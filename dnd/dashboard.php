@@ -371,25 +371,6 @@ function saveCharacterData($data) {
     return true;
 }
 
-// Function to load inventory data
-function loadInventoryData() {
-    $dataFile = 'data/inventory.json';
-    if (file_exists($dataFile)) {
-        $content = file_get_contents($dataFile);
-        $data = json_decode($content, true);
-        if ($data) {
-            return $data;
-        }
-    }
-    
-    // Return default data structure if file doesn't exist
-    $default_data = array();
-    foreach (array('cal', 'sharon', 'indigo', 'zepha', 'shared', 'gm') as $section) {
-        $default_data[$section] = array('items' => array());
-    }
-    return $default_data;
-}
-
 // Handle AJAX requests - ONLY ALLOW GM TO SAVE CHARACTER DATA
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     // Clear any previous output and set JSON header
@@ -406,26 +387,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     // Debug logging
     error_log("DEBUG: Received action: " . $_POST['action']);
     
-    // Handle inventory requests (separate from character data)
-    // Use exact action matching to prevent false matches
-    if (isset($_POST['action']) &&
-        ($_POST['action'] === 'inventory_load' ||
-         $_POST['action'] === 'inventory_save' ||
-         $_POST['action'] === 'inventory_update' ||
-         $_POST['action'] === 'inventory_delete' ||
-         $_POST['action'] === 'inventory_add' ||
-         $_POST['action'] === 'inventory_save_item' ||
-         $_POST['action'] === 'inventory_delete_item' ||
-         $_POST['action'] === 'inventory_share_item' ||
-         $_POST['action'] === 'inventory_take_item' ||
-         $_POST['action'] === 'inventory_update_item_field' ||
-         $_POST['action'] === 'inventory_duplicate_item' ||
-         $_POST['action'] === 'inventory_upload_image')) {
-        error_log("DEBUG: Routing to inventory handler for action: " . $_POST['action']);
-        include_once 'inventory_handler.php';
-        exit;
-    }
-
     if (isset($_POST['action']) && strpos($_POST['action'], 'chat_') === 0) {
         error_log("DEBUG: Routing to chat handler for action: " . $_POST['action']);
         include_once 'chat_handler.php';
@@ -892,15 +853,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 // Load initial data
 $allData = loadCharacterData();
 $currentCharacter = $is_gm ? 'cal' : $user; // GM starts viewing Cal, players see their own
-
-// Determine which inventory tabs the user can see
-$visibleInventoryTabs = array();
-if ($is_gm) {
-    $visibleInventoryTabs = array('cal', 'sharon', 'indigo', 'zepha', 'shared', 'gm');
-} else {
-    $visibleInventoryTabs = array($user, 'shared', 'gm');
-}
-$defaultInventoryTab = $is_gm ? 'cal' : $user;
 ?>
 
 <!DOCTYPE html>
@@ -911,7 +863,6 @@ $defaultInventoryTab = $is_gm ? 'cal' : $user;
     <title>Strixhaven Report Card - <?php echo htmlspecialchars($user); ?></title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="dice-roller/dice-roller.css">
-    <link rel="stylesheet" href="css/inventory.css">
     <link rel="stylesheet" href="Halloween/theme.css" id="halloween-theme" disabled>
     <link rel="stylesheet" href="Christmas/theme.css" id="christmas-theme" disabled>
     <link rel="stylesheet" href="Cal/theme.css" id="cal-theme" disabled>
@@ -1002,7 +953,6 @@ $defaultInventoryTab = $is_gm ? 'cal' : $user;
                 <button class="section-tab" data-section="projects" onclick="switchSection('projects').catch(err => console.error('Error switching section:', err))">Projects</button>
                 <button class="section-tab" data-section="clubs" onclick="switchSection('clubs').catch(err => console.error('Error switching section:', err))">Clubs</button>
                 <button class="section-tab" data-section="job" onclick="switchSection('job').catch(err => console.error('Error switching section:', err))">Job</button>
-                <button class="section-tab" data-section="inventory" onclick="switchSection('inventory').catch(err => console.error('Error switching section:', err))">Inventory</button>
             </div>
 
             <!-- Section Content -->
@@ -1325,44 +1275,6 @@ $defaultInventoryTab = $is_gm ? 'cal' : $user;
                     </div>
                 </div>
 
-                <!-- Inventory Section -->
-                <div class="section inventory-section" id="inventory-section">
-                    <div class="inventory-container">
-                        <!-- Inventory Tabs -->
-                        <div class="inventory-tabs">
-                            <?php foreach ($visibleInventoryTabs as $index => $tab): ?>
-                                <button class="inventory-tab <?php echo $index === 0 ? 'active' : ''; ?>" 
-                                        data-tab="<?php echo $tab; ?>"
-                                        onclick="switchInventoryTab('<?php echo $tab; ?>')">
-                                    <?php echo $tab === 'gm' ? 'GM' : ucfirst($tab); ?>
-                                </button>
-                            <?php endforeach; ?>
-                        </div>
-
-                        <!-- Inventory Content Wrapper -->
-                        <div class="inventory-content-wrapper">
-                            <?php foreach ($visibleInventoryTabs as $index => $tab): ?>
-                                <div class="inventory-tab-content <?php echo $index === 0 ? 'active' : ''; ?>" id="inventory-tab-<?php echo $tab; ?>">
-                                    <!-- Add Item Section -->
-                                    <div class="add-item-section">
-                                        <button class="btn-add-item" onclick="addNewInventoryItem('<?php echo $tab; ?>')" 
-                                                id="inventory-add-btn-<?php echo $tab; ?>">
-                                            Add New Item
-                                        </button>
-                                        <span id="inventory-item-count-<?php echo $tab; ?>">0 items</span>
-                                    </div>
-                                    
-                                    <!-- Inventory Grid Container -->
-                                    <div class="inventory-grid-container">
-                                        <div class="inventory-grid" id="inventory-grid-<?php echo $tab; ?>">
-                                            <!-- Items will be loaded here by JavaScript -->
-                                        </div>
-                                    </div>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
 
@@ -1432,9 +1344,6 @@ $defaultInventoryTab = $is_gm ? 'cal' : $user;
         </div>
     </div>
 
-    <!-- Hidden file input for image uploads -->
-    <input type="file" id="inventory-image-upload" accept="image/*" style="display: none;" onchange="handleInventoryImageUpload(event)">
-
     <!-- Autocomplete dropdown for NPC names -->
     <div id="character-autocomplete" class="character-autocomplete" style="display: none;"></div>
 
@@ -1454,20 +1363,9 @@ $defaultInventoryTab = $is_gm ? 'cal' : $user;
         let sessionBackupInterval;
         let lastSessionBackupTime = 0;
         let isSwitchingCharacter = false;
-        
-        // Inventory variables
-        const visibleInventoryTabs = <?php echo json_encode($visibleInventoryTabs); ?>;
-        let currentInventoryTab = '<?php echo $defaultInventoryTab; ?>';
-        let inventoryData = {};
-        let expandedInventoryCard = null;
-        let expandedInventoryRowTop = null;
-        let inventorySaveTimeouts = {};
-        let currentUploadItemId = null;
         let lastCharacterDataModified = null;
-        let lastInventoryModified = null;
         let characterSyncInterval = null;
-        let inventorySyncInterval = null;
-        
+
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
             initRelationshipAutocomplete();
@@ -1478,12 +1376,7 @@ $defaultInventoryTab = $is_gm ? 'cal' : $user;
                 setupSessionBackup();
             }
 
-            // Initialize inventory
-            loadInventoryData();
-            setupInventoryAutoSave();
-            updateInventoryPermissions();
             setupRealtimeCharacterSync();
-            setupRealtimeInventorySync();
 
             initChatPanel(isGM, currentUser);
             setupCharacterSheetNav();
@@ -1655,7 +1548,6 @@ $defaultInventoryTab = $is_gm ? 'cal' : $user;
     <script src="Cal/theme.js" defer></script>
     <script src="strixhaven/gm/js/character-lookup.js"></script>
     <script src="js/character-sheet.js"></script>
-    <script src="js/inventory-integrated.js"></script>
     <script src="js/relationship-autocomplete.js"></script>
     
     <!-- Autocomplete container for relationships -->

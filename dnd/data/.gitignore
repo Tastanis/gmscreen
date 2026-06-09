@@ -6,5 +6,8 @@ characters_temp.json
 # Ignore PHP session files
 sess_*
 
+# Live inventory data (managed by the character sheet Inventory tab)
+character_inventory.json
+
 # Don't ignore example files
 !*.example

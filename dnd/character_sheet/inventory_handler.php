@@ -1,8 +1,7 @@
 <?php
 // Character Sheet Inventory API
 // Standalone handler for the character sheet Inventory tab.
-// Data lives in dnd/data/character_inventory.json (separate from the
-// dashboard inventory in dnd/data/inventory.json during the migration).
+// Data lives in dnd/data/character_inventory.json.
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -19,7 +18,6 @@ $ciUser = strtolower((string) $_SESSION['user']);
 $ciIsGm = strcasecmp((string) $_SESSION['user'], 'GM') === 0;
 
 define('CI_DATA_FILE', __DIR__ . '/../data/character_inventory.json');
-define('CI_DASHBOARD_DATA_FILE', __DIR__ . '/../data/inventory.json');
 define('CI_IMAGES_DIR', __DIR__ . '/../images');
 define('CI_IMAGES_WEB_PATH', '/dnd/images');
 
@@ -193,8 +191,9 @@ function ciFindItemIndex($data, $tab, $itemId)
     return -1;
 }
 
-// Image usage must be checked across BOTH inventory files while the old
-// dashboard inventory still exists, since imported items share image files.
+// Items imported from the old dashboard inventory may reference images by
+// either a relative ("images/foo.jpg") or absolute ("/dnd/images/foo.jpg")
+// path, so usage checks match both forms.
 function ciImagePathVariants($path)
 {
     $path = (string) $path;
@@ -217,23 +216,20 @@ function ciIsImageUsed($imagePath)
         return true;
     }
 
-    $files = array(CI_DATA_FILE, CI_DASHBOARD_DATA_FILE);
-    foreach ($files as $file) {
-        if (!is_readable($file)) {
+    if (!is_readable(CI_DATA_FILE)) {
+        return false;
+    }
+    $decoded = json_decode((string) file_get_contents(CI_DATA_FILE), true);
+    if (!is_array($decoded)) {
+        return false;
+    }
+    foreach ($decoded as $tab) {
+        if (!isset($tab['items']) || !is_array($tab['items'])) {
             continue;
         }
-        $decoded = json_decode((string) file_get_contents($file), true);
-        if (!is_array($decoded)) {
-            continue;
-        }
-        foreach ($decoded as $tab) {
-            if (!isset($tab['items']) || !is_array($tab['items'])) {
-                continue;
-            }
-            foreach ($tab['items'] as $item) {
-                if (is_array($item) && !empty($item['image']) && in_array((string) $item['image'], $targets, true)) {
-                    return true;
-                }
+        foreach ($tab['items'] as $item) {
+            if (is_array($item) && !empty($item['image']) && in_array((string) $item['image'], $targets, true)) {
+                return true;
             }
         }
     }
@@ -260,20 +256,6 @@ function ciDeleteImageIfUnused($imagePath)
     if (is_file($file)) {
         unlink($file);
     }
-}
-
-// Convert dashboard-relative image paths ("images/foo.jpg") to absolute web
-// paths so they resolve from the character sheet page too.
-function ciNormalizeImagePath($path)
-{
-    $path = trim((string) $path);
-    if ($path === '') {
-        return '';
-    }
-    if (strpos($path, 'images/') === 0) {
-        return '/dnd/' . $path;
-    }
-    return $path;
 }
 
 function ciRespond($payload)
@@ -610,57 +592,6 @@ switch ($action) {
 
         unlink($filePath);
         ciFail('Failed to save image data to inventory');
-        break;
-
-    case 'import_dashboard':
-        if (!$ciIsGm) {
-            ciFail('Only the GM can import items');
-        }
-
-        if (!is_readable(CI_DASHBOARD_DATA_FILE)) {
-            ciFail('Dashboard inventory file not found');
-        }
-
-        $source = json_decode((string) file_get_contents(CI_DASHBOARD_DATA_FILE), true);
-        if (!is_array($source)) {
-            ciFail('Dashboard inventory file is not valid JSON');
-        }
-
-        $data = ciLoadData();
-        $imported = array();
-        $skipped = 0;
-
-        foreach ($CI_TABS as $tab) {
-            $imported[$tab] = 0;
-            if (!isset($source[$tab]['items']) || !is_array($source[$tab]['items'])) {
-                continue;
-            }
-
-            foreach ($source[$tab]['items'] as $rawItem) {
-                if (!is_array($rawItem) || empty($rawItem['id'])) {
-                    continue;
-                }
-                if (ciFindItemIndex($data, $tab, $rawItem['id']) >= 0) {
-                    $skipped++;
-                    continue;
-                }
-
-                $clean = ciCleanItem($rawItem);
-                $clean['image'] = ciNormalizeImagePath($clean['image']);
-                $data[$tab]['items'][] = $clean;
-                $imported[$tab]++;
-            }
-        }
-
-        if (ciSaveData($data)) {
-            ciRespond(array(
-                'success' => true,
-                'imported' => $imported,
-                'imported_total' => array_sum($imported),
-                'skipped' => $skipped
-            ));
-        }
-        ciFail('Failed to save data');
         break;
 
     default:

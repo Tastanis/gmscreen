@@ -599,17 +599,6 @@ async function switchSection(section) {
         });
         document.querySelector(`[data-section="${section}"]`).classList.add('active');
         
-        // Special handling for inventory section
-        if (section === 'inventory') {
-            // Make sure inventory data is loaded
-            if (typeof inventoryData !== 'undefined' && Object.keys(inventoryData).length === 0) {
-                loadInventoryData();
-            }
-            clearExpandedInventoryState();
-        } else {
-            clearExpandedInventoryState();
-        }
-
         // Load section-specific data
         loadSectionData(section);
 

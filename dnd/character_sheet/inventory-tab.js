@@ -226,9 +226,6 @@
     if (editMode && canEdit) {
       toolButtons += '<button type="button" class="ci-btn ci-btn--add" data-ci-action="add">+ Add Item</button>';
     }
-    if (isGM) {
-      toolButtons += '<button type="button" class="ci-btn" data-ci-action="import" title="Copy all items from the dashboard inventory into this one">Import Dashboard Items</button>';
-    }
 
     var grid = items.map(function (item) { return renderItem(item, editMode, canEdit); }).join("");
     if (!items.length) {
@@ -426,20 +423,6 @@
         nameInput.focus();
         nameInput.select();
       }
-    });
-  }
-
-  function importDashboard() {
-    if (!confirm("Copy all items from the dashboard inventory into the character sheet inventory? Items that were already imported are skipped.")) {
-      return;
-    }
-    var params = new URLSearchParams();
-    params.append("action", "import_dashboard");
-    showStatus("Importing items...", "loading");
-    post(params, function (result) {
-      if (!result.success) return;
-      showStatus("Imported " + result.imported_total + " item(s)" + (result.skipped ? ", skipped " + result.skipped + " already imported" : ""), "success");
-      loadData();
     });
   }
 
@@ -689,9 +672,6 @@
         break;
       case "add":
         addItem();
-        break;
-      case "import":
-        importDashboard();
         break;
       case "add-effect":
         addEffectSection(itemId);
