@@ -287,9 +287,9 @@
 
     var html = '<div class="' + classes + '" data-item-id="' + escapeHtml(item.id) + '">';
 
-    // Header
+    // Header — clicking it collapses the card (except on the name input).
     html +=
-      '<div class="ci-card__header">' +
+      '<div class="ci-card__header" data-ci-action="close" data-item-id="' + escapeHtml(item.id) + '" title="Click to collapse">' +
       (item.image ? '<img class="ci-card__thumb" src="' + escapeHtml(item.image) + '" alt="" draggable="true" />' : "") +
       '<div class="ci-card__title">' +
       (editable
@@ -297,7 +297,7 @@
         : '<span class="ci-card__name">' + escapeHtml(item.name || "Unnamed Item") + "</span>") +
       (hidden ? '<span class="ci-card__badge">Hidden</span>' : "") +
       "</div>" +
-      '<button type="button" class="ci-card__close" data-ci-action="close" data-item-id="' + escapeHtml(item.id) + '" aria-label="Collapse item">&times;</button>' +
+      '<span class="ci-card__collapse" aria-hidden="true">&#9650;</span>' +
       "</div>";
 
     html += '<div class="ci-card__body">';
@@ -348,8 +348,15 @@
         actions += '<button type="button" class="ci-btn ci-btn--small" data-ci-action="toggle-visibility" data-item-id="' + escapeHtml(item.id) + '">' + (item.visible === false ? "Show" : "Hide") + "</button>";
         actions += '<button type="button" class="ci-btn ci-btn--small" data-ci-action="duplicate" data-item-id="' + escapeHtml(item.id) + '">Copy Item</button>';
       }
-      if (CHARACTER_TABS.indexOf(ciFolder) !== -1 && (ciFolder === currentUser || isGM)) {
-        actions += '<button type="button" class="ci-btn ci-btn--small" data-ci-action="share" data-item-id="' + escapeHtml(item.id) + '">' + (isGM ? "Move to GM" : "Share") + "</button>";
+      if (isGM) {
+        if (ciFolder !== "shared") {
+          actions += '<button type="button" class="ci-btn ci-btn--small" data-ci-action="share" data-to-tab="shared" data-item-id="' + escapeHtml(item.id) + '">Send to Shared</button>';
+        }
+        if (ciFolder !== "gm") {
+          actions += '<button type="button" class="ci-btn ci-btn--small" data-ci-action="share" data-to-tab="gm" data-item-id="' + escapeHtml(item.id) + '">Move to GM</button>';
+        }
+      } else if (ciFolder === currentUser) {
+        actions += '<button type="button" class="ci-btn ci-btn--small" data-ci-action="share" data-to-tab="shared" data-item-id="' + escapeHtml(item.id) + '">Send to Shared</button>';
       }
       actions += '<button type="button" class="ci-btn ci-btn--small ci-btn--danger" data-ci-action="delete" data-item-id="' + escapeHtml(item.id) + '">Delete</button>';
     }
@@ -479,16 +486,17 @@
     saveFieldNow(ciFolder, itemId, "visible", newVisible ? "true" : "false");
   }
 
-  function shareItem(itemId) {
+  function shareItem(itemId, toTab) {
     var item = findItem(ciFolder, itemId);
     if (!item) return;
-    var target = isGM ? "GM folder" : "shared folder";
+    var target = toTab === "gm" ? "GM folder" : "shared folder";
     if (!confirm('Move "' + (item.name || "Unnamed Item") + '" to the ' + target + "?")) return;
 
     var folder = ciFolder;
     var params = new URLSearchParams();
     params.append("action", "share_item");
     params.append("from_tab", folder);
+    params.append("to_tab", toTab);
     params.append("item_id", itemId);
     post(params, function (result) {
       if (!result.success || !result.item) return;
@@ -674,6 +682,9 @@
         openItem(itemId);
         break;
       case "close":
+        // The whole card header collapses, but not when typing in the name
+        // input or interacting with other controls inside it.
+        if (["INPUT", "TEXTAREA", "BUTTON"].indexOf(event.target.tagName) !== -1) return;
         closeItem(itemId);
         break;
       case "add":
@@ -699,7 +710,7 @@
         duplicateItem(itemId);
         break;
       case "share":
-        shareItem(itemId);
+        shareItem(itemId, target.getAttribute("data-to-tab") || "shared");
         break;
       case "take":
         takeItem(itemId);

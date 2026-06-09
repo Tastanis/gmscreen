@@ -474,14 +474,17 @@ switch ($action) {
 
     case 'share_item':
         $fromTab = isset($_POST['from_tab']) ? strtolower((string) $_POST['from_tab']) : '';
+        $toTab = isset($_POST['to_tab']) ? strtolower((string) $_POST['to_tab']) : 'shared';
         $itemId = isset($_POST['item_id']) ? (string) $_POST['item_id'] : '';
-        $toTab = $ciIsGm ? 'gm' : 'shared';
 
-        if (!in_array($fromTab, $CI_CHARACTER_TABS, true)) {
-            ciFail('Can only share from a character inventory');
+        if (!in_array($fromTab, $CI_TABS, true) || !in_array($toTab, array('shared', 'gm'), true)) {
+            ciFail('Invalid tab');
         }
-        if (!$ciIsGm && $fromTab !== $ciUser) {
-            ciFail('Can only share from your own inventory');
+        if ($fromTab === $toTab) {
+            ciFail('Item is already there');
+        }
+        if (!$ciIsGm && ($fromTab !== $ciUser || $toTab !== 'shared')) {
+            ciFail('You can only send items from your own inventory to the shared folder');
         }
 
         $data = ciLoadData();

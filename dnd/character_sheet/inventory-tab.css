@@ -217,6 +217,11 @@
   border-bottom: 1px solid var(--border);
   background: linear-gradient(180deg, #e6dccb 0%, #ddd1bd 100%);
   border-radius: 6px 6px 0 0;
+  cursor: pointer;
+}
+
+.ci-card__header:hover {
+  background: linear-gradient(180deg, #ddd1bd 0%, #d3c5ae 100%);
 }
 
 .ci-card__thumb {
@@ -250,17 +255,14 @@
   flex: 1;
 }
 
-.ci-card__close {
-  border: none;
-  background: none;
-  font-size: 20px;
-  line-height: 1;
+.ci-card__collapse {
+  font-size: 11px;
   color: var(--muted);
-  cursor: pointer;
   padding: 0 4px;
+  flex-shrink: 0;
 }
 
-.ci-card__close:hover {
+.ci-card__header:hover .ci-card__collapse {
   color: var(--text);
 }
 
