@@ -1,0 +1,1090 @@
+﻿Cal Ability Automations - Copy/Paste Blocks
+
+Copy exactly one block at a time: start after COPY START and stop before COPY END.
+Paste that JSON object into the ability automation popup for the matching live sheet card.
+
+========================================================================
+01. Thorn In Foot
+Section: mains
+Live action id: action_1779503651502_1d50c961da0fc
+Rules source: Your Allies Cannot Save You!
+COPY START
+{
+    "fields":  {
+
+               },
+    "automation":  {
+                       "schema":  "ability-automation/v3",
+                       "cards":  [
+                                     {
+                                         "type":  "target",
+                                         "id":  "target-thorn-primary",
+                                         "name":  "primary",
+                                         "mode":  "token",
+                                         "predicate":  "creature",
+                                         "count":  1,
+                                         "distance":  {
+                                                          "form":  "ranged",
+                                                          "value":  10
+                                                      }
+                                     },
+                                     {
+                                         "type":  "powerRoll",
+                                         "id":  "roll-thorn",
+                                         "attribute":  "P",
+                                         "target":  "primary",
+                                         "tiers":  {
+                                                       "tier1":  {
+                                                                     "effects":  [
+                                                                                     {
+                                                                                         "kind":  "damage",
+                                                                                         "amount":  5,
+                                                                                         "attribute":  "P",
+                                                                                         "damageType":  "psychic"
+                                                                                     }
+                                                                                 ]
+                                                                 },
+                                                       "tier2":  {
+                                                                     "effects":  [
+                                                                                     {
+                                                                                         "kind":  "damage",
+                                                                                         "amount":  7,
+                                                                                         "attribute":  "P",
+                                                                                         "damageType":  "psychic"
+                                                                                     }
+                                                                                 ]
+                                                                 },
+                                                       "tier3":  {
+                                                                     "effects":  [
+                                                                                     {
+                                                                                         "kind":  "damage",
+                                                                                         "amount":  10,
+                                                                                         "attribute":  "P",
+                                                                                         "damageType":  "psychic"
+                                                                                     }
+                                                                                 ]
+                                                                 }
+                                                   }
+                                     },
+                                     {
+                                         "type":  "trigger",
+                                         "id":  "trigger-thorn-move",
+                                         "target":  "primary",
+                                         "condition":  "Before the end of your next turn, the target willingly moves.",
+                                         "match":  {
+                                                       "event":  "move",
+                                                       "filter":  {
+                                                                      "whose":  "target",
+                                                                      "targetGroup":  "primary",
+                                                                      "minDistance":  1
+                                                                  }
+                                                   },
+                                         "effects":  [
+                                                         {
+                                                             "kind":  "damage",
+                                                             "target":  "eventActor",
+                                                             "amountFrom":  {
+                                                                                "source":  "triggeringForcedMovement"
+                                                                            },
+                                                             "damageType":  "psychic"
+                                                         }
+                                                     ],
+                                         "expires":  {
+                                                         "event":  "turnEnd",
+                                                         "whose":  "self",
+                                                         "count":  1,
+                                                         "skipCurrent":  true
+                                                     },
+                                         "note":  "The VTT cannot distinguish willing movement from all normal movement; use only when the movement is willing."
+                                     }
+                                 ]
+                   }
+}
+COPY END
+
+========================================================================
+02. Protective Attack
+Section: mains
+Live action id: action_1779503891513_bf1a1797a9b1b8
+COPY START
+{
+    "fields":  {
+
+               },
+    "automation":  {
+                       "schema":  "ability-automation/v3",
+                       "cards":  [
+                                     {
+                                         "type":  "target",
+                                         "id":  "target-protective-primary",
+                                         "name":  "primary",
+                                         "mode":  "token",
+                                         "predicate":  "creature",
+                                         "count":  1,
+                                         "distance":  {
+                                                          "form":  "melee",
+                                                          "value":  1
+                                                      }
+                                     },
+                                     {
+                                         "type":  "powerRoll",
+                                         "id":  "roll-protective",
+                                         "attribute":  [
+                                                           "Might",
+                                                           "Agility"
+                                                       ],
+                                         "target":  "primary",
+                                         "tiers":  {
+                                                       "tier1":  {
+                                                                     "effects":  [
+                                                                                     {
+                                                                                         "kind":  "damage",
+                                                                                         "amount":  5,
+                                                                                         "attribute":  "M",
+                                                                                         "damageType":  "untyped"
+                                                                                     },
+                                                                                     {
+                                                                                         "kind":  "condition",
+                                                                                         "name":  "taunted",
+                                                                                         "duration":  "endOfTurn"
+                                                                                     }
+                                                                                 ]
+                                                                 },
+                                                       "tier2":  {
+                                                                     "effects":  [
+                                                                                     {
+                                                                                         "kind":  "damage",
+                                                                                         "amount":  8,
+                                                                                         "attribute":  "M",
+                                                                                         "damageType":  "untyped"
+                                                                                     },
+                                                                                     {
+                                                                                         "kind":  "condition",
+                                                                                         "name":  "taunted",
+                                                                                         "duration":  "endOfTurn"
+                                                                                     }
+                                                                                 ]
+                                                                 },
+                                                       "tier3":  {
+                                                                     "effects":  [
+                                                                                     {
+                                                                                         "kind":  "damage",
+                                                                                         "amount":  11,
+                                                                                         "attribute":  "M",
+                                                                                         "damageType":  "untyped"
+                                                                                     },
+                                                                                     {
+                                                                                         "kind":  "condition",
+                                                                                         "name":  "taunted",
+                                                                                         "duration":  "endOfTurn"
+                                                                                     }
+                                                                                 ]
+                                                                 }
+                                                   },
+                                         "note":  "Cal\u0027s Might is higher than Agility, so the damage attribute is M while the roll still offers Might or Agility."
+                                     }
+                                 ]
+                   }
+}
+COPY END
+
+========================================================================
+03. Morelia Punish and Defend
+Section: mains
+Live action id: action_1779504025064_ccd0f5e53d3ac
+Rules source: The Gods Punish and Defend
+COPY START
+{
+    "fields":  {
+                   "cost":  "3 Wrath"
+               },
+    "automation":  {
+                       "schema":  "ability-automation/v3",
+                       "cards":  [
+                                     {
+                                         "type":  "target",
+                                         "id":  "target-punish-primary",
+                                         "name":  "primary",
+                                         "mode":  "token",
+                                         "predicate":  "creatureOrObject",
+                                         "count":  1,
+                                         "distance":  {
+                                                          "form":  "melee",
+                                                          "value":  1
+                                                      }
+                                     },
+                                     {
+                                         "type":  "powerRoll",
+                                         "id":  "roll-punish",
+                                         "attribute":  "M",
+                                         "target":  "primary",
+                                         "tiers":  {
+                                                       "tier1":  {
+                                                                     "effects":  [
+                                                                                     {
+                                                                                         "kind":  "damage",
+                                                                                         "amount":  5,
+                                                                                         "attribute":  "M",
+                                                                                         "damageType":  "holy"
+                                                                                     }
+                                                                                 ]
+                                                                 },
+                                                       "tier2":  {
+                                                                     "effects":  [
+                                                                                     {
+                                                                                         "kind":  "damage",
+                                                                                         "amount":  8,
+                                                                                         "attribute":  "M",
+                                                                                         "damageType":  "holy"
+                                                                                     }
+                                                                                 ]
+                                                                 },
+                                                       "tier3":  {
+                                                                     "effects":  [
+                                                                                     {
+                                                                                         "kind":  "damage",
+                                                                                         "amount":  11,
+                                                                                         "attribute":  "M",
+                                                                                         "damageType":  "holy"
+                                                                                     }
+                                                                                 ]
+                                                                 }
+                                                   }
+                                     },
+                                     {
+                                         "type":  "target",
+                                         "id":  "target-punish-heal",
+                                         "name":  "healTarget",
+                                         "mode":  "token",
+                                         "predicate":  "selfOrAlly",
+                                         "count":  1,
+                                         "optional":  true,
+                                         "distance":  {
+                                                          "form":  "ranged",
+                                                          "value":  10
+                                                      },
+                                         "promptText":  "Choose yourself or one ally within 10 squares to heal with Cal\u0027s Recovery."
+                                     },
+                                     {
+                                         "type":  "effect",
+                                         "id":  "effect-punish-recovery",
+                                         "target":  "healTarget",
+                                         "effects":  [
+                                                         {
+                                                             "kind":  "ifPrompt",
+                                                             "question":  "Spend one of Cal\u0027s Recoveries to heal the selected target?",
+                                                             "yesLabel":  "Spend recovery",
+                                                             "noLabel":  "Skip heal",
+                                                             "then":  [
+                                                                          {
+                                                                              "kind":  "heal",
+                                                                              "recoveries":  1,
+                                                                              "recoverySource":  "self"
+                                                                          },
+                                                                          {
+                                                                              "kind":  "ifPrompt",
+                                                                              "question":  "Is the healed target an ally other than Cal and within 10 squares for Blessing of Life?",
+                                                                              "yesLabel":  "Add +3",
+                                                                              "noLabel":  "No extra heal",
+                                                                              "then":  [
+                                                                                           {
+                                                                                               "kind":  "heal",
+                                                                                               "amount":  3
+                                                                                           }
+                                                                                       ]
+                                                                          }
+                                                                      ]
+                                                         }
+                                                     ]
+                                     }
+                                 ]
+                   }
+}
+COPY END
+
+========================================================================
+04. Purifying Fire
+Section: mains
+Live action id: action_1779504169845_50d8080f3a0c4
+COPY START
+{
+    "fields":  {
+                   "cost":  "5 Wrath"
+               },
+    "automation":  {
+                       "schema":  "ability-automation/v3",
+                       "cards":  [
+                                     {
+                                         "type":  "target",
+                                         "id":  "target-purifying-primary",
+                                         "name":  "primary",
+                                         "mode":  "token",
+                                         "predicate":  "creature",
+                                         "count":  1,
+                                         "distance":  {
+                                                          "form":  "meleeOrRanged",
+                                                          "value":  5
+                                                      }
+                                     },
+                                     {
+                                         "type":  "powerRoll",
+                                         "id":  "roll-purifying",
+                                         "attribute":  "M",
+                                         "target":  "primary",
+                                         "tiers":  {
+                                                       "tier1":  {
+                                                                     "effects":  [
+                                                                                     {
+                                                                                         "kind":  "damage",
+                                                                                         "amount":  7,
+                                                                                         "attribute":  "M",
+                                                                                         "damageType":  "holy"
+                                                                                     },
+                                                                                     {
+                                                                                         "kind":  "potency",
+                                                                                         "attribute":  "M",
+                                                                                         "level":  "weak",
+                                                                                         "onFail":  [
+                                                                                                        {
+                                                                                                            "kind":  "condition",
+                                                                                                            "name":  "damageWeakness",
+                                                                                                            "amount":  3,
+                                                                                                            "damageType":  "fire",
+                                                                                                            "duration":  "saveEnds"
+                                                                                                        }
+                                                                                                    ]
+                                                                                     }
+                                                                                 ]
+                                                                 },
+                                                       "tier2":  {
+                                                                     "effects":  [
+                                                                                     {
+                                                                                         "kind":  "damage",
+                                                                                         "amount":  11,
+                                                                                         "attribute":  "M",
+                                                                                         "damageType":  "holy"
+                                                                                     },
+                                                                                     {
+                                                                                         "kind":  "potency",
+                                                                                         "attribute":  "M",
+                                                                                         "level":  "average",
+                                                                                         "onFail":  [
+                                                                                                        {
+                                                                                                            "kind":  "condition",
+                                                                                                            "name":  "damageWeakness",
+                                                                                                            "amount":  5,
+                                                                                                            "damageType":  "fire",
+                                                                                                            "duration":  "saveEnds"
+                                                                                                        }
+                                                                                                    ]
+                                                                                     }
+                                                                                 ]
+                                                                 },
+                                                       "tier3":  {
+                                                                     "effects":  [
+                                                                                     {
+                                                                                         "kind":  "damage",
+                                                                                         "amount":  14,
+                                                                                         "attribute":  "M",
+                                                                                         "damageType":  "holy"
+                                                                                     },
+                                                                                     {
+                                                                                         "kind":  "potency",
+                                                                                         "attribute":  "M",
+                                                                                         "level":  "strong",
+                                                                                         "onFail":  [
+                                                                                                        {
+                                                                                                            "kind":  "condition",
+                                                                                                            "name":  "damageWeakness",
+                                                                                                            "amount":  7,
+                                                                                                            "damageType":  "fire",
+                                                                                                            "duration":  "saveEnds"
+                                                                                                        }
+                                                                                                    ]
+                                                                                     }
+                                                                                 ]
+                                                                 }
+                                                   }
+                                     },
+                                     {
+                                         "type":  "effect",
+                                         "id":  "effect-purifying-note",
+                                         "target":  "primary",
+                                         "effects":  [
+                                                         {
+                                                             "kind":  "note",
+                                                             "text":  "While this fire weakness remains, Cal can choose for his abilities to deal fire damage to this target instead of holy damage."
+                                                         }
+                                                     ]
+                                     }
+                                 ]
+                   }
+}
+COPY END
+
+========================================================================
+05. Judgment
+Section: maneuvers
+Live action id: action_1779504368699_863547a261abf
+COPY START
+{
+    "fields":  {
+
+               },
+    "automation":  {
+                       "schema":  "ability-automation/v3",
+                       "cards":  [
+                                     {
+                                         "type":  "target",
+                                         "id":  "target-judgment-primary",
+                                         "name":  "primary",
+                                         "mode":  "token",
+                                         "predicate":  "enemy",
+                                         "count":  1,
+                                         "distance":  {
+                                                          "form":  "ranged",
+                                                          "value":  10
+                                                      }
+                                     },
+                                     {
+                                         "type":  "effect",
+                                         "id":  "effect-judgment-mark",
+                                         "target":  "primary",
+                                         "effects":  [
+                                                         {
+                                                             "kind":  "applyMark",
+                                                             "markType":  "judgment",
+                                                             "duration":  "endOfEncounter",
+                                                             "exclusivePerSource":  true,
+                                                             "exclusivePerTarget":  true
+                                                         },
+                                                         {
+                                                             "kind":  "ifPrompt",
+                                                             "question":  "Is this the first time this turn Cal used Judgment?",
+                                                             "yesLabel":  "Use Paragon pull",
+                                                             "noLabel":  "Skip pull",
+                                                             "then":  [
+                                                                          {
+                                                                              "kind":  "forcedMovement",
+                                                                              "verb":  "verticalPull",
+                                                                              "distance":  0,
+                                                                              "attribute":  "P",
+                                                                              "multiplier":  2,
+                                                                              "upTo":  true
+                                                                          }
+                                                                      ]
+                                                         },
+                                                         {
+                                                             "kind":  "ifPrompt",
+                                                             "question":  "Spend 1 Wrath for Look On My Work and Despair? Choose no if the target is already frightened of Cal.",
+                                                             "yesLabel":  "Spend Wrath",
+                                                             "noLabel":  "Skip",
+                                                             "then":  [
+                                                                          {
+                                                                              "kind":  "spend",
+                                                                              "resource":  "Wrath",
+                                                                              "amount":  1,
+                                                                              "prompt":  "Spend 1 Wrath to frighten this Judgment target on P \u003c average.",
+                                                                              "effects":  [
+                                                                                              {
+                                                                                                  "kind":  "potency",
+                                                                                                  "attribute":  "P",
+                                                                                                  "level":  "average",
+                                                                                                  "onFail":  [
+                                                                                                                 {
+                                                                                                                     "kind":  "condition",
+                                                                                                                     "name":  "frightened",
+                                                                                                                     "duration":  "saveEnds"
+                                                                                                                 }
+                                                                                                             ]
+                                                                                              }
+                                                                                          ]
+                                                                          }
+                                                                      ]
+                                                         },
+                                                         {
+                                                             "kind":  "note",
+                                                             "text":  "If the Look On My Work target is already frightened of Cal, do not apply frightened again; deal 6 holy damage instead."
+                                                         }
+                                                     ]
+                                     }
+                                 ]
+                   }
+}
+COPY END
+
+========================================================================
+06. Blessing of the Faithful
+Section: maneuvers
+Live action id: action_1779504433990_6195cd85bddf28
+COPY START
+{
+    "fields":  {
+                   "cost":  "5 Wrath"
+               },
+    "automation":  {
+                       "schema":  "ability-automation/v3",
+                       "cards":  [
+                                     {
+                                         "type":  "effect",
+                                         "id":  "effect-blessing-aura",
+                                         "target":  "self",
+                                         "effects":  [
+                                                         {
+                                                             "kind":  "aura",
+                                                             "radius":  3,
+                                                             "color":  "#facc15",
+                                                             "affects":  "selfAndAlly",
+                                                             "triggers":  [
+                                                                              {
+                                                                                  "event":  "turnEnd",
+                                                                                  "whose":  "self"
+                                                                              }
+                                                                          ],
+                                                             "effects":  [
+                                                                             {
+                                                                                 "kind":  "surgeGain",
+                                                                                 "amount":  1
+                                                                             }
+                                                                         ],
+                                                             "expires":  {
+                                                                             "event":  "combatEnd",
+                                                                             "whose":  "any"
+                                                                         },
+                                                             "text":  "Self and allies in Cal\u0027s 3 aura gain 1 surge at the end of each of Cal\u0027s turns."
+                                                         }
+                                                     ]
+                                     }
+                                 ]
+                   }
+}
+COPY END
+
+========================================================================
+07. Edict of Purifying Pacifism
+Section: maneuvers
+Live action id: action_1779504555719_67ae7d677ba59
+COPY START
+{
+    "fields":  {
+                   "cost":  "7 Wrath"
+               },
+    "automation":  {
+                       "schema":  "ability-automation/v3",
+                       "cards":  [
+                                     {
+                                         "type":  "effect",
+                                         "id":  "effect-pacifism-aura",
+                                         "target":  "self",
+                                         "effects":  [
+                                                         {
+                                                             "kind":  "aura",
+                                                             "radius":  2,
+                                                             "color":  "#fb923c",
+                                                             "affects":  "enemy",
+                                                             "triggers":  [
+                                                                              {
+                                                                                  "event":  "actionUsed",
+                                                                                  "whose":  "occupant",
+                                                                                  "target":  "eventActor",
+                                                                                  "filter":  {
+                                                                                                 "keywordsAny":  [
+                                                                                                                     "Strike"
+                                                                                                                 ]
+                                                                                             }
+                                                                              }
+                                                                          ],
+                                                             "effects":  [
+                                                                             {
+                                                                                 "kind":  "damage",
+                                                                                 "amount":  0,
+                                                                                 "attribute":  "P",
+                                                                                 "multiplier":  2,
+                                                                                 "damageType":  "holy"
+                                                                             },
+                                                                             {
+                                                                                 "kind":  "ifMark",
+                                                                                 "predicate":  "targetJudgedBySelf",
+                                                                                 "target":  "target",
+                                                                                 "then":  [
+                                                                                              {
+                                                                                                  "kind":  "damage",
+                                                                                                  "amountDice":  "2d6",
+                                                                                                  "damageType":  "holy"
+                                                                                              }
+                                                                                          ]
+                                                                             }
+                                                                         ],
+                                                             "expires":  {
+                                                                             "event":  "combatEnd",
+                                                                             "whose":  "any"
+                                                                         },
+                                                             "text":  "Enemies in Cal\u0027s 2 aura take 6 holy when they make a Strike; judged targets take an extra 2d6 holy."
+                                                         }
+                                                     ]
+                                     }
+                                 ]
+                   }
+}
+COPY END
+
+========================================================================
+08. Triggered Action (My Life for Yours)
+Section: triggers
+Live action id: action_1779504610833_235d3bc58cbe48
+COPY START
+{
+    "fields":  {
+
+               },
+    "automation":  {
+                       "schema":  "ability-automation/v3",
+                       "cards":  [
+                                     {
+                                         "type":  "trigger",
+                                         "id":  "trigger-my-life-self-turn",
+                                         "condition":  "Cal starts his turn.",
+                                         "match":  {
+                                                       "event":  "turnStart",
+                                                       "filter":  {
+                                                                      "whose":  "self"
+                                                                  }
+                                                   }
+                                     },
+                                     {
+                                         "type":  "trigger",
+                                         "id":  "trigger-my-life-ally-turn",
+                                         "condition":  "An ally starts their turn.",
+                                         "match":  {
+                                                       "event":  "turnStart",
+                                                       "filter":  {
+                                                                      "whose":  "ally"
+                                                                  }
+                                                   }
+                                     },
+                                     {
+                                         "type":  "trigger",
+                                         "id":  "trigger-my-life-self-damage",
+                                         "condition":  "Cal takes damage.",
+                                         "match":  {
+                                                       "event":  "damage",
+                                                       "filter":  {
+                                                                      "whose":  "self",
+                                                                      "minAmount":  1
+                                                                  }
+                                                   }
+                                     },
+                                     {
+                                         "type":  "trigger",
+                                         "id":  "trigger-my-life-ally-damage",
+                                         "condition":  "An ally takes damage.",
+                                         "match":  {
+                                                       "event":  "damage",
+                                                       "filter":  {
+                                                                      "whose":  "ally",
+                                                                      "minAmount":  1
+                                                                  }
+                                                   }
+                                     },
+                                     {
+                                         "type":  "target",
+                                         "id":  "target-my-life-recipient",
+                                         "name":  "recipient",
+                                         "mode":  "token",
+                                         "predicate":  "selfOrAlly",
+                                         "count":  1,
+                                         "distance":  {
+                                                          "form":  "ranged",
+                                                          "value":  10
+                                                      },
+                                         "promptText":  "Choose the creature who started their turn or took the triggering damage."
+                                     },
+                                     {
+                                         "type":  "effect",
+                                         "id":  "effect-my-life-heal",
+                                         "target":  "recipient",
+                                         "effects":  [
+                                                         {
+                                                             "kind":  "heal",
+                                                             "recoveries":  1,
+                                                             "recoverySource":  "self"
+                                                         },
+                                                         {
+                                                             "kind":  "ifPrompt",
+                                                             "question":  "Is the target an ally other than Cal for Blessing of Life?",
+                                                             "yesLabel":  "Add +3",
+                                                             "noLabel":  "No extra heal",
+                                                             "then":  [
+                                                                          {
+                                                                              "kind":  "heal",
+                                                                              "amount":  3
+                                                                          }
+                                                                      ]
+                                                         },
+                                                         {
+                                                             "kind":  "ifPrompt",
+                                                             "question":  "Spend 1 Wrath to end a save/end-of-turn effect on the target, or stand a prone target up?",
+                                                             "yesLabel":  "Spend Wrath",
+                                                             "noLabel":  "Skip",
+                                                             "then":  [
+                                                                          {
+                                                                              "kind":  "spend",
+                                                                              "resource":  "Wrath",
+                                                                              "amount":  1,
+                                                                              "prompt":  "Spend 1 Wrath for the My Life for Yours rider.",
+                                                                              "effects":  [
+                                                                                              {
+                                                                                                  "kind":  "note",
+                                                                                                  "text":  "End one save-ends/end-of-turn effect on the target, or stand a prone target up. Apply the removal manually."
+                                                                                              }
+                                                                                          ]
+                                                                          }
+                                                                      ]
+                                                         }
+                                                     ]
+                                     }
+                                 ]
+                   }
+}
+COPY END
+
+========================================================================
+09. Triggered Action (Resist the Unnatural)
+Section: triggers
+Live action id: action_1779504726512_71f4fd668ac0c8
+COPY START
+{
+    "fields":  {
+
+               },
+    "automation":  {
+                       "schema":  "ability-automation/v3",
+                       "cards":  [
+                                     {
+                                         "type":  "trigger",
+                                         "id":  "trigger-resist-damage",
+                                         "condition":  "Cal takes typed damage that is not untyped.",
+                                         "match":  {
+                                                       "event":  "damage",
+                                                       "filter":  {
+                                                                      "whose":  "self",
+                                                                      "minAmount":  1
+                                                                  }
+                                                   },
+                                         "effects":  [
+                                                         {
+                                                             "kind":  "ifPrompt",
+                                                             "question":  "Is the triggering damage typed damage, not untyped?",
+                                                             "yesLabel":  "Halve it",
+                                                             "noLabel":  "Do nothing",
+                                                             "then":  [
+                                                                          {
+                                                                              "kind":  "halveTriggeringDamage",
+                                                                              "rounding":  "up"
+                                                                          }
+                                                                      ]
+                                                         }
+                                                     ],
+                                         "note":  "Ability triggers cannot filter out untyped damage yet, so this asks before refunding the half damage."
+                                     }
+                                 ]
+                   }
+}
+COPY END
+
+========================================================================
+10. Free Triggered Action (Judgment main action rebuke)
+Section: triggers
+Live action id: action_1780273102615_aa1a74f2473bb
+COPY START
+{
+    "fields":  {
+
+               },
+    "automation":  {
+                       "schema":  "ability-automation/v3",
+                       "cards":  [
+                                     {
+                                         "type":  "trigger",
+                                         "id":  "trigger-judgment-main-action",
+                                         "condition":  "A creature judged by Cal uses a main action and is within line of effect.",
+                                         "match":  {
+                                                       "event":  "actionUsed",
+                                                       "filter":  {
+                                                                      "whose":  "judgedTarget",
+                                                                      "actionKind":  "main",
+                                                                      "lineOfEffectTo":  "self"
+                                                                  }
+                                                   },
+                                         "effects":  [
+                                                         {
+                                                             "kind":  "ifPrompt",
+                                                             "question":  "Is the judged creature within Cal\u0027s line of effect?",
+                                                             "yesLabel":  "Deal 6 holy",
+                                                             "noLabel":  "Skip",
+                                                             "then":  [
+                                                                          {
+                                                                              "kind":  "damage",
+                                                                              "target":  "eventActor",
+                                                                              "amount":  0,
+                                                                              "attribute":  "P",
+                                                                              "multiplier":  2,
+                                                                              "damageType":  "holy"
+                                                                          }
+                                                                      ]
+                                                         }
+                                                     ],
+                                         "note":  "The VTT stores lineOfEffectTo but does not evaluate it yet."
+                                     }
+                                 ]
+                   }
+}
+COPY END
+
+========================================================================
+11. Free Triggered Action (Judgment new target)
+Section: triggers
+Live action id: action_1780273114468_6607d1542407
+COPY START
+{
+    "fields":  {
+
+               },
+    "automation":  {
+                       "schema":  "ability-automation/v3",
+                       "cards":  [
+                                     {
+                                         "type":  "trigger",
+                                         "id":  "trigger-judgment-zero",
+                                         "condition":  "A creature judged by Cal is reduced to 0 Stamina.",
+                                         "match":  {
+                                                       "event":  "staminaZero",
+                                                       "filter":  {
+                                                                      "whose":  "judgedTarget",
+                                                                      "direction":  "down"
+                                                                  }
+                                                   }
+                                     },
+                                     {
+                                         "type":  "target",
+                                         "id":  "target-judgment-new",
+                                         "name":  "newJudgmentTarget",
+                                         "mode":  "token",
+                                         "predicate":  "enemy",
+                                         "count":  1,
+                                         "distance":  {
+                                                          "form":  "ranged",
+                                                          "value":  10
+                                                      },
+                                         "promptText":  "Choose the new Judgment target."
+                                     },
+                                     {
+                                         "type":  "effect",
+                                         "id":  "effect-judgment-new",
+                                         "target":  "newJudgmentTarget",
+                                         "effects":  [
+                                                         {
+                                                             "kind":  "applyMark",
+                                                             "markType":  "judgment",
+                                                             "duration":  "endOfEncounter",
+                                                             "exclusivePerSource":  true,
+                                                             "exclusivePerTarget":  true
+                                                         },
+                                                         {
+                                                             "kind":  "ifPrompt",
+                                                             "question":  "Spend 1 Wrath for Look On My Work and Despair on the new target? Choose no if already frightened of Cal.",
+                                                             "yesLabel":  "Spend Wrath",
+                                                             "noLabel":  "Skip",
+                                                             "then":  [
+                                                                          {
+                                                                              "kind":  "spend",
+                                                                              "resource":  "Wrath",
+                                                                              "amount":  1,
+                                                                              "prompt":  "Spend 1 Wrath to frighten the new Judgment target on P \u003c strong.",
+                                                                              "effects":  [
+                                                                                              {
+                                                                                                  "kind":  "potency",
+                                                                                                  "attribute":  "P",
+                                                                                                  "level":  "strong",
+                                                                                                  "onFail":  [
+                                                                                                                 {
+                                                                                                                     "kind":  "condition",
+                                                                                                                     "name":  "frightened",
+                                                                                                                     "duration":  "saveEnds"
+                                                                                                                 }
+                                                                                                             ]
+                                                                                              }
+                                                                                          ]
+                                                                          }
+                                                                      ]
+                                                         },
+                                                         {
+                                                             "kind":  "note",
+                                                             "text":  "If the new target is already frightened of Cal, do not apply frightened again; deal 6 holy damage instead."
+                                                         }
+                                                     ]
+                                     }
+                                 ]
+                   }
+}
+COPY END
+
+========================================================================
+12. Free Triggered Action (Judgment: stop shift)
+Section: triggers
+Live action id: action_1780274930123_b34653314140c
+COPY START
+{
+    "fields":  {
+                   "cost":  "1 Wrath"
+               },
+    "automation":  {
+                       "schema":  "ability-automation/v3",
+                       "cards":  [
+                                     {
+                                         "type":  "trigger",
+                                         "id":  "trigger-judgment-stop-shift",
+                                         "condition":  "An adjacent creature judged by Cal starts to shift.",
+                                         "match":  {
+                                                       "event":  "move",
+                                                       "filter":  {
+                                                                      "whose":  "judgedTarget",
+                                                                      "leavesAdjacency":  true,
+                                                                      "minDistance":  1
+                                                                  }
+                                                   },
+                                         "effects":  [
+                                                         {
+                                                             "kind":  "freeStrike",
+                                                             "target":  "self",
+                                                             "against":  "enemy",
+                                                             "asPowerRoll":  true,
+                                                             "text":  "Choose the judged creature who started to shift."
+                                                         },
+                                                         {
+                                                             "kind":  "condition",
+                                                             "target":  "eventActor",
+                                                             "name":  "other",
+                                                             "duration":  "endOfTurn",
+                                                             "text":  "speed is 0 until the end of the current turn"
+                                                         }
+                                                     ],
+                                         "note":  "Movement triggers fire after the VTT observes movement, so the speed-0 prevention may still need table enforcement."
+                                     }
+                                 ]
+                   }
+}
+COPY END
+
+========================================================================
+13. Free Triggered Action (Judgment: bane power roll)
+Section: triggers
+Live action id: action_1780274938055_d303cfb0781e78
+COPY START
+{
+    "fields":  {
+                   "cost":  "1 Wrath"
+               },
+    "automation":  {
+                       "schema":  "ability-automation/v3",
+                       "cards":  [
+                                     {
+                                         "type":  "trigger",
+                                         "id":  "trigger-judgment-bane-roll",
+                                         "condition":  "A creature judged by Cal within 10 squares makes a power roll.",
+                                         "match":  {
+                                                       "event":  "powerRoll",
+                                                       "filter":  {
+                                                                      "whose":  "judgedTarget",
+                                                                      "withinSquares":  10
+                                                                  }
+                                                   },
+                                         "effects":  [
+                                                         {
+                                                             "kind":  "note",
+                                                             "text":  "Apply one bane to the triggering power roll. This must be applied before the roll resolves; the VTT cannot retroactively add the bane after the roll event fires."
+                                                         }
+                                                     ]
+                                     }
+                                 ]
+                   }
+}
+COPY END
+
+========================================================================
+14. Free Triggered Action (Judgment: reduce potency)
+Section: triggers
+Live action id: action_1780274946089_ff06f53d9a2e1
+COPY START
+{
+    "fields":  {
+                   "cost":  "1 Wrath"
+               },
+    "automation":  {
+                       "schema":  "ability-automation/v3",
+                       "cards":  [
+                                     {
+                                         "type":  "trigger",
+                                         "id":  "trigger-judgment-reduce-potency",
+                                         "condition":  "A creature judged by Cal within 10 squares uses an ability with a potency that targets only one creature.",
+                                         "match":  {
+                                                       "event":  "potency",
+                                                       "filter":  {
+                                                                      "whose":  "judgedTarget",
+                                                                      "withinSquares":  10,
+                                                                      "maxTargets":  1
+                                                                  }
+                                                   },
+                                         "effects":  [
+                                                         {
+                                                             "kind":  "note",
+                                                             "text":  "Reduce the triggering potency by 1 for that one target. The VTT cannot currently mutate a potency check that is already in progress."
+                                                         }
+                                                     ]
+                                     }
+                                 ]
+                   }
+}
+COPY END
+
+========================================================================
+15. Free Triggered Action (Judgment: melee damage taunt)
+Section: triggers
+Live action id: action_1780274956221_e53656897d4a6
+COPY START
+{
+    "fields":  {
+                   "cost":  "1 Wrath"
+               },
+    "automation":  {
+                       "schema":  "ability-automation/v3",
+                       "cards":  [
+                                     {
+                                         "type":  "trigger",
+                                         "id":  "trigger-judgment-melee-taunt",
+                                         "condition":  "Cal damages a judged creature with a melee ability.",
+                                         "match":  {
+                                                       "event":  "damageDealt",
+                                                       "filter":  {
+                                                                      "whose":  "self",
+                                                                      "targetWhose":  "judgedTarget",
+                                                                      "keywordsAny":  [
+                                                                                          "Melee"
+                                                                                      ],
+                                                                      "minAmount":  1
+                                                                  }
+                                                   },
+                                         "effects":  [
+                                                         {
+                                                             "kind":  "condition",
+                                                             "target":  "eventTarget",
+                                                             "name":  "taunted",
+                                                             "duration":  "endOfTurn"
+                                                         }
+                                                     ]
+                                     }
+                                 ]
+                   }
+}
+COPY END
+
