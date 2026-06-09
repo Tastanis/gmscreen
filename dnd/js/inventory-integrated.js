@@ -81,58 +81,63 @@ function syncLegacyInventoryEffect(item) {
     }).filter(Boolean).join('\n\n');
 }
 
-function renderInventoryEffectSections(item, index, tab, canEdit) {
-    const sections = getInventoryEffectSections(item, { ensureEditableSection: canEdit });
+function renderInventoryEffectSection(section, index, tab, canEdit) {
+    if (!section) {
+        return '<div class="inventory-readonly-field readonly-textarea" data-field="effect"></div>';
+    }
+
+    if (canEdit) {
+        return `
+            <div class="inventory-effect-section" data-effect-section-id="${escapeHtml(section.id)}">
+                <div class="inventory-effect-section-header">
+                    <input
+                        type="text"
+                        class="inventory-effect-section-title"
+                        value="${escapeHtml(section.title)}"
+                        placeholder="Effect title"
+                        oninput="updateInventoryEffectSectionField('${tab}', ${index}, '${escapeHtml(section.id)}', 'title', this.value)"
+                    >
+                    <input
+                        type="text"
+                        class="inventory-effect-section-cost"
+                        value="${escapeHtml(section.cost)}"
+                        placeholder="Cost"
+                        oninput="updateInventoryEffectSectionField('${tab}', ${index}, '${escapeHtml(section.id)}', 'cost', this.value)"
+                    >
+                    <button
+                        type="button"
+                        class="btn-inventory-effect-remove"
+                        title="Remove effect"
+                        aria-label="Remove effect"
+                        onclick="event.stopPropagation(); removeInventoryEffectSection('${tab}', ${index}, '${escapeHtml(section.id)}')"
+                    >&times;</button>
+                </div>
+                <textarea
+                    class="inventory-effect-section-text"
+                    placeholder="Effect text"
+                    oninput="updateInventoryEffectSectionField('${tab}', ${index}, '${escapeHtml(section.id)}', 'text', this.value)"
+                >${escapeHtml(section.text)}</textarea>
+            </div>
+        `;
+    }
+
+    return `
+        <div class="inventory-effect-section inventory-effect-section-readonly">
+            <div class="inventory-effect-section-header">
+                <strong>${escapeHtml(section.title || 'Effect')}</strong>
+                ${section.cost ? `<span>${escapeHtml(section.cost)}</span>` : ''}
+            </div>
+            <div class="inventory-effect-section-body">${escapeHtml(section.text || '')}</div>
+        </div>
+    `;
+}
+
+function renderInventoryEffectSections(sections, index, tab, canEdit) {
     if (!sections.length) {
         return '<div class="inventory-readonly-field readonly-textarea" data-field="effect"></div>';
     }
 
-    return sections.map((section) => {
-        if (canEdit) {
-            return `
-                <div class="inventory-effect-section" data-effect-section-id="${escapeHtml(section.id)}">
-                    <div class="inventory-effect-section-header">
-                        <input
-                            type="text"
-                            class="inventory-effect-section-title"
-                            value="${escapeHtml(section.title)}"
-                            placeholder="Effect title"
-                            oninput="updateInventoryEffectSectionField('${tab}', ${index}, '${escapeHtml(section.id)}', 'title', this.value)"
-                        >
-                        <input
-                            type="text"
-                            class="inventory-effect-section-cost"
-                            value="${escapeHtml(section.cost)}"
-                            placeholder="Cost"
-                            oninput="updateInventoryEffectSectionField('${tab}', ${index}, '${escapeHtml(section.id)}', 'cost', this.value)"
-                        >
-                        <button
-                            type="button"
-                            class="btn-inventory-effect-remove"
-                            title="Remove effect"
-                            aria-label="Remove effect"
-                            onclick="event.stopPropagation(); removeInventoryEffectSection('${tab}', ${index}, '${escapeHtml(section.id)}')"
-                        >&times;</button>
-                    </div>
-                    <textarea
-                        class="inventory-effect-section-text"
-                        placeholder="Effect text"
-                        oninput="updateInventoryEffectSectionField('${tab}', ${index}, '${escapeHtml(section.id)}', 'text', this.value)"
-                    >${escapeHtml(section.text)}</textarea>
-                </div>
-            `;
-        }
-
-        return `
-            <div class="inventory-effect-section inventory-effect-section-readonly">
-                <div class="inventory-effect-section-header">
-                    <strong>${escapeHtml(section.title || 'Effect')}</strong>
-                    ${section.cost ? `<span>${escapeHtml(section.cost)}</span>` : ''}
-                </div>
-                <div class="inventory-effect-section-body">${escapeHtml(section.text || '')}</div>
-            </div>
-        `;
-    }).join('');
+    return sections.map((section) => renderInventoryEffectSection(section, index, tab, canEdit)).join('');
 }
 
 // Load inventory data from server
@@ -263,6 +268,9 @@ function createInventoryItemCard(item, index, tab) {
     if (effectSections.length > 1 || getInventoryMeaningfulEffectSectionCount(item) > 1) {
         card.classList.add('inventory-item-card--multi-effect');
     }
+    if (!item.image) {
+        card.classList.add('inventory-item-card--no-image');
+    }
     
     // Handle visibility for non-GM users - hide completely
     if (!isGM && !item.visible) {
@@ -274,6 +282,17 @@ function createInventoryItemCard(item, index, tab) {
     if (isGM && !item.visible) {
         card.classList.add('item-hidden');
     }
+
+    const primaryEffectSection = effectSections[0] || null;
+    const overflowEffectSections = effectSections.slice(1);
+    const overflowEffectsMarkup = overflowEffectSections.length ? `
+        <div class="inventory-effect-sections inventory-effect-sections--overflow">
+            <div class="inventory-effect-sections-header">
+                <label>More Effects:</label>
+            </div>
+            ${renderInventoryEffectSections(overflowEffectSections, index, tab, canEdit)}
+        </div>
+    ` : '';
     
     card.innerHTML = `
         <div class="inventory-item-card-header">
@@ -282,50 +301,47 @@ function createInventoryItemCard(item, index, tab) {
         </div>
 
         <div class="inventory-item-details">
-            <div class="inventory-item-content">
-                ${item.image ? `<div class="inventory-item-image-wrapper"><img src="${item.image}" alt="${escapeHtml(item.name)}" class="inventory-item-image-large" draggable="true"></div>` : ''}
-                <div class="inventory-item-main">
-                    <div class="inventory-item-field">
-                        <label>Name:</label>
-                        ${canEdit ?
-                            `<input type="text" data-field="name" value="${escapeHtml(item.name || '')}" onchange="updateInventoryItemField('${tab}', ${index}, 'name', this.value)">` :
-                            `<div class="inventory-readonly-field" data-field="name">${escapeHtml(item.name || '')}</div>`
-                        }
-                    </div>
+            ${item.image ? `<div class="inventory-item-image-wrapper"><img src="${item.image}" alt="${escapeHtml(item.name)}" class="inventory-item-image-large" draggable="true"></div>` : ''}
 
-                    <div class="inventory-item-field description-field">
-                        <label>Description:</label>
-                        ${canEdit ?
-                            `<textarea data-field="description" onchange="updateInventoryItemField('${tab}', ${index}, 'description', this.value)">${escapeHtml(item.description || '')}</textarea>` :
-                            `<div class="inventory-readonly-field readonly-textarea" data-field="description">${escapeHtml(item.description || '')}</div>`
-                        }
-                    </div>
-                </div>
+            <div class="inventory-item-field inventory-item-field--name">
+                <label>Name:</label>
+                ${canEdit ?
+                    `<input type="text" data-field="name" value="${escapeHtml(item.name || '')}" onchange="updateInventoryItemField('${tab}', ${index}, 'name', this.value)">` :
+                    `<div class="inventory-readonly-field" data-field="name">${escapeHtml(item.name || '')}</div>`
+                }
             </div>
 
-            <div class="inventory-item-meta">
-                <div class="inventory-item-field">
-                    <label>Keywords:</label>
-                    ${canEdit ?
-                        `<input type="text" data-field="keywords" value="${escapeHtml(item.keywords || '')}" onchange="updateInventoryItemField('${tab}', ${index}, 'keywords', this.value)">` :
-                        `<div class="inventory-readonly-field" data-field="keywords">${escapeHtml(item.keywords || '')}</div>`
-                    }
-                </div>
-
-                <div class="inventory-effect-sections">
-                    <div class="inventory-effect-sections-header">
-                        <label>Effects:</label>
-                        ${canEdit ? `
-                            <button
-                                type="button"
-                                class="btn-inventory-effect-add"
-                                onclick="event.stopPropagation(); addInventoryEffectSection('${tab}', ${index})"
-                            >Add Effect</button>
-                        ` : ''}
-                    </div>
-                    ${renderInventoryEffectSections(item, index, tab, canEdit)}
-                </div>
+            <div class="inventory-item-field inventory-item-field--keywords">
+                <label>Keywords:</label>
+                ${canEdit ?
+                    `<input type="text" data-field="keywords" value="${escapeHtml(item.keywords || '')}" onchange="updateInventoryItemField('${tab}', ${index}, 'keywords', this.value)">` :
+                    `<div class="inventory-readonly-field" data-field="keywords">${escapeHtml(item.keywords || '')}</div>`
+                }
             </div>
+
+            <div class="inventory-item-field inventory-item-field--description">
+                <label>Description:</label>
+                ${canEdit ?
+                    `<textarea data-field="description" onchange="updateInventoryItemField('${tab}', ${index}, 'description', this.value)">${escapeHtml(item.description || '')}</textarea>` :
+                    `<div class="inventory-readonly-field readonly-textarea" data-field="description">${escapeHtml(item.description || '')}</div>`
+                }
+            </div>
+
+            <div class="inventory-effect-sections inventory-effect-sections--primary">
+                <div class="inventory-effect-sections-header">
+                    <label>Effects:</label>
+                    ${canEdit ? `
+                        <button
+                            type="button"
+                            class="btn-inventory-effect-add"
+                            onclick="event.stopPropagation(); addInventoryEffectSection('${tab}', ${index})"
+                        >Add Effect</button>
+                    ` : ''}
+                </div>
+                ${renderInventoryEffectSection(primaryEffectSection, index, tab, canEdit)}
+            </div>
+
+            ${overflowEffectsMarkup}
 
             <div class="inventory-card-actions">
                 ${canEdit ? `
