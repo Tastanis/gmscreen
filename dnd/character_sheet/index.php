@@ -49,6 +49,7 @@ require_once '../includes/strix-nav.php';
   <title>Hero Sheet</title>
   <link rel="stylesheet" href="../css/chat-panel.css?v=<?php echo (int) $assetVersion; ?>" />
   <link rel="stylesheet" href="styles.css?v=<?php echo (int) $assetVersion; ?>" />
+  <link rel="stylesheet" href="inventory-tab.css?v=<?php echo (int) $assetVersion; ?>" />
   <link rel="stylesheet" href="ability-automation/automation.css?v=<?php echo (int) $assetVersion; ?>" />
   <script src="ability-automation/primitives.js?v=<?php echo (int) $assetVersion; ?>"></script>
   <script src="ability-automation/schema.js?v=<?php echo (int) $assetVersion; ?>"></script>
@@ -58,11 +59,12 @@ require_once '../includes/strix-nav.php';
   <script src="ability-automation/inspector.js?v=<?php echo (int) $assetVersion; ?>"></script>
   <script src="ability-automation/runner.js?v=<?php echo (int) $assetVersion; ?>"></script>
   <script type="module" src="sheet.js?v=<?php echo (int) $assetVersion; ?>"></script>
+  <script src="inventory-tab.js?v=<?php echo (int) $assetVersion; ?>" defer></script>
 <?php if ($chatPusherConfig !== null): ?>
   <script src="https://js.pusher.com/8.4.0/pusher.min.js"></script>
 <?php endif; ?>
 </head>
-<body class="character-sheet-page" data-character="<?php echo htmlspecialchars($activeCharacter, ENT_QUOTES, 'UTF-8'); ?>">
+<body class="character-sheet-page" data-character="<?php echo htmlspecialchars($activeCharacter, ENT_QUOTES, 'UTF-8'); ?>" data-user="<?php echo htmlspecialchars($sessionUser, ENT_QUOTES, 'UTF-8'); ?>" data-is-gm="<?php echo $isGm ? '1' : '0'; ?>">
   <?php renderStrixNav('charactersheet'); ?>
   <div class="app-shell">
     <main class="sheet">
@@ -87,6 +89,7 @@ require_once '../includes/strix-nav.php';
         <button class="tab" data-tab="maneuvers">Maneuvers</button>
         <button class="tab" data-tab="triggers">Triggers</button>
         <button class="tab" data-tab="free-strikes">Free Strikes</button>
+        <button class="tab" data-tab="inventory">Inventory</button>
       </div>
 
       <div class="sheet__content">
@@ -96,6 +99,7 @@ require_once '../includes/strix-nav.php';
         <div class="pane is-hidden" data-pane="maneuvers" id="maneuvers-pane"></div>
         <div class="pane is-hidden" data-pane="triggers" id="triggers-pane"></div>
         <div class="pane is-hidden" data-pane="free-strikes" id="free-strikes-pane"></div>
+        <div class="pane is-hidden" data-pane="inventory" id="inventory-pane"></div>
       </div>
     </main>
 

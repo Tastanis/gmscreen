@@ -57,7 +57,9 @@ function normalizeVttItemsCharacter($value): string
 
 function loadVttInventoryData(): array
 {
-    $path = __DIR__ . '/../../data/inventory.json';
+    // Items now come from the character sheet inventory rather than the
+    // legacy dashboard inventory (dnd/data/inventory.json).
+    $path = __DIR__ . '/../../data/character_inventory.json';
     if (!is_readable($path)) {
         return [];
     }
