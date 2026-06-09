@@ -283,14 +283,18 @@ function createInventoryItemCard(item, index, tab) {
         card.classList.add('item-hidden');
     }
 
-    const primaryEffectSection = effectSections[0] || null;
-    const overflowEffectSections = effectSections.slice(1);
-    const overflowEffectsMarkup = overflowEffectSections.length ? `
-        <div class="inventory-effect-sections inventory-effect-sections--overflow">
+    const leftEffectCount = Math.min(
+        effectSections.length || 1,
+        1 + Math.max(0, Math.ceil((effectSections.length - 4) / 2))
+    );
+    const leftEffectSections = effectSections.slice(0, leftEffectCount);
+    const rightEffectSections = effectSections.slice(leftEffectCount);
+    const rightEffectsMarkup = rightEffectSections.length ? `
+        <div class="inventory-effect-sections inventory-effect-sections--right">
             <div class="inventory-effect-sections-header">
                 <label>More Effects:</label>
             </div>
-            ${renderInventoryEffectSections(overflowEffectSections, index, tab, canEdit)}
+            ${renderInventoryEffectSections(rightEffectSections, index, tab, canEdit)}
         </div>
     ` : '';
     
@@ -301,70 +305,74 @@ function createInventoryItemCard(item, index, tab) {
         </div>
 
         <div class="inventory-item-details">
-            ${item.image ? `<div class="inventory-item-image-wrapper"><img src="${item.image}" alt="${escapeHtml(item.name)}" class="inventory-item-image-large" draggable="true"></div>` : ''}
+            <div class="inventory-item-details-left">
+                <div class="inventory-item-summary">
+                    ${item.image ? `<div class="inventory-item-image-wrapper"><img src="${item.image}" alt="${escapeHtml(item.name)}" class="inventory-item-image-large" draggable="true"></div>` : ''}
 
-            <div class="inventory-item-field inventory-item-field--name">
-                <label>Name:</label>
-                ${canEdit ?
-                    `<input type="text" data-field="name" value="${escapeHtml(item.name || '')}" onchange="updateInventoryItemField('${tab}', ${index}, 'name', this.value)">` :
-                    `<div class="inventory-readonly-field" data-field="name">${escapeHtml(item.name || '')}</div>`
-                }
-            </div>
+                    <div class="inventory-item-field inventory-item-field--name">
+                        <label>Name:</label>
+                        ${canEdit ?
+                            `<input type="text" data-field="name" value="${escapeHtml(item.name || '')}" onchange="updateInventoryItemField('${tab}', ${index}, 'name', this.value)">` :
+                            `<div class="inventory-readonly-field" data-field="name">${escapeHtml(item.name || '')}</div>`
+                        }
+                    </div>
 
-            <div class="inventory-item-field inventory-item-field--keywords">
-                <label>Keywords:</label>
-                ${canEdit ?
-                    `<input type="text" data-field="keywords" value="${escapeHtml(item.keywords || '')}" onchange="updateInventoryItemField('${tab}', ${index}, 'keywords', this.value)">` :
-                    `<div class="inventory-readonly-field" data-field="keywords">${escapeHtml(item.keywords || '')}</div>`
-                }
-            </div>
+                    <div class="inventory-item-field inventory-item-field--keywords">
+                        <label>Keywords:</label>
+                        ${canEdit ?
+                            `<input type="text" data-field="keywords" value="${escapeHtml(item.keywords || '')}" onchange="updateInventoryItemField('${tab}', ${index}, 'keywords', this.value)">` :
+                            `<div class="inventory-readonly-field" data-field="keywords">${escapeHtml(item.keywords || '')}</div>`
+                        }
+                    </div>
 
-            <div class="inventory-item-field inventory-item-field--description">
-                <label>Description:</label>
-                ${canEdit ?
-                    `<textarea data-field="description" onchange="updateInventoryItemField('${tab}', ${index}, 'description', this.value)">${escapeHtml(item.description || '')}</textarea>` :
-                    `<div class="inventory-readonly-field readonly-textarea" data-field="description">${escapeHtml(item.description || '')}</div>`
-                }
-            </div>
+                    <div class="inventory-item-field inventory-item-field--description">
+                        <label>Description:</label>
+                        ${canEdit ?
+                            `<textarea data-field="description" onchange="updateInventoryItemField('${tab}', ${index}, 'description', this.value)">${escapeHtml(item.description || '')}</textarea>` :
+                            `<div class="inventory-readonly-field readonly-textarea" data-field="description">${escapeHtml(item.description || '')}</div>`
+                        }
+                    </div>
+                </div>
 
-            <div class="inventory-effect-sections inventory-effect-sections--primary">
-                <div class="inventory-effect-sections-header">
-                    <label>Effects:</label>
+                <div class="inventory-effect-sections inventory-effect-sections--left">
+                    <div class="inventory-effect-sections-header">
+                        <label>Effects:</label>
+                        ${canEdit ? `
+                            <button
+                                type="button"
+                                class="btn-inventory-effect-add"
+                                onclick="event.stopPropagation(); addInventoryEffectSection('${tab}', ${index})"
+                            >Add Effect</button>
+                        ` : ''}
+                    </div>
+                    ${renderInventoryEffectSections(leftEffectSections, index, tab, canEdit)}
+                </div>
+
+                <div class="inventory-card-actions">
                     ${canEdit ? `
-                        <button
-                            type="button"
-                            class="btn-inventory-effect-add"
-                            onclick="event.stopPropagation(); addInventoryEffectSection('${tab}', ${index})"
-                        >Add Effect</button>
+                        <button class="btn-inventory-upload" onclick="uploadInventoryImage('${item.id}')">
+                            ${item.image ? 'Change Image' : 'Add Image'}
+                        </button>
+                        ${isGM ? `
+                            <button class="btn-inventory-visibility" onclick="toggleInventoryItemVisibility('${tab}', ${index})">
+                                ${item.visible ? 'Hide' : 'Show'}
+                            </button>
+                            <button class="btn-inventory-duplicate" onclick="duplicateInventoryItem('${tab}', ${index})">Copy Item</button>
+                        ` : ''}
+                        ${(tab === currentUser) ? `
+                            <button class="btn-inventory-share" onclick="shareInventoryItem('${tab}', ${index})">
+                                ${isGM ? 'Share to GM' : 'Share'}
+                            </button>
+                        ` : ''}
+                        <button class="btn-inventory-delete" onclick="deleteInventoryItem('${tab}', ${index})">Delete</button>
+                    ` : ''}
+                    ${!isGM && (tab === 'gm' || tab === 'shared') ? `
+                        <button class="btn-inventory-take" onclick="takeInventoryItem('${tab}', ${index})">Take Item</button>
                     ` : ''}
                 </div>
-                ${renderInventoryEffectSection(primaryEffectSection, index, tab, canEdit)}
             </div>
 
-            ${overflowEffectsMarkup}
-
-            <div class="inventory-card-actions">
-                ${canEdit ? `
-                    <button class="btn-inventory-upload" onclick="uploadInventoryImage('${item.id}')">
-                        ${item.image ? 'Change Image' : 'Add Image'}
-                    </button>
-                    ${isGM ? `
-                        <button class="btn-inventory-visibility" onclick="toggleInventoryItemVisibility('${tab}', ${index})">
-                            ${item.visible ? 'Hide' : 'Show'}
-                        </button>
-                        <button class="btn-inventory-duplicate" onclick="duplicateInventoryItem('${tab}', ${index})">Copy Item</button>
-                    ` : ''}
-                    ${(tab === currentUser) ? `
-                        <button class="btn-inventory-share" onclick="shareInventoryItem('${tab}', ${index})">
-                            ${isGM ? 'Share to GM' : 'Share'}
-                        </button>
-                    ` : ''}
-                    <button class="btn-inventory-delete" onclick="deleteInventoryItem('${tab}', ${index})">Delete</button>
-                ` : ''}
-                ${!isGM && (tab === 'gm' || tab === 'shared') ? `
-                    <button class="btn-inventory-take" onclick="takeInventoryItem('${tab}', ${index})">Take Item</button>
-                ` : ''}
-            </div>
+            ${rightEffectsMarkup}
         </div>
     `;
     

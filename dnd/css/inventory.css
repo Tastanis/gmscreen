@@ -374,9 +374,8 @@
 
 .inventory-item-card--multi-effect.expanded .inventory-item-details {
     display: grid;
-    grid-template-columns: minmax(76px, 100px) minmax(220px, 1fr) minmax(420px, 1.34fr);
-    grid-template-rows: auto auto auto auto auto;
-    gap: 7px 10px;
+    grid-template-columns: minmax(330px, 0.9fr) minmax(420px, 1.1fr);
+    gap: 10px;
     align-items: start;
 }
 
@@ -387,11 +386,6 @@
 
 .inventory-item-card.expanded .inventory-item-image-small {
     display: none;
-}
-
-.inventory-item-card--multi-effect.expanded .inventory-item-image-wrapper {
-    grid-column: 1;
-    grid-row: 1 / span 2;
 }
 
 .inventory-item-card--multi-effect.expanded .inventory-item-image-large {
@@ -405,9 +399,56 @@
     align-items: flex-start;
 }
 
-.inventory-item-card--multi-effect.expanded .inventory-item-field--name {
+.inventory-item-summary {
+    display: grid;
+    grid-template-columns: minmax(108px, 148px) minmax(0, 1fr);
+    gap: 8px;
+    align-items: start;
+    margin-bottom: 6px;
+}
+
+.inventory-item-summary .inventory-item-image-wrapper {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+}
+
+.inventory-item-field--name {
     grid-column: 2;
     grid-row: 1;
+}
+
+.inventory-item-field--keywords {
+    grid-column: 2;
+    grid-row: 2;
+}
+
+.inventory-item-field--description {
+    grid-column: 1 / span 2;
+    grid-row: 3;
+}
+
+.inventory-item-card--no-image .inventory-item-field--name,
+.inventory-item-card--no-image .inventory-item-field--keywords {
+    grid-column: 1 / span 2;
+}
+
+.inventory-item-card--multi-effect.expanded .inventory-item-details-left {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+
+.inventory-item-card--multi-effect.expanded .inventory-item-summary {
+    display: grid;
+    grid-template-columns: minmax(76px, 100px) minmax(0, 1fr);
+    gap: 7px 10px;
+    align-items: start;
+}
+
+.inventory-item-card--multi-effect.expanded .inventory-item-image-wrapper {
+    grid-column: 1;
+    grid-row: 1 / span 2;
 }
 
 .inventory-item-card--multi-effect.expanded .inventory-item-field {
@@ -419,6 +460,11 @@
     padding-bottom: 5px;
 }
 
+.inventory-item-card--multi-effect.expanded .inventory-item-field--name {
+    grid-column: 2;
+    grid-row: 1;
+}
+
 .inventory-item-card--multi-effect.expanded .inventory-item-field--keywords {
     grid-column: 2;
     grid-row: 2;
@@ -427,11 +473,6 @@
 .inventory-item-card--multi-effect.expanded .inventory-item-field--description {
     grid-column: 1 / span 2;
     grid-row: 3;
-}
-
-.inventory-item-card--multi-effect.expanded .inventory-effect-sections--primary {
-    grid-column: 1 / span 2;
-    grid-row: 4;
 }
 
 .inventory-item-card--multi-effect.expanded.inventory-item-card--no-image .inventory-item-field--name,
@@ -454,16 +495,12 @@
     }
 }
 
-.inventory-item-card--multi-effect.expanded .inventory-effect-sections--overflow {
-    grid-column: 3;
-    grid-row: 1 / span 5;
+.inventory-item-card--multi-effect.expanded .inventory-effect-sections--right {
     margin-top: 0;
     min-height: 0;
 }
 
 .inventory-item-card--multi-effect.expanded .inventory-card-actions {
-    grid-column: 1 / span 2;
-    grid-row: 5;
     margin-top: 0;
 }
 
