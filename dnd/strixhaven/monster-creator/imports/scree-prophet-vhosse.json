@@ -1,0 +1,264 @@
+{
+  "id": "scree_prophet_vhosse",
+  "name": "Scree-Prophet Vhosse",
+  "level": 3,
+  "role": "Leader",
+  "types": "Tallish, Already-Damned Commander — \"The Uncounted\"",
+  "ev": 40,
+  "size": "1M",
+  "speed": 6,
+  "movement": "ignores difficult stone terrain",
+  "stamina": 80,
+  "stability": 2,
+  "free_strike": 6,
+  "immunities": [],
+  "weaknesses": [],
+  "attributes": {
+    "might": 3,
+    "agility": 2,
+    "reason": 1,
+    "intuition": 2,
+    "presence": 3
+  },
+  "traits": [
+    {
+      "name": "Stand Firm",
+      "text": "While Vhosse is adjacent to an ally, she has +3 stability (5 total), can't be knocked prone, and can't be frightened."
+    },
+    {
+      "name": "The Uncounted",
+      "text": "Ex-Witness confessor who did the math and stopped believing in the total. The scree graffiti is hers. Speaks in funeral liturgy, fights like a landslide. She refuses The Pause — deaths within 10 squares never cost her warband their turns while she lives; death feeds her instead of stopping her (see Witness Me)."
+    }
+  ],
+  "abilities": {
+    "passive": [
+      {
+        "name": "We Are Already Counted",
+        "keywords": "Aura, Magic",
+        "range": "Aura 5",
+        "targets": "All allies in the aura",
+        "effect": "Allies in the aura gain +1 to power rolls, and their Codified Edict movement provokes nothing, ever. The warband advances as one grieving mass. (Run this once at combat start to place the visible aura; apply the +1 to allied power rolls manually.)",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "effects": [
+                { "kind": "aura", "enabled": true, "radius": 5, "color": "#7a6f8f", "target": "self", "text": "We Are Already Counted: allies in the aura have +1 to power rolls, and Codified Edict movement provokes no opportunity attacks." },
+                { "kind": "note", "text": "AURA UP — allies within 5 of Vhosse: +1 to power rolls (add manually to their flat bonus), and Codified Edict movement never provokes." }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "maneuver": [
+      {
+        "name": "Codified Edict",
+        "keywords": "Move",
+        "range": "Self",
+        "targets": "Self and adjacent allies",
+        "effect": "Vhosse moves up to her speed toward an enemy, then makes a free strike. Every ally adjacent to her when this maneuver starts may also move up to their speed. (Faction maneuver. Inside her aura, this movement provokes nothing.)",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "effects": [
+                { "kind": "shift", "distance": "speed", "text": "Move up to speed toward an enemy." },
+                { "kind": "freeStrike", "text": "Free strike at the end of the move." },
+                { "kind": "note", "text": "Codified Edict: every ally adjacent to Vhosse when the maneuver started may also move up to their speed (move them manually)." }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "action": [
+      {
+        "name": "Liturgy of the Last Bend",
+        "keywords": "Ranged, Magic, Earth",
+        "range": "Ranged 10",
+        "targets": "2 creatures",
+        "effect": "She drags you into the dead world she is making. Tier 1 (≤11): 6 damage. Tier 2 (12–16): 9 damage, pull 3 toward the nearest scree. Tier 3 (17+): 12 damage, pull 4, and the target's square becomes scree. (Automation pulls toward Vhosse; the GM clicks the destination, so pull toward the nearest scree instead — the highlight is advisory only.)",
+        "has_test": true,
+        "test": {
+          "tier1": { "damage_amount": "6", "damage_type": "untyped" },
+          "tier2": { "damage_amount": "9", "damage_type": "untyped" },
+          "tier3": { "damage_amount": "12", "damage_type": "untyped" }
+        },
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "primary",
+              "mode": "token",
+              "predicate": "enemy",
+              "count": { "value": 2, "mode": "upTo" },
+              "distance": { "form": "ranged", "value": 10 }
+            },
+            {
+              "type": "powerRoll",
+              "flatBonus": 3,
+              "tiers": {
+                "tier1": {
+                  "effects": [
+                    { "kind": "damage", "amount": 6 }
+                  ]
+                },
+                "tier2": {
+                  "effects": [
+                    { "kind": "damage", "amount": 9 },
+                    { "kind": "forcedMovement", "verb": "pull", "distance": 3, "text": "Pull 3 toward the nearest scree (GM places destination)." }
+                  ]
+                },
+                "tier3": {
+                  "effects": [
+                    { "kind": "damage", "amount": 12 },
+                    { "kind": "forcedMovement", "verb": "pull", "distance": 4, "text": "Pull 4 toward the nearest scree (GM places destination)." },
+                    { "kind": "note", "text": "Tier 3: the target's square becomes PERMANENT SCREE. Mark the map." }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "triggered_action": [
+      {
+        "name": "Witness Me (2/encounter)",
+        "trigger": "An ally within 10 squares would die.",
+        "keywords": "Magic",
+        "range": "10",
+        "targets": "The dying ally",
+        "effect": "The ally drops to 1 Stamina instead of dying. Vhosse and all allies adjacent to her gain +2 damage until the end of the next round. She refuses The Pause — death feeds her instead of stopping her. (Track the 2/encounter limit manually — the tracker only supports 1/encounter, so it is left off. The +2 damage buff is applied manually.)",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "trigger",
+              "condition": "An ally within 10 squares would die",
+              "match": {
+                "event": "staminaZero",
+                "filter": { "whose": "ally", "withinSquares": 10 }
+              },
+              "effects": [
+                { "kind": "heal", "amount": 1, "target": "eventTarget", "text": "The ally drops to 1 Stamina instead of dying." },
+                { "kind": "floatingText", "text": "WITNESS ME", "tone": "danger" },
+                { "kind": "note", "text": "WITNESS ME: Vhosse and all allies adjacent to her gain +2 damage until the end of the next round (apply manually). 2/encounter — track uses manually." }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "villain_action": [
+      {
+        "name": "Villain Action 1 — Stop Counting",
+        "keywords": "Magic",
+        "range": "Battlefield",
+        "targets": "All allied Tallish",
+        "effect": "All allied Tallish ignore Measure Thrice and immediately take a free Codified Edict. The line surges.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "effects": [
+                { "kind": "floatingText", "text": "STOP COUNTING", "tone": "danger" },
+                { "kind": "note", "text": "STOP COUNTING: every allied Tallish ignores Measure Thrice and immediately takes a free Codified Edict — run each one's Codified Edict maneuver from its own tray now (move + free strike, adjacent allies may move)." }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "Villain Action 2 — Sermon of Scree",
+        "keywords": "Area, Magic, Earth",
+        "range": "Burst 3",
+        "targets": "Each enemy in the burst",
+        "effect": "2d10+3 vs enemies in the burst. Tier 1 (≤11): 5 damage. Tier 2 (12–16): 8 damage. Tier 3 (17+): 11 damage. All stone in the burst becomes permanent scree; her allies take nothing. The dead world is home. (Tier damage numbers are GM-fill — the source block only specified the roll; adjust if you have different values.)",
+        "has_test": true,
+        "test": {
+          "tier1": { "damage_amount": "5", "damage_type": "untyped" },
+          "tier2": { "damage_amount": "8", "damage_type": "untyped" },
+          "tier3": { "damage_amount": "11", "damage_type": "untyped" }
+        },
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "sermon",
+              "mode": "area",
+              "predicate": "enemy",
+              "shape": "burst",
+              "size": 3,
+              "distance": { "form": "burst", "value": 3 }
+            },
+            {
+              "type": "powerRoll",
+              "flatBonus": 3,
+              "tiers": {
+                "tier1": {
+                  "effects": [
+                    { "kind": "damage", "amount": 5 }
+                  ]
+                },
+                "tier2": {
+                  "effects": [
+                    { "kind": "damage", "amount": 8 }
+                  ]
+                },
+                "tier3": {
+                  "effects": [
+                    { "kind": "damage", "amount": 11 }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "effect",
+              "effects": [
+                { "kind": "note", "text": "SERMON OF SCREE: all stone in the burst becomes PERMANENT SCREE (mark the map). Vhosse's allies in the burst take nothing." }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "Villain Action 3 — The Last Working",
+        "keywords": "Area, Magic, Earth",
+        "range": "Line 4",
+        "targets": "Each creature in the line",
+        "effect": "Vhosse pulls a cliff face or structure edge down across a 4-square line. Each creature in the line takes 3d6 damage and is knocked prone — this is terrain, so it ignores Stand Firm. The line becomes scree strewn with half-cover rubble, and she carves the hell-mark into it. The thing she has been promising everyone.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "collapse",
+              "mode": "area",
+              "predicate": "creature",
+              "shape": "line",
+              "size": 4,
+              "distance": { "form": "line", "value": 4 }
+            },
+            {
+              "type": "effect",
+              "effects": [
+                { "kind": "damage", "amount": 0, "amountDice": "3d6", "text": "Falling stone — 3d6 damage." },
+                { "kind": "condition", "name": "prone", "text": "Terrain ignores Stand Firm — apply prone even to clustered Tallish." },
+                { "kind": "floatingText", "text": "THE LAST WORKING", "tone": "danger" },
+                { "kind": "note", "text": "THE LAST WORKING: the 4-square line becomes SCREE with half-cover rubble. Vhosse carves the hell-mark into it. Mark the map." }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "malice": []
+  }
+}

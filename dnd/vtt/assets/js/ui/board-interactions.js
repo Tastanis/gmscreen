@@ -2746,13 +2746,25 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
+  // turnStart/turnEnd fire on every connected client (state syncs call
+  // setActiveCombatantId everywhere), so those prompts can be routed to the
+  // client of the player who owns the character. All other events may only
+  // fire on the GM client, so the GM keeps handling them.
+  function shouldHandleHeroicResourceEventHere(eventType, profileId) {
+    if (eventType === 'turnStart' || eventType === 'turnEnd') {
+      return normalizeProfileId(profileId) === normalizeProfileId(getCurrentUserId());
+    }
+    return isGmUser();
+  }
+
   async function processHeroicResourceAutomationEvent(eventType, payload = {}) {
-    if (!eventType || !isGmUser()) return;
+    if (!eventType) return;
     const placements = getHeroicResourceCandidatePlacements(eventType, payload);
     if (!placements.length) return;
     for (const placement of placements) {
       const profileId = getAutomationProfileIdForPlacement(placement.id);
       if (!profileId) continue;
+      if (!shouldHandleHeroicResourceEventHere(eventType, profileId)) continue;
       const sheet = await getAutomationSheetForPlacement(placement.id);
       const resource = sheet?.hero?.resource;
       const automation = normalizeHeroicResourceAutomation(resource?.automation);

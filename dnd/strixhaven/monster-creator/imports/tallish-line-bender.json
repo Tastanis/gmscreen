@@ -1,0 +1,144 @@
+{
+  "id": "tallish_line_bender",
+  "name": "Tallish Line-Bender",
+  "level": 2,
+  "role": "Controller",
+  "types": "Tallish, Order Lorehold / Already-Damned (rank-and-file)",
+  "ev": 14,
+  "size": "1M",
+  "speed": 5,
+  "movement": "",
+  "stamina": 30,
+  "stability": 2,
+  "free_strike": 4,
+  "immunities": [],
+  "weaknesses": [],
+  "attributes": {
+    "might": 2,
+    "agility": 0,
+    "reason": 2,
+    "intuition": 1,
+    "presence": 0
+  },
+  "traits": [
+    {
+      "name": "Stand Firm",
+      "text": "While the Line-Bender is adjacent to an ally, it has +3 stability (5 total), can't be knocked prone, and can't be frightened."
+    },
+    {
+      "name": "Dead Stone",
+      "text": "While the Line-Bender is standing on scree or dead stone, its bending abilities are disabled — it can only make free strikes."
+    },
+    {
+      "name": "Measure Thrice",
+      "text": "The Line-Bender takes no opportunity attacks. It won't move and use a main action on the same turn UNLESS it is executing the score (Codified Edict IS the score — exempt)."
+    },
+    {
+      "name": "The Pause (1/encounter)",
+      "text": "When any creature dies within 10 squares, all Line-Benders lose their next turn, witnessing. (Director note: this is exploitable — players should be able to discover and weaponize it.)"
+    },
+    {
+      "name": "Crew-Chief Upgrade (Varresk, Zedh)",
+      "text": "Crew-chiefs/reckoners use this same stat block with +15 Stamina (45 total) and +1 to power rolls (use flat bonus +3 on Stone Haul)."
+    }
+  ],
+  "abilities": {
+    "passive": [],
+    "maneuver": [
+      {
+        "name": "Codified Edict",
+        "keywords": "Move",
+        "range": "Self",
+        "targets": "Self and adjacent allies",
+        "effect": "The Line-Bender moves up to its speed toward an enemy, then makes a free strike. Every ally adjacent to it when this maneuver starts may also move up to their speed. (Faction maneuver — this counts as executing the score for Measure Thrice.)",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "effects": [
+                { "kind": "shift", "distance": "speed", "text": "Move up to speed toward an enemy." },
+                { "kind": "freeStrike", "text": "Free strike at the end of the move." },
+                { "kind": "note", "text": "Codified Edict: every ally adjacent to the Line-Bender when the maneuver started may also move up to their speed (move them manually)." }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "action": [
+      {
+        "name": "Stone Haul",
+        "keywords": "Ranged, Magic, Earth",
+        "range": "Ranged 8",
+        "targets": "1 creature",
+        "effect": "The Line-Bender folds the stone under the target and reels it toward the formation — into the Stand Firm wall and free-strike range. Tier 1 (≤11): 5 damage. Tier 2 (12–16): 8 damage, pull 2 toward the cluster. Tier 3 (17+): 11 damage, pull 3, prone.",
+        "has_test": true,
+        "test": {
+          "tier1": { "damage_amount": "5", "damage_type": "untyped" },
+          "tier2": { "damage_amount": "8", "damage_type": "untyped" },
+          "tier3": { "damage_amount": "11", "damage_type": "untyped" }
+        },
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "primary",
+              "mode": "token",
+              "predicate": "enemy",
+              "count": { "value": 1, "mode": "exact" },
+              "distance": { "form": "ranged", "value": 8 }
+            },
+            {
+              "type": "powerRoll",
+              "flatBonus": 2,
+              "tiers": {
+                "tier1": {
+                  "effects": [
+                    { "kind": "damage", "amount": 5 }
+                  ]
+                },
+                "tier2": {
+                  "effects": [
+                    { "kind": "damage", "amount": 8 },
+                    { "kind": "forcedMovement", "verb": "pull", "distance": 2, "text": "Pull 2 toward the cluster." }
+                  ]
+                },
+                "tier3": {
+                  "effects": [
+                    { "kind": "damage", "amount": 11 },
+                    { "kind": "forcedMovement", "verb": "pull", "distance": 3, "text": "Pull 3 toward the cluster." },
+                    { "kind": "condition", "name": "prone" }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Convened Working",
+        "keywords": "Magic, Earth, Ritual",
+        "range": "Adjacent worked stone",
+        "targets": "Terrain",
+        "effect": "Requires 2+ Line-Benders ADJACENT to each other, each spending their main action. No roll. Choose one: raise a 3-square wall (10 Stamina per square), open a 2-square pit, or fold a ramp. A +1 tally-stroke appears carved into the worked stone. Codified Edict then marches the block in — this is why they cluster.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "effects": [
+                { "kind": "note", "text": "CONVENED WORKING — requires 2+ adjacent Line-Benders each spending a main action. GM: raise a 3-square wall (10 Stamina/square), open a 2-square pit, or fold a ramp. Mark a +1 tally-stroke on the worked stone." },
+                { "kind": "floatingText", "text": "THE STONE IS WORKED", "tone": "neutral" }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "triggered_action": [],
+    "villain_action": [],
+    "malice": []
+  }
+}

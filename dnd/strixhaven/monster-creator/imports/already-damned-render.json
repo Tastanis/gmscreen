@@ -1,0 +1,186 @@
+{
+  "id": "already_damned_render",
+  "name": "Already-Damned Render",
+  "level": 2,
+  "role": "Harrier",
+  "types": "Tallish, Rogue Believer (both sides)",
+  "ev": 16,
+  "size": "1M",
+  "speed": 7,
+  "movement": "ignores difficult stone terrain",
+  "stamina": 40,
+  "stability": 1,
+  "free_strike": 5,
+  "immunities": [],
+  "weaknesses": [],
+  "attributes": {
+    "might": 2,
+    "agility": 2,
+    "reason": 0,
+    "intuition": 0,
+    "presence": 1
+  },
+  "traits": [
+    {
+      "name": "Stand Firm",
+      "text": "While the Render is adjacent to an ally, it has +3 stability (4 total), can't be knocked prone, and can't be frightened."
+    },
+    {
+      "name": "Nothing Left to Count",
+      "text": "While the Render is bloodied (winded), its abilities deal +3 damage, and allied Tallish within 5 squares ignore Measure Thrice — the heresy aura lets them bend without permission. (The +3 damage is automated on Spendthrift Bend via its winded tiers; the Measure Thrice exemption is manual.)"
+    }
+  ],
+  "abilities": {
+    "passive": [],
+    "maneuver": [
+      {
+        "name": "Codified Edict",
+        "keywords": "Move",
+        "range": "Self",
+        "targets": "Self and adjacent allies",
+        "effect": "The Render moves up to its speed toward an enemy, then makes a free strike. Every ally adjacent to it when this maneuver starts may also move up to their speed. (Faction maneuver.)",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "effects": [
+                { "kind": "shift", "distance": "speed", "text": "Move up to speed toward an enemy." },
+                { "kind": "freeStrike", "text": "Free strike at the end of the move." },
+                { "kind": "note", "text": "Codified Edict: every ally adjacent to the Render when the maneuver started may also move up to their speed (move them manually)." }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "Stone Surf (1/turn)",
+        "keywords": "Move, Earth",
+        "range": "Self",
+        "targets": "Self and one adjacent ally",
+        "effect": "The Render shifts up to its speed along any worked stone, walls included. One adjacent ally may surf along with it. The pack rides the wave.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "effects": [
+                { "kind": "shift", "distance": "speed", "text": "Shift along worked stone (walls included)." },
+                { "kind": "note", "text": "Stone Surf: one ally adjacent at the start of the surf may shift along the same worked stone (move them manually). Path must follow worked stone." }
+              ]
+            }
+          ],
+          "usageLimit": { "scope": "turn", "key": "stone-surf", "target": "self", "message": "Stone Surf is 1/turn." }
+        }
+      }
+    ],
+    "action": [
+      {
+        "name": "Spendthrift Bend",
+        "keywords": "Melee, Ranged, Magic, Earth",
+        "range": "Melee 2 or Ranged 5",
+        "targets": "1 creature",
+        "effect": "Tier 1 (≤11): 6 damage. Tier 2 (12–16): 9 damage, slide 2. Tier 3 (17+): 12 damage, slide 3. ALL TIERS: the target's square and all adjacent squares become permanent scree. Slides go away from the Render's allies (never strand its own cluster). While bloodied, all damage is +3 (Nothing Left to Count — automated). It deletes the map as it fights.",
+        "has_test": true,
+        "test": {
+          "tier1": { "damage_amount": "6", "damage_type": "untyped" },
+          "tier2": { "damage_amount": "9", "damage_type": "untyped" },
+          "tier3": { "damage_amount": "12", "damage_type": "untyped" }
+        },
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "primary",
+              "mode": "token",
+              "predicate": "enemy",
+              "count": { "value": 1, "mode": "exact" },
+              "distance": { "form": "ranged", "value": 5 }
+            },
+            {
+              "type": "powerRoll",
+              "flatBonus": 2,
+              "tiers": {
+                "tier1": {
+                  "effects": [
+                    { "kind": "damage", "amount": 6 }
+                  ]
+                },
+                "tier2": {
+                  "effects": [
+                    { "kind": "damage", "amount": 9 },
+                    { "kind": "forcedMovement", "verb": "slide", "distance": 2, "text": "Slide 2, away from the Render's allies." }
+                  ]
+                },
+                "tier3": {
+                  "effects": [
+                    { "kind": "damage", "amount": 12 },
+                    { "kind": "forcedMovement", "verb": "slide", "distance": 3, "text": "Slide 3, away from the Render's allies." }
+                  ]
+                }
+              },
+              "whenWinded": {
+                "tiers": {
+                  "tier1": {
+                    "effects": [
+                      { "kind": "damage", "amount": 9 }
+                    ]
+                  },
+                  "tier2": {
+                    "effects": [
+                      { "kind": "damage", "amount": 12 },
+                      { "kind": "forcedMovement", "verb": "slide", "distance": 2, "text": "Slide 2, away from the Render's allies." }
+                    ]
+                  },
+                  "tier3": {
+                    "effects": [
+                      { "kind": "damage", "amount": 15 },
+                      { "kind": "forcedMovement", "verb": "slide", "distance": 3, "text": "Slide 3, away from the Render's allies." }
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "type": "effect",
+              "effects": [
+                { "kind": "note", "text": "SPENDTHRIFT BEND (all tiers): the target's square and every adjacent square become PERMANENT SCREE. Mark the map." }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "triggered_action": [
+      {
+        "name": "Squanderer's Mark (1/encounter)",
+        "trigger": "The first push, pull, slide, or area effect used against the Render.",
+        "keywords": "Earth",
+        "range": "Self",
+        "targets": "Self",
+        "effect": "The stone underneath the Render dies instead: the Render takes half damage from the triggering effect, ignores the forced movement, and its square becomes scree. It pays in stone, never in self.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "trigger",
+              "condition": "First push/pull/slide or area effect against the Render",
+              "match": {
+                "event": "forcedMovement",
+                "filter": { "whose": "self" }
+              },
+              "effects": [
+                { "kind": "floatingText", "text": "THE STONE DIES INSTEAD", "tone": "danger" },
+                { "kind": "note", "text": "SQUANDERER'S MARK: halve the damage from the triggering effect, cancel the forced movement (return the Render to its square if it was moved), and turn the Render's square into scree. 1/encounter — remove this trigger after use." }
+              ]
+            }
+          ],
+          "usageLimit": { "scope": "encounter", "key": "squanderers-mark", "target": "self", "message": "Squanderer's Mark is 1/encounter." }
+        }
+      }
+    ],
+    "villain_action": [],
+    "malice": []
+  }
+}
