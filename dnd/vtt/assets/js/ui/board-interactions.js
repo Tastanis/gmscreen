@@ -11359,6 +11359,44 @@ export function mountBoardInteractions(store, routes = {}) {
     return Math.floor(total / profiles.length);
   }
 
+  // Set every player character's surges to 0 on the character sheet.
+  // Runs only on the GM's client so the reset happens exactly once.
+  // At combat start this runs BEFORE the combatStart timing boundary, so any
+  // character automation JSON that grants surges at combat start applies on
+  // top of the zeroed baseline (the JSON wins over the hard-coded reset).
+  async function resetPlayerSurgesToZero(reason) {
+    if (!isGmUser()) {
+      return;
+    }
+    const endpoint = typeof routes?.sheet === 'string' && routes.sheet ? routes.sheet : '/dnd/character_sheet/handler.php';
+    await Promise.all(PLAYER_CHARACTER_USER_IDS.map(async (profileId) => {
+      const body = new URLSearchParams();
+      body.set('action', 'sync-surges');
+      body.set('character', profileId);
+      body.set('source', 'vtt');
+      body.set('value', '0');
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body,
+        });
+        const result = await response.json().catch(() => null);
+        if (!response.ok || result?.success === false) {
+          console.warn('[VTT] Failed to reset surges for', profileId, result?.error || response.status);
+          return;
+        }
+        if (characterSummaryCache instanceof Map) characterSummaryCache.delete(profileId);
+        document.dispatchEvent(new CustomEvent('vtt:character-sheet-updated', {
+          detail: { characterId: profileId, change: 'surges', reason },
+        }));
+      } catch (error) {
+        console.warn('[VTT] Failed to reset surges for', profileId, error);
+      }
+    }));
+  }
+
   function handleStartCombat() {
     if (combatActive) {
       return;
@@ -11389,8 +11427,11 @@ export function mountBoardInteractions(store, routes = {}) {
     const initialTeam = rollForInitiativeAnnouncement() ?? 'enemy';
     startingCombatTeam = initialTeam;
     currentTurnTeam = initialTeam;
-    fireTimingBoundary('combatStart', { round: combatRound });
-    fireTimingBoundary('roundStart', { round: combatRound });
+    const startRound = combatRound;
+    resetPlayerSurgesToZero('combat-start').finally(() => {
+      fireTimingBoundary('combatStart', { round: startRound });
+      fireTimingBoundary('roundStart', { round: startRound });
+    });
     updateStartCombatButton();
     refreshCombatTracker();
     focusNextCombatant([
@@ -11452,6 +11493,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     markCombatEncounterStateDirty();
     fireTimingBoundary('combatEnd', { round: combatRound });
+    resetPlayerSurgesToZero('combat-end');
     combatActive = false;
     combatRound = 0;
     // Persistent zones auto-end at encounter end per Draw Steel rules.

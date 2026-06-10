@@ -468,14 +468,19 @@ switch ($action) {
         $sheet = $allSheets[$requestedCharacter];
 
         if ($requestMethod === 'POST') {
-            $delta = isset($requestData['delta']) ? (int)$requestData['delta'] : 0;
-            $currentSurges = isset($sheet['hero']['surges']) && $sheet['hero']['surges'] !== ''
-                ? (int)$sheet['hero']['surges']
-                : 0;
             if (!isset($sheet['hero']) || !is_array($sheet['hero'])) {
                 $sheet['hero'] = array();
             }
-            $sheet['hero']['surges'] = max(0, $currentSurges + $delta);
+            if (isset($requestData['value']) && $requestData['value'] !== '') {
+                // Absolute set (used by VTT combat start/end surge resets).
+                $sheet['hero']['surges'] = max(0, (int)$requestData['value']);
+            } else {
+                $delta = isset($requestData['delta']) ? (int)$requestData['delta'] : 0;
+                $currentSurges = isset($sheet['hero']['surges']) && $sheet['hero']['surges'] !== ''
+                    ? (int)$sheet['hero']['surges']
+                    : 0;
+                $sheet['hero']['surges'] = max(0, $currentSurges + $delta);
+            }
             $sheet['hero']['surgesUsed'] = 0;
             $allSheets[$requestedCharacter] = $sheet;
 
