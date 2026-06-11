@@ -1,1 +1,58 @@
-[]
+[
+    {
+        "id": "msg_6a29df629ea8f8.95230286",
+        "timestamp": "2026-06-10T22:04:18+00:00",
+        "user": "GM",
+        "message": "Dice roll (1d10): 10",
+        "type": "dice_roll",
+        "payload": {
+            "expression": "1d10",
+            "components": [
+                "1d10"
+            ],
+            "breakdown": [
+                {
+                    "type": "dice",
+                    "notation": "1d10",
+                    "rolls": [
+                        10
+                    ],
+                    "total": 10
+                }
+            ],
+            "total": 10
+        }
+    },
+    {
+        "id": "msg_6a29eb02ee2e20.63237638",
+        "timestamp": "2026-06-10T22:53:54+00:00",
+        "user": "GM",
+        "message": "Dice roll (2d10): 11",
+        "type": "dice_roll",
+        "payload": {
+            "expression": "2d10",
+            "components": [
+                "2d10"
+            ],
+            "breakdown": [
+                {
+                    "type": "dice",
+                    "notation": "2d10",
+                    "rolls": [
+                        4,
+                        7
+                    ],
+                    "total": 11
+                }
+            ],
+            "total": 11
+        }
+    },
+    {
+        "id": "msg_6a2a1ff05c9896.49621918",
+        "timestamp": "2026-06-11T02:39:44+00:00",
+        "user": "cal",
+        "message": "Persistent zone ended: Test Fire Wall (manually ended).",
+        "type": "text"
+    }
+]

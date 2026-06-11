@@ -356,6 +356,16 @@ $allowVttSurgeSync =
     && isset($requestData['source'])
     && $requestData['source'] === 'vtt'
     && $currentUser !== '';
+// VTT heroic-resource automation: whoever is RUNNING a hero (per the token's
+// claim) applies its resource gains, which may not be the character's own
+// account. Like sync-stamina/sync-surges, this is a narrow, single-field
+// write open to any authenticated VTT user.
+$allowVttResourceSync =
+    $action === 'sync-resource'
+    && $requestMethod === 'POST'
+    && isset($requestData['source'])
+    && $requestData['source'] === 'vtt'
+    && $currentUser !== '';
 $allowVttTraitRead =
     $action === 'sync-token-traits'
     && $requestMethod === 'GET'
@@ -366,7 +376,7 @@ $allowPublicSummaryRead =
     && $requestMethod === 'GET'
     && $currentUser !== '';
 
-if (!$is_gm && $requestedCharacter !== strtolower($currentUser) && !$allowVttStaminaSync && !$allowVttSurgeSync && !$allowVttTraitRead && !$allowPublicSummaryRead) {
+if (!$is_gm && $requestedCharacter !== strtolower($currentUser) && !$allowVttStaminaSync && !$allowVttSurgeSync && !$allowVttResourceSync && !$allowVttTraitRead && !$allowPublicSummaryRead) {
     sendJsonResponse(array('success' => false, 'error' => 'Permission denied'));
 }
 
@@ -493,6 +503,37 @@ switch ($action) {
             'success' => true,
             'name' => isset($sheet['hero']['name']) && $sheet['hero']['name'] !== '' ? $sheet['hero']['name'] : $requestedCharacter,
             'surges' => isset($sheet['hero']['surges']) ? (int)$sheet['hero']['surges'] : 0,
+        ));
+        break;
+
+    case 'sync-resource':
+        $allSheets = loadCharacterSheetData($dataDir, $dataFile, $characters);
+        $sheet = $allSheets[$requestedCharacter];
+
+        if ($requestMethod === 'POST') {
+            if (!isset($requestData['value']) || $requestData['value'] === '') {
+                sendJsonResponse(array('success' => false, 'error' => 'Missing resource value'));
+            }
+            if (!isset($sheet['hero']) || !is_array($sheet['hero'])) {
+                $sheet['hero'] = array();
+            }
+            if (!isset($sheet['hero']['resource']) || !is_array($sheet['hero']['resource'])) {
+                $sheet['hero']['resource'] = array();
+            }
+            // Heroic resources may legitimately go negative (allowNegative
+            // resources floor at -(1 + Reason)), so no max(0, ...) here.
+            $sheet['hero']['resource']['value'] = (int)$requestData['value'];
+            $allSheets[$requestedCharacter] = $sheet;
+
+            if (!saveCharacterSheetData($dataDir, $dataFile, $allSheets)) {
+                sendJsonResponse(array('success' => false, 'error' => 'Failed to save resource'));
+            }
+        }
+
+        sendJsonResponse(array(
+            'success' => true,
+            'name' => isset($sheet['hero']['name']) && $sheet['hero']['name'] !== '' ? $sheet['hero']['name'] : $requestedCharacter,
+            'resource' => isset($sheet['hero']['resource']['value']) ? (int)$sheet['hero']['resource']['value'] : 0,
         ));
         break;
 

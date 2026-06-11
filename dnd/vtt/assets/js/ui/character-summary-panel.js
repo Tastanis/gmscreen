@@ -715,7 +715,8 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
           activeToken.readyTriggerAbilities = [];
           activeToken.readyTriggerSources = {};
           activeToken.readyTriggerPayloads = {};
-          activeToken.triggerSetAtPhase = null;
+          activeToken.triggerMarkRound = null;
+          activeToken.triggerMarkCombatantId = null;
         renderCurrentAbilityTray();
         }
         document.dispatchEvent(new CustomEvent('vtt:clear-trigger-ready', { detail: { placementId } }));
@@ -759,7 +760,10 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
               delete activeToken.readyTriggerPayloads[clearsTrigger];
             }
             activeToken.hasReadyTrigger = activeToken.readyTriggerAbilities.length > 0;
-            if (!activeToken.hasReadyTrigger) activeToken.triggerSetAtPhase = null;
+            if (!activeToken.hasReadyTrigger) {
+              activeToken.triggerMarkRound = null;
+              activeToken.triggerMarkCombatantId = null;
+            }
           }
           document.dispatchEvent(new CustomEvent('vtt:clear-trigger-ready', {
             detail: { placementId: sourcePlacementId, abilityId: clearsTrigger },

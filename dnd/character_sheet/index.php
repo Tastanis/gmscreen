@@ -50,6 +50,7 @@ require_once '../includes/strix-nav.php';
   <link rel="stylesheet" href="../css/chat-panel.css?v=<?php echo (int) $assetVersion; ?>" />
   <link rel="stylesheet" href="styles.css?v=<?php echo (int) $assetVersion; ?>" />
   <link rel="stylesheet" href="inventory-tab.css?v=<?php echo (int) $assetVersion; ?>" />
+  <link rel="stylesheet" href="../dice-roller/dice-roller.css?v=<?php echo (int) $assetVersion; ?>" />
   <link rel="stylesheet" href="ability-automation/automation.css?v=<?php echo (int) $assetVersion; ?>" />
   <script src="ability-automation/primitives.js?v=<?php echo (int) $assetVersion; ?>"></script>
   <script src="ability-automation/schema.js?v=<?php echo (int) $assetVersion; ?>"></script>
@@ -60,6 +61,7 @@ require_once '../includes/strix-nav.php';
   <script src="ability-automation/runner.js?v=<?php echo (int) $assetVersion; ?>"></script>
   <script type="module" src="sheet.js?v=<?php echo (int) $assetVersion; ?>"></script>
   <script src="inventory-tab.js?v=<?php echo (int) $assetVersion; ?>" defer></script>
+  <script src="../dice-roller/dice-roller.js?v=<?php echo (int) $assetVersion; ?>" defer></script>
 <?php if ($chatPusherConfig !== null): ?>
   <script src="https://js.pusher.com/8.4.0/pusher.min.js"></script>
 <?php endif; ?>
@@ -74,6 +76,7 @@ require_once '../includes/strix-nav.php';
           <h1 id="hero-name-heading">Tableside Hero View</h1>
         </div>
         <div class="header__actions">
+          <button type="button" id="dice-roller-btn" class="dice-roller-launch" title="Open dice roller">Dice Roller</button>
           <label class="toggle">
             <input type="checkbox" id="edit-toggle" />
             <span class="toggle__slider"></span>
@@ -153,6 +156,7 @@ require_once '../includes/strix-nav.php';
   <div id="chat-whisper-alerts" class="chat-whisper-alerts" aria-live="assertive" aria-atomic="true"></div>
 
   <script>
+    window.currentCharacter = <?php echo json_encode($activeCharacter, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;
     window.chatHandlerUrl = '/dnd/chat_handler.php';
     window.chatParticipants = <?php echo json_encode($chatParticipantList, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;
     window.chatPusherConfig = <?php echo json_encode($chatPusherConfig, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;

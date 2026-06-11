@@ -11,7 +11,8 @@ export function applyTriggerReadyState(placement, {
   abilityId = null,
   sourceId = null,
   eventSnapshot = null,
-  phaseTick = null,
+  markRound = null,
+  markCombatantId = null,
   now = Date.now(),
 } = {}) {
   if (!placement || typeof placement !== 'object') return null;
@@ -32,11 +33,18 @@ export function applyTriggerReadyState(placement, {
     payloads[abilityId] = cloneTriggerSnapshot(eventSnapshot);
   }
 
+  const round = Number.isFinite(Number(markRound)) ? Math.max(0, Math.trunc(Number(markRound))) : null;
+  const combatantId = typeof markCombatantId === 'string' && markCombatantId ? markCombatantId : null;
+
   placement.readyTriggerAbilities = ready;
   placement.readyTriggerSources = sources;
   placement.readyTriggerPayloads = payloads;
   placement.hasReadyTrigger = true;
-  placement.triggerSetAtPhase = phaseTick;
+  placement.triggerMarkRound = round;
+  placement.triggerMarkCombatantId = combatantId;
+  // Legacy field from the GM-local phase-tick expiry system; scrub it so old
+  // clients' stale stamps don't linger on the placement.
+  placement.triggerSetAtPhase = null;
   placement._lastModified = now;
 
   return {
@@ -44,7 +52,8 @@ export function applyTriggerReadyState(placement, {
     readyTriggerAbilities: ready,
     readyTriggerSources: sources,
     readyTriggerPayloads: payloads,
-    triggerSetAtPhase: phaseTick,
+    triggerMarkRound: round,
+    triggerMarkCombatantId: combatantId,
   };
 }
 
@@ -78,7 +87,11 @@ export function clearTriggerReadyState(placement, abilityId = null, { now = Date
   placement.readyTriggerSources = nextSources;
   placement.readyTriggerPayloads = nextPayloads;
   placement.hasReadyTrigger = nextHas;
-  if (!nextHas) placement.triggerSetAtPhase = null;
+  if (!nextHas) {
+    placement.triggerMarkRound = null;
+    placement.triggerMarkCombatantId = null;
+    placement.triggerSetAtPhase = null;
+  }
   placement._lastModified = now;
 
   return {
@@ -86,8 +99,31 @@ export function clearTriggerReadyState(placement, abilityId = null, { now = Date
     readyTriggerAbilities: nextReady,
     readyTriggerSources: nextSources,
     readyTriggerPayloads: nextPayloads,
-    triggerSetAtPhase: nextHas ? placement.triggerSetAtPhase : null,
+    triggerMarkRound: nextHas ? (placement.triggerMarkRound ?? null) : null,
+    triggerMarkCombatantId: nextHas ? (placement.triggerMarkCombatantId ?? null) : null,
   };
+}
+
+// Decides whether a placement's ready-trigger "!" marker should expire when a
+// combatant finishes their turn. Rules:
+// - Marker stamped during a creature's turn → expires when THAT creature ends
+//   its turn.
+// - Marker stamped while no one's turn was active (or by a legacy client that
+//   only wrote `triggerSetAtPhase`) → expires at the NEXT turn end, on the
+//   assumption the acting player forgot to press Start Turn.
+export function shouldExpireReadyTriggerAtTurnEnd(placement, finishedCombatantId) {
+  if (!placement || typeof placement !== 'object') return false;
+  const hasReady = Boolean(placement.hasReadyTrigger)
+    || (Array.isArray(placement.readyTriggerAbilities) && placement.readyTriggerAbilities.length > 0);
+  if (!hasReady) return false;
+  const markId = typeof placement.triggerMarkCombatantId === 'string' && placement.triggerMarkCombatantId
+    ? placement.triggerMarkCombatantId
+    : null;
+  if (!markId) return true;
+  const finishedId = typeof finishedCombatantId === 'string' && finishedCombatantId
+    ? finishedCombatantId
+    : null;
+  return Boolean(finishedId) && markId === finishedId;
 }
 
 export function syncTriggeredActionIndicator(tokenElement, placement = {}) {

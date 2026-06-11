@@ -11,6 +11,7 @@ import { buildAutomationTargetPromptHtml } from './automation-target-prompt.js';
 import {
   applyTriggerReadyState,
   clearTriggerReadyState,
+  shouldExpireReadyTriggerAtTurnEnd,
   syncTriggeredActionIndicator,
 } from './automation-trigger-ready.js';
 import { buildAutomationTriggerPredicate } from './automation-trigger-predicate.js';
@@ -2554,12 +2555,28 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  // Set while a 'turnEnd' boundary is being fanned out. Triggers marked
+  // during the fan-out (e.g. authored "at end of turn" abilities) must NOT be
+  // stamped with the finishing combatant — they'd expire in the same breath.
+  // Stamping them null instead defers their expiry to the next turn end.
+  let endingTurnCombatantId = null;
+
   function fireTimingBoundary(eventType, payload = {}) {
     const boundaryPayload = {
       round: combatRound,
       activeCombatantId,
       ...payload,
     };
+    // Expire ready "!" markers BEFORE firing this boundary's triggers, so a
+    // marker armed by an end-of-turn trigger survives into the next turn.
+    if (eventType === 'turnEnd') {
+      try {
+        expireReadyTriggersAtTurnEnd(boundaryPayload.placementId || null);
+      } catch (err) {
+        console.warn('[VTT] ready-trigger turn-end expiry failed', err);
+      }
+      endingTurnCombatantId = boundaryPayload.placementId || null;
+    }
     try {
       triggerFire(eventType, boundaryPayload);
     } catch (err) {
@@ -2569,6 +2586,9 @@ export function mountBoardInteractions(store, routes = {}) {
       console.warn(`[VTT] automation aura ${eventType} failed`, err);
     });
     expireTriggerEntriesForBoundary(eventType, boundaryPayload);
+    if (eventType === 'turnEnd') {
+      endingTurnCombatantId = null;
+    }
     if (eventType === 'combatEnd') {
       triggerUnregisterAllAuthored();
     }
@@ -2746,25 +2766,32 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
-  // turnStart/turnEnd fire on every connected client (state syncs call
-  // setActiveCombatantId everywhere), so those prompts can be routed to the
-  // client of the player who owns the character. All other events may only
-  // fire on the GM client, so the GM keeps handling them.
-  function shouldHandleHeroicResourceEventHere(eventType, profileId) {
-    if (eventType === 'turnStart' || eventType === 'turnEnd') {
-      return normalizeProfileId(profileId) === normalizeProfileId(getCurrentUserId());
-    }
-    return isGmUser();
-  }
-
+  // Heroic-resource prompts belong to whoever is RUNNING the hero — the
+  // token's claim when set (so the GM or a covering player can run an
+  // absent player's character), defaulting to the hero's own player:
+  // - Events for a hero this client controls are handled (prompted) locally.
+  // - turnStart/turnEnd fire on EVERY client via combat state sync, so
+  //   non-controllers skip them — the controller's client handles its hero.
+  // - All other events (damage, power rolls, ...) fire only on the single
+  //   client that ran the action. That client routes the offer to the
+  //   controller by writing a pending-prompt record onto the hero's
+  //   placement; the controller's client picks it up in
+  //   processPendingHeroResourcePrompts and shows the prompt there.
+  //   Exception: silent autoApply rules are applied immediately by the GM
+  //   (the GM may write any sheet), so they don't wait on the controller's
+  //   client being open.
   async function processHeroicResourceAutomationEvent(eventType, payload = {}) {
     if (!eventType) return;
     const placements = getHeroicResourceCandidatePlacements(eventType, payload);
     if (!placements.length) return;
+    const currentUserId = normalizeProfileId(getCurrentUserId());
+    const isTurnBoundary = eventType === 'turnStart' || eventType === 'turnEnd';
     for (const placement of placements) {
       const profileId = getAutomationProfileIdForPlacement(placement.id);
       if (!profileId) continue;
-      if (!shouldHandleHeroicResourceEventHere(eventType, profileId)) continue;
+      const controllerId = getControllingUserIdForPlacement(placement.id) || normalizeProfileId(profileId);
+      const isController = Boolean(controllerId) && controllerId === currentUserId;
+      if (!isController && isTurnBoundary) continue;
       const sheet = await getAutomationSheetForPlacement(placement.id);
       const resource = sheet?.hero?.resource;
       const automation = normalizeHeroicResourceAutomation(resource?.automation);
@@ -2774,18 +2801,149 @@ export function mountBoardInteractions(store, routes = {}) {
         if (!ruleMatchesHeroicResourceEvent(rule, eventType, payload, env)) continue;
         const eventTargetId = payload?.targetId || payload?.placementId || placement.id;
         if (hasHeroicResourceRuleLimit(rule, placement.id, eventTargetId)) continue;
-        await offerHeroicResourceRule({
-          eventType,
-          payload,
-          placement,
-          profileId,
-          sheet,
-          resource,
-          rule,
-          eventTargetId,
+        if (isController || (rule.autoApply && isGmUser())) {
+          await offerHeroicResourceRule({
+            eventType,
+            payload,
+            placement,
+            profileId,
+            sheet,
+            resource,
+            rule,
+            eventTargetId,
+          });
+        } else {
+          routeHeroicResourcePromptToOwner({
+            eventType,
+            payload,
+            placement,
+            profileId,
+            recipientUserId: controllerId,
+            rule,
+            eventTargetId,
+          });
+        }
+      }
+    }
+  }
+
+  let pendingHeroResourcePromptCounter = 0;
+
+  function cloneJsonSafe(value) {
+    if (value === null || value === undefined) return null;
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch (err) {
+      return null;
+    }
+  }
+
+  // Keep only the small, known-serializable parts of a trigger payload —
+  // enough for debugging and future filters without dragging DOM references
+  // or large snapshots into placement state.
+  function trimHeroResourceEventPayload(payload = {}) {
+    if (!payload || typeof payload !== 'object') return {};
+    const trimmed = {};
+    ['placementId', 'targetId', 'sourceId', 'actorId', 'team', 'amount', 'delta', 'before', 'after', 'kind', 'abilityName'].forEach((key) => {
+      const value = payload[key];
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        trimmed[key] = value;
+      }
+    });
+    return trimmed;
+  }
+
+  function routeHeroicResourcePromptToOwner({ eventType, payload, placement, profileId, recipientUserId = null, rule, eventTargetId }) {
+    const rulePayload = cloneJsonSafe(rule);
+    if (!rulePayload) return false;
+    pendingHeroResourcePromptCounter += 1;
+    const record = {
+      id: `hrp_${Date.now()}_${pendingHeroResourcePromptCounter}_${Math.random().toString(36).slice(2, 7)}`,
+      // Whose CHARACTER the resource belongs to (the sheet that gets written).
+      profileId: normalizeProfileId(profileId),
+      // Whose CLIENT should show the prompt — the token's controller per the
+      // claim system. Falls back to profileId for records written by older
+      // clients.
+      recipientUserId: normalizeProfileId(recipientUserId) ?? normalizeProfileId(profileId),
+      eventType,
+      eventTargetId: typeof eventTargetId === 'string' ? eventTargetId : '',
+      rule: rulePayload,
+      payload: cloneJsonSafe(trimHeroResourceEventPayload(payload)) ?? {},
+      createdAt: Date.now(),
+    };
+    // Mark offered-limits on the routing client — it is the only client that
+    // sees this event, so this is what prevents duplicate records for
+    // once-per-round/turn rules.
+    if (rule.limit?.markOn === 'offered') {
+      markHeroicResourceRuleLimit(rule, placement.id, eventTargetId);
+    }
+    return Boolean(updatePlacementById(placement.id, (target) => {
+      const existing = Array.isArray(target.pendingHeroResourcePrompts)
+        ? target.pendingHeroResourcePrompts
+        : [];
+      target.pendingHeroResourcePrompts = [...existing, record];
+    }));
+  }
+
+  // Prompt-record ids this client has already picked up, so repeated state
+  // applications don't re-show the same prompt.
+  const handledHeroResourcePromptIds = new Set();
+
+  function processPendingHeroResourcePrompts(state = {}) {
+    const currentUserId = normalizeProfileId(getCurrentUserId());
+    if (!currentUserId) return;
+    const placements = getActiveScenePlacements(state);
+    for (const placement of placements) {
+      const records = Array.isArray(placement?.pendingHeroResourcePrompts)
+        ? placement.pendingHeroResourcePrompts
+        : [];
+      for (const record of records) {
+        if (!record || typeof record !== 'object') continue;
+        if (typeof record.id !== 'string' || !record.id) continue;
+        const recipient = normalizeProfileId(record.recipientUserId) ?? normalizeProfileId(record.profileId);
+        if (recipient !== currentUserId) continue;
+        if (handledHeroResourcePromptIds.has(record.id)) continue;
+        handledHeroResourcePromptIds.add(record.id);
+        runPendingHeroResourcePrompt(placement.id, record).catch((err) => {
+          console.warn('[VTT] pending heroic resource prompt failed', err);
         });
       }
     }
+  }
+
+  async function runPendingHeroResourcePrompt(placementId, record) {
+    try {
+      const placement = getPlacementFromStore(placementId);
+      if (!placement) return;
+      const rule = record.rule && typeof record.rule === 'object' ? record.rule : null;
+      if (!rule || !rule.effect || typeof rule.effect !== 'object') return;
+      const sheet = await getAutomationSheetForPlacement(placementId);
+      const resource = sheet?.hero?.resource;
+      if (!sheet || !resource) return;
+      await offerHeroicResourceRule({
+        eventType: record.eventType || 'event',
+        payload: record.payload && typeof record.payload === 'object' ? record.payload : {},
+        placement,
+        profileId: normalizeProfileId(record.profileId),
+        sheet,
+        resource,
+        rule,
+        eventTargetId: record.eventTargetId || placementId,
+      });
+    } finally {
+      removePendingHeroResourcePromptRecord(placementId, record.id);
+    }
+  }
+
+  function removePendingHeroResourcePromptRecord(placementId, recordId) {
+    if (!placementId || !recordId) return;
+    updatePlacementById(placementId, (target) => {
+      const existing = Array.isArray(target.pendingHeroResourcePrompts)
+        ? target.pendingHeroResourcePrompts
+        : [];
+      const next = existing.filter((r) => r && r.id !== recordId);
+      target.pendingHeroResourcePrompts = next.length ? next : null;
+    });
   }
 
   async function offerHeroicResourceRule({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId }) {
@@ -2850,9 +3008,63 @@ export function mountBoardInteractions(store, routes = {}) {
     nextResource.value = change.next;
     hero.resource = nextResource;
     sheet.hero = hero;
-    await saveAutomationSheetForProfile(profileId, sheet, 'resource');
+    const applierUserId = normalizeProfileId(getCurrentUserId());
+    if (isGmUser() || normalizeProfileId(profileId) === applierUserId) {
+      await saveAutomationSheetForProfile(profileId, sheet, 'resource');
+    } else {
+      // A player covering someone else's hero (via the token claim) can't
+      // save that character's full sheet — use the narrow resource sync the
+      // sheet handler allows for any authenticated VTT user.
+      await syncHeroResourceValueForProfile(profileId, change.next, sheet);
+    }
     const subject = tokenLabel(placement) || sheet?.hero?.name || 'Hero';
     updateStatus(`${subject}: ${action.toLowerCase()} ${amount} ${resourceName} (${change.current} -> ${change.next}).`);
+  }
+
+  // Narrow cross-character write: sets hero.resource.value only, via the
+  // sheet handler's VTT sync carve-out (any authenticated user). Mirrors
+  // saveAutomationSheetForProfile's cache + broadcast behavior so panels
+  // refresh the same way.
+  async function syncHeroResourceValueForProfile(profileId, value, sheetForCache = null) {
+    if (!profileId) return false;
+    const endpoint = typeof routes?.sheet === 'string' && routes.sheet ? routes.sheet : '/dnd/character_sheet/handler.php';
+    const body = new URLSearchParams();
+    body.set('action', 'sync-resource');
+    body.set('character', profileId);
+    body.set('source', 'vtt');
+    body.set('value', String(Math.trunc(Number(value) || 0)));
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+      });
+      const payload = await response.json().catch(() => null);
+      const saved = Boolean(response.ok && payload?.success !== false);
+      if (saved) {
+        if (sheetForCache && characterSummaryCache instanceof Map) {
+          characterSummaryCache.set(profileId, sheetForCache);
+        }
+        if (typeof BroadcastChannel === 'function') {
+          const channel = new BroadcastChannel('vtt-character-sheet-sync');
+          channel.postMessage({
+            type: 'character-sheet-sync',
+            source: 'vtt',
+            character: profileId,
+            change: 'resource',
+          });
+          channel.close();
+        }
+        document.dispatchEvent(new CustomEvent('vtt:character-sheet-updated', {
+          detail: { characterId: profileId, change: 'resource' },
+        }));
+      }
+      return saved;
+    } catch (error) {
+      console.warn('[VTT] Failed to sync hero resource value', error);
+      return false;
+    }
   }
 
   function markTriggerReady(placementId, abilityId, sourceId = null, eventSnapshot = null) {
@@ -2860,6 +3072,19 @@ export function mountBoardInteractions(store, routes = {}) {
     const state = boardApi.getState?.() ?? {};
     const activeSceneId = state.boardState?.activeSceneId ?? null;
     if (!activeSceneId) return false;
+    // Stamp the marker with the combat context it fired in. Markers stamped
+    // with a combatant expire at that combatant's turn end; markers stamped
+    // with null (no active turn, or fired during the turn-end fan-out itself)
+    // expire at the NEXT turn end. Both are persisted placement fields, so
+    // expiry works regardless of which client created the marker and survives
+    // page reloads — unlike the old GM-local phase-tick counter.
+    const activeRep = activeCombatantId
+      ? (getRepresentativeIdFor(activeCombatantId) || activeCombatantId)
+      : null;
+    const markCombatantId = combatActive && activeRep && activeRep !== endingTurnCombatantId
+      ? activeRep
+      : null;
+    const markRound = combatActive ? combatRound : null;
     let updated = false;
     let nextReady = [];
     let nextSources = {};
@@ -2872,7 +3097,8 @@ export function mountBoardInteractions(store, routes = {}) {
         abilityId,
         sourceId,
         eventSnapshot,
-        phaseTick,
+        markRound,
+        markCombatantId,
       });
       if (!readyState) return;
       target._lastModified = Date.now();
@@ -2894,7 +3120,9 @@ export function mountBoardInteractions(store, routes = {}) {
           readyTriggerAbilities: nextReady,
           readyTriggerSources: nextSources,
           readyTriggerPayloads: nextPayloads,
-          triggerSetAtPhase: phaseTick,
+          triggerMarkRound: markRound,
+          triggerMarkCombatantId: markCombatantId,
+          triggerSetAtPhase: null,
         },
       }];
     }
@@ -2939,7 +3167,11 @@ export function mountBoardInteractions(store, routes = {}) {
           readyTriggerAbilities: nextReady,
           readyTriggerSources: nextSources,
           readyTriggerPayloads: nextPayloads,
-          triggerSetAtPhase: nextHas ? undefined : null,
+          ...(nextHas ? {} : {
+            triggerMarkRound: null,
+            triggerMarkCombatantId: null,
+            triggerSetAtPhase: null,
+          }),
         },
       }];
     }
@@ -3266,8 +3498,22 @@ export function mountBoardInteractions(store, routes = {}) {
   //
   // Pass 1 does NOT persist zones to disk or sync via Pusher — page reload
   // wipes them. Acceptable because zones auto-end at encounter end anyway.
-  const persistentZonesByScene = new Map();
+  // Persistent zone records live on the CASTER'S PLACEMENT
+  // (placement.persistentZones, an array of JSON-safe zone records) so they
+  // sync to every client through normal placement state — all players see
+  // zone overlays, enter-triggers work regardless of which client moves a
+  // token, and zones survive the caster reloading their page. Only the
+  // per-round "already entered" dedupe state stays client-local, because
+  // enter checks only run on the client that performs the move.
+  const persistentZoneRuntime = new Map(); // zoneId -> Set<placementId> entered this round
   let persistentZoneCounter = 0;
+
+  function getPersistentZoneEnteredSet(zoneId) {
+    if (!persistentZoneRuntime.has(zoneId)) {
+      persistentZoneRuntime.set(zoneId, new Set());
+    }
+    return persistentZoneRuntime.get(zoneId);
+  }
   let zoneOverlayLayer = null;
 
   function ensurePersistentZoneOverlayLayer() {
@@ -3304,20 +3550,50 @@ export function mountBoardInteractions(store, routes = {}) {
     return layer;
   }
 
+  function getScenePlacementsFromStore(sceneId) {
+    if (!sceneId) return [];
+    const state = boardApi.getState?.() ?? {};
+    const placements = state.boardState?.placements?.[sceneId];
+    return Array.isArray(placements) ? placements : [];
+  }
+
+  // Derives the live zone list from synced placement state. Each returned
+  // zone is a fresh wrapper object; `enteredThisRound` is the client-local
+  // runtime Set, shared across derivations of the same zone id so the four
+  // mutation sites (enter dedupe, round reset) keep working unchanged.
   function getPersistentZonesForScene(sceneId) {
     if (!sceneId) return [];
-    const list = persistentZonesByScene.get(sceneId);
-    if (!list) {
-      persistentZonesByScene.set(sceneId, []);
-      return persistentZonesByScene.get(sceneId);
+    const zones = [];
+    for (const placement of getScenePlacementsFromStore(sceneId)) {
+      if (!placement || typeof placement !== 'object') continue;
+      const records = Array.isArray(placement.persistentZones) ? placement.persistentZones : [];
+      for (const record of records) {
+        if (!record || typeof record !== 'object' || !record.id) continue;
+        zones.push({
+          ...record,
+          sceneId,
+          casterId: record.casterId || placement.id,
+          enteredThisRound: getPersistentZoneEnteredSet(record.id),
+        });
+      }
     }
-    return list;
+    return zones;
   }
 
   function getActivePersistentZones() {
     const state = boardApi.getState?.() ?? {};
     const sceneId = state.boardState?.activeSceneId ?? null;
     return getPersistentZonesForScene(sceneId);
+  }
+
+  // Only the GM or whoever currently controls the casting token (per the
+  // token claim, defaulting to the character's own player) may end a zone
+  // from the overlay button. (Zones cast by GM-run tokens are GM-only.)
+  function canEndPersistentZone(zone) {
+    if (isGmUser()) return true;
+    if (!zone?.casterId) return false;
+    const controllerId = getControllingUserIdForPlacement(zone.casterId);
+    return Boolean(controllerId) && controllerId === normalizeProfileId(getCurrentUserId());
   }
 
   // (startWallPlacementForAutomation lives inside createTemplateTool so it
@@ -3337,7 +3613,7 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
     persistentZoneCounter += 1;
-    const zoneId = `zone_${Date.now()}_${persistentZoneCounter}`;
+    const zoneId = `zone_${Date.now()}_${persistentZoneCounter}_${Math.random().toString(36).slice(2, 7)}`;
     const ownerPlacement = getPlacementFromStore(payload.casterId);
     // For walls, the runner-side area record carries a `squares` list; for
     // rectangular shapes it's just the bounding box.
@@ -3384,7 +3660,6 @@ export function mountBoardInteractions(store, routes = {}) {
       triggers: Array.isArray(payload.triggers)
         ? payload.triggers.filter((t) => t === 'onEnter' || t === 'onOccupantTurnStart')
         : [],
-      enteredThisRound: new Set(),
       effects: Array.isArray(payload.effects) ? payload.effects : [],
       attributeBonuses: payload.attributeBonuses && typeof payload.attributeBonuses === 'object'
         ? { ...payload.attributeBonuses }
@@ -3392,17 +3667,34 @@ export function mountBoardInteractions(store, routes = {}) {
       note: payload.note || '',
       createdAt: Date.now(),
     };
-    const list = getPersistentZonesForScene(sceneId);
-    list.push(zone);
+    // The record must be JSON-safe — it rides placement state to the server
+    // and every other client. (No Sets/functions; runtime dedupe state lives
+    // in persistentZoneRuntime instead.)
+    let record;
+    try {
+      record = JSON.parse(JSON.stringify(zone));
+    } catch (err) {
+      resolve?.({ registered: false, reason: 'unserializable-zone' });
+      return;
+    }
+    const updated = updatePlacementById(payload.casterId, (target) => {
+      const existing = Array.isArray(target.persistentZones) ? target.persistentZones : [];
+      target.persistentZones = [...existing, record];
+    });
+    if (!updated) {
+      resolve?.({ registered: false, reason: 'caster-not-found' });
+      return;
+    }
     // Seed enteredThisRound with anyone already inside at registration time so
     // they don't double-tick if they're already standing in the area.
-    if (zone.triggers.includes('onEnter')) {
-      for (const occupant of getCreaturesInsideZone(zone)) {
-        if (occupant?.id) zone.enteredThisRound.add(occupant.id);
+    if (record.triggers.includes('onEnter')) {
+      const entered = getPersistentZoneEnteredSet(zoneId);
+      for (const occupant of getCreaturesInsideZone(record)) {
+        if (occupant?.id) entered.add(occupant.id);
       }
     }
     renderPersistentZoneOverlays();
-    resolve?.({ registered: true, zoneId, zoneCount: list.length });
+    resolve?.({ registered: true, zoneId, zoneCount: getPersistentZonesForScene(sceneId).length });
   }
 
   function renderPersistentZoneOverlays() {
@@ -3420,10 +3712,15 @@ export function mountBoardInteractions(store, routes = {}) {
     for (const zone of zones) {
       const safeName = escapeZoneText(zone.abilityName);
       const safeOwner = escapeZoneText(zone.ownerName || 'Owner');
-      const upkeepText = zone.upkeep.cost
+      const upkeepText = zone.upkeep?.cost
         ? `${zone.upkeep.cost} ${zone.upkeep.resource || 'Resource'}/turn`
         : 'no upkeep';
       const titleAttr = `${safeName} — ${safeOwner} • ${escapeZoneText(upkeepText)}`;
+      // Zones render on every client now; only the GM or the caster's owner
+      // gets the End control.
+      const endButtonHtml = canEndPersistentZone(zone)
+        ? `<button type="button" class="vtt-persistent-zone__end" data-zone-end="${escapeZoneText(zone.id)}" title="End this zone">End</button>`
+        : '';
 
       if (Array.isArray(zone.squares) && zone.squares.length) {
         // Wall-shaped zone: render each square as its own tile so the
@@ -3442,7 +3739,7 @@ export function mountBoardInteractions(store, routes = {}) {
               <div class="vtt-persistent-zone__body">
                 <div class="vtt-persistent-zone__label">${safeName}</div>
                 <div class="vtt-persistent-zone__meta">${safeOwner} • ${escapeZoneText(upkeepText)}</div>
-                <button type="button" class="vtt-persistent-zone__end" data-zone-end="${zone.id}" title="End this zone">End</button>
+                ${endButtonHtml}
               </div>
             `;
           }
@@ -3464,7 +3761,7 @@ export function mountBoardInteractions(store, routes = {}) {
         <div class="vtt-persistent-zone__body">
           <div class="vtt-persistent-zone__label">${safeName}</div>
           <div class="vtt-persistent-zone__meta">${safeOwner} • ${escapeZoneText(upkeepText)}</div>
-          <button type="button" class="vtt-persistent-zone__end" data-zone-end="${zone.id}" title="End this zone">End</button>
+          ${endButtonHtml}
         </div>
       `;
       positionAutomationCell(cell, zone.template.column, zone.template.row, zone.template.width, zone.template.height);
@@ -3483,15 +3780,26 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function removePersistentZone(zoneId, { reason = '' } = {}) {
     if (!zoneId) return false;
+    const state = boardApi.getState?.() ?? {};
+    const sceneId = state.boardState?.activeSceneId ?? null;
+    if (!sceneId) return false;
+    const owner = getScenePlacementsFromStore(sceneId).find((p) =>
+      Array.isArray(p?.persistentZones) && p.persistentZones.some((z) => z && z.id === zoneId)
+    );
+    if (!owner) return false;
     let removed = null;
-    for (const [sceneId, list] of persistentZonesByScene.entries()) {
-      const idx = list.findIndex((z) => z && z.id === zoneId);
-      if (idx !== -1) {
-        removed = list.splice(idx, 1)[0];
-        break;
+    const updated = updatePlacementById(owner.id, (target) => {
+      const existing = Array.isArray(target.persistentZones) ? target.persistentZones : [];
+      removed = existing.find((z) => z && z.id === zoneId) || null;
+      const next = existing.filter((z) => z && z.id !== zoneId);
+      if (next.length) {
+        target.persistentZones = next;
+      } else {
+        target.persistentZones = null;
       }
-    }
-    if (!removed) return false;
+    });
+    if (!updated || !removed) return false;
+    persistentZoneRuntime.delete(zoneId);
     renderPersistentZoneOverlays();
     if (window.dashboardChat?.sendMessage) {
       const reasonText = reason ? ` (${reason})` : '';
@@ -3504,20 +3812,52 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function clearPersistentZonesForScene(sceneId, { reason = '' } = {}) {
-    const list = persistentZonesByScene.get(sceneId);
-    if (!list || !list.length) return;
-    const removed = list.splice(0, list.length);
+    if (!sceneId || typeof boardApi.updateState !== 'function') return;
+    const clearedIds = [];
+    let removedCount = 0;
+    boardApi.updateState?.((draft) => {
+      const scenePlacements = ensureScenePlacementDraft(draft, sceneId);
+      const nowMs = Date.now();
+      scenePlacements.forEach((placement) => {
+        if (!placement || typeof placement !== 'object') return;
+        const zones = Array.isArray(placement.persistentZones) ? placement.persistentZones : [];
+        if (!zones.length) return;
+        zones.forEach((z) => {
+          if (z?.id) persistentZoneRuntime.delete(z.id);
+        });
+        removedCount += zones.length;
+        placement.persistentZones = null;
+        placement._lastModified = nowMs;
+        if (placement.id) clearedIds.push(placement.id);
+      });
+    });
+    if (!clearedIds.length) return;
+    clearedIds.forEach((id) => markPlacementDirty(sceneId, id));
+    let ops = null;
+    if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
+      ops = clearedIds.map((id) => ({
+        type: 'placement.update',
+        sceneId,
+        placementId: id,
+        patch: { persistentZones: null },
+      }));
+    }
+    persistBoardStateSnapshot({}, ops);
     renderPersistentZoneOverlays();
-    if (removed.length && window.dashboardChat?.sendMessage) {
+    if (removedCount && window.dashboardChat?.sendMessage) {
       window.dashboardChat.sendMessage({
-        message: `${removed.length} persistent zone${removed.length === 1 ? '' : 's'} cleared${reason ? ` (${reason})` : ''}.`,
+        message: `${removedCount} persistent zone${removedCount === 1 ? '' : 's'} cleared${reason ? ` (${reason})` : ''}.`,
         type: 'text',
       }).catch(() => {});
     }
   }
 
   function clearAllPersistentZones({ reason = '' } = {}) {
-    const sceneIds = [...persistentZonesByScene.keys()];
+    const state = boardApi.getState?.() ?? {};
+    const placementsByScene = state.boardState?.placements;
+    const sceneIds = placementsByScene && typeof placementsByScene === 'object'
+      ? Object.keys(placementsByScene)
+      : [];
     for (const sceneId of sceneIds) {
       clearPersistentZonesForScene(sceneId, { reason });
     }
@@ -6719,6 +7059,12 @@ export function mountBoardInteractions(store, routes = {}) {
       renderStairs(state);
       templateTool.notifyMapState();
       applyCombatStateFromBoardState(state);
+      // Persistent zones live on placements now, so any synced state change
+      // (including remote casts/removals) re-renders the overlays here.
+      renderPersistentZoneOverlays();
+      // Heroic-resource prompts addressed to this client's player ride
+      // placement state; pick up any new ones. Async + internally deduped.
+      processPendingHeroResourcePrompts(state);
       mapPings.processIncomingPings(state.boardState?.pings ?? [], activeSceneId);
       // Levels v2 §5.2: pan the view to a claim-sourced level update.
       maybeFollowClaimedTokenView(state, activeSceneId);
@@ -6947,7 +7293,6 @@ export function mountBoardInteractions(store, routes = {}) {
         readyTriggerPayloads: placement.readyTriggerPayloads && typeof placement.readyTriggerPayloads === 'object'
           ? JSON.parse(JSON.stringify(placement.readyTriggerPayloads))
           : {},
-        triggerSetAtPhase: Number.isFinite(placement.triggerSetAtPhase) ? placement.triggerSetAtPhase : null,
       },
     };
   }
@@ -9058,15 +9403,15 @@ export function mountBoardInteractions(store, routes = {}) {
   // Levels v2 (§5.4): paint a colored ring on tokens claimed by a player so
   // every viewer can see whose token is whose at a glance. Color is driven
   // entirely from CSS via `data-claimed-by` so the palette is centralized
-  // (Indigo = purple, Sharon = light grey, Cal = red, Zepha = brown-orange).
-  // Unclaimed tokens (or any non-PC claimant) get no ring.
+  // (Indigo = purple, Sharon = light grey, Cal = red, Zepha = brown-orange,
+  // GM = gold). Unclaimed tokens (or any unknown claimant) get no ring.
   function applyTokenClaimPresentation(token, claimedUserId) {
     if (!token) {
       return;
     }
     const ring = token.querySelector('.vtt-token__claim-ring');
     const userKey = typeof claimedUserId === 'string' ? claimedUserId.trim().toLowerCase() : '';
-    if (!userKey || !PLAYER_CHARACTER_USER_IDS.includes(userKey)) {
+    if (!userKey || (userKey !== 'gm' && !PLAYER_CHARACTER_USER_IDS.includes(userKey))) {
       delete token.dataset.claimedBy;
       if (ring) {
         ring.remove();
@@ -9553,12 +9898,6 @@ export function mountBoardInteractions(store, routes = {}) {
     const newPhase = getTurnPhase();
     if (newPhase !== turnPhase) {
       turnPhase = newPhase;
-      // Phase changed — bump the trigger-expiration counter. This is the real
-      // choke point for turn advance (setActiveCombatantId calls
-      // updateTurnPhase). The transitionTo* helpers below also bump on their
-      // own paths; the bumpPhaseTick guard against double-bump is the
-      // `newPhase !== turnPhase` check above.
-      bumpPhaseTick();
     }
     return turnPhase;
   }
@@ -9576,10 +9915,8 @@ export function mountBoardInteractions(store, routes = {}) {
     // In PICK phase, no one should hold the lock
     releaseTurnLock();
 
-    const previousPhase = turnPhase;
     currentTurnTeam = normalizedTeam;
     turnPhase = TURN_PHASE.PICK;
-    if (previousPhase !== TURN_PHASE.PICK) bumpPhaseTick();
     return true;
   }
 
@@ -9593,11 +9930,9 @@ export function mountBoardInteractions(store, routes = {}) {
       return false;
     }
 
-    const previousPhase = turnPhase;
     activeCombatantId = combatantId;
     activeTeam = team;
     turnPhase = TURN_PHASE.ACTIVE;
-    if (previousPhase !== TURN_PHASE.ACTIVE) bumpPhaseTick();
     return true;
   }
 
@@ -9616,26 +9951,14 @@ export function mountBoardInteractions(store, routes = {}) {
     // reset on next combat round-start via resetTriggeredActionsForActiveScene.
   }
 
-  // GM-local counter. Bumps on every phase boundary (pick<->active). Used to
-  // expire stale ready-trigger overlays — a trigger set during phase N clears
-  // when phaseTick reaches N + 2 (i.e., two boundaries later). The placement
-  // stores its own setAtPhase value, persisted with the rest of placement
-  // state, so non-GM clients see clears via state sync.
-  let phaseTick = 0;
-
-  function bumpPhaseTick() {
-    if (!isGmUser()) return;
-    // CRITICAL: Do NOT call boardApi.updateState() while combat is being
-    // ended. The end-combat flow (see line ~8611 comment) requires that no
-    // store-write happens between local state mutation and the explicit
-    // sync — otherwise the store subscriber reads stale pre-end-combat
-    // state and reverts everything ("old things came back" bug).
-    if (!combatActive) return;
-    phaseTick += 1;
-    expireStaleTriggers();
-  }
-
-  function expireStaleTriggers() {
+  // Clears ready-trigger "!" markers when a combatant finishes their turn.
+  // Runs on whichever client completes the turn (fireTimingBoundary
+  // 'turnEnd'); the clear is persisted via placement ops, so every other
+  // client sees it through normal state sync. Expiry is decided purely from
+  // persisted placement fields (triggerMarkCombatantId), so it is immune to
+  // page reloads and works no matter which client created the marker —
+  // unlike the old GM-local phaseTick counter this replaces.
+  function expireReadyTriggersAtTurnEnd(finishedCombatantId) {
     if (typeof boardApi.updateState !== 'function') return;
     const state = boardApi.getState?.() ?? {};
     const activeSceneId = state.boardState?.activeSceneId ?? null;
@@ -9646,14 +9969,13 @@ export function mountBoardInteractions(store, routes = {}) {
       const nowMs = Date.now();
       scenePlacements.forEach((p) => {
         if (!p || typeof p !== 'object') return;
-        if (!p.hasReadyTrigger) return;
-        const setAt = Number.isFinite(p.triggerSetAtPhase) ? p.triggerSetAtPhase : null;
-        if (setAt === null) return;
-        if (phaseTick - setAt < 2) return;
+        if (!shouldExpireReadyTriggerAtTurnEnd(p, finishedCombatantId)) return;
         p.hasReadyTrigger = false;
         p.readyTriggerAbilities = [];
         p.readyTriggerSources = {};
         p.readyTriggerPayloads = {};
+        p.triggerMarkRound = null;
+        p.triggerMarkCombatantId = null;
         p.triggerSetAtPhase = null;
         p._lastModified = nowMs;
         if (p.id) expirableIds.push(p.id);
@@ -9667,7 +9989,7 @@ export function mountBoardInteractions(store, routes = {}) {
         type: 'placement.update',
         sceneId: activeSceneId,
         placementId: id,
-        patch: { hasReadyTrigger: false, readyTriggerAbilities: [], readyTriggerSources: {}, readyTriggerPayloads: {}, triggerSetAtPhase: null },
+        patch: { hasReadyTrigger: false, readyTriggerAbilities: [], readyTriggerSources: {}, readyTriggerPayloads: {}, triggerMarkRound: null, triggerMarkCombatantId: null, triggerSetAtPhase: null },
       }));
     }
     persistBoardStateSnapshot({}, ops);
@@ -9690,6 +10012,8 @@ export function mountBoardInteractions(store, routes = {}) {
         p.readyTriggerAbilities = [];
         p.readyTriggerSources = {};
         p.readyTriggerPayloads = {};
+        p.triggerMarkRound = null;
+        p.triggerMarkCombatantId = null;
         p.triggerSetAtPhase = null;
         p._lastModified = nowMs;
         if (p.id) ids.push(p.id);
@@ -12272,6 +12596,16 @@ export function mountBoardInteractions(store, routes = {}) {
           placement.readyTriggerAbilities = [];
           placement.readyTriggerSources = {};
           placement.readyTriggerPayloads = {};
+          placement.triggerMarkRound = null;
+          placement.triggerMarkCombatantId = null;
+          placement.triggerSetAtPhase = null;
+          placementMutated = true;
+        }
+        // Round-start: drop heroic-resource prompt records nobody answered
+        // (e.g. the owning player wasn't connected). A prompt left over from
+        // a previous round was abandoned, not pending.
+        if (Array.isArray(placement.pendingHeroResourcePrompts) && placement.pendingHeroResourcePrompts.length) {
+          placement.pendingHeroResourcePrompts = null;
           placementMutated = true;
         }
         if (placementMutated) {
@@ -12305,6 +12639,10 @@ export function mountBoardInteractions(store, routes = {}) {
             readyTriggerAbilities: [],
             readyTriggerSources: {},
             readyTriggerPayloads: {},
+            triggerMarkRound: null,
+            triggerMarkCombatantId: null,
+            triggerSetAtPhase: null,
+            pendingHeroResourcePrompts: null,
           },
         }));
       }
@@ -14483,7 +14821,6 @@ export function mountBoardInteractions(store, routes = {}) {
       ? placement.readyTriggerAbilities.filter((id) => typeof id === 'string' && id.length)
       : [];
     const hasReadyTrigger = Boolean(placement.hasReadyTrigger || readyTriggerAbilities.length);
-    const triggerSetAtPhase = Number.isFinite(placement.triggerSetAtPhase) ? placement.triggerSetAtPhase : null;
     const conditions = ensurePlacementConditions(
       placement?.conditions ??
         placement.condition ??
@@ -16840,6 +17177,16 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!placement) return '';
     const profileId = matchProfileByName(tokenLabel(placement));
     return profileId && PLAYER_CHARACTER_USER_IDS.includes(profileId) ? profileId : '';
+  }
+
+  // Who is RUNNING this token right now. The token-settings claim wins
+  // (the GM can claim a token as 'gm', or reassign an absent player's hero
+  // to whoever is covering them); with no claim it falls back to the
+  // character's own player (token-name match) — the pre-claim default.
+  function getControllingUserIdForPlacement(placementId) {
+    const claimed = getClaimedUserIdForActivePlacement(placementId);
+    if (claimed) return normalizeProfileId(claimed);
+    return normalizeProfileId(getAutomationProfileIdForPlacement(placementId));
   }
 
   function resolveAutomationRecoveryValue(vitals = {}) {
@@ -19496,6 +19843,7 @@ export function mountBoardInteractions(store, routes = {}) {
             >
               <option value="">Unclaimed</option>
               ${playerClaimOptionsMarkup}
+              <option value="gm">GM</option>
             </select>
               `
               : `
@@ -20666,7 +21014,7 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
     const targetUserId = typeof rawValue === 'string' ? rawValue.trim().toLowerCase() : '';
-    if (targetUserId && !PLAYER_CHARACTER_USER_IDS.includes(targetUserId)) {
+    if (targetUserId && targetUserId !== 'gm' && !PLAYER_CHARACTER_USER_IDS.includes(targetUserId)) {
       // Defensive: select options are constrained, but bail if a stray
       // value sneaks in so we never broadcast an invalid claim.
       syncTokenClaimControls(getPlacementFromStore(activeTokenSettingsId));

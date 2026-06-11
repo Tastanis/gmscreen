@@ -2783,6 +2783,10 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
   --vtt-claim-color: #c2410c;
 }
 
+.vtt-token__claim-ring[data-claimed-by='gm'] {
+  --vtt-claim-color: #facc15;
+}
+
 .vtt-token.is-selected .vtt-token__claim-ring,
 .vtt-token.is-hover-highlight .vtt-token__claim-ring {
   display: none;

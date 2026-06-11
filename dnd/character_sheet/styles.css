@@ -149,6 +149,22 @@ body {
   gap: 10px;
 }
 
+.dice-roller-launch {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.dice-roller-launch:hover {
+  background: var(--accent-strong);
+}
+
 .toggle {
   display: inline-flex;
   align-items: center;
