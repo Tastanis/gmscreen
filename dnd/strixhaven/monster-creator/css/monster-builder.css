@@ -4,16 +4,14 @@
     box-sizing: border-box;
 }
 
+/* Local aliases mapped onto the shared theme tokens (css/theme.css).
+   --accent / --accent-strong / --border / --success / --danger come straight
+   from theme.css and are no longer redefined here. */
 :root {
-    --ink: #2f241a;
-    --parchment: #f2e7da;
-    --parchment-deep: #e2d6c6;
-    --accent: #c99a5f;
-    --accent-strong: #8b6640;
-    --border: #b99d7e;
-    --muted: #7a6857;
-    --success: #4a7b4b;
-    --danger: #a54332;
+    --ink: var(--text, #2f241a);
+    --parchment: var(--surface, #f4eadc);
+    --parchment-deep: var(--surface-strong, #e6d8c5);
+    --muted: var(--text-muted, #5e4b36);
 }
 
 body {
@@ -38,7 +36,7 @@ body::before {
     padding: 6px 10px;
     font-weight: 600;
     font-size: 13px;
-    z-index: 1000;
+    z-index: var(--z-nav, 100);
     border-bottom: 1px solid var(--border);
 }
 
@@ -99,8 +97,33 @@ body::before {
 
 .tab.active, .sub-tab.active {
     background-color: var(--accent);
-    color: #2f241a;
+    color: #fdf8f2;
     border-color: var(--border);
+}
+
+/* Inline tab rename input (double-click a tab name) */
+.tab-rename-input {
+    width: 110px;
+    padding: 2px 4px;
+    font-size: 13px;
+    font-family: inherit;
+    color: var(--ink);
+    background: var(--surface-raised, #fdfaf5);
+    border: 1px solid var(--border-strong, #a08a68);
+    border-radius: 3px;
+}
+
+/* Unsaved-changes dot on tabs containing dirty monsters */
+.tab.has-unsaved .tab-name::after,
+.sub-tab.has-unsaved .tab-name::after {
+    content: ' •';
+    color: var(--warning, #b07d2a);
+    font-weight: 900;
+}
+
+.tab.active.has-unsaved .tab-name::after,
+.sub-tab.active.has-unsaved .tab-name::after {
+    color: #f7dfae;
 }
 
 .tab-name {
@@ -298,7 +321,7 @@ body.delete-mode-active .sub-tab:hover {
     box-shadow: none;
     position: sticky;
     top: 0;
-    z-index: 10;
+    z-index: var(--z-nav, 100);
 }
 
 .workspace-title h3 {
@@ -345,7 +368,7 @@ body.delete-mode-active .sub-tab:hover {
 
 .mode-btn.active {
     background-color: var(--accent);
-    color: #2f241a;
+    color: #fdf8f2;
     box-shadow: none;
 }
 
@@ -391,10 +414,10 @@ body.delete-mode-active .sub-tab:hover {
     overflow-y: auto;
 }
 
-/* Search Mode - 2 Column Layout */
+/* Search Mode - Responsive Card Grid */
 .search-mode .workspace-content {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: 10px;
     align-items: start;
 }
@@ -544,7 +567,7 @@ body.delete-mode-active .sub-tab:hover {
 
 .search-stat-value {
     font-weight: 500;
-    color: #2c3e50;
+    color: var(--ink);
 }
 
 /* Compact Attributes Bar for Search Mode */
@@ -610,7 +633,7 @@ body.delete-mode-active .sub-tab:hover {
 
 .search-ability-name {
     font-weight: bold;
-    color: #2c3e50;
+    color: var(--ink);
     margin-bottom: 4px;
 }
 
@@ -648,7 +671,7 @@ body.delete-mode-active .sub-tab:hover {
     display: block;
     text-align: center;
     padding: 8px;
-    color: #6c757d;
+    color: var(--muted);
     font-size: 11px;
     font-style: italic;
     border-top: 1px solid #e9ecef;
@@ -701,7 +724,7 @@ body.delete-mode-active .sub-tab:hover {
 
 .upload-text {
     font-size: 12px;
-    color: #6c757d;
+    color: var(--muted);
     font-weight: 500;
 }
 
@@ -765,7 +788,6 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .monster-name:focus {
-    outline: none;
     border-color: var(--accent-strong);
 }
 
@@ -832,7 +854,7 @@ body.delete-mode-active .sub-tab:hover {
 /* Core Stats Row */
 .core-stats-row {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
     gap: 10px;
     margin-bottom: 12px;
     padding: 12px;
@@ -851,24 +873,23 @@ body.delete-mode-active .sub-tab:hover {
 .core-stat-input {
     width: 60px;
     padding: 8px 6px;
-    border: 2px solid #dee2e6;
+    border: 2px solid var(--border);
     border-radius: 4px;
     font-size: 16px;
     font-weight: bold;
     text-align: center;
     margin-bottom: 6px;
-    background: white;
+    background: #fdf8f2;
 }
 
 .core-stat-input:focus {
-    outline: none;
-    border-color: #3498db;
+    border-color: var(--accent-strong);
 }
 
 .core-stat-label {
     font-size: 12px;
     font-weight: bold;
-    color: #495057;
+    color: var(--muted);
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
@@ -925,8 +946,7 @@ body.delete-mode-active .sub-tab:hover {
 .defensive-stat-text:focus,
 .defensive-stat-number:focus,
 .movement-input:focus {
-    outline: none;
-    border-color: #3498db;
+    border-color: var(--accent-strong);
 }
 
 /* Multi-entry immunity / weakness repeater */
@@ -954,9 +974,9 @@ body.delete-mode-active .sub-tab:hover {
 .defensive-stat-remove {
     width: 22px;
     height: 22px;
-    border: 1px solid #c0392b;
+    border: 1px solid var(--danger);
     background: #fff;
-    color: #c0392b;
+    color: var(--danger);
     border-radius: 3px;
     cursor: pointer;
     font-size: 14px;
@@ -968,7 +988,7 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .defensive-stat-remove:hover {
-    background: #c0392b;
+    background: var(--danger);
     color: #fff;
 }
 
@@ -981,9 +1001,9 @@ body.delete-mode-active .sub-tab:hover {
 .defensive-stat-add {
     margin-left: 4px;
     padding: 4px 8px;
-    border: 1px dashed #3498db;
+    border: 1px dashed var(--accent-strong);
     background: transparent;
-    color: #2c3e50;
+    color: var(--ink);
     border-radius: 3px;
     cursor: pointer;
     font-size: 12px;
@@ -991,7 +1011,7 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .defensive-stat-add:hover {
-    background: #ecf6fd;
+    background: var(--parchment-deep);
 }
 
 /* EV "for four minions" suffix */
@@ -999,7 +1019,7 @@ body.delete-mode-active .sub-tab:hover {
     margin-left: 6px;
     font-size: 12px;
     font-style: italic;
-    color: #6c757d;
+    color: var(--muted);
     white-space: nowrap;
 }
 
@@ -1031,7 +1051,6 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .captain-input:focus {
-    outline: none;
     border-color: #b8975c;
 }
 
@@ -1056,9 +1075,9 @@ body.delete-mode-active .sub-tab:hover {
     align-items: center;
     gap: 4px;
     padding: 2px 4px 2px 8px;
-    background: #d6e9f8;
-    border: 1px solid #5a8db3;
-    color: #1f3d57;
+    background: var(--info-soft, #e3eaf1);
+    border: 1px solid var(--info, #4f6f8f);
+    color: var(--ink);
     border-radius: 12px;
     font-size: 12px;
     font-weight: 600;
@@ -1069,7 +1088,7 @@ body.delete-mode-active .sub-tab:hover {
     height: 18px;
     border: none;
     background: transparent;
-    color: #1f3d57;
+    color: var(--info, #4f6f8f);
     cursor: pointer;
     font-size: 14px;
     line-height: 1;
@@ -1078,13 +1097,13 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .movement-chip-remove:hover {
-    background: #1f3d57;
+    background: var(--info, #4f6f8f);
     color: #fff;
 }
 
 .movement-empty {
     font-size: 12px;
-    color: #95a5a6;
+    color: var(--text-faint, #8a7558);
     font-style: italic;
 }
 
@@ -1096,22 +1115,22 @@ body.delete-mode-active .sub-tab:hover {
 
 .movement-preset {
     padding: 3px 7px;
-    border: 1px solid #b0bec5;
+    border: 1px solid var(--border);
     background: #fff;
-    color: #455a64;
+    color: var(--muted);
     border-radius: 12px;
     font-size: 11px;
     cursor: pointer;
 }
 
 .movement-preset:hover {
-    border-color: #5a8db3;
+    border-color: var(--info, #4f6f8f);
 }
 
 .movement-preset.is-active {
-    background: #5a8db3;
+    background: var(--info, #4f6f8f);
     color: #fff;
-    border-color: #5a8db3;
+    border-color: var(--info, #4f6f8f);
 }
 
 .movement-custom-input {
@@ -1124,8 +1143,7 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .movement-custom-input:focus {
-    outline: none;
-    border-color: #3498db;
+    border-color: var(--accent-strong);
 }
 
 /* Print: with-captain row */
@@ -1146,9 +1164,9 @@ body.delete-mode-active .sub-tab:hover {
     gap: 10px;
     align-items: center;
     padding: 12px 20px;
-    background: linear-gradient(135deg, #34495e 0%, #2c3e50 100%);
+    background: linear-gradient(135deg, var(--accent-strong, #6f5333) 0%, #59412a 100%);
     border-radius: 6px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 4px rgba(47, 36, 23, 0.2);
     overflow: hidden;
 }
 
@@ -1156,7 +1174,7 @@ body.delete-mode-active .sub-tab:hover {
     display: flex;
     align-items: center;
     gap: 5px;
-    color: white;
+    color: #fdf8f2;
     flex-shrink: 0;
 }
 
@@ -1171,24 +1189,23 @@ body.delete-mode-active .sub-tab:hover {
     font-size: 16px;
     font-weight: 900;
     text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
-    color: #3498db;
+    color: #e9c98f;
 }
 
 .attribute-input {
     width: 35px;
     padding: 4px 4px;
-    border: 1px solid #34495e;
+    border: 1px solid var(--accent-strong, #6f5333);
     border-radius: 4px;
     font-size: 12px;
     font-weight: bold;
     text-align: center;
-    background: rgba(255, 255, 255, 0.9);
+    background: rgba(253, 248, 242, 0.92);
 }
 
 .attribute-input:focus {
-    outline: none;
-    border-color: #3498db;
-    background: white;
+    border-color: #e9c98f;
+    background: #fff;
 }
 
 .attribute-separator {
@@ -1206,7 +1223,7 @@ body.delete-mode-active .sub-tab:hover {
 
 .abilities-section h4 {
     margin-bottom: 15px;
-    color: #2c3e50;
+    color: var(--ink);
 }
 
 .ability-slots {
@@ -1227,35 +1244,35 @@ body.delete-mode-active .sub-tab:hover {
     transition: all 0.3s ease;
 }
 
-/* Category-Specific Color Themes */
+/* Category-Specific Color Themes (deepened for contrast on parchment) */
 .ability-category.category-passive {
-    background-color: #e3f2fd;
-    border-color: #bbdefb;
+    background-color: #d6e7f6;
+    border-color: #8fb8de;
 }
 
 .ability-category.category-maneuver {
-    background-color: #e8f5e8;
-    border-color: #a5d6a7;
+    background-color: #d9ecd9;
+    border-color: #8cc18e;
 }
 
 .ability-category.category-action {
-    background-color: #fff3e0;
-    border-color: #ffcc80;
+    background-color: #fbe6c4;
+    border-color: #dfa75a;
 }
 
 .ability-category.category-triggered_action {
-    background-color: #f3e5f5;
-    border-color: #ce93d8;
+    background-color: #ecdaef;
+    border-color: #bd86c9;
 }
 
 .ability-category.category-villain_action {
-    background-color: #ffebee;
-    border-color: #ef9a9a;
+    background-color: #f8dcdc;
+    border-color: #dd8484;
 }
 
 .ability-category.category-malice {
-    background-color: #ede7f6;
-    border-color: #b39ddb;
+    background-color: #e2daf1;
+    border-color: #a288cf;
 }
 
 /* Darker Colors for Categories with Abilities */
@@ -1355,8 +1372,16 @@ body.delete-mode-active .sub-tab:hover {
 
 .category-name {
     font-weight: bold;
-    color: #2c3e50;
+    color: var(--ink);
     font-size: 14px;
+}
+
+/* Category icon — symbol differentiator alongside color */
+.category-icon {
+    display: inline-block;
+    margin-right: 6px;
+    font-size: 13px;
+    opacity: 0.85;
 }
 
 /* Ability Count Badge */
@@ -1370,7 +1395,7 @@ body.delete-mode-active .sub-tab:hover {
     margin-left: 8px;
     border-radius: 12px;
     background-color: rgba(0, 0, 0, 0.1);
-    color: #2c3e50;
+    color: var(--ink);
     font-size: 12px;
     font-weight: bold;
 }
@@ -1415,7 +1440,7 @@ body.delete-mode-active .sub-tab:hover {
 
 .expand-icon {
     font-size: 12px;
-    color: #7f8c8d;
+    color: var(--muted);
     transition: transform 0.3s ease;
     width: 16px;
     text-align: center;
@@ -1545,7 +1570,7 @@ body.delete-mode-active .sub-tab:hover {
 
 .roll-text {
     font-weight: bold;
-    color: #2c3e50;
+    color: var(--ink);
     font-size: 14px;
 }
 
@@ -1559,8 +1584,8 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .action-type {
-    background-color: #3498db;
-    color: white;
+    background-color: var(--accent-strong);
+    color: #fdf8f2;
     padding: 6px 12px;
     border-radius: 15px;
     font-size: 12px;
@@ -1577,13 +1602,17 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .remove-ability {
-    background-color: #e74c3c;
+    background-color: var(--danger);
     color: white;
     border: none;
     padding: 6px 10px;
     border-radius: 4px;
     cursor: pointer;
     font-size: 14px;
+}
+
+.remove-ability:hover {
+    background-color: #8c3829;
 }
 
 /* Row 2: Combat Details */
@@ -1636,7 +1665,7 @@ body.delete-mode-active .sub-tab:hover {
     display: block;
     font-weight: bold;
     margin-bottom: 5px;
-    color: #2c3e50;
+    color: var(--ink);
 }
 
 .effect-input {
@@ -1666,7 +1695,7 @@ body.delete-mode-active .sub-tab:hover {
     justify-content: space-between;
     align-items: center;
     font-weight: bold;
-    color: #2c3e50;
+    color: var(--ink);
 }
 
 .test-header:hover {
@@ -1695,7 +1724,7 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .add-test-btn {
-    background-color: #27ae60;
+    background-color: var(--success);
     color: white;
     padding: 8px 16px;
     border-radius: 5px;
@@ -1704,7 +1733,7 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .add-test-btn:hover {
-    background-color: #219a52;
+    background-color: #336538;
 }
 
 .additional-effect-section {
@@ -1717,7 +1746,7 @@ body.delete-mode-active .sub-tab:hover {
     display: block;
     font-weight: bold;
     margin-bottom: 5px;
-    color: #2c3e50;
+    color: var(--ink);
 }
 
 .test-tier {
@@ -1742,7 +1771,7 @@ body.delete-mode-active .sub-tab:hover {
 .tier-label {
     font-weight: bold;
     min-width: 60px;
-    color: #2c3e50;
+    color: var(--ink);
 }
 
 .damage-amount, .damage-type {
@@ -1766,7 +1795,7 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .attribute-toggle {
-    background-color: #95a5a6;
+    background-color: var(--text-faint, #8a7558);
     color: white;
     padding: 4px 8px;
     border-radius: 3px;
@@ -1776,7 +1805,7 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .attribute-toggle.active {
-    background-color: #27ae60;
+    background-color: var(--success);
 }
 
 .attribute-section {
@@ -1842,7 +1871,7 @@ body.delete-mode-active .sub-tab:hover {
     display: block;
     font-weight: bold;
     margin-bottom: 5px;
-    color: #2c3e50;
+    color: var(--ink);
 }
 
 .additional-effect-input {
@@ -1885,7 +1914,7 @@ body.delete-mode-active .sub-tab:hover {
 
 .context-info {
     background-color: var(--accent);
-    color: #2f241a;
+    color: #fdf8f2;
     padding: 2px 8px;
     border-radius: 4px;
     font-size: 11px;
@@ -1914,7 +1943,6 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .browser-search-input:focus {
-    outline: none;
     border-color: #5a3e30;
     box-shadow: 0 0 0 2px rgba(90, 62, 48, 0.18);
 }
@@ -2049,7 +2077,7 @@ body.delete-mode-active .sub-tab:hover {
 
 .count {
     background-color: var(--accent);
-    color: #2f241a;
+    color: #fdf8f2;
     font-size: 11px;
     padding: 2px 8px;
     border-radius: 4px;
@@ -2162,7 +2190,7 @@ body.delete-mode-active .sub-tab:hover {
 
 .browser-card-name {
     font-weight: bold;
-    color: #2c3e50;
+    color: var(--ink);
     margin-bottom: 2px;
     white-space: nowrap;
     overflow: hidden;
@@ -2178,23 +2206,23 @@ body.delete-mode-active .sub-tab:hover {
 
 .browser-card-location {
     font-style: italic;
-    color: #95a5a6;
+    color: var(--text-faint, #8a7558);
     font-size: 10px;
     margin-top: 4px;
 }
 
 /* Debug Info */
 .debug-info {
-    background-color: #2c3e50;
-    color: white;
+    background-color: #2f241a;
+    color: #f2e7da;
     padding: 10px;
     font-size: 11px;
-    border-top: 1px solid #34495e;
+    border-top: 1px solid #59412a;
 }
 
 .debug-info h5 {
     margin: 0 0 8px 0;
-    color: #ecf0f1;
+    color: #f2e7da;
 }
 
 #debugContent {
@@ -2217,9 +2245,9 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .btn-primary {
-    background-color: #3498db;
+    background-color: var(--accent);
     color: white;
-    border: none;
+    border: 1px solid var(--accent-strong);
     padding: 12px 24px;
     border-radius: 6px;
     cursor: pointer;
@@ -2228,11 +2256,11 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .btn-primary:hover {
-    background-color: #2980b9;
+    background-color: var(--accent-strong);
 }
 
 .btn-small {
-    background-color: #95a5a6;
+    background-color: var(--text-faint, #8a7558);
     color: white;
     border: none;
     padding: 4px 8px;
@@ -2243,7 +2271,7 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .btn-small:hover {
-    background-color: #7f8c8d;
+    background-color: var(--muted);
 }
 
 /* Abilities Section */
@@ -2257,7 +2285,7 @@ body.delete-mode-active .sub-tab:hover {
     margin: 0 0 10px 0;
     display: flex;
     align-items: center;
-    color: #2c3e50;
+    color: var(--ink);
 }
 
 .abilities-container {
@@ -2318,7 +2346,7 @@ body.delete-mode-active .sub-tab:hover {
 /* Image Modal */
 .image-modal {
     position: fixed;
-    z-index: 1000;
+    z-index: var(--z-overlay, 900);
     left: 0;
     top: 0;
     width: 100%;
@@ -2331,8 +2359,10 @@ body.delete-mode-active .sub-tab:hover {
 
 .image-modal-content {
     position: relative;
+    z-index: var(--z-modal, 1000);
     max-width: 90%;
-    max-height: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
     background: white;
     border-radius: 8px;
     padding: 20px;
@@ -2366,7 +2396,7 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .btn-danger {
-    background-color: #dc3545;
+    background-color: var(--danger);
     color: white;
     border: none;
     padding: 10px 20px;
@@ -2378,7 +2408,7 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .btn-danger:hover {
-    background-color: #c82333;
+    background-color: #8c3829;
 }
 
 /* Ability Card */
@@ -2403,7 +2433,7 @@ body.delete-mode-active .sub-tab:hover {
 
 .ability-card h5 {
     margin: 0 0 8px 0;
-    color: #2c3e50;
+    color: var(--ink);
     font-size: 16px;
 }
 
@@ -2413,15 +2443,18 @@ body.delete-mode-active .sub-tab:hover {
     color: #666;
 }
 
-/* Save Status */
+/* Save Status — three visible states: saved (success), saving (warning), error (danger) */
 .save-status {
     position: fixed;
     bottom: 50px;
     left: 20px;
-    background-color: white;
+    z-index: var(--z-panel, 200);
+    background-color: var(--surface-raised, #fdfaf5);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--success);
     border-radius: 6px;
     padding: 10px 20px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-card, 0 2px 8px rgba(47, 36, 23, 0.15));
     display: flex;
     align-items: center;
     gap: 10px;
@@ -2429,23 +2462,45 @@ body.delete-mode-active .sub-tab:hover {
 
 .status-text {
     font-size: 14px;
-    color: #666;
+    color: var(--muted);
 }
 
 .status-indicator {
     width: 10px;
     height: 10px;
     border-radius: 50%;
-    background-color: #2ecc71;
+    background-color: var(--success);
+}
+
+.save-status.saved .status-text {
+    color: var(--success);
+}
+
+.save-status.saving {
+    border-left-color: var(--warning);
+}
+
+.save-status.saving .status-text {
+    color: var(--warning);
+    font-weight: 600;
 }
 
 .save-status.saving .status-indicator {
-    background-color: #f39c12;
+    background-color: var(--warning);
     animation: pulse 1s infinite;
 }
 
+.save-status.error {
+    border-left-color: var(--danger);
+}
+
+.save-status.error .status-text {
+    color: var(--danger);
+    font-weight: 600;
+}
+
 .save-status.error .status-indicator {
-    background-color: #e74c3c;
+    background-color: var(--danger);
 }
 
 @keyframes pulse {
@@ -2467,41 +2522,149 @@ body.delete-mode-active .sub-tab:hover {
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
 
+/* Body scroll lock while a modal is open (body is already overflow:hidden,
+   this keeps the lock explicit if that ever changes) */
+body.modal-open {
+    overflow: hidden;
+}
+
+/* Browser sidebar toggle button — hidden on wide screens */
+.browser-toggle {
+    display: none;
+    background: #5a3e30;
+    color: #fdf8f2;
+    border: 1px solid #3f2b21;
+    padding: 7px 14px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    align-self: center;
+}
+
+.browser-toggle:hover {
+    background: #6a4c3b;
+}
+
+.browser-toggle.active {
+    background: var(--accent);
+}
+
 /* Responsive Design */
-@media (max-width: 768px) {
-    .abilities-sidebar {
-        display: none;
+@media (max-width: 1024px) {
+    .browser-sidebar {
+        width: 250px;
     }
-    
+}
+
+@media (max-width: 768px) {
+    /* Sidebar becomes a toggleable overlay panel */
+    .browser-sidebar {
+        position: fixed;
+        top: 34px;
+        right: 0;
+        bottom: 0;
+        width: min(320px, 85vw);
+        z-index: var(--z-panel, 200);
+        border-left: 1px solid var(--border-strong, #a08a68);
+        box-shadow: -4px 0 16px rgba(47, 36, 23, 0.25);
+        transform: translateX(100%);
+        transition: transform 0.2s ease;
+    }
+
+    .browser-sidebar.open {
+        transform: translateX(0);
+    }
+
+    .browser-toggle {
+        display: inline-flex;
+    }
+
+    .top-tabs-container,
+    .action-buttons-group {
+        flex-wrap: wrap;
+    }
+
     .monster-card {
         max-width: 100%;
-        margin: 10px;
+    }
+
+    /* Stack editor form rows cleanly */
+    .monster-info-top {
+        flex-direction: column;
+    }
+
+    .info-row-1,
+    .info-row-2,
+    .level-role-section {
+        flex-wrap: wrap;
+    }
+
+    .monster-name,
+    .types-input {
+        max-width: 100%;
+        min-width: 0;
+        flex: 1 1 100%;
+    }
+
+    .defensive-stats-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+
+    .attributes-bar {
+        flex-wrap: wrap;
+        padding: 10px 12px;
+    }
+
+    .attribute-separator {
+        display: none;
+    }
+
+    .ability-row-1,
+    .ability-item[data-category="villain_action"] .ability-row-1,
+    .ability-item[data-category="malice"] .ability-row-1,
+    .ability-row-2 {
+        grid-template-columns: 1fr;
+    }
+
+    .workspace-header {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .browser-sidebar {
+        transition: none;
     }
 }
 
 /* Print Mode UI Styles */
 .print-mode-toggle {
-    background-color: #4a5568;
-    color: white;
-    border: none;
-    padding: 10px 20px;
+    background-color: #5a3e30;
+    color: #fdf8f2;
+    border: 1px solid #3f2b21;
+    padding: 7px 14px;
     cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
-    transition: all 0.3s ease;
+    font-size: 13px;
+    font-weight: 600;
+    transition: background-color 0.15s ease;
     white-space: nowrap;
     align-self: center;
-    margin-right: 15px;
-    border-radius: 5px;
+    margin-right: 12px;
+    border-radius: 3px;
 }
 
 .print-mode-toggle:hover {
-    background-color: #2d3748;
+    background-color: #6a4c3b;
 }
 
 .print-mode-toggle.active {
-    background-color: #2563eb;
-    box-shadow: 0 0 10px rgba(37, 99, 235, 0.5);
+    background-color: var(--info, #4f6f8f);
+    box-shadow: 0 0 8px rgba(79, 111, 143, 0.5);
 }
 
 .print-controls {
@@ -2521,30 +2684,30 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .btn-print-preview {
-    background-color: #3b82f6;
+    background-color: var(--info, #4f6f8f);
     color: white;
 }
 
 .btn-print-preview:hover {
-    background-color: #2563eb;
+    background-color: #405b76;
 }
 
 .btn-print {
-    background-color: #10b981;
+    background-color: var(--success);
     color: white;
 }
 
 .btn-print:hover {
-    background-color: #059669;
+    background-color: #336538;
 }
 
 .btn-clear-selection {
-    background-color: #ef4444;
+    background-color: var(--danger);
     color: white;
 }
 
 .btn-clear-selection:hover {
-    background-color: #dc2626;
+    background-color: #8c3829;
 }
 
 .selection-count {
@@ -2560,7 +2723,7 @@ body.delete-mode-active .sub-tab:hover {
     position: absolute;
     top: 10px;
     right: 10px;
-    z-index: 10;
+    z-index: 1;
     pointer-events: none; /* Don't block clicks on the card */
 }
 
@@ -2572,8 +2735,8 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .monster-card.selected-for-print {
-    border: 2px solid #3b82f6;
-    background-color: #eff6ff;
+    border: 2px solid var(--info, #4f6f8f);
+    background-color: var(--info-soft, #e3eaf1);
 }
 
 .print-mode-active .monster-card {
@@ -2581,7 +2744,7 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .print-mode-active .monster-card:hover {
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    box-shadow: 0 4px 12px rgba(79, 111, 143, 0.3);
 }
 
 /* Print Preview Modal */
@@ -2593,12 +2756,14 @@ body.delete-mode-active .sub-tab:hover {
     right: 0;
     bottom: 0;
     background-color: rgba(0, 0, 0, 0.7);
-    z-index: 10000;
+    z-index: var(--z-overlay, 900);
     align-items: center;
     justify-content: center;
 }
 
 .print-preview-content {
+    position: relative;
+    z-index: var(--z-modal, 1000);
     background: white;
     width: 90%;
     max-width: 1200px;
@@ -2620,7 +2785,7 @@ body.delete-mode-active .sub-tab:hover {
 .print-preview-header h2 {
     margin: 0;
     font-size: 24px;
-    color: #1f2937;
+    color: var(--ink);
 }
 
 .close-preview {
@@ -2628,16 +2793,17 @@ body.delete-mode-active .sub-tab:hover {
     border: none;
     font-size: 30px;
     cursor: pointer;
-    color: #6b7280;
+    color: var(--muted);
 }
 
 .close-preview:hover {
-    color: #1f2937;
+    color: var(--ink);
 }
 
 .print-preview-body {
     flex: 1;
-    overflow: auto;
+    overflow-y: auto;
+    max-height: calc(90vh - 130px);
     padding: 20px;
     background: #f9fafb;
 }
@@ -2660,21 +2826,21 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .btn-print-final {
-    background-color: #10b981;
+    background-color: var(--success);
     color: white;
 }
 
 .btn-print-final:hover {
-    background-color: #059669;
+    background-color: #336538;
 }
 
 .btn-close-preview {
-    background-color: #6b7280;
+    background-color: var(--muted);
     color: white;
 }
 
 .btn-close-preview:hover {
-    background-color: #4b5563;
+    background-color: var(--ink);
 }
 
 /* Print Layout Styles */
@@ -3079,14 +3245,14 @@ body.delete-mode-active .sub-tab:hover {
 
 /* Selected Monster Highlighting */
 .browser-monster-card.selected {
-    background-color: #e3f2fd;
-    border-left: 4px solid #2196f3;
-    box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+    background-color: var(--parchment-deep);
+    border-left: 4px solid var(--accent-strong);
+    box-shadow: 0 2px 8px rgba(111, 83, 51, 0.35);
 }
 
 .monster-card.selected {
-    border: 2px solid #2196f3;
-    box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
+    border: 2px solid var(--accent-strong);
+    box-shadow: 0 4px 12px rgba(111, 83, 51, 0.35);
     transform: translateY(-2px);
     transition: all 0.3s ease;
 }
@@ -3103,33 +3269,33 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .browser-category-header.category-passive {
-    background-color: #e3f2fd;
+    background-color: #d6e7f6;
     color: #1565c0;
 }
 
 .browser-category-header.category-maneuver {
-    background-color: #e8f5e8;
+    background-color: #d9ecd9;
     color: #2e7d32;
 }
 
 .browser-category-header.category-action {
-    background-color: #fff3e0;
-    color: #ef6c00;
+    background-color: #fbe6c4;
+    color: #e65100;
 }
 
 .browser-category-header.category-triggered_action {
-    background-color: #f3e5f5;
-    color: #7b1fa2;
+    background-color: #ecdaef;
+    color: #6a1b9a;
 }
 
 .browser-category-header.category-villain_action {
-    background-color: #ffebee;
+    background-color: #f8dcdc;
     color: #c62828;
 }
 
 .browser-category-header.category-malice {
-    background-color: #f1f8e9;
-    color: #558b2f;
+    background-color: #e2daf1;
+    color: #5e35b1;
 }
 
 .browser-ability-card {
@@ -3148,27 +3314,27 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .browser-ability-card.category-passive {
-    border-left-color: #2196f3;
+    border-left-color: #1565c0;
 }
 
 .browser-ability-card.category-maneuver {
-    border-left-color: #4caf50;
+    border-left-color: #2e7d32;
 }
 
 .browser-ability-card.category-action {
-    border-left-color: #ff9800;
+    border-left-color: #e65100;
 }
 
 .browser-ability-card.category-triggered_action {
-    border-left-color: #9c27b0;
+    border-left-color: #6a1b9a;
 }
 
 .browser-ability-card.category-villain_action {
-    border-left-color: #f44336;
+    border-left-color: #c62828;
 }
 
 .browser-ability-card.category-malice {
-    border-left-color: #8bc34a;
+    border-left-color: #5e35b1;
 }
 
 .browser-ability-name {
@@ -3257,15 +3423,15 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .test-tier.tier-low .tier-label {
-    color: #28a745;
+    color: var(--success);
 }
 
 .test-tier.tier-mid .tier-label {
-    color: #ffc107;
+    color: var(--warning);
 }
 
 .test-tier.tier-high .tier-label {
-    color: #dc3545;
+    color: var(--danger);
 }
 
 .ability-additional {
@@ -3279,9 +3445,9 @@ body.delete-mode-active .sub-tab:hover {
 
 /* Secondary Button Styling */
 .btn-secondary {
-    background-color: #6c757d;
-    color: white;
-    border: none;
+    background-color: var(--parchment-deep);
+    color: var(--ink);
+    border: 1px solid var(--border-strong, #a08a68);
     padding: 8px 16px;
     border-radius: 5px;
     cursor: pointer;
@@ -3292,7 +3458,7 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .btn-secondary:hover {
-    background-color: #5a6268;
+    background-color: var(--border);
 }
 
 .btn-secondary:active {
@@ -3334,7 +3500,7 @@ body.delete-mode-active .sub-tab:hover {
     border: 1px solid #ffeaa7;
     border-radius: 8px;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    z-index: 10000;
+    z-index: var(--z-toast, 2000);
     animation: slideDown 0.3s ease-out;
     max-width: 500px;
 }
@@ -3384,21 +3550,21 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .btn-recover {
-    background: #28a745;
+    background: var(--success);
     color: white;
 }
 
 .btn-recover:hover {
-    background: #218838;
+    background: #336538;
 }
 
 .btn-discard {
-    background: #6c757d;
+    background: var(--muted);
     color: white;
 }
 
 .btn-discard:hover {
-    background: #5a6268;
+    background: var(--ink);
 }
 
 @keyframes slideDown {
@@ -3416,7 +3582,7 @@ body.delete-mode-active .sub-tab:hover {
 .json-import-modal {
     position: fixed;
     inset: 0;
-    z-index: 9999;
+    z-index: var(--z-overlay, 900);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3430,6 +3596,7 @@ body.delete-mode-active .sub-tab:hover {
 
 .json-import-modal__dialog {
     position: relative;
+    z-index: var(--z-modal, 1000);
     width: min(720px, 92vw);
     max-height: 88vh;
     display: flex;
