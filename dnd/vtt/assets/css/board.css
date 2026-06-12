@@ -2881,11 +2881,13 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
   animation: vtt-token-automation-target-flash 0.9s ease-in-out infinite;
 }
 
+/* Lives inside the map transform layer, so it only competes with in-board
+   siblings (tokens and rings top out around z-index 72). */
 .vtt-automation-move {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 100050;
+  z-index: var(--z-dropdown, 500);
 }
 
 .vtt-automation-move__svg {

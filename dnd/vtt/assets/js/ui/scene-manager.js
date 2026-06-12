@@ -318,7 +318,9 @@ export function renderSceneList(routes, store) {
       const mapLevels = normalizeMapLevelsState(sceneEntry.mapLevels ?? null, { sceneGrid });
       const existingLevel = mapLevels.levels.find((level) => level.id === levelId);
       const currentName = existingLevel?.name ?? '';
-      const name = window.prompt('Map level name', currentName);
+      const name = window.UIKit
+        ? await window.UIKit.prompt({ title: 'Rename Map Level', message: 'Map level name', defaultValue: currentName })
+        : window.prompt('Map level name', currentName);
       if (name === null) {
         return;
       }
@@ -356,7 +358,14 @@ export function renderSceneList(routes, store) {
         return;
       }
 
-      const confirmed = window.confirm('Delete this map level? This cannot be undone.');
+      const confirmed = window.UIKit
+        ? await window.UIKit.confirm({
+          title: 'Delete Map Level',
+          message: 'Delete this map level? This cannot be undone.',
+          confirmText: 'Delete',
+          danger: true,
+        })
+        : window.confirm('Delete this map level? This cannot be undone.');
       if (!confirmed) {
         return;
       }
@@ -452,7 +461,14 @@ export function renderSceneList(routes, store) {
 
     if (action === 'delete-scene' && sceneId) {
       if (!endpoints.scenes) return;
-      const confirmed = window.confirm('Delete this scene? This cannot be undone.');
+      const confirmed = window.UIKit
+        ? await window.UIKit.confirm({
+          title: 'Delete Scene',
+          message: 'Delete this scene? This cannot be undone.',
+          confirmText: 'Delete',
+          danger: true,
+        })
+        : window.confirm('Delete this scene? This cannot be undone.');
       if (!confirmed) return;
 
       try {
@@ -733,7 +749,9 @@ export function renderSceneList(routes, store) {
   folderButtons.forEach((button) => {
     button.addEventListener('click', async () => {
       if (!endpoints.scenes) return;
-      const name = window.prompt('Folder name');
+      const name = window.UIKit
+        ? await window.UIKit.prompt({ title: 'New Scene Folder', message: 'Folder name', placeholder: 'Folder name' })
+        : window.prompt('Folder name');
       const trimmed = name?.trim();
       if (!trimmed) return;
 

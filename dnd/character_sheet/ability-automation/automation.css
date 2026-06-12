@@ -33,9 +33,11 @@
   inset: 0;
   pointer-events: none;
   position: fixed;
-  z-index: 35;
+  z-index: var(--z-modal, 1000);
 }
 
+/* The VTT page stack keeps panels between 1200 and 1600, so automation
+   windows there sit one full band above the shared modal scale. */
 .vtt-body .power-roll-runner {
   --panel-alt: var(--dice-surface);
   --border: var(--dice-border);
@@ -45,7 +47,7 @@
   --success: var(--dice-success);
   --danger: var(--dice-danger);
   --accent-strong: var(--dice-accent-strong);
-  z-index: 2000;
+  z-index: calc(var(--z-modal, 1000) + 800);
 }
 
 .vtt-body .power-roll-runner .dice-modal,
@@ -74,12 +76,14 @@
   width: min(300px, calc(100vw - 32px));
 }
 
-.power-roll-runner__modal--dragging {
+.power-roll-runner__modal--dragging,
+.power-roll-runner__modal--dragging .power-roll-runner__header {
   cursor: grabbing;
 }
 
 .power-roll-runner__header {
   align-items: center;
+  cursor: grab;
 }
 
 .power-roll-runner__heading {
@@ -363,7 +367,7 @@
   inset: 0;
   pointer-events: none;
   position: fixed;
-  z-index: 2100;
+  z-index: calc(var(--z-modal-child, 1100) + 800);
 }
 
 .vtt-body .vtt-automation-spend,
@@ -383,7 +387,8 @@
   width: min(380px, calc(100vw - 32px));
 }
 
-.vtt-automation-spend__modal.is-dragging {
+.vtt-automation-spend__modal.is-dragging,
+.vtt-automation-spend__modal.is-dragging .vtt-automation-spend__header {
   cursor: grabbing;
 }
 
@@ -492,7 +497,7 @@
 .ability-paste {
   inset: 0;
   position: fixed;
-  z-index: 5000;
+  z-index: var(--z-modal-child, 5000);
 }
 
 .ability-paste__backdrop {
@@ -502,8 +507,8 @@
 }
 
 .ability-paste__modal {
-  background: #f5edde;
-  border: 1px solid #b89c70;
+  background: var(--surface, #f5edde);
+  border: 1px solid var(--border, #b89c70);
   border-radius: 8px;
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
   display: flex;
@@ -519,8 +524,8 @@
 
 .ability-paste__header {
   align-items: flex-start;
-  background: #ece1ca;
-  border-bottom: 1px solid #b89c70;
+  background: var(--surface-strong, #ece1ca);
+  border-bottom: 1px solid var(--border, #b89c70);
   display: flex;
   gap: 12px;
   justify-content: space-between;
@@ -533,7 +538,7 @@
 }
 
 .ability-paste__subtitle {
-  color: #6e5b3a;
+  color: var(--text-muted, #6e5b3a);
   font-size: 0.85rem;
   margin: 0;
 }
@@ -545,11 +550,11 @@
   font-size: 1.4rem;
   line-height: 1;
   padding: 2px 8px;
-  color: #6e5b3a;
+  color: var(--text-muted, #6e5b3a);
 }
 
 .ability-paste__close:hover {
-  color: #1a1a1a;
+  color: var(--text, #1a1a1a);
 }
 
 .ability-paste__body {
@@ -561,8 +566,8 @@
 }
 
 .ability-paste__textarea {
-  background: #fffaf0;
-  border: 1px solid #b89c70;
+  background: var(--surface-raised, #fffaf0);
+  border: 1px solid var(--border, #b89c70);
   border-radius: 6px;
   font-family: ui-monospace, "SF Mono", Monaco, Consolas, "Cascadia Code", monospace;
   font-size: 13px;
@@ -574,8 +579,8 @@
 }
 
 .ability-paste__status {
-  background: #fffaf0;
-  border: 1px solid #d8c4a3;
+  background: var(--surface-raised, #fffaf0);
+  border: 1px solid var(--border, #d8c4a3);
   border-radius: 6px;
   padding: 10px 12px;
   font-size: 0.86rem;
@@ -583,7 +588,7 @@
 }
 
 .ability-paste__hint {
-  color: #6e5b3a;
+  color: var(--text-muted, #6e5b3a);
   font-size: 0.82rem;
   margin: -2px 0 0;
 }
@@ -593,15 +598,15 @@
 }
 
 .ability-paste__field-warnings {
-  background: #fff4df;
-  border: 1px solid #d8b26d;
+  background: var(--warning-soft, #fff4df);
+  border: 1px solid var(--warning, #d8b26d);
   border-radius: 6px;
   font-size: 0.86rem;
   padding: 8px 12px;
 }
 
 .ability-paste__summary {
-  color: #3b3024;
+  color: var(--text, #3b3024);
   margin-bottom: 4px;
 }
 
@@ -616,18 +621,18 @@
 }
 
 .ability-paste__status-empty {
-  color: #6e5b3a;
+  color: var(--text-muted, #6e5b3a);
 }
 
 .ability-paste__status-error {
-  color: #a8341c;
+  color: var(--danger, #a8341c);
   font-weight: 600;
 }
 
 .ability-paste__footer {
   align-items: center;
-  background: #ece1ca;
-  border-top: 1px solid #b89c70;
+  background: var(--surface-strong, #ece1ca);
+  border-top: 1px solid var(--border, #b89c70);
   display: flex;
   gap: 8px;
   padding: 12px 18px;
@@ -638,10 +643,10 @@
 }
 
 .ability-paste__btn {
-  background: #fffaf0;
-  border: 1px solid #b89c70;
+  background: var(--surface-raised, #fffaf0);
+  border: 1px solid var(--border, #b89c70);
   border-radius: 5px;
-  color: #1a1a1a;
+  color: var(--text, #1a1a1a);
   cursor: pointer;
   font: inherit;
   font-size: 0.9rem;
@@ -650,7 +655,7 @@
 }
 
 .ability-paste__btn:hover {
-  background: #f0e3c8;
+  background: var(--surface-strong, #f0e3c8);
 }
 
 .ability-paste__btn--primary {
@@ -672,7 +677,7 @@
 .ability-inspector {
   inset: 0;
   position: fixed;
-  z-index: 5000;
+  z-index: var(--z-modal-child, 5000);
 }
 
 .ability-inspector__modal {

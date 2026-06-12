@@ -523,7 +523,9 @@ export function renderTokenLibrary(routes, store, options = {}) {
         return;
       }
 
-      const name = window.prompt('Folder name');
+      const name = window.UIKit
+        ? await window.UIKit.prompt({ title: 'New Token Folder', message: 'Folder name', placeholder: 'Folder name' })
+        : window.prompt('Folder name');
       const trimmed = name?.trim();
       if (!trimmed) return;
 
@@ -748,7 +750,14 @@ export function renderTokenLibrary(routes, store, options = {}) {
         return;
       }
 
-      const confirmed = window.confirm('Delete this token? This cannot be undone.');
+      const confirmed = window.UIKit
+        ? await window.UIKit.confirm({
+          title: 'Delete Token',
+          message: 'Delete this token? This cannot be undone.',
+          confirmText: 'Delete',
+          danger: true,
+        })
+        : window.confirm('Delete this token? This cannot be undone.');
       if (!confirmed) {
         return;
       }

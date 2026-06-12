@@ -1,16 +1,16 @@
 
 :root {
-    --dice-surface: #f4eadc;
-    --dice-surface-strong: #e6d8c5;
-    --dice-border: #c2ad90;
-    --dice-text: #2f2417;
-    --dice-muted: #5e4b36;
-    --dice-accent: #8b6f4e;
-    --dice-accent-strong: #6f5333;
-    --dice-success: #3b6d42;
-    --dice-danger: #8c3a2f;
-    --dice-info: #2f586b;
-    --dice-warning: #b28739;
+    --dice-surface: var(--surface, #f4eadc);
+    --dice-surface-strong: var(--surface-strong, #e6d8c5);
+    --dice-border: var(--border, #c2ad90);
+    --dice-text: var(--text, #2f2417);
+    --dice-muted: var(--text-muted, #5e4b36);
+    --dice-accent: var(--accent, #8b6f4e);
+    --dice-accent-strong: var(--accent-strong, #6f5333);
+    --dice-success: var(--success, #3b6d42);
+    --dice-danger: var(--danger, #8c3a2f);
+    --dice-info: var(--info, #2f586b);
+    --dice-warning: var(--warning, #b28739);
 }
 
 .dice-modal-overlay {
@@ -20,7 +20,7 @@
     align-items: center;
     justify-content: center;
     background: transparent;
-    z-index: 1600;
+    z-index: var(--z-overlay, 900);
     pointer-events: none;
     opacity: 1;
     transition: opacity 0.2s ease, visibility 0.2s ease;
@@ -37,6 +37,7 @@
 
 .dice-modal {
     position: absolute;
+    z-index: var(--z-modal, 1000);
     background: linear-gradient(135deg, var(--dice-surface) 0%, var(--dice-surface-strong) 100%);
     color: var(--dice-text);
     border-radius: 6px;
@@ -56,7 +57,8 @@
     display: none;
 }
 
-.dice-modal--dragging {
+.dice-modal--dragging,
+.dice-modal--dragging .dice-modal-header {
     cursor: grabbing;
 }
 
@@ -118,6 +120,8 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
 }
 
 .dice-view {
@@ -169,6 +173,44 @@
     color: #a89278;
     text-align: right;
     line-height: 1.2;
+}
+
+/* ── Result Breakdown Rows ── */
+.dice-result-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.dice-result-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 2px 6px;
+    border-radius: 3px;
+    text-align: left;
+}
+
+.dice-result-row__label {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    opacity: 0.85;
+}
+
+.dice-result-row__value {
+    font-weight: 700;
+    text-align: right;
+}
+
+.dice-result-row--kept {
+    background: var(--success-soft, #e4efe2);
+    color: var(--success, #3e7a44);
+    box-shadow: inset 0 0 0 1px var(--success, #3e7a44);
+}
+
+.dice-result-row--kept .dice-result-row__label {
+    opacity: 1;
 }
 
 /* ── Shared Button Styles ── */
@@ -614,7 +656,7 @@
     position: absolute;
     right: 1rem;
     top: 1rem;
-    z-index: 1700;
+    z-index: var(--z-modal-child, 1100);
     pointer-events: auto;
 }
 
@@ -848,12 +890,21 @@
     }
 }
 
+@media (prefers-reduced-motion: reduce) {
+    .dice-queue-display--flash {
+        animation: none;
+        background: rgba(139, 111, 78, 0.15);
+        box-shadow: 0 0 0 3px rgba(139, 111, 78, 0.25);
+        transition: box-shadow 0.2s ease;
+    }
+}
+
 /* ── Retainer Dialog ── */
 .dice-retainer-dialog {
     position: absolute;
     right: 1rem;
     top: 1rem;
-    z-index: 1100;
+    z-index: var(--z-modal-child, 1100);
     pointer-events: none;
 }
 

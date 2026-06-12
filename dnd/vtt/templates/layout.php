@@ -27,6 +27,8 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
         })();
     </script>
     <script src="https://js.pusher.com/8.4.0/pusher.min.js"></script>
+    <link rel="stylesheet" href="../css/theme.css?v=<?= $assetVersion ?>" />
+    <link rel="stylesheet" href="../css/ui-kit.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="../css/style.css" />
     <link rel="stylesheet" href="assets/css/base.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="assets/css/layout.css?v=<?= $assetVersion ?>" />
@@ -67,6 +69,7 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
         // immediate refetch instead of 1.5s polling.
         window.chatPusherConfig = <?= json_encode($config['chatPusher'] ?? null, $jsonScriptFlags) ?>;
     </script>
+    <script src="../js/ui-kit.js?v=<?= $assetVersion ?>"></script>
     <script src="../js/chat-panel.js?v=<?= $assetVersion ?>"></script>
     <script src="../character_sheet/ability-automation/primitives.js?v=<?= $assetVersion ?>"></script>
     <script src="../character_sheet/ability-automation/schema.js?v=<?= $assetVersion ?>"></script>

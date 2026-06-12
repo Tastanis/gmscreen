@@ -448,7 +448,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   async function handleStaminaAction(action) {
     const vitals = activeSheet?.hero?.vitals;
     if (!vitals) return;
-    const amount = promptForPositiveInt(action === 'damage' ? 'How much damage?' : 'How much healing?');
+    const amount = await promptForPositiveInt(action === 'damage' ? 'How much damage?' : 'How much healing?');
     if (!amount) return;
     const current = numberLike(vitals.currentStamina, 0);
     const max = numberLike(vitals.staminaMax, 0);
@@ -458,7 +458,10 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
       const healed = current + amount;
       if (max > 0 && healed > max) {
         const overflow = healed - max;
-        const useTemp = window.confirm(`Healing would go ${overflow} over max. Use the extra as temporary Stamina? OK = temp, Cancel = heal to max.`);
+        const useTemp = await confirmSummaryAction(
+          `Healing would go ${overflow} over max. Use the extra as temporary Stamina?`,
+          { title: 'Healing Overflow', confirmText: 'Use as temp', cancelText: 'Heal to max' }
+        );
         vitals.currentStamina = useTemp ? healed : max;
       } else {
         vitals.currentStamina = healed;
@@ -477,7 +480,11 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     if (currentRecoveries <= 0 || recoveryValue <= 0) {
       return;
     }
-    if (!window.confirm(`Spend 1 recovery to heal ${recoveryValue} Stamina?`)) {
+    const spendRecovery = await confirmSummaryAction(`Spend 1 recovery to heal ${recoveryValue} Stamina?`, {
+      title: 'Spend Recovery',
+      confirmText: 'Spend',
+    });
+    if (!spendRecovery) {
       return;
     }
     const current = numberLike(vitals.currentStamina, 0);
@@ -517,7 +524,11 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     if (!resource) return;
     const autoGain = resolveAutoResourceGain(resource.autoDice || '');
     if (!autoGain) {
-      window.alert('No resource auto gain is set on this character sheet.');
+      if (window.UIKit) {
+        window.UIKit.toast('No resource auto gain is set on this character sheet.', 'warning');
+      } else {
+        window.alert('No resource auto gain is set on this character sheet.');
+      }
       return;
     }
     const current = Number.parseInt(resource.value ?? 0, 10) || 0;
@@ -526,13 +537,22 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
       renderActiveSheet();
     }
     await saveActiveSheet('resource');
-    window.alert(`${resource.title || 'Resource'} ${autoGain.label}: +${autoGain.amount} (${current} -> ${resource.value}).`);
+    const gainSummary = `${resource.title || 'Resource'} ${autoGain.label}: +${autoGain.amount} (${current} -> ${resource.value}).`;
+    if (window.UIKit) {
+      window.UIKit.toast(gainSummary, 'success');
+    } else {
+      window.alert(gainSummary);
+    }
   }
 
   async function handleVictoryClick() {
     const hero = activeSheet?.hero;
     if (!hero) return;
-    if (!window.confirm('Do you want to add a victory point?')) {
+    const addVictory = await confirmSummaryAction('Do you want to add a victory point?', {
+      title: 'Victory Point',
+      confirmText: 'Add',
+    });
+    if (!addVictory) {
       return;
     }
     hero.victories = (Number.parseInt(hero.victories ?? 0, 10) || 0) + 1;
@@ -2911,9 +2931,13 @@ function showAutomationSpendDialog({
     document.body?.appendChild(host);
     const modal = host.querySelector('.vtt-automation-spend__modal');
     const input = host.querySelector('[data-spend-input]');
+    let settled = false;
     const cleanup = (result) => {
+      if (settled) return;
+      settled = true;
       host.remove();
       document.removeEventListener('keydown', onKey);
+      if (window.UIKit && modal) window.UIKit.closeModal(modal);
       resolve(result);
     };
     const getValue = () => {
@@ -2946,6 +2970,12 @@ function showAutomationSpendDialog({
     });
     input?.addEventListener('input', () => setValue(getValue()));
     document.addEventListener('keydown', onKey);
+    if (window.UIKit && modal) {
+      window.UIKit.openModal(modal, {
+        initialFocus: input || host.querySelector('[data-spend-confirm]'),
+        onClose: () => cleanup({ canceled: true }),
+      });
+    }
     makeAutomationDialogDraggable(host);
     positionAutomationDialog(modal, anchor);
     input?.focus?.();
@@ -3051,11 +3081,17 @@ async function spendAbilityResource(sheet, ability, options = {}) {
   // other resource the floor is 0 and the old behavior (confirm prompt at
   // insufficient) is preserved.
   if (!resource.allowNegative && current < cost.amount) {
-    const proceed = window.confirm(`${title} is ${current}, but ${ability?.name || 'this ability'} costs ${cost.amount}. Continue anyway?`);
+    const proceed = await confirmSummaryAction(
+      `${title} is ${current}, but ${ability?.name || 'this ability'} costs ${cost.amount}. Continue anyway?`,
+      { title: 'Insufficient Resource', confirmText: 'Continue' }
+    );
     return proceed ? { continued: true, insufficient: true } : { canceled: true };
   }
   if (resource.allowNegative && current - cost.amount < floor) {
-    const proceed = window.confirm(`${title} would drop to ${current - cost.amount}, past the floor of ${floor} (-(1 + Reason)). Cap at ${floor}?`);
+    const proceed = await confirmSummaryAction(
+      `${title} would drop to ${current - cost.amount}, past the floor of ${floor} (-(1 + Reason)). Cap at ${floor}?`,
+      { title: 'Resource Floor', confirmText: 'Cap' }
+    );
     if (!proceed) return { canceled: true };
   }
   resource.value = Math.max(floor, current - cost.amount);
@@ -3234,13 +3270,22 @@ function normalizeHeroTokens(tokens) {
   return [Boolean(tokens?.[0]), Boolean(tokens?.[1])];
 }
 
-function promptForPositiveInt(message) {
-  const raw = window.prompt(message, '');
+async function promptForPositiveInt(message) {
+  const raw = window.UIKit
+    ? await window.UIKit.prompt({ title: 'Stamina', message, placeholder: 'Amount' })
+    : window.prompt(message, '');
   if (raw === null) {
     return 0;
   }
   const value = Number.parseInt(raw, 10);
   return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+async function confirmSummaryAction(message, options = {}) {
+  if (window.UIKit) {
+    return window.UIKit.confirm({ message, ...options });
+  }
+  return window.confirm(message);
 }
 
 function appendStaminaHistory(vitals, value) {
