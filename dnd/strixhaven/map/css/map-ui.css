@@ -1,0 +1,1166 @@
+/* ==========================================================================
+   Strixhaven Map UI
+   Extracted from index.php inline styles and migrated to the shared
+   parchment theme tokens (css/theme.css). Load AFTER theme.css/ui-kit.css.
+   The dark canvas background is intentional; floating UI uses the
+   parchment palette so the map matches the rest of the site.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Base layout / canvas
+   -------------------------------------------------------------------------- */
+body {
+    margin: 0;
+    padding: 0;
+    background: #1a1a2e;
+    color: #eee;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    overflow: hidden;
+}
+
+.map-container {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background: #1a1a2e;
+}
+
+#hex-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    cursor: default;
+    background: transparent;
+}
+
+/* --------------------------------------------------------------------------
+   Loading overlay (map image)
+   -------------------------------------------------------------------------- */
+.map-loading-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    background: rgba(26, 26, 46, 0.85);
+    color: #ddd;
+    font-size: 14px;
+    z-index: var(--z-overlay);
+}
+
+.map-loading-spinner {
+    width: 44px;
+    height: 44px;
+    border: 4px solid rgba(255, 255, 255, 0.2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: map-spin 0.9s linear infinite;
+}
+
+@keyframes map-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* --------------------------------------------------------------------------
+   Panels: controls, info panel, version footer
+   -------------------------------------------------------------------------- */
+.info-panel {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    padding: 10px;
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-card);
+    font-size: 14px;
+    z-index: var(--z-panel);
+}
+
+.info-panel .info-gm-tag {
+    color: var(--danger);
+    font-weight: 700;
+}
+
+.info-panel .info-hints {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.controls {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    padding: 10px;
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-card);
+    z-index: var(--z-panel);
+}
+
+.controls button {
+    display: block;
+    margin: 5px 0;
+    padding: 5px 10px;
+    width: 100%;
+    background: var(--surface-raised);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+
+.controls button:hover {
+    background: var(--surface-strong);
+}
+
+.controls button.active {
+    background: var(--accent);
+    border-color: var(--accent-strong);
+    color: #fff;
+    box-shadow: 0 0 0 2px rgba(139, 111, 78, 0.35);
+}
+
+.controls button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.version-footer {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    font-size: 10px;
+    color: #aaa;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    z-index: var(--z-panel);
+}
+
+/* --------------------------------------------------------------------------
+   Player path panel
+   -------------------------------------------------------------------------- */
+.player-path-panel {
+    position: absolute;
+    top: 160px;
+    left: 10px;
+    width: 210px;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-card);
+    color: var(--text);
+    display: none;
+    padding: 10px;
+    z-index: var(--z-panel);
+}
+
+.player-path-panel--active {
+    display: block;
+}
+
+.player-path-hidden {
+    display: none !important;
+}
+
+.player-path-panel h3 {
+    color: var(--accent-strong);
+    font-size: 14px;
+    margin: 0 0 8px;
+}
+
+/* Sync status dot (fed by player-path-layer.js polling) */
+.player-path-sync {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    margin-left: 6px;
+    border-radius: 50%;
+    vertical-align: middle;
+    background: var(--text-faint);
+}
+
+.player-path-sync--synced {
+    background: var(--success);
+}
+
+.player-path-sync--syncing {
+    background: var(--warning);
+    animation: map-sync-pulse 1.2s ease-in-out infinite;
+}
+
+.player-path-sync--error {
+    background: var(--danger);
+}
+
+@keyframes map-sync-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+.player-path-tools {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+.player-path-tools button,
+.player-path-actions button {
+    background: var(--surface-raised);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 6px 8px;
+}
+
+.player-path-tools button:hover,
+.player-path-actions button:hover {
+    background: var(--surface-strong);
+}
+
+.player-path-tools button.active {
+    background: var(--accent);
+    border-color: var(--accent-strong);
+    color: #fff;
+    font-weight: 700;
+}
+
+.player-path-tools button:disabled,
+.player-path-actions button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.player-path-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.player-path-actions--single {
+    grid-template-columns: 1fr;
+}
+
+.player-path-total {
+    margin-top: 8px;
+    padding: 7px;
+    background: var(--surface-strong);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+}
+
+.player-terrain-panel {
+    display: none;
+    margin-top: 9px;
+    border-top: 1px solid var(--border);
+    padding-top: 9px;
+}
+
+.player-terrain-panel--active {
+    display: block;
+}
+
+.player-terrain-panel h4 {
+    color: var(--accent-strong);
+    font-size: 12px;
+    margin: 0 0 6px;
+}
+
+.player-terrain-tools {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+.player-terrain-tools button {
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 8px;
+}
+
+.player-terrain-tools button.active {
+    box-shadow: 0 0 0 2px var(--accent-strong);
+    transform: translateY(-1px);
+}
+
+.terrain-normal {
+    background: var(--surface-strong);
+    color: var(--text);
+}
+
+.terrain-fast {
+    background: var(--success);
+    color: #fff;
+}
+
+.terrain-yellow {
+    background: var(--warning);
+    color: #fff;
+}
+
+.terrain-red {
+    background: var(--danger);
+    color: #fff;
+}
+
+.player-path-status {
+    color: var(--text-muted);
+    font-size: 11px;
+    line-height: 1.35;
+    margin-top: 8px;
+}
+
+/* --------------------------------------------------------------------------
+   Player marker (destination) modal
+   -------------------------------------------------------------------------- */
+.player-marker-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(47, 36, 23, 0.5);
+    align-items: center;
+    justify-content: center;
+    z-index: var(--z-modal);
+    backdrop-filter: blur(4px);
+}
+
+.player-marker-card {
+    width: min(420px, calc(100vw - 28px));
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-modal);
+    color: var(--text);
+    padding: 14px;
+    position: relative;
+}
+
+.player-marker-card h2 {
+    color: var(--accent-strong);
+    font-size: 18px;
+    margin: 0 28px 10px 0;
+}
+
+.player-marker-close {
+    position: absolute;
+    right: 12px;
+    top: 8px;
+    border: 0;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 24px;
+    line-height: 1;
+}
+
+.player-marker-close:hover {
+    color: var(--danger);
+}
+
+#player-marker-note {
+    width: 100%;
+    min-height: 120px;
+    box-sizing: border-box;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-raised);
+    color: var(--text);
+    font: 14px/1.4 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    resize: vertical;
+    padding: 10px;
+}
+
+.player-marker-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.player-marker-actions button {
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    color: #fff;
+    cursor: pointer;
+    font-weight: 700;
+    padding: 8px 12px;
+}
+
+.player-marker-actions .save {
+    background: var(--accent);
+    border-color: var(--accent-strong);
+}
+
+.player-marker-actions .save:hover {
+    background: var(--accent-strong);
+}
+
+.player-marker-actions .delete {
+    background: var(--danger);
+}
+
+.player-marker-actions .cancel {
+    background: var(--surface-raised);
+    border-color: var(--border-strong);
+    color: var(--text);
+}
+
+/* --------------------------------------------------------------------------
+   Hex popup (details editor)
+   -------------------------------------------------------------------------- */
+.hex-popup {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(47, 36, 23, 0.5);
+    z-index: var(--z-modal);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(6px);
+}
+
+.hex-popup-content {
+    background: var(--surface);
+    color: var(--text);
+    padding: 30px;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-modal);
+    border: 1px solid var(--border-strong);
+    max-width: 500px;
+    width: 95%;
+    max-height: 85%;
+    overflow-y: auto;
+    position: relative;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.hex-popup-close {
+    position: absolute;
+    top: 15px;
+    right: 20px;
+    font-size: 28px;
+    font-weight: bold;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.3s ease;
+}
+
+.hex-popup-close:hover {
+    color: var(--danger);
+}
+
+.hex-popup h2 {
+    margin-top: 0;
+    color: var(--accent-strong);
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 15px;
+    font-size: 1.5em;
+    font-weight: 600;
+}
+
+.hex-popup-actions {
+    margin-top: 25px;
+    text-align: right;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+}
+
+.hex-popup-actions button {
+    background: var(--accent);
+    color: white;
+    border: 1px solid var(--accent-strong);
+    padding: 10px 20px;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    font-size: 1em;
+    font-weight: 500;
+    margin-left: 10px;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.hex-popup-actions button:hover {
+    background: var(--accent-strong);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.hex-popup-actions button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* Section styling: GM section is danger-coded, player section accent-coded */
+.hex-section {
+    margin-bottom: 30px;
+    padding: 20px;
+    background: var(--surface-raised);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+}
+
+.hex-section:last-of-type {
+    margin-bottom: 0;
+}
+
+.section-title {
+    color: var(--accent-strong);
+    font-size: 1.3em;
+    font-weight: 600;
+    margin: 0 0 20px 0;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--accent);
+}
+
+.gm-only {
+    border-left: 4px solid var(--danger);
+}
+
+.gm-only .section-title {
+    color: var(--danger);
+    border-bottom-color: var(--danger);
+}
+
+.gm-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 8px;
+    background: var(--danger);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border-radius: var(--radius-sm);
+    vertical-align: middle;
+}
+
+.hex-section--player {
+    border-left: 4px solid var(--accent);
+}
+
+.hex-title-container {
+    margin-bottom: 20px;
+}
+
+.hex-field-label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: var(--accent-strong);
+}
+
+.gm-only .hex-field-label {
+    color: var(--danger);
+}
+
+.hex-title-input {
+    width: 100%;
+    padding: 10px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 16px;
+    background: var(--surface-raised);
+    color: var(--text);
+    box-sizing: border-box;
+}
+
+.hex-images-container {
+    margin-bottom: 25px;
+}
+
+.hex-images-container h3 {
+    color: var(--text-muted);
+    margin-bottom: 15px;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.hex-image-upload {
+    margin-bottom: 15px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.hex-image-upload .upload-btn {
+    background: var(--accent);
+    color: white;
+    border: 1px solid var(--accent-strong);
+    padding: 8px 16px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.hex-image-upload .upload-btn:hover {
+    background: var(--accent-strong);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.hex-image-upload .upload-btn--secondary {
+    background: var(--surface-strong);
+    color: var(--accent-strong);
+    box-shadow: none;
+}
+
+.hex-image-upload .upload-btn--secondary:hover {
+    background: var(--border);
+    color: var(--accent-strong);
+}
+
+.hex-image-upload .upload-btn:disabled,
+.hex-image-upload .upload-btn--disabled {
+    background: var(--surface-strong);
+    color: var(--text-faint);
+    border-color: var(--border);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.hex-images-gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 12px;
+    min-height: 100px;
+    padding: 15px;
+    background: var(--surface-strong);
+    border-radius: var(--radius-md);
+    border: 2px solid var(--border);
+}
+
+.hex-images-gallery.single-image {
+    grid-template-columns: 1fr;
+    max-width: 200px;
+}
+
+.hex-image-thumb {
+    position: relative;
+    aspect-ratio: 1;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.hex-image-thumb:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.hex-image-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.hex-notes-container h3 {
+    color: var(--text-muted);
+    margin-bottom: 15px;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.notes-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.edit-btn {
+    background: var(--accent);
+    color: white;
+    border: 1px solid var(--accent-strong);
+    padding: 6px 14px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.edit-btn:hover {
+    background: var(--accent-strong);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
+}
+
+.edit-btn.editing {
+    background: var(--danger);
+    border-color: var(--danger);
+}
+
+.edit-status {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.hex-notes {
+    width: 100%;
+    min-height: 120px;
+    background: var(--surface-raised);
+    color: var(--text);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 12px;
+    resize: vertical;
+    font-family: inherit;
+    box-sizing: border-box;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.hex-notes[readonly] {
+    background: var(--surface-strong);
+    cursor: not-allowed;
+    color: var(--text-muted);
+}
+
+.hex-notes:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(139, 111, 78, 0.15);
+}
+
+/* GM action buttons inside the popup */
+.gm-actions {
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.gm-actions button {
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.gm-actions .copy-btn {
+    background: var(--success);
+}
+
+.gm-actions .reset-btn {
+    background: var(--danger);
+}
+
+.gm-actions .show-players-btn {
+    background: var(--accent);
+}
+
+/* --------------------------------------------------------------------------
+   Map dialogs (copy hex data) and copy-mode banner
+   -------------------------------------------------------------------------- */
+.map-dialog-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(47, 36, 23, 0.6);
+    z-index: var(--z-modal-child);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(5px);
+}
+
+.map-dialog {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    padding: 30px;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-modal);
+    max-width: 500px;
+    width: 92%;
+    text-align: center;
+}
+
+.map-dialog h3 {
+    color: var(--accent-strong);
+    margin-top: 0;
+}
+
+.map-dialog-options {
+    text-align: left;
+    margin: 25px 0;
+}
+
+.map-dialog-options h4 {
+    margin-bottom: 15px;
+}
+
+.map-dialog-options label {
+    display: block;
+    margin-bottom: 10px;
+    font-size: 14px;
+}
+
+.map-dialog-suboptions {
+    margin-left: 20px;
+    margin-bottom: 12px;
+}
+
+.map-dialog-suboptions label {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.map-dialog-buttons {
+    margin-top: 25px;
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+}
+
+.map-copy-banner {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--success);
+    border-left: 4px solid var(--success);
+    padding: 15px 25px;
+    border-radius: var(--radius-md);
+    z-index: var(--z-toast);
+    font-weight: 500;
+    text-align: center;
+    box-shadow: var(--shadow-card);
+}
+
+.map-copy-banner .map-copy-banner-title {
+    font-size: 16px;
+    margin-bottom: 8px;
+    color: var(--success);
+    font-weight: 700;
+}
+
+.map-copy-banner .map-copy-banner-step {
+    font-size: 14px;
+}
+
+.map-copy-banner .map-copy-banner-cancel {
+    margin-top: 10px;
+}
+
+/* --------------------------------------------------------------------------
+   Image lightbox
+   -------------------------------------------------------------------------- */
+.image-lightbox {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: var(--z-lightbox);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(5px);
+}
+
+.lightbox-content {
+    position: relative;
+    max-width: 90%;
+    max-height: 90%;
+    text-align: center;
+}
+
+.lightbox-close {
+    position: absolute;
+    top: -40px;
+    right: 0;
+    font-size: 32px;
+    color: white;
+    cursor: pointer;
+    transition: color 0.3s ease;
+}
+
+.lightbox-close:hover {
+    color: var(--warning);
+}
+
+#lightbox-image {
+    max-width: 100%;
+    max-height: calc(100vh - 100px);
+    border-radius: var(--radius-md);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.lightbox-actions {
+    margin-top: 20px;
+}
+
+.lightbox-actions button {
+    background: var(--accent);
+    color: white;
+    border: 1px solid var(--accent-strong);
+    padding: 10px 18px;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    margin: 0 8px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.lightbox-actions .delete-btn {
+    background: var(--danger);
+    border-color: var(--danger);
+}
+
+.lightbox-actions button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* --------------------------------------------------------------------------
+   Hex tooltip
+   (stays dark: it floats directly over the dark map canvas)
+   -------------------------------------------------------------------------- */
+#hex-tooltip {
+    position: fixed;
+    background: rgba(26, 21, 14, 0.92);
+    color: var(--surface);
+    padding: 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-strong);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+    z-index: var(--z-dropdown);
+    max-width: 250px;
+    display: none;
+    backdrop-filter: blur(5px);
+}
+
+#hex-tooltip .tooltip-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--surface-strong);
+}
+
+#hex-tooltip .tooltip-image {
+    width: 100%;
+    max-width: 200px;
+    height: auto;
+    border-radius: var(--radius-sm);
+    margin-top: 8px;
+}
+
+#hex-tooltip .tooltip-marker-note {
+    margin-top: 8px;
+    border-top: 1px solid var(--border-strong);
+    padding-top: 8px;
+    color: var(--surface-strong);
+    font-size: 13px;
+    line-height: 1.35;
+    white-space: pre-wrap;
+}
+
+#hex-tooltip.visible {
+    display: block;
+}
+
+/* --------------------------------------------------------------------------
+   Map pings
+   (z-index 50 is intentional: a canvas-level overlay below all UI chrome)
+   -------------------------------------------------------------------------- */
+.map-ping-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 50;
+    overflow: hidden;
+}
+
+.map-ping {
+    --ping-color: #ff9f1c;
+    position: absolute;
+    width: var(--ping-size, 120px);
+    height: var(--ping-size, 120px);
+    margin: calc(var(--ping-size, 120px) / -2);
+    border-radius: 999px;
+    border: 4px solid var(--ping-color);
+    background: color-mix(in srgb, var(--ping-color) 20%, transparent);
+    box-shadow: 0 0 1.5rem color-mix(in srgb, var(--ping-color) 45%, transparent);
+    pointer-events: none;
+    opacity: 0;
+    transform: scale(1.75);
+    transform-origin: center;
+    animation: map-ping-pulse 900ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    animation-delay: var(--ping-delay, 0ms);
+}
+
+.map-ping::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0.6rem;
+    height: 0.6rem;
+    margin-top: -0.3rem;
+    margin-left: -0.3rem;
+    border-radius: 999px;
+    background: var(--ping-color);
+    box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.85);
+    opacity: 1;
+}
+
+.map-ping--focus {
+    --ping-color: #38bdf8;
+    background: color-mix(in srgb, var(--ping-color) 25%, transparent);
+}
+
+@keyframes map-ping-pulse {
+    0% {
+        opacity: 0;
+        transform: scale(2.25);
+    }
+    18% {
+        opacity: 0.96;
+        transform: scale(0.3);
+    }
+    52% {
+        opacity: 0.82;
+        transform: scale(1.4);
+    }
+    78% {
+        opacity: 0.6;
+        transform: scale(0.55);
+    }
+    100% {
+        opacity: 0;
+        transform: scale(0.12);
+    }
+}
+
+/* --------------------------------------------------------------------------
+   First-visit tips panel
+   -------------------------------------------------------------------------- */
+.map-tips {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 340px;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    border-left: 4px solid var(--accent);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-card);
+    padding: 12px 18px;
+    font-size: 13px;
+    z-index: var(--z-toast);
+    cursor: pointer;
+}
+
+.map-tips h4 {
+    margin: 0 0 6px;
+    color: var(--accent-strong);
+    font-size: 14px;
+}
+
+.map-tips ul {
+    margin: 0;
+    padding-left: 18px;
+    line-height: 1.5;
+}
+
+.map-tips .map-tips-dismiss {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--text-faint);
+}
+
+/* --------------------------------------------------------------------------
+   Small screens (<768px): stack/compress fixed panels, no overlap
+   -------------------------------------------------------------------------- */
+@media (max-width: 768px) {
+    .controls {
+        padding: 6px;
+    }
+
+    .controls button {
+        margin: 4px 0;
+        padding: 4px 8px;
+        font-size: 12px;
+    }
+
+    .info-panel {
+        display: none;
+    }
+
+    .player-path-panel {
+        top: auto;
+        bottom: 10px;
+        left: 10px;
+        right: 10px;
+        width: auto;
+        max-height: 45vh;
+        overflow-y: auto;
+        padding: 8px;
+    }
+
+    .player-path-tools,
+    .player-path-actions,
+    .player-terrain-tools {
+        gap: 4px;
+    }
+
+    .player-path-tools button,
+    .player-path-actions button,
+    .player-terrain-tools button {
+        font-size: 11px;
+        padding: 5px 6px;
+    }
+
+    .version-footer {
+        display: none;
+    }
+
+    .map-tips {
+        bottom: 12px;
+        max-width: calc(100vw - 24px);
+    }
+
+    .hex-popup-content {
+        padding: 18px;
+        max-height: 92%;
+    }
+}

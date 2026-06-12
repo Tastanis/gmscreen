@@ -10,6 +10,8 @@ class MapInterfaceV2 {
         this.isPanning = false;
         this.lastPanX = 0;
         this.lastPanY = 0;
+        this.hoverRafId = null;
+        this.pendingHover = null;
         
         // Current viewport
         this.viewport = {
@@ -74,12 +76,21 @@ class MapInterfaceV2 {
      * Set up all event listeners
      */
     setupEventListeners() {
-        // Mouse move for hover
+        // Mouse move for hover (throttled to animation frames)
         this.canvas.addEventListener('mousemove', (e) => {
             if (this.isPanning) {
                 this.handlePan(e.clientX, e.clientY);
-            } else {
-                this.hexGrid.handleMouseMove(e.clientX, e.clientY);
+                return;
+            }
+            this.pendingHover = { x: e.clientX, y: e.clientY };
+            if (this.hoverRafId === null) {
+                this.hoverRafId = requestAnimationFrame(() => {
+                    this.hoverRafId = null;
+                    if (this.pendingHover && !this.isPanning) {
+                        this.hexGrid.handleMouseMove(this.pendingHover.x, this.pendingHover.y);
+                        this.updateHoverCursor();
+                    }
+                });
             }
         });
         
@@ -110,9 +121,13 @@ class MapInterfaceV2 {
         
         // Mouse leave to clear hover
         this.canvas.addEventListener('mouseleave', () => {
+            this.pendingHover = null;
             if (this.hexGrid.hoveredHex) {
                 this.hexGrid.hoveredHex = null;
                 this.hexGrid.render();
+            }
+            if (!this.isPanning) {
+                this.canvas.style.cursor = 'default';
             }
         });
         
@@ -122,6 +137,14 @@ class MapInterfaceV2 {
         });
     }
     
+    /**
+     * Show a pointer cursor while a hex is hovered (hexes are clickable)
+     */
+    updateHoverCursor() {
+        if (this.isPanning) return;
+        this.canvas.style.cursor = this.hexGrid.hoveredHex ? 'pointer' : 'default';
+    }
+
     /**
      * Handle zoom
      */
@@ -196,7 +219,7 @@ class MapInterfaceV2 {
      */
     endPan() {
         this.isPanning = false;
-        this.canvas.style.cursor = 'default';
+        this.canvas.style.cursor = this.hexGrid && this.hexGrid.hoveredHex ? 'pointer' : 'default';
     }
 }
 
