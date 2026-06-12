@@ -1,111 +1,66 @@
 // Staff Management JavaScript
+// Shared behavior lives in ../templates/js/character-sheet-base.js; this file
+// supplies the staff-specific configuration, detail form, and autocomplete logic.
 
-// Store rich text editor instances
-let modalRichTextEditors = new Map();
-let exportSelectionActive = false;
-const selectedExportStaff = new Set();
+const staffEndpoint = 'index.php';
 
-// Initialize character lookup when ready
-function initializeCharacterLookup() {
-    if (window.characterLookup && !window.characterLookup.isReady()) {
-        window.characterLookup.init().then(() => {
-            console.log('Character lookup initialized for staff section');
-            setupExistingTextAreasAutocomplete();
-        }).catch(error => {
-            console.warn('Character lookup initialization failed:', error);
-        });
-    } else if (window.characterLookup && window.characterLookup.isReady()) {
-        setupExistingTextAreasAutocomplete();
+CharacterSheetBase.init({
+    type: 'staff',
+    plural: 'staff',
+    entityLabel: 'staff member',
+    endpoint: staffEndpoint,
+    idField: 'staff_id',
+    actions: {
+        load: 'load_staff',
+        save: 'save_staff',
+        add: 'add_staff',
+        remove: 'delete_staff',
+        export: 'export_staff'
+    },
+    gridId: 'staff-grid',
+    modalId: 'staff-modal',
+    modalNameId: 'modal-staff-name',
+    detailsSelector: '.staff-details',
+    addBtnId: 'add-staff-btn',
+    exportBtnId: 'export-staff-btn',
+    exportSelectedBtnId: 'export-selected-staff-btn',
+    exportButtonLabel: '📤 Export Staff',
+    modalOpenInputSelector: 'input, select',
+    filterParams: [
+        { param: 'filter_college', key: 'college' }
+    ],
+    filterSelects: [
+        { id: 'filter-college', key: 'college' }
+    ],
+    getSelected: () => selectedStaff,
+    setSelected: value => { selectedStaff = value; },
+    getAll: () => window.allStaff,
+    setAll: list => {
+        window.allStaff = list;
+        window.staffLoaded = true;
+    },
+    cardInfoHtml: member => `
+        <div class="staff-college">${escapeHtml(member.college || 'No College')}</div>
+    `,
+    createDetailForm: member => createStaffDetailForm(member),
+    cleanExportRecord: member => cleanStaffExportSections(member),
+    expand: () => expandStaffToNewTab(),
+    onLookupReady: () => setupExistingTextAreasAutocomplete(),
+    globalNames: {
+        loadCharacters: 'loadStaff',
+        displayCharacters: 'displayStaff',
+        createCharacterCard: 'createStaffCard',
+        openCharacterModal: 'openStaffModal',
+        closeCharacterModal: 'closeStaffModal',
+        saveCharacterField: 'saveStaffField',
+        addCharacter: 'addStaffMember',
+        deleteCharacter: 'deleteStaffMember',
+        toggleFavorite: 'toggleStaffFavorite',
+        uploadPortrait: 'uploadStaffPortrait',
+        exportSelectedCharacters: 'exportSelectedStaff',
+        toggleExportSelection: 'toggleStaffExportSelection'
     }
-}
-
-// Setup rich text editors for modal
-function setupModalRichTextEditors(container, staffData) {
-    if (typeof RichTextEditor === 'undefined') {
-        console.warn('RichTextEditor not available');
-        return;
-    }
-    
-    // Clean up existing editors
-    cleanupModalRichTextEditors();
-    
-    const containers = container.querySelectorAll('.rich-text-container');
-    containers.forEach(richContainer => {
-        const field = richContainer.getAttribute('data-field');
-        const placeholder = richContainer.getAttribute('data-placeholder') || 'Enter text...';
-        
-        if (field) {
-            // Create rich text editor
-            const editor = new RichTextEditor(richContainer, {
-                placeholder: placeholder + ' Type [[character name]] to link to characters'
-            });
-            
-            editor.init();
-            
-            // Set content from staff data
-            const fieldValue = getNestedFieldValue(staffData, field);
-            if (fieldValue) {
-                editor.setContent(fieldValue);
-            }
-            
-            // Setup auto-save
-            editor.onChange((content) => {
-                saveStaffField(staffData.staff_id, field, content);
-            });
-            
-            // Connect to character lookup system
-            if (window.characterLookup && window.characterLookup.isReady()) {
-                const editorElement = editor.getEditor();
-                if (editorElement) {
-                    console.log('Connecting rich text editor to character lookup for field:', field);
-                    window.characterLookup.setupEditorListeners(editorElement);
-                }
-            } else {
-                // Try to initialize character lookup if not ready
-                setTimeout(() => {
-                    if (window.characterLookup && window.characterLookup.isReady()) {
-                        const editorElement = editor.getEditor();
-                        if (editorElement) {
-                            console.log('Delayed connection of rich text editor to character lookup for field:', field);
-                            window.characterLookup.setupEditorListeners(editorElement);
-                        }
-                    }
-                }, 500);
-            }
-            
-            // Store editor reference
-            modalRichTextEditors.set(field, editor);
-        }
-    });
-    
-    console.log('Set up', modalRichTextEditors.size, 'rich text editors for staff modal');
-}
-
-// Clean up rich text editors
-function cleanupModalRichTextEditors() {
-    modalRichTextEditors.forEach((editor, field) => {
-        if (editor && editor.destroy) {
-            editor.destroy();
-        }
-    });
-    modalRichTextEditors.clear();
-}
-
-// Get nested field value from staff data
-function getNestedFieldValue(staffData, field) {
-    const parts = field.split('.');
-    let value = staffData;
-    
-    for (const part of parts) {
-        if (value && typeof value === 'object' && part in value) {
-            value = value[part];
-        } else {
-            return '';
-        }
-    }
-    
-    return value || '';
-}
+});
 
 // Setup autocomplete for any existing text areas
 function setupExistingTextAreasAutocomplete() {
@@ -120,13 +75,13 @@ function setupModalTextAreasAutocomplete(container) {
     if (!window.characterLookup || !window.characterLookup.isReady()) {
         return;
     }
-    
+
     const textAreas = container.querySelectorAll('textarea');
     textAreas.forEach(textarea => {
         // Only setup for specific fields that make sense for character linking
         const field = textarea.getAttribute('data-field');
         if (field && (
-            field.includes('character_description') || 
+            field.includes('character_description') ||
             field.includes('general_info') ||
             field.includes('personality') ||
             field.includes('other') ||
@@ -140,276 +95,12 @@ function setupModalTextAreasAutocomplete(container) {
             window.characterLookup.setupTextAreaListeners(textarea);
         }
     });
-    
+
     console.log('Set up autocomplete for staff modal text areas');
-}
-
-// Setup event listeners
-function setupEventListeners() {
-    // Initialize character lookup
-    setTimeout(initializeCharacterLookup, 500);
-    // Search input
-    const searchInput = document.getElementById('search-input');
-    if (searchInput) {
-        searchInput.addEventListener('input', debounce(function() {
-            currentFilters.search = this.value.trim();
-            loadStaff();
-        }, 300));
-    }
-    
-    // Sort buttons
-    document.querySelectorAll('[data-sort]').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const sortType = this.getAttribute('data-sort');
-            
-            // Update active state
-            document.querySelectorAll('[data-sort]').forEach(b => b.classList.remove('active'));
-            this.classList.add('active');
-            
-            currentSort = sortType;
-            loadStaff();
-        });
-    });
-    
-    // Filter selects
-    const collegeFilter = document.getElementById('filter-college');
-    if (collegeFilter) {
-        collegeFilter.addEventListener('change', function() {
-            currentFilters.college = this.value;
-            loadStaff();
-        });
-    }
-    
-    // Favorites toggle
-    const favoritesToggle = document.getElementById('favorites-toggle');
-    if (favoritesToggle) {
-        favoritesToggle.addEventListener('click', function() {
-            currentFilters.favorites = !currentFilters.favorites;
-            this.classList.toggle('active', currentFilters.favorites);
-            loadStaff();
-        });
-    }
-    
-    // Add staff button (GM only)
-    if (isGM) {
-        const addStaffBtn = document.getElementById('add-staff-btn');
-        if (addStaffBtn) {
-            addStaffBtn.addEventListener('click', addStaffMember);
-        }
-        
-        // Export button (GM only)
-        const exportBtn = document.getElementById('export-staff-btn');
-        if (exportBtn) {
-            exportBtn.addEventListener('click', () => toggleExportSelectionMode());
-        }
-
-        const exportSelectedBtn = document.getElementById('export-selected-staff-btn');
-        if (exportSelectedBtn) {
-            exportSelectedBtn.addEventListener('click', exportSelectedStaff);
-        }
-
-        const cancelExportBtn = document.getElementById('cancel-export-selection-btn');
-        if (cancelExportBtn) {
-            cancelExportBtn.addEventListener('click', () => toggleExportSelectionMode(false));
-        }
-        
-        // Delete button (GM only)
-        const modalDeleteBtn = document.getElementById('modal-delete-btn');
-        if (modalDeleteBtn) {
-            modalDeleteBtn.addEventListener('click', deleteStaffMember);
-        }
-    }
-    
-    // Modal controls (available to all users)
-    const modalFavoriteBtn = document.getElementById('modal-favorite-btn');
-    if (modalFavoriteBtn) {
-        modalFavoriteBtn.addEventListener('click', toggleStaffFavorite);
-    }
-    
-    // Expand button (available to all users)
-    const modalExpandBtn = document.getElementById('modal-expand-btn');
-    if (modalExpandBtn) {
-        modalExpandBtn.addEventListener('click', expandStaffToNewTab);
-    }
-    
-    // Modal close on background click
-    const modal = document.getElementById('staff-modal');
-    if (modal) {
-        let backgroundPointerDown = false;
-
-        modal.addEventListener('mousedown', function(e) {
-            backgroundPointerDown = e.target === modal;
-        });
-
-        modal.addEventListener('mouseup', function(e) {
-            if (backgroundPointerDown && e.target === modal) {
-                closeStaffModal();
-            }
-            backgroundPointerDown = false;
-        });
-    }
-}
-
-// Load staff from server
-function loadStaff() {
-    showLoading(true);
-    
-    const formData = new FormData();
-    formData.append('action', 'load_staff');
-    formData.append('sort_by', currentSort);
-    formData.append('filter_college', currentFilters.college);
-    formData.append('show_favorites', currentFilters.favorites.toString());
-    formData.append('search_term', currentFilters.search);
-    
-    fetch('index.php', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        showLoading(false);
-        if (data.success) {
-            displayStaff(data.staff);
-            // Store staff globally for auto-open functionality
-            window.allStaff = data.staff;
-            window.staffLoaded = true;
-        } else {
-            console.error('Failed to load staff:', data.error);
-            showError('Failed to load staff');
-        }
-    })
-    .catch(error => {
-        showLoading(false);
-        console.error('Error loading staff:', error);
-        showError('Error loading staff');
-    });
-}
-
-// Display staff in grid
-function displayStaff(staff) {
-    const grid = document.getElementById('staff-grid');
-    
-    if (staff.length === 0) {
-        grid.innerHTML = `
-            <div class="no-staff">
-                <div class="no-staff-icon">👥</div>
-                <p>No staff found matching your criteria.</p>
-            </div>
-        `;
-        return;
-    }
-    
-    grid.innerHTML = staff.map(member => createStaffCard(member)).join('');
-    
-    // Add click event listeners to cards
-    grid.querySelectorAll('.staff-card').forEach(card => {
-        card.addEventListener('click', function() {
-            const staffId = this.getAttribute('data-staff-id');
-            const member = staff.find(s => s.staff_id === staffId);
-            if (!member) {
-                return;
-            }
-
-            if (exportSelectionActive) {
-                toggleStaffExportSelection(staffId);
-                return;
-            }
-
-            openStaffModal(member);
-        });
-    });
-}
-
-// Create staff card HTML
-function createStaffCard(member) {
-    const isFavorite = member.favorites && member.favorites[currentUser];
-    const favoriteIcon = isFavorite ? '<div class="staff-favorite">★</div>' : '';
-    const isSelectedForExport = selectedExportStaff.has(member.staff_id);
-    const exportClass = isSelectedForExport ? ' is-selected' : '';
-
-    // Handle both old image_path and new images array for backward compatibility
-    let thumbnailImage = '';
-    if (member.images && member.images.length > 0) {
-        thumbnailImage = member.images[0];
-    } else if (member.image_path) {
-        thumbnailImage = member.image_path;
-    }
-
-    let imageHtml;
-    if (thumbnailImage) {
-        // Use thumbnail for card grid if available, fall back to full image
-        const thumbSrc = member.thumbnails && member.thumbnails[thumbnailImage];
-        const cardSrc = thumbSrc || escapeHtml(thumbnailImage);
-
-        // Check for image adjustment
-        const adj = member.image_adjustments && member.image_adjustments[thumbnailImage];
-        const adjustedHtml = adj && typeof ImageAdjuster !== 'undefined' ?
-            ImageAdjuster.createAdjustedImageHtml(
-                cardSrc,
-                escapeHtml(member.name), adj, '', '', 'loading="lazy"'
-            ) : null;
-        imageHtml = adjustedHtml ||
-            `<img src="${cardSrc}" alt="${escapeHtml(member.name)}" class="staff-thumbnail" loading="lazy">`;
-    } else {
-        imageHtml = `<div class="staff-placeholder">No Photo</div>`;
-    }
-
-    return `
-        <div class="staff-card${exportClass}" data-staff-id="${escapeHtml(member.staff_id)}">
-            ${favoriteIcon}
-            <div class="export-select-indicator" aria-hidden="true">✓</div>
-            ${imageHtml}
-            <div class="staff-name">${escapeHtml(member.name)}</div>
-            <div class="staff-info">
-                <div class="staff-college">${escapeHtml(member.college || 'No College')}</div>
-            </div>
-        </div>
-    `;
-}
-
-
-// Open staff detail modal
-function openStaffModal(member) {
-    selectedStaff = member;
-    
-    const modal = document.getElementById('staff-modal');
-    const modalName = document.getElementById('modal-staff-name');
-    const modalBody = modal.querySelector('.staff-details');
-    
-    modalName.textContent = member.name;
-    
-    // Update favorite button (available to all users)
-    const favoriteBtn = document.getElementById('modal-favorite-btn');
-    if (favoriteBtn) {
-        const isFavorite = member.favorites && member.favorites[currentUser];
-        favoriteBtn.classList.toggle('active', isFavorite);
-        favoriteBtn.title = isFavorite ? 'Remove from Favorites' : 'Add to Favorites';
-    }
-    
-    // Build modal content
-    modalBody.innerHTML = createStaffDetailForm(member);
-    
-    // Add event listeners for form inputs (GM only) - only input and select, rich text editors handle themselves
-    if (isGM) {
-        modalBody.querySelectorAll('input, select').forEach(input => {
-            input.addEventListener('change', function() {
-                const field = this.getAttribute('data-field');
-                const value = this.value;
-                saveStaffField(member.staff_id, field, value);
-            });
-        });
-    }
-    
-    // Setup rich text editors
-    setupModalRichTextEditors(modalBody, member);
-    
-    modal.style.display = 'block';
 }
 
 // Create staff detail form
 function createStaffDetailForm(member) {
-    const gmOnly = member.gm_only || {};
-    const characterInfo = member.character_info || {};
     const conflictEngine = member.conflict_engine || {};
     const tensionWeb = member.tension_web || [];
 
@@ -434,7 +125,7 @@ function createStaffDetailForm(member) {
             <div class="tension-web-entry-header">
                 <strong class="tension-web-name">${escapeHtml(entry.name || '')}</strong>
                 <span class="tension-web-role">(${escapeHtml(entry.role || '')})</span>
-                ${isGM ? `<button class="btn-remove-tension" onclick="removeTensionWebEntry('${member.staff_id}', ${index})" title="Remove entry">&times;</button>` : ''}
+                ${isGM ? `<button class="btn-remove-tension" onclick="removeTensionWebEntry('${member.staff_id}', ${index})" title="Remove entry" aria-label="Remove entry">&times;</button>` : ''}
             </div>
             <div class="tension-web-description">${escapeHtml(entry.description || '')}</div>
         </div>
@@ -597,121 +288,13 @@ function createStaffDetailForm(member) {
     `;
 }
 
-// Close staff modal
-function closeStaffModal() {
-    // Clean up rich text editors
-    cleanupModalRichTextEditors();
-    
-    const modal = document.getElementById('staff-modal');
-    modal.style.display = 'none';
-    selectedStaff = null;
-}
-
 // Expand staff to new tab
-// Toggle Director's Notes collapsed/expanded
-function toggleDirectorsNotes(header) {
-    const content = header.nextElementSibling;
-    const arrow = header.querySelector('.toggle-arrow');
-    if (content.style.display === 'none') {
-        content.style.display = 'block';
-        arrow.innerHTML = '&#9650;';
-        // Initialize rich text editors inside if not already done
-        const containers = content.querySelectorAll('.rich-text-container');
-        containers.forEach(container => {
-            if (!container.querySelector('.rich-text-editor') && typeof RichTextEditor !== 'undefined') {
-                const field = container.getAttribute('data-field');
-                const placeholder = container.getAttribute('data-placeholder') || 'Enter text...';
-                const editor = new RichTextEditor(container, {
-                    placeholder: placeholder + ' Type [[character name]] to link to characters'
-                });
-                editor.init();
-                if (selectedStaff && field) {
-                    const value = selectedStaff[field] || '';
-                    if (value) editor.setContent(value);
-                }
-                editor.onChange((editorContent) => {
-                    if (selectedStaff) {
-                        saveStaffField(selectedStaff.staff_id, field, editorContent);
-                    }
-                });
-                if (!isGM) editor.setReadOnly(true);
-                modalRichTextEditors.set(field, editor);
-            }
-        });
-    } else {
-        content.style.display = 'none';
-        arrow.innerHTML = '&#9660;';
-    }
-}
-
-// Add a tension web entry
-function addTensionWebEntry(staffId) {
-    const nameInput = document.getElementById(`tw-name-${staffId}`);
-    const roleInput = document.getElementById(`tw-role-${staffId}`);
-    const descInput = document.getElementById(`tw-desc-${staffId}`);
-
-    const name = nameInput.value.trim();
-    const role = roleInput.value.trim();
-    const description = descInput.value.trim();
-
-    if (!name) {
-        nameInput.focus();
-        return;
-    }
-
-    const member = selectedStaff;
-    if (!member) return;
-
-    if (!member.tension_web) member.tension_web = [];
-    member.tension_web.push({ name, role, description });
-
-    saveStaffField(staffId, 'tension_web', JSON.stringify(member.tension_web));
-
-    nameInput.value = '';
-    roleInput.value = '';
-    descInput.value = '';
-
-    renderTensionWebList(staffId, member.tension_web);
-}
-
-// Remove a tension web entry
-function removeTensionWebEntry(staffId, index) {
-    const member = selectedStaff;
-    if (!member || !member.tension_web) return;
-
-    member.tension_web.splice(index, 1);
-    saveStaffField(staffId, 'tension_web', JSON.stringify(member.tension_web));
-    renderTensionWebList(staffId, member.tension_web);
-}
-
-// Render tension web list
-function renderTensionWebList(staffId, entries) {
-    const list = document.getElementById(`tension-web-${staffId}`);
-    if (!list) return;
-
-    if (!entries || entries.length === 0) {
-        list.innerHTML = '<p class="tension-web-empty">No tension web entries yet.</p>';
-        return;
-    }
-
-    list.innerHTML = entries.map((entry, index) => `
-        <div class="tension-web-entry" data-index="${index}">
-            <div class="tension-web-entry-header">
-                <strong class="tension-web-name">${escapeHtml(entry.name || '')}</strong>
-                <span class="tension-web-role">(${escapeHtml(entry.role || '')})</span>
-                ${isGM ? `<button class="btn-remove-tension" onclick="removeTensionWebEntry('${staffId}', ${index})" title="Remove entry">&times;</button>` : ''}
-            </div>
-            <div class="tension-web-description">${escapeHtml(entry.description || '')}</div>
-        </div>
-    `).join('');
-}
-
 function expandStaffToNewTab() {
     if (!selectedStaff) return;
-    
+
     const newWindow = window.open('', '_blank');
     const member = selectedStaff;
-    
+
     newWindow.document.write(`
         <!DOCTYPE html>
         <html lang="en">
@@ -720,13 +303,16 @@ function expandStaffToNewTab() {
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>${escapeHtml(member.name)} - Staff Details</title>
             <link rel="stylesheet" href="../../../css/style.css">
+            <link rel="stylesheet" href="../../css/theme.css">
+            <link rel="stylesheet" href="../../css/ui-kit.css">
+            <link rel="stylesheet" href="../templates/css/character-sheet-base.css">
             <link rel="stylesheet" href="css/staff.css">
             <style>
                 body { margin: 20px; background: #f8f9fa; }
-                .standalone-header { 
-                    background: white; 
-                    padding: 20px; 
-                    border-radius: 10px; 
+                .standalone-header {
+                    background: white;
+                    padding: 20px;
+                    border-radius: 10px;
                     margin-bottom: 20px;
                     box-shadow: 0 2px 10px rgba(0,0,0,0.1);
                     text-align: center;
@@ -763,7 +349,8 @@ function expandStaffToNewTab() {
                     ${createStaffDetailForm(member)}
                 </div>
             </div>
-            
+
+            <script src="../../js/ui-kit.js"></script>
             <script src="../gm/js/character-lookup.js"></script>
             <script src="../gm/js/rich-text-editor.js"></script>
             <script>
@@ -771,11 +358,12 @@ function expandStaffToNewTab() {
                 const isGM = ${isGM};
                 const currentUser = '${currentUser}';
                 const staffData = ${JSON.stringify(member)};
-                
+                const staffEndpoint = 'index.php';
+
                 // Save function for popout window (GM only)
                 function saveStaffField(staffId, field, value) {
                     if (!isGM) return;
-                    
+
                     // Handle nested GM-only fields
                     if (field.startsWith('gm_only.')) {
                         const gmField = field.split('.')[1];
@@ -784,8 +372,8 @@ function expandStaffToNewTab() {
                         formData.append('staff_id', staffId);
                         formData.append('field', 'gm_only.' + gmField);
                         formData.append('value', value);
-                        
-                        fetch('index.php', {
+
+                        fetch(staffEndpoint, {
                             method: 'POST',
                             body: formData
                         })
@@ -804,14 +392,14 @@ function expandStaffToNewTab() {
                         });
                         return;
                     }
-                    
+
                     const formData = new FormData();
                     formData.append('action', 'save_staff');
                     formData.append('staff_id', staffId);
                     formData.append('field', field);
                     formData.append('value', value);
-                    
-                    fetch('index.php', {
+
+                    fetch(staffEndpoint, {
                         method: 'POST',
                         body: formData
                     })
@@ -829,7 +417,7 @@ function expandStaffToNewTab() {
                         console.error('Error saving field:', error);
                     });
                 }
-                
+
                 function showSaveIndicator() {
                     const indicator = document.getElementById('save-indicator');
                     indicator.style.display = 'block';
@@ -837,7 +425,7 @@ function expandStaffToNewTab() {
                         indicator.style.display = 'none';
                     }, 2000);
                 }
-                
+
                 function escapeHtml(text) {
                     if (!text) return '';
                     const map = {
@@ -849,7 +437,7 @@ function expandStaffToNewTab() {
                     };
                     return text.toString().replace(/[&<>"']/g, function(m) { return map[m]; });
                 }
-                
+
                 function debounce(func, wait) {
                     let timeout;
                     return function executedFunction(...args) {
@@ -861,7 +449,7 @@ function expandStaffToNewTab() {
                         timeout = setTimeout(later, wait);
                     };
                 }
-                
+
                 // Set up event listeners for auto-save (GM only)
                 if (isGM) {
                     document.addEventListener('DOMContentLoaded', function() {
@@ -872,17 +460,17 @@ function expandStaffToNewTab() {
                                     const value = input.value;
                                     saveStaffField('${member.staff_id}', field, value);
                                 }, 1000);
-                                
+
                                 input.addEventListener('input', debouncedSave);
                                 input.addEventListener('change', debouncedSave);
                             }
                         });
-                        
+
                         // Setup character lookup for standalone window
                         setupStandaloneCharacterLookup();
                     });
                 }
-                
+
                 // Setup character lookup for standalone window
                 function setupStandaloneCharacterLookup() {
                     // Wait for character lookup to be available
@@ -892,13 +480,13 @@ function expandStaffToNewTab() {
                             // Setup for both rich text editors and textareas
                             const richTextContainers = document.querySelectorAll('.rich-text-container');
                             const textAreas = document.querySelectorAll('textarea');
-                            
+
                             // Setup rich text editors first
                             if (typeof RichTextEditor !== 'undefined') {
                                 richTextContainers.forEach(container => {
                                     const field = container.getAttribute('data-field');
                                     if (field && (
-                                        field.includes('character_description') || 
+                                        field.includes('character_description') ||
                                         field.includes('general_info') ||
                                         field.includes('personality') ||
                                         field.includes('other') ||
@@ -914,13 +502,13 @@ function expandStaffToNewTab() {
                                             placeholder: 'Enter text... Type [[character name]] to link to characters'
                                         });
                                         editor.init();
-                                        
+
                                         // Connect to character lookup
                                         const editorElement = editor.getEditor();
                                         if (editorElement) {
                                             lookup.setupEditorListeners(editorElement);
                                         }
-                                        
+
                                         // Setup auto-save
                                         editor.onChange((content) => {
                                             const fieldName = container.getAttribute('data-field');
@@ -929,12 +517,12 @@ function expandStaffToNewTab() {
                                     }
                                 });
                             }
-                            
+
                             // Setup for remaining textareas
                             textAreas.forEach(textarea => {
                                 const field = textarea.getAttribute('data-field');
                                 if (field && (
-                                    field.includes('character_description') || 
+                                    field.includes('character_description') ||
                                     field.includes('general_info') ||
                                     field.includes('personality') ||
                                     field.includes('other') ||
@@ -960,684 +548,12 @@ function expandStaffToNewTab() {
         </body>
         </html>
     `);
-    
+
     newWindow.document.close();
 }
 
-// Save staff field (GM only)
-function saveStaffField(staffId, field, value) {
-    if (!isGM) return;
-    
-    const formData = new FormData();
-    formData.append('action', 'save_staff');
-    formData.append('staff_id', staffId);
-    formData.append('field', field);
-    formData.append('value', value);
-    
-    fetch('index.php', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (!data.success) {
-            console.error('Failed to save field:', data.error);
-            showError('Failed to save changes');
-        }
-    })
-    .catch(error => {
-        console.error('Error saving field:', error);
-        showError('Error saving changes');
-    });
-}
-
-// Add new staff member (GM only)
-function addStaffMember() {
-    if (!isGM) return;
-    
-    const formData = new FormData();
-    formData.append('action', 'add_staff');
-    
-    fetch('index.php', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            loadStaff();
-            showSuccess('Staff member added successfully');
-        } else {
-            showError('Failed to add staff member');
-        }
-    })
-    .catch(error => {
-        console.error('Error adding staff member:', error);
-        showError('Error adding staff member');
-    });
-}
-
-// Toggle staff favorite (available to all users)
-function toggleStaffFavorite() {
-    if (!selectedStaff) return;
-    
-    const formData = new FormData();
-    formData.append('action', 'toggle_favorite');
-    formData.append('staff_id', selectedStaff.staff_id);
-    
-    fetch('index.php', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Update local staff data
-            if (!selectedStaff.favorites) {
-                selectedStaff.favorites = {};
-            }
-            selectedStaff.favorites[currentUser] = data.is_favorite;
-            
-            // Update button appearance
-            const favoriteBtn = document.getElementById('modal-favorite-btn');
-            if (favoriteBtn) {
-                favoriteBtn.classList.toggle('active', data.is_favorite);
-                favoriteBtn.title = data.is_favorite ? 'Remove from Favorites' : 'Add to Favorites';
-            }
-            
-            // Refresh grid to show/hide favorite star
-            loadStaff();
-        } else {
-            showError('Failed to update favorite status');
-        }
-    })
-    .catch(error => {
-        console.error('Error toggling favorite:', error);
-        showError('Error updating favorite');
-    });
-}
-
-// Delete staff member (GM only)
-function deleteStaffMember() {
-    if (!isGM || !selectedStaff) return;
-    
-    if (!confirm(`Are you sure you want to delete ${selectedStaff.name}? This action cannot be undone.`)) {
-        return;
-    }
-    
-    const formData = new FormData();
-    formData.append('action', 'delete_staff');
-    formData.append('staff_id', selectedStaff.staff_id);
-    
-    fetch('index.php', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            closeStaffModal();
-            loadStaff();
-            showSuccess('Staff member deleted successfully');
-        } else {
-            showError('Failed to delete staff member');
-        }
-    })
-    .catch(error => {
-        console.error('Error deleting staff member:', error);
-        showError('Error deleting staff member');
-    });
-}
-
-// Open image adjuster for a staff member's image
-function openImageAdjuster(itemId, imagePath, itemType) {
-    if (!isGM || typeof ImageAdjuster === 'undefined') return;
-
-    const member = selectedStaff && selectedStaff.staff_id === itemId ? selectedStaff : null;
-    const existingAdj = member && member.image_adjustments ? member.image_adjustments[imagePath] : null;
-
-    ImageAdjuster.open(imagePath, itemId, itemType, 'index.php', existingAdj, function(imgPath, adjustment) {
-        // Update local data with the new adjustment
-        if (selectedStaff && selectedStaff.staff_id === itemId) {
-            if (!selectedStaff.image_adjustments) {
-                selectedStaff.image_adjustments = {};
-            }
-            selectedStaff.image_adjustments[imgPath] = adjustment;
-
-            // Refresh the modal content
-            const modalBody = document.querySelector('#staff-modal .staff-details');
-            if (modalBody) {
-                modalBody.innerHTML = createStaffDetailForm(selectedStaff);
-                modalBody.querySelectorAll('input, select').forEach(input => {
-                    input.addEventListener('change', function() {
-                        const field = this.getAttribute('data-field');
-                        const value = this.value;
-                        saveStaffField(selectedStaff.staff_id, field, value);
-                    });
-                });
-                setupModalRichTextEditors(modalBody, selectedStaff);
-            }
-        }
-
-        // Refresh the main grid to show updated thumbnails
-        loadStaff();
-    });
-}
-
-// Upload staff portrait (GM only)
-function uploadStaffPortrait(staffId) {
-    if (!isGM) return;
-    
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*,.webp';
-    input.onchange = function(e) {
-        const file = e.target.files[0];
-        if (file) {
-            // Validate file size (max 5MB)
-            if (file.size > 5 * 1024 * 1024) {
-                showError('Image file must be smaller than 5MB');
-                return;
-            }
-            
-            // Validate file type
-            const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-            if (!allowedTypes.includes(file.type)) {
-                showError('Please select a valid image file (JPEG, PNG, GIF, or WebP)');
-                return;
-            }
-            
-            uploadImageFile(staffId, file);
-        }
-    };
-    input.click();
-}
-
-// Handle the actual file upload
-function uploadImageFile(staffId, file) {
-    const formData = new FormData();
-    formData.append('action', 'upload_portrait');
-    formData.append('staff_id', staffId);
-    formData.append('portrait', file);
-    
-    // Show upload progress
-    showUploadProgress(true);
-    
-    fetch('index.php', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        showUploadProgress(false);
-        if (data.success) {
-            // Update the selected staff data with new images array
-            if (selectedStaff && selectedStaff.staff_id === staffId) {
-                if (!selectedStaff.images) {
-                    selectedStaff.images = [];
-                }
-                selectedStaff.images.push(data.image_path);
-                
-                // Refresh the modal content
-                const modalBody = document.querySelector('#staff-modal .staff-details');
-                if (modalBody) {
-                    modalBody.innerHTML = createStaffDetailForm(selectedStaff);
-                    
-                    // Re-add event listeners for input and select only
-                    modalBody.querySelectorAll('input, select').forEach(input => {
-                        input.addEventListener('change', function() {
-                            const field = this.getAttribute('data-field');
-                            const value = this.value;
-                            saveStaffField(selectedStaff.staff_id, field, value);
-                        });
-                    });
-                    
-                    // Setup rich text editors
-                    setupModalRichTextEditors(modalBody, selectedStaff);
-                }
-            }
-            
-            // Refresh the grid to show new portrait
-            loadStaff();
-            
-            showSuccess('Image uploaded successfully');
-        } else {
-            showError('Failed to upload image: ' + (data.error || 'Unknown error'));
-        }
-    })
-    .catch(error => {
-        showUploadProgress(false);
-        console.error('Error uploading portrait:', error);
-        showError('Error uploading portrait');
-    });
-}
-
-// Update portrait in modal
-function updatePortraitInModal(portraitPath) {
-    const portraitSection = document.querySelector('.staff-portrait-section');
-    if (portraitSection && selectedStaff) {
-        const imageHtml = portraitPath ? 
-            `<img src="${escapeHtml(portraitPath)}" alt="${escapeHtml(selectedStaff.name)}" class="staff-portrait">` :
-            `<div class="staff-portrait-placeholder">No Photo</div>`;
-        
-        const uploadButton = isGM ? 
-            `<button class="upload-portrait-btn" onclick="uploadStaffPortrait('${selectedStaff.staff_id}')">Upload Photo</button>` : '';
-        
-        portraitSection.innerHTML = imageHtml + uploadButton;
-    }
-}
-
-// Show/hide upload progress
-function showUploadProgress(show) {
-    const uploadBtns = document.querySelectorAll('.upload-portrait-btn');
-    uploadBtns.forEach(btn => {
-        if (show) {
-            btn.disabled = true;
-            btn.textContent = 'Uploading...';
-        } else {
-            btn.disabled = false;
-            btn.textContent = 'Upload Photo';
-        }
-    });
-}
-
-// Utility functions
-function showLoading(show) {
-    const loading = document.getElementById('loading');
-    const staffGrid = document.getElementById('staff-grid');
-    
-    if (show) {
-        loading.style.display = 'flex';
-        staffGrid.style.opacity = '0.5';
-    } else {
-        loading.style.display = 'none';
-        staffGrid.style.opacity = '1';
-    }
-}
-
-function showError(message) {
-    // Create a simple toast notification
-    const toast = document.createElement('div');
-    toast.className = 'toast toast-error';
-    toast.textContent = message;
-    toast.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: #e74c3c;
-        color: white;
-        padding: 12px 20px;
-        border-radius: 6px;
-        z-index: 10000;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        animation: slideInRight 0.3s ease-out;
-    `;
-    
-    document.body.appendChild(toast);
-    
-    setTimeout(() => {
-        toast.style.animation = 'slideOutRight 0.3s ease-in';
-        setTimeout(() => {
-            if (toast.parentNode) {
-                toast.parentNode.removeChild(toast);
-            }
-        }, 300);
-    }, 4000);
-}
-
-function showSuccess(message) {
-    // Create a simple toast notification
-    const toast = document.createElement('div');
-    toast.className = 'toast toast-success';
-    toast.textContent = message;
-    toast.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: #27ae60;
-        color: white;
-        padding: 12px 20px;
-        border-radius: 6px;
-        z-index: 10000;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        animation: slideInRight 0.3s ease-out;
-    `;
-    
-    document.body.appendChild(toast);
-    
-    setTimeout(() => {
-        toast.style.animation = 'slideOutRight 0.3s ease-in';
-        setTimeout(() => {
-            if (toast.parentNode) {
-                toast.parentNode.removeChild(toast);
-            }
-        }, 300);
-    }, 3000);
-}
-
-function escapeHtml(text) {
-    if (!text) return '';
-    const map = {
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#039;'
-    };
-    return text.toString().replace(/[&<>"']/g, function(m) { return map[m]; });
-}
-
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            try {
-                func.apply(this, args);
-            } catch (error) {
-                console.error('Error in debounced function:', error);
-            }
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
-}
-
-// Image Gallery Functions
-function createImageGallery(images, itemId, itemType, imageAdjustments) {
-    if (!images || images.length === 0) {
-        return `<div class="${itemType}-portrait-placeholder">No Photo</div>`;
-    }
-
-    const currentImageIndex = 0;
-    const hasMultipleImages = images.length > 1;
-    const currentImage = images[currentImageIndex];
-    const adj = imageAdjustments && imageAdjustments[currentImage];
-
-    // Build the image element - adjusted or standard
-    let imageElement;
-    const adjustedHtml = adj && typeof ImageAdjuster !== 'undefined' ?
-        ImageAdjuster.createAdjustedImageHtml(
-            escapeHtml(currentImage),
-            itemType + ' image', adj, '',
-            "openImagePopup('" + escapeHtml(currentImage) + "')"
-        ) : null;
-
-    if (adjustedHtml) {
-        imageElement = adjustedHtml;
-    } else {
-        imageElement = `<img src="${escapeHtml(currentImage)}"
-                     alt="${itemType} image"
-                     class="${itemType}-portrait gallery-image"
-                     onclick="openImagePopup('${escapeHtml(currentImage)}')"
-                     data-current-index="${currentImageIndex}">`;
-    }
-
-    return `
-        <div class="image-gallery" data-item-id="${itemId}" data-item-type="${itemType}">
-            <div class="image-container">
-                ${imageElement}
-
-                ${hasMultipleImages ? `
-                    <button class="gallery-nav prev" onclick="navigateGallery('${itemId}', -1)">‹</button>
-                    <button class="gallery-nav next" onclick="navigateGallery('${itemId}', 1)">›</button>
-                    <div class="gallery-indicator">${currentImageIndex + 1} / ${images.length}</div>
-                ` : ''}
-
-                ${isGM ? `
-                    <button class="delete-image-btn" onclick="deleteImage('${itemId}', '${escapeHtml(currentImage)}', '${itemType}')">×</button>
-                ` : ''}
-            </div>
-            ${isGM ? `
-                <button class="adjust-image-btn" onclick="openImageAdjuster('${itemId}', '${escapeHtml(currentImage)}', '${itemType}')">Adjust Image</button>
-            ` : ''}
-        </div>
-    `;
-}
-
-function navigateGallery(itemId, direction) {
-    if (!selectedStaff || selectedStaff.staff_id !== itemId) return;
-
-    const images = selectedStaff.images || (selectedStaff.image_path ? [selectedStaff.image_path] : []);
-    if (images.length <= 1) return;
-
-    const galleryEl = document.querySelector(`[data-item-id="${itemId}"]`);
-    if (!galleryEl) return;
-
-    const imgEl = galleryEl.querySelector('.image-container img, .image-container .adjusted-image-wrapper img');
-    const currentIndex = imgEl ? parseInt(imgEl.getAttribute('data-current-index') || '0') : 0;
-
-    let newIndex = currentIndex + direction;
-    if (newIndex < 0) newIndex = images.length - 1;
-    if (newIndex >= images.length) newIndex = 0;
-
-    const newImage = images[newIndex];
-    const adj = selectedStaff.image_adjustments && selectedStaff.image_adjustments[newImage];
-    const container = galleryEl.querySelector('.image-container');
-
-    // Build new image element
-    let newImageHtml;
-    const adjustedHtml = adj && typeof ImageAdjuster !== 'undefined' ?
-        ImageAdjuster.createAdjustedImageHtml(
-            escapeHtml(newImage),
-            'staff image', adj, '',
-            "openImagePopup('" + escapeHtml(newImage) + "')"
-        ) : null;
-
-    if (adjustedHtml) {
-        newImageHtml = adjustedHtml;
-    } else {
-        newImageHtml = `<img src="${escapeHtml(newImage)}"
-             alt="staff image"
-             class="staff-portrait gallery-image"
-             onclick="openImagePopup('${escapeHtml(newImage)}')"
-             data-current-index="${newIndex}">`;
-    }
-
-    container.innerHTML = `
-        ${newImageHtml}
-        <button class="gallery-nav prev" onclick="navigateGallery('${itemId}', -1)">&#8249;</button>
-        <button class="gallery-nav next" onclick="navigateGallery('${itemId}', 1)">&#8250;</button>
-        <div class="gallery-indicator">${newIndex + 1} / ${images.length}</div>
-        ${isGM ? `<button class="delete-image-btn" onclick="deleteImage('${itemId}', '${escapeHtml(newImage)}', 'staff')">×</button>` : ''}
-    `;
-
-    // Update the adjust button
-    const adjustBtn = galleryEl.querySelector('.adjust-image-btn');
-    if (adjustBtn) {
-        adjustBtn.setAttribute('onclick', `openImageAdjuster('${itemId}', '${escapeHtml(newImage)}', 'staff')`);
-    }
-
-    const newImgEl = container.querySelector('img');
-    if (newImgEl) newImgEl.setAttribute('data-current-index', newIndex);
-}
-
-function openImagePopup(imagePath) {
-    let popup = document.getElementById('image-popup');
-    if (!popup) {
-        popup = createImagePopup();
-    }
-    const popupImage = popup.querySelector('.image-popup-content img');
-    
-    popupImage.src = imagePath;
-    popup.style.display = 'block';
-}
-
-function closeImagePopup() {
-    const popup = document.getElementById('image-popup');
-    if (popup) {
-        popup.style.display = 'none';
-    }
-}
-
-function createImagePopup() {
-    const popup = document.createElement('div');
-    popup.id = 'image-popup';
-    popup.className = 'image-popup';
-    popup.innerHTML = `
-        <div class="image-popup-header">
-            <div class="image-popup-title">Staff Image</div>
-            <button class="image-popup-close" onclick="closeImagePopup()">×</button>
-        </div>
-        <div class="image-popup-content">
-            <img src="" alt="Staff image">
-        </div>
-    `;
-    document.body.appendChild(popup);
-    
-    // Make popup draggable
-    makeDraggable(popup);
-    
-    return popup;
-}
-
-function makeDraggable(popup) {
-    const header = popup.querySelector('.image-popup-header');
-    let isDragging = false;
-    let currentX, currentY, initialX, initialY;
-    let xOffset = 0, yOffset = 0;
-
-    header.addEventListener('mousedown', dragStart);
-    document.addEventListener('mouseup', dragEnd);
-    document.addEventListener('mousemove', drag);
-
-    function dragStart(e) {
-        if (e.target.classList.contains('image-popup-close')) return;
-        
-        initialX = e.clientX - xOffset;
-        initialY = e.clientY - yOffset;
-
-        if (e.target === header || header.contains(e.target)) {
-            isDragging = true;
-        }
-    }
-
-    function drag(e) {
-        if (isDragging) {
-            e.preventDefault();
-            currentX = e.clientX - initialX;
-            currentY = e.clientY - initialY;
-
-            xOffset = currentX;
-            yOffset = currentY;
-
-            popup.style.transform = `translate(${currentX}px, ${currentY}px)`;
-        }
-    }
-
-    function dragEnd(e) {
-        initialX = currentX;
-        initialY = currentY;
-        isDragging = false;
-    }
-}
-
-function deleteImage(itemId, imagePath, itemType) {
-    if (!isGM) return;
-    
-    if (!confirm('Are you sure you want to delete this image?')) {
-        return;
-    }
-    
-    const formData = new FormData();
-    formData.append('action', 'delete_image');
-    formData.append('staff_id', itemId);
-    formData.append('image_path', imagePath);
-    
-    fetch('index.php', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Update local data
-            if (selectedStaff && selectedStaff.staff_id === itemId) {
-                if (selectedStaff.images) {
-                    const imageIndex = selectedStaff.images.indexOf(imagePath);
-                    if (imageIndex !== -1) {
-                        selectedStaff.images.splice(imageIndex, 1);
-                    }
-                }
-                
-                // Refresh the modal content
-                const modalBody = document.querySelector('#staff-modal .staff-details');
-                if (modalBody) {
-                    modalBody.innerHTML = createStaffDetailForm(selectedStaff);
-                    
-                    // Re-add event listeners for input and select only
-                    modalBody.querySelectorAll('input, select').forEach(input => {
-                        input.addEventListener('change', function() {
-                            const field = this.getAttribute('data-field');
-                            const value = this.value;
-                            saveStaffField(selectedStaff.staff_id, field, value);
-                        });
-                    });
-                    
-                    // Setup rich text editors
-                    setupModalRichTextEditors(modalBody, selectedStaff);
-                }
-            }
-            
-            // Refresh the main grid
-            loadStaff();
-            showSuccess('Image deleted successfully');
-        } else {
-            console.error('Failed to delete image:', data.error);
-            showError('Failed to delete image');
-        }
-    })
-    .catch(error => {
-        console.error('Error deleting image:', error);
-        showError('Error deleting image');
-    });
-}
-
-// Export functionality
-function exportSelectedStaff() {
-    if (selectedExportStaff.size === 0) {
-        alert('Select at least one staff member to export.');
-        return;
-    }
-
-    const formData = new FormData();
-    formData.append('action', 'export_staff');
-    
-    fetch('index.php', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            const selectedData = Array.isArray(data.data.staff)
-                ? data.data.staff.filter(member => selectedExportStaff.has(member.staff_id))
-                : [];
-            const exportPayload = buildStaffExportPayload({
-                ...data.data,
-                staff: selectedData.map(cleanStaffExportSections)
-            });
-
-            showExportModal(exportPayload);
-        } else {
-            alert('Failed to export data: ' + (data.error || 'Unknown error'));
-        }
-    })
-    .catch(error => {
-        console.error('Error exporting data:', error);
-        alert('Error exporting data');
-    });
-}
-
-function buildStaffExportPayload(payload) {
-    // Return simplified format with just the staff array
-    return {
-        staff: payload.staff
-    };
-}
-
+// Export cleanup: only include important visible fields
 function cleanStaffExportSections(member) {
-    // Only include important visible fields
     const cleanedMember = {};
 
     // Basic Information
@@ -1679,131 +595,4 @@ function cleanStaffExportSections(member) {
     }
 
     return cleanedMember;
-}
-
-function cleanEmptySection(section) {
-    if (!section || typeof section !== 'object' || Array.isArray(section)) {
-        return null;
-    }
-
-    const cleaned = {};
-    Object.entries(section).forEach(([key, value]) => {
-        if (!isValueEmpty(value)) {
-            cleaned[key] = value;
-        }
-    });
-
-    return Object.keys(cleaned).length > 0 ? cleaned : null;
-}
-
-function isValueEmpty(value) {
-    if (value === null || value === undefined) {
-        return true;
-    }
-    if (typeof value === 'string') {
-        const normalized = value.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
-        return normalized === '';
-    }
-    if (Array.isArray(value)) {
-        return value.length === 0;
-    }
-    return false;
-}
-
-function toggleExportSelectionMode(forceState) {
-    const nextState = typeof forceState === 'boolean' ? forceState : !exportSelectionActive;
-    exportSelectionActive = nextState;
-    document.body.classList.toggle('export-selection-active', exportSelectionActive);
-
-    const selectionActions = document.getElementById('export-selection-actions');
-    if (selectionActions) {
-        selectionActions.style.display = exportSelectionActive ? 'flex' : 'none';
-    }
-
-    const exportBtn = document.getElementById('export-staff-btn');
-    if (exportBtn) {
-        exportBtn.textContent = exportSelectionActive ? '✖ Cancel Export' : '📤 Export Staff';
-    }
-
-    if (!exportSelectionActive) {
-        selectedExportStaff.clear();
-        updateExportSelectionCount();
-        loadStaff();
-    } else {
-        updateExportSelectionCount();
-    }
-}
-
-function toggleStaffExportSelection(staffId) {
-    if (!exportSelectionActive) {
-        return;
-    }
-
-    if (selectedExportStaff.has(staffId)) {
-        selectedExportStaff.delete(staffId);
-    } else {
-        selectedExportStaff.add(staffId);
-    }
-
-    const card = document.querySelector(`.staff-card[data-staff-id="${CSS.escape(staffId)}"]`);
-    if (card) {
-        card.classList.toggle('is-selected', selectedExportStaff.has(staffId));
-    }
-
-    updateExportSelectionCount();
-}
-
-function updateExportSelectionCount() {
-    const count = selectedExportStaff.size;
-    const countLabel = document.getElementById('export-selection-count');
-    if (countLabel) {
-        countLabel.textContent = `${count} selected`;
-    }
-
-    const exportSelectedBtn = document.getElementById('export-selected-staff-btn');
-    if (exportSelectedBtn) {
-        exportSelectedBtn.disabled = count === 0;
-    }
-}
-
-function showExportModal(data) {
-    const modal = document.getElementById('export-modal');
-    const textarea = document.getElementById('export-data');
-    
-    // Format JSON with proper indentation
-    textarea.value = JSON.stringify(data, null, 2);
-    
-    modal.style.display = 'block';
-}
-
-function closeExportModal() {
-    const modal = document.getElementById('export-modal');
-    modal.style.display = 'none';
-    
-    // Reset copy feedback
-    const feedback = document.getElementById('copy-feedback');
-    if (feedback) {
-        feedback.style.display = 'none';
-    }
-}
-
-function copyExportData() {
-    const textarea = document.getElementById('export-data');
-    textarea.select();
-    
-    try {
-        document.execCommand('copy');
-        
-        // Show feedback
-        const feedback = document.getElementById('copy-feedback');
-        if (feedback) {
-            feedback.style.display = 'inline';
-            setTimeout(() => {
-                feedback.style.display = 'none';
-            }, 2000);
-        }
-    } catch (err) {
-        console.error('Failed to copy:', err);
-        alert('Failed to copy to clipboard');
-    }
 }

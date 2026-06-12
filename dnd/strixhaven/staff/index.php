@@ -10,6 +10,10 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 $user = $_SESSION['user'];
 $is_gm = ($user === 'GM');
 
+// Include version system
+define('VERSION_SYSTEM_INTERNAL', true);
+require_once '../../version.php';
+
 // Include character integration for character details functionality
 require_once '../gm/includes/character-integration.php';
 require_once __DIR__ . '/data-utils.php';
@@ -567,6 +571,9 @@ require_once '../../includes/strix-nav.php';
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Strixhaven Staff - <?php echo htmlspecialchars($user); ?></title>
     <link rel="stylesheet" href="../../css/style.css">
+    <link rel="stylesheet" href="../../css/theme.css">
+    <link rel="stylesheet" href="../../css/ui-kit.css">
+    <link rel="stylesheet" href="../templates/css/character-sheet-base.css">
     <link rel="stylesheet" href="css/staff.css">
     <link rel="stylesheet" href="../includes/image-adjuster.css">
 </head>
@@ -647,12 +654,12 @@ require_once '../../includes/strix-nav.php';
             <div class="modal-header">
                 <h2 id="modal-staff-name">Staff Details</h2>
                 <div class="modal-controls">
-                    <button class="btn-expand" id="modal-expand-btn" title="Open in New Tab">📋</button>
-                    <button class="btn-favorite" id="modal-favorite-btn" title="Toggle Favorite">★</button>
+                    <button class="btn-expand" id="modal-expand-btn" title="Open in New Tab" aria-label="Open in new tab">📋</button>
+                    <button class="btn-favorite" id="modal-favorite-btn" title="Toggle Favorite" aria-label="Toggle favorite">★</button>
                     <?php if ($is_gm): ?>
-                        <button class="btn-danger" id="modal-delete-btn" title="Delete Staff Member">🗑</button>
+                        <button class="btn-danger" id="modal-delete-btn" title="Delete Staff Member" aria-label="Delete staff member">🗑</button>
                     <?php endif; ?>
-                    <span class="close" onclick="closeStaffModal()">&times;</span>
+                    <span class="close" role="button" tabindex="0" aria-label="Close" onclick="closeStaffModal()">&times;</span>
                 </div>
             </div>
             <div class="modal-body">
@@ -715,7 +722,7 @@ require_once '../../includes/strix-nav.php';
         <div class="modal-content" style="max-width: 800px;">
             <div class="modal-header">
                 <h2>Export Staff Data</h2>
-                <span class="close" onclick="closeExportModal()">&times;</span>
+                <span class="close" role="button" tabindex="0" aria-label="Close" onclick="closeExportModal()">&times;</span>
             </div>
             <div class="modal-body">
                 <div style="margin-bottom: 10px;">
@@ -727,9 +734,17 @@ require_once '../../includes/strix-nav.php';
         </div>
     </div>
 
+    <!-- Version Footer -->
+    <div class="version-footer">
+        <span class="version-info"><?php echo Version::displayVersion(); ?></span>
+        <span class="version-updated">Updated: <?php echo Version::getLastUpdated(); ?></span>
+    </div>
+
+    <script src="../../js/ui-kit.js"></script>
     <script src="../gm/js/rich-text-editor.js"></script>
     <script src="../gm/js/character-lookup.js"></script>
     <script src="../includes/image-adjuster.js"></script>
+    <script src="../templates/js/character-sheet-base.js"></script>
     <script src="js/staff.js"></script>
 </body>
 </html>
