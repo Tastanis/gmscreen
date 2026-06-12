@@ -1,0 +1,246 @@
+/* ==========================================================================
+   GM Screen shared UI kit: toasts, confirm/prompt dialogs, base modal.
+   Requires css/theme.css for tokens (safe fallbacks included).
+   JS counterpart: js/ui-kit.js (window.UIKit)
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Toasts
+   -------------------------------------------------------------------------- */
+.uik-toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: var(--z-toast, 2000);
+    pointer-events: none;
+    max-width: min(360px, calc(100vw - 40px));
+}
+
+.uik-toast {
+    pointer-events: auto;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 16px;
+    border-radius: var(--radius-md, 8px);
+    border: 1px solid var(--border, #c2ad90);
+    background: var(--surface-raised, #fdfaf5);
+    color: var(--text, #2f2417);
+    box-shadow: var(--shadow-card, 0 2px 8px rgba(47, 36, 23, 0.15));
+    font-size: 0.9rem;
+    line-height: 1.4;
+    cursor: pointer;
+    animation: uik-toast-in 0.25s ease-out;
+}
+
+.uik-toast--leaving {
+    animation: uik-toast-out 0.2s ease-in forwards;
+}
+
+.uik-toast__icon {
+    flex: 0 0 auto;
+    font-weight: bold;
+}
+
+.uik-toast--success { border-left: 4px solid var(--success, #3e7a44); }
+.uik-toast--success .uik-toast__icon { color: var(--success, #3e7a44); }
+
+.uik-toast--error { border-left: 4px solid var(--danger, #a54332); }
+.uik-toast--error .uik-toast__icon { color: var(--danger, #a54332); }
+
+.uik-toast--warning { border-left: 4px solid var(--warning, #b07d2a); }
+.uik-toast--warning .uik-toast__icon { color: var(--warning, #b07d2a); }
+
+.uik-toast--info { border-left: 4px solid var(--info, #4f6f8f); }
+.uik-toast--info .uik-toast__icon { color: var(--info, #4f6f8f); }
+
+@keyframes uik-toast-in {
+    from { opacity: 0; transform: translateX(24px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes uik-toast-out {
+    from { opacity: 1; transform: translateX(0); }
+    to   { opacity: 0; transform: translateX(24px); }
+}
+
+/* --------------------------------------------------------------------------
+   Base modal (also used by UIKit.confirm / UIKit.prompt)
+   -------------------------------------------------------------------------- */
+.uik-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(47, 36, 23, 0.5);
+    z-index: var(--z-overlay, 900);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    animation: uik-fade-in 0.15s ease-out;
+}
+
+.uik-overlay--leaving {
+    animation: uik-fade-out 0.12s ease-in forwards;
+}
+
+.uik-modal {
+    background: var(--surface, #f4eadc);
+    color: var(--text, #2f2417);
+    border: 1px solid var(--border-strong, #a08a68);
+    border-radius: var(--radius-lg, 12px);
+    box-shadow: var(--shadow-modal, 0 12px 40px rgba(47, 36, 23, 0.35));
+    width: min(440px, 100%);
+    max-height: calc(100vh - 48px);
+    display: flex;
+    flex-direction: column;
+    z-index: var(--z-modal, 1000);
+}
+
+.uik-modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border, #c2ad90);
+}
+
+.uik-modal__title {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--accent-strong, #6f5333);
+}
+
+.uik-modal__close {
+    flex: 0 0 auto;
+    border: none;
+    background: transparent;
+    color: var(--text-muted, #5e4b36);
+    font-size: 1.3rem;
+    line-height: 1;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm, 4px);
+    cursor: pointer;
+}
+
+.uik-modal__close:hover {
+    background: var(--surface-strong, #e6d8c5);
+    color: var(--text, #2f2417);
+}
+
+.uik-modal__body {
+    padding: 16px 18px;
+    overflow-y: auto;
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+.uik-modal__input {
+    width: 100%;
+    margin-top: 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--border, #c2ad90);
+    border-radius: var(--radius-sm, 4px);
+    background: var(--surface-raised, #fdfaf5);
+    color: var(--text, #2f2417);
+    font-size: 0.95rem;
+    box-sizing: border-box;
+}
+
+.uik-modal__footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 12px 18px 16px;
+}
+
+.uik-btn {
+    padding: 8px 18px;
+    border-radius: var(--radius-sm, 4px);
+    border: 1px solid var(--border-strong, #a08a68);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--surface-raised, #fdfaf5);
+    color: var(--text, #2f2417);
+}
+
+.uik-btn:hover {
+    background: var(--surface-strong, #e6d8c5);
+}
+
+.uik-btn--primary {
+    background: var(--accent, #8b6f4e);
+    border-color: var(--accent-strong, #6f5333);
+    color: #fff;
+}
+
+.uik-btn--primary:hover {
+    background: var(--accent-strong, #6f5333);
+}
+
+.uik-btn--danger {
+    background: var(--danger, #a54332);
+    border-color: #7e3225;
+    color: #fff;
+}
+
+.uik-btn--danger:hover {
+    background: #8c3829;
+}
+
+.uik-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+/* Generic loading state for any button (fix #6) */
+.uik-loading {
+    position: relative;
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+.uik-loading::after {
+    content: "";
+    display: inline-block;
+    width: 0.85em;
+    height: 0.85em;
+    margin-left: 8px;
+    vertical-align: -0.1em;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: uik-spin 0.7s linear infinite;
+}
+
+@keyframes uik-spin {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes uik-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+@keyframes uik-fade-out {
+    from { opacity: 1; }
+    to   { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .uik-toast,
+    .uik-toast--leaving,
+    .uik-overlay,
+    .uik-overlay--leaving {
+        animation: none;
+    }
+
+    .uik-loading::after {
+        animation-duration: 1.5s;
+    }
+}
