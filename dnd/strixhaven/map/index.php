@@ -24,778 +24,24 @@ require_once '../../includes/strix-nav.php';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Strixhaven Map - 60x60 Hex Grid</title>
-    
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            background: #1a1a2e;
-            color: #eee;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            overflow: hidden;
-        }
-        
-        .map-container {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
-            overflow: hidden;
-            background: #1a1a2e;
-        }
-        
-        #hex-canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            cursor: default;
-            /* Canvas is transparent to show background */
-            background: transparent;
-        }
-        
-        .info-panel {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 10px;
-            border-radius: 5px;
-            font-size: 14px;
-            z-index: 100;
-        }
-        
-        .controls {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 10px;
-            border-radius: 5px;
-            z-index: 100;
-        }
-        
-        .controls button {
-            display: block;
-            margin: 5px 0;
-            padding: 5px 10px;
-            background: #4a4a6a;
-            color: white;
-            border: none;
-            border-radius: 3px;
-            cursor: pointer;
-        }
-        
-        .controls button:hover {
-            background: #6a6a8a;
-        }
 
-        .controls button.active {
-            background: #c7ff2e;
-            color: #17210d;
-            box-shadow: 0 0 14px rgba(199, 255, 46, 0.5);
-        }
-
-        .controls button:disabled {
-            opacity: 0.45;
-            cursor: not-allowed;
-        }
-
-        .player-path-panel {
-            position: absolute;
-            top: 160px;
-            left: 10px;
-            width: 210px;
-            background: rgba(13, 20, 9, 0.88);
-            border: 1px solid rgba(199, 255, 46, 0.4);
-            border-radius: 6px;
-            box-shadow: 0 0 18px rgba(199, 255, 46, 0.18);
-            color: #efffd0;
-            display: none;
-            padding: 10px;
-            z-index: 105;
-        }
-
-        .player-path-panel--active {
-            display: block;
-        }
-
-        .player-path-hidden {
-            display: none !important;
-        }
-
-        .player-path-panel h3 {
-            color: #c7ff2e;
-            font-size: 14px;
-            margin: 0 0 8px;
-        }
-
-        .player-path-tools {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 6px;
-        }
-
-        .player-path-tools button,
-        .player-path-actions button {
-            background: #27341d;
-            color: #efffd0;
-            border: 1px solid rgba(199, 255, 46, 0.35);
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-            padding: 6px 8px;
-        }
-
-        .player-path-tools button.active {
-            background: #c7ff2e;
-            color: #17210d;
-            font-weight: 700;
-        }
-
-        .player-path-tools button:disabled,
-        .player-path-actions button:disabled {
-            opacity: 0.45;
-            cursor: not-allowed;
-        }
-
-        .player-path-actions {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 6px;
-            margin-top: 8px;
-        }
-
-        .player-path-actions--single {
-            grid-template-columns: 1fr;
-        }
-
-        .player-path-total {
-            margin-top: 8px;
-            padding: 7px;
-            background: rgba(199, 255, 46, 0.12);
-            border-radius: 4px;
-            font-size: 13px;
-        }
-
-        .player-terrain-panel {
-            display: none;
-            margin-top: 9px;
-            border-top: 1px solid rgba(199, 255, 46, 0.28);
-            padding-top: 9px;
-        }
-
-        .player-terrain-panel--active {
-            display: block;
-        }
-
-        .player-terrain-panel h4 {
-            color: #e8ff9a;
-            font-size: 12px;
-            margin: 0 0 6px;
-        }
-
-        .player-terrain-tools {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 6px;
-        }
-
-        .player-terrain-tools button {
-            border: 1px solid rgba(255, 255, 255, 0.25);
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 700;
-            padding: 6px 8px;
-        }
-
-        .player-terrain-tools button.active {
-            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35), 0 0 14px rgba(255, 255, 255, 0.18);
-            transform: translateY(-1px);
-        }
-
-        .terrain-normal {
-            background: #2f3540;
-            color: #f2f2f2;
-        }
-
-        .terrain-fast {
-            background: #35c46f;
-            color: #102817;
-        }
-
-        .terrain-yellow {
-            background: #ffd84a;
-            color: #3b2f05;
-        }
-
-        .terrain-red {
-            background: #e54b4b;
-            color: #fff5f5;
-        }
-
-        .player-path-status {
-            color: #d9e8c0;
-            font-size: 11px;
-            line-height: 1.35;
-            margin-top: 8px;
-        }
-
-        .player-marker-modal {
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.42);
-            align-items: center;
-            justify-content: center;
-            z-index: 1200;
-            backdrop-filter: blur(4px);
-        }
-
-        .player-marker-card {
-            width: min(420px, calc(100vw - 28px));
-            background: #f3f0df;
-            border: 1px solid #bda887;
-            border-radius: 8px;
-            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
-            color: #342b1f;
-            padding: 14px;
-            position: relative;
-        }
-
-        .player-marker-card h2 {
-            color: #455d1c;
-            font-size: 18px;
-            margin: 0 28px 10px 0;
-        }
-
-        .player-marker-close {
-            position: absolute;
-            right: 12px;
-            top: 8px;
-            border: 0;
-            background: transparent;
-            color: #6a5740;
-            cursor: pointer;
-            font-size: 24px;
-            line-height: 1;
-        }
-
-        #player-marker-note {
-            width: 100%;
-            min-height: 120px;
-            box-sizing: border-box;
-            border: 1px solid #bda887;
-            border-radius: 6px;
-            background: #fffbed;
-            color: #342b1f;
-            font: 14px/1.4 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            resize: vertical;
-            padding: 10px;
-        }
-
-        .player-marker-actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: 8px;
-            margin-top: 10px;
-        }
-
-        .player-marker-actions button {
-            border: 0;
-            border-radius: 5px;
-            color: #fff;
-            cursor: pointer;
-            font-weight: 700;
-            padding: 8px 12px;
-        }
-
-        .player-marker-actions .save {
-            background: #5f7f2a;
-        }
-
-        .player-marker-actions .delete {
-            background: #a84632;
-        }
-
-        .player-marker-actions .cancel {
-            background: #6b6254;
-        }
-        
-        /* Version footer */
-        .version-footer {
-            position: absolute;
-            bottom: 10px;
-            right: 10px;
-            font-size: 10px;
-            color: #aaa;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 4px 8px;
-            border-radius: 4px;
-            z-index: 100;
-        }
-        
-        /* Hex Popup Styles - DND Dashboard Theme */
-        .hex-popup {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 1000;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            backdrop-filter: blur(10px);
-        }
-        
-        .hex-popup-content {
-            background: rgba(255, 255, 255, 0.95);
-            color: #2c3e50;
-            padding: 30px;
-            border-radius: 15px;
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            max-width: 500px;
-            width: 95%;
-            max-height: 85%;
-            overflow-y: auto;
-            position: relative;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-        
-        .hex-popup-close {
-            position: absolute;
-            top: 15px;
-            right: 20px;
-            font-size: 28px;
-            font-weight: bold;
-            color: #666;
-            cursor: pointer;
-            transition: color 0.3s ease;
-        }
-        
-        .hex-popup-close:hover {
-            color: #667eea;
-        }
-        
-        .hex-popup h2 {
-            margin-top: 0;
-            color: #2c3e50;
-            border-bottom: 2px solid #ecf0f1;
-            padding-bottom: 15px;
-            font-size: 1.5em;
-            font-weight: 600;
-        }
-        
-        .hex-popup-actions {
-            margin-top: 25px;
-            text-align: right;
-            padding-top: 20px;
-            border-top: 1px solid #ecf0f1;
-        }
-        
-        .hex-popup-actions button {
-            background: #667eea;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 1em;
-            font-weight: 500;
-            margin-left: 10px;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-        }
-        
-        .hex-popup-actions button:hover {
-            background: #5a67d8;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        }
-        
-        /* Section Styling */
-        .hex-section {
-            margin-bottom: 30px;
-            padding: 20px;
-            background: rgba(255, 255, 255, 0.7);
-            border-radius: 10px;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-        }
-        
-        .hex-section:last-of-type {
-            margin-bottom: 0;
-        }
-        
-        .section-title {
-            color: #667eea;
-            font-size: 1.3em;
-            font-weight: 600;
-            margin: 0 0 20px 0;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #667eea;
-        }
-        
-        .gm-only {
-            border-left: 4px solid #667eea;
-        }
-        
-        .hex-images-container {
-            margin-bottom: 25px;
-        }
-        
-        .hex-images-container h3 {
-            color: #34495e;
-            margin-bottom: 15px;
-            font-size: 16px;
-            font-weight: 600;
-        }
-        
-        .hex-image-upload {
-            margin-bottom: 15px;
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .hex-image-upload .upload-btn {
-            background: #667eea;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .hex-image-upload .upload-btn:hover {
-            background: #5a67d8;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-        }
-
-        .hex-image-upload .upload-btn--secondary {
-            background: rgba(102, 126, 234, 0.18);
-            color: #3248c4;
-            box-shadow: none;
-        }
-
-        .hex-image-upload .upload-btn--secondary:hover {
-            background: rgba(102, 126, 234, 0.28);
-            color: #2537a0;
-            box-shadow: 0 2px 6px rgba(37, 55, 160, 0.25);
-        }
-
-        .hex-image-upload .upload-btn:disabled,
-        .hex-image-upload .upload-btn--disabled {
-            background: rgba(148, 163, 184, 0.35);
-            color: rgba(44, 62, 80, 0.6);
-            cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
-        }
-        
-        .hex-images-gallery {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-            gap: 12px;
-            min-height: 100px;
-            padding: 15px;
-            background: rgba(255, 255, 255, 0.8);
-            border-radius: 8px;
-            border: 2px solid #ecf0f1;
-        }
-        
-        .hex-images-gallery.single-image {
-            grid-template-columns: 1fr;
-            max-width: 200px;
-        }
-        
-        .hex-image-thumb {
-            position: relative;
-            aspect-ratio: 1;
-            border-radius: 6px;
-            overflow: hidden;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        }
-        
-        .hex-image-thumb:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-        }
-        
-        .hex-image-thumb img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        
-        .hex-notes-container h3 {
-            color: #34495e;
-            margin-bottom: 15px;
-            font-size: 16px;
-            font-weight: 600;
-        }
-        
-        .notes-controls {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 12px;
-        }
-        
-        .edit-btn {
-            background: #667eea;
-            color: white;
-            border: none;
-            padding: 6px 14px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-        
-        .edit-btn:hover {
-            background: #5a67d8;
-            transform: translateY(-1px);
-            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
-        }
-        
-        .edit-btn.editing {
-            background: #e74c3c;
-        }
-        
-        .edit-status {
-            font-size: 13px;
-            color: #666;
-            font-weight: 500;
-        }
-        
-        .hex-notes {
-            width: 100%;
-            min-height: 120px;
-            background: rgba(255, 255, 255, 0.9);
-            color: #2c3e50;
-            border: 2px solid #ecf0f1;
-            border-radius: 8px;
-            padding: 12px;
-            resize: vertical;
-            font-family: inherit;
-            transition: border-color 0.3s ease, box-shadow 0.3s ease;
-        }
-        
-        .hex-notes[readonly] {
-            background: rgba(255, 255, 255, 0.6);
-            cursor: not-allowed;
-            color: #666;
-        }
-        
-        .hex-notes:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-        
-        /* Image Lightbox Styles */
-        .image-lightbox {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.8);
-            z-index: 2000;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            backdrop-filter: blur(5px);
-        }
-        
-        .lightbox-content {
-            position: relative;
-            max-width: 90%;
-            max-height: 90%;
-            text-align: center;
-        }
-        
-        .lightbox-close {
-            position: absolute;
-            top: -40px;
-            right: 0;
-            font-size: 32px;
-            color: white;
-            cursor: pointer;
-            z-index: 2001;
-            transition: color 0.3s ease;
-        }
-        
-        .lightbox-close:hover {
-            color: #667eea;
-        }
-        
-        #lightbox-image {
-            max-width: 100%;
-            max-height: calc(100vh - 100px);
-            border-radius: 10px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-        }
-        
-        .lightbox-actions {
-            margin-top: 20px;
-        }
-        
-        .lightbox-actions button {
-            background: #667eea;
-            color: white;
-            border: none;
-            padding: 10px 18px;
-            border-radius: 8px;
-            cursor: pointer;
-            margin: 0 8px;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-        }
-        
-        .lightbox-actions .delete-btn {
-            background: #e74c3c;
-        }
-        
-        .lightbox-actions button:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-        }
-        
-        /* Hex Tooltip Styles */
-        #hex-tooltip {
-            position: fixed;
-            background: rgba(0, 0, 0, 0.9);
-            color: white;
-            padding: 12px;
-            border-radius: 8px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-            pointer-events: none;
-            z-index: 2000;
-            max-width: 250px;
-            display: none;
-            backdrop-filter: blur(5px);
-        }
-        
-        #hex-tooltip .tooltip-title {
-            font-size: 16px;
-            font-weight: 600;
-            margin-bottom: 8px;
-            color: #667eea;
-        }
-        
-        #hex-tooltip .tooltip-image {
-            width: 100%;
-            max-width: 200px;
-            height: auto;
-            border-radius: 6px;
-            margin-top: 8px;
-        }
-
-        #hex-tooltip .tooltip-marker-note {
-            margin-top: 8px;
-            border-top: 1px solid rgba(199, 255, 46, 0.32);
-            padding-top: 8px;
-            color: #eaffad;
-            font-size: 13px;
-            line-height: 1.35;
-            white-space: pre-wrap;
-        }
-        
-        #hex-tooltip.visible {
-            display: block;
-        }
-
-        /* Map Ping Styles */
-        .map-ping-layer {
-            position: absolute;
-            inset: 0;
-            pointer-events: none;
-            z-index: 50;
-            overflow: hidden;
-        }
-
-        .map-ping {
-            --ping-color: #ff9f1c;
-            position: absolute;
-            width: var(--ping-size, 120px);
-            height: var(--ping-size, 120px);
-            margin: calc(var(--ping-size, 120px) / -2);
-            border-radius: 999px;
-            border: 4px solid var(--ping-color);
-            background: color-mix(in srgb, var(--ping-color) 20%, transparent);
-            box-shadow: 0 0 1.5rem color-mix(in srgb, var(--ping-color) 45%, transparent);
-            pointer-events: none;
-            opacity: 0;
-            transform: scale(1.75);
-            transform-origin: center;
-            animation: map-ping-pulse 900ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
-            animation-delay: var(--ping-delay, 0ms);
-        }
-
-        .map-ping::after {
-            content: "";
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 0.6rem;
-            height: 0.6rem;
-            margin-top: -0.3rem;
-            margin-left: -0.3rem;
-            border-radius: 999px;
-            background: var(--ping-color);
-            box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.85);
-            opacity: 1;
-        }
-
-        .map-ping--focus {
-            --ping-color: #38bdf8;
-            background: color-mix(in srgb, var(--ping-color) 25%, transparent);
-        }
-
-        @keyframes map-ping-pulse {
-            0% {
-                opacity: 0;
-                transform: scale(2.25);
-            }
-            18% {
-                opacity: 0.96;
-                transform: scale(0.3);
-            }
-            52% {
-                opacity: 0.82;
-                transform: scale(1.4);
-            }
-            78% {
-                opacity: 0.6;
-                transform: scale(0.55);
-            }
-            100% {
-                opacity: 0;
-                transform: scale(0.12);
-            }
-        }
-    </style>
+    <!-- Shared foundation (theme tokens + UI kit) loads before map CSS/JS -->
+    <link rel="stylesheet" href="../../css/theme.css">
+    <link rel="stylesheet" href="../../css/ui-kit.css">
+    <link rel="stylesheet" href="css/map-ui.css">
+    <script src="../../js/ui-kit.js"></script>
 </head>
 <body>
     <?php renderStrixNav('map'); ?>
     <div class="map-container">
         <!-- Main canvas for hex grid -->
         <canvas id="hex-canvas"></canvas>
+
+        <!-- Loading overlay (removed by hex-grid.js once the map image loads) -->
+        <div id="map-loading-overlay" class="map-loading-overlay">
+            <div class="map-loading-spinner"></div>
+            <div>Loading map&hellip;</div>
+        </div>
 
         <!-- Ping Layer (for cross-user pings) -->
         <div id="ping-layer" class="map-ping-layer"></div>
@@ -809,7 +55,7 @@ require_once '../../includes/strix-nav.php';
         </div>
 
         <div id="player-path-panel" class="player-path-panel">
-            <h3>Player Path</h3>
+            <h3>Player Path <span id="player-path-sync" class="player-path-sync" title="Waiting for sync"></span></h3>
             <div class="player-path-tools">
                 <button id="player-path-marker-tool" type="button">Destination</button>
                 <button id="player-path-draw-tool" type="button">Draw</button>
@@ -840,10 +86,10 @@ require_once '../../includes/strix-nav.php';
         
         <!-- Info panel -->
         <div class="info-panel">
-            <div>User: <?php echo htmlspecialchars($user); ?> <?php if ($isGM): ?><span style="color: #ff6b6b;">(GM)</span><?php endif; ?></div>
+            <div>User: <?php echo htmlspecialchars($user); ?> <?php if ($isGM): ?><span class="info-gm-tag">(GM)</span><?php endif; ?></div>
             <div>Hex: <span id="hex-info">-</span></div>
             <div>Zoom: <span id="zoom-info">100%</span></div>
-            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.2); font-size: 11px; color: #aaa;">
+            <div class="info-hints">
                 <div>Alt+Click: Ping</div>
                 <div>Alt+Right: Focus all</div>
             </div>
@@ -899,7 +145,39 @@ require_once '../../includes/strix-nav.php';
                     document.getElementById('hex-info').textContent = '-';
                 }
             });
+
+            showFirstVisitTips();
         });
+
+        // First-visit tips (shown once, dismissed via click or after 12s)
+        function showFirstVisitTips() {
+            if (localStorage.getItem('strixMapTipsDismissed')) return;
+
+            const tips = document.createElement('div');
+            tips.className = 'map-tips';
+            tips.setAttribute('role', 'status');
+            tips.innerHTML = `
+                <h4>Map controls</h4>
+                <ul>
+                    <li>Right-click drag to pan</li>
+                    <li>Scroll to zoom</li>
+                    <li>Click a hex for details</li>
+                    <li>Alt+Click to ping</li>
+                </ul>
+                <div class="map-tips-dismiss">Click to dismiss</div>
+            `;
+
+            const dismiss = () => {
+                localStorage.setItem('strixMapTipsDismissed', '1');
+                tips.remove();
+            };
+            tips.addEventListener('click', dismiss);
+            setTimeout(() => {
+                if (tips.parentNode) dismiss();
+            }, 12000);
+
+            document.body.appendChild(tips);
+        }
         
         // Control functions
         function resetView() {
@@ -955,11 +233,6 @@ require_once '../../includes/strix-nav.php';
             isGM: <?php echo $isGM ? 'true' : 'false'; ?>,
             sessionId: '<?php echo session_id(); ?>'
         };
-        
-        // Function to close hex popup
-        function closeHexPopup() {
-            document.getElementById('hex-popup').style.display = 'none';
-        }
     </script>
     
     <!-- Hex Details Popup -->
@@ -970,12 +243,11 @@ require_once '../../includes/strix-nav.php';
             
             <!-- GM Section (visible only to GM, shown first) -->
             <div id="gm-section" class="hex-section gm-only" style="display: none;">
-                <h2 class="section-title">GM Section</h2>
-                
-                <div class="hex-title-container" style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #667eea;">Location Title (GM):</label>
-                    <input type="text" id="gm-title" class="hex-title-input" placeholder="Enter location name (visible only to GM)..." 
-                           style="width: 100%; padding: 10px; border: 2px solid #ecf0f1; border-radius: 6px; font-size: 16px; background: rgba(255, 255, 255, 0.9); color: #2c3e50;">
+                <h2 class="section-title">GM Section <span class="gm-badge">GM only</span></h2>
+
+                <div class="hex-title-container">
+                    <label class="hex-field-label" for="gm-title">Location Title (GM):</label>
+                    <input type="text" id="gm-title" class="hex-title-input" placeholder="Enter location name (visible only to GM)...">
                 </div>
                 
                 <div class="hex-images-container">
@@ -994,27 +266,26 @@ require_once '../../includes/strix-nav.php';
                     <textarea id="gm-notes" class="hex-notes" placeholder="Add GM notes about this hex..."></textarea>
                 </div>
                 
-                <div class="gm-actions" style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #ecf0f1;">
-                    <button onclick="startCopyMode()" class="copy-btn" style="background: #2ecc71; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 500; margin-right: 10px;">
+                <div class="gm-actions">
+                    <button onclick="startCopyMode()" class="copy-btn">
                         Copy Data From Another Hex
                     </button>
-                    <button onclick="resetHexData()" class="reset-btn" style="background: #e74c3c; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 500;">
+                    <button onclick="resetHexData()" class="reset-btn">
                         Reset Hex Data
                     </button>
-                    <button onclick="showPlayersFromGm()" class="show-players-btn" style="background: #667eea; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 500; margin-left: 10px;">
+                    <button onclick="showPlayersFromGm()" class="show-players-btn">
                         Show Players
                     </button>
                 </div>
             </div>
             
             <!-- Player Section (visible to all users) -->
-            <div id="player-section" class="hex-section">
+            <div id="player-section" class="hex-section hex-section--player">
                 <h2 class="section-title">Player Section</h2>
-                
-                <div class="hex-title-container" style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #667eea;">Location Title:</label>
-                    <input type="text" id="player-title" class="hex-title-input" placeholder="Enter location name (visible to all players)..." 
-                           style="width: 100%; padding: 10px; border: 2px solid #ecf0f1; border-radius: 6px; font-size: 16px; background: rgba(255, 255, 255, 0.9); color: #2c3e50;">
+
+                <div class="hex-title-container">
+                    <label class="hex-field-label" for="player-title">Location Title:</label>
+                    <input type="text" id="player-title" class="hex-title-input" placeholder="Enter location name (visible to all players)...">
                 </div>
                 
                 <div class="hex-images-container">
@@ -1044,7 +315,7 @@ require_once '../../includes/strix-nav.php';
             </div>
             
             <div class="hex-popup-actions">
-                <button onclick="saveHexData()">Save</button>
+                <button id="hex-save-btn" onclick="saveHexData()">Save</button>
                 <button onclick="closeHexPopup()">Close</button>
             </div>
         </div>

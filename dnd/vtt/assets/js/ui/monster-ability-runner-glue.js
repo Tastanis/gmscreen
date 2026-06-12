@@ -235,12 +235,22 @@
         };
     }
 
-    function confirmTriggeredFire(ability) {
-        var name = (ability && ability.name) || 'this triggered action';
-        return window.confirm("Fire triggered action '" + name + "' now?");
+    function confirmGmChoice(message, options) {
+        if (window.UIKit && typeof window.UIKit.confirm === 'function') {
+            return window.UIKit.confirm(Object.assign({ message: message }, options || {}));
+        }
+        return Promise.resolve(window.confirm(message));
     }
 
-    function ensureMalice(monster, ability) {
+    function confirmTriggeredFire(ability) {
+        var name = (ability && ability.name) || 'this triggered action';
+        return confirmGmChoice("Fire triggered action '" + name + "' now?", {
+            title: 'Triggered Action',
+            confirmText: 'Fire'
+        });
+    }
+
+    async function ensureMalice(monster, ability) {
         var cost = parseMaliceCost(ability.resource_cost);
         if (cost <= 0) {
             return { proceed: true, cost: 0 };
@@ -252,8 +262,9 @@
         }
         var current = tracker.get();
         if (current < cost) {
-            var ok = window.confirm(
-                'Not enough malice (current ' + current + ', need ' + cost + '). Spend anyway?'
+            var ok = await confirmGmChoice(
+                'Not enough malice (current ' + current + ', need ' + cost + '). Spend anyway?',
+                { title: 'Malice', confirmText: 'Spend anyway', danger: true }
             );
             if (!ok) return { proceed: false, cost: cost };
         }
@@ -276,13 +287,13 @@
         }
 
         if (category === TRIGGERED_CATEGORY) {
-            if (!confirmTriggeredFire(ability)) {
+            if (!(await confirmTriggeredFire(ability))) {
                 return { aborted: true, reason: 'triggered-cancelled' };
             }
         }
 
         if (MALICE_CATEGORIES.indexOf(category) !== -1) {
-            var maliceResult = ensureMalice(monster, ability);
+            var maliceResult = await ensureMalice(monster, ability);
             if (!maliceResult.proceed) {
                 return { aborted: true, reason: 'malice-cancelled' };
             }

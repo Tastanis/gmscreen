@@ -40,8 +40,20 @@
     return div.textContent || div.innerText || String(value ?? "");
   }
 
+  // Hosts whose close has already been handled, so the UIKit onClose hook
+  // doesn't re-dispatch a cancel for programmatic closes.
+  const closedRunnerHosts = new WeakSet();
+
+  function removeRunnerHost(host) {
+    if (!host) return;
+    closedRunnerHosts.add(host);
+    const modal = host.querySelector(".power-roll-runner__modal");
+    host.remove();
+    if (global.UIKit && modal) global.UIKit.closeModal(modal);
+  }
+
   function closeRunner() {
-    document.getElementById(RUNNER_ID)?.remove();
+    removeRunnerHost(document.getElementById(RUNNER_ID));
   }
 
   function isVttAutomationContext() {
@@ -176,10 +188,25 @@
     host.addEventListener("click", (event) => {
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest("[data-close-power-roll]")) {
+        closedRunnerHosts.add(host);
         host.dispatchEvent(new CustomEvent("automation-cancel"));
         closeRunner();
       }
     });
+    const modal = host.querySelector(".power-roll-runner__modal");
+    if (global.UIKit && modal instanceof HTMLElement) {
+      modal.tabIndex = -1;
+      global.UIKit.openModal(modal, {
+        initialFocus: modal,
+        onClose: () => {
+          // Esc through UIKit behaves like the close button.
+          if (closedRunnerHosts.has(host)) return;
+          closedRunnerHosts.add(host);
+          host.dispatchEvent(new CustomEvent("automation-cancel"));
+          host.remove();
+        },
+      });
+    }
     makeRunnerDraggable(host);
     positionRunnerWindow(host, variant, anchor);
     return host;
@@ -692,7 +719,7 @@
   async function runTargetBlock(state, block) {
     const useBoardOnlyPrompt = block.mode === "token" && Boolean(block.promptTitle || block.promptText);
     const host = useBoardOnlyPrompt ? null : showTargetPrompt(state, block);
-    const finish = () => host?.remove();
+    const finish = () => removeRunnerHost(host);
 
     const cancelPromise = new Promise((resolve) => {
       if (!host) return;
@@ -2539,9 +2566,14 @@
       return;
     }
     if (!spendResult) {
-      const proceed = global.confirm(
-        `Spend ${cost} for ${state.action.name || "this ability"}?\n${inner || "(no listed effect)"}`
-      );
+      const question = `Spend ${cost} for ${state.action.name || "this ability"}?\n${inner || "(no listed effect)"}`;
+      const proceed = global.UIKit
+        ? await global.UIKit.confirm({
+          title: "Spend Resource",
+          message: question,
+          confirmText: "Spend",
+        })
+        : global.confirm(question);
       if (!proceed) {
         await postChat(state.context, {
           message: `${state.heroName} - ${state.action.name || "Ability"}: declined to spend ${cost}.`,

@@ -97,7 +97,9 @@
 
         if (!readyCheck()) {
             console.warn('[monster-automation-ui] AbilityAutomation paste UI not loaded.');
-            alert('Automation editor failed to load. Reload the page.');
+            if (window.UIKit) {
+                window.UIKit.toast('Automation editor failed to load. Reload the page.', 'error');
+            }
             return;
         }
 

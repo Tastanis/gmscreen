@@ -1,0 +1,91 @@
+/* ==========================================================================
+   GM Screen shared design tokens
+   Load this BEFORE any page/area stylesheet so areas can consume the tokens.
+   Values mirror the established parchment palette from css/style.css.
+   ========================================================================== */
+
+:root {
+    /* Core palette (parchment / medieval) */
+    --accent: #8b6f4e;
+    --accent-strong: #6f5333;
+    --surface: #f4eadc;
+    --surface-strong: #e6d8c5;
+    --surface-raised: #fdfaf5;
+    --border: #c2ad90;
+    --border-strong: #a08a68;
+    --text: #2f2417;
+    --text-muted: #5e4b36;
+    --text-faint: #8a7558;
+
+    /* Semantic colors */
+    --success: #3e7a44;
+    --success-soft: #e4efe2;
+    --danger: #a54332;
+    --danger-soft: #f6e3df;
+    --warning: #b07d2a;
+    --warning-soft: #f7eed9;
+    --info: #4f6f8f;
+    --info-soft: #e3eaf1;
+
+    /* Focus ring (keyboard navigation) */
+    --focus-ring: 2px solid #6f5333;
+    --focus-ring-offset: 2px;
+
+    /* Spacing scale */
+    --space-xs: 4px;
+    --space-sm: 8px;
+    --space-md: 16px;
+    --space-lg: 24px;
+    --space-xl: 40px;
+
+    /* Radii / shadows */
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --shadow-card: 0 2px 8px rgba(47, 36, 23, 0.15);
+    --shadow-modal: 0 12px 40px rgba(47, 36, 23, 0.35);
+
+    /* ----------------------------------------------------------------------
+       Z-index scale — use these instead of ad-hoc numbers.
+       Layering plan:
+         nav        sticky headers / top navigation
+         panel      side panels, info panels, save-status chips
+         dropdown   menus, autocomplete lists, tooltips
+         overlay    modal backdrops
+         modal      standard modals / draggable popups
+         modal-child  dialogs spawned on top of an open modal
+         toast      toast notifications (above everything interactive)
+         lightbox   fullscreen image viewers
+       ---------------------------------------------------------------------- */
+    --z-nav: 100;
+    --z-panel: 200;
+    --z-dropdown: 500;
+    --z-overlay: 900;
+    --z-modal: 1000;
+    --z-modal-child: 1100;
+    --z-toast: 2000;
+    --z-lightbox: 3000;
+}
+
+/* Shared utility classes */
+.hidden {
+    display: none !important;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Default visible focus for keyboard users; areas may refine per-component */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+    outline: var(--focus-ring);
+    outline-offset: var(--focus-ring-offset);
+}

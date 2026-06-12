@@ -27,6 +27,8 @@ require_once '../../version.php';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Monster Creator - Strixhaven</title>
+    <link rel="stylesheet" href="../../css/theme.css">
+    <link rel="stylesheet" href="../../css/ui-kit.css">
     <link rel="stylesheet" href="../../css/style.css">
     <link rel="stylesheet" href="css/monster-builder.css">
 </head>
@@ -85,6 +87,11 @@ require_once '../../version.php';
                     <button class="btn-print" onclick="printMonsters()">Print</button>
                     <button class="btn-clear-selection" onclick="clearPrintSelection()">Clear</button>
                 </div>
+
+                <!-- Browser sidebar toggle (small screens only) -->
+                <button class="browser-toggle" id="browserSidebarToggle" onclick="toggleBrowserSidebar()" aria-controls="browserSidebar" aria-expanded="false">
+                    Browser
+                </button>
             </div>
         </div>
 
@@ -101,7 +108,7 @@ require_once '../../version.php';
             </div>
 
             <!-- Right Sidebar - Monster/Ability Browser -->
-            <div class="browser-sidebar">
+            <div class="browser-sidebar" id="browserSidebar">
                 <div class="browser-header">
                     <h3 id="browserTitle">All Monsters & Abilities</h3>
                     <div class="browser-context" id="browserContext">
@@ -222,6 +229,7 @@ require_once '../../version.php';
     <link rel="stylesheet" href="../../character_sheet/ability-automation/automation.css">
 
     <!-- JavaScript -->
+    <script src="../../js/ui-kit.js"></script>
     <!-- Ability automation primitives -> schema -> paste -> inspector must
          load BEFORE monster-builder.js so the Automate button hook points
          have AbilityAutomation.open() available by render time. -->

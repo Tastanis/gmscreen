@@ -12,6 +12,33 @@ let isGM = false;
 let currentUser = '';
 let gmShareButton = null;
 
+const HEX_FETCH_TIMEOUT_MS = 8000;
+
+/**
+ * Fetch with a timeout via AbortController
+ */
+async function hexFetch(url, options = {}) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), HEX_FETCH_TIMEOUT_MS);
+    try {
+        return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+/**
+ * Enable/disable the popup save button (disabled when hex data failed to
+ * load, so a blank form can't overwrite existing data)
+ */
+function setSaveEnabled(enabled) {
+    const saveBtn = document.getElementById('hex-save-btn');
+    if (saveBtn) {
+        saveBtn.disabled = !enabled;
+        saveBtn.title = enabled ? '' : 'Saving disabled: hex data failed to load.';
+    }
+}
+
 /**
  * Initialize hex popup system
  */
@@ -65,24 +92,27 @@ function initializeSectionVisibility() {
  * Load hex data from server
  */
 async function loadHexData(q, r) {
+    setSaveEnabled(false);
     try {
         const formData = new FormData();
         formData.append('action', 'load');
         formData.append('q', q);
         formData.append('r', r);
-        
-        const response = await fetch('hex-data-handler.php', {
+
+        const response = await hexFetch('hex-data-handler.php', {
             method: 'POST',
             body: formData
         });
-        
+
         const result = await response.json();
         if (result.success) {
             currentHexData = result.data;
             populateHexData();
+            setSaveEnabled(true);
         } else {
             console.error('Failed to load hex data:', result.error);
-            // Initialize with empty data
+            // Initialize with empty data, but keep saving disabled so the
+            // blank form can't overwrite whatever is on the server
             currentHexData = {
                 player: { title: '', images: [], notes: '' },
                 editing: { user: '', timestamp: '', section: '' }
@@ -91,9 +121,11 @@ async function loadHexData(q, r) {
                 currentHexData.gm = { title: '', images: [], notes: '' };
             }
             populateHexData();
+            UIKit.toast('Failed to load hex data: ' + (result.error || 'unknown error') + '. Saving is disabled.', 'error');
         }
     } catch (error) {
         console.error('Error loading hex data:', error);
+        UIKit.toast('Could not load hex data from the server. Saving is disabled to protect existing notes.', 'error');
     }
 }
 
@@ -134,7 +166,7 @@ function populateImages(section, images) {
     gallery.innerHTML = '';
 
     if (images.length === 0) {
-        gallery.innerHTML = '<div style="color: #aaa; text-align: center; padding: 20px;">No images uploaded</div>';
+        gallery.innerHTML = '<div style="color: var(--text-faint); text-align: center; padding: 20px;">No images uploaded</div>';
         gallery.classList.remove('single-image');
         return;
     }
@@ -193,7 +225,7 @@ function uploadHexImage(section) {
  */
 async function useGmImagesForPlayers() {
     if (!isGM) {
-        alert('Only the GM can share images with the players.');
+        UIKit.toast('Only the GM can share images with the players.', 'warning');
         return;
     }
 
@@ -202,7 +234,7 @@ async function useGmImagesForPlayers() {
         : [];
 
     if (gmImages.length === 0) {
-        alert('Upload a GM image before sharing it with the players.');
+        UIKit.toast('Upload a GM image before sharing it with the players.', 'warning');
         return;
     }
 
@@ -217,7 +249,7 @@ async function useGmImagesForPlayers() {
     formData.append('r', currentHex.r);
 
     try {
-        const response = await fetch('hex-data-handler.php', {
+        const response = await hexFetch('hex-data-handler.php', {
             method: 'POST',
             body: formData
         });
@@ -229,13 +261,14 @@ async function useGmImagesForPlayers() {
             if (window.mapInterface && window.mapInterface.hexGrid) {
                 window.mapInterface.hexGrid.refreshHexStatus();
             }
+            UIKit.toast('GM image shared with players.', 'success');
         } else {
             const errorMessage = result.error ? `Failed to share image: ${result.error}` : 'Failed to share image.';
-            alert(errorMessage);
+            UIKit.toast(errorMessage, 'error');
         }
     } catch (error) {
         console.error('Error sharing GM image:', error);
-        alert('Error sharing GM image with players.');
+        UIKit.toast('Error sharing GM image with players.', 'error');
     } finally {
         updateShareButtonState();
     }
@@ -246,7 +279,7 @@ async function useGmImagesForPlayers() {
  */
 async function showPlayersFromGm() {
     if (!isGM) {
-        alert('Only the GM can share details with the players.');
+        UIKit.toast('Only the GM can share details with the players.', 'warning');
         return;
     }
 
@@ -289,28 +322,28 @@ async function handleImageUpload(event, section) {
     formData.append('image', file);
     
     try {
-        const response = await fetch('hex-data-handler.php', {
+        const response = await hexFetch('hex-data-handler.php', {
             method: 'POST',
             body: formData
         });
-        
+
         const result = await response.json();
         if (result.success) {
             // Reload hex data to show new image
             await loadHexData(currentHex.q, currentHex.r);
-            
+
             // Refresh hex visual indicators
             if (window.mapInterface && window.mapInterface.hexGrid) {
                 window.mapInterface.hexGrid.refreshHexStatus();
             }
         } else {
-            alert('Failed to upload image: ' + result.error);
+            UIKit.toast('Failed to upload image: ' + result.error, 'error');
         }
     } catch (error) {
         console.error('Error uploading image:', error);
-        alert('Error uploading image');
+        UIKit.toast('Error uploading image', 'error');
     }
-    
+
     // Clear the file input
     event.target.value = '';
 }
@@ -321,20 +354,35 @@ async function handleImageUpload(event, section) {
 function openLightbox(filename, section, index) {
     const lightbox = document.getElementById('image-lightbox');
     const image = document.getElementById('lightbox-image');
-    
+
     image.src = `hex-images/${filename}`;
     lightbox.style.display = 'flex';
-    
+
     // Store current image info for deletion
     currentImageForDelete = { filename, section, index };
+
+    if (window.UIKit) {
+        UIKit.openModal(lightbox, {
+            onClose: () => {
+                lightbox.style.display = 'none';
+                currentImageForDelete = null;
+            }
+        });
+    }
 }
 
 /**
  * Close image lightbox
  */
 function closeLightbox() {
-    document.getElementById('image-lightbox').style.display = 'none';
-    currentImageForDelete = null;
+    const lightbox = document.getElementById('image-lightbox');
+    if (window.UIKit) {
+        UIKit.closeModal(lightbox);
+    }
+    if (lightbox && lightbox.style.display !== 'none') {
+        lightbox.style.display = 'none';
+        currentImageForDelete = null;
+    }
 }
 
 /**
@@ -342,38 +390,45 @@ function closeLightbox() {
  */
 async function deleteCurrentImage() {
     if (!currentImageForDelete) return;
-    
-    if (!confirm('Are you sure you want to delete this image?')) return;
-    
+
+    const confirmed = await UIKit.confirm({
+        title: 'Delete image',
+        message: 'Are you sure you want to delete this image?',
+        confirmText: 'Delete',
+        danger: true
+    });
+    if (!confirmed || !currentImageForDelete) return;
+
     const formData = new FormData();
     formData.append('action', 'delete_image');
     formData.append('q', currentHex.q);
     formData.append('r', currentHex.r);
     formData.append('section', currentImageForDelete.section);
     formData.append('filename', currentImageForDelete.filename);
-    
+
     try {
-        const response = await fetch('hex-data-handler.php', {
+        const response = await hexFetch('hex-data-handler.php', {
             method: 'POST',
             body: formData
         });
-        
+
         const result = await response.json();
         if (result.success) {
             closeLightbox();
             // Reload hex data to reflect deletion
             await loadHexData(currentHex.q, currentHex.r);
-            
+
             // Refresh hex visual indicators
             if (window.mapInterface && window.mapInterface.hexGrid) {
                 window.mapInterface.hexGrid.refreshHexStatus();
             }
+            UIKit.toast('Image deleted.', 'success');
         } else {
-            alert('Failed to delete image: ' + result.error);
+            UIKit.toast('Failed to delete image: ' + result.error, 'error');
         }
     } catch (error) {
         console.error('Error deleting image:', error);
-        alert('Error deleting image');
+        UIKit.toast('Error deleting image', 'error');
     }
 }
 
@@ -392,13 +447,13 @@ async function toggleEdit(section) {
         formData.append('q', currentHex.q);
         formData.append('r', currentHex.r);
         formData.append('section', section);
-        
+
         try {
-            const response = await fetch('hex-data-handler.php', {
+            const response = await hexFetch('hex-data-handler.php', {
                 method: 'POST',
                 body: formData
             });
-            
+
             const result = await response.json();
             if (result.success) {
                 // Enable editing
@@ -432,13 +487,13 @@ async function releaseEditLock() {
     formData.append('action', 'unlock_edit');
     formData.append('q', currentHex.q);
     formData.append('r', currentHex.r);
-    
+
     try {
-        const response = await fetch('hex-data-handler.php', {
+        const response = await hexFetch('hex-data-handler.php', {
             method: 'POST',
             body: formData
         });
-        
+
         const result = await response.json();
         if (result.success) {
             // Disable editing
@@ -476,6 +531,7 @@ function updateEditLockStatus() {
  */
 async function saveHexData() {
     // Save everything in a single atomic request to prevent race conditions
+    const saveBtn = document.getElementById('hex-save-btn');
     const formData = new FormData();
     formData.append('action', 'save_all');
     formData.append('q', currentHex.q);
@@ -488,8 +544,9 @@ async function saveHexData() {
         formData.append('gm_notes', document.getElementById('gm-notes').value);
     }
 
+    UIKit.setLoading(saveBtn, true, 'Saving...');
     try {
-        const response = await fetch('hex-data-handler.php', {
+        const response = await hexFetch('hex-data-handler.php', {
             method: 'POST',
             body: formData
         });
@@ -497,13 +554,15 @@ async function saveHexData() {
         const result = await response.json();
         if (!result.success) {
             console.error('Failed to save hex data:', result.error);
-            alert('Failed to save hex data: ' + (result.error || 'Unknown error'));
+            UIKit.toast('Failed to save hex data: ' + (result.error || 'Unknown error'), 'error');
             return;
         }
     } catch (error) {
         console.error('Error saving hex data:', error);
-        alert('Error saving hex data');
+        UIKit.toast('Error saving hex data', 'error');
         return;
+    } finally {
+        UIKit.setLoading(saveBtn, false);
     }
 
     // Refresh hex visual indicators
@@ -512,7 +571,7 @@ async function saveHexData() {
         window.mapInterface.hexGrid.loadAllHexData(); // Refresh tooltip data
     }
 
-    alert('Hex data saved!');
+    UIKit.toast('Hex data saved!', 'success');
 }
 
 /**
@@ -521,16 +580,16 @@ async function saveHexData() {
 async function saveNotes(section) {
     const textarea = document.getElementById(`${section}-notes`);
     const notes = textarea.value;
-    
+
     const formData = new FormData();
     formData.append('action', 'save_notes');
     formData.append('q', currentHex.q);
     formData.append('r', currentHex.r);
     formData.append('section', section);
     formData.append('notes', notes);
-    
+
     try {
-        const response = await fetch('hex-data-handler.php', {
+        const response = await hexFetch('hex-data-handler.php', {
             method: 'POST',
             body: formData
         });
@@ -557,9 +616,9 @@ async function saveTitle(section) {
     formData.append('r', currentHex.r);
     formData.append('section', section);
     formData.append('title', title);
-    
+
     try {
-        const response = await fetch('hex-data-handler.php', {
+        const response = await hexFetch('hex-data-handler.php', {
             method: 'POST',
             body: formData
         });
@@ -578,85 +637,49 @@ async function saveTitle(section) {
  */
 async function resetHexData() {
     if (!isGM) {
-        alert('Only GM can reset hex data');
+        UIKit.toast('Only GM can reset hex data', 'warning');
         return;
     }
-    
-    // Create custom confirmation dialog
-    const confirmationHTML = `
-        <div id="reset-confirmation" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 3000; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(5px);">
-            <div style="background: white; padding: 30px; border-radius: 15px; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3); max-width: 500px; text-align: center; color: #2c3e50;">
-                <h3 style="color: #e74c3c; margin-top: 0;">⚠️ Warning: Reset Hex Data</h3>
-                <p style="margin: 20px 0; font-size: 16px; line-height: 1.5;">
-                    This will permanently delete <strong>ALL data</strong> for hex (${currentHex.q}, ${currentHex.r}), including:
-                </p>
-                <ul style="text-align: left; margin: 20px 0; padding-left: 20px;">
-                    <li>All player notes and images</li>
-                    <li>All GM notes and images</li>
-                    <li>All uploaded files</li>
-                </ul>
-                <p style="color: #e74c3c; font-weight: bold; margin: 20px 0;">
-                    This action cannot be undone!
-                </p>
-                <div style="margin-top: 30px;">
-                    <button onclick="confirmReset()" style="background: #e74c3c; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; margin: 0 10px; font-weight: 500; font-size: 16px;">
-                        Yes, Reset Everything
-                    </button>
-                    <button onclick="cancelReset()" style="background: #95a5a6; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; margin: 0 10px; font-weight: 500; font-size: 16px;">
-                        Cancel
-                    </button>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    // Add confirmation dialog to page
-    document.body.insertAdjacentHTML('beforeend', confirmationHTML);
-}
 
-/**
- * Confirm hex reset
- */
-async function confirmReset() {
+    const confirmed = await UIKit.confirm({
+        title: 'Reset Hex Data',
+        message: `This permanently deletes ALL data for hex (${currentHex.q}, ${currentHex.r}): ` +
+            'all player notes and images, all GM notes and images, and all uploaded files. ' +
+            'This action cannot be undone.',
+        confirmText: 'Reset Everything',
+        danger: true
+    });
+    if (!confirmed) return;
+
     const formData = new FormData();
     formData.append('action', 'reset_hex');
     formData.append('q', currentHex.q);
     formData.append('r', currentHex.r);
-    
+
     try {
-        const response = await fetch('hex-data-handler.php', {
+        const response = await hexFetch('hex-data-handler.php', {
             method: 'POST',
             body: formData
         });
-        
+
         const result = await response.json();
         if (result.success) {
-            // Remove confirmation dialog
-            document.getElementById('reset-confirmation').remove();
-            
             // Close hex popup
             closeHexPopup();
-            
+
             // Refresh hex visual indicators
             if (window.mapInterface && window.mapInterface.hexGrid) {
                 window.mapInterface.hexGrid.refreshHexStatus();
             }
-            
-            alert('Hex data has been reset successfully!');
+
+            UIKit.toast('Hex data has been reset successfully!', 'success');
         } else {
-            alert('Failed to reset hex data: ' + result.error);
+            UIKit.toast('Failed to reset hex data: ' + result.error, 'error');
         }
     } catch (error) {
         console.error('Error resetting hex data:', error);
-        alert('Error resetting hex data');
+        UIKit.toast('Error resetting hex data', 'error');
     }
-}
-
-/**
- * Cancel hex reset
- */
-function cancelReset() {
-    document.getElementById('reset-confirmation').remove();
 }
 
 /**
@@ -664,7 +687,7 @@ function cancelReset() {
  */
 function startCopyMode() {
     if (!isGM) {
-        alert('Only GM can copy hex data');
+        UIKit.toast('Only GM can copy hex data', 'warning');
         return;
     }
     
@@ -685,20 +708,18 @@ function startCopyMode() {
  */
 function showCopyInstructions() {
     const instructionsHTML = `
-        <div id="copy-instructions" style="position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(46, 204, 113, 0.95); color: white; padding: 15px 25px; border-radius: 10px; z-index: 2500; font-weight: 500; text-align: center; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);">
-            <div style="font-size: 16px; margin-bottom: 8px;">📋 Copy Mode Active</div>
-            <div style="font-size: 14px;">1. Click source hex with data to copy</div>
-            <div style="font-size: 14px;">2. Click target hex to receive the data</div>
-            <div style="margin-top: 10px;">
-                <button onclick="cancelCopyMode()" style="background: rgba(255, 255, 255, 0.2); border: 1px solid white; color: white; padding: 5px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">
-                    Cancel (ESC)
-                </button>
+        <div id="copy-instructions" class="map-copy-banner">
+            <div class="map-copy-banner-title">Copy Mode Active</div>
+            <div class="map-copy-banner-step">1. Click source hex with data to copy</div>
+            <div class="map-copy-banner-step">2. Click target hex to receive the data</div>
+            <div class="map-copy-banner-cancel">
+                <button onclick="cancelCopyMode()" class="uik-btn">Cancel (ESC)</button>
             </div>
         </div>
     `;
-    
+
     document.body.insertAdjacentHTML('beforeend', instructionsHTML);
-    
+
     // Listen for ESC key
     document.addEventListener('keydown', handleCopyModeEscape);
 }
@@ -742,55 +763,53 @@ function showCopyDialog(sourceQ, sourceR, targetQ, targetR) {
     }
     
     const copyDialogHTML = `
-        <div id="copy-dialog" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 3000; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(5px);">
-            <div style="background: white; padding: 30px; border-radius: 15px; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3); max-width: 500px; text-align: center; color: #2c3e50;">
-                <h3 style="color: #2ecc71; margin-top: 0;">📋 Copy Hex Data</h3>
-                <p style="margin: 20px 0; font-size: 16px;">
+        <div id="copy-dialog" class="map-dialog-overlay">
+            <div class="map-dialog">
+                <h3>Copy Hex Data</h3>
+                <p>
                     Copy data from <strong>Hex (${sourceQ}, ${sourceR})</strong> to <strong>Hex (${targetQ}, ${targetR})</strong>
                 </p>
-                
-                <div style="text-align: left; margin: 25px 0;">
-                    <h4 style="margin-bottom: 15px;">What to copy:</h4>
-                    
-                    <label style="display: block; margin-bottom: 12px; font-size: 14px;">
-                        <input type="checkbox" id="copy-player-data" checked style="margin-right: 8px;">
+
+                <div class="map-dialog-options">
+                    <h4>What to copy:</h4>
+
+                    <label>
+                        <input type="checkbox" id="copy-player-data" checked>
                         Player Data (visible to all players)
                     </label>
-                    
-                    <div style="margin-left: 20px; margin-bottom: 12px;">
-                        <label style="display: block; margin-bottom: 8px; font-size: 13px; color: #666;">
-                            <input type="checkbox" id="copy-player-notes" checked style="margin-right: 8px;">
+
+                    <div class="map-dialog-suboptions">
+                        <label>
+                            <input type="checkbox" id="copy-player-notes" checked>
                             Player Notes
                         </label>
-                        <label style="display: block; font-size: 13px; color: #666;">
-                            <input type="checkbox" id="copy-player-images" checked style="margin-right: 8px;">
+                        <label>
+                            <input type="checkbox" id="copy-player-images" checked>
                             Player Images
                         </label>
                     </div>
-                    
-                    <label style="display: block; margin-bottom: 12px; font-size: 14px;">
-                        <input type="checkbox" id="copy-gm-data" checked style="margin-right: 8px;">
+
+                    <label>
+                        <input type="checkbox" id="copy-gm-data" checked>
                         GM Data (visible only to GM)
                     </label>
-                    
-                    <div style="margin-left: 20px;">
-                        <label style="display: block; margin-bottom: 8px; font-size: 13px; color: #666;">
-                            <input type="checkbox" id="copy-gm-notes" checked style="margin-right: 8px;">
+
+                    <div class="map-dialog-suboptions">
+                        <label>
+                            <input type="checkbox" id="copy-gm-notes" checked>
                             GM Notes
                         </label>
-                        <label style="display: block; font-size: 13px; color: #666;">
-                            <input type="checkbox" id="copy-gm-images" checked style="margin-right: 8px;">
+                        <label>
+                            <input type="checkbox" id="copy-gm-images" checked>
                             GM Images
                         </label>
                     </div>
                 </div>
-                
-                <div style="margin-top: 30px;">
-                    <button onclick="executeCopy(${sourceQ}, ${sourceR}, ${targetQ}, ${targetR})" style="background: #2ecc71; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; margin: 0 10px; font-weight: 500; font-size: 16px;">
+
+                <div class="map-dialog-buttons">
+                    <button onclick="cancelCopy()" class="uik-btn">Cancel</button>
+                    <button onclick="executeCopy(${sourceQ}, ${sourceR}, ${targetQ}, ${targetR})" class="uik-btn uik-btn--primary">
                         Copy Data
-                    </button>
-                    <button onclick="cancelCopy()" style="background: #95a5a6; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; margin: 0 10px; font-weight: 500; font-size: 16px;">
-                        Cancel
                     </button>
                 </div>
             </div>
@@ -855,31 +874,31 @@ async function executeCopy(sourceQ, sourceR, targetQ, targetR) {
     formData.append('copy_gm_data', copyGMData);
     formData.append('copy_gm_notes', copyGMNotes);
     formData.append('copy_gm_images', copyGMImages);
-    
+
     try {
-        const response = await fetch('hex-data-handler.php', {
+        const response = await hexFetch('hex-data-handler.php', {
             method: 'POST',
             body: formData
         });
-        
+
         const result = await response.json();
         if (result.success) {
             // Remove copy dialog
             document.getElementById('copy-dialog').remove();
-            
+
             // End copy mode
             if (window.mapInterface && window.mapInterface.hexGrid) {
                 window.mapInterface.hexGrid.endCopyMode();
                 window.mapInterface.hexGrid.refreshHexStatus();
             }
-            
-            alert(`Data successfully copied from hex (${sourceQ}, ${sourceR}) to hex (${targetQ}, ${targetR})!`);
+
+            UIKit.toast(`Data copied from hex (${sourceQ}, ${sourceR}) to hex (${targetQ}, ${targetR})!`, 'success');
         } else {
-            alert('Failed to copy hex data: ' + result.error);
+            UIKit.toast('Failed to copy hex data: ' + result.error, 'error');
         }
     } catch (error) {
         console.error('Error copying hex data:', error);
-        alert('Error copying hex data');
+        UIKit.toast('Error copying hex data', 'error');
     }
 }
 
@@ -899,22 +918,39 @@ function cancelCopy() {
 window.showCopyDialog = showCopyDialog;
 
 /**
- * Close hex popup and cleanup
+ * Hide the hex popup and reset its state.
+ * Used as the UIKit.openModal onClose handler; call closeHexPopup()
+ * instead so focus restore and Esc handling are torn down too.
  */
-function closeHexPopup() {
+function hexPopupCleanup() {
     // Release any edit locks
     if (currentEditLock) {
         releaseEditLock();
     }
-    
+
     // Hide popup
     document.getElementById('hex-popup').style.display = 'none';
-    
+
     // Reset state
     currentHex = { q: 0, r: 0 };
     currentHexData = {};
     currentEditLock = null;
 }
+
+/**
+ * Close hex popup and cleanup
+ */
+function closeHexPopup() {
+    const popup = document.getElementById('hex-popup');
+    if (window.UIKit) {
+        UIKit.closeModal(popup); // runs hexPopupCleanup via onClose
+    }
+    if (popup && popup.style.display !== 'none') {
+        hexPopupCleanup();
+    }
+}
+
+window.hexPopupCleanup = hexPopupCleanup;
 
 // Initialize when DOM is loaded
 if (document.readyState === 'loading') {

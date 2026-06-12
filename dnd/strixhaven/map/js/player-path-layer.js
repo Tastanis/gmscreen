@@ -27,6 +27,7 @@ class PlayerPathLayer {
         this.pollInterval = null;
         this.heartbeatInterval = null;
         this.selectedHex = null;
+        this.syncState = null;
 
         this.elements = {};
 
@@ -76,6 +77,7 @@ class PlayerPathLayer {
         this.elements.clear = document.getElementById('player-path-clear');
         this.elements.total = document.getElementById('player-path-total');
         this.elements.status = document.getElementById('player-path-status');
+        this.elements.sync = document.getElementById('player-path-sync');
         this.elements.terrainPanel = document.getElementById('player-terrain-panel');
         this.elements.terrainToggle = document.getElementById('player-terrain-toggle');
         this.elements.terrainButtons = Array.from(document.querySelectorAll('[data-terrain-difficulty]'));
@@ -188,22 +190,46 @@ class PlayerPathLayer {
         return tagName === 'input' || tagName === 'textarea' || target.isContentEditable;
     }
 
+    setSyncStatus(state) {
+        if (this.syncState === state) {
+            return;
+        }
+        this.syncState = state;
+
+        const dot = this.elements.sync;
+        if (!dot) {
+            return;
+        }
+        dot.classList.remove('player-path-sync--synced', 'player-path-sync--syncing', 'player-path-sync--error');
+        dot.classList.add(`player-path-sync--${state}`);
+        dot.title = state === 'synced' ? 'Synced'
+            : state === 'syncing' ? 'Syncing...'
+            : 'Sync error - retrying';
+    }
+
     async request(action, payload = {}, options = {}) {
-        const response = await fetch(this.apiEndpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action, ...payload })
-        });
-        const data = await response.json();
-        if (!data.success) {
-            throw new Error(data.error || 'Player path request failed');
-        }
-        if (options.applyState !== false) {
-            this.applyState(data.data, {
-                forcePathUpdate: options.forcePathUpdate ?? ['undo', 'save_path', 'delete_path_segment', 'release_lock'].includes(action)
+        this.setSyncStatus('syncing');
+        try {
+            const response = await fetch(this.apiEndpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action, ...payload })
             });
+            const data = await response.json();
+            if (!data.success) {
+                throw new Error(data.error || 'Player path request failed');
+            }
+            if (options.applyState !== false) {
+                this.applyState(data.data, {
+                    forcePathUpdate: options.forcePathUpdate ?? ['undo', 'save_path', 'delete_path_segment', 'release_lock'].includes(action)
+                });
+            }
+            this.setSyncStatus('synced');
+            return data.data;
+        } catch (error) {
+            this.setSyncStatus('error');
+            throw error;
         }
-        return data.data;
     }
 
     async loadState() {
@@ -215,8 +241,12 @@ class PlayerPathLayer {
             const data = await response.json();
             if (data.success) {
                 this.applyState(data.data);
+                this.setSyncStatus('synced');
+            } else {
+                this.setSyncStatus('error');
             }
         } catch (error) {
+            this.setSyncStatus('error');
             console.debug('Player path state load failed:', error);
         }
     }
@@ -312,7 +342,7 @@ class PlayerPathLayer {
                     await this.request('acquire_lock');
                     this.startHeartbeat();
                 } catch (error) {
-                    alert(error.message);
+                    UIKit.toast(error.message, 'error');
                     return;
                 }
             }
@@ -494,15 +524,25 @@ class PlayerPathLayer {
             const segment = this.findSegmentAtClient(clientX, clientY);
             if (segment) {
                 if (this.isLockedByOther()) {
-                    alert(`${this.drawLock.user} is still drawing this path.`);
+                    UIKit.toast(`${this.drawLock.user} is still drawing this path.`, 'warning');
                     return true;
                 }
                 this.deletePathSegment(segment);
                 return true;
             }
             const marker = this.markers.get(`${hex.q},${hex.r}`);
-            if (marker && confirm('Delete this destination marker?')) {
-                this.request('delete_marker', { q: hex.q, r: hex.r }).catch(error => alert(error.message));
+            if (marker) {
+                UIKit.confirm({
+                    title: 'Delete destination',
+                    message: 'Delete this destination marker?',
+                    confirmText: 'Delete',
+                    danger: true
+                }).then(confirmed => {
+                    if (confirmed) {
+                        this.request('delete_marker', { q: hex.q, r: hex.r })
+                            .catch(error => UIKit.toast(error.message, 'error'));
+                    }
+                });
             }
             return true;
         }
@@ -579,7 +619,7 @@ class PlayerPathLayer {
         try {
             await this.request('save_terrain_patch', { cells });
         } catch (error) {
-            alert(error.message);
+            UIKit.toast(error.message, 'error');
         }
     }
 
@@ -712,7 +752,7 @@ class PlayerPathLayer {
                 this.applyState(state, { forcePathUpdate: true });
             }
         } catch (error) {
-            alert(error.message);
+            UIKit.toast(error.message, 'error');
         }
     }
 
@@ -749,15 +789,31 @@ class PlayerPathLayer {
         }
         if (this.elements.modal) {
             this.elements.modal.style.display = 'flex';
+            if (window.UIKit) {
+                UIKit.openModal(this.elements.modal, {
+                    onClose: () => this.hideMarkerModal(),
+                    initialFocus: this.elements.note
+                });
+            }
         }
         this.elements.note?.focus();
     }
 
-    closeMarkerModal() {
+    hideMarkerModal() {
         if (this.elements.modal) {
             this.elements.modal.style.display = 'none';
         }
         this.selectedHex = null;
+    }
+
+    closeMarkerModal() {
+        const modal = this.elements.modal;
+        if (window.UIKit && modal) {
+            UIKit.closeModal(modal); // runs hideMarkerModal via onClose
+        }
+        if (modal && modal.style.display !== 'none') {
+            this.hideMarkerModal();
+        }
     }
 
     async saveMarkerFromModal() {
@@ -772,7 +828,7 @@ class PlayerPathLayer {
             });
             this.closeMarkerModal();
         } catch (error) {
-            alert(error.message);
+            UIKit.toast(error.message, 'error');
         }
     }
 
@@ -787,18 +843,24 @@ class PlayerPathLayer {
             });
             this.closeMarkerModal();
         } catch (error) {
-            alert(error.message);
+            UIKit.toast(error.message, 'error');
         }
     }
 
     async clearAll() {
-        if (!confirm('Clear all player destinations and path lines? This will not change normal map data.')) {
+        const confirmed = await UIKit.confirm({
+            title: 'Clear player path',
+            message: 'Clear all player destinations and path lines? This will not change normal map data.',
+            confirmText: 'Clear All',
+            danger: true
+        });
+        if (!confirmed) {
             return;
         }
         try {
             await this.request('clear_all');
         } catch (error) {
-            alert(error.message);
+            UIKit.toast(error.message, 'error');
         }
     }
 
@@ -813,7 +875,7 @@ class PlayerPathLayer {
         try {
             await this.request('undo');
         } catch (error) {
-            alert(error.message);
+            UIKit.toast(error.message, 'error');
         }
     }
 
@@ -824,7 +886,7 @@ class PlayerPathLayer {
                 segmentIndex: segment.segmentIndex
             });
         } catch (error) {
-            alert(error.message);
+            UIKit.toast(error.message, 'error');
         }
     }
 
@@ -1071,7 +1133,7 @@ class PlayerPathLayer {
         const sectionNumber = this.pathSections.findIndex(section => section.id === endpoint.sectionId) + 1;
         const hexes = Math.max(0, endpoint.endIndex);
         const blocks = this.roundBlocks(this.getRouteTimeBlocks(endpoint.route, endpoint.endIndex));
-        alert(`Line ${sectionNumber}: ${hexes} hex${hexes === 1 ? '' : 'es'} / ${this.formatBlocks(blocks)}`);
+        UIKit.toast(`Line ${sectionNumber}: ${hexes} hex${hexes === 1 ? '' : 'es'} / ${this.formatBlocks(blocks)}`, 'info');
     }
 
     worldToScreen(point) {

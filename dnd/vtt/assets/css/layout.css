@@ -27,6 +27,13 @@ body.chat-panel-is-open .vtt-app__main {
   margin-right: calc(var(--chat-panel-width, 360px) + var(--chat-panel-offset, 20px) + 8px);
 }
 
+/* The VTT page stack keeps panels between 1200 and 1600 and the automation
+   windows at modal+800/+900 (1800/1900), so UIKit dialogs need to clear all
+   of that while staying under toasts (2000). */
+body.vtt-body .uik-overlay {
+  z-index: calc(var(--z-modal-child, 1100) + 850);
+}
+
 #vtt-main {
   box-shadow: 0 10px 24px rgba(10, 6, 4, 0.3);
   --turn-flash-color-rgb: 250, 204, 21;

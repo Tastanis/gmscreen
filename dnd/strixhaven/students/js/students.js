@@ -1,413 +1,126 @@
 // Students Management JavaScript
+// Shared behavior lives in ../templates/js/character-sheet-base.js; this file
+// supplies the student-specific configuration, detail form, and skills logic.
 
 const studentsEndpoint = (typeof STUDENTS_ENDPOINT !== 'undefined' && STUDENTS_ENDPOINT)
     ? STUDENTS_ENDPOINT
     : 'index.php';
 
-// Store rich text editor instances
-let modalRichTextEditors = new Map();
-let exportSelectionActive = false;
-const selectedExportStudents = new Set();
-
-// Initialize character lookup when ready
-function initializeCharacterLookup() {
-    if (window.characterLookup && !window.characterLookup.isReady()) {
-        window.characterLookup.init().then(() => {
-            console.log('Character lookup initialized for students section');
-        }).catch(error => {
-            console.warn('Character lookup initialization failed:', error);
-        });
-    }
-}
-
-// Setup rich text editors for modal
-function setupModalRichTextEditors(container, studentData) {
-    if (typeof RichTextEditor === 'undefined') {
-        console.warn('RichTextEditor not available');
-        return;
-    }
-    
-    // Clean up existing editors
-    cleanupModalRichTextEditors();
-    
-    const containers = container.querySelectorAll('.rich-text-container');
-    containers.forEach(richContainer => {
-        const field = richContainer.getAttribute('data-field');
-        const placeholder = richContainer.getAttribute('data-placeholder') || 'Enter text...';
-        
-        if (field) {
-            // Create rich text editor
-            const editor = new RichTextEditor(richContainer, {
-                placeholder: placeholder + ' Type [[character name]] to link to characters'
-            });
-            
-            editor.init();
-            
-            // Set content from student data
-            const fieldValue = getNestedFieldValue(studentData, field);
-            if (fieldValue) {
-                editor.setContent(fieldValue);
-            }
-            
-            // Setup auto-save
-            editor.onChange((content) => {
-                saveStudentField(studentData.student_id, field, content);
-            });
-            
-            // Connect to character lookup system
-            if (window.characterLookup && window.characterLookup.isReady()) {
-                const editorElement = editor.getEditor();
-                if (editorElement) {
-                    console.log('Connecting rich text editor to character lookup for field:', field);
-                    window.characterLookup.setupEditorListeners(editorElement);
-                }
-            } else {
-                // Try to initialize character lookup if not ready
-                setTimeout(() => {
-                    if (window.characterLookup && window.characterLookup.isReady()) {
-                        const editorElement = editor.getEditor();
-                        if (editorElement) {
-                            console.log('Delayed connection of rich text editor to character lookup for field:', field);
-                            window.characterLookup.setupEditorListeners(editorElement);
-                        }
-                    }
-                }, 500);
-            }
-            
-            // Store editor reference
-            modalRichTextEditors.set(field, editor);
-        }
-    });
-    
-    console.log('Set up', modalRichTextEditors.size, 'rich text editors for student modal');
-}
-
-// Clean up rich text editors
-function cleanupModalRichTextEditors() {
-    modalRichTextEditors.forEach((editor, field) => {
-        if (editor && editor.destroy) {
-            editor.destroy();
-        }
-    });
-    modalRichTextEditors.clear();
-}
-
-// Get nested field value from student data
-function getNestedFieldValue(studentData, field) {
-    const parts = field.split('.');
-    let value = studentData;
-    
-    for (const part of parts) {
-        if (value && typeof value === 'object' && part in value) {
-            value = value[part];
-        } else {
-            return '';
-        }
-    }
-    
-    return value || '';
-}
-
 // Skills list for dropdown
 const SKILLS_LIST = {
     'Crafting Skills': [
-        'Alchemy', 'Architecture', 'Blacksmithing', 'Carpentry', 'Cooking', 
+        'Alchemy', 'Architecture', 'Blacksmithing', 'Carpentry', 'Cooking',
         'Fletching', 'Forgery', 'Jewelry', 'Mechanics', 'Tailoring'
     ],
     'Exploration Skills': [
-        'Climb', 'Drive', 'Endurance', 'Gymnastics', 'Heal', 'Jump', 
+        'Climb', 'Drive', 'Endurance', 'Gymnastics', 'Heal', 'Jump',
         'Lift', 'Navigate', 'Ride', 'Swim', 'Track'
     ],
     'Interpersonal Skills': [
-        'Brag', 'Empathize', 'Flirt', 'Gamble', 'Handle Animals', 'Interrogate', 
+        'Brag', 'Empathize', 'Flirt', 'Gamble', 'Handle Animals', 'Interrogate',
         'Intimidate', 'Lead', 'Lie', 'Music', 'Perform', 'Persuade', 'Read Person'
     ],
     'Intrigue Skills': [
-        'Alertness', 'Conceal Object', 'Disguise', 'Eavesdrop', 'Escape Artist', 
+        'Alertness', 'Conceal Object', 'Disguise', 'Eavesdrop', 'Escape Artist',
         'Hide', 'Pick Lock', 'Pick Pocket', 'Sabotage', 'Search'
     ],
     'Lore Skills': [
-        'Culture', 'Criminal Underworld', 'History', 'Magic', 'Monsters', 
+        'Culture', 'Criminal Underworld', 'History', 'Magic', 'Monsters',
         'Nature', 'Psionics', 'Religion', 'Rumors', 'Society', 'Strategy', 'Timescape'
     ]
 };
 
-// Setup event listeners
-function setupEventListeners() {
-    // Initialize character lookup
-    setTimeout(initializeCharacterLookup, 500);
-    // Search input
-    const searchInput = document.getElementById('search-input');
-    if (searchInput) {
-        searchInput.addEventListener('input', debounce(function() {
-            currentFilters.search = this.value.trim();
-            loadStudents();
-        }, 300));
+CharacterSheetBase.init({
+    type: 'student',
+    plural: 'students',
+    entityLabel: 'student',
+    endpoint: studentsEndpoint,
+    idField: 'student_id',
+    actions: {
+        load: 'load_students',
+        save: 'save_student',
+        add: 'add_student',
+        remove: 'delete_student',
+        export: 'export_students'
+    },
+    gridId: 'students-grid',
+    modalId: 'student-modal',
+    modalNameId: 'modal-student-name',
+    detailsSelector: '.student-details',
+    addBtnId: 'add-student-btn',
+    exportBtnId: 'export-students-btn',
+    exportSelectedBtnId: 'export-selected-students-btn',
+    exportButtonLabel: '📤 Export Students',
+    modalOpenInputSelector: 'input, select, textarea',
+    filterParams: [
+        { param: 'filter_grade', key: 'grade' },
+        { param: 'filter_college', key: 'college' },
+        { param: 'filter_club', key: 'club' }
+    ],
+    filterSelects: [
+        { id: 'filter-grade', key: 'grade' },
+        { id: 'filter-college', key: 'college' }
+    ],
+    getSelected: () => selectedStudent,
+    setSelected: value => { selectedStudent = value; },
+    getAll: () => window.allStudents,
+    setAll: list => {
+        window.allStudents = list;
+        window.studentsLoaded = true;
+    },
+    cardInfoHtml: student => `
+        <div class="student-grade">${escapeHtml(student.grade_level || 'Unknown Grade')}</div>
+        <div class="student-college">${escapeHtml(student.college || 'No College')}</div>
+    `,
+    createDetailForm: student => createStudentDetailForm(student),
+    cleanExportRecord: student => cleanStudentExportSections(student),
+    prepareFieldValue: prepareStudentFieldValue,
+    expand: () => expandStudentToNewTab(),
+    globalNames: {
+        loadCharacters: 'loadStudents',
+        displayCharacters: 'displayStudents',
+        createCharacterCard: 'createStudentCard',
+        openCharacterModal: 'openStudentModal',
+        closeCharacterModal: 'closeStudentModal',
+        saveCharacterField: 'saveStudentField',
+        addCharacter: 'addStudent',
+        deleteCharacter: 'deleteStudent',
+        toggleFavorite: 'toggleStudentFavorite',
+        uploadPortrait: 'uploadStudentPortrait',
+        exportSelectedCharacters: 'exportSelectedStudents',
+        toggleExportSelection: 'toggleStudentExportSelection'
     }
-    
-    // Sort buttons
-    document.querySelectorAll('[data-sort]').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const sortType = this.getAttribute('data-sort');
-            
-            // Update active state
-            document.querySelectorAll('[data-sort]').forEach(b => b.classList.remove('active'));
-            this.classList.add('active');
-            
-            currentSort = sortType;
-            loadStudents();
-        });
-    });
-    
-    // Filter selects
-    const gradeFilter = document.getElementById('filter-grade');
-    if (gradeFilter) {
-        gradeFilter.addEventListener('change', function() {
-            currentFilters.grade = this.value;
-            loadStudents();
-        });
+});
+
+// Student-specific save handling: clubs become arrays, relationship subfields
+// are merged into the full relationships object before saving
+function prepareStudentFieldValue(field, value) {
+    if (field === 'clubs') {
+        value = value.split(',').map(club => club.trim()).filter(club => club);
     }
-    
-    const collegeFilter = document.getElementById('filter-college');
-    if (collegeFilter) {
-        collegeFilter.addEventListener('change', function() {
-            currentFilters.college = this.value;
-            loadStudents();
-        });
-    }
-    
-    // Favorites toggle
-    const favoritesToggle = document.getElementById('favorites-toggle');
-    if (favoritesToggle) {
-        favoritesToggle.addEventListener('click', function() {
-            currentFilters.favorites = !currentFilters.favorites;
-            this.classList.toggle('active', currentFilters.favorites);
-            loadStudents();
-        });
-    }
-    
-    // Add student button (GM only)
-    if (isGM) {
-        const addStudentBtn = document.getElementById('add-student-btn');
-        if (addStudentBtn) {
-            addStudentBtn.addEventListener('click', addStudent);
+
+    if (field.startsWith('relationships.')) {
+        const relationshipField = field.split('.')[1];
+        const student = selectedStudent;
+        if (!student) return null;
+
+        if (!student.relationships) {
+            student.relationships = {};
         }
-        
-        // Export button (GM only)
-        const exportBtn = document.getElementById('export-students-btn');
-        if (exportBtn) {
-            exportBtn.addEventListener('click', () => toggleExportSelectionMode());
-        }
+        student.relationships[relationshipField] = value;
 
-        const exportSelectedBtn = document.getElementById('export-selected-students-btn');
-        if (exportSelectedBtn) {
-            exportSelectedBtn.addEventListener('click', exportSelectedStudents);
-        }
-
-        const cancelExportBtn = document.getElementById('cancel-export-selection-btn');
-        if (cancelExportBtn) {
-            cancelExportBtn.addEventListener('click', () => toggleExportSelectionMode(false));
-        }
-        
-        // Delete button (GM only)
-        const modalDeleteBtn = document.getElementById('modal-delete-btn');
-        if (modalDeleteBtn) {
-            modalDeleteBtn.addEventListener('click', deleteStudent);
-        }
-    }
-    
-    // Modal controls (available to all users)
-    const modalFavoriteBtn = document.getElementById('modal-favorite-btn');
-    if (modalFavoriteBtn) {
-        modalFavoriteBtn.addEventListener('click', toggleStudentFavorite);
-    }
-    
-    // Expand button (available to all users)
-    const modalExpandBtn = document.getElementById('modal-expand-btn');
-    if (modalExpandBtn) {
-        modalExpandBtn.addEventListener('click', expandStudentToNewTab);
-    }
-    
-    // Modal close on background click
-    const modal = document.getElementById('student-modal');
-    if (modal) {
-        let backgroundPointerDown = false;
-
-        modal.addEventListener('mousedown', function(e) {
-            backgroundPointerDown = e.target === modal;
-        });
-
-        modal.addEventListener('mouseup', function(e) {
-            if (backgroundPointerDown && e.target === modal) {
-                closeStudentModal();
-            }
-            backgroundPointerDown = false;
-        });
-    }
-}
-
-// Load students from server
-function loadStudents() {
-    showLoading(true);
-    
-    const formData = new FormData();
-    formData.append('action', 'load_students');
-    formData.append('sort_by', currentSort);
-    formData.append('filter_grade', currentFilters.grade);
-    formData.append('filter_college', currentFilters.college);
-    formData.append('filter_club', currentFilters.club);
-    formData.append('show_favorites', currentFilters.favorites.toString());
-    formData.append('search_term', currentFilters.search);
-    
-    fetch(studentsEndpoint, {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        showLoading(false);
-        if (data.success) {
-            displayStudents(data.students);
-            // Store students globally for auto-open functionality
-            window.allStudents = data.students;
-            window.studentsLoaded = true;
-        } else {
-            console.error('Failed to load students:', data.error);
-            showError('Failed to load students');
-        }
-    })
-    .catch(error => {
-        showLoading(false);
-        console.error('Error loading students:', error);
-        showError('Error loading students');
-    });
-}
-
-// Display students in grid
-function displayStudents(students) {
-    const grid = document.getElementById('students-grid');
-    
-    if (students.length === 0) {
-        grid.innerHTML = `
-            <div class="no-students">
-                <div class="no-students-icon">👥</div>
-                <p>No students found matching your criteria.</p>
-            </div>
-        `;
-        return;
-    }
-    
-    grid.innerHTML = students.map(student => createStudentCard(student)).join('');
-    
-    // Add click event listeners to cards
-    grid.querySelectorAll('.student-card').forEach(card => {
-        card.addEventListener('click', function() {
-            const studentId = this.getAttribute('data-student-id');
-            const student = students.find(s => s.student_id === studentId);
-            if (!student) {
-                return;
-            }
-            
-            if (exportSelectionActive) {
-                toggleStudentExportSelection(studentId);
-                return;
-            }
-            
-            openStudentModal(student);
-        });
-    });
-}
-
-// Create student card HTML
-function createStudentCard(student) {
-    const isFavorite = student.favorites && student.favorites[currentUser];
-    const favoriteIcon = isFavorite ? '<div class="student-favorite">★</div>' : '';
-    const isSelectedForExport = selectedExportStudents.has(student.student_id);
-    const exportClass = isSelectedForExport ? ' is-selected' : '';
-
-    // Handle both old image_path and new images array for backward compatibility
-    let thumbnailImage = '';
-    if (student.images && student.images.length > 0) {
-        thumbnailImage = student.images[0];
-    } else if (student.image_path) {
-        thumbnailImage = student.image_path;
+        return {
+            field: 'relationships',
+            debounceKey: 'relationships',
+            getValue: () => JSON.stringify(student.relationships)
+        };
     }
 
-    let imageHtml;
-    if (thumbnailImage) {
-        // Use thumbnail for card grid if available, fall back to full image
-        const thumbSrc = student.thumbnails && student.thumbnails[thumbnailImage];
-        const cardSrc = thumbSrc || escapeHtml(thumbnailImage);
-
-        // Check for image adjustment
-        const adj = student.image_adjustments && student.image_adjustments[thumbnailImage];
-        const adjustedHtml = adj && typeof ImageAdjuster !== 'undefined' ?
-            ImageAdjuster.createAdjustedImageHtml(
-                cardSrc,
-                escapeHtml(student.name), adj, '', '', 'loading="lazy"'
-            ) : null;
-        imageHtml = adjustedHtml ||
-            `<img src="${cardSrc}" alt="${escapeHtml(student.name)}" class="student-thumbnail" loading="lazy">`;
-    } else {
-        imageHtml = `<div class="student-placeholder">No Photo</div>`;
-    }
-
-    return `
-        <div class="student-card${exportClass}" data-student-id="${escapeHtml(student.student_id)}">
-            ${favoriteIcon}
-            <div class="export-select-indicator" aria-hidden="true">✓</div>
-            ${imageHtml}
-            <div class="student-name">${escapeHtml(student.name)}</div>
-            <div class="student-info">
-                <div class="student-grade">${escapeHtml(student.grade_level || 'Unknown Grade')}</div>
-                <div class="student-college">${escapeHtml(student.college || 'No College')}</div>
-            </div>
-        </div>
-    `;
-}
-
-
-// Open student detail modal
-function openStudentModal(student) {
-    selectedStudent = student;
-    
-    const modal = document.getElementById('student-modal');
-    const modalName = document.getElementById('modal-student-name');
-    const modalBody = modal.querySelector('.student-details');
-    
-    modalName.textContent = student.name;
-    
-    // Update favorite button (available to all users)
-    const favoriteBtn = document.getElementById('modal-favorite-btn');
-    if (favoriteBtn) {
-        const isFavorite = student.favorites && student.favorites[currentUser];
-        favoriteBtn.classList.toggle('active', isFavorite);
-        favoriteBtn.title = isFavorite ? 'Remove from Favorites' : 'Add to Favorites';
-    }
-    
-    // Build modal content
-    modalBody.innerHTML = createStudentDetailForm(student);
-    
-    // Add event listeners for form inputs (GM only)
-    if (isGM) {
-        modalBody.querySelectorAll('input, select, textarea').forEach(input => {
-            input.addEventListener('change', function() {
-                const field = this.getAttribute('data-field');
-                const value = this.value;
-                saveStudentField(student.student_id, field, value);
-            });
-        });
-    }
-    
-    // Setup rich text editors
-    setupModalRichTextEditors(modalBody, student);
-    
-    modal.style.display = 'block';
+    return { field: field, value: value };
 }
 
 // Create student detail form
 function createStudentDetailForm(student) {
-    const details = student.details || {};
     const relationships = student.relationships || {};
     const conflictEngine = student.conflict_engine || {};
     const tensionWeb = student.tension_web || [];
@@ -439,7 +152,7 @@ function createStudentDetailForm(student) {
     // Create selected skills display
     const selectedSkills = student.skills || [];
     const skillsDisplayHtml = selectedSkills.map(skill =>
-        `<span class="skill-tag">${escapeHtml(skill)} ${isGM ? `<span class="remove-skill" onclick="removeSkill('${student.student_id}', '${escapeHtml(skill)}')">×</span>` : ''}</span>`
+        `<span class="skill-tag">${escapeHtml(skill)} ${isGM ? `<span class="remove-skill" onclick="removeSkill('${student.student_id}', '${escapeHtml(skill)}')" role="button" aria-label="Remove skill">×</span>` : ''}</span>`
     ).join('');
 
     // Build tension web entries HTML
@@ -448,7 +161,7 @@ function createStudentDetailForm(student) {
             <div class="tension-web-entry-header">
                 <strong class="tension-web-name">${escapeHtml(entry.name || '')}</strong>
                 <span class="tension-web-role">(${escapeHtml(entry.role || '')})</span>
-                ${isGM ? `<button class="btn-remove-tension" onclick="removeTensionWebEntry('${student.student_id}', ${index})" title="Remove entry">&times;</button>` : ''}
+                ${isGM ? `<button class="btn-remove-tension" onclick="removeTensionWebEntry('${student.student_id}', ${index})" title="Remove entry" aria-label="Remove entry">&times;</button>` : ''}
             </div>
             <div class="tension-web-description">${entry.description || ''}</div>
         </div>
@@ -745,127 +458,126 @@ function createStudentDetailForm(student) {
     `;
 }
 
-// Close student modal
-function closeStudentModal() {
-    // Clean up rich text editors
-    cleanupModalRichTextEditors();
-    
-    const modal = document.getElementById('student-modal');
-    modal.style.display = 'none';
-    selectedStudent = null;
-}
+// Skills management functions
+function addSkillFromDropdown(studentId) {
+    const dropdown = document.getElementById(`skills-dropdown-${studentId}`);
+    const skill = dropdown.value;
 
-// Toggle Director's Notes collapsed/expanded
-function toggleDirectorsNotes(header) {
-    const content = header.nextElementSibling;
-    const arrow = header.querySelector('.toggle-arrow');
-    if (content.style.display === 'none') {
-        content.style.display = 'block';
-        arrow.innerHTML = '&#9650;';
-        // Initialize rich text editors inside if not already done
-        const containers = content.querySelectorAll('.rich-text-container');
-        containers.forEach(container => {
-            if (!container.querySelector('.rich-text-editor') && typeof RichTextEditor !== 'undefined') {
-                const field = container.getAttribute('data-field');
-                const placeholder = container.getAttribute('data-placeholder') || 'Enter text...';
-                const editor = new RichTextEditor(container, {
-                    placeholder: placeholder + ' Type [[character name]] to link to characters'
-                });
-                editor.init();
-                // Set content
-                if (selectedStudent && field) {
-                    const value = selectedStudent[field] || '';
-                    if (value) editor.setContent(value);
-                }
-                editor.onChange((editorContent) => {
-                    if (selectedStudent) {
-                        saveStudentField(selectedStudent.student_id, field, editorContent);
-                    }
-                });
-                if (!isGM) editor.setReadOnly(true);
-                modalRichTextEditors.set(field, editor);
-            }
-        });
-    } else {
-        content.style.display = 'none';
-        arrow.innerHTML = '&#9660;';
+    if (skill && skill.trim() !== '') {
+        addSkillToStudent(studentId, skill);
+        dropdown.value = ''; // Reset dropdown
     }
 }
 
-// Add a tension web entry
-function addTensionWebEntry(studentId) {
-    const nameInput = document.getElementById(`tw-name-${studentId}`);
-    const roleInput = document.getElementById(`tw-role-${studentId}`);
-    const descInput = document.getElementById(`tw-desc-${studentId}`);
+function addCustomSkill(studentId) {
+    const input = document.getElementById(`custom-skill-${studentId}`);
+    const skill = input.value.trim();
 
-    const name = nameInput.value.trim();
-    const role = roleInput.value.trim();
-    const description = descInput.value.trim();
+    if (skill !== '') {
+        addSkillToStudent(studentId, skill);
+        input.value = ''; // Clear input
+    }
+}
 
-    if (!name) {
-        nameInput.focus();
+function addSkillToStudent(studentId, skill) {
+    if (!selectedStudent || selectedStudent.student_id !== studentId) return;
+
+    // Check if skill already exists
+    const currentSkills = selectedStudent.skills || [];
+    if (currentSkills.includes(skill)) {
+        UIKit.toast('Skill already added', 'warning');
         return;
     }
 
-    // Find current student and add entry
-    const student = window.allStudents ? window.allStudents.find(s => s.student_id === studentId) : selectedStudent;
-    if (!student) return;
-
-    if (!student.tension_web) student.tension_web = [];
-    student.tension_web.push({ name, role, description });
+    // Add skill to local data
+    const newSkills = [...currentSkills, skill];
+    selectedStudent.skills = newSkills;
 
     // Save to server
-    saveStudentField(studentId, 'tension_web', JSON.stringify(student.tension_web));
+    const formData = new FormData();
+    formData.append('action', 'save_student');
+    formData.append('student_id', studentId);
+    formData.append('field', 'skills');
+    formData.append('value', JSON.stringify(newSkills));
 
-    // Clear inputs
-    nameInput.value = '';
-    roleInput.value = '';
-    descInput.value = '';
-
-    // Re-render the tension web list
-    renderTensionWebList(studentId, student.tension_web);
+    fetch(studentsEndpoint, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update the skills display
+            updateSkillsDisplay(studentId);
+        } else {
+            // Revert local change
+            selectedStudent.skills = currentSkills;
+            showError('Failed to add skill');
+        }
+    })
+    .catch(error => {
+        // Revert local change
+        selectedStudent.skills = currentSkills;
+        console.error('Error adding skill:', error);
+        showError('Error adding skill');
+    });
 }
 
-// Remove a tension web entry
-function removeTensionWebEntry(studentId, index) {
-    const student = window.allStudents ? window.allStudents.find(s => s.student_id === studentId) : selectedStudent;
-    if (!student || !student.tension_web) return;
+function removeSkill(studentId, skill) {
+    if (!selectedStudent || selectedStudent.student_id !== studentId) return;
 
-    student.tension_web.splice(index, 1);
-    saveStudentField(studentId, 'tension_web', JSON.stringify(student.tension_web));
-    renderTensionWebList(studentId, student.tension_web);
+    const currentSkills = selectedStudent.skills || [];
+    const newSkills = currentSkills.filter(s => s !== skill);
+    selectedStudent.skills = newSkills;
+
+    // Save to server
+    const formData = new FormData();
+    formData.append('action', 'save_student');
+    formData.append('student_id', studentId);
+    formData.append('field', 'skills');
+    formData.append('value', JSON.stringify(newSkills));
+
+    fetch(studentsEndpoint, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update the skills display
+            updateSkillsDisplay(studentId);
+        } else {
+            // Revert local change
+            selectedStudent.skills = currentSkills;
+            showError('Failed to remove skill');
+        }
+    })
+    .catch(error => {
+        // Revert local change
+        selectedStudent.skills = currentSkills;
+        console.error('Error removing skill:', error);
+        showError('Error removing skill');
+    });
 }
 
-// Render tension web list
-function renderTensionWebList(studentId, entries) {
-    const list = document.getElementById(`tension-web-${studentId}`);
-    if (!list) return;
+function updateSkillsDisplay(studentId) {
+    const skillsContainer = document.querySelector('.selected-skills');
+    if (!skillsContainer || !selectedStudent) return;
 
-    if (!entries || entries.length === 0) {
-        list.innerHTML = '<p class="tension-web-empty">No tension web entries yet.</p>';
-        return;
-    }
-
-    list.innerHTML = entries.map((entry, index) => `
-        <div class="tension-web-entry" data-index="${index}">
-            <div class="tension-web-entry-header">
-                <strong class="tension-web-name">${escapeHtml(entry.name || '')}</strong>
-                <span class="tension-web-role">(${escapeHtml(entry.role || '')})</span>
-                ${isGM ? `<button class="btn-remove-tension" onclick="removeTensionWebEntry('${studentId}', ${index})" title="Remove entry">&times;</button>` : ''}
-            </div>
-            <div class="tension-web-description">${escapeHtml(entry.description || '')}</div>
-        </div>
-    `).join('');
+    const skills = selectedStudent.skills || [];
+    skillsContainer.innerHTML = skills.map(skill =>
+        `<span class="skill-tag">${escapeHtml(skill)} ${isGM ? `<span class="remove-skill" onclick="removeSkill('${studentId}', '${escapeHtml(skill)}')" role="button" aria-label="Remove skill">×</span>` : ''}</span>`
+    ).join('');
 }
 
 // Expand student to new tab
 function expandStudentToNewTab() {
     if (!selectedStudent) return;
-    
+
     const newWindow = window.open('', '_blank');
     const student = selectedStudent;
     const endpoint = studentsEndpoint;
-    
+
     newWindow.document.write(`
         <!DOCTYPE html>
         <html lang="en">
@@ -874,13 +586,16 @@ function expandStudentToNewTab() {
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>${escapeHtml(student.name)} - Student Details</title>
             <link rel="stylesheet" href="../../../css/style.css">
+            <link rel="stylesheet" href="../../css/theme.css">
+            <link rel="stylesheet" href="../../css/ui-kit.css">
+            <link rel="stylesheet" href="../templates/css/character-sheet-base.css">
             <link rel="stylesheet" href="css/students.css">
             <style>
                 body { margin: 20px; background: #f8f9fa; }
-                .standalone-header { 
-                    background: white; 
-                    padding: 20px; 
-                    border-radius: 10px; 
+                .standalone-header {
+                    background: white;
+                    padding: 20px;
+                    border-radius: 10px;
                     margin-bottom: 20px;
                     box-shadow: 0 2px 10px rgba(0,0,0,0.1);
                     text-align: center;
@@ -917,7 +632,8 @@ function expandStudentToNewTab() {
                     ${createStudentDetailForm(student)}
                 </div>
             </div>
-            
+
+            <script src="../../js/ui-kit.js"></script>
             <script src="../gm/js/character-lookup.js"></script>
             <script src="../gm/js/rich-text-editor.js"></script>
             <script>
@@ -926,16 +642,16 @@ function expandStudentToNewTab() {
                 const currentUser = '${currentUser}';
                 const studentData = ${JSON.stringify(student)};
                 const studentsEndpoint = '${endpoint}';
-                
+
                 // Save function for popout window (GM only)
                 function saveStudentField(studentId, field, value) {
                     if (!isGM) return;
-                    
+
                     // Handle clubs as array
                     if (field === 'clubs') {
                         value = value.split(',').map(club => club.trim()).filter(club => club);
                     }
-                    
+
                     // Handle nested relationship fields
                     if (field.startsWith('relationships.')) {
                         const relationshipField = field.split('.')[1];
@@ -943,12 +659,12 @@ function expandStudentToNewTab() {
                         formData.append('action', 'save_student');
                         formData.append('student_id', studentId);
                         formData.append('field', 'relationships');
-                        
+
                         // Get current relationships and update the specific field
                         const currentRelationships = studentData.relationships || {};
                         currentRelationships[relationshipField] = value;
                         formData.append('value', JSON.stringify(currentRelationships));
-                        
+
                         fetch(studentsEndpoint, {
                             method: 'POST',
                             body: formData
@@ -967,13 +683,13 @@ function expandStudentToNewTab() {
                         });
                         return;
                     }
-                    
+
                     const formData = new FormData();
                     formData.append('action', 'save_student');
                     formData.append('student_id', studentId);
                     formData.append('field', field);
                     formData.append('value', Array.isArray(value) ? JSON.stringify(value) : value);
-                    
+
                     fetch(studentsEndpoint, {
                         method: 'POST',
                         body: formData
@@ -998,44 +714,52 @@ function expandStudentToNewTab() {
                         console.error('Error saving field:', error);
                     });
                 }
-                
+
+                function notify(message, type) {
+                    if (window.UIKit) {
+                        UIKit.toast(message, type);
+                    } else {
+                        console.warn(message);
+                    }
+                }
+
                 // Skills management for popout
                 function addSkillFromDropdown(studentId) {
                     const dropdown = document.getElementById('skills-dropdown-' + studentId);
                     const skill = dropdown.value;
-                    
+
                     if (skill && skill.trim() !== '') {
                         addSkillToStudent(studentId, skill);
                         dropdown.value = '';
                     }
                 }
-                
+
                 function addCustomSkill(studentId) {
                     const input = document.getElementById('custom-skill-' + studentId);
                     const skill = input.value.trim();
-                    
+
                     if (skill !== '') {
                         addSkillToStudent(studentId, skill);
                         input.value = '';
                     }
                 }
-                
+
                 function addSkillToStudent(studentId, skill) {
                     const currentSkills = studentData.skills || [];
                     if (currentSkills.includes(skill)) {
-                        alert('Skill already added');
+                        notify('Skill already added', 'warning');
                         return;
                     }
-                    
+
                     const newSkills = [...currentSkills, skill];
                     studentData.skills = newSkills;
-                    
+
                     const formData = new FormData();
                     formData.append('action', 'save_student');
                     formData.append('student_id', studentId);
                     formData.append('field', 'skills');
                     formData.append('value', JSON.stringify(newSkills));
-                    
+
                     fetch(studentsEndpoint, {
                         method: 'POST',
                         body: formData
@@ -1047,7 +771,7 @@ function expandStudentToNewTab() {
                             showSaveIndicator();
                         } else {
                             studentData.skills = currentSkills;
-                            alert('Failed to add skill');
+                            notify('Failed to add skill', 'error');
                         }
                     })
                     .catch(error => {
@@ -1055,18 +779,18 @@ function expandStudentToNewTab() {
                         console.error('Error adding skill:', error);
                     });
                 }
-                
+
                 function removeSkill(studentId, skill) {
                     const currentSkills = studentData.skills || [];
                     const newSkills = currentSkills.filter(s => s !== skill);
                     studentData.skills = newSkills;
-                    
+
                     const formData = new FormData();
                     formData.append('action', 'save_student');
                     formData.append('student_id', studentId);
                     formData.append('field', 'skills');
                     formData.append('value', JSON.stringify(newSkills));
-                    
+
                     fetch(studentsEndpoint, {
                         method: 'POST',
                         body: formData
@@ -1078,7 +802,7 @@ function expandStudentToNewTab() {
                             showSaveIndicator();
                         } else {
                             studentData.skills = currentSkills;
-                            alert('Failed to remove skill');
+                            notify('Failed to remove skill', 'error');
                         }
                     })
                     .catch(error => {
@@ -1086,19 +810,19 @@ function expandStudentToNewTab() {
                         console.error('Error removing skill:', error);
                     });
                 }
-                
+
                 function updateSkillsDisplay(studentId) {
                     const skillsContainer = document.querySelector('.selected-skills');
                     if (!skillsContainer) return;
-                    
+
                     const skills = studentData.skills || [];
-                    skillsContainer.innerHTML = skills.map(skill => 
-                        '<span class="skill-tag">' + escapeHtml(skill) + 
-                        (isGM ? ' <span class="remove-skill" onclick="removeSkill(\\'' + studentId + '\\', \\'' + escapeHtml(skill) + '\\')">×</span>' : '') + 
+                    skillsContainer.innerHTML = skills.map(skill =>
+                        '<span class="skill-tag">' + escapeHtml(skill) +
+                        (isGM ? ' <span class="remove-skill" onclick="removeSkill(\\'' + studentId + '\\', \\'' + escapeHtml(skill) + '\\')">×</span>' : '') +
                         '</span>'
                     ).join('');
                 }
-                
+
                 function showSaveIndicator() {
                     const indicator = document.getElementById('save-indicator');
                     indicator.style.display = 'block';
@@ -1106,7 +830,7 @@ function expandStudentToNewTab() {
                         indicator.style.display = 'none';
                     }, 2000);
                 }
-                
+
                 function escapeHtml(text) {
                     if (!text) return '';
                     const map = {
@@ -1118,7 +842,7 @@ function expandStudentToNewTab() {
                     };
                     return text.toString().replace(/[&<>"']/g, function(m) { return map[m]; });
                 }
-                
+
                 function debounce(func, wait) {
                     let timeout;
                     return function executedFunction(...args) {
@@ -1130,7 +854,7 @@ function expandStudentToNewTab() {
                         timeout = setTimeout(later, wait);
                     };
                 }
-                
+
                 // Set up event listeners for auto-save (GM only)
                 if (isGM) {
                     document.addEventListener('DOMContentLoaded', function() {
@@ -1141,17 +865,17 @@ function expandStudentToNewTab() {
                                     const value = input.value;
                                     saveStudentField('${student.student_id}', field, value);
                                 }, 1000);
-                                
+
                                 input.addEventListener('input', debouncedSave);
                                 input.addEventListener('change', debouncedSave);
                             }
                         });
-                        
+
                         // Setup character lookup for standalone window
                         setupStandaloneCharacterLookup();
                     });
                 }
-                
+
                 // Setup character lookup for standalone window
                 function setupStandaloneCharacterLookup() {
                     // Wait for character lookup to be available
@@ -1161,13 +885,13 @@ function expandStudentToNewTab() {
                             // Setup for both rich text editors and textareas
                             const richTextContainers = document.querySelectorAll('.rich-text-container');
                             const textAreas = document.querySelectorAll('textarea');
-                            
+
                             // Setup rich text editors first
                             if (typeof RichTextEditor !== 'undefined') {
                                 richTextContainers.forEach(container => {
                                     const field = container.getAttribute('data-field');
                                     if (field && (
-                                        field.includes('backstory') || 
+                                        field.includes('backstory') ||
                                         field.includes('core_want') ||
                                         field.includes('core_fear') ||
                                         field.includes('other') ||
@@ -1185,13 +909,13 @@ function expandStudentToNewTab() {
                                             placeholder: 'Enter text... Type [[character name]] to link to characters'
                                         });
                                         editor.init();
-                                        
+
                                         // Connect to character lookup
                                         const editorElement = editor.getEditor();
                                         if (editorElement) {
                                             lookup.setupEditorListeners(editorElement);
                                         }
-                                        
+
                                         // Setup auto-save
                                         editor.onChange((content) => {
                                             const fieldName = container.getAttribute('data-field');
@@ -1200,12 +924,12 @@ function expandStudentToNewTab() {
                                     }
                                 });
                             }
-                            
+
                             // Setup for remaining textareas
                             textAreas.forEach(textarea => {
                                 const field = textarea.getAttribute('data-field');
                                 if (field && (
-                                    field.includes('backstory') || 
+                                    field.includes('backstory') ||
                                     field.includes('core_want') ||
                                     field.includes('core_fear') ||
                                     field.includes('other') ||
@@ -1233,865 +957,12 @@ function expandStudentToNewTab() {
         </body>
         </html>
     `);
-    
+
     newWindow.document.close();
 }
 
-// Save student field (GM only)
-function saveStudentField(studentId, field, value) {
-    if (!isGM) return;
-    
-    // Handle clubs as array
-    if (field === 'clubs') {
-        value = value.split(',').map(club => club.trim()).filter(club => club);
-    }
-    
-    // Handle nested relationship fields
-    if (field.startsWith('relationships.')) {
-        const relationshipField = field.split('.')[1];
-        const formData = new FormData();
-        formData.append('action', 'save_student');
-        formData.append('student_id', studentId);
-        formData.append('field', 'relationships');
-        
-        // Get current relationships and update the specific field
-        const currentRelationships = selectedStudent.relationships || {};
-        currentRelationships[relationshipField] = value;
-        formData.append('value', JSON.stringify(currentRelationships));
-        
-        fetch(studentsEndpoint, {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                selectedStudent.relationships = currentRelationships;
-            } else {
-                console.error('Failed to save relationship:', data.error);
-                showError('Failed to save changes');
-            }
-        })
-        .catch(error => {
-            console.error('Error saving relationship:', error);
-            showError('Error saving changes');
-        });
-        return;
-    }
-    
-    const formData = new FormData();
-    formData.append('action', 'save_student');
-    formData.append('student_id', studentId);
-    formData.append('field', field);
-    formData.append('value', Array.isArray(value) ? JSON.stringify(value) : value);
-    
-    fetch(studentsEndpoint, {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (!data.success) {
-            console.error('Failed to save field:', data.error);
-            showError('Failed to save changes');
-        }
-    })
-    .catch(error => {
-        console.error('Error saving field:', error);
-        showError('Error saving changes');
-    });
-}
-
-// Skills management functions
-function addSkillFromDropdown(studentId) {
-    const dropdown = document.getElementById(`skills-dropdown-${studentId}`);
-    const skill = dropdown.value;
-    
-    if (skill && skill.trim() !== '') {
-        addSkillToStudent(studentId, skill);
-        dropdown.value = ''; // Reset dropdown
-    }
-}
-
-function addCustomSkill(studentId) {
-    const input = document.getElementById(`custom-skill-${studentId}`);
-    const skill = input.value.trim();
-    
-    if (skill !== '') {
-        addSkillToStudent(studentId, skill);
-        input.value = ''; // Clear input
-    }
-}
-
-function addSkillToStudent(studentId, skill) {
-    if (!selectedStudent || selectedStudent.student_id !== studentId) return;
-    
-    // Check if skill already exists
-    const currentSkills = selectedStudent.skills || [];
-    if (currentSkills.includes(skill)) {
-        showError('Skill already added');
-        return;
-    }
-    
-    // Add skill to local data
-    const newSkills = [...currentSkills, skill];
-    selectedStudent.skills = newSkills;
-    
-    // Save to server
-    const formData = new FormData();
-    formData.append('action', 'save_student');
-    formData.append('student_id', studentId);
-    formData.append('field', 'skills');
-    formData.append('value', JSON.stringify(newSkills));
-    
-    fetch(studentsEndpoint, {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Update the skills display
-            updateSkillsDisplay(studentId);
-        } else {
-            // Revert local change
-            selectedStudent.skills = currentSkills;
-            showError('Failed to add skill');
-        }
-    })
-    .catch(error => {
-        // Revert local change
-        selectedStudent.skills = currentSkills;
-        console.error('Error adding skill:', error);
-        showError('Error adding skill');
-    });
-}
-
-function removeSkill(studentId, skill) {
-    if (!selectedStudent || selectedStudent.student_id !== studentId) return;
-    
-    const currentSkills = selectedStudent.skills || [];
-    const newSkills = currentSkills.filter(s => s !== skill);
-    selectedStudent.skills = newSkills;
-    
-    // Save to server
-    const formData = new FormData();
-    formData.append('action', 'save_student');
-    formData.append('student_id', studentId);
-    formData.append('field', 'skills');
-    formData.append('value', JSON.stringify(newSkills));
-    
-    fetch(studentsEndpoint, {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Update the skills display
-            updateSkillsDisplay(studentId);
-        } else {
-            // Revert local change
-            selectedStudent.skills = currentSkills;
-            showError('Failed to remove skill');
-        }
-    })
-    .catch(error => {
-        // Revert local change
-        selectedStudent.skills = currentSkills;
-        console.error('Error removing skill:', error);
-        showError('Error removing skill');
-    });
-}
-
-function updateSkillsDisplay(studentId) {
-    const skillsContainer = document.querySelector('.selected-skills');
-    if (!skillsContainer || !selectedStudent) return;
-    
-    const skills = selectedStudent.skills || [];
-    skillsContainer.innerHTML = skills.map(skill => 
-        `<span class="skill-tag">${escapeHtml(skill)} ${isGM ? `<span class="remove-skill" onclick="removeSkill('${studentId}', '${escapeHtml(skill)}')">×</span>` : ''}</span>`
-    ).join('');
-}
-
-// Add new student (GM only)
-function addStudent() {
-    if (!isGM) return;
-    
-    const formData = new FormData();
-    formData.append('action', 'add_student');
-    
-    fetch(studentsEndpoint, {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            loadStudents();
-            showSuccess('Student added successfully');
-        } else {
-            showError('Failed to add student');
-        }
-    })
-    .catch(error => {
-        console.error('Error adding student:', error);
-        showError('Error adding student');
-    });
-}
-
-// Toggle student favorite (available to all users)
-function toggleStudentFavorite() {
-    if (!selectedStudent) return;
-    
-    const formData = new FormData();
-    formData.append('action', 'toggle_favorite');
-    formData.append('student_id', selectedStudent.student_id);
-    
-    fetch(studentsEndpoint, {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Update local student data
-            if (!selectedStudent.favorites) {
-                selectedStudent.favorites = {};
-            }
-            selectedStudent.favorites[currentUser] = data.is_favorite;
-            
-            // Update button appearance
-            const favoriteBtn = document.getElementById('modal-favorite-btn');
-            if (favoriteBtn) {
-                favoriteBtn.classList.toggle('active', data.is_favorite);
-                favoriteBtn.title = data.is_favorite ? 'Remove from Favorites' : 'Add to Favorites';
-            }
-            
-            // Refresh grid to show/hide favorite star
-            loadStudents();
-        } else {
-            showError('Failed to update favorite status');
-        }
-    })
-    .catch(error => {
-        console.error('Error toggling favorite:', error);
-        showError('Error updating favorite');
-    });
-}
-
-// Delete student (GM only)
-function deleteStudent() {
-    if (!isGM || !selectedStudent) return;
-    
-    if (!confirm(`Are you sure you want to delete ${selectedStudent.name}? This action cannot be undone.`)) {
-        return;
-    }
-    
-    const formData = new FormData();
-    formData.append('action', 'delete_student');
-    formData.append('student_id', selectedStudent.student_id);
-    
-    fetch(studentsEndpoint, {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            closeStudentModal();
-            loadStudents();
-            showSuccess('Student deleted successfully');
-        } else {
-            showError('Failed to delete student');
-        }
-    })
-    .catch(error => {
-        console.error('Error deleting student:', error);
-        showError('Error deleting student');
-    });
-}
-
-// Upload student portrait (GM only)
-function uploadStudentPortrait(studentId) {
-    if (!isGM) return;
-    
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*,.webp';
-    input.onchange = function(e) {
-        const file = e.target.files[0];
-        if (file) {
-            // Validate file size (max 5MB)
-            if (file.size > 5 * 1024 * 1024) {
-                showError('Image file must be smaller than 5MB');
-                return;
-            }
-            
-            // Validate file type
-            const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-            if (!allowedTypes.includes(file.type)) {
-                showError('Please select a valid image file (JPEG, PNG, GIF, or WebP)');
-                return;
-            }
-            
-            uploadImageFile(studentId, file);
-        }
-    };
-    input.click();
-}
-
-// Handle the actual file upload
-function uploadImageFile(studentId, file) {
-    const formData = new FormData();
-    formData.append('action', 'upload_portrait');
-    formData.append('student_id', studentId);
-    formData.append('portrait', file);
-    
-    // Show upload progress
-    showUploadProgress(true);
-    
-    fetch(studentsEndpoint, {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        showUploadProgress(false);
-        if (data.success) {
-            // Update the portrait in the modal
-            updatePortraitInModal(data.portrait_path);
-            
-            // Update the selected student data
-            if (selectedStudent) {
-                selectedStudent.image_path = data.portrait_path;
-            }
-            
-            // Refresh the grid to show new portrait
-            loadStudents();
-            
-            showSuccess('Portrait uploaded successfully');
-        } else {
-            showError('Failed to upload portrait: ' + (data.error || 'Unknown error'));
-        }
-    })
-    .catch(error => {
-        showUploadProgress(false);
-        console.error('Error uploading portrait:', error);
-        showError('Error uploading portrait');
-    });
-}
-
-// Update portrait in modal
-function updatePortraitInModal(portraitPath) {
-    const portraitSection = document.querySelector('.student-portrait-section');
-    if (portraitSection && selectedStudent) {
-        const imageHtml = portraitPath ? 
-            `<img src="${escapeHtml(portraitPath)}" alt="${escapeHtml(selectedStudent.name)}" class="student-portrait">` :
-            `<div class="student-portrait-placeholder">No Photo</div>`;
-        
-        const uploadButton = isGM ? 
-            `<button class="upload-portrait-btn" onclick="uploadStudentPortrait('${selectedStudent.student_id}')">Upload Photo</button>` : '';
-        
-        portraitSection.innerHTML = imageHtml + uploadButton;
-    }
-}
-
-// Show/hide upload progress
-function showUploadProgress(show) {
-    const uploadBtns = document.querySelectorAll('.upload-portrait-btn');
-    uploadBtns.forEach(btn => {
-        if (show) {
-            btn.disabled = true;
-            btn.textContent = 'Uploading...';
-        } else {
-            btn.disabled = false;
-            btn.textContent = 'Upload Photo';
-        }
-    });
-}
-
-// Utility functions
-function showLoading(show) {
-    const loading = document.getElementById('loading');
-    const studentsGrid = document.getElementById('students-grid');
-    
-    if (show) {
-        loading.style.display = 'flex';
-        studentsGrid.style.opacity = '0.5';
-    } else {
-        loading.style.display = 'none';
-        studentsGrid.style.opacity = '1';
-    }
-}
-
-function showError(message) {
-    // Create a simple toast notification
-    const toast = document.createElement('div');
-    toast.className = 'toast toast-error';
-    toast.textContent = message;
-    toast.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: #e74c3c;
-        color: white;
-        padding: 12px 20px;
-        border-radius: 6px;
-        z-index: 10000;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        animation: slideInRight 0.3s ease-out;
-    `;
-    
-    document.body.appendChild(toast);
-    
-    setTimeout(() => {
-        toast.style.animation = 'slideOutRight 0.3s ease-in';
-        setTimeout(() => {
-            if (toast.parentNode) {
-                toast.parentNode.removeChild(toast);
-            }
-        }, 300);
-    }, 4000);
-}
-
-function showSuccess(message) {
-    // Create a simple toast notification
-    const toast = document.createElement('div');
-    toast.className = 'toast toast-success';
-    toast.textContent = message;
-    toast.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: #27ae60;
-        color: white;
-        padding: 12px 20px;
-        border-radius: 6px;
-        z-index: 10000;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        animation: slideInRight 0.3s ease-out;
-    `;
-    
-    document.body.appendChild(toast);
-    
-    setTimeout(() => {
-        toast.style.animation = 'slideOutRight 0.3s ease-in';
-        setTimeout(() => {
-            if (toast.parentNode) {
-                toast.parentNode.removeChild(toast);
-            }
-        }, 300);
-    }, 3000);
-}
-
-function escapeHtml(text) {
-    if (!text) return '';
-    const map = {
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#039;'
-    };
-    return text.toString().replace(/[&<>"']/g, function(m) { return map[m]; });
-}
-
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func.apply(this, args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
-}
-
-// Image Gallery Functions
-function createImageGallery(images, itemId, itemType, imageAdjustments) {
-    if (!images || images.length === 0) {
-        return `<div class="${itemType}-portrait-placeholder">No Photo</div>`;
-    }
-
-    const currentImageIndex = 0;
-    const hasMultipleImages = images.length > 1;
-    const currentImage = images[currentImageIndex];
-    const adj = imageAdjustments && imageAdjustments[currentImage];
-
-    // Build the image element - adjusted or standard
-    let imageElement;
-    const adjustedHtml = adj && typeof ImageAdjuster !== 'undefined' ?
-        ImageAdjuster.createAdjustedImageHtml(
-            escapeHtml(currentImage),
-            itemType + ' image', adj, '',
-            "openImagePopup('" + escapeHtml(currentImage) + "')"
-        ) : null;
-
-    if (adjustedHtml) {
-        imageElement = adjustedHtml;
-    } else {
-        imageElement = `<img src="${escapeHtml(currentImage)}"
-                     alt="${itemType} image"
-                     class="${itemType}-portrait gallery-image"
-                     onclick="openImagePopup('${escapeHtml(currentImage)}')"
-                     data-current-index="${currentImageIndex}">`;
-    }
-
-    return `
-        <div class="image-gallery" data-item-id="${itemId}" data-item-type="${itemType}">
-            <div class="image-container">
-                ${imageElement}
-
-                ${hasMultipleImages ? `
-                    <button class="gallery-nav prev" onclick="navigateGallery('${itemId}', -1)">‹</button>
-                    <button class="gallery-nav next" onclick="navigateGallery('${itemId}', 1)">›</button>
-                    <div class="gallery-indicator">${currentImageIndex + 1} / ${images.length}</div>
-                ` : ''}
-
-                ${isGM ? `
-                    <button class="delete-image-btn" onclick="deleteImage('${itemId}', '${escapeHtml(currentImage)}', '${itemType}')">×</button>
-                ` : ''}
-            </div>
-            ${isGM ? `
-                <button class="adjust-image-btn" onclick="openImageAdjuster('${itemId}', '${escapeHtml(currentImage)}', '${itemType}')">Adjust Image</button>
-            ` : ''}
-        </div>
-    `;
-}
-
-function navigateGallery(itemId, direction) {
-    if (!selectedStudent || selectedStudent.student_id !== itemId) return;
-
-    const images = selectedStudent.images || (selectedStudent.image_path ? [selectedStudent.image_path] : []);
-    if (images.length <= 1) return;
-
-    // Re-render the gallery section for the new image
-    const galleryEl = document.querySelector(`[data-item-id="${itemId}"]`);
-    if (!galleryEl) return;
-
-    const imgEl = galleryEl.querySelector('.image-container img, .image-container .adjusted-image-wrapper img');
-    const currentIndex = imgEl ? parseInt(imgEl.getAttribute('data-current-index') || '0') : 0;
-
-    let newIndex = currentIndex + direction;
-    if (newIndex < 0) newIndex = images.length - 1;
-    if (newIndex >= images.length) newIndex = 0;
-
-    const newImage = images[newIndex];
-    const adj = selectedStudent.image_adjustments && selectedStudent.image_adjustments[newImage];
-    const container = galleryEl.querySelector('.image-container');
-
-    // Build new image element
-    let newImageHtml;
-    const adjustedHtml = adj && typeof ImageAdjuster !== 'undefined' ?
-        ImageAdjuster.createAdjustedImageHtml(
-            escapeHtml(newImage),
-            'student image', adj, '',
-            "openImagePopup('" + escapeHtml(newImage) + "')"
-        ) : null;
-
-    if (adjustedHtml) {
-        newImageHtml = adjustedHtml;
-    } else {
-        newImageHtml = `<img src="${escapeHtml(newImage)}"
-             alt="student image"
-             class="student-portrait gallery-image"
-             onclick="openImagePopup('${escapeHtml(newImage)}')"
-             data-current-index="${newIndex}">`;
-    }
-
-    // Rebuild container content
-    container.innerHTML = `
-        ${newImageHtml}
-        <button class="gallery-nav prev" onclick="navigateGallery('${itemId}', -1)">&#8249;</button>
-        <button class="gallery-nav next" onclick="navigateGallery('${itemId}', 1)">&#8250;</button>
-        <div class="gallery-indicator">${newIndex + 1} / ${images.length}</div>
-        ${isGM ? `<button class="delete-image-btn" onclick="deleteImage('${itemId}', '${escapeHtml(newImage)}', 'student')">×</button>` : ''}
-    `;
-
-    // Update the adjust button
-    const adjustBtn = galleryEl.querySelector('.adjust-image-btn');
-    if (adjustBtn) {
-        adjustBtn.setAttribute('onclick', `openImageAdjuster('${itemId}', '${escapeHtml(newImage)}', 'student')`);
-    }
-
-    // Store current index on the new img element
-    const newImgEl = container.querySelector('img');
-    if (newImgEl) newImgEl.setAttribute('data-current-index', newIndex);
-}
-
-function openImagePopup(imagePath) {
-    let popup = document.getElementById('image-popup');
-    if (!popup) {
-        popup = createImagePopup();
-    }
-    const popupImage = popup.querySelector('.image-popup-content img');
-    
-    popupImage.src = imagePath;
-    popup.style.display = 'block';
-}
-
-function closeImagePopup() {
-    const popup = document.getElementById('image-popup');
-    if (popup) {
-        popup.style.display = 'none';
-    }
-}
-
-function createImagePopup() {
-    const popup = document.createElement('div');
-    popup.id = 'image-popup';
-    popup.className = 'image-popup';
-    popup.innerHTML = `
-        <div class="image-popup-header">
-            <div class="image-popup-title">Student Image</div>
-            <button class="image-popup-close" onclick="closeImagePopup()">×</button>
-        </div>
-        <div class="image-popup-content">
-            <img src="" alt="Student image">
-        </div>
-    `;
-    document.body.appendChild(popup);
-    
-    // Make popup draggable
-    makeDraggable(popup);
-    
-    return popup;
-}
-
-function makeDraggable(popup) {
-    const header = popup.querySelector('.image-popup-header');
-    let isDragging = false;
-    let currentX, currentY, initialX, initialY;
-    let xOffset = 0, yOffset = 0;
-
-    header.addEventListener('mousedown', dragStart);
-    document.addEventListener('mouseup', dragEnd);
-    document.addEventListener('mousemove', drag);
-
-    function dragStart(e) {
-        if (e.target.classList.contains('image-popup-close')) return;
-        
-        initialX = e.clientX - xOffset;
-        initialY = e.clientY - yOffset;
-
-        if (e.target === header || header.contains(e.target)) {
-            isDragging = true;
-        }
-    }
-
-    function drag(e) {
-        if (isDragging) {
-            e.preventDefault();
-            currentX = e.clientX - initialX;
-            currentY = e.clientY - initialY;
-
-            xOffset = currentX;
-            yOffset = currentY;
-
-            popup.style.transform = `translate(${currentX}px, ${currentY}px)`;
-        }
-    }
-
-    function dragEnd(e) {
-        initialX = currentX;
-        initialY = currentY;
-        isDragging = false;
-    }
-}
-
-function deleteImage(itemId, imagePath, itemType) {
-    if (!isGM) return;
-    
-    if (!confirm('Are you sure you want to delete this image?')) {
-        return;
-    }
-    
-    const formData = new FormData();
-    formData.append('action', 'delete_image');
-    formData.append('student_id', itemId);
-    formData.append('image_path', imagePath);
-    
-    fetch(studentsEndpoint, {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Update local data
-            if (selectedStudent && selectedStudent.student_id === itemId) {
-                if (selectedStudent.images) {
-                    const imageIndex = selectedStudent.images.indexOf(imagePath);
-                    if (imageIndex !== -1) {
-                        selectedStudent.images.splice(imageIndex, 1);
-                    }
-                }
-                
-                // Refresh the modal content
-                const modalBody = document.querySelector('#student-modal .student-details');
-                if (modalBody) {
-                    modalBody.innerHTML = createStudentDetailForm(selectedStudent);
-                    setupFormEventListeners(modalBody);
-                    setupModalRichTextEditors(modalBody, selectedStudent);
-                }
-            }
-            
-            // Refresh the main grid
-            loadStudents();
-        } else {
-            alert('Failed to delete image: ' + (data.error || 'Unknown error'));
-        }
-    })
-    .catch(error => {
-        console.error('Error deleting image:', error);
-        alert('Error deleting image');
-    });
-}
-
-// Update the upload function to handle multiple images
-function uploadStudentPortrait(studentId) {
-    if (!isGM) return;
-    
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*,.webp';
-    input.onchange = function(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-        
-        const formData = new FormData();
-        formData.append('action', 'upload_portrait');
-        formData.append('student_id', studentId);
-        formData.append('portrait', file);
-        
-        fetch(studentsEndpoint, {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Update local data
-                if (selectedStudent && selectedStudent.student_id === studentId) {
-                    if (!selectedStudent.images) {
-                        selectedStudent.images = [];
-                    }
-                    selectedStudent.images.push(data.image_path);
-                    
-                    // Refresh the modal content
-                    const modalBody = document.querySelector('#student-modal .student-details');
-                    if (modalBody) {
-                        modalBody.innerHTML = createStudentDetailForm(selectedStudent);
-                        setupFormEventListeners(modalBody);
-                        setupModalRichTextEditors(modalBody, selectedStudent);
-                    }
-                }
-                
-                // Refresh the main grid
-                loadStudents();
-            } else {
-                alert('Failed to upload image: ' + (data.error || 'Unknown error'));
-            }
-        })
-        .catch(error => {
-            console.error('Error uploading image:', error);
-            alert('Error uploading image');
-        });
-    };
-    input.click();
-}
-
-// Open image adjuster for a student's image
-function openImageAdjuster(itemId, imagePath, itemType) {
-    if (!isGM || typeof ImageAdjuster === 'undefined') return;
-
-    const student = selectedStudent && selectedStudent.student_id === itemId ? selectedStudent : null;
-    const existingAdj = student && student.image_adjustments ? student.image_adjustments[imagePath] : null;
-
-    ImageAdjuster.open(imagePath, itemId, itemType, studentsEndpoint, existingAdj, function(imgPath, adjustment) {
-        // Update local data with the new adjustment
-        if (selectedStudent && selectedStudent.student_id === itemId) {
-            if (!selectedStudent.image_adjustments) {
-                selectedStudent.image_adjustments = {};
-            }
-            selectedStudent.image_adjustments[imgPath] = adjustment;
-
-            // Refresh the modal content
-            const modalBody = document.querySelector('#student-modal .student-details');
-            if (modalBody) {
-                modalBody.innerHTML = createStudentDetailForm(selectedStudent);
-                setupFormEventListeners(modalBody);
-                setupModalRichTextEditors(modalBody, selectedStudent);
-            }
-        }
-
-        // Refresh the main grid to show updated thumbnails
-        loadStudents();
-    });
-}
-
-function setupFormEventListeners(container) {
-    if (!isGM) return;
-
-    // Only handle input and select elements - rich text editors handle their own auto-save
-    container.querySelectorAll('input, select').forEach(input => {
-        input.addEventListener('change', function() {
-            const field = this.getAttribute('data-field');
-            const value = this.value;
-            if (selectedStudent) {
-                saveStudentField(selectedStudent.student_id, field, value);
-            }
-        });
-    });
-}
-
-// Export functionality
-function exportSelectedStudents() {
-    if (selectedExportStudents.size === 0) {
-        alert('Select at least one student to export.');
-        return;
-    }
-
-    const formData = new FormData();
-    formData.append('action', 'export_students');
-    
-    fetch(studentsEndpoint, {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            const selectedData = Array.isArray(data.data.students)
-                ? data.data.students.filter(student => selectedExportStudents.has(student.student_id))
-                : [];
-            const exportPayload = buildStudentExportPayload({
-                ...data.data,
-                students: selectedData.map(cleanStudentExportSections)
-            });
-
-            showExportModal(exportPayload);
-        } else {
-            alert('Failed to export data: ' + (data.error || 'Unknown error'));
-        }
-    })
-    .catch(error => {
-        console.error('Error exporting data:', error);
-        alert('Error exporting data');
-    });
-}
-
-function buildStudentExportPayload(payload) {
-    // Return simplified format with just the students array
-    return {
-        students: payload.students
-    };
-}
-
+// Export cleanup: only include important visible fields
 function cleanStudentExportSections(student) {
-    // Only include important visible fields
     const cleanedStudent = {};
 
     // Basic Information
@@ -2169,131 +1040,4 @@ function cleanStudentExportSections(student) {
     }
 
     return cleanedStudent;
-}
-
-function cleanEmptySection(section) {
-    if (!section || typeof section !== 'object' || Array.isArray(section)) {
-        return null;
-    }
-
-    const cleaned = {};
-    Object.entries(section).forEach(([key, value]) => {
-        if (!isValueEmpty(value)) {
-            cleaned[key] = value;
-        }
-    });
-
-    return Object.keys(cleaned).length > 0 ? cleaned : null;
-}
-
-function isValueEmpty(value) {
-    if (value === null || value === undefined) {
-        return true;
-    }
-    if (typeof value === 'string') {
-        const normalized = value.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
-        return normalized === '';
-    }
-    if (Array.isArray(value)) {
-        return value.length === 0;
-    }
-    return false;
-}
-
-function toggleExportSelectionMode(forceState) {
-    const nextState = typeof forceState === 'boolean' ? forceState : !exportSelectionActive;
-    exportSelectionActive = nextState;
-    document.body.classList.toggle('export-selection-active', exportSelectionActive);
-
-    const selectionActions = document.getElementById('export-selection-actions');
-    if (selectionActions) {
-        selectionActions.style.display = exportSelectionActive ? 'flex' : 'none';
-    }
-
-    const exportBtn = document.getElementById('export-students-btn');
-    if (exportBtn) {
-        exportBtn.textContent = exportSelectionActive ? '✖ Cancel Export' : '📤 Export Students';
-    }
-
-    if (!exportSelectionActive) {
-        selectedExportStudents.clear();
-        updateExportSelectionCount();
-        loadStudents();
-    } else {
-        updateExportSelectionCount();
-    }
-}
-
-function toggleStudentExportSelection(studentId) {
-    if (!exportSelectionActive) {
-        return;
-    }
-
-    if (selectedExportStudents.has(studentId)) {
-        selectedExportStudents.delete(studentId);
-    } else {
-        selectedExportStudents.add(studentId);
-    }
-
-    const card = document.querySelector(`.student-card[data-student-id="${CSS.escape(studentId)}"]`);
-    if (card) {
-        card.classList.toggle('is-selected', selectedExportStudents.has(studentId));
-    }
-
-    updateExportSelectionCount();
-}
-
-function updateExportSelectionCount() {
-    const count = selectedExportStudents.size;
-    const countLabel = document.getElementById('export-selection-count');
-    if (countLabel) {
-        countLabel.textContent = `${count} selected`;
-    }
-
-    const exportSelectedBtn = document.getElementById('export-selected-students-btn');
-    if (exportSelectedBtn) {
-        exportSelectedBtn.disabled = count === 0;
-    }
-}
-
-function showExportModal(data) {
-    const modal = document.getElementById('export-modal');
-    const textarea = document.getElementById('export-data');
-    
-    // Format JSON with proper indentation
-    textarea.value = JSON.stringify(data, null, 2);
-    
-    modal.style.display = 'block';
-}
-
-function closeExportModal() {
-    const modal = document.getElementById('export-modal');
-    modal.style.display = 'none';
-    
-    // Reset copy feedback
-    const feedback = document.getElementById('copy-feedback');
-    if (feedback) {
-        feedback.style.display = 'none';
-    }
-}
-
-function copyExportData() {
-    const textarea = document.getElementById('export-data');
-    textarea.select();
-    
-    try {
-        document.execCommand('copy');
-        
-        // Show feedback
-        const feedback = document.getElementById('copy-feedback');
-        if (feedback) {
-            feedback.style.display = 'inline';
-            setTimeout(() => {
-                feedback.style.display = 'none';
-            }, 2000);
-        }
-    } catch (err) {
-        console.error('Failed to copy:', err);
-        alert('Failed to copy to clipboard');
-    }
 }

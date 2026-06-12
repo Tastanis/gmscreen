@@ -64,6 +64,20 @@ function formatAttributeValue(value) {
     return numValue > 0 ? `+${numValue}` : `${numValue}`;
 }
 
+// Icons for ability categories so color is not the only differentiator
+const CATEGORY_ICONS = {
+    'passive': '◆',
+    'maneuver': '⟳',
+    'action': '⚔',
+    'triggered_action': '⚡',
+    'villain_action': '☠',
+    'malice': '✦'
+};
+
+function getCategoryIcon(category) {
+    return CATEGORY_ICONS[category] || '◆';
+}
+
 // Get display name for ability categories
 function getCategoryDisplayName(category) {
     const categoryNames = {
@@ -241,10 +255,14 @@ function createDefaultStructure() {
 }
 
 // Tab Management Functions
-function addMainTab() {
+async function addMainTab() {
     const tabId = 'tab_' + Date.now();
-    const tabName = prompt('Enter tab name:', 'New Tab');
-    
+    const tabName = await UIKit.prompt({
+        title: 'New Tab',
+        message: 'Enter tab name:',
+        defaultValue: 'New Tab'
+    });
+
     if (tabName) {
         // Create tab data
         monsterData.tabs[tabId] = {
@@ -277,7 +295,10 @@ function createTabElement(tabId, tabName, isSubTab = false) {
     const nameSpan = document.createElement('span');
     nameSpan.className = 'tab-name';
     nameSpan.textContent = tabName;
-    nameSpan.ondblclick = () => renameTab(tabId, isSubTab);
+    nameSpan.ondblclick = (e) => {
+        e.stopPropagation();
+        startTabRename(tabId, isSubTab, nameSpan);
+    };
     
     const closeBtn = document.createElement('button');
     closeBtn.className = 'tab-close';
@@ -405,13 +426,18 @@ function loadSubTabs(mainTabId) {
     subTabList.appendChild(addBtn);
     
     // DON'T auto-select first sub-tab - let main tab show all contents
+    updateTabDirtyIndicators();
     console.log('Loaded subtabs for main tab:', mainTabId, 'Current subtab:', currentSubTab);
 }
 
-function addSubTab() {
+async function addSubTab() {
     const subTabId = 'subtab_' + Date.now();
-    const subTabName = prompt('Enter sub-tab name:', 'New Sub-Tab');
-    
+    const subTabName = await UIKit.prompt({
+        title: 'New Sub-Tab',
+        message: 'Enter sub-tab name:',
+        defaultValue: 'New Sub-Tab'
+    });
+
     if (subTabName) {
         // Create sub-tab data
         if (!monsterData.tabs[currentMainTab].subTabs) {
@@ -440,25 +466,50 @@ function addSubTab() {
     }
 }
 
-function renameTab(tabId, isSubTab) {
-    const tab = isSubTab ? 
-        monsterData.tabs[currentMainTab].subTabs[tabId] : 
+function startTabRename(tabId, isSubTab, nameSpan) {
+    const tab = isSubTab ?
+        monsterData.tabs[currentMainTab]?.subTabs[tabId] :
         monsterData.tabs[tabId];
-    
-    const newName = prompt('Enter new name:', tab.name);
-    
-    if (newName && newName !== tab.name) {
-        tab.name = newName;
-        
-        const selector = isSubTab ? 
-            `[data-subtab-id="${tabId}"] .tab-name` : 
-            `[data-tab-id="${tabId}"] .tab-name`;
-        
-        document.querySelector(selector).textContent = newName;
-        
-        queueSave();
-        console.log('Renamed tab to:', newName);
-    }
+
+    if (!tab || nameSpan.querySelector('.tab-rename-input')) return;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'tab-rename-input';
+    input.value = tab.name;
+    input.setAttribute('aria-label', isSubTab ? 'Rename sub-tab' : 'Rename tab');
+
+    nameSpan.textContent = '';
+    nameSpan.appendChild(input);
+    input.focus();
+    input.select();
+
+    let finished = false;
+    const finish = (commit) => {
+        if (finished) return;
+        finished = true;
+        const newName = input.value.trim();
+        if (commit && newName && newName !== tab.name) {
+            tab.name = newName;
+            queueSave();
+            console.log('Renamed tab to:', newName);
+        }
+        nameSpan.textContent = tab.name;
+    };
+
+    input.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            finish(true);
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            finish(false);
+        }
+    });
+    input.addEventListener('blur', () => finish(true));
+    input.addEventListener('click', (e) => e.stopPropagation());
+    input.addEventListener('dblclick', (e) => e.stopPropagation());
 }
 
 // Toggle delete mode for tabs
@@ -490,15 +541,21 @@ function disableDeleteMode() {
     }
 }
 
-function closeMainTab(tabId) {
+async function closeMainTab(tabId) {
     const tabCount = Object.keys(monsterData.tabs).length;
-    
+
     if (tabCount <= 1) {
-        alert('Cannot close the last tab');
+        UIKit.toast('Cannot close the last tab', 'warning');
         return;
     }
-    
-    if (confirm('Are you sure you want to close this tab? All monsters in this tab will be lost.')) {
+
+    const confirmed = await UIKit.confirm({
+        title: 'Close Tab',
+        message: 'Are you sure you want to close this tab? All monsters in this tab will be lost.',
+        confirmText: 'Delete',
+        danger: true
+    });
+    if (confirmed) {
         // Remove tab data and associated monsters
         const tab = monsterData.tabs[tabId];
         if (tab && tab.subTabs) {
@@ -533,15 +590,21 @@ function closeMainTab(tabId) {
     }
 }
 
-function closeSubTab(subTabId) {
+async function closeSubTab(subTabId) {
     const subTabs = monsterData.tabs[currentMainTab].subTabs;
-    
+
     if (Object.keys(subTabs).length <= 1) {
-        alert('Cannot close the last sub-tab');
+        UIKit.toast('Cannot close the last sub-tab', 'warning');
         return;
     }
-    
-    if (confirm('Are you sure you want to close this sub-tab? All monsters in this sub-tab will be lost.')) {
+
+    const confirmed = await UIKit.confirm({
+        title: 'Close Sub-Tab',
+        message: 'Are you sure you want to close this sub-tab? All monsters in this sub-tab will be lost.',
+        confirmText: 'Delete',
+        danger: true
+    });
+    if (confirmed) {
         // Remove monsters in this sub-tab
         const subTab = subTabs[subTabId];
         if (subTab && subTab.monsters) {
@@ -948,7 +1011,7 @@ function renderCompactAbilities(abilities) {
             html += `
                 <div class="search-ability-category category-${category.key}">
                     <div class="category-header">
-                        <span class="category-name">${category.name}</span>
+                        <span class="category-name"><span class="category-icon" aria-hidden="true">${getCategoryIcon(category.key)}</span>${category.name}</span>
                         <span class="ability-count">${categoryAbilities.length}</span>
                     </div>
                     <div class="category-content">
@@ -1186,28 +1249,28 @@ function createFullMonsterCard(monsterId, monsterData) {
                 </div>
                 <div class="info-right">
                     <div class="info-row-1">
-                        <input type="text" class="monster-name" placeholder="Monster Name" 
+                        <input type="text" class="monster-name" id="name-${monsterId}" placeholder="Monster Name" aria-label="Monster Name"
                                data-field="name" value="${monsterData.name || ''}">
                         <div class="level-role-section">
-                            <label class="field-label">Level:</label>
-                            <input type="number" class="level-input" placeholder="1"
+                            <label class="field-label" for="level-${monsterId}">Level:</label>
+                            <input type="number" class="level-input" id="level-${monsterId}" placeholder="1"
                                    data-field="level" value="${monsterData.level || 1}" min="1" max="30">
-                            <label class="field-label">Org:</label>
-                            <select class="role-select" data-field="organization" data-role-part="organization">
+                            <label class="field-label" for="organization-${monsterId}">Org:</label>
+                            <select class="role-select" id="organization-${monsterId}" data-field="organization" data-role-part="organization">
                                 ${organizationDropdown}
                             </select>
-                            <label class="field-label">Role:</label>
-                            <select class="role-select" data-field="tactical_role" data-role-part="tactical">
+                            <label class="field-label" for="tactical-role-${monsterId}">Role:</label>
+                            <select class="role-select" id="tactical-role-${monsterId}" data-field="tactical_role" data-role-part="tactical">
                                 ${tacticalRoleDropdown}
                             </select>
                         </div>
                     </div>
                     <div class="info-row-2">
-                        <label class="field-label">Type:</label>
-                        <input type="text" class="types-input" placeholder="Fire, Dragon, etc."
+                        <label class="field-label" for="types-${monsterId}">Type:</label>
+                        <input type="text" class="types-input" id="types-${monsterId}" placeholder="Fire, Dragon, etc."
                                data-field="types" value="${monsterData.types || ''}">
-                        <label class="field-label">EV:</label>
-                        <input type="number" class="ev-input" placeholder="0"
+                        <label class="field-label" for="ev-${monsterId}">EV:</label>
+                        <input type="number" class="ev-input" id="ev-${monsterId}" placeholder="0"
                                data-field="ev" value="${monsterData.ev || 0}" min="0">
                         ${isMinion ? '<span class="ev-minion-suffix">for four minions</span>' : ''}
                         ${currentMode === 'search' ?
@@ -1223,26 +1286,26 @@ function createFullMonsterCard(monsterId, monsterData) {
                 <!-- Core Stats Row -->
                 <div class="core-stats-row">
                     <div class="core-stat">
-                        <select class="core-stat-input" data-field="size">
+                        <select class="core-stat-input" id="size-${monsterId}" data-field="size">
                             ${sizeDropdown}
                         </select>
-                        <div class="core-stat-label">Size</div>
+                        <label class="core-stat-label" for="size-${monsterId}">Size</label>
                     </div>
                     <div class="core-stat">
-                        <input type="number" class="core-stat-input" data-field="speed" value="${monsterData.speed || 0}" min="0" max="200">
-                        <div class="core-stat-label">Speed</div>
+                        <input type="number" class="core-stat-input" id="speed-${monsterId}" data-field="speed" value="${monsterData.speed || 0}" min="0" max="200">
+                        <label class="core-stat-label" for="speed-${monsterId}">Speed</label>
                     </div>
                     <div class="core-stat">
-                        <input type="number" class="core-stat-input" data-field="stamina" value="${monsterData.stamina || 0}" min="0" max="50">
-                        <div class="core-stat-label">Stamina</div>
+                        <input type="number" class="core-stat-input" id="stamina-${monsterId}" data-field="stamina" value="${monsterData.stamina || 0}" min="0" max="50">
+                        <label class="core-stat-label" for="stamina-${monsterId}">Stamina</label>
                     </div>
                     <div class="core-stat">
-                        <input type="number" class="core-stat-input" data-field="stability" value="${monsterData.stability || 0}" min="0" max="30">
-                        <div class="core-stat-label">Stability</div>
+                        <input type="number" class="core-stat-input" id="stability-${monsterId}" data-field="stability" value="${monsterData.stability || 0}" min="0" max="30">
+                        <label class="core-stat-label" for="stability-${monsterId}">Stability</label>
                     </div>
                     <div class="core-stat">
-                        <input type="number" class="core-stat-input" data-field="free_strike" value="${monsterData.free_strike || 0}" min="0" max="10">
-                        <div class="core-stat-label">Free Strike</div>
+                        <input type="number" class="core-stat-input" id="free-strike-${monsterId}" data-field="free_strike" value="${monsterData.free_strike || 0}" min="0" max="10">
+                        <label class="core-stat-label" for="free-strike-${monsterId}">Free Strike</label>
                     </div>
                 </div>
 
@@ -1261,28 +1324,28 @@ function createFullMonsterCard(monsterId, monsterData) {
                 <!-- Attributes Bar -->
                 <div class="attributes-bar">
                     <div class="attribute">
-                        <span class="attribute-label"><span class="first-letter">M</span>ight</span>
-                        <input type="text" class="attribute-input" data-field="might" data-attribute="true" value="${formatAttributeValue(monsterData.might || 0)}" data-raw-value="${monsterData.might || 0}">
+                        <label class="attribute-label" for="might-${monsterId}"><span class="first-letter">M</span>ight</label>
+                        <input type="text" class="attribute-input" id="might-${monsterId}" data-field="might" data-attribute="true" value="${formatAttributeValue(monsterData.might || 0)}" data-raw-value="${monsterData.might || 0}">
                     </div>
                     <div class="attribute-separator"></div>
                     <div class="attribute">
-                        <span class="attribute-label"><span class="first-letter">A</span>gility</span>
-                        <input type="text" class="attribute-input" data-field="agility" data-attribute="true" value="${formatAttributeValue(monsterData.agility || 0)}" data-raw-value="${monsterData.agility || 0}">
+                        <label class="attribute-label" for="agility-${monsterId}"><span class="first-letter">A</span>gility</label>
+                        <input type="text" class="attribute-input" id="agility-${monsterId}" data-field="agility" data-attribute="true" value="${formatAttributeValue(monsterData.agility || 0)}" data-raw-value="${monsterData.agility || 0}">
                     </div>
                     <div class="attribute-separator"></div>
                     <div class="attribute">
-                        <span class="attribute-label"><span class="first-letter">R</span>eason</span>
-                        <input type="text" class="attribute-input" data-field="reason" data-attribute="true" value="${formatAttributeValue(monsterData.reason || 0)}" data-raw-value="${monsterData.reason || 0}">
+                        <label class="attribute-label" for="reason-${monsterId}"><span class="first-letter">R</span>eason</label>
+                        <input type="text" class="attribute-input" id="reason-${monsterId}" data-field="reason" data-attribute="true" value="${formatAttributeValue(monsterData.reason || 0)}" data-raw-value="${monsterData.reason || 0}">
                     </div>
                     <div class="attribute-separator"></div>
                     <div class="attribute">
-                        <span class="attribute-label"><span class="first-letter">I</span>ntuition</span>
-                        <input type="text" class="attribute-input" data-field="intuition" data-attribute="true" value="${formatAttributeValue(monsterData.intuition || 0)}" data-raw-value="${monsterData.intuition || 0}">
+                        <label class="attribute-label" for="intuition-${monsterId}"><span class="first-letter">I</span>ntuition</label>
+                        <input type="text" class="attribute-input" id="intuition-${monsterId}" data-field="intuition" data-attribute="true" value="${formatAttributeValue(monsterData.intuition || 0)}" data-raw-value="${monsterData.intuition || 0}">
                     </div>
                     <div class="attribute-separator"></div>
                     <div class="attribute">
-                        <span class="attribute-label"><span class="first-letter">P</span>resence</span>
-                        <input type="text" class="attribute-input" data-field="presence" data-attribute="true" value="${formatAttributeValue(monsterData.presence || 0)}" data-raw-value="${monsterData.presence || 0}">
+                        <label class="attribute-label" for="presence-${monsterId}"><span class="first-letter">P</span>resence</label>
+                        <input type="text" class="attribute-input" id="presence-${monsterId}" data-field="presence" data-attribute="true" value="${formatAttributeValue(monsterData.presence || 0)}" data-raw-value="${monsterData.presence || 0}">
                     </div>
                 </div>
             </div>
@@ -1332,7 +1395,7 @@ function renderCategorizedAbilities(monsterId, abilities) {
         return `
             <div class="ability-category category-${category.key} ${expandedClass} ${hasAbilitiesClass}" data-category="${category.key}">
                 <div class="category-header" onclick="toggleCategory('${monsterId}', '${category.key}')">
-                    <span class="category-name">${category.name}</span>
+                    <span class="category-name"><span class="category-icon" aria-hidden="true">${getCategoryIcon(category.key)}</span>${category.name}</span>
                     ${abilityCount > 0 ? `<span class="ability-count">${abilityCount}</span>` : ''}
                     <button class="btn-small add-category-btn" onclick="event.stopPropagation(); addAbility('${monsterId}', '${category.key}')">+ Add</button>
                     <span class="expand-icon">${hasAbilities ? '▼' : '▶'}</span>
@@ -1756,8 +1819,15 @@ function setupCardEventListeners(card, monsterId) {
 }
 
 // Delete monster function - Updated for new save system
-function deleteMonster(monsterId) {
-    if (confirm('Are you sure you want to delete this monster?')) {
+async function deleteMonster(monsterId) {
+    const monsterName = monsterData.monsters[monsterId]?.name || 'this monster';
+    const confirmed = await UIKit.confirm({
+        title: 'Delete Monster',
+        message: `Are you sure you want to delete ${monsterName}?`,
+        confirmText: 'Delete',
+        danger: true
+    });
+    if (confirmed) {
         console.log(`Deleting monster: ${monsterId}`);
         
         // Clean up event listeners first
@@ -1886,8 +1956,33 @@ function markMonsterDirty(monsterId) {
         if (dirtyMonsters.size === 1) {
             console.log(`Started tracking changes...`);
         }
+        updateTabDirtyIndicators();
         queueSave();
     }
+}
+
+// Show an "unsaved changes" dot on tabs/sub-tabs containing dirty monsters
+function updateTabDirtyIndicators() {
+    const dirtyTabs = new Set();
+    const dirtySubTabs = new Set();
+
+    dirtyMonsters.forEach(monsterId => {
+        Object.entries(monsterData.tabs || {}).forEach(([tabId, tab]) => {
+            Object.entries(tab?.subTabs || {}).forEach(([subTabId, subTab]) => {
+                if ((subTab?.monsters || []).includes(monsterId)) {
+                    dirtyTabs.add(tabId);
+                    dirtySubTabs.add(subTabId);
+                }
+            });
+        });
+    });
+
+    document.querySelectorAll('.tab[data-tab-id]').forEach(el => {
+        el.classList.toggle('has-unsaved', dirtyTabs.has(el.getAttribute('data-tab-id')));
+    });
+    document.querySelectorAll('.sub-tab[data-subtab-id]').forEach(el => {
+        el.classList.toggle('has-unsaved', dirtySubTabs.has(el.getAttribute('data-subtab-id')));
+    });
 }
 
 function markTabsDirty() {
@@ -2425,6 +2520,7 @@ async function saveChangedData(backupType = 'auto') {
             // Clear dirty flags after successful save
             dirtyMonsters.clear();
             needsTabSave = false;
+            updateTabDirtyIndicators();
             // Clear from localStorage since save was successful
             clearLocalStorage();
             console.log('✅ Data saved successfully');
@@ -2541,7 +2637,9 @@ function rebuildUI() {
     
     // Update right sidebar
     updateRightSidebar();
-    
+
+    updateTabDirtyIndicators();
+
     console.log('UI rebuilt successfully');
 }
 
@@ -2664,14 +2762,14 @@ function addAbility(monsterId, category = 'action') {
 function copyAbilityToCurrentMonster(abilityData, categoryKey) {
     // Check if we're in editor mode with an active monster
     if (currentMode !== 'editor' || !editorMonsterId) {
-        alert('Please enter editor mode and select a monster to edit before copying abilities.');
+        UIKit.toast('Enter editor mode and select a monster to edit before copying abilities.', 'warning');
         return;
     }
-    
+
     // Get the monster being edited
     const monster = monsterData.monsters[editorMonsterId];
     if (!monster) {
-        alert('Could not find the monster being edited.');
+        UIKit.toast('Could not find the monster being edited.', 'error');
         return;
     }
     
@@ -2713,7 +2811,8 @@ function copyAbilityToCurrentMonster(abilityData, categoryKey) {
         }
     }, 100);
     
-    // Optional: Show a brief success message
+    // Brief success message
+    UIKit.toast(`Copied "${copiedAbility.name || 'ability'}" to ${monster.name || 'monster'}`, 'success');
     console.log(`Copied ability "${copiedAbility.name}" to ${monster.name}`);
 }
 
@@ -3127,7 +3226,7 @@ function updateAbilityBrowser(abilities) {
             currentCategory = ability.category;
             const categoryHeader = document.createElement('div');
             categoryHeader.className = `browser-category-header category-${ability.categoryKey}`;
-            categoryHeader.textContent = currentCategory;
+            categoryHeader.textContent = `${getCategoryIcon(ability.categoryKey)} ${currentCategory}`;
             abilityList.appendChild(categoryHeader);
         }
         
@@ -3346,6 +3445,18 @@ function updateSaveStatus(status) {
     }
 }
 
+// Browser sidebar overlay toggle (small screens)
+function toggleBrowserSidebar() {
+    const sidebar = document.getElementById('browserSidebar');
+    const toggleBtn = document.getElementById('browserSidebarToggle');
+    if (!sidebar) return;
+    const isOpen = sidebar.classList.toggle('open');
+    if (toggleBtn) {
+        toggleBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        toggleBtn.classList.toggle('active', isOpen);
+    }
+}
+
 function debounce(func, wait) {
     let timeout;
     return function executedFunction(...args) {
@@ -3386,13 +3497,13 @@ async function handleImageUpload(monsterId, fileInput) {
     
     // Validate file type
     if (!file.type.startsWith('image/')) {
-        alert('Please select an image file');
+        UIKit.toast('Please select an image file', 'warning');
         return;
     }
-    
+
     // Validate file size (5MB max)
     if (file.size > 5 * 1024 * 1024) {
-        alert('Image must be less than 5MB');
+        UIKit.toast('Image must be less than 5MB', 'warning');
         return;
     }
     
@@ -3429,11 +3540,11 @@ async function handleImageUpload(monsterId, fileInput) {
                 console.log('Image uploaded successfully:', result.filename);
             }
         } else {
-            alert('Failed to upload image: ' + result.error);
+            UIKit.toast('Failed to upload image: ' + result.error, 'error');
         }
     } catch (error) {
         console.error('Image upload error:', error);
-        alert('Failed to upload image');
+        UIKit.toast('Failed to upload image', 'error');
     }
 }
 
@@ -3453,7 +3564,15 @@ function showImageModal(monsterId) {
     `;
     
     document.body.appendChild(modal);
-    
+    document.body.classList.add('modal-open');
+
+    UIKit.openModal(modal, {
+        onClose: () => {
+            document.body.classList.remove('modal-open');
+            modal.remove();
+        }
+    });
+
     // Close on outside click
     modal.onclick = (e) => {
         if (e.target === modal) {
@@ -3464,14 +3583,23 @@ function showImageModal(monsterId) {
 
 function closeImageModal() {
     const modal = document.querySelector('.image-modal');
-    if (modal) {
+    if (!modal) return;
+    UIKit.closeModal(modal);
+    if (modal.parentNode) {
+        document.body.classList.remove('modal-open');
         modal.remove();
     }
 }
 
 async function deleteMonsterImage(monsterId) {
-    if (!confirm('Are you sure you want to delete this image?')) return;
-    
+    const confirmed = await UIKit.confirm({
+        title: 'Delete Image',
+        message: 'Are you sure you want to delete this image?',
+        confirmText: 'Delete',
+        danger: true
+    });
+    if (!confirmed) return;
+
     const monster = monsterData.monsters[monsterId];
     if (!monster || !monster.image) return;
     
@@ -3491,7 +3619,7 @@ async function deleteMonsterImage(monsterId) {
         console.log('Image deleted successfully');
     } catch (error) {
         console.error('Failed to delete image:', error);
-        alert('Failed to delete image');
+        UIKit.toast('Failed to delete image', 'error');
     }
 }
 
@@ -3602,10 +3730,14 @@ function finishEditing() {
     loadWorkspace();
 }
 
-function createNewMonsterForEditor() {
+async function createNewMonsterForEditor() {
     const monsterId = 'monster_' + Date.now();
-    const monsterName = prompt('Enter monster name:', 'New Monster');
-    
+    const monsterName = await UIKit.prompt({
+        title: 'New Monster',
+        message: 'Enter monster name:',
+        defaultValue: 'New Monster'
+    });
+
     if (monsterName) {
         // Create monster data with enhanced structure
         monsterData.monsters[monsterId] = {
@@ -3666,12 +3798,24 @@ function openMonsterJsonImportModal() {
         errorEl.textContent = '';
     }
     modal.style.display = 'flex';
-    setTimeout(() => textarea?.focus(), 0);
+    document.body.classList.add('modal-open');
+    UIKit.openModal(modal, {
+        onClose: () => {
+            modal.style.display = 'none';
+            document.body.classList.remove('modal-open');
+        },
+        initialFocus: textarea
+    });
 }
 
 function closeMonsterJsonImportModal() {
     const modal = document.getElementById('monsterJsonImportModal');
-    if (modal) modal.style.display = 'none';
+    if (!modal) return;
+    UIKit.closeModal(modal);
+    if (modal.style.display !== 'none') {
+        modal.style.display = 'none';
+        document.body.classList.remove('modal-open');
+    }
 }
 
 function showMonsterJsonImportError(message) {
@@ -3680,7 +3824,7 @@ function showMonsterJsonImportError(message) {
         errorEl.textContent = message;
         errorEl.style.display = 'block';
     } else {
-        alert(message);
+        UIKit.toast(message, 'error');
     }
 }
 
@@ -3712,7 +3856,7 @@ function importMonsterFromPastedJson() {
 function triggerMonsterJsonImport() {
     const input = document.getElementById('monsterJsonImportInput');
     if (!input) {
-        alert('Monster JSON import input is missing.');
+        UIKit.toast('Monster JSON import input is missing.', 'error');
         return;
     }
     input.value = '';
@@ -3735,7 +3879,7 @@ async function handleMonsterJsonImportFile(input) {
         if (modal && modal.style.display !== 'none') {
             showMonsterJsonImportError(message);
         } else {
-            alert(message);
+            UIKit.toast(message, 'error');
         }
     } finally {
         input.value = '';
@@ -3752,7 +3896,7 @@ function applyMonsterJsonImport(parsed) {
     saveToLocalStorage();
     queueSave();
 
-    alert(`Imported ${importedMonster.name}. Review it, then use Save to Tab when ready.`);
+    UIKit.toast(`Imported ${importedMonster.name}. Review it, then use Save to Tab when ready.`, 'success', { duration: 6000 });
 }
 
 // LLM AUTHORING NOTE:
@@ -4069,9 +4213,9 @@ function findMonsterLocation(monsterId) {
     }
 }
 
-function showTabAssignment() {
+async function showTabAssignment() {
     if (!editorMonsterId) {
-        alert('No monster in editor mode');
+        UIKit.toast('No monster in editor mode', 'warning');
         return;
     }
     
@@ -4091,7 +4235,7 @@ function showTabAssignment() {
     
     // If no tab is selected or selected tab doesn't exist, show error
     if (!currentMainTab || !currentSubTab) {
-        alert('Please select a tab and subtab first before saving.');
+        UIKit.toast('Select a tab and sub-tab first, then click Save to Tab.', 'warning');
         return;
     }
     
@@ -4113,14 +4257,20 @@ function showTabAssignment() {
     
     // Simple selection for now - can be enhanced with a proper modal later
     const tabLabels = availableTabs.map(tab => tab.label);
-    const selectedIndex = prompt(
-        `Select a tab to save the monster to:\n${tabLabels.map((label, i) => `${i + 1}. ${label}`).join('\n')}\n\nEnter the number:`
-    );
-    
+    const selectedIndex = await UIKit.prompt({
+        title: 'Save to Tab',
+        message: `Select a tab to save the monster to:\n${tabLabels.map((label, i) => `${i + 1}. ${label}`).join('\n')}\n\nEnter the number:`,
+        placeholder: '1',
+        confirmText: 'Save'
+    });
+    if (selectedIndex === null) return;
+
     const index = parseInt(selectedIndex) - 1;
     if (index >= 0 && index < availableTabs.length) {
         const selectedTab = availableTabs[index];
         saveMonsterToTab(selectedTab.mainTabId, selectedTab.subTabId);
+    } else {
+        UIKit.toast('That was not a valid tab number.', 'warning');
     }
 }
 
@@ -4151,16 +4301,22 @@ function saveMonsterToTab(mainTabId, subTabId) {
         // Update last modified
         monsterData.monsters[editorMonsterId].lastModified = Date.now();
         markMonsterDirty(editorMonsterId);
-        
+
+        const savedMonsterName = monsterData.monsters[editorMonsterId].name || 'Unnamed Monster';
+        const mainTabName = monsterData.tabs[mainTabId]?.name || 'Tab';
+        const subTabName = targetSubTab.name || 'Sub-Tab';
+
         console.log(`Saved monster ${editorMonsterId} to ${mainTabId}/${subTabId}`);
-        
+
         // Finish editing session since monster is now saved to a tab
         finishEditing();
-        
+
         // Switch to search mode and the tab where we saved the monster
         setMode('search');
         selectMainTab(mainTabId);
         selectSubTab(subTabId);
+
+        UIKit.toast(`Saved '${savedMonsterName}' to ${mainTabName} / ${subTabName}`, 'success');
     }
 }
 
@@ -4295,11 +4451,7 @@ async function recoverFromLocalStorage(savedData) {
         needsTabSave = savedData.needsTabSave || false;
         
         // Refresh UI
-        renderMainTabs();
-        if (currentMainTab) {
-            renderSubTabs(currentMainTab);
-        }
-        updateMonsterBrowser();
+        rebuildUI();
         
         // Try to save to server
         updateSaveStatus('saving');
@@ -4324,17 +4476,17 @@ async function recoverFromLocalStorage(savedData) {
             dirtyMonsters.clear();
             needsTabSave = false;
             console.log('✅ Recovery data saved successfully to server');
-            alert('Data recovered and saved successfully!');
+            UIKit.toast('Data recovered and saved successfully!', 'success');
         } else {
             updateSaveStatus('error');
             console.error('Failed to save recovered data:', result.error);
-            alert('Data recovered but failed to save to server. Please try saving manually.');
+            UIKit.toast('Data recovered but failed to save to server. Please try saving manually.', 'error');
         }
-        
+
     } catch (error) {
         console.error('Error during recovery:', error);
         updateSaveStatus('error');
-        alert('Error during recovery: ' + error.message);
+        UIKit.toast('Error during recovery: ' + error.message, 'error');
     }
 }
 
@@ -4513,7 +4665,7 @@ function removeAllPrintSelectionIndicators() {
 
 function showPrintPreview() {
     if (selectedForPrint.size === 0) {
-        alert('Please select at least one monster to print');
+        UIKit.toast('Select at least one monster to print', 'warning');
         return;
     }
 
@@ -4539,7 +4691,7 @@ function showPrintPreview() {
 
     if (selectedMonsters.length === 0) {
         previewBody.innerHTML = '<p>No monsters available for print.</p>';
-        modal.style.display = 'flex';
+        openPrintPreviewModal(modal);
         return;
     }
 
@@ -4552,11 +4704,28 @@ function showPrintPreview() {
     `;
 
     previewBody.innerHTML = previewHtml;
+    openPrintPreviewModal(modal);
+}
+
+function openPrintPreviewModal(modal) {
     modal.style.display = 'flex';
+    document.body.classList.add('modal-open');
+    UIKit.openModal(modal, {
+        onClose: () => {
+            modal.style.display = 'none';
+            document.body.classList.remove('modal-open');
+        }
+    });
 }
 
 function closePrintPreview() {
-    document.getElementById('printPreviewModal').style.display = 'none';
+    const modal = document.getElementById('printPreviewModal');
+    if (!modal) return;
+    UIKit.closeModal(modal);
+    if (modal.style.display !== 'none') {
+        modal.style.display = 'none';
+        document.body.classList.remove('modal-open');
+    }
 }
 
 function renderMonsterForPrint(monsterId, monsterData, options = {}) {

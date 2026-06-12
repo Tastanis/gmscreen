@@ -475,6 +475,7 @@ class DashboardDiceRoller {
         // ── Calculator Screen (result + queue at top) ──
         const screen = document.createElement('div');
         screen.className = 'dice-result-screen';
+        screen.setAttribute('aria-live', 'polite');
 
         const queueDisplay = document.createElement('div');
         queueDisplay.className = 'dice-queue-display';
@@ -630,6 +631,7 @@ class DashboardDiceRoller {
         // ── Calculator Screen (result + queue at top) ──
         const screen = document.createElement('div');
         screen.className = 'dice-result-screen';
+        screen.setAttribute('aria-live', 'polite');
 
         const screenQueueDisplay = document.createElement('div');
         screenQueueDisplay.className = 'dice-queue-display';
@@ -715,13 +717,15 @@ class DashboardDiceRoller {
         const manualRow = document.createElement('div');
         manualRow.className = 'dice-project-manual';
 
-        const manualLabel = document.createElement('span');
+        const manualLabel = document.createElement('label');
         manualLabel.className = 'dice-project-manual-label';
         manualLabel.textContent = 'Manual Result';
+        manualLabel.htmlFor = 'dice-project-manual-input';
         manualRow.appendChild(manualLabel);
 
         const manualInput = document.createElement('input');
         manualInput.type = 'number';
+        manualInput.id = 'dice-project-manual-input';
         manualInput.className = 'dice-project-manual-input';
         manualInput.placeholder = 'Enter a result';
         manualInput.addEventListener('input', () => {
@@ -751,8 +755,16 @@ class DashboardDiceRoller {
             return;
         }
 
+        const wasHidden = this.overlay.classList.contains('hidden');
         this.overlay.classList.remove('hidden');
         document.addEventListener('keydown', this.handleKeyDown);
+
+        if (wasHidden && window.UIKit) {
+            window.UIKit.openModal(this.modal, {
+                onClose: () => this.close(),
+                initialFocus: this.modal
+            });
+        }
 
         requestAnimationFrame(() => {
             if (!this.modal) {
@@ -774,10 +786,15 @@ class DashboardDiceRoller {
             return;
         }
 
+        const wasOpen = !this.overlay.classList.contains('hidden');
         this.overlay.classList.add('hidden');
         document.removeEventListener('keydown', this.handleKeyDown);
         this.onPointerUp();
         this.cancelProjectRoll();
+
+        if (wasOpen && window.UIKit) {
+            window.UIKit.closeModal(this.modal);
+        }
     }
 
     setProjectMode(mode) {
@@ -971,6 +988,7 @@ class DashboardDiceRoller {
 
         const removeClass = () => element.classList.remove('dice-queue-display--flash');
         element.addEventListener('animationend', removeClass, { once: true });
+        setTimeout(removeClass, 1600);
     }
 
     clearProjectManualInput() {
@@ -1184,7 +1202,24 @@ class DashboardDiceRoller {
             }
 
             this.updateResultDisplay(rollResult);
-            this.publishRollToChat('dice_roll', rollResult);
+            const publishPromise = this.publishRollToChat('dice_roll', rollResult);
+            if (publishPromise) {
+                if (window.UIKit) {
+                    window.UIKit.setLoading(this.rollButton, true, 'Sending…');
+                }
+                publishPromise
+                    .then(() => {
+                        if (window.UIKit) {
+                            window.UIKit.toast('Roll sent to chat', 'success');
+                        }
+                    })
+                    .catch(() => {})
+                    .finally(() => {
+                        if (window.UIKit) {
+                            window.UIKit.setLoading(this.rollButton, false);
+                        }
+                    });
+            }
             this.currentRollQueue = [];
             this.updateQueueDisplay();
         } catch (error) {
@@ -1418,6 +1453,23 @@ class DashboardDiceRoller {
         return { result: total, detail: rolls };
     }
 
+    createResultRow({ label, value, kept = false }) {
+        const row = document.createElement('div');
+        row.className = kept ? 'dice-result-row dice-result-row--kept' : 'dice-result-row';
+
+        const labelEl = document.createElement('span');
+        labelEl.className = 'dice-result-row__label';
+        labelEl.textContent = kept ? `${label} (kept)` : label;
+        row.appendChild(labelEl);
+
+        const valueEl = document.createElement('span');
+        valueEl.className = 'dice-result-row__value';
+        valueEl.textContent = value;
+        row.appendChild(valueEl);
+
+        return row;
+    }
+
     updateResultDisplay(rollResult) {
         if (!rollResult) {
             return;
@@ -1431,7 +1483,7 @@ class DashboardDiceRoller {
                 ? 'Result (Advantage)'
                 : 'Result';
 
-        const detailParts = [];
+        const detailRows = [];
         if (hasAdvantage) {
             const attempts = Array.isArray(rollResult.advantage.attempts)
                 ? rollResult.advantage.attempts
@@ -1441,19 +1493,17 @@ class DashboardDiceRoller {
                 : 0;
 
             if (attempts.length > 0) {
-                const attemptSummary = attempts
-                    .map((attempt, index) => {
-                        const total = typeof attempt.total === 'number' ? attempt.total : '?';
-                        return `#${index + 1}: ${total}`;
-                    })
-                    .join(', ');
-                const keptAttempt = attempts[keptIndex];
-                const keptTotal = keptAttempt && typeof keptAttempt.total === 'number'
-                    ? keptAttempt.total
-                    : rollResult.total;
-                detailParts.push(`Advantage applied (kept #${keptIndex + 1}: ${keptTotal}). Rolls ${attemptSummary}.`);
+                attempts.forEach((attempt, index) => {
+                    const total = typeof attempt.total === 'number' ? attempt.total : '?';
+                    detailRows.push({
+                        label: `Roll #${index + 1}`,
+                        value: `${total}`,
+                        kept: index === keptIndex
+                    });
+                });
+                detailRows.push({ label: 'Kept', value: `Roll #${keptIndex + 1}` });
             } else {
-                detailParts.push('Advantage applied: best of two rolls kept.');
+                detailRows.push({ label: 'Advantage', value: 'best of two kept' });
             }
         }
 
@@ -1461,7 +1511,7 @@ class DashboardDiceRoller {
             const manualValue = rollResult.manualEntry && typeof rollResult.manualEntry.value !== 'undefined'
                 ? rollResult.manualEntry.value
                 : rollResult.total;
-            detailParts.push(`Manual result entered (${manualValue}).`);
+            detailRows.push({ label: 'Manual entry', value: `${manualValue}` });
         }
 
         if (Array.isArray(rollResult.breakdown)) {
@@ -1470,11 +1520,14 @@ class DashboardDiceRoller {
                     return;
                 }
                 if (entry.type === 'dice') {
-                    const notation = entry.notation || '';
+                    const notation = entry.notation || 'Dice';
                     const rolls = Array.isArray(entry.rolls) ? entry.rolls.join(', ') : '';
-                    detailParts.push(`${notation}: ${rolls}`.trim());
+                    detailRows.push({ label: notation, value: rolls });
                 } else if (entry.type === 'modifier') {
-                    detailParts.push(entry.notation || `${entry.value >= 0 ? '+' : ''}${entry.value}`);
+                    detailRows.push({
+                        label: 'Modifier',
+                        value: entry.notation || `${entry.value >= 0 ? '+' : ''}${entry.value}`
+                    });
                 }
             });
         }
@@ -1484,11 +1537,13 @@ class DashboardDiceRoller {
                 total.textContent = `${resultLabel}: ${rollResult.total}`;
             }
             if (detail) {
-                if (detailParts.length > 0) {
-                    detail.textContent = detailParts.join(' | ');
-                    detail.style.display = 'block';
+                detail.textContent = '';
+                if (detailRows.length > 0) {
+                    detailRows.forEach((row) => {
+                        detail.appendChild(this.createResultRow(row));
+                    });
+                    detail.style.display = 'flex';
                 } else {
-                    detail.textContent = '';
                     detail.style.display = 'none';
                 }
             }
@@ -1503,7 +1558,7 @@ class DashboardDiceRoller {
 
     publishRollToChat(type, rollResult, extraPayload = {}) {
         if (!rollResult || !window.dashboardChat || typeof window.dashboardChat.sendMessage !== 'function') {
-            return;
+            return null;
         }
 
         const payload = Object.assign({}, rollResult, extraPayload);
@@ -1529,7 +1584,10 @@ class DashboardDiceRoller {
 
         if (maybePromise && typeof maybePromise.then === 'function') {
             maybePromise.catch(() => {});
+            return maybePromise;
         }
+
+        return Promise.resolve(maybePromise);
     }
 
     focusProjectsSection() {
@@ -1658,6 +1716,17 @@ class DashboardDiceRoller {
         this.lastPosition = { left, top };
     }
 
+    getChatPanelReservedWidth() {
+        if (!document.body || !document.body.classList.contains('chat-panel-is-open')) {
+            return 0;
+        }
+
+        const styles = window.getComputedStyle(document.body);
+        const width = parseFloat(styles.getPropertyValue('--chat-panel-width')) || 360;
+        const offset = parseFloat(styles.getPropertyValue('--chat-panel-offset')) || 20;
+        return width + offset + 8;
+    }
+
     constrainPosition(left, top, widthOverride = null, heightOverride = null) {
         if (!this.modal) {
             return { left, top };
@@ -1666,7 +1735,8 @@ class DashboardDiceRoller {
         const modalWidth = widthOverride || this.modal.offsetWidth;
         const modalHeight = heightOverride || this.modal.offsetHeight;
 
-        const maxLeft = Math.max(window.innerWidth - modalWidth, 0);
+        const reservedRight = this.getChatPanelReservedWidth();
+        const maxLeft = Math.max(window.innerWidth - reservedRight - modalWidth, 0);
         const maxTop = Math.max(window.innerHeight - modalHeight, 0);
 
         return {

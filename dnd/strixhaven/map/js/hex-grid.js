@@ -51,9 +51,9 @@ class HexGridV2 {
         // Colors
         this.colors = {
             grid: 'rgba(100, 100, 150, 0.3)',
-            hover: 'rgba(255, 255, 100, 0.4)',
-            hoverStroke: 'rgba(255, 255, 100, 0.8)',
-            dataOutline: 'rgba(128, 128, 128, 0.8)',   // Grey outline for data
+            hover: 'rgba(255, 255, 150, 0.6)',
+            hoverStroke: 'rgba(255, 255, 170, 0.95)',
+            dataOutline: 'rgba(255, 235, 180, 0.9)',   // Bright outline for data hexes
             copySource: 'rgba(46, 204, 113, 0.6)',     // Green for copy source
             copyTarget: 'rgba(241, 196, 15, 0.6)'      // Yellow for copy target preview
         };
@@ -68,9 +68,13 @@ class HexGridV2 {
         // Initialize grid
         this.initializeGrid();
         
-        // Set up canvas size
+        // Set up canvas size (resize is debounced)
+        this.resizeTimer = null;
         this.resizeCanvas();
-        window.addEventListener('resize', () => this.resizeCanvas());
+        window.addEventListener('resize', () => {
+            clearTimeout(this.resizeTimer);
+            this.resizeTimer = setTimeout(() => this.resizeCanvas(), 120);
+        });
         
         // Load hex status data
         this.loadHexStatus();
@@ -86,15 +90,35 @@ class HexGridV2 {
      * Load the background image
      */
     loadBackgroundImage() {
+        const overlay = document.getElementById('map-loading-overlay');
         this.backgroundImage = new Image();
         this.backgroundImage.onload = () => {
             this.imageLoaded = true;
+            if (overlay) {
+                overlay.classList.add('hidden');
+            }
             this.render();
         };
         this.backgroundImage.onerror = () => {
             console.error('Failed to load background image');
+            if (overlay) {
+                overlay.classList.add('hidden');
+            }
+            if (window.UIKit) {
+                UIKit.toast('Failed to load the map image. Check your connection and reload the page.', 'error', { duration: 0 });
+            }
         };
         this.backgroundImage.src = 'images/Strixhavenmap.png';
+    }
+
+    /**
+     * Fetch with an 8s timeout via AbortController
+     */
+    fetchWithTimeout(url, options = {}) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 8000);
+        return fetch(url, { ...options, signal: controller.signal })
+            .finally(() => clearTimeout(timer));
     }
     
     /**
@@ -120,14 +144,14 @@ class HexGridV2 {
      */
     async loadHexStatus() {
         try {
-            const response = await fetch('hex-data-handler.php', {
+            const response = await this.fetchWithTimeout('hex-data-handler.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                 },
                 body: 'action=get_hex_status'
             });
-            
+
             const data = await response.json();
             if (data.success) {
                 this.hexStatus.clear();
@@ -138,9 +162,15 @@ class HexGridV2 {
                 this.render(); // Re-render to show indicators
             } else {
                 console.error('Failed to load hex status:', data.error);
+                if (window.UIKit) {
+                    UIKit.toast('Failed to load hex markers: ' + (data.error || 'unknown error'), 'error');
+                }
             }
         } catch (error) {
             console.error('Error loading hex status:', error);
+            if (window.UIKit) {
+                UIKit.toast('Could not load hex markers from the server.', 'error');
+            }
         }
     }
     
@@ -149,7 +179,7 @@ class HexGridV2 {
      */
     async loadAllHexData() {
         try {
-            const response = await fetch('hex-data-handler.php', {
+            const response = await this.fetchWithTimeout('hex-data-handler.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -393,9 +423,9 @@ class HexGridV2 {
         // Get hex vertices for drawing the outline
         const vertices = this.coordSystem.getHexVertices(q, r);
         
-        // Draw hex outline with thicker grey border
+        // Draw hex outline with a thicker, bright border
         this.ctx.strokeStyle = this.colors.dataOutline;
-        this.ctx.lineWidth = 2.5;  // Thicker than normal grid lines
+        this.ctx.lineWidth = 3;  // Thicker than normal grid lines
         
         this.ctx.beginPath();
         this.ctx.moveTo(vertices[0].x, vertices[0].y);
@@ -503,12 +533,24 @@ class HexGridV2 {
             
             // Update popup title
             hexCoords.textContent = `Hex (${q}, ${r})`;
-            
+
             // Load hex data
             loadHexData(q, r);
-            
+
             // Show the popup
-            popup.style.display = 'block';
+            popup.style.display = 'flex';
+
+            if (window.UIKit) {
+                UIKit.openModal(popup, {
+                    onClose: () => {
+                        if (window.hexPopupCleanup) {
+                            window.hexPopupCleanup();
+                        } else {
+                            popup.style.display = 'none';
+                        }
+                    }
+                });
+            }
         }
     }
     

@@ -4620,12 +4620,12 @@ export function mountBoardInteractions(store, routes = {}) {
     resolve?.(announceFloatingTextFromAutomation(payload));
   }
 
-  function handleAutomationStartTurnRequest(event) {
+  async function handleAutomationStartTurnRequest(event) {
     const detail = event?.detail ?? {};
     const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
     const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
     try {
-      resolve?.(handleAutomationStartTurn(payload));
+      resolve?.(await handleAutomationStartTurn(payload));
     } catch (error) {
       console.warn('[VTT] automation startTurn failed', error);
       resolve?.({ started: false, valid: false, reason: 'error', message: 'Could not start turn.' });
@@ -6381,28 +6381,35 @@ export function mountBoardInteractions(store, routes = {}) {
     handleAutomationMovePointerMove(event);
   }, true);
 
+  // These three run in the capture phase and stop the event so that Escape
+  // cancels only the pending board picker. Otherwise the UIKit Esc handler
+  // attached to the automation runner window would close the whole runner
+  // while a picker is still waiting on a board click.
   document.addEventListener('keydown', (event) => {
     if (pendingAutomationArea && event.key === 'Escape') {
       event.preventDefault();
+      event.stopImmediatePropagation();
       cancelPendingAutomationArea('Area targeting canceled.');
     }
-  });
+  }, true);
 
   document.addEventListener('keydown', (event) => {
     if (!pendingAutomationMove || event.key !== 'Escape') {
       return;
     }
     event.preventDefault();
+    event.stopImmediatePropagation();
     cancelPendingAutomationMove('Forced movement canceled.');
-  });
+  }, true);
 
   document.addEventListener('keydown', (event) => {
     if (!pendingAutomationTarget || event.key !== 'Escape') {
       return;
     }
     event.preventDefault();
+    event.stopImmediatePropagation();
     cancelPendingAutomationTarget('Target selection canceled.');
-  });
+  }, true);
 
   mapSurface.addEventListener('pointerdown', async (event) => {
     if (isCustomConditionDialogOpen()) {
@@ -10247,7 +10254,7 @@ export function mountBoardInteractions(store, routes = {}) {
     processCombatantActivation(target);
   }
 
-  function processCombatantActivation(target) {
+  async function processCombatantActivation(target) {
     if (!combatActive || !target) {
       return;
     }
@@ -10283,7 +10290,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (activeCombatantId && activeCombatantId !== representativeId) {
       const currentLabel = getCombatantLabel(activeCombatantId) || 'the current combatant';
       const nextLabel = getCombatantLabel(representativeId) || 'this combatant';
-      if (!confirmSwitchActiveTurn(currentLabel, nextLabel)) {
+      if (!(await confirmSwitchActiveTurn(currentLabel, nextLabel))) {
         return;
       }
       completeActiveCombatant({
@@ -11803,20 +11810,18 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
-  function handleEndCombat() {
+  async function handleEndCombat() {
     if (!combatActive) {
       return;
     }
 
     if (isGmUser()) {
-      try {
-        if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
-          const confirmed = window.confirm('End combat and reset the tracker?');
-          if (!confirmed) {
-            return;
-          }
-        }
-      } catch (error) {
+      const confirmed = await confirmBoardAction('End combat and reset the tracker?', {
+        title: 'End Combat',
+        confirmText: 'End combat',
+        danger: true,
+      });
+      if (!confirmed || !combatActive) {
         return;
       }
     }
@@ -12377,12 +12382,30 @@ export function mountBoardInteractions(store, routes = {}) {
     return true;
   }
 
+  async function confirmBoardAction(message, options = {}) {
+    if (typeof window !== 'undefined' && window.UIKit && typeof window.UIKit.confirm === 'function') {
+      try {
+        return await window.UIKit.confirm({ message, ...options });
+      } catch (error) {
+        return false;
+      }
+    }
+    try {
+      if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+        return window.confirm(message);
+      }
+    } catch (error) {
+      return false;
+    }
+    return false;
+  }
+
   function notifyTurnLocked(holderName) {
     const displayName = holderName && holderName.trim() ? holderName.trim() : 'another player';
     const message = `${displayName} is currently taking their turn.`;
     try {
-      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-        window.alert(message);
+      if (typeof window !== 'undefined' && window.UIKit && typeof window.UIKit.toast === 'function') {
+        window.UIKit.toast(message, 'warning');
       } else {
         showConditionBanner(message, { tone: 'warning' });
       }
@@ -12393,15 +12416,11 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function confirmTurnLockOverride(holderName) {
     const displayName = holderName && holderName.trim() ? holderName.trim() : 'another player';
-    const message = `${displayName} is currently taking their turn. Override anyway?`;
-    try {
-      if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
-        return window.confirm(message);
-      }
-    } catch (error) {
-      return false;
-    }
-    return false;
+    return confirmBoardAction(`${displayName} is currently taking their turn. Override anyway?`, {
+      title: 'Turn In Progress',
+      confirmText: 'Override',
+      danger: true,
+    });
   }
 
   function confirmSwitchActiveTurn(currentLabel, nextLabel) {
@@ -12411,15 +12430,10 @@ export function mountBoardInteractions(store, routes = {}) {
     const nextName = typeof nextLabel === 'string' && nextLabel.trim()
       ? nextLabel.trim()
       : 'this combatant';
-    const message = `${currentName} is already taking a turn. End that turn and start ${nextName}'s turn instead?`;
-    try {
-      if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
-        return window.confirm(message);
-      }
-    } catch (error) {
-      return false;
-    }
-    return false;
+    return confirmBoardAction(
+      `${currentName} is already taking a turn. End that turn and start ${nextName}'s turn instead?`,
+      { title: 'Switch Active Turn', confirmText: 'Switch turn' }
+    );
   }
 
   function forceAcquireTurnLockForGm(combatantId) {
@@ -12463,15 +12477,11 @@ export function mountBoardInteractions(store, routes = {}) {
     const confirmationCompletedIds = Array.from(completedCombatants).sort();
     const confirmationRepresentatives = representatives.slice().sort();
 
-    const promptRoundEnd = () => {
-      let confirmed = false;
-      try {
-        confirmed = typeof window !== 'undefined' && typeof window.confirm === 'function'
-          ? window.confirm('End combat round?')
-          : false;
-      } catch (error) {
-        confirmed = false;
-      }
+    const promptRoundEnd = async () => {
+      const confirmed = await confirmBoardAction('End combat round?', {
+        title: 'End Round',
+        confirmText: 'End round',
+      });
 
       if (confirmed) {
         const currentRepresentatives = getAllRepresentativeIds().slice().sort();
@@ -13356,17 +13366,10 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function confirmAutomationStartTurn(message) {
-    try {
-      if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
-        return window.confirm(message);
-      }
-    } catch (error) {
-      return false;
-    }
-    return false;
+    return confirmBoardAction(message, { title: 'Start Turn', confirmText: 'Start turn' });
   }
 
-  function handleAutomationStartTurn(payload = {}) {
+  async function handleAutomationStartTurn(payload = {}) {
     const placementId = typeof payload.placementId === 'string' && payload.placementId.trim()
       ? payload.placementId.trim()
       : typeof payload.sourceId === 'string'
@@ -13382,7 +13385,7 @@ export function mountBoardInteractions(store, routes = {}) {
       if (payload.confirmOnInvalid === false && payload.preflightAccepted !== true) {
         return { started: false, valid: false, reason: check.reason, message: check.message };
       }
-      if (payload.preflightAccepted !== true && !confirmAutomationStartTurn(payload.invalidMessage || check.message)) {
+      if (payload.preflightAccepted !== true && !(await confirmAutomationStartTurn(payload.invalidMessage || check.message))) {
         return { started: false, valid: false, reason: check.reason, canceled: true, message: check.message };
       }
     }
@@ -13414,7 +13417,7 @@ export function mountBoardInteractions(store, routes = {}) {
     return { started: activeCombatantId === representativeId, valid: check.valid, reason: check.reason };
   }
 
-  function handlePlayerInitiatedTurn(combatantId, context = {}) {
+  async function handlePlayerInitiatedTurn(combatantId, context = {}) {
     const userId = getCurrentUserId();
     if (!userId) {
       return;
@@ -13436,18 +13439,22 @@ export function mountBoardInteractions(store, routes = {}) {
       if (validation.confirmationType === 'override_active_turn') {
         // Someone else is actively taking their turn - check if there's a lock holder
         const lockHolderName = turnLockState.holderName || 'Another player';
-        if (!window.confirm(`${lockHolderName} is currently taking their turn. End that turn and start yours instead?`)) {
+        const overrideTurn = await confirmBoardAction(
+          `${lockHolderName} is currently taking their turn. End that turn and start yours instead?`,
+          { title: 'Turn In Progress', confirmText: 'Start my turn', danger: true }
+        );
+        if (!overrideTurn) {
           return;
         }
       } else if (validation.confirmationType === 'switch_active_turn') {
         const currentLabel = getCombatantLabel(activeCombatantId) || 'the current combatant';
         const nextLabel = getCombatantLabel(combatantId) || 'your character';
-        if (!confirmSwitchActiveTurn(currentLabel, nextLabel)) {
+        if (!(await confirmSwitchActiveTurn(currentLabel, nextLabel))) {
           return;
         }
       } else {
         // Unknown confirmation type, use generic
-        if (!confirmPlayerTurnOverride()) {
+        if (!(await confirmPlayerTurnOverride())) {
           return;
         }
       }
@@ -13486,14 +13493,10 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function confirmPlayerTurnOverride() {
-    try {
-      if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
-        return window.confirm("It is not the PC's turn. Would you like to go anyways?");
-      }
-    } catch (error) {
-      return false;
-    }
-    return true;
+    return confirmBoardAction("It is not the PC's turn. Would you like to go anyways?", {
+      title: 'Out of Turn',
+      confirmText: 'Go anyway',
+    });
   }
 
   function handleActiveTeamChanged(previousTeam, nextTeam, previousCombatantId, nextCombatantId) {
