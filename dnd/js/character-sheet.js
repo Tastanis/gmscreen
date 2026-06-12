@@ -1,31 +1,33 @@
 // Enhanced Character Sheet JavaScript - Strixhaven Functionality with Read-Only Player Mode
 
-// Setup save on navigation functionality (GM only)
+// Setup save on navigation functionality (warning for everyone, flush for GM)
 function setupAutoSave() {
-    if (!isGM) return; // Only GM gets navigation saves
-    
     // NO MORE AUTO-SAVE INTERVAL - Removed to prevent 503 errors
-    
-    // Save before window/tab close
+
+    // Warn before window/tab close if there are pending unsaved changes
     window.addEventListener('beforeunload', function(e) {
         if (hasPendingChanges()) {
-            // Use synchronous XMLHttpRequest for beforeunload (async doesn't work reliably)
-            const updates = collectAllFormData();
-            if (updates.length > 0) {
-                const xhr = new XMLHttpRequest();
-                xhr.open('POST', 'dashboard.php', false); // false = synchronous
-                xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-                const params = 'action=batch_save&character=' + encodeURIComponent(currentCharacter) + 
-                              '&updates=' + encodeURIComponent(JSON.stringify(updates));
-                xhr.send(params);
+            if (isGM) {
+                // Use synchronous XMLHttpRequest for beforeunload (async doesn't work reliably)
+                const updates = collectAllFormData();
+                if (updates.length > 0) {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('POST', 'dashboard.php', false); // false = synchronous
+                    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+                    const params = 'action=batch_save&character=' + encodeURIComponent(currentCharacter) +
+                                  '&updates=' + encodeURIComponent(JSON.stringify(updates));
+                    xhr.send(params);
+                }
             }
-            
+
             // Most browsers will show their own message, but we set one just in case
             e.preventDefault();
             e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
         }
     });
-    
+
+    if (!isGM) return; // Only GM saves on link navigation
+
     // Save before navigating away from the page
     document.addEventListener('click', function(e) {
         // Check if clicking a link that will navigate away
@@ -274,6 +276,7 @@ async function processSaveQueue() {
     // Create a new promise for this batch of saves
     activeSavePromise = (async () => {
         const failuresThisRun = [];
+        showSaveStatus('Saving…', 'loading');
         while (saveQueue.length > 0 && !isSwitchingCharacter) {
             const saveRequest = saveQueue.shift();
             const requestWithId = { ...saveRequest, requestId: saveRequest.requestId || generateRequestId() };
@@ -317,11 +320,13 @@ async function processSaveQueue() {
                 }, 1500);
             }
 
-            showSaveStatus('Some changes failed to save. Please retry Save All to prevent data loss.', 'error');
+            showSaveStatus('Save failed', 'error');
             if (!hasShownSaveFailureAlert) {
-                alert('Some changes failed to save. Please click "Save All" to retry and keep this page open.');
+                UIKit.toast('Some changes failed to save. Please click "Save All" to retry and keep this page open.', 'error');
                 hasShownSaveFailureAlert = true;
             }
+        } else if (saveQueue.length === 0) {
+            showSaveStatus('Saved ✓', 'success');
         }
     })();
 
@@ -1287,16 +1292,22 @@ function addRelationship() {
 }
 
 // Delete relationship (GM only)
-function deleteRelationship(index) {
+async function deleteRelationship(index) {
     if (!isGM) return;
-    
-    if (confirm('Are you sure you want to delete this relationship?')) {
+
+    const confirmed = await UIKit.confirm({
+        title: 'Delete Relationship',
+        message: 'Are you sure you want to delete this relationship?',
+        confirmText: 'Delete',
+        danger: true
+    });
+    if (confirmed) {
         const formData = new FormData();
         formData.append('action', 'delete_item');
         formData.append('character', currentCharacter);
         formData.append('section', 'relationships');
         formData.append('index', index);
-        
+
         fetch('dashboard.php', {
             method: 'POST',
             body: formData
@@ -1705,10 +1716,16 @@ function addProject() {
 }
 
 // Delete project (GM only)
-function deleteProject(index) {
+async function deleteProject(index) {
     if (!isGM) return;
-    
-    if (confirm('Are you sure you want to delete this project?')) {
+
+    const confirmed = await UIKit.confirm({
+        title: 'Delete Project',
+        message: 'Are you sure you want to delete this project?',
+        confirmText: 'Delete',
+        danger: true
+    });
+    if (confirmed) {
         const formData = new FormData();
         formData.append('action', 'delete_item');
         formData.append('character', currentCharacter);
@@ -1879,7 +1896,7 @@ function deleteClub() {
     if (!isGM) return;
     
     if (characterData.clubs.length <= 1) {
-        alert('Cannot delete the last club.');
+        UIKit.toast('Cannot delete the last club.', 'warning');
         return;
     }
     
@@ -2241,18 +2258,23 @@ function clearAllFormData() {
 }
 
 // Finalize current class (GM only)
-function finalizeClass() {
+async function finalizeClass() {
     if (!isGM) return;
-    
+
     const classNameElement = document.getElementById('class_name');
     if (!classNameElement || !classNameElement.value) {
-        alert('Please enter a class name before finalizing.');
+        UIKit.toast('Please enter a class name before finalizing.', 'warning');
         return;
     }
-    
+
     const className = classNameElement.value;
-    
-    if (confirm(`Are you sure you want to finalize the class "${className}"?`)) {
+
+    const confirmed = await UIKit.confirm({
+        title: 'Finalize Class',
+        message: `Are you sure you want to finalize the class "${className}"?`,
+        confirmText: 'Finalize'
+    });
+    if (confirmed) {
         const formData = new FormData();
         formData.append('action', 'save');
         formData.append('character', currentCharacter);
@@ -2396,10 +2418,8 @@ function loadPortrait(portraitPath) {
     }
 }
 
-// Show save status (GM only shows save messages)
+// Show save status (visible to all users)
 function showSaveStatus(message, type) {
-    if (!isGM) return; // Only GM sees save status
-    
     const statusElement = document.getElementById('save-status');
     if (!statusElement) return;
     
@@ -2441,7 +2461,7 @@ function openStrixhavenSection(section) {
     
     // Check if Arcane Construction section and user is not zepha or GM
     if (section === 'arcaneconstruction' && currentUser !== 'zepha' && !isGM) {
-        alert('Access Restricted: Arcane Construction is only available to Zepha and the GM.');
+        UIKit.toast('Access Restricted: Arcane Construction is only available to Zepha and the GM.', 'warning');
         return false;
     }
     

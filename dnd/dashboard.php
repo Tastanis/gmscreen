@@ -861,8 +861,11 @@ $currentCharacter = $is_gm ? 'cal' : $user; // GM starts viewing Cal, players se
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Strixhaven Report Card - <?php echo htmlspecialchars($user); ?></title>
+    <link rel="stylesheet" href="css/theme.css">
+    <link rel="stylesheet" href="css/ui-kit.css">
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="dice-roller/dice-roller.css">
+    <script src="js/ui-kit.js"></script>
     <link rel="stylesheet" href="Halloween/theme.css" id="halloween-theme" disabled>
     <link rel="stylesheet" href="Christmas/theme.css" id="christmas-theme" disabled>
     <link rel="stylesheet" href="Cal/theme.css" id="cal-theme" disabled>
@@ -1121,7 +1124,7 @@ $currentCharacter = $is_gm ? 'cal' : $user; // GM starts viewing Cal, players se
                         <div class="form-group">
                             <label>Overall Grade:</label>
                             <?php if ($is_gm): ?>
-                                <input type="text" id="overall_grade" data-field="overall_grade" data-section="current_classes" readonly style="background-color: #f8f9fa;">
+                                <input type="text" id="overall_grade" data-field="overall_grade" data-section="current_classes" readonly style="background: var(--surface-strong); border-style: dashed; cursor: default;">
                             <?php else: ?>
                                 <div class="readonly-field" id="overall_grade">-</div>
                             <?php endif; ?>
@@ -1278,12 +1281,10 @@ $currentCharacter = $is_gm ? 'cal' : $user; // GM starts viewing Cal, players se
             </div>
         </div>
 
-        <!-- Save Status (GM Only) -->
-        <?php if ($is_gm): ?>
-            <div class="save-container">
-                <div id="save-status" class="save-status"></div>
-            </div>
-        <?php endif; ?>
+        <!-- Save Status -->
+        <div class="save-container">
+            <div id="save-status" class="save-status" role="status" aria-live="polite"></div>
+        </div>
 
         <!-- Backup Button (GM Only) - Bottom Left -->
         <?php if ($is_gm): ?>
@@ -1370,8 +1371,8 @@ $currentCharacter = $is_gm ? 'cal' : $user; // GM starts viewing Cal, players se
         document.addEventListener('DOMContentLoaded', function() {
             initRelationshipAutocomplete();
             loadCharacterData(currentCharacter);
+            setupAutoSave();
             if (isGM) {
-                setupAutoSave();
                 setupEventListeners();
                 setupSessionBackup();
             }
@@ -1493,7 +1494,12 @@ $currentCharacter = $is_gm ? 'cal' : $user; // GM starts viewing Cal, players se
             if (!btn) return;
 
             btn.addEventListener('click', async function () {
-                if (!confirm('Clear server and browser caches, then reload the page?')) return;
+                const confirmed = await UIKit.confirm({
+                    title: 'Clear Cache',
+                    message: 'Clear server and browser caches, then reload the page?',
+                    confirmText: 'Clear & Reload'
+                });
+                if (!confirmed) return;
 
                 var originalLabel = btn.textContent;
                 btn.disabled = true;
