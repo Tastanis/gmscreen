@@ -178,10 +178,15 @@
             var parts = buildDialog(opts, withInput);
             var previousFocus = document.activeElement;
             var settled = false;
+            // Join the modal stack so Esc/Tab handlers of modals underneath
+            // see this dialog as topmost and stay inert while it is open.
+            var stackRecord = { el: parts.overlay, onClose: null, previousFocus: null, keyHandler: null };
 
             function settle(value) {
                 if (settled) { return; }
                 settled = true;
+                var idx = openModals.indexOf(stackRecord);
+                if (idx !== -1) { openModals.splice(idx, 1); }
                 document.removeEventListener('keydown', onKeyDown, true);
                 parts.overlay.classList.add('uik-overlay--leaving');
                 setTimeout(function () {
@@ -220,6 +225,7 @@
                 }
             });
             document.addEventListener('keydown', onKeyDown, true);
+            openModals.push(stackRecord);
 
             document.body.appendChild(parts.overlay);
             if (withInput) {
