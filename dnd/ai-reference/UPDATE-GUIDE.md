@@ -22,10 +22,9 @@ When touching monster tray or monster runtime:
 
 When touching source-book organization:
 
-- Update `source/rules/INDEX.md` or `source/monsters/INDEX.md`.
+- Update `source/rules-v1.01b/INDEX.md` or `source/monsters/INDEX.md`.
 - Keep chunking coarse unless there is a clear retrieval problem.
 
 ## Rule
 
 Do not invent JSON fields or hook names. If the code does not support a mechanic, use `note` or `other` in automation JSON and document the limitation in the registry.
-

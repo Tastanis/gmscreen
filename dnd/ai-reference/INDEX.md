@@ -4,18 +4,18 @@
 
 | Task | Read these files |
 |---|---|
-| Make a class ability JSON | `source/rules/classes/<class>.md`, then `../character_sheet/ability-automation/AUTHORING.md`, then `../character_sheet/ability-automation/REGISTRY.md` |
+| Make a class ability JSON | `source/rules-v1.01b/classes/<class>.md`, then `../character_sheet/ability-automation/AUTHORING.md`, then `../character_sheet/ability-automation/REGISTRY.md` |
 | Make a monster import JSON | `source/monsters/INDEX.md`, one monster chunk, then `../strixhaven/monster-creator/MONSTER_JSON_IMPORT_TEMPLATE.md` |
 | Add automation to an existing monster ability | Monster chunk, `vtt-json/INDEX.md`, `hooks/INDEX.md`, and the current ability row in the monster creator data/code |
 | Check whether an effect/hook exists | `../character_sheet/ability-automation/REGISTRY.md`, then `hooks/INDEX.md` |
 | Update automation schema/runtime | `UPDATE-GUIDE.md`, `../character_sheet/ability-automation/README.md`, `AUTHORING.md`, and `REGISTRY.md` |
-| Add heroic resource automation | `source/rules/classes/<class>.md`, then `../character_sheet/heroic-resource-automation/README.md`, then VTT event hooks in `../vtt/assets/js/ui/board-interactions.js` |
+| Add heroic resource automation | `source/rules-v1.01b/classes/<class>.md`, then `../character_sheet/heroic-resource-automation/README.md`, then VTT event hooks in `../vtt/assets/js/ui/board-interactions.js` |
 | Work on monster tray/runtime behavior | `vtt-json/INDEX.md`, `hooks/INDEX.md`, `../vtt/assets/js/ui/monster-ability-tray.js`, `../vtt/assets/js/ui/monster-ability-runner-glue.js` |
 
 ## Source Text
 
-- Rules chapter chunks: `source/rules/chapters/`
-- Whole-class chunks: `source/rules/classes/`
+- Current Heroes v1.01b rules chapter chunks: `source/rules-v1.01b/chapters/`
+- Current Heroes v1.01b whole-class chunks: `source/rules-v1.01b/classes/`
 - Monster chunk index: `source/monsters/INDEX.md`
 - Monster source chunks: `source/monsters/chunks/`
 
@@ -31,7 +31,7 @@
 
 For "In All This Confusion":
 
-1. Open `source/rules/classes/shadow.md`.
+1. Open `source/rules-v1.01b/classes/shadow.md`.
 2. Search for `In All This Confusion`.
 3. Confirm it is a Shadow Harlequin Mask triggered action: trigger is taking damage, effect halves the damage and teleports up to 4 squares after the triggering effect resolves.
 4. Open `../character_sheet/ability-automation/AUTHORING.md` and search for `trigger`, `halveTriggeringDamage`, and `teleport`.

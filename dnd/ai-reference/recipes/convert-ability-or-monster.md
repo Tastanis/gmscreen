@@ -2,7 +2,7 @@
 
 ## Class Ability
 
-1. Open `../source/rules/classes/<class>.md`.
+1. Open `../source/rules-v1.01b/classes/<class>.md`.
 2. Search for the ability name.
 3. Capture the visible card fields: name, action label, keywords, range, target, trigger, cost, description, and test tiers.
 4. Open `../../character_sheet/ability-automation/AUTHORING.md`.
