@@ -2216,8 +2216,8 @@ function renderMonsterMovementEditor(monsterId, monster) {
     }).join('');
 
     return `
-        <div class="defensive-stat defensive-stat--multi">
-            <span class="defensive-stat-label">Movement Types:</span>
+        <div class="defensive-stat defensive-stat--multi defensive-stat--movement">
+            <span class="defensive-stat-label">Movement:</span>
             <div class="movement-editor">
                 <div class="movement-chips">${chips || '<span class="movement-empty">none</span>'}</div>
                 <div class="movement-presets">${presetButtons}</div>

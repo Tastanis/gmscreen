@@ -432,6 +432,7 @@ body.delete-mode-active .sub-tab:hover {
     max-width: 760px;
     margin-left: auto;
     margin-right: auto;
+    overflow: hidden;
 }
 
 .card-header {
@@ -482,6 +483,7 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .search-mode .monster-info-top {
+    grid-template-columns: 80px minmax(0, 1fr);
     padding: 8px;
     margin-bottom: 8px;
     gap: 10px;
@@ -508,11 +510,23 @@ body.delete-mode-active .sub-tab:hover {
     gap: 8px;
 }
 
+.search-mode .info-row-1 {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.search-mode .info-row-2 {
+    grid-template-columns: auto minmax(0, 1fr) auto minmax(44px, 52px);
+}
+
+.search-mode .level-role-section {
+    grid-template-columns: auto minmax(0, 1fr);
+}
+
 .search-mode .monster-name {
     font-size: 16px;
     padding: 6px 10px;
-    min-width: 150px;
-    max-width: 200px;
+    min-width: 0;
+    max-width: none;
 }
 
 .search-mode .level-role-section {
@@ -529,12 +543,34 @@ body.delete-mode-active .sub-tab:hover {
 .search-mode .types-input {
     padding: 6px 10px;
     font-size: 13px;
-    min-width: 120px;
-    max-width: 160px;
+    min-width: 0;
+    max-width: none;
 }
 
 .search-mode .field-label {
     font-size: 12px;
+}
+
+.search-mode .edit-monster-btn {
+    grid-column: 1 / -1;
+    justify-self: end;
+    margin-left: 0;
+}
+
+.search-mode .core-stats-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    padding: 8px;
+}
+
+.search-mode .defensive-stats-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    padding: 8px;
+}
+
+.search-mode .defensive-stat--movement {
+    grid-column: 1 / -1;
 }
 
 /* Compact Stats Grid for Search Mode */
@@ -684,7 +720,8 @@ body.delete-mode-active .sub-tab:hover {
 
 /* New Monster Info Top Section */
 .monster-info-top {
-    display: flex;
+    display: grid;
+    grid-template-columns: 120px minmax(0, 1fr);
     gap: 12px;
     margin-bottom: 14px;
     padding: 12px;
@@ -761,22 +798,31 @@ body.delete-mode-active .sub-tab:hover {
 
 /* Right side - Info fields */
 .info-right {
-    flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 10px;
 }
 
 .info-row-1, .info-row-2 {
-    display: flex;
+    display: grid;
     align-items: center;
     gap: 8px;
+    min-width: 0;
+}
+
+.info-row-1 {
+    grid-template-columns: minmax(150px, 1fr) minmax(0, 1.35fr);
+}
+
+.info-row-2 {
+    grid-template-columns: auto minmax(120px, 1fr) auto minmax(48px, 64px) auto;
 }
 
 .monster-name {
-    flex: 0 1 auto;
-    min-width: 200px;
-    max-width: 280px;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
     font-size: 18px;
     font-weight: bold;
     border: 1px solid var(--border);
@@ -784,7 +830,7 @@ body.delete-mode-active .sub-tab:hover {
     padding: 7px 10px;
     border-radius: 4px;
     transition: border-color 0.15s;
-    margin-right: 8px;
+    box-sizing: border-box;
 }
 
 .monster-name:focus {
@@ -793,47 +839,52 @@ body.delete-mode-active .sub-tab:hover {
 
 /* Level and Role Section */
 .level-role-section {
-    display: flex;
+    display: grid;
+    grid-template-columns: auto minmax(48px, 60px) auto minmax(78px, 1fr) auto minmax(78px, 1fr);
     gap: 6px;
     align-items: center;
+    min-width: 0;
 }
 
 .level-input {
-    width: 70px;
+    width: 100%;
     padding: 7px 9px;
     border: 1px solid var(--border);
     border-radius: 3px;
     text-align: center;
     font-weight: 500;
+    box-sizing: border-box;
 }
 
 .role-select {
+    min-width: 0;
+    width: 100%;
     padding: 7px 10px;
     border: 1px solid var(--border);
     border-radius: 3px;
     background: #fdf8f2;
     font-weight: 500;
-    min-width: 100px;
+    box-sizing: border-box;
 }
 
 .types-input {
-    flex: 0 1 auto;
-    min-width: 150px;
-    max-width: 220px;
+    min-width: 0;
+    width: 100%;
     padding: 7px 10px;
     border: 1px solid var(--border);
     border-radius: 3px;
     background: #fdf8f2;
-    margin-right: 8px;
+    box-sizing: border-box;
 }
 
 .ev-input {
-    width: 60px;
+    width: 100%;
     padding: 7px 9px;
     border: 1px solid var(--border);
     border-radius: 3px;
     text-align: center;
     font-weight: 500;
+    box-sizing: border-box;
 }
 
 /* Field Labels */
@@ -854,7 +905,7 @@ body.delete-mode-active .sub-tab:hover {
 /* Core Stats Row */
 .core-stats-row {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 10px;
     margin-bottom: 12px;
     padding: 12px;
@@ -871,7 +922,8 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .core-stat-input {
-    width: 60px;
+    width: 100%;
+    max-width: 72px;
     padding: 8px 6px;
     border: 2px solid var(--border);
     border-radius: 4px;
@@ -896,11 +948,12 @@ body.delete-mode-active .sub-tab:hover {
 
 /* Defensive Stats Row */
 .defensive-stats-row {
-    display: flex;
-    gap: 20px;
-    align-items: center;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(160px, 1.25fr);
+    gap: 8px;
+    align-items: stretch;
     margin-bottom: 15px;
-    padding: 12px 15px;
+    padding: 10px;
     background-color: #fff;
     border: 1px solid #e9ecef;
     border-radius: 6px;
@@ -909,13 +962,15 @@ body.delete-mode-active .sub-tab:hover {
 .defensive-stat {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
+    min-width: 0;
 }
 
 .defensive-stat-label {
     font-weight: bold;
     color: #495057;
     white-space: nowrap;
+    flex: 0 0 auto;
 }
 
 .defensive-stat-text {
@@ -955,8 +1010,18 @@ body.delete-mode-active .sub-tab:hover {
     flex-wrap: wrap;
 }
 
+.defensive-stat--movement {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+}
+
 .defensive-stat--multi > .defensive-stat-label {
+    flex: 0 0 auto;
     padding-top: 6px;
+}
+
+.defensive-stat--movement > .defensive-stat-label {
+    padding-top: 4px;
 }
 
 .defensive-stat-rows {
@@ -1059,7 +1124,8 @@ body.delete-mode-active .sub-tab:hover {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    min-width: 240px;
+    min-width: 0;
+    flex: 1 1 auto;
 }
 
 .movement-chips {
@@ -1114,6 +1180,7 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .movement-preset {
+    flex: 1 1 46px;
     padding: 3px 7px;
     border: 1px solid var(--border);
     background: #fff;
@@ -2100,6 +2167,8 @@ body.delete-mode-active .sub-tab:hover {
 
 /* Edit Monster Button */
 .edit-monster-btn {
+    justify-self: end;
+    white-space: nowrap;
     background-color: #7b5a3f;
     color: #fdf8f2;
     border: 1px solid #604733;
@@ -2605,26 +2674,31 @@ body.modal-open {
 
     /* Stack editor form rows cleanly */
     .monster-info-top {
-        flex-direction: column;
+        grid-template-columns: 1fr;
     }
 
     .info-row-1,
-    .info-row-2,
+    .info-row-2 {
+        grid-template-columns: 1fr;
+    }
+
     .level-role-section {
-        flex-wrap: wrap;
+        grid-template-columns: auto minmax(48px, 1fr);
     }
 
     .monster-name,
     .types-input {
         max-width: 100%;
         min-width: 0;
-        flex: 1 1 100%;
     }
 
     .defensive-stats-row {
-        flex-direction: column;
-        align-items: stretch;
+        grid-template-columns: 1fr;
         gap: 12px;
+    }
+
+    .defensive-stat--movement {
+        grid-column: auto;
     }
 
     .attributes-bar {
