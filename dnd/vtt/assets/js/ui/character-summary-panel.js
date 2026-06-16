@@ -223,9 +223,11 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
       return;
     }
     activeDisplayName = activeSheet?.hero?.name || activeToken?.name || formatCharacterName(activeCharacterId);
+    const standFirm = resolveCharacterStandFirmState(activeSheet, activeToken);
     panel.innerHTML = renderCharacterCard(activeSheet, {
       characterId: activeCharacterId,
       token: activeToken,
+      standFirm,
     });
     bindCharacterSummaryControls(panel, {
       onTuck: tuckPanel,
@@ -682,9 +684,33 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   }
 
   abilityTray.addEventListener('click', (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) {
+      return;
+    }
+
+    const chatPost = target.closest('[data-character-chat-post]');
+    if (chatPost && activeSheet) {
+      event.preventDefault();
+      event.stopPropagation();
+      const type = chatPost.dataset.characterChatPost || '';
+      const posted = type === 'item'
+        ? postInventoryItemToChat(activeSheet, chatPost.dataset.itemIndex, { characterId: activeCharacterId })
+        : postAbilityToChat(activeSheet, chatPost.dataset.abilityCategory, chatPost.dataset.abilityIndex, {
+            activeToken,
+            characterId: activeCharacterId,
+          });
+      Promise.resolve(posted).then((ok) => {
+        if (!ok && window.UIKit && typeof window.UIKit.toast === 'function') {
+          window.UIKit.toast('Unable to post to chat.', 'warning');
+        }
+      });
+      return;
+    }
+
     // Trigger-dot toggle (above the TRIGGER tab) — dispatches to the board to
     // flip triggeredActionReady on the placement.
-    const triggerDot = event.target.closest('[data-character-trigger-toggle]');
+    const triggerDot = target.closest('[data-character-trigger-toggle]');
     if (triggerDot) {
       event.preventDefault();
       event.stopPropagation();
@@ -704,7 +730,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
       return;
     }
 
-    const actionDot = event.target.closest('[data-character-action-toggle]');
+    const actionDot = target.closest('[data-character-action-toggle]');
     if (actionDot) {
       event.preventDefault();
       event.stopPropagation();
@@ -724,7 +750,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     }
 
     // Clicking the blue "!" badge clears all ready-trigger flags for this token.
-    const triggerClear = event.target.closest('[data-character-trigger-clear]');
+    const triggerClear = target.closest('[data-character-trigger-clear]');
     if (triggerClear) {
       event.preventDefault();
       event.stopPropagation();
@@ -744,7 +770,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
       return;
     }
 
-    const abilityItem = event.target.closest('[data-character-ability-item]');
+    const abilityItem = target.closest('[data-character-ability-item]');
     if (abilityItem && activeSheet) {
       const action = getAbilityAction(activeSheet, abilityItem.dataset.abilityCategory, abilityItem.dataset.abilityIndex, { activeToken });
       if (action && hasAbilityAutomation(action.automation)) {
@@ -812,7 +838,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
       return;
     }
 
-    const categoryButton = event.target.closest('[data-character-ability-category]');
+    const categoryButton = target.closest('[data-character-ability-category]');
     if (!categoryButton || !activeSheet) {
       return;
     }
@@ -1182,7 +1208,7 @@ function renderInventoryItemList(category, state) {
   } else if (!items.length) {
     body = `<div class="vtt-character-ability-empty">${escapeHtml(category.empty)}</div>`;
   } else {
-    body = items.map(renderInventoryTrayItem).join('');
+    body = items.map((item, index) => renderInventoryTrayItem(item, index)).join('');
   }
 
   return `
@@ -1193,10 +1219,18 @@ function renderInventoryItemList(category, state) {
   `;
 }
 
-function renderInventoryTrayItem(item) {
+function renderInventoryTrayItem(item, index) {
   return `
     <div class="vtt-character-inventory-item" role="menuitem" data-character-inventory-item>
       <span class="vtt-character-inventory-item__name">${escapeHtml(item?.name || 'Unnamed Item')}</span>
+      <button
+        class="vtt-character-chat-dot"
+        type="button"
+        data-character-chat-post="item"
+        data-item-index="${escapeAttribute(index)}"
+        aria-label="Post item to chat"
+        title="Post to chat"
+      ></button>
     </div>
   `;
 }
@@ -1228,6 +1262,16 @@ function renderAbilityItem(action, categoryKey, index, opts = {}) {
       </span>
       ${renderAbilityCostBadge(action)}
       ${automated ? '<span class="vtt-character-ability-item__auto" title="Automated" aria-label="Automated">A</span>' : ''}
+      <span
+        class="vtt-character-chat-dot"
+        role="button"
+        tabindex="0"
+        data-character-chat-post="ability"
+        data-ability-category="${escapeAttribute(categoryKey)}"
+        data-ability-index="${escapeAttribute(index)}"
+        aria-label="Post ability to chat"
+        title="Post to chat"
+      ></span>
     </button>
   `;
 }
@@ -1662,12 +1706,130 @@ async function fetchCharacterInventoryItems(routes, characterId) {
         .map((item) => ({
           id: typeof item?.id === 'string' ? item.id : '',
           name: typeof item?.name === 'string' ? item.name : '',
+          description: typeof item?.description === 'string' ? item.description : '',
+          keywords: typeof item?.keywords === 'string' ? item.keywords : '',
+          effect: typeof item?.effect === 'string' ? item.effect : '',
+          effectSections: Array.isArray(item?.effectSections)
+            ? item.effectSections.map((section) => ({
+                title: typeof section?.title === 'string' ? section.title : '',
+                cost: typeof section?.cost === 'string' ? section.cost : '',
+                text: typeof section?.text === 'string' ? section.text : '',
+              }))
+            : [],
         }))
         .filter((item) => item.name.trim())
     : [];
 }
 
-function renderCharacterCard(sheet, { characterId, token } = {}) {
+function postAbilityToChat(sheet, categoryKey, indexValue, opts = {}) {
+  const action = getAbilityAction(sheet, categoryKey, indexValue, opts);
+  if (!action) {
+    return false;
+  }
+  return postAutomationChat({
+    message: formatAbilityForChat(sheet, action, categoryKey),
+    type: 'text',
+    payload: {
+      kind: 'ability',
+      characterId: opts.characterId || '',
+      category: categoryKey,
+      name: action.name || '',
+    },
+  });
+}
+
+function postInventoryItemToChat(sheet, indexValue, { characterId = '' } = {}) {
+  const index = Number.parseInt(indexValue, 10);
+  const state = INVENTORY_ITEM_CACHE.get(normalizeCharacterId(characterId));
+  const items = Array.isArray(state?.items) ? state.items : [];
+  if (!Number.isInteger(index) || index < 0 || index >= items.length) {
+    return false;
+  }
+  const item = items[index];
+  return postAutomationChat({
+    message: formatInventoryItemForChat(sheet, item),
+    type: 'text',
+    payload: {
+      kind: 'item',
+      characterId,
+      itemId: item.id || '',
+      name: item.name || '',
+    },
+  });
+}
+
+function formatAbilityForChat(sheet, action, categoryKey) {
+  const heroName = sheet?.hero?.name || 'Hero';
+  const title = action?.name || 'Untitled Ability';
+  const label = action?.actionLabel || getAbilityCategoryLabel(categoryKey);
+  const tags = Array.isArray(action?.tags) ? action.tags.filter(Boolean).join(', ') : '';
+  const lines = [
+    `${heroName} - ${title}`,
+    `Type: ${label}${tags ? ` | ${tags}` : ''}`,
+  ];
+
+  if (action?.range) lines.push(`Range: ${action.range}`);
+  if (action?.target) lines.push(`Target: ${action.target}`);
+  if (categoryKey === 'triggers' && action?.trigger) lines.push(`Trigger: ${action.trigger}`);
+  if (action?.cost) lines.push(`Cost: ${action.cost}`);
+  if (action?.useWhen) lines.push(`Use When: ${stripHtml(action.useWhen)}`);
+  if (action?.description) lines.push(`Effect: ${stripHtml(action.description)}`);
+
+  const tests = Array.isArray(action?.tests) ? applyFeatureModifiersToPreviewTests(action.tests, action, sheet) : [];
+  tests.forEach((test) => {
+    lines.push(`-- ${test?.label || 'Power Roll'} (${formatRoll(test?.rollMod)}) --`);
+    if (test?.beforeEffect) lines.push(`Before: ${stripHtml(test.beforeEffect)}`);
+    const tiers = test?.tiers && typeof test.tiers === 'object' ? test.tiers : {};
+    Object.entries(TEST_TIER_LABELS).forEach(([key, labelText]) => {
+      const tierText = formatAbilityTierForChat(tiers[key], sheet);
+      if (tierText) lines.push(`${labelText}: ${tierText}`);
+    });
+    if (test?.additionalEffect) lines.push(`Additional: ${stripHtml(test.additionalEffect)}`);
+  });
+
+  return lines.filter(Boolean).join('\n');
+}
+
+function formatAbilityTierForChat(tier = {}, sheet = null) {
+  const parts = [];
+  if (tier?.damage) {
+    const damage = resolveDamagePreview(tier.damage, sheet);
+    parts.push(`${damage}${tier.damageType ? ` ${tier.damageType}` : ''}`.trim());
+  }
+  const noteHasPotency = hasPotencyShorthand(tier?.notes);
+  if (tier?.notes) {
+    parts.push(resolvePotencyNotePreview(stripHtml(tier.notes), sheet));
+  }
+  if (tier?.attributeCheck?.enabled && !noteHasPotency) {
+    const attribute = tier.attributeCheck.attribute || 'Attribute';
+    const threshold = resolvePotencyThresholdPreview(tier.attributeCheck.threshold, sheet);
+    const effect = tier.attributeCheck.effect || '';
+    parts.push(`${attribute} < ${threshold}${effect ? `: ${effect}` : ''}`);
+  }
+  return parts.filter(Boolean).join(' | ');
+}
+
+function formatInventoryItemForChat(sheet, item) {
+  const heroName = sheet?.hero?.name || 'Hero';
+  const lines = [`${heroName} - ${item?.name || 'Unnamed Item'}`];
+  if (item?.keywords) lines.push(`Keywords: ${item.keywords}`);
+  if (item?.description) lines.push(`Description: ${stripHtml(item.description)}`);
+
+  const sections = Array.isArray(item?.effectSections) ? item.effectSections : [];
+  sections.forEach((section) => {
+    const heading = [section?.title, section?.cost].filter(Boolean).join(' - ');
+    if (heading) lines.push(`-- ${heading} --`);
+    if (section?.text) lines.push(stripHtml(section.text));
+  });
+
+  if (!sections.length && item?.effect) {
+    lines.push(`Effect: ${stripHtml(item.effect)}`);
+  }
+
+  return lines.filter(Boolean).join('\n');
+}
+
+function renderCharacterCard(sheet, { characterId, token, standFirm = null } = {}) {
   const hero = sheet?.hero && typeof sheet.hero === 'object' ? sheet.hero : {};
   const sidebar = sheet?.sidebar && typeof sheet.sidebar === 'object' ? sheet.sidebar : {};
   const vitals = hero.vitals && typeof hero.vitals === 'object' ? hero.vitals : {};
@@ -1696,6 +1858,7 @@ function renderCharacterCard(sheet, { characterId, token } = {}) {
   const lists = sidebar.lists && typeof sidebar.lists === 'object' ? sidebar.lists : {};
   const skills = normalizeSkills(sidebar.skills);
   const languageList = Array.isArray(lists.languages) ? lists.languages : [];
+  const stabilityBonus = standFirm?.active ? Math.max(0, numberLike(standFirm.stabilityBonus, 0)) : 0;
 
   return `
     <article class="vtt-character-card" data-character-id="${escapeHtml(characterId)}">
@@ -1736,7 +1899,7 @@ function renderCharacterCard(sheet, { characterId, token } = {}) {
         <div class="vtt-character-vitals">
           ${renderVital('Speed', vitals.speed)}
           ${renderVital('Disengage', vitals.disengage)}
-          ${renderVital('Stability', vitals.stability)}
+          ${renderVital('Stability', vitals.stability, { bonus: stabilityBonus, source: standFirm?.labels?.[0] || 'Stand Firm' })}
         </div>
       `)}
 
@@ -1875,13 +2038,39 @@ function renderStat(label, value) {
   `;
 }
 
-function renderVital(label, value) {
+function renderVital(label, value, options = {}) {
+  const bonus = Math.max(0, numberLike(options.bonus, 0));
+  const base = Number.parseInt(value, 10);
+  const boosted = bonus > 0 && Number.isFinite(base);
+  const boostedValue = boosted ? base + bonus : bonus;
+  const title = bonus > 0 ? ` title="${escapeAttribute(`${options.source || 'Stand Firm'} adds ${bonus}`)}"` : '';
   return `
-    <div class="vtt-character-vital">
+    <div class="vtt-character-vital ${bonus > 0 ? 'vtt-character-vital--boosted' : ''}"${title}>
       <div class="vtt-character-vital__label">${escapeHtml(label)}</div>
-      <div class="vtt-character-vital__value">${escapeHtml(valueOrDash(value))}</div>
+      <div class="vtt-character-vital__value">${
+        bonus > 0
+          ? `<span class="vtt-character-vital__base">${escapeHtml(valueOrDash(value))}</span><span class="vtt-character-vital__bonus">+${escapeHtml(bonus)}</span><span class="vtt-character-vital__total">=${escapeHtml(boostedValue)}</span>`
+          : escapeHtml(valueOrDash(value))
+      }</div>
     </div>
   `;
+}
+
+function resolveCharacterStandFirmState(sheet, token) {
+  const helper = window.DrawSteelStandFirm;
+  if (!helper || typeof helper.resolveStandFirmState !== 'function' || !token?.id) {
+    return null;
+  }
+  const placements = window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.getActiveScenePlacements === 'function'
+    ? window.VTTBoardCallbacks.getActiveScenePlacements()
+    : [];
+  const placement = placements.find((item) => item?.id === token.id) || token;
+  return helper.resolveStandFirmState({
+    placement,
+    placements,
+    sheet,
+    getTeam: (item) => item?.team,
+  });
 }
 
 function renderResource(label, value, { resource = null } = {}) {

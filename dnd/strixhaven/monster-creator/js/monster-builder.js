@@ -107,6 +107,7 @@ function migrateAbility(simpleAbility, category) {
             tier1: {
                 damage_amount: '',
                 damage_type: '',
+                tier_effect: '',
                 has_attribute_check: false,
                 attribute: 'might',
                 attribute_threshold: 0,
@@ -115,6 +116,7 @@ function migrateAbility(simpleAbility, category) {
             tier2: {
                 damage_amount: '',
                 damage_type: '',
+                tier_effect: '',
                 has_attribute_check: false,
                 attribute: 'might',
                 attribute_threshold: 0,
@@ -123,6 +125,7 @@ function migrateAbility(simpleAbility, category) {
             tier3: {
                 damage_amount: '',
                 damage_type: '',
+                tier_effect: '',
                 has_attribute_check: false,
                 attribute: 'might',
                 attribute_threshold: 0,
@@ -1078,35 +1081,38 @@ function renderCompactTestInfo(test) {
     
     tiers.forEach(tier => {
         const tierData = test[tier.key];
-        if (tierData && (tierData.damage_amount || tierData.damage_type)) {
+        if (tierData && (tierData.damage_amount || tierData.damage_type || tierData.tier_effect || tierData.has_attribute_check)) {
             let tierText = `• (${tier.label}): `;
-            
+            const parts = [];
+
             // Add damage info
             if (tierData.damage_amount || tierData.damage_type) {
                 const damage = tierData.damage_amount || '';
                 const type = tierData.damage_type || '';
                 if (damage) {
-                    tierText += damage;
-                    if (type) {
-                        tierText += ` ${type} damage`;
-                    } else {
-                        tierText += ' damage';
-                    }
+                    parts.push(type ? `${damage} ${type} damage` : `${damage} damage`);
                 } else if (type) {
                     // If only type is specified, just show the type
-                    tierText += type;
+                    parts.push(type);
                 }
             }
-            
+
+            // Add flat tier rider (pull/slide/prone/etc.)
+            if (tierData.tier_effect) {
+                parts.push(tierData.tier_effect);
+            }
+
             // Add attribute check info
             if (tierData.has_attribute_check && tierData.attribute && tierData.attribute_threshold) {
                 const attributeName = tierData.attribute.charAt(0).toUpperCase() + tierData.attribute.slice(1);
-                tierText += `; ${attributeName} ≤${tierData.attribute_threshold}`;
+                let attrText = `${attributeName} ≤${tierData.attribute_threshold}`;
                 if (tierData.attribute_effect) {
-                    tierText += `: ${tierData.attribute_effect}`;
+                    attrText += `: ${tierData.attribute_effect}`;
                 }
+                parts.push(attrText);
             }
-            
+
+            tierText += parts.join('; ');
             testHtml += `<div class="search-test-tier">${tierText}</div>`;
         }
     });
@@ -1423,9 +1429,9 @@ function renderSingleAbility(ability, index, category, monsterId = '') {
     }
     if (!ability.test) {
         ability.test = {
-            tier1: { damage_amount: '', damage_type: '', has_attribute_check: false, attribute: 'might', attribute_threshold: 0, attribute_effect: '' },
-            tier2: { damage_amount: '', damage_type: '', has_attribute_check: false, attribute: 'might', attribute_threshold: 0, attribute_effect: '' },
-            tier3: { damage_amount: '', damage_type: '', has_attribute_check: false, attribute: 'might', attribute_threshold: 0, attribute_effect: '' }
+            tier1: { damage_amount: '', damage_type: '', tier_effect: '', has_attribute_check: false, attribute: 'might', attribute_threshold: 0, attribute_effect: '' },
+            tier2: { damage_amount: '', damage_type: '', tier_effect: '', has_attribute_check: false, attribute: 'might', attribute_threshold: 0, attribute_effect: '' },
+            tier3: { damage_amount: '', damage_type: '', tier_effect: '', has_attribute_check: false, attribute: 'might', attribute_threshold: 0, attribute_effect: '' }
         };
     }
 
@@ -1560,12 +1566,18 @@ function renderTestTier(tierKey, tierLabel, tierData, category, abilityIndex) {
                        value="${tierData.damage_type || ''}">
                 <span class="damage-label" data-tier="${tierKey}">${tierData.damage_amount ? 'damage;' : ''}</span>
                 
-                <button class="btn-small attribute-toggle ${tierData.has_attribute_check ? 'active' : ''}" 
+                <button class="btn-small attribute-toggle ${tierData.has_attribute_check ? 'active' : ''}"
                         onclick="toggleAttributeCheck('${category}', ${abilityIndex}, '${tierKey}')">
                     Attribute Check
                 </button>
             </div>
-            
+
+            <div class="tier-effect-row">
+                <input type="text" class="tier-effect-input" placeholder="extra effect on this tier, e.g. pull 2 toward the cluster; prone"
+                       data-field-path="abilities.${category}.${abilityIndex}.test.${tierKey}.tier_effect"
+                       value="${tierData.tier_effect || ''}">
+            </div>
+
             <div class="attribute-section ${tierData.has_attribute_check ? 'visible' : 'hidden'}">
                 <div class="attribute-check-row">
                     <select class="attribute-select" data-field-path="abilities.${category}.${abilityIndex}.test.${tierKey}.attribute">
@@ -2694,6 +2706,7 @@ function addAbility(monsterId, category = 'action') {
             tier1: {
                 damage_amount: '',
                 damage_type: '',
+                tier_effect: '',
                 has_attribute_check: false,
                 attribute: 'might',
                 attribute_threshold: 0,
@@ -2702,6 +2715,7 @@ function addAbility(monsterId, category = 'action') {
             tier2: {
                 damage_amount: '',
                 damage_type: '',
+                tier_effect: '',
                 has_attribute_check: false,
                 attribute: 'might',
                 attribute_threshold: 0,
@@ -2710,6 +2724,7 @@ function addAbility(monsterId, category = 'action') {
             tier3: {
                 damage_amount: '',
                 damage_type: '',
+                tier_effect: '',
                 has_attribute_check: false,
                 attribute: 'might',
                 attribute_threshold: 0,
@@ -3330,9 +3345,9 @@ function renderBrowserTestInfo(test) {
     
     tiers.forEach(tier => {
         const tierData = test[tier.key];
-        if (tierData && (tierData.damage_amount || tierData.damage_type || tierData.has_attribute_check)) {
+        if (tierData && (tierData.damage_amount || tierData.damage_type || tierData.tier_effect || tierData.has_attribute_check)) {
             let tierContent = [];
-            
+
             // Add damage info
             if (tierData.damage_amount || tierData.damage_type) {
                 const damage = tierData.damage_amount || '';
@@ -3350,7 +3365,12 @@ function renderBrowserTestInfo(test) {
                     tierContent.push(type);
                 }
             }
-            
+
+            // Add flat tier rider (pull/slide/prone/etc.)
+            if (tierData.tier_effect) {
+                tierContent.push(tierData.tier_effect);
+            }
+
             // Add attribute check info
             if (tierData.has_attribute_check && tierData.attribute && tierData.attribute_threshold) {
                 const attributeName = tierData.attribute.charAt(0).toUpperCase() + tierData.attribute.slice(1);
@@ -3360,7 +3380,7 @@ function renderBrowserTestInfo(test) {
                 }
                 tierContent.push(attrText);
             }
-            
+
             if (tierContent.length > 0) {
                 testHtml += `
                     <div class="test-tier ${tier.class}">
@@ -4138,6 +4158,7 @@ function normalizeImportedAbilityTest(rawTest) {
         empty[tierKey] = {
             damage_amount: cleanText(tier.damage_amount ?? tier.damageAmount ?? ''),
             damage_type: cleanText(tier.damage_type ?? tier.damageType ?? ''),
+            tier_effect: cleanText(tier.tier_effect ?? tier.tierEffect ?? tier.effect ?? ''),
             has_attribute_check: Boolean(tier.has_attribute_check ?? tier.hasAttributeCheck ?? tier.attribute_effect ?? tier.attributeEffect),
             attribute: cleanText(tier.attribute ?? 'might') || 'might',
             attribute_threshold: toImportedInt(tier.attribute_threshold ?? tier.attributeThreshold, 0),
@@ -4150,9 +4171,9 @@ function normalizeImportedAbilityTest(rawTest) {
 
 function createEmptyImportedTest() {
     return {
-        tier1: { damage_amount: '', damage_type: '', has_attribute_check: false, attribute: 'might', attribute_threshold: 0, attribute_effect: '' },
-        tier2: { damage_amount: '', damage_type: '', has_attribute_check: false, attribute: 'might', attribute_threshold: 0, attribute_effect: '' },
-        tier3: { damage_amount: '', damage_type: '', has_attribute_check: false, attribute: 'might', attribute_threshold: 0, attribute_effect: '' }
+        tier1: { damage_amount: '', damage_type: '', tier_effect: '', has_attribute_check: false, attribute: 'might', attribute_threshold: 0, attribute_effect: '' },
+        tier2: { damage_amount: '', damage_type: '', tier_effect: '', has_attribute_check: false, attribute: 'might', attribute_threshold: 0, attribute_effect: '' },
+        tier3: { damage_amount: '', damage_type: '', tier_effect: '', has_attribute_check: false, attribute: 'might', attribute_threshold: 0, attribute_effect: '' }
     };
 }
 
@@ -4924,10 +4945,10 @@ function renderTestForPrint(test) {
     
     tiers.forEach(tier => {
         const tierData = test[tier.key];
-        if (tierData && (tierData.damage_amount || tierData.damage_type || tierData.has_attribute_check)) {
+        if (tierData && (tierData.damage_amount || tierData.damage_type || tierData.tier_effect || tierData.has_attribute_check)) {
             hasAnyTest = true;
             const lines = [];
-            
+
             // Add damage info
             if (tierData.damage_amount || tierData.damage_type) {
                 const damage = tierData.damage_amount || '';
@@ -4944,7 +4965,12 @@ function renderTestForPrint(test) {
                     lines.push(`Damage: ${type}`);
                 }
             }
-            
+
+            // Add flat tier rider (pull/slide/prone/etc.)
+            if (tierData.tier_effect) {
+                lines.push(`Effect: ${tierData.tier_effect}`);
+            }
+
             // Add attribute check info
             if (tierData.has_attribute_check && tierData.attribute && tierData.attribute_threshold) {
                 const attributeName = tierData.attribute.charAt(0).toUpperCase() + tierData.attribute.slice(1);

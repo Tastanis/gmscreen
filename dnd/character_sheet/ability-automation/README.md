@@ -35,6 +35,9 @@ action.automation = {
   schema: "ability-automation/v3",
   version: 3,
   warnings: [],   // populated by normalize; surfaced in inspector
+  passives: [
+    { kind: "standFirm", label, condition, stabilityBonus, preventConditions }
+  ],
   cards: [
     { type: "target",     id, name, mode, predicate, count, optional, distance, ... },
     { type: "powerRoll",  id, attribute, bonus, target, tiers: { tier1, tier2, tier3 } },
@@ -48,6 +51,8 @@ action.automation = {
 ```
 
 `automation.cards` (the field name is retained from v2 for minimal sheet-side churn) is the runtime execution order. Block types are orthogonal — multiple targets, multiple effects, etc. all allowed.
+
+`automation.passives` is for always-on board-state traits on features, traits, or monster passive abilities. `standFirm` is active while adjacent to an ally, adds its temporary Stability bonus to forced-movement math, highlights the sidebar Stability value in green, and warns when `prone` or `frightened` is applied.
 
 ## Runtime flow
 
@@ -69,6 +74,8 @@ Effects can specify their own `target` to override the parent block target. `tar
 VTT-only utility effects include `floatingText` for the giant centered combat banner and `startTurn` for Hesitation-style turn claiming. `startTurn` is preflighted before action-cost spending so invalid timing can warn before heroic resource is spent.
 
 Token `aura` effects can be visual-only or automated. Automated auras store `affects`, `triggers`, `effects`, and optional `expires` on the VTT placement, move with the owning token, and resolve against the live occupants at timing boundaries or when a token enters the aura. Aura ticks support damage, healing, temporary stamina, surge gain, conditions, mark-gated branches, floating text, and notes.
+
+Top-level `passives[]` do not run in card order. The VTT reads them from the token's character-sheet features or monster passive data whenever board state needs the trait.
 
 Triggered effects can also target dynamic event groups: `eventActor`, `eventSource`, or `eventTarget` (plus `trigger*` aliases). These resolve from the captured event payload for delayed reactions. `trigger.effects` default to `eventActor` unless the trigger block sets `effectTarget`.
 

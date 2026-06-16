@@ -7280,6 +7280,7 @@ export function mountBoardInteractions(store, routes = {}) {
       token: {
         id: placement.id ?? placementId,
         name: tokenLabel(placement),
+        team: getCombatantTeam(placementId) || normalizeCombatTeam(placement.team),
         column: Number.isFinite(placement.column) ? placement.column : 0,
         row: Number.isFinite(placement.row) ? placement.row : 0,
         width: Math.max(1, Number.isFinite(placement.width) ? placement.width : 1),
@@ -11031,6 +11032,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
       syncConditionsAfterMutation(true);
       dispatchTokenSelectionSummary();
+      maybeWarnStandFirmCondition(placementId, normalized);
     }
 
     return updated && didChange;
@@ -12919,6 +12921,12 @@ export function mountBoardInteractions(store, routes = {}) {
     getPlacementById: function (placementId) {
       const placement = getPlacementFromStore(placementId);
       return placement ? JSON.parse(JSON.stringify(placement)) : null;
+    },
+    getActiveScenePlacements: function () {
+      return getPlacementsForActiveScene().map((placement) => JSON.parse(JSON.stringify(placement)));
+    },
+    getStandFirmState: function (placementId, context) {
+      return resolveStandFirmForPlacement(placementId, context && typeof context === 'object' ? context : {});
     },
     // Reusable distance check (Layer 2). Returns the square (Chebyshev) distance
     // between two placement ids, or null when either token is not on the board.
@@ -17012,6 +17020,31 @@ export function mountBoardInteractions(store, routes = {}) {
     resolve?.({ applied: true, name, hidden: isAutomationPlacementHidden(placement) });
   }
 
+  async function maybeWarnStandFirmCondition(placementId, condition) {
+    const conditionName = typeof condition?.name === 'string' ? condition.name.trim().toLowerCase() : '';
+    const helper = window.DrawSteelStandFirm;
+    if (!placementId || !conditionName || !helper || typeof helper.conditionPrevented !== 'function') {
+      return;
+    }
+    if (conditionName !== 'prone' && conditionName !== 'frightened') {
+      return;
+    }
+    const state = await resolveStandFirmForPlacement(placementId);
+    if (!helper.conditionPrevented(state, conditionName)) {
+      return;
+    }
+    const placement = getPlacementFromStore(placementId);
+    const label = state.labels?.[0] || 'Stand Firm';
+    const conditionLabel = conditionName.charAt(0).toUpperCase() + conditionName.slice(1);
+    const name = placement ? tokenLabel(placement) : 'This creature';
+    const message = `${name} has ${label}: ${conditionLabel} cannot be applied while adjacent to an ally.`;
+    showConditionBanner(message, {
+      tone: 'reminder',
+      description: 'The VTT leaves the condition in place so you can confirm the ruling; remove or undo it manually if Stand Firm applies.',
+    });
+    updateStatus(message);
+  }
+
   async function handleAutomationPotencyRequest(event) {
     const detail = event?.detail ?? {};
     const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
@@ -17692,6 +17725,17 @@ export function mountBoardInteractions(store, routes = {}) {
     const traits = placement?.traits && typeof placement.traits === 'object' ? placement.traits : {};
     const monster = placement?.monster && typeof placement.monster === 'object' ? placement.monster : {};
     const defenses = monster.defenses && typeof monster.defenses === 'object' ? monster.defenses : {};
+    const baseStability = firstAutomationTraitValue(
+      vitals.stability,
+      traits.stability,
+      monster.stability,
+      defenses.stability
+    );
+    const standFirm = await resolveStandFirmForPlacement(placement?.id, { sheet, monster });
+    const standFirmBonus = standFirm.active ? Math.max(0, Number.parseInt(standFirm.stabilityBonus, 10) || 0) : 0;
+    const stabilityWithBonus = standFirmBonus
+      ? String((Number.parseInt(baseStability, 10) || 0) + standFirmBonus)
+      : baseStability;
     return {
       size: firstAutomationTraitValue(
         vitals.size,
@@ -17702,13 +17746,25 @@ export function mountBoardInteractions(store, routes = {}) {
         placement?.size,
         placement?.sizeOverride
       ),
-      stability: firstAutomationTraitValue(
-        vitals.stability,
-        traits.stability,
-        monster.stability,
-        defenses.stability
-      ),
+      stability: stabilityWithBonus,
     };
+  }
+
+  async function resolveStandFirmForPlacement(placementId, options = {}) {
+    const helper = window.DrawSteelStandFirm;
+    const placement = placementId ? getPlacementFromStore(placementId) : null;
+    if (!helper || typeof helper.resolveStandFirmState !== 'function' || !placement) {
+      return { active: false, adjacentAlly: false, stabilityBonus: 0, preventConditions: [], labels: [] };
+    }
+    const sheet = options.sheet !== undefined ? options.sheet : await getAutomationSheetForPlacement(placementId);
+    const monster = options.monster || placement.monster || null;
+    return helper.resolveStandFirmState({
+      placement,
+      placements: getPlacementsForActiveScene(),
+      sheet,
+      monster,
+      getTeam: (item) => getCombatantTeam(item?.id) || normalizeCombatTeam(item?.team),
+    });
   }
 
   function firstAutomationTraitValue(...values) {
@@ -22085,6 +22141,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
       syncConditionsAfterMutation(true);
       dispatchTokenSelectionSummary();
+      targetIds.forEach((placementId) => maybeWarnStandFirmCondition(placementId, normalized));
     }
 
     return updated && didChange;

@@ -9,7 +9,7 @@ The runtime is lenient: unknown fields are preserved but ignored, missing fields
 **Two flavors of automation:**
 
 - **Ability automation** — `cards[]` describes what happens when the ability fires. Attached to an ability.
-- **Feature automation** — `modifiers[]` describes how the feature changes other abilities. Attached to a feature. See [Feature modifiers](#feature-modifiers) at the bottom.
+- **Feature automation** — `modifiers[]` describes how the feature changes other abilities. `passives[]` describes always-on board-state traits such as Stand Firm. Attached to a feature or passive monster ability. See [Feature modifiers](#feature-modifiers) and [Passive automation](#passive-automation) at the bottom.
 
 ---
 
@@ -20,6 +20,7 @@ The runtime is lenient: unknown fields are preserved but ignored, missing fields
   "schema": "ability-automation/v3",
   "usageLimit": { "scope": "round", "key": "hesitation-is-weakness", "target": "self" },
   "keywords": ["Melee", "Strike", "Weapon"],
+  "passives": [],
   "cards": [
     { "type": "target",     "...": "..." },
     { "type": "powerRoll",  "...": "..." },
@@ -34,6 +35,7 @@ The runtime is lenient: unknown fields are preserved but ignored, missing fields
 
 - `schema` — must be `"ability-automation/v3"`.
 - `keywords` — optional array of strings describing the ability. Used by `ifKeyword` predicates and feature-modifier matching. Standard set (case-insensitive): `Melee, Ranged, Strike, Weapon, Magic, Psionic, Area, Charge, Persistent, Resistance, Routine, Free, FreeStrike, FreeTriggered`. Custom strings allowed.
+- `passives` — optional array for always-on feature/passive behavior. Currently supports Stand Firm.
 - `cards` — ordered list of blocks. The runtime executes them top-to-bottom.
 
 The `name` and `description` of the ability live on the character sheet — do **not** copy them into the JSON.
@@ -138,6 +140,7 @@ For `automation`, follow the existing REGISTRY.md schema exactly.
 Never wrap the output in markdown code fences.
 If a field is unknown or N/A, omit the key; do not write `null` or `""`.
 Preserve the ability's rules text in `fields.description` when useful, but put only automatable behavior in `automation`.
+**Account for every clause in the book text.** `fields` is what renders on the visible card and `automation` is what the VTT runs — fill BOTH. For each tier, set its `tierNDamage`, `tierNDamageType`, and `tierNNotes` (every rider after the damage — push/pull/slide, conditions, potency lines), and use `testBeforeEffect` / `testAdditionalEffect` for before/after-roll lines. A rider that exists only in `automation` will be missing from the displayed card; a rider only in `fields` will not execute. Before finishing, re-read the book text and confirm no clause was dropped from either side.
 Here is the ability text:
 
 [PASTE ABILITY RULES TEXT HERE]
@@ -1392,6 +1395,8 @@ The `trigger` card listens for an ally taking damage; after it resolves you pick
 
 10. **`schema` field is required** — set it to `"ability-automation/v3"`.
 
+11. **Account for every clause — in both `fields` and `automation`.** When you use the combined paste format, the `fields.*` keys render the visible card and `automation` runs it; they are two copies of the same ability and both must be complete. Map each tier's damage to `tierNDamage`/`tierNDamageType` and **every rider after it** (push/pull/slide, conditions, potency `<w>/<v>/<s>` lines) to `tierNNotes`, and put before/after-roll lines in `testBeforeEffect`/`testAdditionalEffect`. The common failure is filling `automation` fully but leaving the tier `Notes`/before/after fields blank, so the printed card silently drops those riders. Re-read the book text at the end and confirm nothing was dropped from either side.
+
 ---
 
 ## Feature modifiers
@@ -1545,6 +1550,34 @@ A chat message names which modifiers kicked in so the table can see "Sword Maste
 - `insertEffectAfter` (e.g. "after damage, also push") — not yet
 - `cost` / `perEncounter` / `perRound` — not yet
 
+## Passive automation
+
+Passive automation lives at top-level `automation.passives[]` on a feature or monster passive ability. It is read by the VTT from board state; the user does not click the passive to activate it.
+
+### Stand Firm
+
+Use this for text like "While adjacent to an ally, the creature gains 3 stability and can't be knocked prone or frightened."
+
+```json
+{
+  "schema": "ability-automation/v3",
+  "passives": [
+    {
+      "kind": "standFirm",
+      "label": "Stand Firm",
+      "stabilityBonus": 3,
+      "preventConditions": ["prone", "frightened"]
+    }
+  ]
+}
+```
+
+Runtime behavior:
+- Active only while the token is adjacent to an ally on the current VTT board.
+- The VTT character/monster sidebar shows Stability as the stored value plus the temporary bonus, highlighted green.
+- Forced-movement automation uses the boosted Stability while active.
+- If `prone` or `frightened` is applied while active, the VTT shows a warning banner. It does not auto-remove the condition; remove/undo it manually after confirming the ruling.
+
 ---
 
 ## Monster abilities
@@ -1557,6 +1590,8 @@ To create a complete monster at once, use the Monster Creator **Import JSON** bu
 
 ### Rules of thumb
 
+- **Keep the prose `effect` field to flavor; put tiers in `test`.** The monster stat block renders the tier table from `test.tier1/2/3`, not from prose. Do not restate "Tier 1: 5 damage. Tier 2: …" in `effect` — that duplicates the tiers and the copies drift. `effect` is one flavor sentence (or the full text for no-roll abilities). Per-tier flat riders ("pull 2", "prone") go in each tier's `tier_effect`; potency lines ("M<2 prone") go in the tier's attribute-check fields. See `dnd/strixhaven/monster-creator/MONSTER_JSON_IMPORT_TEMPLATE.md` for the full field-ownership table.
+- **Set `roll_bonus` to match `flatBonus`.** The ability's displayed roll uses `roll_bonus`; the automation uses `flatBonus`. They are the same number — set both, or the printed roll shows "2d10+0" while the VTT rolls the real bonus.
 - **Use static numbers.** Damage and potency in monster JSON are literals, not formulas. Write `"amount": 12` and `"target": 13`, never `"amount": "7+M"`.
 - **Use `flatBonus` on `powerRoll`.** Set the literal roll bonus directly:
   ```json

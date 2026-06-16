@@ -80,13 +80,15 @@
         "keywords": "Melee, Ranged, Magic, Earth",
         "range": "Melee 2 or Ranged 5",
         "targets": "1 creature",
-        "effect": "Tier 1 (≤11): 6 damage. Tier 2 (12–16): 9 damage, slide 2. Tier 3 (17+): 12 damage, slide 3. ALL TIERS: the target's square and all adjacent squares become permanent scree. Slides go away from the Render's allies (never strand its own cluster). While bloodied, all damage is +3 (Nothing Left to Count — automated). It deletes the map as it fights.",
+        "roll_bonus": 2,
+        "effect": "The Render spends the stone itself, bending it apart beneath the target and deleting the ground as it fights.",
         "has_test": true,
         "test": {
-          "tier1": { "damage_amount": "6", "damage_type": "untyped" },
-          "tier2": { "damage_amount": "9", "damage_type": "untyped" },
-          "tier3": { "damage_amount": "12", "damage_type": "untyped" }
+          "tier1": { "damage_amount": "6", "damage_type": "", "tier_effect": "" },
+          "tier2": { "damage_amount": "9", "damage_type": "", "tier_effect": "slide 2 (away from the Render's allies)" },
+          "tier3": { "damage_amount": "12", "damage_type": "", "tier_effect": "slide 3 (away from the Render's allies)" }
         },
+        "additional_effect": "All tiers: the target's square and every adjacent square become permanent scree. Slides always move the target away from the Render's allies, never stranding its own cluster. While bloodied, all damage is +3 (Nothing Left to Count).",
         "automation": {
           "schema": "ability-automation/v3",
           "cards": [
@@ -102,50 +104,22 @@
               "type": "powerRoll",
               "flatBonus": 2,
               "tiers": {
-                "tier1": {
-                  "effects": [
-                    { "kind": "damage", "amount": 6 }
-                  ]
-                },
-                "tier2": {
-                  "effects": [
-                    { "kind": "damage", "amount": 9 },
-                    { "kind": "forcedMovement", "verb": "slide", "distance": 2, "text": "Slide 2, away from the Render's allies." }
-                  ]
-                },
-                "tier3": {
-                  "effects": [
-                    { "kind": "damage", "amount": 12 },
-                    { "kind": "forcedMovement", "verb": "slide", "distance": 3, "text": "Slide 3, away from the Render's allies." }
-                  ]
-                }
+                "tier1": { "effects": [{ "kind": "damage", "amount": 6 }] },
+                "tier2": { "effects": [{ "kind": "damage", "amount": 9 }, { "kind": "forcedMovement", "verb": "slide", "distance": 2 }] },
+                "tier3": { "effects": [{ "kind": "damage", "amount": 12 }, { "kind": "forcedMovement", "verb": "slide", "distance": 3 }] }
               },
               "whenWinded": {
                 "tiers": {
-                  "tier1": {
-                    "effects": [
-                      { "kind": "damage", "amount": 9 }
-                    ]
-                  },
-                  "tier2": {
-                    "effects": [
-                      { "kind": "damage", "amount": 12 },
-                      { "kind": "forcedMovement", "verb": "slide", "distance": 2, "text": "Slide 2, away from the Render's allies." }
-                    ]
-                  },
-                  "tier3": {
-                    "effects": [
-                      { "kind": "damage", "amount": 15 },
-                      { "kind": "forcedMovement", "verb": "slide", "distance": 3, "text": "Slide 3, away from the Render's allies." }
-                    ]
-                  }
+                  "tier1": { "effects": [{ "kind": "damage", "amount": 9 }] },
+                  "tier2": { "effects": [{ "kind": "damage", "amount": 12 }, { "kind": "forcedMovement", "verb": "slide", "distance": 2 }] },
+                  "tier3": { "effects": [{ "kind": "damage", "amount": 15 }, { "kind": "forcedMovement", "verb": "slide", "distance": 3 }] }
                 }
               }
             },
             {
               "type": "effect",
               "effects": [
-                { "kind": "note", "text": "SPENDTHRIFT BEND (all tiers): the target's square and every adjacent square become PERMANENT SCREE. Mark the map." }
+                { "kind": "note", "text": "SPENDTHRIFT BEND (all tiers): the target's square and every adjacent square become PERMANENT SCREE. Slides move the target away from the Render's allies. Mark the map." }
               ]
             }
           ]

@@ -39,7 +39,7 @@
     },
     {
       "name": "Crew-Chief Upgrade (Varresk, Zedh)",
-      "text": "Crew-chiefs/reckoners use this same stat block with +15 Stamina (45 total) and +1 to power rolls (use flat bonus +3 on Stone Haul)."
+      "text": "Crew-chiefs/reckoners use this same stat block with +15 Stamina (45 total) and +1 to power rolls (set roll_bonus and flatBonus to 3 on Stone Haul)."
     }
   ],
   "abilities": {
@@ -72,13 +72,15 @@
         "keywords": "Ranged, Magic, Earth",
         "range": "Ranged 8",
         "targets": "1 creature",
-        "effect": "The Line-Bender folds the stone under the target and reels it toward the formation — into the Stand Firm wall and free-strike range. Tier 1 (≤11): 5 damage. Tier 2 (12–16): 8 damage, pull 2 toward the cluster. Tier 3 (17+): 11 damage, pull 3, prone.",
+        "roll_bonus": 2,
+        "effect": "The Line-Bender folds the stone underfoot and reels the target back toward the formation — into the Stand Firm wall and free-strike range.",
         "has_test": true,
         "test": {
-          "tier1": { "damage_amount": "5", "damage_type": "untyped" },
-          "tier2": { "damage_amount": "8", "damage_type": "untyped" },
-          "tier3": { "damage_amount": "11", "damage_type": "untyped" }
+          "tier1": { "damage_amount": "5", "damage_type": "", "tier_effect": "" },
+          "tier2": { "damage_amount": "8", "damage_type": "", "tier_effect": "pull 2 toward the cluster" },
+          "tier3": { "damage_amount": "11", "damage_type": "", "tier_effect": "pull 3 toward the cluster; prone" }
         },
+        "additional_effect": "",
         "automation": {
           "schema": "ability-automation/v3",
           "cards": [
@@ -94,24 +96,9 @@
               "type": "powerRoll",
               "flatBonus": 2,
               "tiers": {
-                "tier1": {
-                  "effects": [
-                    { "kind": "damage", "amount": 5 }
-                  ]
-                },
-                "tier2": {
-                  "effects": [
-                    { "kind": "damage", "amount": 8 },
-                    { "kind": "forcedMovement", "verb": "pull", "distance": 2, "text": "Pull 2 toward the cluster." }
-                  ]
-                },
-                "tier3": {
-                  "effects": [
-                    { "kind": "damage", "amount": 11 },
-                    { "kind": "forcedMovement", "verb": "pull", "distance": 3, "text": "Pull 3 toward the cluster." },
-                    { "kind": "condition", "name": "prone" }
-                  ]
-                }
+                "tier1": { "effects": [{ "kind": "damage", "amount": 5 }] },
+                "tier2": { "effects": [{ "kind": "damage", "amount": 8 }, { "kind": "forcedMovement", "verb": "pull", "distance": 2 }] },
+                "tier3": { "effects": [{ "kind": "damage", "amount": 11 }, { "kind": "forcedMovement", "verb": "pull", "distance": 3 }, { "kind": "condition", "name": "prone" }] }
               }
             }
           ]

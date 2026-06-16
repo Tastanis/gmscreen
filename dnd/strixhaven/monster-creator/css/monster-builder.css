@@ -1794,6 +1794,19 @@ body.delete-mode-active .sub-tab:hover {
     color: #666;
 }
 
+.tier-effect-row {
+    width: 100%;
+    margin-bottom: 8px;
+}
+
+.tier-effect-input {
+    width: 100%;
+    padding: 4px 8px;
+    border: 1px solid #dee2e6;
+    border-radius: 3px;
+    font-size: 12px;
+}
+
 .attribute-toggle {
     background-color: var(--text-faint, #8a7558);
     color: white;

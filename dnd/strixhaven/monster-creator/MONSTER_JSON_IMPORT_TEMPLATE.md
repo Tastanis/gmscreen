@@ -4,6 +4,35 @@ Use this format when creating a complete monster for the Strixhaven Monster Crea
 
 The import creates a new monster in editor mode. Review it, then use **Save to Tab**.
 
+---
+
+## Read this first: where each piece of an ability goes
+
+Every ability has **three channels**, and each owns a different job. The #1 mistake LLMs make is dumping the whole ability into the prose `effect` field — restating the power-roll tiers as a sentence — and then *also* filling `test` and `automation`. That writes the tiers two or three times, the copies drift apart, and the structured stat block ends up missing the bits that only got typed into prose. Don't do that. Follow the ownership table:
+
+| Channel | Field(s) | What it OWNS | What must NEVER go here |
+|---|---|---|---|
+| **Prose** | `effect` | Flavor / lead-in only ("The hulk slams a burning fist."). For abilities with **no** power roll, the full rules text. | The tier breakdown. Do not write "Tier 1: 5 damage. Tier 2: …" in `effect`. |
+| **Structured power roll** | `roll_bonus` + `test.tier1/2/3` | The whole 2d10 roll: per-tier damage, per-tier rider text, per-tier potency check. This is what renders the tier table. | Flavor prose. |
+| **All-tiers rider** | `additional_effect` | One effect that applies on every tier ("All tiers: the square becomes scree."), shown after the tier table. | Anything tier-specific. |
+| **Automation** | `automation.cards` | The executable version the VTT runs. | — |
+
+### Hard rules
+
+1. **`effect` is flavor, not tiers.** If the ability has a power roll, the tier numbers live ONLY in `test.tierN`. `effect` is one sentence of flavor (or empty). Restating the tiers in prose is the bug we are fixing.
+2. **Write every tier piece into `test`.** Each tier carries up to three things, and each has its own field — none should be dropped:
+   - **damage** → `damage_amount` + `damage_type`
+   - **a flat rider** ("pull 2 toward the cluster", "prone", "slide 3") → `tier_effect`
+   - **a potency-gated effect** ("M<2 prone") → `has_attribute_check` + `attribute` + `attribute_threshold` + `attribute_effect`
+3. **`roll_bonus` must equal the automation `flatBonus`.** They are the same number in two places (display vs. execution). Set both. If you set one and forget the other, the printed roll says "2d10+0" while the VTT rolls the real bonus.
+4. **Before/after and all-tiers effects are their own thing.** A rider that happens regardless of tier goes in `additional_effect` (display) **and** as a separate `{ "type": "effect" }` card placed *before* or *after* the `powerRoll` card in automation (a precondition goes before, a consequence goes after). Do not fold it into the prose or into a tier.
+5. **Keep the book's exact wording.** Put the source text verbatim into the field that owns it — `tier_effect` gets "pull 2 toward the cluster", not a paraphrase. Same words, correct field.
+6. **`test` and `automation` must agree.** Every tier's damage/rider in `test` has a matching effect in the same tier of `automation.tiers`, and vice versa. They are the display copy and the executable copy of the same thing.
+
+---
+
+## Template
+
 ```json
 {
   "id": "ember_hulk_optional_unique_id",
@@ -47,13 +76,15 @@ The import creates a new monster in editor mode. Review it, then use **Save to T
         "keywords": "Melee, Weapon, Fire",
         "range": "Melee 2",
         "targets": "1 creature",
+        "roll_bonus": 5,
         "effect": "The hulk slams a burning fist into the target.",
         "has_test": true,
         "test": {
-          "tier1": { "damage_amount": "5", "damage_type": "fire" },
-          "tier2": { "damage_amount": "9", "damage_type": "fire" },
-          "tier3": { "damage_amount": "13", "damage_type": "fire", "attribute": "might", "attribute_threshold": 2, "attribute_effect": "prone" }
+          "tier1": { "damage_amount": "5", "damage_type": "fire", "tier_effect": "" },
+          "tier2": { "damage_amount": "9", "damage_type": "fire", "tier_effect": "push 2" },
+          "tier3": { "damage_amount": "13", "damage_type": "fire", "tier_effect": "push 3", "has_attribute_check": true, "attribute": "might", "attribute_threshold": 2, "attribute_effect": "prone" }
         },
+        "additional_effect": "The struck square is scorched and becomes difficult terrain until the end of the encounter.",
         "automation": {
           "schema": "ability-automation/v3",
           "cards": [
@@ -70,9 +101,13 @@ The import creates a new monster in editor mode. Review it, then use **Save to T
               "flatBonus": 5,
               "tiers": {
                 "tier1": { "effects": [{ "kind": "damage", "amount": 5, "damageType": "fire" }] },
-                "tier2": { "effects": [{ "kind": "damage", "amount": 9, "damageType": "fire" }] },
-                "tier3": { "effects": [{ "kind": "damage", "amount": 13, "damageType": "fire" }, { "kind": "condition", "name": "prone" }] }
+                "tier2": { "effects": [{ "kind": "damage", "amount": 9, "damageType": "fire" }, { "kind": "forcedMovement", "verb": "push", "distance": 2 }] },
+                "tier3": { "effects": [{ "kind": "damage", "amount": 13, "damageType": "fire" }, { "kind": "forcedMovement", "verb": "push", "distance": 3 }, { "kind": "condition", "name": "prone" }] }
               }
+            },
+            {
+              "type": "effect",
+              "effects": [{ "kind": "note", "text": "The struck square is scorched difficult terrain until the end of the encounter. Mark the map." }]
             }
           ]
         }
@@ -104,7 +139,14 @@ The import creates a new monster in editor mode. Review it, then use **Save to T
         "keywords": "Area, Fire",
         "range": "Burst 3",
         "targets": "Each enemy in the burst",
-        "effect": "Each target takes 8 fire damage.",
+        "roll_bonus": 5,
+        "effect": "Fire erupts from the ground around the hulk.",
+        "has_test": true,
+        "test": {
+          "tier1": { "damage_amount": "5", "damage_type": "fire", "tier_effect": "" },
+          "tier2": { "damage_amount": "8", "damage_type": "fire", "tier_effect": "" },
+          "tier3": { "damage_amount": "11", "damage_type": "fire", "tier_effect": "" }
+        },
         "automation": {
           "schema": "ability-automation/v3",
           "cards": [
@@ -118,8 +160,13 @@ The import creates a new monster in editor mode. Review it, then use **Save to T
               "distance": { "form": "burst", "value": 3 }
             },
             {
-              "type": "effect",
-              "effects": [{ "kind": "damage", "amount": 8, "damageType": "fire" }]
+              "type": "powerRoll",
+              "flatBonus": 5,
+              "tiers": {
+                "tier1": { "effects": [{ "kind": "damage", "amount": 5, "damageType": "fire" }] },
+                "tier2": { "effects": [{ "kind": "damage", "amount": 8, "damageType": "fire" }] },
+                "tier3": { "effects": [{ "kind": "damage", "amount": 11, "damageType": "fire" }] }
+              }
             }
           ]
         }
@@ -134,8 +181,28 @@ The import creates a new monster in editor mode. Review it, then use **Save to T
 
 - `abilities` categories: `passive`, `maneuver`, `action`, `triggered_action`, `villain_action`, `malice`.
 - The importer also accepts common aliases such as `actions`, `triggeredActions`, and `villainActions`.
+
+### Ability-level fields
+
+- `roll_bonus` — integer. The 2d10 bonus shown on the displayed stat block (e.g. "Cinder Maul (2d10+5)"). **Must match the `flatBonus` you set on the ability's `powerRoll` automation card.** Set it on any ability that has a test; omit (or 0) for abilities with no roll.
+- `effect` — flavor / lead-in prose only when the ability has a test. For abilities with no test, this holds the full rules text. Never restate the tier breakdown here.
+- `has_test` — `true` if the ability has a 2d10 power roll. Required for the tier table to render.
+- `additional_effect` — one effect that applies on every tier, rendered after the tier table (e.g. "All tiers: the target's square becomes scree."). Mirror it as a standalone `effect` card before/after the `powerRoll` in automation.
+
+### Per-tier fields (inside `test.tier1` / `tier2` / `tier3`)
+
+- `damage_amount` — the tier's damage as a string (`"11"`, or dice like `"2d6"`). `damage_type` — the damage type (`"fire"`, etc.); omit/empty for untyped.
+- `tier_effect` — **free-text rider for a flat (non-potency) effect on that tier**, e.g. `"pull 2 toward the cluster"`, `"prone"`, `"slide 3"`. This is the structured home for tier riders that used to get stranded in prose. Renders right after the damage on the tier line. Mirror it with the matching automation effect (`forcedMovement`, `condition`, etc.) in the same tier.
+- `has_attribute_check` + `attribute` + `attribute_threshold` + `attribute_effect` — a **potency-gated** rider for "Attribute ≤ N: effect" lines (the book's `M<2 prone`). The display shows "Might ≤2: prone". Set `has_attribute_check: true`, pick the `attribute`, the numeric `attribute_threshold`, and the `attribute_effect` text. Use `tier_effect` for flat riders and these fields for potency-gated ones — a tier can use both.
+
+### Automation
+
 - For monster automation, use static numbers and `flatBonus`. Do not write PC-style `7 + M` formulas for monsters.
+- Effects that happen **before** the roll (a precondition, e.g. "first the hulk shifts") go in an `effect` card *before* the `powerRoll` card. Effects **after** the roll, or that apply regardless of tier, go in an `effect` card *after* the `powerRoll` card. Tier-specific effects go inside that tier's `effects` array.
 - Ability automation uses the shared v3 format documented in `../../character_sheet/ability-automation/AUTHORING.md` and `../../character_sheet/ability-automation/REGISTRY.md`. In target cards, put `mode`, `predicate`, `count`, `distance`, `shape`, and `size` directly on the card; do not use the old nested `{ "target": { "kind": ... } }` shape.
+
+### Immunities / weaknesses
+
 - `immunities` and `weaknesses` are arrays of `{ "type": "<damage type>", "value": <int> }` entries. Use one entry per damage type — e.g. an undead with "Immunity: corruption 1, poison 1" becomes two entries. Empty `type` matches any incoming damage type. The legacy single-field form (`immunity_type`/`immunity_value`/`weakness_type`/`weakness_value`) is still accepted for back-compat; the importer auto-promotes it to a one-entry array.
 - The VTT automation damage adjuster sums **all matching entries** in the list. Multiple immunities/weaknesses against the same incoming damage type stack additively.
 - To create a temporary weakness or immunity that automation damage does apply, use condition effects named `damageWeakness` or `damageImmunity`.

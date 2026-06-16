@@ -84,7 +84,7 @@
             '</div>' +
             '</header>' +
             renderSection('Stamina', renderStaminaSection(hp, healthPercent)) +
-            renderSection('Statistics', renderStats(attrs, monster, defenses)) +
+            renderSection('Statistics', renderStats(attrs, monster, defenses, placement)) +
             renderDefenses(defenses) +
             renderSection('Auras, Conditions, & Effects',
                 '<div class="vtt-character-condition-list">' +
@@ -111,7 +111,9 @@
             '</div>';
     }
 
-    function renderStats(attrs, monster, defenses) {
+    function renderStats(attrs, monster, defenses, placement) {
+        var standFirm = resolveMonsterStandFirmState(placement, monster);
+        var stabilityBonus = standFirm && standFirm.active ? Math.max(0, toNumber(standFirm.stabilityBonus, 0)) : 0;
         return '<div class="vtt-character-stats">' +
             ATTRIBUTES.map(function (key) {
                 return renderStat(capitalize(key), attrs[key]);
@@ -119,7 +121,7 @@
             '</div>' +
             '<div class="vtt-character-vitals">' +
             renderVital('Speed', monster.speed ?? monster.movement) +
-            renderVital('Stability', monster.stability ?? defenses.stability) +
+            renderVital('Stability', monster.stability ?? defenses.stability, { bonus: stabilityBonus, source: standFirm?.labels?.[0] || 'Stand Firm' }) +
             renderVital('Size', monster.size || monster.footprint) +
             '</div>';
     }
@@ -247,11 +249,36 @@
             '</div>';
     }
 
-    function renderVital(label, value) {
-        return '<div class="vtt-character-vital">' +
+    function renderVital(label, value, options) {
+        options = options || {};
+        var bonus = Math.max(0, toNumber(options.bonus, 0));
+        var base = Number.parseInt(value, 10);
+        var boostedValue = Number.isFinite(base) ? base + bonus : bonus;
+        var title = bonus > 0 ? ' title="' + escapeAttribute((options.source || 'Stand Firm') + ' adds ' + bonus) + '"' : '';
+        var valueHtml = bonus > 0
+            ? '<span class="vtt-character-vital__base">' + escapeHtml(valueOrDash(value)) + '</span>' +
+                '<span class="vtt-character-vital__bonus">+' + escapeHtml(bonus) + '</span>' +
+                '<span class="vtt-character-vital__total">=' + escapeHtml(boostedValue) + '</span>'
+            : escapeHtml(valueOrDash(value));
+        return '<div class="vtt-character-vital ' + (bonus > 0 ? 'vtt-character-vital--boosted' : '') + '"' + title + '>' +
             '<div class="vtt-character-vital__label">' + escapeHtml(label) + '</div>' +
-            '<div class="vtt-character-vital__value">' + escapeHtml(valueOrDash(value)) + '</div>' +
+            '<div class="vtt-character-vital__value">' + valueHtml + '</div>' +
             '</div>';
+    }
+
+    function resolveMonsterStandFirmState(placement, monster) {
+        var helper = window.DrawSteelStandFirm;
+        if (!helper || typeof helper.resolveStandFirmState !== 'function' || !placement) return null;
+        var placements = window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.getActiveScenePlacements === 'function'
+            ? window.VTTBoardCallbacks.getActiveScenePlacements()
+            : [];
+        var livePlacement = placements.find(function (item) { return item && item.id === placement.id; }) || placement;
+        return helper.resolveStandFirmState({
+            placement: livePlacement,
+            placements: placements,
+            monster: monster,
+            getTeam: function (item) { return item && item.team; }
+        });
     }
 
     function renderCondition(condition, placementId) {

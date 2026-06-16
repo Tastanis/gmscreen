@@ -115,6 +115,11 @@
                 (meta ? '<span class="vtt-character-ability-item__meta">' + escapeHtml(meta) + '</span>' : '') +
                 '</span>' +
                 (automated ? '<span class="vtt-character-ability-item__auto" title="Automated" aria-label="Automated">A</span>' : '') +
+                '<span class="vtt-character-chat-dot" role="button" tabindex="0" ' +
+                    'data-monster-chat-post="ability" ' +
+                    'data-ability-index="' + escapeAttribute(index) + '" ' +
+                    'data-ability-category="' + escapeAttribute(categoryKey) + '" ' +
+                    'aria-label="Post ability to chat" title="Post to chat"></span>' +
                 '</button>';
         }).join('');
 
@@ -165,6 +170,18 @@
     function handleTrayClick(event) {
         var target = event.target instanceof Element ? event.target : null;
         if (!target) return;
+
+        var chatPost = target.closest('[data-monster-chat-post]');
+        if (chatPost) {
+            event.preventDefault();
+            event.stopPropagation();
+            var postIndex = parseInt(chatPost.getAttribute('data-ability-index'), 10);
+            var postCategory = chatPost.getAttribute('data-ability-category');
+            if (!isNaN(postIndex) && postCategory) {
+                postAbilityToChat(postCategory, postIndex);
+            }
+            return;
+        }
 
         var tabBtn = target.closest('[data-monster-tab]');
         if (tabBtn) {
@@ -319,6 +336,73 @@
         }
         if (ability && ability.range) parts.push('Range ' + ability.range);
         return parts.filter(Boolean).join(' - ');
+    }
+
+    function postAbilityToChat(categoryKey, index) {
+        var ability = abilitiesFor(state.monster, categoryKey)[index];
+        if (!ability || !window.dashboardChat || typeof window.dashboardChat.sendMessage !== 'function') {
+            return false;
+        }
+        return window.dashboardChat.sendMessage({
+            message: formatAbilityForChat(ability, categoryKey),
+            type: 'text',
+            payload: {
+                kind: 'monster-ability',
+                placementId: state.placement && state.placement.id ? state.placement.id : '',
+                category: categoryKey,
+                name: ability.name || ''
+            }
+        });
+    }
+
+    function formatAbilityForChat(ability, categoryKey) {
+        var category = CATEGORIES.find(function (cat) { return cat.key === categoryKey; }) || {};
+        var monsterName = (state.placement && state.placement.name) || (state.monster && state.monster.name) || 'Monster';
+        var keywords = typeof ability.keywords === 'string'
+            ? ability.keywords.split(/[,;]+/).map(function (s) { return s.trim(); }).filter(Boolean).join(', ')
+            : '';
+        var lines = [
+            monsterName + ' - ' + (ability.name || 'Unnamed Ability'),
+            'Type: ' + (category.label || 'Ability') + (keywords ? ' | ' + keywords : '')
+        ];
+        if (ability.range) lines.push('Range: ' + ability.range);
+        if (ability.targets) lines.push('Target: ' + ability.targets);
+        if (categoryKey === 'triggered_action' && ability.trigger) lines.push('Trigger: ' + ability.trigger);
+        if (ability.resource_cost) lines.push('Cost: ' + ability.resource_cost);
+        if (ability.effect) lines.push('Effect: ' + ability.effect);
+        if (ability.additional_effect) lines.push('Additional: ' + ability.additional_effect);
+
+        var testText = formatTestForChat(ability.test);
+        if (testText) lines.push(testText);
+        return lines.filter(Boolean).join('\n');
+    }
+
+    function formatTestForChat(test) {
+        if (!test || typeof test !== 'object') return '';
+        var labels = { tier1: '<= 11', tier2: '12-16', tier3: '17+' };
+        var lines = ['-- Power Roll --'];
+        ['tier1', 'tier2', 'tier3'].forEach(function (tier) {
+            var entry = test[tier];
+            if (!entry || typeof entry !== 'object') return;
+            var pieces = [];
+            var dmgAmount = (entry.damage_amount || '').toString().trim();
+            if (dmgAmount) {
+                var dmgType = (entry.damage_type || '').toString().trim();
+                pieces.push((dmgAmount + (dmgType ? ' ' + dmgType : '') + ' damage').trim());
+            }
+            var attr = (entry.attribute || '').toString().trim();
+            var attrEffect = (entry.attribute_effect || '').toString().trim();
+            if (attrEffect) {
+                var attrInitial = attr ? attr.charAt(0).toUpperCase() : '';
+                var threshold = entry.attribute_threshold !== undefined && entry.attribute_threshold !== null
+                    ? String(entry.attribute_threshold)
+                    : '';
+                pieces.push(attrInitial && threshold ? attrInitial + '<' + threshold + ' ' + attrEffect : attrEffect);
+            }
+            if (entry.effect) pieces.push(entry.effect);
+            if (pieces.length) lines.push(labels[tier] + ': ' + pieces.join(' | '));
+        });
+        return lines.length > 1 ? lines.join('\n') : '';
     }
 
     function getAbilityIcon(categoryKey) {

@@ -395,6 +395,23 @@ Applied at the start of `runner.open()`, before any rendering. The tier preview,
 
 Stacking is additive. Multiple matching modifiers all apply. Per-encounter / spend-based / replace-effect modifiers are deferred.
 
+## Passive automation
+
+Top-level `automation.passives[]` on a feature, trait, or monster passive ability. Passive automation is read from board state and does not require clicking the ability.
+
+| Passive | Status | Runtime behavior |
+|---|---|---|
+| `standFirm` | Full advisory + Stability adjustment | Active while the token is adjacent to an ally. Adds `stabilityBonus` (default `3`) to VTT forced-movement Stability math and renders the character/monster sidebar Stability value in green as base plus bonus. `preventConditions` defaults to `["prone", "frightened"]`; applying either condition while active shows a warning banner, but the condition is left in place for manual undo/confirmation. |
+
+`standFirm` fields:
+
+| Field | Shape |
+|---|---|
+| `kind` | `"standFirm"` |
+| `label` | optional string; defaults to `"Stand Firm"` |
+| `stabilityBonus` | optional int; defaults to `3` |
+| `preventConditions` | optional array; currently supports `prone` and `frightened` |
+
 ## Schema versioning
 
 | Version | Status |

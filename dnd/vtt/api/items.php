@@ -39,6 +39,10 @@ if (is_array($rawItems)) {
         $items[] = [
             'id' => (string)($item['id'] ?? ''),
             'name' => $name,
+            'description' => (string)($item['description'] ?? ''),
+            'keywords' => (string)($item['keywords'] ?? ''),
+            'effect' => (string)($item['effect'] ?? ''),
+            'effectSections' => normalizeVttItemEffectSections($item['effectSections'] ?? []),
         ];
     }
 }
@@ -71,6 +75,33 @@ function loadVttInventoryData(): array
 
     $data = json_decode($contents, true);
     return is_array($data) ? $data : [];
+}
+
+function normalizeVttItemEffectSections($value): array
+{
+    if (!is_array($value)) {
+        return [];
+    }
+
+    $sections = [];
+    foreach ($value as $section) {
+        if (!is_array($section)) {
+            continue;
+        }
+        $title = trim((string)($section['title'] ?? ''));
+        $cost = trim((string)($section['cost'] ?? ''));
+        $text = trim((string)($section['text'] ?? ''));
+        if ($title === '' && $cost === '' && $text === '') {
+            continue;
+        }
+        $sections[] = [
+            'title' => $title,
+            'cost' => $cost,
+            'text' => $text,
+        ];
+    }
+
+    return $sections;
 }
 
 function respondVttItemsJson(int $status, array $payload): void

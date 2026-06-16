@@ -75,6 +75,7 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
     <script src="../character_sheet/ability-automation/schema.js?v=<?= $assetVersion ?>"></script>
     <script src="../character_sheet/ability-automation/catalog.js?v=<?= $assetVersion ?>"></script>
     <script src="../character_sheet/ability-automation/runner.js?v=<?= $assetVersion ?>"></script>
+    <script src="assets/js/ui/stand-firm.js?v=<?= $assetVersion ?>"></script>
     <script src="assets/js/ui/monster-ability-runner-glue.js?v=<?= $assetVersion ?>"></script>
     <script src="assets/js/ui/monster-ability-tray.js?v=<?= $assetVersion ?>"></script>
     <script src="assets/js/ui/monster-summary-panel.js?v=<?= $assetVersion ?>"></script>

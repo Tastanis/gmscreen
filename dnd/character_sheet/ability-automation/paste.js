@@ -141,12 +141,16 @@
       const warnings = normalized.warnings || [];
       const summaries = (normalized.cards || []).map((block, index) => `${index + 1}. ${block.type}`);
       const modifierCount = Array.isArray(normalized.modifiers) ? normalized.modifiers.length : 0;
+      const passiveCount = Array.isArray(normalized.passives) ? normalized.passives.length : 0;
       let summaryHtml = '';
       if (summaries.length) {
         summaryHtml = `<div class="ability-paste__summary"><strong>${normalized.cards.length} block(s):</strong> ${escapeHtml(summaries.join("  →  "))}</div>`;
       } else if (modifierCount > 0) {
         const labels = normalized.modifiers.map((m, i) => m.label || `modifier ${i + 1}`).join(', ');
         summaryHtml = `<div class="ability-paste__summary"><strong>${modifierCount} feature modifier(s):</strong> ${escapeHtml(labels)}</div>`;
+      } else if (passiveCount > 0) {
+        const labels = normalized.passives.map((p, i) => p.label || `passive ${i + 1}`).join(', ');
+        summaryHtml = `<div class="ability-paste__summary"><strong>${passiveCount} passive automation(s):</strong> ${escapeHtml(labels)}</div>`;
       } else {
         summaryHtml = '<div class="ability-paste__summary">No blocks or modifiers parsed.</div>';
       }

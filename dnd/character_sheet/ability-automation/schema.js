@@ -1548,6 +1548,34 @@
     return out;
   }
 
+  function normalizePassive(input, warnings, path) {
+    if (!input || typeof input !== "object") {
+      warnings.push(`${path}: passive must be an object — skipping.`);
+      return null;
+    }
+    const rawKind = asTrimmedString(input.kind || input.type || input.passive || input.id || input.label || input.name);
+    const key = rawKind.toLowerCase().replace(/[^a-z0-9]+/g, "");
+    if (key !== "standfirm") {
+      warnings.push(`${path}: unknown passive "${rawKind || "(missing)"}" — skipping.`);
+      return null;
+    }
+    const rawPrevented = Array.isArray(input.preventConditions)
+      ? input.preventConditions
+      : Array.isArray(input.preventedConditions)
+        ? input.preventedConditions
+        : ["prone", "frightened"];
+    const preventConditions = rawPrevented
+      .map((name) => P.normalizeCondition?.(name) || asTrimmedString(name).toLowerCase())
+      .filter((name) => name === "prone" || name === "frightened");
+    return {
+      kind: "standFirm",
+      label: asTrimmedString(input.label || input.name || "Stand Firm"),
+      condition: { kind: "adjacentAlly" },
+      stabilityBonus: Math.max(0, asInt(input.stabilityBonus ?? input.stability ?? input.amount, 3)),
+      preventConditions: preventConditions.length ? Array.from(new Set(preventConditions)) : ["prone", "frightened"],
+    };
+  }
+
   // ---------- top-level ----------
 
   function emptyAutomation() {
@@ -1556,6 +1584,7 @@
       version: SCHEMA_VERSION,
       cards: [],
       modifiers: [],
+      passives: [],
       usageLimit: null,
       warnings: [],
     };
@@ -1588,6 +1617,11 @@
       .map((mod, index) => normalizeModifier(mod, warnings, `modifiers[${index}]`))
       .filter(Boolean);
 
+    const rawPassives = Array.isArray(input.passives) ? input.passives : [];
+    const passives = rawPassives
+      .map((passive, index) => normalizePassive(passive, warnings, `passives[${index}]`))
+      .filter(Boolean);
+
     // Top-level ability keywords. Optional. The runner uses these for
     // ifKeyword predicates and feature-modifier matching. If absent, the
     // runner falls back to the action's `keywords` / `tags` field on the
@@ -1603,6 +1637,7 @@
       version: SCHEMA_VERSION,
       cards,
       modifiers,
+      passives,
       keywords,
       usageLimit,
       warnings,
@@ -1635,7 +1670,8 @@
       input &&
         typeof input === "object" &&
         ((Array.isArray(input.cards) && input.cards.length) ||
-          (Array.isArray(input.modifiers) && input.modifiers.length))
+          (Array.isArray(input.modifiers) && input.modifiers.length) ||
+          (Array.isArray(input.passives) && input.passives.length))
     );
   }
 

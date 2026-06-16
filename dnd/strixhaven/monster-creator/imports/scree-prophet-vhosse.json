@@ -80,13 +80,15 @@
         "keywords": "Ranged, Magic, Earth",
         "range": "Ranged 10",
         "targets": "2 creatures",
-        "effect": "She drags you into the dead world she is making. Tier 1 (≤11): 6 damage. Tier 2 (12–16): 9 damage, pull 3 toward the nearest scree. Tier 3 (17+): 12 damage, pull 4, and the target's square becomes scree. (Automation pulls toward Vhosse; the GM clicks the destination, so pull toward the nearest scree instead — the highlight is advisory only.)",
+        "roll_bonus": 3,
+        "effect": "Vhosse drags her targets into the dead world she is making.",
         "has_test": true,
         "test": {
-          "tier1": { "damage_amount": "6", "damage_type": "untyped" },
-          "tier2": { "damage_amount": "9", "damage_type": "untyped" },
-          "tier3": { "damage_amount": "12", "damage_type": "untyped" }
+          "tier1": { "damage_amount": "6", "damage_type": "", "tier_effect": "" },
+          "tier2": { "damage_amount": "9", "damage_type": "", "tier_effect": "pull 3 toward the nearest scree" },
+          "tier3": { "damage_amount": "12", "damage_type": "", "tier_effect": "pull 4 toward the nearest scree; target's square becomes scree" }
         },
+        "additional_effect": "",
         "automation": {
           "schema": "ability-automation/v3",
           "cards": [
@@ -102,24 +104,9 @@
               "type": "powerRoll",
               "flatBonus": 3,
               "tiers": {
-                "tier1": {
-                  "effects": [
-                    { "kind": "damage", "amount": 6 }
-                  ]
-                },
-                "tier2": {
-                  "effects": [
-                    { "kind": "damage", "amount": 9 },
-                    { "kind": "forcedMovement", "verb": "pull", "distance": 3, "text": "Pull 3 toward the nearest scree (GM places destination)." }
-                  ]
-                },
-                "tier3": {
-                  "effects": [
-                    { "kind": "damage", "amount": 12 },
-                    { "kind": "forcedMovement", "verb": "pull", "distance": 4, "text": "Pull 4 toward the nearest scree (GM places destination)." },
-                    { "kind": "note", "text": "Tier 3: the target's square becomes PERMANENT SCREE. Mark the map." }
-                  ]
-                }
+                "tier1": { "effects": [{ "kind": "damage", "amount": 6 }] },
+                "tier2": { "effects": [{ "kind": "damage", "amount": 9 }, { "kind": "forcedMovement", "verb": "pull", "distance": 3, "text": "Pull 3 toward the nearest scree (GM places destination)." }] },
+                "tier3": { "effects": [{ "kind": "damage", "amount": 12 }, { "kind": "forcedMovement", "verb": "pull", "distance": 4, "text": "Pull 4 toward the nearest scree (GM places destination)." }, { "kind": "note", "text": "Tier 3: the target's square becomes PERMANENT SCREE. Mark the map." }] }
               }
             }
           ]
@@ -133,7 +120,7 @@
         "keywords": "Magic",
         "range": "10",
         "targets": "The dying ally",
-        "effect": "The ally drops to 1 Stamina instead of dying. Vhosse and all allies adjacent to her gain +2 damage until the end of the next round. She refuses The Pause — death feeds her instead of stopping her. (Track the 2/encounter limit manually — the tracker only supports 1/encounter, so it is left off. The +2 damage buff is applied manually.)",
+        "effect": "The ally drops to 1 Stamina instead of dying. Vhosse and all allies adjacent to her gain +2 damage until the end of the next round. She refuses The Pause — death feeds her instead of stopping her. (Track the 2/encounter limit manually; the +2 damage buff is applied manually.)",
         "automation": {
           "schema": "ability-automation/v3",
           "cards": [
@@ -179,13 +166,15 @@
         "keywords": "Area, Magic, Earth",
         "range": "Burst 3",
         "targets": "Each enemy in the burst",
-        "effect": "2d10+3 vs enemies in the burst. Tier 1 (≤11): 5 damage. Tier 2 (12–16): 8 damage. Tier 3 (17+): 11 damage. All stone in the burst becomes permanent scree; her allies take nothing. The dead world is home. (Tier damage numbers are GM-fill — the source block only specified the roll; adjust if you have different values.)",
+        "roll_bonus": 3,
+        "effect": "Vhosse preaches the dead world into being; her allies in the burst take nothing.",
         "has_test": true,
         "test": {
-          "tier1": { "damage_amount": "5", "damage_type": "untyped" },
-          "tier2": { "damage_amount": "8", "damage_type": "untyped" },
-          "tier3": { "damage_amount": "11", "damage_type": "untyped" }
+          "tier1": { "damage_amount": "5", "damage_type": "", "tier_effect": "" },
+          "tier2": { "damage_amount": "8", "damage_type": "", "tier_effect": "" },
+          "tier3": { "damage_amount": "11", "damage_type": "", "tier_effect": "" }
         },
+        "additional_effect": "All stone in the burst becomes permanent scree; Vhosse's allies in the burst take nothing. (Tier damage 5/8/11 is GM-fill — the source block only specified 2d10+3; adjust if you have different values.)",
         "automation": {
           "schema": "ability-automation/v3",
           "cards": [
@@ -202,21 +191,9 @@
               "type": "powerRoll",
               "flatBonus": 3,
               "tiers": {
-                "tier1": {
-                  "effects": [
-                    { "kind": "damage", "amount": 5 }
-                  ]
-                },
-                "tier2": {
-                  "effects": [
-                    { "kind": "damage", "amount": 8 }
-                  ]
-                },
-                "tier3": {
-                  "effects": [
-                    { "kind": "damage", "amount": 11 }
-                  ]
-                }
+                "tier1": { "effects": [{ "kind": "damage", "amount": 5 }] },
+                "tier2": { "effects": [{ "kind": "damage", "amount": 8 }] },
+                "tier3": { "effects": [{ "kind": "damage", "amount": 11 }] }
               }
             },
             {
