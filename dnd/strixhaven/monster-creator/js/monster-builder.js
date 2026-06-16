@@ -937,7 +937,7 @@ function createCompactMonsterCard(monsterId, monsterData) {
                     <span class="search-stat-label">Free Strike:</span>
                     <span class="search-stat-value">${defaultData.free_strike}</span>
                 </div>
-                <div class="search-stat-item">
+                <div class="search-stat-item search-stat-item--movement">
                     <span class="search-stat-label">Movement:</span>
                     <span class="search-stat-value">${(monsterData.movement_modes || []).join(', ') || defaultData.movement || '—'}</span>
                 </div>
