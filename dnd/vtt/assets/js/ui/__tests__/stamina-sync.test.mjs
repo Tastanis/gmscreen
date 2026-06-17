@@ -9,6 +9,7 @@ import {
   restrictTokensToPlayerView,
   restrictPlacementsToPlayerView,
 } from '../../state/store.js';
+import { isPlacementStaminaSyncSource } from '../board-interactions.js';
 
 // ============================================================
 // normalizePlayerTokenFolderName — PC folder matching
@@ -44,6 +45,13 @@ test('normalizePlayerTokenFolderName returns empty for empty string', () => {
 
 test('PLAYER_VISIBLE_TOKEN_FOLDER constant is set to PC\'s', () => {
   assert.equal(PLAYER_VISIBLE_TOKEN_FOLDER, "PC's");
+});
+
+test('placement stamina sync accepts sheet and VTT sidebar broadcasts', () => {
+  assert.equal(isPlacementStaminaSyncSource('sheet'), true);
+  assert.equal(isPlacementStaminaSyncSource('vtt'), true);
+  assert.equal(isPlacementStaminaSyncSource('monster'), false);
+  assert.equal(isPlacementStaminaSyncSource(undefined), false);
 });
 
 // ============================================================

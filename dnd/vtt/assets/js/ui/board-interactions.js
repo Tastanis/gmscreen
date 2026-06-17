@@ -256,6 +256,10 @@ const STAMINA_FLOAT_ANIMATION_MS = 1500;
 const STAMINA_FLOAT_QUEUE_GAP_MS = STAMINA_FLOAT_ANIMATION_MS;
 const MALICE_VICTORIES_ACTION = 'fetch-victories';
 
+export function isPlacementStaminaSyncSource(source) {
+  return source === 'sheet' || source === 'vtt';
+}
+
 // Board state merge helpers live in utils/merge-helpers.js (imported at
 // the top of this file). Re-export them so existing callers importing
 // these names from './board-interactions.js' keep working.
@@ -19478,13 +19482,14 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   /**
-   * Handles stamina-sync broadcasts originating from the character sheet.
+   * Handles stamina-sync broadcasts originating from the character sheet or
+   * the VTT character summary panel.
    * Finds all PC placements matching the character name and updates their HP
    * without re-syncing back to the sheet (prevents oscillation loops).
    */
   function handleSheetStaminaBroadcast(event) {
     const payload = event?.data;
-    if (!payload || payload.type !== 'stamina-sync' || payload.source !== 'sheet') {
+    if (!payload || payload.type !== 'stamina-sync' || !isPlacementStaminaSyncSource(payload.source)) {
       return;
     }
 

@@ -811,6 +811,7 @@
 }
 
 .token-item {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -821,6 +822,36 @@
   background: rgba(15, 23, 42, 0.45);
   cursor: grab;
   transition: border-color var(--vtt-transition), box-shadow var(--vtt-transition);
+}
+
+.token-item__delete {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  appearance: none;
+  border: 1px solid rgba(248, 113, 113, 0.55);
+  border-radius: 999px;
+  background: rgba(127, 29, 29, 0.58);
+  color: #fecaca;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0.25rem 0.45rem;
+  cursor: pointer;
+  transition: background var(--vtt-transition), border-color var(--vtt-transition), color var(--vtt-transition);
+}
+
+.token-item__delete:hover:not(:disabled),
+.token-item__delete:focus-visible {
+  background: rgba(185, 28, 28, 0.72);
+  border-color: rgba(252, 165, 165, 0.8);
+  color: #fff;
+  outline: none;
+}
+
+.token-item__delete:disabled {
+  opacity: 0.55;
+  cursor: wait;
 }
 
 .token-item.is-context-active {
