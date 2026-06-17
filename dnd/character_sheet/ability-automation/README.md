@@ -73,7 +73,7 @@ Effects can specify their own `target` to override the parent block target. `tar
 
 VTT-only utility effects include `floatingText` for the giant centered combat banner and `startTurn` for Hesitation-style turn claiming. `startTurn` is preflighted before action-cost spending so invalid timing can warn before heroic resource is spent.
 
-Token `aura` effects can be visual-only or automated. Automated auras store `affects`, `triggers`, `effects`, and optional `expires` on the VTT placement, move with the owning token, and resolve against the live occupants at timing boundaries or when a token enters the aura. Aura ticks support damage, healing, temporary stamina, surge gain, conditions, mark-gated branches, floating text, and notes.
+Token `aura` effects can be visual-only or automated. Automated auras store `affects`, `triggers`, `effects`, and optional `expires` on the VTT placement, move with the owning token, and resolve against the live occupants at timing boundaries or when a token enters the aura. Multiple automated auras can coexist on one token and are toggled separately from that token's right-click settings. Aura ticks support damage, healing, temporary stamina, surge gain, conditions, mark-gated branches, floating text, and notes.
 
 Top-level `passives[]` do not run in card order. The VTT reads them from the token's character-sheet features or monster passive data whenever board state needs the trait.
 

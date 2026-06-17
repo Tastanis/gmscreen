@@ -4064,6 +4064,48 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
   color: var(--vtt-text-muted);
 }
 
+.vtt-token-settings__automation-aura-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0.45rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vtt-token-settings__automation-aura-list[hidden] {
+  display: none;
+}
+
+.vtt-token-settings__automation-aura-toggle {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  font-size: 0.72rem;
+  color: var(--vtt-text-muted);
+}
+
+.vtt-token-settings__automation-aura-swatch {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  background: var(--aura-color, #3b82f6);
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.35);
+}
+
+.vtt-token-settings__automation-aura-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vtt-token-settings__automation-aura-radius {
+  white-space: nowrap;
+}
+
 /* ── Aura board layer ───────────────────────────────────────────── */
 .vtt-board__auras {
   position: absolute;

@@ -494,7 +494,16 @@ body.delete-mode-active .sub-tab:hover {
     transform: translateY(-1px);
 }
 
+.search-mode .monster-card.expanded {
+    grid-column: 1 / -1;
+    width: 100%;
+    max-width: none;
+    z-index: 1;
+}
+
 .search-mode .card-body {
+    display: flex;
+    flex-direction: column;
     padding: 12px;
 }
 
@@ -689,7 +698,10 @@ body.delete-mode-active .sub-tab:hover {
 }
 
 .search-abilities.expanded {
-    max-height: 1000px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 8px;
+    max-height: none;
     padding-top: 10px;
 }
 

@@ -80,6 +80,15 @@ test('resourceFloor clamps only allowNegative resources', () => {
   assert.equal(__testing.resourceFloor({ stats: { reason: 2 } }, null), 0);
 });
 
+test('heroic resource counter is separate from victories counter', () => {
+  const victoriesHtml = __testing.renderResource('Victories', 2);
+  const wrathHtml = __testing.renderResource('Wrath', 4, { resource: { title: 'Wrath' } });
+
+  assert.match(victoriesHtml, /data-character-counter="victories"/);
+  assert.doesNotMatch(victoriesHtml, /data-character-counter="resource"/);
+  assert.match(wrathHtml, /data-character-counter="resource"/);
+});
+
 test('spendHeroicResource reports insufficient when an allowNegative resource is at its floor', async () => {
   const result = await __testing.spendHeroicResource(
     {

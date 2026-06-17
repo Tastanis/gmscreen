@@ -1095,7 +1095,7 @@ An aura can also carry automation that checks the aura's live occupants when a t
 | `effects` | Effects to apply to the live occupants when a trigger fires. Supported aura tick effects include `damage`, `heal`, `temporaryStamina`, `surgeGain`, `condition`, `ifMark`, `floatingText`, `note`, and `other`. |
 | `expires` | Optional lifetime object using the same shape as trigger expiry: `{ "event": "combatEnd", "whose": "any" }`, `{ "event": "turnEnd", "whose": "self", "count": 1 }`, etc. |
 
-Nest inside `ifStrained` to grow the aura when the caster strains (e.g. radius 3 normally, 4 when strained). Falls back to a chat reminder if the runtime has no token (such as the Hero Sheet preview). Automated auras are token-attached: if the owner moves, the aura moves with them, and trigger resolution checks who is currently inside the aura.
+Nest inside `ifStrained` to grow the aura when the caster strains (e.g. radius 3 normally, 4 when strained). Falls back to a chat reminder if the runtime has no token (such as the Hero Sheet preview). Automated auras are token-attached: if the owner moves, the aura moves with them, and trigger resolution checks who is currently inside the aura. Multiple automated auras can coexist on the same token; the VTT keys them by source/ability and lists each one separately in the token right-click settings so they can be toggled off individually.
 
 ### `other`
 

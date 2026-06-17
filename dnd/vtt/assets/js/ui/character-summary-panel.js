@@ -582,7 +582,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   if (sheetChannel) {
     sheetChannel.addEventListener('message', (event) => {
       const payload = event?.data;
-      if (!payload || payload.type !== 'character-sheet-sync' || payload.source === 'vtt') {
+      if (!payload || payload.type !== 'character-sheet-sync') {
         return;
       }
       const character = String(payload.character || '').trim().toLowerCase();
@@ -592,6 +592,14 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
       refreshActiveSheet({ force: true });
     });
   }
+
+  document.addEventListener('vtt:character-sheet-updated', (event) => {
+    const character = String(event?.detail?.characterId || '').trim().toLowerCase();
+    if (!activeCharacterId || (character && character !== activeCharacterId)) {
+      return;
+    }
+    refreshActiveSheet({ force: true });
+  });
 
   const heroChannel = getHeroTokenSyncChannel();
   if (heroChannel) {
@@ -2079,7 +2087,7 @@ function renderResource(label, value, { resource = null } = {}) {
     return `
       <button type="button" class="vtt-character-resource vtt-character-resource--button" data-character-add-victory>
         <div class="vtt-character-resource__label">${escapeHtml(label)}</div>
-        <div class="vtt-character-resource__value" data-character-counter="resource">${escapeHtml(value)}</div>
+        <div class="vtt-character-resource__value" data-character-counter="victories">${escapeHtml(value)}</div>
       </button>
     `;
   }
@@ -2088,7 +2096,7 @@ function renderResource(label, value, { resource = null } = {}) {
       <div class="vtt-character-resource__label">${escapeHtml(label)}</div>
       <div class="vtt-character-resource__value-row">
         <button type="button" class="vtt-character-step" data-character-resource-delta="1" aria-label="Increase ${escapeAttribute(label)}">▲</button>
-        <div class="vtt-character-resource__value">${escapeHtml(value)}</div>
+        <div class="vtt-character-resource__value" data-character-counter="resource">${escapeHtml(value)}</div>
         <button type="button" class="vtt-character-step" data-character-resource-delta="-1" aria-label="Decrease ${escapeAttribute(label)}">▼</button>
         ${autoDice ? `<button type="button" class="vtt-character-roll" data-character-resource-roll aria-label="Roll ${escapeAttribute(autoDice)}">${escapeHtml(autoDice)}</button>` : ''}
       </div>
@@ -3500,6 +3508,8 @@ function parseAutoDice(value) {
 }
 
 export const __testing = {
+  renderResource,
+  updateCharacterPanelCounter,
   resourceFloor,
   saveCharacterSummarySheet,
   spendHeroicResource,

@@ -252,6 +252,8 @@ const TURN_FLASH_TONE_CLASSES = {
   red: 'is-turn-flash-red',
 };
 const SHEET_SYNC_DEBOUNCE_MS = 400;
+const STAMINA_FLOAT_ANIMATION_MS = 1500;
+const STAMINA_FLOAT_QUEUE_GAP_MS = STAMINA_FLOAT_ANIMATION_MS;
 const MALICE_VICTORIES_ACTION = 'fetch-victories';
 
 // Board state merge helpers live in utils/merge-helpers.js (imported at
@@ -669,6 +671,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const combatTrackerGroups = new Map();
   const combatantGroupRepresentative = new Map();
   const combatGroupMissingCounts = new Map();
+  const staminaFloatQueues = new Map();
   const MAX_COMBAT_GROUP_MISSING_TICKS = 2;
   const MAX_COMBAT_GROUP_COLORS = 7;
 
@@ -3190,6 +3193,151 @@ export function mountBoardInteractions(store, routes = {}) {
 
   // ---------- Token-attached automation auras ----------
 
+  function normalizeAutomationAuraId(value) {
+    return String(value || '').trim();
+  }
+
+  function createAutomationAuraId(automation = {}, payload = {}) {
+    const explicit = normalizeAutomationAuraId(payload.auraId || payload.id || automation.id);
+    if (explicit) return explicit;
+    const abilityId = normalizeAutomationAuraId(automation.abilityId);
+    const sourceId = normalizeAutomationAuraId(automation.sourceId || payload.placementId);
+    const abilityName = normalizeAutomationAuraId(automation.abilityName || 'Aura')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    return [sourceId, abilityId || abilityName || 'aura'].filter(Boolean).join(':');
+  }
+
+  function cloneAutomationAuraRecord(record) {
+    if (!record || typeof record !== 'object') return null;
+    const automation = record.automation && typeof record.automation === 'object'
+      ? record.automation
+      : null;
+    if (!automation) return null;
+    const id = normalizeAutomationAuraId(record.id) || createAutomationAuraId(automation);
+    return {
+      id,
+      enabled: record.enabled !== false,
+      radius: Math.max(1, Math.min(20, Number.parseInt(record.radius, 10) || 1)),
+      color: typeof record.color === 'string' && record.color ? record.color : '#3b82f6',
+      automation,
+      legacy: Boolean(record.legacy),
+    };
+  }
+
+  function getAutomationAuraRecords(placement, { includeDisabled = false } = {}) {
+    if (!placement || typeof placement !== 'object') return [];
+    const records = [];
+    const manualAura = placement.aura && typeof placement.aura === 'object' ? placement.aura : null;
+    if (manualAura?.automation && (includeDisabled || manualAura.enabled !== false)) {
+      const legacyRecord = cloneAutomationAuraRecord({
+        id: '__legacy__',
+        enabled: manualAura.enabled !== false,
+        radius: manualAura.radius,
+        color: manualAura.color,
+        automation: manualAura.automation,
+        legacy: true,
+      });
+      if (legacyRecord) records.push(legacyRecord);
+    }
+    const stored = Array.isArray(placement.automationAuras) ? placement.automationAuras : [];
+    stored.forEach((record) => {
+      if (!includeDisabled && record?.enabled === false) return;
+      const normalized = cloneAutomationAuraRecord(record);
+      if (normalized) records.push(normalized);
+    });
+    return records;
+  }
+
+  function getRenderableAurasForPlacement(placement) {
+    if (!placement || typeof placement !== 'object') return [];
+    const result = [];
+    const manualAura = placement.aura && typeof placement.aura === 'object' ? placement.aura : null;
+    if (manualAura?.enabled) {
+      result.push({
+        id: 'manual',
+        radius: manualAura.radius,
+        color: manualAura.color || '#3b82f6',
+      });
+    }
+    getAutomationAuraRecords(placement).forEach((record) => {
+      if (record.legacy && manualAura?.enabled) return;
+      result.push({
+        id: `automation:${record.id}`,
+        radius: record.radius,
+        color: record.color,
+      });
+    });
+    return result;
+  }
+
+  function renderAutomationAuraSettingsList(menu, placement) {
+    const list = menu?.automationAuraList;
+    if (!(list instanceof HTMLElement)) return;
+    const records = getAutomationAuraRecords(placement, { includeDisabled: true });
+    if (!records.length) {
+      list.innerHTML = '';
+      list.hidden = true;
+      return;
+    }
+    list.hidden = false;
+    list.innerHTML = records.map((record) => {
+      const automation = record.automation && typeof record.automation === 'object' ? record.automation : {};
+      const name = automation.abilityName || 'Automation aura';
+      const color = record.color || '#3b82f6';
+      const radius = Math.max(1, Math.min(20, Number.parseInt(record.radius, 10) || 1));
+      const checked = record.enabled !== false ? ' checked' : '';
+      return `
+        <li class="vtt-token-settings__automation-aura">
+          <label class="vtt-token-settings__automation-aura-toggle">
+            <input
+              type="checkbox"
+              data-token-settings-automation-aura-toggle="${escapeAttribute(record.id)}"
+              ${checked}
+            />
+            <span class="vtt-token-settings__automation-aura-swatch" style="--aura-color:${escapeAttribute(color)}"></span>
+            <span class="vtt-token-settings__automation-aura-name">${escapeHtml(name)}</span>
+            <span class="vtt-token-settings__automation-aura-radius">${radius} sq</span>
+          </label>
+        </li>
+      `;
+    }).join('');
+  }
+
+  function updateAutomationAuraEnabled(placementId, auraId, enabled) {
+    if (!placementId || !auraId) return false;
+    return Boolean(updatePlacementById(placementId, (target) => {
+      if (auraId === '__legacy__') {
+        if (target.aura && typeof target.aura === 'object' && target.aura.automation) {
+          target.aura.enabled = Boolean(enabled);
+        }
+        return;
+      }
+      const records = Array.isArray(target.automationAuras) ? target.automationAuras : [];
+      const next = records.map((record) => (
+        record && record.id === auraId
+          ? { ...record, enabled: Boolean(enabled) }
+          : record
+      ));
+      target.automationAuras = next.length ? next : null;
+    }));
+  }
+
+  function removeAutomationAuraRecord(target, auraId) {
+    if (!target || typeof target !== 'object' || !auraId) return;
+    if (auraId === '__legacy__') {
+      if (target.aura && typeof target.aura === 'object') {
+        target.aura.enabled = false;
+        delete target.aura.automation;
+      }
+      return;
+    }
+    const records = Array.isArray(target.automationAuras) ? target.automationAuras : [];
+    const next = records.filter((record) => record && record.id !== auraId);
+    target.automationAuras = next.length ? next : null;
+  }
+
   function normalizeAuraAutomationPayload(payload, context = {}) {
     if (!payload || typeof payload !== 'object') return null;
     const effects = Array.isArray(payload.effects) ? JSON.parse(JSON.stringify(payload.effects)) : [];
@@ -3231,14 +3379,14 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function getActiveAutomationAuras() {
-    return getPlacementsForActiveScene()
-      .map((owner) => {
-        const aura = owner?.aura && typeof owner.aura === 'object' ? owner.aura : null;
-        const automation = aura?.automation && typeof aura.automation === 'object' ? aura.automation : null;
-        if (!owner?.id || !aura?.enabled || !automation) return null;
-        return { owner, aura, automation };
-      })
-      .filter(Boolean);
+    const entries = [];
+    getPlacementsForActiveScene().forEach((owner) => {
+      if (!owner?.id) return;
+      getAutomationAuraRecords(owner).forEach((aura) => {
+        entries.push({ owner, aura, automation: aura.automation });
+      });
+    });
+    return entries;
   }
 
   function getAuraAreaForPlacement(owner, radius, override = null) {
@@ -3472,15 +3620,28 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!shouldExpire) {
       if (entry.lifetimeState) {
         updatePlacementById(owner.id, (target) => {
-          if (target.aura?.automation) target.aura.automation.lifetimeState = entry.lifetimeState;
+          if (aura.legacy && target.aura?.automation) {
+            target.aura.automation.lifetimeState = entry.lifetimeState;
+            return;
+          }
+          const records = Array.isArray(target.automationAuras) ? target.automationAuras : [];
+          target.automationAuras = records.map((record) => (
+            record && record.id === aura.id
+              ? {
+                  ...record,
+                  automation: {
+                    ...(record.automation || {}),
+                    lifetimeState: entry.lifetimeState,
+                  },
+                }
+              : record
+          ));
         });
       }
       return false;
     }
     updatePlacementById(owner.id, (target) => {
-      if (!target.aura || typeof target.aura !== 'object') return;
-      target.aura.enabled = false;
-      delete target.aura.automation;
+      removeAutomationAuraRecord(target, aura.id);
     });
     renderAuras(boardApi.getState?.() ?? {}, auraLayer, viewState);
     if (activeTokenSettingsId === owner.id && typeof refreshTokenSettings === 'function') {
@@ -4515,6 +4676,24 @@ export function mountBoardInteractions(store, routes = {}) {
       activeCombatantId,
     });
     updatePlacementById(placementId, (target) => {
+      if (automation) {
+        const auraId = createAutomationAuraId(automation, payload);
+        removeAutomationAuraRecord(target, auraId);
+        if (enabled) {
+          const existing = Array.isArray(target.automationAuras) ? target.automationAuras : [];
+          target.automationAuras = [
+            ...existing,
+            {
+              id: auraId,
+              enabled: true,
+              radius,
+              color: payload.color || '#3b82f6',
+              automation,
+            },
+          ];
+        }
+        return;
+      }
       if (!target.aura || typeof target.aura !== 'object') {
         target.aura = { enabled: false, radius: 1, color: '#3b82f6' };
       }
@@ -4523,9 +4702,7 @@ export function mountBoardInteractions(store, routes = {}) {
       if (payload.color) {
         target.aura.color = payload.color;
       }
-      if (automation) {
-        target.aura.automation = automation;
-      } else if (!enabled || payload.automation === null) {
+      if (!enabled || payload.automation === null) {
         delete target.aura.automation;
       }
     });
@@ -9194,7 +9371,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const topOffset = Number.isFinite(offsets.top) ? offsets.top : 0;
     const placements = view?.mapLoaded ? getActiveScenePlacements(state) : [];
 
-    // Build set of existing aura elements by placement ID
+    // Build set of existing aura elements by placement ID + aura ID.
     const existingAuras = new Map();
     Array.from(layer.children).forEach((child) => {
       if (!(child instanceof HTMLElement)) {
@@ -9202,8 +9379,9 @@ export function mountBoardInteractions(store, routes = {}) {
         return;
       }
       const id = child.dataset?.placementId;
+      const auraId = child.dataset?.auraId || 'manual';
       if (id) {
-        existingAuras.set(id, child);
+        existingAuras.set(`${id}:${auraId}`, child);
       } else {
         layer.removeChild(child);
       }
@@ -9264,60 +9442,64 @@ export function mountBoardInteractions(store, routes = {}) {
         }
       }
 
-      const aura = placement.aura && typeof placement.aura === 'object' ? placement.aura : null;
-      if (!aura?.enabled) {
+      const auras = getRenderableAurasForPlacement(placement);
+      if (!auras.length) {
         return;
       }
 
-      const auraRadius = Math.max(1, Math.min(20, parseInt(aura.radius, 10) || 1));
-      const auraColor = typeof aura.color === 'string' ? aura.color : '#3b82f6';
+      auras.forEach((aura) => {
+        const auraRadius = Math.max(1, Math.min(20, parseInt(aura.radius, 10) || 1));
+        const auraColor = typeof aura.color === 'string' ? aura.color : '#3b82f6';
+        const auraKey = `${normalized.id}:${aura.id || 'manual'}`;
 
-      // Calculate aura dimensions.
-      // Draw Steel uses square (Chebyshev) distance — diagonals count as 1 — so
-      // an aura of radius N extends N squares beyond EVERY edge of the token,
-      // including diagonally. For a WxH token that is a (W+2N) x (H+2N) square
-      // block, computed per-axis (not a circle).
-      const tokenW = normalized.width;
-      const tokenH = normalized.height;
-      const auraWidth = (tokenW + auraRadius * 2) * gridSize;
-      const auraHeight = (tokenH + auraRadius * 2) * gridSize;
+        // Calculate aura dimensions.
+        // Draw Steel uses square (Chebyshev) distance — diagonals count as 1 — so
+        // an aura of radius N extends N squares beyond EVERY edge of the token,
+        // including diagonally. For a WxH token that is a (W+2N) x (H+2N) square
+        // block, computed per-axis (not a circle).
+        const tokenW = normalized.width;
+        const tokenH = normalized.height;
+        const auraWidth = (tokenW + auraRadius * 2) * gridSize;
+        const auraHeight = (tokenH + auraRadius * 2) * gridSize;
 
-      let auraEl = existingAuras.get(normalized.id);
-      let isNew = false;
-      if (auraEl) {
-        existingAuras.delete(normalized.id);
-      } else {
-        auraEl = document.createElement('div');
-        auraEl.className = 'vtt-token-aura';
-        auraEl.dataset.placementId = normalized.id;
-        isNew = true;
-      }
+        let auraEl = existingAuras.get(auraKey);
+        let isNew = false;
+        if (auraEl) {
+          existingAuras.delete(auraKey);
+        } else {
+          auraEl = document.createElement('div');
+          auraEl.className = 'vtt-token-aura';
+          auraEl.dataset.placementId = normalized.id;
+          auraEl.dataset.auraId = aura.id || 'manual';
+          isNew = true;
+        }
 
-      auraEl.style.width = `${auraWidth}px`;
-      auraEl.style.height = `${auraHeight}px`;
+        auraEl.style.width = `${auraWidth}px`;
+        auraEl.style.height = `${auraHeight}px`;
 
-      // Memoize fill: only recompute if color changed. Flat fill + inset border
-      // so the square reads as a discrete grid block rather than a soft circle.
-      const gradientKey = auraColor;
-      if (auraEl._lastGradientKey !== gradientKey) {
-        const r = parseInt(auraColor.slice(1, 3), 16) || 0;
-        const g = parseInt(auraColor.slice(3, 5), 16) || 0;
-        const b = parseInt(auraColor.slice(5, 7), 16) || 0;
-        auraEl.style.background = `rgba(${r},${g},${b},0.18)`;
-        auraEl.style.boxShadow = `inset 0 0 0 2px rgba(${r},${g},${b},0.45)`;
-        auraEl._lastGradientKey = gradientKey;
-      }
+        // Memoize fill: only recompute if color changed. Flat fill + inset border
+        // so the square reads as a discrete grid block rather than a soft circle.
+        const gradientKey = auraColor;
+        if (auraEl._lastGradientKey !== gradientKey) {
+          const r = parseInt(auraColor.slice(1, 3), 16) || 0;
+          const g = parseInt(auraColor.slice(3, 5), 16) || 0;
+          const b = parseInt(auraColor.slice(5, 7), 16) || 0;
+          auraEl.style.background = `rgba(${r},${g},${b},0.18)`;
+          auraEl.style.boxShadow = `inset 0 0 0 2px rgba(${r},${g},${b},0.45)`;
+          auraEl._lastGradientKey = gradientKey;
+        }
 
-      // Position from the token's top-left, pulled back auraRadius squares on
-      // both axes so the square is centered on the token's footprint.
-      const auraLeft = leftOffset + (normalized.column - auraRadius) * gridSize;
-      const auraTop = topOffset + (normalized.row - auraRadius) * gridSize;
-      auraEl.style.transform = `translate3d(${auraLeft}px, ${auraTop}px, 0)`;
+        // Position from the token's top-left, pulled back auraRadius squares on
+        // both axes so the square is centered on the token's footprint.
+        const auraLeft = leftOffset + (normalized.column - auraRadius) * gridSize;
+        const auraTop = topOffset + (normalized.row - auraRadius) * gridSize;
+        auraEl.style.transform = `translate3d(${auraLeft}px, ${auraTop}px, 0)`;
 
-      if (isNew) {
-        layer.appendChild(auraEl);
-      }
-      auraCount += 1;
+        if (isNew) {
+          layer.appendChild(auraEl);
+        }
+        auraCount += 1;
+      });
     });
 
     // Remove orphaned aura elements no longer in state
@@ -18263,12 +18445,29 @@ export function mountBoardInteractions(store, routes = {}) {
     suggestedTargetPulseId = null;
   }
 
-  // Floats a -N (red) or +N (green) number above a token for 1.5s, slowly
-  // rising and fading. Multiple calls stack vertically.
+  // Floats a -N (red) or +N (green) number above a token. Calls for the same
+  // token are queued so rapid damage/heal events do not cover each other.
   function floatStaminaDelta(placementId, amount, mode /* 'damage' | 'heal' */) {
     if (!placementId || !tokenLayer) return;
     const numericAmount = Number.parseInt(amount, 10);
     if (!Number.isFinite(numericAmount) || numericAmount === 0) return;
+    const key = String(placementId);
+    const prior = staminaFloatQueues.get(key) || Promise.resolve();
+    const next = prior
+      .catch(() => {})
+      .then(() => new Promise((resolve) => {
+        showStaminaFloatNow(placementId, numericAmount, mode);
+        window.setTimeout(resolve, STAMINA_FLOAT_QUEUE_GAP_MS);
+      }));
+    staminaFloatQueues.set(key, next);
+    next.finally(() => {
+      if (staminaFloatQueues.get(key) === next) {
+        staminaFloatQueues.delete(key);
+      }
+    });
+  }
+
+  function showStaminaFloatNow(placementId, amount, mode) {
     const escapedId = window.CSS?.escape
       ? window.CSS.escape(String(placementId))
       : String(placementId).replace(/["\\]/g, '\\$&');
@@ -18278,17 +18477,13 @@ export function mountBoardInteractions(store, routes = {}) {
     const span = document.createElement('span');
     span.className = `vtt-token__float-number vtt-token__float-number--${mode === 'heal' ? 'heal' : 'damage'}`;
     const prefix = mode === 'heal' ? '+' : '-';
-    span.textContent = `${prefix}${Math.abs(numericAmount)}`;
-
-    // Stagger if multiple delta numbers are already on this token.
-    const existing = token.querySelectorAll('.vtt-token__float-number').length;
-    span.style.setProperty('--float-stagger-x', `${existing * 6}px`);
+    span.textContent = `${prefix}${Math.abs(amount)}`;
     token.appendChild(span);
     window.setTimeout(() => {
       if (span.parentNode === token) {
         span.parentNode.removeChild(span);
       }
-    }, 1600);
+    }, STAMINA_FLOAT_ANIMATION_MS + 100);
   }
 
   function formatAutomationTargetPrompt(targetConfig = {}) {
@@ -20051,6 +20246,7 @@ export function mountBoardInteractions(store, routes = {}) {
               aria-label="Aura color"
             />
           </div>
+          <ul class="vtt-token-settings__automation-aura-list" data-token-settings-automation-aura-list></ul>
         </div>
         ${levelControlsMarkup}
         ${claimControlsMarkup}
@@ -20094,6 +20290,7 @@ export function mountBoardInteractions(store, routes = {}) {
       auraField: element.querySelector('[data-token-settings-field="aura"]'),
       auraRadiusInput: element.querySelector('[data-token-settings-input="auraRadius"]'),
       auraColorInput: element.querySelector('[data-token-settings-input="auraColor"]'),
+      automationAuraList: element.querySelector('[data-token-settings-automation-aura-list]'),
     };
 
     element.addEventListener('contextmenu', (event) => {
@@ -20371,6 +20568,23 @@ export function mountBoardInteractions(store, routes = {}) {
           target.aura.color = color;
         });
         renderAuras(boardApi.getState?.() ?? {}, auraLayer, viewState);
+      });
+    }
+
+    if (menu.automationAuraList) {
+      menu.automationAuraList.addEventListener('change', (event) => {
+        const target = event.target instanceof HTMLInputElement ? event.target : null;
+        if (!target || !target.matches('[data-token-settings-automation-aura-toggle]')) {
+          return;
+        }
+        if (!activeTokenSettingsId) {
+          return;
+        }
+        const auraId = target.dataset.tokenSettingsAutomationAuraToggle || '';
+        const enabled = target.checked;
+        updateAutomationAuraEnabled(activeTokenSettingsId, auraId, enabled);
+        renderAuras(boardApi.getState?.() ?? {}, auraLayer, viewState);
+        refreshTokenSettings();
       });
     }
 
@@ -21273,6 +21487,7 @@ export function mountBoardInteractions(store, routes = {}) {
       tokenSettingsMenu.auraColorInput.value = aura?.color || '#3b82f6';
       tokenSettingsMenu.auraColorInput.disabled = !auraEnabled;
     }
+    renderAutomationAuraSettingsList(tokenSettingsMenu, placement);
   }
 
   function handleStatBlockButtonClick() {
