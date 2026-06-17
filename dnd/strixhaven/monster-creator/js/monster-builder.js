@@ -42,6 +42,7 @@ let editorMonsterId = null; // ID of monster being edited
 let editorMonsterOriginalTab = null; // Track original tab location
 let editorMonsterOriginalSubTab = null; // Track original subtab location
 let selectedMonsterId = null; // ID of monster selected for ability viewing
+let searchMonsterColumnCount = null;
 
 const MONSTER_ABILITY_CATEGORIES = [
     'passive',
@@ -792,11 +793,15 @@ function loadWorkspace() {
         // Sort alphabetically and display monsters
         monstersToShow.sort((a, b) => (a.data.name || 'Unnamed').localeCompare(b.data.name || 'Unnamed'));
         
-        monstersToShow.forEach(monster => {
-            console.log('Loading monster:', monster.id, monster.data);
-            const monsterCard = createMonsterCard(monster.id, monster.data);
-            workspaceContent.appendChild(monsterCard);
-        });
+        if (currentMode === 'search') {
+            renderSearchMonsterColumns(workspaceContent, monstersToShow);
+        } else {
+            monstersToShow.forEach(monster => {
+                console.log('Loading monster:', monster.id, monster.data);
+                const monsterCard = createMonsterCard(monster.id, monster.data);
+                workspaceContent.appendChild(monsterCard);
+            });
+        }
         
         console.log('Loaded workspace with monsters:', monstersToShow.length);
         
@@ -819,6 +824,32 @@ function loadWorkspace() {
         `;
         console.log('Loaded empty workspace');
     }
+}
+
+function getSearchMonsterColumnCount(workspaceContent) {
+    const availableWidth = workspaceContent?.clientWidth || 0;
+    if (availableWidth <= 760) return 1;
+    if (availableWidth <= 1180) return 2;
+    return 3;
+}
+
+function renderSearchMonsterColumns(workspaceContent, monstersToShow) {
+    const columnCount = getSearchMonsterColumnCount(workspaceContent);
+    searchMonsterColumnCount = columnCount;
+    workspaceContent.style.setProperty('--monster-search-columns', columnCount);
+
+    const columns = Array.from({ length: columnCount }, () => {
+        const column = document.createElement('div');
+        column.className = 'monster-card-column';
+        workspaceContent.appendChild(column);
+        return column;
+    });
+
+    monstersToShow.forEach((monster, index) => {
+        console.log('Loading monster:', monster.id, monster.data);
+        const monsterCard = createMonsterCard(monster.id, monster.data);
+        columns[index % columnCount].appendChild(monsterCard);
+    });
 }
 
 function createMonsterCard(monsterId, monsterData) {
@@ -3506,6 +3537,16 @@ function setupEventListeners() {
             toggleDebugInfo();
         }
     });
+
+    window.addEventListener('resize', debounce(function() {
+        if (currentMode !== 'search') return;
+
+        const workspaceContent = document.getElementById('workspaceContent');
+        const nextColumnCount = getSearchMonsterColumnCount(workspaceContent);
+        if (nextColumnCount !== searchMonsterColumnCount) {
+            loadWorkspace();
+        }
+    }, 150));
     
     console.log('Event listeners set up. Press Ctrl+D to toggle debug info.');
 }
