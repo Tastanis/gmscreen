@@ -16,7 +16,11 @@ export function normalizeCombatStateEntry(raw = {}) {
   const malice = Math.max(0, toInt(raw.malice ?? raw.maliceCount ?? 0, 0));
   const encounterId = normalizeNullableString(raw.encounterId ?? raw.combatEncounterId ?? null);
   const turnLock = normalizeTurnLockEntry(raw.turnLock ?? null);
-  const lastEffect = normalizeTurnEffectEntry(raw.lastEffect ?? raw.lastEvent ?? null);
+  const fallbackLastEffect = normalizeTurnEffectEntry(raw.lastEffect ?? raw.lastEvent ?? null);
+  const lastEffects = normalizeTurnEffectsEntry(raw.lastEffects ?? raw.effects ?? null, fallbackLastEffect);
+  const lastEffect = lastEffects.length > 0
+    ? { ...lastEffects[lastEffects.length - 1] }
+    : fallbackLastEffect;
   const groups = normalizeCombatGroupsEntry(
     raw.groups ?? raw.groupings ?? raw.combatGroups ?? raw.combatantGroups ?? []
   );
@@ -34,6 +38,7 @@ export function normalizeCombatStateEntry(raw = {}) {
     Boolean(encounterId) ||
     Boolean(turnLock) ||
     Boolean(lastEffect) ||
+    lastEffects.length > 0 ||
     groups.length > 0;
 
   if (!hasMeaningfulState && !hasTimestamp) {
@@ -60,6 +65,7 @@ export function normalizeCombatStateEntry(raw = {}) {
     sequence,
     turnLock,
     lastEffect,
+    lastEffects,
     groups,
   };
 }
@@ -70,7 +76,9 @@ export function normalizeTurnEffectEntry(raw) {
   }
 
   const type = typeof raw.type === 'string' ? raw.type.trim() : '';
+  const id = typeof raw.id === 'string' ? raw.id.trim() : '';
   const combatantId = typeof raw.combatantId === 'string' ? raw.combatantId.trim() : '';
+  const placementId = typeof raw.placementId === 'string' ? raw.placementId.trim() : '';
   const initiatorId = typeof raw.initiatorId === 'string' ? raw.initiatorId.trim() : '';
   const text = typeof raw.text === 'string' ? raw.text.trim() : '';
   const tone = typeof raw.tone === 'string' ? raw.tone.trim().toLowerCase() : '';
@@ -79,8 +87,12 @@ export function normalizeTurnEffectEntry(raw) {
   const triggeredAtRaw = Number(raw.triggeredAt ?? raw.timestamp ?? raw.at);
   const triggeredAt = Number.isFinite(triggeredAtRaw) ? Math.max(0, Math.trunc(triggeredAtRaw)) : Date.now();
   const payload = raw.payload && typeof raw.payload === 'object' ? raw.payload : null;
+  const amountRaw = Number(raw.amount);
+  const amount = Number.isFinite(amountRaw) ? Math.trunc(amountRaw) : null;
+  const modeRaw = typeof raw.mode === 'string' ? raw.mode.trim().toLowerCase() : '';
+  const mode = modeRaw === 'heal' ? 'heal' : modeRaw === 'damage' ? 'damage' : '';
 
-  if (!type && !combatantId && !initiatorId && !text && !payload) {
+  if (!type && !id && !combatantId && !placementId && !initiatorId && !text && !payload) {
     return null;
   }
 
@@ -88,8 +100,14 @@ export function normalizeTurnEffectEntry(raw) {
   if (type) {
     effect.type = type;
   }
+  if (id) {
+    effect.id = id;
+  }
   if (combatantId) {
     effect.combatantId = combatantId;
+  }
+  if (placementId) {
+    effect.placementId = placementId;
   }
   if (initiatorId) {
     effect.initiatorId = initiatorId;
@@ -109,8 +127,60 @@ export function normalizeTurnEffectEntry(raw) {
   if (payload) {
     effect.payload = payload;
   }
+  if (amount !== null) {
+    effect.amount = amount;
+  }
+  if (mode) {
+    effect.mode = mode;
+  }
 
   return effect;
+}
+
+export function normalizeTurnEffectsEntry(rawEffects, fallbackEffect = null) {
+  const source = Array.isArray(rawEffects) ? rawEffects : [];
+  const effects = [];
+  const seen = new Set();
+
+  source.forEach((entry) => {
+    const effect = normalizeTurnEffectEntry(entry);
+    if (!effect) {
+      return;
+    }
+    const signature = getTurnEffectEntrySignature(effect);
+    if (signature && seen.has(signature)) {
+      return;
+    }
+    if (signature) {
+      seen.add(signature);
+    }
+    effects.push(effect);
+  });
+
+  if (effects.length === 0 && fallbackEffect) {
+    const effect = normalizeTurnEffectEntry(fallbackEffect);
+    if (effect) {
+      effects.push(effect);
+    }
+  }
+
+  return effects.slice(-12);
+}
+
+function getTurnEffectEntrySignature(effect) {
+  if (!effect || typeof effect !== 'object') {
+    return '';
+  }
+  const id = typeof effect.id === 'string' ? effect.id.trim() : '';
+  if (id) {
+    return `id:${id}`;
+  }
+  const type = typeof effect.type === 'string' ? effect.type.trim().toLowerCase() : '';
+  const combatantId = typeof effect.combatantId === 'string' ? effect.combatantId.trim() : '';
+  const placementId = typeof effect.placementId === 'string' ? effect.placementId.trim() : '';
+  const triggeredAtRaw = Number(effect.triggeredAt);
+  const triggeredAt = Number.isFinite(triggeredAtRaw) ? Math.max(0, Math.trunc(triggeredAtRaw)) : 0;
+  return `${type}:${combatantId || placementId}:${triggeredAt}`;
 }
 
 export function normalizeCombatGroupsEntry(rawGroups) {

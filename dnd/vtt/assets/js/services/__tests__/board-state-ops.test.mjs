@@ -163,6 +163,7 @@ describe('Board State – delta ops persistence (phase 3-B commit 2)', () => {
           turnLock: null,
           groups: [{ representativeId: 'hero', memberIds: ['hero', 'ally'] }],
           lastEffect: null,
+          lastEffects: [],
         },
       },
     ]);

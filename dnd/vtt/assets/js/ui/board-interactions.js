@@ -88,6 +88,7 @@ import { createTokenInteractions } from './token-interactions.js';
 import { createTokenMovementController } from '../token-system/token-movement-controller.js';
 import {
   buildTokenStackOrderUpdate,
+  getDefaultTokenStackOrderMap,
   getPlacementStackOrder,
   getTokenStackOrderAvailability,
 } from './token-stack-order.js';
@@ -118,6 +119,7 @@ import {
   TURN_PHASE,
   createCombatStateSnapshot as buildCombatStateSnapshot,
   getTurnPhase as getCombatTurnPhase,
+  mergeTurnEffects,
   normalizeCombatGroups,
   normalizeCombatState,
   normalizeCombatTeam,
@@ -1353,8 +1355,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const updated = boardApi.getState?.();
     const serverCombat =
       updated?.boardState?.sceneState?.[intent.activeSceneId]?.combat ?? null;
-    const serverActive = Boolean(serverCombat?.active);
-    if (serverActive === Boolean(intent.active)) {
+    if (combatIntentMatchesServer(intent, serverCombat)) {
       if (hasPendingCombatIntentSave() || registeringLocalCombatSave) {
         return;
       }
@@ -1398,6 +1399,59 @@ export function mountBoardInteractions(store, routes = {}) {
     refreshCombatTracker();
     markCombatEncounterStateDirty();
     syncCombatStateToStore();
+  }
+
+  function combatIntentMatchesServer(intent, serverCombat) {
+    if (!intent || !serverCombat || typeof serverCombat !== 'object') {
+      return false;
+    }
+
+    return (
+      Boolean(serverCombat.active) === Boolean(intent.active) &&
+      toCombatIntentNumber(serverCombat.round) === toCombatIntentNumber(intent.round) &&
+      toCombatIntentNumber(serverCombat.roundTurnCount) === toCombatIntentNumber(intent.roundTurnCount) &&
+      normalizeCombatIntentId(serverCombat.activeCombatantId) === normalizeCombatIntentId(intent.activeCombatantId) &&
+      normalizeCombatTeam(serverCombat.startingTeam) === normalizeCombatTeam(intent.startingTeam) &&
+      normalizeCombatTeam(serverCombat.currentTeam) === normalizeCombatTeam(intent.currentTeam) &&
+      normalizeCombatTeam(serverCombat.lastTeam) === normalizeCombatTeam(intent.lastTeam) &&
+      normalizeCombatIntentId(serverCombat.encounterId) === normalizeCombatIntentId(intent.encounterId) &&
+      sameCombatIntentIds(serverCombat.completedCombatantIds, intent.completedCombatantIds)
+    );
+  }
+
+  function toCombatIntentNumber(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : 0;
+  }
+
+  function normalizeCombatIntentId(value) {
+    return typeof value === 'string' && value.trim() ? value.trim() : null;
+  }
+
+  function sameCombatIntentIds(left, right) {
+    const leftIds = toCombatIntentIdSet(left);
+    const rightIds = toCombatIntentIdSet(right);
+    if (leftIds.size !== rightIds.size) {
+      return false;
+    }
+    for (const id of leftIds) {
+      if (!rightIds.has(id)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function toCombatIntentIdSet(values) {
+    if (!values || typeof values === 'string' || typeof values[Symbol.iterator] !== 'function') {
+      return new Set();
+    }
+    return new Set(
+      Array.from(values)
+        .filter((value) => typeof value === 'string')
+        .map((value) => value.trim())
+        .filter(Boolean)
+    );
   }
 
   // Phase 3-B (commit 3): helpers for building `placement.update` ops
@@ -1669,8 +1723,10 @@ export function mountBoardInteractions(store, routes = {}) {
   let malicePanelAddCount = 0;
   let audioContext = null;
   let lastTurnEffect = null;
+  let lastTurnEffects = [];
   let lastTurnEffectSignature = null;
   let lastProcessedTurnEffectSignature = null;
+  let lastProcessedTurnEffectSignatures = new Set();
   const sheetSyncQueue = new Map();
   const maliceVictoriesCache = new Map();
   // Sand timer artwork is resolved via CSS data-stage attributes using
@@ -9124,6 +9180,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const trackerEntries = [];
     const activeCombatantIds = new Set();
     const groupColorAssignments = getCombatGroupColorAssignments();
+    const defaultStackOrders = getDefaultTokenStackOrderMap(placements);
     const tokenLevelState = getActiveSceneTokenLevelState(state);
     const viewerLevelId = activeSceneKey ? getViewerLevelIdForCurrentUser(state, activeSceneKey) : null;
     // Pre-compute fog checker once (null when fog inactive or GM viewing).
@@ -9140,7 +9197,10 @@ export function mountBoardInteractions(store, routes = {}) {
       if (!normalized) {
         return;
       }
-      const stackOrder = getPlacementStackOrder(placement, placementIndex);
+      const stackOrder = getPlacementStackOrder(
+        placement,
+        defaultStackOrders.get(normalized.id) ?? placementIndex
+      );
 
       activeCombatantIds.add(normalized.id);
 
@@ -10456,13 +10516,19 @@ export function mountBoardInteractions(store, routes = {}) {
     const state = target.dataset.combatState;
 
     if (isInCompleted || state === 'completed') {
-      completedCombatants.delete(representativeId);
-      setActiveCombatantId(representativeId);
+      const changed = completedCombatants.delete(representativeId);
+      if (changed) {
+        markCombatFieldDirty('completedCombatantIds');
+      }
+      if (activeCombatantId === representativeId) {
+        setActiveCombatantId(null);
+        releaseTurnLock();
+      }
       markCombatTurnStateDirty();
-      // Don't change currentTurnTeam here - preserve the existing decision state.
-      // Moving a token back from completed doesn't change whose turn it is to pick.
+      // Keep this as a manual side change only: moving a token back from
+      // completed should not immediately start a new active turn.
+      setFocusedCombatantId(representativeId);
       refreshCombatTracker();
-      forceAcquireTurnLockForGm(representativeId);
       updateCombatModeIndicators();
       syncCombatStateToStore();
       return;
@@ -10488,7 +10554,9 @@ export function mountBoardInteractions(store, routes = {}) {
       });
     }
 
-    completedCombatants.delete(representativeId);
+    if (completedCombatants.delete(representativeId)) {
+      markCombatFieldDirty('completedCombatantIds');
+    }
     setActiveCombatantId(representativeId);
     forceAcquireTurnLockForGm(representativeId);
     markCombatTurnStateDirty();
@@ -10560,7 +10628,9 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    completedCombatants.delete(representativeId);
+    if (completedCombatants.delete(representativeId)) {
+      markCombatFieldDirty('completedCombatantIds');
+    }
     setActiveCombatantId(representativeId);
     markCombatTurnStateDirty();
     if (isGmUser()) {
@@ -12230,9 +12300,11 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       const snapshot = { ...normalized, updatedAt: normalized.updatedAt || Date.now(), sequence: appliedVersion };
       lastCombatStateSnapshot = JSON.stringify(snapshot);
-      if (normalized.lastEffect) {
+      if (Array.isArray(normalized.lastEffects) && normalized.lastEffects.length > 0) {
+        applyTurnEffectsFromState(normalized.lastEffects);
+      } else if (normalized.lastEffect) {
         applyTurnEffectFromState(normalized.lastEffect);
-      } else if (lastTurnEffect) {
+      } else if (lastTurnEffect || lastTurnEffects.length > 0) {
         resetTurnEffects();
       }
       if (wasCombatActive && !combatActive) {
@@ -12259,8 +12331,10 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function resetTurnEffects() {
     lastTurnEffect = null;
+    lastTurnEffects = [];
     lastTurnEffectSignature = null;
     lastProcessedTurnEffectSignature = null;
+    lastProcessedTurnEffectSignatures = new Set();
   }
 
   function recordTurnEffect(effect) {
@@ -12269,13 +12343,23 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
     lastTurnEffect = result.effect;
+    lastTurnEffects = mergeTurnEffects(lastTurnEffects, [result.effect]);
     lastTurnEffectSignature = result.signature;
-    lastProcessedTurnEffectSignature = lastTurnEffectSignature;
+    markTurnEffectProcessed(lastTurnEffectSignature);
+    markCombatFieldDirty('turnEffects');
+  }
+
+  function applyTurnEffectsFromState(effects) {
+    if (!Array.isArray(effects)) {
+      return;
+    }
+    effects.forEach((effect) => applyTurnEffectFromState(effect));
   }
 
   function applyTurnEffectFromState(effect) {
     const result = prepareSyncedTurnEffect(effect, {
       lastProcessedTurnEffectSignature,
+      processedTurnEffectSignatures: lastProcessedTurnEffectSignatures,
       lastTurnEffectSignature,
       maxAgeMs: TURN_EFFECT_MAX_AGE_MS,
     });
@@ -12285,11 +12369,12 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (result.shouldStore) {
       lastTurnEffect = result.effect;
+      lastTurnEffects = mergeTurnEffects(lastTurnEffects, [result.effect]);
       lastTurnEffectSignature = result.signature;
     }
 
     if (result.shouldMarkProcessed) {
-      lastProcessedTurnEffectSignature = result.signature;
+      markTurnEffectProcessed(result.signature);
     }
 
     if (!result.shouldDisplay) {
@@ -12306,7 +12391,28 @@ export function mountBoardInteractions(store, routes = {}) {
         tone: result.effect?.tone || 'danger',
         durationMs: result.effect?.durationMs || 2100,
       });
+    } else if (result.displayType === TURN_EFFECT_TYPES.TOKEN_FLOAT) {
+      floatStaminaDelta(
+        result.effect?.placementId || '',
+        result.effect?.amount || 0,
+        result.effect?.mode === 'heal' ? 'heal' : 'damage',
+        { sync: false }
+      );
     }
+  }
+
+  function markTurnEffectProcessed(signature) {
+    if (!signature) {
+      return;
+    }
+    lastProcessedTurnEffectSignature = signature;
+    lastProcessedTurnEffectSignatures.add(signature);
+    if (lastProcessedTurnEffectSignatures.size <= 40) {
+      return;
+    }
+    lastProcessedTurnEffectSignatures = new Set(
+      Array.from(lastProcessedTurnEffectSignatures).slice(-24)
+    );
   }
 
   function getTurnEffectSignature(effect) {
@@ -12347,6 +12453,7 @@ export function mountBoardInteractions(store, routes = {}) {
       sequence: combatSequence,
       turnLock: serializeTurnLockState(),
       lastEffect: lastTurnEffect,
+      lastEffects: lastTurnEffects,
       groups: serializeCombatGroups(combatTrackerGroups),
     });
     combatSequence = snapshot.sequence;
@@ -12383,6 +12490,9 @@ export function mountBoardInteractions(store, routes = {}) {
     const existingCombatState = state.boardState?.sceneState?.[activeSceneId]?.combat ?? null;
     const currentIsGm = isGmUser();
     const dirtyFieldsForSnapshot = dirtyCombatFields.snapshot();
+    if (currentIsGm && dirtyFieldsForSnapshot.length > 0) {
+      rememberGmCombatIntent();
+    }
     const {
       snapshot,
       isRemoteNewer,
@@ -12431,6 +12541,9 @@ export function mountBoardInteractions(store, routes = {}) {
       if (localStatePatch.applyTurnLock) {
         updateTurnLockState(localStatePatch.turnLock);
       }
+      if (localStatePatch.applyTurnEffects) {
+        applyTurnEffectsFromState(localStatePatch.lastEffects);
+      }
       if (localStatePatch.applyGroups) {
         applyCombatGroupsFromState(localStatePatch.groups);
       }
@@ -12462,6 +12575,9 @@ export function mountBoardInteractions(store, routes = {}) {
           ...snapshot,
           completedCombatantIds: [...snapshot.completedCombatantIds],
           lastEffect: snapshot.lastEffect ? { ...snapshot.lastEffect } : null,
+          lastEffects: Array.isArray(snapshot.lastEffects)
+            ? snapshot.lastEffects.map((effect) => ({ ...effect }))
+            : [],
         };
       });
     } finally {
@@ -12696,6 +12812,15 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function advanceCombatRound() {
+    if (combatActive && activeCombatantId) {
+      completeActiveCombatant({
+        forceReleaseLock: true,
+        suppressAnnouncements: true,
+        suppressRoundCompletionCheck: true,
+        suppressSync: true,
+      });
+    }
+
     if (combatActive) {
       fireTimingBoundary('roundEnd', { round: combatRound });
     }
@@ -18451,7 +18576,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
   // Floats a -N (red) or +N (green) number above a token. Calls for the same
   // token are queued so rapid damage/heal events do not cover each other.
-  function floatStaminaDelta(placementId, amount, mode /* 'damage' | 'heal' */) {
+  function floatStaminaDelta(placementId, amount, mode /* 'damage' | 'heal' */, options = {}) {
     if (!placementId || !tokenLayer) return;
     const numericAmount = Number.parseInt(amount, 10);
     if (!Number.isFinite(numericAmount) || numericAmount === 0) return;
@@ -18469,6 +18594,34 @@ export function mountBoardInteractions(store, routes = {}) {
         staminaFloatQueues.delete(key);
       }
     });
+
+    if (options?.sync === false) {
+      return;
+    }
+
+    recordTurnEffect({
+      type: TURN_EFFECT_TYPES.TOKEN_FLOAT,
+      id: generateTurnEffectId('float'),
+      placementId: key,
+      amount: Math.abs(numericAmount),
+      mode: mode === 'heal' ? 'heal' : 'damage',
+      triggeredAt: Date.now(),
+    });
+    syncCombatStateToStore();
+  }
+
+  function generateTurnEffectId(prefix = 'effect') {
+    const random = (() => {
+      try {
+        if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+          return crypto.randomUUID();
+        }
+      } catch (error) {
+        // Fall through to timestamp/random fallback.
+      }
+      return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    })();
+    return `${prefix}-${random}`;
   }
 
   function showStaminaFloatNow(placementId, amount, mode) {
@@ -20009,18 +20162,18 @@ export function mountBoardInteractions(store, routes = {}) {
             <button
               type="button"
               class="vtt-token-settings__stack-button"
-              data-token-settings-stack="forward"
-              aria-label="Move token forward"
-              title="Move token forward"
+              data-token-settings-stack="front"
+              aria-label="Bring token to front"
+              title="Bring token to front"
             >
               <span aria-hidden="true">&#9650;</span>
             </button>
             <button
               type="button"
               class="vtt-token-settings__stack-button"
-              data-token-settings-stack="backward"
-              aria-label="Move token backward"
-              title="Move token backward"
+              data-token-settings-stack="back"
+              aria-label="Send token to back"
+              title="Send token to back"
             >
               <span aria-hidden="true">&#9660;</span>
             </button>
@@ -20265,8 +20418,8 @@ export function mountBoardInteractions(store, routes = {}) {
       form: element.querySelector('form'),
       title: element.querySelector('[data-token-settings-title]'),
       statBlockButton: element.querySelector('[data-token-settings-stat-block]'),
-      stackForwardButton: element.querySelector('[data-token-settings-stack="forward"]'),
-      stackBackwardButton: element.querySelector('[data-token-settings-stack="backward"]'),
+      stackFrontButton: element.querySelector('[data-token-settings-stack="front"]'),
+      stackBackButton: element.querySelector('[data-token-settings-stack="back"]'),
       closeButton: element.querySelector('[data-token-settings-close]'),
       showHpToggle: element.querySelector('[data-token-settings-toggle="hitPoints"]'),
       hpField: element.querySelector('[data-token-settings-field="hitPoints"]'),
@@ -20320,12 +20473,12 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }
 
-    menu.stackForwardButton?.addEventListener('click', () => {
-      handleTokenStackOrderClick('forward');
+    menu.stackFrontButton?.addEventListener('click', () => {
+      handleTokenStackOrderClick('front');
     });
 
-    menu.stackBackwardButton?.addEventListener('click', () => {
-      handleTokenStackOrderClick('backward');
+    menu.stackBackButton?.addEventListener('click', () => {
+      handleTokenStackOrderClick('back');
     });
 
     menu.levelDownButton?.addEventListener('click', () => {
@@ -20860,7 +21013,9 @@ export function mountBoardInteractions(store, routes = {}) {
     refreshTokenSettings();
     if (status) {
       const label = tokenLabel(getPlacementFromStore(activeTokenSettingsId));
-      status.textContent = `Moved ${label} ${direction === 'backward' ? 'backward' : 'forward'} in the stack.`;
+      status.textContent = direction === 'back'
+        ? `Sent ${label} to the back.`
+        : `Brought ${label} to the front.`;
     }
   }
 
@@ -21174,14 +21329,14 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function syncTokenStackControls(placementId = activeTokenSettingsId) {
-    if (!tokenSettingsMenu?.stackForwardButton || !tokenSettingsMenu?.stackBackwardButton) {
+    if (!tokenSettingsMenu?.stackFrontButton || !tokenSettingsMenu?.stackBackButton) {
       return;
     }
 
     const placements = getActiveScenePlacements(boardApi.getState?.() ?? {});
     const availability = getTokenStackOrderAvailability(placements, placementId);
-    setStackButtonState(tokenSettingsMenu.stackForwardButton, !availability.canMoveForward);
-    setStackButtonState(tokenSettingsMenu.stackBackwardButton, !availability.canMoveBackward);
+    setStackButtonState(tokenSettingsMenu.stackFrontButton, !availability.canMoveToFront);
+    setStackButtonState(tokenSettingsMenu.stackBackButton, !availability.canMoveToBack);
   }
 
   function syncTokenLevelControls(placement = null) {

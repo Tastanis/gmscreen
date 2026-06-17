@@ -312,6 +312,37 @@ describe('Combat State Normalization – Last Effect', () => {
     assert.equal(combat.lastEffect.durationMs, 2600);
   });
 
+  test('last effects queue with token floats is preserved', () => {
+    const combat = initWithCombat({
+      lastEffects: [
+        {
+          type: 'token-float',
+          id: 'float-1',
+          placementId: 'token-a',
+          amount: 11,
+          mode: 'damage',
+          triggeredAt: 3600,
+        },
+        {
+          type: 'token-float',
+          id: 'float-2',
+          placementId: 'token-a',
+          amount: 4,
+          mode: 'heal',
+          triggeredAt: 3700,
+        },
+      ],
+      updatedAt: 1000,
+    });
+
+    assert.ok(combat);
+    assert.equal(combat.lastEffects.length, 2);
+    assert.equal(combat.lastEffects[0].placementId, 'token-a');
+    assert.equal(combat.lastEffects[0].amount, 11);
+    assert.equal(combat.lastEffects[1].mode, 'heal');
+    assert.equal(combat.lastEffect.id, 'float-2');
+  });
+
   test('alternate key: lastEvent maps to lastEffect', () => {
     const combat = initWithCombat({
       lastEvent: {

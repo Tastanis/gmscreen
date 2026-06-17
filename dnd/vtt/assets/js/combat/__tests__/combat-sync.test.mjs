@@ -202,6 +202,72 @@ describe('combat sync helpers', () => {
     );
   });
 
+  test('protects fresh GM turn-side intent when completed combatants differ', () => {
+    assert.equal(
+      shouldProtectLocalCombatIntent(
+        {
+          active: true,
+          round: 2,
+          activeCombatantId: null,
+          completedCombatantIds: ['old-completed'],
+          roundTurnCount: 1,
+          sequence: 8,
+          updatedAt: 8000,
+        },
+        {
+          intent: {
+            activeSceneId: 'scene-a',
+            active: true,
+            round: 2,
+            activeCombatantId: null,
+            completedCombatantIds: ['new-completed'],
+            roundTurnCount: 2,
+            recordedAt: 10000,
+          },
+          activeSceneId: 'scene-a',
+          currentVersion: 9,
+          currentUpdatedAt: 9000,
+          hasPendingSave: true,
+          now: 10100,
+        }
+      ),
+      true
+    );
+  });
+
+  test('does not protect matching completed combatants in different order', () => {
+    assert.equal(
+      shouldProtectLocalCombatIntent(
+        {
+          active: true,
+          round: 2,
+          activeCombatantId: null,
+          completedCombatantIds: ['b', 'a'],
+          roundTurnCount: 2,
+          sequence: 8,
+          updatedAt: 8000,
+        },
+        {
+          intent: {
+            activeSceneId: 'scene-a',
+            active: true,
+            round: 2,
+            activeCombatantId: null,
+            completedCombatantIds: ['a', 'b'],
+            roundTurnCount: 2,
+            recordedAt: 10000,
+          },
+          activeSceneId: 'scene-a',
+          currentVersion: 9,
+          currentUpdatedAt: 9000,
+          hasPendingSave: true,
+          now: 10100,
+        }
+      ),
+      false
+    );
+  });
+
   test('does not protect expired or matching GM combat intents', () => {
     assert.equal(
       shouldProtectLocalCombatIntent(
@@ -382,6 +448,57 @@ describe('combat sync snapshot reconciliation', () => {
     assert.equal(result.localStatePatch.applyMalice, false);
     assert.equal(result.localStatePatch.applyTurnLock, false);
     assert.equal(result.localStatePatch.applyGroups, false);
+  });
+
+  test('dirty local turn effects merge with newer remote effect queue', () => {
+    const result = prepareCombatSnapshotForSync(
+      {
+        active: true,
+        round: 2,
+        sequence: 4,
+        updatedAt: 1000,
+        lastEffects: [
+          {
+            type: 'token-float',
+            id: 'local-float',
+            placementId: 'token-a',
+            amount: 6,
+            mode: 'damage',
+            triggeredAt: 1100,
+          },
+        ],
+      },
+      {
+        existingCombatState: {
+          active: true,
+          round: 2,
+          sequence: 6,
+          updatedAt: 2000,
+          lastEffects: [
+            {
+              type: 'token-float',
+              id: 'remote-float',
+              placementId: 'token-b',
+              amount: 3,
+              mode: 'heal',
+              triggeredAt: 1900,
+            },
+          ],
+        },
+        currentVersion: 5,
+        currentUpdatedAt: 1500,
+        dirtyFields: new Set(['turnEffects']),
+        isGm: true,
+      }
+    );
+
+    assert.equal(result.isRemoteNewer, true);
+    assert.deepEqual(
+      result.snapshot.lastEffects.map((effect) => effect.id),
+      ['remote-float', 'local-float']
+    );
+    assert.equal(result.snapshot.lastEffect.id, 'local-float');
+    assert.equal(result.localStatePatch.applyTurnEffects, false);
   });
 
   test('dirty GM encounter state survives newer remote reconciliation', () => {

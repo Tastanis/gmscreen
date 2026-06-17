@@ -167,4 +167,37 @@ describe('turn effect normalization', () => {
       }
     );
   });
+
+  test('normalizes recent token float effects and exposes the newest as lastEffect', () => {
+    const state = normalizeCombatState({
+      lastEffects: [
+        {
+          type: 'token-float',
+          id: 'float-1',
+          placementId: 'token-a',
+          amount: 5,
+          mode: 'damage',
+          triggeredAt: 1000,
+        },
+        {
+          type: 'token-float',
+          id: 'float-2',
+          placementId: 'token-a',
+          amount: 3,
+          mode: 'heal',
+          triggeredAt: 1100,
+        },
+      ],
+    });
+
+    assert.equal(state.lastEffects.length, 2);
+    assert.deepEqual(state.lastEffect, {
+      type: 'token-float',
+      triggeredAt: 1100,
+      id: 'float-2',
+      placementId: 'token-a',
+      amount: 3,
+      mode: 'heal',
+    });
+  });
 });

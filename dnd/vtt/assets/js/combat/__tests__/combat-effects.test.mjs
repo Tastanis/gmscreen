@@ -23,6 +23,18 @@ describe('combat turn effect signatures', () => {
     );
   });
 
+  test('uses explicit effect ids for signatures', () => {
+    assert.equal(
+      getTurnEffectSignature({
+        type: TURN_EFFECT_TYPES.TOKEN_FLOAT,
+        id: 'float-abc',
+        placementId: 'token-1',
+        triggeredAt: 1234,
+      }),
+      'token-float:float-abc'
+    );
+  });
+
   test('local turn effect recording normalizes effects and rejects invalid payloads', () => {
     const recorded = recordLocalTurnEffect({
       type: TURN_EFFECT_TYPES.DRAW_STEEL,
@@ -96,6 +108,45 @@ describe('synced combat turn effects', () => {
     assert.equal(staleLocal.duplicate, true);
     assert.equal(staleLocal.shouldStore, true);
     assert.equal(staleLocal.shouldDisplay, false);
+  });
+
+  test('processed signature set suppresses older queued effects without hiding new ones', () => {
+    const processed = new Set(['token-float:float-1']);
+
+    const duplicate = prepareSyncedTurnEffect(
+      {
+        type: TURN_EFFECT_TYPES.TOKEN_FLOAT,
+        id: 'float-1',
+        placementId: 'token-a',
+        amount: 5,
+        mode: 'damage',
+        triggeredAt: 5000,
+      },
+      {
+        processedTurnEffectSignatures: processed,
+        now: () => 5001,
+      }
+    );
+
+    const fresh = prepareSyncedTurnEffect(
+      {
+        type: TURN_EFFECT_TYPES.TOKEN_FLOAT,
+        id: 'float-2',
+        placementId: 'token-a',
+        amount: 4,
+        mode: 'damage',
+        triggeredAt: 5002,
+      },
+      {
+        processedTurnEffectSignatures: processed,
+        now: () => 5003,
+      }
+    );
+
+    assert.equal(duplicate.duplicate, true);
+    assert.equal(duplicate.shouldDisplay, false);
+    assert.equal(fresh.duplicate, false);
+    assert.equal(fresh.shouldDisplay, true);
   });
 });
 

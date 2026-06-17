@@ -1,6 +1,7 @@
 import {
   getCombatStateVersion,
   isCombatStateNewer,
+  mergeTurnEffects,
   normalizeCombatState,
   normalizeCombatTeam,
 } from './combat-state.js';
@@ -168,11 +169,13 @@ export function shouldProtectLocalCombatIntent(
   const mismatchesIntent =
     Boolean(normalizedState.active) !== Boolean(intent.active) ||
     Number(normalizedState.round ?? 0) !== Number(intent.round ?? 0) ||
+    Number(normalizedState.roundTurnCount ?? 0) !== Number(intent.roundTurnCount ?? 0) ||
     normalizeNullableTeam(normalizedState.startingTeam) !== normalizeNullableTeam(intent.startingTeam) ||
     normalizeNullableTeam(normalizedState.currentTeam) !== normalizeNullableTeam(intent.currentTeam) ||
     normalizeNullableTeam(normalizedState.lastTeam) !== normalizeNullableTeam(intent.lastTeam) ||
     normalizeNullableId(normalizedState.encounterId) !== normalizeNullableId(intent.encounterId) ||
-    normalizeNullableId(normalizedState.activeCombatantId) !== normalizeNullableId(intent.activeCombatantId);
+    normalizeNullableId(normalizedState.activeCombatantId) !== normalizeNullableId(intent.activeCombatantId) ||
+    !sameStringSet(normalizedState.completedCombatantIds, intent.completedCombatantIds);
 
   if (!mismatchesIntent) {
     return false;
@@ -242,6 +245,7 @@ export function prepareCombatSnapshotForSync(
     const applyEncounterId = !isDirty('encounterId');
     const applyTurnLock = !isDirty('turnLock');
     const applyGroups = !isDirty('groups');
+    const applyTurnEffects = !isDirty('turnEffects');
 
     if (applyActive) {
       nextSnapshot.active = existingNormalized.active;
@@ -286,7 +290,16 @@ export function prepareCombatSnapshotForSync(
       nextSnapshot.turnLock = cloneNullableObject(existingNormalized.turnLock);
     }
 
-    nextSnapshot.lastEffect = cloneNullableObject(existingNormalized.lastEffect);
+    if (applyTurnEffects) {
+      nextSnapshot.lastEffects = cloneTurnEffects(existingNormalized.lastEffects);
+    } else {
+      nextSnapshot.lastEffects = mergeTurnEffects(existingNormalized.lastEffects, nextSnapshot.lastEffects);
+    }
+    nextSnapshot.lastEffect = cloneNullableObject(
+      nextSnapshot.lastEffects.length > 0
+        ? nextSnapshot.lastEffects[nextSnapshot.lastEffects.length - 1]
+        : existingNormalized.lastEffect
+    );
 
     if (applyGroups) {
       nextSnapshot.groups = cloneCombatGroups(existingNormalized.groups);
@@ -309,6 +322,8 @@ export function prepareCombatSnapshotForSync(
       malice: nextSnapshot.malice,
       encounterId: nextSnapshot.encounterId,
       turnLock: cloneNullableObject(nextSnapshot.turnLock),
+      lastEffect: cloneNullableObject(nextSnapshot.lastEffect),
+      lastEffects: cloneTurnEffects(nextSnapshot.lastEffects),
       groups: cloneCombatGroups(nextSnapshot.groups),
       existingVersion,
       existingUpdatedAt: existingNormalized.updatedAt,
@@ -322,6 +337,7 @@ export function prepareCombatSnapshotForSync(
       applyMalice,
       applyEncounterId,
       applyTurnLock,
+      applyTurnEffects,
       applyGroups,
     };
   }
@@ -390,6 +406,32 @@ function normalizeNullableId(value) {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
+function sameStringSet(left, right) {
+  const leftSet = toNormalizedStringSet(left);
+  const rightSet = toNormalizedStringSet(right);
+  if (leftSet.size !== rightSet.size) {
+    return false;
+  }
+  for (const value of leftSet) {
+    if (!rightSet.has(value)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function toNormalizedStringSet(values) {
+  if (!values || typeof values === 'string' || typeof values[Symbol.iterator] !== 'function') {
+    return new Set();
+  }
+  return new Set(
+    Array.from(values)
+      .filter((value) => typeof value === 'string')
+      .map((value) => value.trim())
+      .filter(Boolean)
+  );
+}
+
 function cloneCombatSnapshot(snapshot) {
   const source = snapshot && typeof snapshot === 'object' ? snapshot : {};
   return {
@@ -399,8 +441,15 @@ function cloneCombatSnapshot(snapshot) {
       : [],
     turnLock: cloneNullableObject(source.turnLock),
     lastEffect: cloneNullableObject(source.lastEffect),
+    lastEffects: cloneTurnEffects(source.lastEffects),
     groups: cloneCombatGroups(source.groups),
   };
+}
+
+function cloneTurnEffects(effects) {
+  return Array.isArray(effects)
+    ? effects.map((effect) => cloneNullableObject(effect)).filter(Boolean)
+    : [];
 }
 
 function cloneCombatGroups(groups) {

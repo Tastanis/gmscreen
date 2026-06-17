@@ -209,6 +209,73 @@ describe('Board State Op Applier - combat.set', () => {
     });
   });
 
+  test('preserves queued token float effects in combat payloads', () => {
+    const state = {
+      sceneState: {
+        'scene-1': {
+          combat: {
+            active: true,
+            round: 1,
+            turnPhase: 'active',
+            sequence: 1,
+            updatedAt: 1000,
+          },
+        },
+      },
+    };
+
+    const mutated = applyBoardStateOpLocally(state, {
+      type: 'combat.set',
+      sceneId: 'scene-1',
+      combat: {
+        active: true,
+        round: 1,
+        turnPhase: 'active',
+        sequence: 2,
+        updatedAt: 2000,
+        lastEffects: [
+          {
+            type: 'token-float',
+            id: 'float-1',
+            placementId: 'token-a',
+            amount: 8,
+            mode: 'damage',
+            triggeredAt: 1800,
+          },
+          {
+            type: 'token-float',
+            id: 'float-2',
+            placementId: 'token-a',
+            amount: 3,
+            mode: 'heal',
+            triggeredAt: 1900,
+          },
+        ],
+      },
+    });
+
+    assert.equal(mutated, true);
+    assert.deepEqual(state.sceneState['scene-1'].combat.lastEffects, [
+      {
+        type: 'token-float',
+        triggeredAt: 1800,
+        id: 'float-1',
+        placementId: 'token-a',
+        amount: 8,
+        mode: 'damage',
+      },
+      {
+        type: 'token-float',
+        triggeredAt: 1900,
+        id: 'float-2',
+        placementId: 'token-a',
+        amount: 3,
+        mode: 'heal',
+      },
+    ]);
+    assert.equal(state.sceneState['scene-1'].combat.lastEffect.id, 'float-2');
+  });
+
   test('ignores stale end-combat payloads from a different encounter', () => {
     const state = {
       sceneState: {

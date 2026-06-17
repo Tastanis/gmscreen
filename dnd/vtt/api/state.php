@@ -2885,6 +2885,7 @@ function normalizeCombatStatePayload($rawCombat): array
         'turnLock' => null,
         'groups' => [],
         'lastEffect' => null,
+        'lastEffects' => [],
     ];
 
     if (!is_array($rawCombat)) {
@@ -2962,6 +2963,13 @@ function normalizeCombatStatePayload($rawCombat): array
         $rawCombat['groups'] ?? $rawCombat['groupings'] ?? $rawCombat['combatGroups'] ?? $rawCombat['combatantGroups'] ?? []
     );
     $state['lastEffect'] = normalizeCombatTurnEffect($rawCombat['lastEffect'] ?? $rawCombat['lastEvent'] ?? null);
+    $state['lastEffects'] = normalizeCombatTurnEffects(
+        $rawCombat['lastEffects'] ?? $rawCombat['effects'] ?? null,
+        $state['lastEffect']
+    );
+    if (!empty($state['lastEffects'])) {
+        $state['lastEffect'] = $state['lastEffects'][count($state['lastEffects']) - 1];
+    }
 
     return $state;
 }
@@ -3130,7 +3138,9 @@ function normalizeCombatTurnEffect($rawEffect): ?array
         return null;
     }
 
+    $id = isset($rawEffect['id']) && is_string($rawEffect['id']) ? trim($rawEffect['id']) : '';
     $combatantId = isset($rawEffect['combatantId']) && is_string($rawEffect['combatantId']) ? trim($rawEffect['combatantId']) : '';
+    $placementId = isset($rawEffect['placementId']) && is_string($rawEffect['placementId']) ? trim($rawEffect['placementId']) : '';
     $triggeredAt = isset($rawEffect['triggeredAt']) && is_numeric($rawEffect['triggeredAt'])
         ? max(0, (int) round((float) $rawEffect['triggeredAt']))
         : (isset($rawEffect['timestamp']) && is_numeric($rawEffect['timestamp'])
@@ -3151,14 +3161,28 @@ function normalizeCombatTurnEffect($rawEffect): ?array
     $durationMs = isset($rawEffect['durationMs']) && is_numeric($rawEffect['durationMs'])
         ? max(1, (int) round((float) $rawEffect['durationMs']))
         : null;
+    $amount = isset($rawEffect['amount']) && is_numeric($rawEffect['amount'])
+        ? (int) round((float) $rawEffect['amount'])
+        : null;
+    $mode = isset($rawEffect['mode']) && is_string($rawEffect['mode'])
+        ? strtolower(trim($rawEffect['mode']))
+        : '';
 
     $effect = [
         'type' => $type,
         'triggeredAt' => $triggeredAt,
     ];
 
+    if ($id !== '') {
+        $effect['id'] = $id;
+    }
+
     if ($combatantId !== '') {
         $effect['combatantId'] = $combatantId;
+    }
+
+    if ($placementId !== '') {
+        $effect['placementId'] = $placementId;
     }
 
     if ($initiatorId !== '') {
@@ -3181,7 +3205,67 @@ function normalizeCombatTurnEffect($rawEffect): ?array
         $effect['durationMs'] = $durationMs;
     }
 
+    if ($amount !== null) {
+        $effect['amount'] = $amount;
+    }
+
+    if ($mode === 'damage' || $mode === 'heal') {
+        $effect['mode'] = $mode;
+    }
+
     return $effect;
+}
+
+/**
+ * @param mixed $rawEffects
+ * @param array<string,mixed>|null $fallbackEffect
+ * @return array<int,array<string,mixed>>
+ */
+function normalizeCombatTurnEffects($rawEffects, ?array $fallbackEffect = null): array
+{
+    $source = is_array($rawEffects) && isListArray($rawEffects) ? $rawEffects : [];
+    $effects = [];
+    $seen = [];
+
+    foreach ($source as $entry) {
+        $effect = normalizeCombatTurnEffect($entry);
+        if ($effect === null) {
+            continue;
+        }
+        $signature = combatTurnEffectSignature($effect);
+        if ($signature !== '' && isset($seen[$signature])) {
+            continue;
+        }
+        if ($signature !== '') {
+            $seen[$signature] = true;
+        }
+        $effects[] = $effect;
+    }
+
+    if (empty($effects) && $fallbackEffect !== null) {
+        $effects[] = $fallbackEffect;
+    }
+
+    return array_slice($effects, -12);
+}
+
+/**
+ * @param array<string,mixed> $effect
+ */
+function combatTurnEffectSignature(array $effect): string
+{
+    $id = isset($effect['id']) && is_string($effect['id']) ? trim($effect['id']) : '';
+    if ($id !== '') {
+        return 'id:' . $id;
+    }
+    $type = isset($effect['type']) && is_string($effect['type']) ? strtolower(trim($effect['type'])) : '';
+    $combatantId = isset($effect['combatantId']) && is_string($effect['combatantId']) ? trim($effect['combatantId']) : '';
+    $placementId = isset($effect['placementId']) && is_string($effect['placementId']) ? trim($effect['placementId']) : '';
+    $triggeredAt = isset($effect['triggeredAt']) && is_numeric($effect['triggeredAt'])
+        ? max(0, (int) round((float) $effect['triggeredAt']))
+        : 0;
+
+    return $type . ':' . ($combatantId !== '' ? $combatantId : $placementId) . ':' . $triggeredAt;
 }
 
 /**

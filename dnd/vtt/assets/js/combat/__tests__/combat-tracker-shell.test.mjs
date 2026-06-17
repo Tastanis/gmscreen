@@ -60,6 +60,7 @@ describe('standalone combat tracker shell', () => {
       sequence: 0,
       turnLock: null,
       lastEffect: null,
+      lastEffects: [],
       groups: [],
     });
   });

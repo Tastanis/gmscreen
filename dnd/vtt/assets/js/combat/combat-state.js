@@ -8,6 +8,7 @@ export const TURN_PHASE = Object.freeze({
 });
 
 const VALID_TURN_PHASES = new Set(Object.values(TURN_PHASE));
+export const MAX_TURN_EFFECT_HISTORY = 12;
 
 export function normalizeCombatState(raw = {}) {
   const source = raw && typeof raw === 'object' ? raw : {};
@@ -33,7 +34,11 @@ export function normalizeCombatState(raw = {}) {
   const sequenceRaw = Number(source.sequence ?? source.seq ?? 0);
   const sequence = Number.isFinite(sequenceRaw) ? Math.max(0, Math.trunc(sequenceRaw)) : 0;
   const turnLock = normalizeTurnLock(source.turnLock ?? null);
-  const lastEffect = normalizeTurnEffect(source.lastEffect ?? source.lastEvent ?? null);
+  const fallbackLastEffect = normalizeTurnEffect(source.lastEffect ?? source.lastEvent ?? null);
+  const lastEffects = normalizeTurnEffects(source.lastEffects ?? source.effects ?? null, fallbackLastEffect);
+  const lastEffect = lastEffects.length > 0
+    ? { ...lastEffects[lastEffects.length - 1] }
+    : fallbackLastEffect;
   const groups = normalizeCombatGroups(
     source.groups ?? source.groupings ?? source.combatGroups ?? source.combatantGroups ?? null
   );
@@ -54,6 +59,7 @@ export function normalizeCombatState(raw = {}) {
     sequence,
     turnLock,
     lastEffect,
+    lastEffects,
     groups,
   };
 }
@@ -73,6 +79,7 @@ export function createCombatStateSnapshot({
   sequence = 0,
   turnLock = null,
   lastEffect = null,
+  lastEffects = [],
   groups = [],
   updatedAt = Date.now(),
 } = {}) {
@@ -81,7 +88,12 @@ export function createCombatStateSnapshot({
   const timestampRaw = Number(updatedAt);
   const timestamp = Number.isFinite(timestampRaw) ? Math.max(0, Math.trunc(timestampRaw)) : Date.now();
   const nextSequence = toNonNegativeNumber(sequence, 0) + 1;
-  const effectSnapshot = lastEffect && typeof lastEffect === 'object' ? { ...lastEffect } : null;
+  const normalizedLastEffects = normalizeTurnEffects(lastEffects, lastEffect);
+  const effectSnapshot = normalizedLastEffects.length > 0
+    ? { ...normalizedLastEffects[normalizedLastEffects.length - 1] }
+    : lastEffect && typeof lastEffect === 'object'
+    ? { ...lastEffect }
+    : null;
 
   return {
     active: Boolean(active),
@@ -99,6 +111,7 @@ export function createCombatStateSnapshot({
     sequence: nextSequence,
     turnLock: normalizeTurnLock(turnLock),
     lastEffect: effectSnapshot,
+    lastEffects: normalizedLastEffects,
     groups: normalizeCombatGroups(groups),
   };
 }
@@ -262,6 +275,8 @@ export function normalizeTurnEffect(raw) {
   }
 
   const combatantId = typeof raw.combatantId === 'string' ? raw.combatantId.trim() : '';
+  const id = typeof raw.id === 'string' ? raw.id.trim() : '';
+  const placementId = typeof raw.placementId === 'string' ? raw.placementId.trim() : '';
   const triggeredAtSource =
     raw.triggeredAt ?? raw.timestamp ?? raw.updatedAt ?? raw.time ?? raw.occurredAt ?? null;
   const triggeredAtRaw = Number(triggeredAtSource);
@@ -279,9 +294,21 @@ export function normalizeTurnEffect(raw) {
   const tone = typeof raw.tone === 'string' ? raw.tone.trim().toLowerCase() : '';
   const audience = typeof raw.audience === 'string' ? raw.audience.trim().toLowerCase() : '';
   const durationMsRaw = Number(raw.durationMs);
+  const amountRaw = Number(raw.amount);
+  const amount = Number.isFinite(amountRaw) ? Math.trunc(amountRaw) : null;
+  const modeRaw = typeof raw.mode === 'string' ? raw.mode.trim().toLowerCase() : '';
+  const mode = modeRaw === 'heal' ? 'heal' : modeRaw === 'damage' ? 'damage' : '';
 
   if (combatantId) {
     effect.combatantId = combatantId;
+  }
+
+  if (id) {
+    effect.id = id;
+  }
+
+  if (placementId) {
+    effect.placementId = placementId;
   }
 
   if (initiatorId) {
@@ -304,7 +331,80 @@ export function normalizeTurnEffect(raw) {
     effect.durationMs = Math.trunc(durationMsRaw);
   }
 
+  if (amount !== null) {
+    effect.amount = amount;
+  }
+
+  if (mode) {
+    effect.mode = mode;
+  }
+
   return effect;
+}
+
+export function normalizeTurnEffects(rawEffects, fallbackEffect = null) {
+  const source = Array.isArray(rawEffects) ? rawEffects : [];
+  const normalized = [];
+  const seen = new Set();
+
+  source.forEach((entry) => {
+    const effect = normalizeTurnEffect(entry);
+    if (!effect) {
+      return;
+    }
+    const signature = getTurnEffectIdentity(effect);
+    if (signature && seen.has(signature)) {
+      return;
+    }
+    if (signature) {
+      seen.add(signature);
+    }
+    normalized.push(effect);
+  });
+
+  if (normalized.length === 0 && fallbackEffect) {
+    const effect = normalizeTurnEffect(fallbackEffect);
+    if (effect) {
+      normalized.push(effect);
+    }
+  }
+
+  return normalized.slice(-MAX_TURN_EFFECT_HISTORY);
+}
+
+export function mergeTurnEffects(...effectGroups) {
+  const merged = [];
+  const seen = new Set();
+
+  effectGroups.forEach((group) => {
+    normalizeTurnEffects(group).forEach((effect) => {
+      const signature = getTurnEffectIdentity(effect);
+      if (signature && seen.has(signature)) {
+        return;
+      }
+      if (signature) {
+        seen.add(signature);
+      }
+      merged.push(effect);
+    });
+  });
+
+  return merged.slice(-MAX_TURN_EFFECT_HISTORY);
+}
+
+function getTurnEffectIdentity(effect) {
+  if (!effect || typeof effect !== 'object') {
+    return '';
+  }
+  if (typeof effect.id === 'string' && effect.id.trim()) {
+    return `id:${effect.id.trim()}`;
+  }
+  const type = typeof effect.type === 'string' ? effect.type.trim().toLowerCase() : '';
+  const combatantId = typeof effect.combatantId === 'string' ? effect.combatantId.trim() : '';
+  const placementId = typeof effect.placementId === 'string' ? effect.placementId.trim() : '';
+  const triggeredAtRaw = Number(effect.triggeredAt);
+  const triggeredAt = Number.isFinite(triggeredAtRaw) ? Math.max(0, Math.trunc(triggeredAtRaw)) : 0;
+  return `${type}:${combatantId || placementId}:${triggeredAt}`;
 }
 
 function normalizeProfileId(value) {

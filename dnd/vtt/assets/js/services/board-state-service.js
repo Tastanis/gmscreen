@@ -636,7 +636,11 @@ function formatCombatState(raw = {}) {
   const groups = sanitizeCombatGroups(
     raw.groups ?? raw.groupings ?? raw.combatGroups ?? raw.combatantGroups ?? null
   );
-  const lastEffect = sanitizeTurnEffect(raw.lastEffect ?? raw.lastEvent ?? null);
+  const fallbackLastEffect = sanitizeTurnEffect(raw.lastEffect ?? raw.lastEvent ?? null);
+  const lastEffects = sanitizeTurnEffects(raw.lastEffects ?? raw.effects ?? null, fallbackLastEffect);
+  const lastEffect = lastEffects.length > 0
+    ? { ...lastEffects[lastEffects.length - 1] }
+    : fallbackLastEffect;
   // Preserve the sequence counter for reliable cross-client ordering.
   const sequence = Math.max(0, toInt(raw.sequence, 0));
 
@@ -657,6 +661,7 @@ function formatCombatState(raw = {}) {
     turnLock,
     groups,
     lastEffect,
+    lastEffects,
   };
 }
 
@@ -727,13 +732,19 @@ function sanitizeTurnEffect(raw) {
     return null;
   }
 
+  const id = typeof raw.id === 'string' ? raw.id.trim() : '';
   const combatantId = typeof raw.combatantId === 'string' ? raw.combatantId.trim() : '';
+  const placementId = typeof raw.placementId === 'string' ? raw.placementId.trim() : '';
   const triggeredAt = toInt(raw.triggeredAt ?? raw.timestamp ?? raw.updatedAt, Date.now());
   const initiatorId = typeof raw.initiatorId === 'string' ? raw.initiatorId.trim().toLowerCase() : '';
   const text = typeof raw.text === 'string' ? raw.text.trim() : '';
   const tone = typeof raw.tone === 'string' ? raw.tone.trim().toLowerCase() : '';
   const audience = typeof raw.audience === 'string' ? raw.audience.trim().toLowerCase() : '';
   const durationMs = toInt(raw.durationMs, 0);
+  const amountRaw = Number(raw.amount);
+  const amount = Number.isFinite(amountRaw) ? Math.trunc(amountRaw) : null;
+  const modeRaw = typeof raw.mode === 'string' ? raw.mode.trim().toLowerCase() : '';
+  const mode = modeRaw === 'heal' ? 'heal' : modeRaw === 'damage' ? 'damage' : '';
 
   const effect = {
     type,
@@ -742,6 +753,14 @@ function sanitizeTurnEffect(raw) {
 
   if (combatantId) {
     effect.combatantId = combatantId;
+  }
+
+  if (id) {
+    effect.id = id;
+  }
+
+  if (placementId) {
+    effect.placementId = placementId;
   }
 
   if (initiatorId) {
@@ -764,7 +783,57 @@ function sanitizeTurnEffect(raw) {
     effect.durationMs = durationMs;
   }
 
+  if (amount !== null) {
+    effect.amount = amount;
+  }
+
+  if (mode) {
+    effect.mode = mode;
+  }
+
   return effect;
+}
+
+function sanitizeTurnEffects(rawEffects, fallbackEffect = null) {
+  const source = Array.isArray(rawEffects) ? rawEffects : [];
+  const effects = [];
+  const seen = new Set();
+
+  source.forEach((entry) => {
+    const effect = sanitizeTurnEffect(entry);
+    if (!effect) {
+      return;
+    }
+    const signature = getTurnEffectIdentity(effect);
+    if (signature && seen.has(signature)) {
+      return;
+    }
+    if (signature) {
+      seen.add(signature);
+    }
+    effects.push(effect);
+  });
+
+  if (effects.length === 0 && fallbackEffect) {
+    const effect = sanitizeTurnEffect(fallbackEffect);
+    if (effect) {
+      effects.push(effect);
+    }
+  }
+
+  return effects.slice(-12);
+}
+
+function getTurnEffectIdentity(effect) {
+  const id = typeof effect?.id === 'string' ? effect.id.trim() : '';
+  if (id) {
+    return `id:${id}`;
+  }
+  const type = typeof effect?.type === 'string' ? effect.type.trim().toLowerCase() : '';
+  const combatantId = typeof effect?.combatantId === 'string' ? effect.combatantId.trim() : '';
+  const placementId = typeof effect?.placementId === 'string' ? effect.placementId.trim() : '';
+  const triggeredAt = toInt(effect?.triggeredAt, 0);
+  return `${type}:${combatantId || placementId}:${triggeredAt}`;
 }
 
 function sanitizeCombatGroups(raw) {

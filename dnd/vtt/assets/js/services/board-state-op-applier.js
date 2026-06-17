@@ -421,6 +421,12 @@ function normalizeCombatOpPayload(raw) {
         .filter((id) => id)
     )
   );
+  const fallbackLastEffect = normalizeCombatTurnEffect(raw.lastEffect ?? raw.lastEvent);
+  const lastEffects = normalizeCombatTurnEffects(raw.lastEffects ?? raw.effects, fallbackLastEffect);
+  const lastEffect = lastEffects.length > 0
+    ? { ...lastEffects[lastEffects.length - 1] }
+    : fallbackLastEffect;
+
   return {
     active,
     round: normalizeNonNegativeInt(raw.round, 0),
@@ -437,7 +443,8 @@ function normalizeCombatOpPayload(raw) {
     sequence: normalizeNonNegativeInt(raw.sequence ?? raw.seq, 0),
     turnLock: normalizeCombatTurnLock(raw.turnLock),
     groups: normalizeCombatGroups(raw.groups ?? raw.groupings ?? raw.combatGroups ?? raw.combatantGroups),
-    lastEffect: normalizeCombatTurnEffect(raw.lastEffect ?? raw.lastEvent),
+    lastEffect,
+    lastEffects,
   };
 }
 
@@ -632,14 +639,26 @@ function normalizeCombatTurnEffect(raw) {
     type,
     triggeredAt: normalizeNonNegativeInt(raw.triggeredAt ?? raw.timestamp ?? raw.updatedAt, Date.now()),
   };
+  const id = normalizeNullableString(raw.id);
   const combatantId = normalizeNullableString(raw.combatantId);
+  const placementId = normalizeNullableString(raw.placementId);
   const initiatorId = normalizeProfileIdField(raw.initiatorId);
   const text = normalizeNullableString(raw.text);
   const tone = normalizeNullableString(raw.tone)?.toLowerCase() || null;
   const audience = normalizeNullableString(raw.audience)?.toLowerCase() || null;
   const durationMs = normalizeNonNegativeInt(raw.durationMs, 0);
+  const amountRaw = Number(raw.amount);
+  const amount = Number.isFinite(amountRaw) ? Math.trunc(amountRaw) : null;
+  const modeRaw = normalizeNullableString(raw.mode)?.toLowerCase() || null;
+  const mode = modeRaw === 'heal' ? 'heal' : modeRaw === 'damage' ? 'damage' : null;
+  if (id) {
+    effect.id = id;
+  }
   if (combatantId) {
     effect.combatantId = combatantId;
+  }
+  if (placementId) {
+    effect.placementId = placementId;
   }
   if (initiatorId) {
     effect.initiatorId = initiatorId;
@@ -656,5 +675,52 @@ function normalizeCombatTurnEffect(raw) {
   if (durationMs > 0) {
     effect.durationMs = durationMs;
   }
+  if (amount !== null) {
+    effect.amount = amount;
+  }
+  if (mode) {
+    effect.mode = mode;
+  }
   return effect;
+}
+
+function normalizeCombatTurnEffects(rawEffects, fallbackEffect = null) {
+  const source = Array.isArray(rawEffects) ? rawEffects : [];
+  const effects = [];
+  const seen = new Set();
+  source.forEach((entry) => {
+    const effect = normalizeCombatTurnEffect(entry);
+    if (!effect) {
+      return;
+    }
+    const signature = getCombatTurnEffectIdentity(effect);
+    if (signature && seen.has(signature)) {
+      return;
+    }
+    if (signature) {
+      seen.add(signature);
+    }
+    effects.push(effect);
+  });
+
+  if (effects.length === 0 && fallbackEffect) {
+    const effect = normalizeCombatTurnEffect(fallbackEffect);
+    if (effect) {
+      effects.push(effect);
+    }
+  }
+
+  return effects.slice(-12);
+}
+
+function getCombatTurnEffectIdentity(effect) {
+  const id = normalizeNullableString(effect?.id);
+  if (id) {
+    return `id:${id}`;
+  }
+  const type = normalizeNullableString(effect?.type)?.toLowerCase() || '';
+  const combatantId = normalizeNullableString(effect?.combatantId) || '';
+  const placementId = normalizeNullableString(effect?.placementId) || '';
+  const triggeredAt = normalizeNonNegativeInt(effect?.triggeredAt, 0);
+  return `${type}:${combatantId || placementId}:${triggeredAt}`;
 }

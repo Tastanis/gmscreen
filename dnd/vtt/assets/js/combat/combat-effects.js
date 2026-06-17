@@ -6,6 +6,7 @@ export const TURN_EFFECT_TYPES = Object.freeze({
   DRAW_STEEL: 'draw-steel',
   SHARON_HESITATION: 'sharon-hesitation',
   FLOATING_TEXT: 'floating-text',
+  TOKEN_FLOAT: 'token-float',
 });
 
 export const SHARON_PROFILE_ID = 'sharon';
@@ -16,11 +17,16 @@ export function getTurnEffectSignature(effect) {
   }
 
   const type = typeof effect.type === 'string' ? effect.type.trim().toLowerCase() : '';
+  const id = typeof effect.id === 'string' ? effect.id.trim() : '';
+  if (id) {
+    return `${type || 'effect'}:${id}`;
+  }
   const combatantId = typeof effect.combatantId === 'string' ? effect.combatantId.trim() : '';
+  const placementId = typeof effect.placementId === 'string' ? effect.placementId.trim() : '';
   const triggeredAtRaw = Number(effect.triggeredAt);
   const triggeredAt = Number.isFinite(triggeredAtRaw) ? Math.max(0, Math.trunc(triggeredAtRaw)) : 0;
 
-  return `${type}:${combatantId}:${triggeredAt}`;
+  return `${type}:${combatantId || placementId}:${triggeredAt}`;
 }
 
 export function recordLocalTurnEffect(effect) {
@@ -42,6 +48,7 @@ export function recordLocalTurnEffect(effect) {
 
 export function prepareSyncedTurnEffect(effect, {
   lastProcessedTurnEffectSignature = null,
+  processedTurnEffectSignatures = null,
   lastTurnEffectSignature = null,
   maxAgeMs = TURN_EFFECT_MAX_AGE_MS,
   now = Date.now,
@@ -61,8 +68,15 @@ export function prepareSyncedTurnEffect(effect, {
   }
 
   const signature = getTurnEffectSignature(normalized);
+  const processedSignatures =
+    processedTurnEffectSignatures && typeof processedTurnEffectSignatures.has === 'function'
+      ? processedTurnEffectSignatures
+      : null;
   const duplicate =
-    Boolean(signature) && signature === (lastProcessedTurnEffectSignature || '');
+    Boolean(signature) && (
+      (processedSignatures && processedSignatures.has(signature)) ||
+      signature === (lastProcessedTurnEffectSignature || '')
+    );
 
   if (duplicate) {
     return {
