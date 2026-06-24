@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 
 import { __testing } from '../character-summary-panel.js';
 
-function withFakeSaveEnvironment(fn) {
+function withFakeSaveEnvironment(fn, fetchImpl = null) {
   const originalFetch = globalThis.fetch;
   const originalBroadcastChannel = globalThis.BroadcastChannel;
   const broadcasts = [];
   const requests = [];
 
-  globalThis.fetch = async (endpoint, options = {}) => {
+  globalThis.fetch = fetchImpl || (async (endpoint, options = {}) => {
     requests.push({ endpoint, options });
     return {
       ok: true,
@@ -17,7 +17,7 @@ function withFakeSaveEnvironment(fn) {
         return { success: true };
       },
     };
-  };
+  });
 
   globalThis.BroadcastChannel = class FakeBroadcastChannel {
     constructor(name) {
@@ -72,6 +72,30 @@ test('saveCharacterSummarySheet can skip broadcasting for callers that broadcast
     assert.equal(saved, true);
     assert.deepEqual(broadcasts, []);
   });
+});
+
+test('saveCharacterSummarySheet requires explicit success true before broadcasting', async () => {
+  const requests = [];
+  const fetchImpl = async (endpoint, options = {}) => {
+    requests.push({ endpoint, options });
+    return {
+      ok: true,
+      async json() {
+        return null;
+      },
+    };
+  };
+
+  await withFakeSaveEnvironment(async ({ broadcasts }) => {
+    const saved = await __testing.saveCharacterSummarySheet(
+      { hero: { name: 'Sharon' } },
+      { characterId: 'sharon', change: 'resource' }
+    );
+
+    assert.equal(saved, false);
+    assert.equal(requests.length, 1);
+    assert.deepEqual(broadcasts, []);
+  }, fetchImpl);
 });
 
 test('resourceFloor clamps only allowNegative resources', () => {

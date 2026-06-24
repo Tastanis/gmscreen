@@ -382,10 +382,18 @@ function loadCharacterSheetData($dataDir, $dataFile, $characters) {
     ensureCharacterSheetStorage($dataDir, $dataFile, $characters);
 
     $content = file_get_contents($dataFile);
+    if ($content === false) {
+        throw new RuntimeException('Unable to read character sheet data.');
+    }
+
     $data = json_decode($content, true);
 
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        throw new RuntimeException('Character sheet data is invalid JSON: ' . json_last_error_msg());
+    }
+
     if (!is_array($data)) {
-        $data = array();
+        throw new RuntimeException('Character sheet data must be a JSON object.');
     }
 
     $defaults = getDefaultCharacterEntry();
@@ -510,6 +518,7 @@ if (!$is_gm && $requestedCharacter !== strtolower($currentUser) && !$allowVttSta
     sendJsonResponse(array('success' => false, 'error' => 'Permission denied'));
 }
 
+try {
 switch ($action) {
     case 'summary':
         $allSheets = loadCharacterSheetData($dataDir, $dataFile, $characters);
@@ -722,4 +731,10 @@ switch ($action) {
 
     default:
         sendJsonResponse(array('success' => false, 'error' => 'Unknown action'));
+}
+} catch (RuntimeException $error) {
+    sendJsonResponse(array(
+        'success' => false,
+        'error' => 'Character sheet storage error: ' . $error->getMessage()
+    ));
 }

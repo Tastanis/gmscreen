@@ -3360,7 +3360,10 @@ async function saveCharacterSummarySheet(sheet, options = {}) {
     body,
   });
   const payload = await response.json().catch(() => null);
-  const saved = Boolean(response.ok && payload?.success !== false);
+  const saved = Boolean(response.ok && payload?.success === true);
+  if (!saved) {
+    console.warn('[VTT] Character summary save failed', payload?.error || response.status);
+  }
   if (saved && shouldBroadcast && typeof BroadcastChannel === 'function') {
     const channel = new BroadcastChannel(CHARACTER_SHEET_SYNC_CHANNEL);
     channel.postMessage({
