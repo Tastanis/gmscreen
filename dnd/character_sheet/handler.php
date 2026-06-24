@@ -280,6 +280,104 @@ function mergeCharacterDefaults($entry, $defaults) {
     return $normalized;
 }
 
+function sheet_content_score($entry) {
+    if (!is_array($entry)) {
+        return 0;
+    }
+
+    $score = 0;
+    $hero = isset($entry['hero']) && is_array($entry['hero']) ? $entry['hero'] : array();
+
+    foreach (array('name', 'class', 'classTrack', 'complication', 'ancestry', 'wealth', 'renown', 'xp', 'victories', 'surges') as $key) {
+        if (isset($hero[$key]) && trim((string)$hero[$key]) !== '') {
+            $score++;
+        }
+    }
+
+    if (isset($hero['level']) && (int)$hero['level'] > 1) {
+        $score++;
+    }
+
+    foreach (array('culture', 'career', 'stats', 'vitals', 'bonuses', 'hirelings') as $key) {
+        if (!isset($hero[$key]) || !is_array($hero[$key])) {
+            continue;
+        }
+        foreach ($hero[$key] as $value) {
+            if (is_array($value)) {
+                if (sheet_content_score(array('hero' => $value)) > 0) {
+                    $score++;
+                    break;
+                }
+            } elseif (trim((string)$value) !== '' && (string)$value !== '0') {
+                $score++;
+                break;
+            }
+        }
+    }
+
+    $sidebar = isset($entry['sidebar']) && is_array($entry['sidebar']) ? $entry['sidebar'] : array();
+    if (isset($sidebar['lists']) && is_array($sidebar['lists'])) {
+        foreach ($sidebar['lists'] as $list) {
+            if (is_array($list) && count($list) > 0) {
+                $score++;
+            }
+        }
+    }
+    if (isset($sidebar['skills']) && is_array($sidebar['skills']) && count($sidebar['skills']) > 0) {
+        $score++;
+    }
+    if (isset($sidebar['resource']) && is_array($sidebar['resource'])) {
+        foreach (array('title', 'text') as $key) {
+            if (isset($sidebar['resource'][$key]) && trim((string)$sidebar['resource'][$key]) !== '' && $sidebar['resource'][$key] !== 'Resource') {
+                $score++;
+            }
+        }
+    }
+
+    if (isset($entry['features']) && is_array($entry['features'])) {
+        $score += count($entry['features']);
+    }
+
+    if (isset($entry['actions']) && is_array($entry['actions'])) {
+        foreach (array('mains', 'maneuvers', 'triggers', 'freeStrikes') as $type) {
+            if (isset($entry['actions'][$type]) && is_array($entry['actions'][$type])) {
+                $score += count($entry['actions'][$type]);
+            }
+        }
+    }
+
+    return $score;
+}
+
+function sheet_has_meaningful_content($entry) {
+    return sheet_content_score($entry) > 0;
+}
+
+function find_character_sheet_entry($data, $character) {
+    if (!is_array($data)) {
+        return null;
+    }
+
+    if (isset($data[$character]) && is_array($data[$character]) && sheet_has_meaningful_content($data[$character])) {
+        return $data[$character];
+    }
+
+    $fallback = isset($data[$character]) && is_array($data[$character]) ? $data[$character] : null;
+    foreach ($data as $key => $entry) {
+        if (!is_string($key) || strtolower(trim($key)) !== $character || !is_array($entry)) {
+            continue;
+        }
+        if (sheet_has_meaningful_content($entry)) {
+            return $entry;
+        }
+        if ($fallback === null) {
+            $fallback = $entry;
+        }
+    }
+
+    return $fallback;
+}
+
 function loadCharacterSheetData($dataDir, $dataFile, $characters) {
     ensureCharacterSheetStorage($dataDir, $dataFile, $characters);
 
@@ -292,14 +390,44 @@ function loadCharacterSheetData($dataDir, $dataFile, $characters) {
 
     $defaults = getDefaultCharacterEntry();
     foreach ($characters as $character) {
-        if (!isset($data[$character]) || !is_array($data[$character])) {
+        $entry = find_character_sheet_entry($data, $character);
+        if (!is_array($entry)) {
             $data[$character] = $defaults;
         } else {
-            $data[$character] = mergeCharacterDefaults($data[$character], $defaults);
+            $data[$character] = mergeCharacterDefaults($entry, $defaults);
         }
     }
 
     return $data;
+}
+
+function backupCharacterSheetData($dataDir, $dataFile) {
+    if (!is_readable($dataFile) || filesize($dataFile) <= 2) {
+        return;
+    }
+
+    $backupDir = $dataDir . '/backups';
+    if (!is_dir($backupDir)) {
+        mkdir($backupDir, 0755, true);
+    }
+
+    $latest = $backupDir . '/character_sheets_latest.json';
+    @copy($dataFile, $latest);
+
+    $timestamp = date('Ymd_His');
+    $backupFile = $backupDir . '/character_sheets_' . $timestamp . '.json';
+    @copy($dataFile, $backupFile);
+
+    $backups = glob($backupDir . '/character_sheets_*.json');
+    if (is_array($backups) && count($backups) > 30) {
+        sort($backups);
+        $toDelete = array_slice($backups, 0, count($backups) - 30);
+        foreach ($toDelete as $oldBackup) {
+            if (basename($oldBackup) !== 'character_sheets_latest.json') {
+                @unlink($oldBackup);
+            }
+        }
+    }
 }
 
 function saveCharacterSheetData($dataDir, $dataFile, $data) {
@@ -307,8 +435,10 @@ function saveCharacterSheetData($dataDir, $dataFile, $data) {
         mkdir($dataDir, 0755, true);
     }
 
+    backupCharacterSheetData($dataDir, $dataFile);
+
     $jsonData = json_encode($data, JSON_PRETTY_PRINT);
-    return file_put_contents($dataFile, $jsonData) !== false;
+    return file_put_contents($dataFile, $jsonData, LOCK_EX) !== false;
 }
 
 function sendJsonResponse($payload) {
@@ -413,7 +543,23 @@ switch ($action) {
             $sheetData['hero'] = array();
         }
         $sheetData['hero']['heroTokens'] = $heroTokens;
-        $allSheets[$requestedCharacter] = mergeCharacterDefaults($sheetData, getDefaultCharacterEntry());
+        $existingSheet = isset($allSheets[$requestedCharacter]) && is_array($allSheets[$requestedCharacter])
+            ? $allSheets[$requestedCharacter]
+            : getDefaultCharacterEntry();
+        $normalizedSheet = mergeCharacterDefaults($sheetData, getDefaultCharacterEntry());
+
+        if (
+            sheet_has_meaningful_content($existingSheet)
+            && !sheet_has_meaningful_content($normalizedSheet)
+            && !isset($_POST['confirm_blank_sheet'])
+        ) {
+            sendJsonResponse(array(
+                'success' => false,
+                'error' => 'Refusing to replace a populated character sheet with a blank sheet. Reload before saving.'
+            ));
+        }
+
+        $allSheets[$requestedCharacter] = $normalizedSheet;
 
         if (saveCharacterSheetData($dataDir, $dataFile, $allSheets)) {
             sendJsonResponse(array('success' => true));
