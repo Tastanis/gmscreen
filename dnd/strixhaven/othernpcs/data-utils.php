@@ -25,7 +25,11 @@ function getBlankNpcRecord() {
         'name' => 'New NPC',
         'images' => [],
         'race' => '',
+        'age' => '',
+        'school' => '',
         'college' => '',
+        'character_description' => '',
+        'general_info' => '',
         'favorites' => [],
         'conflict_engine' => [
             'want' => '',
@@ -43,6 +47,11 @@ function getBlankNpcRecord() {
             'core_want' => '',
             'core_fear' => '',
             'other' => '',
+        ],
+        'gm_only' => [
+            'plot_hooks' => '',
+            'secrets' => '',
+            'notes' => '',
         ],
     ];
 }

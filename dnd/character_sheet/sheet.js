@@ -945,28 +945,16 @@ function broadcastSheetSync(change = "sheet") {
 
 function applyRemoteSheetSync(data) {
   if (!data || typeof data !== "object") return;
+  if (document.body.classList.contains("edit-mode")) return;
   const nextState = mergeWithDefaults(data);
   sheetState = nextState;
-  if (document.body.classList.contains("edit-mode")) {
-    renderBars();
-    renderSidebarResource();
-    renderHeroTokens();
-    renderHeroPane();
-    updateResourceDisplays();
-    bindTokenButtons();
-    bindResourceControls();
-    bindSurgeButtons();
-    bindVictoryButtons();
-    bindRespiteButton();
-    repairGeneratedFormFields(document);
-    return;
-  }
   renderAll();
 }
 
 async function pollSheetSync() {
   if (!activeCharacter) return;
   if (document.visibilityState === "hidden") return;
+  if (document.body.classList.contains("edit-mode")) return;
   if (sheetSyncInFlight) return;
 
   sheetSyncInFlight = true;

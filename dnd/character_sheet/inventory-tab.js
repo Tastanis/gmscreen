@@ -103,6 +103,19 @@
     });
   }
 
+  function normalizeChargeCount(value) {
+    var number = parseInt(value, 10);
+    if (!Number.isFinite(number) || number < 0) return 0;
+    return Math.min(number, 999);
+  }
+
+  function fieldSaveValue(item, field) {
+    if (field === "effectSections") return JSON.stringify(item.effectSections || []);
+    if (field === "hasCharges") return item.hasCharges ? "true" : "false";
+    if (field === "charges") return String(normalizeChargeCount(item.charges));
+    return String(item[field] || "");
+  }
+
   // ---------------------------------------------------------------------
   // Server communication
   // ---------------------------------------------------------------------
@@ -177,8 +190,7 @@
       var field = parts.slice(2).join(":");
       var item = findItem(folder, itemId);
       if (!item) return;
-      var value = field === "effectSections" ? JSON.stringify(item.effectSections || []) : String(item[field] || "");
-      saveFieldNow(folder, itemId, field, value);
+      saveFieldNow(folder, itemId, field, fieldSaveValue(item, field));
     });
   }
 
@@ -262,6 +274,7 @@
       '" data-ci-action="open" data-item-id="' + escapeHtml(item.id) + '" title="' + escapeHtml(item.name || "Unnamed Item") + '">' +
       '<span class="ci-tile__icon">' + icon + "</span>" +
       '<span class="ci-tile__name">' + escapeHtml(item.name || "Unnamed Item") + "</span>" +
+      (item.hasCharges ? '<span class="ci-tile__charges">' + normalizeChargeCount(item.charges) + "</span>" : "") +
       (hidden ? '<span class="ci-tile__badge">Hidden</span>' : "") +
       "</button>"
     );
@@ -312,6 +325,23 @@
         .map(function (keyword) { return '<span class="ci-chip">' + escapeHtml(keyword) + "</span>"; })
         .join("");
       html += '<div class="ci-card__keywords">' + chips + "</div>";
+    }
+
+    if (editable) {
+      var checked = item.hasCharges ? " checked" : "";
+      html +=
+        '<div class="ci-field ci-field--inline ci-field--charges-toggle">' +
+        '<label class="ci-check"><input type="checkbox" data-ci-field="hasCharges"' + checked + ' /> <span>Charges</span></label>' +
+        (item.hasCharges
+          ? '<input type="number" class="ci-input ci-charge-input" data-ci-field="charges" min="0" max="999" step="1" value="' + normalizeChargeCount(item.charges) + '" aria-label="Charges" />'
+          : "") +
+        "</div>";
+    } else if (item.hasCharges) {
+      html +=
+        '<div class="ci-charges" aria-label="Item charges">' +
+        '<span class="ci-charges__label">Charges</span>' +
+        '<input type="number" class="ci-input ci-charge-input" data-ci-field="charges" min="0" max="999" step="1" value="' + normalizeChargeCount(item.charges) + '" aria-label="Charges" />' +
+        "</div>";
     }
 
     // Description
@@ -572,11 +602,25 @@
 
     var field = target.getAttribute("data-ci-field");
     if (field) {
-      item[field] = target.value;
+      if (field === "hasCharges") {
+        item.hasCharges = !!target.checked;
+        if (item.hasCharges && typeof item.charges === "undefined") {
+          item.charges = 0;
+        }
+        saveFieldNow(ciFolder, itemId, "hasCharges", item.hasCharges ? "true" : "false");
+        render();
+        return;
+      }
+      if (field === "charges") {
+        item.charges = normalizeChargeCount(target.value);
+        target.value = item.charges;
+      } else {
+        item[field] = target.value;
+      }
       if (field === "name") {
         // keep tooltip/labels consistent on next render
       }
-      queueFieldSave(ciFolder, itemId, field, function () { return item[field] || ""; });
+      queueFieldSave(ciFolder, itemId, field, function () { return fieldSaveValue(item, field); });
       return;
     }
 
@@ -734,6 +778,8 @@
     pane.addEventListener("change", function (event) {
       if (event.target.classList.contains("ci__file")) {
         handleFileSelected(event);
+      } else if (event.target.matches("[data-ci-field], [data-ci-sfield]")) {
+        handleFieldInput(event.target);
       }
     });
 

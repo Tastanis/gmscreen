@@ -187,6 +187,22 @@
   right: 4px;
 }
 
+.ci-tile__charges {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  min-width: 20px;
+  height: 18px;
+  padding: 1px 5px;
+  border-radius: 9px;
+  background: var(--accent-strong);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
 /* --- Open cards ----------------------------------------------------- */
 
 .ci-card {
@@ -293,6 +309,52 @@
   font-size: 13px;
   line-height: 1.45;
   white-space: pre-wrap;
+}
+
+.ci-charges,
+.ci-field--charges-toggle {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.ci-charges {
+  width: fit-content;
+  padding: 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--panel);
+}
+
+.ci-charges__label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.ci-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ci-check input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+}
+
+.ci-charge-input {
+  width: 68px;
+  min-width: 68px;
+  text-align: center;
 }
 
 .ci-card__effects-head {
@@ -426,6 +488,11 @@
 .ci-textarea {
   min-height: 64px;
   resize: vertical;
+}
+
+.ci-field--charges-toggle {
+  flex-direction: row;
+  align-items: center;
 }
 
 /* --- Status toast ---------------------------------------------------- */

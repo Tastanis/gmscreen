@@ -79,6 +79,22 @@ function ciCanEditTab($tab, $user, $isGm)
     return false;
 }
 
+function ciCanUpdateCharges($data, $tab, $index, $user, $isGm)
+{
+    global $CI_CHARACTER_TABS;
+
+    if ($isGm) {
+        return true;
+    }
+    if ($tab === 'shared' || $tab === 'gm' || $tab === $user) {
+        $item = isset($data[$tab]['items'][$index]) && is_array($data[$tab]['items'][$index])
+            ? $data[$tab]['items'][$index]
+            : array();
+        return !array_key_exists('visible', $item) || $item['visible'] !== false;
+    }
+    return in_array($tab, $CI_CHARACTER_TABS, true) && $tab === $user;
+}
+
 function ciNormalizeEffectSections($value, $legacyEffect = '', $preserveEmpty = false)
 {
     $sections = array();
@@ -164,7 +180,9 @@ function ciCleanItem($raw)
         'description' => isset($item['description']) ? substr((string) $item['description'], 0, 8000) : '',
         'keywords' => isset($item['keywords']) ? substr((string) $item['keywords'], 0, 500) : '',
         'image' => isset($item['image']) ? substr((string) $item['image'], 0, 500) : '',
-        'visible' => isset($item['visible']) ? (bool) $item['visible'] : true
+        'visible' => isset($item['visible']) ? (bool) $item['visible'] : true,
+        'hasCharges' => isset($item['hasCharges']) ? (bool) $item['hasCharges'] : false,
+        'charges' => isset($item['charges']) ? max(0, min(999, (int) $item['charges'])) : 0
     );
 
     $clean['effectSections'] = ciNormalizeEffectSections(
@@ -352,11 +370,8 @@ switch ($action) {
         if (!in_array($tab, $CI_TABS, true)) {
             ciFail('Invalid tab');
         }
-        if (!ciCanEditTab($tab, $ciUser, $ciIsGm)) {
-            ciFail('Permission denied');
-        }
-
-        $allowedFields = array('name', 'description', 'keywords', 'effect', 'effectSections', 'visible', 'image');
+        $chargeFields = array('hasCharges', 'charges');
+        $allowedFields = array('name', 'description', 'keywords', 'effect', 'effectSections', 'visible', 'image', 'hasCharges', 'charges');
         if ($itemId === '' || !in_array($field, $allowedFields, true)) {
             ciFail('Invalid parameters');
         }
@@ -367,6 +382,12 @@ switch ($action) {
             ciFail('Item not found');
         }
 
+        if (!ciCanEditTab($tab, $ciUser, $ciIsGm)) {
+            if (!in_array($field, $chargeFields, true) || !ciCanUpdateCharges($data, $tab, $index, $ciUser, $ciIsGm)) {
+                ciFail('Permission denied');
+            }
+        }
+
         if ($field === 'visible') {
             if (!$ciIsGm) {
                 ciFail('Only the GM can change visibility');
@@ -374,7 +395,12 @@ switch ($action) {
             $value = ($value === 'true' || $value === '1' || $value === 1 || $value === true);
         }
 
-        if ($field === 'effectSections') {
+        if ($field === 'hasCharges') {
+            $value = ($value === 'true' || $value === '1' || $value === 1 || $value === true);
+        } elseif ($field === 'charges') {
+            $value = max(0, min(999, (int) $value));
+            $data[$tab]['items'][$index]['hasCharges'] = true;
+        } elseif ($field === 'effectSections') {
             $value = ciNormalizeEffectSections(
                 $value,
                 isset($data[$tab]['items'][$index]['effect']) ? $data[$tab]['items'][$index]['effect'] : '',

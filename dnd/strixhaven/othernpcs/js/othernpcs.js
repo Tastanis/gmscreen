@@ -251,7 +251,7 @@ function createNpcCard(npc) {
             <div class="npc-name">${escapeHtml(npc.name)}</div>
             <div class="npc-info">
                 <div class="npc-race">${escapeHtml(npc.race || 'Unknown Race')}</div>
-                <div class="npc-college">${escapeHtml(npc.college || 'No College')}</div>
+                <div class="npc-college">${escapeHtml(npc.school || npc.college || 'No School')}</div>
             </div>
         </div>
     `;
@@ -327,7 +327,7 @@ function createNpcDetailForm(npc) {
                 ${uploadButton}
             </div>
 
-            <!-- Basic Information: name, race, college only -->
+            <!-- Basic Information -->
             <div class="form-section">
                 <h3>Basic Information</h3>
                 <div class="form-row">
@@ -340,6 +340,14 @@ function createNpcDetailForm(npc) {
                         <input type="text" value="${escapeHtml(npc.race || '')}" data-field="race" placeholder="Enter race">
                     </div>
                     <div class="form-group">
+                        <label>Age:</label>
+                        <input type="text" value="${escapeHtml(npc.age || '')}" data-field="age" placeholder="Enter age">
+                    </div>
+                    <div class="form-group">
+                        <label>School:</label>
+                        <input type="text" value="${escapeHtml(npc.school || npc.college || '')}" data-field="school" placeholder="Enter school">
+                    </div>
+                    <div class="form-group">
                         <label>College:</label>
                         <select data-field="college">
                             <option value="">No College</option>
@@ -350,6 +358,14 @@ function createNpcDetailForm(npc) {
                             <option value="Quandrix" ${npc.college === 'Quandrix' ? 'selected' : ''}>Quandrix</option>
                         </select>
                     </div>
+                </div>
+                <div class="form-group">
+                    <label>Description:</label>
+                    <div class="rich-text-container medium" data-field="character_description" data-placeholder="Brief NPC description..."></div>
+                </div>
+                <div class="form-group">
+                    <label>General Information:</label>
+                    <div class="rich-text-container large" data-field="general_info" data-placeholder="Public or campaign-facing NPC information..."></div>
                 </div>
             </div>
 
@@ -438,6 +454,9 @@ function createNpcDetailForm(npc) {
                 <h3 class="directors-notes-toggle" onclick="toggleDirectorsNotes(this)">Director's Notes <span class="toggle-arrow">&#9660;</span></h3>
                 <div class="directors-notes-content" style="display: none;">
                     <div class="rich-text-container large" data-field="directors_notes" data-placeholder="Origin, background, and other GM notes..."></div>
+                    <div class="rich-text-container large" data-field="gm_only.plot_hooks" data-placeholder="Plot hooks..."></div>
+                    <div class="rich-text-container large" data-field="gm_only.secrets" data-placeholder="Secrets..."></div>
+                    <div class="rich-text-container large" data-field="gm_only.notes" data-placeholder="Additional private notes..."></div>
                 </div>
             </div>
         </div>
@@ -467,7 +486,7 @@ function toggleDirectorsNotes(header) {
                 });
                 editor.init();
                 if (selectedNpc && field) {
-                    const value = selectedNpc[field] || '';
+                    const value = getNestedFieldValue(selectedNpc, field);
                     if (value) editor.setContent(value);
                 }
                 editor.onChange((editorContent) => {

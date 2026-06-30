@@ -61,6 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $data = loadNpcData();
         $sort_by = isset($_POST['sort_by']) ? $_POST['sort_by'] : 'name';
         $filter_college = isset($_POST['filter_college']) ? $_POST['filter_college'] : '';
+        $filter_school = isset($_POST['filter_school']) ? $_POST['filter_school'] : '';
         $show_favorites = isset($_POST['show_favorites']) ? $_POST['show_favorites'] === 'true' : false;
         $search_term = isset($_POST['search_term']) ? trim($_POST['search_term']) : '';
 
@@ -74,7 +75,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
         if ($filter_college) {
             $npcs = array_filter($npcs, function($npc) use ($filter_college) {
-                return isset($npc['college']) && $npc['college'] === $filter_college;
+                $college = isset($npc['college']) ? $npc['college'] : '';
+                $school = isset($npc['school']) ? $npc['school'] : '';
+                return $college === $filter_college || $school === $filter_college;
+            });
+        }
+
+        if ($filter_school) {
+            $npcs = array_filter($npcs, function($npc) use ($filter_school) {
+                $school = isset($npc['school']) ? $npc['school'] : (isset($npc['college']) ? $npc['college'] : '');
+                return $school === $filter_school;
             });
         }
 
@@ -93,6 +103,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         return strcasecmp($a['name'], $b['name']);
                     }
                     return strcasecmp($ac, $bc);
+
+                case 'school':
+                    $as = isset($a['school']) ? $a['school'] : (isset($a['college']) ? $a['college'] : '');
+                    $bs = isset($b['school']) ? $b['school'] : (isset($b['college']) ? $b['college'] : '');
+                    if ($as === $bs) {
+                        return strcasecmp($a['name'], $b['name']);
+                    }
+                    return strcasecmp($as, $bs);
 
                 case 'race':
                     $ar = isset($a['race']) ? $a['race'] : '';
@@ -146,8 +164,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                 return ['save' => false, 'error' => 'Invalid tension web data'];
                             }
                             $npc['tension_web'] = $decoded;
-                        } elseif ($field === 'pressure_point' || $field === 'trajectory' || $field === 'directors_notes') {
+                        } elseif ($field === 'pressure_point' || $field === 'trajectory' || $field === 'directors_notes' || $field === 'character_description' || $field === 'general_info') {
                             $npc[$field] = $value;
+                        } elseif (strpos($field, 'gm_only.') === 0) {
+                            $gmField = substr($field, 8);
+                            if (!isset($npc['gm_only']) || !is_array($npc['gm_only'])) {
+                                $npc['gm_only'] = array();
+                            }
+                            $npc['gm_only'][$gmField] = $value;
                         } elseif (strpos($field, 'details.') === 0) {
                             $detailField = substr($field, 8);
                             if (!isset($npc['details']) || !is_array($npc['details'])) {
@@ -457,13 +481,14 @@ require_once '../../includes/strix-nav.php';
                     <label>Sort by:</label>
                     <button class="filter-btn active" data-sort="name">Name</button>
                     <button class="filter-btn" data-sort="race">Race</button>
+                    <button class="filter-btn" data-sort="school">School</button>
                     <button class="filter-btn" data-sort="college">College</button>
                 </div>
 
                 <div class="filter-group">
                     <label>Filter:</label>
                     <select id="filter-college" class="filter-select">
-                        <option value="">All Colleges</option>
+                        <option value="">All Schools</option>
                         <option value="Silverquill">Silverquill</option>
                         <option value="Prismari">Prismari</option>
                         <option value="Witherbloom">Witherbloom</option>
@@ -476,6 +501,7 @@ require_once '../../includes/strix-nav.php';
 
                 <div class="admin-controls">
                     <button class="btn-add" id="add-npc-btn">+ Add NPC</button>
+                    <button class="btn-import" onclick="window.location.href='npc-import.php'">Import NPCs</button>
                 </div>
             </div>
         </div>
