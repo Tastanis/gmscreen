@@ -2991,6 +2991,19 @@ function shouldApplyCombatStatePayload($incomingCombat, $existingCombat): bool
     $existingSequence = (int) ($existingCombat['sequence'] ?? 0);
     $incomingUpdatedAt = (int) ($incomingCombat['updatedAt'] ?? 0);
     $incomingSequence = (int) ($incomingCombat['sequence'] ?? 0);
+    $existingActive = normalizeMapLevelBoolean($existingCombat['active'] ?? ($existingCombat['isActive'] ?? false), false);
+    $incomingActive = normalizeMapLevelBoolean($incomingCombat['active'] ?? ($incomingCombat['isActive'] ?? false), false);
+    $existingEncounterId = normalizeNullableStringValue($existingCombat['encounterId'] ?? ($existingCombat['combatEncounterId'] ?? null));
+    $incomingEncounterId = normalizeNullableStringValue($incomingCombat['encounterId'] ?? ($incomingCombat['combatEncounterId'] ?? null));
+
+    if (
+        !$existingActive
+        && $incomingActive
+        && $incomingEncounterId !== null
+        && ($existingEncounterId === null || $existingEncounterId !== $incomingEncounterId)
+    ) {
+        return true;
+    }
 
     if ($existingSequence > 0 && $incomingSequence > 0) {
         if ($incomingSequence !== $existingSequence) {

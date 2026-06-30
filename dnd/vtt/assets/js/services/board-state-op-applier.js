@@ -449,6 +449,19 @@ function normalizeCombatOpPayload(raw) {
 }
 
 function shouldApplyCombatPayload(incoming, existing) {
+  const existingActive = Boolean(existing?.active ?? existing?.isActive);
+  const incomingActive = Boolean(incoming?.active ?? incoming?.isActive);
+  const existingEncounterId = normalizeNullableString(existing?.encounterId ?? existing?.combatEncounterId);
+  const incomingEncounterId = normalizeNullableString(incoming?.encounterId ?? incoming?.combatEncounterId);
+  if (
+    !existingActive &&
+    incomingActive &&
+    incomingEncounterId &&
+    (!existingEncounterId || existingEncounterId !== incomingEncounterId)
+  ) {
+    return true;
+  }
+
   const existingSequence = normalizeNonNegativeInt(existing.sequence, 0);
   const incomingSequence = normalizeNonNegativeInt(incoming.sequence, 0);
   const existingUpdatedAt = normalizeNonNegativeInt(existing.updatedAt, 0);

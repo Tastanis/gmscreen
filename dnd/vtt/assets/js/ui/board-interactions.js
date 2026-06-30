@@ -119,6 +119,7 @@ import {
   TURN_PHASE,
   createCombatStateSnapshot as buildCombatStateSnapshot,
   getTurnPhase as getCombatTurnPhase,
+  isCombatStateNewer,
   mergeTurnEffects,
   normalizeCombatGroups,
   normalizeCombatState,
@@ -130,6 +131,7 @@ import {
   getActiveSceneCombatState,
   getCombatStateMaliceSnapshot,
   hasCombatMaliceValue,
+  haveCombatGroupsChanged,
   prepareCombatSnapshotForSync,
   shouldApplyRemoteCombatState,
   shouldProtectLocalCombatIntent,
@@ -256,6 +258,8 @@ const TURN_FLASH_TONE_CLASSES = {
 const SHEET_SYNC_DEBOUNCE_MS = 400;
 const STAMINA_FLOAT_ANIMATION_MS = 1500;
 const STAMINA_FLOAT_QUEUE_GAP_MS = STAMINA_FLOAT_ANIMATION_MS;
+const STAMINA_FLOAT_RENDER_RETRY_DELAY_MS = 80;
+const STAMINA_FLOAT_RENDER_RETRY_ATTEMPTS = 4;
 const MALICE_VICTORIES_ACTION = 'fetch-victories';
 
 export function isPlacementStaminaSyncSource(source) {
@@ -11714,6 +11718,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const sceneEntry = activeSceneId ? state?.boardState?.sceneState?.[activeSceneId] ?? null : null;
     const claimedTokens = sceneEntry?.claimedTokens;
     const claimedPlacementIds = [];
+    const livePlacements = activeSceneId ? getActiveScenePlacements(state) : [];
 
     if (claimedTokens && typeof claimedTokens === 'object') {
       Object.entries(claimedTokens).forEach(([placementId, claimedUserId]) => {
@@ -11735,12 +11740,28 @@ export function mountBoardInteractions(store, routes = {}) {
         candidateIds.add(id);
       }
     });
+    livePlacements.forEach((placement) => {
+      const id = typeof placement?.id === 'string' ? placement.id : null;
+      if (id && normalizeProfileId(getCombatantProfileId(id)) === userId) {
+        candidateIds.add(id);
+      }
+    });
 
     const activeIds = lastCombatTrackerActiveIds instanceof Set ? lastCombatTrackerActiveIds : new Set();
+    const livePlacementIds = new Set(
+      livePlacements
+        .map((placement) => (typeof placement?.id === 'string' ? placement.id : ''))
+        .filter(Boolean)
+    );
     const validCandidates = Array.from(candidateIds).filter((id) => {
       const representativeId = getRepresentativeIdFor(id) || id;
-      const isActive = activeIds.has(id) || activeIds.has(representativeId);
-      return isActive && getCombatantTeam(representativeId) === 'ally';
+      const isActive =
+        activeIds.has(id) ||
+        activeIds.has(representativeId) ||
+        livePlacementIds.has(id) ||
+        livePlacementIds.has(representativeId);
+      const onCurrentSide = !currentTurnTeam || currentTurnTeam === 'ally';
+      return isActive && onCurrentSide && getCombatantTeam(representativeId) === 'ally';
     });
     const waitingCandidate = validCandidates.find((id) => {
       const representativeId = getRepresentativeIdFor(id) || id;
@@ -12212,12 +12233,28 @@ export function mountBoardInteractions(store, routes = {}) {
     // Also check if groups have changed - partial group data can arrive initially and
     // we need to apply complete group data when it arrives, even with the same sequence.
     // Use sequence numbers for reliable ordering (avoids clock drift between clients)
-    // Fall back to timestamp comparison if sequence is not available (backwards compatibility)
+    // Fall back to timestamp comparison if sequence is not available (backwards compatibility).
+    const remoteCombatIsNewer = isCombatStateNewer(normalized, {
+      version: combatStateVersion,
+      updatedAt: combatStateUpdatedAt,
+    });
+    const remoteCombatGroupsChanged = haveCombatGroupsChanged(normalized.groups, combatTrackerGroups);
     if (!shouldApplyRemoteCombatState(normalized, {
       currentVersion: combatStateVersion,
       currentUpdatedAt: combatStateUpdatedAt,
       currentGroups: combatTrackerGroups,
     })) {
+      return;
+    }
+    if (combatStateVersion !== 0 && !remoteCombatIsNewer && remoteCombatGroupsChanged) {
+      suppressCombatStateSync = true;
+      try {
+        applyCombatGroupsFromState(normalized.groups);
+        refreshCombatTracker();
+        updateCombatModeIndicators();
+      } finally {
+        suppressCombatStateSync = false;
+      }
       return;
     }
 
@@ -18585,8 +18622,9 @@ export function mountBoardInteractions(store, routes = {}) {
     const next = prior
       .catch(() => {})
       .then(() => new Promise((resolve) => {
-        showStaminaFloatNow(placementId, numericAmount, mode);
-        window.setTimeout(resolve, STAMINA_FLOAT_QUEUE_GAP_MS);
+        showStaminaFloatWhenTokenRenders(placementId, numericAmount, mode).finally(() => {
+          window.setTimeout(resolve, STAMINA_FLOAT_QUEUE_GAP_MS);
+        });
       }));
     staminaFloatQueues.set(key, next);
     next.finally(() => {
@@ -18610,6 +18648,28 @@ export function mountBoardInteractions(store, routes = {}) {
     syncCombatStateToStore();
   }
 
+  function showStaminaFloatWhenTokenRenders(placementId, amount, mode, attemptsLeft = STAMINA_FLOAT_RENDER_RETRY_ATTEMPTS) {
+    if (showStaminaFloatNow(placementId, amount, mode)) {
+      return Promise.resolve(true);
+    }
+    if (attemptsLeft <= 0) {
+      return Promise.resolve(false);
+    }
+    return new Promise((resolve) => {
+      const retry = () => {
+        window.setTimeout(() => {
+          showStaminaFloatWhenTokenRenders(placementId, amount, mode, attemptsLeft - 1)
+            .then(resolve);
+        }, STAMINA_FLOAT_RENDER_RETRY_DELAY_MS);
+      };
+      if (typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(retry);
+      } else {
+        retry();
+      }
+    });
+  }
+
   function generateTurnEffectId(prefix = 'effect') {
     const random = (() => {
       try {
@@ -18629,7 +18689,7 @@ export function mountBoardInteractions(store, routes = {}) {
       ? window.CSS.escape(String(placementId))
       : String(placementId).replace(/["\\]/g, '\\$&');
     const token = tokenLayer.querySelector(`[data-placement-id="${escapedId}"]`);
-    if (!(token instanceof HTMLElement)) return;
+    if (!(token instanceof HTMLElement)) return false;
 
     const span = document.createElement('span');
     span.className = `vtt-token__float-number vtt-token__float-number--${mode === 'heal' ? 'heal' : 'damage'}`;
@@ -18641,6 +18701,7 @@ export function mountBoardInteractions(store, routes = {}) {
         span.parentNode.removeChild(span);
       }
     }, STAMINA_FLOAT_ANIMATION_MS + 100);
+    return true;
   }
 
   function formatAutomationTargetPrompt(targetConfig = {}) {
@@ -21070,7 +21131,7 @@ export function mountBoardInteractions(store, routes = {}) {
       if (targetLevel?.id) {
         target.levelId = targetLevel.id;
       }
-    });
+    }, { syncBoard: false });
     if (!updated) {
       syncTokenLevelControls(activePlacement);
       return;
@@ -21080,13 +21141,34 @@ export function mountBoardInteractions(store, routes = {}) {
     // mutation must also update that claimant's `userLevelState` so reload
     // persistence and "follow your token" stay coherent. Activate-pulled
     // entries get overwritten by the new `claim`-source entry.
+    const levelMoveOps = movedIds
+      .map((placementId) => {
+        const targetLevel = targetLevelById.get(placementId);
+        if (!targetLevel?.id) {
+          return null;
+        }
+        markPlacementDirty(activeSceneId, placementId);
+        return {
+          type: 'placement.update',
+          sceneId: activeSceneId,
+          placementId,
+          patch: { levelId: targetLevel.id },
+        };
+      })
+      .filter(Boolean);
     targetLevelById.forEach((targetLevel, placementId) => {
-      applyClaimDrivenUserLevelUpdate({
+      const claimOp = applyClaimDrivenUserLevelUpdate({
         sceneId: activeSceneId,
         placementId,
         levelId: targetLevel.id,
-      });
+      }, { persist: false });
+      if (claimOp) {
+        levelMoveOps.push(claimOp);
+      }
     });
+    if (levelMoveOps.length) {
+      persistBoardStateSnapshot({}, levelMoveOps);
+    }
 
     // Levels v2 (§5.6): if the GM moved a token to a level whose cutout
     // sits entirely under the token's footprint, the token falls. Chained
@@ -21130,20 +21212,20 @@ export function mountBoardInteractions(store, routes = {}) {
   // resolves immediately without waiting for the broadcast round-trip.
   // No-op when the placement is unclaimed, or when the new level matches
   // the claimant's existing userLevelState entry.
-  function applyClaimDrivenUserLevelUpdate({ sceneId, placementId, levelId }) {
+  function applyClaimDrivenUserLevelUpdate({ sceneId, placementId, levelId }, { persist = true } = {}) {
     if (
       typeof sceneId !== 'string' || !sceneId
       || typeof placementId !== 'string' || !placementId
       || typeof levelId !== 'string' || !levelId
       || typeof boardApi.updateState !== 'function'
     ) {
-      return;
+      return null;
     }
     const state = boardApi.getState?.() ?? {};
     const sceneEntry = state.boardState?.sceneState?.[sceneId] ?? null;
     const claimedUserId = getClaimedUserIdForPlacement(sceneEntry, placementId);
     if (!claimedUserId) {
-      return;
+      return null;
     }
     const updatedAt = Date.now();
     let mutated = false;
@@ -21173,19 +21255,21 @@ export function mountBoardInteractions(store, routes = {}) {
       mutated = true;
     });
     if (!mutated) {
-      return;
+      return null;
     }
     markSceneStateDirty(sceneId);
-    persistBoardStateSnapshot({}, [
-      {
-        type: 'user-level.set',
-        sceneId,
-        userId: claimedUserId,
-        levelId,
-        source: 'claim',
-        tokenId: placementId,
-      },
-    ]);
+    const op = {
+      type: 'user-level.set',
+      sceneId,
+      userId: claimedUserId,
+      levelId,
+      source: 'claim',
+      tokenId: placementId,
+    };
+    if (persist) {
+      persistBoardStateSnapshot({}, [op]);
+    }
+    return op;
   }
 
   // Levels v2 (§5.6): after a token movement (drag commit or level-move),

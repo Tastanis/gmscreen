@@ -125,6 +125,49 @@ describe('Board State Op Applier - combat.set', () => {
     assert.equal(state.sceneState['scene-1'].combat.sequence, 10);
   });
 
+  test('accepts a fresh start-combat payload after a previous combat ended with a higher sequence', () => {
+    const state = {
+      sceneState: {
+        'scene-1': {
+          combat: {
+            active: false,
+            round: 0,
+            activeCombatantId: null,
+            completedCombatantIds: [],
+            turnPhase: 'idle',
+            encounterId: 'encounter-old',
+            sequence: 10,
+            updatedAt: 3000,
+          },
+        },
+      },
+    };
+
+    const mutated = applyBoardStateOpLocally(state, {
+      type: 'combat.set',
+      sceneId: 'scene-1',
+      combat: {
+        active: true,
+        round: 1,
+        activeCombatantId: null,
+        completedCombatantIds: [],
+        turnPhase: 'pick',
+        encounterId: 'encounter-new',
+        startingTeam: 'ally',
+        currentTeam: 'ally',
+        sequence: 1,
+        updatedAt: 2000,
+      },
+    });
+
+    assert.equal(mutated, true);
+    assert.equal(state.sceneState['scene-1'].combat.active, true);
+    assert.equal(state.sceneState['scene-1'].combat.round, 1);
+    assert.equal(state.sceneState['scene-1'].combat.encounterId, 'encounter-new');
+    assert.equal(state.sceneState['scene-1'].combat.sequence, 11);
+    assert.equal(state.sceneState['scene-1'].combat.updatedAt, 3001);
+  });
+
   test('applies end-combat payloads even when the broadcast sequence is stale', () => {
     const state = {
       sceneState: {
