@@ -195,110 +195,68 @@ Live action id: action_1779504025064_ccd0f5e53d3ac
 Rules source: The Gods Punish and Defend
 COPY START
 {
-    "fields":  {
-                   "cost":  "3 Wrath"
-               },
-    "automation":  {
-                       "schema":  "ability-automation/v3",
-                       "cards":  [
-                                     {
-                                         "type":  "target",
-                                         "id":  "target-punish-primary",
-                                         "name":  "primary",
-                                         "mode":  "token",
-                                         "predicate":  "creatureOrObject",
-                                         "count":  1,
-                                         "distance":  {
-                                                          "form":  "melee",
-                                                          "value":  1
-                                                      }
-                                     },
-                                     {
-                                         "type":  "powerRoll",
-                                         "id":  "roll-punish",
-                                         "attribute":  "M",
-                                         "target":  "primary",
-                                         "tiers":  {
-                                                       "tier1":  {
-                                                                     "effects":  [
-                                                                                     {
-                                                                                         "kind":  "damage",
-                                                                                         "amount":  5,
-                                                                                         "attribute":  "M",
-                                                                                         "damageType":  "holy"
-                                                                                     }
-                                                                                 ]
-                                                                 },
-                                                       "tier2":  {
-                                                                     "effects":  [
-                                                                                     {
-                                                                                         "kind":  "damage",
-                                                                                         "amount":  8,
-                                                                                         "attribute":  "M",
-                                                                                         "damageType":  "holy"
-                                                                                     }
-                                                                                 ]
-                                                                 },
-                                                       "tier3":  {
-                                                                     "effects":  [
-                                                                                     {
-                                                                                         "kind":  "damage",
-                                                                                         "amount":  11,
-                                                                                         "attribute":  "M",
-                                                                                         "damageType":  "holy"
-                                                                                     }
-                                                                                 ]
-                                                                 }
-                                                   }
-                                     },
-                                     {
-                                         "type":  "target",
-                                         "id":  "target-punish-heal",
-                                         "name":  "healTarget",
-                                         "mode":  "token",
-                                         "predicate":  "selfOrAlly",
-                                         "count":  1,
-                                         "optional":  true,
-                                         "distance":  {
-                                                          "form":  "ranged",
-                                                          "value":  10
-                                                      },
-                                         "promptText":  "Choose yourself or one ally within 10 squares to heal with Cal\u0027s Recovery."
-                                     },
-                                     {
-                                         "type":  "effect",
-                                         "id":  "effect-punish-recovery",
-                                         "target":  "healTarget",
-                                         "effects":  [
-                                                         {
-                                                             "kind":  "ifPrompt",
-                                                             "question":  "Spend one of Cal\u0027s Recoveries to heal the selected target?",
-                                                             "yesLabel":  "Spend recovery",
-                                                             "noLabel":  "Skip heal",
-                                                             "then":  [
-                                                                          {
-                                                                              "kind":  "heal",
-                                                                              "recoveries":  1,
-                                                                              "recoverySource":  "self"
-                                                                          },
-                                                                          {
-                                                                              "kind":  "ifPrompt",
-                                                                              "question":  "Is the healed target an ally other than Cal and within 10 squares for Blessing of Life?",
-                                                                              "yesLabel":  "Add +3",
-                                                                              "noLabel":  "No extra heal",
-                                                                              "then":  [
-                                                                                           {
-                                                                                               "kind":  "heal",
-                                                                                               "amount":  3
-                                                                                           }
-                                                                                       ]
-                                                                          }
-                                                                      ]
-                                                         }
-                                                     ]
-                                     }
-                                 ]
-                   }
+    "fields": { "cost": "3 Wrath" },
+    "automation": {
+        "schema": "ability-automation/v3",
+        "cards": [
+            {
+                "type": "target",
+                "id": "target-punish-primary",
+                "name": "primary",
+                "mode": "token",
+                "predicate": "creatureOrObject",
+                "count": 1,
+                "distance": { "form": "melee", "value": 1 }
+            },
+            {
+                "type": "powerRoll",
+                "id": "roll-punish",
+                "attribute": "M",
+                "target": "primary",
+                "tiers": {
+                    "tier1": { "effects": [ { "kind": "damage", "amount": 5, "attribute": "M", "damageType": "holy" } ] },
+                    "tier2": { "effects": [ { "kind": "damage", "amount": 8, "attribute": "M", "damageType": "holy" } ] },
+                    "tier3": { "effects": [ { "kind": "damage", "amount": 11, "attribute": "M", "damageType": "holy" } ] }
+                }
+            },
+            {
+                "type": "target",
+                "id": "target-punish-heal",
+                "name": "healTarget",
+                "mode": "token",
+                "predicate": "selfOrAlly",
+                "count": 1,
+                "optional": true,
+                "distance": { "form": "ranged", "value": 10 },
+                "promptText": "Choose yourself or one ally within 10 squares to heal with Cal's Recovery."
+            },
+            {
+                "type": "effect",
+                "id": "effect-punish-recovery",
+                "target": "healTarget",
+                "effects": [
+                    {
+                        "kind": "ifPrompt",
+                        "target": "healTarget",
+                        "question": "Spend one of Cal's Recoveries to heal the selected target?",
+                        "yesLabel": "Spend recovery",
+                        "noLabel": "Skip heal",
+                        "then": [
+                            { "kind": "heal", "target": "healTarget", "recoveries": 1, "recoverySource": "self" },
+                            {
+                                "kind": "ifPrompt",
+                                "target": "healTarget",
+                                "question": "Is the healed target an ally other than Cal?",
+                                "yesLabel": "Add Presence",
+                                "noLabel": "No extra heal",
+                                "then": [ { "kind": "heal", "target": "healTarget", "amount": 3 } ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
 }
 COPY END
 
@@ -634,117 +592,80 @@ Section: triggers
 Live action id: action_1779504610833_235d3bc58cbe48
 COPY START
 {
-    "fields":  {
-
-               },
-    "automation":  {
-                       "schema":  "ability-automation/v3",
-                       "cards":  [
-                                     {
-                                         "type":  "trigger",
-                                         "id":  "trigger-my-life-self-turn",
-                                         "condition":  "Cal starts his turn.",
-                                         "match":  {
-                                                       "event":  "turnStart",
-                                                       "filter":  {
-                                                                      "whose":  "self"
-                                                                  }
-                                                   }
-                                     },
-                                     {
-                                         "type":  "trigger",
-                                         "id":  "trigger-my-life-ally-turn",
-                                         "condition":  "An ally starts their turn.",
-                                         "match":  {
-                                                       "event":  "turnStart",
-                                                       "filter":  {
-                                                                      "whose":  "ally"
-                                                                  }
-                                                   }
-                                     },
-                                     {
-                                         "type":  "trigger",
-                                         "id":  "trigger-my-life-self-damage",
-                                         "condition":  "Cal takes damage.",
-                                         "match":  {
-                                                       "event":  "damage",
-                                                       "filter":  {
-                                                                      "whose":  "self",
-                                                                      "minAmount":  1
-                                                                  }
-                                                   }
-                                     },
-                                     {
-                                         "type":  "trigger",
-                                         "id":  "trigger-my-life-ally-damage",
-                                         "condition":  "An ally takes damage.",
-                                         "match":  {
-                                                       "event":  "damage",
-                                                       "filter":  {
-                                                                      "whose":  "ally",
-                                                                      "minAmount":  1
-                                                                  }
-                                                   }
-                                     },
-                                     {
-                                         "type":  "target",
-                                         "id":  "target-my-life-recipient",
-                                         "name":  "recipient",
-                                         "mode":  "token",
-                                         "predicate":  "selfOrAlly",
-                                         "count":  1,
-                                         "distance":  {
-                                                          "form":  "ranged",
-                                                          "value":  10
-                                                      },
-                                         "promptText":  "Choose the creature who started their turn or took the triggering damage."
-                                     },
-                                     {
-                                         "type":  "effect",
-                                         "id":  "effect-my-life-heal",
-                                         "target":  "recipient",
-                                         "effects":  [
-                                                         {
-                                                             "kind":  "heal",
-                                                             "recoveries":  1,
-                                                             "recoverySource":  "self"
-                                                         },
-                                                         {
-                                                             "kind":  "ifPrompt",
-                                                             "question":  "Is the target an ally other than Cal for Blessing of Life?",
-                                                             "yesLabel":  "Add +3",
-                                                             "noLabel":  "No extra heal",
-                                                             "then":  [
-                                                                          {
-                                                                              "kind":  "heal",
-                                                                              "amount":  3
-                                                                          }
-                                                                      ]
-                                                         },
-                                                         {
-                                                             "kind":  "ifPrompt",
-                                                             "question":  "Spend 1 Wrath to end a save/end-of-turn effect on the target, or stand a prone target up?",
-                                                             "yesLabel":  "Spend Wrath",
-                                                             "noLabel":  "Skip",
-                                                             "then":  [
-                                                                          {
-                                                                              "kind":  "spend",
-                                                                              "resource":  "Wrath",
-                                                                              "amount":  1,
-                                                                              "prompt":  "Spend 1 Wrath for the My Life for Yours rider.",
-                                                                              "effects":  [
-                                                                                              {
-                                                                                                  "kind":  "note",
-                                                                                                  "text":  "End one save-ends/end-of-turn effect on the target, or stand a prone target up. Apply the removal manually."
-                                                                                              }
-                                                                                          ]
-                                                                          }
-                                                                      ]
-                                                         }
-                                                     ]
-                                     }
-                                 ]
-                   }
+    "fields": {},
+    "automation": {
+        "schema": "ability-automation/v3",
+        "cards": [
+            {
+                "type": "trigger",
+                "id": "trigger-my-life-self-turn",
+                "condition": "Cal starts his turn.",
+                "match": { "event": "turnStart", "filter": { "whose": "self" } }
+            },
+            {
+                "type": "trigger",
+                "id": "trigger-my-life-ally-turn",
+                "condition": "An ally starts their turn.",
+                "match": { "event": "turnStart", "filter": { "whose": "ally" } }
+            },
+            {
+                "type": "trigger",
+                "id": "trigger-my-life-self-damage",
+                "condition": "Cal takes damage.",
+                "match": { "event": "damage", "filter": { "whose": "self", "minAmount": 1 } }
+            },
+            {
+                "type": "trigger",
+                "id": "trigger-my-life-ally-damage",
+                "condition": "An ally takes damage.",
+                "match": { "event": "damage", "filter": { "whose": "ally", "minAmount": 1 } }
+            },
+            {
+                "type": "target",
+                "id": "target-my-life-recipient",
+                "name": "recipient",
+                "mode": "token",
+                "predicate": "selfOrAlly",
+                "count": 1,
+                "distance": { "form": "ranged", "value": 10 },
+                "promptText": "Choose yourself or the ally who started their turn or took the triggering damage."
+            },
+            {
+                "type": "effect",
+                "id": "effect-my-life-heal",
+                "target": "recipient",
+                "effects": [
+                    { "kind": "heal", "target": "recipient", "recoveries": 1, "recoverySource": "self" },
+                    {
+                        "kind": "ifPrompt",
+                        "target": "recipient",
+                        "question": "Is the target an ally other than Cal (Blessing of Life)?",
+                        "yesLabel": "Add Presence",
+                        "noLabel": "No extra heal",
+                        "then": [ { "kind": "heal", "target": "recipient", "amount": 3 } ]
+                    },
+                    {
+                        "kind": "ifPrompt",
+                        "target": "recipient",
+                        "question": "Spend 1 Wrath to end a save/end-of-turn effect on the target, or stand a prone target up?",
+                        "yesLabel": "Spend Wrath",
+                        "noLabel": "Skip",
+                        "then": [
+                            {
+                                "kind": "spend",
+                                "resource": "Wrath",
+                                "amount": 1,
+                                "prompt": "Spend 1 Wrath for the My Life for Yours rider.",
+                                "effects": [
+                                    { "kind": "note", "text": "End one save-ends/end-of-turn effect on the target, or stand a prone target up. Apply the removal manually." }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
 }
 COPY END
 

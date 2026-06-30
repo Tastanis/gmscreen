@@ -12,6 +12,14 @@
 | Add heroic resource automation | `source/rules-v1.01b/classes/<class>.md`, then `../character_sheet/heroic-resource-automation/README.md`, then VTT event hooks in `../vtt/assets/js/ui/board-interactions.js` |
 | Work on monster tray/runtime behavior | `vtt-json/INDEX.md`, `hooks/INDEX.md`, `../vtt/assets/js/ui/monster-ability-tray.js`, `../vtt/assets/js/ui/monster-ability-runner-glue.js` |
 
+## Character Automations
+
+Saved, paste-ready ability + heroic-resource JSON per player character. Convention and file list: `characters/README.md`.
+
+- Cal (Censor / Wrath / Judgment): `characters/cal-automations.md`
+- Sharon (Shadow / Black Ash): `characters/sharon-automations.md`
+- Indigo, Zepha: not yet built
+
 ## Source Text
 
 - Current Heroes v1.01b rules chapter chunks: `source/rules-v1.01b/chapters/`

@@ -2593,6 +2593,7 @@ export function mountBoardInteractions(store, routes = {}) {
           sourceId: '',
           before: beforeValue,
           after: afterValue,
+          delta: afterValue - beforeValue,
           abilityName: source,
           manual: true,
         });
@@ -17173,6 +17174,7 @@ export function mountBoardInteractions(store, routes = {}) {
           sourceId: payload.sourceId || '',
           before: beforeStamina,
           after: afterStamina,
+          delta,
           damageType: payload.damageType || '',
           abilityName: payload.abilityName || '',
         });
