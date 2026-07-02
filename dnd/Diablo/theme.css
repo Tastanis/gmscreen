@@ -1,0 +1,893 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&display=swap');
+
+/* ==========================================================================
+   Diablo theme — dark gothic stone, bronze-framed slabs, glowing gold text.
+   Modeled on the Diablo II character-select / main-menu UI.
+   ========================================================================== */
+
+body.diablo-theme {
+    /* Re-map shared design tokens to the Diablo palette */
+    --accent: #a8853e;
+    --accent-strong: #d4b46a;
+    --surface: #16130f;
+    --surface-strong: #1d1914;
+    --surface-raised: #24201a;
+    --border: #3c3122;
+    --border-strong: #6e5a33;
+    --text: #b8b0a2;
+    --text-muted: #8d8474;
+    --text-faint: #665f51;
+    --shadow-card: 0 2px 10px rgba(0, 0, 0, 0.7);
+    --shadow-modal: 0 14px 45px rgba(0, 0, 0, 0.9);
+
+    /* Diablo-specific tokens */
+    --d2-gold: #c8a95e;
+    --d2-gold-bright: #f0d68a;
+    --d2-gold-dim: #8a7342;
+    --d2-slab: linear-gradient(180deg, #3a352d 0%, #262119 45%, #16120d 100%);
+    --d2-slab-hover: linear-gradient(180deg, #4a4335 0%, #322a1f 45%, #1d1811 100%);
+    --d2-frame:
+        inset 0 0 0 1px #000,
+        inset 0 0 0 2px #6e5a33,
+        inset 0 0 0 3px #241d12,
+        inset 0 1px 0 3px rgba(255, 255, 255, 0.06);
+    --d2-frame-bright:
+        inset 0 0 0 1px #000,
+        inset 0 0 0 2px #a8853e,
+        inset 0 0 0 3px #2c2416,
+        inset 0 1px 0 3px rgba(255, 255, 255, 0.08);
+
+    font-family: 'Cinzel', 'Palatino Linotype', 'Book Antiqua', serif;
+    background:
+        radial-gradient(ellipse at 50% -12%, rgba(133, 42, 18, 0.28) 0%, rgba(133, 42, 18, 0) 55%),
+        radial-gradient(ellipse at 92% 105%, rgba(120, 58, 16, 0.16) 0%, rgba(120, 58, 16, 0) 45%),
+        radial-gradient(ellipse at 8% 100%, rgba(70, 22, 10, 0.2) 0%, rgba(70, 22, 10, 0) 40%),
+        linear-gradient(180deg, #191510 0%, #100d0a 40%, #070605 100%);
+    background-attachment: fixed;
+    color: var(--text);
+    position: relative;
+    overflow-x: hidden;
+}
+
+/* Stone texture + mortar cracks */
+body.diablo-theme::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background:
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.014) 0px, rgba(255, 255, 255, 0.014) 1px, transparent 1px, transparent 3px),
+        repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.22) 0px, rgba(0, 0, 0, 0.22) 1px, transparent 1px, transparent 90px),
+        repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.22) 0px, rgba(0, 0, 0, 0.22) 1px, transparent 1px, transparent 64px),
+        radial-gradient(circle at 30% 42%, rgba(255, 255, 255, 0.015) 0%, transparent 30%),
+        radial-gradient(circle at 72% 68%, rgba(255, 255, 255, 0.012) 0%, transparent 26%);
+    z-index: -1;
+}
+
+/* Heavy vignette closing in on the edges */
+body.diablo-theme::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background:
+        radial-gradient(ellipse at 50% 45%, rgba(0, 0, 0, 0) 42%, rgba(0, 0, 0, 0.55) 88%, rgba(0, 0, 0, 0.8) 100%),
+        linear-gradient(to top, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0) 22%);
+    z-index: 0;
+}
+
+body.diablo-theme .main-container,
+body.diablo-theme .top-nav {
+    position: relative;
+    z-index: 1;
+}
+
+/* Rising embers (spawned by Diablo/theme.js) */
+.diablo-ember {
+    position: fixed;
+    bottom: -12px;
+    left: var(--ember-left, 50vw);
+    width: var(--ember-size, 5px);
+    height: var(--ember-size, 5px);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 2;
+    background: radial-gradient(circle at 40% 40%, #ffe9a8 0%, #ffab45 40%, rgba(255, 92, 20, 0.55) 65%, rgba(255, 60, 10, 0) 100%);
+    box-shadow: 0 0 6px 1px rgba(255, 140, 50, 0.55);
+    opacity: 0;
+    animation: diablo-ember-rise var(--ember-duration, 9s) linear forwards;
+}
+
+@keyframes diablo-ember-rise {
+    0% {
+        opacity: 0;
+        transform: translate(0, 0) scale(1);
+    }
+    8% {
+        opacity: var(--ember-opacity, 0.85);
+    }
+    45% {
+        opacity: var(--ember-opacity, 0.85);
+        transform: translate(var(--ember-drift, 2rem), -42vh) scale(0.9);
+    }
+    75% {
+        opacity: 0.5;
+        transform: translate(calc(var(--ember-drift, 2rem) * 0.4), -68vh) scale(0.7);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(var(--ember-drift, 2rem), -92vh) scale(0.4);
+    }
+}
+
+/* --------------------------------------------------------------------------
+   Top navigation — dark iron bar with gold-framed slab buttons
+   -------------------------------------------------------------------------- */
+
+body.diablo-theme .top-nav {
+    background: linear-gradient(180deg, #211c15 0%, #14100b 100%);
+    border-bottom: 1px solid #000;
+    box-shadow:
+        inset 0 -1px 0 rgba(168, 133, 62, 0.35),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05),
+        0 6px 22px rgba(0, 0, 0, 0.85);
+}
+
+body.diablo-theme .nav-title {
+    font-family: 'Cinzel', serif;
+    font-weight: 800;
+    color: var(--d2-gold);
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    text-shadow:
+        0 0 14px rgba(200, 169, 94, 0.35),
+        0 2px 3px rgba(0, 0, 0, 0.9);
+}
+
+body.diablo-theme .nav-buttons .nav-btn,
+body.diablo-theme .nav-btn {
+    font-family: 'Cinzel', serif;
+    background: var(--d2-slab);
+    color: var(--d2-gold);
+    border: 1px solid #000;
+    border-radius: 2px;
+    box-shadow: var(--d2-frame), 0 2px 6px rgba(0, 0, 0, 0.8);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-weight: 700;
+    text-shadow: 0 0 8px rgba(200, 169, 94, 0.28), 0 1px 2px #000;
+}
+
+body.diablo-theme .nav-buttons .nav-btn:hover,
+body.diablo-theme .nav-btn:hover {
+    background: var(--d2-slab-hover);
+    color: var(--d2-gold-bright);
+    box-shadow: var(--d2-frame-bright), 0 2px 8px rgba(0, 0, 0, 0.85);
+    text-shadow: 0 0 12px rgba(240, 214, 138, 0.6), 0 1px 2px #000;
+    transform: none;
+}
+
+body.diablo-theme .nav-btn.logout-btn {
+    background: linear-gradient(180deg, #3d1712 0%, #240d09 55%, #140605 100%);
+    color: #d8a08a;
+    border-color: #000;
+    box-shadow:
+        inset 0 0 0 1px #000,
+        inset 0 0 0 2px #6e3a28,
+        inset 0 0 0 3px #1d0f0a,
+        0 2px 6px rgba(0, 0, 0, 0.8);
+}
+
+body.diablo-theme .nav-btn.logout-btn:hover {
+    background: linear-gradient(180deg, #55201a 0%, #33120c 55%, #1c0907 100%);
+    color: #f2c3ac;
+    text-shadow: 0 0 12px rgba(255, 120, 70, 0.55), 0 1px 2px #000;
+}
+
+body.diablo-theme #theme-toggle-btn.theme-active {
+    color: var(--d2-gold-bright);
+    box-shadow: var(--d2-frame-bright), 0 0 14px rgba(200, 169, 94, 0.25), 0 2px 6px rgba(0, 0, 0, 0.8);
+}
+
+/* Dropdown menus — dark panel, gold hover rows */
+body.diablo-theme .dropdown-content {
+    background: linear-gradient(180deg, #1b1712 0%, #100d09 100%);
+    border: 1px solid #000;
+    border-radius: 2px;
+    box-shadow: var(--d2-frame), 0 18px 40px rgba(0, 0, 0, 0.9);
+    padding: 4px;
+}
+
+body.diablo-theme .dropdown-content a {
+    font-family: 'Cinzel', serif;
+    color: var(--text);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+    font-size: 12px;
+    border-radius: 0;
+}
+
+body.diablo-theme .dropdown-content a:hover {
+    background: linear-gradient(90deg, rgba(200, 169, 94, 0.16) 0%, rgba(200, 169, 94, 0.05) 100%);
+    color: var(--d2-gold-bright);
+    text-shadow: 0 0 8px rgba(240, 214, 138, 0.45);
+}
+
+body.diablo-theme .dropdown-content a.access-restricted,
+body.diablo-theme .access-restricted {
+    color: var(--text-faint);
+}
+
+/* --------------------------------------------------------------------------
+   Character tabs — the character-select roster slats
+   -------------------------------------------------------------------------- */
+
+body.diablo-theme .character-tabs {
+    background: linear-gradient(180deg, #17130e 0%, #0e0b08 100%);
+    border: 1px solid #000;
+    border-radius: 2px 2px 0 0;
+    box-shadow: var(--d2-frame), 0 10px 30px rgba(0, 0, 0, 0.7);
+    padding: 4px;
+    gap: 4px;
+}
+
+body.diablo-theme .character-tab {
+    font-family: 'Cinzel', serif;
+    background: linear-gradient(180deg, #2b261f 0%, #1a1610 55%, #100d09 100%);
+    color: var(--text-muted);
+    border: 1px solid #000;
+    border-radius: 2px;
+    box-shadow:
+        inset 0 0 0 1px rgba(110, 90, 51, 0.35),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    text-shadow: 0 1px 2px #000;
+}
+
+body.diablo-theme .character-tab:hover {
+    color: var(--d2-gold);
+    background: linear-gradient(180deg, #363028 0%, #221c14 55%, #14100b 100%);
+    text-shadow: 0 0 8px rgba(200, 169, 94, 0.4), 0 1px 2px #000;
+}
+
+body.diablo-theme .character-tab.active {
+    background: linear-gradient(180deg, #3d362b 0%, #292217 55%, #181209 100%);
+    color: var(--d2-gold-bright);
+    border-color: #000;
+    box-shadow:
+        inset 0 0 0 1px #c8a95e,
+        inset 0 0 0 2px #241d12,
+        inset 0 0 12px rgba(200, 169, 94, 0.18);
+    text-shadow: 0 0 12px rgba(240, 214, 138, 0.55), 0 1px 2px #000;
+}
+
+/* Section tabs */
+body.diablo-theme .section-tabs {
+    background: linear-gradient(180deg, #14110d 0%, #0d0b08 100%);
+    border-bottom: 1px solid #000;
+    box-shadow: inset 0 -1px 0 rgba(110, 90, 51, 0.4);
+}
+
+body.diablo-theme .section-tab {
+    font-family: 'Cinzel', serif;
+    background: linear-gradient(180deg, #241f18 0%, #16120d 100%);
+    color: var(--text-muted);
+    border: 1px solid #000;
+    border-bottom: none;
+    border-radius: 2px 2px 0 0;
+    box-shadow: inset 0 0 0 1px rgba(110, 90, 51, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 12px;
+    text-shadow: 0 1px 2px #000;
+}
+
+body.diablo-theme .section-tab:hover {
+    color: var(--d2-gold);
+    background: linear-gradient(180deg, #2e2820 0%, #1c1711 100%);
+    text-shadow: 0 0 8px rgba(200, 169, 94, 0.35), 0 1px 2px #000;
+}
+
+body.diablo-theme .section-tab.active {
+    background: linear-gradient(180deg, #383126 0%, #241e15 100%);
+    color: var(--d2-gold-bright);
+    box-shadow:
+        inset 0 0 0 1px #a8853e,
+        inset 0 0 10px rgba(200, 169, 94, 0.14);
+    text-shadow: 0 0 10px rgba(240, 214, 138, 0.5), 0 1px 2px #000;
+}
+
+/* --------------------------------------------------------------------------
+   Main panel — bronze-framed dark stone
+   -------------------------------------------------------------------------- */
+
+body.diablo-theme .content-wrapper {
+    background:
+        radial-gradient(ellipse at 50% 0%, rgba(200, 169, 94, 0.045) 0%, rgba(200, 169, 94, 0) 45%),
+        linear-gradient(180deg, #191510 0%, #110e0a 100%);
+    border: 1px solid #000;
+    border-radius: 0 0 3px 3px;
+    box-shadow: var(--d2-frame), 0 24px 55px rgba(0, 0, 0, 0.8);
+}
+
+body.diablo-theme .section h2,
+body.diablo-theme .character-details h2,
+body.diablo-theme .section-header h2 {
+    font-family: 'Cinzel', serif;
+    font-weight: 800;
+    color: var(--d2-gold);
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    border-bottom: 1px solid rgba(110, 90, 51, 0.55);
+    text-shadow: 0 0 12px rgba(200, 169, 94, 0.3), 0 2px 3px #000;
+}
+
+body.diablo-theme .character-details h2::after,
+body.diablo-theme .classes-section > h2::after {
+    background: linear-gradient(90deg, rgba(200, 169, 94, 0.85), rgba(200, 169, 94, 0));
+}
+
+/* Labels — gold like D2 stat headers; values gray like item text */
+body.diablo-theme .form-group label,
+body.diablo-theme .character-details .form-group label,
+body.diablo-theme .classes-section .form-group label,
+body.diablo-theme .clubs-section .club-form .form-group label {
+    font-family: 'Cinzel', serif;
+    color: var(--d2-gold);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 12px;
+    text-shadow: 0 1px 2px #000;
+}
+
+body.diablo-theme input,
+body.diablo-theme textarea,
+body.diablo-theme select {
+    background: linear-gradient(180deg, #0c0a07 0%, #12100b 100%);
+    border: 1px solid #000;
+    border-radius: 2px;
+    box-shadow:
+        inset 0 0 0 1px rgba(110, 90, 51, 0.4),
+        inset 0 2px 6px rgba(0, 0, 0, 0.8);
+    color: #cfc6b4;
+    caret-color: var(--d2-gold-bright);
+}
+
+body.diablo-theme input:focus,
+body.diablo-theme textarea:focus,
+body.diablo-theme select:focus {
+    border-color: #000;
+    outline: none;
+    box-shadow:
+        inset 0 0 0 1px #a8853e,
+        inset 0 2px 6px rgba(0, 0, 0, 0.8),
+        0 0 10px rgba(200, 169, 94, 0.25);
+}
+
+body.diablo-theme input::placeholder,
+body.diablo-theme textarea::placeholder {
+    color: var(--text-faint);
+}
+
+body.diablo-theme .readonly-field,
+body.diablo-theme .form-group .readonly-field {
+    background: rgba(12, 10, 7, 0.7);
+    border: 1px solid rgba(110, 90, 51, 0.3);
+    border-radius: 2px;
+    color: var(--text);
+}
+
+/* --------------------------------------------------------------------------
+   Buttons — engraved stone slabs
+   -------------------------------------------------------------------------- */
+
+body.diablo-theme .btn-primary,
+body.diablo-theme .btn-secondary,
+body.diablo-theme .btn-add,
+body.diablo-theme .upload-btn,
+body.diablo-theme .btn-save,
+body.diablo-theme .btn-backup,
+body.diablo-theme .club-navigation button {
+    font-family: 'Cinzel', serif;
+    background: var(--d2-slab);
+    color: var(--d2-gold);
+    border: 1px solid #000;
+    border-radius: 2px;
+    box-shadow: var(--d2-frame), 0 2px 6px rgba(0, 0, 0, 0.8);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 700;
+    text-shadow: 0 0 8px rgba(200, 169, 94, 0.28), 0 1px 2px #000;
+}
+
+body.diablo-theme .btn-primary:hover,
+body.diablo-theme .btn-secondary:hover,
+body.diablo-theme .btn-add:hover,
+body.diablo-theme .upload-btn:hover,
+body.diablo-theme .btn-save:hover,
+body.diablo-theme .btn-backup:hover,
+body.diablo-theme .club-navigation button:hover:not(:disabled) {
+    background: var(--d2-slab-hover);
+    color: var(--d2-gold-bright);
+    box-shadow: var(--d2-frame-bright), 0 2px 8px rgba(0, 0, 0, 0.85);
+    text-shadow: 0 0 12px rgba(240, 214, 138, 0.6), 0 1px 2px #000;
+    transform: none;
+}
+
+body.diablo-theme .club-navigation button:disabled {
+    background: linear-gradient(180deg, #1c1913 0%, #100e0a 100%);
+    color: var(--text-faint);
+    text-shadow: none;
+    box-shadow: inset 0 0 0 1px rgba(110, 90, 51, 0.2);
+}
+
+body.diablo-theme .btn-danger {
+    font-family: 'Cinzel', serif;
+    background: linear-gradient(180deg, #3d1712 0%, #240d09 55%, #140605 100%);
+    color: #d8a08a;
+    border: 1px solid #000;
+    border-radius: 2px;
+    box-shadow:
+        inset 0 0 0 1px #000,
+        inset 0 0 0 2px #6e3a28,
+        inset 0 0 0 3px #1d0f0a,
+        0 2px 6px rgba(0, 0, 0, 0.8);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 700;
+    text-shadow: 0 1px 2px #000;
+}
+
+body.diablo-theme .btn-danger:hover {
+    background: linear-gradient(180deg, #55201a 0%, #33120c 55%, #1c0907 100%);
+    color: #f2c3ac;
+    text-shadow: 0 0 12px rgba(255, 120, 70, 0.55), 0 1px 2px #000;
+}
+
+/* --------------------------------------------------------------------------
+   Portrait, cards, list entries
+   -------------------------------------------------------------------------- */
+
+body.diablo-theme .portrait-frame {
+    background: radial-gradient(ellipse at 50% 30%, #1e1a13 0%, #0c0a07 100%);
+    border: 1px solid #000;
+    border-radius: 2px;
+    box-shadow: var(--d2-frame), 0 8px 24px rgba(0, 0, 0, 0.7);
+}
+
+body.diablo-theme .portrait-placeholder {
+    font-family: 'Cinzel', serif;
+    color: var(--text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+}
+
+body.diablo-theme .relationship-entry,
+body.diablo-theme .card,
+body.diablo-theme .past-class-item,
+body.diablo-theme .project-entry {
+    background: linear-gradient(180deg, #1d1912 0%, #12100b 100%);
+    border: 1px solid #000;
+    border-radius: 2px;
+    box-shadow:
+        inset 0 0 0 1px rgba(110, 90, 51, 0.32),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04),
+        0 4px 12px rgba(0, 0, 0, 0.55);
+}
+
+body.diablo-theme .relationship-entry:hover,
+body.diablo-theme .card:hover,
+body.diablo-theme .past-class-item:hover,
+body.diablo-theme .project-entry:hover {
+    border-color: #000;
+    box-shadow:
+        inset 0 0 0 1px rgba(200, 169, 94, 0.75),
+        inset 0 0 12px rgba(200, 169, 94, 0.12),
+        0 6px 16px rgba(0, 0, 0, 0.65);
+    transform: none;
+}
+
+body.diablo-theme .relationship-entry strong,
+body.diablo-theme .card strong,
+body.diablo-theme .detail-row strong {
+    color: var(--d2-gold);
+}
+
+/* --------------------------------------------------------------------------
+   Modal — gothic dialog panel
+   -------------------------------------------------------------------------- */
+
+body.diablo-theme .modal-content {
+    background:
+        radial-gradient(ellipse at 50% 0%, rgba(200, 169, 94, 0.05) 0%, rgba(200, 169, 94, 0) 50%),
+        linear-gradient(180deg, #1b1712 0%, #100d09 100%);
+    border: 1px solid #000;
+    border-radius: 3px;
+    box-shadow: var(--d2-frame), 0 30px 80px rgba(0, 0, 0, 0.95);
+    color: var(--text);
+}
+
+body.diablo-theme .modal-content h2 {
+    font-family: 'Cinzel', serif;
+    color: var(--d2-gold);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    text-shadow: 0 0 12px rgba(200, 169, 94, 0.3), 0 2px 3px #000;
+}
+
+body.diablo-theme .close {
+    color: var(--d2-gold-dim);
+}
+
+body.diablo-theme .close:hover {
+    color: var(--d2-gold-bright);
+    text-shadow: 0 0 10px rgba(240, 214, 138, 0.6);
+}
+
+/* --------------------------------------------------------------------------
+   Chat panel
+   -------------------------------------------------------------------------- */
+
+body.diablo-theme .chat-panel {
+    background: linear-gradient(180deg, #17130e 0%, #0d0b08 100%);
+    border: 1px solid #000;
+    box-shadow: var(--d2-frame), 0 18px 45px rgba(0, 0, 0, 0.85);
+    color: var(--text);
+}
+
+body.diablo-theme .chat-panel__header {
+    background: linear-gradient(180deg, #241f17 0%, #16120d 100%);
+    border-bottom: 1px solid rgba(110, 90, 51, 0.45);
+}
+
+body.diablo-theme .chat-panel__title {
+    font-family: 'Cinzel', serif;
+    color: var(--d2-gold);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    text-shadow: 0 0 10px rgba(200, 169, 94, 0.3), 0 1px 2px #000;
+}
+
+body.diablo-theme .chat-panel-toggle {
+    font-family: 'Cinzel', serif;
+    background: var(--d2-slab);
+    color: var(--d2-gold);
+    border: 1px solid #000;
+    box-shadow: var(--d2-frame), 0 4px 14px rgba(0, 0, 0, 0.7);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    text-shadow: 0 1px 2px #000;
+}
+
+body.diablo-theme .chat-panel-toggle:hover {
+    background: var(--d2-slab-hover);
+    color: var(--d2-gold-bright);
+}
+
+body.diablo-theme .chat-message {
+    background: rgba(20, 17, 12, 0.85);
+    border: 1px solid rgba(110, 90, 51, 0.3);
+    color: var(--text);
+}
+
+body.diablo-theme .chat-message--self {
+    background: rgba(38, 31, 20, 0.9);
+    border-color: rgba(168, 133, 62, 0.45);
+}
+
+body.diablo-theme .chat-message__meta {
+    color: var(--d2-gold-dim);
+}
+
+body.diablo-theme .chat-panel__send,
+body.diablo-theme .chat-panel__clear {
+    font-family: 'Cinzel', serif;
+    background: var(--d2-slab);
+    color: var(--d2-gold);
+    border: 1px solid #000;
+    box-shadow: var(--d2-frame);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    text-shadow: 0 1px 2px #000;
+}
+
+body.diablo-theme .chat-panel__send:hover,
+body.diablo-theme .chat-panel__clear:hover {
+    background: var(--d2-slab-hover);
+    color: var(--d2-gold-bright);
+}
+
+/* --------------------------------------------------------------------------
+   Autocomplete, save status, scrollbars, misc
+   -------------------------------------------------------------------------- */
+
+body.diablo-theme .character-autocomplete {
+    background: linear-gradient(180deg, #1b1712 0%, #100d09 100%);
+    border: 1px solid #000;
+    box-shadow: var(--d2-frame), 0 18px 40px rgba(0, 0, 0, 0.9);
+}
+
+body.diablo-theme .autocomplete-item {
+    color: var(--text);
+    border-bottom: 1px solid rgba(110, 90, 51, 0.2);
+}
+
+body.diablo-theme .autocomplete-item:hover,
+body.diablo-theme .autocomplete-item.selected {
+    background: rgba(200, 169, 94, 0.14);
+    color: var(--d2-gold-bright);
+}
+
+body.diablo-theme .save-status.success {
+    background: rgba(30, 42, 22, 0.9);
+    color: #a4c87e;
+    border: 1px solid rgba(120, 160, 80, 0.4);
+}
+
+body.diablo-theme .save-status.error {
+    background: rgba(50, 16, 12, 0.9);
+    color: #e08a70;
+    border: 1px solid rgba(180, 80, 50, 0.45);
+}
+
+body.diablo-theme .save-status.saving {
+    background: rgba(40, 33, 20, 0.9);
+    color: var(--d2-gold);
+    border: 1px solid rgba(168, 133, 62, 0.4);
+}
+
+body.diablo-theme ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+
+body.diablo-theme ::-webkit-scrollbar-track {
+    background: #0c0a07;
+    border: 1px solid rgba(110, 90, 51, 0.25);
+}
+
+body.diablo-theme ::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #3a352d 0%, #241f17 100%);
+    border: 1px solid #000;
+    box-shadow: inset 0 0 0 1px rgba(110, 90, 51, 0.5);
+    border-radius: 2px;
+}
+
+body.diablo-theme ::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #4a4335 0%, #322a1f 100%);
+}
+
+body.diablo-theme .version-footer,
+body.diablo-theme .tab-description {
+    color: var(--text-faint);
+}
+
+body.diablo-theme .schedule-table th {
+    background: rgba(200, 169, 94, 0.12);
+    color: var(--d2-gold);
+}
+
+body.diablo-theme .schedule-table td {
+    background: rgba(18, 15, 11, 0.85);
+    color: var(--text);
+}
+
+body.diablo-theme .schedule-table tr:nth-child(even) td {
+    background: rgba(26, 22, 16, 0.85);
+}
+
+body.diablo-theme .schedule-table tr:hover td {
+    background: rgba(200, 169, 94, 0.12);
+}
+
+/* ==========================================================================
+   High-specificity overrides for the scoped "stone tablet" section styles
+   in css/style.css (.classes-section .form-group input, etc.). The repeated
+   .diablo-theme class is intentional — it out-ranks those scoped selectors.
+   ========================================================================== */
+
+/* Section panels — dark stone slabs instead of tan tablets */
+body.diablo-theme .character-section,
+body.diablo-theme .classes-section,
+body.diablo-theme .past-classes-section,
+body.diablo-theme .relationships-section,
+body.diablo-theme .projects-section,
+body.diablo-theme .clubs-section,
+body.diablo-theme .job-section {
+    background:
+        radial-gradient(ellipse at 50% 0%, rgba(200, 169, 94, 0.05) 0%, rgba(200, 169, 94, 0) 55%),
+        linear-gradient(180deg, #1c1812 0%, #120f0b 100%);
+    border: 1px solid #000;
+    box-shadow:
+        inset 0 0 0 1px rgba(110, 90, 51, 0.4),
+        inset 0 1px 0 1px rgba(255, 255, 255, 0.04),
+        0 8px 24px rgba(0, 0, 0, 0.6);
+}
+
+body.diablo-theme .character-section .portrait-section {
+    background: linear-gradient(180deg, rgba(35, 29, 21, 0.75) 0%, rgba(18, 15, 11, 0.75) 100%);
+    border: 1px solid rgba(110, 90, 51, 0.35);
+}
+
+/* Section headings and divider flourishes */
+body.diablo-theme .classes-section > h2,
+body.diablo-theme .past-classes-section > h2,
+body.diablo-theme .job-section > h2,
+body.diablo-theme .relationships-section .section-header h2,
+body.diablo-theme .projects-section .section-header h2,
+body.diablo-theme .clubs-section .section-header h2 {
+    font-family: 'Cinzel', serif;
+    font-weight: 800;
+    color: var(--d2-gold);
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    text-shadow: 0 0 12px rgba(200, 169, 94, 0.3), 0 2px 3px #000;
+}
+
+body.diablo-theme .section > h2::after,
+body.diablo-theme .past-classes-section > h2::after,
+body.diablo-theme .job-section > h2::after {
+    background: linear-gradient(90deg, rgba(200, 169, 94, 0.85), rgba(200, 169, 94, 0)) !important;
+}
+
+/* Field labels — engraved bronze name plates */
+body.diablo-theme.diablo-theme.diablo-theme .form-group label {
+    font-family: 'Cinzel', serif;
+    background: linear-gradient(180deg, rgba(58, 48, 33, 0.95) 0%, rgba(28, 23, 16, 0.95) 100%);
+    border: 1px solid #000;
+    box-shadow: inset 0 0 0 1px rgba(110, 90, 51, 0.5), inset 0 1px 0 1px rgba(255, 255, 255, 0.05);
+    color: var(--d2-gold);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 12px;
+    text-shadow: 0 1px 2px #000;
+}
+
+/* Inputs / textareas — dark recessed engravings */
+body.diablo-theme.diablo-theme.diablo-theme input,
+body.diablo-theme.diablo-theme.diablo-theme textarea,
+body.diablo-theme.diablo-theme.diablo-theme select {
+    background: linear-gradient(180deg, #0c0a07 0%, #14110c 100%);
+    border: 1px solid #000;
+    box-shadow:
+        inset 0 0 0 1px rgba(110, 90, 51, 0.45),
+        inset 0 2px 6px rgba(0, 0, 0, 0.8);
+    color: #cfc6b4;
+}
+
+body.diablo-theme.diablo-theme.diablo-theme input:focus,
+body.diablo-theme.diablo-theme.diablo-theme textarea:focus,
+body.diablo-theme.diablo-theme.diablo-theme select:focus {
+    background: linear-gradient(180deg, #0f0c08 0%, #17130d 100%);
+    border-color: #000;
+    box-shadow:
+        inset 0 0 0 1px #a8853e,
+        inset 0 2px 6px rgba(0, 0, 0, 0.8),
+        0 0 10px rgba(200, 169, 94, 0.25);
+}
+
+body.diablo-theme.diablo-theme.diablo-theme .readonly-field,
+body.diablo-theme.diablo-theme.diablo-theme .readonly-field.readonly-textarea {
+    background: linear-gradient(180deg, rgba(14, 12, 8, 0.85) 0%, rgba(22, 18, 13, 0.85) 100%);
+    border: 1px solid rgba(110, 90, 51, 0.35);
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
+    color: var(--text);
+}
+
+body.diablo-theme.diablo-theme.diablo-theme .form-group .points-history {
+    background: rgba(12, 10, 7, 0.7);
+    border: 1px solid rgba(110, 90, 51, 0.3);
+    color: var(--text-muted);
+}
+
+/* Collapsible list items — relationships, projects, past classes */
+body.diablo-theme .relationship-item,
+body.diablo-theme .project-item,
+body.diablo-theme .past-classes-section .past-class-item {
+    background: linear-gradient(180deg, #221d15 0%, #14110c 100%);
+    border: 1px solid #000;
+    box-shadow:
+        inset 0 0 0 1px rgba(110, 90, 51, 0.35),
+        inset 0 1px 0 1px rgba(255, 255, 255, 0.04),
+        0 4px 12px rgba(0, 0, 0, 0.55);
+}
+
+body.diablo-theme .past-classes-section .past-class-item:hover {
+    background: linear-gradient(180deg, #2b251b 0%, #1a1610 100%);
+    box-shadow:
+        inset 0 0 0 1px rgba(200, 169, 94, 0.7),
+        inset 0 0 12px rgba(200, 169, 94, 0.12),
+        0 6px 16px rgba(0, 0, 0, 0.65);
+}
+
+body.diablo-theme .relationship-header,
+body.diablo-theme .project-header {
+    background: linear-gradient(180deg, #2b251b 0%, #191510 100%);
+    border-bottom: 1px solid rgba(110, 90, 51, 0.35);
+}
+
+body.diablo-theme .relationship-header:hover,
+body.diablo-theme .project-header:hover {
+    background: linear-gradient(180deg, #363028 0%, #211b13 100%);
+}
+
+body.diablo-theme .relationship-details,
+body.diablo-theme .project-details {
+    background: linear-gradient(180deg, #191510 0%, #100d09 100%);
+}
+
+body.diablo-theme .relationship-header h3,
+body.diablo-theme .project-header h3,
+body.diablo-theme .past-classes-section .past-class-item h3 {
+    font-family: 'Cinzel', serif;
+    color: var(--d2-gold);
+    letter-spacing: 0.06em;
+    text-shadow: 0 0 8px rgba(200, 169, 94, 0.25), 0 1px 2px #000;
+}
+
+body.diablo-theme .past-classes-section .past-class-item p,
+body.diablo-theme .relationship-points,
+body.diablo-theme .progress-text {
+    color: var(--text-muted);
+    text-shadow: 0 1px 2px #000;
+}
+
+body.diablo-theme .relationships-section .relationship-points {
+    background: rgba(12, 10, 7, 0.7);
+    border: 1px solid rgba(110, 90, 51, 0.35);
+    color: var(--d2-gold);
+}
+
+/* Progress bars — smoldering ember fill */
+body.diablo-theme .progress-bar,
+body.diablo-theme .projects-section .progress-bar {
+    background: linear-gradient(180deg, #0c0a07 0%, #16120d 100%);
+    border: 1px solid #000;
+    box-shadow: inset 0 0 0 1px rgba(110, 90, 51, 0.4), inset 0 2px 5px rgba(0, 0, 0, 0.8);
+}
+
+body.diablo-theme .progress-fill,
+body.diablo-theme .projects-section .progress-fill {
+    background: linear-gradient(90deg, #6e1c0e 0%, #a84a18 55%, #d49a3a 100%);
+    box-shadow: 0 0 10px rgba(212, 132, 42, 0.45);
+}
+
+/* Clubs */
+body.diablo-theme .clubs-section .club-form {
+    background: linear-gradient(180deg, rgba(35, 29, 21, 0.55) 0%, rgba(18, 15, 11, 0.55) 100%);
+    border: 1px solid rgba(110, 90, 51, 0.3);
+}
+
+body.diablo-theme #club-indicator {
+    font-family: 'Cinzel', serif;
+    background: linear-gradient(180deg, #2b251b 0%, #16120d 100%);
+    border: 1px solid #000;
+    box-shadow: inset 0 0 0 1px rgba(110, 90, 51, 0.45);
+    color: var(--d2-gold);
+    text-shadow: 0 1px 2px #000;
+}
+
+/* Project roll button (blue in base theme) — recast as a slab */
+body.diablo-theme .projects-section .btn-project-roll {
+    font-family: 'Cinzel', serif;
+    background: var(--d2-slab);
+    color: var(--d2-gold);
+    border: 1px solid #000;
+    border-radius: 2px;
+    box-shadow: var(--d2-frame), 0 2px 6px rgba(0, 0, 0, 0.8);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    text-shadow: 0 1px 2px #000;
+}
+
+body.diablo-theme .projects-section .btn-project-roll:hover {
+    background: var(--d2-slab-hover);
+    color: var(--d2-gold-bright);
+    text-shadow: 0 0 12px rgba(240, 214, 138, 0.6), 0 1px 2px #000;
+}
+
+body.diablo-theme .expand-icon {
+    color: var(--d2-gold-dim);
+}

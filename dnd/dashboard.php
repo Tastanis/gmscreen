@@ -869,6 +869,7 @@ $currentCharacter = $is_gm ? 'cal' : $user; // GM starts viewing Cal, players se
     <link rel="stylesheet" href="Halloween/theme.css" id="halloween-theme" disabled>
     <link rel="stylesheet" href="Christmas/theme.css" id="christmas-theme" disabled>
     <link rel="stylesheet" href="Cal/theme.css" id="cal-theme" disabled>
+    <link rel="stylesheet" href="Diablo/theme.css" id="diablo-theme" disabled>
 <?php if ($chatPusherConfig !== null): ?>
     <script src="https://js.pusher.com/8.4.0/pusher.min.js"></script>
 <?php endif; ?>
@@ -1552,6 +1553,7 @@ $currentCharacter = $is_gm ? 'cal' : $user; // GM starts viewing Cal, players se
     <script src="Halloween/theme.js" defer></script>
     <script src="Christmas/theme.js" defer></script>
     <script src="Cal/theme.js" defer></script>
+    <script src="Diablo/theme.js" defer></script>
     <script src="strixhaven/gm/js/character-lookup.js"></script>
     <script src="js/character-sheet.js"></script>
     <script src="js/relationship-autocomplete.js"></script>

@@ -21,6 +21,12 @@
             className: 'cal-theme',
             linkId: 'cal-theme',
             label: 'Cal'
+        },
+        {
+            name: 'diablo',
+            className: 'diablo-theme',
+            linkId: 'diablo-theme',
+            label: 'Diablo'
         }
     ];
 
