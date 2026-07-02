@@ -51,3 +51,35 @@ test('normalizePlacementEntry omits levelId when absent', () => {
 
   assert.equal(Object.hasOwn(placement, 'levelId'), false);
 });
+
+test('normalizePlacementEntry preserves monsterTriggerHooks on stripped placements', () => {
+  const placement = normalizePlacementEntry({
+    id: 'enemy-1',
+    name: 'Render',
+    monsterTriggerHooks: [
+      {
+        category: 'triggered_action',
+        name: "Squanderer's Mark",
+        resourceCost: '',
+        blocks: [{ type: 'trigger', match: { event: 'forcedMovement' }, effects: [] }],
+      },
+    ],
+  });
+
+  assert.equal(Array.isArray(placement.monsterTriggerHooks), true);
+  assert.equal(placement.monsterTriggerHooks[0].name, "Squanderer's Mark");
+});
+
+test('normalizePlacementEntry drops monsterTriggerHooks when full monster is present', () => {
+  const placement = normalizePlacementEntry({
+    id: 'enemy-1',
+    name: 'Render',
+    monster: { id: 'render-1', name: 'Render' },
+    monsterTriggerHooks: [
+      { category: 'triggered_action', name: 'Stale Hook', resourceCost: '', blocks: [] },
+    ],
+  });
+
+  assert.equal(placement.monster.name, 'Render');
+  assert.equal(Object.hasOwn(placement, 'monsterTriggerHooks'), false);
+});

@@ -6,11 +6,11 @@
 |---|---|
 | Make a class ability JSON | `source/rules-v1.01b/classes/<class>.md`, then `../character_sheet/ability-automation/AUTHORING.md`, then `../character_sheet/ability-automation/REGISTRY.md` |
 | Make a monster import JSON | `source/monsters/INDEX.md`, one monster chunk, then `../strixhaven/monster-creator/MONSTER_JSON_IMPORT_TEMPLATE.md` |
-| Add automation to an existing monster ability | Monster chunk, `vtt-json/INDEX.md`, `hooks/INDEX.md`, and the current ability row in the monster creator data/code |
-| Check whether an effect/hook exists | `../character_sheet/ability-automation/REGISTRY.md`, then `hooks/INDEX.md` |
+| Add automation to an existing monster ability | `hooks/monster-automation.md`, then the monster chunk, then `../character_sheet/ability-automation/REGISTRY.md` for exact field shapes |
+| Check whether an effect/hook exists | `../character_sheet/ability-automation/REGISTRY.md`, then `hooks/INDEX.md` (monsters: `hooks/monster-automation.md`) |
 | Update automation schema/runtime | `UPDATE-GUIDE.md`, `../character_sheet/ability-automation/README.md`, `AUTHORING.md`, and `REGISTRY.md` |
 | Add heroic resource automation | `source/rules-v1.01b/classes/<class>.md`, then `../character_sheet/heroic-resource-automation/README.md`, then VTT event hooks in `../vtt/assets/js/ui/board-interactions.js` |
-| Work on monster tray/runtime behavior | `vtt-json/INDEX.md`, `hooks/INDEX.md`, `../vtt/assets/js/ui/monster-ability-tray.js`, `../vtt/assets/js/ui/monster-ability-runner-glue.js` |
+| Work on monster tray/runtime behavior | `hooks/monster-automation.md`, `vtt-json/INDEX.md`, `../vtt/assets/js/ui/monster-ability-tray.js`, `../vtt/assets/js/ui/monster-ability-runner-glue.js` |
 
 ## Character Automations
 

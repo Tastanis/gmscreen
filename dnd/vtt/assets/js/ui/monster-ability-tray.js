@@ -469,6 +469,20 @@
         render();
     }
 
+    // Re-render when this monster's trigger-ready state changes so the ready
+    // highlight appears/clears without reselecting the token. Pull a fresh
+    // placement from the store — the tray's copy is a snapshot from openFor.
+    document.addEventListener('vtt:trigger-state-changed', function (event) {
+        var placementId = event && event.detail ? event.detail.placementId : '';
+        if (!state.placement || !placementId || state.placement.id !== placementId) return;
+        var board = window.VTTBoardCallbacks;
+        if (board && typeof board.getPlacementById === 'function') {
+            var fresh = board.getPlacementById(placementId);
+            if (fresh) state.placement = fresh;
+        }
+        render();
+    });
+
     window.MonsterAbilityTray = {
         openFor: openFor,
         close: close

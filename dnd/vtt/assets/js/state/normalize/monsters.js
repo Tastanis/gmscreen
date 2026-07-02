@@ -308,6 +308,44 @@ export function normalizeMonsterAbilityTest(raw) {
   return normalized;
 }
 
+// Authored trigger blocks survive stat-block stripping so player clients can
+// still arm an enemy monster's triggers on their local AbilityTriggerBus —
+// trigger detection happens on the acting client (the player pushing or
+// damaging the monster), not just the GM's. Only what arming needs is kept:
+// category + ability name (the ready-marker id), the malice cost text (free
+// vs. non-free triggered action), and the trigger cards themselves.
+export function extractMonsterTriggerHooks(monster) {
+  const abilities = monster?.abilities && typeof monster.abilities === 'object' ? monster.abilities : null;
+  if (!abilities) {
+    return [];
+  }
+  const categories = ['passive', 'maneuver', 'action', 'triggered_action', 'villain_action', 'malice'];
+  const hooks = [];
+  categories.forEach((category) => {
+    const list = Array.isArray(abilities[category]) ? abilities[category] : [];
+    list.forEach((ability) => {
+      const name = sanitizeMonsterString(ability?.name ?? '');
+      const cards = Array.isArray(ability?.automation?.cards) ? ability.automation.cards : [];
+      if (!name || cards.length === 0) {
+        return;
+      }
+      const blocks = cards.filter(
+        (block) => block && block.type === 'trigger' && block.match && typeof block.match === 'object' && block.match.event
+      );
+      if (blocks.length === 0) {
+        return;
+      }
+      hooks.push({
+        category,
+        name,
+        resourceCost: sanitizeMonsterString(ability?.resource_cost ?? ''),
+        blocks: blocks.map((block) => clonePlainObject(block)),
+      });
+    });
+  });
+  return hooks;
+}
+
 export function stripMonsterSnapshot(entity, options = {}) {
   if (!entity || typeof entity !== 'object') {
     return entity;
@@ -318,6 +356,13 @@ export function stripMonsterSnapshot(entity, options = {}) {
   const canView = allowAllyMonster && canPlayersViewMonsterSnapshot(entity);
 
   if (!canView) {
+    const hookSource =
+      (sanitized.monster && typeof sanitized.monster === 'object' ? sanitized.monster : null) ??
+      (sanitized.metadata?.monster && typeof sanitized.metadata.monster === 'object' ? sanitized.metadata.monster : null);
+    const triggerHooks = extractMonsterTriggerHooks(hookSource);
+    if (triggerHooks.length > 0) {
+      sanitized.monsterTriggerHooks = triggerHooks;
+    }
     const movementSpeed = extractSafeMovementSpeed(sanitized);
     if (movementSpeed !== null) {
       sanitized.traits = {

@@ -163,6 +163,11 @@ export function normalizePlacementEntry(entry) {
 
   if (monster) {
     normalized.monster = monster;
+  } else if (Array.isArray(entry.monsterTriggerHooks) && entry.monsterTriggerHooks.length > 0) {
+    // Player-view placements carry trigger hooks instead of the full stat
+    // block (see stripMonsterSnapshot); keep them through re-normalization so
+    // enemy triggers stay armed on player clients.
+    normalized.monsterTriggerHooks = clonePlainObject(entry.monsterTriggerHooks);
   }
 
   if (Object.keys(traits).length > 0) {

@@ -147,6 +147,14 @@
         var actionId = (placement && placement.id ? placement.id : 'monster') +
             ':' + category + ':' + (ability.name || 'ability');
 
+        // Runner reads action.actionLabel to decide whether firing consumes the
+        // one triggered action per round. Only real (non-free) triggered actions
+        // get the consuming label; every other category stays unlabeled.
+        var isFreeTriggered = String(ability.resource_cost || '').toLowerCase().indexOf('free') !== -1;
+        var actionLabel = category === TRIGGERED_CATEGORY
+            ? (isFreeTriggered ? 'Free Triggered Action' : 'Triggered Action')
+            : '';
+
         var action = {
             id: actionId,
             name: ability.name || 'Ability',
@@ -157,7 +165,8 @@
             description: ability.effect || '',
             range: ability.range || '',
             cost: ability.resource_cost || '',
-            actionKind: category || ''
+            actionKind: category || '',
+            actionLabel: actionLabel
         };
 
         var hero = {
@@ -191,12 +200,16 @@
             action: action,
             hero: hero,
             automation: ability.automation || null,
+            // Runner derives trigger-only behavior from actionType; the monster
+            // category strings ('triggered_action', 'maneuver', ...) map cleanly.
+            actionType: category || '',
             sourceToken: placement || null,
             sourcePlacement: placement || null,
             sourceTraits: traits,
             getAttributeBonus: function (attribute) { return getMonsterAttributeBonus(stats, attribute); },
             getStrongestAttribute: function () { return getStrongestMonsterAttribute(stats); },
             getPotencyThreshold: function () { return 0; },
+            getSkillBonus: function () { return 0; },
             isWinded: function () { return isWindedFromPlacement(placement); },
             postChat: postChat,
             spendResource: spendResource,
@@ -228,6 +241,9 @@
             checkScopedFlag: board.checkScopedFlag,
             setScopedFlag: board.setScopedFlag,
             setAura: board.setAura,
+            showFloatingText: board.showFloatingText,
+            startTurn: board.startTurn,
+            consumeTriggeredAction: board.consumeTriggeredAction,
             getPowerRollSuggestions: board.getPowerRollSuggestions,
             consumeRollRiders: board.consumeRollRiders,
             getPlacementById: board.getPlacementById,
@@ -306,6 +322,16 @@
                     context[key] = options[key];
                 }
             }
+        }
+
+        // Firing a triggered action without a captured trigger payload is a
+        // manual resolution (the GM confirmed the trigger happened). Without
+        // this flag the runner treats structured trigger blocks as arm-only:
+        // it re-registers the listener and executes nothing — the "triggered
+        // actions don't do anything" bug. Ready-trigger resolution from the
+        // tray passes triggerPayload, which takes the resolving path anyway.
+        if (category === TRIGGERED_CATEGORY && !context.triggerPayload) {
+            context.manualTriggerResolution = true;
         }
 
         try {

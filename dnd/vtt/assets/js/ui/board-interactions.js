@@ -5021,11 +5021,82 @@ export function mountBoardInteractions(store, routes = {}) {
     return Boolean(triggerRegister(entry));
   }
 
+  // Monster placements carry their abilities inline (`placement.monster`), so
+  // their authored trigger blocks register synchronously — no sheet fetch.
+  // The abilityId format MUST match the monster tray's getMonsterAbilityTriggerId
+  // (`placementId:category:abilityName`) so the ready "!" highlight lands on the
+  // right tray row and resolution passes the captured trigger payload through.
+  const MONSTER_TRIGGER_CATEGORIES = ['passive', 'maneuver', 'action', 'triggered_action', 'villain_action', 'malice'];
+
+  function collectMonsterTriggerHooksForPlacement(placement) {
+    const monster = placement?.monster && typeof placement.monster === 'object' ? placement.monster : null;
+    const abilities = monster?.abilities && typeof monster.abilities === 'object' ? monster.abilities : null;
+    if (abilities) {
+      const hooks = [];
+      for (const category of MONSTER_TRIGGER_CATEGORIES) {
+        const list = Array.isArray(abilities[category]) ? abilities[category] : [];
+        list.forEach((ability) => {
+          const name = typeof ability?.name === 'string' ? ability.name : '';
+          const cards = Array.isArray(ability?.automation?.cards) ? ability.automation.cards : [];
+          if (!name || !cards.length) return;
+          const blocks = cards.filter((block) => block?.type === 'trigger' && block?.match?.event);
+          if (!blocks.length) return;
+          hooks.push({
+            category,
+            name,
+            resourceCost: String(ability.resource_cost || ''),
+            blocks,
+          });
+        });
+      }
+      return hooks;
+    }
+    // Player clients: enemy stat blocks are stripped from the local store, but
+    // stripMonsterSnapshot preserves the trigger hooks so events caused by
+    // this client (its own moves, damage rolls) still arm enemy triggers.
+    return Array.isArray(placement?.monsterTriggerHooks) ? placement.monsterTriggerHooks : [];
+  }
+
+  function registerMonsterAuthoredTriggersForPlacement(placement) {
+    const placementId = placement?.id || '';
+    if (!placementId) return { registered: 0 };
+    const hooks = collectMonsterTriggerHooksForPlacement(placement);
+    triggerUnregisterAuthoredByToken(placementId);
+    authoredTriggerTokenIds.delete(placementId);
+    let registered = 0;
+    hooks.forEach((hook, hookIndex) => {
+      if (!hook || typeof hook !== 'object' || !hook.name) return;
+      const stableId = `${placementId}:${hook.category}:${hook.name}`;
+      // Only real (non-free) triggered actions consume the monster's one
+      // triggered action per round. Trigger blocks on passives/actions and
+      // triggered actions whose cost says "free" bypass that gate.
+      const isFree = hook.category !== 'triggered_action'
+        || String(hook.resourceCost || '').toLowerCase().includes('free');
+      const actionLabel = isFree ? 'Free Triggered Action' : 'Triggered Action';
+      (Array.isArray(hook.blocks) ? hook.blocks : []).forEach((block) => {
+        const ok = registerAuthoredTriggerBlock({
+          placementId,
+          action: { _stableActionId: stableId, name: hook.name, actionLabel },
+          actionIndex: hookIndex,
+          block,
+        });
+        if (ok) registered += 1;
+      });
+    });
+    if (registered > 0) {
+      authoredTriggerTokenIds.add(placementId);
+    }
+    return { registered };
+  }
+
   async function registerAuthoredTriggersForPlacement(placementOrId) {
     const placement = typeof placementOrId === 'string'
       ? getPlacementFromStore(placementOrId)
       : placementOrId;
     const placementId = placement?.id || (typeof placementOrId === 'string' ? placementOrId : '');
+    if (placement?.monster || Array.isArray(placement?.monsterTriggerHooks)) {
+      return registerMonsterAuthoredTriggersForPlacement(placement);
+    }
     if (!placementId || !isPlayerCharacterPlacement(placement)) {
       return { registered: 0 };
     }
@@ -5065,15 +5136,18 @@ export function mountBoardInteractions(store, routes = {}) {
   async function registerAuthoredTriggersForActiveScene() {
     const state = boardApi.getState?.() ?? {};
     const placements = getActiveScenePlacements(state) || [];
-    const pcPlacements = placements.filter((placement) => placement?.id && isPlayerCharacterPlacement(placement));
-    const activePcIds = new Set(pcPlacements.map((placement) => placement.id));
+    const eligiblePlacements = placements.filter(
+      (placement) => placement?.id
+        && (placement.monster || Array.isArray(placement.monsterTriggerHooks) || isPlayerCharacterPlacement(placement))
+    );
+    const activeIds = new Set(eligiblePlacements.map((placement) => placement.id));
     for (const tokenId of [...authoredTriggerTokenIds]) {
-      if (!activePcIds.has(tokenId)) {
+      if (!activeIds.has(tokenId)) {
         triggerUnregisterAuthoredByToken(tokenId);
         authoredTriggerTokenIds.delete(tokenId);
       }
     }
-    await Promise.all(pcPlacements.map((placement) => registerAuthoredTriggersForPlacement(placement)));
+    await Promise.all(eligiblePlacements.map((placement) => registerAuthoredTriggersForPlacement(placement)));
   }
 
   function scheduleActiveSceneTriggerRegistration() {

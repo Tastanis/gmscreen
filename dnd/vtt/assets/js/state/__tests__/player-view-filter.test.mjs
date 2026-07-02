@@ -237,6 +237,103 @@ test('hidden enemy placement is kept but monster data is stripped', () => {
 });
 
 // ============================================================
+// restrictPlacementsToPlayerView — monster trigger hooks
+// ============================================================
+
+test('enemy placement keeps trigger hooks when stat block is stripped', () => {
+  const placements = {
+    'scene-1': [
+      {
+        id: 'enemy-1',
+        combatTeam: 'enemy',
+        monster: {
+          name: 'Render',
+          hp: 40,
+          abilities: {
+            triggered_action: [
+              {
+                name: "Squanderer's Mark",
+                resource_cost: '',
+                automation: {
+                  cards: [
+                    {
+                      type: 'trigger',
+                      match: { event: 'forcedMovement', filter: { whose: 'self' } },
+                      effects: [{ kind: 'note', text: 'halve the damage' }],
+                    },
+                  ],
+                },
+              },
+            ],
+            action: [
+              { name: 'Claw', automation: { cards: [{ type: 'powerRoll', flatBonus: 2 }] } },
+            ],
+          },
+        },
+      },
+    ],
+  };
+
+  const filtered = restrictPlacementsToPlayerView(placements);
+  const token = filtered['scene-1'][0];
+
+  assert.equal(token.monster, undefined);
+  assert.equal(Array.isArray(token.monsterTriggerHooks), true);
+  assert.equal(token.monsterTriggerHooks.length, 1);
+  assert.equal(token.monsterTriggerHooks[0].category, 'triggered_action');
+  assert.equal(token.monsterTriggerHooks[0].name, "Squanderer's Mark");
+  assert.equal(token.monsterTriggerHooks[0].blocks[0].match.event, 'forcedMovement');
+});
+
+test('enemy placement without trigger blocks gets no trigger hooks field', () => {
+  const placements = {
+    'scene-1': [
+      {
+        id: 'enemy-2',
+        combatTeam: 'enemy',
+        monster: {
+          name: 'Goblin',
+          abilities: {
+            action: [{ name: 'Stab', automation: { cards: [{ type: 'powerRoll', flatBonus: 1 }] } }],
+          },
+        },
+      },
+    ],
+  };
+
+  const filtered = restrictPlacementsToPlayerView(placements);
+  const token = filtered['scene-1'][0];
+
+  assert.equal(token.monster, undefined);
+  assert.equal(token.monsterTriggerHooks, undefined);
+});
+
+test('re-stripping an already-stripped placement preserves existing trigger hooks', () => {
+  const placements = {
+    'scene-1': [
+      {
+        id: 'enemy-3',
+        combatTeam: 'enemy',
+        monsterTriggerHooks: [
+          {
+            category: 'triggered_action',
+            name: 'Tether Down',
+            resourceCost: '',
+            blocks: [{ type: 'trigger', match: { event: 'move' }, effects: [] }],
+          },
+        ],
+      },
+    ],
+  };
+
+  const filtered = restrictPlacementsToPlayerView(placements);
+  const token = filtered['scene-1'][0];
+
+  assert.equal(Array.isArray(token.monsterTriggerHooks), true);
+  assert.equal(token.monsterTriggerHooks[0].name, 'Tether Down');
+});
+
+// ============================================================
 // restrictTokensToPlayerView — token library filtering
 // ============================================================
 

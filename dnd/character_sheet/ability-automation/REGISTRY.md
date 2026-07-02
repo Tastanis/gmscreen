@@ -35,7 +35,9 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 | Behavior | When | Effect |
 |---|---|---|
 | Malice auto-spend | `category` is `villain_action` or `malice` | Reads cost from `ability.resource_cost` (first integer), calls `window.MaliceTracker.spend(cost)`. Confirm dialog if pool is short. |
-| Triggered-action confirm | `category` is `triggered_action` | GM-clickable launcher fires a confirm dialog before invoking the runner. |
+| Trigger auto-arming | placement in active scene | Every monster trigger block with a structured `match` registers on the trigger bus automatically (all categories; listener id `placementId:category:abilityName`). Player clients register enemy monsters' triggers from the stripped `monsterTriggerHooks` placement field, so events fired on the acting client still mark the monster's trigger ready. |
+| Triggered-action confirm | `category` is `triggered_action` | GM-clickable launcher fires a confirm dialog before invoking the runner. Ready triggers resolve with the captured event payload; manual fires pass `manualTriggerResolution` so trigger-card effects execute instead of arm-only. |
+| Triggered-action consumption | non-free `triggered_action` resolves | `consumeTriggeredAction` marks the token's triggered action used this round. A `resource_cost` containing "free" marks the listener free-triggered (exempt from the once-per-round gate). |
 | `getAttributeBonus` reads monster stats | fallback | Monsters should use `flatBonus` for authored power rolls. If a monster automation uses `attribute` or damage `attribute`, the runner currently resolves it from the monster's Might/Agility/Reason/Intuition/Presence fields. |
 | `getPotencyThreshold` returns 0 | always | Monster JSON should hard-code potency `target` integers. |
 | `isWinded()` | always | Derives from `placement.hp <= floor(placement.maxHp / 2)`. |
@@ -279,7 +281,7 @@ Additional accepted events:
 
 ### Authored trigger `match` shape
 
-Trigger blocks may carry a structured `match` alongside the free-text `condition` label. The board auto-registers PC trigger actions from active-scene character sheets and converts each `match` into a bus listener with a generated predicate. The runner can still forward the same match via the host's `registerTrigger` callback as a fallback/debug path.
+Trigger blocks may carry a structured `match` alongside the free-text `condition` label. The board auto-registers PC trigger actions from active-scene character sheets AND monster trigger blocks from active-scene monster placements, converting each `match` into a bus listener with a generated predicate. The runner can still forward the same match via the host's `registerTrigger` callback as a fallback/debug path.
 
 ```json
 {

@@ -36,10 +36,12 @@ Known current limitation: manual/non-automation damage does not fire typed `dama
 
 ## Monster-Specific Runtime Notes
 
-Monster ability execution is bridged by `monster-ability-runner-glue.js`.
+The full monster authoring reference is `monster-automation.md` (this folder). Monster ability execution is bridged by `monster-ability-runner-glue.js`.
 
 - Villain and malice categories spend from `window.MaliceTracker`.
-- Triggered monster actions prompt for confirmation before firing.
+- Monster trigger blocks with a structured `match` are auto-armed on the bus whenever the placement is in the active scene (`registerMonsterAuthoredTriggersForPlacement` in `board-interactions.js`). Player clients arm them too via the stripped `monsterTriggerHooks` placement field, so events caused by a player's own client still mark enemy triggers ready.
+- Firing a triggered action from the tray prompts for confirmation, then resolves: a ready trigger passes the captured event payload; a manual fire sets `manualTriggerResolution` so the trigger card's effects execute instead of arm-only. Non-free triggered actions consume the round's triggered action via `consumeTriggeredAction` (a `resource_cost` containing "free" is exempt).
 - Monsters should use `flatBonus`; attribute lookup exists as a fallback.
 - Monster heroic `spend` falls back to a native `confirm()` dialog (the monster context omits `spendHeroicResource`); `resourceGain` and `surgeGain` post manual chat reminders (`applyResourceGain` / `applySurgeGain` are not passed). Recovery heals are NOT monster-blocked — `spendRecoveryForTarget` is wired and acts on the target's sheet.
+- `showFloatingText` and `startTurn` are passed through to monsters like PCs.
 - Winded state is based on token HP at or below half max HP.
