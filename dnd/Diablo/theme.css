@@ -76,10 +76,14 @@ body.diablo-theme::after {
     z-index: 0;
 }
 
-body.diablo-theme .main-container,
-body.diablo-theme .top-nav {
+body.diablo-theme .main-container {
     position: relative;
     z-index: 1;
+}
+
+/* Keep the sticky nav (and its dropdowns) above the main content */
+body.diablo-theme .top-nav {
+    z-index: var(--z-nav, 100);
 }
 
 /* Rising embers (spawned by Diablo/theme.js) */
