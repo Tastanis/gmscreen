@@ -1,0 +1,260 @@
+/* ==========================================================================
+   Diablo skin — satellite pages (Students, Staff, Other NPCs).
+   Load AFTER the page's own CSS, together with Diablo/theme.css (which
+   supplies the shared chrome: top-nav, buttons, inputs, modal, scrollbars)
+   and js/diablo-theme-loader.js (which applies the .diablo-theme class).
+   ========================================================================== */
+
+/* Kill the parchment flash while the body is still parsing */
+html.diablo-theme {
+    background: #0e0c0a;
+}
+
+/* Strix mini-nav (fixed bar at the very top) */
+body.diablo-theme .strix-mini-nav {
+    background: rgba(10, 8, 6, 0.97);
+    border-bottom: 1px solid rgba(110, 90, 51, 0.55);
+}
+
+body.diablo-theme .strix-mini-nav a {
+    color: #8d8474;
+    font-family: 'Cinzel', serif;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+body.diablo-theme .strix-mini-nav a:hover {
+    color: #f0d68a;
+    background: rgba(200, 169, 94, 0.16);
+}
+
+body.diablo-theme .strix-mini-nav a.active {
+    color: #c8a95e;
+}
+
+/* Page shell */
+body.diablo-theme .main-container {
+    background: transparent;
+}
+
+/* Control panel (search / filters / add buttons) */
+body.diablo-theme .control-panel {
+    background: linear-gradient(180deg, #1b1712 0%, #110e0a 100%);
+    border: 1px solid #000;
+    box-shadow: var(--d2-frame, inset 0 0 0 1px #6e5a33), 0 10px 30px rgba(0, 0, 0, 0.7);
+}
+
+body.diablo-theme .search-input,
+body.diablo-theme .filter-select {
+    background: linear-gradient(180deg, #0c0a07 0%, #14110c 100%);
+    background-color: #0e0c09;
+    border: 1px solid #000;
+    box-shadow:
+        inset 0 0 0 1px rgba(110, 90, 51, 0.45),
+        inset 0 2px 6px rgba(0, 0, 0, 0.8);
+    color: #cfc6b4;
+}
+
+body.diablo-theme .search-input:focus,
+body.diablo-theme .filter-select:focus {
+    border-color: #000;
+    box-shadow:
+        inset 0 0 0 1px #a8853e,
+        inset 0 2px 6px rgba(0, 0, 0, 0.8),
+        0 0 10px rgba(200, 169, 94, 0.25);
+}
+
+body.diablo-theme .filter-btn {
+    font-family: 'Cinzel', serif;
+    background: linear-gradient(180deg, #2b261f 0%, #1a1610 55%, #100d09 100%);
+    border: 1px solid #000;
+    box-shadow: inset 0 0 0 1px rgba(110, 90, 51, 0.35);
+    color: #8d8474;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    text-shadow: 0 1px 2px #000;
+}
+
+body.diablo-theme .filter-btn:hover {
+    background: linear-gradient(180deg, #363028 0%, #221c14 55%, #14100b 100%);
+    border-color: #000;
+    color: #c8a95e;
+    text-shadow: 0 0 8px rgba(200, 169, 94, 0.4), 0 1px 2px #000;
+}
+
+body.diablo-theme .filter-btn.active {
+    background: linear-gradient(180deg, #3d362b 0%, #292217 55%, #181209 100%);
+    color: #f0d68a;
+    box-shadow:
+        inset 0 0 0 1px #c8a95e,
+        inset 0 0 12px rgba(200, 169, 94, 0.18);
+    text-shadow: 0 0 12px rgba(240, 214, 138, 0.55), 0 1px 2px #000;
+}
+
+/* Utility buttons that Diablo/theme.css doesn't already cover */
+body.diablo-theme .btn-import,
+body.diablo-theme .btn-export,
+body.diablo-theme .btn-expand,
+body.diablo-theme .btn-favorite {
+    font-family: 'Cinzel', serif;
+    background: linear-gradient(180deg, #3a352d 0%, #262119 45%, #16120d 100%);
+    color: #c8a95e;
+    border: 1px solid #000;
+    border-radius: 2px;
+    box-shadow:
+        inset 0 0 0 1px #000,
+        inset 0 0 0 2px #6e5a33,
+        inset 0 0 0 3px #241d12,
+        0 2px 6px rgba(0, 0, 0, 0.8);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    text-shadow: 0 1px 2px #000;
+}
+
+body.diablo-theme .btn-import:hover,
+body.diablo-theme .btn-export:hover,
+body.diablo-theme .btn-expand:hover,
+body.diablo-theme .btn-favorite:hover {
+    background: linear-gradient(180deg, #4a4335 0%, #322a1f 45%, #1d1811 100%);
+    color: #f0d68a;
+    text-shadow: 0 0 12px rgba(240, 214, 138, 0.6), 0 1px 2px #000;
+}
+
+body.diablo-theme .btn-favorite.is-favorite,
+body.diablo-theme .btn-favorite.active {
+    color: #f0d68a;
+    box-shadow:
+        inset 0 0 0 1px #c8a95e,
+        inset 0 0 10px rgba(200, 169, 94, 0.2),
+        0 2px 6px rgba(0, 0, 0, 0.8);
+}
+
+/* Roster cards — students / staff / other NPCs */
+body.diablo-theme .students-container,
+body.diablo-theme .staff-container,
+body.diablo-theme .npcs-container {
+    background: transparent;
+}
+
+body.diablo-theme .student-card,
+body.diablo-theme .staff-card,
+body.diablo-theme .npc-card {
+    background: linear-gradient(180deg, #221d15 0%, #14110c 100%);
+    border: 1px solid #000;
+    box-shadow:
+        inset 0 0 0 1px rgba(110, 90, 51, 0.35),
+        inset 0 1px 0 1px rgba(255, 255, 255, 0.04),
+        0 4px 12px rgba(0, 0, 0, 0.55);
+}
+
+body.diablo-theme .student-card:hover,
+body.diablo-theme .staff-card:hover,
+body.diablo-theme .npc-card:hover {
+    border-color: #000;
+    box-shadow:
+        inset 0 0 0 1px rgba(200, 169, 94, 0.8),
+        inset 0 0 12px rgba(200, 169, 94, 0.12),
+        0 6px 18px rgba(0, 0, 0, 0.7);
+}
+
+body.diablo-theme .student-placeholder,
+body.diablo-theme .staff-placeholder,
+body.diablo-theme .npc-placeholder {
+    background: radial-gradient(ellipse at 50% 30%, #1e1a13 0%, #0c0a07 100%);
+    border: 1px solid rgba(110, 90, 51, 0.4);
+    color: #665f51;
+}
+
+body.diablo-theme .student-name,
+body.diablo-theme .staff-name,
+body.diablo-theme .npc-name {
+    font-family: 'Cinzel', serif;
+    color: #c8a95e;
+    letter-spacing: 0.04em;
+    text-shadow: 0 0 8px rgba(200, 169, 94, 0.25), 0 1px 2px #000;
+}
+
+body.diablo-theme .student-college,
+body.diablo-theme .student-grade,
+body.diablo-theme .staff-college,
+body.diablo-theme .staff-role,
+body.diablo-theme .npc-college,
+body.diablo-theme .npc-role {
+    color: #8d8474;
+}
+
+/* Tags (clubs / skills on student cards) */
+body.diablo-theme .club-tag,
+body.diablo-theme .skill-tag {
+    background: linear-gradient(180deg, #2b261f 0%, #1a1610 100%);
+    border: 1px solid rgba(110, 90, 51, 0.5);
+    color: #c8a95e;
+    text-shadow: 0 1px 2px #000;
+}
+
+/* Modal internals beyond what Diablo/theme.css covers */
+body.diablo-theme .modal-header {
+    background: linear-gradient(180deg, #241f17 0%, #16120d 100%);
+    border-bottom: 1px solid rgba(110, 90, 51, 0.45);
+}
+
+body.diablo-theme .modal-header h2,
+body.diablo-theme .modal-header h3 {
+    font-family: 'Cinzel', serif;
+    color: #c8a95e;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    text-shadow: 0 0 10px rgba(200, 169, 94, 0.3), 0 1px 2px #000;
+}
+
+body.diablo-theme .form-section {
+    background: linear-gradient(180deg, rgba(35, 29, 21, 0.6) 0%, rgba(18, 15, 11, 0.6) 100%);
+    border: 1px solid rgba(110, 90, 51, 0.3);
+}
+
+body.diablo-theme .form-section.gm-only {
+    background: linear-gradient(180deg, rgba(48, 32, 14, 0.55) 0%, rgba(26, 17, 8, 0.55) 100%);
+    border: 1px solid rgba(200, 140, 40, 0.45);
+}
+
+body.diablo-theme .form-section.gm-only h3,
+body.diablo-theme .form-section.gm-only .gm-label {
+    color: #d4a04a;
+}
+
+body.diablo-theme .form-section h3,
+body.diablo-theme .form-group label {
+    color: #c8a95e;
+    text-shadow: 0 1px 2px #000;
+}
+
+body.diablo-theme .rich-text-toolbar {
+    background: linear-gradient(180deg, #241f17 0%, #16120d 100%);
+    border-bottom: 1px solid rgba(110, 90, 51, 0.35);
+}
+
+body.diablo-theme .rich-text-toolbar button {
+    background: linear-gradient(180deg, #2b261f 0%, #1a1610 100%);
+    border: 1px solid rgba(110, 90, 51, 0.4);
+    color: #b8b0a2;
+}
+
+body.diablo-theme .rich-text-toolbar button:hover {
+    color: #f0d68a;
+    border-color: rgba(200, 169, 94, 0.6);
+}
+
+body.diablo-theme .tension-web-entry {
+    background: rgba(20, 17, 12, 0.85);
+    border-left: 3px solid #a8853e;
+    color: #b8b0a2;
+}
+
+/* Detail text inside cards / modals */
+body.diablo-theme .modal-content p,
+body.diablo-theme .modal-content .detail-value,
+body.diablo-theme .student-details,
+body.diablo-theme .staff-details,
+body.diablo-theme .npc-details {
+    color: #b8b0a2;
+}

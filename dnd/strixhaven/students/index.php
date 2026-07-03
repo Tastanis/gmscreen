@@ -701,6 +701,10 @@ require_once '../../includes/strix-nav.php';
     <link rel="stylesheet" href="../templates/css/character-sheet-base.css">
     <link rel="stylesheet" href="css/students.css">
     <link rel="stylesheet" href="../includes/image-adjuster.css">
+    <link rel="stylesheet" href="../../Diablo/theme.css">
+    <link rel="stylesheet" href="../../Diablo/satellite.css">
+    <script src="../../js/diablo-theme-loader.js"></script>
+    <script src="../../Diablo/theme.js" defer></script>
 </head>
 <body>
     <?php renderStrixNav('students'); ?>

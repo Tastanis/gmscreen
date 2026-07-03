@@ -52,6 +52,10 @@ require_once '../includes/strix-nav.php';
   <link rel="stylesheet" href="inventory-tab.css?v=<?php echo (int) $assetVersion; ?>" />
   <link rel="stylesheet" href="../dice-roller/dice-roller.css?v=<?php echo (int) $assetVersion; ?>" />
   <link rel="stylesheet" href="ability-automation/automation.css?v=<?php echo (int) $assetVersion; ?>" />
+  <link rel="stylesheet" href="../Diablo/theme.css?v=<?php echo (int) $assetVersion; ?>" />
+  <link rel="stylesheet" href="diablo-theme.css?v=<?php echo (int) $assetVersion; ?>" />
+  <script src="../js/diablo-theme-loader.js?v=<?php echo (int) $assetVersion; ?>"></script>
+  <script src="../Diablo/theme.js?v=<?php echo (int) $assetVersion; ?>" defer></script>
   <script src="ability-automation/primitives.js?v=<?php echo (int) $assetVersion; ?>"></script>
   <script src="ability-automation/schema.js?v=<?php echo (int) $assetVersion; ?>"></script>
   <script src="ability-automation/catalog.js?v=<?php echo (int) $assetVersion; ?>"></script>

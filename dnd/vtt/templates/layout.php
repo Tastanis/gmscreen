@@ -43,6 +43,8 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
     <link rel="stylesheet" href="assets/css/monster-ability-tray.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="assets/css/monster-summary-panel.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="assets/css/theme.css?v=<?= $assetVersion ?>" />
+    <link rel="stylesheet" href="assets/css/diablo-skin.css?v=<?= $assetVersion ?>" />
+    <script src="../js/diablo-theme-loader.js?v=<?= $assetVersion ?>"></script>
 </head>
 <body class="vtt-body">
     <?php renderStrixNav('vtt'); ?>

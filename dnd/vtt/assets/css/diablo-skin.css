@@ -1,0 +1,256 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&display=swap');
+
+/* ==========================================================================
+   Diablo skin — VTT.
+   Applied when the dashboard theme is set to Diablo (localStorage
+   'dnd-dashboard-theme' = 'diablo'; js/diablo-theme-loader.js adds the
+   .diablo-theme class to <html> and <body>).
+
+   Must be the LAST stylesheet in templates/layout.php: it out-cascades the
+   :root[data-vtt-theme='light'/'dark'] variable blocks, so the Diablo
+   palette wins regardless of the VTT's own light/dark setting.
+   ========================================================================== */
+
+:root.diablo-theme {
+  color-scheme: dark;
+
+  /* base.css palette */
+  --vtt-bg-gradient-start: #191510;
+  --vtt-bg-gradient-end: #070605;
+  --vtt-panel-bg: rgba(18, 15, 11, 0.95);
+  --vtt-panel-border: rgba(110, 90, 51, 0.55);
+  --vtt-text-primary: #c4bcac;
+  --vtt-text-muted: #8d8474;
+  --vtt-surface: #16130f;
+  --vtt-surface-strong: #221d15;
+  --vtt-border: #4a3b24;
+  --vtt-text-dark: #c4bcac;
+  --vtt-text-dark-muted: #8d8474;
+  --vtt-accent: #a8853e;
+  --vtt-accent-strong: #c9a959;
+  --vtt-accent-soft: rgba(200, 169, 94, 0.16);
+  --vtt-warning: #b28739;
+
+  /* Stone buttons -> Diablo slabs */
+  --vtt-stone-face: #3a352d;
+  --vtt-stone-mid: #262119;
+  --vtt-stone-base: #16120d;
+  --vtt-stone-shadow: #0a0806;
+  --vtt-stone-shadow-deep: #000000;
+  --vtt-stone-border-top: #6e5a33;
+  --vtt-stone-border-left: #4a3b24;
+  --vtt-stone-border-right: #241d12;
+  --vtt-stone-border-bottom: #141009;
+
+  /* theme.css layer */
+  --vtt-app-bg: rgba(13, 11, 8, 0.92);
+  --vtt-main-bg: rgba(17, 14, 10, 0.96);
+  --vtt-header-bg: rgba(9, 7, 5, 0.72);
+  --vtt-control-bg: rgba(24, 20, 14, 0.85);
+  --vtt-control-bg-hover: rgba(200, 169, 94, 0.16);
+  --vtt-control-border: rgba(110, 90, 51, 0.5);
+  --vtt-control-border-strong: rgba(200, 169, 94, 0.7);
+  --vtt-panel-shadow: rgba(0, 0, 0, 0.6);
+  --vtt-map-frame-bg: #14100b;
+  --vtt-map-empty-bg: #0c0a07;
+  --vtt-map-empty-grid: rgba(200, 169, 94, 0.1);
+  --vtt-map-empty-grid-strong: rgba(200, 169, 94, 0.18);
+  --vtt-map-overlay-bg: rgba(0, 0, 0, 0.65);
+  --vtt-map-overlay-text: #c8a95e;
+  --vtt-btn-bg: #262119;
+  --vtt-btn-hover-bg: #322a1f;
+}
+
+/* Page background — dark stone with the ember glow from the dashboard */
+:root.diablo-theme body.vtt-body {
+  background:
+    radial-gradient(ellipse at 50% -12%, rgba(133, 42, 18, 0.28) 0%, rgba(133, 42, 18, 0) 55%),
+    radial-gradient(ellipse at 92% 105%, rgba(120, 58, 16, 0.16) 0%, rgba(120, 58, 16, 0) 45%),
+    linear-gradient(180deg, #191510 0%, #100d0a 40%, #070605 100%);
+}
+
+html.diablo-theme {
+  background: #0e0c0a;
+}
+
+/* Sidebar character sheet tokens. Must out-rank both the base
+   body.vtt-body block and :root[data-vtt-theme='dark'] body.vtt-body. */
+:root.diablo-theme body.vtt-body.diablo-theme {
+  --vtt-sheet-bg: linear-gradient(180deg, rgba(29, 25, 20, 0.98), rgba(12, 10, 7, 0.99));
+  --vtt-sheet-panel: rgba(30, 25, 18, 0.85);
+  --vtt-sheet-panel-strong: rgba(15, 12, 9, 0.95);
+  --vtt-sheet-border: rgba(110, 90, 51, 0.55);
+  --vtt-sheet-border-strong: rgba(200, 169, 94, 0.8);
+  --vtt-sheet-text: #c4bcac;
+  --vtt-sheet-muted: #8d8474;
+  --vtt-sheet-gold: #c8a95e;
+  --vtt-sheet-shadow: rgba(0, 0, 0, 0.7);
+}
+
+/* Board action buttons — hard-coded stone gradients in theme.css */
+:root.diablo-theme .vtt-board__actions .btn {
+  background: linear-gradient(145deg, #3a352d 0%, #262119 60%, #16120d 100%);
+  border-top-color: #6e5a33;
+  border-left-color: #4a3b24;
+  border-right-color: #241d12;
+  border-bottom-color: #141009;
+  color: #c8a95e;
+  text-shadow: 0 1px 2px #000;
+  box-shadow:
+    2px 2px 0 #0a0806,
+    3px 3px 0 #000,
+    4px 4px 8px rgba(0, 0, 0, 0.6);
+}
+
+:root.diablo-theme .vtt-board__actions .btn:hover {
+  background: linear-gradient(145deg, #4a4335 0%, #322a1f 60%, #1d1811 100%);
+  color: #f0d68a;
+  text-shadow: 0 0 10px rgba(240, 214, 138, 0.55), 0 1px 2px #000;
+  box-shadow:
+    2px 3px 0 #0a0806,
+    3px 4px 0 #000,
+    5px 5px 10px rgba(0, 0, 0, 0.65);
+}
+
+:root.diablo-theme .vtt-board__actions .btn.is-active,
+:root.diablo-theme .vtt-board__actions .btn[aria-pressed="true"] {
+  background: linear-gradient(145deg, #3d362b 0%, #292217 60%, #181209 100%);
+  border-top-color: #c8a95e;
+  border-left-color: #a8853e;
+  color: #f0d68a;
+  text-shadow: 0 0 10px rgba(240, 214, 138, 0.5), 0 1px 2px #000;
+}
+
+/* Generic stone .btn states (base.css/theme.css hard-code hovers per mode) */
+:root.diablo-theme .btn:hover {
+  background: linear-gradient(145deg, #4a4335 0%, #322a1f 60%, #1d1811 100%);
+  border-top-color: #a8853e;
+  border-left-color: #6e5a33;
+  color: #f0d68a;
+}
+
+:root.diablo-theme .btn.is-active {
+  background: linear-gradient(145deg, #3d362b 0%, #292217 60%, #181209 100%);
+  border-top-color: #c8a95e;
+  border-left-color: #a8853e;
+  color: #f0d68a;
+}
+
+/* Character summary card + ability/inventory lists (hard-coded parchment) */
+:root.diablo-theme .vtt-character-card {
+  background:
+    linear-gradient(180deg, rgba(29, 25, 19, 0.96), rgba(14, 12, 8, 0.99)),
+    radial-gradient(circle at 18% 0%, rgba(200, 169, 94, 0.1), transparent 28%);
+}
+
+:root.diablo-theme .vtt-character-card__name,
+:root.diablo-theme .vtt-character-section__title,
+:root.diablo-theme .vtt-character-feature__title {
+  font-family: 'Cinzel', serif;
+  color: #c8a95e;
+  letter-spacing: 0.06em;
+  text-shadow: 0 0 8px rgba(200, 169, 94, 0.25), 0 1px 2px #000;
+}
+
+:root.diablo-theme .vtt-character-ability-list,
+:root.diablo-theme .vtt-character-inventory-list {
+  border-color: rgba(110, 90, 51, 0.5);
+  background: linear-gradient(180deg, rgba(26, 22, 16, 0.98), rgba(13, 11, 8, 0.98));
+  box-shadow:
+    0 12px 26px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+:root.diablo-theme .vtt-character-ability-list__heading {
+  background: linear-gradient(180deg, rgba(58, 48, 33, 0.85), rgba(30, 25, 17, 0.75));
+  border-bottom-color: rgba(110, 90, 51, 0.4);
+  color: #c8a95e;
+  font-family: 'Cinzel', serif;
+  letter-spacing: 0.08em;
+  text-shadow: 0 1px 2px #000;
+}
+
+:root.diablo-theme .vtt-character-ability-item,
+:root.diablo-theme .vtt-character-inventory-item {
+  border-bottom-color: rgba(110, 90, 51, 0.25);
+  background: linear-gradient(90deg, rgba(30, 25, 18, 0.98), rgba(18, 15, 11, 0.98));
+  color: #c4bcac;
+}
+
+:root.diablo-theme .vtt-character-ability-item:hover,
+:root.diablo-theme .vtt-character-ability-item:focus-visible {
+  background: linear-gradient(90deg, rgba(46, 39, 27, 1), rgba(26, 21, 14, 1));
+  color: #f0d68a;
+}
+
+/* Panel headers get the gold engraved treatment */
+:root.diablo-theme .vtt-panel__header h2,
+:root.diablo-theme .vtt-panel__header h3,
+:root.diablo-theme .vtt-combat-tracker__heading {
+  font-family: 'Cinzel', serif;
+  color: #c8a95e;
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 8px rgba(200, 169, 94, 0.25), 0 1px 2px #000;
+}
+
+/* Settings launchers */
+:root.diablo-theme .vtt-settings-launcher {
+  background: rgba(24, 20, 14, 0.92);
+  border-color: rgba(110, 90, 51, 0.5);
+  color: #c8a95e;
+}
+
+:root.diablo-theme .vtt-settings-launcher:hover {
+  background: rgba(200, 169, 94, 0.16);
+  border-color: rgba(200, 169, 94, 0.5);
+  color: #f0d68a;
+}
+
+:root.diablo-theme .vtt-settings-launcher.is-active {
+  background: rgba(200, 169, 94, 0.24);
+  border-color: rgba(200, 169, 94, 0.75);
+}
+
+/* Strix mini-nav (fixed bar at the very top) */
+:root.diablo-theme .strix-mini-nav {
+  background: rgba(10, 8, 6, 0.97);
+  border-bottom: 1px solid rgba(110, 90, 51, 0.55);
+}
+
+:root.diablo-theme .strix-mini-nav a {
+  color: #8d8474;
+  font-family: 'Cinzel', serif;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+:root.diablo-theme .strix-mini-nav a:hover {
+  color: #f0d68a;
+  background: rgba(200, 169, 94, 0.16);
+}
+
+:root.diablo-theme .strix-mini-nav a.active {
+  color: #c8a95e;
+}
+
+/* Scrollbars */
+:root.diablo-theme ::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+:root.diablo-theme ::-webkit-scrollbar-track {
+  background: #0c0a07;
+  border: 1px solid rgba(110, 90, 51, 0.25);
+}
+
+:root.diablo-theme ::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #3a352d 0%, #241f17 100%);
+  border: 1px solid #000;
+  box-shadow: inset 0 0 0 1px rgba(110, 90, 51, 0.5);
+  border-radius: 2px;
+}
+
+:root.diablo-theme ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #4a4335 0%, #322a1f 100%);
+}
