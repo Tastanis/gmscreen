@@ -1,0 +1,325 @@
+/* ==========================================================================
+   Diablo skin for the static rules pages (breakthrough, conditions,
+   fall-jump, negotiation, projects, respites, skills, tests-studying,
+   universal-actions).
+
+   Every rule is scoped under body.diablo-theme, so the default parchment
+   look stays untouched. Loaded AFTER each page's inline <style> block via
+   <link> in <head>, together with ../../Diablo/theme.css (page chrome,
+   ember styles) and the diablo-theme-loader.js / Diablo/theme.js pair.
+
+   The pages' original accent colors (purple skills, green projects, red
+   fall rules, etc.) are re-picked here into the Diablo palette: gold for
+   headers/highlights, blood red for damage/warnings, poison green for
+   bonuses/success, cold steel blue for informational callouts.
+   ========================================================================== */
+
+/* Universal-actions defines its own :root tokens; re-point them here so
+   its var()-driven boxes pick up the dark palette. */
+body.diablo-theme {
+    --muted: var(--text-muted, #8d8474);
+    --alert: #e06a50;
+    --success: #8fc08f;
+    --info: #7fb3d1;
+}
+
+/* --------------------------------------------------------------------------
+   Page shell
+   -------------------------------------------------------------------------- */
+
+body.diablo-theme .container {
+    background: linear-gradient(180deg, #201b14 0%, #17130e 55%, #120f0a 100%);
+    border: 1px solid #000;
+    border-radius: 4px;
+    box-shadow:
+        inset 0 0 0 1px #000,
+        inset 0 0 0 2px #6e5a33,
+        inset 0 0 0 3px #241d12,
+        0 14px 45px rgba(0, 0, 0, 0.85);
+    position: relative;
+    z-index: 1;
+}
+
+body.diablo-theme h1 {
+    color: #f0d68a;
+    border-bottom-color: #6e5a33;
+    text-shadow: 0 0 14px rgba(200, 169, 94, 0.35), 0 2px 3px rgba(0, 0, 0, 0.8);
+    letter-spacing: 0.04em;
+}
+
+body.diablo-theme h2 {
+    color: #d4b46a;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+
+body.diablo-theme h3,
+body.diablo-theme h4 {
+    color: #c8a95e;
+}
+
+body.diablo-theme a {
+    color: #d4b46a;
+}
+
+body.diablo-theme a:hover {
+    color: #f0d68a;
+}
+
+/* --------------------------------------------------------------------------
+   Section slabs (the colored left-border boxes on every page)
+   -------------------------------------------------------------------------- */
+
+body.diablo-theme .skills-section,
+body.diablo-theme .breakthrough-section,
+body.diablo-theme .condition,
+body.diablo-theme .rules-section,
+body.diablo-theme .jump-section,
+body.diablo-theme .negotiation-section,
+body.diablo-theme .project-section,
+body.diablo-theme .respite-section,
+body.diablo-theme .study-section,
+body.diablo-theme .attributes-legend,
+body.diablo-theme .flow-section,
+body.diablo-theme .time-requirement,
+body.diablo-theme .interest-scale,
+body.diablo-theme .point-threshold {
+    background: linear-gradient(180deg, #26211a 0%, #1a1610 100%);
+    border-color: #6e5a33;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 2px 8px rgba(0, 0, 0, 0.55);
+    color: var(--text, #b8b0a2);
+}
+
+body.diablo-theme .rules-section,
+body.diablo-theme .breakthrough-section,
+body.diablo-theme .condition {
+    border-left-color: #a8853e;
+}
+
+body.diablo-theme .jump-section,
+body.diablo-theme .flow-section,
+body.diablo-theme .time-requirement {
+    border-left-color: #4a7a96;
+    border-color: #4a7a96;
+}
+
+/* --------------------------------------------------------------------------
+   Cards / items inside sections
+   -------------------------------------------------------------------------- */
+
+body.diablo-theme .material-item,
+body.diablo-theme .rule-item,
+body.diablo-theme .skill-category,
+body.diablo-theme .flow-step,
+body.diablo-theme .effect-box,
+body.diablo-theme .duration-display,
+body.diablo-theme .ability-block,
+body.diablo-theme .motivation-type {
+    background: linear-gradient(180deg, #2b251d 0%, #1d1913 100%);
+    border: 1px solid #3c3122;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 2px 6px rgba(0, 0, 0, 0.5);
+    color: var(--text, #b8b0a2);
+}
+
+body.diablo-theme .material-item {
+    border-left: 6px solid #a8853e;
+}
+
+body.diablo-theme .flow-step {
+    border-left: 4px solid #4a7a96;
+}
+
+body.diablo-theme .skill-item,
+body.diablo-theme .action,
+body.diablo-theme .action-category {
+    background-color: #211c15;
+    border-color: #3c3122;
+    color: var(--text, #b8b0a2);
+}
+
+body.diablo-theme .skill-item {
+    border-left: 3px solid #a8853e;
+}
+
+body.diablo-theme .skill-category h3,
+body.diablo-theme .action-category h3 {
+    color: #d4b46a;
+    border-bottom-color: #3c3122;
+}
+
+body.diablo-theme .attribute-item {
+    background: linear-gradient(180deg, #3a352d 0%, #262119 60%, #1a150f 100%);
+    border: 1px solid #6e5a33;
+    color: #e8d9ae;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+
+/* --------------------------------------------------------------------------
+   Named titles — re-picked from per-page accents into Diablo hues
+   -------------------------------------------------------------------------- */
+
+body.diablo-theme .material-name,
+body.diablo-theme .condition-name,
+body.diablo-theme .rule-title,
+body.diablo-theme .effect-title,
+body.diablo-theme .action-name,
+body.diablo-theme .concept-label,
+body.diablo-theme .cost-value {
+    color: #f0d68a;
+}
+
+body.diablo-theme .skill-name {
+    color: #e8d9ae;
+}
+
+body.diablo-theme .skill-attributes,
+body.diablo-theme .keywords,
+body.diablo-theme .cost-label,
+body.diablo-theme .effect-description {
+    color: var(--text-muted, #8d8474);
+}
+
+/* Cold steel blue for the "jump"/flow/time callouts (was bright blue) */
+body.diablo-theme .jump-title,
+body.diablo-theme .flow-section h3,
+body.diablo-theme .flow-step h4,
+body.diablo-theme .time-requirement h3,
+body.diablo-theme .duration-display,
+body.diablo-theme .range,
+body.diablo-theme .vp-transfer .effect-title {
+    color: #7fb3d1;
+}
+
+body.diablo-theme .vp-transfer {
+    border-left-color: #4a7a96;
+}
+
+/* Poison green for growth/refresh/motivation (was bootstrap green) */
+body.diablo-theme .motivation-type {
+    border-left-color: #3e6b34;
+}
+
+body.diablo-theme .motivation-type h4,
+body.diablo-theme .motivation-name,
+body.diablo-theme .refresh .effect-title {
+    color: #8fc08f;
+}
+
+body.diablo-theme .refresh {
+    border-left-color: #3e6b34;
+}
+
+body.diablo-theme .pitfall {
+    color: #d1706a;
+}
+
+body.diablo-theme .mechanic {
+    color: #e06a50;
+}
+
+/* --------------------------------------------------------------------------
+   Tables
+   -------------------------------------------------------------------------- */
+
+body.diablo-theme table {
+    background-color: #17130e;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+}
+
+body.diablo-theme th {
+    background: linear-gradient(180deg, #3a352d 0%, #262119 60%, #1a150f 100%);
+    color: #f0d68a;
+    border-color: #3c3122;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+body.diablo-theme td {
+    border-color: #3c3122;
+    color: var(--text, #b8b0a2);
+}
+
+body.diablo-theme tr:nth-child(even) {
+    background-color: rgba(255, 255, 255, 0.025);
+}
+
+/* --------------------------------------------------------------------------
+   Inline chips + callouts — semantic colors re-picked for the dark palette
+   -------------------------------------------------------------------------- */
+
+body.diablo-theme .highlight {
+    background-color: rgba(200, 169, 94, 0.18);
+    color: #f0d68a;
+    box-shadow: inset 0 0 0 1px rgba(200, 169, 94, 0.35);
+}
+
+body.diablo-theme .damage,
+body.diablo-theme .warning {
+    background-color: rgba(122, 31, 20, 0.4);
+    color: #e08a7a;
+    border-left-color: #8a2a1e;
+    box-shadow: inset 0 0 0 1px rgba(138, 42, 30, 0.5);
+}
+
+body.diablo-theme .bonus,
+body.diablo-theme .success {
+    background-color: rgba(46, 92, 38, 0.35);
+    color: #8fc08f;
+    border-left-color: #3e6b34;
+    box-shadow: inset 0 0 0 1px rgba(62, 107, 52, 0.5);
+}
+
+body.diablo-theme .intro,
+body.diablo-theme .performance-rule {
+    background-color: rgba(42, 90, 110, 0.28);
+    color: #9fc4d8;
+    border-left-color: #4a7a96;
+}
+
+body.diablo-theme .note {
+    background-color: rgba(200, 169, 94, 0.14);
+    color: #e8d9ae;
+    border-left-color: #a8853e;
+}
+
+body.diablo-theme .formula {
+    background-color: #0d0b08;
+    color: #d4b46a;
+    border: 1px solid #6e5a33;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+body.diablo-theme .dice-box {
+    background-color: rgba(46, 92, 38, 0.25);
+    color: #8fc08f;
+    border-color: #3e6b34;
+}
+
+body.diablo-theme .cost {
+    background-color: #211c15;
+    border: 1px solid #3c3122;
+}
+
+/* --------------------------------------------------------------------------
+   Breakthrough material accents (glass/wood/stone/metal) — brightened so
+   the hue still reads against the dark slab
+   -------------------------------------------------------------------------- */
+
+body.diablo-theme .glass { border-left-color: #4fb3c9; }
+body.diablo-theme .wood { border-left-color: #a06a30; }
+body.diablo-theme .stone { border-left-color: #8d8474; }
+body.diablo-theme .metal { border-left-color: #a8adb5; }
+
+/* --------------------------------------------------------------------------
+   Negotiation interest scale — deep Diablo variants, same hue order
+   -------------------------------------------------------------------------- */
+
+body.diablo-theme .interest-level {
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+body.diablo-theme .interest-0 { background-color: #7a1f14; color: #f2ddd0; }
+body.diablo-theme .interest-1 { background-color: #8a4a10; color: #f2e3d0; }
+body.diablo-theme .interest-2 { background-color: #8a6d1e; color: #f5ecd2; }
+body.diablo-theme .interest-3 { background-color: #1e5a4a; color: #d3ece4; }
+body.diablo-theme .interest-4 { background-color: #2e5c26; color: #daecd4; }
+body.diablo-theme .interest-5 { background-color: #2a5a6e; color: #d5e8f0; }

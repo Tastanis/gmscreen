@@ -51,6 +51,7 @@ require_once '../includes/strix-nav.php';
   <link rel="stylesheet" href="styles.css?v=<?php echo (int) $assetVersion; ?>" />
   <link rel="stylesheet" href="inventory-tab.css?v=<?php echo (int) $assetVersion; ?>" />
   <link rel="stylesheet" href="../dice-roller/dice-roller.css?v=<?php echo (int) $assetVersion; ?>" />
+  <link rel="stylesheet" href="../dice-roller/diablo-dice.css?v=<?php echo (int) $assetVersion; ?>" />
   <link rel="stylesheet" href="ability-automation/automation.css?v=<?php echo (int) $assetVersion; ?>" />
   <link rel="stylesheet" href="../Diablo/theme.css?v=<?php echo (int) $assetVersion; ?>" />
   <link rel="stylesheet" href="diablo-theme.css?v=<?php echo (int) $assetVersion; ?>" />

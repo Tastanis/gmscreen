@@ -1,0 +1,304 @@
+/* ==========================================================================
+   Diablo skin for the dice roller (dashboard, character sheet, and VTT all
+   share dice-roller.css). Loaded right after dice-roller.css everywhere;
+   every rule is scoped under body.diablo-theme so the parchment default
+   stays untouched. No --d2-* tokens are referenced here because the VTT
+   never loads Diablo/theme.css — colors are spelled out.
+   ========================================================================== */
+
+body.diablo-theme {
+    --dice-surface: #16130f;
+    --dice-surface-strong: #1d1914;
+    --dice-border: #6e5a33;
+    --dice-text: #d6cdb8;
+    --dice-muted: #8d8474;
+    --dice-accent: #a8853e;
+    --dice-accent-strong: #d4b46a;
+    --dice-success: #6ea45a;
+    --dice-danger: #c05a45;
+    --dice-info: #7fb3d1;
+    --dice-warning: #c8a95e;
+}
+
+body.diablo-theme .dice-modal {
+    background: linear-gradient(180deg, #26211a 0%, #1a1610 55%, #120f0a 100%);
+    border: 2px solid #6e5a33;
+    box-shadow:
+        inset 0 0 0 1px #000,
+        inset 0 1px 0 rgba(255, 255, 255, 0.06),
+        0 14px 45px rgba(0, 0, 0, 0.9);
+}
+
+body.diablo-theme .dice-modal-header {
+    background: linear-gradient(180deg, #211c15 0%, #14100b 100%);
+    border-bottom: 1px solid #000;
+    box-shadow: inset 0 -1px 0 rgba(168, 133, 62, 0.35);
+}
+
+body.diablo-theme .dice-modal-title {
+    color: #f0d68a;
+    text-shadow: 0 0 10px rgba(200, 169, 94, 0.35), 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+/* ── Result screen: obsidian slab with glowing gold total ── */
+body.diablo-theme .dice-result-screen {
+    background: #0b0908;
+    border-color: #6e5a33;
+    box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.8);
+}
+
+body.diablo-theme .dice-result-screen .dice-queue-display {
+    color: #c8a95e;
+}
+
+body.diablo-theme .dice-result-screen .dice-result-total {
+    color: #f0d68a;
+    text-shadow: 0 0 14px rgba(240, 214, 138, 0.4);
+}
+
+body.diablo-theme .dice-result-screen .dice-result-detail {
+    color: #8d8474;
+}
+
+body.diablo-theme .dice-result-row--kept {
+    background: rgba(46, 92, 38, 0.35);
+    color: #8fc08f;
+    box-shadow: inset 0 0 0 1px #3e6b34;
+}
+
+/* ── Buttons: dark iron slabs with bronze framing ── */
+body.diablo-theme .dice-btn {
+    background: linear-gradient(145deg, #3a352d 0%, #262119 60%, #1a150f 100%);
+    border-top-color: #6e5a33;
+    border-left-color: #5c4c2c;
+    border-right-color: #14100b;
+    border-bottom-color: #0d0a07;
+    color: #e8d9ae;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    box-shadow:
+        2px 2px 0 #0d0a07,
+        3px 3px 0 #000,
+        4px 4px 8px rgba(0, 0, 0, 0.5);
+}
+
+body.diablo-theme .dice-btn:hover,
+body.diablo-theme .dice-btn:focus {
+    background: linear-gradient(145deg, #4a4335 0%, #322a1f 60%, #221c13 100%);
+    border-top-color: #a8853e;
+    border-left-color: #8a7342;
+    color: #f0d68a;
+}
+
+body.diablo-theme .dice-btn:active {
+    box-shadow:
+        1px 1px 0 #0d0a07,
+        2px 2px 4px rgba(0, 0, 0, 0.6);
+}
+
+body.diablo-theme .dice-btn--accent {
+    background: linear-gradient(145deg, #4a2318 0%, #38180f 60%, #28100a 100%);
+    border-top-color: #8a4a30;
+    border-left-color: #6e3a24;
+    border-right-color: #180a06;
+    border-bottom-color: #100604;
+    color: #f0c8a8;
+}
+
+body.diablo-theme .dice-btn--accent:hover,
+body.diablo-theme .dice-btn--accent:focus {
+    background: linear-gradient(145deg, #5c2e1e 0%, #4a2318 60%, #38180f 100%);
+    border-top-color: #a85a3a;
+    border-left-color: #8a4a30;
+}
+
+/* ── Edge / Bane: burnished gold slabs with dark engraved text ── */
+body.diablo-theme .dice-btn--edge,
+body.diablo-theme .dice-btn--bane {
+    background: linear-gradient(145deg, #c8a95e 0%, #a8853e 60%, #8a7342 100%);
+    border-top-color: #f0d68a;
+    border-left-color: #d4b46a;
+    border-right-color: #57431f;
+    border-bottom-color: #3c2f16;
+    color: #241d12;
+    text-shadow: 0 1px 0 rgba(255, 240, 200, 0.35);
+}
+
+body.diablo-theme .dice-btn--edge:hover,
+body.diablo-theme .dice-btn--edge:focus,
+body.diablo-theme .dice-btn--bane:hover,
+body.diablo-theme .dice-btn--bane:focus {
+    background: linear-gradient(145deg, #dcbd72 0%, #bc9950 60%, #9c8348 100%);
+    border-top-color: #ffe9a8;
+    border-left-color: #f0d68a;
+}
+
+/* ── Roll / Clear / Project actions: deep poison green + blood red ── */
+body.diablo-theme .dice-roll-btn,
+body.diablo-theme .dice-clear-btn,
+body.diablo-theme .dice-project-btn,
+body.diablo-theme .dice-project-roll-btn {
+    box-shadow:
+        2px 2px 0 #0d0a07,
+        3px 3px 0 #000,
+        4px 4px 8px rgba(0, 0, 0, 0.5);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+body.diablo-theme .dice-roll-btn:active,
+body.diablo-theme .dice-clear-btn:active,
+body.diablo-theme .dice-project-btn:active,
+body.diablo-theme .dice-project-roll-btn:active {
+    box-shadow:
+        1px 1px 0 #0d0a07,
+        2px 2px 4px rgba(0, 0, 0, 0.6);
+}
+
+body.diablo-theme .dice-roll-btn,
+body.diablo-theme .dice-project-roll-btn {
+    background: linear-gradient(145deg, #3e5c2e 0%, #2e461f 60%, #203414 100%);
+    border-top-color: #5c7a44;
+    border-left-color: #4c6a38;
+    border-right-color: #16240c;
+    border-bottom-color: #0e1808;
+    color: #d6e8c8;
+}
+
+body.diablo-theme .dice-roll-btn:hover,
+body.diablo-theme .dice-roll-btn:focus,
+body.diablo-theme .dice-project-roll-btn:hover,
+body.diablo-theme .dice-project-roll-btn:focus {
+    background: linear-gradient(145deg, #4c6e3a 0%, #3e5c2e 60%, #2e461f 100%);
+    border-top-color: #6e8c54;
+    border-left-color: #5c7a44;
+}
+
+body.diablo-theme .dice-clear-btn {
+    background: linear-gradient(145deg, #7a2418 0%, #5c1a10 60%, #44120a 100%);
+    border-top-color: #a84430;
+    border-left-color: #8a3424;
+    border-right-color: #2c0c06;
+    border-bottom-color: #1e0804;
+    color: #f0c8b8;
+}
+
+body.diablo-theme .dice-clear-btn:hover,
+body.diablo-theme .dice-clear-btn:focus {
+    background: linear-gradient(145deg, #8e3020 0%, #7a2418 60%, #5c1a10 100%);
+    border-top-color: #c05a45;
+    border-left-color: #a84430;
+}
+
+body.diablo-theme .dice-project-btn {
+    background: linear-gradient(145deg, #3a352d 0%, #262119 60%, #1a150f 100%);
+    border-top-color: #6e5a33;
+    border-left-color: #5c4c2c;
+    border-right-color: #14100b;
+    border-bottom-color: #0d0a07;
+    color: #e8d9ae;
+}
+
+body.diablo-theme .dice-project-btn:hover,
+body.diablo-theme .dice-project-btn:focus {
+    background: linear-gradient(145deg, #4a4335 0%, #322a1f 60%, #221c13 100%);
+    border-top-color: #a8853e;
+    border-left-color: #8a7342;
+}
+
+body.diablo-theme .dice-project-roll-btn--manual-ready {
+    background: linear-gradient(145deg, #a8853e 0%, #8a6d2e 60%, #6e5624 100%);
+    border-top-color: #d4b46a;
+    border-left-color: #c8a95e;
+    border-right-color: #4a3a18;
+    border-bottom-color: #382c10;
+    color: #fff4d6;
+}
+
+/* ── Advantage toggle ── */
+body.diablo-theme .dice-advantage-toggle--active {
+    background: #2c2416;
+    color: #f0d68a;
+    border-color: #a8853e;
+    box-shadow: inset 0 0 8px rgba(200, 169, 94, 0.25);
+}
+
+/* ── Queue / project surfaces ── */
+body.diablo-theme .dice-queue-section--project {
+    background: rgba(46, 92, 38, 0.2);
+}
+
+body.diablo-theme .dice-divider {
+    background: linear-gradient(90deg, rgba(168, 133, 62, 0.6) 0%, rgba(168, 133, 62, 0.12) 100%);
+}
+
+@keyframes diablo-dice-queue-flash {
+    0% { background: transparent; box-shadow: none; }
+    50% { background: rgba(200, 169, 94, 0.18); box-shadow: 0 0 0 3px rgba(200, 169, 94, 0.3); }
+    100% { background: transparent; box-shadow: none; }
+}
+
+body.diablo-theme .dice-queue-display--flash {
+    animation-name: diablo-dice-queue-flash;
+}
+
+/* ── Dialogs (project type, retainer) ── */
+body.diablo-theme .dice-project-type-dialog__card,
+body.diablo-theme .dice-retainer-dialog__card {
+    background: linear-gradient(180deg, #26211a 0%, #17130e 100%);
+    border: 1px solid #6e5a33;
+    box-shadow:
+        inset 0 0 0 1px #000,
+        0 10px 30px rgba(0, 0, 0, 0.85);
+}
+
+body.diablo-theme .dice-project-type-dialog__header h3,
+body.diablo-theme .dice-retainer-dialog__header h3 {
+    color: #f0d68a;
+}
+
+body.diablo-theme .dice-project-type-dialog__option--normal {
+    background: rgba(46, 92, 38, 0.3);
+    color: #8fc08f;
+    border-color: #3e6b34;
+}
+
+body.diablo-theme .dice-retainer-dialog__confirm {
+    background: rgba(46, 92, 38, 0.3);
+    color: #8fc08f;
+    border-color: #3e6b34;
+}
+
+body.diablo-theme .dice-retainer-dialog__confirm:hover,
+body.diablo-theme .dice-retainer-dialog__confirm:focus {
+    background: rgba(46, 92, 38, 0.45);
+    border-color: #6ea45a;
+}
+
+/* ── Project select / change / cancel accents ── */
+body.diablo-theme .dice-project-cancel {
+    background: rgba(122, 36, 24, 0.3);
+    color: #e08a7a;
+    border-color: #8a2a1e;
+}
+
+body.diablo-theme .dice-project-cancel:hover,
+body.diablo-theme .dice-project-cancel:focus {
+    background: rgba(122, 36, 24, 0.45);
+    border-color: #c05a45;
+}
+
+body.diablo-theme .dice-project-change {
+    background: rgba(42, 90, 110, 0.3);
+    color: #9fc4d8;
+    border-color: #4a7a96;
+}
+
+body.diablo-theme .dice-project-change:hover,
+body.diablo-theme .dice-project-change:focus {
+    background: rgba(42, 90, 110, 0.45);
+    border-color: #7fb3d1;
+}
+
+body.diablo-theme .dice-project-manual-input:focus {
+    border-color: #a8853e;
+    box-shadow: 0 0 0 2px rgba(200, 169, 94, 0.25);
+}

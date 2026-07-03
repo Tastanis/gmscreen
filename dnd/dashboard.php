@@ -865,6 +865,7 @@ $currentCharacter = $is_gm ? 'cal' : $user; // GM starts viewing Cal, players se
     <link rel="stylesheet" href="css/ui-kit.css">
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="dice-roller/dice-roller.css">
+    <link rel="stylesheet" href="dice-roller/diablo-dice.css">
     <script src="js/ui-kit.js"></script>
     <link rel="stylesheet" href="Halloween/theme.css" id="halloween-theme" disabled>
     <link rel="stylesheet" href="Christmas/theme.css" id="christmas-theme" disabled>

@@ -6,9 +6,19 @@
     const EMBER_DURATION_MIN_MS = 7000;
     const EMBER_DURATION_MAX_MS = 13000;
     const EMBER_MAX_COUNT = 18;
+    // Full intensity for the first 30s after the theme activates, then drop
+    // the ember volume by 80% (spawn 5x less often, cap 20% as many).
+    const EMBER_FULL_INTENSITY_MS = 30000;
+    const EMBER_REDUCED_SPAWN_FACTOR = 5;
+    const EMBER_REDUCED_MAX_COUNT = 4;
 
     let spawnTimer = null;
     let active = false;
+    let activatedAt = 0;
+
+    function isReducedPhase() {
+        return Date.now() - activatedAt >= EMBER_FULL_INTENSITY_MS;
+    }
 
     function randomBetween(min, max) {
         return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -23,7 +33,8 @@
             return;
         }
 
-        if (document.querySelectorAll('.diablo-ember').length < EMBER_MAX_COUNT) {
+        const maxCount = isReducedPhase() ? EMBER_REDUCED_MAX_COUNT : EMBER_MAX_COUNT;
+        if (document.querySelectorAll('.diablo-ember').length < maxCount) {
             const ember = document.createElement('div');
             ember.className = 'diablo-ember';
             ember.style.setProperty('--ember-left', `${randomBetweenFloat(2, 98).toFixed(2)}vw`);
@@ -45,7 +56,8 @@
         if (!active) {
             return;
         }
-        spawnTimer = window.setTimeout(spawnEmber, randomBetween(EMBER_SPAWN_MIN_MS, EMBER_SPAWN_MAX_MS));
+        const factor = isReducedPhase() ? EMBER_REDUCED_SPAWN_FACTOR : 1;
+        spawnTimer = window.setTimeout(spawnEmber, randomBetween(EMBER_SPAWN_MIN_MS, EMBER_SPAWN_MAX_MS) * factor);
     }
 
     function removeEmberElements() {
@@ -59,6 +71,7 @@
             return;
         }
         active = true;
+        activatedAt = Date.now();
         scheduleNextEmber();
     }
 
