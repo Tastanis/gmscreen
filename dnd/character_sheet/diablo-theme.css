@@ -97,6 +97,7 @@ body.diablo-theme .tab--active {
    The parchment bevel borders become dark iron with a bronze pinstripe. */
 body.diablo-theme .marip-block,
 body.diablo-theme .action-card,
+body.diablo-theme .feature-card,
 body.diablo-theme .bonus-row__cell,
 body.diablo-theme .hireling-card,
 body.diablo-theme .quick-resources .field-card {
@@ -113,6 +114,7 @@ body.diablo-theme .bonus-row__cell--source {
 
 body.diablo-theme .marip-block::before,
 body.diablo-theme .action-card::before,
+body.diablo-theme .feature-card::before,
 body.diablo-theme .bonus-row__cell::before,
 body.diablo-theme .hireling-card::before,
 body.diablo-theme .quick-resources .field-card::before {
@@ -238,4 +240,140 @@ body.diablo-theme .ci-card__header {
 
 body.diablo-theme .ci-card__header:hover {
     background: linear-gradient(180deg, #363028 0%, #211b13 100%);
+}
+
+/* ==========================================================================
+   Features tab + edit mode — the remaining hard-coded parchment panels
+   (feature cards share the .action-card slab override above)
+   ========================================================================== */
+
+/* Soften the parchment emboss/shine pseudo-elements on the dark slabs */
+body.diablo-theme .feature-card::after,
+body.diablo-theme .action-card::after {
+    box-shadow:
+        inset 1px 1px 2px rgba(255, 255, 255, 0.06),
+        inset -1px -1px 2px rgba(0, 0, 0, 0.35);
+}
+
+/* Editor panels: meta grid (Range/Target/Cost), effect rows, tests,
+   attribute checks, effect blocks, placeholders */
+body.diablo-theme .action-meta,
+body.diablo-theme .effect,
+body.diablo-theme .test,
+body.diablo-theme .attribute-check,
+body.diablo-theme .effect-block,
+body.diablo-theme .placeholder {
+    background: linear-gradient(180deg, #201b14 0%, #14110c 100%);
+    border-color: rgba(110, 90, 51, 0.4);
+    color: #b8b0a2;
+}
+
+body.diablo-theme .test__roll {
+    background: linear-gradient(180deg, #16120d 0%, #0e0b08 100%);
+    border-color: rgba(110, 90, 51, 0.4);
+    color: #c8a95e;
+}
+
+/* Tier result bands: labels keep their blue/green/red identity, bodies
+   become dark tints of the same hue */
+body.diablo-theme .test-tier[data-tier="low"] .test-tier__body {
+    background: #141c28;
+    color: #9fc4d8;
+}
+
+body.diablo-theme .test-tier[data-tier="mid"] .test-tier__body {
+    background: #122015;
+    color: #8fc08f;
+}
+
+body.diablo-theme .test-tier[data-tier="high"] .test-tier__body {
+    background: #241110;
+    color: #e0968a;
+}
+
+/* Small editor buttons (B / U, arrows, close) */
+body.diablo-theme .icon-btn {
+    background: linear-gradient(180deg, #2b251b 0%, #191510 100%);
+    border-color: rgba(110, 90, 51, 0.5);
+    color: #c8a95e;
+}
+
+body.diablo-theme .text-btn {
+    color: #c8a95e;
+    border-color: rgba(110, 90, 51, 0.6);
+}
+
+body.diablo-theme .text-btn:hover,
+body.diablo-theme .icon-btn:hover {
+    filter: brightness(1.25);
+}
+
+/* Rich text editor + selects */
+body.diablo-theme .rich-text-editor,
+body.diablo-theme .skill-select {
+    background: linear-gradient(180deg, #0c0a07 0%, #14110c 100%);
+    border: 1px solid #000;
+    box-shadow:
+        inset 0 0 0 1px rgba(110, 90, 51, 0.45),
+        inset 0 2px 6px rgba(0, 0, 0, 0.8);
+    color: #cfc6b4;
+}
+
+/* Tag chips (Main action / Psionic / Ranged / etc.) */
+body.diablo-theme .chip--tone,
+body.diablo-theme .skill-chip__group {
+    background: #2b251b;
+    border-color: rgba(110, 90, 51, 0.5);
+    color: #c8a95e;
+}
+
+/* Skill pickers (modal) */
+body.diablo-theme .skill-picker__title,
+body.diablo-theme .skill-group__title {
+    background: linear-gradient(180deg, #2b251b 0%, #191510 100%);
+    border-color: rgba(110, 90, 51, 0.4);
+    color: #c8a95e;
+}
+
+body.diablo-theme .skill-picker__option {
+    background: linear-gradient(180deg, #201b14 0%, #14110c 100%);
+    border-color: rgba(110, 90, 51, 0.4);
+    color: #b8b0a2;
+}
+
+body.diablo-theme .skill-picker__option:hover {
+    filter: brightness(1.25);
+}
+
+/* Cost badge (was pale yellow) */
+body.diablo-theme .cost-badge {
+    background: rgba(200, 169, 94, 0.16);
+    color: #f0d68a;
+    border-color: rgba(168, 133, 62, 0.55);
+}
+
+/* Error panels (were pale pink) */
+body.diablo-theme .resource-automation-error,
+body.diablo-theme .sheet-load-error {
+    background: rgba(122, 31, 20, 0.35);
+    border-color: #8a2a1e;
+    color: #e08a7a;
+}
+
+/* Hirelings empty-state slab */
+body.diablo-theme .hirelings-empty {
+    background: linear-gradient(180deg, #201b14 0%, #14110c 100%);
+    border-color: rgba(110, 90, 51, 0.4);
+    color: #8d8474;
+}
+
+/* Automation runner extras (stepper, inspector steps) */
+body.diablo-theme .vtt-automation-spend__stepper {
+    background: #14110c;
+    border-color: rgba(110, 90, 51, 0.45);
+}
+
+body.diablo-theme .ability-inspector__pre--steps {
+    background: #0e0b08;
+    color: #b8b0a2;
 }
