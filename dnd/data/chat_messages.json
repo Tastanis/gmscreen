@@ -54,5 +54,30 @@
         "user": "cal",
         "message": "Persistent zone ended: Test Fire Wall (manually ended).",
         "type": "text"
+    },
+    {
+        "id": "msg_6a481819b7c418.91075626",
+        "timestamp": "2026-07-03T20:14:17+00:00",
+        "user": "GM",
+        "message": "Dice roll (2d10): 7",
+        "type": "dice_roll",
+        "payload": {
+            "expression": "2d10",
+            "components": [
+                "2d10"
+            ],
+            "breakdown": [
+                {
+                    "type": "dice",
+                    "notation": "2d10",
+                    "rolls": [
+                        1,
+                        6
+                    ],
+                    "total": 7
+                }
+            ],
+            "total": 7
+        }
     }
 ]

@@ -165,6 +165,27 @@ body {
   background: var(--accent-strong);
 }
 
+.sheet-export-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #d8ccb5;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.sheet-export-btn:hover {
+  background: var(--accent);
+  color: #f0e8da;
+}
+
+.sheet-export-btn--skills {
+  background: #c9b795;
+}
+
 .toggle {
   display: inline-flex;
   align-items: center;
@@ -2149,6 +2170,37 @@ body.edit-mode .respite-btn {
   padding: 8px 10px;
   background: #f8dddd;
   color: #7a1f1f;
+  font-size: 13px;
+}
+
+.skills-export-modal {
+  width: min(980px, 95vw);
+}
+
+.skills-export-textarea {
+  width: 100%;
+  min-height: 62vh;
+  resize: vertical;
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px;
+  background: #fffaf1;
+  color: var(--text);
+}
+
+.skills-export-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+
+.skills-export-status {
+  margin-right: auto;
+  color: var(--muted);
   font-size: 13px;
 }
 

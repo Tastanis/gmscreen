@@ -81,6 +81,10 @@ require_once '../includes/strix-nav.php';
           <h1 id="hero-name-heading">Tableside Hero View</h1>
         </div>
         <div class="header__actions">
+          <?php if ($isGm): ?>
+            <button type="button" id="export-character-sheet-btn" class="sheet-export-btn">Export Character Sheet</button>
+            <button type="button" id="export-skills-btn" class="sheet-export-btn sheet-export-btn--skills edit-only">Export Skills</button>
+          <?php endif; ?>
           <button type="button" id="dice-roller-btn" class="dice-roller-launch" title="Open dice roller">Dice Roller</button>
           <label class="toggle">
             <input type="checkbox" id="edit-toggle" />

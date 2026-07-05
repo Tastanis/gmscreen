@@ -4079,11 +4079,591 @@ function bindChatDots(scope) {
   });
 }
 
+function isCurrentUserGm() {
+  return document.body?.dataset?.isGm === "1";
+}
+
+function sheetExportFileBase() {
+  const heroName = sheetState.hero?.name || activeCharacter || "character";
+  return String(heroName)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "character";
+}
+
+function downloadTextFile(filename, content, mimeType = "application/json") {
+  const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function cloneExportValue(value) {
+  if (value === null || value === undefined) return null;
+  return deepClone(value);
+}
+
+function buildSkillExportPayload() {
+  captureAllSections();
+
+  const skills = Object.entries(normalizeSkillsState(sheetState.sidebar.skills || {}))
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, data]) => ({
+      name,
+      group: getSkillGroup(name),
+      level: data.level || "Trained",
+      bonus: data.bonus ?? "",
+    }));
+
+  const features = (sheetState.features || []).map((feature) => ({
+    id: feature.id,
+    name: feature.title || "",
+    type: "feature",
+    useWhen: feature.useWhen || "",
+    tags: Array.isArray(feature.tags) ? [...feature.tags] : [],
+    text: stripHtmlToText(feature.text || ""),
+    textHtml: feature.text || "",
+    automation: cloneExportValue(feature.automation),
+  }));
+
+  const actions = {};
+  Object.entries(sheetState.actions || {}).forEach(([type, entries]) => {
+    actions[type] = (entries || []).map((action) => ({
+      id: action.id,
+      name: action.name || "",
+      type,
+      actionLabel: action.actionLabel || "",
+      useWhen: action.useWhen || "",
+      tags: Array.isArray(action.tags) ? [...action.tags] : [],
+      range: action.range || "",
+      target: action.target || "",
+      trigger: action.trigger || "",
+      cost: action.cost || "",
+      description: stripHtmlToText(action.description || ""),
+      descriptionHtml: action.description || "",
+      tests: cloneExportValue(action.tests || []),
+      automation: cloneExportValue(action.automation),
+    }));
+  });
+
+  return {
+    schema: "character-sheet-llm-export/v1",
+    exportedAt: new Date().toISOString(),
+    characterKey: activeCharacter || "",
+    hero: {
+      name: sheetState.hero?.name || "",
+      level: sheetState.hero?.level || "",
+      class: sheetState.hero?.class || "",
+      classTrack: sheetState.hero?.classTrack || "",
+      ancestry: sheetState.hero?.ancestry || "",
+      career: sheetState.hero?.career || {},
+      culture: sheetState.hero?.culture || {},
+      complication: sheetState.hero?.complication || "",
+    },
+    trainedSkills: skills,
+    heroicResource: {
+      title: sheetState.hero?.resource?.title || "Resource",
+      sidebarText: stripHtmlToText(sheetState.sidebar?.resource?.text || ""),
+      automation: cloneExportValue(sheetState.hero?.resource?.automation),
+    },
+    features,
+    actions,
+    rawSheet: cloneExportValue(sheetState),
+  };
+}
+
+async function copyExportText(text) {
+  if (!navigator.clipboard || !window.isSecureContext) {
+    return false;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (error) {
+    console.warn("Clipboard export failed", error);
+    return false;
+  }
+}
+
+function closeSkillExportModal() {
+  document.getElementById("skills-export-modal")?.remove();
+}
+
+function openSkillExportModal(jsonText) {
+  closeSkillExportModal();
+  const modal = document.createElement("div");
+  modal.id = "skills-export-modal";
+  modal.className = "modal-overlay";
+  modal.innerHTML = `
+    <div class="modal skills-export-modal" role="dialog" aria-modal="true" aria-labelledby="skills-export-title">
+      <div class="modal__header">
+        <h2 class="modal__title" id="skills-export-title">Export Skills</h2>
+        <button class="icon-btn" type="button" data-close-skills-export aria-label="Close export">X</button>
+      </div>
+      <div class="modal__body">
+        <textarea class="skills-export-textarea" data-skills-export-text readonly>${escapeHtml(jsonText)}</textarea>
+        <div class="skills-export-actions">
+          <span class="skills-export-status" data-skills-export-status></span>
+          <button class="text-btn" type="button" data-copy-skills-export>Copy JSON</button>
+          <button class="text-btn" type="button" data-download-skills-export>Download JSON</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+  const textarea = modal.querySelector("[data-skills-export-text]");
+  const status = modal.querySelector("[data-skills-export-status]");
+  const close = () => closeSkillExportModal();
+
+  modal.querySelectorAll("[data-close-skills-export]").forEach((button) => {
+    button.addEventListener("click", close);
+  });
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) close();
+  });
+  modal.querySelector("[data-copy-skills-export]")?.addEventListener("click", async () => {
+    const copied = await copyExportText(jsonText);
+    if (!copied && textarea) {
+      textarea.focus();
+      textarea.select();
+      try {
+        document.execCommand("copy");
+      } catch (error) {
+        console.warn("Fallback copy failed", error);
+      }
+    }
+    if (status) status.textContent = "Copied";
+  });
+  modal.querySelector("[data-download-skills-export]")?.addEventListener("click", () => {
+    downloadTextFile(`${sheetExportFileBase()}-skills-export.json`, jsonText);
+    if (status) status.textContent = "Downloaded";
+  });
+
+  textarea?.focus();
+  textarea?.select();
+}
+
+function exportSkillsForLlm() {
+  if (!isCurrentUserGm()) return;
+  const jsonText = JSON.stringify(buildSkillExportPayload(), null, 2);
+  openSkillExportModal(jsonText);
+}
+
+function printableValue(value, fallback = "") {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
+function fieldBox(label, value) {
+  return `
+    <div class="fs-field">
+      <div class="fs-value">${escapeHtml(printableValue(value))}</div>
+      <div class="fs-label">${escapeHtml(label)}</div>
+    </div>
+  `;
+}
+
+function sectionTitle(title) {
+  return `<h2 class="fs-section-title"><span>${escapeHtml(title)}</span></h2>`;
+}
+
+function statBox(label, short, value) {
+  return `
+    <div class="fs-stat">
+      <div class="fs-stat-label"><b>${escapeHtml(short)}</b>${escapeHtml(label)}</div>
+      <div class="fs-stat-value">${escapeHtml(printableValue(value, "0"))}</div>
+    </div>
+  `;
+}
+
+function checkboxLine(label, checked) {
+  return `<div class="fs-check-line"><span>${checked ? "◆" : "◇"}</span>${escapeHtml(label)}</div>`;
+}
+
+function trainedSkillMap() {
+  return normalizeSkillsState(sheetState.sidebar.skills || {});
+}
+
+function renderPrintableSkills() {
+  const trained = trainedSkillMap();
+  return Object.entries(SORTED_SKILL_GROUPS)
+    .map(([group, skills]) => `
+      <div class="fs-skill-group">
+        <h3>${escapeHtml(group.replace(" Skills", ""))}</h3>
+        <div class="fs-skill-grid">
+          ${skills
+            .map((skill) => {
+              const data = trained[skill];
+              const suffix = data?.bonus ? ` ${data.bonus}` : "";
+              return checkboxLine(`${skill}${suffix}`, Boolean(data));
+            })
+            .join("")}
+        </div>
+      </div>
+    `)
+    .join("");
+}
+
+function testTierPrintLine(label, tier) {
+  if (!tier) return "";
+  const parts = [];
+  if (tier.damage || tier.damageType) {
+    parts.push(`${tier.damage || ""}${tier.damageType ? " " + tier.damageType : ""}`.trim());
+  }
+  if (tier.notes) parts.push(tier.notes);
+  if (tier.attributeCheck?.enabled) {
+    const attr = tier.attributeCheck.attribute || "Attr";
+    const threshold = tier.attributeCheck.threshold || "?";
+    const effect = tier.attributeCheck.effect || "";
+    parts.push(`${attr} <= ${threshold}: ${effect}`);
+  }
+  if (!parts.length) return "";
+  return `<div class="fs-tier"><span>${escapeHtml(label)}</span>${escapeHtml(parts.join("; "))}</div>`;
+}
+
+function actionPrintTone(action, type) {
+  const haystack = [type, action.actionLabel, ...(action.tags || [])].join(" ").toLowerCase();
+  if (haystack.includes("trigger")) return "green";
+  if (haystack.includes("maneuver")) return "blue";
+  if (haystack.includes("performance") || haystack.includes("no action")) return "purple";
+  if (haystack.includes("free")) return "gray";
+  return "red";
+}
+
+function renderPrintableActionCard(action, type) {
+  const tone = actionPrintTone(action, type);
+  const label = printableValue(action.actionLabel, type);
+  const tags = (action.tags || []).join(", ");
+  const meta = [
+    tags,
+    action.range ? `Range ${action.range}` : "",
+    action.target ? `Target ${action.target}` : "",
+    type === "triggers" && action.trigger ? `Trigger: ${action.trigger}` : "",
+  ].filter(Boolean);
+
+  return `
+    <article class="fs-ability-card fs-tone-${tone}">
+      <div class="fs-ability-kind">${escapeHtml(label)}</div>
+      <h3>${escapeHtml(printableValue(action.name, "Unnamed Ability"))}</h3>
+      ${action.cost ? `<div class="fs-cost">${escapeHtml(action.cost)}</div>` : ""}
+      ${action.useWhen ? `<p class="fs-flavor">${escapeHtml(action.useWhen)}</p>` : ""}
+      ${meta.length ? `<div class="fs-meta">${meta.map((item) => `<div>${escapeHtml(item)}</div>`).join("")}</div>` : ""}
+      ${(action.tests || [])
+        .map((test) => `
+          <div class="fs-test">
+            <strong>${escapeHtml(printableValue(test.label, "Power Roll"))} ${escapeHtml(formatRoll(test.rollMod))}</strong>
+            ${test.beforeEffect ? `<p>${escapeHtml(test.beforeEffect)}</p>` : ""}
+            ${testTierPrintLine("<=11", test.tiers?.low)}
+            ${testTierPrintLine("12-16", test.tiers?.mid)}
+            ${testTierPrintLine("17+", test.tiers?.high)}
+            ${test.additionalEffect ? `<p>${escapeHtml(test.additionalEffect)}</p>` : ""}
+          </div>
+        `)
+        .join("")}
+      ${action.description ? `<div class="fs-card-text">${renderRichText(action.description)}</div>` : ""}
+    </article>
+  `;
+}
+
+function renderPrintableFeature(feature) {
+  const tags = Array.isArray(feature.tags) && feature.tags.length ? feature.tags.join(", ") : "";
+  return `
+    <div class="fs-feature">
+      <h3>${escapeHtml(printableValue(feature.title, "Feature"))}</h3>
+      ${tags ? `<div class="fs-chipline">${escapeHtml(tags)}</div>` : ""}
+      ${feature.useWhen ? `<p class="fs-flavor">${escapeHtml(feature.useWhen)}</p>` : ""}
+      <div>${renderRichText(feature.text || "")}</div>
+    </div>
+  `;
+}
+
+function renderPrintableCommonThing(thing) {
+  return `
+    <div class="fs-feature">
+      <h3>${escapeHtml(printableValue(thing.title, "Common Thing"))}</h3>
+      <div>${renderRichText(thing.details || "")}</div>
+    </div>
+  `;
+}
+
+async function fetchInventoryForExport() {
+  try {
+    const params = new URLSearchParams();
+    params.append("action", "load");
+    const response = await fetch("inventory_handler.php", {
+      method: "POST",
+      body: params,
+      credentials: "same-origin",
+    });
+    const result = await response.json();
+    return result.success && result.data ? result.data : {};
+  } catch (error) {
+    console.warn("Inventory export load failed", error);
+    return {};
+  }
+}
+
+function renderPrintableInventory(inventoryData) {
+  const currentItems = inventoryData?.[activeCharacter]?.items || [];
+  const sharedItems = inventoryData?.shared?.items || [];
+  const items = [...currentItems, ...sharedItems].filter((item) => item && item.visible !== false);
+  if (!items.length) return '<div class="fs-empty-box"></div>';
+  return items
+    .map((item) => {
+      const effects = Array.isArray(item.effectSections) ? item.effectSections : [];
+      return `
+        <div class="fs-inventory-item">
+          <strong>${escapeHtml(printableValue(item.name, "Unnamed Item"))}</strong>
+          ${item.keywords ? `<span class="fs-chipline">${escapeHtml(item.keywords)}</span>` : ""}
+          ${item.description ? `<p>${escapeHtml(item.description)}</p>` : ""}
+          ${effects
+            .map((section) => `
+              <p><b>${escapeHtml(printableValue(section.title, "Effect"))}${section.cost ? ` (${escapeHtml(section.cost)})` : ""}:</b>
+              ${escapeHtml(section.text || "")}</p>
+            `)
+            .join("")}
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function buildPrintableCharacterSheetHtml(inventoryData) {
+  captureAllSections();
+  const hero = sheetState.hero || {};
+  const vitals = hero.vitals || {};
+  const resourceTitle = hero.resource?.title || sheetState.sidebar?.resource?.title || "Heroic Resource";
+  const actions = [
+    ...(sheetState.actions?.mains || []).map((action) => ({ action, type: "mains" })),
+    ...(sheetState.actions?.maneuvers || []).map((action) => ({ action, type: "maneuvers" })),
+    ...(sheetState.actions?.triggers || []).map((action) => ({ action, type: "triggers" })),
+    ...(sheetState.actions?.freeStrikes || []).map((action) => ({ action, type: "freeStrikes" })),
+  ];
+  const conditions = ["Bleeding", "Dazed", "Frightened", "Grabbed", "Prone", "Restrained", "Slowed", "Taunted", "Weakened"];
+  const vulnerabilities = sheetState.sidebar?.lists?.vulnerability || [];
+  const immunities = sheetState.sidebar?.lists?.immunity || [];
+  const languages = sheetState.sidebar?.lists?.languages || [];
+  const commonThings = normalizeCommonThings(sheetState.sidebar?.lists?.common || []);
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${escapeHtml(printableValue(hero.name, "Character Sheet"))}</title>
+  <style>
+    @page { size: letter; margin: 0.22in; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #fff; color: #222; font-family: Georgia, "Times New Roman", serif; font-size: 10.5pt; }
+    .fs-page { width: 7.95in; min-height: 10.55in; margin: 0 auto; page-break-after: always; border: 1px solid #b8b8b8; padding: 0.1in; }
+    .fs-page:last-child { page-break-after: auto; }
+    .fs-brand { text-align: center; font-family: Arial, sans-serif; font-weight: 800; letter-spacing: 0.06em; line-height: 1; color: #666; border-bottom: 3px double #777; padding-bottom: 4px; margin-bottom: 6px; }
+    .fs-brand small { display: block; font-size: 8pt; }
+    .fs-top { display: grid; grid-template-columns: 1fr 3.8in; gap: 8px; margin-bottom: 6px; }
+    .fs-identity, .fs-advancement, .fs-box { border: 1px solid #aaa; padding: 8px; }
+    .fs-name { font-size: 20pt; border-bottom: 1px solid #999; margin-bottom: 2px; }
+    .fs-field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; }
+    .fs-field { border-bottom: 1px solid #999; min-height: 28px; }
+    .fs-value { font-size: 12pt; min-height: 16px; }
+    .fs-label { color: #555; font-size: 7.5pt; font-family: Arial, sans-serif; }
+    .fs-advancement { display: grid; grid-template-columns: 1fr 0.55in; gap: 8px; align-items: center; }
+    .fs-level { text-align: center; border-left: 3px double #aaa; }
+    .fs-level strong { display: block; font-size: 28pt; }
+    .fs-track { display: flex; gap: 8px; margin-top: 6px; }
+    .fs-track div { flex: 1; border: 1px solid #777; padding: 4px; text-align: center; font-size: 13pt; }
+    .fs-main-row { display: grid; grid-template-columns: 3in 1.72in 1.2in 1.05in 1.35in; gap: 6px; margin-bottom: 6px; }
+    .fs-stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+    .fs-stat { text-align: center; }
+    .fs-stat-label { font-family: Arial, sans-serif; font-size: 7pt; letter-spacing: 0.02em; }
+    .fs-stat-label b { background: #222; color: #fff; padding: 1px 3px; margin-right: 1px; }
+    .fs-stat-value { width: 0.42in; height: 0.42in; margin: 4px auto; border: 3px double #777; font-size: 19pt; line-height: 0.34in; }
+    .fs-resource-symbol { width: 0.58in; height: 0.58in; margin: 8px auto 4px; border: 4px solid #777; transform: rotate(30deg); }
+    .fs-resource-label { text-align: center; font-size: 13pt; }
+    .fs-section-title { text-align: center; font-size: 12pt; font-weight: 500; letter-spacing: 0.08em; margin: 0 0 5px; border-bottom: 3px double #777; line-height: 0.25; }
+    .fs-section-title span { background: #fff; padding: 0 8px; }
+    .fs-overview-grid { display: grid; grid-template-columns: 3.05in 3.05in 1.38in; gap: 6px; align-items: start; }
+    .fs-box { min-height: 1.25in; }
+    .fs-equipment-line { border: 1px solid #777; margin: 6px 0; padding: 4px; text-align: center; }
+    .fs-condition-table { width: 100%; border-collapse: collapse; }
+    .fs-condition-table th { font-weight: 400; border-bottom: 1px solid #777; }
+    .fs-condition-table td { border-bottom: 1px solid #bbb; padding: 2px 4px; }
+    .fs-condition-table tr:nth-child(even) td { background: #e9e9e9; }
+    .fs-side-note h3 { text-align: center; font-size: 10pt; margin: 8px 0 4px; letter-spacing: 0.07em; }
+    .fs-features-two { column-count: 2; column-gap: 12px; column-rule: 1px solid #aaa; }
+    .fs-feature { break-inside: avoid; margin: 0 0 8px; }
+    .fs-feature h3 { margin: 0 0 2px; font-size: 10.5pt; }
+    .fs-flavor { font-style: italic; margin: 2px 0 4px; color: #555; }
+    .fs-chipline { display: inline-block; color: #666; background: #eee; border: 1px solid #ccc; border-radius: 2px; padding: 0 3px; font-size: 8pt; margin: 1px 3px 1px 0; }
+    .fs-culture-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1.15fr; gap: 8px; margin-bottom: 8px; }
+    .fs-mid-grid { display: grid; grid-template-columns: 2.6in 2.6in 2.1in; gap: 8px; }
+    .fs-skill-group { break-inside: avoid; margin-bottom: 8px; }
+    .fs-skill-group h3 { font-size: 10pt; letter-spacing: 0.07em; border-bottom: 1px solid #777; margin: 0 0 4px; }
+    .fs-skill-grid { columns: 2; column-gap: 10px; }
+    .fs-check-line { break-inside: avoid; margin-bottom: 4px; }
+    .fs-check-line span { display: inline-block; width: 13px; }
+    .fs-abilities { column-count: 3; column-gap: 8px; }
+    .fs-ability-card { position: relative; break-inside: avoid; border: 2px solid #999; border-radius: 8px; padding: 18px 8px 8px; margin: 0 0 8px; min-height: 1.8in; }
+    .fs-ability-kind { position: absolute; top: -2px; left: 16px; right: 16px; text-align: center; background: #fff; font-family: Arial, sans-serif; font-size: 8pt; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+    .fs-ability-card h3 { text-align: center; margin: 0 0 4px; font-size: 12pt; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; }
+    .fs-cost { position: absolute; right: 6px; top: 10px; width: 0.28in; height: 0.28in; border: 1px solid currentColor; border-radius: 50%; text-align: center; font-size: 8pt; line-height: 0.24in; }
+    .fs-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 5px; margin: 4px 0; }
+    .fs-test { margin-top: 5px; }
+    .fs-test p, .fs-card-text p { margin: 2px 0; }
+    .fs-tier { display: flex; gap: 4px; margin: 3px 0; }
+    .fs-tier span { flex: 0 0 31px; border: 1px solid #777; border-radius: 3px; text-align: center; font-size: 7pt; font-family: Arial, sans-serif; font-weight: 800; }
+    .fs-tone-red { color: #f00; } .fs-tone-red * { border-color: #f00; }
+    .fs-tone-blue { color: #00aeef; } .fs-tone-blue * { border-color: #00aeef; }
+    .fs-tone-green { color: #00a651; } .fs-tone-green * { border-color: #00a651; }
+    .fs-tone-purple { color: #a30aa6; } .fs-tone-purple * { border-color: #a30aa6; }
+    .fs-tone-gray { color: #666; } .fs-tone-gray * { border-color: #999; }
+    .fs-ability-card h3, .fs-ability-card p, .fs-ability-card div:not(.fs-ability-kind):not(.fs-cost):not(.fs-tier), .fs-ability-card strong { color: #222; }
+    .fs-inventory-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .fs-inventory-item { break-inside: avoid; border-bottom: 1px solid #ccc; padding: 4px 0; }
+    .fs-empty-box { min-height: 1.5in; }
+    .fs-reference-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    @media screen { body { background: #ddd; padding: 16px; } .fs-page { background: #fff; margin-bottom: 16px; box-shadow: 0 6px 24px rgba(0,0,0,0.18); } }
+  </style>
+</head>
+<body>
+  <section class="fs-page">
+    <div class="fs-brand">POWERED BY<br><span>DRAW STEEL</span><small>MADE WITH FORGE STEEL</small></div>
+    <div class="fs-top">
+      <div class="fs-identity">
+        <div class="fs-name">${escapeHtml(printableValue(hero.name, "Unnamed Hero"))}</div>
+        <div class="fs-field-grid">
+          ${fieldBox("Ancestry", hero.ancestry)}
+          ${fieldBox("Class", hero.class)}
+          ${fieldBox("Career", hero.career?.career)}
+          ${fieldBox("Subclass (Class Act)", hero.classTrack)}
+        </div>
+      </div>
+      <div class="fs-advancement">
+        <div>
+          <div><b>VICTORIES:</b> ${Array.from({ length: 14 }, (_, index) => index < Number(hero.victories || 0) ? "|" : "_").join(" ")}</div>
+          <div class="fs-track">
+            <div><small>WEALTH</small><br>${escapeHtml(printableValue(hero.wealth, "0"))}</div>
+            <div><small>RENOWN</small><br>${escapeHtml(printableValue(hero.renown, "0"))}</div>
+            <div><small>XP</small><br>${escapeHtml(printableValue(hero.xp, "0"))}</div>
+          </div>
+        </div>
+        <div class="fs-level"><small>LEVEL</small><strong>${escapeHtml(printableValue(hero.level, "1"))}</strong></div>
+      </div>
+    </div>
+    <div class="fs-main-row fs-box">
+      <div class="fs-stats">
+        ${statBox("IGHT", "M", hero.stats?.might)}
+        ${statBox("GILITY", "A", hero.stats?.agility)}
+        ${statBox("EASON", "R", hero.stats?.reason)}
+        ${statBox("NTUITION", "I", hero.stats?.intuition)}
+        ${statBox("RESENCE", "P", hero.stats?.presence)}
+      </div>
+      <div>${sectionTitle("STAMINA")}<div style="text-align:center;font-size:16pt;">${escapeHtml(printableValue(vitals.currentStamina, "0"))}</div><div style="text-align:center;">Max ${escapeHtml(printableValue(vitals.staminaMax, "0"))}</div></div>
+      <div>${sectionTitle("RECOVERIES")}<div style="text-align:center;font-size:16pt;">${escapeHtml(printableValue(vitals.currentRecoveries, "0"))}</div><div style="text-align:center;">Max ${escapeHtml(printableValue(vitals.recoveriesMax, "0"))}</div></div>
+      <div>${sectionTitle("HEROIC RESOURCE")}<div class="fs-resource-symbol"></div><div class="fs-resource-label">${escapeHtml(resourceTitle)}</div><div style="text-align:center;">${escapeHtml(printableValue(hero.resource?.value, "0"))}</div></div>
+      <div>${sectionTitle("SURGES")}<div style="border:4px solid #777;width:.58in;height:.58in;margin:8px auto;"></div><div style="text-align:center;">${escapeHtml(printableValue(hero.surges, "0"))}</div></div>
+    </div>
+    <div class="fs-overview-grid">
+      <div class="fs-box">
+        ${sectionTitle("EQUIPMENT AND MODIFIERS")}
+        ${(hero.bonuses || []).map((bonus) => `<div class="fs-equipment-line">${renderRichText(bonus.bonus || "")}<br><small>${renderRichText(bonus.source || "")}</small></div>`).join("") || '<div class="fs-empty-box"></div>'}
+      </div>
+      <div class="fs-box">
+        ${sectionTitle("CONDITIONS")}
+        <table class="fs-condition-table"><thead><tr><th>Condition</th><th>End of Turn</th><th>Save Ends</th></tr></thead><tbody>
+          ${conditions.map((condition) => `<tr><td>${condition}</td><td style="text-align:center;">◇</td><td style="text-align:center;">◇</td></tr>`).join("")}
+        </tbody></table>
+        <p><b>Immunities:</b> ${escapeHtml(immunities.join(", ") || "None")}</p>
+        <p><b>Weaknesses:</b> ${escapeHtml(vulnerabilities.join(", ") || "None")}</p>
+      </div>
+      <div class="fs-box fs-side-note">
+        ${sectionTitle("POTENCY")}
+        <div class="fs-track"><div>WEAK<br>0</div><div>AVERAGE<br>1</div><div>STRONG<br>2</div></div>
+        <h3>YOUR TURN</h3>
+        <p>Each creature can take one action, one maneuver, and a main action on their turn.</p>
+        <p>You can also take one triggered action per round when the trigger happens.</p>
+      </div>
+    </div>
+    <div class="fs-box" style="margin-top:8px;">
+      ${sectionTitle("CLASS FEATURES")}
+      <div class="fs-features-two">${(sheetState.features || []).slice(0, 8).map(renderPrintableFeature).join("") || '<div class="fs-empty-box"></div>'}</div>
+    </div>
+  </section>
+
+  <section class="fs-page">
+    ${sectionTitle("CULTURE")}
+    <div class="fs-culture-grid">
+      <div class="fs-box">${fieldBox("Culture Name", hero.culture?.culture)}</div>
+      <div class="fs-box">${fieldBox("Environment", hero.culture?.environment)}</div>
+      <div class="fs-box">${fieldBox("Organization", hero.culture?.organization)}${fieldBox("Upbringing", hero.culture?.upbringing)}</div>
+      <div class="fs-box">${sectionTitle("LANGUAGES")}<ul>${languages.map((lang) => `<li>${escapeHtml(lang)}</li>`).join("")}</ul></div>
+    </div>
+    <div class="fs-mid-grid">
+      <div>
+        <div class="fs-box">${sectionTitle("CAREER")}${fieldBox("Career", hero.career?.career)}${fieldBox("Inciting Incident", hero.career?.incitingIncident)}</div>
+        <div class="fs-box" style="margin-top:8px;">${sectionTitle("COMMON THINGS")}${commonThings.map(renderPrintableCommonThing).join("") || '<div class="fs-empty-box"></div>'}</div>
+      </div>
+      <div>
+        <div class="fs-box">${sectionTitle("COMPLICATION")}${fieldBox("Complication", hero.complication)}<div class="fs-empty-box"></div></div>
+        <div class="fs-box" style="margin-top:8px;">${sectionTitle("ANCESTRY TRAITS AND PERKS")}${(sheetState.features || []).slice(8).map(renderPrintableFeature).join("") || '<div class="fs-empty-box"></div>'}</div>
+      </div>
+      <div class="fs-box">${sectionTitle("SKILLS")}${renderPrintableSkills()}</div>
+    </div>
+  </section>
+
+  <section class="fs-page">
+    ${sectionTitle("ABILITIES")}
+    <div class="fs-abilities">${actions.map(({ action, type }) => renderPrintableActionCard(action, type)).join("") || '<div class="fs-empty-box"></div>'}</div>
+  </section>
+
+  <section class="fs-page">
+    ${sectionTitle("INVENTORY")}
+    <div class="fs-inventory-grid">${renderPrintableInventory(inventoryData)}</div>
+    <div class="fs-reference-grid" style="margin-top:8px;">
+      <div class="fs-box">${sectionTitle("HIRELINGS")}${(hero.hirelings || []).map((hireling) => `<p><b>${escapeHtml(hireling.name || "Hireling")}</b> ${escapeHtml((hireling.skills || []).join(", "))}<br>${renderRichText(hireling.notes || "")}</p>`).join("") || '<div class="fs-empty-box"></div>'}</div>
+      <div class="fs-box">${sectionTitle("NOTES")}<div class="fs-empty-box"></div></div>
+    </div>
+  </section>
+</body>
+</html>`;
+}
+
+async function exportPrintableCharacterSheet() {
+  if (!isCurrentUserGm()) return;
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {
+    showChatToast("Allow popups to export the sheet");
+    return;
+  }
+  printWindow.document.write("<!doctype html><title>Preparing character sheet...</title><body>Preparing character sheet...</body>");
+  printWindow.document.close();
+
+  const inventoryData = await fetchInventoryForExport();
+  const html = buildPrintableCharacterSheetHtml(inventoryData);
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => printWindow.print(), 300);
+}
+
+function bindExportButtons() {
+  if (!isCurrentUserGm()) return;
+  document.getElementById("export-skills-btn")?.addEventListener("click", exportSkillsForLlm);
+  document.getElementById("export-character-sheet-btn")?.addEventListener("click", exportPrintableCharacterSheet);
+}
+
 async function ready() {
   activeCharacter = document.body.dataset.character || "";
   setupTabbing();
   bindEditToggle();
   bindAutoSave();
+  bindExportButtons();
   await loadSheet();
   startStaminaSync();
   startHeroTokenSync();
