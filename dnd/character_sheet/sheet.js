@@ -96,6 +96,24 @@ const DEFAULT_CAREER_FIELDS = {
   incitingIncident: "",
 };
 
+const DEFAULT_KIT_FIELDS = {
+  name: "",
+  weapon: "",
+  armor: "",
+  speed: "",
+  disengage: "",
+  stamina: "",
+  stability: "",
+  meleeDistance: "",
+  rangedDistance: "",
+  meleeDamageLow: "",
+  meleeDamageMid: "",
+  meleeDamageHigh: "",
+  rangedDamageLow: "",
+  rangedDamageMid: "",
+  rangedDamageHigh: "",
+};
+
 function defaultCommonThing() {
   return {
     id: createId("common"),
@@ -170,6 +188,7 @@ const defaultSheet = {
     ancestry: "",
     culture: { ...DEFAULT_CULTURE_FIELDS },
     career: { ...DEFAULT_CAREER_FIELDS },
+    kit: { ...DEFAULT_KIT_FIELDS },
     classTrack: "",
     wealth: "",
     renown: "",
@@ -475,6 +494,7 @@ function mergeWithDefaults(data) {
   merged.hero.vitals = normalizeVitals(inputHero.vitals);
   merged.hero.culture = normalizeIdentityGroup(inputHero.culture, DEFAULT_CULTURE_FIELDS);
   merged.hero.career = normalizeIdentityGroup(inputHero.career, DEFAULT_CAREER_FIELDS);
+  merged.hero.kit = normalizeIdentityGroup(inputHero.kit, DEFAULT_KIT_FIELDS);
   merged.hero.heroTokens = [
     Boolean(inputHero.heroTokens?.[0]),
     Boolean(inputHero.heroTokens?.[1]),
@@ -1176,6 +1196,17 @@ function renderHeroPane() {
     `;
   };
 
+  const kitItem = (label, key) => {
+    const value = hero.kit?.[key] ?? "";
+    return `
+      <div class="detail-item">
+        <div class="detail-item__label">${label}</div>
+        <div class="display-value">${value || ""}</div>
+        <input class="edit-field" type="text" data-model="hero.kit.${key}" value="${value || ""}" />
+      </div>
+    `;
+  };
+
   const detailGroup = (title, entries, basePath) => `
     <div class="field-card detail-card">
       <label>${title}</label>
@@ -1324,6 +1355,33 @@ function renderHeroPane() {
             "hero.career"
           )}
           ${identityField("Complication", "hero.complication")}
+        </div>
+      </div>
+
+      <div class="bottom-details">
+        <div class="field-card detail-card kit-card">
+          <label>Kit</label>
+          <div class="detail-grid kit-grid">
+            ${kitItem("Kit Name", "name")}
+            ${kitItem("Weapon / Implement", "weapon")}
+            ${kitItem("Armor / Ward", "armor")}
+          </div>
+          <div class="detail-grid kit-grid kit-grid--mods">
+            ${kitItem("Speed", "speed")}
+            ${kitItem("Disengage", "disengage")}
+            ${kitItem("Stamina", "stamina")}
+            ${kitItem("Stability", "stability")}
+            ${kitItem("Melee Dist.", "meleeDistance")}
+            ${kitItem("Ranged Dist.", "rangedDistance")}
+          </div>
+          <div class="detail-grid kit-grid kit-grid--damage">
+            ${kitItem("Melee Dmg ≤11", "meleeDamageLow")}
+            ${kitItem("Melee Dmg 12–16", "meleeDamageMid")}
+            ${kitItem("Melee Dmg 17+", "meleeDamageHigh")}
+            ${kitItem("Ranged Dmg ≤11", "rangedDamageLow")}
+            ${kitItem("Ranged Dmg 12–16", "rangedDamageMid")}
+            ${kitItem("Ranged Dmg 17+", "rangedDamageHigh")}
+          </div>
         </div>
       </div>
 
@@ -4164,6 +4222,7 @@ function buildSkillExportPayload() {
       ancestry: sheetState.hero?.ancestry || "",
       career: sheetState.hero?.career || {},
       culture: sheetState.hero?.culture || {},
+      kit: sheetState.hero?.kit || {},
       complication: sheetState.hero?.complication || "",
     },
     trainedSkills: skills,
@@ -4506,6 +4565,16 @@ function buildPrintableCharacterSheetHtml(inventoryData) {
   const immunities = sheetState.sidebar?.lists?.immunity || [];
   const languages = sheetState.sidebar?.lists?.languages || [];
   const commonThings = normalizeCommonThings(sheetState.sidebar?.lists?.common || []);
+  const kit = { ...DEFAULT_KIT_FIELDS, ...(hero.kit || {}) };
+  const kitHasData = Object.values(kit).some((value) => String(value ?? "").trim() !== "");
+  const kitDamageTiers = (prefix) => ["Low", "Mid", "High"].map((tier, index) => `
+    <div class="fs-kit-tier">
+      <b>${escapeHtml(printableValue(kit[`${prefix}Damage${tier}`]))}</b>
+      <span class="fs-tier-band">${["≤11", "12–16", "17+"][index]}</span>
+    </div>
+  `).join("");
+  const kitHasMeleeDamage = ["meleeDamageLow", "meleeDamageMid", "meleeDamageHigh"].some((key) => String(kit[key] ?? "").trim() !== "");
+  const kitHasRangedDamage = ["rangedDamageLow", "rangedDamageMid", "rangedDamageHigh"].some((key) => String(kit[key] ?? "").trim() !== "");
   const staminaMax = printableNumber(vitals.staminaMax, 0);
   const windedValue = Math.floor(staminaMax / 2);
   const maxStat = highestStatValue();
@@ -4591,6 +4660,15 @@ function buildPrintableCharacterSheetHtml(inventoryData) {
     .fs-overview-grid > * { min-height: 1in; }
     .fs-equipment-line { border: 1px solid #777; border-radius: 8px; margin: 6px 0; padding: 3px 4px; text-align: center; }
     .fs-equipment-line small { color: #555; font-size: 7pt; font-family: Arial, sans-serif; }
+    .fs-kit-two { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .fs-kit-two .fs-equipment-line { margin: 0 0 6px; }
+    .fs-kit-mods { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin: 2px 0 6px; }
+    .fs-kit-damage { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; border-top: 1px solid #ccc; padding-top: 5px; margin-bottom: 6px; }
+    .fs-kit-damage-title { text-align: center; font-family: Arial, sans-serif; font-size: 7pt; font-weight: 700; letter-spacing: 0.06em; margin-bottom: 2px; }
+    .fs-kit-damage-row { display: flex; justify-content: space-around; }
+    .fs-kit-tier { text-align: center; }
+    .fs-kit-tier b { display: block; font-size: 11pt; font-weight: 400; }
+    .fs-kit-tier .fs-tier-band { display: inline-block; padding: 0 4px; }
     .fs-condition-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
     .fs-condition-table th { font-weight: 400; font-family: Arial, sans-serif; font-size: 7.5pt; border-bottom: 1px solid #777; padding: 1px 4px; text-align: left; }
     .fs-condition-table td { padding: 2.5px 4px; min-height: 14px; }
@@ -4753,7 +4831,34 @@ function buildPrintableCharacterSheetHtml(inventoryData) {
     <div class="fs-overview-grid">
       <div class="fs-box">
         ${sectionTitle("EQUIPMENT AND MODIFIERS")}
-        ${(hero.bonuses || []).map((bonus) => `<div class="fs-equipment-line">${renderRichText(bonus.bonus || "")}<br><small>${renderRichText(bonus.source || "")}</small></div>`).join("") || '<div class="fs-empty-box"></div>'}
+        ${kitHasData ? `
+          <div class="fs-equipment-line">${escapeHtml(printableValue(kit.name))}<br><small>Kit</small></div>
+          <div class="fs-kit-two">
+            <div class="fs-equipment-line">${escapeHtml(printableValue(kit.weapon))}<br><small>Weapon / Implement</small></div>
+            <div class="fs-equipment-line">${escapeHtml(printableValue(kit.armor))}<br><small>Armor / Ward</small></div>
+          </div>
+          <div class="fs-kit-mods">
+            ${vitalMini("Speed", kit.speed)}
+            ${vitalMini("Disengage", kit.disengage)}
+            ${vitalMini("Stamina", kit.stamina)}
+            ${vitalMini("Stability", kit.stability)}
+            ${vitalMini("Melee Dist.", kit.meleeDistance)}
+            ${vitalMini("Ranged Dist.", kit.rangedDistance)}
+          </div>
+          ${kitHasMeleeDamage || kitHasRangedDamage ? `
+            <div class="fs-kit-damage">
+              <div>
+                <div class="fs-kit-damage-title">Melee Damage Bonus</div>
+                <div class="fs-kit-damage-row">${kitDamageTiers("melee")}</div>
+              </div>
+              <div>
+                <div class="fs-kit-damage-title">Ranged Damage Bonus</div>
+                <div class="fs-kit-damage-row">${kitDamageTiers("ranged")}</div>
+              </div>
+            </div>
+          ` : ""}
+        ` : ""}
+        ${(hero.bonuses || []).map((bonus) => `<div class="fs-equipment-line">${renderRichText(bonus.bonus || "")}<br><small>${renderRichText(bonus.source || "")}</small></div>`).join("") || (kitHasData ? "" : '<div class="fs-empty-box"></div>')}
       </div>
       <div class="fs-box">
         ${sectionTitle("CONDITIONS")}

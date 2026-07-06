@@ -2361,6 +2361,19 @@ body.edit-mode .respite-btn {
   gap: 6px;
 }
 
+.kit-card .kit-grid {
+  margin-bottom: 8px;
+}
+
+.kit-card .kit-grid:last-child {
+  margin-bottom: 0;
+}
+
+.kit-grid--mods,
+.kit-grid--damage {
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+}
+
 .detail-item__label {
   font-weight: 750;
   font-size: 12.5px;
