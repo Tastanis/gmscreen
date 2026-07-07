@@ -10,17 +10,25 @@ $base = aslhub_base_url();
 $buckets = $pdo->query("SELECT * FROM asl_skill_buckets WHERE active = 1 ORDER BY order_index")->fetchAll();
 $standards = $pdo->query("SELECT * FROM asl_standards WHERE active = 1 ORDER BY order_index, standard_id")->fetchAll();
 $resources = $pdo->query("SELECT * FROM asl_learning_target_resources WHERE standard_id IS NOT NULL ORDER BY standard_id, order_index, id")->fetchAll();
+$targets = $pdo->query("SELECT id, standard_id, target_code, asl_level FROM asl_learning_targets WHERE active = 1 ORDER BY standard_id, asl_level, order_index")->fetchAll();
 
 $byStandard = [];
 foreach ($resources as $r) $byStandard[$r['standard_id']][] = $r;
 $standardsByBucket = [];
 foreach ($standards as $s) $standardsByBucket[$s['bucket_id']][] = $s;
+$targetsByStandard = [];
+$targetCodeById = [];
+foreach ($targets as $t) {
+    $targetsByStandard[$t['standard_id']][] = $t;
+    $targetCodeById[(int)$t['id']] = $t['target_code'];
+}
 
 aslhub_teacher_header($me, 'Resources', 'resources');
 ?>
     <p style="color:#4a5568;margin-bottom:14px;">
-        Resources attach to a <strong>standard</strong> and show on the student's rubric page.
-        Leave level blank to show it to all ASL levels, or pick one level.
+        Resources attach to a <strong>standard</strong> (general — shows on the rubric overview) or to one
+        <strong>specific skill</strong> (shows when a student zooms into that skill).
+        Leave level blank to show a general resource to all ASL levels.
     </p>
 
     <?php foreach ($buckets as $b): ?>
@@ -43,7 +51,11 @@ aslhub_teacher_header($me, 'Resources', 'resources');
                                     <?php endif; ?>
                                 </div>
                                 <span>
-                                    <span class="pill"><?php echo $r['asl_level'] ? 'ASL ' . (int)$r['asl_level'] : 'All levels'; ?></span>
+                                    <?php if (!empty($r['learning_target_id'])): ?>
+                                        <span class="pill" style="background:#eaf2fb;color:#2b6cb0;"><?php echo aslhub_h($targetCodeById[(int)$r['learning_target_id']] ?? 'skill'); ?></span>
+                                    <?php else: ?>
+                                        <span class="pill"><?php echo $r['asl_level'] ? 'ASL ' . (int)$r['asl_level'] : 'All levels'; ?></span>
+                                    <?php endif; ?>
                                     <button type="button" class="close-btn" style="font-size:18px;" title="Delete resource"
                                         onclick="deleteResource(<?php echo (int)$r['id']; ?>, this)">&times;</button>
                                 </span>
@@ -61,6 +73,12 @@ aslhub_teacher_header($me, 'Resources', 'resources');
                         <select class="cell-input" name="asl_level" style="width:110px;">
                             <option value="">All levels</option>
                             <option value="1">ASL 1</option><option value="2">ASL 2</option><option value="3">ASL 3</option>
+                        </select>
+                        <select class="cell-input" name="learning_target_id" style="width:190px;" title="Attach to one specific skill (optional)">
+                            <option value="">Whole standard</option>
+                            <?php foreach ($targetsByStandard[$s['standard_id']] ?? [] as $t): ?>
+                                <option value="<?php echo (int)$t['id']; ?>"><?php echo aslhub_h($t['target_code']); ?></option>
+                            <?php endforeach; ?>
                         </select>
                         <button type="submit" class="form-button" style="width:auto;margin:0;padding:7px 14px;">Add</button>
                     </form>

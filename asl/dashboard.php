@@ -96,7 +96,7 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
                     </div>
                     <div class="standard-column">
                         <div class="column-title-row">
-                            <h3 class="column-title">Standards</h3>
+                            <h3 class="column-title" id="standard-column-title">Standards</h3>
                             <button type="button" id="back-to-buckets" class="back-to-buckets" style="display: none;">&larr; Back to Buckets</button>
                         </div>
                         <div id="standard-list" class="standard-list"></div>
@@ -159,7 +159,7 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
 
         const dashboardData = window.ASL_STUDENT_DASHBOARD || {};
         const SCORE_COLORS = { 0: '#9aa2ad', 1: '#e05252', 2: '#e8b93e', 3: '#4caf6d', 4: '#4a90d9' };
-        const state = { bucketId: null, standardId: null, progressScope: 'overall' };
+        const state = { bucketId: null, standardId: null, targetId: null, progressScope: 'overall' };
         const overlayState = { attendance: false, participation: false };
 
         function openGoals() {
@@ -238,7 +238,35 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
                 button.addEventListener('click', () => {
                     state.bucketId = button.dataset.bucketId;
                     state.standardId = null;
+                    state.targetId = null;
                     state.progressScope = 'bucket';
+                    renderDashboard();
+                });
+            });
+        }
+
+        function skillChip(t) {
+            const my = scoreOf(t.id);
+            return my === null
+                ? '<span class="pill">Not rated</span>'
+                : `<span class="score-chip score-${my}" style="background:${SCORE_COLORS[my]}">${my}</span>`;
+        }
+
+        function skillCardHtml(t, compact) {
+            const my = scoreOf(t.id);
+            const tint = my !== null ? 'score-tint-' + my : '';
+            const active = String(t.id) === String(state.targetId) ? 'active' : '';
+            return `
+                <button type="button" class="target-row ${tint} ${active}" data-target-id="${escapeHtml(t.id)}">
+                    <span>${skillChip(t)} ${escapeHtml(t.title)}</span>
+                    ${compact ? '' : `<small style="color:#718096;font-weight:700;">${escapeHtml(t.target_code)}</small>`}
+                </button>`;
+        }
+
+        function bindSkillCards(container) {
+            container.querySelectorAll('[data-target-id]').forEach(button => {
+                button.addEventListener('click', () => {
+                    state.targetId = button.dataset.targetId;
                     renderDashboard();
                 });
             });
@@ -246,8 +274,19 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
 
         function renderStandards() {
             const list = document.getElementById('standard-list');
+            const title = document.getElementById('standard-column-title');
             const bucket = getBucket(state.bucketId);
+            const standard = getStandard(state.standardId);
 
+            // Zoomed into one skill: this column becomes the collapsed skill list
+            if (state.targetId && standard) {
+                title.textContent = standard.standard_id + ' Skills';
+                list.innerHTML = (standard.targets || []).map(t => skillCardHtml(t, true)).join('');
+                bindSkillCards(list);
+                return;
+            }
+
+            title.textContent = 'Standards';
             if (!bucket) {
                 list.innerHTML = '<div class="empty-panel">Select a bucket to view its standards.</div>';
                 return;
@@ -269,10 +308,29 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
             list.querySelectorAll('[data-standard-id]').forEach(button => {
                 button.addEventListener('click', () => {
                     state.standardId = button.dataset.standardId;
+                    state.targetId = null;
                     state.progressScope = 'standard';
                     renderDashboard();
                 });
             });
+        }
+
+        function resourcePills(resources, emptyText) {
+            return (resources && resources.length)
+                ? resources.map(r => {
+                    const body = `
+                        <span>${escapeHtml(r.resource_label)}</span>
+                        ${r.resource_description ? `<small>${escapeHtml(r.resource_description)}</small>` : ''}`;
+                    return r.resource_url
+                        ? `<a class="resource-pill" href="${escapeHtml(r.resource_url)}" target="_blank" rel="noopener noreferrer">${body}</a>`
+                        : `<div class="resource-pill placeholder">${body}</div>`;
+                }).join('')
+                : `<div class="resource-pill placeholder"><span>${escapeHtml(emptyText)}</span></div>`;
+        }
+
+        function getTarget(targetId) {
+            const standard = getStandard(state.standardId);
+            return standard ? (standard.targets || []).find(t => String(t.id) === String(targetId)) || null : null;
         }
 
         function renderRubric() {
@@ -285,57 +343,63 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
                 panel.innerHTML = '';
                 return;
             }
-            title.textContent = 'Proficiency Rubric';
 
-            const threads = (standard.targets || []).map(t => {
-                const my = scoreOf(t.id);
-                const chip = my === null
-                    ? '<span class="pill">Not rated yet</span>'
-                    : `<span class="score-chip score-${my}" style="background:${SCORE_COLORS[my]}">${my}</span>`;
+            const target = state.targetId ? getTarget(state.targetId) : null;
+
+            // ===== Zoom level 2: one skill's full rubric + its specific resources =====
+            if (target) {
+                title.textContent = target.target_code;
+                const my = scoreOf(target.id);
                 const rows = [4, 3, 2, 1, 0].map(score => {
                     const current = my !== null && my === score;
                     return `
                     <tr class="${current ? 'rubric-row-current' : ''}">
                         <td class="rubric-score" style="background:${SCORE_COLORS[score]}">${score}${current ? '<span class="you-are-here">You</span>' : ''}</td>
-                        <td>${escapeHtml((t.rubric || {})[score] || '')}</td>
+                        <td>${escapeHtml((target.rubric || {})[score] || '')}</td>
                     </tr>`;
                 }).join('');
-                return `
-                <div class="rubric-thread ${my !== null ? 'score-tint-' + my : ''}" style="border-radius:10px;padding:10px;">
-                    <h4>${chip} ${escapeHtml(t.title)}</h4>
-                    <span class="thread-code">${escapeHtml(t.target_code)}</span>
-                    ${t.description ? `<p style="font-size:.82rem;color:#64748b;margin:2px 0 0;">${escapeHtml(t.description)}</p>` : ''}
-                    <table class="rubric-table">${rows}</table>
-                </div>`;
-            }).join('');
 
-            const allResources = [...(standard.resources || []), ...(standard.targets || []).flatMap(t => t.resources || [])];
-            const resourceItems = allResources.length
-                ? allResources.map(r => {
-                    const body = `
-                        <span>${escapeHtml(r.resource_label)}</span>
-                        ${r.resource_description ? `<small>${escapeHtml(r.resource_description)}</small>` : ''}`;
-                    return r.resource_url
-                        ? `<a class="resource-pill" href="${escapeHtml(r.resource_url)}" target="_blank" rel="noopener noreferrer">${body}</a>`
-                        : `<div class="resource-pill placeholder">${body}</div>`;
-                }).join('')
-                : '<div class="resource-pill placeholder"><span>No resources posted for this standard yet.</span></div>';
+                panel.innerHTML = `
+                    <div class="target-standard-summary">
+                        <span>${escapeHtml(target.target_code)}</span>
+                        <h4>${escapeHtml(target.title)}</h4>
+                        <p>${escapeHtml(target.description || standard.name)}</p>
+                    </div>
+                    <div class="rubric-thread ${my !== null ? 'score-tint-' + my : ''}" style="border-radius:10px;padding:10px;">
+                        <h4>${skillChip(target)} Where you are on this skill</h4>
+                        <table class="rubric-table">${rows}</table>
+                    </div>
+                    <div class="resource-panel">
+                        <div class="resource-panel-header">
+                            <span>Resources for this skill</span>
+                            <strong>${escapeHtml(target.target_code)}</strong>
+                        </div>
+                        <div class="resource-list">${resourcePills(target.resources, 'No skill-specific resources yet — check the standard resources one level up.')}</div>
+                    </div>
+                `;
+                return;
+            }
 
+            // ===== Zoom level 1: skill cards + the standard's general resources =====
+            title.textContent = 'Proficiency Rubric';
             panel.innerHTML = `
                 <div class="target-standard-summary">
                     <span>${escapeHtml(standard.standard_id)}</span>
                     <h4>${escapeHtml(standard.name)}</h4>
                     <p>${escapeHtml(standard.description || '')}</p>
                 </div>
-                ${threads}
+                <div class="target-list">
+                    ${(standard.targets || []).map(t => skillCardHtml(t, false)).join('')}
+                </div>
                 <div class="resource-panel">
                     <div class="resource-panel-header">
                         <span>Resources</span>
                         <strong>${escapeHtml(standard.standard_id)}</strong>
                     </div>
-                    <div class="resource-list">${resourceItems}</div>
+                    <div class="resource-list">${resourcePills(standard.resources, 'No resources posted for this standard yet.')}</div>
                 </div>
             `;
+            bindSkillCards(panel);
         }
 
         /* ============ Hero progress summary ============ */
@@ -560,12 +624,19 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
             if (!grid) return;
             const focused = !!state.standardId;
             grid.classList.toggle('standard-focus', focused);
-            if (backBtn) backBtn.style.display = focused ? '' : 'none';
+            if (backBtn) {
+                backBtn.style.display = focused ? '' : 'none';
+                backBtn.innerHTML = state.targetId ? '&larr; Back to Standards' : '&larr; Back to Buckets';
+            }
         }
 
         function backToBuckets() {
-            state.standardId = null;
-            state.progressScope = state.bucketId ? 'bucket' : 'overall';
+            if (state.targetId) {
+                state.targetId = null; // zoom out one step: skill -> standard view
+            } else {
+                state.standardId = null;
+                state.progressScope = state.bucketId ? 'bucket' : 'overall';
+            }
             renderDashboard();
         }
 

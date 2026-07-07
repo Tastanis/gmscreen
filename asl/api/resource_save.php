@@ -17,6 +17,7 @@ try {
     $id = (int)($_POST['id'] ?? 0);
     $standardId = trim($_POST['standard_id'] ?? '');
     $level = ($_POST['asl_level'] ?? '') === '' ? null : (int)$_POST['asl_level'];
+    $targetId = ($_POST['learning_target_id'] ?? '') === '' ? null : (int)$_POST['learning_target_id'];
     $label = trim($_POST['resource_label'] ?? '');
     $url = trim($_POST['resource_url'] ?? '');
     $desc = trim($_POST['resource_description'] ?? '');
@@ -26,21 +27,27 @@ try {
     $stmt = $pdo->prepare("SELECT standard_id FROM asl_standards WHERE standard_id = ? AND active = 1");
     $stmt->execute([$standardId]);
     if (!$stmt->fetch()) aslhub_json_error('Unknown standard.');
+    if ($targetId !== null) {
+        // skill-specific resource: the skill must belong to this standard
+        $stmt = $pdo->prepare("SELECT id FROM asl_learning_targets WHERE id = ? AND standard_id = ? AND active = 1");
+        $stmt->execute([$targetId, $standardId]);
+        if (!$stmt->fetch()) aslhub_json_error('That skill does not belong to this standard.');
+    }
     if ($url !== '' && !preg_match('#^https?://#i', $url)) aslhub_json_error('Links must start with http:// or https://');
 
     if ($id) {
         $pdo->prepare("UPDATE asl_learning_target_resources
-            SET standard_id = ?, asl_level = ?, resource_label = ?, resource_url = ?, resource_description = ?, resource_type = ?
+            SET learning_target_id = ?, standard_id = ?, asl_level = ?, resource_label = ?, resource_url = ?, resource_description = ?, resource_type = ?
             WHERE id = ?")
-            ->execute([$standardId, $level, $label, $url ?: null, $desc ?: null, $type, $id]);
+            ->execute([$targetId, $standardId, $level, $label, $url ?: null, $desc ?: null, $type, $id]);
     } else {
         $stmt = $pdo->prepare("SELECT COALESCE(MAX(order_index), 0) + 1 AS o FROM asl_learning_target_resources WHERE standard_id = ?");
         $stmt->execute([$standardId]);
         $order = (int)$stmt->fetch()['o'];
         $pdo->prepare("INSERT INTO asl_learning_target_resources
             (learning_target_id, standard_id, asl_level, resource_type, resource_label, resource_url, resource_description, order_index)
-            VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)")
-            ->execute([$standardId, $level, $type, $label, $url ?: null, $desc ?: null, $order]);
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+            ->execute([$targetId, $standardId, $level, $type, $label, $url ?: null, $desc ?: null, $order]);
         $id = (int)$pdo->lastInsertId();
     }
     aslhub_json(['success' => true, 'id' => $id]);
