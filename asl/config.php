@@ -40,4 +40,5 @@ try {
 require_once __DIR__ . '/lib/helpers.php';
 require_once __DIR__ . '/lib/schema.php';
 
-// Additive-only schema check (cheap; guarded by a settings
+// Additive-only schema check (cheap; guarded by a settings flag once complete)
+aslhub_ensure_schema($pdo);
