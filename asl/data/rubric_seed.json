@@ -1,0 +1,2605 @@
+{
+ "version": 1,
+ "generated": "2026-07-06",
+ "buckets": [
+  {
+   "name": "Classifiers",
+   "order": 1,
+   "code": "CLS",
+   "standards": [
+    {
+     "id": "CLS.1",
+     "name": "Classifier Foundations",
+     "description": "Students know the classifier system: the handshape inventory, classifier types and groupings, recognizing classifiers in input, and the noun-first rule.",
+     "targets": [
+      {
+       "sub": "a",
+       "statement": "I can identify classifier handshapes and what they represent.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "CLS.1.1a",
+         "rubric": {
+          "4": "I can identify an expanded set of classifier handshapes across taught topics, and sort classifiers into taught types and groupings.",
+          "3": "I can identify the common starter set of classifier handshapes and what each typically represents (people, vehicles, flat objects).",
+          "2": "I can identify some starter classifier handshapes, but I mix up what several of them represent.",
+          "1": "I can match classifier handshapes to what they represent only with a chart or word bank in front of me.",
+          "0": "I haven’t attempted this yet, or I can’t match a classifier handshape to what it represents even with a chart."
+         }
+        },
+        "2": {
+         "code": "CLS.1.2a",
+         "rubric": {
+          "4": "I can identify an extensive inventory of classifier handshapes and choose which types and groupings fit different kinds of referents.",
+          "3": "I can identify an expanded set of classifier handshapes across taught topics, and I can sort classifiers into taught types and groupings (entity, handling, property).",
+          "2": "I can identify the starter set of classifier handshapes and what each represents — but sorting classifiers into types and groupings isn’t there yet.",
+          "1": "I can sort classifiers into types only with a chart, examples, or guiding questions.",
+          "0": "I haven’t attempted this yet, or I can’t match a classifier handshape to what it represents even with a chart."
+         }
+        },
+        "3": {
+         "code": "CLS.1.3a",
+         "rubric": {
+          "4": "I know the classifier system well enough to explain it: given any referent, I can name several handshape options, the types they belong to, and which choice fits which situation.",
+          "3": "I can identify an extensive inventory of classifier handshapes, and I can choose which types and groupings fit different kinds of referents.",
+          "2": "I can identify an expanded set of handshapes and sort them into taught types — but my inventory has gaps, and matching types to unusual referents trips me up.",
+          "1": "I can work with the classifier inventory only with a chart or a walk-through.",
+          "0": "I haven’t attempted this yet, or I can’t match a classifier handshape to what it represents even with a chart."
+         }
+        }
+       }
+      },
+      {
+       "sub": "b",
+       "statement": "I can recognize classifiers in signed input and connect them to referents.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "CLS.1.1b",
+         "rubric": {
+          "4": "I can recognize classifiers in signed descriptions at a steady pace, connecting them to their referents through short scenes.",
+          "3": "I can recognize a classifier in slow, clearly signed input and connect it to its referent when the referent has just been named.",
+          "2": "I can sometimes spot that a handshape is working as a classifier, but I lose what it refers to.",
+          "1": "I can recognize a classifier only when the signing is replayed slowly and the referent is pointed out.",
+          "0": "I haven’t attempted this yet, or I can’t spot classifiers in signing even with replays."
+         }
+        },
+        "2": {
+         "code": "CLS.1.2b",
+         "rubric": {
+          "4": "I can recognize classifiers in signed input at a normal pace, connecting each to its referent even in scenes with several classifiers at work.",
+          "3": "I can recognize classifiers in signed descriptions at a steady pace, connecting them to their referents through short scenes.",
+          "2": "I can recognize a classifier in slow, clear signing when the referent was just named — but through a whole scene at a steady pace, I lose the connections.",
+          "1": "I can follow classifiers in a description only with replays or slowed signing.",
+          "0": "I haven’t attempted this yet, or I can’t spot classifiers in signing even with replays."
+         }
+        },
+        "3": {
+         "code": "CLS.1.3b",
+         "rubric": {
+          "4": "I pick out and read classifiers automatically in any signing — fast narratives, several classifiers layered in one scene — without ever losing a referent.",
+          "3": "I can recognize classifiers in signed input at a normal pace, connecting each to its referent even in scenes with several classifiers at work.",
+          "2": "I can follow classifiers through short scenes at a steady pace — but at a normal pace, or with several classifiers working at once, connections drop.",
+          "1": "I can track classifiers in normal-pace signing only with replays or coaching.",
+          "0": "I haven’t attempted this yet, or I can’t spot classifiers in signing even with replays."
+         }
+        }
+       }
+      },
+      {
+       "sub": "c",
+       "statement": "I can name the referent before using a classifier.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "CLS.1.1c",
+         "rubric": {
+          "4": "I can introduce referents before classifying them consistently in my own sentences, though the habit may slip when I’m signing spontaneously.",
+          "3": "I can name the referent before using a classifier to represent it in practiced sentences.",
+          "2": "I can use noun-first in practiced sentences when reminded, but the classifier often comes out before I’ve named what it stands for.",
+          "1": "I can follow the noun-first rule only when prompted each time.",
+          "0": "I haven’t attempted this yet, or my classifiers appear without referents even with prompting."
+         }
+        },
+        "2": {
+         "code": "CLS.1.2c",
+         "rubric": {
+          "4": "I can introduce referents before classifying them automatically in my own signing.",
+          "3": "I can introduce referents before classifying them consistently in my own sentences, though the habit may slip in spontaneous signing.",
+          "2": "I can name the referent first in practiced sentences — but in my own sentences, the habit slips often.",
+          "1": "I can keep noun-first only with frequent reminders.",
+          "0": "I haven’t attempted this yet, or my classifiers appear without referents even with prompting."
+         }
+        },
+        "3": {
+         "code": "CLS.1.3c",
+         "rubric": {
+          "4": "Noun-first is invisible habit for me, even in fast, complex storytelling — and I skillfully re-introduce referents when scenes get crowded.",
+          "3": "I can introduce referents before classifying them automatically in my own signing.",
+          "2": "I can keep noun-first consistent in my own sentences — but in spontaneous signing, classifiers still sometimes show up before their referents.",
+          "1": "I can keep noun-first only with reminders during my signing.",
+          "0": "I haven’t attempted this yet, or my classifiers appear without referents even with prompting."
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "CLS.2",
+     "name": "Depicting with Classifiers",
+     "description": "Students depict referents with classifiers: selecting the right classifier, building spatial layouts with reference points, describing size and shape, showing movement with descriptive detail, and switching scales.",
+     "targets": [
+      {
+       "sub": "a",
+       "statement": "I can select the right classifier for what I’m depicting.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "CLS.2.1a",
+         "rubric": {
+          "4": "I can select correctly among taught classifiers for familiar referents, with only occasional type errors.",
+          "3": "I can use taught classifiers with the referents they were taught for, in practiced sentences.",
+          "2": "I can use a classifier when the situation is practiced, but I often grab a handshape that doesn’t fit the referent.",
+          "1": "I can use a classifier only when someone models which handshape to use.",
+          "0": "I haven’t attempted this yet, or I avoid classifiers entirely even with a model."
+         }
+        },
+        "2": {
+         "code": "CLS.2.2a",
+         "rubric": {
+          "4": "I can select the right classifier and type for what I’m depicting, even in situations I haven’t practiced.",
+          "3": "I can select correctly among taught classifiers for familiar referents, though I still make occasional type errors (like showing an entity when handling fits).",
+          "2": "I can use taught classifiers with the referents they were taught for — but choosing correctly among several options for a new familiar referent isn’t reliable yet.",
+          "1": "I can pick the right classifier only with a model or coaching.",
+          "0": "I haven’t attempted this yet, or I avoid classifiers entirely even with a model."
+         }
+        },
+        "3": {
+         "code": "CLS.2.3a",
+         "rubric": {
+          "4": "My classifier choices are precise and creative everywhere — I pick the handshape and type a fluent signer would, even for referents I’ve never depicted.",
+          "3": "I can select the right classifier and type for what I’m depicting, in situations I haven’t practiced — including whether to show the entity itself or the handling of it.",
+          "2": "I can select correctly among taught classifiers for familiar referents — but in unpracticed situations, type errors come back.",
+          "1": "I can choose classifiers in new situations only with prompting or examples.",
+          "0": "I haven’t attempted this yet, or I avoid classifiers entirely even with a model."
+         }
+        }
+       }
+      },
+      {
+       "sub": "b",
+       "statement": "I can build spatial layouts with classifiers.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "CLS.2.1b",
+         "rubric": {
+          "4": "I can place a few referents in space using taught layouts, beginning to use reference points.",
+          "3": "I can place one or two referents in space following a modeled layout.",
+          "2": "I can put a referent somewhere in space, but my placement doesn’t follow the modeled layout or stay put.",
+          "1": "I can place referents in space only while copying a model step by step.",
+          "0": "I haven’t attempted this yet, or I can’t place referents in space even while copying."
+         }
+        },
+        "2": {
+         "code": "CLS.2.2b",
+         "rubric": {
+          "4": "I can build spatial layouts with classifiers, using reference points, with spatial relationships that are clear to the viewer.",
+          "3": "I can place a few referents in space using taught layouts and begin using reference points, though my spatial relationships may be unclear at times.",
+          "2": "I can place one or two referents following a modeled layout — but on my own, with more referents, the layout stops reading clearly.",
+          "1": "I can lay out a scene only with a model or step-by-step coaching.",
+          "0": "I haven’t attempted this yet, or I can’t place referents in space even while copying."
+         }
+        },
+        "3": {
+         "code": "CLS.2.3b",
+         "rubric": {
+          "4": "I can build complex scenes — many referents, layered arrangements, distance and orientation exact — so clearly that a viewer could sketch the scene from my signing alone.",
+          "3": "I can build spatial layouts with classifiers, using reference points, with the distance, orientation, and arrangement clear to the viewer.",
+          "2": "I can place a few referents with taught layouts and reference points — but the spatial relationships still read unclearly at times.",
+          "1": "I can make a layout clear only with planning time or coaching.",
+          "0": "I haven’t attempted this yet, or I can’t place referents in space even while copying."
+         }
+        }
+       }
+      },
+      {
+       "sub": "c",
+       "statement": "I can describe size and shape with classifiers.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "CLS.2.1c",
+         "rubric": {
+          "4": "I can describe the size and shape of familiar objects recognizably through classifier depiction.",
+          "3": "I can trace the basic sizes and shapes of objects as I was taught.",
+          "2": "I can attempt a size-and-shape trace, but it often doesn’t match the object’s actual proportions or form.",
+          "1": "I can trace a size or shape only while copying a model.",
+          "0": "I haven’t attempted this yet, or I can’t trace sizes and shapes even while copying."
+         }
+        },
+        "2": {
+         "code": "CLS.2.2c",
+         "rubric": {
+          "4": "I can depict the size, shape, and physical properties of referents with precision.",
+          "3": "I can describe the size and shape of familiar objects recognizably through classifier depiction.",
+          "2": "I can trace basic sizes and shapes as taught — but my depictions of real objects aren’t always recognizable.",
+          "1": "I can describe an object’s size and shape only with a model or prompts.",
+          "0": "I haven’t attempted this yet, or I can’t trace sizes and shapes even while copying."
+         }
+        },
+        "3": {
+         "code": "CLS.2.3c",
+         "rubric": {
+          "4": "My size-and-shape work is vivid and exact — texture, proportion, and detail come through, and viewers can identify an object from my depiction alone.",
+          "3": "I can depict the size, shape, and physical properties of referents with precision.",
+          "2": "I can describe familiar objects recognizably — but precision in proportions, properties, and detail isn’t there yet.",
+          "1": "I can depict properties precisely only with coaching or examples.",
+          "0": "I haven’t attempted this yet, or I can’t trace sizes and shapes even while copying."
+         }
+        }
+       }
+      },
+      {
+       "sub": "d",
+       "statement": "I can show movement with classifiers.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "CLS.2.1d",
+         "rubric": {
+          "4": "I can depict movement along clear paths, adding speed or manner one element at a time.",
+          "3": "I can move a classifier along a simple path, adding a basic descriptive element (fast, slow, jerky) when it’s modeled.",
+          "2": "I can move a classifier from one point to another, but the path is vague and descriptive elements drop out without a model.",
+          "1": "I can show movement only while copying a modeled depiction.",
+          "0": "I haven’t attempted this yet, or I can’t show movement with a classifier even while copying."
+         }
+        },
+        "2": {
+         "code": "CLS.2.2d",
+         "rubric": {
+          "4": "I can depict movement with layered detail, showing path, speed, and manner together.",
+          "3": "I can depict movement along clear paths, adding speed or manner one element at a time.",
+          "2": "I can move a classifier along a simple path with a modeled descriptive element — but clear paths with speed or manner added on my own aren’t there yet.",
+          "1": "I can add speed or manner to movement only when prompted.",
+          "0": "I haven’t attempted this yet, or I can’t show movement with a classifier even while copying."
+         }
+        },
+        "3": {
+         "code": "CLS.2.3d",
+         "rubric": {
+          "4": "I can choreograph motion — several referents moving at once, path, speed, and manner layered with non-manual intensity — so the movement itself tells the story.",
+          "3": "I can depict movement with layered detail, showing path, speed, and manner together.",
+          "2": "I can depict movement along clear paths with speed or manner added one at a time — but layering path, speed, and manner together isn’t consistent yet.",
+          "1": "I can layer movement detail only with coaching or a model.",
+          "0": "I haven’t attempted this yet, or I can’t show movement with a classifier even while copying."
+         }
+        }
+       }
+      },
+      {
+       "sub": "e",
+       "statement": "I can switch scales when depicting.",
+       "note": null,
+       "levels": {
+        "2": {
+         "code": "CLS.2.2e",
+         "rubric": {
+          "4": "I can switch between scales as the scene requires — from showing a referent with my body to showing it with a classifier — choosing the scale that serves the scene.",
+          "3": "I can use two scales in taught depictions — showing a referent with my body in one moment and with a classifier in another — switching when the material calls for it.",
+          "2": "I can show a referent with my body or with a classifier, but I stay locked in one scale rather than switching.",
+          "1": "I can switch scales only when the switch is modeled and prompted.",
+          "0": "I haven’t attempted this yet, or I can’t show a referent at two scales even with a model."
+         }
+        },
+        "3": {
+         "code": "CLS.2.3e",
+         "rubric": {
+          "4": "I move between body scale and classifier scale fluidly and strategically — zooming in and out mid-scene the way Deaf storytellers do, with each switch making the scene clearer.",
+          "3": "I can switch between scales as the scene requires — from representing a referent with my own body to showing it with a single classifier — choosing the scale that serves the scene.",
+          "2": "I can use two scales in taught depictions and switch when the material calls for it — but choosing the right scale on my own, scene by scene, isn’t consistent yet.",
+          "1": "I can switch scales only with prompting or planning time.",
+          "0": "I haven’t attempted this yet, or I can’t show a referent at two scales even with a model."
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "CLS.3",
+     "name": "Blending Classifiers into Signing",
+     "description": "Students weave classifiers into connected language: moving between signs and depiction, showing referents interacting, and choosing the right depiction for the meaning.",
+     "targets": [
+      {
+       "sub": "a",
+       "statement": "I can blend classifiers into my sentences.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "CLS.3.1a",
+         "rubric": {
+          "4": "I can enter and exit classifier depiction within practiced sentence types, though I may pause or reset when shifting between signs and depiction.",
+          "3": "I can produce practiced sentences that include a classifier alongside lexical signs, completing the sentence as one piece.",
+          "2": "I can produce a classifier and a sentence, but they come out as separate performances rather than one piece.",
+          "1": "I can include a classifier in a sentence only while copying a modeled sentence.",
+          "0": "I haven’t attempted this yet, or I can’t put a classifier into a sentence even with a model."
+         }
+        },
+        "2": {
+         "code": "CLS.3.2a",
+         "rubric": {
+          "4": "I can move between lexical signs and classifier depiction within a sentence, entering and exiting depiction without breaking the flow of my signing.",
+          "3": "I can enter and exit classifier depiction within practiced sentence types, though I may pause or reset when shifting between signs and depiction.",
+          "2": "I can produce practiced sentences that include a classifier — but shifting between signs and depiction mid-sentence still throws me off.",
+          "1": "I can blend depiction into a sentence only with a model or a planned script.",
+          "0": "I haven’t attempted this yet, or I can’t put a classifier into a sentence even with a model."
+         }
+        },
+        "3": {
+         "code": "CLS.3.3a",
+         "rubric": {
+          "4": "Depiction and lexical signing are one seamless stream for me — I slip in and out of classifier work constantly, even in fast conversation, without a visible seam.",
+          "3": "I can move between lexical signs and classifier depiction within a sentence, entering and exiting depiction without breaking the flow of my signing.",
+          "2": "I can enter and exit depiction within practiced sentence types — but in my own signing, the shift still costs me a pause or a reset.",
+          "1": "I can keep flow through a depiction shift only with rehearsal or coaching.",
+          "0": "I haven’t attempted this yet, or I can’t put a classifier into a sentence even with a model."
+         }
+        }
+       }
+      },
+      {
+       "sub": "b",
+       "statement": "I can depict referents interacting.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "CLS.3.1b",
+         "rubric": {
+          "4": "I can depict two referents interacting in taught pairings, conveying the basic relationship between them.",
+          "3": "I can depict one taught interaction between two referents (like one thing moving to another), conveying the basic idea.",
+          "2": "I can show two referents, but the interaction between them doesn’t read clearly.",
+          "1": "I can depict an interaction only while copying a model.",
+          "0": "I haven’t attempted this yet, or I can’t show two referents interacting even with a model."
+         }
+        },
+        "2": {
+         "code": "CLS.3.2b",
+         "rubric": {
+          "4": "I can depict referents interacting in any arrangement the meaning calls for, with the interaction clear to the viewer.",
+          "3": "I can depict two referents interacting in taught pairings, conveying the basic relationship between them.",
+          "2": "I can depict the one interaction I practiced — but new pairings of referents fall apart or read unclearly.",
+          "1": "I can depict interactions only with a model or planned setup.",
+          "0": "I haven’t attempted this yet, or I can’t show two referents interacting even with a model."
+         }
+        },
+        "3": {
+         "code": "CLS.3.3b",
+         "rubric": {
+          "4": "I can stage multi-referent interactions of any complexity — collisions, chases, exchanges among three or more referents — with every relationship readable.",
+          "3": "I can depict referents interacting in any arrangement the meaning calls for — one thing moving onto, past, or into another — with the interaction and relationship clear to the viewer.",
+          "2": "I can depict taught pairings of referents clearly — but new arrangements still come out muddled.",
+          "1": "I can make a new interaction clear only with planning or coaching.",
+          "0": "I haven’t attempted this yet, or I can’t show two referents interacting even with a model."
+         }
+        }
+       }
+      },
+      {
+       "sub": "c",
+       "statement": "I can choose depiction when it shows meaning best.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "CLS.3.1c",
+         "rubric": {
+          "4": "I can begin choosing classifier depiction on my own in familiar situations, selecting a depiction that fits the meaning.",
+          "3": "I can select the correct classifier depiction for practiced situations, choosing among a small set of taught options.",
+          "2": "I can use a depiction when told which one, but choosing among the taught options on my own isn’t reliable yet.",
+          "1": "I can choose a depiction only when the options are laid out and someone helps me pick.",
+          "0": "I haven’t attempted this yet, or I can’t match a depiction to a situation even with help."
+         }
+        },
+        "2": {
+         "code": "CLS.3.2c",
+         "rubric": {
+          "4": "I can choose classifier depiction wherever it shows something better than signs alone, selecting the depiction that conveys the meaning accurately.",
+          "3": "I can begin choosing classifier depiction on my own in familiar situations — describing a scene, comparing objects — selecting a depiction that fits the meaning.",
+          "2": "I can select the correct depiction for practiced situations from taught options — but choosing depiction on my own, unprompted, isn’t there yet.",
+          "1": "I can choose to depict only when prompted that the situation calls for it.",
+          "0": "I haven’t attempted this yet, or I can’t match a depiction to a situation even with help."
+         }
+        },
+        "3": {
+         "code": "CLS.3.3c",
+         "rubric": {
+          "4": "I judge sign-versus-depiction like an experienced signer — my choices consistently make meaning sharper, and I invent apt depictions for situations nothing in class prepared me for.",
+          "3": "I can choose classifier depiction where it shows something better than signs alone, and I select the depiction that conveys the meaning accurately.",
+          "2": "I can choose depiction on my own in familiar situations — but recognizing every spot where depiction beats signs, and picking the most accurate option, isn’t consistent yet.",
+          "1": "I can make the sign-versus-depiction call only with prompting.",
+          "0": "I haven’t attempted this yet, or I can’t match a depiction to a situation even with help."
+         }
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Culture & History",
+   "order": 2,
+   "code": "CUL",
+   "standards": [
+    {
+     "id": "CUL.1",
+     "name": "History",
+     "description": "Students know, explain, and analyze the people and events of Deaf history.",
+     "targets": [
+      {
+       "sub": "a",
+       "statement": "I can tell who key figures in Deaf history were and why they matter.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "CUL.1.1a",
+         "rubric": {
+          "4": "I can explain why key figures in Deaf history were important and how they affected and interacted with other people and events.",
+          "3": "I can identify key figures in Deaf history, telling who they were and generally why they’re important.",
+          "2": "I can recognize the names of key figures, but I mix up who did what or why they matter.",
+          "1": "I can identify key figures only with a word bank, notes, or guiding questions.",
+          "0": "I haven’t attempted this yet, or I can’t identify key figures even with a word bank and guiding questions."
+         }
+        },
+        "2": {
+         "code": "CUL.1.2a",
+         "rubric": {
+          "4": "I can analyze the contributions of key figures to Deaf culture on a deeper level, connecting readings and sources about them.",
+          "3": "I can explain why key figures in Deaf history were important and how they affected and interacted with other people and events.",
+          "2": "I can identify key figures and tell generally why they matter — but explaining how they affected and interacted with other people and events isn’t there yet.",
+          "1": "I can explain a figure’s importance only with guiding questions or notes.",
+          "0": "I haven’t attempted this yet, or I can’t identify key figures even with a word bank and guiding questions."
+         }
+        },
+        "3": {
+         "code": "CUL.1.3a",
+         "rubric": {
+          "4": "I can build an original argument about a figure’s legacy — synthesizing multiple sources, weighing conflicting accounts, and defending my interpretation.",
+          "3": "I can analyze the contributions of key figures to Deaf culture on a deeper level, connecting readings and sources about them.",
+          "2": "I can explain why key figures mattered and how they shaped events — but connecting multiple readings and sources into deeper analysis isn’t consistent yet.",
+          "1": "I can analyze a figure’s contributions only with guiding questions and sources picked for me.",
+          "0": "I haven’t attempted this yet, or I can’t identify key figures even with a word bank and guiding questions."
+         }
+        }
+       }
+      },
+      {
+       "sub": "b",
+       "statement": "I can work with the events of Deaf history.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "CUL.1.1b",
+         "rubric": {
+          "4": "I can match people to the events they shaped, expanding beyond the main timeline of Deaf history.",
+          "3": "I can place the major events of Deaf history in order on a timeline.",
+          "2": "I can name some major events, but their order on a timeline gets scrambled.",
+          "1": "I can order events only with a word bank or a partially completed timeline.",
+          "0": "I haven’t attempted this yet, or I can’t place events in order even with a word bank."
+         }
+        },
+        "2": {
+         "code": "CUL.1.2b",
+         "rubric": {
+          "4": "I can research a historical event or topic from multiple sides, comparing perspectives on it.",
+          "3": "I can match people to the events they shaped, expanding my knowledge beyond the main Deaf history timeline.",
+          "2": "I can place the major events in order on a timeline — but matching people to the events they shaped, and going beyond the main timeline, isn’t there yet.",
+          "1": "I can match people to events only with notes or guiding questions.",
+          "0": "I haven’t attempted this yet, or I can’t place events in order even with a word bank."
+         }
+        },
+        "3": {
+         "code": "CUL.1.3b",
+         "rubric": {
+          "4": "I can run a genuine historical inquiry — finding sources beyond what’s assigned, weighing their reliability, and presenting an original comparison of perspectives.",
+          "3": "I can research a historical event or topic from multiple sides, comparing the perspectives on it.",
+          "2": "I can match people to events and work beyond the main timeline — but researching one topic from multiple sides, and comparing the perspectives, isn’t consistent yet.",
+          "1": "I can compare perspectives only with sources handed to me and guiding questions.",
+          "0": "I haven’t attempted this yet, or I can’t place events in order even with a word bank."
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "CUL.2",
+     "name": "Cultural Norms",
+     "description": "Students know, explain, and analyze Deaf cultural norms across three areas: technology, information sharing and community, and language use and visual access.",
+     "targets": [
+      {
+       "sub": "a",
+       "statement": "I can explain Deaf norms around technology.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "CUL.2.1a",
+         "rubric": {
+          "4": "I can explain how Deaf norms have been shaped by contact with technology, including examples of norms that changed as technology did.",
+          "3": "I can identify core Deaf norms around technology and life without sound, stating the basic reason behind each.",
+          "2": "I can name some norms around technology and life without sound, but not the reasons behind them.",
+          "1": "I can identify these norms only with a word bank or guiding questions.",
+          "0": "I haven’t attempted this yet, or I can’t identify these norms even with a word bank and guiding questions."
+         }
+        },
+        "2": {
+         "code": "CUL.2.2a",
+         "rubric": {
+          "4": "I can analyze how contact with technology has shaped and continues to reshape Deaf norms, including tensions between older and newer practices.",
+          "3": "I can explain how Deaf norms have been shaped by contact with technology, including examples of norms that changed as technology did.",
+          "2": "I can identify core technology norms and the basic reason behind each — but explaining how the norms changed as technology did isn’t there yet.",
+          "1": "I can explain how technology shaped a norm only with guiding questions or examples laid out for me.",
+          "0": "I haven’t attempted this yet, or I can’t identify these norms even with a word bank and guiding questions."
+         }
+        },
+        "3": {
+         "code": "CUL.2.3a",
+         "rubric": {
+          "4": "I can take a position in the live debates (cochlear implants, video relay versus in-person interpreting) and argue it with evidence from Deaf perspectives, history, and my own analysis.",
+          "3": "I can analyze how contact with technology has shaped and continues to reshape Deaf norms, including where tensions exist between older and newer practices.",
+          "2": "I can explain how technology shaped Deaf norms with examples — but analyzing the ongoing reshaping, and the tensions between older and newer practices, isn’t consistent yet.",
+          "1": "I can analyze technology-driven change only with guiding questions and sources picked for me.",
+          "0": "I haven’t attempted this yet, or I can’t identify these norms even with a word bank and guiding questions."
+         }
+        }
+       }
+      },
+      {
+       "sub": "b",
+       "statement": "I can explain Deaf norms of information sharing and community.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "CUL.2.1b",
+         "rubric": {
+          "4": "I can explain how the norms of information sharing and community connection grew out of Deaf experiences and values.",
+          "3": "I can identify core norms of information sharing and community connection, stating the basic reason behind each.",
+          "2": "I can name some information-sharing and community norms, but not the reasons behind them.",
+          "1": "I can identify these norms only with a word bank or guiding questions.",
+          "0": "I haven’t attempted this yet, or I can’t identify these norms even with a word bank and guiding questions."
+         }
+        },
+        "2": {
+         "code": "CUL.2.2b",
+         "rubric": {
+          "4": "I can analyze the norms of information sharing and community connection, examining the experiences and values that produced them and how they’re changing.",
+          "3": "I can explain how the norms of information sharing and community connection grew out of Deaf experiences and values.",
+          "2": "I can identify the core norms and basic reasons — but explaining how they grew out of Deaf experiences and values isn’t there yet.",
+          "1": "I can connect these norms to Deaf experiences only with guiding questions.",
+          "0": "I haven’t attempted this yet, or I can’t identify these norms even with a word bank and guiding questions."
+         }
+        },
+        "3": {
+         "code": "CUL.2.3b",
+         "rubric": {
+          "4": "I can analyze how these norms are evolving right now — social media, dispersed communities — and make defensible predictions grounded in the values underneath.",
+          "3": "I can analyze the norms of information sharing and community connection, examining the experiences and values that produced them and how they’re changing.",
+          "2": "I can explain how these norms grew out of Deaf experiences and values — but analyzing how they’re changing isn’t consistent yet.",
+          "1": "I can analyze these norms only with guiding questions and sources picked for me.",
+          "0": "I haven’t attempted this yet, or I can’t identify these norms even with a word bank and guiding questions."
+         }
+        }
+       }
+      },
+      {
+       "sub": "c",
+       "statement": "I can explain Deaf norms of language use and visual access.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "CUL.2.1c",
+         "rubric": {
+          "4": "I can explain how the norms of language use and visual access grew out of the visual nature of the Deaf community.",
+          "3": "I can identify core norms of language use and visual access, stating the basic reason behind each.",
+          "2": "I can name some language-use and visual-access norms, but not the reasons behind them.",
+          "1": "I can identify these norms only with a word bank or guiding questions.",
+          "0": "I haven’t attempted this yet, or I can’t identify these norms even with a word bank and guiding questions."
+         }
+        },
+        "2": {
+         "code": "CUL.2.2c",
+         "rubric": {
+          "4": "I can analyze the norms of language use and visual access, including the history and values of language pride behind them.",
+          "3": "I can explain how the norms of language use and visual access grew out of the visual nature of the community.",
+          "2": "I can identify the core norms and basic reasons — but explaining how they grew out of the community’s visual nature isn’t there yet.",
+          "1": "I can connect these norms to the community’s visual nature only with guiding questions.",
+          "0": "I haven’t attempted this yet, or I can’t identify these norms even with a word bank and guiding questions."
+         }
+        },
+        "3": {
+         "code": "CUL.2.3c",
+         "rubric": {
+          "4": "I can connect language-use and access norms to language pride and audism debates — analyzing a real situation (a school, a workplace) and proposing what cultural competence would look like.",
+          "3": "I can analyze the norms of language use and visual access, including the history and values of language pride behind them.",
+          "2": "I can explain how these norms grew from the community’s visual nature — but analyzing the history and values of language pride behind them isn’t consistent yet.",
+          "1": "I can analyze these norms only with guiding questions and sources picked for me.",
+          "0": "I haven’t attempted this yet, or I can’t identify these norms even with a word bank and guiding questions."
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "CUL.3",
+     "name": "Deaf Media",
+     "description": "Students know the landscape of Deaf media and engage with Deaf-created works.",
+     "targets": [
+      {
+       "sub": "a",
+       "statement": "I can describe the landscape of Deaf media.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "CUL.3.1a",
+         "rubric": {
+          "4": "I can describe the major genres of Deaf media — ABC stories, classifier stories, ASL poetry — and what makes each distinctive.",
+          "3": "I can identify the major forms of Deaf media (ASL storytelling and literature, Deaf film and theater, Deaf creators online), naming examples of each.",
+          "2": "I can name some forms of Deaf media, but I can’t give examples of each.",
+          "1": "I can identify forms of Deaf media only with a word bank or examples in front of me.",
+          "0": "I haven’t attempted this yet, or I can’t identify forms of Deaf media even with a word bank."
+         }
+        },
+        "2": {
+         "code": "CUL.3.2a",
+         "rubric": {
+          "4": "I can analyze how Deaf media expresses Deaf experience, identity, and culture across its forms.",
+          "3": "I can describe the major genres of Deaf media — ABC stories, classifier stories, ASL poetry — and what makes each distinctive.",
+          "2": "I can identify the major forms of Deaf media with examples — but describing the genres and what makes each distinctive isn’t there yet.",
+          "1": "I can describe genres only with notes or guiding questions.",
+          "0": "I haven’t attempted this yet, or I can’t identify forms of Deaf media even with a word bank."
+         }
+        },
+        "3": {
+         "code": "CUL.3.3a",
+         "rubric": {
+          "4": "I can curate and critique — situating works in the tradition, comparing how different forms carry Deaf identity, and arguing what a piece contributes to the culture.",
+          "3": "I can analyze how Deaf media expresses Deaf experience, identity, and culture across its forms.",
+          "2": "I can describe the genres of Deaf media and what makes each distinctive — but analyzing how the forms express Deaf experience and identity isn’t consistent yet.",
+          "1": "I can analyze Deaf media only with guiding questions and selected examples.",
+          "0": "I haven’t attempted this yet, or I can’t identify forms of Deaf media even with a word bank."
+         }
+        }
+       }
+      },
+      {
+       "sub": "b",
+       "statement": "I can engage with Deaf-created works.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "CUL.3.1b",
+         "rubric": {
+          "4": "I can summarize and respond to Deaf-created works, pointing out the ASL features and cultural content within them.",
+          "3": "I can watch accessible Deaf-created works and identify the basic story or message.",
+          "2": "I can watch a Deaf-created work, but I come away unsure what happened or what the message was.",
+          "1": "I can identify the story of a work only with a second viewing, guiding questions, or a partner.",
+          "0": "I haven’t attempted this yet, or I can’t identify a work’s basic story even with guiding questions."
+         }
+        },
+        "2": {
+         "code": "CUL.3.2b",
+         "rubric": {
+          "4": "I can analyze Deaf-created works — connecting the techniques a creator uses and the themes they explore to Deaf culture — and compare works or creators.",
+          "3": "I can summarize and respond to Deaf-created works, pointing out the ASL features and cultural content within them.",
+          "2": "I can identify the basic story or message of a Deaf-created work — but summarizing it and pointing out its ASL features and cultural content isn’t there yet.",
+          "1": "I can point out features in a work only with prompts or a guided rewatch.",
+          "0": "I haven’t attempted this yet, or I can’t identify a work’s basic story even with guiding questions."
+         }
+        },
+        "3": {
+         "code": "CUL.3.3b",
+         "rubric": {
+          "4": "I can produce original critical analysis — close-reading a work’s technique, connecting it across creators and eras, and presenting my interpretation in ASL.",
+          "3": "I can analyze Deaf-created works — connecting the techniques a creator uses (classifier work, cinematographic signing) and the themes they explore to Deaf culture — and I can compare works or creators.",
+          "2": "I can summarize works and point out ASL features and cultural content — but connecting techniques and themes to Deaf culture, and comparing works or creators, isn’t consistent yet.",
+          "1": "I can analyze a work only with guiding questions and a guided rewatch.",
+          "0": "I haven’t attempted this yet, or I can’t identify a work’s basic story even with guiding questions."
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "CUL.4",
+     "name": "Language & Cultural Comparisons",
+     "description": "Students compare ASL and Deaf culture with English and hearing culture, including the effects of language contact.",
+     "targets": [
+      {
+       "sub": "a",
+       "statement": "I can compare ASL and English as languages.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "CUL.4.1a",
+         "rubric": {
+          "4": "I can describe structural differences between ASL and English and how each language expresses the same ideas differently.",
+          "3": "I can identify basic differences between ASL and English, and explain that ASL is a distinct language with its own grammar — not signed English.",
+          "2": "I can state that ASL and English are different, but I can’t name the basic differences or explain why ASL isn’t signed English.",
+          "1": "I can identify differences only with examples laid out and guiding questions.",
+          "0": "I haven’t attempted this yet, or I can’t name a difference between ASL and English even with examples."
+         }
+        },
+        "2": {
+         "code": "CUL.4.2a",
+         "rubric": {
+          "4": "I can analyze what the comparison between ASL and English reveals about language itself, including common misconceptions about signed languages.",
+          "3": "I can describe structural differences between ASL and English and how each language expresses the same ideas in different ways.",
+          "2": "I can identify basic differences and explain that ASL has its own grammar — but describing structural differences, and how each language expresses the same idea, isn’t there yet.",
+          "1": "I can describe structural differences only with examples and guiding questions.",
+          "0": "I haven’t attempted this yet, or I can’t name a difference between ASL and English even with examples."
+         }
+        },
+        "3": {
+         "code": "CUL.4.3a",
+         "rubric": {
+          "4": "I can teach this comparison — correcting misconceptions in real conversations with evidence, and extending the analysis to other signed languages and what they show about language itself.",
+          "3": "I can analyze what the comparison between ASL and English reveals about language itself, including common misconceptions about signed languages.",
+          "2": "I can describe the structural differences between the languages — but analyzing what the comparison reveals about language, and addressing misconceptions, isn’t consistent yet.",
+          "1": "I can analyze the comparison only with guiding questions and prepared examples.",
+          "0": "I haven’t attempted this yet, or I can’t name a difference between ASL and English even with examples."
+         }
+        }
+       }
+      },
+      {
+       "sub": "b",
+       "statement": "I can explain how language contact has shaped ASL.",
+       "note": null,
+       "levels": {
+        "2": {
+         "code": "CUL.4.2b",
+         "rubric": {
+          "4": "I can analyze the effects of English contact on ASL, including where English influence is debated within the Deaf community.",
+          "3": "I can describe ways English has influenced ASL through language contact, such as fingerspelling, initialized signs, and mouthing.",
+          "2": "I can name one or two ways English shows up in ASL when examples are in front of me, but I can’t describe the influence on my own.",
+          "1": "I can describe language contact only with a word bank or guiding questions.",
+          "0": "I haven’t attempted this yet, or I can’t describe English influence on ASL even with examples."
+         }
+        },
+        "3": {
+         "code": "CUL.4.3b",
+         "rubric": {
+          "4": "I can weigh in on the debates themselves — initialized signs, signed systems, English-influenced variation — representing multiple Deaf community positions fairly and defending my own.",
+          "3": "I can analyze the effects of English contact on ASL, including where English influence is debated within the Deaf community.",
+          "2": "I can describe how English has influenced ASL through contact — but analyzing the effects, and where the influence is debated in the community, isn’t consistent yet.",
+          "1": "I can analyze contact effects only with sources and guiding questions.",
+          "0": "I haven’t attempted this yet, or I can’t describe English influence on ASL even with examples."
+         }
+        }
+       }
+      },
+      {
+       "sub": "c",
+       "statement": "I can compare Deaf and hearing cultural practices.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "CUL.4.1b",
+         "rubric": {
+          "4": "I can compare the values underneath Deaf and hearing cultural practices, including practices from my own cultures.",
+          "3": "I can identify basic differences between Deaf and hearing cultural practices.",
+          "2": "I can name a Deaf cultural practice or two, but I can’t lay out how they differ from hearing practices.",
+          "1": "I can identify differences in practices only with examples and guiding questions.",
+          "0": "I haven’t attempted this yet, or I can’t name a difference between Deaf and hearing practices even with examples."
+         }
+        },
+        "2": {
+         "code": "CUL.4.2c",
+         "rubric": {
+          "4": "I can analyze Deaf and hearing cultural perspectives, including how hearing assumptions look from a Deaf point of view.",
+          "3": "I can compare the values underneath Deaf and hearing cultural practices, including practices from my own cultures.",
+          "2": "I can identify basic differences between Deaf and hearing practices — but comparing the values underneath them isn’t there yet.",
+          "1": "I can compare cultural values only with guiding questions or sentence frames.",
+          "0": "I haven’t attempted this yet, or I can’t name a difference between Deaf and hearing practices even with examples."
+         }
+        },
+        "3": {
+         "code": "CUL.4.3c",
+         "rubric": {
+          "4": "I can flip frames at will — analyzing a real situation from a Deaf perspective, naming the hearing assumptions in play, and articulating what each culture’s values would change about it.",
+          "3": "I can analyze Deaf and hearing cultural perspectives, including how hearing assumptions look from a Deaf point of view.",
+          "2": "I can compare the values underneath Deaf and hearing practices — but analyzing whole perspectives, including how hearing assumptions look from the Deaf side, isn’t consistent yet.",
+          "1": "I can analyze cultural perspectives only with guiding questions and examples.",
+          "0": "I haven’t attempted this yet, or I can’t name a difference between Deaf and hearing practices even with examples."
+         }
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Expression",
+   "order": 3,
+   "code": "EXP",
+   "standards": [
+    {
+     "id": "EXP.1",
+     "name": "5 Parameters",
+     "description": "Students produce signs with accurate parameters, acquire new signs precisely, and use parameter knowledge to modify and combine signs.",
+     "targets": [
+      {
+       "sub": "a",
+       "statement": "I can produce signs with correct parameters.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "EXP.1.1a",
+         "rubric": {
+          "4": "I can sign familiar signs with correct parameters consistently — including the facial and non-manual parts of signs — and keep my parameters accurate through whole phrases and several signs in a row.",
+          "3": "I can sign familiar signs with all five parameters correct most of the time. I make occasional parameter errors, and I can fix them when they’re pointed out.",
+          "2": "I can sign familiar signs that others recognize, but I make frequent errors in one or more parameters (handshape, movement, location, palm orientation, or expression) and need reminders to catch them.",
+          "1": "I can sign familiar signs with correct parameters only when someone models the sign for me or coaches me through it.",
+          "0": "I haven’t attempted this yet, or my signs aren’t recognizable even with a model and help."
+         }
+        },
+        "2": {
+         "code": "EXP.1.2a",
+         "rubric": {
+          "4": "I can sign with every parameter correct consistently, keeping my accuracy through connected, unscripted signing.",
+          "3": "I can sign familiar signs with correct parameters consistently — including the non-manual parts — and keep my parameters accurate through phrases and several signs in a row.",
+          "2": "I can sign familiar signs with parameters correct most of the time, fixing occasional errors when they’re pointed out — but my accuracy doesn’t yet hold up across full phrases, and non-manual parts get dropped.",
+          "1": "I can sign with correct parameters only with a model to copy or step-by-step corrections; on my own, my parameter errors are frequent.",
+          "0": "I haven’t attempted this yet, or my signs aren’t recognizable even with a model and help."
+         }
+        },
+        "3": {
+         "code": "EXP.1.3a",
+         "rubric": {
+          "4": "I can keep every parameter accurate even in fast, complex, or unplanned signing, and I use parameters deliberately — adjusting a sign on purpose to shade its meaning, and catching and fixing my own slips immediately without losing flow.",
+          "3": "I can sign with every parameter correct consistently, keeping my accuracy through connected, unscripted signing.",
+          "2": "I can sign with correct parameters through phrases and strings of familiar signs, but my accuracy slips when the signing gets longer or unscripted.",
+          "1": "I can hold parameter accuracy only with support such as a model, prompts, or repeated corrections; on my own, errors show up regularly even in familiar signing.",
+          "0": "I haven’t attempted this yet, or my signs aren’t recognizable even with a model and help."
+         }
+        }
+       }
+      },
+      {
+       "sub": "b",
+       "statement": "I can pick up new signs and use parameter patterns to build on them.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "EXP.1.1b",
+         "rubric": {
+          "4": "I can pick up new signs from a model with mostly correct parameters, modify familiar signs within their sign families in guided practice, and start adjusting signs when I combine them.",
+          "3": "I can learn a new sign by copying a model, capturing most of its parameters on the first try.",
+          "2": "I can copy a new sign from a model, but I usually miss more than one parameter and need several tries before the sign is recognizable.",
+          "1": "I can copy a new sign only when it’s signed slowly, several times, with someone coaching me through each parameter.",
+          "0": "I haven’t attempted this yet, or I can’t copy a new sign even with a slow model and coaching."
+         }
+        },
+        "2": {
+         "code": "EXP.1.2b",
+         "rubric": {
+          "4": "I can pick up new signs precisely from a model, use sign families and parameter patterns to make educated attempts at signs I haven’t been taught and to modify signs for new meaning, and blend combined signs smoothly.",
+          "3": "I can pick up new signs from a model with mostly correct parameters, modify familiar signs within their sign families in guided practice, and begin adjusting signs when I combine them.",
+          "2": "I can learn a new sign by copying a model, capturing most of its parameters — but modifying signs within sign families and adjusting signs in combinations isn’t there yet.",
+          "1": "I can pick up or modify signs only with a model to copy and step-by-step corrections; on my own, my versions miss parameters.",
+          "0": "I haven’t attempted this yet, or I can’t copy a new sign even with a slow model and coaching."
+         }
+        },
+        "3": {
+         "code": "EXP.1.3b",
+         "rubric": {
+          "4": "I can acquire a new sign accurately from a single viewing, and my educated attempts at untaught signs are usually close enough that a fluent signer reads them without help — I build and modify signs the way the language itself does.",
+          "3": "I can pick up new signs precisely from a model, use sign families and parameter patterns to make educated attempts at signs I haven’t been taught and to modify signs for new meaning, and blend combined signs smoothly.",
+          "2": "I can pick up new signs from a model with mostly correct parameters and modify familiar signs in guided practice — but my attempts at untaught signs and my blends of combined signs aren’t reliable yet.",
+          "1": "I can attempt new or modified signs only with a model and coaching; without support, my attempts miss key parameters.",
+          "0": "I haven’t attempted this yet, or I can’t copy a new sign even with a slow model and coaching."
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "EXP.2",
+     "name": "Vocabulary",
+     "description": "Students build and use a cumulative sign vocabulary: retaining signs over time, signing concepts rather than English words, and covering gaps with the vocabulary they own.",
+     "targets": [
+      {
+       "sub": "a",
+       "statement": "I can use and keep building a sign vocabulary.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "EXP.2.1a",
+         "rubric": {
+          "4": "I can use an expanding vocabulary across taught topics, keeping signs from earlier units and using them in familiar conversations.",
+          "3": "I can use core everyday vocabulary and a small set of well-practiced signs from taught topics in familiar, practiced contexts.",
+          "2": "I can use some everyday vocabulary in practiced contexts, but I lose signs soon after a unit ends and often need a prompt to retrieve them.",
+          "1": "I can produce taught vocabulary only with prompts, a word bank, or a model to copy.",
+          "0": "I haven’t attempted this yet, or I can’t produce taught signs even with prompts and a model."
+         }
+        },
+        "2": {
+         "code": "EXP.2.2a",
+         "rubric": {
+          "4": "I can use a broad vocabulary across familiar and many less familiar topics, retaining signs from across my years of study.",
+          "3": "I can use an expanding vocabulary across taught topics, retaining signs from earlier units and applying them in familiar conversations.",
+          "2": "I can use core everyday vocabulary and well-practiced signs in familiar, practiced contexts — but signs from earlier units fade, and my vocabulary doesn’t yet hold up in real conversations.",
+          "1": "I can use taught vocabulary only with heavy prompting or a review right beforehand; on my own, retrieval fails often.",
+          "0": "I haven’t attempted this yet, or I can’t produce taught signs even with prompts and a model."
+         }
+        },
+        "3": {
+         "code": "EXP.2.3a",
+         "rubric": {
+          "4": "I can pull the right sign quickly on nearly any topic, and my vocabulary keeps growing on its own — I pick up signs from Deaf signers and media and put them to use without being taught them in class.",
+          "3": "I can use a broad vocabulary across familiar and many less familiar topics, retaining signs from across my years of study.",
+          "2": "I can use a solid vocabulary across taught topics and keep signs from earlier units — but on less familiar topics, my vocabulary thins out quickly.",
+          "1": "I can use my vocabulary only with prompts or a pre-review; without support, I fall back on the same small set of signs.",
+          "0": "I haven’t attempted this yet, or I can’t produce taught signs even with prompts and a model."
+         }
+        }
+       }
+      },
+      {
+       "sub": "b",
+       "statement": "I can sign concepts instead of English words.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "EXP.2.1b",
+         "rubric": {
+          "4": "I can sign concepts rather than English words for taught multi-meaning words, even though my errors are still common.",
+          "3": "I can sign the concept rather than the English word on a few explicitly taught examples (such as the different signs for ’run’).",
+          "2": "I can match signs to English words, but I mostly sign word-for-word; the conceptually right sign shows up only when someone reminds me.",
+          "1": "I can choose the conceptually correct sign only when someone walks me through what the sentence actually means.",
+          "0": "I haven’t attempted this yet, or I sign English word-for-word even with coaching."
+         }
+        },
+        "2": {
+         "code": "EXP.2.2b",
+         "rubric": {
+          "4": "I can sign concepts rather than English words for most multi-meaning words, choosing the correct sign for each sense, with occasional errors on unfamiliar ones.",
+          "3": "I can sign concepts rather than English words for taught multi-meaning words, though my errors are still common.",
+          "2": "I can sign the concept instead of the English word on a few explicitly taught examples — but beyond those, word-for-word signing takes over.",
+          "1": "I can pick the conceptually correct sign only with reminders or a walk-through of the meaning.",
+          "0": "I haven’t attempted this yet, or I sign English word-for-word even with coaching."
+         }
+        },
+        "3": {
+         "code": "EXP.2.3b",
+         "rubric": {
+          "4": "I can choose conceptually accurate signs automatically, even for words and idioms I’ve never seen signed — meaning drives my signing, not English glosses.",
+          "3": "I can sign the concept rather than the English word for most multi-meaning words, choosing the correct sign for each sense, with occasional errors on unfamiliar ones.",
+          "2": "I can sign concepts for taught multi-meaning words — but my errors are still common, and unfamiliar multi-meaning words usually come out as the wrong sign.",
+          "1": "I can keep conceptual accuracy only with reminders; on my own, English glosses drive my sign choices.",
+          "0": "I haven’t attempted this yet, or I sign English word-for-word even with coaching."
+         }
+        }
+       }
+      },
+      {
+       "sub": "c",
+       "statement": "I can cover vocabulary gaps with the signs I own.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "EXP.2.1c",
+         "rubric": {
+          "4": "I can choose between taught near-synonyms, and I can work around vocabulary gaps using simpler signs I already know.",
+          "3": "I can cover a vocabulary gap with a sign I know, a gesture, or fingerspelling instead of stopping.",
+          "2": "I can sometimes keep going past a missing sign, but I often freeze or drop into English when I don’t know a sign.",
+          "1": "I can get past a missing sign only when someone prompts me with a strategy (fingerspell it, gesture, point).",
+          "0": "I haven’t attempted this yet, or I stop completely at a missing sign even with prompting."
+         }
+        },
+        "2": {
+         "code": "EXP.2.2c",
+         "rubric": {
+          "4": "I can choose among near-synonyms for meaning and context, and I can express concepts that don’t have a one-to-one sign by combining vocabulary I own.",
+          "3": "I can choose between taught near-synonyms, and I can work around vocabulary gaps using simpler signs I already know.",
+          "2": "I can cover a missing sign with a known sign, a gesture, or fingerspelling — but my workarounds are clunky, and choosing between near-synonyms isn’t there yet.",
+          "1": "I can work around a gap only when someone prompts the strategy; otherwise I stall or switch to English.",
+          "0": "I haven’t attempted this yet, or I stop completely at a missing sign even with prompting."
+         }
+        },
+        "3": {
+         "code": "EXP.2.3c",
+         "rubric": {
+          "4": "I can paraphrase around any gap so smoothly that the viewer rarely notices a sign was missing, and my sign choices read like a skilled signer’s — precise, contextual, and varied.",
+          "3": "I can choose among near-synonyms for meaning and context, and I can express untaught concepts by combining vocabulary I own.",
+          "2": "I can choose between taught near-synonyms and work around gaps with simpler signs — but expressing untaught concepts by combining my vocabulary is still hit-or-miss.",
+          "1": "I can express a concept I lack a sign for only with prompting and time to plan it out.",
+          "0": "I haven’t attempted this yet, or I stop completely at a missing sign even with prompting."
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "EXP.3",
+     "name": "ASL Grammar",
+     "description": "Students structure their signing with ASL syntax: building sentences with ASL conventions, connecting ideas into complex sentences, and restructuring ideas visually rather than translating from English.",
+     "targets": [
+      {
+       "sub": "a",
+       "statement": "I can build sentences with ASL structure.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "EXP.3.1a",
+         "rubric": {
+          "4": "I can structure my own sentences on familiar topics using ASL conventions — topic-comment, time-first ordering, and question and negation placement — with developing consistency.",
+          "3": "I can produce short sentences using taught ASL patterns, including time-first ordering and WH-questions at the end, in practiced contexts.",
+          "2": "I can produce a taught pattern when the frame is set up for me, but English order takes over once I leave the practiced frame.",
+          "1": "I can build an ASL-ordered sentence only with a model or a frame to fill in.",
+          "0": "I haven’t attempted this yet, or my sentences come out in English order even with a model."
+         }
+        },
+        "2": {
+         "code": "EXP.3.2a",
+         "rubric": {
+          "4": "I can structure sentences using ASL conventions — topic-comment, time-first ordering, and placement of questions and negation — consistently in unscripted signing.",
+          "3": "I can structure my own sentences on familiar topics using ASL conventions — topic-comment, time-first ordering, and question and negation placement — with developing consistency.",
+          "2": "I can produce taught patterns such as time-first and WH-final in practiced contexts — but in my own sentences, ASL structure comes and goes and English order creeps back.",
+          "1": "I can use ASL sentence structure only with frames, models, or corrections as I go.",
+          "0": "I haven’t attempted this yet, or my sentences come out in English order even with a model."
+         }
+        },
+        "3": {
+         "code": "EXP.3.3a",
+         "rubric": {
+          "4": "I can keep ASL structure intact in fast, complex, unplanned signing, and I bend structures on purpose — fronting a topic for emphasis or reshaping a sentence mid-stream — without losing grammatical control.",
+          "3": "I can structure sentences using ASL conventions — topic-comment structure, time-first ordering, and placement of questions and negation — consistently in unscripted signing.",
+          "2": "I can structure sentences with ASL conventions on familiar topics — but consistency isn’t there yet in unscripted signing, where English order resurfaces.",
+          "1": "I can hold ASL structure only with prompts or planning time; unscripted, my sentences default to English order.",
+          "0": "I haven’t attempted this yet, or my sentences come out in English order even with a model."
+         }
+        }
+       }
+      },
+      {
+       "sub": "b",
+       "statement": "I can connect ideas into complex sentences.",
+       "note": null,
+       "levels": {
+        "2": {
+         "code": "EXP.3.2b",
+         "rubric": {
+          "4": "I can connect ideas into complex sentences, sequencing clauses the way ASL conventions call for, including conditionals, cause and effect, and comparisons.",
+          "3": "I can connect two ideas into one sentence using taught structures such as conditionals and cause and effect.",
+          "2": "I can sign two related ideas as separate sentences, but joining them into one structure only works with a frame or model in front of me.",
+          "1": "I can connect two ideas only when the structure is modeled and I’m walked through it step by step.",
+          "0": "I haven’t attempted this yet, or I can’t join two ideas even with a modeled frame."
+         }
+        },
+        "3": {
+         "code": "EXP.3.3b",
+         "rubric": {
+          "4": "I can build multi-clause sentences fluidly in unscripted signing — layering conditionals, comparisons, and cause-and-effect chains — and I choose the clause order that makes my point land best.",
+          "3": "I can connect ideas into complex sentences, sequencing clauses according to ASL conventions, including conditionals, cause and effect, and comparisons.",
+          "2": "I can connect two ideas with taught structures such as conditionals and cause and effect — but longer chains of clauses and comparisons still break apart or slide into English order.",
+          "1": "I can build a complex sentence only with planning time or a structure laid out for me.",
+          "0": "I haven’t attempted this yet, or I can’t join two ideas even with a modeled frame."
+         }
+        }
+       }
+      },
+      {
+       "sub": "c",
+       "statement": "I can restructure ideas visually instead of translating from English.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "EXP.3.1c",
+         "rubric": {
+          "4": "I can restructure taught sentence types visually, such as comparisons and descriptions, setting up elements in space within practiced structures.",
+          "3": "I can restructure one taught sentence type away from English order — usually moving the question sign to the end.",
+          "2": "I can repeat a restructured sentence after a model, but on my own I build it in English order first and have to fix it.",
+          "1": "I can restructure a sentence only when someone shows me the ASL version to copy.",
+          "0": "I haven’t attempted this yet, or I can’t move a sentence out of English order even with a model."
+         }
+        },
+        "2": {
+         "code": "EXP.3.2c",
+         "rubric": {
+          "4": "I can restructure ideas visually rather than translating from English — setting up elements in space and commenting on them — in practiced structures and increasingly in my own signing.",
+          "3": "I can restructure taught sentence types visually, such as comparisons and descriptions, setting up elements in space within practiced structures.",
+          "2": "I can restructure one taught sentence type away from English order — but visual restructuring like comparisons and spatial setups isn’t there yet.",
+          "1": "I can set up a visual structure only when it’s modeled first and I’m coached through it.",
+          "0": "I haven’t attempted this yet, or I can’t move a sentence out of English order even with a model."
+         }
+        },
+        "3": {
+         "code": "EXP.3.3c",
+         "rubric": {
+          "4": "I can think visually first: even on new topics, my signing organizes ideas spatially by default, with no English sentence structure left to undo.",
+          "3": "I can restructure ideas visually rather than translating from English, setting up elements in space and commenting on them, in practiced structures and increasingly in my own signing.",
+          "2": "I can restructure taught sentence types visually in practiced structures — but in my own signing, I still translate from English more often than I build visually.",
+          "1": "I can build a visual structure only with a model or step-by-step coaching.",
+          "0": "I haven’t attempted this yet, or I can’t move a sentence out of English order even with a model."
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "EXP.4",
+     "name": "Clarity-Pacing-Fluency",
+     "description": "Students sign watchably: forming signs clearly and delivering them with steady, connected flow.",
+     "targets": [
+      {
+       "sub": "a",
+       "statement": "I can form my signs clearly and visibly.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "EXP.4.1a",
+         "rubric": {
+          "4": "I can produce clear, fully formed signs within the signing space in practiced performances and on familiar prompts, not just fully rehearsed pieces.",
+          "3": "I can sign deliberately and visibly in prepared, rehearsed performances, forming each sign fully and keeping it inside the signing space, even if I’m slow.",
+          "2": "I can get through a rehearsed performance, but my signs shrink, drift out of the signing space, or blur together in stretches.",
+          "1": "I can form signs clearly only when someone models them or slows me down sign by sign.",
+          "0": "I haven’t attempted this yet, or my signing isn’t readable even with a model and coaching."
+         }
+        },
+        "2": {
+         "code": "EXP.4.2a",
+         "rubric": {
+          "4": "I can produce clear, fully formed signs within the signing space, including when I’m signing on a topic with no preparation.",
+          "3": "I can produce clear, fully formed signs within the signing space in practiced performances and on familiar prompts.",
+          "2": "I can form signs fully in rehearsed performances — but on familiar prompts without rehearsal, my clarity drops and signs start to shrink or blur.",
+          "1": "I can keep my production clear only with a model, a slow pace set for me, or constant reminders.",
+          "0": "I haven’t attempted this yet, or my signing isn’t readable even with a model and coaching."
+         }
+        },
+        "3": {
+         "code": "EXP.4.3a",
+         "rubric": {
+          "4": "My production stays crisp no matter the situation — speed, nerves, or hard content don’t degrade it — and viewers never have to work to read my signs.",
+          "3": "I can produce clear, fully formed signs within the signing space, including when I’m signing on an unprepared topic.",
+          "2": "I can keep my signs clear and fully formed in practiced work and on familiar prompts — but put on the spot, my clarity slips.",
+          "1": "I can keep production clear only in short, supported stretches with prompts to reset.",
+          "0": "I haven’t attempted this yet, or my signing isn’t readable even with a model and coaching."
+         }
+        }
+       }
+      },
+      {
+       "sub": "b",
+       "statement": "I can deliver my signing at a steady, connected pace.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "EXP.4.1b",
+         "rubric": {
+          "4": "I can deliver practiced and familiar signing at a steady pace with developing phrasing, with hesitations falling between ideas more often than between every sign.",
+          "3": "I can deliver rehearsed material with an even rhythm from start to finish — not racing through memorized strings, not freezing between signs.",
+          "2": "I can get through rehearsed material, but my delivery lurches: racing through the parts I know and stalling between signs.",
+          "1": "I can keep a rhythm only when someone signs along with me or sets the pace for me.",
+          "0": "I haven’t attempted this yet, or I can’t get through rehearsed material even with support."
+         }
+        },
+        "2": {
+         "code": "EXP.4.2b",
+         "rubric": {
+          "4": "I can deliver impromptu signing at a steady pace with connected phrasing and only occasional false starts, and I’m beginning to vary my speed for emphasis in prepared work.",
+          "3": "I can deliver practiced and familiar signing at a steady pace with developing phrasing — my hesitations fall between ideas more often than between every sign.",
+          "2": "I can deliver rehearsed material with an even rhythm — but on familiar prompts without rehearsal, my pacing breaks down and I hesitate between every sign.",
+          "1": "I can hold a steady pace only with a practice run right before or someone pacing me.",
+          "0": "I haven’t attempted this yet, or I can’t get through rehearsed material even with support."
+         }
+        },
+        "3": {
+         "code": "EXP.4.3b",
+         "rubric": {
+          "4": "My pacing reads like a fluent signer’s: impromptu signing flows without visible effort, and I use speed deliberately — slowing down, snapping a sign, holding a pause — to shape meaning.",
+          "3": "I can deliver impromptu signing at a steady pace with connected phrasing and only occasional false starts, and I’m beginning to vary my speed for emphasis in prepared work.",
+          "2": "I can deliver practiced and familiar signing at a steady, phrased pace — but impromptu signing still stalls and fragments when I have to compose on the spot.",
+          "1": "I can keep impromptu signing moving only with prompts, restarts, and patience from my viewer.",
+          "0": "I haven’t attempted this yet, or I can’t get through rehearsed material even with support."
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "EXP.5",
+     "name": "Numbers, Counting & Fingerspelling",
+     "description": "Students produce fingerspelling, lexicalized fingerspelling, and ASL number systems accurately and smoothly within their signing.",
+     "targets": [
+      {
+       "sub": "a",
+       "statement": "I can fingerspell clearly and smoothly.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "EXP.5.1a",
+         "rubric": {
+          "4": "I can fingerspell familiar words with an even rhythm and growing speed, and spell new words without disrupting the flow of my signing.",
+          "3": "I can fingerspell practiced, familiar words with correct letter formation, minimal bouncing, and a slow, careful pace — and I use fingerspelling when a word calls for it instead of avoiding it.",
+          "2": "I can fingerspell short practiced words, but my letters slip, my hand bounces, and I avoid fingerspelling when I can.",
+          "1": "I can fingerspell only letter by letter, with a model or an alphabet chart to follow.",
+          "0": "I haven’t attempted this yet, or I can’t form the manual alphabet even with a model."
+         }
+        },
+        "2": {
+         "code": "EXP.5.2a",
+         "rubric": {
+          "4": "I can fingerspell most words where it’s appropriate, including names and unfamiliar terms, smoothly and without interrupting my pacing.",
+          "3": "I can fingerspell familiar words with an even rhythm and growing speed, and I can spell new words without disrupting the flow of my signing.",
+          "2": "I can fingerspell practiced words with correct formation at a slow, careful pace — but my rhythm is uneven, and spelling a new word stops my signing.",
+          "1": "I can fingerspell smoothly only when I rehearse the word first or someone sets a slow pace with me.",
+          "0": "I haven’t attempted this yet, or I can’t form the manual alphabet even with a model."
+         }
+        },
+        "3": {
+         "code": "EXP.5.3a",
+         "rubric": {
+          "4": "My fingerspelling approaches native speed and shape: words come out as smooth units with natural rhythm, and I’m comfortable spelling anything, anywhere in my signing.",
+          "3": "I can fingerspell most words where it’s appropriate — names, unfamiliar terms — smoothly and without interrupting my pacing.",
+          "2": "I can fingerspell familiar words with even rhythm and fold new words into my signing — but unfamiliar terms and names still slow me down or break my pacing.",
+          "1": "I can fingerspell unfamiliar words only slowly and deliberately, with rehearsal or support.",
+          "0": "I haven’t attempted this yet, or I can’t form the manual alphabet even with a model."
+         }
+        }
+       }
+      },
+      {
+       "sub": "b",
+       "statement": "I can produce lexicalized fingerspelling as fused signs.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "EXP.5.1b",
+         "rubric": {
+          "4": "I can produce common taught lexicalized fingerspelling as fused units within practiced signing.",
+          "3": "I can produce a small set of practiced lexicalized signs (such as #BUS) as taught units.",
+          "2": "I can spell the letters of taught lexicalized signs, but they come out as plain fingerspelling rather than the fused sign.",
+          "1": "I can produce a lexicalized sign only right after a model shows it to me.",
+          "0": "I haven’t attempted this yet, or I can’t produce a lexicalized sign even right after a model."
+         }
+        },
+        "2": {
+         "code": "EXP.5.2b",
+         "rubric": {
+          "4": "I can produce common lexicalized fingerspelling as single fused units inside my own signing.",
+          "3": "I can produce common taught lexicalized fingerspelling as fused units within practiced signing.",
+          "2": "I can produce a small set of lexicalized signs as taught units — but inside connected signing they fall apart into letter-by-letter spelling.",
+          "1": "I can produce lexicalized signs only in isolation with a model to copy.",
+          "0": "I haven’t attempted this yet, or I can’t produce a lexicalized sign even right after a model."
+         }
+        },
+        "3": {
+         "code": "EXP.5.3b",
+         "rubric": {
+          "4": "I can use a wide range of lexicalized forms naturally and pick up new ones from Deaf signers, fusing them the way the community signs them.",
+          "3": "I can produce common lexicalized fingerspelling as single fused units inside my own signing.",
+          "2": "I can produce common lexicalized fingerspelling as fused units in practiced signing — but in my own spontaneous signing they still surface as plain fingerspelling.",
+          "1": "I can produce lexicalized forms only in drilled phrases with support.",
+          "0": "I haven’t attempted this yet, or I can’t produce a lexicalized sign even right after a model."
+         }
+        }
+       }
+      },
+      {
+       "sub": "c",
+       "statement": "I can produce numbers across ASL number systems.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "EXP.5.1c",
+         "rubric": {
+          "4": "I can produce numbers across additional taught systems, such as age, money, and time, choosing the right system in practiced contexts and counting quickly.",
+          "3": "I can produce cardinal and ordinal numbers with correct formation, counting comfortably to 100.",
+          "2": "I can count and form many numbers, but my formation errors are common past the teens, and ordinals trip me up.",
+          "1": "I can produce numbers only by copying a model number by number.",
+          "0": "I haven’t attempted this yet, or I can’t form numbers even with a model."
+         }
+        },
+        "2": {
+         "code": "EXP.5.2c",
+         "rubric": {
+          "4": "I can produce numbers accurately across a variety of systems, choosing the correct system for the context and signing several numbers in a row at a steady pace.",
+          "3": "I can produce numbers across additional taught systems, such as age, money, and time, choosing the right system in practiced contexts and counting quickly.",
+          "2": "I can produce cardinal and ordinal numbers with correct formation and count comfortably to 100 — but the special systems (age, money, time) mix together, and I default to plain counting.",
+          "1": "I can use the number systems only with a chart, prompts, or a model for each one.",
+          "0": "I haven’t attempted this yet, or I can’t form numbers even with a model."
+         }
+        },
+        "3": {
+         "code": "EXP.5.3c",
+         "rubric": {
+          "4": "I can handle any number situation without thinking about it — switching systems mid-sentence, incorporating numbers into signs, and keeping number-heavy signing at full conversational speed.",
+          "3": "I can produce numbers accurately across a variety of number systems, choosing the correct system for the context, and I can sign several numbers in a row — dates, phone numbers, identification numbers — at a steady pace.",
+          "2": "I can produce numbers across the taught systems in practiced contexts — but choosing the right system on the fly and signing strings of numbers at a steady pace isn’t reliable yet.",
+          "1": "I can produce number strings only slowly, with planning or prompting between numbers.",
+          "0": "I haven’t attempted this yet, or I can’t form numbers even with a model."
+         }
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Interactive Communication",
+   "order": 4,
+   "code": "INT",
+   "standards": [
+    {
+     "id": "INT.1",
+     "name": "Initiating and Maintaining Interaction",
+     "description": "Students carry their share of signed conversations: starting and ending exchanges, asking their own questions, and keeping the conversation moving.",
+     "targets": [
+      {
+       "sub": "a",
+       "statement": "I can start, carry, and end signed conversations.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "INT.1.1a",
+         "rubric": {
+          "4": "I can initiate, sustain, and close short conversations on familiar topics, using practiced openings, closings, and small-talk scripts as a base.",
+          "3": "I can open and close short exchanges using memorized greetings, farewells, and pleasantries.",
+          "2": "I can return a greeting when someone signs it to me, but I rarely start or end an exchange myself.",
+          "1": "I can open or close an exchange only with a script in front of me or the teacher feeding me the signs.",
+          "0": "I haven’t attempted this yet, or I can’t greet or close even with a script."
+         }
+        },
+        "2": {
+         "code": "INT.1.2a",
+         "rubric": {
+          "4": "I can initiate, sustain, and close unscripted conversations on familiar and some less familiar topics, including meeting and getting to know new signers.",
+          "3": "I can initiate, sustain, and close short conversations on familiar topics, using practiced openings, closings, and small-talk scripts as a base.",
+          "2": "I can open and close exchanges with memorized greetings and pleasantries — but sustaining a real conversation between the opening and the closing isn’t there yet.",
+          "1": "I can hold a conversation only when my partner slows down, feeds me lines, or sticks to the script.",
+          "0": "I haven’t attempted this yet, or I can’t greet or close even with a script."
+         }
+        },
+        "3": {
+         "code": "INT.1.3a",
+         "rubric": {
+          "4": "I can hold my own in any signed conversation — unfamiliar topics, group settings, native signers at full speed — and the exchange flows for both of us.",
+          "3": "I can initiate, sustain, and close unscripted conversations on familiar and some less familiar topics, including meeting and getting to know new signers.",
+          "2": "I can initiate, sustain, and close short conversations on familiar topics from a practiced base — but unscripted conversations, and conversations with new signers, still fall apart on me.",
+          "1": "I can manage an unscripted conversation only with a patient partner who simplifies and supports.",
+          "0": "I haven’t attempted this yet, or I can’t greet or close even with a script."
+         }
+        }
+       }
+      },
+      {
+       "sub": "b",
+       "statement": "I can ask my own questions in conversation.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "INT.1.1b",
+         "rubric": {
+          "4": "I can ask my own questions and follow-ups beyond the script to learn more about a partner or topic.",
+          "3": "I can ask and answer common scripted questions about myself and familiar topics within a rehearsed exchange.",
+          "2": "I can answer scripted questions when asked, but I don’t ask questions back without prompting.",
+          "1": "I can ask or answer questions only with a script or the teacher modeling each one.",
+          "0": "I haven’t attempted this yet, or I can’t ask or answer even scripted questions with support."
+         }
+        },
+        "2": {
+         "code": "INT.1.2b",
+         "rubric": {
+          "4": "I can pursue my own lines of inquiry in conversation, asking original questions and follow-ups to investigate what I want to know.",
+          "3": "I can ask my own questions and follow-ups beyond the script to learn more about a partner or topic.",
+          "2": "I can ask and answer common scripted questions in a rehearsed exchange — but my own questions, beyond the script, are rare.",
+          "1": "I can come up with a question of my own only with prompting or planning time.",
+          "0": "I haven’t attempted this yet, or I can’t ask or answer even scripted questions with support."
+         }
+        },
+        "3": {
+         "code": "INT.1.3b",
+         "rubric": {
+          "4": "I drive real conversations with my questions — probing, redirecting, and following curiosity wherever it goes — the way I would in my first language.",
+          "3": "I can pursue my own lines of inquiry in conversation, asking original questions and follow-ups to investigate what I want to know about a person or topic.",
+          "2": "I can ask my own questions and follow-ups beyond the script — but a sustained line of inquiry, with follow-ups building on answers, isn’t consistent yet.",
+          "1": "I can keep a line of questioning going only with prompts or planned questions.",
+          "0": "I haven’t attempted this yet, or I can’t ask or answer even scripted questions with support."
+         }
+        }
+       }
+      },
+      {
+       "sub": "c",
+       "statement": "I can keep the conversation moving.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "INT.1.1c",
+         "rubric": {
+          "4": "I can maintain conversational flow with shorter pauses, recovering from lulls and continuing the exchange rather than stalling out.",
+          "3": "I can stay in an exchange for several turns, attempting a response rather than giving up or breaking into English.",
+          "2": "I can take a turn or two, but when I don’t know what to say, I drop out of the exchange or switch to English.",
+          "1": "I can stay in an exchange only with the teacher prompting me through each turn.",
+          "0": "I haven’t attempted this yet, or I leave the exchange even with prompting."
+         }
+        },
+        "2": {
+         "code": "INT.1.2c",
+         "rubric": {
+          "4": "I can maintain conversational flow, responding without long pauses or visible searching, and drawing on pleasantries and go-to phrases to bridge lulls.",
+          "3": "I can keep a conversation moving with shorter pauses, recovering from lulls and continuing rather than stalling or dropping out.",
+          "2": "I can stay in an exchange for several turns and attempt responses — but my pauses are long, and lulls tend to end the conversation.",
+          "1": "I can keep a conversation going only with my partner carrying it or prompting me.",
+          "0": "I haven’t attempted this yet, or I leave the exchange even with prompting."
+         }
+        },
+        "3": {
+         "code": "INT.1.3c",
+         "rubric": {
+          "4": "I carry conversations effortlessly — no visible searching, lulls turned into new threads — and I can keep an exchange alive even with a reluctant or struggling partner.",
+          "3": "I can keep conversations flowing — responding without long pauses or visible searching, and drawing on a bank of pleasantries and go-to phrases to bridge lulls.",
+          "2": "I can keep a conversation moving and recover from lulls — but long pauses and visible searching still show up, especially on less familiar topics.",
+          "1": "I can keep flow only when my partner manages the rhythm of the conversation for me.",
+          "0": "I haven’t attempted this yet, or I leave the exchange even with prompting."
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "INT.2",
+     "name": "Clarification and Repair",
+     "description": "Students keep conversations on track when communication breaks down, signaling and requesting help as receivers, repairing their own message as senders, and monitoring and correcting themselves as they sign.",
+     "targets": [
+      {
+       "sub": "a",
+       "statement": "I can signal when I don’t understand and ask for the help I need.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "INT.2.1a",
+         "rubric": {
+          "4": "I can back-channel at some points during exchanges to show I’m following, and signal non-understanding using practiced requests — asking for repetition, slowing, or fingerspelling.",
+          "3": "I can signal when I don’t understand and ask for help using basic practiced signs such as AGAIN or SLOW.",
+          "2": "When I’m lost, I tend to freeze, nod along, or wait it out — I signal non-understanding only when prompted.",
+          "1": "I can signal non-understanding only when the teacher prompts me to use AGAIN or SLOW.",
+          "0": "I haven’t attempted this yet, or I let breakdowns pass without signaling even when prompted."
+         }
+        },
+        "2": {
+         "code": "INT.2.2a",
+         "rubric": {
+          "4": "I can back-channel appropriately so my partner knows the message is landing, signal promptly when it isn’t, and request the specific kind of help I need.",
+          "3": "I can back-channel at some points during exchanges to show I’m following, and I can signal non-understanding using practiced requests — asking for repetition, slowing, or fingerspelling.",
+          "2": "I can signal non-understanding with basic signs like AGAIN or SLOW — but back-channeling and choosing the right kind of request aren’t there yet.",
+          "1": "I can use clarification requests only when prompted in the moment.",
+          "0": "I haven’t attempted this yet, or I let breakdowns pass without signaling even when prompted."
+         }
+        },
+        "3": {
+         "code": "INT.2.3a",
+         "rubric": {
+          "4": "My feedback loop is constant and unobtrusive — partners always know what’s landing, and my repair requests are so specific and well-timed that breakdowns barely register.",
+          "3": "I can back-channel appropriately so my partner knows the message is landing, signal promptly when it isn’t, and request the kind of help I need — repetition, slowing, rephrasing, or fingerspelling.",
+          "2": "I can back-channel and signal non-understanding with practiced requests — but my signals come late, and I default to asking for repetition instead of the specific help I need.",
+          "1": "I can manage the feedback loop only with reminders to back-channel and signal.",
+          "0": "I haven’t attempted this yet, or I let breakdowns pass without signaling even when prompted."
+         }
+        }
+       }
+      },
+      {
+       "sub": "b",
+       "statement": "I can repair my message when my partner doesn’t understand.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "INT.2.1b",
+         "rubric": {
+          "4": "I can attempt at least one repair beyond repetition when a partner doesn’t understand me — trying a different sign, fingerspelling, or simplifying.",
+          "3": "I can respond to a partner’s confusion by repeating my message slowly and carefully.",
+          "2": "When my partner looks confused, I tend to give up or switch to English instead of repeating my message.",
+          "1": "I can repair my message only when the teacher tells me to repeat it and how.",
+          "0": "I haven’t attempted this yet, or I abandon my message at the first breakdown even with support."
+         }
+        },
+        "2": {
+         "code": "INT.2.2b",
+         "rubric": {
+          "4": "I can repair my own message until it lands — rephrasing with different signs, restructuring, fingerspelling, or depicting.",
+          "3": "I can attempt at least one repair beyond simple repetition when a partner doesn’t understand — trying a different sign, fingerspelling, or simplifying.",
+          "2": "I can repeat my message slowly and carefully when my partner is confused — but repetition is my only repair.",
+          "1": "I can try a different repair only when someone suggests it.",
+          "0": "I haven’t attempted this yet, or I abandon my message at the first breakdown even with support."
+         }
+        },
+        "3": {
+         "code": "INT.2.3b",
+         "rubric": {
+          "4": "I diagnose why a message failed and pick the fix that works on the first try — rebuilding an idea two or three different ways without breaking conversational rhythm.",
+          "3": "I can repair my own message when a partner doesn’t understand — rephrasing with different signs, restructuring, fingerspelling, or depicting until it lands.",
+          "2": "I can attempt a repair beyond repetition — but if my first alternate attempt fails, I run out of strategies.",
+          "1": "I can work through a failed message only with coaching on what to try.",
+          "0": "I haven’t attempted this yet, or I abandon my message at the first breakdown even with support."
+         }
+        }
+       }
+      },
+      {
+       "sub": "c",
+       "statement": "I can catch and correct my own errors as I sign.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "INT.2.1c",
+         "rubric": {
+          "4": "I can catch my own errors and correct them, even if the correction interrupts the flow of the exchange.",
+          "3": "I can catch my own errors as I sign — especially in fingerspelling — even if fixing them is awkward or stops the exchange.",
+          "2": "I keep signing past my errors without noticing them; I fix them only when someone points them out.",
+          "1": "I can catch an error only when someone flags that I made one.",
+          "0": "I haven’t attempted this yet, or I don’t catch my errors even when they’re flagged."
+         }
+        },
+        "2": {
+         "code": "INT.2.2c",
+         "rubric": {
+          "4": "I can monitor as I sign — checking that my partner is following and correcting my own errors smoothly, without halting the conversation.",
+          "3": "I can catch my own errors and correct them, even if the correction interrupts the flow of the exchange.",
+          "2": "I can catch some of my own errors, especially in fingerspelling — but many slip by, and my corrections stop the exchange.",
+          "1": "I can catch and fix errors only when they’re pointed out.",
+          "0": "I haven’t attempted this yet, or I don’t catch my errors even when they’re flagged."
+         }
+        },
+        "3": {
+         "code": "INT.2.3c",
+         "rubric": {
+          "4": "My self-monitoring is silent and total — errors get fixed in-stride before most viewers notice, and I adjust my signing in real time to my partner’s comprehension.",
+          "3": "I can monitor the exchange as I sign — checking that my partner is following and correcting my own errors smoothly, without halting the conversation.",
+          "2": "I can catch and correct my own errors — but the corrections still interrupt my flow, and I lose track of whether my partner is following.",
+          "1": "I can monitor and self-correct only with prompts or a slowed pace.",
+          "0": "I haven’t attempted this yet, or I don’t catch my errors even when they’re flagged."
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "INT.3",
+     "name": "Communication Norms",
+     "description": "Students follow Deaf cultural and visual communication norms: getting attention, managing eye gaze and the visual environment, taking turns, and operating in ASL-only environments.",
+     "targets": [
+      {
+       "sub": "a",
+       "statement": "I can get attention the culturally Deaf way.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "INT.3.1a",
+         "rubric": {
+          "4": "I can get attention smoothly without being reminded — choosing politely between a tap and a wave for the situation — and I respond right away when someone seeks mine.",
+          "3": "I can get attention with a tap or a wave, and I respond when someone seeks my attention.",
+          "2": "I can respond when someone gets my attention, but I fall back on voice or hovering instead of tapping or waving to get theirs.",
+          "1": "I can use a tap or wave only when reminded in the moment.",
+          "0": "I haven’t attempted this yet, or I use voice and English habits even with reminders."
+         }
+        },
+        "2": {
+         "code": "INT.3.2a",
+         "rubric": {
+          "4": "I can get attention using methods suited to the situation — including relaying through another person — and respond appropriately when others seek my attention.",
+          "3": "I can get attention using practiced methods such as tapping or waving, and I respond when others seek my attention — though I tend to use the same method no matter the situation.",
+          "2": "I can get attention with a tap or wave when I think of it — but I need reminders, and my method or timing is often awkward for the situation.",
+          "1": "I can use attention-getting norms only with reminders.",
+          "0": "I haven’t attempted this yet, or I use voice and English habits even with reminders."
+         }
+        },
+        "3": {
+         "code": "INT.3.3a",
+         "rubric": {
+          "4": "My attention-getting reads as culturally native — taps, waves, light flashes, relays, and judgment calls about urgency and politeness, all matched to the setting without thought.",
+          "3": "I can get attention using methods suited to the situation — including relaying through another person when someone is out of reach — and respond appropriately when others seek my attention.",
+          "2": "I can get attention with practiced methods and respond when others seek mine — but I use the same method regardless of situation, and relaying through others isn’t part of my toolkit yet.",
+          "1": "I can match my method to the situation only with coaching.",
+          "0": "I haven’t attempted this yet, or I use voice and English habits even with reminders."
+         }
+        }
+       }
+      },
+      {
+       "sub": "b",
+       "statement": "I can manage eye gaze and the visual environment.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "INT.3.1b",
+         "rubric": {
+          "4": "I can hold visual attention through whole exchanges without reminders, and I position myself with sightlines in mind.",
+          "3": "I can keep my eyes on the signer during exchanges — even when I don’t catch everything — and avoid blocking sightlines or walking between signed conversations.",
+          "2": "I can watch the signer when reminded, but my eyes drop or wander when I’m lost, and I block sightlines without noticing.",
+          "1": "I can keep visual attention only with frequent reminders.",
+          "0": "I haven’t attempted this yet, or I look away and block signing space even with reminders."
+         }
+        },
+        "2": {
+         "code": "INT.3.2b",
+         "rubric": {
+          "4": "I can manage my eye gaze with cultural awareness — knowing when to look and when looking away is expected — and keep sightlines open as I position and move through signed spaces.",
+          "3": "I can maintain eye contact and visual attention during exchanges with only occasional lapses, and I follow positioning and sightline norms with occasional reminders.",
+          "2": "I can keep my eyes on the signer through most of an exchange — but my gaze drops when the language gets hard, and positioning norms still need regular reminders.",
+          "1": "I can maintain visual attention and positioning only with frequent reminders.",
+          "0": "I haven’t attempted this yet, or I look away and block signing space even with reminders."
+         }
+        },
+        "3": {
+         "code": "INT.3.3b",
+         "rubric": {
+          "4": "My visual presence is native-like — gaze, positioning, and movement through signed spaces all read as someone raised in the norms, even in crowded or unfamiliar settings.",
+          "3": "I can manage my eye gaze with cultural awareness — looking and looking away at the moments the culture expects — and I keep sightlines open as I position and move through signed spaces.",
+          "2": "I can maintain eye contact with only occasional lapses and follow positioning norms — but the judgment calls (when looking away is expected, how to move through signed space) aren’t automatic yet.",
+          "1": "I can manage gaze and positioning judgment only with coaching.",
+          "0": "I haven’t attempted this yet, or I look away and block signing space even with reminders."
+         }
+        }
+       }
+      },
+      {
+       "sub": "c",
+       "statement": "I can take turns the way signed conversation expects.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "INT.3.1c",
+         "rubric": {
+          "4": "I can read when the floor is open and take my turn without it being clearly handed to me, in pairs and small groups.",
+          "3": "I can take my turn when it’s clearly given, and I wait while my partner is signing.",
+          "2": "I can wait for my turn when reminded, but I start signing over my partner or miss my turn when no one cues me.",
+          "1": "I can manage turns only with the teacher directing who signs when.",
+          "0": "I haven’t attempted this yet, or I sign over others even with direction."
+         }
+        },
+        "2": {
+         "code": "INT.3.2c",
+         "rubric": {
+          "4": "I can manage turn-taking smoothly — taking the floor at natural moments, yielding it appropriately, and judging when and how to interrupt.",
+          "3": "I can take my turn when the floor is offered and hold back from signing over my partner, though my timing may be hesitant or occasionally overlap.",
+          "2": "I can take clearly given turns and wait while my partner signs — but subtler floor offers get past me, and overlaps still happen without prompting.",
+          "1": "I can time my turns only with prompting.",
+          "0": "I haven’t attempted this yet, or I sign over others even with direction."
+         }
+        },
+        "3": {
+         "code": "INT.3.3c",
+         "rubric": {
+          "4": "My turn-taking is invisible — I read group rhythm, hold or pass the floor with native-like timing, and my interruptions land as natural rather than rude.",
+          "3": "I can manage turn-taking smoothly — taking the floor at natural moments, yielding it appropriately, and judging when and how to interrupt.",
+          "2": "I can take offered turns and avoid signing over partners — but reading natural moments to take the floor, and judging when an interruption is appropriate, isn’t consistent yet.",
+          "1": "I can manage the rhythm of group turn-taking only with support.",
+          "0": "I haven’t attempted this yet, or I sign over others even with direction."
+         }
+        }
+       }
+      },
+      {
+       "sub": "d",
+       "statement": "I can operate voice-off in signing environments.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "INT.3.1d",
+         "rubric": {
+          "4": "I can operate voice-off through extended class activities, handling my conversations and classwork in ASL with only occasional fallback to writing or English.",
+          "3": "I can operate voice-off for a class period, following directions and handling routine classroom business in ASL and gesture.",
+          "2": "I can stay voice-off for stretches of class, but I break into spoken English when things get confusing or social.",
+          "1": "I can stay voice-off only with constant reminders.",
+          "0": "I haven’t attempted this yet, or I can’t stay voice-off even with reminders."
+         }
+        },
+        "2": {
+         "code": "INT.3.2d",
+         "rubric": {
+          "4": "I can switch to ASL automatically in signing environments and sustain it for events lasting an hour or more, without writing, voicing, or English side conversations.",
+          "3": "I can operate voice-off through extended class activities, handling my conversations and classwork in ASL with only occasional fallback to writing or English.",
+          "2": "I can stay voice-off for a class period and handle routine business in ASL — but during extended activities, I still fall back on writing or English regularly.",
+          "1": "I can sustain voice-off through activities only with frequent reminders.",
+          "0": "I haven’t attempted this yet, or I can’t stay voice-off even with reminders."
+         }
+        },
+        "3": {
+         "code": "INT.3.3d",
+         "rubric": {
+          "4": "Voice-off isn’t an effort I make — it’s my default in any signing environment, for any duration, including socially, and others never see me reach for English.",
+          "3": "I can switch to ASL automatically in signing environments — around Deaf people and at extended events like competitions — and sustain it for an hour or more without writing, voicing, or English side conversations.",
+          "2": "I can operate voice-off through extended activities with only occasional fallback — but switching automatically around Deaf people, and lasting through hour-plus events, isn’t there yet.",
+          "1": "I can sustain long voice-off stretches only with check-ins and reminders.",
+          "0": "I haven’t attempted this yet, or I can’t stay voice-off even with reminders."
+         }
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "NonManual Markers",
+   "order": 5,
+   "code": "NMM",
+   "standards": [
+    {
+     "id": "NMM.1",
+     "name": "Grammatical NMM",
+     "description": "Students produce the facial grammar of ASL: marking sentence types, separating phrases, and keeping non-manual marking alive as they sign.",
+     "targets": [
+      {
+       "sub": "a",
+       "statement": "I can mark sentence types with facial grammar.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "NMM.1.1a",
+         "rubric": {
+          "4": "I can produce grammatical markers for yes-no questions, WH-questions, and negation reliably, and apply topic and conditional marking in practiced contexts.",
+          "3": "I can produce grammatical non-manual markers for yes-no questions (brows up), WH-questions (brows down), and negation (headshake) in short, practiced sentences — even if my timing is rough.",
+          "2": "I can produce a marker when I concentrate on it, but my sentences usually go unmarked unless someone cues me.",
+          "1": "I can produce a grammatical marker only when cued at the moment I need it.",
+          "0": "I haven’t attempted this yet, or my face stays unmarked even with cueing."
+         }
+        },
+        "2": {
+         "code": "NMM.1.2a",
+         "rubric": {
+          "4": "I can produce the full range of grammatical markers — yes-no, WH, negation, topic, conditional, and rhetorical marking — applying each where appropriate with clean onset and release.",
+          "3": "I can produce markers for yes-no questions, WH-questions, and negation reliably, and I can apply topic and conditional marking in practiced contexts.",
+          "2": "I can mark yes-no, WH, and negation in short, practiced sentences — but reliability isn’t there yet, and topic and conditional marking only appear with prompting.",
+          "1": "I can apply topic or conditional marking only when cued or drilled right before.",
+          "0": "I haven’t attempted this yet, or my face stays unmarked even with cueing."
+         }
+        },
+        "3": {
+         "code": "NMM.1.3a",
+         "rubric": {
+          "4": "My facial grammar is precise enough that someone could identify my sentence types with my hands out of view — and I layer markers (a rhetorical inside a conditional) cleanly when the meaning calls for it.",
+          "3": "I can produce the full range of grammatical markers — yes-no, WH, negation, topic, conditional, and rhetorical marking — applying each where appropriate with clean onset and release.",
+          "2": "I can mark yes-no, WH, negation, and practiced topic and conditional sentences — but rhetorical marking and clean onset and release across the full range aren’t consistent yet.",
+          "1": "I can produce the full marker range only with cueing or rehearsal.",
+          "0": "I haven’t attempted this yet, or my face stays unmarked even with cueing."
+         }
+        }
+       }
+      },
+      {
+       "sub": "b",
+       "statement": "I can mark the boundaries between sentences.",
+       "note": null,
+       "levels": {
+        "2": {
+         "code": "NMM.1.2b",
+         "rubric": {
+          "4": "I can separate phrases and clauses visually, using head movement, pausing, and brow shifts to mark sentence boundaries.",
+          "3": "I can mark the boundaries between sentences, using head movement and pausing so one sentence doesn’t run into the next.",
+          "2": "My sentences tend to run together; boundaries show up only when I stop and reset.",
+          "1": "I can mark a boundary only when cued to pause between sentences.",
+          "0": "I haven’t attempted this yet, or my signing runs together even with cueing."
+         }
+        },
+        "3": {
+         "code": "NMM.1.3b",
+         "rubric": {
+          "4": "My boundary marking makes long, complex signing read in clean visual paragraphs — clause edges, asides, and transitions all land without effort from the viewer.",
+          "3": "I can separate phrases and clauses visually, using head movement, pausing, and brow shifts to mark sentence boundaries.",
+          "2": "I can mark boundaries between sentences with head movement and pausing — but inside long sentences, phrase and clause boundaries still blur.",
+          "1": "I can mark phrase boundaries only with coaching or planned pauses.",
+          "0": "I haven’t attempted this yet, or my signing runs together even with cueing."
+         }
+        }
+       }
+      },
+      {
+       "sub": "c",
+       "statement": "I can keep non-manual marking alive as I sign.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "NMM.1.1b",
+         "rubric": {
+          "4": "I can sustain grammatical marking through short, familiar conversations, though markers may drop when my attention shifts.",
+          "3": "I can sign with an active face — attempting grammatical marking rather than signing with a blank face — even if my markers are exaggerated or roughly timed.",
+          "2": "My face goes blank for stretches when I sign; expression shows up only when someone reminds me.",
+          "1": "I can keep my face active only when cued moment to moment.",
+          "0": "I haven’t attempted this yet, or my face stays blank even with cueing."
+         }
+        },
+        "2": {
+         "code": "NMM.1.2c",
+         "rubric": {
+          "4": "I can sustain grammatical marking through extended, unscripted signing, keeping my markers in agreement with my signing without prompting.",
+          "3": "I can sustain grammatical non-manual marking through short, familiar conversations, though markers may drop when my attention shifts to vocabulary or structure.",
+          "2": "I can sign with an active face and attempt marking — but sustaining it through a conversation isn’t there yet; markers fade after the first sentence or two.",
+          "1": "I can keep marking alive only with cues during the conversation.",
+          "0": "I haven’t attempted this yet, or my face stays blank even with cueing."
+         }
+        },
+        "3": {
+         "code": "NMM.1.3c",
+         "rubric": {
+          "4": "Marking never drops, no matter how demanding the content — my facial grammar runs on autopilot while I think about what to say, not how to mark it.",
+          "3": "I can sustain grammatical non-manual marking through extended, unscripted signing, keeping my markers in agreement with my signing without prompting.",
+          "2": "I can sustain marking through short, familiar conversations — but in extended or unscripted signing, markers still drop when the language gets hard.",
+          "1": "I can sustain marking in longer signing only with cueing or planned check-ins.",
+          "0": "I haven’t attempted this yet, or my face stays blank even with cueing."
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "NMM.2",
+     "name": "Head-Face-Body-Eye Gaze",
+     "description": "Students use face, head, body, and eye gaze expressively: conveying emotion and intensity, portraying characters through role shift, and directing gaze for reference and depiction.",
+     "targets": [
+      {
+       "sub": "a",
+       "statement": "I can convey emotion and intensity with my face and body.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "NMM.2.1a",
+         "rubric": {
+          "4": "I can convey clear emotions and basic intensity through facial expression and body movement that generally match my message.",
+          "3": "I can show basic emotions and other simple expressions while signing, with expression that sometimes matches my message.",
+          "2": "I can make expressions on prompted vocabulary, but while signing, my face mostly stays flat.",
+          "1": "I can show emotion while signing only when cued to add it.",
+          "0": "I haven’t attempted this yet, or my signing stays flat-faced even with cueing."
+         }
+        },
+        "2": {
+         "code": "NMM.2.2a",
+         "rubric": {
+          "4": "I can convey emotion, attitude, and intensity through facial expression, head movement, and body posture that match the content of my message.",
+          "3": "I can convey clear emotions and basic intensity through facial expression and body movement that generally match my message.",
+          "2": "I can show basic emotions while signing, sometimes matching my message — but the match is inconsistent, and my expression fades during harder stretches.",
+          "1": "I can match expression to message only with cues or a model.",
+          "0": "I haven’t attempted this yet, or my signing stays flat-faced even with cueing."
+         }
+        },
+        "3": {
+         "code": "NMM.2.3a",
+         "rubric": {
+          "4": "My expressive layer works like an instrument — shading attitude and intensity precisely, dialing emotion up and down mid-sentence — and it never flattens, even in demanding language.",
+          "3": "I can convey emotion, attitude, and intensity through facial expression, head movement, and body posture that match the content of my message.",
+          "2": "I can convey clear emotions and basic intensity that generally match my message — but attitude, subtler shades, and a full range still flatten when the language gets hard.",
+          "1": "I can keep the expressive layer going only with cueing or rehearsal.",
+          "0": "I haven’t attempted this yet, or my signing stays flat-faced even with cueing."
+         }
+        }
+       }
+      },
+      {
+       "sub": "b",
+       "statement": "I can portray characters through role shift.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "NMM.2.1b",
+         "rubric": {
+          "4": "I can portray two characters in practiced narratives through role shift, keeping each character on a consistent side and using eye gaze and expression to tell them apart.",
+          "3": "I can attempt role shift in a short, practiced narrative — assigning characters to a left and right side — even if I show the change of character inconsistently.",
+          "2": "I can tell a practiced story’s characters apart in my head, but my body doesn’t show the shift without prompting.",
+          "1": "I can shift between characters only when coached through each change.",
+          "0": "I haven’t attempted this yet, or I can’t show a character change even with coaching."
+         }
+        },
+        "2": {
+         "code": "NMM.2.2b",
+         "rubric": {
+          "4": "I can portray characters and dialogue through role shift, maintaining each character’s placement across a narrative, adjusting posture and gaze for traits like height or size, and moving cleanly between characters.",
+          "3": "I can portray two characters in practiced narratives through role shift, keeping each character on a consistent side and using eye gaze and expression to distinguish them with developing consistency.",
+          "2": "I can attempt role shift with characters on a left and right side — but the sides drift, and the character changes don’t read clearly yet.",
+          "1": "I can hold two characters apart only with coaching during the story.",
+          "0": "I haven’t attempted this yet, or I can’t show a character change even with coaching."
+         }
+        },
+        "3": {
+         "code": "NMM.2.3b",
+         "rubric": {
+          "4": "I can carry an ensemble — three or more distinct characters held across a long narrative, each with their own posture, gaze, and manner — switching cleanly at speed.",
+          "3": "I can portray characters and dialogue through role shift — maintaining each character’s placement across a narrative, adjusting my posture and gaze for traits like height or size, and moving cleanly between characters.",
+          "2": "I can portray two characters with consistent sides and distinguishing gaze and expression — but holding placement across a whole narrative, and adjusting for character traits, isn’t consistent yet.",
+          "1": "I can maintain characters through a narrative only with coaching or restarts.",
+          "0": "I haven’t attempted this yet, or I can’t show a character change even with coaching."
+         }
+        }
+       }
+      },
+      {
+       "sub": "c",
+       "statement": "I can direct eye gaze for reference and depiction.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "NMM.2.1c",
+         "rubric": {
+          "4": "I can use eye gaze to locate referents I’ve placed in space, and begin depicting qualities such as distance or size.",
+          "3": "I can use eye gaze to look at referents I’ve placed in space within short, practiced sentences.",
+          "2": "I can place a referent in space, but my eyes don’t go to it unless someone reminds me.",
+          "1": "I can direct my gaze to a referent only when prompted in the moment.",
+          "0": "I haven’t attempted this yet, or my gaze stays on my hands or the viewer even with prompting."
+         }
+        },
+        "2": {
+         "code": "NMM.2.2c",
+         "rubric": {
+          "4": "I can direct my eye gaze deliberately — locating referents in space and depicting their qualities, such as distance, size, or height.",
+          "3": "I can use eye gaze to locate referents I’ve placed in space, and I’m beginning to depict qualities such as distance or size with my gaze.",
+          "2": "I can look at referents in practiced sentences — but in my own signing, my gaze forgets the referents, and depictive gaze isn’t there yet.",
+          "1": "I can use depictive gaze only when cued.",
+          "0": "I haven’t attempted this yet, or my gaze stays on my hands or the viewer even with prompting."
+         }
+        },
+        "3": {
+         "code": "NMM.2.3c",
+         "rubric": {
+          "4": "My gaze does grammatical and depictive work without my thinking about it — locating, agreeing, depicting, and showing where characters look — woven through every scene I sign.",
+          "3": "I can direct my eye gaze deliberately, locating referents in space and depicting their qualities, such as distance, size, or height.",
+          "2": "I can use gaze to locate my referents and sometimes depict qualities — but deliberate, consistent gaze work across my signing isn’t there yet.",
+          "1": "I can sustain gaze work only with cueing or planned scenes.",
+          "0": "I haven’t attempted this yet, or my gaze stays on my hands or the viewer even with prompting."
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "NMM.3",
+     "name": "Mouth Morphemes",
+     "description": "Students use the mouth as a meaningful channel: producing ASL mouth morphemes and keeping mouth activity ASL-driven rather than mouthing English.",
+     "targets": [
+      {
+       "sub": "a",
+       "statement": "I can produce ASL mouth morphemes.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "NMM.3.1a",
+         "rubric": {
+          "4": "I can produce taught mouth morphemes for size and distance, along with mouth morphemes tied to specific signs, and begin pairing morphemes with classifiers.",
+          "3": "I can produce a small set of taught mouth morphemes on prompted vocabulary, copying the mouth shape along with the sign as it was modeled.",
+          "2": "I can copy a mouth morpheme right after a model, but it doesn’t appear with the sign on my own.",
+          "1": "I can produce a mouth morpheme only while mirroring a model.",
+          "0": "I haven’t attempted this yet, or I can’t copy a mouth morpheme even while mirroring."
+         }
+        },
+        "2": {
+         "code": "NMM.3.2a",
+         "rubric": {
+          "4": "I can produce common mouth morphemes — size, effort, intensity, distance — paired with the right signs and timed to the movement, including with classifiers.",
+          "3": "I can produce taught mouth morphemes for size and distance, along with morphemes tied to specific signs, and I’m beginning to pair morphemes with classifiers.",
+          "2": "I can produce a small set of taught morphemes on prompted vocabulary — but size and distance morphemes, sign-specific ones, and classifier pairings only show up with prompting.",
+          "1": "I can pair a morpheme with a sign only when cued or drilled.",
+          "0": "I haven’t attempted this yet, or I can’t copy a mouth morpheme even while mirroring."
+         }
+        },
+        "3": {
+         "code": "NMM.3.3a",
+         "rubric": {
+          "4": "I use a wide repertoire of mouth morphemes with native-like timing, layering them over signs and classifiers automatically — and I pick up new morphemes from Deaf signers without instruction.",
+          "3": "I can produce common adverbial mouth morphemes — showing size, effort, intensity, and distance — paired with the right signs and timed to the manual movement, including with classifiers.",
+          "2": "I can produce taught morphemes with their signs and begin pairing them with classifiers — but my timing is loose, and morphemes drop in spontaneous signing.",
+          "1": "I can keep morphemes in my signing only with cueing.",
+          "0": "I haven’t attempted this yet, or I can’t copy a mouth morpheme even while mirroring."
+         }
+        }
+       }
+      },
+      {
+       "sub": "b",
+       "statement": "I can keep my mouth ASL-driven instead of mouthing English.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "NMM.3.1b",
+         "rubric": {
+          "4": "I can reduce my English mouthing as I sign, replacing it with mouth morphemes in practiced structures.",
+          "3": "I can sign practiced vocabulary and phrases without mouthing full English sentences.",
+          "2": "I can sign short practiced items without full-sentence mouthing when reminded, but English mouthing runs through most of my signing.",
+          "1": "I can hold back English mouthing only when cued moment to moment.",
+          "0": "I haven’t attempted this yet, or I mouth full English sentences even with cueing."
+         }
+        },
+        "2": {
+         "code": "NMM.3.2b",
+         "rubric": {
+          "4": "I can keep my mouth activity ASL-driven, using mouth morphemes rather than mouthing English as I sign.",
+          "3": "I can reduce my English mouthing as I sign, replacing it with mouth morphemes in practiced structures — though mouthing may return when the language gets hard.",
+          "2": "I can sign practiced vocabulary and phrases without mouthing full sentences — but English mouthing still runs through my own signing, and I rarely catch it.",
+          "1": "I can replace mouthing with morphemes only when cued.",
+          "0": "I haven’t attempted this yet, or I mouth full English sentences even with cueing."
+         }
+        },
+        "3": {
+         "code": "NMM.3.3b",
+         "rubric": {
+          "4": "My mouth channel is fully ASL — no English mouthing under any pressure, with mouth morphemes doing meaningful work everywhere they belong.",
+          "3": "I can keep my mouth activity ASL-driven — using mouth morphemes rather than mouthing English — consistently in my spontaneous signing, not just drilled phrases.",
+          "2": "I can replace English mouthing with morphemes in practiced structures — but when the language gets hard, mouthing comes back.",
+          "1": "I can keep my mouth ASL-driven only with cueing or rehearsed material.",
+          "0": "I haven’t attempted this yet, or I mouth full English sentences even with cueing."
+         }
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Reception",
+   "order": 6,
+   "code": "REC",
+   "standards": [
+    {
+     "id": "REC.1",
+     "name": "Classroom Directions",
+     "description": "Students follow instructions, assignments, and classroom business delivered in ASL, from routine activities to new, unfamiliar projects.",
+     "targets": [
+      {
+       "sub": "a",
+       "statement": "I can follow classroom instructions in ASL.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "REC.1.1a",
+         "rubric": {
+          "4": "I can follow multi-step instructions for familiar types of activities and assignments at a steady pace.",
+          "3": "I can follow simple one-and-two-step instructions and routine classroom language signed clearly at a slow pace.",
+          "2": "I can follow routine one-step instructions, but multi-part directions lose me without a repeat or a demonstration.",
+          "1": "I can follow instructions only when they’re repeated, slowed way down, and paired with gestures or demonstrations.",
+          "0": "I haven’t attempted this yet, or I can’t follow classroom instructions even with repetition and demonstration."
+         }
+        },
+        "2": {
+         "code": "REC.1.2a",
+         "rubric": {
+          "4": "I can carry out a new, unfamiliar project from ASL instructions alone, explained at a normal pace.",
+          "3": "I can follow multi-step instructions for familiar activity and assignment types at a steady pace.",
+          "2": "I can follow one-and-two-step instructions and routine classroom language at a slow pace — but multi-step directions at a steady pace still need repeats.",
+          "1": "I can follow multi-step instructions only when they’re broken into single steps and repeated for me.",
+          "0": "I haven’t attempted this yet, or I can’t follow classroom instructions even with repetition and demonstration."
+         }
+        },
+        "3": {
+         "code": "REC.1.3a",
+         "rubric": {
+          "4": "I can follow instructions delivered at full speed for complex, multi-stage work — and when classmates are lost, I can re-explain the directions in ASL myself.",
+          "3": "I can carry out new, unfamiliar projects and activities from ASL instructions alone — explained at a normal pace, without simplification or repetition — including the expectations and steps.",
+          "2": "I can follow multi-step instructions for familiar activity types at a steady pace — but new, unfamiliar projects explained at a normal pace still need repetition or simplification.",
+          "1": "I can follow instructions for new projects only when they’re slowed, repeated, or broken into pieces for me.",
+          "0": "I haven’t attempted this yet, or I can’t follow classroom instructions even with repetition and demonstration."
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "REC.2",
+     "name": "Contextual Understanding",
+     "description": "Students use context to understand: capturing the message, decoding unfamiliar signs from families and parameters, following new classifiers from the established scene, and inferring unstated meaning.",
+     "targets": [
+      {
+       "sub": "a",
+       "statement": "I can capture the message of signed communication.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "REC.2.1a",
+         "rubric": {
+          "4": "I can identify the main idea and the key details of signed messages on familiar topics.",
+          "3": "I can identify the main point of short, familiar signed messages.",
+          "2": "I can pick out familiar signs in a message, but I often miss the main point unless the message is repeated.",
+          "1": "I can find the main point only when the message is repeated, slowed, and supported with gestures or visuals.",
+          "0": "I haven’t attempted this yet, or I can’t follow a signed message even with repetition and slowed signing."
+         }
+        },
+        "2": {
+         "code": "REC.2.2a",
+         "rubric": {
+          "4": "I can identify the main idea and a high percentage of the details of signed messages, on familiar and less familiar topics.",
+          "3": "I can identify the main idea and the key details of signed messages on familiar topics.",
+          "2": "I can identify the main point of short, familiar messages — but the key details slip past me.",
+          "1": "I can catch the main idea and details only with repetition and slowed signing.",
+          "0": "I haven’t attempted this yet, or I can’t follow a signed message even with repetition and slowed signing."
+         }
+        },
+        "3": {
+         "code": "REC.2.3a",
+         "rubric": {
+          "4": "I can catch essentially everything — main ideas, details, and implications — from varied signers at full conversational speed, even on new topics, the way I would in my first language.",
+          "3": "I can identify the main idea and a high percentage of the details of signed messages on familiar and less familiar topics.",
+          "2": "I can identify the main idea and key details on familiar topics — but on less familiar topics, or when the details pile up, my comprehension drops to the gist.",
+          "1": "I can capture the details of a message only with repeated viewings or slowed signing.",
+          "0": "I haven’t attempted this yet, or I can’t follow a signed message even with repetition and slowed signing."
+         }
+        }
+       }
+      },
+      {
+       "sub": "b",
+       "statement": "I can decode unfamiliar signs using parameters and sign families.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "REC.2.1b",
+         "rubric": {
+          "4": "I can work out the meaning of unfamiliar signs using parameters, sign families, and context.",
+          "3": "I can tell apart signs that differ in a single parameter and identify which parameter changed.",
+          "2": "I can see that two similar signs are different, but I can’t name which parameter changed or keep the signs apart reliably.",
+          "1": "I can spot parameter differences only when the signs are shown side by side, slowly, and the difference is pointed out.",
+          "0": "I haven’t attempted this yet, or I can’t tell similar signs apart even with help."
+         }
+        },
+        "2": {
+         "code": "REC.2.2b",
+         "rubric": {
+          "4": "I can work out unfamiliar signs from parameters, sign families, and context automatically, as a normal part of comprehension.",
+          "3": "I can work out the meaning of unfamiliar signs using parameters, sign families, and context.",
+          "2": "I can tell apart signs that differ in a parameter and name what changed — but using parameters, sign families, and context to work out a brand-new sign is still hit-or-miss.",
+          "1": "I can work out a new sign’s meaning only with hints, a slowed repeat, or answer choices.",
+          "0": "I haven’t attempted this yet, or I can’t work out an unfamiliar sign even with hints and repetition."
+         }
+        },
+        "3": {
+         "code": "REC.2.3b",
+         "rubric": {
+          "4": "Unfamiliar signs rarely slow me down: I decode them in real time from form and context alone, and I’m usually right, even in fast signing on new topics.",
+          "3": "I can work out the meaning of unfamiliar signs using parameters, sign families, and context as a normal part of comprehension, without losing the thread of the message.",
+          "2": "I can work out unfamiliar signs from parameters, sign families, and context when I stop and think — but doing it mid-message, without losing the flow, isn’t consistent yet.",
+          "1": "I can work out a new sign’s meaning only with hints, a slowed repeat, or answer choices.",
+          "0": "I haven’t attempted this yet, or I can’t work out an unfamiliar sign even with hints and repetition."
+         }
+        }
+       }
+      },
+      {
+       "sub": "c",
+       "statement": "I can follow classifiers in signed scenes.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "REC.2.1c",
+         "rubric": {
+          "4": "I can identify what a new classifier represents and follow the change in perspective, using the scene and referents already established.",
+          "3": "I can connect a classifier to its referent when the referent has just been named.",
+          "2": "I can follow a classifier when it’s obvious or acted out, but I lose track of what the handshape stands for.",
+          "1": "I can connect a classifier to its referent only when the signer pauses, points back, or re-signs the noun for me.",
+          "0": "I haven’t attempted this yet, or I can’t connect a classifier to what it represents even with help."
+         }
+        },
+        "2": {
+         "code": "REC.2.2c",
+         "rubric": {
+          "4": "I can follow new classifiers and shifts in perspective as scenes develop, using the context that has been established.",
+          "3": "I can identify what a new classifier represents and follow the perspective change, using the scene and referents already established.",
+          "2": "I can connect a classifier to a referent that was just named — but when the referent came earlier in the scene, or the perspective shifts, I lose the thread.",
+          "1": "I can follow new classifiers only when the scene is replayed slowly or the referent is re-named.",
+          "0": "I haven’t attempted this yet, or I can’t connect a classifier to what it represents even with help."
+         }
+        },
+        "3": {
+         "code": "REC.2.3c",
+         "rubric": {
+          "4": "I can track multiple classifiers through long, layered scenes — rapid perspective changes and scale switches included — without losing who or what each handshape represents.",
+          "3": "I can follow new classifiers and shifts in perspective as scenes develop, using the established context.",
+          "2": "I can identify what a new classifier represents and follow a perspective change in a set-up scene — but as scenes grow and develop, I start losing classifiers and shifts.",
+          "1": "I can follow developing scenes only with replays, slowed signing, or someone naming the referents.",
+          "0": "I haven’t attempted this yet, or I can’t connect a classifier to what it represents even with help."
+         }
+        }
+       }
+      },
+      {
+       "sub": "d",
+       "statement": "I can infer meaning that isn’t stated directly.",
+       "note": null,
+       "levels": {
+        "2": {
+         "code": "REC.2.2d",
+         "rubric": {
+          "4": "I can infer meaning that isn’t stated directly, using context and my prior knowledge together.",
+          "3": "I can infer meaning that isn’t stated directly when the context makes it clear.",
+          "2": "I can understand what’s stated directly, but I take messages at face value — implied meaning gets past me unless someone flags it.",
+          "1": "I can find the implied meaning only with guiding questions or a second, slowed viewing.",
+          "0": "I haven’t attempted this yet, or I can’t find implied meaning even with guiding questions."
+         }
+        },
+        "3": {
+         "code": "REC.2.3d",
+         "rubric": {
+          "4": "I read between the lines reliably — tone, implication, the signer’s attitude, and what’s deliberately left unsaid — even on unfamiliar topics.",
+          "3": "I can infer meaning that isn’t stated directly, using context and my prior knowledge.",
+          "2": "I can infer unstated meaning when the context makes it obvious — but inferences that lean on prior knowledge or subtler cues don’t land consistently.",
+          "1": "I can find the implied meaning only with guiding questions or a second, slowed viewing.",
+          "0": "I haven’t attempted this yet, or I can’t find implied meaning even with guiding questions."
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "REC.3",
+     "name": "Grammar",
+     "description": "Students follow the grammar of signed input: grammatical markers, sentence structure and boundaries, and referents and directional verbs in space.",
+     "targets": [
+      {
+       "sub": "a",
+       "statement": "I can interpret ASL grammatical markers.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "REC.3.1a",
+         "rubric": {
+          "4": "I can interpret a wider range of grammatical markers, such as topic and conditional marking, to follow how a sentence is organized.",
+          "3": "I can recognize the most common grammatical markers and tell whether a sentence is a statement, a question, or a negation.",
+          "2": "I can sometimes tell a question from a statement, but I miss the facial grammar unless it’s exaggerated.",
+          "1": "I can tell sentence types apart only when the signer exaggerates the marker and holds it for me.",
+          "0": "I haven’t attempted this yet, or I can’t tell a question from a statement even with exaggerated marking."
+         }
+        },
+        "2": {
+         "code": "REC.3.2a",
+         "rubric": {
+          "4": "I can interpret the full range of grammatical markers — including subtle ones and several working together — at a normal pace.",
+          "3": "I can interpret a wider range of grammatical markers, such as topic and conditional marking, to follow how a sentence is organized.",
+          "2": "I can recognize the most common markers — statements, questions, negation — but newer markers like topic and conditional marking slip past me.",
+          "1": "I can interpret topic or conditional marking only when it’s pointed out or replayed slowly.",
+          "0": "I haven’t attempted this yet, or I can’t tell a question from a statement even with exaggerated marking."
+         }
+        },
+        "3": {
+         "code": "REC.3.3a",
+         "rubric": {
+          "4": "I catch grammatical marking the way a fluent signer does — nothing about brow, head, or body grammar escapes me, even in fast, layered signing — and I use it to predict where a sentence is going.",
+          "3": "I can interpret the full range of grammatical markers, including subtle ones and several working together, at a normal pace.",
+          "2": "I can interpret a wide range of markers in clear signing — but subtle markers, stacked markers, and normal-pace signing still cause misses.",
+          "1": "I can interpret subtle or stacked markers only with replays or slowed signing.",
+          "0": "I haven’t attempted this yet, or I can’t tell a question from a statement even with exaggerated marking."
+         }
+        }
+       }
+      },
+      {
+       "sub": "b",
+       "statement": "I can follow sentence structure and boundaries.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "REC.3.1b",
+         "rubric": {
+          "4": "I can recognize the pauses and boundaries that separate sentences and ideas, and follow sentences that connect two ideas.",
+          "3": "I can follow short, simple sentences, recognizing the basic topic-comment setup.",
+          "2": "I can follow individual familiar signs, but where one sentence ends and the next begins is mostly a blur.",
+          "1": "I can follow a sentence only when it’s signed slowly with exaggerated pauses.",
+          "0": "I haven’t attempted this yet, or I can’t follow even short sentences with slowed signing."
+         }
+        },
+        "2": {
+         "code": "REC.3.2b",
+         "rubric": {
+          "4": "I can differentiate ideas across complex, multi-clause sentences, using pauses, boundaries, and sentence structure.",
+          "3": "I can recognize the pauses and boundaries that separate sentences and ideas, and I can follow sentences that connect two ideas.",
+          "2": "I can follow short, simple topic-comment sentences — but boundaries between sentences and two-idea sentences still blur together.",
+          "1": "I can find sentence boundaries only with slowed signing or replays.",
+          "0": "I haven’t attempted this yet, or I can’t follow even short sentences with slowed signing."
+         }
+        },
+        "3": {
+         "code": "REC.3.3b",
+         "rubric": {
+          "4": "I can follow any sentence structure in real time — nested clauses, asides, interruptions, and restarts — and long stretches of signing stay clearly organized for me.",
+          "3": "I can differentiate ideas across complex, multi-clause sentences, using pauses, boundaries, and sentence structure.",
+          "2": "I can follow boundaries between sentences and two-idea sentences — but complex, multi-clause sentences still run together.",
+          "1": "I can untangle multi-clause sentences only with replays or slowed signing.",
+          "0": "I haven’t attempted this yet, or I can’t follow even short sentences with slowed signing."
+         }
+        }
+       }
+      },
+      {
+       "sub": "c",
+       "statement": "I can track referents and directional verbs in space.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "REC.3.1c",
+         "rubric": {
+          "4": "I can track a few referents placed in space and the directional verbs that move between them.",
+          "3": "I can tell when a signer assigns a person or thing to a location in space and refers back to it.",
+          "2": "I can see the signer placing things in space, but when they point back, I’ve lost what the location stands for.",
+          "1": "I can follow a spatial reference only when the signer re-names the referent or repeats the setup slowly.",
+          "0": "I haven’t attempted this yet, or I can’t follow references to space even with the setup repeated."
+         }
+        },
+        "2": {
+         "code": "REC.3.2c",
+         "rubric": {
+          "4": "I can track referents and directional verbs in space through extended signing, following who acts on whom.",
+          "3": "I can track a few referents placed in space and the directional verbs that move between them.",
+          "2": "I can tell when a signer sets up a referent and points back to it — but tracking several referents and the verbs moving between them isn’t there yet.",
+          "1": "I can track referents and directional verbs only with replays or a slowed pace.",
+          "0": "I haven’t attempted this yet, or I can’t follow references to space even with the setup repeated."
+         }
+        },
+        "3": {
+         "code": "REC.3.3c",
+         "rubric": {
+          "4": "I never lose the map: many referents, rearranged space, and verbs moving between third parties stay clear through a whole story at full speed.",
+          "3": "I can track referents and directional verbs in space through extended signing, following who acts on whom.",
+          "2": "I can track a few referents and their directional verbs through short stretches — but in extended signing, I lose who acts on whom.",
+          "1": "I can follow who acts on whom only with replays, slowed signing, or the referents re-named.",
+          "0": "I haven’t attempted this yet, or I can’t follow references to space even with the setup repeated."
+         }
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Spacial Grammar",
+   "order": 7,
+   "code": "SPC",
+   "standards": [
+    {
+     "id": "SPC.1",
+     "name": "Establishing and Referencing",
+     "description": "Students use space as a referencing system: establishing referents, indexing back accurately, keeping the spatial setup consistent, and arranging ordered information spatially.",
+     "targets": [
+      {
+       "sub": "a",
+       "statement": "I can establish referents in space and point back to them.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "SPC.1.1a",
+         "rubric": {
+          "4": "I can establish a few referents at locations and index back to them through short stretches of signing.",
+          "3": "I can establish one or two referents at locations in practiced sentences and point back to them within the same short stretch of signing.",
+          "2": "I can place a referent at a location, but instead of pointing back to the spot, I usually re-sign the noun.",
+          "1": "I can set up and point back to a referent only when the setup is modeled and I’m prompted to index.",
+          "0": "I haven’t attempted this yet, or I can’t point back to a placed referent even with prompting."
+         }
+        },
+        "2": {
+         "code": "SPC.1.2a",
+         "rubric": {
+          "4": "I can establish referents at locations in space and index back to them accurately across extended signing, returning to the same location each time.",
+          "3": "I can establish a few referents at locations and index back to them through short stretches of signing.",
+          "2": "I can establish one or two referents and point back within the same short stretch — but with more referents in play, my pointing loses precision.",
+          "1": "I can keep referents at their locations only with prompting or a planned setup.",
+          "0": "I haven’t attempted this yet, or I can’t point back to a placed referent even with prompting."
+         }
+        },
+        "3": {
+         "code": "SPC.1.3a",
+         "rubric": {
+          "4": "My referencing never wobbles — many referents across a long story, each index landing exactly, even when I deliberately rearrange the space.",
+          "3": "I can establish referents at locations in space and index back to them accurately across extended signing, returning to the same location each time rather than pointing vaguely.",
+          "2": "I can establish a few referents and index back through short stretches — but across extended signing, my pointing drifts or goes vague.",
+          "1": "I can index accurately through longer signing only with planning or reminders.",
+          "0": "I haven’t attempted this yet, or I can’t point back to a placed referent even with prompting."
+         }
+        }
+       }
+      },
+      {
+       "sub": "b",
+       "statement": "I can keep my spatial setup consistent.",
+       "note": null,
+       "levels": {
+        "2": {
+         "code": "SPC.1.2b",
+         "rubric": {
+          "4": "I can maintain a consistent spatial setup through a story or explanation, keeping several referents at their locations unless the meaning moves them.",
+          "3": "I can maintain my spatial setup through short narratives, though locations may drift in longer or unplanned signing.",
+          "2": "I can set referents up, but my locations drift or swap even within a short narrative.",
+          "1": "I can hold a setup only with a planned layout or reminders as I go.",
+          "0": "I haven’t attempted this yet, or my referents lose their locations even with reminders."
+         }
+        },
+        "3": {
+         "code": "SPC.1.3b",
+         "rubric": {
+          "4": "My space stays organized through anything — long stories, interruptions, reorganizations — and I deliberately restructure it when the meaning calls for it, without confusing the viewer.",
+          "3": "I can maintain a consistent spatial setup through a story or explanation, keeping several referents at their locations unless the meaning moves them.",
+          "2": "I can maintain my setup through short narratives — but in longer or unplanned signing, locations still drift or swap.",
+          "1": "I can keep a long setup consistent only with planning time or coaching.",
+          "0": "I haven’t attempted this yet, or my referents lose their locations even with reminders."
+         }
+        }
+       }
+      },
+      {
+       "sub": "c",
+       "statement": "I can arrange ordered information spatially.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "SPC.1.1c",
+         "rubric": {
+          "4": "I can apply taught spatial layouts, such as timelines and steps, to sequence my own information.",
+          "3": "I can reproduce taught spatial layouts, such as listing and ranking on my non-dominant hand, as they were modeled.",
+          "2": "I can attempt a taught layout, but I need the model in front of me to keep it organized.",
+          "1": "I can produce a spatial layout only while copying a model step by step.",
+          "0": "I haven’t attempted this yet, or I can’t reproduce a layout even while copying."
+         }
+        },
+        "2": {
+         "code": "SPC.1.2c",
+         "rubric": {
+          "4": "I can arrange sequences and ordered information spatially — timelines, steps, rankings — so the order is visible.",
+          "3": "I can apply taught spatial layouts, such as timelines and steps, to sequence my own information.",
+          "2": "I can reproduce taught layouts as modeled — but applying them to organize my own information isn’t there yet.",
+          "1": "I can use a layout for my own content only with prompting and a model nearby.",
+          "0": "I haven’t attempted this yet, or I can’t reproduce a layout even while copying."
+         }
+        },
+        "3": {
+         "code": "SPC.1.3c",
+         "rubric": {
+          "4": "I design my own spatial organization for any content — choosing or inventing the layout that makes order, hierarchy, or comparison clearest — the way fluent signers structure information.",
+          "3": "I can arrange sequences and ordered information spatially, laying out timelines, steps, and rankings so the order is visible to my viewer.",
+          "2": "I can apply taught layouts to sequence my own information — but choosing the right layout unprompted, and keeping the order visible, isn’t consistent yet.",
+          "1": "I can organize information spatially only with planning time or prompts.",
+          "0": "I haven’t attempted this yet, or I can’t reproduce a layout even while copying."
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "SPC.2",
+     "name": "Agreement & Directionality",
+     "description": "Students use directional verbs: moving verbs between referents so the path shows who acts on whom, and making directionality a working part of their grammar.",
+     "targets": [
+      {
+       "sub": "a",
+       "statement": "I can move directional verbs between referents.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "SPC.2.1a",
+         "rubric": {
+          "4": "I can move a growing set of directional verbs between myself and a third referent established in space, showing the path of the action in my own sentences.",
+          "3": "I can move a small set of taught directional verbs (GIVE, HELP, ASK) between myself and my conversation partner, showing the direction of the action in practiced sentences.",
+          "2": "I can produce taught directional verbs, but the movement doesn’t reliably show who does what to whom.",
+          "1": "I can move a verb in the right direction only when it’s modeled and I copy it.",
+          "0": "I haven’t attempted this yet, or my directional verbs don’t show direction even with a model."
+         }
+        },
+        "2": {
+         "code": "SPC.2.2a",
+         "rubric": {
+          "4": "I can move directional verbs between established referents accurately, showing who acts on whom through the verb’s path — including between two referents where I’m not part of the action.",
+          "3": "I can move a growing set of directional verbs between myself and a third referent established in space, showing the path of the action in my own sentences.",
+          "2": "I can move taught directional verbs between me and my conversation partner — but verbs to or from a third referent set up in space aren’t reliable yet.",
+          "1": "I can aim a verb at a third referent only with prompting or a planned setup.",
+          "0": "I haven’t attempted this yet, or my directional verbs don’t show direction even with a model."
+         }
+        },
+        "3": {
+         "code": "SPC.2.3a",
+         "rubric": {
+          "4": "Directional verbs carry my grammar effortlessly — any verb, any pair of referents, chained actions among several parties — always landing at the right locations.",
+          "3": "I can move directional verbs between established referents accurately, showing who acts on whom through the verb’s path — including between two referents in space where I’m not part of the action.",
+          "2": "I can move directional verbs between myself and a third referent in my own sentences — but verbs between two third-party referents, where I’m not involved, aren’t consistent yet.",
+          "1": "I can show third-party verb paths only with planning or coaching.",
+          "0": "I haven’t attempted this yet, or my directional verbs don’t show direction even with a model."
+         }
+        }
+       }
+      },
+      {
+       "sub": "b",
+       "statement": "I can use directionality as a working part of my grammar.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "SPC.2.1b",
+         "rubric": {
+          "4": "I can use directionality with developing consistency in my own sentences, not just practiced ones.",
+          "3": "I can change a verb’s direction to change its meaning (I-give-you versus you-give-me).",
+          "2": "I can repeat both directions of a verb after a model, but on my own I don’t flip the direction to flip the meaning.",
+          "1": "I can change a verb’s direction only when coached through what the new direction means.",
+          "0": "I haven’t attempted this yet, or I can’t flip a verb’s direction even with coaching."
+         }
+        },
+        "2": {
+         "code": "SPC.2.2b",
+         "rubric": {
+          "4": "I can use directionality wherever a verb supports it, modifying verbs for the situation, such as for multiple recipients.",
+          "3": "I can use directionality with developing consistency in my own sentences.",
+          "2": "I can change a verb’s direction to change its meaning — but in my own sentences, I often fall back on signing the verb plain and naming both people.",
+          "1": "I can use directionality in my own sentences only with prompting.",
+          "0": "I haven’t attempted this yet, or I can’t flip a verb’s direction even with coaching."
+         }
+        },
+        "3": {
+         "code": "SPC.2.3b",
+         "rubric": {
+          "4": "Directionality is automatic and inflected for me — I modify paths for number, distribution, and emphasis (each-of-them, all-of-you) without planning it.",
+          "3": "I can use directionality wherever a verb supports it, modifying directional verbs for the situation, such as adjusting for multiple recipients.",
+          "2": "I can use directionality with developing consistency in my own sentences — but using it everywhere a verb supports it, and modifying for situations like multiple recipients, isn’t there yet.",
+          "1": "I can modify directional verbs for the situation only with prompting or examples.",
+          "0": "I haven’t attempted this yet, or I can’t flip a verb’s direction even with coaching."
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "SPC.3",
+     "name": "Temporal Aspect & Intensity",
+     "description": "Students modify verb movement to carry meaning about time and degree.",
+     "targets": [
+      {
+       "sub": "a",
+       "statement": "I can modify verb movement to show time and intensity.",
+       "note": null,
+       "levels": {
+        "1": {
+         "code": "SPC.3.1a",
+         "rubric": {
+          "4": "I can apply movement modification to familiar verbs in practiced contexts, showing temporal aspect and intensity, and begin pairing the movement change with matching facial expression.",
+          "3": "I can produce a small set of taught movement-modified forms as learned units — repeated movement for again-and-again, a sharp movement for intensity — as they were modeled.",
+          "2": "I can copy a movement-modified form right after a model, but on my own the modification flattens back to the plain verb.",
+          "1": "I can produce a modified form only while mirroring a model.",
+          "0": "I haven’t attempted this yet, or I can’t copy a movement-modified form even while mirroring."
+         }
+        },
+        "2": {
+         "code": "SPC.3.2a",
+         "rubric": {
+          "4": "I can modify verb movement wherever the meaning calls for it, showing temporal aspect, intensity, and degree, with matching non-manual markers.",
+          "3": "I can apply movement modification to familiar verbs in practiced contexts, showing temporal aspect and intensity, and I’m beginning to pair the movement change with matching facial expression.",
+          "2": "I can produce the taught movement-modified forms as learned units — but applying the pattern to other familiar verbs isn’t there yet.",
+          "1": "I can modify a verb’s movement only with a model or prompting.",
+          "0": "I haven’t attempted this yet, or I can’t copy a movement-modified form even while mirroring."
+         }
+        },
+        "3": {
+         "code": "SPC.3.3a",
+         "rubric": {
+          "4": "I inflect movement the way fluent signers do — aspect, degree, and rhythm shaped on the fly, paired seamlessly with non-manual intensity, even on verbs I’ve never seen modified.",
+          "3": "I can modify verb movement wherever the meaning calls for it — showing temporal aspect, intensity, and degree — choosing the modification myself and pairing it with matching non-manual markers.",
+          "2": "I can modify familiar verbs in practiced contexts with beginning facial pairing — but choosing modifications on my own, wherever meaning calls for them, isn’t consistent yet.",
+          "1": "I can choose a movement modification only with prompting or examples.",
+          "0": "I haven’t attempted this yet, or I can’t copy a movement-modified form even while mirroring."
+         }
+        }
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

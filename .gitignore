@@ -120,3 +120,7 @@ Thumbs.db
 # Keep the directories but not the data files
 !**/.gitkeep
 !**/vendor/.gitkeep
+
+# ASL Hub local credentials - never commit
+asl/config.local.php
+asl/backups/
