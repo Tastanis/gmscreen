@@ -180,6 +180,10 @@ function buildDatasets() {
 }
 
 function renderChart() {
+    if (typeof Chart === 'undefined') {
+        console.error('Chart library missing (js/vendor/chart.umd.js)');
+        return;
+    }
     const showY2 = overlayState.attendance || overlayState.participation;
     const cfg = {
         type: 'line',
@@ -361,7 +365,7 @@ function openStandard(standardId) {
 
 document.getElementById('back-to-buckets').addEventListener('click', renderBuckets);
 
-renderChart();
+try { renderChart(); } catch (e) { console.error('Chart failed:', e); }
 setupCards();
 renderBuckets();
 </script>
