@@ -48,9 +48,9 @@ function aslhub_teacher_header(array $me, string $title, string $active = ''): v
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>ASL Hub - <?php echo aslhub_h($title); ?></title>
-    <link rel="stylesheet" href="<?php echo $base; ?>/css/asl-style.css">
-    <link rel="stylesheet" href="<?php echo $base; ?>/css/hub.css">
-    <script src="<?php echo $base; ?>/js/vendor/chart.umd.js"></script>
+    <?php $aslhubCssV = @filemtime(dirname(__DIR__) . '/css/asl-style.css') ?: 1; $aslhubHubV = @filemtime(dirname(__DIR__) . '/css/hub.css') ?: 1; ?>
+    <link rel="stylesheet" href="<?php echo $base; ?>/css/asl-style.css?v=<?php echo $aslhubCssV; ?>">
+    <link rel="stylesheet" href="<?php echo $base; ?>/css/hub.css?v=<?php echo $aslhubHubV; ?>">
     <style>
         .teacher-nav { display:flex; gap:8px; flex-wrap:wrap; }
         .teacher-nav a {

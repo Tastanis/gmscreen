@@ -18,356 +18,569 @@ if (!empty($me['is_teacher'])) {
 }
 
 $payload = aslhub_dashboard_payload($pdo, $subject);
-$csrf = aslhub_csrf_token();
+$level = (int)$payload['student']['level'];
+$gamesLevel = min($level, 2); // scroller/goals/bingo still live in asl1/asl2
+$initials = mb_substr($subject['first_name'] ?? 'A', 0, 1) . mb_substr($subject['last_name'] ?? 'S', 0, 1);
+$cssV = @filemtime(__DIR__ . '/css/asl-style.css') ?: 1;
+$hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>ASL Hub - My Dashboard</title>
-    <link rel="stylesheet" href="css/asl-style.css">
-    <link rel="stylesheet" href="css/hub.css">
-    <script src="js/vendor/chart.umd.js"></script>
+    <title>ASL Hub - Student Dashboard</title>
+    <link rel="stylesheet" href="css/asl-style.css?v=<?php echo $cssV; ?>">
+    <link rel="stylesheet" href="css/hub.css?v=<?php echo $hubV; ?>">
 </head>
-<body>
-<div class="container">
-    <?php if ($viewingAsTeacher): ?>
-        <div style="background:#fdf6e3;border:2px solid #e8b93e;border-radius:10px;padding:10px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
-            <strong>Teacher view:</strong> you are seeing this dashboard exactly as
-            <?php echo aslhub_h($subject['first_name'] . ' ' . $subject['last_name']); ?> sees it.
-            <span>
-                <a href="teacher/student.php?id=<?php echo (int)$subject['id']; ?>" class="pill" style="text-decoration:none;">Manage student</a>
-                <a href="teacher/dashboard.php" class="pill" style="text-decoration:none;">&larr; Roster</a>
-            </span>
-        </div>
-    <?php endif; ?>
-    <header>
-        <h1>ASL Hub</h1>
-        <div class="user-info">
-            <span class="pill">ASL <?php echo (int)$payload['student']['level']; ?></span>
-            <span><?php echo aslhub_h($subject['first_name'] . ' ' . $subject['last_name']); ?></span>
-            <?php if (!$viewingAsTeacher): ?><a href="logout.php" class="back-btn">Logout</a><?php endif; ?>
-        </div>
-    </header>
-
-    <!-- ===== Progress Over Time ===== -->
-    <section class="dashboard-section" style="background:rgba(255,255,255,.95);border-radius:15px;padding:24px;margin-bottom:20px;">
-        <h2 id="chart-heading" style="color:#2d3748;">Progress Over Time</h2>
-        <p class="muted" style="font-size:.9rem;margin:4px 0 12px;">
-            Every step you move up on any skill earns a point. Stay at or above the
-            <strong style="color:var(--score-3)">green line</strong> to be on track for proficient (3s) by the end of the year.
-        </p>
-        <div style="position:relative;height:340px;">
-            <canvas id="progressChart"></canvas>
-        </div>
-        <div class="chart-legend">
-            <span class="lg"><span class="swatch" style="background:#667eea;"></span> You</span>
-            <span class="lg"><span class="swatch" style="background:var(--score-3);"></span> On-track pace (all 3s)</span>
-            <span class="lg"><span class="swatch" style="background:var(--score-4);"></span> Reaching-for-4s pace</span>
-            <span class="lg"><span class="swatch" style="background:var(--score-1);"></span> Failing pace (all 2s)</span>
-        </div>
-
-        <div class="overlay-cards">
-            <button type="button" class="overlay-card" id="card-attendance">
-                <div class="oc-label">Attendance</div>
-                <div class="oc-value" id="attendance-value">&ndash;</div>
-                <div class="oc-meta">absences total &middot; click to show on graph</div>
-            </button>
-            <button type="button" class="overlay-card" id="card-participation">
-                <div class="oc-label">Participation</div>
-                <div class="oc-value" id="participation-value">&ndash;</div>
-                <div class="oc-meta">points this week &middot; click to show on graph</div>
-            </button>
-            <button type="button" class="overlay-card" id="card-notes">
-                <div class="oc-label">Notes</div>
-                <div class="oc-value" id="notes-value">&ndash;</div>
-                <div class="oc-meta">click to read your notes</div>
-            </button>
-        </div>
-    </section>
-
-    <!-- ===== Skills ===== -->
-    <section class="dashboard-section">
-        <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px;">
-            <h2 style="color:#2d3748;">My Skills</h2>
-            <span id="skills-breadcrumb" style="color:#718096;font-size:.9rem;"></span>
-        </div>
-        <div id="bucket-view" class="bucket-grid"></div>
-
-        <div id="detail-view" style="display:none;grid-template-columns:340px 1fr;gap:18px;align-items:start;">
+<body class="student-dashboard-page">
+    <div class="student-shell">
+        <?php if ($viewingAsTeacher): ?>
+            <div style="background:#fdf6e3;border:2px solid #e8b93e;border-radius:10px;padding:10px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+                <span><strong>Teacher view:</strong> seeing this dashboard exactly as
+                <?php echo aslhub_h($subject['first_name'] . ' ' . $subject['last_name']); ?> sees it.</span>
+                <span>
+                    <a href="teacher/student.php?id=<?php echo (int)$subject['id']; ?>" class="pill" style="text-decoration:none;">Manage student</a>
+                    <a href="teacher/dashboard.php" class="pill" style="text-decoration:none;">&larr; Roster</a>
+                </span>
+            </div>
+        <?php endif; ?>
+        <header class="student-topbar">
             <div>
-                <button type="button" class="back-btn" id="back-to-buckets" style="margin-bottom:12px;">&larr; All Skills</button>
-                <div id="standards-list"></div>
+                <p class="student-kicker">ASL Hub &middot; ASL <?php echo $level; ?></p>
+                <h1>Student Dashboard</h1>
             </div>
-            <div id="right-panel" class="rubric-panel">
-                <p class="muted">Select a standard on the left to see its proficiency rubric.</p>
-            </div>
-        </div>
-    </section>
+            <nav class="student-actions" aria-label="Student tools">
+                <button type="button" onclick="window.open('../asl<?php echo $gamesLevel; ?>/scrollergame/index.html', '_blank')">Scroller Game</button>
+                <button type="button" onclick="openGoals()">Goals</button>
+                <a href="../asl<?php echo $gamesLevel; ?>/bingo.php">Bingo</a>
+                <?php if (!$viewingAsTeacher): ?><a class="logout-link" href="logout.php">Logout</a><?php endif; ?>
+            </nav>
+        </header>
 
-    <div class="version-footer" style="text-align:right;color:#a0aec0;font-size:.75rem;padding:10px 0;">
-        ASL Hub
-    </div>
-</div>
-
-<!-- Notes modal -->
-<div id="notesModal" class="modal">
-    <div class="modal-content" style="max-width:640px;">
-        <div class="modal-header">
-            <h2>My Notes</h2>
-            <button class="close-btn" onclick="closeNotes()">&times;</button>
-        </div>
-        <div id="notes-body"></div>
-    </div>
-</div>
-
-<script>
-const DATA = <?php echo json_encode($payload, JSON_UNESCAPED_UNICODE); ?>;
-const SCORE_COLORS = { 0: '#9aa2ad', 1: '#e05252', 2: '#e8b93e', 3: '#4caf6d', 4: '#4a90d9' };
-
-function esc(s) {
-    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-function scoreOf(targetId) {
-    const s = DATA.scores && DATA.scores[String(targetId)];
-    return (s === undefined || s === null) ? null : Number(s);
-}
-function weekLabel(iso) {
-    const d = new Date(iso + 'T12:00:00');
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
-/* ===================== Chart ===================== */
-
-function paceSeries(goal) {
-    const n = DATA.weeks.length;
-    const total = DATA.target_count * goal;
-    if (n < 3) return DATA.weeks.map(() => null);
-    const slope = total / (n - 2); // starts week 2 (index 1), ends last week
-    return DATA.weeks.map((w, i) => (i === 0 ? null : +(slope * (i - 1)).toFixed(2)));
-}
-
-// Only draw the student's line up to the current week
-function studentSeries() {
-    const today = new Date().toISOString().slice(0, 10);
-    return DATA.weeks.map((w, i) => (w <= today ? DATA.progress[i] : null));
-}
-
-let chart;
-const overlayState = { attendance: false, participation: false };
-
-function buildDatasets() {
-    const ds = [
-        { label: 'You', data: studentSeries(), borderColor: '#667eea', backgroundColor: '#667eea',
-          borderWidth: 3, pointRadius: 2, tension: .25, yAxisID: 'y', spanGaps: true },
-        { label: 'On-track pace (all 3s)', data: paceSeries(DATA.settings.pace_green_goal), borderColor: SCORE_COLORS[3],
-          borderWidth: 2, pointRadius: 0, borderDash: [], yAxisID: 'y', spanGaps: false },
-        { label: 'Reaching-for-4s pace', data: paceSeries(DATA.settings.pace_blue_goal), borderColor: SCORE_COLORS[4],
-          borderWidth: 2, pointRadius: 0, borderDash: [6, 4], yAxisID: 'y' },
-        { label: 'Failing pace (all 2s)', data: paceSeries(DATA.settings.pace_red_goal), borderColor: SCORE_COLORS[1],
-          borderWidth: 2, pointRadius: 0, borderDash: [3, 4], yAxisID: 'y' },
-    ];
-    if (overlayState.attendance) {
-        ds.push({ label: 'Absences / week', data: DATA.absences, borderColor: '#f6993f', backgroundColor: '#f6993f',
-            borderWidth: 2, pointRadius: 3, stepped: false, yAxisID: 'y2', spanGaps: true });
-    }
-    if (overlayState.participation) {
-        ds.push({ label: 'Participation points / week', data: DATA.participation, borderColor: '#9f7aea', backgroundColor: '#9f7aea',
-            borderWidth: 2, pointRadius: 3, yAxisID: 'y2', spanGaps: true });
-    }
-    return ds;
-}
-
-function renderChart() {
-    if (typeof Chart === 'undefined') {
-        console.error('Chart library missing (js/vendor/chart.umd.js)');
-        return;
-    }
-    const showY2 = overlayState.attendance || overlayState.participation;
-    const cfg = {
-        type: 'line',
-        data: { labels: DATA.weeks.map(weekLabel), datasets: buildDatasets() },
-        options: {
-            responsive: true, maintainAspectRatio: false, animation: false,
-            interaction: { mode: 'index', intersect: false },
-            plugins: { legend: { display: false } },
-            scales: {
-                x: { ticks: { maxTicksLimit: 12 } },
-                y: { beginAtZero: true, title: { display: true, text: 'Progress points' },
-                     suggestedMax: DATA.target_count * 4 },
-                y2: { display: showY2, position: 'right', beginAtZero: true,
-                      grid: { drawOnChartArea: false },
-                      title: { display: true, text: 'Absences / Participation per week' } },
-            },
-        },
-    };
-    if (chart) { chart.destroy(); }
-    chart = new Chart(document.getElementById('progressChart'), cfg);
-}
-
-/* ============ Overlay cards ============ */
-
-function setupCards() {
-    const meetings = DATA.meetings || [];
-    const totalAbs = meetings.reduce((a, m) => a + (Number(m.absences) || 0), 0);
-    document.getElementById('attendance-value').textContent = totalAbs;
-    const latest = meetings.find(m => m.participation_points !== null && m.participation_points !== undefined);
-    document.getElementById('participation-value').textContent = latest ? latest.participation_points : '–';
-    const noteCount = meetings.filter(m => m.notes && m.notes.trim()).length;
-    document.getElementById('notes-value').textContent = noteCount;
-
-    document.getElementById('card-attendance').addEventListener('click', function () {
-        overlayState.attendance = !overlayState.attendance;
-        this.classList.toggle('active', overlayState.attendance);
-        renderChart();
-    });
-    document.getElementById('card-participation').addEventListener('click', function () {
-        overlayState.participation = !overlayState.participation;
-        this.classList.toggle('active', overlayState.participation);
-        renderChart();
-    });
-    document.getElementById('card-notes').addEventListener('click', openNotes);
-}
-
-function openNotes() {
-    const withNotes = (DATA.meetings || []).filter(m => m.notes && m.notes.trim());
-    const body = document.getElementById('notes-body');
-    if (!withNotes.length) {
-        body.innerHTML = '<p class="muted">No notes yet.</p>';
-    } else {
-        const byMonth = {};
-        withNotes.forEach(m => {
-            const d = new Date(m.meeting_date + 'T12:00:00');
-            const key = d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-            (byMonth[key] = byMonth[key] || []).push(m);
-        });
-        body.innerHTML = Object.entries(byMonth).map(([month, notes]) => `
-            <div class="notes-month">
-                <h4>${esc(month)}</h4>
-                ${notes.map(m => `
-                    <div class="note-entry">
-                        <div class="note-date">Week of ${esc(weekLabel(m.meeting_date))}</div>
-                        <div>${esc(m.notes)}</div>
-                    </div>`).join('')}
-            </div>`).join('');
-    }
-    document.getElementById('notesModal').classList.add('show');
-}
-function closeNotes() { document.getElementById('notesModal').classList.remove('show'); }
-window.addEventListener('click', e => { if (e.target === document.getElementById('notesModal')) closeNotes(); });
-
-/* ============ Buckets / Standards / Rubric ============ */
-
-let selectedBucket = null;
-
-function dotHtml(target) {
-    const s = scoreOf(target.id);
-    const cls = s === null ? 'score-none' : 'score-' + s;
-    const label = `${target.target_code}: ${s === null ? 'not graded yet' : 'score ' + s}`;
-    return `<span class="score-dot ${cls}" title="${esc(label)}"></span>`;
-}
-
-function renderBuckets() {
-    const view = document.getElementById('bucket-view');
-    view.style.display = 'grid';
-    document.getElementById('detail-view').style.display = 'none';
-    document.getElementById('skills-breadcrumb').textContent = '';
-    view.innerHTML = DATA.taxonomy.map(b => `
-        <div class="bucket-card" data-bucket="${esc(b.bucket_id)}">
-            <div>
-                <div class="bucket-code">${esc(b.code)}</div>
-                <h3>${esc(b.name)}</h3>
-            </div>
-            <div class="bucket-dots">
-                ${b.standards.map(s => `<span class="dot-row" title="${esc(s.standard_id + ' — ' + s.name)}">${s.targets.map(dotHtml).join('')}</span>`).join('')}
-            </div>
-        </div>`).join('');
-    view.querySelectorAll('.bucket-card').forEach(card =>
-        card.addEventListener('click', () => openBucket(card.dataset.bucket)));
-}
-
-function openBucket(bucketId) {
-    selectedBucket = DATA.taxonomy.find(b => b.bucket_id === bucketId);
-    if (!selectedBucket) return;
-    document.getElementById('bucket-view').style.display = 'none';
-    const dv = document.getElementById('detail-view');
-    dv.style.display = 'grid';
-    document.getElementById('skills-breadcrumb').textContent = selectedBucket.name;
-    document.getElementById('right-panel').innerHTML =
-        '<p class="muted">Select a standard on the left to see its proficiency rubric.</p>';
-
-    document.getElementById('standards-list').innerHTML = selectedBucket.standards.map(s => {
-        const scores = s.targets.map(t => scoreOf(t.id)).filter(v => v !== null);
-        const tint = scores.length ? Math.min(...scores) : null;
-        return `
-        <div class="standard-row ${tint !== null ? 'score-tint-' + tint : ''}" data-standard="${esc(s.standard_id)}">
-            <div>
-                <div class="std-id">${esc(s.standard_id)}</div>
-                <div class="std-name">${esc(s.name)}</div>
-            </div>
-            <div class="std-dots">${s.targets.map(dotHtml).join('')}</div>
-        </div>`;
-    }).join('');
-
-    document.querySelectorAll('.standard-row').forEach(row =>
-        row.addEventListener('click', () => openStandard(row.dataset.standard)));
-}
-
-function openStandard(standardId) {
-    const s = selectedBucket.standards.find(x => x.standard_id === standardId);
-    if (!s) return;
-    document.querySelectorAll('.standard-row').forEach(r =>
-        r.classList.toggle('selected', r.dataset.standard === standardId));
-
-    const threads = s.targets.map(t => {
-        const my = scoreOf(t.id);
-        const rows = [4, 3, 2, 1, 0].map(score => {
-            const current = my !== null && my === score;
-            return `
-            <tr class="${current ? 'rubric-row-current' : ''}">
-                <td class="rubric-score" style="background:${SCORE_COLORS[score]}">${score}${current ? '<span class="you-are-here">You</span>' : ''}</td>
-                <td>${esc(t.rubric[score] || '')}</td>
-            </tr>`;
-        }).join('');
-        const chip = my === null
-            ? '<span class="pill">Not graded yet</span>'
-            : `<span class="score-chip score-${my}" style="background:${SCORE_COLORS[my]}">${my}</span>`;
-        return `
-        <div class="rubric-thread ${my !== null ? 'score-tint-' + my : ''}" style="border-radius:10px;padding:12px;">
-            <h4>${chip} ${esc(t.title)}</h4>
-            <span class="thread-code">${esc(t.target_code)}</span>
-            ${t.description ? `<p class="muted" style="font-size:.85rem;">${esc(t.description)}</p>` : ''}
-            <table class="rubric-table">${rows}</table>
-        </div>`;
-    }).join('');
-
-    const allResources = [...(s.resources || []), ...s.targets.flatMap(t => t.resources || [])];
-    const resHtml = allResources.length
-        ? allResources.map(r => `
-            <div class="resource-item">
-                <div>
-                    ${r.resource_url ? `<a href="${esc(r.resource_url)}" target="_blank" rel="noopener">${esc(r.resource_label)}</a>` : `<strong>${esc(r.resource_label)}</strong>`}
-                    ${r.resource_description ? `<div class="muted" style="font-size:.82rem;">${esc(r.resource_description)}</div>` : ''}
+        <main class="student-dashboard">
+            <section class="student-hero" aria-labelledby="student-name-heading">
+                <div class="student-identity">
+                    <div class="student-avatar" aria-hidden="true"><?php echo aslhub_h(mb_strtoupper($initials)); ?></div>
+                    <div>
+                        <p class="student-kicker">Welcome back</p>
+                        <h2 id="student-name-heading"><?php echo aslhub_h($subject['first_name'] . ' ' . $subject['last_name']); ?></h2>
+                    </div>
                 </div>
-                <span class="pill">${esc(r.resource_type || 'link')}</span>
-            </div>`).join('')
-        : '<div class="resource-empty">No resources posted for this standard yet.</div>';
 
-    document.getElementById('right-panel').innerHTML = `
-        <h3 style="color:#2d3748;">${esc(s.standard_id)} — ${esc(s.name)}</h3>
-        ${s.description ? `<p class="muted" style="margin:4px 0 14px;">${esc(s.description)}</p>` : ''}
-        <h3 style="color:#2d3748;margin-bottom:10px;">Proficiency Rubric</h3>
-        ${threads}
-        <h3 style="color:#2d3748;margin-top:18px;">Resources</h3>
-        <div class="resource-list">${resHtml}</div>`;
-}
+                <div class="student-progress-summary" aria-live="polite">
+                    <div class="progress-copy">
+                        <span id="progress-context">Overall Progress</span>
+                        <strong id="progress-percent">0%</strong>
+                    </div>
+                    <div class="student-progress-track" aria-hidden="true">
+                        <div id="student-progress-fill" class="student-progress-fill"></div>
+                    </div>
+                    <div id="progress-count" class="student-progress-count">No points yet</div>
+                </div>
+            </section>
 
-document.getElementById('back-to-buckets').addEventListener('click', renderBuckets);
+            <section class="student-section curriculum-section" aria-labelledby="curriculum-heading">
+                <div class="student-section-header">
+                    <div>
+                        <p class="student-kicker">Skill Buckets</p>
+                        <h2 id="curriculum-heading">Standards and Proficiency</h2>
+                    </div>
+                    <p>Click a bucket, then a standard to see its proficiency rubric and resources.</p>
+                </div>
 
-try { renderChart(); } catch (e) { console.error('Chart failed:', e); }
-setupCards();
-renderBuckets();
-</script>
+                <div class="curriculum-grid" id="curriculum-grid">
+                    <div class="bucket-column">
+                        <h3 class="column-title">Buckets</h3>
+                        <div id="bucket-list" class="bucket-list"></div>
+                    </div>
+                    <div class="standard-column">
+                        <div class="column-title-row">
+                            <h3 class="column-title">Standards</h3>
+                            <button type="button" id="back-to-buckets" class="back-to-buckets" style="display: none;">&larr; Back to Buckets</button>
+                        </div>
+                        <div id="standard-list" class="standard-list"></div>
+                    </div>
+                    <div class="target-column">
+                        <h3 class="column-title" id="target-column-title">&nbsp;</h3>
+                        <div id="target-panel" class="target-panel"></div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="student-section analytics-section" aria-labelledby="chart-heading">
+                <div class="student-section-header">
+                    <div>
+                        <p class="student-kicker">Course Progression</p>
+                        <h2 id="chart-heading">Progress Over Time</h2>
+                    </div>
+                    <p id="chart-scope">Showing all skill buckets</p>
+                </div>
+                <div class="chart-wrap">
+                    <svg id="progress-chart" role="img" aria-label="Skill points earned over time"></svg>
+                    <p id="chart-empty-note" class="chart-empty-note">The graph will fill in as your skills are rated 1-4. Stay at or above the green line to be on track for proficient (3s) by June.</p>
+                </div>
+                <div class="comparison-legend" style="margin-top:8px;">
+                    <span class="legend-swatch legend-student"></span> You
+                    <span class="legend-swatch" style="background:#4caf6d;"></span> On-track pace (3s)
+                    <span class="legend-swatch" style="background:#4a90d9;"></span> Reaching-for-4s pace
+                    <span class="legend-swatch" style="background:#e05252;"></span> Failing pace (2s)
+                    <span id="legend-absences" style="display:none;"><span class="legend-swatch" style="background:#f6993f;"></span> Absences/week (right axis)</span>
+                    <span id="legend-participation" style="display:none;"><span class="legend-swatch" style="background:#9f7aea;"></span> Participation points (right axis)</span>
+                </div>
+            </section>
+
+            <section class="student-section comparisons-section" aria-labelledby="comparison-heading">
+                <div class="student-section-header">
+                    <div>
+                        <p class="student-kicker">Weekly Log</p>
+                        <h2 id="comparison-heading">Attendance, Participation and Notes</h2>
+                    </div>
+                    <p>Click Attendance or Participation to add that line to the graph above. Click Notes to read your notes.</p>
+                </div>
+                <div id="comparison-cards" class="comparison-cards"></div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Notes modal -->
+    <div id="notesModal" class="modal">
+        <div class="modal-content" style="max-width:640px;">
+            <div class="modal-header">
+                <h2>My Notes</h2>
+                <button class="close-btn" onclick="closeNotes()">&times;</button>
+            </div>
+            <div id="notes-body"></div>
+        </div>
+    </div>
+
+    <script>
+        window.ASL_STUDENT_DASHBOARD = <?php echo json_encode($payload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE); ?>;
+
+        const dashboardData = window.ASL_STUDENT_DASHBOARD || {};
+        const SCORE_COLORS = { 0: '#9aa2ad', 1: '#e05252', 2: '#e8b93e', 3: '#4caf6d', 4: '#4a90d9' };
+        const state = { bucketId: null, standardId: null, progressScope: 'overall' };
+        const overlayState = { attendance: false, participation: false };
+
+        function openGoals() {
+            window.open('../asl<?php echo $gamesLevel; ?>/goals/index.php', 'aslGoalsWindow', 'width=960,height=720,scrollbars=yes,resizable=yes');
+        }
+
+        function escapeHtml(value) {
+            const div = document.createElement('div');
+            div.textContent = value == null ? '' : String(value);
+            return div.innerHTML;
+        }
+
+        function formatNumber(value) {
+            const number = Number(value || 0);
+            return Number.isInteger(number) ? String(number) : number.toFixed(1);
+        }
+
+        function scoreOf(targetId) {
+            const s = dashboardData.scores && dashboardData.scores[String(targetId)];
+            return (s === undefined || s === null) ? null : Number(s);
+        }
+
+        function bucketTargets(bucket) {
+            return (bucket.standards || []).flatMap(s => s.targets || []);
+        }
+
+        function pointsFor(targets) {
+            let earned = 0;
+            targets.forEach(t => { const s = scoreOf(t.id); if (s !== null) earned += s; });
+            return { earned, total: targets.length * 4 };
+        }
+
+        function progressText(earned, total) {
+            if (!total) return 'No skills at this level yet';
+            return earned + ' of ' + total + ' points';
+        }
+
+        function getBucket(bucketId) {
+            return (dashboardData.taxonomy || []).find(b => b.bucket_id === bucketId) || null;
+        }
+
+        function getStandard(standardId) {
+            for (const bucket of dashboardData.taxonomy || []) {
+                const found = (bucket.standards || []).find(s => s.standard_id === standardId);
+                if (found) return found;
+            }
+            return null;
+        }
+
+        function dotsHtml(targets) {
+            return targets.map(t => {
+                const s = scoreOf(t.id);
+                const cls = s === null ? 'score-none' : 'score-' + s;
+                const label = t.target_code + ': ' + (s === null ? 'not rated yet' : 'score ' + s);
+                return `<i class="score-dot ${cls}" title="${escapeHtml(label)}"></i>`;
+            }).join('');
+        }
+
+        /* ============ Buckets / Standards / Rubric ============ */
+
+        function renderBuckets() {
+            const list = document.getElementById('bucket-list');
+            list.innerHTML = (dashboardData.taxonomy || []).map(bucket => {
+                const targets = bucketTargets(bucket);
+                const pts = pointsFor(targets);
+                return `
+                <button type="button" class="bucket-card ${bucket.bucket_id === state.bucketId ? 'active' : ''}" data-bucket-id="${escapeHtml(bucket.bucket_id)}">
+                    <span class="bucket-code">${escapeHtml(bucket.code)}</span>
+                    <span class="bucket-name">${escapeHtml(bucket.name)}</span>
+                    <span class="bucket-dot-strip">${dotsHtml(targets)}</span>
+                    <span class="bucket-progress">${escapeHtml(progressText(pts.earned, pts.total))}</span>
+                </button>`;
+            }).join('');
+
+            list.querySelectorAll('[data-bucket-id]').forEach(button => {
+                button.addEventListener('click', () => {
+                    state.bucketId = button.dataset.bucketId;
+                    state.standardId = null;
+                    state.progressScope = 'bucket';
+                    renderDashboard();
+                });
+            });
+        }
+
+        function renderStandards() {
+            const list = document.getElementById('standard-list');
+            const bucket = getBucket(state.bucketId);
+
+            if (!bucket) {
+                list.innerHTML = '<div class="empty-panel">Select a bucket to view its standards.</div>';
+                return;
+            }
+
+            list.innerHTML = (bucket.standards || []).map(standard => {
+                const scores = (standard.targets || []).map(t => scoreOf(t.id)).filter(v => v !== null);
+                const tint = scores.length ? 'score-tint-' + Math.min.apply(null, scores) : '';
+                const pts = pointsFor(standard.targets || []);
+                return `
+                <button type="button" class="standard-row ${tint} ${standard.standard_id === state.standardId ? 'active' : ''}" data-standard-id="${escapeHtml(standard.standard_id)}">
+                    <span class="standard-id">${escapeHtml(standard.standard_id)}</span>
+                    <span class="standard-name">${escapeHtml(standard.name)}</span>
+                    <span class="standard-dots">${dotsHtml(standard.targets || [])}</span>
+                    <span class="standard-progress">${escapeHtml(progressText(pts.earned, pts.total))}</span>
+                </button>`;
+            }).join('');
+
+            list.querySelectorAll('[data-standard-id]').forEach(button => {
+                button.addEventListener('click', () => {
+                    state.standardId = button.dataset.standardId;
+                    state.progressScope = 'standard';
+                    renderDashboard();
+                });
+            });
+        }
+
+        function renderRubric() {
+            const panel = document.getElementById('target-panel');
+            const title = document.getElementById('target-column-title');
+            const standard = getStandard(state.standardId);
+
+            if (!standard) {
+                title.innerHTML = '&nbsp;';
+                panel.innerHTML = '';
+                return;
+            }
+            title.textContent = 'Proficiency Rubric';
+
+            const threads = (standard.targets || []).map(t => {
+                const my = scoreOf(t.id);
+                const chip = my === null
+                    ? '<span class="pill">Not rated yet</span>'
+                    : `<span class="score-chip score-${my}" style="background:${SCORE_COLORS[my]}">${my}</span>`;
+                const rows = [4, 3, 2, 1, 0].map(score => {
+                    const current = my !== null && my === score;
+                    return `
+                    <tr class="${current ? 'rubric-row-current' : ''}">
+                        <td class="rubric-score" style="background:${SCORE_COLORS[score]}">${score}${current ? '<span class="you-are-here">You</span>' : ''}</td>
+                        <td>${escapeHtml((t.rubric || {})[score] || '')}</td>
+                    </tr>`;
+                }).join('');
+                return `
+                <div class="rubric-thread ${my !== null ? 'score-tint-' + my : ''}" style="border-radius:10px;padding:10px;">
+                    <h4>${chip} ${escapeHtml(t.title)}</h4>
+                    <span class="thread-code">${escapeHtml(t.target_code)}</span>
+                    ${t.description ? `<p style="font-size:.82rem;color:#64748b;margin:2px 0 0;">${escapeHtml(t.description)}</p>` : ''}
+                    <table class="rubric-table">${rows}</table>
+                </div>`;
+            }).join('');
+
+            const allResources = [...(standard.resources || []), ...(standard.targets || []).flatMap(t => t.resources || [])];
+            const resourceItems = allResources.length
+                ? allResources.map(r => {
+                    const body = `
+                        <span>${escapeHtml(r.resource_label)}</span>
+                        ${r.resource_description ? `<small>${escapeHtml(r.resource_description)}</small>` : ''}`;
+                    return r.resource_url
+                        ? `<a class="resource-pill" href="${escapeHtml(r.resource_url)}" target="_blank" rel="noopener noreferrer">${body}</a>`
+                        : `<div class="resource-pill placeholder">${body}</div>`;
+                }).join('')
+                : '<div class="resource-pill placeholder"><span>No resources posted for this standard yet.</span></div>';
+
+            panel.innerHTML = `
+                <div class="target-standard-summary">
+                    <span>${escapeHtml(standard.standard_id)}</span>
+                    <h4>${escapeHtml(standard.name)}</h4>
+                    <p>${escapeHtml(standard.description || '')}</p>
+                </div>
+                ${threads}
+                <div class="resource-panel">
+                    <div class="resource-panel-header">
+                        <span>Resources</span>
+                        <strong>${escapeHtml(standard.standard_id)}</strong>
+                    </div>
+                    <div class="resource-list">${resourceItems}</div>
+                </div>
+            `;
+        }
+
+        /* ============ Hero progress summary ============ */
+
+        function renderProgressSummary() {
+            const context = document.getElementById('progress-context');
+            const percent = document.getElementById('progress-percent');
+            const count = document.getElementById('progress-count');
+            const fill = document.getElementById('student-progress-fill');
+
+            let name = 'Overall Progress';
+            let targets = (dashboardData.taxonomy || []).flatMap(bucketTargets);
+            const standard = getStandard(state.standardId);
+            const bucket = getBucket(state.bucketId);
+            if (state.progressScope === 'standard' && standard) {
+                name = standard.standard_id + ' Progress';
+                targets = standard.targets || [];
+            } else if (state.progressScope === 'bucket' && bucket) {
+                name = bucket.name + ' Progress';
+                targets = bucketTargets(bucket);
+            }
+            const pts = pointsFor(targets);
+            const pct = pts.total ? Math.round((pts.earned / pts.total) * 100) : 0;
+            context.textContent = name;
+            percent.textContent = pct + '%';
+            count.textContent = progressText(pts.earned, pts.total);
+            fill.style.width = pct + '%';
+        }
+
+        /* ============ Progress chart (SVG, old style + pace lines + overlays) ============ */
+
+        function renderChart() {
+            const svg = document.getElementById('progress-chart');
+            const note = document.getElementById('chart-empty-note');
+            const scopeLabel = document.getElementById('chart-scope');
+            const weeks = dashboardData.weeks || [];
+            const nWeeks = weeks.length;
+            const bucket = getBucket(state.bucketId);
+            const useBucket = state.progressScope !== 'overall' && bucket;
+            const progress = dashboardData.progress || { overall: [], byBucket: {} };
+            const values = useBucket ? (progress.byBucket[bucket.bucket_id] || new Array(nWeeks).fill(0)) : (progress.overall || []);
+            const scopeTargets = useBucket ? bucketTargets(bucket).length : (dashboardData.target_count || 0);
+            const settings = dashboardData.settings || {};
+
+            scopeLabel.textContent = useBucket ? 'Showing ' + bucket.name : 'Showing all skill buckets';
+            note.style.display = values.some(v => v > 0) ? 'none' : 'block';
+
+            const width = 920;
+            const height = 300;
+            const showY2 = overlayState.attendance || overlayState.participation;
+            const pad = { top: 22, right: showY2 ? 54 : 26, bottom: 58, left: 54 };
+            const chartWidth = width - pad.left - pad.right;
+            const chartHeight = height - pad.top - pad.bottom;
+            const maxY = Math.max(scopeTargets * 4, ...values, 1);
+            const xAt = i => pad.left + (i / Math.max(nWeeks - 1, 1)) * chartWidth;
+            const yAt = v => pad.top + chartHeight - (v / maxY) * chartHeight;
+
+            // student line only up to the current week
+            const today = dashboardData.today || '';
+            const studentPts = [];
+            values.forEach((v, i) => { if (weeks[i] <= today) studentPts.push([xAt(i), yAt(v)]); });
+            const studentLine = studentPts.map(p => p.join(',')).join(' ');
+
+            // pace lines: straight from week 2 (0 pts) to the last week (targets x goal)
+            const pace = (goal, cls, dash) => {
+                if (nWeeks < 3 || !scopeTargets) return '';
+                return `<line x1="${xAt(1)}" y1="${yAt(0)}" x2="${xAt(nWeeks - 1)}" y2="${yAt(scopeTargets * goal)}"
+                    stroke-width="2.5" fill="none" stroke="${cls}" ${dash ? `stroke-dasharray="${dash}"` : ''} />`;
+            };
+
+            // month labels where the month changes
+            const monthLabels = [];
+            let lastMonth = '';
+            weeks.forEach((w, i) => {
+                const m = new Date(w + 'T12:00:00').toLocaleDateString(undefined, { month: 'short' });
+                if (m !== lastMonth) {
+                    monthLabels.push(`<text x="${xAt(i)}" y="${height - 20}" text-anchor="middle" class="chart-label">${escapeHtml(m)}</text>`);
+                    lastMonth = m;
+                }
+            });
+
+            const weekLines = [];
+            for (let i = 0; i < nWeeks; i++) {
+                weekLines.push(`<line x1="${xAt(i)}" y1="${pad.top}" x2="${xAt(i)}" y2="${pad.top + chartHeight}" class="chart-week-line ${i % 4 === 0 ? 'month' : ''}" />`);
+            }
+
+            // overlays on a second right-hand axis
+            let overlaySvg = '';
+            let y2AxisSvg = '';
+            if (showY2) {
+                const absS = overlayState.attendance ? (dashboardData.absences || []) : [];
+                const partS = overlayState.participation ? (dashboardData.participation || []) : [];
+                const overlayVals = absS.concat(partS).filter(v => v != null).map(Number);
+                const maxY2 = Math.max(...(overlayVals.length ? overlayVals : [1]), 1);
+                const y2At = v => pad.top + chartHeight - (v / maxY2) * chartHeight;
+                const drawSeries = (series, color) => {
+                    const segs = [];
+                    let cur = [];
+                    series.forEach((v, i) => {
+                        if (v == null) { if (cur.length) { segs.push(cur); cur = []; } }
+                        else cur.push([xAt(i), y2At(Number(v))]);
+                    });
+                    if (cur.length) segs.push(cur);
+                    return segs.map(seg =>
+                        `<polyline points="${seg.map(p => p.join(',')).join(' ')}" fill="none" stroke="${color}" stroke-width="2.5" />`).join('') +
+                        segs.flat().map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="3.5" fill="${color}"></circle>`).join('');
+                };
+                if (overlayState.attendance) overlaySvg += drawSeries(absS, '#f6993f');
+                if (overlayState.participation) overlaySvg += drawSeries(partS, '#9f7aea');
+                const rx = pad.left + chartWidth;
+                y2AxisSvg = `
+                    <line x1="${rx}" y1="${pad.top}" x2="${rx}" y2="${pad.top + chartHeight}" class="chart-axis"></line>
+                    <text x="${rx + 8}" y="${pad.top + 5}" text-anchor="start" class="chart-label">${formatNumber(maxY2)}</text>
+                    <text x="${rx + 8}" y="${pad.top + chartHeight}" text-anchor="start" class="chart-label">0</text>
+                    <text x="${rx + 8}" y="14" text-anchor="start" class="chart-axis-label">Wk</text>`;
+            }
+
+            svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+            svg.innerHTML = `
+                <rect x="0" y="0" width="${width}" height="${height}" class="chart-bg"></rect>
+                ${weekLines.join('')}
+                <line x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${pad.top + chartHeight}" class="chart-axis"></line>
+                <line x1="${pad.left}" y1="${pad.top + chartHeight}" x2="${pad.left + chartWidth}" y2="${pad.top + chartHeight}" class="chart-axis"></line>
+                <text x="${pad.left}" y="14" text-anchor="end" class="chart-axis-label">Pts</text>
+                <text x="${pad.left - 8}" y="${pad.top + 5}" text-anchor="end" class="chart-label">${maxY}</text>
+                <text x="${pad.left - 12}" y="${pad.top + chartHeight}" text-anchor="end" class="chart-label">0</text>
+                ${pace(Number(settings.pace_red_goal || 2), '#e05252', '3 5')}
+                ${pace(Number(settings.pace_blue_goal || 3.7), '#4a90d9', '7 5')}
+                ${pace(Number(settings.pace_green_goal || 3), '#4caf6d', '')}
+                <polyline points="${studentLine}" class="chart-line"></polyline>
+                ${studentPts.map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="3" class="chart-dot"></circle>`).join('')}
+                ${overlaySvg}
+                ${y2AxisSvg}
+                ${monthLabels.join('')}
+            `;
+
+            document.getElementById('legend-absences').style.display = overlayState.attendance ? '' : 'none';
+            document.getElementById('legend-participation').style.display = overlayState.participation ? '' : 'none';
+        }
+
+        /* ============ Weekly log cards ============ */
+
+        function formatMeetingDate(iso) {
+            if (!iso) return '';
+            const parts = iso.split('-');
+            if (parts.length !== 3) return iso;
+            const d = new Date(parts[0], parts[1] - 1, parts[2]);
+            return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+        }
+
+        function renderComparisons() {
+            const cards = document.getElementById('comparison-cards');
+            const meetings = dashboardData.meetings || [];
+            const totalAbs = meetings.reduce((a, m) => a + (Number(m.absences) || 0), 0);
+            const latestPart = meetings.find(m => m.participation_points !== null && m.participation_points !== undefined);
+            const withNotes = meetings.filter(m => m.notes && String(m.notes).trim());
+
+            cards.innerHTML = `
+                <button type="button" class="comparison-summary-card ${overlayState.attendance ? 'active' : ''}" data-metric="attendance">
+                    <span class="comparison-card-label">Attendance</span>
+                    <strong class="comparison-card-value">${totalAbs}<small> absence${totalAbs === 1 ? '' : 's'}</small></strong>
+                    <span class="comparison-card-meta">${overlayState.attendance ? 'Shown on graph — click to hide' : 'Click to show on the graph'}</span>
+                </button>
+                <button type="button" class="comparison-summary-card ${overlayState.participation ? 'active' : ''}" data-metric="participation">
+                    <span class="comparison-card-label">Participation</span>
+                    <strong class="comparison-card-value">${latestPart ? escapeHtml(latestPart.participation_points) : '&mdash;'}<small> pts this week</small></strong>
+                    <span class="comparison-card-meta">${overlayState.participation ? 'Shown on graph — click to hide' : 'Click to show on the graph'}</span>
+                </button>
+                <button type="button" class="comparison-summary-card" data-metric="notes">
+                    <span class="comparison-card-label">Notes</span>
+                    <strong class="comparison-card-value">${withNotes.length}<small> note${withNotes.length === 1 ? '' : 's'}</small></strong>
+                    <span class="comparison-card-meta">${withNotes.length ? 'Most recent: ' + escapeHtml(formatMeetingDate(withNotes[0].meeting_date)) : 'No notes yet'}</span>
+                </button>
+            `;
+
+            cards.querySelectorAll('[data-metric]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const metric = btn.dataset.metric;
+                    if (metric === 'notes') { openNotes(); return; }
+                    overlayState[metric] = !overlayState[metric];
+                    renderChart();
+                    renderComparisons();
+                });
+            });
+        }
+
+        function openNotes() {
+            const withNotes = (dashboardData.meetings || []).filter(m => m.notes && String(m.notes).trim());
+            const body = document.getElementById('notes-body');
+            if (!withNotes.length) {
+                body.innerHTML = '<div class="empty-panel">No meeting notes yet.</div>';
+            } else {
+                const byMonth = {};
+                withNotes.forEach(m => {
+                    const d = new Date(m.meeting_date + 'T12:00:00');
+                    const key = d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+                    (byMonth[key] = byMonth[key] || []).push(m);
+                });
+                body.innerHTML = Object.entries(byMonth).map(([month, notes]) => `
+                    <div class="notes-month">
+                        <h4>${escapeHtml(month)}</h4>
+                        ${notes.map(m => `
+                            <article class="meeting-note-card">
+                                <header>
+                                    <strong>Week of ${escapeHtml(formatMeetingDate(m.meeting_date))}</strong>
+                                    <span>Absences: ${escapeHtml(m.absences)}${m.participation_points != null ? ' &middot; Participation: ' + escapeHtml(m.participation_points) + ' pts' : ''}</span>
+                                </header>
+                                <p>${escapeHtml(m.notes)}</p>
+                            </article>`).join('')}
+                    </div>`).join('');
+            }
+            document.getElementById('notesModal').classList.add('show');
+        }
+        function closeNotes() { document.getElementById('notesModal').classList.remove('show'); }
+        window.addEventListener('click', e => { if (e.target === document.getElementById('notesModal')) closeNotes(); });
+
+        /* ============ Layout plumbing (same as the old dashboard) ============ */
+
+        function applyCurriculumLayout() {
+            const grid = document.getElementById('curriculum-grid');
+            const backBtn = document.getElementById('back-to-buckets');
+            if (!grid) return;
+            const focused = !!state.standardId;
+            grid.classList.toggle('standard-focus', focused);
+            if (backBtn) backBtn.style.display = focused ? '' : 'none';
+        }
+
+        function backToBuckets() {
+            state.standardId = null;
+            state.progressScope = state.bucketId ? 'bucket' : 'overall';
+            renderDashboard();
+        }
+
+        function renderDashboard() {
+            renderBuckets();
+            renderStandards();
+            renderRubric();
+            applyCurriculumLayout();
+            renderProgressSummary();
+            renderChart();
+            renderComparisons();
+        }
+
+        document.getElementById('back-to-buckets').addEventListener('click', backToBuckets);
+        renderDashboard();
+    </script>
 </body>
 </html>

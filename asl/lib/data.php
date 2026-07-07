@@ -93,30 +93,49 @@ function aslhub_year_weeks(array $settings): array {
  * Weekly cumulative points for a student, built from the append-only score
  * history. Points at week W = sum over targets of the latest score recorded
  * on or before the end of W. Only targets at the student's level count.
+ * Returns ['overall' => [...], 'byBucket' => ['CLS' => [...], ...]].
  */
 function aslhub_weekly_progress(PDO $pdo, int $userId, int $level, array $weeks): array {
     $stmt = $pdo->prepare("
-        SELECT h.learning_target_id, h.score, h.scored_at
+        SELECT h.learning_target_id, h.score, h.scored_at, s.bucket_id
         FROM user_learning_target_score_history h
         JOIN asl_learning_targets t ON t.id = h.learning_target_id
+        JOIN asl_standards s ON s.standard_id = t.standard_id
         WHERE h.user_id = ? AND t.active = 1 AND t.asl_level = ?
         ORDER BY h.scored_at ASC, h.id ASC");
     $stmt->execute([$userId, $level]);
     $events = $stmt->fetchAll();
 
-    $series = [];
+    $overall = [];
+    $byBucket = [];
     $latest = []; // target_id => score, replayed through time
+    $bucketOf = []; // target_id => bucket_id
     $i = 0;
     $n = count($events);
     foreach ($weeks as $weekStart) {
         $weekEnd = date('Y-m-d 23:59:59', strtotime($weekStart . ' +6 days'));
         while ($i < $n && $events[$i]['scored_at'] <= $weekEnd) {
-            $latest[(int)$events[$i]['learning_target_id']] = (int)$events[$i]['score'];
+            $tid = (int)$events[$i]['learning_target_id'];
+            $latest[$tid] = (int)$events[$i]['score'];
+            $bucketOf[$tid] = $events[$i]['bucket_id'];
             $i++;
         }
-        $series[] = array_sum($latest);
+        $overall[] = array_sum($latest);
+        $bucketTotals = [];
+        foreach ($latest as $tid => $score) {
+            $b = $bucketOf[$tid];
+            $bucketTotals[$b] = ($bucketTotals[$b] ?? 0) + $score;
+        }
+        foreach ($bucketTotals as $b => $total) {
+            // pad any bucket series that started later
+            if (!isset($byBucket[$b])) $byBucket[$b] = array_fill(0, count($overall) - 1, 0);
+        }
+        foreach ($byBucket as $b => &$series) {
+            $series[] = $bucketTotals[$b] ?? 0;
+        }
+        unset($series);
     }
-    return $series;
+    return ['overall' => $overall, 'byBucket' => $byBucket];
 }
 
 /** Weekly log rows for a student, newest first. */
@@ -170,6 +189,7 @@ function aslhub_dashboard_payload(PDO $pdo, array $student): array {
         'weeks' => $weeks,
         'target_count' => $targetCount,
         'progress' => aslhub_weekly_progress($pdo, (int)$student['id'], $level, $weeks),
+        'today' => date('Y-m-d'),
         'absences' => $absSeries,
         'participation' => $partSeries,
         'meetings' => $meetings,

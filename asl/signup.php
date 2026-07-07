@@ -22,8 +22,9 @@ unset($_SESSION['signup_old'], $_SESSION['signup_errors']);
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>ASL Hub - Create Account</title>
-    <link rel="stylesheet" href="css/asl-style.css">
-    <link rel="stylesheet" href="css/hub.css">
+    <?php $cssV = @filemtime(__DIR__ . '/css/asl-style.css') ?: 1; $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1; ?>
+    <link rel="stylesheet" href="css/asl-style.css?v=<?php echo $cssV; ?>">
+    <link rel="stylesheet" href="css/hub.css?v=<?php echo $hubV; ?>">
 </head>
 <body>
     <div class="login-container" style="max-width:560px;">
