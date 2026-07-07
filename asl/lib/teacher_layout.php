@@ -55,9 +55,10 @@ function aslhub_teacher_header(array $me, string $title, string $active = ''): v
         .teacher-nav { display:flex; gap:8px; flex-wrap:wrap; }
         .teacher-nav a {
             padding:8px 16px; border-radius:20px; text-decoration:none; font-weight:600;
-            background:rgba(255,255,255,.25); color:#fff; font-size:.9rem;
+            background:#edf2f7; color:#4a5568; font-size:.9rem; border:1px solid #e2e8f0;
         }
-        .teacher-nav a.active, .teacher-nav a:hover { background:rgba(255,255,255,.95); color:#4a5568; }
+        .teacher-nav a:hover { background:#e2e8f0; }
+        .teacher-nav a.active { background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); color:#fff; border-color:transparent; }
         .filters-bar { display:flex; gap:10px; flex-wrap:wrap; align-items:center;
             background:rgba(255,255,255,.95); border-radius:12px; padding:12px 16px; margin-bottom:16px; }
         .filters-bar select, .filters-bar input[type=text], .filters-bar input[type=date] {
