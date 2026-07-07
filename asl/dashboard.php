@@ -90,8 +90,8 @@ $csrf = aslhub_csrf_token();
     <!-- ===== Skills ===== -->
     <section class="dashboard-section">
         <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px;">
-            <h2 style="color:#fff;">My Skills</h2>
-            <span id="skills-breadcrumb" style="color:rgba(255,255,255,.85);font-size:.9rem;"></span>
+            <h2 style="color:#2d3748;">My Skills</h2>
+            <span id="skills-breadcrumb" style="color:#718096;font-size:.9rem;"></span>
         </div>
         <div id="bucket-view" class="bucket-grid"></div>
 
@@ -106,7 +106,7 @@ $csrf = aslhub_csrf_token();
         </div>
     </section>
 
-    <div class="version-footer" style="text-align:right;color:rgba(255,255,255,.7);font-size:.75rem;padding:10px 0;">
+    <div class="version-footer" style="text-align:right;color:#a0aec0;font-size:.75rem;padding:10px 0;">
         ASL Hub
     </div>
 </div>

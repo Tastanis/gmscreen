@@ -18,7 +18,7 @@ foreach ($standards as $s) $standardsByBucket[$s['bucket_id']][] = $s;
 
 aslhub_teacher_header($me, 'Resources', 'resources');
 ?>
-    <p style="color:rgba(255,255,255,.9);margin-bottom:14px;">
+    <p style="color:#4a5568;margin-bottom:14px;">
         Resources attach to a <strong>standard</strong> and show on the student's rubric page.
         Leave level blank to show it to all ASL levels, or pick one level.
     </p>

@@ -137,3 +137,7 @@
 .danger-zone { border: 2px solid #e05252; border-radius: 12px; padding: 18px; background: #fff5f5; margin-top: 24px; }
 .danger-zone h3 { color: #c53030; }
 .btn-danger { background: linear-gradient(135deg, #e05252 0%, #c53030 100%) !important; }
+
+/* ===== Clean light theme ===== */
+body { background: #f5f5f7 !important; color: #1d1d1f; }
+.on-light-heading { color: #2d3748 !important; }

@@ -50,7 +50,7 @@ if ($errors) {
         'first_name' => $first_name, 'last_name' => $last_name, 'email' => $email,
         'teacher' => $teacher, 'class_period' => $period, 'level' => $level,
     ];
-    header('Location: index.php');
+    header('Location: signup.php');
     exit;
 }
 
@@ -69,8 +69,7 @@ try {
     exit;
 } catch (PDOException $e) {
     error_log('ASL register insert: ' . $e->getMessage());
-    $_SESSION['message'] = 'Could not create the account. Please try again.';
-    $_SESSION['message_type'] = 'error';
-    header('Location: index.php');
+    $_SESSION['signup_errors'] = ['Could not create the account. Please try again.'];
+    header('Location: signup.php');
     exit;
 }
