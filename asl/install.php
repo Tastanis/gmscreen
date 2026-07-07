@@ -1,7 +1,8 @@
 <?php
 /**
  * One-time installer / re-seeder. Safe to run repeatedly (additive only).
- * Access: Harms only — or anyone if no teacher account exists yet (bootstrap).
+ * Access: any logged-in teacher — or anyone if no teacher account exists yet
+ * (bootstrap on a brand-new database).
  */
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/lib/seed.php';
@@ -9,7 +10,12 @@ require_once __DIR__ . '/lib/seed.php';
 $hasTeacher = (bool)$pdo->query("SELECT id FROM users WHERE is_teacher = TRUE LIMIT 1")->fetch();
 if ($hasTeacher) {
     $me = aslhub_require_teacher($pdo);
-    if (!aslhub_is_admin($me)) die('Admin (Harms) access required.');
+    // Legacy teacher accounts from asl1/asl2 predate the teacher tag — tag Harms now
+    // so admin-only pages recognize him after this install.
+    if (empty($me['teacher']) && strcasecmp($me['first_name'], 'Brandon') === 0) {
+        $pdo->prepare("UPDATE users SET teacher = 'harms' WHERE id = ? AND is_teacher = TRUE")
+            ->execute([(int)$me['id']]);
+    }
 }
 
 $results = [];
