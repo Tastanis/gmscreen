@@ -21,8 +21,17 @@ test('getDefaultTokenStackOrderMap puts higher grid rows in front', () => {
     { id: 'bottom', row: 10 },
   ]);
 
-  assert.ok(defaults.get('top') > defaults.get('middle'));
-  assert.ok(defaults.get('middle') > defaults.get('bottom'));
+  assert.ok(defaults.get('bottom') > defaults.get('middle'));
+  assert.ok(defaults.get('middle') > defaults.get('top'));
+});
+
+test('getDefaultTokenStackOrderMap puts smaller tokens above bigger ones', () => {
+  const defaults = getDefaultTokenStackOrderMap([
+    { id: 'small', row: 4, width: 1, height: 1 },
+    { id: 'dragon', row: 6, width: 3, height: 3 },
+  ]);
+
+  assert.ok(defaults.get('small') > defaults.get('dragon'));
 });
 
 test('getDefaultTokenStackOrderMap preserves placement order within the same row', () => {
@@ -41,17 +50,17 @@ test('buildTokenStackOrderUpdate brings a token to the front', () => {
       { id: 'middle', row: 5 },
       { id: 'bottom', row: 10 },
     ],
-    'bottom',
+    'top',
     'front'
   );
 
   assert.equal(changes.length, 1);
-  assert.equal(changes[0].id, 'bottom');
+  assert.equal(changes[0].id, 'top');
   assert.ok(changes[0].stackOrder > getDefaultTokenStackOrderMap([
     { id: 'top', row: 1 },
     { id: 'middle', row: 5 },
     { id: 'bottom', row: 10 },
-  ]).get('top'));
+  ]).get('bottom'));
 });
 
 test('buildTokenStackOrderUpdate sends a token to the back', () => {
@@ -61,11 +70,11 @@ test('buildTokenStackOrderUpdate sends a token to the back', () => {
       { id: 'middle', row: 5 },
       { id: 'bottom', row: 10 },
     ],
-    'top',
+    'bottom',
     'back'
   );
 
-  assert.deepEqual(changes, [{ id: 'top', stackOrder: 999 }]);
+  assert.deepEqual(changes, [{ id: 'bottom', stackOrder: 999 }]);
 });
 
 test('buildTokenStackOrderUpdate honors explicit stack orders as locked layers', () => {
@@ -83,8 +92,8 @@ test('buildTokenStackOrderUpdate honors explicit stack orders as locked layers',
 
 test('buildTokenStackOrderUpdate returns no changes at stack edges', () => {
   const placements = [
-    { id: 'front', row: 1 },
-    { id: 'back', row: 10 },
+    { id: 'back', row: 1 },
+    { id: 'front', row: 10 },
   ];
 
   assert.deepEqual(buildTokenStackOrderUpdate(placements, 'back', 'back'), []);
@@ -98,7 +107,7 @@ test('getTokenStackOrderAvailability reports edge movement', () => {
     { id: 'bottom', row: 10 },
   ];
 
-  assert.deepEqual(getTokenStackOrderAvailability(placements, 'bottom'), {
+  assert.deepEqual(getTokenStackOrderAvailability(placements, 'top'), {
     canMoveToBack: false,
     canMoveToFront: true,
   });
@@ -106,7 +115,7 @@ test('getTokenStackOrderAvailability reports edge movement', () => {
     canMoveToBack: true,
     canMoveToFront: true,
   });
-  assert.deepEqual(getTokenStackOrderAvailability(placements, 'top'), {
+  assert.deepEqual(getTokenStackOrderAvailability(placements, 'bottom'), {
     canMoveToBack: true,
     canMoveToFront: false,
   });

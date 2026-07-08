@@ -9,11 +9,41 @@ export function normalizePlacements(raw = {}) {
   const normalized = {};
   Object.keys(raw).forEach((sceneId) => {
     const placements = Array.isArray(raw[sceneId]) ? raw[sceneId] : [];
-    normalized[sceneId] = placements
-      .map((entry) => normalizePlacementEntry(entry))
-      .filter(Boolean);
+    normalized[sceneId] = dedupePlacementsById(
+      placements
+        .map((entry) => normalizePlacementEntry(entry))
+        .filter(Boolean)
+    );
   });
   return normalized;
+}
+
+// Duplicate ids make placement lookups ambiguous: resolvePlacementById
+// returns the first match while the renderer keeps the last DOM node, so a
+// stale duplicate can shadow the live copy and leave a token that selects
+// but will not open its panel or context menu. Keep the last occurrence and
+// graft monster data from an earlier copy if the survivor lacks it.
+function dedupePlacementsById(entries) {
+  if (entries.length < 2) {
+    return entries;
+  }
+  const byId = new Map();
+  entries.forEach((entry) => {
+    const prior = byId.get(entry.id);
+    if (prior) {
+      if (!entry.monster && prior.monster) {
+        entry.monster = prior.monster;
+      }
+      if (!entry.monsterId && prior.monsterId) {
+        entry.monsterId = prior.monsterId;
+      }
+      if (!entry.monsterTriggerHooks && prior.monsterTriggerHooks) {
+        entry.monsterTriggerHooks = prior.monsterTriggerHooks;
+      }
+    }
+    byId.set(entry.id, entry);
+  });
+  return byId.size === entries.length ? entries : Array.from(byId.values());
 }
 
 export function restrictPlacementsToPlayerView(placements = {}) {

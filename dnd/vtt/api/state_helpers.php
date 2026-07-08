@@ -315,7 +315,14 @@ function mergeSceneEntriesByTimestamp(array $existingEntries, array $incomingEnt
                     // fields like 'hidden'.
                     $existingById[$id] = mergeGmAuthoredEntry($existingEntry, $entry);
                 } else {
-                    $existingById[$id] = $entry;
+                    // Player clients hold placements with enemy monster data
+                    // stripped (restrictPlacementsToPlayerView), so a wholesale
+                    // replace here would erase the monster stat block from the
+                    // saved state and leave the token permanently broken
+                    // (abilities panel will not open). Carry the monster payload
+                    // over from the existing entry whenever the incoming one
+                    // lacks it.
+                    $existingById[$id] = preserveMonsterSnapshotFields($existingEntry, $entry);
                 }
             }
             // else: keep existing entry (it's newer)
@@ -332,6 +339,45 @@ function mergeSceneEntriesByTimestamp(array $existingEntries, array $incomingEnt
     }
 
     return $merged;
+}
+
+/**
+ * Copy monster payload fields from an existing entry onto an incoming
+ * replacement that lacks them. Player-view placements have enemy monster
+ * snapshots stripped before they ever reach the client, so an incoming
+ * player entry missing `monster` means "I never had it", not "delete it".
+ *
+ * @param array<string,mixed> $existingEntry
+ * @param array<string,mixed> $incomingEntry
+ * @return array<string,mixed>
+ */
+function preserveMonsterSnapshotFields(array $existingEntry, array $incomingEntry): array
+{
+    $keys = ['monster', 'monsterId', 'monsterTriggerHooks'];
+    foreach ($keys as $key) {
+        if (!array_key_exists($key, $incomingEntry) && array_key_exists($key, $existingEntry)) {
+            $incomingEntry[$key] = $existingEntry[$key];
+        }
+    }
+
+    $existingMetadata = isset($existingEntry['metadata']) && is_array($existingEntry['metadata'])
+        ? $existingEntry['metadata']
+        : null;
+    if ($existingMetadata !== null) {
+        $incomingMetadata = isset($incomingEntry['metadata']) && is_array($incomingEntry['metadata'])
+            ? $incomingEntry['metadata']
+            : [];
+        foreach (['monster', 'monsterId'] as $key) {
+            if (!array_key_exists($key, $incomingMetadata) && array_key_exists($key, $existingMetadata)) {
+                $incomingMetadata[$key] = $existingMetadata[$key];
+            }
+        }
+        if ($incomingMetadata !== []) {
+            $incomingEntry['metadata'] = $incomingMetadata;
+        }
+    }
+
+    return $incomingEntry;
 }
 
 /**

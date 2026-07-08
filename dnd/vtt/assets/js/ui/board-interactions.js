@@ -9239,9 +9239,16 @@ export function mountBoardInteractions(store, routes = {}) {
         return;
       }
       // Drag-ghost clones intentionally lack data-placement-id (so DOM
-      // queries don't double-match them). Leave them alone here — they
-      // own their own transform and lifecycle (endTokenDrag removes them).
+      // queries don't double-match them). While a drag is active leave
+      // them alone — they own their own transform and lifecycle
+      // (endTokenDrag removes them). With no drag in flight a ghost is an
+      // orphan from an abnormally ended drag; sweep it so it can't sit on
+      // top of the real token indefinitely.
       if (child.dataset?.vttDragGhost === '1') {
+        if (viewState.dragState || viewState.dragCandidate) {
+          return;
+        }
+        layer.removeChild(child);
         return;
       }
       const id = child.dataset?.placementId;
@@ -9473,9 +9480,14 @@ export function mountBoardInteractions(store, routes = {}) {
       node.remove();
     });
 
-    // Clear remaining children but preserve drag-ghost clones (see above).
+    // Clear remaining children but preserve drag-ghost clones while a drag
+    // is active (see above); orphaned ghosts are swept.
     Array.from(layer.children).forEach((child) => {
-      if (child instanceof HTMLElement && child.dataset?.vttDragGhost === '1') {
+      if (
+        child instanceof HTMLElement &&
+        child.dataset?.vttDragGhost === '1' &&
+        (viewState.dragState || viewState.dragCandidate)
+      ) {
         return;
       }
       layer.removeChild(child);
@@ -12445,8 +12457,12 @@ export function mountBoardInteractions(store, routes = {}) {
     lastTurnEffect = null;
     lastTurnEffects = [];
     lastTurnEffectSignature = null;
-    lastProcessedTurnEffectSignature = null;
-    lastProcessedTurnEffectSignatures = new Set();
+    // Keep lastProcessedTurnEffectSignature(s): they are the dedup record
+    // for effects that were already displayed. Wiping them here let a
+    // recently shown stamina float replay (double "-6") when a combat
+    // snapshot without effects arrived between the local display and the
+    // sync echo of the same effect. The set is size-capped, so retaining
+    // it across resets is safe.
   }
 
   function recordTurnEffect(effect) {

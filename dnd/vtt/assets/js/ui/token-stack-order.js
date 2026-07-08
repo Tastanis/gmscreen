@@ -22,16 +22,25 @@ export function getDefaultTokenStackOrderMap(placements = []) {
       if (!id) {
         return null;
       }
+      const size = getPlacementFootprint(placement);
       return {
         id,
         index,
-        row: getPlacementRow(placement, index),
+        area: size.width * size.height,
+        bottomRow: getPlacementRow(placement, index) + size.height,
       };
     })
     .filter(Boolean)
+    // Earlier entries render underneath later ones. Bigger tokens sit at the
+    // bottom of the stack so smaller tokens standing on them stay visible;
+    // among same-size tokens, the one lower on the map renders on top so its
+    // health bar is not covered by tokens above it.
     .sort((left, right) => {
-      if (left.row !== right.row) {
-        return right.row - left.row;
+      if (left.area !== right.area) {
+        return right.area - left.area;
+      }
+      if (left.bottomRow !== right.bottomRow) {
+        return left.bottomRow - right.bottomRow;
       }
       return left.index - right.index;
     });
@@ -130,6 +139,24 @@ function buildOrderedStackEntries(placements = []) {
       }
       return left.index - right.index;
     });
+}
+
+function getPlacementFootprint(placement) {
+  const width = toPositiveDimension(
+    placement?.width ?? placement?.columns ?? placement?.w
+  );
+  const height = toPositiveDimension(
+    placement?.height ?? placement?.rows ?? placement?.h
+  );
+  return { width, height };
+}
+
+function toPositiveDimension(raw) {
+  const numeric = typeof raw === 'number' ? raw : Number.parseFloat(raw);
+  if (Number.isFinite(numeric) && numeric >= 1) {
+    return numeric;
+  }
+  return 1;
 }
 
 function getPlacementRow(placement, fallback) {

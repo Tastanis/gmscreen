@@ -96,11 +96,27 @@ export function initializeState(snapshot = {}) {
     state.boardState.placements = restrictPlacementsToPlayerView(state.boardState.placements);
     state.tokens = restrictTokensToPlayerView(state.tokens);
   }
+  invalidateStateSnapshot();
   notify();
 }
 
+// Deep-cloning the full state is expensive (fog grids, monster snapshots,
+// every scene's placements/drawings), and getState() is called dozens of
+// times per user action. Memoize the clone and invalidate whenever the
+// store mutates: writes only ever land through updateState/initializeState,
+// so mutating a returned snapshot was always a no-op and callers already
+// treat it as read-only scratch data.
+let cachedStateSnapshot = null;
+
+function invalidateStateSnapshot() {
+  cachedStateSnapshot = null;
+}
+
 export function getState() {
-  return JSON.parse(JSON.stringify(state));
+  if (cachedStateSnapshot === null) {
+    cachedStateSnapshot = JSON.parse(JSON.stringify(state));
+  }
+  return cachedStateSnapshot;
 }
 
 export function getIsGm() {
@@ -132,12 +148,14 @@ export function updateState(updater) {
     state.tokens = restrictTokensToPlayerView(state.tokens);
   }
   state.boardState.pings = normalizePings(state.boardState.pings);
+  invalidateStateSnapshot();
   notify();
 
   // After notify(), subscribers may have triggered nested updateState calls
   // that replaced boardState (e.g. the poller merging server state).
   // Re-check and restore fog data if it was lost during notification.
   restoreFogOfWarSnapshot(state.boardState, fogSnap);
+  invalidateStateSnapshot();
 }
 
 function notify() {

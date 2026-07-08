@@ -824,7 +824,10 @@
           affects: block.predicate,
           pickIndex: pickIndex + 1,
           pickTotal: Number.isFinite(desired) ? desired : 0,
-          allowDone: upTo,
+          // "Done" finishes early with the targets picked so far without
+          // cancelling the ability. Always offer it once at least one target
+          // is locked in, so a multi-target ability can hit a single target.
+          allowDone: upTo || selected.length > 0,
           // Pre-suggested target (e.g. the mover that triggered an
           // opp-attack). Picker pulses this token red but the player can
           // still click anyone.
