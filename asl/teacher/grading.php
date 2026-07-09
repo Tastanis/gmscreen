@@ -44,6 +44,20 @@ if ($students && $targetIds) {
     }
 }
 
+// rubric + wording for every visible target, for the pinned rubric side panel
+$targetMeta = [];
+foreach ($standards as $s) {
+    foreach ($s['targets'] as $t) {
+        $targetMeta[(int)$t['id']] = [
+            'code' => $t['target_code'],
+            'title' => $t['title'],
+            'description' => $t['description'] ?? '',
+            'standard' => $s['standard_id'] . ' — ' . $s['name'],
+            'rubric' => $t['rubric'] ?: new stdClass(),
+        ];
+    }
+}
+
 aslhub_teacher_header($me, 'Grading', 'grading');
 ?>
     <form class="filters-bar" method="GET" id="filter-form">
@@ -79,7 +93,8 @@ aslhub_teacher_header($me, 'Grading', 'grading');
                 <option value="<?php echo $i; ?>" <?php echo (string)$filters['period'] === (string)$i ? 'selected' : ''; ?>>Period <?php echo $i; ?></option>
             <?php endfor; ?>
         </select>
-        <span class="muted" style="font-size:.82rem;">Click a cell to cycle 0 → 1 → 2 → 3 → 4. Saves instantly.</span>
+        <span class="muted" style="font-size:.82rem;">Click a cell to cycle 0 → 1 → 2 → 3 → 4. Saves instantly.
+            Click a skill header to pin its rubric. Click a student to zoom in.</span>
     </form>
 
     <?php if (!$students): ?>
@@ -87,20 +102,24 @@ aslhub_teacher_header($me, 'Grading', 'grading');
     <?php elseif (!$targetIds): ?>
         <div class="rubric-panel"><p class="muted">No skills at this level for that selection.</p></div>
     <?php else: ?>
+    <div class="grading-layout">
     <div class="grading-grid-wrap" style="max-height:70vh;overflow-y:auto;">
         <table class="grading-grid">
             <thead>
                 <tr>
                     <th class="sticky-col">Student</th>
                     <?php foreach ($standards as $s): foreach ($s['targets'] as $t): ?>
-                        <th title="<?php echo aslhub_h($t['title']); ?>"><?php echo aslhub_h($t['target_code']); ?></th>
+                        <th class="skill-head" data-target="<?php echo (int)$t['id']; ?>"
+                            title="<?php echo aslhub_h($t['title'] . ' — click to pin the rubric'); ?>"><?php echo aslhub_h($t['target_code']); ?></th>
                     <?php endforeach; endforeach; ?>
                 </tr>
             </thead>
             <tbody>
                 <?php foreach ($students as $st): $sid = (int)$st['id']; ?>
                 <tr>
-                    <td class="sticky-col"><?php echo aslhub_h($st['last_name'] . ', ' . $st['first_name']); ?>
+                    <td class="sticky-col"><a class="student-link" href="<?php echo $base; ?>/dashboard.php?student_id=<?php echo $sid; ?>"
+                            title="Zoom in on <?php echo aslhub_h($st['first_name']); ?> — browse the standards and grade from the rubrics"><?php
+                            echo aslhub_h($st['last_name'] . ', ' . $st['first_name']); ?></a>
                         <span class="muted" style="font-size:.75rem;">P<?php echo (int)$st['class_period']; ?></span></td>
                     <?php foreach ($standards as $s): foreach ($s['targets'] as $t):
                         $sc = $scores[$sid][(int)$t['id']] ?? null; ?>
@@ -116,16 +135,71 @@ aslhub_teacher_header($me, 'Grading', 'grading');
             </tbody>
         </table>
     </div>
+    <aside class="rubric-side" id="rubric-side" hidden>
+        <div class="rubric-side-head">
+            <strong id="rubric-side-code"></strong>
+            <button type="button" class="close-btn" id="rubric-side-close" title="Close rubric">&times;</button>
+        </div>
+        <h4 id="rubric-side-title"></h4>
+        <p id="rubric-side-standard" class="muted" style="font-size:.78rem;margin:0 0 4px;"></p>
+        <p id="rubric-side-desc" style="font-size:.85rem;color:#4a5568;margin:0 0 6px;"></p>
+        <table class="rubric-table"><tbody id="rubric-side-rows"></tbody></table>
+    </aside>
+    </div>
     <?php endif; ?>
 
 <script>
 const CSRF = '<?php echo $csrf; ?>';
 const COLORS = { 0: '#9aa2ad', 1: '#e05252', 2: '#e8b93e', 3: '#4caf6d', 4: '#4a90d9' };
+const TARGETS = <?php echo json_encode($targetMeta, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE); ?>;
 
 document.querySelectorAll('.grade-cell').forEach(cell => {
     cell.addEventListener('click', () => cycle(cell, +1));
     cell.addEventListener('contextmenu', e => { e.preventDefault(); cycle(cell, -1); });
 });
+
+/* ===== Pinned rubric side panel ===== */
+let pinnedTarget = null;
+
+function escapeHtml(v) {
+    const d = document.createElement('div');
+    d.textContent = v == null ? '' : String(v);
+    return d.innerHTML;
+}
+
+function openRubric(id) {
+    const t = TARGETS[id];
+    if (!t) return;
+    pinnedTarget = String(id);
+    document.getElementById('rubric-side-code').textContent = t.code;
+    document.getElementById('rubric-side-title').textContent = t.title;
+    document.getElementById('rubric-side-standard').textContent = t.standard;
+    document.getElementById('rubric-side-desc').textContent = t.description || '';
+    document.getElementById('rubric-side-rows').innerHTML = [4, 3, 2, 1, 0].map(s => `
+        <tr><td class="rubric-score" style="background:${COLORS[s]}">${s}</td>
+        <td>${escapeHtml((t.rubric || {})[s] || '')}</td></tr>`).join('');
+    document.getElementById('rubric-side').hidden = false;
+    highlightColumn();
+}
+
+function closeRubric() {
+    pinnedTarget = null;
+    document.getElementById('rubric-side').hidden = true;
+    highlightColumn();
+}
+
+function highlightColumn() {
+    document.querySelectorAll('.skill-head').forEach(th =>
+        th.classList.toggle('selected', th.dataset.target === pinnedTarget));
+    document.querySelectorAll('.grade-cell').forEach(td =>
+        td.classList.toggle('col-selected', td.dataset.target === pinnedTarget));
+}
+
+document.querySelectorAll('.skill-head').forEach(th => {
+    th.addEventListener('click', () =>
+        pinnedTarget === th.dataset.target ? closeRubric() : openRubric(th.dataset.target));
+});
+document.getElementById('rubric-side-close')?.addEventListener('click', closeRubric);
 
 async function cycle(cell, dir) {
     if (cell.classList.contains('saving')) return;
@@ -142,7 +216,7 @@ async function cycle(cell, dir) {
         if (!out.success) throw new Error(out.error || 'save failed');
         cell.dataset.score = next;
         cell.textContent = next;
-        cell.className = 'grade-cell score-' + next;
+        cell.className = 'grade-cell score-' + next + (cell.dataset.target === pinnedTarget ? ' col-selected' : '');
         cell.style.background = COLORS[next];
     } catch (err) {
         cell.classList.add('save-error');

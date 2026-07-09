@@ -38,9 +38,11 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
         <?php if ($viewingAsTeacher): ?>
             <div style="background:#fdf6e3;border:2px solid #e8b93e;border-radius:10px;padding:10px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
                 <span><strong>Teacher view:</strong> seeing this dashboard exactly as
-                <?php echo aslhub_h($subject['first_name'] . ' ' . $subject['last_name']); ?> sees it.</span>
+                <?php echo aslhub_h($subject['first_name'] . ' ' . $subject['last_name']); ?> sees it.
+                Zoom into a skill and click a rubric level to grade it.</span>
                 <span>
                     <a href="teacher/student.php?id=<?php echo (int)$subject['id']; ?>" class="pill" style="text-decoration:none;">Manage student</a>
+                    <a href="teacher/grading.php?level=<?php echo $level; ?>" class="pill" style="text-decoration:none;">&larr; Grading grid</a>
                     <a href="teacher/dashboard.php" class="pill" style="text-decoration:none;">&larr; Roster</a>
                 </span>
             </div>
@@ -156,6 +158,14 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
 
     <script>
         window.ASL_STUDENT_DASHBOARD = <?php echo json_encode($payload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE); ?>;
+        // When a teacher is viewing, rubric levels become clickable grade buttons.
+        window.ASL_TEACHER_GRADE = <?php echo $viewingAsTeacher
+            ? json_encode([
+                'csrf' => aslhub_csrf_token(),
+                'api' => aslhub_base_url() . '/api/save_score.php',
+                'studentId' => (int)$subject['id'],
+            ], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP)
+            : 'null'; ?>;
 
         const dashboardData = window.ASL_STUDENT_DASHBOARD || {};
         const SCORE_COLORS = { 0: '#9aa2ad', 1: '#e05252', 2: '#e8b93e', 3: '#4caf6d', 4: '#4a90d9' };
@@ -180,6 +190,30 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
         function scoreOf(targetId) {
             const s = dashboardData.scores && dashboardData.scores[String(targetId)];
             return (s === undefined || s === null) ? null : Number(s);
+        }
+
+        /* Teacher-view only: save a score by clicking a rubric level. */
+        async function gradeTarget(targetId, score, row) {
+            const g = window.ASL_TEACHER_GRADE;
+            if (!g || gradeTarget.busy) return;
+            gradeTarget.busy = true;
+            if (row) row.classList.add('rubric-saving');
+            try {
+                const body = new URLSearchParams({
+                    csrf_token: g.csrf, student_id: g.studentId, target_id: targetId, score: score,
+                });
+                const res = await fetch(g.api, { method: 'POST', body });
+                const out = await res.json();
+                if (!out.success) throw new Error(out.error || 'save failed');
+                if (!dashboardData.scores || Array.isArray(dashboardData.scores)) dashboardData.scores = {};
+                dashboardData.scores[String(targetId)] = score;
+                renderDashboard();
+            } catch (err) {
+                if (row) row.classList.remove('rubric-saving');
+                alert('Could not save score: ' + err.message);
+            } finally {
+                gradeTarget.busy = false;
+            }
         }
 
         function bucketTargets(bucket) {
@@ -350,11 +384,14 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
             if (target) {
                 title.textContent = target.target_code;
                 const my = scoreOf(target.id);
+                const canGrade = !!window.ASL_TEACHER_GRADE;
+                const hereLabel = canGrade ? escapeHtml((dashboardData.student || {}).first_name || 'Now') : 'You';
                 const rows = [4, 3, 2, 1, 0].map(score => {
                     const current = my !== null && my === score;
                     return `
-                    <tr class="${current ? 'rubric-row-current' : ''}">
-                        <td class="rubric-score" style="background:${SCORE_COLORS[score]}">${score}${current ? '<span class="you-are-here">You</span>' : ''}</td>
+                    <tr class="${current ? 'rubric-row-current' : ''} ${canGrade ? 'rubric-gradable' : ''}"
+                        ${canGrade ? `data-grade-score="${score}" title="Set score to ${score}"` : ''}>
+                        <td class="rubric-score" style="background:${SCORE_COLORS[score]}">${score}${current ? `<span class="you-are-here">${hereLabel}</span>` : ''}</td>
                         <td>${escapeHtml((target.rubric || {})[score] || '')}</td>
                     </tr>`;
                 }).join('');
@@ -366,7 +403,7 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
                         <p>${escapeHtml(target.description || standard.name)}</p>
                     </div>
                     <div class="rubric-thread ${my !== null ? 'score-tint-' + my : ''}" style="border-radius:10px;padding:10px;">
-                        <h4>${skillChip(target)} Where you are on this skill</h4>
+                        <h4>${skillChip(target)} ${canGrade ? 'Click a level to grade this skill' : 'Where you are on this skill'}</h4>
                         <table class="rubric-table">${rows}</table>
                     </div>
                     <div class="resource-panel">
@@ -377,6 +414,11 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
                         <div class="resource-list">${resourcePills(target.resources, 'No skill-specific resources yet — check the standard resources one level up.')}</div>
                     </div>
                 `;
+                if (canGrade) {
+                    panel.querySelectorAll('[data-grade-score]').forEach(row => {
+                        row.addEventListener('click', () => gradeTarget(target.id, Number(row.dataset.gradeScore), row));
+                    });
+                }
                 return;
             }
 

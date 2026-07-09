@@ -98,6 +98,37 @@ body { background: #f5f5f7 !important; }
 .grade-cell:hover { transform: scale(1.08); outline: 2px solid #2d3748; z-index: 1; position: relative; }
 .grade-cell.saving { opacity: .5; }
 .grade-cell.save-error { outline: 3px solid #e05252; }
+
+/* Grading page: grid + pinned rubric panel side by side */
+.grading-layout { display: flex; gap: 14px; align-items: flex-start; }
+.grading-layout .grading-grid-wrap { flex: 1 1 auto; min-width: 0; }
+.rubric-side {
+    flex: 0 0 340px; position: sticky; top: 12px;
+    background: rgba(255,255,255,.97); border-radius: 12px; padding: 16px 18px;
+    max-height: calc(100vh - 24px); overflow-y: auto;
+    box-shadow: 0 4px 18px rgba(0,0,0,.08);
+}
+.rubric-side-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.rubric-side-head strong { color: #667eea; font-size: 1.05rem; }
+.rubric-side h4 { color: #2d3748; margin: 6px 0 2px; }
+@media (max-width: 900px) {
+    .grading-layout { flex-direction: column-reverse; }
+    .rubric-side { position: static; flex: 1 1 auto; width: 100%; max-height: none; }
+}
+.grading-grid th.skill-head { cursor: pointer; }
+.grading-grid th.skill-head:hover { background: #e2e8f0; }
+.grading-grid th.skill-head.selected {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff;
+}
+.grading-grid td.col-selected { box-shadow: inset 0 0 0 2px #667eea; }
+.student-link { color: inherit; text-decoration: none; border-bottom: 1px dashed #a0aec0; font-weight: 600; }
+.student-link:hover { color: #4a90d9; border-bottom-color: #4a90d9; }
+
+/* Teacher grading from the student-style rubric view */
+.rubric-table tr.rubric-gradable { cursor: pointer; }
+.rubric-table tr.rubric-gradable:hover td { background: #edf2f7; }
+.rubric-table tr.rubric-gradable:hover td.rubric-score { filter: brightness(1.1); }
+.rubric-table tr.rubric-saving { opacity: .5; pointer-events: none; }
 .cell-input { width: 70px; padding: 4px 6px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: .85rem; }
 .cell-note { width: 220px; }
 
