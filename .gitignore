@@ -123,7 +123,9 @@ Thumbs.db
 
 # ASL Hub local credentials - never commit
 asl/config.local.php
+asl/config.test.local.php
 asl/backups/
+asl/tests/output/
 
 # ASL Hub vendored chart library must be committed
 !asl/js/vendor/

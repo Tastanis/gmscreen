@@ -61,6 +61,10 @@ aslhub_teacher_header($me, 'Manage Student', 'dashboard');
                        href="<?php echo $base; ?>/dashboard.php?student_id=<?php echo (int)$student['id']; ?>">
                         View dashboard as this student &rarr;</a>
                 </p>
+                <p style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px;">
+                    <a class="pill" style="text-decoration:none;" href="weekly.php?metric=attendance&amp;student_id=<?php echo (int)$student['id']; ?>">Enter attendance</a>
+                    <a class="pill" style="text-decoration:none;" href="weekly.php?metric=participation&amp;student_id=<?php echo (int)$student['id']; ?>">Enter participation</a>
+                </p>
                 <div class="form-group">
                     <label>Reset Password</label>
                     <div style="display:flex;gap:8px;">
@@ -84,8 +88,8 @@ aslhub_teacher_header($me, 'Manage Student', 'dashboard');
             <div class="danger-zone">
                 <h3>Danger Zone</h3>
                 <p style="font-size:.85rem;margin:8px 0;">Permanently deletes this student and ALL their
-                scores, history, and weekly logs. Prefer <em>Deactivate</em>. Export a backup first
-                (Settings &rarr; Export). Type <strong>DELETE</strong> to confirm.</p>
+                scores, history, attendance, participation, and legacy weekly logs. Prefer <em>Deactivate</em>.
+                The server creates a safety backup first. Type <strong>DELETE</strong> to confirm.</p>
                 <div style="display:flex;gap:8px;">
                     <input class="form-input" type="text" id="delete-confirm" placeholder="Type DELETE">
                     <button type="button" class="form-button btn-danger" style="width:auto;margin:0;padding:10px 16px;" onclick="hardDelete()">Delete Forever</button>

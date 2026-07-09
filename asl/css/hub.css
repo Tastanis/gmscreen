@@ -3,12 +3,12 @@
    curriculum-grid, chart-*) live in asl-style.css — do NOT restyle them here. */
 
 :root {
-    --score-0: #9aa2ad;
+    --score-0: #e05252;
     --score-1: #e05252;
     --score-2: #e8b93e;
     --score-3: #4caf6d;
     --score-4: #4a90d9;
-    --score-0-bg: #f1f3f5;
+    --score-0-bg: #fdeaea;
     --score-1-bg: #fdeaea;
     --score-2-bg: #fdf6e3;
     --score-3-bg: #eaf7ef;

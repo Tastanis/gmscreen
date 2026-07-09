@@ -4,6 +4,7 @@
  * deactivate/reactivate, hard delete (typed confirmation).
  */
 require_once dirname(__DIR__) . '/config.php';
+require_once dirname(__DIR__) . '/lib/backup.php';
 
 $teacher = aslhub_require_teacher($pdo, true);
 aslhub_require_csrf();
@@ -55,13 +56,22 @@ try {
             if (($_POST['confirm_text'] ?? '') !== 'DELETE') {
                 aslhub_json_error('Type DELETE to confirm permanent removal.');
             }
+            try {
+                $sqlBackup = aslhub_backup_sql($pdo);
+                $xlsxBackup = aslhub_backup_xlsx($pdo);
+                aslhub_backup_prune();
+            } catch (Throwable $backupError) {
+                aslhub_json_error('Refusing to delete because the automatic safety backup failed.', 500);
+            }
             $pdo->beginTransaction();
+            $pdo->prepare("DELETE FROM asl_student_block_metric_audit WHERE user_id = ?")->execute([$studentId]);
+            $pdo->prepare("DELETE FROM asl_student_block_metrics WHERE user_id = ?")->execute([$studentId]);
             $pdo->prepare("DELETE FROM user_learning_targets WHERE user_id = ?")->execute([$studentId]);
             $pdo->prepare("DELETE FROM user_learning_target_score_history WHERE user_id = ?")->execute([$studentId]);
             $pdo->prepare("DELETE FROM asl_student_meetings WHERE user_id = ?")->execute([$studentId]);
             $pdo->prepare("DELETE FROM users WHERE id = ? AND is_teacher = FALSE")->execute([$studentId]);
             $pdo->commit();
-            aslhub_json(['success' => true]);
+            aslhub_json(['success' => true, 'backups' => [basename($sqlBackup), basename($xlsxBackup)]]);
 
         default:
             aslhub_json_error('Unknown action.');

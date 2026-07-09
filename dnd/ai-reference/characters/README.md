@@ -8,8 +8,8 @@ Saved, paste-ready automation JSON for each player character — so VTT abilitie
 |---|---|---|
 | Cal | Censor (Wrath / Judgment) | `cal-automations.md` |
 | Sharon | Shadow (College of Black Ash) | `sharon-automations.md` |
-| Indigo | — | _(not yet built)_ |
-| Zepha | — | _(not yet built)_ |
+| Indigo | Talent (Telepathy / Clarity) | `indigo-automations.md` |
+| Zepha | Elementalist (Essence) | `zepha-automations.md` |
 
 ## Convention
 

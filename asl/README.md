@@ -1,8 +1,9 @@
 # ASL Hub (unified ASL 1 / 2 / 3)
 
 One codebase replaces the old duplicated `asl1/` + `asl2/` proficiency system.
-The old folders are untouched (bingo, scroller, goals still live there) — this
-folder is the new home for accounts, dashboards, grading, and rubrics.
+The old folders remain only for legacy bingo/goals links. The student/teacher
+dashboards, grading, rubrics, school calendar, attendance, participation, and
+single-computer Scroller now live under `asl/`.
 
 ## Deploying to the live site
 
@@ -17,44 +18,75 @@ folder is the new home for accounts, dashboards, grading, and rubrics.
 4. Log in and change both teacher passwords right away (Settings page):
    - Harms (admin): first name `Brandon`, starter password `HarmsASL2026`
    - Parks: first name `Ms.`, starter password `ParksASL2026`
-5. Optional: set the school-year dates and signup code in Settings.
+5. In Settings, upload the shared school-calendar JSON, set the participation
+   maximum, pace goals, and signup code.
 
 Re-run `install.php` any time rubric wording changes (regenerate
 `data/rubric_seed.json` first) — student scores are never touched.
 
 ## Who can do what
 
-- **Students** — see only their own dashboard: progress chart with pace lines,
-  bucket dots, rubrics, resources, attendance/participation overlays, notes.
-  They pick teacher/period/level once at signup; only teachers can change them after.
-- **Ms. Parks** — full control of *her* students (grading, weekly logs, editing
-  info, password resets, deactivation) + her own password.
+- **Students** — see only their own dashboard: proficiency, attendance, and
+  participation graphs; pace lines; bucket dots; rubrics; resources; notes; and
+  play-only access to the Scroller. Only teachers manage word banks/settings.
+- **Ms. Parks** — full control of *her* students (grading, block-entry grids,
+  Scroller banks, editing info, password resets, deactivation) + her own password.
 - **Mr. Harms (admin)** — everything, for all students, plus: year/pace settings,
   signup code, teacher passwords, Excel export/import, SQL backups, and the
   temporary **Start Fresh** wipe.
 
 ## Data safety rules baked into the code
 
-- Schema and seeding are strictly additive; retired content is deactivated, never deleted.
+- Schema is additive. The rubric seed is validated for completeness before it
+  may deactivate retired content, and Install creates a safety backup first when
+  student grading data exists.
 - Every score change is also appended to an immutable history table (drives the chart).
-- Clearing a non-empty note requires an explicit confirmation (blank-overwrite guard).
-- Export (Settings) produces one Excel workbook holding the entire database; the
-  importer reads the same file back with a preview-first, add/update-only restore.
-- Import and Start Fresh both take automatic SQL + Excel backups before writing.
+- Block attendance/participation saves are transactional, version checked, and
+  audit logged. Finalized changes retain who/when audit history without requiring
+  the teacher to enter a justification.
+- Entry grids keep browser-local drafts, show dirty cells, save as a batch, retry
+  safely, and warn before leaving with unsaved work.
+- Excel export/import is the preview-first, add/update-only portable class-data
+  format. SQL is the complete disaster-recovery backup.
+- Import, calendar replacement, Install reseeding, hard student deletion, and
+  Start Fresh take automatic SQL + Excel backups before writing.
+- Backup reads use a consistent database snapshot and atomic filenames.
 - Server-side backups live in `asl/backups/` (web access denied; newest 40 kept).
+- `scripts/nightly_backup.php` is the CLI entry point for Task Scheduler/cron.
+  Copy backups off the web server using encrypted storage approved by the school.
 
-## Weekly teacher rhythm
+## Ten-school-day teacher rhythm
 
 1. **Grading** tab — pick level + bucket, click cells (left-click up, right-click down).
-2. **Weekly Log** tab — one screen per week: absences, participation points, note.
+2. **Attendance & Participation** tab — students down the left, reporting blocks
+   across the top. Blank attendance means zero absences; blank participation means
+   the saved block maximum. Enter moves down and Tab moves right.
 3. Every week or two: Settings → **Download Excel Export**, keep it somewhere safe.
 
 ## Pace lines
 
-Lines start at week 2 and are computed from real data:
-`(gradable skills at the student's level × goal score) ÷ (school weeks − 2)`.
-Current skill counts: ASL 1 = 60, ASL 2 = 66, ASL 3 = 66 — so "all 3s" (green) is
-about 5.1 pts/week for ASL 1 over a 36-week year. Goals are adjustable in Settings.
+Lines start at reporting block 2 and are computed from real data:
+`(gradable skills at the student's level × goal score) ÷ (reporting blocks − 2)`.
+Each reporting block contains 10 uploaded instructional dates; weekends, holidays,
+and breaks do not consume a block day. Goals remain adjustable in Settings.
+
+At a checkpoint the chart uses the latest saved score for each skill. Repeatedly
+cycling a score during one block does not add every click; only the final value at
+the checkpoint contributes. Past checkpoints remain historical snapshots.
+
+## Calendar JSON
+
+Settings shows a copyable example. The required top-level fields are
+`school_year`, IANA `timezone`, and `days`. Each day is a unique object containing
+`date` (`YYYY-MM-DD`), boolean `instructional`, and an optional `label`. Upload is
+preview-first. A new calendar cannot remap finalized blocks.
+
+## Disposable test data
+
+`tests/disposable_test_db.php` creates a separate database whose name must end in
+`_codex_disposable_test`, with fake `@example.invalid` students and a completed
+year of history. It has a separate confirmation-protected drop command. The local
+machine needs a running MySQL/MariaDB service; see `tests/README.md`.
 
 ## Removing the Start Fresh tool after launch
 

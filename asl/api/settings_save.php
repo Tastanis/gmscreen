@@ -40,20 +40,42 @@ try {
             $green = (float)($_POST['pace_green_goal'] ?? 3.0);
             $blue = (float)($_POST['pace_blue_goal'] ?? 3.7);
             $red = (float)($_POST['pace_red_goal'] ?? 2.0);
+            $participationMax = (int)($_POST['participation_max'] ?? 10);
+            if ($participationMax < 1 || $participationMax > 1000) {
+                aslhub_json_error('Participation maximum must be between 1 and 1000.');
+            }
+            $maxOpenScore = (int)$pdo->query("SELECT COALESCE(MAX(m.participation_points),0) AS m
+                FROM asl_student_block_metrics m JOIN asl_reporting_blocks b ON b.id=m.block_id
+                WHERE b.finalized_at IS NULL")->fetch()['m'];
+            if ($participationMax < $maxOpenScore) {
+                aslhub_json_error("Participation maximum cannot be below an existing open-block score of $maxOpenScore.");
+            }
             foreach ([['pace_green_goal', $green], ['pace_blue_goal', $blue], ['pace_red_goal', $red]] as [$k, $v]) {
                 if ($v <= 0 || $v > 4) aslhub_json_error('Pace goals must be between 0 and 4.');
+            }
+            $pdo->beginTransaction();
+            foreach ([['pace_green_goal', $green], ['pace_blue_goal', $blue], ['pace_red_goal', $red]] as [$k, $v]) {
                 aslhub_set_setting($pdo, $k, (string)$v);
             }
             aslhub_set_setting($pdo, 'year_start', $start);
             aslhub_set_setting($pdo, 'year_end', $end);
+            aslhub_set_setting($pdo, 'participation_max', (string)$participationMax);
+            // Finalized blocks keep the maximum they were graded against; only open/future blocks follow the global setting.
+            $pdo->prepare("UPDATE asl_reporting_blocks SET participation_max=? WHERE finalized_at IS NULL")
+                ->execute([$participationMax]);
+            $pdo->prepare("UPDATE asl_student_block_metrics m JOIN asl_reporting_blocks b ON b.id=m.block_id
+                SET m.participation_max=? WHERE b.finalized_at IS NULL")
+                ->execute([$participationMax]);
             $code = trim($_POST['signup_code'] ?? '');
             if ($code !== '') aslhub_set_setting($pdo, 'signup_code', $code);
+            $pdo->commit();
             aslhub_json(['success' => true]);
 
         default:
             aslhub_json_error('Unknown action.');
     }
 } catch (PDOException $e) {
+    if ($pdo->inTransaction()) $pdo->rollBack();
     error_log('settings_save: ' . $e->getMessage());
     aslhub_json_error('Save failed.', 500);
 }

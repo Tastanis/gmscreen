@@ -6,6 +6,7 @@
  */
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/lib/seed.php';
+require_once __DIR__ . '/lib/backup.php';
 
 $hasTeacher = (bool)$pdo->query("SELECT id FROM users WHERE is_teacher = TRUE LIMIT 1")->fetch();
 if ($hasTeacher) {
@@ -23,6 +24,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     aslhub_require_csrf(false);
     aslhub_ensure_schema($pdo, true);
     $results[] = 'Schema check complete (version ' . ASLHUB_SCHEMA_VERSION . ').';
+    $hasStudentData = (bool)$pdo->query("SELECT id FROM user_learning_targets LIMIT 1")->fetchColumn()
+        || (bool)$pdo->query("SELECT id FROM user_learning_target_score_history LIMIT 1")->fetchColumn();
+    if ($hasStudentData) {
+        $sqlBackup = aslhub_backup_sql($pdo);
+        $xlsxBackup = aslhub_backup_xlsx($pdo);
+        aslhub_backup_prune();
+        $results[] = 'Safety backup created before seeding: ' . basename($sqlBackup) . ' and ' . basename($xlsxBackup) . '.';
+    }
     $seedResult = aslhub_seed_content($pdo);
     if ($seedResult['success']) {
         $s = $seedResult['stats'];

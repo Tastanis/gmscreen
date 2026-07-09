@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ASL Hub - Disposable Chart Preview</title>
+  <link rel="stylesheet" href="../css/asl-style.css">
+  <link rel="stylesheet" href="../css/hub.css">
+  <style>
+    body{margin:0;background:#f5f5f7;color:#1d1d1f;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    .preview-shell{max-width:1120px;margin:0 auto;padding:34px 24px 60px}
+    .preview-banner{background:#fff4ce;border:1px solid #e8c654;border-radius:14px;padding:12px 16px;margin-bottom:18px}
+    .preview-header{display:flex;justify-content:space-between;gap:18px;align-items:end;margin-bottom:20px}
+    .preview-header h1{font-size:2rem;margin:4px 0}.preview-header p{margin:0;color:#6e6e73}
+    .chart-stack{display:grid;gap:18px}.analytics-section{background:rgba(255,255,255,.94);border:1px solid #dedee3;border-radius:18px;padding:20px;box-shadow:0 9px 28px rgba(0,0,0,.05)}
+    .student-section-header{display:flex;justify-content:space-between;gap:18px;align-items:start}.student-section-header h2{margin:2px 0 5px}.student-kicker{font-size:.74rem;letter-spacing:.09em;text-transform:uppercase;color:#6e6e73;font-weight:700;margin:0}
+    .toggle{display:flex;background:#ececf1;border-radius:10px;padding:3px}.toggle button{border:0;background:transparent;border-radius:8px;padding:7px 10px;font-weight:650;color:#65656a}.toggle button.active{background:white;color:#111;box-shadow:0 1px 5px rgba(0,0,0,.12)}
+    .summary{font-weight:650;margin:12px 0 2px}.chart{width:100%;height:260px;display:block}.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:.82rem;color:#5f6368}.key{display:inline-block;width:18px;height:3px;border-radius:4px;margin-right:6px;vertical-align:middle}
+    .axis{stroke:#8e8e93;stroke-width:1}.grid{stroke:#e2e2e7;stroke-width:1}.label{fill:#6e6e73;font-size:12px}.series{fill:none;stroke-width:3}.dot{stroke:white;stroke-width:1.5}
+    @media(max-width:700px){.preview-header,.student-section-header{display:block}.toggle{margin-top:10px;width:max-content}}
+  </style>
+</head>
+<body>
+<main class="preview-shell">
+  <div class="preview-banner"><strong>Disposable fake-data preview.</strong> No grading database is connected; all names and values on this page are generated test data.</div>
+  <header class="preview-header"><div><p class="student-kicker">ASL Hub · ASL 1</p><h1>Codex Test Student</h1><p>Full-year demonstration with irregular school-calendar blocks and breaks.</p></div><div class="toggle" data-global-range><button data-range="ytd">Year to date</button><button class="active" data-range="full">Full year</button></div></header>
+  <div class="chart-stack">
+    <section class="analytics-section"><div class="student-section-header"><div><p class="student-kicker">Proficiency</p><h2>Progress Over Time</h2><p>Every point is the latest saved score at the end of a 10-school-day block.</p></div></div><div class="summary" id="progress-summary"></div><svg class="chart" id="progress"></svg><div class="legend"><span><i class="key" style="background:#000"></i>You</span><span><i class="key" style="background:#34a853"></i>On-track 3s</span><span><i class="key" style="background:#4285d4"></i>Reaching for 4s</span><span><i class="key" style="background:#ea4335"></i>Failing pace</span></div></section>
+    <section class="analytics-section"><div class="student-section-header"><div><p class="student-kicker">Attendance</p><h2>Attendance Percentage</h2><p>Calculated from elapsed instructional days, with the class average for comparison.</p></div></div><div class="summary" id="attendance-summary"></div><svg class="chart" id="attendance"></svg><div class="legend"><span><i class="key" style="background:#111"></i>You</span><span><i class="key" style="background:#ff9f0a"></i>Class average</span></div></section>
+    <section class="analytics-section"><div class="student-section-header"><div><p class="student-kicker">Participation</p><h2>Participation by Block</h2><p>Raw score out of the block maximum, with an optional four-block trend.</p></div><div class="toggle" data-participation><button class="active" data-view="raw">Score / max</button><button data-view="trend">4-block trend</button></div></div><div class="summary" id="participation-summary"></div><svg class="chart" id="participation"></svg><div class="legend" id="participation-legend"></div></section>
+  </div>
+</main>
+<script>
+const blocks=['Aug','Sep','Sep','Oct','Nov','Dec','Jan','Jan','Feb','Mar','Apr','Apr','May','Jun'];
+const progress=[0,5,14,25,37,48,61,73,88,103,119,136,154,173];
+const attendance=[100,100,98.3,97.5,98,98.3,98.6,98.8,98.9,99,98.7,98.9,99,99.1];
+const classAttendance=[98.5,97.8,97.2,96.8,96.6,96.4,96.5,96.7,96.8,96.9,97,97,97.1,97.2];
+const participation=[10,10,10,6,6,6,6,9,10,10,8,10,10,10], maxima=blocks.map(()=>10);
+const rolling=participation.map((_,i)=>{const w=participation.slice(Math.max(0,i-3),i+1);return w.reduce((a,b)=>a+b,0)/w.length*10});
+let range='full', partView='raw'; const current=9;
+function visible(a){return range==='full'?a:a.slice(0,current+1)}
+function frame(svg,maxY,minY=0){const w=980,h=260,p={l:52,r:18,t:16,b:42},cw=w-p.l-p.r,ch=h-p.t-p.b;svg.setAttribute('viewBox',`0 0 ${w} ${h}`);return{w,h,p,cw,ch,x:i=>p.l+i/Math.max(visible(blocks).length-1,1)*cw,y:v=>p.t+ch-(v-minY)/Math.max(maxY-minY,1)*ch}}
+function draw(svg,series,maxY,minY=0,colors=[]){const f=frame(svg,maxY,minY), labels=visible(blocks), lines=[];for(let n=0;n<=4;n++){const v=minY+(maxY-minY)*n/4,y=f.y(v);lines.push(`<line class="grid" x1="${f.p.l}" y1="${y}" x2="${f.p.l+f.cw}" y2="${y}"/><text class="label" x="${f.p.l-8}" y="${y+4}" text-anchor="end">${Math.round(v)}</text>`)}labels.forEach((b,i)=>lines.push(`<text class="label" x="${f.x(i)}" y="${f.h-13}" text-anchor="middle">${b}</text>`));series.forEach((s,si)=>{const vals=visible(s);const pts=vals.map((v,i)=>`${f.x(i)},${f.y(v)}`).join(' ');lines.push(`<polyline class="series" stroke="${colors[si]}" points="${pts}"/>`);vals.forEach((v,i)=>lines.push(`<circle class="dot" fill="${colors[si]}" cx="${f.x(i)}" cy="${f.y(v)}" r="3.6"/>`))});svg.innerHTML=lines.join('')}
+function render(){const p=visible(progress),target=240,n=p.length,pace=n?Array.from({length:n},(_,i)=>i?target*3/4*(i/(Math.max(visible(blocks).length-1,1))):0):[];const reach=pace.map(v=>v*1.23),fail=pace.map(v=>v*.67);draw(document.querySelector('#progress'),[fail,reach,pace,p],240,0,['#ea4335','#4285d4','#34a853','#000']);document.querySelector('#progress-summary').textContent=`${p[p.length-1]} proficiency points at ${visible(blocks).length} reporting blocks`;
+draw(document.querySelector('#attendance'),[visible(attendance),visible(classAttendance)],100,80,['#111','#ff9f0a']);const a=visible(attendance),ca=visible(classAttendance);document.querySelector('#attendance-summary').textContent=`You: ${a[a.length-1]}% · Class average: ${ca[ca.length-1]}%`;
+if(partView==='raw'){draw(document.querySelector('#participation'),[visible(maxima),visible(participation)],10,0,['#a0a0a7','#7c3aed']);const x=visible(participation);document.querySelector('#participation-summary').textContent=`Latest block: ${x[x.length-1]} of 10 points`;document.querySelector('#participation-legend').innerHTML='<span><i class="key" style="background:#7c3aed"></i>Your score</span><span><i class="key" style="background:#a0a0a7"></i>Maximum</span>'}else{draw(document.querySelector('#participation'),[visible(rolling)],100,0,['#7c3aed']);const x=visible(rolling);document.querySelector('#participation-summary').textContent=`Latest four-block trend: ${x[x.length-1].toFixed(1)}%`;document.querySelector('#participation-legend').innerHTML='<span><i class="key" style="background:#7c3aed"></i>Current block plus previous 3</span>'}}
+document.querySelectorAll('[data-global-range] button').forEach(b=>b.onclick=()=>{range=b.dataset.range;document.querySelectorAll('[data-global-range] button').forEach(x=>x.classList.toggle('active',x===b));render()});document.querySelectorAll('[data-participation] button').forEach(b=>b.onclick=()=>{partView=b.dataset.view;document.querySelectorAll('[data-participation] button').forEach(x=>x.classList.toggle('active',x===b));render()});render();
+</script>
+</body>
+</html>

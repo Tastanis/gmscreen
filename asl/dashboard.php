@@ -19,7 +19,7 @@ if (!empty($me['is_teacher'])) {
 
 $payload = aslhub_dashboard_payload($pdo, $subject);
 $level = (int)$payload['student']['level'];
-$gamesLevel = min($level, 2); // scroller/goals/bingo still live in asl1/asl2
+$gamesLevel = min($level, 2); // goals/bingo still live in asl1/asl2
 $initials = mb_substr($subject['first_name'] ?? 'A', 0, 1) . mb_substr($subject['last_name'] ?? 'S', 0, 1);
 $cssV = @filemtime(__DIR__ . '/css/asl-style.css') ?: 1;
 $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
@@ -42,6 +42,8 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
                 Zoom into a skill and click a rubric level to grade it.</span>
                 <span>
                     <a href="teacher/student.php?id=<?php echo (int)$subject['id']; ?>" class="pill" style="text-decoration:none;">Manage student</a>
+                    <a href="teacher/weekly.php?metric=attendance&amp;student_id=<?php echo (int)$subject['id']; ?>" class="pill" style="text-decoration:none;">Enter attendance</a>
+                    <a href="teacher/weekly.php?metric=participation&amp;student_id=<?php echo (int)$subject['id']; ?>" class="pill" style="text-decoration:none;">Enter participation</a>
                     <a href="teacher/grading.php?level=<?php echo $level; ?>" class="pill" style="text-decoration:none;">&larr; Grading grid</a>
                     <a href="teacher/dashboard.php" class="pill" style="text-decoration:none;">&larr; Roster</a>
                 </span>
@@ -53,7 +55,7 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
                 <h1>Student Dashboard</h1>
             </div>
             <nav class="student-actions" aria-label="Student tools">
-                <button type="button" onclick="window.open('../asl<?php echo $gamesLevel; ?>/scrollergame/index.html', '_blank')">Scroller Game</button>
+                <button type="button" onclick="window.open('scroller/index.php', '_blank')">Scroller Game</button>
                 <button type="button" onclick="openGoals()">Goals</button>
                 <a href="../asl<?php echo $gamesLevel; ?>/bingo.php">Bingo</a>
                 <?php if (!$viewingAsTeacher): ?><a class="logout-link" href="logout.php">Logout</a><?php endif; ?>
@@ -116,7 +118,13 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
                         <p class="student-kicker">Course Progression</p>
                         <h2 id="chart-heading">Progress Over Time</h2>
                     </div>
-                    <p id="chart-scope">Showing all skill buckets</p>
+                    <div class="chart-header-tools">
+                        <p id="chart-scope">Showing all skill buckets</p>
+                        <div class="chart-toggle" data-range-toggle="progress" aria-label="Progress chart date range">
+                            <button type="button" data-range="ytd" class="active">Year to Date</button>
+                            <button type="button" data-range="full">Full Year</button>
+                        </div>
+                    </div>
                 </div>
                 <div class="chart-wrap">
                     <svg id="progress-chart" role="img" aria-label="Skill points earned over time"></svg>
@@ -127,18 +135,63 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
                     <span class="legend-swatch" style="background:#4caf6d;"></span> On-track pace (3s)
                     <span class="legend-swatch" style="background:#4a90d9;"></span> Reaching-for-4s pace
                     <span class="legend-swatch" style="background:#e05252;"></span> Failing pace (2s)
-                    <span id="legend-absences" style="display:none;"><span class="legend-swatch" style="background:#f6993f;"></span> Absences/week (right axis)</span>
-                    <span id="legend-participation" style="display:none;"><span class="legend-swatch" style="background:#9f7aea;"></span> Participation points (right axis)</span>
                 </div>
+            </section>
+
+            <section class="student-section analytics-section" aria-labelledby="attendance-heading">
+                <div class="student-section-header">
+                    <div>
+                        <p class="student-kicker">School Days Attended</p>
+                        <h2 id="attendance-heading">Attendance</h2>
+                    </div>
+                    <div class="chart-toggle" data-range-toggle="attendance" aria-label="Attendance chart date range">
+                        <button type="button" data-range="ytd" class="active">Year to Date</button>
+                        <button type="button" data-range="full">Full Year</button>
+                    </div>
+                </div>
+                <div id="attendance-summary" class="metric-summary" aria-live="polite"></div>
+                <div class="chart-wrap metric-chart-wrap">
+                    <svg id="attendance-chart" role="img" aria-label="Attendance percentage over time"></svg>
+                    <p id="attendance-empty-note" class="chart-empty-note">Attendance will appear after school-day and absence data are entered.</p>
+                </div>
+                <div class="comparison-legend">
+                    <span><span class="legend-swatch metric-student-swatch"></span>You</span>
+                    <span><span class="legend-swatch legend-class"></span>Class average</span>
+                </div>
+            </section>
+
+            <section class="student-section analytics-section" aria-labelledby="participation-heading">
+                <div class="student-section-header">
+                    <div>
+                        <p class="student-kicker">Ten-School-Day Blocks</p>
+                        <h2 id="participation-heading">Participation</h2>
+                    </div>
+                    <div class="chart-header-tools">
+                        <div class="chart-toggle" data-participation-view aria-label="Participation chart view">
+                            <button type="button" data-view="raw" class="active">Score / Max</button>
+                            <button type="button" data-view="trend">4-Block Trend</button>
+                        </div>
+                        <div class="chart-toggle" data-range-toggle="participation" aria-label="Participation chart date range">
+                            <button type="button" data-range="ytd" class="active">Year to Date</button>
+                            <button type="button" data-range="full">Full Year</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="participation-summary" class="metric-summary" aria-live="polite"></div>
+                <div class="chart-wrap metric-chart-wrap">
+                    <svg id="participation-chart" role="img" aria-label="Participation results over time"></svg>
+                    <p id="participation-empty-note" class="chart-empty-note">Participation will appear after the first reporting block is scored.</p>
+                </div>
+                <div id="participation-legend" class="comparison-legend"></div>
             </section>
 
             <section class="student-section comparisons-section" aria-labelledby="comparison-heading">
                 <div class="student-section-header">
                     <div>
-                        <p class="student-kicker">Weekly Log</p>
-                        <h2 id="comparison-heading">Attendance, Participation and Notes</h2>
+                        <p class="student-kicker">Teacher Feedback</p>
+                        <h2 id="comparison-heading">Notes</h2>
                     </div>
-                    <p>Click Attendance or Participation to add that line to the graph above. Click Notes to read your notes.</p>
+                    <p>Open your dated teacher notes and weekly context.</p>
                 </div>
                 <div id="comparison-cards" class="comparison-cards"></div>
             </section>
@@ -168,9 +221,12 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
             : 'null'; ?>;
 
         const dashboardData = window.ASL_STUDENT_DASHBOARD || {};
-        const SCORE_COLORS = { 0: '#9aa2ad', 1: '#e05252', 2: '#e8b93e', 3: '#4caf6d', 4: '#4a90d9' };
+        const SCORE_COLORS = { 0: '#e05252', 1: '#e05252', 2: '#e8b93e', 3: '#4caf6d', 4: '#4a90d9' };
         const state = { bucketId: null, standardId: null, targetId: null, progressScope: 'overall' };
-        const overlayState = { attendance: false, participation: false };
+        const chartState = {
+            ranges: { progress: 'ytd', attendance: 'ytd', participation: 'ytd' },
+            participationView: 'raw',
+        };
 
         function openGoals() {
             window.open('../asl<?php echo $gamesLevel; ?>/goals/index.php', 'aslGoalsWindow', 'width=960,height=720,scrollbars=yes,resizable=yes');
@@ -471,118 +527,218 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
             fill.style.width = pct + '%';
         }
 
-        /* ============ Progress chart (SVG, old style + pace lines + overlays) ============ */
+        /* ============ Reporting-block charts ============ */
+
+        function reportingBlocks() {
+            const blocks = Array.isArray(dashboardData.reporting_blocks) ? dashboardData.reporting_blocks : [];
+            if (blocks.length) return blocks.map((block, index) => ({ ...block, sourceIndex: index }));
+            return (dashboardData.weeks || []).map((week, index) => ({
+                id: week, ordinal: index + 1, start_date: week, end_date: week,
+                month_label: new Date(week + 'T12:00:00').toLocaleDateString(undefined, { month: 'short' }),
+                status: week <= (dashboardData.today || '') ? 'complete' : 'future', sourceIndex: index,
+            }));
+        }
+
+        function blockDate(block) {
+            return block.end_date || block.start_date || block.date || block.id || '';
+        }
+
+        function blockHasStarted(block) {
+            if (block.is_current || block.is_complete || block.is_finalized) return true;
+            if (block.status === 'future' || block.status === 'upcoming') return false;
+            if (block.status === 'complete' || block.status === 'current' || block.status === 'closed') return true;
+            return (block.start_date || blockDate(block)) <= (dashboardData.today || '9999-12-31');
+        }
+
+        function visibleBlocks(kind) {
+            const blocks = reportingBlocks();
+            if (chartState.ranges[kind] === 'full') return blocks;
+            const visible = blocks.filter(blockHasStarted);
+            return visible.length ? visible : blocks.slice(0, 1);
+        }
+
+        function seriesValue(series, block) {
+            if (Array.isArray(series)) return series[block.sourceIndex] ?? null;
+            if (series && typeof series === 'object') return series[block.id] ?? series[block.start_date] ?? null;
+            return null;
+        }
+
+        function progressForBlocks(series, blocks) {
+            const weeks = dashboardData.weeks || [];
+            if (!Array.isArray(series) || !weeks.length || series.length === reportingBlocks().length) return series;
+            return blocks.map(block => {
+                const cutoff = block.end_date || block.start_date || '';
+                let match = -1;
+                weeks.forEach((week, index) => { if (week <= cutoff) match = index; });
+                return match >= 0 ? (series[match] ?? null) : null;
+            });
+        }
+
+        function seriesPoints(series, blocks, xAt, yAt, includeFuture = false) {
+            const segments = [];
+            let current = [];
+            blocks.forEach((block, index) => {
+                const value = seriesValue(series, block);
+                if (value === null || value === '' || value === undefined || (!includeFuture && !blockHasStarted(block))) {
+                    if (current.length) segments.push(current);
+                    current = [];
+                } else current.push([xAt(index), yAt(Number(value))]);
+            });
+            if (current.length) segments.push(current);
+            return segments;
+        }
+
+        function drawSeries(segments, className, color = '', dash = '', withDots = true) {
+            const stroke = color ? `stroke="${color}"` : '';
+            const dashed = dash ? `stroke-dasharray="${dash}"` : '';
+            const dotClass = className.split(/\s+/).pop() + '-dot';
+            return segments.map(segment => `<polyline points="${segment.map(p => p.join(',')).join(' ')}" class="${className}" ${stroke} ${dashed}></polyline>`).join('') +
+                (withDots ? segments.flat().map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="3.5" class="metric-dot ${dotClass}" ${color ? `style="stroke:${color}"` : ''}></circle>`).join('') : '');
+        }
+
+        function chartScaffold(svg, blocks, maxY, unit) {
+            const width = 920, height = 300;
+            const pad = { top: 24, right: 26, bottom: 58, left: 58 };
+            const chartWidth = width - pad.left - pad.right;
+            const chartHeight = height - pad.top - pad.bottom;
+            const xAt = index => pad.left + (index / Math.max(blocks.length - 1, 1)) * chartWidth;
+            const yAt = value => pad.top + chartHeight - (Math.max(0, Number(value)) / Math.max(maxY, 1)) * chartHeight;
+            const grids = blocks.map((block, index) => `<line x1="${xAt(index)}" y1="${pad.top}" x2="${xAt(index)}" y2="${pad.top + chartHeight}" class="chart-week-line ${block.month_label ? 'month' : ''}"></line>`).join('');
+            let lastMonth = '';
+            const labels = blocks.map((block, index) => {
+                let month = block.month_label || '';
+                if (!month && blockDate(block)) month = new Date(blockDate(block) + 'T12:00:00').toLocaleDateString(undefined, { month: 'short' });
+                if (!month || month === lastMonth) return '';
+                lastMonth = month;
+                return `<text x="${xAt(index)}" y="${height - 20}" text-anchor="middle" class="chart-label">${escapeHtml(month)}</text>`;
+            }).join('');
+            svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+            return { width, height, pad, chartWidth, chartHeight, xAt, yAt, grids, labels,
+                base: `<rect x="0" y="0" width="${width}" height="${height}" class="chart-bg"></rect>${grids}
+                    <line x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${pad.top + chartHeight}" class="chart-axis"></line>
+                    <line x1="${pad.left}" y1="${pad.top + chartHeight}" x2="${pad.left + chartWidth}" y2="${pad.top + chartHeight}" class="chart-axis"></line>
+                    <text x="${pad.left}" y="15" text-anchor="end" class="chart-axis-label">${escapeHtml(unit)}</text>
+                    <text x="${pad.left - 8}" y="${pad.top + 5}" text-anchor="end" class="chart-label">${formatNumber(maxY)}</text>
+                    <text x="${pad.left - 12}" y="${pad.top + chartHeight}" text-anchor="end" class="chart-label">0</text>` };
+        }
 
         function renderChart() {
             const svg = document.getElementById('progress-chart');
             const note = document.getElementById('chart-empty-note');
             const scopeLabel = document.getElementById('chart-scope');
-            const weeks = dashboardData.weeks || [];
-            const nWeeks = weeks.length;
+            const blocks = visibleBlocks('progress');
+            const allBlocks = reportingBlocks();
             const bucket = getBucket(state.bucketId);
-            const useBucket = state.progressScope !== 'overall' && bucket;
-            const progress = dashboardData.progress || { overall: [], byBucket: {} };
-            const values = useBucket ? (progress.byBucket[bucket.bucket_id] || new Array(nWeeks).fill(0)) : (progress.overall || []);
-            const scopeTargets = useBucket ? bucketTargets(bucket).length : (dashboardData.target_count || 0);
+            const standard = getStandard(state.standardId);
+            const progress = dashboardData.progress || { overall: [], byBucket: {}, byStandard: {} };
+            let values = progress.overall || [];
+            let scopeTargets = Number(dashboardData.target_count || 0);
+            if (state.progressScope === 'standard' && standard) {
+                values = (progress.byStandard && progress.byStandard[standard.standard_id]) ||
+                    (bucket && progress.byBucket && progress.byBucket[bucket.bucket_id]) || [];
+                scopeTargets = (standard.targets || []).length;
+                scopeLabel.textContent = 'Showing ' + standard.standard_id;
+            } else if (state.progressScope === 'bucket' && bucket) {
+                values = (progress.byBucket && progress.byBucket[bucket.bucket_id]) || [];
+                scopeTargets = bucketTargets(bucket).length;
+                scopeLabel.textContent = 'Showing ' + bucket.name;
+            } else scopeLabel.textContent = 'Showing all skill buckets';
+
+            values = progressForBlocks(values, allBlocks);
+
+            const visibleValues = blocks.map(block => seriesValue(values, block)).filter(v => v != null).map(Number);
+            note.style.display = visibleValues.some(v => v > 0) ? 'none' : 'block';
+            const lastSource = blocks.length ? blocks[blocks.length - 1].sourceIndex : 0;
+            const fullLast = Math.max(allBlocks.length - 1, 1);
+            const visibleFraction = Math.max(0, (lastSource - 1) / Math.max(fullLast - 1, 1));
+            const maxPace = scopeTargets * 4 * (chartState.ranges.progress === 'full' ? 1 : visibleFraction);
+            const maxY = Math.max(...visibleValues, maxPace, 1);
+            const frame = chartScaffold(svg, blocks, maxY, 'Pts');
             const settings = dashboardData.settings || {};
-
-            scopeLabel.textContent = useBucket ? 'Showing ' + bucket.name : 'Showing all skill buckets';
-            note.style.display = values.some(v => v > 0) ? 'none' : 'block';
-
-            const width = 920;
-            const height = 300;
-            const showY2 = overlayState.attendance || overlayState.participation;
-            const pad = { top: 22, right: showY2 ? 54 : 26, bottom: 58, left: 54 };
-            const chartWidth = width - pad.left - pad.right;
-            const chartHeight = height - pad.top - pad.bottom;
-            const maxY = Math.max(scopeTargets * 4, ...values, 1);
-            const xAt = i => pad.left + (i / Math.max(nWeeks - 1, 1)) * chartWidth;
-            const yAt = v => pad.top + chartHeight - (v / maxY) * chartHeight;
-
-            // student line only up to the current week
-            const today = dashboardData.today || '';
-            const studentPts = [];
-            values.forEach((v, i) => { if (weeks[i] <= today) studentPts.push([xAt(i), yAt(v)]); });
-            const studentLine = studentPts.map(p => p.join(',')).join(' ');
-
-            // pace lines: straight from week 2 (0 pts) to the last week (targets x goal)
-            const pace = (goal, cls, dash) => {
-                if (nWeeks < 3 || !scopeTargets) return '';
-                return `<line x1="${xAt(1)}" y1="${yAt(0)}" x2="${xAt(nWeeks - 1)}" y2="${yAt(scopeTargets * goal)}"
-                    stroke-width="2.5" fill="none" stroke="${cls}" ${dash ? `stroke-dasharray="${dash}"` : ''} />`;
+            const pace = (goal, color, dash) => {
+                if (allBlocks.length < 3 || !scopeTargets) return '';
+                const points = blocks.map((block, index) => {
+                    const fraction = Math.max(0, (block.sourceIndex - 1) / Math.max(allBlocks.length - 2, 1));
+                    return [frame.xAt(index), frame.yAt(scopeTargets * goal * fraction)];
+                });
+                return `<polyline points="${points.map(p => p.join(',')).join(' ')}" fill="none" stroke="${color}" stroke-width="2.5" ${dash ? `stroke-dasharray="${dash}"` : ''}></polyline>`;
             };
-
-            // month labels where the month changes
-            const monthLabels = [];
-            let lastMonth = '';
-            weeks.forEach((w, i) => {
-                const m = new Date(w + 'T12:00:00').toLocaleDateString(undefined, { month: 'short' });
-                if (m !== lastMonth) {
-                    monthLabels.push(`<text x="${xAt(i)}" y="${height - 20}" text-anchor="middle" class="chart-label">${escapeHtml(m)}</text>`);
-                    lastMonth = m;
-                }
-            });
-
-            const weekLines = [];
-            for (let i = 0; i < nWeeks; i++) {
-                weekLines.push(`<line x1="${xAt(i)}" y1="${pad.top}" x2="${xAt(i)}" y2="${pad.top + chartHeight}" class="chart-week-line ${i % 4 === 0 ? 'month' : ''}" />`);
-            }
-
-            // overlays on a second right-hand axis
-            let overlaySvg = '';
-            let y2AxisSvg = '';
-            if (showY2) {
-                const absS = overlayState.attendance ? (dashboardData.absences || []) : [];
-                const partS = overlayState.participation ? (dashboardData.participation || []) : [];
-                const overlayVals = absS.concat(partS).filter(v => v != null).map(Number);
-                const maxY2 = Math.max(...(overlayVals.length ? overlayVals : [1]), 1);
-                const y2At = v => pad.top + chartHeight - (v / maxY2) * chartHeight;
-                const drawSeries = (series, color) => {
-                    const segs = [];
-                    let cur = [];
-                    series.forEach((v, i) => {
-                        if (v == null) { if (cur.length) { segs.push(cur); cur = []; } }
-                        else cur.push([xAt(i), y2At(Number(v))]);
-                    });
-                    if (cur.length) segs.push(cur);
-                    return segs.map(seg =>
-                        `<polyline points="${seg.map(p => p.join(',')).join(' ')}" fill="none" stroke="${color}" stroke-width="2.5" />`).join('') +
-                        segs.flat().map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="3.5" fill="${color}"></circle>`).join('');
-                };
-                if (overlayState.attendance) overlaySvg += drawSeries(absS, '#f6993f');
-                if (overlayState.participation) overlaySvg += drawSeries(partS, '#9f7aea');
-                const rx = pad.left + chartWidth;
-                y2AxisSvg = `
-                    <line x1="${rx}" y1="${pad.top}" x2="${rx}" y2="${pad.top + chartHeight}" class="chart-axis"></line>
-                    <text x="${rx + 8}" y="${pad.top + 5}" text-anchor="start" class="chart-label">${formatNumber(maxY2)}</text>
-                    <text x="${rx + 8}" y="${pad.top + chartHeight}" text-anchor="start" class="chart-label">0</text>
-                    <text x="${rx + 8}" y="14" text-anchor="start" class="chart-axis-label">Wk</text>`;
-            }
-
-            svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-            svg.innerHTML = `
-                <rect x="0" y="0" width="${width}" height="${height}" class="chart-bg"></rect>
-                ${weekLines.join('')}
-                <line x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${pad.top + chartHeight}" class="chart-axis"></line>
-                <line x1="${pad.left}" y1="${pad.top + chartHeight}" x2="${pad.left + chartWidth}" y2="${pad.top + chartHeight}" class="chart-axis"></line>
-                <text x="${pad.left}" y="14" text-anchor="end" class="chart-axis-label">Pts</text>
-                <text x="${pad.left - 8}" y="${pad.top + 5}" text-anchor="end" class="chart-label">${maxY}</text>
-                <text x="${pad.left - 12}" y="${pad.top + chartHeight}" text-anchor="end" class="chart-label">0</text>
-                ${pace(Number(settings.pace_red_goal || 2), '#e05252', '3 5')}
-                ${pace(Number(settings.pace_blue_goal || 3.7), '#4a90d9', '7 5')}
-                ${pace(Number(settings.pace_green_goal || 3), '#4caf6d', '')}
-                <polyline points="${studentLine}" class="chart-line"></polyline>
-                ${studentPts.map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="3" class="chart-dot"></circle>`).join('')}
-                ${overlaySvg}
-                ${y2AxisSvg}
-                ${monthLabels.join('')}
-            `;
-
-            document.getElementById('legend-absences').style.display = overlayState.attendance ? '' : 'none';
-            document.getElementById('legend-participation').style.display = overlayState.participation ? '' : 'none';
+            const student = seriesPoints(values, blocks, frame.xAt, frame.yAt);
+            svg.innerHTML = frame.base +
+                pace(Number(settings.pace_red_goal || 2), '#e05252', '3 5') +
+                pace(Number(settings.pace_blue_goal || 3.7), '#4a90d9', '7 5') +
+                pace(Number(settings.pace_green_goal || 3), '#4caf6d', '') +
+                frame.labels +
+                drawSeries(student, 'chart-line', '', '', false) +
+                student.flat().map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="3.5" class="chart-dot"></circle>`).join('');
         }
 
-        /* ============ Weekly log cards ============ */
+        function renderAttendanceChart() {
+            const svg = document.getElementById('attendance-chart');
+            const blocks = visibleBlocks('attendance');
+            const attendance = dashboardData.attendance || {};
+            const student = attendance.ytd_percent || attendance.student_pct || attendance.student || dashboardData.attendance_pct || [];
+            const classAverage = attendance.class_ytd_average_percent || attendance.class_avg_pct || attendance.class_average_pct || dashboardData.class_attendance_pct || [];
+            const hasData = blocks.some(block => seriesValue(student, block) != null || seriesValue(classAverage, block) != null);
+            document.getElementById('attendance-empty-note').style.display = hasData ? 'none' : 'block';
+            const latestBlock = [...blocks].reverse().find(block => seriesValue(student, block) != null || seriesValue(classAverage, block) != null);
+            const latestStudent = latestBlock ? seriesValue(student, latestBlock) : null;
+            const latestClass = latestBlock ? seriesValue(classAverage, latestBlock) : null;
+            document.getElementById('attendance-summary').innerHTML = `
+                <span><small>Your attendance</small><strong>${latestStudent == null ? '&mdash;' : formatNumber(latestStudent) + '%'}</strong></span>
+                <span><small>Class average</small><strong>${latestClass == null ? '&mdash;' : formatNumber(latestClass) + '%'}</strong></span>`;
+            const frame = chartScaffold(svg, blocks, 100, '%');
+            svg.innerHTML = frame.base + frame.labels +
+                drawSeries(seriesPoints(classAverage, blocks, frame.xAt, frame.yAt), 'metric-line metric-line-class') +
+                drawSeries(seriesPoints(student, blocks, frame.xAt, frame.yAt), 'metric-line metric-line-student');
+        }
+
+        function rollingFour(series) {
+            return series.map((value, index) => {
+                if (index < 3) return null;
+                const windowValues = series.slice(index - 3, index + 1);
+                return windowValues.every(v => v != null && v !== '')
+                    ? windowValues.reduce((sum, v) => sum + Number(v), 0) / 4 : null;
+            });
+        }
+
+        function renderParticipationChart() {
+            const svg = document.getElementById('participation-chart');
+            const blocks = visibleBlocks('participation');
+            const participation = dashboardData.participation_metrics || (Array.isArray(dashboardData.participation)
+                ? { score: dashboardData.participation }
+                : (dashboardData.participation || {}));
+            const scores = participation.points || participation.score || participation.scores || [];
+            const maxima = participation.max_points || participation.max || participation.maximum || dashboardData.participation_max || [];
+            const pct = participation.percent || participation.pct || reportingBlocks().map(block => {
+                const score = seriesValue(scores, block), max = seriesValue(maxima, block);
+                return score == null || !Number(max) ? null : (Number(score) / Number(max)) * 100;
+            });
+            const trend = participation.rolling_4_block_percent || participation.rolling_4_pct || participation.trend_4_pct || rollingFour(pct);
+            const isTrend = chartState.participationView === 'trend';
+            const primary = isTrend ? trend : scores;
+            const rawValues = blocks.flatMap(block => [seriesValue(scores, block), seriesValue(maxima, block)]).filter(v => v != null).map(Number);
+            const maxY = isTrend ? 100 : Math.max(...rawValues, 1);
+            const hasData = blocks.some(block => seriesValue(primary, block) != null);
+            document.getElementById('participation-empty-note').style.display = hasData ? 'none' : 'block';
+            const latestBlock = [...blocks].reverse().find(block => seriesValue(primary, block) != null);
+            const latestScore = latestBlock ? seriesValue(scores, latestBlock) : null;
+            const latestMax = latestBlock ? seriesValue(maxima, latestBlock) : null;
+            const latestTrend = latestBlock ? seriesValue(trend, latestBlock) : null;
+            document.getElementById('participation-summary').innerHTML = isTrend
+                ? `<span><small>Latest 4-block trend</small><strong>${latestTrend == null ? '&mdash;' : formatNumber(latestTrend) + '%'}</strong></span>`
+                : `<span><small>Latest score</small><strong>${latestScore == null ? '&mdash;' : formatNumber(latestScore)}${latestMax == null ? '' : ' / ' + formatNumber(latestMax)}</strong></span>`;
+            const frame = chartScaffold(svg, blocks, maxY, isTrend ? '%' : 'Pts');
+            svg.innerHTML = frame.base + frame.labels + (isTrend
+                ? drawSeries(seriesPoints(trend, blocks, frame.xAt, frame.yAt), 'metric-line participation-trend')
+                : drawSeries(seriesPoints(maxima, blocks, frame.xAt, frame.yAt), 'metric-line participation-max') +
+                  drawSeries(seriesPoints(scores, blocks, frame.xAt, frame.yAt), 'metric-line participation-score'));
+            document.getElementById('participation-legend').innerHTML = isTrend
+                ? '<span><span class="legend-swatch participation-trend-swatch"></span>Your rolling average across the latest 4 completed blocks</span>'
+                : '<span><span class="legend-swatch participation-score-swatch"></span>Your score</span><span><span class="legend-swatch participation-max-swatch"></span>Maximum</span>';
+        }
+
+        /* ============ Teacher notes ============ */
 
         function formatMeetingDate(iso) {
             if (!iso) return '';
@@ -595,21 +751,9 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
         function renderComparisons() {
             const cards = document.getElementById('comparison-cards');
             const meetings = dashboardData.meetings || [];
-            const totalAbs = meetings.reduce((a, m) => a + (Number(m.absences) || 0), 0);
-            const latestPart = meetings.find(m => m.participation_points !== null && m.participation_points !== undefined);
             const withNotes = meetings.filter(m => m.notes && String(m.notes).trim());
 
             cards.innerHTML = `
-                <button type="button" class="comparison-summary-card ${overlayState.attendance ? 'active' : ''}" data-metric="attendance">
-                    <span class="comparison-card-label">Attendance</span>
-                    <strong class="comparison-card-value">${totalAbs}<small> absence${totalAbs === 1 ? '' : 's'}</small></strong>
-                    <span class="comparison-card-meta">${overlayState.attendance ? 'Shown on graph — click to hide' : 'Click to show on the graph'}</span>
-                </button>
-                <button type="button" class="comparison-summary-card ${overlayState.participation ? 'active' : ''}" data-metric="participation">
-                    <span class="comparison-card-label">Participation</span>
-                    <strong class="comparison-card-value">${latestPart ? escapeHtml(latestPart.participation_points) : '&mdash;'}<small> pts this week</small></strong>
-                    <span class="comparison-card-meta">${overlayState.participation ? 'Shown on graph — click to hide' : 'Click to show on the graph'}</span>
-                </button>
                 <button type="button" class="comparison-summary-card" data-metric="notes">
                     <span class="comparison-card-label">Notes</span>
                     <strong class="comparison-card-value">${withNotes.length}<small> note${withNotes.length === 1 ? '' : 's'}</small></strong>
@@ -619,11 +763,7 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
 
             cards.querySelectorAll('[data-metric]').forEach(btn => {
                 btn.addEventListener('click', () => {
-                    const metric = btn.dataset.metric;
-                    if (metric === 'notes') { openNotes(); return; }
-                    overlayState[metric] = !overlayState[metric];
-                    renderChart();
-                    renderComparisons();
+                    if (btn.dataset.metric === 'notes') openNotes();
                 });
             });
         }
@@ -689,10 +829,50 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
             applyCurriculumLayout();
             renderProgressSummary();
             renderChart();
+            renderAttendanceChart();
+            renderParticipationChart();
             renderComparisons();
         }
 
         document.getElementById('back-to-buckets').addEventListener('click', backToBuckets);
+        document.querySelectorAll('[data-range-toggle] button').forEach(button => {
+            button.addEventListener('click', () => {
+                const group = button.closest('[data-range-toggle]');
+                const kind = group.dataset.rangeToggle;
+                chartState.ranges[kind] = button.dataset.range;
+                group.querySelectorAll('button').forEach(candidate => candidate.classList.toggle('active', candidate === button));
+                if (kind === 'progress') renderChart();
+                if (kind === 'attendance') renderAttendanceChart();
+                if (kind === 'participation') renderParticipationChart();
+            });
+        });
+        document.querySelectorAll('[data-participation-view] button').forEach(button => {
+            button.addEventListener('click', () => {
+                chartState.participationView = button.dataset.view;
+                button.parentElement.querySelectorAll('button').forEach(candidate => candidate.classList.toggle('active', candidate === button));
+                renderParticipationChart();
+            });
+        });
+
+        function resetCurriculumSelection() {
+            if (!state.bucketId && !state.standardId && !state.targetId && state.progressScope === 'overall') return;
+            state.bucketId = null;
+            state.standardId = null;
+            state.targetId = null;
+            state.progressScope = 'overall';
+            renderDashboard();
+        }
+
+        document.addEventListener('click', event => {
+            if (event.target.closest('button, a, input, select, textarea, label, [role="button"], .modal-content')) return;
+            if (event.target.closest('#notesModal')) return;
+            resetCurriculumSelection();
+        });
+        document.addEventListener('keydown', event => {
+            if (event.key !== 'Escape') return;
+            if (document.getElementById('notesModal').classList.contains('show')) closeNotes();
+            resetCurriculumSelection();
+        });
         renderDashboard();
     </script>
 </body>

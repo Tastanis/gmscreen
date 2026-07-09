@@ -163,6 +163,9 @@ function aslhub_year_settings(PDO $pdo): array {
         'pace_green_goal' => (float)aslhub_setting($pdo, 'pace_green_goal', '3.0'),
         'pace_blue_goal' => (float)aslhub_setting($pdo, 'pace_blue_goal', '3.7'),
         'pace_red_goal' => (float)aslhub_setting($pdo, 'pace_red_goal', '2.0'),
+        'participation_max' => max(1, (int)aslhub_setting($pdo, 'participation_max', '10')),
+        'school_timezone' => aslhub_setting($pdo, 'school_timezone', 'America/Los_Angeles'),
+        'calendar_revision' => (int)aslhub_setting($pdo, 'calendar_revision', '0'),
         'signup_code' => aslhub_setting($pdo, 'signup_code', 'MGHS'),
     ];
 }
@@ -190,7 +193,7 @@ function aslhub_valid_teachers(): array {
 }
 
 function aslhub_score_colors(): array {
-    return [0 => '#9aa2ad', 1 => '#e05252', 2 => '#e8b93e', 3 => '#4caf6d', 4 => '#4a90d9'];
+    return [0 => '#e05252', 1 => '#e05252', 2 => '#e8b93e', 3 => '#4caf6d', 4 => '#4a90d9'];
 }
 
 function aslhub_h(?string $s): string {

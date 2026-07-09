@@ -42,3 +42,16 @@ require_once __DIR__ . '/lib/schema.php';
 
 // Additive-only schema check (cheap; guarded by a settings flag once complete)
 aslhub_ensure_schema($pdo);
+
+// Keep PHP calendar math and MySQL NOW()/CURDATE() on the same school clock.
+// MySQL installations do not always include named-zone tables, so use the
+// current numeric offset while PHP retains the full IANA timezone for DST.
+$schoolTimezone = aslhub_setting($pdo, 'school_timezone', 'America/Los_Angeles');
+if (!in_array($schoolTimezone, timezone_identifiers_list(), true)) $schoolTimezone = 'America/Los_Angeles';
+date_default_timezone_set($schoolTimezone);
+try {
+    $offset = (new DateTimeImmutable('now', new DateTimeZone($schoolTimezone)))->format('P');
+    $pdo->prepare('SET time_zone = ?')->execute([$offset]);
+} catch (Throwable $e) {
+    error_log('ASL Hub timezone alignment failed: ' . $e->getMessage());
+}
