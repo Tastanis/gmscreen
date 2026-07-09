@@ -7,13 +7,12 @@ $me = aslhub_require_teacher($pdo);
 $isAdmin = aslhub_is_admin($me);
 $csrf = aslhub_csrf_token();
 $base = aslhub_base_url();
-$settings = aslhub_year_settings($pdo);
+$settings = aslhub_dashboard_settings($pdo);
 $mustChange = !empty($me['must_change_password']) || isset($_GET['change_pw']);
 
 $counts = [];
 for ($i = 1; $i <= 3; $i++) $counts[$i] = aslhub_target_count($pdo, $i);
 $reportingBlocks = aslhub_reporting_blocks($pdo);
-$pacePeriods = count($reportingBlocks) ?: count(aslhub_year_weeks($settings));
 $calendarCounts = $pdo->query("SELECT COUNT(*) AS days, COALESCE(SUM(is_instructional),0) AS instructional FROM asl_calendar_days")->fetch();
 
 aslhub_teacher_header($me, 'Settings', 'settings');
@@ -40,30 +39,16 @@ aslhub_teacher_header($me, 'Settings', 'settings');
             </div>
 
             <?php if ($isAdmin): ?>
-            <!-- Year & pace -->
+            <!-- Calendar, participation, and fixed pace outcomes -->
             <div class="rubric-panel" style="margin-bottom:18px;">
-                <h3 style="color:#2d3748;">School Calendar, Participation &amp; Pace</h3>
+                <h3 style="color:#2d3748;">School Calendar &amp; Participation</h3>
                 <p class="muted" style="font-size:.85rem;margin:6px 0 12px;">
-                    Pace lines start at reporting block 2 and reach <em>(number of skills &times; goal)</em> points by the final block.
-                    Skills per level right now: ASL 1 = <?php echo $counts[1]; ?>, ASL 2 = <?php echo $counts[2]; ?>, ASL 3 = <?php echo $counts[3]; ?>.
-                    With the current schedule (<?php echo $pacePeriods; ?> reporting blocks), the green line for ASL 1 works out to
-                    <strong><?php echo $pacePeriods > 2 ? round($counts[1] * $settings['pace_green_goal'] / ($pacePeriods - 2), 1) : '—'; ?> points/block</strong>.
+                    Pace lines are fixed and spread evenly across the instructional days in the uploaded calendar.
+                    Green finishes at all 3s (average 3.0); red finishes at 25% 2s and 75% 3s (average 2.75);
+                    blue finishes at 25% 4s and 75% 3s (average 3.25).
+                    Current skill counts: ASL 1 = <?php echo $counts[1]; ?>, ASL 2 = <?php echo $counts[2]; ?>, ASL 3 = <?php echo $counts[3]; ?>.
                 </p>
-                <form id="year-form">
-                    <div class="form-row-2">
-                        <div class="form-group"><label>Fallback first day (calendar upload replaces this)</label>
-                            <input class="form-input" type="date" name="year_start" value="<?php echo aslhub_h($settings['year_start']); ?>" required></div>
-                        <div class="form-group"><label>Fallback last day (calendar upload replaces this)</label>
-                            <input class="form-input" type="date" name="year_end" value="<?php echo aslhub_h($settings['year_end']); ?>" required></div>
-                    </div>
-                    <div class="form-row-3">
-                        <div class="form-group"><label>Green line goal (avg score)</label>
-                            <input class="form-input" type="number" step="0.1" min="0.5" max="4" name="pace_green_goal" value="<?php echo $settings['pace_green_goal']; ?>"></div>
-                        <div class="form-group"><label>Blue line goal</label>
-                            <input class="form-input" type="number" step="0.1" min="0.5" max="4" name="pace_blue_goal" value="<?php echo $settings['pace_blue_goal']; ?>"></div>
-                        <div class="form-group"><label>Red line goal</label>
-                            <input class="form-input" type="number" step="0.1" min="0.5" max="4" name="pace_red_goal" value="<?php echo $settings['pace_red_goal']; ?>"></div>
-                    </div>
+                <form id="course-settings-form">
                     <div class="form-group"><label>Participation maximum per 10-day block</label>
                         <input class="form-input" type="number" min="1" max="1000" name="participation_max"
                             value="<?php echo (int)$settings['participation_max']; ?>">
@@ -71,8 +56,8 @@ aslhub_teacher_header($me, 'Settings', 'settings');
                     </div>
                     <div class="form-group"><label>Student signup code</label>
                         <input class="form-input" type="text" name="signup_code" value="<?php echo aslhub_h($settings['signup_code']); ?>"></div>
-                    <button type="submit" class="form-button">Save Pace &amp; Participation Settings</button>
-                    <div id="year-msg" style="margin-top:8px;font-size:.85rem;"></div>
+                    <button type="submit" class="form-button">Save Participation &amp; Signup Settings</button>
+                    <div id="course-settings-msg" style="margin-top:8px;font-size:.85rem;"></div>
                 </form>
                 <hr style="border:0;border-top:1px solid #e2e8f0;margin:18px 0;">
                 <h4 style="color:#2d3748;">Upload the shared school calendar</h4>
@@ -216,10 +201,10 @@ document.getElementById('pw-form').addEventListener('submit', async e => {
     if (out.success) e.target.reset();
 });
 <?php if ($isAdmin): ?>
-document.getElementById('year-form').addEventListener('submit', async e => {
+document.getElementById('course-settings-form').addEventListener('submit', async e => {
     e.preventDefault();
-    const out = await post(API, { action: 'save_year', ...Object.fromEntries(new FormData(e.target)) });
-    show('year-msg', out, 'Saved — pace lines update immediately');
+    const out = await post(API, { action: 'save_course_settings', ...Object.fromEntries(new FormData(e.target)) });
+    show('course-settings-msg', out, 'Saved');
 });
 let calendarToken = null;
 document.getElementById('calendar-form').addEventListener('submit', async e => {

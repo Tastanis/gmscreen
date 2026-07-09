@@ -10,7 +10,7 @@
  *    on normal page loads once the stored version matches.
  */
 
-const ASLHUB_SCHEMA_VERSION = 6;
+const ASLHUB_SCHEMA_VERSION = 7;
 
 function aslhub_ensure_schema(PDO $pdo, bool $force = false): void {
     static $done = false;
@@ -261,6 +261,11 @@ function aslhub_ensure_schema(PDO $pdo, bool $force = false): void {
             PRIMARY KEY (wordlist_id, asl_level),
             INDEX idx_scroller_level (asl_level)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        // Calendar dates and pace outcomes now come exclusively from the
+        // uploaded school calendar and fixed grading distributions.
+        $pdo->exec("DELETE FROM asl_settings WHERE setting_key IN
+            ('year_start','year_end','pace_green_goal','pace_blue_goal','pace_red_goal')");
 
         aslhub_set_setting($pdo, 'schema_version', (string)ASLHUB_SCHEMA_VERSION);
     } catch (PDOException $e) {

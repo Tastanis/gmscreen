@@ -154,15 +154,18 @@ function aslhub_set_setting(PDO $pdo, string $key, string $value): void {
     $stmt->execute([$key, $value]);
 }
 
-/** Year/pace settings with sane defaults. */
-function aslhub_year_settings(PDO $pdo): array {
+/** Fixed proficiency outcomes for the three calendar-driven pace lines. */
+function aslhub_pace_goals(): array {
     return [
-        'year_start' => aslhub_setting($pdo, 'year_start', '2026-08-24'),
-        'year_end' => aslhub_setting($pdo, 'year_end', '2027-06-04'),
-        // Average end-of-year score each pace line aims for (per gradable skill)
-        'pace_green_goal' => (float)aslhub_setting($pdo, 'pace_green_goal', '3.0'),
-        'pace_blue_goal' => (float)aslhub_setting($pdo, 'pace_blue_goal', '3.7'),
-        'pace_red_goal' => (float)aslhub_setting($pdo, 'pace_red_goal', '2.0'),
+        'pace_green_goal' => 3.0,  // all 3s
+        'pace_red_goal' => 2.75,   // 25% 2s + 75% 3s
+        'pace_blue_goal' => 3.25,  // 25% 4s + 75% 3s
+    ];
+}
+
+/** Dashboard/settings values. Calendar dates come only from the uploaded calendar. */
+function aslhub_dashboard_settings(PDO $pdo): array {
+    return aslhub_pace_goals() + [
         'participation_max' => max(1, (int)aslhub_setting($pdo, 'participation_max', '10')),
         'school_timezone' => aslhub_setting($pdo, 'school_timezone', 'America/Los_Angeles'),
         'calendar_revision' => (int)aslhub_setting($pdo, 'calendar_revision', '0'),

@@ -2610,6 +2610,67 @@ body.student-dashboard-page {
     color: #1d1d1f;
 }
 
+.chart-stage {
+    overflow: hidden;
+}
+
+.dashboard-chart-view {
+    min-height: 390px;
+}
+
+.dashboard-chart-view[hidden] {
+    display: none;
+}
+
+.chart-view-selector {
+    border-top: 1px solid #e5e5ea;
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-top: 14px;
+    padding-top: 14px;
+}
+
+.chart-view-selector button {
+    background: #f5f5f7;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    color: #6e6e73;
+    cursor: pointer;
+    display: grid;
+    font: inherit;
+    gap: 2px;
+    padding: 11px 12px;
+    text-align: left;
+    transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.chart-view-selector button:hover {
+    background: #ebebf0;
+}
+
+.chart-view-selector button.active {
+    background: #fff;
+    border-color: #0071e3;
+    box-shadow: 0 3px 12px rgba(0, 113, 227, 0.14);
+    color: #1d1d1f;
+}
+
+.chart-view-selector button:focus-visible {
+    outline: 3px solid rgba(0, 113, 227, 0.28);
+    outline-offset: 2px;
+}
+
+.chart-view-selector span {
+    font-size: 0.9rem;
+    font-weight: 800;
+}
+
+.chart-view-selector small {
+    color: inherit;
+    font-size: 0.72rem;
+}
+
 .metric-summary {
     display: flex;
     flex-wrap: wrap;
@@ -2642,12 +2703,12 @@ body.student-dashboard-page {
     fill: #fbfbfd;
 }
 
-.chart-week-line {
+.chart-block-line {
     stroke: #ececf0;
     stroke-width: 1;
 }
 
-.chart-week-line.month {
+.chart-block-line.month {
     stroke: #d2d2d7;
 }
 

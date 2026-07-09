@@ -19,10 +19,11 @@ if (!empty($me['is_teacher'])) {
 
 $payload = aslhub_dashboard_payload($pdo, $subject);
 $level = (int)$payload['student']['level'];
-$gamesLevel = min($level, 2); // goals/bingo still live in asl1/asl2
+$gamesLevel = min($level, 2); // goals still live in asl1/asl2
 $initials = mb_substr($subject['first_name'] ?? 'A', 0, 1) . mb_substr($subject['last_name'] ?? 'S', 0, 1);
 $cssV = @filemtime(__DIR__ . '/css/asl-style.css') ?: 1;
 $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
+$chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -32,6 +33,7 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
     <title>ASL Hub - Student Dashboard</title>
     <link rel="stylesheet" href="css/asl-style.css?v=<?php echo $cssV; ?>">
     <link rel="stylesheet" href="css/hub.css?v=<?php echo $hubV; ?>">
+    <script src="js/dashboard-chart-math.js?v=<?php echo $chartMathV; ?>"></script>
 </head>
 <body class="student-dashboard-page">
     <div class="student-shell">
@@ -57,7 +59,6 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
             <nav class="student-actions" aria-label="Student tools">
                 <button type="button" onclick="window.open('scroller/index.php', '_blank')">Scroller Game</button>
                 <button type="button" onclick="openGoals()">Goals</button>
-                <a href="../asl<?php echo $gamesLevel; ?>/bingo.php">Bingo</a>
                 <?php if (!$viewingAsTeacher): ?><a class="logout-link" href="logout.php">Logout</a><?php endif; ?>
             </nav>
         </header>
@@ -112,77 +113,91 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
                 </div>
             </section>
 
-            <section class="student-section analytics-section" aria-labelledby="chart-heading">
-                <div class="student-section-header">
-                    <div>
-                        <p class="student-kicker">Course Progression</p>
-                        <h2 id="chart-heading">Progress Over Time</h2>
+            <section class="student-section analytics-section chart-stage" aria-label="Student progress charts">
+                <div class="dashboard-chart-view active" data-chart-view="progress">
+                    <div class="student-section-header">
+                        <div>
+                            <p class="student-kicker">Course Progression</p>
+                            <h2>Progress Over Time</h2>
+                        </div>
+                        <div class="chart-header-tools">
+                            <p id="chart-scope">Showing all skill buckets</p>
+                            <div class="chart-toggle" data-range-toggle="progress" aria-label="Progress chart date range">
+                                <button type="button" data-range="ytd" class="active">Year to Date</button>
+                                <button type="button" data-range="full">Full Year</button>
+                            </div>
+                        </div>
                     </div>
-                    <div class="chart-header-tools">
-                        <p id="chart-scope">Showing all skill buckets</p>
-                        <div class="chart-toggle" data-range-toggle="progress" aria-label="Progress chart date range">
+                    <div class="chart-wrap">
+                        <svg id="progress-chart" role="img" aria-label="Skill points earned over time"></svg>
+                        <p id="chart-empty-note" class="chart-empty-note">The graph will fill in as your skills are rated 1-4. Stay at or above the green line to be on track for proficient (3s) by the end of the school year.</p>
+                    </div>
+                    <div class="comparison-legend" style="margin-top:8px;">
+                        <span><span class="legend-swatch legend-student"></span>You</span>
+                        <span><span class="legend-swatch" style="background:#4caf6d;"></span>All 3s by year end</span>
+                        <span><span class="legend-swatch" style="background:#4a90d9;"></span>25% 4s, rest 3s</span>
+                        <span><span class="legend-swatch" style="background:#e05252;"></span>25% 2s, rest 3s</span>
+                    </div>
+                </div>
+
+                <div class="dashboard-chart-view" data-chart-view="attendance" hidden>
+                    <div class="student-section-header">
+                        <div>
+                            <p class="student-kicker">School Days Attended</p>
+                            <h2>Attendance</h2>
+                        </div>
+                        <div class="chart-toggle" data-range-toggle="attendance" aria-label="Attendance chart date range">
                             <button type="button" data-range="ytd" class="active">Year to Date</button>
                             <button type="button" data-range="full">Full Year</button>
                         </div>
                     </div>
+                    <div id="attendance-summary" class="metric-summary" aria-live="polite"></div>
+                    <div class="chart-wrap metric-chart-wrap">
+                        <svg id="attendance-chart" role="img" aria-label="Attendance percentage over time"></svg>
+                        <p id="attendance-empty-note" class="chart-empty-note">Attendance will appear after school-day and absence data are entered.</p>
+                    </div>
+                    <div class="comparison-legend">
+                        <span><span class="legend-swatch metric-student-swatch"></span>You</span>
+                        <span><span class="legend-swatch legend-class"></span>Class average</span>
+                    </div>
                 </div>
-                <div class="chart-wrap">
-                    <svg id="progress-chart" role="img" aria-label="Skill points earned over time"></svg>
-                    <p id="chart-empty-note" class="chart-empty-note">The graph will fill in as your skills are rated 1-4. Stay at or above the green line to be on track for proficient (3s) by June.</p>
-                </div>
-                <div class="comparison-legend" style="margin-top:8px;">
-                    <span class="legend-swatch legend-student"></span> You
-                    <span class="legend-swatch" style="background:#4caf6d;"></span> On-track pace (3s)
-                    <span class="legend-swatch" style="background:#4a90d9;"></span> Reaching-for-4s pace
-                    <span class="legend-swatch" style="background:#e05252;"></span> Failing pace (2s)
-                </div>
-            </section>
 
-            <section class="student-section analytics-section" aria-labelledby="attendance-heading">
-                <div class="student-section-header">
-                    <div>
-                        <p class="student-kicker">School Days Attended</p>
-                        <h2 id="attendance-heading">Attendance</h2>
-                    </div>
-                    <div class="chart-toggle" data-range-toggle="attendance" aria-label="Attendance chart date range">
-                        <button type="button" data-range="ytd" class="active">Year to Date</button>
-                        <button type="button" data-range="full">Full Year</button>
-                    </div>
-                </div>
-                <div id="attendance-summary" class="metric-summary" aria-live="polite"></div>
-                <div class="chart-wrap metric-chart-wrap">
-                    <svg id="attendance-chart" role="img" aria-label="Attendance percentage over time"></svg>
-                    <p id="attendance-empty-note" class="chart-empty-note">Attendance will appear after school-day and absence data are entered.</p>
-                </div>
-                <div class="comparison-legend">
-                    <span><span class="legend-swatch metric-student-swatch"></span>You</span>
-                    <span><span class="legend-swatch legend-class"></span>Class average</span>
-                </div>
-            </section>
-
-            <section class="student-section analytics-section" aria-labelledby="participation-heading">
-                <div class="student-section-header">
-                    <div>
-                        <p class="student-kicker">Ten-School-Day Blocks</p>
-                        <h2 id="participation-heading">Participation</h2>
-                    </div>
-                    <div class="chart-header-tools">
-                        <div class="chart-toggle" data-participation-view aria-label="Participation chart view">
-                            <button type="button" data-view="raw" class="active">Score / Max</button>
-                            <button type="button" data-view="trend">4-Block Trend</button>
+                <div class="dashboard-chart-view" data-chart-view="participation" hidden>
+                    <div class="student-section-header">
+                        <div>
+                            <p class="student-kicker">Ten-School-Day Blocks</p>
+                            <h2>Participation</h2>
                         </div>
-                        <div class="chart-toggle" data-range-toggle="participation" aria-label="Participation chart date range">
-                            <button type="button" data-range="ytd" class="active">Year to Date</button>
-                            <button type="button" data-range="full">Full Year</button>
+                        <div class="chart-header-tools">
+                            <div class="chart-toggle" data-participation-view aria-label="Participation chart view">
+                                <button type="button" data-view="raw" class="active">Score / Max</button>
+                                <button type="button" data-view="trend">4-Block Trend</button>
+                            </div>
+                            <div class="chart-toggle" data-range-toggle="participation" aria-label="Participation chart date range">
+                                <button type="button" data-range="ytd" class="active">Year to Date</button>
+                                <button type="button" data-range="full">Full Year</button>
+                            </div>
                         </div>
                     </div>
+                    <div id="participation-summary" class="metric-summary" aria-live="polite"></div>
+                    <div class="chart-wrap metric-chart-wrap">
+                        <svg id="participation-chart" role="img" aria-label="Participation results over time"></svg>
+                        <p id="participation-empty-note" class="chart-empty-note">Participation will appear after the first reporting block is scored.</p>
+                    </div>
+                    <div id="participation-legend" class="comparison-legend"></div>
                 </div>
-                <div id="participation-summary" class="metric-summary" aria-live="polite"></div>
-                <div class="chart-wrap metric-chart-wrap">
-                    <svg id="participation-chart" role="img" aria-label="Participation results over time"></svg>
-                    <p id="participation-empty-note" class="chart-empty-note">Participation will appear after the first reporting block is scored.</p>
+
+                <div class="chart-view-selector" role="tablist" aria-label="Choose a chart">
+                    <button type="button" class="active" role="tab" aria-selected="true" data-chart-select="progress">
+                        <span>Proficiency</span><small>Standards progress</small>
+                    </button>
+                    <button type="button" role="tab" aria-selected="false" data-chart-select="attendance">
+                        <span>Attendance</span><small>Student and class</small>
+                    </button>
+                    <button type="button" role="tab" aria-selected="false" data-chart-select="participation">
+                        <span>Participation</span><small>Scores and trend</small>
+                    </button>
                 </div>
-                <div id="participation-legend" class="comparison-legend"></div>
             </section>
 
             <section class="student-section comparisons-section" aria-labelledby="comparison-heading">
@@ -226,6 +241,7 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
         const chartState = {
             ranges: { progress: 'ytd', attendance: 'ytd', participation: 'ytd' },
             participationView: 'raw',
+            activeView: 'progress',
         };
 
         function openGoals() {
@@ -531,12 +547,7 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
 
         function reportingBlocks() {
             const blocks = Array.isArray(dashboardData.reporting_blocks) ? dashboardData.reporting_blocks : [];
-            if (blocks.length) return blocks.map((block, index) => ({ ...block, sourceIndex: index }));
-            return (dashboardData.weeks || []).map((week, index) => ({
-                id: week, ordinal: index + 1, start_date: week, end_date: week,
-                month_label: new Date(week + 'T12:00:00').toLocaleDateString(undefined, { month: 'short' }),
-                status: week <= (dashboardData.today || '') ? 'complete' : 'future', sourceIndex: index,
-            }));
+            return blocks.map((block, index) => ({ ...block, sourceIndex: index }));
         }
 
         function blockDate(block) {
@@ -553,25 +564,13 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
         function visibleBlocks(kind) {
             const blocks = reportingBlocks();
             if (chartState.ranges[kind] === 'full') return blocks;
-            const visible = blocks.filter(blockHasStarted);
-            return visible.length ? visible : blocks.slice(0, 1);
+            return blocks.filter(blockHasStarted);
         }
 
         function seriesValue(series, block) {
             if (Array.isArray(series)) return series[block.sourceIndex] ?? null;
             if (series && typeof series === 'object') return series[block.id] ?? series[block.start_date] ?? null;
             return null;
-        }
-
-        function progressForBlocks(series, blocks) {
-            const weeks = dashboardData.weeks || [];
-            if (!Array.isArray(series) || !weeks.length || series.length === reportingBlocks().length) return series;
-            return blocks.map(block => {
-                const cutoff = block.end_date || block.start_date || '';
-                let match = -1;
-                weeks.forEach((week, index) => { if (week <= cutoff) match = index; });
-                return match >= 0 ? (series[match] ?? null) : null;
-            });
         }
 
         function seriesPoints(series, blocks, xAt, yAt, includeFuture = false) {
@@ -603,7 +602,7 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
             const chartHeight = height - pad.top - pad.bottom;
             const xAt = index => pad.left + (index / Math.max(blocks.length - 1, 1)) * chartWidth;
             const yAt = value => pad.top + chartHeight - (Math.max(0, Number(value)) / Math.max(maxY, 1)) * chartHeight;
-            const grids = blocks.map((block, index) => `<line x1="${xAt(index)}" y1="${pad.top}" x2="${xAt(index)}" y2="${pad.top + chartHeight}" class="chart-week-line ${block.month_label ? 'month' : ''}"></line>`).join('');
+            const grids = blocks.map((block, index) => `<line x1="${xAt(index)}" y1="${pad.top}" x2="${xAt(index)}" y2="${pad.top + chartHeight}" class="chart-block-line ${block.month_label ? 'month' : ''}"></line>`).join('');
             let lastMonth = '';
             const labels = blocks.map((block, index) => {
                 let month = block.month_label || '';
@@ -644,29 +643,26 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
                 scopeLabel.textContent = 'Showing ' + bucket.name;
             } else scopeLabel.textContent = 'Showing all skill buckets';
 
-            values = progressForBlocks(values, allBlocks);
-
             const visibleValues = blocks.map(block => seriesValue(values, block)).filter(v => v != null).map(Number);
             note.style.display = visibleValues.some(v => v > 0) ? 'none' : 'block';
-            const lastSource = blocks.length ? blocks[blocks.length - 1].sourceIndex : 0;
-            const fullLast = Math.max(allBlocks.length - 1, 1);
-            const visibleFraction = Math.max(0, (lastSource - 1) / Math.max(fullLast - 1, 1));
+            const totalInstructionalDays = ASLChartMath.totalInstructionalDays(allBlocks);
+            const paceDayFraction = block => ASLChartMath.paceDayFraction(allBlocks, block, chartState.ranges.progress);
+            const visibleFraction = blocks.length ? paceDayFraction(blocks[blocks.length - 1]) : 0;
             const maxPace = scopeTargets * 4 * (chartState.ranges.progress === 'full' ? 1 : visibleFraction);
             const maxY = Math.max(...visibleValues, maxPace, 1);
             const frame = chartScaffold(svg, blocks, maxY, 'Pts');
             const settings = dashboardData.settings || {};
             const pace = (goal, color, dash) => {
-                if (allBlocks.length < 3 || !scopeTargets) return '';
+                if (!allBlocks.length || !scopeTargets || !totalInstructionalDays) return '';
                 const points = blocks.map((block, index) => {
-                    const fraction = Math.max(0, (block.sourceIndex - 1) / Math.max(allBlocks.length - 2, 1));
-                    return [frame.xAt(index), frame.yAt(scopeTargets * goal * fraction)];
+                    return [frame.xAt(index), frame.yAt(ASLChartMath.paceEndpoint(scopeTargets, goal) * paceDayFraction(block))];
                 });
                 return `<polyline points="${points.map(p => p.join(',')).join(' ')}" fill="none" stroke="${color}" stroke-width="2.5" ${dash ? `stroke-dasharray="${dash}"` : ''}></polyline>`;
             };
             const student = seriesPoints(values, blocks, frame.xAt, frame.yAt);
             svg.innerHTML = frame.base +
-                pace(Number(settings.pace_red_goal || 2), '#e05252', '3 5') +
-                pace(Number(settings.pace_blue_goal || 3.7), '#4a90d9', '7 5') +
+                pace(Number(settings.pace_red_goal || 2.75), '#e05252', '3 5') +
+                pace(Number(settings.pace_blue_goal || 3.25), '#4a90d9', '7 5') +
                 pace(Number(settings.pace_green_goal || 3), '#4caf6d', '') +
                 frame.labels +
                 drawSeries(student, 'chart-line', '', '', false) +
@@ -853,6 +849,27 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
                 renderParticipationChart();
             });
         });
+        function setActiveChart(view) {
+            if (!['progress', 'attendance', 'participation'].includes(view)) return;
+            chartState.activeView = view;
+            document.querySelectorAll('[data-chart-view]').forEach(panel => {
+                const active = panel.dataset.chartView === view;
+                panel.hidden = !active;
+                panel.classList.toggle('active', active);
+            });
+            document.querySelectorAll('[data-chart-select]').forEach(button => {
+                const active = button.dataset.chartSelect === view;
+                button.classList.toggle('active', active);
+                button.setAttribute('aria-selected', active ? 'true' : 'false');
+                button.tabIndex = active ? 0 : -1;
+            });
+            if (view === 'progress') renderChart();
+            if (view === 'attendance') renderAttendanceChart();
+            if (view === 'participation') renderParticipationChart();
+        }
+        document.querySelectorAll('[data-chart-select]').forEach(button => {
+            button.addEventListener('click', () => setActiveChart(button.dataset.chartSelect));
+        });
 
         function resetCurriculumSelection() {
             if (!state.bucketId && !state.standardId && !state.targetId && state.progressScope === 'overall') return;
@@ -874,6 +891,7 @@ $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
             resetCurriculumSelection();
         });
         renderDashboard();
+        setActiveChart('progress');
     </script>
 </body>
 </html>

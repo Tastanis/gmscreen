@@ -18,7 +18,7 @@ $confirm = (string)($_POST['password_confirm'] ?? '');
 $code = trim($_POST['preset_password'] ?? '');
 
 $errors = [];
-$settings = aslhub_year_settings($pdo);
+$settings = aslhub_dashboard_settings($pdo);
 
 if (!hash_equals($settings['signup_code'], $code)) $errors[] = 'That class signup code is not correct. Ask your teacher.';
 if ($first_name === '' || $last_name === '') $errors[] = 'Please enter your first and last name.';

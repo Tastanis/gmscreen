@@ -1,5 +1,6 @@
 <?php
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
+require_once dirname(__DIR__) . '/lib/helpers.php';
 require_once dirname(__DIR__) . '/lib/calendar.php';
 require_once dirname(__DIR__) . '/lib/data.php';
 
@@ -42,5 +43,11 @@ foreach ($participation as $i=>$value) {
     $trend[]=array_sum($window)/count($window);
 }
 expect_same([100,100,100,90,80,70,60,60], $trend, 'four-block participation trend steps down then plateaus');
+
+$paceGoals = aslhub_pace_goals();
+expect_same(['pace_green_goal'=>3.0,'pace_red_goal'=>2.75,'pace_blue_goal'=>3.25], $paceGoals,
+    'fixed pace outcomes match the requested score distributions');
+expect_same([180.0,165.0,195.0], [60*$paceGoals['pace_green_goal'],60*$paceGoals['pace_red_goal'],60*$paceGoals['pace_blue_goal']],
+    'pace endpoints scale exactly with the number of proficiency targets');
 
 fwrite(STDOUT, "ALL ASL PURE TESTS PASSED\n");

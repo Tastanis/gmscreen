@@ -93,6 +93,7 @@ function aslhub_export_sheets(PDO $pdo): array {
 
     $settings = [['setting_key', 'setting_value']];
     foreach ($pdo->query("SELECT * FROM asl_settings ORDER BY setting_key") as $r) {
+        if (in_array($r['setting_key'], ['year_start','year_end','pace_green_goal','pace_blue_goal','pace_red_goal'], true)) continue;
         $settings[] = [$r['setting_key'], $r['setting_value']];
     }
 

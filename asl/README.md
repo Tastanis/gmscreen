@@ -1,9 +1,9 @@
 # ASL Hub (unified ASL 1 / 2 / 3)
 
 One codebase replaces the old duplicated `asl1/` + `asl2/` proficiency system.
-The old folders remain only for legacy bingo/goals links. The student/teacher
-dashboards, grading, rubrics, school calendar, attendance, participation, and
-single-computer Scroller now live under `asl/`.
+The old folders remain untouched for legacy tools such as Bingo and Goals. Only
+the single-computer Scroller was migrated. The student/teacher dashboards,
+grading, rubrics, school calendar, attendance, and participation live under `asl/`.
 
 ## Deploying to the live site
 
@@ -18,20 +18,21 @@ single-computer Scroller now live under `asl/`.
 4. Log in and change both teacher passwords right away (Settings page):
    - Harms (admin): first name `Brandon`, starter password `HarmsASL2026`
    - Parks: first name `Ms.`, starter password `ParksASL2026`
-5. In Settings, upload the shared school-calendar JSON, set the participation
-   maximum, pace goals, and signup code.
+5. In Settings, upload the shared school-calendar JSON and set the participation
+   maximum and signup code. Pace outcomes are fixed from the grading rules.
 
 Re-run `install.php` any time rubric wording changes (regenerate
 `data/rubric_seed.json` first) — student scores are never touched.
 
 ## Who can do what
 
-- **Students** — see only their own dashboard: proficiency, attendance, and
-  participation graphs; pace lines; bucket dots; rubrics; resources; notes; and
-  play-only access to the Scroller. Only teachers manage word banks/settings.
+- **Students** — see only their own dashboard: one switchable chart stage for
+  proficiency, attendance, and participation; pace lines; bucket dots; rubrics;
+  resources; notes; and play-only access to the Scroller. Only teachers manage
+  word banks/settings.
 - **Ms. Parks** — full control of *her* students (grading, block-entry grids,
   Scroller banks, editing info, password resets, deactivation) + her own password.
-- **Mr. Harms (admin)** — everything, for all students, plus: year/pace settings,
+- **Mr. Harms (admin)** — everything, for all students, plus: calendar/participation settings,
   signup code, teacher passwords, Excel export/import, SQL backups, and the
   temporary **Start Fresh** wipe.
 
@@ -65,10 +66,10 @@ Re-run `install.php` any time rubric wording changes (regenerate
 
 ## Pace lines
 
-Lines start at reporting block 2 and are computed from real data:
-`(gradable skills at the student's level × goal score) ÷ (reporting blocks − 2)`.
-Each reporting block contains 10 uploaded instructional dates; weekends, holidays,
-and breaks do not consume a block day. Goals remain adjustable in Settings.
+The pace lines advance in proportion to the instructional days elapsed in the
+uploaded calendar, so breaks and weekends never steepen the expected pace. At the
+last school day, green ends at all 3s (average 3.0), red at 25% 2s plus 75% 3s
+(average 2.75), and blue at 25% 4s plus 75% 3s (average 3.25).
 
 At a checkpoint the chart uses the latest saved score for each skill. Repeatedly
 cycling a score during one block does not add every click; only the final value at

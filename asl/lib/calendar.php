@@ -137,8 +137,6 @@ function aslhub_calendar_apply(PDO $pdo, array $calendar): array {
 
         aslhub_set_setting($pdo, 'calendar_revision', (string)$revision);
         aslhub_set_setting($pdo, 'school_timezone', $calendar['timezone']);
-        aslhub_set_setting($pdo, 'year_start', $calendar['blocks'][0]['start_date']);
-        aslhub_set_setting($pdo, 'year_end', $calendar['blocks'][count($calendar['blocks']) - 1]['end_date']);
         $pdo->commit();
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();

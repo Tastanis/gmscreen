@@ -191,7 +191,6 @@ function aslhub_import_run(PDO $pdo, string $path, bool $commit): array {
 
         // ---- Settings (non-secret application settings only) ----
         $allowedSettings = [
-            'year_start', 'year_end', 'pace_green_goal', 'pace_blue_goal', 'pace_red_goal',
             'signup_code', 'participation_max', 'calendar_revision', 'school_timezone',
         ];
         $rows = aslhub_sheet_assoc($book['Settings'] ?? []);
