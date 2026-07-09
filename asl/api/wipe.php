@@ -31,6 +31,8 @@ try {
     $count = count($studentIds);
     if ($count) {
         $in = implode(',', array_map('intval', $studentIds));
+        $pdo->exec("DELETE FROM asl_student_block_metric_audit WHERE user_id IN ($in)");
+        $pdo->exec("DELETE FROM asl_student_block_metrics WHERE user_id IN ($in)");
         $pdo->exec("DELETE FROM user_learning_targets WHERE user_id IN ($in)");
         $pdo->exec("DELETE FROM user_learning_target_score_history WHERE user_id IN ($in)");
         $pdo->exec("DELETE FROM asl_student_meetings WHERE user_id IN ($in)");

@@ -37,7 +37,9 @@ function aslhub_teacher_header(array $me, string $title, string $active = ''): v
     $nav = [
         'dashboard' => ['dashboard.php', 'Roster'],
         'grading' => ['grading.php', 'Grading'],
-        'weekly' => ['weekly.php', 'Weekly Log'],
+        'weekly' => ['weekly.php', 'Attendance & Participation'],
+        'notes' => ['notes.php', 'Notes'],
+        'scroller' => ['scroller.php', 'Scroller'],
         'resources' => ['resources.php', 'Resources'],
         'settings' => ['settings.php', 'Settings'],
     ];

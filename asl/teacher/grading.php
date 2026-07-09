@@ -150,7 +150,9 @@ aslhub_teacher_header($me, 'Grading', 'grading');
 
 <script>
 const CSRF = '<?php echo $csrf; ?>';
-const COLORS = { 0: '#9aa2ad', 1: '#e05252', 2: '#e8b93e', 3: '#4caf6d', 4: '#4a90d9' };
+// An explicit zero is a proficiency score, so it shares the red intervention
+// color with a 1. An empty cell remains the neutral "not graded" state.
+const COLORS = { 0: '#e05252', 1: '#e05252', 2: '#e8b93e', 3: '#4caf6d', 4: '#4a90d9' };
 const TARGETS = <?php echo json_encode($targetMeta, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE); ?>;
 
 document.querySelectorAll('.grade-cell').forEach(cell => {

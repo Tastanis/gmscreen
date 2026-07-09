@@ -2568,10 +2568,74 @@ body.student-dashboard-page {
     position: relative;
 }
 
-#progress-chart {
+#progress-chart,
+#attendance-chart,
+#participation-chart {
     width: 100%;
     min-height: 260px;
     display: block;
+}
+
+.chart-header-tools {
+    align-items: flex-end;
+    display: grid;
+    gap: 8px;
+    justify-items: end;
+}
+
+.chart-toggle {
+    background: #e8e8ed;
+    border-radius: 9px;
+    display: inline-flex;
+    gap: 2px;
+    padding: 3px;
+}
+
+.chart-toggle button {
+    background: transparent;
+    border: 0;
+    border-radius: 7px;
+    color: #6e6e73;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 750;
+    padding: 7px 10px;
+    white-space: nowrap;
+}
+
+.chart-toggle button.active {
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+    color: #1d1d1f;
+}
+
+.metric-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: -4px 0 8px;
+}
+
+.metric-summary span {
+    background: #fbfbfd;
+    border: 1px solid #d2d2d7;
+    border-radius: 9px;
+    display: grid;
+    gap: 2px;
+    min-width: 150px;
+    padding: 9px 12px;
+}
+
+.metric-summary small {
+    color: #6e6e73;
+    font-size: 0.75rem;
+    font-weight: 750;
+}
+
+.metric-summary strong {
+    color: #1d1d1f;
+    font-size: 1.15rem;
 }
 
 .chart-bg {
@@ -2601,16 +2665,16 @@ body.student-dashboard-page {
 
 .chart-line {
     fill: none;
-    stroke: #0071e3;
-    stroke-width: 3.5;
+    stroke: #000;
+    stroke-width: 4;
     stroke-linejoin: round;
     stroke-linecap: round;
 }
 
 .chart-dot {
     fill: #fff;
-    stroke: #0071e3;
-    stroke-width: 2;
+    stroke: #000;
+    stroke-width: 2.5;
 }
 
 .chart-empty-note {
@@ -2788,8 +2852,12 @@ body.student-dashboard-page {
     vertical-align: middle;
 }
 
-.legend-swatch.legend-student { background: #0071e3; }
+.legend-swatch.legend-student { background: #000; }
 .legend-swatch.legend-class { background: #ff9f0a; }
+.legend-swatch.metric-student-swatch { background: #0071e3; }
+.legend-swatch.participation-score-swatch { background: #5856d6; }
+.legend-swatch.participation-max-swatch { background: #86868b; }
+.legend-swatch.participation-trend-swatch { background: #af52de; }
 
 .metric-line {
     fill: none;
@@ -2804,6 +2872,24 @@ body.student-dashboard-page {
 
 .metric-dot-student { fill: #fff; stroke: #0071e3; stroke-width: 2; }
 .metric-dot-class { fill: #fff; stroke: #ff9f0a; stroke-width: 2; }
+
+.metric-dot {
+    fill: #fff;
+    stroke-width: 2;
+}
+
+.metric-line-student-dot { stroke: #0071e3; }
+.metric-line-class-dot { stroke: #ff9f0a; }
+.participation-score { stroke: #5856d6; stroke-width: 3; }
+.participation-score-dot { stroke: #5856d6; }
+.participation-max { stroke: #86868b; stroke-dasharray: 6 5; }
+.participation-max-dot { stroke: #86868b; }
+.participation-trend { stroke: #af52de; stroke-width: 3.5; }
+.participation-trend-dot { stroke: #af52de; }
+
+.comparisons-section .comparison-cards {
+    grid-template-columns: minmax(0, 1fr);
+}
 
 .meeting-notes-list {
     display: grid;
@@ -3137,6 +3223,11 @@ body.student-dashboard-page {
 
     .comparison-list {
         grid-template-columns: 1fr;
+    }
+
+    .chart-header-tools {
+        align-items: flex-start;
+        justify-items: start;
     }
 }
 

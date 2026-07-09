@@ -10,7 +10,7 @@
  *    on normal page loads once the stored version matches.
  */
 
-const ASLHUB_SCHEMA_VERSION = 4;
+const ASLHUB_SCHEMA_VERSION = 6;
 
 function aslhub_ensure_schema(PDO $pdo, bool $force = false): void {
     static $done = false;
@@ -176,6 +176,91 @@ function aslhub_ensure_schema(PDO $pdo, bool $force = false): void {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
         aslhub_add_column($pdo, 'asl_student_meetings', 'participation_points', "INT NULL COMMENT 'weekly participation points (SCM)'");
         aslhub_add_index($pdo, 'asl_student_meetings', 'uniq_user_week', "UNIQUE (user_id, meeting_date)");
+
+        // ----- shared school calendar + ten-instructional-day reporting blocks -----
+        $pdo->exec("CREATE TABLE IF NOT EXISTS asl_calendar_days (
+            school_date DATE NOT NULL PRIMARY KEY,
+            is_instructional TINYINT(1) NOT NULL DEFAULT 0,
+            label VARCHAR(255) NULL,
+            calendar_revision INT NOT NULL DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_asl_calendar_instructional (is_instructional, school_date)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        $pdo->exec("CREATE TABLE IF NOT EXISTS asl_reporting_blocks (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            block_index INT NOT NULL,
+            label VARCHAR(100) NOT NULL,
+            start_date DATE NOT NULL,
+            end_date DATE NOT NULL,
+            instructional_days INT NOT NULL DEFAULT 10,
+            participation_max INT NOT NULL DEFAULT 10,
+            active TINYINT(1) NOT NULL DEFAULT 1,
+            finalized_at DATETIME NULL,
+            calendar_revision INT NOT NULL DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_asl_reporting_block_index (block_index),
+            INDEX idx_asl_reporting_blocks_dates (start_date, end_date),
+            INDEX idx_asl_reporting_blocks_active (active, block_index)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        $pdo->exec("CREATE TABLE IF NOT EXISTS asl_student_block_metrics (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            block_id INT NOT NULL,
+            absences INT NULL,
+            participation_points INT NULL,
+            participation_max INT NOT NULL DEFAULT 10,
+            version INT NOT NULL DEFAULT 1,
+            updated_by INT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_asl_student_block (user_id, block_id),
+            INDEX idx_asl_block_metrics_user (user_id, block_id),
+            INDEX idx_asl_block_metrics_block (block_id, user_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        $pdo->exec("CREATE TABLE IF NOT EXISTS asl_student_block_metric_audit (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            block_id INT NOT NULL,
+            old_absences INT NULL,
+            new_absences INT NULL,
+            old_participation_points INT NULL,
+            new_participation_points INT NULL,
+            participation_max INT NOT NULL,
+            old_version INT NOT NULL DEFAULT 0,
+            new_version INT NOT NULL,
+            changed_by INT NULL,
+            is_correction TINYINT(1) NOT NULL DEFAULT 0,
+            changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_asl_metric_audit_user_time (user_id, changed_at),
+            INDEX idx_asl_metric_audit_block_time (block_id, changed_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        // ----- unified single-computer scroller word banks -----
+        $pdo->exec("CREATE TABLE IF NOT EXISTS asl_scroller_wordlists (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            teacher_id INT NOT NULL,
+            name VARCHAR(120) NOT NULL,
+            words LONGTEXT NOT NULL,
+            speed_setting DECIMAL(3,1) NOT NULL DEFAULT 1.0,
+            word_count SMALLINT UNSIGNED NOT NULL DEFAULT 10,
+            enabled TINYINT(1) NOT NULL DEFAULT 1,
+            active TINYINT(1) NOT NULL DEFAULT 1,
+            legacy_id INT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_scroller_legacy (legacy_id),
+            INDEX idx_scroller_teacher_active (teacher_id, active)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        $pdo->exec("CREATE TABLE IF NOT EXISTS asl_scroller_wordlist_levels (
+            wordlist_id INT NOT NULL,
+            asl_level TINYINT UNSIGNED NOT NULL,
+            PRIMARY KEY (wordlist_id, asl_level),
+            INDEX idx_scroller_level (asl_level)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
         aslhub_set_setting($pdo, 'schema_version', (string)ASLHUB_SCHEMA_VERSION);
     } catch (PDOException $e) {

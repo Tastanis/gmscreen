@@ -18,7 +18,8 @@ Saved, paste-ready ability + heroic-resource JSON per player character. Conventi
 
 - Cal (Censor / Wrath / Judgment): `characters/cal-automations.md`
 - Sharon (Shadow / Black Ash): `characters/sharon-automations.md`
-- Indigo, Zepha: not yet built
+- Indigo (Talent / Telepathy / Clarity): `characters/indigo-automations.md`
+- Zepha (Elementalist / Essence): `characters/zepha-automations.md`
 
 ## Source Text
 

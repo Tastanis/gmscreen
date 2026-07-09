@@ -21,6 +21,32 @@ function aslhub_seed_content(PDO $pdo): array {
         return ['success' => false, 'error' => 'rubric_seed.json is empty or invalid'];
     }
 
+    // Refuse obviously truncated/generated-in-error seeds before they can hide
+    // most of the active taxonomy. Legitimate wording and taxonomy updates are
+    // still allowed, but a partial file must never silently become authoritative.
+    $standardCount = 0; $levelTargetCount = 0; $rubricRowCount = 0;
+    foreach ($seed['buckets'] as $bucket) {
+        $standardCount += count($bucket['standards'] ?? []);
+        foreach (($bucket['standards'] ?? []) as $standard) {
+            foreach (($standard['targets'] ?? []) as $target) {
+                foreach (($target['levels'] ?? []) as $levelData) {
+                    $levelTargetCount++;
+                    $rubric = $levelData['rubric'] ?? [];
+                    foreach ([0,1,2,3,4] as $score) {
+                        if (!array_key_exists((string)$score, $rubric) && !array_key_exists($score, $rubric)) {
+                            return ['success' => false, 'error' => 'Seed validation failed: every level target needs rubric scores 0 through 4.'];
+                        }
+                    }
+                    $rubricRowCount += count($rubric);
+                }
+            }
+        }
+    }
+    if (count($seed['buckets']) < 5 || $standardCount < 15 || $levelTargetCount < 100 || $rubricRowCount < 500) {
+        return ['success' => false, 'error' => "Seed validation failed: file looks incomplete (" .
+            count($seed['buckets']) . " buckets, $standardCount standards, $levelTargetCount level targets, $rubricRowCount rubric rows)."];
+    }
+
     $stats = ['buckets' => 0, 'standards' => 0, 'targets' => 0, 'rubric_rows' => 0, 'deactivated' => []];
     $seedBucketIds = [];
     $seedStandardIds = [];
