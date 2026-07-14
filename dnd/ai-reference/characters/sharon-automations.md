@@ -34,9 +34,9 @@ See `../../character_sheet/ability-automation/AUTHORING.md` and `REGISTRY.md` fo
 
 ---
 
-## I Work Better Alone (signature — homebrew version)
+## I Work Better Alone (signature — book version)
 
-Homebrew: instead of the book's "gain 1 surge if no allies adjacent," this strike deals **extra damage equal to Agility** when the target has no allies adjacent.
+Per the book: if the target has none of your allies adjacent to them, you gain **1 surge before making the power roll**. The surge prompt fires after you pick the target and before the roll modal opens, so the surge is available to spend on that strike. (Range is Melee 2 on her sheet — book Melee 1 + Whirlwind kit's +1 melee distance.)
 
 ```json
 {
@@ -49,10 +49,10 @@ Homebrew: instead of the book's "gain 1 surge if no allies adjacent," this strik
     "description": "\"It's better, just you and me. Isn't it?\"",
     "testLabel": "Power Roll + Agility",
     "testRollMod": "Agility",
+    "testBeforeEffect": "If the target has none of your allies adjacent to them, you gain 1 surge before making the power roll.",
     "tier1Damage": "3 + A",
     "tier2Damage": "6 + A",
-    "tier3Damage": "9 + A",
-    "testAdditionalEffect": "If the target has none of your allies adjacent to them, this strike deals extra damage equal to your Agility score."
+    "tier3Damage": "9 + A"
   },
   "automation": {
     "schema": "ability-automation/v3",
@@ -82,6 +82,21 @@ Homebrew: instead of the book's "gain 1 surge if no allies adjacent," this strik
         ]
       },
       {
+        "type": "effect",
+        "target": "self",
+        "effects": [
+          {
+            "kind": "ifPrompt",
+            "question": "Does {target} have any of your allies adjacent to them?",
+            "yesLabel": "Yes",
+            "noLabel": "No — gain 1 surge",
+            "target": "self",
+            "then": [],
+            "else": [ { "kind": "surgeGain", "amount": 1 } ]
+          }
+        ]
+      },
+      {
         "type": "powerRoll",
         "attribute": "Agility",
         "target": "target",
@@ -90,20 +105,6 @@ Homebrew: instead of the book's "gain 1 surge if no allies adjacent," this strik
           "tier2": { "effects": [ { "kind": "damage", "amount": 6, "attribute": "A" } ] },
           "tier3": { "effects": [ { "kind": "damage", "amount": 9, "attribute": "A" } ] }
         }
-      },
-      {
-        "type": "effect",
-        "target": "target",
-        "effects": [
-          {
-            "kind": "ifPrompt",
-            "question": "Does {target} have any of your allies adjacent to them?",
-            "yesLabel": "Yes",
-            "noLabel": "No",
-            "then": [],
-            "else": [ { "kind": "damage", "amount": 0, "attribute": "A", "raw": true } ]
-          }
-        ]
       }
     ]
   }
