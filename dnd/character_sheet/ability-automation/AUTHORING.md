@@ -346,6 +346,21 @@ Both are optional and may be combined to form a band (e.g. `"minSquares": 2, "wi
 "match": { "event": "damage", "filter": { "whose": "enemy", "minAmount": 1, "withinSquares": 5 } }
 ```
 
+**Caster-state gates (any event)** — two boolean filter fields for "another hero…" style reactions:
+
+| filter field | Meaning |
+|---|---|
+| `excludeSelf` | Never arm off an event the caster themself caused. Needed with `whose: "ally"`, which is a pure team check and **includes the caster**. |
+| `casterHasNotActed` | Only arm while the caster has **not** yet taken (and is not currently taking) their turn this combat round. |
+
+Example — Hesitation Is Weakness ("another hero ends their turn; take your turn after them"):
+
+```json
+"match": { "event": "turnEnd", "filter": { "whose": "ally", "excludeSelf": true, "casterHasNotActed": true } }
+```
+
+Additionally, a top-level `usageLimit` on the automation now suppresses **arming**: once the round/encounter-scoped flag is consumed, the ready `!` stops appearing until the scope resets (previously the limit was only enforced after the player clicked the ready trigger).
+
 **Trigger lifetimes (`expires`)** - add this to a structured trigger when the listener should stop after a turn, round, or combat boundary. The boundary is counted after the trigger is registered.
 
 ```json

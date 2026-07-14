@@ -4935,6 +4935,19 @@ export function mountBoardInteractions(store, routes = {}) {
         const casterPlacement = getPlacementFromStore(casterId);
         return !(casterPlacement?.triggeredActionReady === false || casterPlacement?.triggeredActionUsedThisRound === true);
       },
+      hasCasterActedThisRound(casterId) {
+        return completedCombatants.has(casterId) || activeCombatantId === casterId;
+      },
+      isUsageLimitSpent(casterId, usageLimit) {
+        if (!usageLimit || !usageLimit.key || !casterId) return false;
+        const key = scopedFlagKey({
+          scope: usageLimit.scope || 'round',
+          key: usageLimit.key,
+          sourceId: casterId,
+          targetId: casterId,
+        });
+        return Boolean(key && automationScopedFlags.has(key));
+      },
       getSquareDistance(casterId, otherId) {
         const casterPlacement = getPlacementFromStore(casterId);
         const otherPlacement = getPlacementFromStore(otherId);
@@ -4995,12 +5008,13 @@ export function mountBoardInteractions(store, routes = {}) {
     return text.includes('triggered') && text.includes('free');
   }
 
-  function registerAuthoredTriggerBlock({ placementId, action, actionIndex, block }) {
+  function registerAuthoredTriggerBlock({ placementId, action, actionIndex, block, usageLimit = null }) {
     const match = block?.match && typeof block.match === 'object' ? block.match : null;
     if (!placementId || !match?.event) return false;
     const casterTeam = getTeamForPlacementId(placementId);
     const abilityId = action?._stableActionId || getStableActionIdForBoard(action, 'triggers', actionIndex);
     const entry = {
+      usageLimit: usageLimit && typeof usageLimit === 'object' && usageLimit.key ? usageLimit : null,
       tokenId: placementId,
       eventType: match.event,
       casterId: placementId,
@@ -5114,7 +5128,7 @@ export function mountBoardInteractions(store, routes = {}) {
         if (!hasAuthoredAutomation(automation)) return;
         const triggerBlocks = (automation.cards || []).filter((block) => block?.type === 'trigger' && block.match);
         triggerBlocks.forEach((block) => {
-          if (registerAuthoredTriggerBlock({ placementId, action, actionIndex, block })) {
+          if (registerAuthoredTriggerBlock({ placementId, action, actionIndex, block, usageLimit: automation.usageLimit || null })) {
             registered += 1;
           }
         });
@@ -6619,9 +6633,32 @@ export function mountBoardInteractions(store, routes = {}) {
     tokenLayer.addEventListener('click', handleTriggerIndicatorClick);
     tokenLayer.addEventListener('keydown', handleTriggerIndicatorKeydown);
     tokenLayer.addEventListener('pointerdown', (event) => {
-      if (event.target?.closest?.('[data-token-trigger-ready], [data-token-judgment-mark]')) {
+      if (event.target?.closest?.('[data-token-trigger-ready], [data-token-judgment-mark], [data-token-hidden-effect]')) {
         event.preventDefault();
         event.stopPropagation();
+      }
+    });
+    tokenLayer.addEventListener('click', (event) => {
+      const badge = event.target?.closest?.('[data-token-hidden-effect]');
+      if (!badge) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const tokenElement = badge.closest('.vtt-token');
+      const placementId = tokenElement?.dataset?.placementId ?? null;
+      if (!placementId) return;
+      const placement = getPlacementFromStore(placementId);
+      const conditions = ensurePlacementConditions(placement?.conditions ?? placement?.condition ?? null);
+      const hiddenIndexes = conditions
+        .map((condition, index) => (condition?.hidden || String(condition?.name || '').trim().toLowerCase() === 'hiddeneffect') ? index : -1)
+        .filter((index) => index >= 0);
+      if (!hiddenIndexes.length) return;
+      const labels = hiddenIndexes
+        .map((index) => conditions[index]?.label || conditions[index]?.sourceAbility || conditions[index]?.name || 'Effect')
+        .join(', ');
+      if (!window.confirm(`Remove hidden effect${hiddenIndexes.length > 1 ? 's' : ''}: ${labels}?`)) return;
+      // Remove from the highest index down so earlier indexes stay valid.
+      for (const index of [...hiddenIndexes].reverse()) {
+        removeConditionFromPlacement(placementId, index);
       }
     });
     tokenLayer.addEventListener('click', (event) => {
@@ -14988,11 +15025,15 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!hiddenBadge) {
       hiddenBadge = document.createElement('div');
       hiddenBadge.className = 'vtt-token__hidden-effect';
+      hiddenBadge.setAttribute('data-token-hidden-effect', '');
+      hiddenBadge.setAttribute('role', 'button');
+      hiddenBadge.setAttribute('tabindex', '0');
+      hiddenBadge.style.cursor = 'pointer';
       tokenElement.appendChild(hiddenBadge);
     }
     hiddenBadge.textContent = 'FX';
-    hiddenBadge.setAttribute('aria-label', `Hidden effects: ${hiddenText}`);
-    hiddenBadge.title = `Hidden effects: ${hiddenText}`;
+    hiddenBadge.setAttribute('aria-label', `Hidden effects: ${hiddenText} (click to remove)`);
+    hiddenBadge.title = `Hidden effects: ${hiddenText}\n(click to remove)`;
   }
 
   function handleTriggerIndicatorPointerDown(event) {

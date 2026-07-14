@@ -171,3 +171,5 @@ When a PC's automated ability force-moves this monster, the `!` marker appears o
 5. Malice cost is in `resource_cost`, not in automation.
 6. Unsupported mechanics are `note` cards, not invented fields.
 7. Per-use limits use `usageLimit`, not prose.
+8. **The ability's FULL rules text is written out in the displayed fields** (`effect`, `test.tierN` damage/`tier_effect`/attribute-check fields, `additional_effect`, `trigger`). The GM never sees the automation JSON — every rider (push, condition, potency, zone) that exists in an automation card must also appear in the display text, or the hover card will look like plain damage and be run wrong.
+9. **When authoring a whole monster: complete stats are mandatory.** All five `attributes` (`might`, `agility`, `reason`, `intuition`, `presence`) plus `level`, `role`, `ev`, `size`, `speed`, `stamina`, `stability`, and `free_strike` must be present on every monster — a monster without a Might score is invalid. See `dnd/strixhaven/monster-creator/MONSTER_JSON_IMPORT_TEMPLATE.md`.

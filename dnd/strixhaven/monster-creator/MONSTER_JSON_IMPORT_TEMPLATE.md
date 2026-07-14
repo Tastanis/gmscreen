@@ -6,6 +6,19 @@ The import creates a new monster in editor mode. Review it, then use **Save to T
 
 ---
 
+## ⚠️ Two non-negotiable requirements (read before anything else)
+
+**1. Every ability's FULL rules text must appear in the displayed fields.** The GM reads the stat block and the ability hover card at the table — they can NEVER see the `automation` JSON. If a rider (a push, a condition, a potency line, an all-tiers effect) exists only inside `automation`, the displayed ability looks like it "just does damage" and the GM will run it wrong. So: every single thing the ability does must be written out in the display channels — `effect`, `test.tierN.damage_amount` / `tier_effect` / attribute-check fields, `additional_effect`, and `trigger` for triggered actions. `automation` is a *copy* of that text in executable form, never the only home of a mechanic. Before you finish, re-read each ability and confirm a GM who sees ONLY the displayed fields (never the automation) would run it exactly as intended.
+
+**2. Every monster must have COMPLETE stats.** A monster with a missing Might score (or any other stat) is invalid. Always include ALL of the following, even when a value is 0:
+
+- `name`, `level`, `role`, `types`, `ev`, `size`, `speed`, `stamina`, `stability`, `free_strike`
+- `attributes` with **all five** keys: `might`, `agility`, `reason`, `intuition`, `presence` (use explicit numbers; `0` and negatives are fine, omission is not)
+
+If the source material doesn't state a value, derive a sensible one from the monster's level and role — do not leave it out and do not leave it blank.
+
+---
+
 ## Read this first: where each piece of an ability goes
 
 Every ability has **three channels**, and each owns a different job. The #1 mistake LLMs make is dumping the whole ability into the prose `effect` field — restating the power-roll tiers as a sentence — and then *also* filling `test` and `automation`. That writes the tiers two or three times, the copies drift apart, and the structured stat block ends up missing the bits that only got typed into prose. Don't do that. Follow the ownership table:
@@ -28,6 +41,8 @@ Every ability has **three channels**, and each owns a different job. The #1 mist
 4. **Before/after and all-tiers effects are their own thing.** A rider that happens regardless of tier goes in `additional_effect` (display) **and** as a separate `{ "type": "effect" }` card placed *before* or *after* the `powerRoll` card in automation (a precondition goes before, a consequence goes after). Do not fold it into the prose or into a tier.
 5. **Keep the book's exact wording.** Put the source text verbatim into the field that owns it — `tier_effect` gets "pull 2 toward the cluster", not a paraphrase. Same words, correct field.
 6. **`test` and `automation` must agree.** Every tier's damage/rider in `test` has a matching effect in the same tier of `automation.tiers`, and vice versa. They are the display copy and the executable copy of the same thing.
+7. **Nothing may live ONLY in `automation`.** The GM never sees automation JSON — they see the displayed fields. Any effect present in an `automation` card (forced movement, condition, potency, zone, note) must also be written out in the matching display field (`tier_effect`, attribute-check fields, `additional_effect`, `effect`, or `trigger`). An automation-only rider is a bug: the hover card will look like plain damage.
+8. **All five attributes, always.** `attributes.might/agility/reason/intuition/presence` are all required on every monster, along with `level`, `role`, `ev`, `size`, `speed`, `stamina`, `stability`, and `free_strike`. Never omit a stat.
 
 ---
 

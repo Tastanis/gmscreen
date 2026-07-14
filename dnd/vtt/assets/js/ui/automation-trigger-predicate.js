@@ -83,7 +83,20 @@ export function buildAutomationTriggerPredicate(entry, env = {}) {
     if (!entry.freeTriggered && typeof env.isTriggerActionAvailable === 'function') {
       if (!env.isTriggerActionAvailable(casterId)) return false;
     }
+    // A round/encounter usageLimit that has already been consumed should stop
+    // the ready "!" from re-arming, not just block resolution after the click.
+    if (entry.usageLimit && typeof env.isUsageLimitSpent === 'function') {
+      if (env.isUsageLimitSpent(casterId, entry.usageLimit)) return false;
+    }
     const payloadTokenId = payloadPrimaryTokenId(event, payload);
+    // "Another hero..." style triggers: never arm off an event the caster
+    // themself caused (whose:"ally" is a pure team check and includes self).
+    if (filter.excludeSelf && payloadTokenId === casterId) return false;
+    // "...that hero can't have used this to start their turn" style gating:
+    // only arm while the caster has not yet taken their turn this round.
+    if (filter.casterHasNotActed && typeof env.hasCasterActedThisRound === 'function') {
+      if (env.hasCasterActedThisRound(casterId)) return false;
+    }
     if (!matchWhose(whose, payloadTokenId)) return false;
     if (filter.targetWhose && !anyTokenMatchesWhose(payloadTargetIds(payload), (id) => matchWhose(filter.targetWhose, id))) {
       return false;

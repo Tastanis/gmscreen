@@ -965,26 +965,30 @@ COPY END
 
 ## Triggered Actions
 
-### Skin Like Castle Walls
+### Explosive Assistance
 
-Live action id: `action_1774396924257_48986d18502e4`.
+Replaces **Skin Like Castle Walls** (swap made 2026-07-14; the old block is gone from this file — regenerate from the class doc if it's ever needed again).
 
-Triggered Action | Earth,Magic,Ranged | Range: Ranged 10 | Target: Self or one ally | Trigger: The target takes damage.
+Triggered Action | Fire,Magic,Ranged | Range: Ranged 10 | Target: Self or one ally | Trigger: The target force moves a creature or object.
 
-You cover yourself or an ally in protective stone.Effect: The target takes half the damage.Spend 1 Essence: If the damage has any potency effects associated with it, the potency is reduced by 1 for the target.
+You add a little magic to an ally's aggression at just the right time. Effect: The forced movement distance gains a bonus equal to your Reason score. Spend 1 Essence: The forced movement distance gains a bonus equal to twice your Reason score instead.
+
+Authoring notes:
+- The trigger listens on `forcedMovementDealt` (Zepha or an ally force moves a creature or object). By the time the `!` is resolved, the original push/pull/slide has already happened at its printed distance, so the "bonus" is applied as **follow-up forced movement of the pushed creature** — pick the creature that was force moved and move it the extra squares, continuing the original direction (the engine offers a free-form slide; honor the original verb's direction manually).
+- "Twice your Reason instead" is modeled as base +R always, plus an optional **Spend 1 Essence for another +R** (R + R = 2R — same total, and declining the spend leaves the base R bonus).
 
 ```json
 COPY START
 {
   "fields": {
-    "name": "Skin Like Castle Walls",
-    "useWhen": "The target takes damage.",
+    "name": "Explosive Assistance",
+    "useWhen": "You or an ally within 10 force moves a creature or object.",
     "actionLabel": "Triggered Action",
-    "keywords": "Earth,Magic,Ranged",
+    "keywords": "Fire,Magic,Ranged",
     "range": "Ranged 10",
     "target": "Self or one ally",
-    "trigger": "The target takes damage.",
-    "description": "You cover yourself or an ally in protective stone.Effect: The target takes half the damage.Spend 1 Essence: If the damage has any potency effects associated with it, the potency is reduced by 1 for the target."
+    "trigger": "The target force moves a creature or object.",
+    "description": "You add a little magic to an ally's aggression at just the right time. Effect: The forced movement distance gains a bonus equal to your Reason score. Spend 1 Essence: The forced movement distance gains a bonus equal to twice your Reason score instead."
   },
   "automation": {
     "schema": "ability-automation/v3",
@@ -992,27 +996,44 @@ COPY START
     "cards": [
       {
         "type": "trigger",
-        "id": "trigger_1780205368017_437cf767905de8",
-        "condition": "The target (self or one ally) takes damage.",
+        "condition": "You or an ally within 10 squares force moves a creature or object.",
         "target": "",
         "effectTarget": "",
         "effects": [],
         "match": {
-          "event": "damage",
+          "event": "forcedMovementDealt",
           "filter": {
             "whose": "ally",
-            "minAmount": 1
+            "minDistance": 1,
+            "withinSquares": 10
           }
         }
       },
       {
+        "type": "target",
+        "name": "movedCreature",
+        "mode": "token",
+        "predicate": "creatureOrObject",
+        "count": { "value": 1, "mode": "exact" },
+        "optional": false,
+        "promptTitle": "Explosive Assistance",
+        "promptText": "Pick the creature or object that was just force moved.",
+        "distance": { "form": "ranged", "value": 20 }
+      },
+      {
         "type": "effect",
-        "id": "effect_1780205368017_b1c849cef6d48",
-        "target": "",
+        "target": "movedCreature",
         "effects": [
           {
-            "kind": "halveTriggeringDamage",
-            "rounding": "down"
+            "kind": "note",
+            "text": "Explosive Assistance: the forced movement gains +Reason distance (continue the original push/pull/slide direction)."
+          },
+          {
+            "kind": "forcedMovement",
+            "verb": "slide",
+            "distance": 0,
+            "attribute": "Reason",
+            "upTo": true
           },
           {
             "kind": "spend",
@@ -1020,11 +1041,14 @@ COPY START
             "amount": 1,
             "maxAmount": 1,
             "timing": "postResult",
-            "prompt": "",
+            "prompt": "Spend 1 Essence: the bonus becomes twice your Reason instead (move the target another Reason squares)?",
             "effects": [
               {
-                "kind": "note",
-                "text": "If the triggering damage had any potency effects, reduce that potency by 1 for the target."
+                "kind": "forcedMovement",
+                "verb": "slide",
+                "distance": 0,
+                "attribute": "Reason",
+                "upTo": true
               }
             ]
           }
@@ -1034,7 +1058,7 @@ COPY START
     "modifiers": [],
     "passives": [],
     "keywords": [
-      "Earth",
+      "Fire",
       "Magic",
       "Ranged"
     ],

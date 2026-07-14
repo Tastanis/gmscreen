@@ -308,6 +308,8 @@ Ranged-only, per the book.
 
 Using this fires a real `turnStart` for Sharon, so her Insight resource rule will prompt the +1d3 start-of-turn gain right after she claims the turn.
 
+The trigger filter uses `excludeSelf` (don't arm off Sharon's own turn end — `whose: "ally"` is a team check that includes self) and `casterHasNotActed` (stop arming once Sharon has taken her turn this round, however she took it). The round-scoped `usageLimit` also suppresses re-arming after the ability is used. **Re-paste this block onto the ability** — the fix lives in the filter fields below.
+
 ```json
 {
   "fields": {
@@ -328,7 +330,7 @@ Using this fires a real `turnStart` for Sharon, so her Insight resource rule wil
       {
         "type": "trigger",
         "condition": "Another hero ends their turn (and didn't use Hesitation Is Weakness to start their turn).",
-        "match": { "event": "turnEnd", "filter": { "whose": "ally" } }
+        "match": { "event": "turnEnd", "filter": { "whose": "ally", "excludeSelf": true, "casterHasNotActed": true } }
       },
       {
         "type": "effect",

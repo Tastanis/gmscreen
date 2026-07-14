@@ -1062,6 +1062,12 @@
     if (filterInput.minSquares != null && filterInput.minSquares !== "") {
       filter.minSquares = asNonNegInt(filterInput.minSquares, 0);
     }
+    // Universal caster-state gates (any event). `excludeSelf` skips events the
+    // caster themself caused ("another hero..." triggers — whose:"ally" is a
+    // pure team check and includes self). `casterHasNotActed` only arms while
+    // the caster has not yet taken their turn this combat round.
+    if (filterInput.excludeSelf === true) filter.excludeSelf = true;
+    if (filterInput.casterHasNotActed === true) filter.casterHasNotActed = true;
     if (event === "damage" || event === "damageDealt") {
       const minAmount = asNonNegInt(filterInput.minAmount, 0);
       if (minAmount) filter.minAmount = minAmount;

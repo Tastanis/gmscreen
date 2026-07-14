@@ -311,6 +311,7 @@ Trigger blocks may carry a structured `match` alongside the free-text `condition
 | `actionUsed` | `whose`, `actionKind`, `keywordsAny`, `costIncludes`; `lineOfEffectTo` is accepted by the schema but not evaluated yet |
 | `markApplied` | `whose`, `markType`, `source` |
 | *(any event)* | `withinSquares` int, `minSquares` int — square-distance band between the caster and the event's other token; skipped if either lacks a placement |
+| *(any event)* | `excludeSelf` bool — never arm off an event the caster themself caused (pair with `whose:"ally"`, which is a team check that INCLUDES self). `casterHasNotActed` bool — only arm while the caster has not yet taken (and is not currently taking) their turn this combat round. Use both for "another hero ends their turn" reactions like Hesitation Is Weakness. |
 | *(events with target ids)* | `targetWhose` — requires at least one payload target (`targetId`, `placementId`, or `targetIds[]`) to match `self`/`ally`/`enemy`/`target`/`judgedTarget`/`markSource`/`any`. Use with `whose:"ally"` + `targetWhose:"target"` for "an ally rolls against the watched target." |
 
 `whose` resolves against:
