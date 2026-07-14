@@ -1,14 +1,12 @@
 ﻿Cal Ability Automations - Copy/Paste Blocks
 
-Copy exactly one block at a time: start after COPY START and stop before COPY END.
-Paste that JSON object into the ability automation popup for the matching live sheet card.
+Copy exactly one JSON block at a time and paste it into the ability automation popup for the matching live sheet card.
 
 ========================================================================
 01. Thorn In Foot
 Section: mains
 Live action id: action_1779503651502_1d50c961da0fc
 Rules source: Your Allies Cannot Save You!
-COPY START
 {
     "fields":  {
 
@@ -100,13 +98,11 @@ COPY START
                                  ]
                    }
 }
-COPY END
 
 ========================================================================
 02. Protective Attack
 Section: mains
 Live action id: action_1779503891513_bf1a1797a9b1b8
-COPY START
 {
     "fields":  {
 
@@ -186,14 +182,12 @@ COPY START
                                  ]
                    }
 }
-COPY END
 
 ========================================================================
 03. Morelia Punish and Defend
 Section: mains
 Live action id: action_1779504025064_ccd0f5e53d3ac
 Rules source: The Gods Punish and Defend
-COPY START
 {
     "fields": { "cost": "3 Wrath" },
     "automation": {
@@ -258,13 +252,11 @@ COPY START
         ]
     }
 }
-COPY END
 
 ========================================================================
 04. Purifying Fire
 Section: mains
 Live action id: action_1779504169845_50d8080f3a0c4
-COPY START
 {
     "fields":  {
                    "cost":  "5 Wrath"
@@ -378,13 +370,11 @@ COPY START
                                  ]
                    }
 }
-COPY END
 
 ========================================================================
 05. Judgment
 Section: maneuvers
 Live action id: action_1779504368699_863547a261abf
-COPY START
 {
     "fields":  {
 
@@ -469,13 +459,11 @@ COPY START
                                  ]
                    }
 }
-COPY END
 
 ========================================================================
 06. Blessing of the Faithful
 Section: maneuvers
 Live action id: action_1779504433990_6195cd85bddf28
-COPY START
 {
     "fields":  {
                    "cost":  "5 Wrath"
@@ -516,13 +504,11 @@ COPY START
                                  ]
                    }
 }
-COPY END
 
 ========================================================================
 07. Edict of Purifying Pacifism
 Section: maneuvers
 Live action id: action_1779504555719_67ae7d677ba59
-COPY START
 {
     "fields":  {
                    "cost":  "7 Wrath"
@@ -584,13 +570,11 @@ COPY START
                                  ]
                    }
 }
-COPY END
 
 ========================================================================
 08. Triggered Action (My Life for Yours)
 Section: triggers
 Live action id: action_1779504610833_235d3bc58cbe48
-COPY START
 {
     "fields": {},
     "automation": {
@@ -667,13 +651,11 @@ COPY START
         ]
     }
 }
-COPY END
 
 ========================================================================
 09. Triggered Action (Resist the Unnatural)
 Section: triggers
 Live action id: action_1779504726512_71f4fd668ac0c8
-COPY START
 {
     "fields":  {
 
@@ -711,13 +693,11 @@ COPY START
                                  ]
                    }
 }
-COPY END
 
 ========================================================================
 10. Free Triggered Action (Judgment main action rebuke)
 Section: triggers
 Live action id: action_1780273102615_aa1a74f2473bb
-COPY START
 {
     "fields":  {
 
@@ -760,13 +740,11 @@ COPY START
                                  ]
                    }
 }
-COPY END
 
 ========================================================================
 11. Free Triggered Action (Judgment new target)
 Section: triggers
 Live action id: action_1780273114468_6607d1542407
-COPY START
 {
     "fields":  {
 
@@ -848,13 +826,11 @@ COPY START
                                  ]
                    }
 }
-COPY END
 
 ========================================================================
 12. Free Triggered Action (Judgment: stop shift)
 Section: triggers
 Live action id: action_1780274930123_b34653314140c
-COPY START
 {
     "fields":  {
                    "cost":  "1 Wrath"
@@ -895,13 +871,11 @@ COPY START
                                  ]
                    }
 }
-COPY END
 
 ========================================================================
 13. Free Triggered Action (Judgment: bane power roll)
 Section: triggers
 Live action id: action_1780274938055_d303cfb0781e78
-COPY START
 {
     "fields":  {
                    "cost":  "1 Wrath"
@@ -930,13 +904,11 @@ COPY START
                                  ]
                    }
 }
-COPY END
 
 ========================================================================
 14. Free Triggered Action (Judgment: reduce potency)
 Section: triggers
 Live action id: action_1780274946089_ff06f53d9a2e1
-COPY START
 {
     "fields":  {
                    "cost":  "1 Wrath"
@@ -966,13 +938,11 @@ COPY START
                                  ]
                    }
 }
-COPY END
 
 ========================================================================
 15. Free Triggered Action (Judgment: melee damage taunt)
 Section: triggers
 Live action id: action_1780274956221_e53656897d4a6
-COPY START
 {
     "fields":  {
                    "cost":  "1 Wrath"
@@ -1007,5 +977,4 @@ COPY START
                                  ]
                    }
 }
-COPY END
 

@@ -27,7 +27,6 @@ Live feature id: `feature_1774395725994_8b737b527e6f8`.
 You become an expert at wielding destructive flames. Your abilities that have the Fire and Magic keywords gain a +1 bonus to rolled damage. Your Hurl Element ability (see below) also gains the bonus when you use it to deal fire damage.
 
 ```json
-COPY START
 {
   "schema": "ability-automation/v3",
   "version": 3,
@@ -79,7 +78,6 @@ COPY START
   "keywords": [],
   "usageLimit": null
 }
-COPY END
 ```
 
 ## Main Actions
@@ -93,7 +91,6 @@ Main Action | Magic,Ranged,Strike | Range: Ranged 10 | Target: One creature or o
 You cast a ball of elemental energy at a foe. Can be used as a ranged free strike. When you make this strike, choose the damage type: acid, cold, corruption, fire, lightning, poison, or sonic.
 
 ```json
-COPY START
 {
   "fields": {
     "name": "Hurl Element",
@@ -193,7 +190,6 @@ COPY START
     "usageLimit": null
   }
 }
-COPY END
 ```
 
 ### Motivate Earth
@@ -205,7 +201,6 @@ Main Action | Earth,Magic,Melee | Range: Melee 1 | Target: Special | Cost: Free!
 The earth rises, falls, or opens up at your command. You touch a square containing mundane dirt, stone, or metal and create a 5 wall of the same material, which rises up out of the ground and must include the square you touched. Alternatively, you touch a structure of mundane dirt, stone, or metal occupying 2+ squares to open a 1-square opening where you touched it, or touch an existing 1-square-or-smaller opening to seal it with the same material.
 
 ```json
-COPY START
 {
   "fields": {
     "name": "Motivate Earth",
@@ -267,7 +262,6 @@ COPY START
     "usageLimit": null
   }
 }
-COPY END
 ```
 
 ### Bifurcated Incineration
@@ -279,7 +273,6 @@ Main Action | Fire,Magic,Ranged,Strike | Range: Ranged 10 | Target: Two creature
 Two jets of flame lance out at your command.
 
 ```json
-COPY START
 {
   "fields": {
     "name": "Bifurcated Incineration",
@@ -381,7 +374,6 @@ COPY START
     "usageLimit": null
   }
 }
-COPY END
 ```
 
 ### Unquiet Ground
@@ -393,7 +385,6 @@ Main Action | Area,Earth,Magic,Ranged | Range: 2 cube within 10 | Target: Each e
 A sudden storm of detritus assaults your foes and leaves them struggling to move. Effect: The ground beneath the area is difficult terrain for enemies.
 
 ```json
-COPY START
 {
   "fields": {
     "name": "Unquiet Ground",
@@ -506,7 +497,6 @@ COPY START
     "usageLimit": null
   }
 }
-COPY END
 ```
 
 ### The Flesh, a Crucible
@@ -518,7 +508,6 @@ Main Action | Fire,Magic,Ranged,Strike | Range: Ranged 10 | Target: One creature
 Fire engulfs your target and continues to churn. Persistent 1: If the target is within distance at the start of your turn, you can make the power roll again without spending essence.
 
 ```json
-COPY START
 {
   "fields": {
     "name": "The Flesh, a Crucible",
@@ -620,7 +609,6 @@ COPY START
     "usageLimit": null
   }
 }
-COPY END
 ```
 
 ### Conflagration
@@ -632,7 +620,6 @@ Main Action | Area,Fire,Magic,Ranged | Range: 3 cube within 10 | Target: Each en
 A storm of fire descends upon your enemies. Persistent 2: At the start of your turn, you can use a maneuver to use this ability again without spending essence.
 
 ```json
-COPY START
 {
   "fields": {
     "name": "Conflagration",
@@ -736,7 +723,6 @@ COPY START
     "usageLimit": null
   }
 }
-COPY END
 ```
 
 ### Maw of Earth
@@ -748,7 +734,6 @@ Main Action | Area,Earth,Magic,Ranged | Range: 3 cube within 10 | Target: Each e
 You open up the ground, spewing out shrapnel of stone and debris. Effect: The ground in or directly beneath the area drops 3 squares.
 
 ```json
-COPY START
 {
   "fields": {
     "name": "Maw of Earth",
@@ -861,7 +846,6 @@ COPY START
     "usageLimit": null
   }
 }
-COPY END
 ```
 
 ## Maneuvers
@@ -875,7 +859,6 @@ Maneuver | Maneuver,Area,Earth,Green,Magic,Ranged | Range: 3 cube within 10 | Ta
 Until the start of your next turn, the area gains: (1) Once at the start of your turn as a free maneuver, you and each ally in the area can spend any number of Recoveries. (2) The area is difficult terrain for enemies. (3) Each enemy who enters the area for the first time in a combat round or starts their turn there takes damage equal to your Reason score.
 
 ```json
-COPY START
 {
   "fields": {
     "name": "O Flower Aid, O Earth Defend",
@@ -960,7 +943,6 @@ COPY START
     "usageLimit": null
   }
 }
-COPY END
 ```
 
 ## Triggered Actions
@@ -978,7 +960,6 @@ Authoring notes:
 - "Twice your Reason instead" is modeled as base +R always, plus an optional **Spend 1 Essence for another +R** (R + R = 2R — same total, and declining the spend leaves the base R bonus).
 
 ```json
-COPY START
 {
   "fields": {
     "name": "Explosive Assistance",
@@ -1065,7 +1046,6 @@ COPY START
     "usageLimit": null
   }
 }
-COPY END
 ```
 
 ### Ward of Surprising Reactivity
@@ -1077,7 +1057,6 @@ Free Triggered Action | Fire,Magic | Range: Self | Target: The triggering creatu
 You use the magic of fire to create a ward of explosive energy. Whenever an adjacent creature deals damage to you, you can use a free triggered action to push that creature up to a number of squares equal to twice your Reason score.
 
 ```json
-COPY START
 {
   "fields": {
     "name": "Ward of Surprising Reactivity",
@@ -1153,13 +1132,11 @@ COPY START
     "usageLimit": null
   }
 }
-COPY END
 ```
 
 ## Heroic Resource - Essence
 
 ```json
-COPY START
 {
   "schema": "heroic-resource/v1",
   "rules": [
@@ -1238,7 +1215,6 @@ COPY START
     }
   ]
 }
-COPY END
 ```
 
 ## No saved automation

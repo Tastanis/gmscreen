@@ -27,7 +27,6 @@ Live feature id: `feature_1779855357534_0944dae254f7a`.
 Your damage-dealing psionic abilities gain a +1 bonus to rolled damage.
 
 ```json
-COPY START
 {
   "schema": "ability-automation/v3",
   "version": 3,
@@ -57,7 +56,6 @@ COPY START
   "keywords": [],
   "usageLimit": null
 }
-COPY END
 ```
 
 ## Main Actions
@@ -71,7 +69,6 @@ Main action | Area,Fire,Psionic,Pyrokinesis,Ranged | Range: 3 cube within 10 | T
 The air erupts into a column of smokeless flame. Effect: A column of fire remains in the area until the start of your next turn. Each enemy who enters the area for the first time in a combat round or starts their turn there takes 2 fire damage. Strained: The size of the cube increases by 2, but the fire disappears at the end of your turn.
 
 ```json
-COPY START
 {
   "fields": {
     "name": "Incinerate",
@@ -273,7 +270,6 @@ COPY START
     "usageLimit": null
   }
 }
-COPY END
 ```
 
 ### Materialize
@@ -285,7 +281,6 @@ Main action | Psionic,Ranged,Resopathy,Strike | Range: Ranged 10 | Target: One c
 You picture an object in your mind and give it form--directly above your opponent's head. Effect: A worthless size 1M object drops onto the target to deal the damage, then rolls into an adjacent unoccupied space of your choice. The object is made of wood, stone, or metal (your choice). Strained: The object explodes after the damage is dealt, and each creature adjacent to the target takes damage equal to your Reason score. You also take damage equal to your Reason score that can't be reduced in any way.
 
 ```json
-COPY START
 {
   "fields": {
     "name": "Materialize",
@@ -464,7 +459,6 @@ COPY START
     "usageLimit": null
   }
 }
-COPY END
 ```
 
 ### Mind Spike
@@ -476,7 +470,6 @@ Main action | Psionic,Ranged,Strike,Telepathy | Range: Ranged 10 | Target: One c
 A telepathic bolt instantly zaps a creature's brain. Strained: The target takes an extra 2 psychic damage. You also take 2 psychic damage that can't be reduced in any way.
 
 ```json
-COPY START
 {
   "fields": {
     "name": "Mind Spike",
@@ -630,7 +623,6 @@ COPY START
     "usageLimit": null
   }
 }
-COPY END
 ```
 
 ### Smolder
@@ -640,7 +632,6 @@ Live action id: `action_1766542300384_08c5ee6d726d1`.
 Main Action | Psionic Pyrokinesis Ranged Strike | Range: 10 | Target: one creature | Cost: 3
 
 ```json
-COPY START
 {
   "fields": {
     "name": "Smolder",
@@ -804,7 +795,6 @@ COPY START
     "usageLimit": null
   }
 }
-COPY END
 ```
 
 ### Synaptic Override
@@ -816,7 +806,6 @@ Main Action | Psionic,Ranged,Telepathy | Range: Ranged 10 | Target: One enemy | 
 You control an enemy's nervous system. You control the target's movement. The target can't be moved in a way that would harm them (such as over a cliff), leave them dying, or result in them suffering a condition or other negative effect. However, you can move them to provoke opportunity attacks.
 
 ```json
-COPY START
 {
   "fields": {
     "name": "Synaptic Override",
@@ -934,7 +923,6 @@ COPY START
     "usageLimit": null
   }
 }
-COPY END
 ```
 
 ### Reflector Field
@@ -946,7 +934,6 @@ Main Action | Area,Psionic,Telepathy | Range: 3 aura | Target: Special | Cost: 7
 A protective field reverses the momentum of incoming attacks. The aura lasts until the start of your next turn. Whenever an enemy targets an ally in the area with a ranged ability, the ability is negated on the ally and reflected back at the enemy. The ability deals half the damage to the enemy that it would have dealt to the ally and loses any additional effects.
 
 ```json
-COPY START
 {
   "fields": {
     "name": "Reflector Field",
@@ -1002,7 +989,6 @@ COPY START
     "usageLimit": null
   }
 }
-COPY END
 ```
 
 ## Maneuvers
@@ -1016,7 +1002,6 @@ Maneuver | Chronopathy,Psionic,Ranged | Range: Ranged 10 | Target: Self or one a
 The target is thrown several seconds back through time and gets to do it all again. The target uses an ability with a base Heroic Resource cost of 7 or lower that they've previously used this round, without needing to spend the base cost. Augmentations to the ability can be paid for as usual.
 
 ```json
-COPY START
 {
   "fields": {
     "name": "Flashback",
@@ -1102,7 +1087,6 @@ COPY START
     "usageLimit": null
   }
 }
-COPY END
 ```
 
 ## Triggered Actions
@@ -1116,7 +1100,6 @@ Triggered Action | Psionic,Ranged | Range: Ranged 10 | Target: 1 creature | Trig
 The target takes psychic damage equal to half the triggering damage.
 
 ```json
-COPY START
 {
   "fields": {
     "name": "Feedback Loop",
@@ -1198,7 +1181,6 @@ COPY START
     "usageLimit": null
   }
 }
-COPY END
 ```
 
 ### Resist the Unnatural
@@ -1210,7 +1192,6 @@ Triggered Action |  | Trigger: You take damage that isn't untyped
 You halve the damage.
 
 ```json
-COPY START
 {
   "fields": {
     "name": "Resist the Unnatural",
@@ -1267,7 +1248,6 @@ COPY START
     "usageLimit": null
   }
 }
-COPY END
 ```
 
 ## Free Strikes
@@ -1281,7 +1261,6 @@ Free Triggered Action | Psionic,Ranged,Strike,Telepathy | Range: Ranged 10 | Tar
 A telepathic bolt instantly zaps a creature's brain. Mind Spike can be used as a ranged free strike, so the Talent makes opportunity attacks with it.
 
 ```json
-COPY START
 {
   "fields": {
     "name": "Mind Spike (Opportunity Attack)",
@@ -1485,7 +1464,6 @@ COPY START
     "usageLimit": null
   }
 }
-COPY END
 ```
 
 ### Free Strike (melee)
@@ -1495,7 +1473,6 @@ Live action id: `action_1766542938520_f59b34e8c7dc5`.
 Free Strike | Charge Melee Strike Weapon | Range: 1 | Target: 1
 
 ```json
-COPY START
 {
   "fields": {
     "name": "Free Strike (melee)",
@@ -1590,7 +1567,6 @@ COPY START
     "usageLimit": null
   }
 }
-COPY END
 ```
 
 ### Free Strike (ranged)
@@ -1600,7 +1576,6 @@ Live action id: `action_1766542985344_14382c6e5644f`.
 Free Strike | Ranged Strike Weapon | Range: 5 | Target: 1
 
 ```json
-COPY START
 {
   "fields": {
     "name": "Free Strike (ranged)",
@@ -1703,7 +1678,6 @@ COPY START
     "usageLimit": null
   }
 }
-COPY END
 ```
 
 ## Heroic Resource - Clarity
@@ -1711,7 +1685,6 @@ COPY END
 Start of your turn: +1d3First force move per round: +2 You can spend clarity you don't have, pushing that Heroic Resource into negative numbers to a maximum negative value equal to 1 + your Reason score. At the end of each of your turns, you take 1 damage for each negative point of clarity. Whenever you have clarity below 0, you are strained. Some psionic abilities have additional effects if you are already strained or become strained when you use them. Strained effects can still impact you even after you are no longer strained. Whenever you use an ability with a strain effect outside of combat, you can take 1d6 damage and incur the effect if you don't incur it for other reasons.
 
 ```json
-COPY START
 {
   "schema": "heroic-resource/v1",
   "rules": [
@@ -1801,7 +1774,6 @@ COPY START
     }
   ]
 }
-COPY END
 ```
 
 ## No saved automation
