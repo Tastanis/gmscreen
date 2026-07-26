@@ -59,6 +59,7 @@ describe('standalone combat tracker shell', () => {
       updatedAt: 0,
       sequence: 0,
       turnLock: null,
+      intentHistory: [],
       lastEffect: null,
       lastEffects: [],
       groups: [],

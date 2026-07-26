@@ -147,7 +147,17 @@ test('queueSave resolves completion listeners when save finishes', async (t) => 
   request.resolve({ ok: true, json: async () => ({}) });
 
   const outcome = await promise;
-  assert.deepEqual(outcome, { success: true, aborted: false, error: null, data: null });
+  assert.deepEqual(outcome, {
+    success: true,
+    aborted: false,
+    error: null,
+    data: null,
+    meta: {
+      applied: true,
+      operationResults: [],
+      combatResults: {},
+    },
+  });
   assert.equal(results.length, 1);
   assert.deepEqual(results[0], outcome);
 });
@@ -207,4 +217,19 @@ test('queueSave returns a non-retryable conflict result for stale board saves', 
   assert.equal(result.error?.name, 'ConflictError');
   assert.equal(result.error?.status, 409);
   assert.deepEqual(result.data, { _version: 12 });
+});
+
+test('bfcache restoration resets unload-only beacon mode', async () => {
+  const {
+    _markPageActiveForTest,
+    _setPageUnloadingForTest,
+    _shouldUseKeepaliveForTest,
+  } = await import('../persistence.js');
+
+  _setPageUnloadingForTest(true);
+  assert.equal(_shouldUseKeepaliveForTest(false), true);
+
+  _markPageActiveForTest();
+  assert.equal(_shouldUseKeepaliveForTest(false), false);
+  assert.equal(_shouldUseKeepaliveForTest(true), true);
 });

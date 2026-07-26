@@ -53,15 +53,18 @@ export function createBoardStatePoller({
   getCurrentVersionFn = () => 0,
   onVersionUpdated = null,
   onStateUpdated = null,
+  onSyncError = null,
+  onSyncRecovered = null,
   isPusherConnectedFn = isPusherConnected,
 } = {}) {
   const endpoint = stateEndpoint ?? routes?.state ?? null;
 
   let isPolling = false;
   let lastHash = null;
+  let lastServerEtag = null;
   let pollErrorLogged = false;
 
-  async function poll() {
+  async function poll({ authoritative = false } = {}) {
     if (isPolling) {
       return;
     }
@@ -82,7 +85,12 @@ export function createBoardStatePoller({
       const knownVersion = typeof getCurrentVersionFn === 'function'
         ? getCurrentVersionFn()
         : 0;
-      if (typeof knownVersion === 'number' && knownVersion > 0) {
+      if (!authoritative && lastServerEtag) {
+        headers['If-None-Match'] = lastServerEtag;
+      } else if (!authoritative && typeof knownVersion === 'number' && knownVersion > 0) {
+        // Compatibility for the first poll after bootstrap and older servers.
+        // A hash-aware server returns one full response, whose ETag is then
+        // reused on subsequent safety polls.
         headers['If-None-Match'] = `W/"v${knownVersion}"`;
       }
 
@@ -90,7 +98,12 @@ export function createBoardStatePoller({
         cache: 'no-store',
         headers,
       });
+      const responseEtag = response?.headers?.get?.('ETag');
+      if (typeof responseEtag === 'string' && responseEtag.trim()) {
+        lastServerEtag = responseEtag.trim();
+      }
       if (response?.status === 304) {
+        onSyncRecovered?.();
         // Nothing has changed since our last applied version. Treat as a
         // successful no-op: do not touch lastHash, do not update state,
         // do not log an error.
@@ -98,8 +111,11 @@ export function createBoardStatePoller({
         return;
       }
       if (!response?.ok) {
-        throw new Error(`Unexpected status ${response?.status ?? 'unknown'}`);
+        const error = new Error(`Unexpected status ${response?.status ?? 'unknown'}`);
+        error.status = Number(response?.status) || 0;
+        throw error;
       }
+      onSyncRecovered?.();
 
       const payload = (await response.json().catch(() => ({}))) ?? {};
       const incoming = payload?.data?.boardState ?? null;
@@ -110,7 +126,7 @@ export function createBoardStatePoller({
       const hashCandidate = hashBoardStateSnapshotFn(incoming);
       const hashFallback = safeJsonStringifyFn(incoming) ?? String(Date.now());
       const hash = hashCandidate ?? hashFallback;
-      if (hash === lastHash) {
+      if (!authoritative && hash === lastHash) {
         pollErrorLogged = false;
         return;
       }
@@ -124,7 +140,8 @@ export function createBoardStatePoller({
           pendingSaveInfo?.blocking
       );
 
-      if (hasPendingSave) {
+      const hasInFlightSave = Boolean(pendingSaveInfo?.promise);
+      if (hasPendingSave && (!authoritative || hasInFlightSave)) {
         // Do NOT update lastHash here. If we record the hash while skipping,
         // the next poll after the save completes will see the same hash and
         // skip again, causing the client to permanently miss this update.
@@ -142,62 +159,6 @@ export function createBoardStatePoller({
       const snapshotAuthorId = normalizeProfileIdFn(
         snapshotMetadata?.authorId ?? snapshotMetadata?.holderId ?? null
       );
-      const snapshotUpdatedAtRaw = Number(
-        snapshotMetadata?.updatedAt ?? snapshotMetadata?.timestamp
-      );
-      const snapshotUpdatedAt = Number.isFinite(snapshotUpdatedAtRaw)
-        ? snapshotUpdatedAtRaw
-        : 0;
-      const snapshotAuthorRole =
-        typeof snapshotMetadata?.authorRole === 'string'
-          ? snapshotMetadata.authorRole.trim().toLowerCase()
-          : '';
-      const snapshotAuthorIsGm = Boolean(
-        snapshotMetadata?.authorIsGm || snapshotAuthorRole === 'gm'
-      );
-
-      const currentState = boardApi.getState?.() ?? {};
-      const currentMetadata =
-        currentState?.boardState?.metadata ?? currentState?.boardState?.meta ?? null;
-      const currentSignature =
-        typeof currentMetadata?.signature === 'string'
-          ? currentMetadata.signature.trim()
-          : null;
-      const currentAuthorRole =
-        typeof currentMetadata?.authorRole === 'string'
-          ? currentMetadata.authorRole.trim().toLowerCase()
-          : '';
-      const currentAuthorIsGm = Boolean(
-        currentMetadata?.authorIsGm || currentAuthorRole === 'gm'
-      );
-      const currentUpdatedAtRaw = Number(
-        currentMetadata?.updatedAt ?? currentMetadata?.timestamp
-      );
-      const currentUpdatedAt = Number.isFinite(currentUpdatedAtRaw)
-        ? currentUpdatedAtRaw
-        : 0;
-      const activeSceneId =
-        typeof incoming?.activeSceneId === 'string'
-          ? incoming.activeSceneId
-          : typeof currentState?.boardState?.activeSceneId === 'string'
-          ? currentState.boardState.activeSceneId
-          : null;
-      const normalizedSceneId = typeof activeSceneId === 'string' ? activeSceneId.trim() : '';
-      const incomingCombatUpdatedAtRaw =
-        normalizedSceneId && incoming?.sceneState?.[normalizedSceneId]?.combat
-          ? Number(incoming.sceneState[normalizedSceneId].combat.updatedAt)
-          : 0;
-      const incomingCombatUpdatedAt = Number.isFinite(incomingCombatUpdatedAtRaw)
-        ? incomingCombatUpdatedAtRaw
-        : 0;
-      const currentCombatUpdatedAtRaw =
-        normalizedSceneId && currentState?.boardState?.sceneState?.[normalizedSceneId]?.combat
-          ? Number(currentState.boardState.sceneState[normalizedSceneId].combat.updatedAt)
-          : 0;
-      const currentCombatUpdatedAt = Number.isFinite(currentCombatUpdatedAtRaw)
-        ? currentCombatUpdatedAtRaw
-        : 0;
-      const hasNewerCombatUpdate = incomingCombatUpdatedAt > currentCombatUpdatedAt;
       const currentUserId = normalizeProfileIdFn(getCurrentUserIdFn());
       const incomingHash = hashCandidate;
       const lastPersistedHash = getLastPersistedHashFn?.() ?? null;
@@ -210,7 +171,7 @@ export function createBoardStatePoller({
               (snapshotAuthorId && currentUserId && snapshotAuthorId === currentUserId)))
       );
 
-      if (authoredSnapshot) {
+      if (!authoritative && authoredSnapshot) {
         lastHash = hash;
         pollErrorLogged = false;
         return;
@@ -243,22 +204,14 @@ export function createBoardStatePoller({
         return;
       }
 
-      // Reject stale player snapshots when current state has newer GM data
-      if (!snapshotAuthorIsGm && currentAuthorIsGm &&
-          snapshotUpdatedAt > 0 && currentUpdatedAt > 0 &&
-          snapshotUpdatedAt < currentUpdatedAt) {
-        lastHash = hash;
-        pollErrorLogged = false;
-        return;
-      }
-
       lastHash = hash;
       pollErrorLogged = false;
 
       boardApi.updateState?.((draft) => {
         draft.boardState = mergeBoardStateSnapshotFn(
           draft.boardState,
-          incoming
+          incoming,
+          { authoritative }
         );
       });
 
@@ -280,6 +233,7 @@ export function createBoardStatePoller({
         }
       }
     } catch (error) {
+      onSyncError?.(error);
       if (!pollErrorLogged) {
         console.warn('[VTT] Board state poll failed', error);
         pollErrorLogged = true;
@@ -287,6 +241,10 @@ export function createBoardStatePoller({
     } finally {
       isPolling = false;
     }
+  }
+
+  function forceImmediatePoll() {
+    return poll({ authoritative: true });
   }
 
   function start() {
@@ -349,11 +307,9 @@ export function createBoardStatePoller({
       // still apply, so calling this during a pending save is a safe
       // no-op — see the `pendingResyncAfterSave` plumbing in
       // board-interactions for the deferred case.
-      forceImmediatePoll() {
-        poll();
-      },
+      forceImmediatePoll,
     };
   }
 
-  return { poll, start };
+  return { poll, start, forceImmediatePoll };
 }

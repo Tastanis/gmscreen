@@ -7,16 +7,14 @@ use PHPUnit\Framework\TestCase;
 require_once __DIR__ . '/../dnd/vtt/bootstrap.php';
 
 /**
- * Tests that hidden tokens are properly sanitized in the player view.
+ * Tests that hidden tokens are omitted from the player view.
  *
- * The server-side filterPlacementsForPlayerView() keeps hidden placements
- * in the response (so clients can track them by ID for unhide syncing)
- * but strips all monster data.  The client-side rendering code skips
- * hidden placements for non-GM users.
+ * Coordinates alone disclose a GM secret, so the server never returns hidden
+ * placements to a non-GM client.
  */
 final class HiddenPlacementFilterTest extends TestCase
 {
-    public function testHiddenTruePlacementIsKeptButSanitized(): void
+    public function testHiddenTruePlacementIsOmitted(): void
     {
         $boardState = [
             'placements' => [
@@ -30,13 +28,8 @@ final class HiddenPlacementFilterTest extends TestCase
 
         $filtered = filterPlacementsForPlayerView($boardState);
 
-        $this->assertCount(2, $filtered['placements']['scene-1']);
+        $this->assertCount(1, $filtered['placements']['scene-1']);
         $this->assertSame('visible-token', $filtered['placements']['scene-1'][0]['id']);
-        $this->assertSame('hidden-token', $filtered['placements']['scene-1'][1]['id']);
-        $this->assertTrue($filtered['placements']['scene-1'][1]['hidden']);
-        // Monster data must be stripped from hidden placements
-        $this->assertArrayNotHasKey('monster', $filtered['placements']['scene-1'][1]);
-        $this->assertArrayNotHasKey('monsterId', $filtered['placements']['scene-1'][1]);
     }
 
     public function testIsHiddenAlternateKeyIsRecognized(): void
@@ -51,8 +44,7 @@ final class HiddenPlacementFilterTest extends TestCase
 
         $filtered = filterPlacementsForPlayerView($boardState);
 
-        $this->assertCount(1, $filtered['placements']['scene-1']);
-        $this->assertSame('hidden-alt', $filtered['placements']['scene-1'][0]['id']);
+        $this->assertCount(0, $filtered['placements']['scene-1']);
     }
 
     public function testFlagsHiddenNestedKeyIsRecognized(): void
@@ -67,8 +59,7 @@ final class HiddenPlacementFilterTest extends TestCase
 
         $filtered = filterPlacementsForPlayerView($boardState);
 
-        $this->assertCount(1, $filtered['placements']['scene-1']);
-        $this->assertSame('hidden-flags', $filtered['placements']['scene-1'][0]['id']);
+        $this->assertCount(0, $filtered['placements']['scene-1']);
     }
 
     public function testNonHiddenPlacementIsPreserved(): void
@@ -103,9 +94,8 @@ final class HiddenPlacementFilterTest extends TestCase
 
         $filtered = filterPlacementsForPlayerView($boardState);
 
-        // All placements are kept; hidden ones are sanitized but present
         $ids = array_column($filtered['placements']['scene-1'], 'id');
-        $this->assertSame(['visible-1', 'hidden-1', 'visible-2', 'hidden-2', 'visible-3'], $ids);
+        $this->assertSame(['visible-1', 'visible-2', 'visible-3'], $ids);
     }
 
     public function testStringTrueIsRecognizedAsHidden(): void
@@ -123,11 +113,7 @@ final class HiddenPlacementFilterTest extends TestCase
 
         $filtered = filterPlacementsForPlayerView($boardState);
 
-        // All kept but monster data stripped
-        $this->assertCount(4, $filtered['placements']['scene-1']);
-        foreach ($filtered['placements']['scene-1'] as $token) {
-            $this->assertArrayNotHasKey('monster', $token);
-        }
+        $this->assertCount(0, $filtered['placements']['scene-1']);
     }
 
     public function testStringFalseIsNotHidden(): void
@@ -159,8 +145,7 @@ final class HiddenPlacementFilterTest extends TestCase
 
         $filtered = filterPlacementsForPlayerView($boardState);
 
-        $this->assertCount(1, $filtered['placements']['scene-1']);
-        $this->assertArrayNotHasKey('monster', $filtered['placements']['scene-1'][0]);
+        $this->assertCount(0, $filtered['placements']['scene-1']);
     }
 
     public function testIntegerZeroIsNotHidden(): void
@@ -197,12 +182,9 @@ final class HiddenPlacementFilterTest extends TestCase
 
         $filtered = filterPlacementsForPlayerView($boardState);
 
-        // All placements are kept (hidden ones sanitized)
-        $this->assertCount(2, $filtered['placements']['scene-1']);
+        $this->assertCount(1, $filtered['placements']['scene-1']);
         $this->assertSame('s1-visible', $filtered['placements']['scene-1'][0]['id']);
-        $this->assertSame('s1-hidden', $filtered['placements']['scene-1'][1]['id']);
-        $this->assertCount(1, $filtered['placements']['scene-2']);
-        $this->assertSame('s2-hidden', $filtered['placements']['scene-2'][0]['id']);
+        $this->assertCount(0, $filtered['placements']['scene-2']);
         $this->assertCount(1, $filtered['placements']['scene-3']);
         $this->assertSame('s3-visible', $filtered['placements']['scene-3'][0]['id']);
     }
@@ -238,9 +220,8 @@ final class HiddenPlacementFilterTest extends TestCase
         $this->assertCount(1, $filtered['placements']['scene-1']);
     }
 
-    public function testHiddenAllyHasMonsterDataStripped(): void
+    public function testHiddenAllyIsOmitted(): void
     {
-        // Even ally tokens have monster data stripped when hidden
         $boardState = [
             'placements' => [
                 'scene-1' => [
@@ -258,11 +239,73 @@ final class HiddenPlacementFilterTest extends TestCase
 
         $filtered = filterPlacementsForPlayerView($boardState);
 
-        $this->assertCount(1, $filtered['placements']['scene-1']);
-        $token = $filtered['placements']['scene-1'][0];
-        $this->assertSame('hidden-ally', $token['id']);
-        $this->assertArrayNotHasKey('monster', $token);
-        $this->assertArrayNotHasKey('monsterId', $token);
+        $this->assertCount(0, $filtered['placements']['scene-1']);
+    }
+
+    public function testPlayerMapDisabledStillFiltersHiddenPlacements(): void
+    {
+        $filtered = filterPlacementsForPlayerView([
+            'playerMapDisabled' => true,
+            'playerActiveSceneId' => 'secret-scene',
+            'playerMapUrl' => '/secret-map.png',
+            'placements' => [
+                'secret-scene' => [
+                    ['id' => 'hidden-boss', 'hidden' => true, 'column' => 8, 'row' => 9],
+                    ['id' => 'visible-hero', 'hidden' => false, 'column' => 1, 'row' => 2],
+                ],
+            ],
+        ]);
+
+        $this->assertNull($filtered['activeSceneId']);
+        $this->assertNull($filtered['mapUrl']);
+        $this->assertSame(['visible-hero'], array_column(
+            $filtered['placements']['secret-scene'],
+            'id'
+        ));
+    }
+
+    public function testCombatProjectionDoesNotExposeHiddenMonsterIdentifiers(): void
+    {
+        $filtered = filterPlacementsForPlayerView([
+            'placements' => [
+                'scene-1' => [
+                    ['id' => 'hidden-boss-name', 'hidden' => true],
+                    ['id' => 'visible-minion', 'hidden' => false],
+                    ['id' => 'visible-hero', 'hidden' => false],
+                ],
+            ],
+            'sceneState' => [
+                'scene-1' => [
+                    'combat' => [
+                        'active' => true,
+                        'activeCombatantId' => 'hidden-boss-name',
+                        'completedCombatantIds' => ['visible-hero', 'hidden-boss-name'],
+                        'turnPhase' => 'active',
+                        'groups' => [[
+                            'representativeId' => 'hidden-boss-name',
+                            'memberIds' => ['hidden-boss-name', 'visible-minion'],
+                        ]],
+                        'turnLock' => [
+                            'holderId' => 'gm',
+                            'holderName' => 'GM',
+                            'combatantId' => 'hidden-boss-name',
+                        ],
+                        'lastEffect' => [
+                            'type' => 'token-float',
+                            'placementId' => 'hidden-boss-name',
+                        ],
+                    ],
+                ],
+            ],
+        ]);
+
+        $combat = $filtered['sceneState']['scene-1']['combat'];
+        $this->assertSame('__hidden_enemy__', $combat['activeCombatantId']);
+        $this->assertSame(['visible-hero'], $combat['completedCombatantIds']);
+        $this->assertSame([], $combat['groups']);
+        $this->assertSame('__hidden_enemy__', $combat['turnLock']['combatantId']);
+        $this->assertNull($combat['lastEffect']);
+        $this->assertStringNotContainsString('hidden-boss-name', json_encode($combat));
     }
 
     public function testPositionDataPreservedInFilteredResults(): void

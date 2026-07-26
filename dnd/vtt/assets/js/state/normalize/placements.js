@@ -56,6 +56,10 @@ export function restrictPlacementsToPlayerView(placements = {}) {
     const entries = Array.isArray(placements[sceneId]) ? placements[sceneId] : [];
     filtered[sceneId] = entries
       .filter((entry) => entry && typeof entry === 'object')
+      .filter((entry) => !toBoolean(
+        entry.hidden ?? entry.isHidden ?? entry.flags?.hidden,
+        false
+      ))
       .map((entry) => stripMonsterSnapshot(entry, { allowAllyMonster: true }));
   });
 

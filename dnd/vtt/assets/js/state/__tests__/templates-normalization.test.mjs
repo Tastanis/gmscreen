@@ -14,9 +14,11 @@ describe('template normalization', () => {
       width: 2,
       rotation: 45,
       levelId: 'upper-floor',
+      _lastModified: 1234,
     });
 
     assert.equal(template.levelId, 'upper-floor');
+    assert.equal(template._lastModified, 1234);
   });
 
   test('defaults legacy templates without a level to Level 0', () => {

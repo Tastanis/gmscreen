@@ -36,8 +36,10 @@ import {
   consumeFullSyncNeeded,
 } from './drawing-tool.js';
 import {
+  acknowledgeBoardStateSnapshot,
   persistBoardState,
   persistBoardStateOps,
+  persistCombatIntent,
   persistCombatState,
 } from '../services/board-state-service.js';
 import { updateSceneGrid } from '../services/scene-service.js';
@@ -137,11 +139,8 @@ import {
   shouldProtectLocalCombatIntent,
 } from '../combat/combat-sync.js';
 import {
-  TURN_LOCK_STALE_TIMEOUT_MS,
   acquireTurnLock as acquireCombatTurnLock,
-  clearStaleTurnLock as clearStaleCombatTurnLock,
   createTurnLockState,
-  isTurnLockStale as isCombatTurnLockStale,
   releaseTurnLock as releaseCombatTurnLock,
   serializeTurnLockState as serializeCombatTurnLockState,
   updateTurnLockState as applyTurnLockState,
@@ -910,6 +909,7 @@ export function mountBoardInteractions(store, routes = {}) {
   let trackerOverflowAnimationFrame = null;
   let combatActive = false;
   let combatRound = 0;
+  let combatIntentHistory = [];
   let activeCombatantId = null;
   let highlightedCombatantId = null;
   let focusedCombatantId = null;
@@ -948,8 +948,10 @@ export function mountBoardInteractions(store, routes = {}) {
   const drawingFullReplaceScenes = new Set();
   // Track if pings changed
   let dirtyPings = false;
-  // Track if scene state changed (combat, grid, overlay)
-  const dirtySceneState = new Set();
+  // Maps sceneId -> Set of changed scene-state fields. A wildcard marks a
+  // mutation whose exact field is unknown. Field-level tracking prevents a
+  // successful claim/level op from clearing an unrelated pending fog change.
+  const dirtySceneState = new Map();
   // Track if top-level fields changed
   const dirtyTopLevel = new Set();
 
@@ -1017,8 +1019,25 @@ export function mountBoardInteractions(store, routes = {}) {
     dirtyPings = true;
   }
 
-  function markSceneStateDirty(sceneId) {
-    if (sceneId) dirtySceneState.add(sceneId);
+  function markSceneStateDirty(sceneId, field = '*') {
+    if (!sceneId) return;
+    if (!dirtySceneState.has(sceneId)) {
+      dirtySceneState.set(sceneId, new Set());
+    }
+    dirtySceneState.get(sceneId).add(
+      typeof field === 'string' && field.trim() ? field.trim() : '*'
+    );
+  }
+
+  function clearDirtySceneStateField(sceneId, field) {
+    const fields = dirtySceneState.get(sceneId);
+    if (!fields || fields.has('*')) {
+      return;
+    }
+    fields.delete(field);
+    if (fields.size === 0) {
+      dirtySceneState.delete(sceneId);
+    }
   }
 
   function markTopLevelDirty(field) {
@@ -1100,10 +1119,12 @@ export function mountBoardInteractions(store, routes = {}) {
       if (
         op.type === 'user-level.set'
         || op.type === 'user-level.activate'
-        || op.type === 'claim.set'
-        || op.type === 'claim.clear'
       ) {
-        dirtySceneState.delete(sceneId);
+        clearDirtySceneStateField(sceneId, 'userLevelState');
+        return;
+      }
+      if (op.type === 'claim.set' || op.type === 'claim.clear') {
+        clearDirtySceneStateField(sceneId, 'claimedTokens');
       }
     });
   }
@@ -1688,6 +1709,32 @@ export function mountBoardInteractions(store, routes = {}) {
   let pusherInterface = null;
   let pusherConnected = false;
   let currentBoardStateVersion = 0;
+  let syncFailureVisible = false;
+
+  function reportSyncFailure(error, source = 'save') {
+    const statusCode = Number(error?.status) || 0;
+    const sessionExpired = statusCode === 401 || statusCode === 403;
+    const message = sessionExpired
+      ? 'Your VTT session expired. Sign in again before making more changes.'
+      : `VTT ${source} failed. Your latest change may not be shared yet.`;
+    if (status) {
+      status.textContent = message;
+      status.dataset.syncError = 'true';
+    }
+    if (!syncFailureVisible
+      && typeof window !== 'undefined'
+      && window.UIKit?.toast) {
+      window.UIKit.toast(message, 'error');
+    }
+    syncFailureVisible = true;
+  }
+
+  function clearSyncFailure() {
+    syncFailureVisible = false;
+    if (status?.dataset?.syncError === 'true') {
+      delete status.dataset.syncError;
+    }
+  }
   // Handle returned by the board state poller's start(). Captured so
   // handlePusherConnectionChange() can call reconfigure() when Pusher
   // connects or drops mid-session.
@@ -1706,12 +1753,29 @@ export function mountBoardInteractions(store, routes = {}) {
   let combatEncounterId = null;
   let lastCombatStateSnapshot = null;
   let pendingGmCombatIntent = null;
+  let pendingCombatAuthorityIntent = null;
   let registeringLocalCombatSave = false;
   let startingCombatTeam = null;
   let currentTurnTeam = null;
   let activeTeam = null;
   let lastActingTeam = null;
   let pendingTurnTransition = null;
+
+  function queueCombatAuthorityIntent(type, details = {}) {
+    const normalizedType = typeof type === 'string' ? type.trim() : '';
+    if (!normalizedType) {
+      return null;
+    }
+    const intentId = `combat-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+    pendingCombatAuthorityIntent = {
+      type: normalizedType,
+      details: {
+        ...(details && typeof details === 'object' ? details : {}),
+        intentId,
+      },
+    };
+    return pendingCombatAuthorityIntent;
+  }
 
   let turnPhase = TURN_PHASE.IDLE;
   let borderFlashTimeoutId = null;
@@ -5429,7 +5493,19 @@ export function mountBoardInteractions(store, routes = {}) {
       // the inner function (not the queue wrapper) because we are
       // already inside a queued task when forceFullSnapshot is true.
       if (opsResult && typeof opsResult === 'object' && opsResult.escape === true) {
-        return doPersistBoardStateSnapshot(options, null);
+        const fallbackPromise = doPersistBoardStateSnapshot(
+          { ...options, forceFullSnapshot: true },
+          null
+        );
+        if (fallbackPromise && typeof fallbackPromise.then === 'function') {
+          fallbackPromise.then((result) => {
+            if (result?.success || result?.error?.name === 'ConflictError') {
+              acknowledgeBoardStateSnapshot(opsResult.throughSeq);
+            }
+            return result;
+          });
+        }
+        return fallbackPromise;
       }
       savePromise = opsResult ?? null;
       saveFlushDescriptor = {
@@ -5469,6 +5545,7 @@ export function mountBoardInteractions(store, routes = {}) {
         pendingEntry.lastResult = result ?? null;
 
         if (result?.success) {
+          clearSyncFailure();
           lastPersistedBoardStateSignature = signature;
           lastPersistedBoardStateHash = snapshotHash;
           lastBoardStateSaveCompletedAt = Date.now();
@@ -5515,6 +5592,13 @@ export function mountBoardInteractions(store, routes = {}) {
               '[VTT] Save response missing _version; not updating version tracker'
             );
           }
+          const rejectedCombat = Object.values(result?.meta?.combatResults ?? {})
+            .some((entry) => entry?.applied === false);
+          const rejectedOperation = (result?.meta?.operationResults ?? [])
+            .some((entry) => entry?.applied === false);
+          if ((rejectedCombat || rejectedOperation || result?.meta?.applied === false) && result?.data) {
+            applyAuthoritativeBoardStateSnapshot(result.data);
+          }
         } else {
           // CRITICAL: Clear the pending entry on failure so the poller is not
           // permanently blocked.  Previously, failed saves left blocking=true
@@ -5535,6 +5619,8 @@ export function mountBoardInteractions(store, routes = {}) {
             if (!applyBoardStateConflictSnapshot(result?.data)) {
               triggerBoardStateResync('save-version-conflict');
             }
+          } else {
+            reportSyncFailure(result?.error, 'save');
           }
         }
         return result;
@@ -5547,7 +5633,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
   const persistBoardStateSnapshot = (options = {}, opsOverride = null) => {
     const hasOpsOverride = Array.isArray(opsOverride) && opsOverride.length > 0;
-    if (hasOpsOverride || options?.keepalive === true) {
+    if ((hasOpsOverride && options?.serializeWithSnapshots !== true) || options?.keepalive === true) {
       return doPersistBoardStateSnapshot(options, opsOverride);
     }
     const previous = snapshotSaveQueue;
@@ -5559,7 +5645,7 @@ export function mountBoardInteractions(store, routes = {}) {
   };
 
   let keepaliveFlushScheduled = false;
-  const flushBoardStateWithKeepalive = () => {
+  const flushBoardStateWithKeepalive = ({ unloading = false } = {}) => {
     if (keepaliveFlushScheduled) {
       return null;
     }
@@ -5574,7 +5660,7 @@ export function mountBoardInteractions(store, routes = {}) {
     // client hasn't polled yet — the same "popback" issue that was already
     // fixed for combat state below.
     if (hasDirtyState()) {
-      const boardPromise = persistBoardStateSnapshot({ keepalive: true });
+      const boardPromise = persistBoardStateSnapshot({ keepalive: unloading });
       if (boardPromise && typeof boardPromise.then === 'function') {
         tasks.push(boardPromise);
       }
@@ -5611,7 +5697,9 @@ export function mountBoardInteractions(store, routes = {}) {
         combatSnapshot.groups = existingNormalized.groups;
       }
       const combatPromise = persistCombatState(routes.state, activeSceneId, combatSnapshot, {
-        keepalive: true,
+        keepalive: unloading,
+        _version: currentBoardStateVersion,
+        _socketId: getSocketId?.() || undefined,
       });
       if (combatPromise && typeof combatPromise.then === 'function') {
         tasks.push(combatPromise);
@@ -5645,7 +5733,7 @@ export function mountBoardInteractions(store, routes = {}) {
   if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        flushBoardStateWithKeepalive();
+        flushBoardStateWithKeepalive({ unloading: false });
       } else if (document.visibilityState === 'visible') {
         // When the tab becomes visible again, re-save any dirty state that
         // failed to persist while the tab was hidden (sendBeacon / keepalive
@@ -5662,10 +5750,17 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-    window.addEventListener('pagehide', flushBoardStateWithKeepalive, {
+    window.addEventListener('pagehide', () => {
+      flushBoardStateWithKeepalive({ unloading: true });
+    }, {
       capture: true,
       passive: true,
     });
+    window.addEventListener('pageshow', (event) => {
+      if (event?.persisted) {
+        triggerBoardStateResync('bfcache-restore');
+      }
+    }, { capture: true, passive: true });
   }
 
   function maybeNudgeBoardState(reason = 'heartbeat') {
@@ -5765,7 +5860,7 @@ export function mountBoardInteractions(store, routes = {}) {
       if (dirtySceneState.size > 0 && isGm) {
         const sceneStateClone = cloneBoardSection(boardState.sceneState);
         const filteredSceneState = {};
-        dirtySceneState.forEach((sceneId) => {
+        dirtySceneState.forEach((_fields, sceneId) => {
           if (sceneStateClone[sceneId]) {
             filteredSceneState[sceneId] = sceneStateClone[sceneId];
           }
@@ -5971,6 +6066,8 @@ export function mountBoardInteractions(store, routes = {}) {
       // Immediately refresh combat state when board state updates
       // This ensures combat tracker syncs instantly instead of waiting for separate loop
       onStateUpdated: applyCombatStateFromBoardState,
+      onSyncError: (error) => reportSyncFailure(error, 'refresh'),
+      onSyncRecovered: clearSyncFailure,
     });
 
     boardStatePollerHandle = poller.start();
@@ -6077,6 +6174,15 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    // The shared Pusher channel carries a player-safe projection only.
+    // A GM receiving another tab's public projection must fetch their
+    // authenticated canonical view instead of applying a payload that
+    // intentionally omits hidden placements and monster data.
+    if (delta.publicView === true && isGmUser()) {
+      triggerBoardStateResync('gm-private-view-refresh');
+      return;
+    }
+
     // ---- Phase 3-C: ops-overflow branch -----------------------------
     // The server fell back to a marker because the ops list would have
     // busted Pusher's 10 KB cap. We have no payload to apply locally;
@@ -6149,7 +6255,21 @@ export function mountBoardInteractions(store, routes = {}) {
         return;
       }
 
-      const ops = Array.isArray(delta.ops) ? delta.ops : [];
+      const incomingOps = Array.isArray(delta.ops) ? delta.ops : [];
+      const draggedTokenIds = new Set();
+      if (viewState.dragState?.previewPositions) {
+        viewState.dragState.previewPositions.forEach((_, id) => {
+          if (id) draggedTokenIds.add(id);
+        });
+      }
+      const ops = incomingOps.filter((op) => {
+        const placement = op?.type === 'placement.add' ? op.placement : null;
+        if (!placement?.id || !draggedTokenIds.has(placement.id)) {
+          return true;
+        }
+        deferDraggedPlacementUpdate(viewState.dragState, placement);
+        return false;
+      });
       let appliedCount = 0;
       try {
         boardApi.updateState?.((draft) => {
@@ -6183,7 +6303,7 @@ export function mountBoardInteractions(store, routes = {}) {
         '[VTT Pusher] Applied',
         appliedCount,
         'of',
-        ops.length,
+        incomingOps.length,
         'ops, version:',
         incomingVersion
       );
@@ -6294,37 +6414,37 @@ export function mountBoardInteractions(store, routes = {}) {
         draft.boardState.pings = delta.pings;
       }
 
-      // Apply scene state (combat and overlay updates)
-      // CRITICAL: Grid is NOT synced via Pusher - it's a permanent scene setting
+      // Apply canonical per-scene state. The server broadcasts the state it
+      // actually persisted, so grid, claims, user routing, fog, stairs, and
+      // combat must advance together.
       if (delta.sceneState && typeof delta.sceneState === 'object') {
         if (!draft.boardState.sceneState) {
           draft.boardState.sceneState = {};
         }
         Object.entries(delta.sceneState).forEach(([sceneId, state]) => {
-          if (!draft.boardState.sceneState[sceneId]) {
-            draft.boardState.sceneState[sceneId] = {};
+          if (!state || typeof state !== 'object') {
+            return;
           }
-          if (state.combat) {
-            draft.boardState.sceneState[sceneId].combat = state.combat;
-          }
-          // CRITICAL: Do NOT apply grid updates from Pusher
-          // Grid is a permanent scene setting that should only come from the scene definition
-          // Syncing grid via Pusher causes grid resets when scenes are reactivated
-          // if (state.grid) {
-          //   draft.boardState.sceneState[sceneId].grid = state.grid;
-          // }
-          if (state.mapLevels) {
-            draft.boardState.sceneState[sceneId].mapLevels = state.mapLevels;
-          }
-          if (state.fogOfWar !== undefined) {
+          const existing =
+            draft.boardState.sceneState[sceneId]
+            && typeof draft.boardState.sceneState[sceneId] === 'object'
+              ? draft.boardState.sceneState[sceneId]
+              : {};
+          const nextSceneState = {
+            ...existing,
+            ...JSON.parse(JSON.stringify(state)),
+          };
+          if (nextSceneState.fogOfWar !== undefined) {
             // Trust the incoming fog state from Pusher as authoritative.
             // Pusher broadcasts are sent after the server saves, so the
             // data reflects the GM's latest changes. Using a union here
             // would prevent the GM from adding fog back because deleted
             // cells would be restored from the player's existing state.
             // Per-level shape: { byLevel: { [levelId]: { enabled, revealedCells } } }.
-            const incomingFog = state.fogOfWar && typeof state.fogOfWar === 'object'
-              ? state.fogOfWar : { byLevel: {} };
+            const incomingFog = nextSceneState.fogOfWar
+              && typeof nextSceneState.fogOfWar === 'object'
+              ? nextSceneState.fogOfWar
+              : { byLevel: {} };
             if (!incomingFog.byLevel || typeof incomingFog.byLevel !== 'object'
                 || Array.isArray(incomingFog.byLevel)) {
               incomingFog.byLevel = {};
@@ -6335,8 +6455,9 @@ export function mountBoardInteractions(store, routes = {}) {
                 entry.revealedCells = {};
               }
             });
-            draft.boardState.sceneState[sceneId].fogOfWar = incomingFog;
+            nextSceneState.fogOfWar = incomingFog;
           }
+          draft.boardState.sceneState[sceneId] = nextSceneState;
         });
       }
 
@@ -6406,6 +6527,7 @@ export function mountBoardInteractions(store, routes = {}) {
    * Handle Pusher connection state changes.
    */
   function handlePusherConnectionChange(state) {
+    const wasConnected = pusherConnected;
     pusherConnected = state.connected;
     console.log('[VTT Pusher] Connection state:', state.connected ? 'connected' : 'disconnected');
 
@@ -6416,6 +6538,46 @@ export function mountBoardInteractions(store, routes = {}) {
     if (boardStatePollerHandle && typeof boardStatePollerHandle.reconfigure === 'function') {
       boardStatePollerHandle.reconfigure({ pusherConnected: state.connected });
     }
+    if (
+      state.connected
+      && !wasConnected
+      && boardStatePollerHandle
+      && typeof boardStatePollerHandle.forceImmediatePoll === 'function'
+    ) {
+      boardStatePollerHandle.forceImmediatePoll();
+    }
+  }
+
+  function applyAuthoritativeBoardStateSnapshot(boardState) {
+    if (!boardState || typeof boardState !== 'object') {
+      return false;
+    }
+    const incomingVersion = typeof boardState._version === 'number'
+      ? boardState._version
+      : Number.parseInt(boardState._version, 10);
+    boardApi.updateState?.((draft) => {
+      const current = draft.boardState && typeof draft.boardState === 'object'
+        ? draft.boardState
+        : {};
+      draft.boardState = mergeBoardStateSnapshot(
+        current,
+        { ...boardState, _fullSync: true },
+        { authoritative: true }
+      );
+      if (Number.isFinite(incomingVersion) && incomingVersion > 0) {
+        draft.boardState._version = incomingVersion;
+      }
+    });
+    if (Number.isFinite(incomingVersion) && incomingVersion > 0) {
+      currentBoardStateVersion = incomingVersion;
+      pusherInterface?.setLastAppliedVersion?.(incomingVersion);
+    }
+    const updatedState = boardApi.getState?.();
+    if (updatedState) {
+      applyStateToBoard(updatedState);
+      applyCombatStateFromBoardState(updatedState);
+    }
+    return true;
   }
 
   function getPendingBoardStateSaveInfo() {
@@ -7279,7 +7441,7 @@ export function mountBoardInteractions(store, routes = {}) {
         }
       });
       if (claimMutated) {
-        markSceneStateDirty(activeSceneId);
+        markSceneStateDirty(activeSceneId, 'claimedTokens');
         if (tokenAddOps) {
           tokenAddOps.push({
             type: 'claim.set',
@@ -7362,10 +7524,16 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     isApplyingState = true;
     try {
+      const storeVersion = Number(state?.boardState?._version);
+      if (Number.isFinite(storeVersion) && storeVersion > currentBoardStateVersion) {
+        currentBoardStateVersion = storeVersion;
+        pusherInterface?.setLastAppliedVersion?.(storeVersion);
+      }
       const sceneState = normalizeSceneState(state.scenes);
       const activeSceneId = state.boardState?.activeSceneId ?? null;
       if (activeSceneId !== lastActiveSceneId) {
         lastActiveSceneId = activeSceneId;
+        mapLevelRenderer.reset();
         mapLevelCutoutTool.reset();
         // Levels v2 §5.2: drop the previous scene's view-follow baseline so
         // entering a new scene establishes a fresh baseline (no auto-pan on
@@ -7494,10 +7662,8 @@ export function mountBoardInteractions(store, routes = {}) {
   subscribeStairsMode(() => refreshStairsRender());
 
   // Expose a helper so fog-of-war.js can mark scene state dirty for saving
-  boardApi._markSceneStateDirty = (sceneId) => {
-    if (typeof sceneId === 'string' && sceneId) {
-      dirtySceneState.add(sceneId);
-    }
+  boardApi._markSceneStateDirty = (sceneId, field = '*') => {
+    markSceneStateDirty(sceneId, field);
   };
 
   boardApi._markTopLevelDirty = (field) => {
@@ -7929,7 +8095,7 @@ export function mountBoardInteractions(store, routes = {}) {
     });
 
     if (activeSceneId) {
-      markSceneStateDirty(activeSceneId);
+      markSceneStateDirty(activeSceneId, 'grid');
     }
     if (activeSceneId && routes?.scenes) {
       persistSceneGridConfig(activeSceneId, nextGrid).then((saved) => {
@@ -8377,6 +8543,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const state = boardApi.getState?.() ?? {};
     const isGM = Boolean(state?.user?.isGM);
+    const currentUserId = normalizeProfileId(getCurrentUserId());
 
     const activeSceneId = state.boardState?.activeSceneId ?? null;
     if (!activeSceneId) {
@@ -8390,6 +8557,9 @@ export function mountBoardInteractions(store, routes = {}) {
 
     let removedCount = 0;
     const removedIds = [];
+    const claimedTokens = normalizeClaimedTokensMap(
+      state.boardState?.sceneState?.[activeSceneId]?.claimedTokens ?? {}
+    );
     boardApi.updateState?.((draft) => {
       const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
       if (!Array.isArray(scenePlacements) || !scenePlacements.length) {
@@ -8402,8 +8572,13 @@ export function mountBoardInteractions(store, routes = {}) {
         if (!selectedSet.has(placement.id)) {
           return true;
         }
-        // Non-GM players can only remove non-hidden tokens
-        if (!isGM && placement.hidden) {
+        // Players may remove only their own visible claimed token. The server
+        // repeats this check using the authenticated profile.
+        if (!isGM && (
+          placement.hidden
+          || !currentUserId
+          || claimedTokens[placement.id] !== currentUserId
+        )) {
           return true;
         }
         removedIds.push(placement.id);
@@ -8412,6 +8587,12 @@ export function mountBoardInteractions(store, routes = {}) {
       removedCount = scenePlacements.length - nextPlacements.length;
       if (removedCount > 0) {
         draft.boardState.placements[activeSceneId] = nextPlacements;
+        const sceneEntry = draft.boardState?.sceneState?.[activeSceneId];
+        if (sceneEntry?.claimedTokens && typeof sceneEntry.claimedTokens === 'object') {
+          removedIds.forEach((placementId) => {
+            delete sceneEntry.claimedTokens[placementId];
+          });
+        }
       }
     });
 
@@ -8430,14 +8611,14 @@ export function mountBoardInteractions(store, routes = {}) {
       // in the tracking set and flushes on the next regular save cycle
       // (typically within seconds during active gameplay).
       let removeOps = null;
-      if (USE_DELTA_SAVES && isGM) {
+      if (USE_DELTA_SAVES) {
         removeOps = removedIds.map((id) => ({
           type: 'placement.remove',
           sceneId: activeSceneId,
           placementId: id,
         }));
       } else {
-        // Non-GM or delta saves disabled: fall back to full snapshot.
+        // Delta saves disabled: fall back to full snapshot.
         clearDirtyTracking();
       }
       persistBoardStateSnapshot({}, removeOps);
@@ -8447,6 +8628,8 @@ export function mountBoardInteractions(store, routes = {}) {
         const noun = removedCount === 1 ? 'token' : 'tokens';
         status.textContent = `Removed ${removedCount} ${noun} from the scene.`;
       }
+    } else if (!isGM && status) {
+      status.textContent = 'You can only remove a visible token claimed by your profile.';
     }
   }
 
@@ -8910,7 +9093,7 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    markSceneStateDirty(activeSceneId);
+    markSceneStateDirty(activeSceneId, 'userLevelState');
     // Levels v2: broadcast the GM's per-user level change as a
     // `user-level.set` op so other clients pick it up via the existing
     // op applier path. The op applier mirrors the local mutation above.
@@ -8921,7 +9104,7 @@ export function mountBoardInteractions(store, routes = {}) {
       levelId: targetLevel.id,
       source: 'manual',
     };
-    persistBoardStateSnapshot({}, [userLevelOp]);
+    persistBoardStateSnapshot({ serializeWithSnapshots: true }, [userLevelOp]);
 
     const latestState = boardApi.getState?.() ?? {};
     syncMapLevelsForState(latestState, activeSceneId);
@@ -8981,14 +9164,14 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    markSceneStateDirty(activeSceneId);
+    markSceneStateDirty(activeSceneId, 'userLevelState');
     const activateOp = {
       type: 'user-level.activate',
       sceneId: activeSceneId,
       levelId: targetLevelId,
       userIds,
     };
-    persistBoardStateSnapshot({}, [activateOp]);
+    persistBoardStateSnapshot({ serializeWithSnapshots: true }, [activateOp]);
 
     const latestState = boardApi.getState?.() ?? {};
     syncMapLevelsForState(latestState, activeSceneId);
@@ -10781,6 +10964,11 @@ export function mountBoardInteractions(store, routes = {}) {
       openTurnPrompt(representativeId);
     }
     notifyConditionTurnStart(representativeId);
+    queueCombatAuthorityIntent('turn.start', {
+      combatantId: representativeId,
+      holderName: initiatorName,
+      override: isGmUser() || options.forceTurnLock === true,
+    });
     syncCombatStateToStore();
   }
 
@@ -10870,6 +11058,9 @@ export function mountBoardInteractions(store, routes = {}) {
     refreshCombatTracker();
     markCombatTurnStateDirty();
     maybeAnnounceAllyPick();
+    queueCombatAuthorityIntent('turn.cancel', {
+      combatantId: canceledId,
+    });
     syncCombatStateToStore();
   }
 
@@ -10985,6 +11176,9 @@ export function mountBoardInteractions(store, routes = {}) {
       checkForRoundCompletion();
     }
     if (options.suppressSync !== true) {
+      queueCombatAuthorityIntent('turn.complete', {
+        combatantId: finishedId,
+      });
       syncCombatStateToStore();
     }
   }
@@ -12192,6 +12386,7 @@ export function mountBoardInteractions(store, routes = {}) {
       triggeredAt: Date.now(),
     });
     rememberGmCombatIntent();
+    queueCombatAuthorityIntent('combat.start');
     syncCombatStateToStore();
     const startCombatIntent = rememberGmCombatIntent();
     resetTriggeredActionsForActiveScene();
@@ -12272,6 +12467,9 @@ export function mountBoardInteractions(store, routes = {}) {
     // build then carries active=true and persists a Start-Combat-shaped
     // payload, defeating the End Combat click.
     rememberGmCombatIntent();
+    queueCombatAuthorityIntent('combat.end', {
+      encounterId: combatEncounterId,
+    });
     syncCombatStateToStore();
     rememberGmCombatIntent();
     resetTriggeredActionsForActiveScene();
@@ -12388,6 +12586,7 @@ export function mountBoardInteractions(store, routes = {}) {
       const wasCombatActive = combatActive;
       combatActive = normalized.active;
       combatRound = normalized.round;
+      combatIntentHistory = [...normalized.intentHistory];
       combatEncounterId = normalized.encounterId ?? null;
       if (isGmUser()) {
         combatTimerService.updateRound(combatRound);
@@ -12617,6 +12816,7 @@ export function mountBoardInteractions(store, routes = {}) {
       encounterId: combatEncounterId,
       sequence: combatSequence,
       turnLock: serializeTurnLockState(),
+      intentHistory: combatIntentHistory,
       lastEffect: lastTurnEffect,
       lastEffects: lastTurnEffects,
       groups: serializeCombatGroups(combatTrackerGroups),
@@ -12647,7 +12847,7 @@ export function mountBoardInteractions(store, routes = {}) {
     pendingCombatStateSync = false;
 
     const state = boardApi.getState?.() ?? {};
-    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    const { activeSceneId } = getActiveSceneCombatState(state);
     if (!activeSceneId) {
       return;
     }
@@ -12725,8 +12925,10 @@ export function mountBoardInteractions(store, routes = {}) {
       refreshCombatTracker();
     }
 
+    const authorityIntent = pendingCombatAuthorityIntent;
+    pendingCombatAuthorityIntent = null;
     const serialized = JSON.stringify(snapshot);
-    if (serialized === lastCombatStateSnapshot) {
+    if (serialized === lastCombatStateSnapshot && !authorityIntent) {
       clearDirtyCombatFields(dirtyFieldsForSnapshot);
       return;
     }
@@ -12751,7 +12953,21 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const latest = boardApi.getState?.() ?? latestBeforeStoreSync;
     let combatSavePromise = null;
-    if (latest?.user?.isGM) {
+    if (authorityIntent && routes?.state) {
+      combatSavePromise = persistCombatIntent(
+        routes.state,
+        activeSceneId,
+        authorityIntent.type,
+        {
+          ...authorityIntent.details,
+          combat: snapshot,
+        },
+        {
+          _version: currentBoardStateVersion,
+          _socketId: getSocketId?.() || undefined,
+        }
+      );
+    } else if (latest?.user?.isGM) {
       combatSavePromise = persistBoardStateSnapshot({}, [
         {
           type: 'combat.set',
@@ -12761,7 +12977,10 @@ export function mountBoardInteractions(store, routes = {}) {
       ]);
     } else if (routes?.state) {
       // Track pending combat state save to prevent poller from overwriting during save
-      const savePromise = persistCombatState(routes.state, activeSceneId, snapshot);
+      const savePromise = persistCombatState(routes.state, activeSceneId, snapshot, {
+        _version: currentBoardStateVersion,
+        _socketId: getSocketId?.() || undefined,
+      });
       combatSavePromise = savePromise;
       if (savePromise && typeof savePromise.then === 'function') {
         pendingCombatStateSave = {
@@ -12791,10 +13010,87 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }
 
+    if (
+      authorityIntent
+      && combatSavePromise
+      && typeof combatSavePromise.then === 'function'
+    ) {
+      pendingCombatStateSave = {
+        promise: combatSavePromise,
+        sceneId: activeSceneId,
+        timestamp: snapshot.updatedAt,
+      };
+      const finishAuthoritySave = () => {
+        if (pendingCombatStateSave?.promise !== combatSavePromise) {
+          return;
+        }
+        pendingCombatStateSave = null;
+        if (pendingResyncAfterSave) {
+          pendingResyncAfterSave = false;
+          triggerBoardStateResync('post-combat-intent-flush');
+        }
+      };
+      combatSavePromise.then(finishAuthoritySave, finishAuthoritySave);
+    }
+
     if (combatSavePromise && typeof combatSavePromise.then === 'function') {
       combatSavePromise.then((result) => {
-        if (result?.success !== false && !isBoardStateVersionConflictResult(result)) {
+        if (authorityIntent) {
+          const operationResults = Array.isArray(result?.meta?.operationResults)
+            ? result.meta.operationResults
+            : [];
+          const intentResult = operationResults.find(
+            (entry) => entry?.intentId === authorityIntent.details.intentId
+          ) ?? null;
+          const intentAccepted = intentResult?.accepted === true;
           clearDirtyCombatFields(dirtyFieldsForSnapshot);
+          if (result?.data) {
+            applyAuthoritativeBoardStateSnapshot(result.data);
+          }
+          if (
+            result?.success !== false
+            && !isBoardStateVersionConflictResult(result)
+            && intentAccepted
+          ) {
+            clearSyncFailure();
+            const newVersion = result?.data?._version;
+            if (shouldApplyIncomingVersion(newVersion, currentBoardStateVersion)) {
+              currentBoardStateVersion = newVersion;
+              pusherInterface?.setLastAppliedVersion?.(newVersion);
+            }
+          } else {
+            const reason = intentResult?.reason || result?.error?.message || 'rejected';
+            const message = `Combat action rejected by the server (${reason}).`;
+            if (status) {
+              status.textContent = message;
+            }
+            if (typeof window !== 'undefined' && window.UIKit?.toast) {
+              window.UIKit.toast(message, 'warning');
+            }
+            if (!result?.data && result?.success === false) {
+              reportSyncFailure(result?.error, 'combat action');
+            }
+          }
+          return;
+        }
+        const combatResult = result?.meta?.combatResults?.[activeSceneId] ?? null;
+        const combatApplied = combatResult?.applied !== false && result?.meta?.applied !== false;
+        if (
+          result?.success !== false
+          && !isBoardStateVersionConflictResult(result)
+          && combatApplied
+        ) {
+          clearSyncFailure();
+          clearDirtyCombatFields(dirtyFieldsForSnapshot);
+          const newVersion = result?.data?._version;
+          if (shouldApplyIncomingVersion(newVersion, currentBoardStateVersion)) {
+            currentBoardStateVersion = newVersion;
+            pusherInterface?.setLastAppliedVersion?.(newVersion);
+          }
+        } else if (result?.data) {
+          applyAuthoritativeBoardStateSnapshot(result.data);
+        } else if (result?.success === false) {
+          reportSyncFailure(result?.error, 'combat save');
         }
       }).catch(() => {});
     } else {
@@ -12825,30 +13121,11 @@ export function mountBoardInteractions(store, routes = {}) {
     return result.released;
   }
 
-  function isTurnLockStale(lock = turnLockState) {
-    return isCombatTurnLockStale(lock, { staleTimeoutMs: TURN_LOCK_STALE_TIMEOUT_MS });
-  }
-
   function clearStaleTurnLock() {
-    const result = clearStaleCombatTurnLock(turnLockState, {
-      staleTimeoutMs: TURN_LOCK_STALE_TIMEOUT_MS,
-    });
-    if (!result.cleared) {
-      return false;
-    }
-    const staleCombatantId = result.staleCombatantId;
-
-    // If the stale lock was for the currently active combatant, clear that too
-    // so the system returns to PICK phase instead of staying stuck in ACTIVE
-    if (staleCombatantId && activeCombatantId === staleCombatantId) {
-      activeCombatantId = null;
-      updateTurnPhase();
-    }
-
-    if (result.changed) {
-      updateCombatModeIndicators();
-    }
-    return true;
+    // Lock timestamps originate on another machine and cannot be compared to
+    // this browser's wall clock safely. Conflicting starts are now validated
+    // by the server; explicit override remains available to the GM/player UI.
+    return false;
   }
 
   async function confirmBoardAction(message, options = {}) {
@@ -13034,6 +13311,7 @@ export function mountBoardInteractions(store, routes = {}) {
       status.textContent = `Round ${combatRound} begins.`;
     }
     maybeAnnounceAllyPick();
+    queueCombatAuthorityIntent('round.advance');
     syncCombatStateToStore();
   }
 
@@ -21390,7 +21668,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!mutated) {
       return null;
     }
-    markSceneStateDirty(sceneId);
+    markSceneStateDirty(sceneId, 'userLevelState');
     const op = {
       type: 'user-level.set',
       sceneId,
@@ -21738,7 +22016,7 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    markSceneStateDirty(activeSceneId);
+    markSceneStateDirty(activeSceneId, 'claimedTokens');
     const op = targetUserId
       ? { type: 'claim.set', sceneId: activeSceneId, placementId, userId: targetUserId }
       : { type: 'claim.clear', sceneId: activeSceneId, placementId };
@@ -23583,7 +23861,7 @@ function createMapLevelCutoutTool() {
     selection = null;
     setStatus('Cutouts applied.');
     renderDraft();
-    markSceneStateDirty(activeSceneId);
+    markSceneStateDirty(activeSceneId, 'mapLevels');
     persistBoardStateSnapshot();
     syncCutoutToggleButtons();
   }

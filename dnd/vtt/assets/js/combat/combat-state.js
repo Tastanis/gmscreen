@@ -34,6 +34,9 @@ export function normalizeCombatState(raw = {}) {
   const sequenceRaw = Number(source.sequence ?? source.seq ?? 0);
   const sequence = Number.isFinite(sequenceRaw) ? Math.max(0, Math.trunc(sequenceRaw)) : 0;
   const turnLock = normalizeTurnLock(source.turnLock ?? null);
+  const intentHistory = uniqueStringList(
+    Array.isArray(source.intentHistory) ? source.intentHistory : []
+  ).slice(-32);
   const fallbackLastEffect = normalizeTurnEffect(source.lastEffect ?? source.lastEvent ?? null);
   const lastEffects = normalizeTurnEffects(source.lastEffects ?? source.effects ?? null, fallbackLastEffect);
   const lastEffect = lastEffects.length > 0
@@ -58,6 +61,7 @@ export function normalizeCombatState(raw = {}) {
     updatedAt,
     sequence,
     turnLock,
+    intentHistory,
     lastEffect,
     lastEffects,
     groups,
@@ -78,6 +82,7 @@ export function createCombatStateSnapshot({
   encounterId = null,
   sequence = 0,
   turnLock = null,
+  intentHistory = [],
   lastEffect = null,
   lastEffects = [],
   groups = [],
@@ -110,6 +115,7 @@ export function createCombatStateSnapshot({
     updatedAt: timestamp,
     sequence: nextSequence,
     turnLock: normalizeTurnLock(turnLock),
+    intentHistory: uniqueStringList(intentHistory).slice(-32),
     lastEffect: effectSnapshot,
     lastEffects: normalizedLastEffects,
     groups: normalizeCombatGroups(groups),

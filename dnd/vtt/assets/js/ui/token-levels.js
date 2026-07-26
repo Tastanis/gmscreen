@@ -79,7 +79,7 @@ export function resolveSceneTokenLevelState(state = {}, sceneId = null) {
 export function resolveTokenLevelId(placement = {}, mapLevelsState = null, options = {}) {
   const levels = getOrderedTokenMapLevels(mapLevelsState?.levels ?? []);
   if (!levels.length) {
-    return null;
+    return BASE_MAP_LEVEL_ID;
   }
 
   const levelIds = new Set(levels.map((level) => level.id));
@@ -88,23 +88,17 @@ export function resolveTokenLevelId(placement = {}, mapLevelsState = null, optio
     normalizeTokenLevelId(placement?.mapLevelId) ??
     normalizeTokenLevelId(placement?.mapLevel) ??
     normalizeTokenLevelId(placement?.floorId);
-  if (explicitId && levelIds.has(explicitId)) {
+  if (explicitId === BASE_MAP_LEVEL_ID || (explicitId && levelIds.has(explicitId))) {
     return explicitId;
   }
 
-  if (options.fallbackToActive !== false) {
-    const activeLevelId = normalizeTokenLevelId(mapLevelsState?.activeLevelId);
-    if (activeLevelId && levelIds.has(activeLevelId)) {
-      return activeLevelId;
-    }
+  if (explicitId) {
+    return explicitId;
   }
 
-  const defaultLevel = levels.find((level) => level.defaultForPlayers && levelIds.has(level.id));
-  if (defaultLevel) {
-    return defaultLevel.id;
-  }
-
-  return levels[0]?.id ?? null;
+  // Legacy placements with no level are always on the virtual base map.
+  // They must never follow a viewer's active level.
+  return BASE_MAP_LEVEL_ID;
 }
 
 export function resolvePlayerActiveMapLevelId(mapLevelsState = null) {
@@ -130,14 +124,17 @@ export function resolvePlayerActiveMapLevelId(mapLevelsState = null) {
 }
 
 export function getPlayerTokenMapLevelVisibility(placement = {}, mapLevelsState = null, options = {}) {
-  const levels = getOrderedTokenMapLevels(mapLevelsState?.levels ?? []);
-  if (!levels.length) {
+  const storedLevels = getOrderedTokenMapLevels(mapLevelsState?.levels ?? []);
+  if (!storedLevels.length) {
     return createTokenMapLevelVisibilityResult({
       visible: true,
       fullyVisible: true,
       hasLevels: false,
     });
   }
+  const levels = getOrderedTokenMapLevelsWithBase(mapLevelsState?.levels ?? [], {
+    includeBaseLevel: true,
+  });
 
   const activeLevelId = resolvePlayerActiveMapLevelId(mapLevelsState);
   if (!activeLevelId) {
@@ -259,7 +256,10 @@ export function getAdjacentTokenLevel(
   const normalizedCurrentId = normalizeTokenLevelId(currentLevelId);
   let resolvedCurrentId = normalizedCurrentId;
   if (!resolvedCurrentId || !levels.some((level) => level.id === resolvedCurrentId)) {
-    resolvedCurrentId = resolveTokenLevelId({}, mapLevelsState);
+    const activeLevelId = normalizeTokenLevelId(mapLevelsState?.activeLevelId);
+    resolvedCurrentId = activeLevelId && levels.some((level) => level.id === activeLevelId)
+      ? activeLevelId
+      : BASE_MAP_LEVEL_ID;
   }
   const currentIndex = levels.findIndex((level) => level.id === resolvedCurrentId);
   if (currentIndex < 0) {
@@ -309,7 +309,10 @@ export function getMapLevelNavigationControlState(mapLevelsState = null, options
   if (overrideId && levels.some((level) => level.id === overrideId)) {
     currentLevelId = overrideId;
   } else {
-    currentLevelId = resolveTokenLevelId({}, mapLevelsState);
+    const activeLevelId = normalizeTokenLevelId(mapLevelsState?.activeLevelId);
+    currentLevelId = activeLevelId && levels.some((level) => level.id === activeLevelId)
+      ? activeLevelId
+      : BASE_MAP_LEVEL_ID;
   }
   const currentLevel = levels.find((level) => level.id === currentLevelId) ?? null;
 
@@ -511,10 +514,12 @@ export function getTokenLevelPresentation(placement = {}, mapLevelsState = null,
     ? viewerOverride
     : BASE_MAP_LEVEL_ID;
   const viewerLevelIndex = levels.findIndex((level) => level.id === viewerLevelId);
+  const gmViewing = Boolean(options?.gmViewing);
 
   if (placementLevelIndex < 0 || viewerLevelIndex < 0) {
     return createTokenLevelPresentationResult({
-      visible: false,
+      visible: gmViewing,
+      fullyVisible: gmViewing,
       hasLevels: levels.length > 1,
       levelId: placementLevelId,
       activeLevelId: viewerLevelId,
@@ -532,7 +537,6 @@ export function getTokenLevelPresentation(placement = {}, mapLevelsState = null,
   const distance = Math.abs(placementLevelIndex - viewerLevelIndex);
   const scale = getMapLevelDistanceScale(direction, distance);
   const indicator = direction === 'same' ? null : { direction, distance };
-  const gmViewing = Boolean(options?.gmViewing);
   const placementBounds = normalizePlacementBounds(placement);
 
   if (direction === 'same') {

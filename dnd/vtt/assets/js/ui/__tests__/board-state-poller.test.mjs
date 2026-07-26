@@ -496,7 +496,7 @@ test('mergeBoardStateSnapshot preserves existing placements not in incoming', as
   assert.equal(token3.row, 10);
 });
 
-test('mergeBoardStateSnapshot preserves grid settings from existing sceneState', async () => {
+test('mergeBoardStateSnapshot applies canonical grid settings from incoming sceneState', async () => {
   const { mergeBoardStateSnapshot } = await import('../board-interactions.js');
 
   // Existing state has a custom grid size (128px)
@@ -536,16 +536,15 @@ test('mergeBoardStateSnapshot preserves grid settings from existing sceneState',
 
   const merged = mergeBoardStateSnapshot(existing, incoming);
 
-  // CRITICAL: Grid should be preserved from existing state, NOT replaced with incoming
   assert.equal(
     merged.sceneState['scene-1'].grid.size,
-    128,
-    'grid size should be preserved from existing state (128), not incoming (64)'
+    64,
+    'grid size should advance to the canonical incoming value'
   );
   assert.equal(
     merged.sceneState['scene-1'].grid.locked,
-    true,
-    'grid locked should be preserved from existing state'
+    false,
+    'grid locked should advance to the canonical incoming value'
   );
 
   // Combat state SHOULD be updated from incoming (it's transient state that should sync)
@@ -590,11 +589,10 @@ test('mergeBoardStateSnapshot preserves grid for scenes not in incoming', async 
 
   const merged = mergeBoardStateSnapshot(existing, incoming);
 
-  // Scene-1 grid should be preserved from existing (128), not incoming (64)
   assert.equal(
     merged.sceneState['scene-1'].grid.size,
-    128,
-    'scene-1 grid should be preserved from existing'
+    64,
+    'scene-1 should use the incoming canonical grid'
   );
 
   // Scene-2 should be completely preserved (not in incoming)
@@ -1070,6 +1068,50 @@ test('poller sends If-None-Match header with the current version', async () => {
   assert.equal(headers['If-None-Match'], 'W/"v42"');
 });
 
+test('poller reuses the server content-hash ETag after the first full response', async () => {
+  const { createBoardStatePoller } = await modulePromise;
+
+  const fetchCalls = [];
+  const fetchFn = async (endpoint, options) => {
+    fetchCalls.push({ endpoint, options });
+    return {
+      ok: true,
+      status: 200,
+      headers: {
+        get: (name) => name.toLowerCase() === 'etag' ? 'W/"v42-contenthash"' : null,
+      },
+      json: async () => ({
+        data: {
+          boardState: {
+            _version: 42,
+            placements: { scene: [{ id: 'hero', column: fetchCalls.length }] },
+          },
+        },
+      }),
+    };
+  };
+  const state = { boardState: {}, user: { name: 'GM', isGM: true } };
+  const poller = createBoardStatePoller({
+    stateEndpoint: '/state',
+    boardApi: {
+      getState: () => state,
+      updateState: (mutator) => mutator(state),
+    },
+    fetchFn,
+    documentRef: { visibilityState: 'visible' },
+    hashBoardStateSnapshotFn: (snapshot) => JSON.stringify(snapshot),
+    safeJsonStringifyFn: (value) => JSON.stringify(value),
+    mergeBoardStateSnapshotFn: (_existing, incoming) => incoming,
+    getCurrentVersionFn: () => 42,
+  });
+
+  await poller.poll();
+  await poller.poll();
+
+  assert.equal(fetchCalls[0].options.headers['If-None-Match'], 'W/"v42"');
+  assert.equal(fetchCalls[1].options.headers['If-None-Match'], 'W/"v42-contenthash"');
+});
+
 test('poller omits If-None-Match when no version is known yet', async () => {
   const { createBoardStatePoller } = await modulePromise;
 
@@ -1164,4 +1206,91 @@ test('poller treats a 304 response as a no-op without applying state', async () 
     { placements: { token: { x: 9 } } },
     'board state must remain untouched on 304',
   );
+});
+
+test('forced poll bypasses grace-period blocking and version ETag to repair same-version drift', async () => {
+  const { createBoardStatePoller } = await modulePromise;
+
+  const boardStateContainer = {
+    boardState: {
+      _version: 42,
+      placements: { scene: [{ id: 'token', column: 1 }] },
+    },
+    user: { name: 'GM User', isGM: true },
+  };
+  const fetchCalls = [];
+  const mergeCalls = [];
+  const poller = createBoardStatePoller({
+    stateEndpoint: '/state',
+    boardApi: {
+      getState: () => boardStateContainer,
+      updateState: (mutator) => mutator(boardStateContainer),
+    },
+    fetchFn: async (endpoint, options) => {
+      fetchCalls.push({ endpoint, options });
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            boardState: {
+              _version: 42,
+              placements: { scene: [{ id: 'token', column: 9 }] },
+            },
+          },
+        }),
+      };
+    },
+    windowRef: { setInterval: () => 0, clearInterval: () => {} },
+    documentRef: { visibilityState: 'visible' },
+    hashBoardStateSnapshotFn: (snapshot) => JSON.stringify(snapshot),
+    safeJsonStringifyFn: (value) => JSON.stringify(value),
+    mergeBoardStateSnapshotFn: (existing, incoming, options) => {
+      mergeCalls.push(options);
+      return incoming ?? existing;
+    },
+    getCurrentUserIdFn: () => 'gm user',
+    normalizeProfileIdFn: (value) =>
+      typeof value === 'string' ? value.trim().toLowerCase() : null,
+    getPendingSaveInfo: () => ({ pending: true, blocking: true, promise: null }),
+    getLastPersistedHashFn: () => null,
+    getLastPersistedSignatureFn: () => null,
+    getCurrentVersionFn: () => 42,
+  });
+
+  await poller.forceImmediatePoll();
+
+  assert.equal(fetchCalls.length, 1);
+  assert.equal('If-None-Match' in fetchCalls[0].options.headers, false);
+  assert.deepEqual(mergeCalls, [{ authoritative: true }]);
+  assert.equal(boardStateContainer.boardState.placements.scene[0].column, 9);
+});
+
+test('forced poll still refuses to overwrite an in-flight save', async () => {
+  const { createBoardStatePoller } = await modulePromise;
+  let updateCount = 0;
+  const poller = createBoardStatePoller({
+    stateEndpoint: '/state',
+    boardApi: {
+      getState: () => ({ boardState: {}, user: { name: 'GM User', isGM: true } }),
+      updateState: () => {
+        updateCount += 1;
+      },
+    },
+    fetchFn: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { boardState: { _version: 2 } } }),
+    }),
+    windowRef: { setInterval: () => 0, clearInterval: () => {} },
+    documentRef: { visibilityState: 'visible' },
+    hashBoardStateSnapshotFn: (snapshot) => JSON.stringify(snapshot),
+    safeJsonStringifyFn: (value) => JSON.stringify(value),
+    getPendingSaveInfo: () => ({ pending: true, promise: Promise.resolve() }),
+    getCurrentVersionFn: () => 1,
+  });
+
+  await poller.forceImmediatePoll();
+
+  assert.equal(updateCount, 0);
 });

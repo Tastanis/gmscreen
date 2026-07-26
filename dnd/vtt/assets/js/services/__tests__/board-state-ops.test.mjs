@@ -243,8 +243,9 @@ describe('Board State – delta ops persistence (phase 3-B commit 2)', () => {
     assert.deepEqual(ids, ['goblin', 'hero']);
   });
 
-  test('returns {escape: true} when the ops buffer exceeds PHASE_3B_MAX_OPS_PER_FLUSH', async () => {
+  test('snapshot acknowledgement drains escaped ops through its sequence watermark', async () => {
     const {
+      acknowledgeBoardStateSnapshot,
       persistBoardStateOps,
       PHASE_3B_MAX_OPS_PER_FLUSH,
       _resetBoardStateOpsBufferForTest,
@@ -265,7 +266,19 @@ describe('Board State – delta ops persistence (phase 3-B commit 2)', () => {
     const result = persistBoardStateOps('/api/state', ops, {});
     assert.ok(result, 'escape result should not be null');
     assert.equal(result.escape, true, 'escape flag should be set when over the op threshold');
+    assert.ok(result.throughSeq > 0, 'escape result should expose a sequence watermark');
     assert.equal(capturedPayloads.length, 0, 'no POST should have been issued');
+
+    acknowledgeBoardStateSnapshot(result.throughSeq);
+    await persistBoardStateOps(
+      '/api/state',
+      [{ type: 'placement.move', sceneId: 'scene-1', placementId: 'new', x: 9, y: 9 }],
+      {}
+    );
+
+    assert.equal(capturedPayloads.length, 1);
+    assert.equal(capturedPayloads[0].ops.length, 1, 'snapshot-covered ops must not be retried');
+    assert.equal(capturedPayloads[0].ops[0].placementId, 'new');
   });
 
   test('returns null if ops is not an array or is empty and no buffer is pending', async () => {
@@ -1089,5 +1102,73 @@ describe('Board State – delta ops persistence (phase 3-B commit 5)', () => {
     assert.equal(capturedPayloads[0].ops.length, 1, 'only the well-formed op survives');
     assert.equal(capturedPayloads[0].ops[0].type, 'drawing.add');
     assert.equal(capturedPayloads[0].ops[0].drawing.id, 'd-ok');
+  });
+
+  test('combat intents keep unique idempotency keys and share the op transport', async () => {
+    const { persistCombatIntent, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    globalThis.fetch = async (_url, options = {}) => {
+      if (options?.body) {
+        capturedPayloads.push(JSON.parse(options.body));
+      }
+      return new Promise((resolve) => {
+        pendingFetchResolvers.push(resolve);
+      });
+    };
+
+    persistCombatIntent(
+      '/api/state',
+      'scene-1',
+      'turn.start',
+      {
+        intentId: 'intent-a',
+        combatantId: 'hero-a',
+        holderName: 'Alice',
+      },
+      { _version: 9, _socketId: 'socket-1' }
+    );
+    persistCombatIntent(
+      '/api/state',
+      'scene-1',
+      'turn.start',
+      {
+        intentId: 'intent-b',
+        combatantId: 'hero-b',
+        holderName: 'Bob',
+      },
+      { _version: 9, _socketId: 'socket-1' }
+    );
+
+    const payload = capturedPayloads[capturedPayloads.length - 1];
+    assert.deepEqual(
+      payload.ops.map((op) => op.intentId),
+      ['intent-a', 'intent-b']
+    );
+    assert.deepEqual(
+      payload.ops.map((op) => op.combatantId),
+      ['hero-a', 'hero-b']
+    );
+    assert.equal(payload.boardState._version, 9);
+    assert.equal(payload.boardState._socketId, 'socket-1');
+  });
+
+  test('combat intent rejects unsupported types before saving', async () => {
+    const { persistCombatIntent, _resetBoardStateOpsBufferForTest } = await import(
+      '../board-state-service.js'
+    );
+    _resetBoardStateOpsBufferForTest();
+
+    const result = persistCombatIntent(
+      '/api/state',
+      'scene-1',
+      'combat.pause',
+      { intentId: 'unsupported' }
+    );
+
+    assert.equal(result, null);
+    assert.equal(capturedPayloads.length, 0);
   });
 });

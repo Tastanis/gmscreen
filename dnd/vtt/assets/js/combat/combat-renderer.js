@@ -42,7 +42,11 @@ export function renderCombatTracker({
       return;
     }
     const team = normalizeCombatTeam(entry.team ?? entry.combatTeam ?? null);
-    combatantTeams.set(id, team);
+    // Leave unknown teams absent so getCombatantTeam can fall through to
+    // placement/profile inference instead of treating a cached null as final.
+    if (team) {
+      combatantTeams.set(id, team);
+    }
   });
 
   if (!gmViewing) {
@@ -154,7 +158,12 @@ export function renderCombatTracker({
   });
 
   const activeCombatantId = getActiveCombatantId();
-  if (activeCombatantId && !renderedRepresentatives.has(activeCombatantId) && gmViewing) {
+  if (
+    !options?.skipPrune
+    && activeCombatantId
+    && !renderedRepresentatives.has(activeCombatantId)
+    && gmViewing
+  ) {
     callbacks.setActiveCombatantId?.(null);
   }
 
@@ -269,8 +278,10 @@ export function createCombatantTokenNode({
   }
 
   groupMembers.forEach((memberId) => {
-    if (memberId) {
+    if (memberId && team) {
       combatantTeams.set(memberId, team);
+    } else if (memberId) {
+      combatantTeams.delete(memberId);
     }
   });
 

@@ -134,6 +134,7 @@ export function subscribe(listener) {
 
 export function updateState(updater) {
   updater(state);
+  applySceneGridState(state);
 
   // Preserve fogOfWar data across notify(). Subscribers triggered by
   // notify() (e.g. poller merge, Pusher sync) can call updateState again

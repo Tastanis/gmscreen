@@ -265,7 +265,11 @@ function extractBoardEntryIdentifier(array $entry): ?string
  * @param array<int,array<string,mixed>> $incomingEntries
  * @return array<int,array<string,mixed>>
  */
-function mergeSceneEntriesByTimestamp(array $existingEntries, array $incomingEntries): array
+function mergeSceneEntriesByTimestamp(
+    array $existingEntries,
+    array $incomingEntries,
+    bool $acceptIncomingByVersion = false
+): array
 {
     // Index existing entries by ID
     $existingById = [];
@@ -301,7 +305,7 @@ function mergeSceneEntriesByTimestamp(array $existingEntries, array $incomingEnt
             $incomingTimestamp = extractEntryTimestamp($entry);
 
             // Keep the entry with newer timestamp (or incoming if equal/no timestamp)
-            if ($incomingTimestamp >= $existingTimestamp) {
+            if ($acceptIncomingByVersion || $incomingTimestamp >= $existingTimestamp) {
                 // When BOTH entries are GM-authored, the incoming GM update wins completely.
                 // This allows the GM to change fields like 'hidden' without the server
                 // reverting them via restoreGmMarkers. We still use array_replace_recursive

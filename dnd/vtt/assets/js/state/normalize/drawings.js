@@ -1,4 +1,5 @@
 import { clampToFinite } from './helpers.js';
+import { BASE_MAP_LEVEL_ID } from './map-levels.js';
 
 export function normalizeDrawings(raw = {}) {
   if (!raw || typeof raw !== 'object') {
@@ -50,11 +51,23 @@ export function normalizeDrawingEntry(entry) {
 
   const color = typeof entry.color === 'string' ? entry.color.trim() : '#ff0000';
   const strokeWidth = Math.max(1, Math.min(50, Math.trunc(Number(entry.strokeWidth) || 3)));
+  const levelId = typeof entry.levelId === 'string' && entry.levelId.trim()
+    ? entry.levelId.trim()
+    : BASE_MAP_LEVEL_ID;
+  const lastModified = Number(entry._lastModified);
 
-  return {
+  const normalized = {
     id,
     points: normalizedPoints,
     color: color || '#ff0000',
     strokeWidth,
+    levelId,
   };
+  if (Number.isFinite(lastModified) && lastModified > 0) {
+    normalized._lastModified = lastModified;
+  }
+  if (typeof entry.authorId === 'string' && entry.authorId.trim()) {
+    normalized.authorId = entry.authorId.trim().toLowerCase();
+  }
+  return normalized;
 }

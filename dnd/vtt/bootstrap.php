@@ -3,6 +3,11 @@ declare(strict_types=1);
 
 $routes = require __DIR__ . '/config/routes.php';
 
+if (!defined('VERSION_SYSTEM_INTERNAL')) {
+    define('VERSION_SYSTEM_INTERNAL', true);
+}
+require_once __DIR__ . '/../version.php';
+
 require_once __DIR__ . '/components/ChatPanel.php';
 require_once __DIR__ . '/components/CharacterSummaryPanel.php';
 require_once __DIR__ . '/components/MonsterSummaryPanel.php';
@@ -233,7 +238,9 @@ function getVttBootstrapConfig(?array $authContext = null): array
         'scenes' => $scenes,
         'tokens' => $tokens,
         'boardState' => $boardState,
-        'assetsVersion' => time(),
+        // Keep asset URLs stable between deploys so browser caching works.
+        // The repository version build is incremented when assets change.
+        'assetsVersion' => Version::getBuildNumber(),
         'isGM' => $isGm,
         'currentUser' => $context['user'] ?? '',
         'chatParticipants' => loadChatParticipants(),
@@ -429,29 +436,29 @@ function filterPlacementsForPlayerView($boardState): array
     }
 
     $filtered = $boardState;
-    if (!empty($filtered['playerMapDisabled'])) {
+    $playerMapDisabled = !empty($filtered['playerMapDisabled']);
+    if ($playerMapDisabled) {
         $filtered['activeSceneId'] = null;
         $filtered['mapUrl'] = null;
         $filtered['thumbnailUrl'] = null;
-        return $filtered;
     }
 
     $playerSceneId = $filtered['playerActiveSceneId'] ?? null;
-    if (is_string($playerSceneId) && trim($playerSceneId) !== '') {
+    if (!$playerMapDisabled && is_string($playerSceneId) && trim($playerSceneId) !== '') {
         $filtered['activeSceneId'] = is_string($playerSceneId) && trim($playerSceneId) !== ''
             ? trim($playerSceneId)
             : null;
     }
 
     $playerMapUrl = $filtered['playerMapUrl'] ?? null;
-    if (is_string($playerMapUrl) && trim($playerMapUrl) !== '') {
+    if (!$playerMapDisabled && is_string($playerMapUrl) && trim($playerMapUrl) !== '') {
         $filtered['mapUrl'] = is_string($playerMapUrl) && trim($playerMapUrl) !== ''
             ? trim($playerMapUrl)
             : null;
     }
 
     $playerThumbnailUrl = $filtered['playerThumbnailUrl'] ?? null;
-    if (is_string($playerThumbnailUrl) && trim($playerThumbnailUrl) !== '') {
+    if (!$playerMapDisabled && is_string($playerThumbnailUrl) && trim($playerThumbnailUrl) !== '') {
         $filtered['thumbnailUrl'] = is_string($playerThumbnailUrl) && trim($playerThumbnailUrl) !== ''
             ? trim($playerThumbnailUrl)
             : null;
@@ -474,23 +481,9 @@ function filterPlacementsForPlayerView($boardState): array
                 continue;
             }
             if (isPlacementHiddenFromPlayers($placement)) {
-                // Keep hidden placements in the response so the client can
-                // track them by ID.  When the GM later unhides a token the
-                // client-side op-applier already has it in local state and
-                // can flip the flag without needing a full resync.  Strip
-                // ALL monster data regardless of ally status — no stat block
-                // should leak for a token the player cannot see yet.
-                $sanitized = attachSafeMovementTrait($placement);
-                unset($sanitized['monster'], $sanitized['monsterId']);
-                if (isset($sanitized['metadata']) && is_array($sanitized['metadata'])) {
-                    $metadata = $sanitized['metadata'];
-                    unset($metadata['monster'], $metadata['monsterId']);
-                    $sanitized['metadata'] = $metadata === [] ? [] : $metadata;
-                    if ($sanitized['metadata'] === []) {
-                        unset($sanitized['metadata']);
-                    }
-                }
-                $visibleEntries[] = $sanitized;
+                // Hidden placements are GM-only information. Omitting them
+                // prevents coordinates, identity, and stat data from leaking
+                // through authenticated player GET responses.
                 continue;
             }
             $visibleEntries[] = sanitizePlacementForPlayerView($placement);
@@ -501,7 +494,132 @@ function filterPlacementsForPlayerView($boardState): array
 
     $filtered['placements'] = $visiblePlacements;
 
+    if (isset($filtered['sceneState']) && is_array($filtered['sceneState'])) {
+        foreach ($filtered['sceneState'] as $sceneId => &$sceneEntry) {
+            if (!is_array($sceneEntry) || !isset($sceneEntry['combat']) || !is_array($sceneEntry['combat'])) {
+                continue;
+            }
+            $scenePlacements = isset($placements[$sceneId]) && is_array($placements[$sceneId])
+                ? $placements[$sceneId]
+                : [];
+            $sceneEntry['combat'] = sanitizeCombatStateForPlayerView(
+                $sceneEntry['combat'],
+                $scenePlacements
+            );
+        }
+        unset($sceneEntry);
+    }
+
     return $filtered;
+}
+
+/**
+ * Remove hidden placement identities from the shared player combat view.
+ *
+ * @param array<string,mixed> $combat
+ * @param array<int,mixed> $placements
+ * @return array<string,mixed>
+ */
+function sanitizeCombatStateForPlayerView(array $combat, array $placements): array
+{
+    $visibleIds = [];
+    foreach ($placements as $placement) {
+        if (!is_array($placement)) {
+            continue;
+        }
+        $placementId = $placement['id'] ?? null;
+        if (!is_string($placementId) || trim($placementId) === '') {
+            continue;
+        }
+        $placementId = trim($placementId);
+        if (isPlacementHiddenFromPlayers($placement)) {
+            continue;
+        } else {
+            $visibleIds[$placementId] = true;
+        }
+    }
+
+    $safe = $combat;
+    $hiddenActive = is_string($safe['activeCombatantId'] ?? null)
+        && trim($safe['activeCombatantId']) !== ''
+        && !isset($visibleIds[trim($safe['activeCombatantId'])]);
+    if ($hiddenActive) {
+        // Preserve the fact that a turn is active without exposing which
+        // hidden monster is taking it.
+        $safe['activeCombatantId'] = '__hidden_enemy__';
+    }
+
+    if (isset($safe['completedCombatantIds']) && is_array($safe['completedCombatantIds'])) {
+        $safe['completedCombatantIds'] = array_values(array_filter(
+            $safe['completedCombatantIds'],
+            static fn($id): bool => is_string($id) && isset($visibleIds[trim($id)])
+        ));
+    }
+
+    if (isset($safe['groups']) && is_array($safe['groups'])) {
+        $safeGroups = [];
+        foreach ($safe['groups'] as $group) {
+            if (!is_array($group)) {
+                continue;
+            }
+            $members = isset($group['memberIds']) && is_array($group['memberIds'])
+                ? array_values(array_filter(
+                    $group['memberIds'],
+                    static fn($id): bool => is_string($id) && isset($visibleIds[trim($id)])
+                ))
+                : [];
+            if (count($members) <= 1) {
+                continue;
+            }
+            $representativeId = is_string($group['representativeId'] ?? null)
+                && isset($visibleIds[trim($group['representativeId'])])
+                ? trim($group['representativeId'])
+                : $members[0];
+            $safeGroups[] = [
+                'representativeId' => $representativeId,
+                'memberIds' => $members,
+            ];
+        }
+        $safe['groups'] = $safeGroups;
+    }
+
+    if ($hiddenActive && isset($safe['turnLock']) && is_array($safe['turnLock'])) {
+        $safe['turnLock']['combatantId'] = '__hidden_enemy__';
+    }
+
+    foreach (['lastEffect', 'lastEffects'] as $field) {
+        if ($field === 'lastEffect') {
+            $effect = $safe[$field] ?? null;
+            if (is_array($effect) && combatEffectReferencesNonPublicPlacement($effect, $visibleIds)) {
+                $safe[$field] = null;
+            }
+            continue;
+        }
+        if (isset($safe[$field]) && is_array($safe[$field])) {
+            $safe[$field] = array_values(array_filter(
+                $safe[$field],
+                static fn($effect): bool =>
+                    is_array($effect) && !combatEffectReferencesNonPublicPlacement($effect, $visibleIds)
+            ));
+        }
+    }
+
+    return $safe;
+}
+
+/**
+ * @param array<string,mixed> $effect
+ * @param array<string,bool> $visibleIds
+ */
+function combatEffectReferencesNonPublicPlacement(array $effect, array $visibleIds): bool
+{
+    foreach (['placementId', 'combatantId'] as $field) {
+        $value = $effect[$field] ?? null;
+        if (is_string($value) && trim($value) !== '' && !isset($visibleIds[trim($value)])) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**

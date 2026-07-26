@@ -26,10 +26,14 @@ let boardApi = null;
 let getCurrentUserId = () => null;
 
 // Per-token tracking so square-by-square movement can detect an entry
-// in one move event and an exit in a later one. Keyed by placementId;
+// in one move event and an exit in a later one. Keyed by scene + placement;
 // value is { stairId, entry: 'green'|'red'|'barrier' } — null when the
 // token is currently outside every stair polygon on its level.
 const tokenStairState = new Map();
+
+function stairTraversalKey(sceneId, placementId) {
+  return `${sceneId}:${placementId}`;
+}
 
 export function mountStairsTrigger(options = {}) {
   boardApi = options.boardApi ?? null;
@@ -65,7 +69,8 @@ function handleTokenMoved(event) {
   // First, evaluate the stair the token is "currently mid-traversal of"
   // (if any) — this lets a token finish a multi-step traversal that
   // started in a previous move event.
-  const existing = tokenStairState.get(placementId) ?? null;
+  const traversalKey = stairTraversalKey(sceneId, placementId);
+  const existing = tokenStairState.get(traversalKey) ?? null;
   const orderedStairs = orderStairsWithPriorEntry(stairs, existing);
 
   for (const stair of orderedStairs) {
@@ -73,7 +78,7 @@ function handleTokenMoved(event) {
       priorEntry: existing && existing.stairId === stair.id ? existing.entry : null,
     });
     if (result.fired) {
-      tokenStairState.delete(placementId);
+      tokenStairState.delete(traversalKey);
       dispatchLevelChange({ sceneId, placementId, targetLevelId: stair.linkedLevelId });
       return; // only one stair can fire per move
     }
@@ -81,12 +86,12 @@ function handleTokenMoved(event) {
     // tracking for one stair at a time — whichever the token is most
     // recently inside of.
     if (result.endsInside) {
-      tokenStairState.set(placementId, { stairId: stair.id, entry: result.entry });
+      tokenStairState.set(traversalKey, { stairId: stair.id, entry: result.entry });
       return;
     }
   }
   // The token ended this move outside every polygon — clear stale state.
-  tokenStairState.delete(placementId);
+  tokenStairState.delete(traversalKey);
 }
 
 function orderStairsWithPriorEntry(stairs, existing) {
@@ -283,7 +288,14 @@ function segmentIntersectionT(p1, p2, q1, q2) {
 
 function dispatchLevelChange({ sceneId, placementId, targetLevelId }) {
   if (!boardApi?.updateState || !sceneId || !placementId || !targetLevelId) return;
-  const userId = (getCurrentUserId() ?? '').toLowerCase();
+  const stateBefore = boardApi.getState?.() ?? {};
+  const moverUserId = (getCurrentUserId() ?? '').toLowerCase();
+  const follower = resolveStairLevelFollower(
+    stateBefore?.boardState?.sceneState?.[sceneId],
+    placementId,
+    moverUserId
+  );
+  const userId = follower.userId;
   const now = Date.now();
 
   boardApi.updateState((draft) => {
@@ -307,7 +319,8 @@ function dispatchLevelChange({ sceneId, placementId, targetLevelId }) {
     }
     sceneEntry.userLevelState[userId] = {
       levelId: targetLevelId,
-      source: 'manual',
+      source: follower.source,
+      ...(follower.tokenId ? { tokenId: follower.tokenId } : null),
       updatedAt: now,
     };
   });
@@ -331,10 +344,33 @@ function dispatchLevelChange({ sceneId, placementId, targetLevelId }) {
       sceneId,
       userId,
       levelId: targetLevelId,
-      source: 'manual',
+      source: follower.source,
+      ...(follower.tokenId ? { tokenId: follower.tokenId } : null),
     });
   }
   boardApi._persistBoardState({}, ops);
+}
+
+export function resolveStairLevelFollower(sceneState, placementId, moverUserId) {
+  const normalizedMover = typeof moverUserId === 'string'
+    ? moverUserId.trim().toLowerCase()
+    : '';
+  const claimedRaw = sceneState?.claimedTokens?.[placementId];
+  const claimedUserId = typeof claimedRaw === 'string'
+    ? claimedRaw.trim().toLowerCase()
+    : '';
+  if (claimedUserId) {
+    return {
+      userId: claimedUserId,
+      source: 'claim',
+      tokenId: placementId,
+    };
+  }
+  return {
+    userId: normalizedMover,
+    source: 'manual',
+    tokenId: null,
+  };
 }
 
 function findPlacement(state, sceneId, placementId) {

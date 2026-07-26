@@ -78,7 +78,8 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 
 ### Site URLs
 - Production D&D site: `https://bharmsasl.com/dnd/`
-- Local development URL, when the PHP server is running from the repo root with `php -S localhost:8000 -t dnd`: `http://localhost:8000`
+- Local development URL, when the PHP server is running from the repo root with `php -S localhost:8000 -t .`: `http://localhost:8000/dnd/`
+- The VTT uses absolute `/dnd/...` API and asset paths. Serving with `-t dnd` makes those requests resolve under `dnd/dnd/...` and produces false 404 sync failures.
 
 ### After Making Changes
 1. Check version number updated in bottom-right corner

@@ -143,10 +143,7 @@ export function renderSceneList(routes, store) {
     }
 
     if (typeof stateApi._persistBoardState === 'function') {
-      return stateApi._persistBoardState({
-        forceFullSnapshot: true,
-        ...options,
-      });
+      return stateApi._persistBoardState(options);
     }
 
     const latest = stateApi.getState?.();
@@ -372,7 +369,7 @@ export function renderSceneList(routes, store) {
 
       const result = deleteSceneMapLevelCascade(stateApi, sceneId, levelId);
       if (result) {
-        persistBoardStateSnapshot(sceneId);
+        persistBoardStateSnapshot(sceneId, { forceFullSnapshot: true });
         showFeedback(feedback, 'Map level deleted.', 'info');
       } else {
         showFeedback(feedback, 'Unable to delete map level.', 'error');
@@ -489,7 +486,7 @@ export function renderSceneList(routes, store) {
             delete boardDraft.sceneState[sceneId];
           }
         });
-        persistBoardStateSnapshot();
+        persistBoardStateSnapshot(null, { forceFullSnapshot: true });
         showFeedback(feedback, 'Scene deleted.', 'info');
       } catch (error) {
         console.error('[VTT] Failed to delete scene', error);
@@ -1055,6 +1052,10 @@ function mutateSceneMapLevels(stateApi, sceneId, mutator) {
     sceneBoardState.mapLevels = normalizeMapLevelsState(mapLevels, { sceneGrid });
     changed = true;
   });
+
+  if (changed && typeof stateApi._markSceneStateDirty === 'function') {
+    stateApi._markSceneStateDirty(sceneId, 'mapLevels');
+  }
 
   return changed;
 }

@@ -33,7 +33,7 @@ describe('grid normalization', () => {
     assert.equal(normalizeGridOffset(-1.5, 64), 62.5);
   });
 
-  test('applies the active scene grid origin as the authoritative grid state', () => {
+  test('prefers synchronized board grid over the legacy scene definition', () => {
     const state = {
       scenes: {
         items: [
@@ -55,11 +55,11 @@ describe('grid normalization', () => {
     applySceneGridState(state);
 
     assert.deepEqual(state.grid, {
-      size: 80,
+      size: 64,
       locked: false,
       visible: true,
-      offsetX: 12,
-      offsetY: 18,
+      offsetX: 0,
+      offsetY: 0,
     });
     assert.deepEqual(state.boardState.sceneState['scene-1'].grid, state.grid);
   });

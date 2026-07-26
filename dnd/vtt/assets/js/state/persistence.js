@@ -14,6 +14,11 @@ const markPageUnloading = () => {
   pageIsUnloading = true;
 };
 
+const markPageActive = () => {
+  pageIsUnloading = false;
+  updatePageVisibility();
+};
+
 if (globalDocument?.addEventListener) {
   globalDocument.addEventListener('visibilitychange', updatePageVisibility, {
     capture: true,
@@ -23,6 +28,7 @@ if (globalDocument?.addEventListener) {
 if (globalWindow?.addEventListener) {
   globalWindow.addEventListener('pagehide', markPageUnloading, { capture: true });
   globalWindow.addEventListener('beforeunload', markPageUnloading, { capture: true });
+  globalWindow.addEventListener('pageshow', markPageActive, { capture: true });
 }
 
 function isDocumentHidden() {
@@ -33,7 +39,19 @@ function isDocumentHidden() {
 }
 
 function shouldUseKeepalive(entryKeepalive = false) {
-  return Boolean(entryKeepalive || pageIsUnloading || isDocumentHidden());
+  return Boolean(entryKeepalive || pageIsUnloading);
+}
+
+export function _setPageUnloadingForTest(value) {
+  pageIsUnloading = Boolean(value);
+}
+
+export function _shouldUseKeepaliveForTest(entryKeepalive = false) {
+  return shouldUseKeepalive(entryKeepalive);
+}
+
+export function _markPageActiveForTest() {
+  markPageActive();
 }
 
 export function queueSave(key, payload, endpoint, options = {}) {
@@ -224,19 +242,35 @@ async function persist(key, entry) {
         `[VTT] Persistence error for ${key}: ${response?.status ?? 'unknown status'}`,
         responseText
       );
-      throw new Error(`Failed to save ${key}`);
+      const httpError = new Error(
+        responsePayload?.error || `Failed to save ${key}`
+      );
+      httpError.name = 'HttpError';
+      httpError.status = Number(response?.status) || 0;
+      throw httpError;
     }
 
     // Parse response to extract data (including version)
     let responseData = null;
+    let responseMeta = null;
     try {
       const responseJson = await response.json();
       responseData = responseJson?.data ?? null;
+      responseMeta = {
+        applied: responseJson?.applied !== false,
+        operationResults: Array.isArray(responseJson?.operationResults)
+          ? responseJson.operationResults
+          : [],
+        combatResults:
+          responseJson?.combatResults && typeof responseJson.combatResults === 'object'
+            ? responseJson.combatResults
+            : {},
+      };
     } catch (parseError) {
       // Response parsing is optional, continue with success
     }
 
-    result = createResult(true, { data: responseData });
+    result = createResult(true, { data: responseData, meta: responseMeta });
   } catch (error) {
     const aborted = controller.signal.aborted || error?.name === 'AbortError';
     if (!aborted) {
@@ -272,7 +306,9 @@ async function persist(key, entry) {
       !entry.lastResult.aborted &&
       entry.attempts < entry.retryLimit &&
       !pageIsUnloading &&
-      !isDocumentHidden();
+      !isDocumentHidden() &&
+      !(Number(entry.lastResult.error?.status) >= 400
+        && Number(entry.lastResult.error?.status) < 500);
 
     if (shouldRetry) {
       const delayMs = entry.retryBackoffMs * Math.max(1, 2 ** (entry.attempts - 1));
@@ -328,8 +364,14 @@ function finalizeEntry(entry, result) {
   }
 }
 
-function createResult(success, { aborted = false, error = null, data = null } = {}) {
-  return { success: Boolean(success), aborted: Boolean(aborted), error: error ?? null, data: data ?? null };
+function createResult(success, { aborted = false, error = null, data = null, meta = null } = {}) {
+  return {
+    success: Boolean(success),
+    aborted: Boolean(aborted),
+    error: error ?? null,
+    data: data ?? null,
+    meta: meta ?? null,
+  };
 }
 
 function createAbortError(key) {

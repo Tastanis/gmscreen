@@ -225,6 +225,54 @@ describe('renderCombatTracker', () => {
     assert.equal(token.getAttribute('aria-label'), 'Visible Member');
     assert.equal(token.querySelector('.vtt-combat-token__initials').textContent, 'VM');
   });
+
+  test('does not clear the active turn during a skip-prune empty render', () => {
+    const { documentRef, root, waiting, completed } = createTrackerDom();
+    const cleared = [];
+
+    renderCombatTracker({
+      elements: { root, waiting, completed },
+      combatants: [],
+      options: { activeIds: [], skipPrune: true, skipCache: true },
+      state: {
+        combatantTeams: new Map(),
+        completedCombatants: new Set(),
+        trackerHoverTokenIds: new Set(),
+      },
+      callbacks: createCallbacks({
+        activeCombatantId: 'hero',
+        hooks: {
+          setActiveCombatantId: (id) => cleared.push(id),
+        },
+      }),
+      documentRef,
+      HTMLElementCtor: FakeElement,
+    });
+
+    assert.deepEqual(cleared, []);
+  });
+
+  test('leaves an unknown team uncached so placement inference can run', () => {
+    const { documentRef, root, waiting, completed } = createTrackerDom();
+    const combatantTeams = new Map([['unknown', 'enemy']]);
+    const callbacks = createCallbacks();
+    callbacks.getCombatantTeam = () => null;
+
+    renderCombatTracker({
+      elements: { root, waiting, completed },
+      combatants: [{ id: 'unknown', name: 'Unknown Team' }],
+      state: {
+        combatantTeams,
+        completedCombatants: new Set(),
+        trackerHoverTokenIds: new Set(),
+      },
+      callbacks,
+      documentRef,
+      HTMLElementCtor: FakeElement,
+    });
+
+    assert.equal(combatantTeams.has('unknown'), false);
+  });
 });
 
 class FakeDocument {

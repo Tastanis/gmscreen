@@ -67,9 +67,22 @@ export function applySceneGridState(state) {
     return;
   }
 
-  // CRITICAL: Read grid from the scene's PERMANENT grid property first.
-  // Grid is stored with the scene definition and should be the authoritative source.
-  // This prevents grid resets when polling/Pusher updates arrive with stale grid values.
+  // The canonical synchronized board state is the live authority. The scene
+  // definition is only a fallback for legacy snapshots with no scene grid.
+  const sceneState = state.boardState.sceneState ?? {};
+  const sceneEntry = sceneState && typeof sceneState === 'object'
+    ? sceneState[activeSceneId]
+    : null;
+  if (sceneEntry && typeof sceneEntry === 'object' && sceneEntry.grid) {
+    const gridState = normalizeGridState(sceneEntry.grid);
+    sceneEntry.grid = gridState;
+    state.grid = {
+      ...state.grid,
+      ...gridState,
+    };
+    return;
+  }
+
   const scenes = state.scenes?.items ?? [];
   const activeScene = scenes.find((scene) => scene && scene.id === activeSceneId);
 
@@ -81,29 +94,11 @@ export function applySceneGridState(state) {
       ...gridState,
     };
 
-    // Also update the sceneState entry to match the scene's permanent grid
-    // This ensures consistency between the scene definition and the board state
+    // Seed the board-state entry from the legacy scene definition.
     if (state.boardState.sceneState && state.boardState.sceneState[activeSceneId]) {
       state.boardState.sceneState[activeSceneId].grid = gridState;
     }
     return;
   }
 
-  // Fallback to boardState.sceneState if scene definition not available
-  // (this shouldn't happen in normal operation, but provides backwards compatibility)
-  const sceneState = state.boardState.sceneState ?? {};
-  if (!sceneState || typeof sceneState !== 'object') {
-    return;
-  }
-
-  const sceneEntry = sceneState[activeSceneId];
-  if (!sceneEntry || typeof sceneEntry !== 'object') {
-    return;
-  }
-
-  const gridState = normalizeGridState(sceneEntry.grid ?? sceneEntry);
-  state.grid = {
-    ...state.grid,
-    ...gridState,
-  };
 }

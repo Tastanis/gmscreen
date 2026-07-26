@@ -699,7 +699,7 @@ function applyFogChange(addFog) {
   });
 
   if (typeof boardApi._markSceneStateDirty === 'function') {
-    boardApi._markSceneStateDirty(sceneId);
+    boardApi._markSceneStateDirty(sceneId, 'fogOfWar');
   }
   if (typeof boardApi._persistBoardState === 'function') {
     boardApi._persistBoardState();

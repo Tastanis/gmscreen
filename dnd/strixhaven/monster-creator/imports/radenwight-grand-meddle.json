@@ -1,0 +1,203 @@
+{
+  "id": "radenwight_grand_meddle",
+  "name": "Radenwight Grand Meddle",
+  "level": 3,
+  "role": "Solo",
+  "types": "Humanoid, Radenwight",
+  "ev": 60,
+  "size": "1S",
+  "speed": 7,
+  "movement": "Climb",
+  "stamina": 300,
+  "stability": 2,
+  "free_strike": 4,
+  "immunities": [],
+  "weaknesses": [],
+  "attributes": {
+    "might": 2,
+    "agility": 3,
+    "reason": 0,
+    "intuition": 1,
+    "presence": 2
+  },
+  "traits": [
+    {
+      "name": "Solo Turns",
+      "text": "The Grand Meddle can take five full turns each round. It can't take turns consecutively."
+    },
+    {
+      "name": "Sacrifice the Squealer (Legendary Resistance)",
+      "text": "When the Grand Meddle would be affected by a potency effect or an effect that can be ended by a saving throw, it can sacrifice one member of the meddle to ignore that effect completely. The Grand Meddle takes 30 damage that can't be reduced in any way. It can't sacrifice its final member."
+    },
+    {
+      "name": "Lockdown",
+      "text": "Any enemy who shifts adjacent to the Grand Meddle has that shift end. Additionally, any enemy adjacent to the Grand Meddle can't shift."
+    },
+    {
+      "name": "Gymratstics",
+      "text": "The Grand Meddle gains an edge on strikes against larger creatures."
+    },
+    {
+      "name": "Musical Suggestion",
+      "text": "Once per round, at the end of one of the Grand Meddle's turns, it can slide one adjacent creature up to 2 squares, ignoring stability."
+    }
+  ],
+  "abilities": {
+    "passive": [],
+    "maneuver": [
+      {
+        "name": "Over Here, Thanks",
+        "keywords": "Melee",
+        "range": "Melee 1",
+        "targets": "One enemy",
+        "effect": "The Grand Meddle slides the target up to 3 squares, then can shift into any square the target left."
+      }
+    ],
+    "action": [
+      {
+        "name": "En Garde",
+        "keywords": "Melee, Strike, Weapon",
+        "range": "Melee 1",
+        "targets": "Two creatures or objects",
+        "roll_bonus": 3,
+        "effect": "The Grand Meddle darts between its targets in a flashing storm of tiny blades.",
+        "has_test": true,
+        "test": {
+          "tier1": {
+            "damage_amount": "4",
+            "damage_type": "",
+            "tier_effect": ""
+          },
+          "tier2": {
+            "damage_amount": "6",
+            "damage_type": "",
+            "tier_effect": ""
+          },
+          "tier3": {
+            "damage_amount": "8",
+            "damage_type": "",
+            "tier_effect": ""
+          }
+        },
+        "additional_effect": "The Grand Meddle shifts up to 2 squares after striking the first target, then can shift 1 square after striking the second target."
+      },
+      {
+        "name": "Lockjaw",
+        "keywords": "Melee, Strike, Weapon",
+        "range": "Melee 1",
+        "targets": "One creature or object",
+        "roll_bonus": 3,
+        "effect": "Several radenwights pile onto the target and sink their teeth in.",
+        "has_test": true,
+        "test": {
+          "tier1": {
+            "damage_amount": "6",
+            "damage_type": "",
+            "tier_effect": ""
+          },
+          "tier2": {
+            "damage_amount": "9",
+            "damage_type": "",
+            "tier_effect": ""
+          },
+          "tier3": {
+            "damage_amount": "12",
+            "damage_type": "",
+            "tier_effect": "grabbed"
+          }
+        },
+        "additional_effect": "A target grabbed this way takes 2 damage at the start of each round. The Grand Meddle can have only one creature grabbed this way at a time."
+      }
+    ],
+    "triggered_action": [],
+    "villain_action": [
+      {
+        "name": "Villain Action 1 — The Meddle Begins",
+        "keywords": "Area",
+        "range": "Self",
+        "targets": "Self",
+        "effect": "The Grand Meddle shifts up to its speed, then takes the Defend action."
+      },
+      {
+        "name": "Villain Action 2 — Cacophony",
+        "keywords": "Area, Magic",
+        "range": "Burst 5",
+        "targets": "Each enemy in the area",
+        "roll_bonus": 3,
+        "effect": "The entire meddle erupts into a piercing musical assault.",
+        "has_test": true,
+        "test": {
+          "tier1": {
+            "damage_amount": "3",
+            "damage_type": "sonic",
+            "tier_effect": "slide 1; the Grand Meddle can shift 1 square"
+          },
+          "tier2": {
+            "damage_amount": "6",
+            "damage_type": "sonic",
+            "tier_effect": "slide 3; the Grand Meddle can shift up to 3 squares"
+          },
+          "tier3": {
+            "damage_amount": "8",
+            "damage_type": "sonic",
+            "tier_effect": "slide 5; the Grand Meddle can shift up to 5 squares"
+          }
+        },
+        "additional_effect": "The Grand Meddle can shift only once for each power roll, regardless of the number of targets."
+      },
+      {
+        "name": "Villain Action 3 — Rondo of Rats",
+        "keywords": "Area",
+        "range": "Burst 10",
+        "targets": "Each previously defeated or sacrificed member of the meddle in the area",
+        "effect": "Each target briefly rises, makes a free strike against an adjacent enemy, then falls dead again. No enemy can be targeted by more than two of these free strikes."
+      }
+    ],
+    "malice": [
+      {
+        "name": "Trouser Cut",
+        "resource_cost": "3 Malice",
+        "keywords": "Magic, Melee, Ranged",
+        "range": "Melee 1",
+        "targets": "One creature",
+        "roll_bonus": 2,
+        "effect": "The Grand Meddle makes an embarrassing low strike against the target.",
+        "has_test": true,
+        "test": {
+          "tier1": {
+            "damage_amount": "7",
+            "damage_type": "",
+            "tier_effect": "push 3"
+          },
+          "tier2": {
+            "damage_amount": "10",
+            "damage_type": "",
+            "tier_effect": "push 3; taunted until the end of the target's turn"
+          },
+          "tier3": {
+            "damage_amount": "13",
+            "damage_type": "",
+            "tier_effect": "push 5; taunted until the end of the target's turn"
+          }
+        },
+        "additional_effect": "If the target is wearing clothing covering the lower half of their body, they must use a maneuver once to pull that clothing up before they can move."
+      },
+      {
+        "name": "Rat Race",
+        "resource_cost": "5 Malice",
+        "keywords": "Move, Melee, Weapon",
+        "range": "Self",
+        "targets": "Self and each adjacent enemy at the end of the shift",
+        "effect": "The Grand Meddle shifts up to its speed. At the end of the shift, it can make one melee free strike against each adjacent enemy."
+      },
+      {
+        "name": "Rally the Rodents",
+        "resource_cost": "7 Malice",
+        "keywords": "Area, Magic, Ranged",
+        "range": "A 1 × 10 line within 10",
+        "targets": "Each enemy in the area when the wall disperses",
+        "effect": "The Grand Meddle uses music to coordinate living rats, forming a 1 × 10 wall of rats scurrying atop one another in unoccupied spaces anywhere on the encounter map. The wall doesn't block line of effect for the Grand Meddle or its allies, but it does for other creatures. Each square of the wall has 10 Stamina. If the Grand Meddle dies while the wall is still standing, the rats let out a hideous screech as they disperse. Each enemy on the encounter map makes an Intuition test. Tier 1: 7 sonic damage, and the target can't take a respite activity during their next respite. Tier 2: 5 sonic damage. Tier 3: No effect."
+      }
+    ]
+  }
+}

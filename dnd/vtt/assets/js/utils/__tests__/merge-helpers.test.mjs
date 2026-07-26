@@ -90,12 +90,12 @@ test('mergeSceneKeyedSection: fullSync drops items missing from incoming in same
   assert.equal(merged.s[0].id, 'a');
 });
 
-test('mergeSceneStatePreservingGrid: preserves grid from existing over incoming', () => {
+test('mergeSceneStatePreservingGrid: applies canonical incoming grid', () => {
   const existing = { s: { grid: { size: 128, locked: true, visible: true } } };
   const incoming = { s: { grid: { size: 64, locked: false, visible: true }, combat: {} } };
   const merged = mergeSceneStatePreservingGrid(existing, incoming);
-  assert.equal(merged.s.grid.size, 128);
-  assert.equal(merged.s.grid.locked, true);
+  assert.equal(merged.s.grid.size, 64);
+  assert.equal(merged.s.grid.locked, false);
 });
 
 test('mergeSceneStatePreservingGrid: keeps newer combat state by sequence', () => {
@@ -116,6 +116,16 @@ test('mergeSceneStatePreservingGrid: breaks equal combat sequence ties by timest
 
   const freshMerge = mergeSceneStatePreservingGrid(existing, freshIncoming);
   assert.equal(freshMerge.s.combat.phase, 'fresh');
+});
+
+test('mergeSceneStatePreservingGrid: authoritative recovery replaces newer local combat', () => {
+  const existing = { s: { combat: { sequence: 9, phase: 'rejected-local' } } };
+  const incoming = { s: { combat: { sequence: 8, phase: 'server-authoritative' } } };
+  const merged = mergeSceneStatePreservingGrid(existing, incoming, {
+    authoritative: true,
+  });
+  assert.equal(merged.s.combat.phase, 'server-authoritative');
+  assert.equal(merged.s.combat.sequence, 8);
 });
 
 test('mergeSceneStatePreservingGrid: coerces array revealedCells to object (per-level)', () => {
@@ -179,4 +189,34 @@ test('mergeBoardStateSnapshot: only includes metadata when non-empty', () => {
 
   const merged2 = mergeBoardStateSnapshot(existing, { metadata: { k: 1 } });
   assert.deepEqual(merged2.metadata, { k: 1 });
+});
+
+test('mergeBoardStateSnapshot preserves and advances player routing and version fields', () => {
+  const existing = {
+    playerMapDisabled: false,
+    playerActiveSceneId: 'player-old',
+    playerMapUrl: '/old.webp',
+    playerThumbnailUrl: '/old-thumb.webp',
+    thumbnailUrl: '/private-thumb.webp',
+    _version: 4,
+  };
+  const incoming = {
+    playerMapDisabled: true,
+    playerActiveSceneId: null,
+    playerMapUrl: null,
+    playerThumbnailUrl: null,
+    thumbnailUrl: '/canonical-thumb.webp',
+    _version: 5,
+    _fullSync: true,
+  };
+
+  const merged = mergeBoardStateSnapshot(existing, incoming);
+
+  assert.equal(merged.playerMapDisabled, true);
+  assert.equal(merged.playerActiveSceneId, null);
+  assert.equal(merged.playerMapUrl, null);
+  assert.equal(merged.playerThumbnailUrl, null);
+  assert.equal(merged.thumbnailUrl, '/canonical-thumb.webp');
+  assert.equal(merged._version, 5);
+  assert.equal(merged._fullSync, true);
 });

@@ -8,6 +8,14 @@ import {
 
 const SAVE_KEY = 'board-state';
 const COMBAT_SAVE_KEY_PREFIX = 'combat-state';
+const COMBAT_INTENT_TYPES = new Set([
+  'combat.start',
+  'turn.start',
+  'turn.complete',
+  'turn.cancel',
+  'round.advance',
+  'combat.end',
+]);
 
 // Phase 3-B (commit 2): delta-op escape thresholds. If a single flush
 // would carry more than this many ops, or ops spanning more than this
@@ -16,8 +24,8 @@ const COMBAT_SAVE_KEY_PREFIX = 'combat-state';
 // the intent is to catch pathological cases (e.g. a scene-wide template
 // change) rather than to nudge normal multi-select drags into the
 // snapshot path.
-export const PHASE_3B_MAX_OPS_PER_FLUSH = 64;
-export const PHASE_3B_MAX_SCENES_PER_FLUSH = 4;
+export const PHASE_3B_MAX_OPS_PER_FLUSH = 256;
+export const PHASE_3B_MAX_SCENES_PER_FLUSH = 16;
 
 // Cross-call ops buffer. Rapidly repeated moves of the same token get
 // coalesced by key (the later op overwrites the earlier one), matching
@@ -161,6 +169,15 @@ function boardStateOpDedupKey(op) {
     }
     return `combat.set:${sceneId}`;
   }
+  if (COMBAT_INTENT_TYPES.has(op.type)) {
+    const intentId = typeof op.intentId === 'string' ? op.intentId.trim() : '';
+    if (!intentId) {
+      return null;
+    }
+    // Intent operations are never coalesced by scene. Their unique key is
+    // also the server-side idempotency key, so retries remain safe.
+    return `${op.type}:${sceneId}:${intentId}`;
+  }
   return null;
 }
 
@@ -293,7 +310,7 @@ export function persistBoardStateOps(endpoint, ops, envelope = {}, options = {})
     // are intentionally left in place: a subsequent snapshot save will
     // persist the canonical state, and then the next op-based save
     // (if any) will observe an empty or reduced buffer.
-    return { escape: true };
+    return { escape: true, throughSeq: sendSeq };
   }
 
   // Build the wire payload. `ops` lives at the top level; metadata and
@@ -339,6 +356,25 @@ export function persistBoardStateOps(endpoint, ops, envelope = {}, options = {})
 }
 
 /**
+ * Drain only the ops represented by a successfully persisted snapshot.
+ *
+ * Newer operations may be queued while the snapshot request is in flight, so
+ * callers pass the escape result's sequence watermark instead of clearing the
+ * whole module buffer.
+ */
+export function acknowledgeBoardStateSnapshot(throughSeq) {
+  const sequence = Number(throughSeq);
+  if (!Number.isFinite(sequence) || sequence <= 0) {
+    return;
+  }
+  for (const [key, entry] of pendingBoardStateOps) {
+    if (entry.seq <= sequence) {
+      pendingBoardStateOps.delete(key);
+    }
+  }
+}
+
+/**
  * Test-only helper. Clears the module-level ops buffer between tests
  * so state from one test does not leak into another.
  */
@@ -352,7 +388,7 @@ export function persistCombatState(endpoint, sceneId, combatState = {}, options 
     return null;
   }
 
-  const payload = buildCombatPayload(sceneId, combatState);
+  const payload = buildCombatPayload(sceneId, combatState, options);
   if (!payload) {
     return null;
   }
@@ -373,7 +409,7 @@ export function persistCombatStateOp(endpoint, sceneId, combatState = {}, envelo
     return null;
   }
 
-  const payload = buildCombatPayload(sceneId, combatState);
+  const payload = buildCombatPayload(sceneId, combatState, options);
   if (!payload) {
     return null;
   }
@@ -395,6 +431,49 @@ export function persistCombatStateOp(endpoint, sceneId, combatState = {}, envelo
     envelope,
     options
   );
+}
+
+/**
+ * Persist a server-authoritative combat transition over the existing board-op
+ * transport. The server validates the transition under the board-state lock
+ * and returns its decision in operationResults.
+ */
+export function persistCombatIntent(
+  endpoint,
+  sceneId,
+  type,
+  details = {},
+  envelope = {},
+  options = {}
+) {
+  const normalizedSceneId = typeof sceneId === 'string' ? sceneId.trim() : '';
+  const normalizedType = typeof type === 'string' ? type.trim() : '';
+  if (!endpoint || !normalizedSceneId || !COMBAT_INTENT_TYPES.has(normalizedType)) {
+    return null;
+  }
+
+  const source = details && typeof details === 'object' ? details : {};
+  const providedIntentId = typeof source.intentId === 'string' ? source.intentId.trim() : '';
+  const intentId = providedIntentId || createCombatIntentId();
+  const op = {
+    ...source,
+    type: normalizedType,
+    sceneId: normalizedSceneId,
+    intentId,
+  };
+
+  return persistBoardStateOps(endpoint, [op], envelope, options);
+}
+
+function createCombatIntentId() {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return `combat-${crypto.randomUUID()}`;
+    }
+  } catch (error) {
+    // Fall through to the timestamp/random fallback.
+  }
+  return `combat-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
 function buildPayload(boardState = {}) {
@@ -589,7 +668,7 @@ function buildPayload(boardState = {}) {
   return Object.keys(payload).length > 0 ? payload : null;
 }
 
-function buildCombatPayload(sceneId, combatState = {}) {
+function buildCombatPayload(sceneId, combatState = {}, envelope = {}) {
   const key = typeof sceneId === 'string' ? sceneId.trim() : String(sceneId || '');
   if (!key) {
     return null;
@@ -600,12 +679,19 @@ function buildCombatPayload(sceneId, combatState = {}) {
     return null;
   }
 
-  return {
+  const payload = {
     sceneId: key,
     sceneState: {
       [key]: { combat },
     },
   };
+  if (typeof envelope?._version === 'number' && envelope._version > 0) {
+    payload._version = envelope._version;
+  }
+  if (typeof envelope?._socketId === 'string' && envelope._socketId.trim()) {
+    payload._socketId = envelope._socketId.trim();
+  }
+  return payload;
 }
 
 function formatCombatState(raw = {}) {

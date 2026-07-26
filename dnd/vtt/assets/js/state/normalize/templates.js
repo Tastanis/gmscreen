@@ -35,6 +35,7 @@ export function normalizeTemplateEntry(entry) {
   const levelId = typeof entry.levelId === 'string' && entry.levelId.trim()
     ? entry.levelId.trim()
     : BASE_MAP_LEVEL_ID;
+  const lastModified = Number(entry._lastModified);
 
   if (type === 'circle') {
     const column = clampToFinite(entry.center?.column, 0, 4);
@@ -49,6 +50,9 @@ export function normalizeTemplateEntry(entry) {
     };
     if (color) {
       normalized.color = color;
+    }
+    if (Number.isFinite(lastModified) && lastModified > 0) {
+      normalized._lastModified = lastModified;
     }
     return normalized;
   }
@@ -70,6 +74,9 @@ export function normalizeTemplateEntry(entry) {
     };
     if (color) {
       normalized.color = color;
+    }
+    if (Number.isFinite(lastModified) && lastModified > 0) {
+      normalized._lastModified = lastModified;
     }
     if (Number.isFinite(entry.anchor?.column) && Number.isFinite(entry.anchor?.row)) {
       normalized.anchor = {
@@ -106,6 +113,9 @@ export function normalizeTemplateEntry(entry) {
     };
     if (color) {
       normalized.color = color;
+    }
+    if (Number.isFinite(lastModified) && lastModified > 0) {
+      normalized._lastModified = lastModified;
     }
     if (typeof entry.wallColor === 'string' && entry.wallColor.trim()) {
       normalized.wallColor = entry.wallColor.trim();

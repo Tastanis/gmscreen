@@ -57,6 +57,7 @@ You can only do a fix if its prerequisites are already merged to the branch. The
 | `phase-5-store-cleanup.md` | phase 4 partially done |
 | `phase-6-normalization-unification.md` | phase 5 |
 | `phase-7-css-split.md` | nothing |
+| `phase-8-sync-hardening.md` | audit findings 1–51 and the existing phase 1–3 sync foundation | ✅ implemented and verified locally (2026-07-26) |
 
 **The biggest "bang for buck" is Phase 1.** If you do nothing else, doing all five Phase 1 fixes will kill most of the user-visible lag. Phase 2 is cheap and fixes correctness. Phases 3–7 are performance and maintainability improvements.
 
@@ -87,7 +88,11 @@ node --test dnd/vtt/assets/js/**/__tests__/*.test.mjs
 
 **Before you start any fix, run the test suite and confirm it is green.** If it is already red before you start, stop and tell the user — do not try to fix pre-existing failures as part of your fix.
 
-There are no PHP tests in this codebase today. Server-side fixes must be verified manually (see each fix's Verification section).
+PHP integration and helper tests now cover state POST behavior, hidden-player
+projection, monster-stat sanitization, and timestamp merging under `tests/`.
+Run them through the repository PHPUnit installation when it is available.
+`phase-8-sync-hardening.md` records the direct runtime checks to use when the
+checkout does not contain PHPUnit.
 
 ## Version system reminder
 

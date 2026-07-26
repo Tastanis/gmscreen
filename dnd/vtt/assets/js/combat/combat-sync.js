@@ -62,21 +62,35 @@ export function getActiveSceneCombatState(state = {}) {
       ? String(activeSceneIdRaw)
       : '';
   const activeSceneKey = activeSceneId.trim();
-  if (!activeSceneKey) {
-    return {
-      activeSceneId: '',
-      combatState: {},
-    };
-  }
-
   const sceneState =
     boardState.sceneState && typeof boardState.sceneState === 'object'
       ? boardState.sceneState
       : {};
+  const routedCombat = activeSceneKey ? sceneState[activeSceneKey]?.combat ?? {} : {};
+  if (routedCombat?.active === true || routedCombat?.isActive === true) {
+    return {
+      activeSceneId: activeSceneKey,
+      combatState: routedCombat,
+    };
+  }
+
+  // Combat is table-global even when the GM routes players to another map.
+  // If the routed scene is inactive (or routing is disabled), follow the one
+  // canonical active encounter so player intents target the same scene the GM
+  // is tracking.
+  for (const [sceneId, sceneEntry] of Object.entries(sceneState)) {
+    const combatState = sceneEntry?.combat;
+    if (combatState?.active === true || combatState?.isActive === true) {
+      return {
+        activeSceneId: sceneId,
+        combatState,
+      };
+    }
+  }
 
   return {
     activeSceneId: activeSceneKey,
-    combatState: sceneState[activeSceneKey]?.combat ?? {},
+    combatState: routedCombat,
   };
 }
 

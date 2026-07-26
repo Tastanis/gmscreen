@@ -10,7 +10,7 @@ import {
 // restrictPlacementsToPlayerView — hidden token filtering
 // ============================================================
 
-test('hidden:true placements are kept but monster data is stripped', () => {
+test('hidden:true placements are omitted from the player view', () => {
   const placements = {
     'scene-1': [
       { id: 'visible', name: 'Fighter', column: 3 },
@@ -20,13 +20,11 @@ test('hidden:true placements are kept but monster data is stripped', () => {
 
   const filtered = restrictPlacementsToPlayerView(placements);
 
-  assert.equal(filtered['scene-1'].length, 2);
+  assert.equal(filtered['scene-1'].length, 1);
   assert.equal(filtered['scene-1'][0].id, 'visible');
-  assert.equal(filtered['scene-1'][1].id, 'hidden');
-  assert.equal(filtered['scene-1'][1].hidden, true);
 });
 
-test('isHidden alternate key placements are kept', () => {
+test('isHidden alternate key placements are omitted', () => {
   const placements = {
     'scene-1': [
       { id: 'hidden-alt', name: 'Secret', isHidden: true },
@@ -35,11 +33,10 @@ test('isHidden alternate key placements are kept', () => {
 
   const filtered = restrictPlacementsToPlayerView(placements);
 
-  assert.equal(filtered['scene-1'].length, 1);
-  assert.equal(filtered['scene-1'][0].id, 'hidden-alt');
+  assert.equal(filtered['scene-1'].length, 0);
 });
 
-test('flags.hidden nested key placements are kept', () => {
+test('flags.hidden nested key placements are omitted', () => {
   const placements = {
     'scene-1': [
       { id: 'hidden-flags', name: 'Ambush', flags: { hidden: true } },
@@ -48,8 +45,7 @@ test('flags.hidden nested key placements are kept', () => {
 
   const filtered = restrictPlacementsToPlayerView(placements);
 
-  assert.equal(filtered['scene-1'].length, 1);
-  assert.equal(filtered['scene-1'][0].id, 'hidden-flags');
+  assert.equal(filtered['scene-1'].length, 0);
 });
 
 test('non-hidden placements are preserved', () => {
@@ -65,7 +61,7 @@ test('non-hidden placements are preserved', () => {
   assert.equal(filtered['scene-1'].length, 2);
 });
 
-test('mixed hidden and visible in same scene are all kept', () => {
+test('mixed hidden and visible scenes retain only visible placements', () => {
   const placements = {
     'scene-1': [
       { id: 'visible-1', name: 'Fighter' },
@@ -79,10 +75,10 @@ test('mixed hidden and visible in same scene are all kept', () => {
   const filtered = restrictPlacementsToPlayerView(placements);
   const ids = filtered['scene-1'].map((e) => e.id);
 
-  assert.deepEqual(ids, ['visible-1', 'hidden-1', 'visible-2', 'hidden-2', 'visible-3']);
+  assert.deepEqual(ids, ['visible-1', 'visible-2', 'visible-3']);
 });
 
-test('string "true" hidden placements are kept', () => {
+test('truthy hidden strings are omitted', () => {
   const placements = {
     'scene-1': [
       { id: 'str-true', hidden: 'true' },
@@ -93,7 +89,7 @@ test('string "true" hidden placements are kept', () => {
 
   const filtered = restrictPlacementsToPlayerView(placements);
 
-  assert.equal(filtered['scene-1'].length, 3);
+  assert.equal(filtered['scene-1'].length, 0);
 });
 
 test('string "false" is NOT hidden', () => {
@@ -109,7 +105,7 @@ test('string "false" is NOT hidden', () => {
   assert.equal(filtered['scene-1'].length, 2);
 });
 
-test('integer 1 hidden placement is kept', () => {
+test('integer 1 hidden placement is omitted', () => {
   const placements = {
     'scene-1': [
       { id: 'int-hidden', hidden: 1 },
@@ -118,10 +114,10 @@ test('integer 1 hidden placement is kept', () => {
 
   const filtered = restrictPlacementsToPlayerView(placements);
 
-  assert.equal(filtered['scene-1'].length, 1);
+  assert.equal(filtered['scene-1'].length, 0);
 });
 
-test('multiple scenes keep all placements including hidden', () => {
+test('multiple scenes omit hidden placements independently', () => {
   const placements = {
     'scene-1': [
       { id: 's1-visible', name: 'Fighter' },
@@ -137,8 +133,8 @@ test('multiple scenes keep all placements including hidden', () => {
 
   const filtered = restrictPlacementsToPlayerView(placements);
 
-  assert.equal(filtered['scene-1'].length, 2);
-  assert.equal(filtered['scene-2'].length, 1);
+  assert.equal(filtered['scene-1'].length, 1);
+  assert.equal(filtered['scene-2'].length, 0);
   assert.equal(filtered['scene-3'].length, 1);
 });
 
@@ -216,7 +212,7 @@ test('placement with no combatTeam has monster stripped', () => {
   assert.equal(token.monsterId, undefined);
 });
 
-test('hidden enemy placement is kept but monster data is stripped', () => {
+test('hidden enemy placement is omitted entirely', () => {
   const placements = {
     'scene-1': [
       {
@@ -230,10 +226,7 @@ test('hidden enemy placement is kept but monster data is stripped', () => {
 
   const filtered = restrictPlacementsToPlayerView(placements);
 
-  assert.equal(filtered['scene-1'].length, 1);
-  assert.equal(filtered['scene-1'][0].id, 'hidden-enemy');
-  assert.equal(filtered['scene-1'][0].hidden, true);
-  assert.equal(filtered['scene-1'][0].monster, undefined);
+  assert.equal(filtered['scene-1'].length, 0);
 });
 
 // ============================================================

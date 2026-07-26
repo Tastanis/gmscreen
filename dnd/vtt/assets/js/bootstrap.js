@@ -103,11 +103,12 @@ async function bootstrap() {
   mountDiceRoller();
   mountMemoryMonitor({ getState }); // [REMOVABLE] Memory monitor widget
 
-  await hydrateFromServer(routes, userContext);
+  await hydrateFromServer(routes, userContext, storeApi);
 }
 
-async function hydrateFromServer(routes, userContext) {
+async function hydrateFromServer(routes, userContext, storeApi = null) {
   const isGM = Boolean(userContext?.isGM);
+  let levelOverrideOp = null;
 
   try {
     // Only GM can access scenes.php directly - players get scene data from state.php
@@ -201,14 +202,26 @@ async function hydrateFromServer(routes, userContext) {
               authorIsGm: false,
               authorRole: 'player',
             };
-            applyPcTokenLevelOverride(nextBoardState, currentState?.user?.name);
+            levelOverrideOp = applyPcTokenLevelOverride(
+              nextBoardState,
+              currentState?.user?.name
+            );
           } else {
-            applyGmActiveLevelOverride(nextBoardState, currentState?.user?.name);
+            levelOverrideOp = applyGmActiveLevelOverride(
+              nextBoardState,
+              currentState?.user?.name
+            );
           }
           draft.boardState = nextBoardState;
         }
       }
     });
+    if (levelOverrideOp && typeof storeApi?._persistBoardState === 'function') {
+      await storeApi._persistBoardState(
+        { serializeWithSnapshots: true },
+        [levelOverrideOp]
+      );
+    }
   } catch (error) {
     console.warn('[VTT] Failed to hydrate data', error);
   }
@@ -253,12 +266,27 @@ function applyPcTokenLevelOverride(nextBoardState, userName) {
     validLevelIds,
   });
   if (!pcLevelId) return;
+  const existingLevelId =
+    typeof sceneEntry.userLevelState?.[userKey]?.levelId === 'string'
+      ? sceneEntry.userLevelState[userKey].levelId.trim()
+      : '';
+  if (existingLevelId === pcLevelId) {
+    return null;
+  }
   if (!sceneEntry.userLevelState || typeof sceneEntry.userLevelState !== 'object') {
     sceneEntry.userLevelState = {};
   }
   sceneEntry.userLevelState[userKey] = {
     levelId: pcLevelId,
-    _lastModified: Date.now(),
+    source: 'manual',
+    updatedAt: Date.now(),
+  };
+  return {
+    type: 'user-level.set',
+    sceneId,
+    userId: userKey,
+    levelId: pcLevelId,
+    source: 'manual',
   };
 }
 
@@ -319,6 +347,13 @@ function applyGmActiveLevelOverride(nextBoardState, userName) {
     source: 'manual',
     updatedAt: Date.now(),
   };
+  return {
+    type: 'user-level.set',
+    sceneId,
+    userId: userKey,
+    levelId: topmostLevelId,
+    source: 'manual',
+  };
 }
 
 document.addEventListener('DOMContentLoaded', bootstrap);
@@ -329,6 +364,16 @@ function normalizeBoardStateSnapshot(raw = {}) {
   }
 
   const snapshot = {};
+
+  if (Object.prototype.hasOwnProperty.call(raw, '_version')) {
+    const version = Number(raw._version);
+    if (Number.isFinite(version) && version >= 0) {
+      snapshot._version = Math.trunc(version);
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, '_fullSync')) {
+    snapshot._fullSync = Boolean(raw._fullSync);
+  }
 
   if (Object.prototype.hasOwnProperty.call(raw, 'activeSceneId')) {
     const rawId = raw.activeSceneId;

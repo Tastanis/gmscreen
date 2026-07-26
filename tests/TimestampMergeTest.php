@@ -16,6 +16,20 @@ require_once __DIR__ . '/../dnd/vtt/api/state_helpers.php';
  */
 final class TimestampMergeTest extends TestCase
 {
+    public function testMatchingVersionCanOverrideAClockSkewedServerTimestamp(): void
+    {
+        $existing = [
+            ['id' => 'token-1', 'column' => 1, '_lastModified' => 9000],
+        ];
+        $incoming = [
+            ['id' => 'token-1', 'column' => 8, '_lastModified' => 1000],
+        ];
+
+        $merged = mergeSceneEntriesByTimestamp($existing, $incoming, true);
+
+        $this->assertSame(8, $merged[0]['column']);
+    }
+
     public function testNewerIncomingEntryReplacesOlderExisting(): void
     {
         $existing = [

@@ -540,6 +540,23 @@ describe('Board State Op Applier — placement.add', () => {
 });
 
 describe('Board State Op Applier — placement.remove', () => {
+  test('removes the associated token claim with the placement', () => {
+    const state = {
+      placements: { 'scene-1': [{ id: 'hero' }] },
+      sceneState: { 'scene-1': { claimedTokens: { hero: 'player one' } } },
+    };
+
+    const mutated = applyBoardStateOpLocally(state, {
+      type: 'placement.remove',
+      sceneId: 'scene-1',
+      placementId: 'hero',
+    });
+
+    assert.equal(mutated, true);
+    assert.deepEqual(state.placements['scene-1'], []);
+    assert.deepEqual(state.sceneState['scene-1'].claimedTokens, {});
+  });
+
   test('removes the matching placement', () => {
     const state = seedBoardState();
     const mutated = applyBoardStateOpLocally(state, {

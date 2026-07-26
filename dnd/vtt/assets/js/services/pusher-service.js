@@ -216,6 +216,16 @@ function handleStateChange(states) {
       states.current === 'connecting'
     ) {
       currentSocketId = null;
+      if (isConnected) {
+        isConnected = false;
+        if (typeof onConnectionStateChangeCallback === 'function') {
+          onConnectionStateChangeCallback({
+            connected: false,
+            socketId: null,
+            reason: states.current,
+          });
+        }
+      }
     }
   }
 }
@@ -248,6 +258,7 @@ function handleStateUpdated(data) {
     timestamp,
     authorId,
     authorRole,
+    publicView,
     changedFields,
     deltaOnly,
     ops,
@@ -302,6 +313,7 @@ function handleStateUpdated(data) {
       timestamp,
       authorId,
       authorRole,
+      publicView: Boolean(publicView),
       ops: Array.isArray(ops) ? ops : [],
     };
   } else if (type === 'ops-overflow') {
@@ -311,6 +323,7 @@ function handleStateUpdated(data) {
       timestamp,
       authorId,
       authorRole,
+      publicView: Boolean(publicView),
     };
   } else {
     // 'full' or undefined — legacy full-state broadcast.
@@ -320,6 +333,7 @@ function handleStateUpdated(data) {
       timestamp,
       authorId,
       authorRole,
+      publicView: Boolean(publicView),
       changedFields: changedFields || [],
     };
 

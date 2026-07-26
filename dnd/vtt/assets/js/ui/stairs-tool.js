@@ -301,7 +301,7 @@ function currentViewerLevelId() {
 
 function markSceneDirty(sceneId) {
   if (typeof boardApi?._markSceneStateDirty === 'function') {
-    boardApi._markSceneStateDirty(sceneId);
+    boardApi._markSceneStateDirty(sceneId, 'stairs');
   }
 }
 

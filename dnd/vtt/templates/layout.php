@@ -3,7 +3,8 @@
 /** @var array<string,mixed> $config */
 /** @var array<string,string> $routes */
 
-$assetVersion = (int) ($config['assetsVersion'] ?? time());
+$assetVersion = (int) ($config['assetsVersion'] ?? 1);
+$pusherEnabled = !empty($config['pusher']) || !empty($config['chatPusher']);
 $jsonScriptFlags = JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_PRETTY_PRINT;
 
 // Include navigation bar
@@ -26,10 +27,12 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
             }
         })();
     </script>
+    <?php if ($pusherEnabled): ?>
     <script src="https://js.pusher.com/8.4.0/pusher.min.js"></script>
+    <?php endif; ?>
     <link rel="stylesheet" href="../css/theme.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="../css/ui-kit.css?v=<?= $assetVersion ?>" />
-    <link rel="stylesheet" href="../css/style.css" />
+    <link rel="stylesheet" href="../css/style.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="assets/css/base.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="assets/css/layout.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="assets/css/board.css?v=<?= $assetVersion ?>" />
@@ -62,12 +65,8 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
         window.vttConfig = <?= json_encode($config, $jsonScriptFlags) ?>;
         window.chatHandlerUrl = <?= json_encode($config['chatHandlerUrl'] ?? ($routes['chat'] ?? '/dnd/chat_handler.php'), $jsonScriptFlags) ?>;
         window.chatParticipants = <?= json_encode($config['chatParticipants'] ?? [], $jsonScriptFlags) ?>;
-        // Pusher configuration for real-time sync
-        window.vttPusherConfig = {
-            key: 'c32516844b741a8b1772',
-            cluster: 'us3',
-            channel: 'vtt-board'
-        };
+        // Pusher configuration is sourced from the server's enabled config.
+        window.vttPusherConfig = <?= json_encode($config['pusher'] ?? null, $jsonScriptFlags) ?>;
         // Pusher chat channel — `chat-updated` notifications drive
         // immediate refetch instead of 1.5s polling.
         window.chatPusherConfig = <?= json_encode($config['chatPusher'] ?? null, $jsonScriptFlags) ?>;

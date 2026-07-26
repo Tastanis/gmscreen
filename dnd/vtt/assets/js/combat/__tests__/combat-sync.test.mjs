@@ -35,6 +35,39 @@ describe('combat sync scene selection', () => {
       combatState: {},
     });
   });
+
+  test('follows the canonical active encounter when player map routing differs', () => {
+    const result = getActiveSceneCombatState({
+      boardState: {
+        activeSceneId: 'player-map',
+        sceneState: {
+          'player-map': { combat: { active: false } },
+          'gm-encounter': {
+            combat: { active: true, encounterId: 'enc-1', sequence: 8 },
+          },
+        },
+      },
+    });
+
+    assert.equal(result.activeSceneId, 'gm-encounter');
+    assert.equal(result.combatState.encounterId, 'enc-1');
+  });
+
+  test('finds active combat even when player map display is disabled', () => {
+    const result = getActiveSceneCombatState({
+      boardState: {
+        activeSceneId: null,
+        sceneState: {
+          'gm-encounter': {
+            combat: { active: true, sequence: 3 },
+          },
+        },
+      },
+    });
+
+    assert.equal(result.activeSceneId, 'gm-encounter');
+    assert.equal(result.combatState.active, true);
+  });
 });
 
 describe('combat sync freshness checks', () => {

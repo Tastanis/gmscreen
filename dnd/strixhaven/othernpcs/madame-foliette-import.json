@@ -1,0 +1,56 @@
+{
+  "npcs": [
+    {
+      "name": "Madame Foliette",
+      "age": "Ageless; appears middle-aged",
+      "race": "Fallen Angel",
+      "school": "Silverquill",
+      "college": "Silverquill",
+      "character_description": "An elegant, pale fallen angel who receives guests beneath the raised cowl of a floor-length dusk-gray cloak. Its worn edges drift like wet ink, while cropped wing-stubs form a dignified shawl-like hump across her shoulders. She carries a black-iron lantern containing a caged mote of pure white light, and the ink-wet floor becomes perfectly still around her hem.",
+      "general_info": "Proprietor of the Duskwalk's den of secrets. Foliette is terrifyingly polite, never raises her voice, and speaks in conditional suggestions such as, 'It might be that someone knows that name.' She collects first lies and can taste when a lie is someone's first, savoring the discovery like a rare vintage. The Witness's Eye: she always knows when someone lies to her, though not what the truth is. The Kept Weight: she can never reveal a secret she has accepted as payment; she can only trade access through the tavern's mechanisms.",
+      "conflict_engine": {
+        "want": "To be owed by everyone and judged by no one.",
+        "want_tag": "Power",
+        "obstacle": "Every secret she accepts becomes impossible for her to reveal, while the Ray of White could still discover the mercy-secret that caused her fall.",
+        "action": "She expands a web of debts and trades controlled access to secrets through the tavern's walls, playback mechanisms, constructs, and intermediaries.",
+        "consequence": "Anyone who gains her help leaves owing Foliette, and each new obligation makes the tavern more influential and more dangerous to cross."
+      },
+      "tension_web": [
+        {
+          "name": "The Ray of White",
+          "role": "existential judge",
+          "description": "If it learns that Foliette still preserves her original mercy-secret, her fall and everything built from it could be rendered meaningless."
+        },
+        {
+          "name": "Ioria",
+          "role": "living reflection",
+          "description": "Ioria's condition mirrors the beginning of Foliette's fall closely enough to disturb her composure."
+        },
+        {
+          "name": "Sharon",
+          "role": "promising client",
+          "description": "Foliette suspects Sharon is protecting someone and recognizes both the danger and value of that loyalty."
+        },
+        {
+          "name": "The Ledger",
+          "role": "despised rival",
+          "description": "Their coercive signatures offend Foliette's belief that a secret or obligation must be knowingly offered to possess real worth."
+        }
+      ],
+      "pressure_point": "Expose the Ledger's coercive methods or offer Foliette a genuinely valuable first lie. Either can make her pause, reassess the speaker, and quietly tilt the house in their favor.",
+      "trajectory": "If the party respects the rules of her secret economy, Foliette allows the house game to be winnable and helps them burn a Ledger-hired freelancer without ever appearing to intervene directly.",
+      "directors_notes": "Play her with perfect courtesy and long, deliberate pauses. She never raises her voice; the room quiets itself for her. She should never state a purchased secret directly, instead directing guests toward a wall, construct, recording, gargoyle, or other mechanism that can reveal it without using her mouth.",
+      "details": {
+        "backstory": "Foliette was an arbitration angel of the same order as Ioria's kind. She kept one secret out of mercy rather than testifying to it. The person was spared, but her wings crusted into powder. She came to understand that a kept secret has physical and spiritual weight, then built a house where that weight could serve as currency.",
+        "core_want": "To be owed by everyone and judged by no one.",
+        "core_fear": "The Ray of White learning she still holds the mercy-secret that caused her fall.",
+        "other": "Edge — The Witness's Eye: Foliette always knows that someone has lied to her, but does not automatically learn the truth. Bane — The Kept Weight: Foliette can never reveal a secret she has accepted as payment. She can trade access to it, but cannot speak or directly disclose it herself."
+      },
+      "gm_only": {
+        "plot_hooks": "Foliette is neutral, but her disgust with the Ledger is Sharon's opening. She can make the house game fairly winnable, leak access to the right mechanism, or arrange circumstances that expose a Ledger freelancer, provided her own hands remain clean.",
+        "secrets": "The white mote inside Foliette's lantern is the first secret she ever kept: the same mercy-secret for which she fell. She may already suspect why the party has come and whom Sharon is protecting. Foliette is a possible future reflection of Ioria if Ioria chooses mercy over testimony.",
+        "notes": "Do not let Foliette simply tell the party purchased information. Route revelations through environmental mechanisms: whispering walls, the shield guardian's playback, the gargoyle, encoded drinks, the singing inklings, or access to a private room. She is fascinated by a person's first lie and briefly allows genuine delight to break her composure when she tastes one."
+      }
+    }
+  ]
+}

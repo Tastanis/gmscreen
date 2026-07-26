@@ -161,6 +161,21 @@ function broadcastVttStateUpdate(array $update, ?string $excludeSocketId = null)
     }
 }
 
+function getVttStateContentHash(): string
+{
+    $context = hash_init('sha256');
+    foreach (['board-state.json', 'scenes.json', 'tokens.json'] as $filename) {
+        $path = __DIR__ . '/../storage/' . $filename;
+        hash_update($context, $filename . "\0");
+        if (is_file($path)) {
+            $contents = file_get_contents($path);
+            hash_update($context, is_string($contents) ? $contents : '');
+        }
+        hash_update($context, "\0");
+    }
+    return substr(hash_final($context), 0, 16);
+}
+
 if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
     header('Content-Type: application/json');
 
@@ -168,6 +183,13 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
 
     try {
         if ($method === 'GET') {
+            $auth = getVttUserContext();
+            if (!($auth['isLoggedIn'] ?? false)) {
+                respondJson(401, [
+                    'success' => false,
+                    'error' => 'Authentication required.',
+                ]);
+            }
             // Phase 3-A: Conditional GET. The polling fallback hits this
             // endpoint every 30 seconds (safety-net) or 1 second (fallback).
             // When the board state version has not advanced since the
@@ -176,9 +198,12 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
             // server: no scene/token loads, no player-view filtering, no
             // JSON serialization. We use a weak ETag because the response
             // body varies by user role (player view vs. GM view), but the
-            // version is always a sufficient freshness key.
+            // hash also repairs same-version drift caused by an external file
+            // restore/edit or a client that advanced its version without
+            // applying the corresponding body.
             $currentVersion = getVttBoardStateVersion();
-            $currentEtag = 'W/"v' . $currentVersion . '"';
+            $contentHash = getVttStateContentHash();
+            $currentEtag = 'W/"v' . $currentVersion . '-' . $contentHash . '"';
             $clientEtag = isset($_SERVER['HTTP_IF_NONE_MATCH'])
                 ? trim((string) $_SERVER['HTTP_IF_NONE_MATCH'])
                 : '';
@@ -212,12 +237,16 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
             // versions expire naturally via the short TTL below, which is
             // the backstop for the narrow window between disk commit and
             // cache-key rotation.
-            $auth = getVttUserContext();
             $apcuEnabled = function_exists('apcu_enabled') && apcu_enabled();
             $cacheKey = null;
             if ($apcuEnabled) {
                 $cacheUser = strtolower(trim((string) ($auth['user'] ?? '')));
-                $cacheKey = sprintf('vtt:state:v%d:%s', $currentVersion, $cacheUser);
+                $cacheKey = sprintf(
+                    'vtt:state:v%d:%s:%s',
+                    $currentVersion,
+                    $contentHash,
+                    $cacheUser
+                );
                 $cachedBody = apcu_fetch($cacheKey, $cacheHit);
                 if ($cacheHit && is_string($cachedBody) && $cachedBody !== '') {
                     header('ETag: ' . $currentEtag);
@@ -359,7 +388,11 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
 
                 $nextState = normalizeBoardState($existing);
                 $nextState['_version'] = $previousVersion;
+                $stateBeforeWrite = $nextState;
                 $isGm = (bool) ($auth['isGM'] ?? false);
+                $appliedOps = [];
+                $operationResults = [];
+                $combatResults = [];
 
                 // Delta ops are intentionally small, typed mutations applied to
                 // the current canonical state while the board-state lock is
@@ -407,10 +440,52 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                         'isGm' => $isGm,
                         'userId' => $callerUserId,
                     ];
-                    foreach ($ops as $op) {
-                        $nextState = applyBoardStateOp($nextState, $op, $opContext);
+                    foreach ($ops as $opIndex => $op) {
+                        $beforeOpState = $nextState;
+                        $opType = isset($op['type']) && is_string($op['type'])
+                            ? trim($op['type'])
+                            : '';
+                        $intentResult = isCombatIntentOpType($opType)
+                            ? applyCombatIntentOp($nextState, $op, $opContext)
+                            : null;
+                        if (is_array($intentResult)) {
+                            $candidateState = $intentResult['state'];
+                            $opAccepted = !empty($intentResult['accepted']);
+                            $opApplied = !empty($intentResult['applied']);
+                            $opReason = $intentResult['reason'] ?? null;
+                        } else {
+                            $candidateState = applyBoardStateOp($nextState, $op, $opContext);
+                            $opApplied = $candidateState !== $beforeOpState;
+                            $opAccepted = $opApplied;
+                            $opReason = $opApplied ? null : 'not-applied';
+                        }
+                        $nextState = $candidateState;
+                        $operationResult = [
+                            'index' => $opIndex,
+                            'type' => $opType,
+                            'accepted' => $opAccepted,
+                            'applied' => $opApplied,
+                            'reason' => $opReason,
+                        ];
+                        if (isset($op['intentId']) && is_string($op['intentId'])) {
+                            $operationResult['intentId'] = trim($op['intentId']);
+                        }
+                        if (is_array($intentResult) && isset($intentResult['combat']) && is_array($intentResult['combat'])) {
+                            $operationResult['combat'] = $intentResult['combat'];
+                        }
+                        $operationResults[] = $operationResult;
+                        if ($opApplied) {
+                            $appliedOp = buildAppliedBoardStateOp($op, $nextState, $beforeOpState);
+                            if ($appliedOp !== null) {
+                                $appliedOps[] = $appliedOp;
+                            }
+                        }
                     }
                 }
+                $acceptIncomingByVersion =
+                    $clientVersion !== null
+                    && $clientVersion > 0
+                    && $clientVersion === $previousVersion;
 
                 if (!$isGm) {
                     $combatUpdates = [];
@@ -470,7 +545,8 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                             // Only GMs can delete tokens (via the separate GM update path)
                             $nextState['placements'][$sceneKey] = mergeSceneEntriesByTimestamp(
                                 $existingPlacements,
-                                $placements
+                                $placements,
+                                $acceptIncomingByVersion
                             );
                         }
                     }
@@ -494,7 +570,8 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                             // Only GMs can delete templates
                             $nextState['templates'][$sceneKey] = mergeSceneEntriesByTimestamp(
                                 $existingTemplates,
-                                $templates
+                                $templates,
+                                $acceptIncomingByVersion
                             );
                         }
                     }
@@ -525,7 +602,8 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                             // Use timestamp-based merge for players (delta mode)
                             $nextState['drawings'][$sceneKey] = mergeSceneEntriesByTimestamp(
                                 $existingDrawings,
-                                $drawings
+                                $drawings,
+                                $acceptIncomingByVersion
                             );
                         }
                     }
@@ -537,20 +615,43 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                                     'grid' => normalizeGridSettings([]),
                                 ];
                             }
-                            // Only apply player combat updates when they are strictly
-                            // newer than the existing combat state. Browser-local
-                            // sequence counters can tie after refresh, so equal
-                            // sequences must be broken by updatedAt instead of
-                            // blindly overwriting the stored state.
                             $existingCombat = $nextState['sceneState'][$sceneId]['combat'] ?? [];
-                            if (shouldApplyCombatStatePayload($combatState, $existingCombat)) {
-                                $nextState['sceneState'][$sceneId]['combat'] = $combatState;
+                            $playerCombatResult = mergePlayerCombatAuxiliaryUpdate(
+                                $existingCombat,
+                                $combatState
+                            );
+                            if (!empty($playerCombatResult['accepted'])) {
+                                $nextState['sceneState'][$sceneId]['combat'] = $playerCombatResult['combat'];
+                                $combatResults[$sceneId] = [
+                                    'applied' => !empty($playerCombatResult['applied']),
+                                    'reason' => $playerCombatResult['reason'] ?? null,
+                                ];
+                            } else {
+                                $combatResults[$sceneId] = [
+                                    'applied' => false,
+                                    'reason' => $playerCombatResult['reason'] ?? 'server-authority-required',
+                                ];
                             }
                         }
                     }
 
                     if ($hasPingUpdates) {
                         $nextState['pings'] = $pingUpdates;
+                    }
+
+                    $stateChanged = $nextState !== $stateBeforeWrite;
+                    if (!$stateChanged) {
+                        $playerView = filterPlacementsForPlayerView($nextState);
+                        $playerView['_version'] = $previousVersion;
+                        return [
+                            'state' => $playerView,
+                            'canonicalState' => $nextState,
+                            'version' => $previousVersion,
+                            'applied' => false,
+                            'appliedOps' => $appliedOps,
+                            'operationResults' => $operationResults,
+                            'combatResults' => $combatResults,
+                        ];
                     }
 
                     // Bump the version on the in-memory state so the saved
@@ -577,7 +678,12 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                     $playerView['_version'] = $newVersion;
                     return [
                         'state' => $playerView,
+                        'canonicalState' => $nextState,
                         'version' => $newVersion,
+                        'applied' => true,
+                        'appliedOps' => $appliedOps,
+                        'operationResults' => $operationResults,
+                        'combatResults' => $combatResults,
                     ];
                 }
 
@@ -592,6 +698,15 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                                 $existingCombat = $nextState['sceneState'][$sceneId]['combat'] ?? [];
                                 if (!shouldApplyCombatStatePayload($config['combat'], $existingCombat)) {
                                     unset($config['combat']);
+                                    $combatResults[$sceneId] = [
+                                        'applied' => false,
+                                        'reason' => 'stale-combat-state',
+                                    ];
+                                } else {
+                                    $combatResults[$sceneId] = [
+                                        'applied' => true,
+                                        'reason' => null,
+                                    ];
                                 }
                             }
                             $nextState['sceneState'][$sceneId] = array_merge($nextState['sceneState'][$sceneId], $config);
@@ -616,7 +731,8 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                                 : [];
                             $nextState['placements'][$sceneKey] = mergeSceneEntriesByTimestamp(
                                 $existingPlacements,
-                                $placements
+                                $placements,
+                                $acceptIncomingByVersion
                             );
                         }
                         continue;
@@ -639,7 +755,8 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                                 : [];
                             $nextState['templates'][$sceneKey] = mergeSceneEntriesByTimestamp(
                                 $existingTemplates,
-                                $templates
+                                $templates,
+                                $acceptIncomingByVersion
                             );
                         }
                         continue;
@@ -670,12 +787,27 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                                 : [];
                             $nextState['drawings'][$sceneKey] = mergeSceneEntriesByTimestamp(
                                 $existingDrawings,
-                                $drawings
+                                $drawings,
+                                $acceptIncomingByVersion
                             );
                         }
                         continue;
                     }
                     $nextState[$key] = $value;
+                }
+
+                $stateChanged = $nextState !== $stateBeforeWrite;
+                if (!$stateChanged) {
+                    $nextState['_version'] = $previousVersion;
+                    return [
+                        'state' => $nextState,
+                        'canonicalState' => $nextState,
+                        'version' => $previousVersion,
+                        'applied' => false,
+                        'appliedOps' => $appliedOps,
+                        'operationResults' => $operationResults,
+                        'combatResults' => $combatResults,
+                    ];
                 }
 
                 // Bump the version on the in-memory state so the saved file
@@ -700,7 +832,12 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
 
                 return [
                     'state' => $nextState,
+                    'canonicalState' => $nextState,
                     'version' => $newVersion,
+                    'applied' => true,
+                    'appliedOps' => $appliedOps,
+                    'operationResults' => $operationResults,
+                    'combatResults' => $combatResults,
                 ];
             });
 
@@ -713,7 +850,20 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
             }
 
             $responseState = $lockResult['state'];
+            $canonicalState = isset($lockResult['canonicalState']) && is_array($lockResult['canonicalState'])
+                ? $lockResult['canonicalState']
+                : $responseState;
             $newVersion = $lockResult['version'];
+            $writeApplied = !empty($lockResult['applied']);
+            $appliedOps = isset($lockResult['appliedOps']) && is_array($lockResult['appliedOps'])
+                ? $lockResult['appliedOps']
+                : [];
+            $operationResults = isset($lockResult['operationResults']) && is_array($lockResult['operationResults'])
+                ? $lockResult['operationResults']
+                : [];
+            $combatResults = isset($lockResult['combatResults']) && is_array($lockResult['combatResults'])
+                ? $lockResult['combatResults']
+                : [];
 
             // Broadcast update via Pusher (non-blocking, fails silently).
             //
@@ -740,43 +890,34 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
             $authorRole = ($auth['isGM'] ?? false) ? 'gm' : 'player';
             $broadcastTimestampMs = time() * 1000;
 
+            $appliedUpdates = buildAppliedBoardStateBroadcastUpdates(
+                $canonicalState,
+                $updates,
+                $isDeltaOnly
+            );
+            $publicUpdates = sanitizeBoardStateBroadcastUpdatesForPlayers(
+                $appliedUpdates,
+                $canonicalState
+            );
+            $publicOps = sanitizeBoardStateBroadcastOpsForPlayers(
+                $appliedOps,
+                $canonicalState
+            );
+
             $opsOnlyPayload = !empty($ops) && empty($updates);
             $useOpsBroadcast = $opsOnlyPayload && VTT_USE_DELTA_BROADCASTS;
+            $broadcastData = null;
 
-            if ($useOpsBroadcast) {
-                $broadcastData = [
-                    'type' => 'ops',
-                    'version' => $newVersion,
-                    'timestamp' => $broadcastTimestampMs,
-                    'authorId' => $authorId,
-                    'authorRole' => $authorRole,
-                    'ops' => $ops,
-                ];
-
-                // Pusher's 10 KB per-message limit is a hard cap. If for
-                // any reason the ops list grew large enough to bust it
-                // (the client-side ops escape hatch should normally
-                // prevent this), fall back to a compact marker that
-                // forces every receiver to issue a fresh GET. We log
-                // because exceeding the cap is a signal that something
-                // upstream is sending too much in one save.
-                $encoded = json_encode($broadcastData);
-                if ($encoded === false || strlen($encoded) > VTT_BROADCAST_MAX_BYTES) {
-                    error_log(sprintf(
-                        '[VTT] Phase 3-C ops broadcast exceeded %d bytes (was %d, %d ops); falling back to ops-overflow marker',
-                        VTT_BROADCAST_MAX_BYTES,
-                        $encoded === false ? -1 : strlen($encoded),
-                        count($ops)
-                    ));
-                    $broadcastData = [
-                        'type' => 'ops-overflow',
-                        'version' => $newVersion,
-                        'timestamp' => $broadcastTimestampMs,
-                        'authorId' => $authorId,
-                        'authorRole' => $authorRole,
-                    ];
-                }
-            } else {
+            if ($writeApplied && $useOpsBroadcast) {
+                $broadcastData = buildPlayerSafeOpsBroadcast(
+                    $publicOps,
+                    $newVersion,
+                    $broadcastTimestampMs,
+                    $authorId,
+                    $authorRole,
+                    count($ops)
+                );
+            } elseif ($writeApplied && !$useOpsBroadcast) {
                 $broadcastData = [
                     // Tag full-state broadcasts so the client subscriber
                     // can dispatch on `type` even when the field is
@@ -787,7 +928,8 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                     'timestamp' => $broadcastTimestampMs, // milliseconds for JS
                     'authorId' => $authorId,
                     'authorRole' => $authorRole,
-                    'changedFields' => $changedFields,
+                    'publicView' => true,
+                    'changedFields' => array_keys($publicUpdates),
                     // When false, the broadcast carries the *complete*
                     // placement/template/drawing arrays for every
                     // included scene. The client can safely replace its
@@ -798,38 +940,38 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                 ];
 
                 // Include delta updates for efficient client-side merging
-                if (isset($updates['placements'])) {
-                    $broadcastData['placements'] = $updates['placements'];
+                if (isset($publicUpdates['placements'])) {
+                    $broadcastData['placements'] = $publicUpdates['placements'];
                 }
-                if (isset($updates['templates'])) {
-                    $broadcastData['templates'] = $updates['templates'];
+                if (isset($publicUpdates['templates'])) {
+                    $broadcastData['templates'] = $publicUpdates['templates'];
                 }
-                if (isset($updates['drawings'])) {
-                    $broadcastData['drawings'] = $updates['drawings'];
+                if (isset($publicUpdates['drawings'])) {
+                    $broadcastData['drawings'] = $publicUpdates['drawings'];
                 }
-                if (isset($updates['pings'])) {
-                    $broadcastData['pings'] = $updates['pings'];
+                if (isset($publicUpdates['pings'])) {
+                    $broadcastData['pings'] = $publicUpdates['pings'];
                 }
-                if (isset($updates['sceneState'])) {
-                    $broadcastData['sceneState'] = $updates['sceneState'];
+                if (isset($publicUpdates['sceneState'])) {
+                    $broadcastData['sceneState'] = $publicUpdates['sceneState'];
                 }
-                if (isset($updates['activeSceneId'])) {
-                    $broadcastData['activeSceneId'] = $updates['activeSceneId'];
+                if (array_key_exists('activeSceneId', $publicUpdates)) {
+                    $broadcastData['activeSceneId'] = $publicUpdates['activeSceneId'];
                 }
-                if (isset($updates['mapUrl'])) {
-                    $broadcastData['mapUrl'] = $updates['mapUrl'];
+                if (array_key_exists('mapUrl', $publicUpdates)) {
+                    $broadcastData['mapUrl'] = $publicUpdates['mapUrl'];
                 }
-                if (array_key_exists('playerMapDisabled', $updates)) {
-                    $broadcastData['playerMapDisabled'] = $updates['playerMapDisabled'];
+                if (array_key_exists('playerMapDisabled', $publicUpdates)) {
+                    $broadcastData['playerMapDisabled'] = $publicUpdates['playerMapDisabled'];
                 }
-                if (array_key_exists('playerActiveSceneId', $updates)) {
-                    $broadcastData['playerActiveSceneId'] = $updates['playerActiveSceneId'];
+                if (array_key_exists('playerActiveSceneId', $publicUpdates)) {
+                    $broadcastData['playerActiveSceneId'] = $publicUpdates['playerActiveSceneId'];
                 }
-                if (array_key_exists('playerMapUrl', $updates)) {
-                    $broadcastData['playerMapUrl'] = $updates['playerMapUrl'];
+                if (array_key_exists('playerMapUrl', $publicUpdates)) {
+                    $broadcastData['playerMapUrl'] = $publicUpdates['playerMapUrl'];
                 }
-                if (array_key_exists('playerThumbnailUrl', $updates)) {
-                    $broadcastData['playerThumbnailUrl'] = $updates['playerThumbnailUrl'];
+                if (array_key_exists('playerThumbnailUrl', $publicUpdates)) {
+                    $broadcastData['playerThumbnailUrl'] = $publicUpdates['playerThumbnailUrl'];
                 }
                 // Propagate the erase/clear full-replace marker to receivers.
                 // The server applies `_replaceDrawings` by replacing each
@@ -852,6 +994,9 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
             respondJson(200, [
                 'success' => true,
                 'data' => $responseState,
+                'applied' => $writeApplied,
+                'operationResults' => $operationResults,
+                'combatResults' => $combatResults,
             ], false);
 
             // Release the session lock so other requests from the same user
@@ -869,7 +1014,9 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
             // Now perform the Pusher broadcast. The client has already
             // received its response; errors are still logged inside
             // broadcastVttStateUpdate() but no longer delay the save.
-            broadcastVttStateUpdate($broadcastData, $clientSocketId);
+            if (is_array($broadcastData)) {
+                broadcastVttStateUpdate($broadcastData, $clientSocketId);
+            }
             return;
         }
 
@@ -932,6 +1079,519 @@ function sanitizeBoardStateOps(array $rawOps): array
         $sanitized[] = $rawOp;
     }
     return $sanitized;
+}
+
+/**
+ * Combat transitions that must be decided from the canonical state while the
+ * board-state lock is held. Legacy combat.set remains available for uncovered
+ * manual edits during the incremental migration.
+ */
+function isCombatIntentOpType(string $type): bool
+{
+    return in_array($type, [
+        'combat.start',
+        'turn.start',
+        'turn.complete',
+        'turn.cancel',
+        'round.advance',
+        'combat.end',
+    ], true);
+}
+
+/**
+ * @param array<string,mixed> $state
+ * @param array<string,mixed> $op
+ * @param array<string,mixed> $context
+ * @return array{
+ *   state:array<string,mixed>,
+ *   accepted:bool,
+ *   applied:bool,
+ *   reason:?string,
+ *   combat?:array<string,mixed>
+ * }
+ */
+function applyCombatIntentOp(array $state, array $op, array $context = []): array
+{
+    $type = isset($op['type']) && is_string($op['type']) ? trim($op['type']) : '';
+    $sceneId = isset($op['sceneId']) && is_string($op['sceneId']) ? trim($op['sceneId']) : '';
+    $intentId = isset($op['intentId']) && is_string($op['intentId']) ? trim($op['intentId']) : '';
+    $isGm = (bool) ($context['isGm'] ?? false);
+    $userId = isset($context['userId']) && is_string($context['userId'])
+        ? strtolower(trim($context['userId']))
+        : '';
+
+    if (!isCombatIntentOpType($type)) {
+        return combatIntentDecision($state, false, false, 'unsupported-intent');
+    }
+    if ($sceneId === '') {
+        return combatIntentDecision($state, false, false, 'missing-scene');
+    }
+    if ($intentId === '') {
+        return combatIntentDecision($state, false, false, 'missing-intent-id');
+    }
+
+    $state = ensureBoardStateSceneEntry($state, $sceneId);
+    $storedCombat = $state['sceneState'][$sceneId]['combat'] ?? [];
+    $combat = normalizeCombatStatePayload($storedCombat);
+    $intentHistory = normalizeCombatIntentHistory(
+        is_array($storedCombat) ? ($storedCombat['intentHistory'] ?? []) : []
+    );
+    $combat['intentHistory'] = $intentHistory;
+
+    if (in_array($intentId, $intentHistory, true)) {
+        return combatIntentDecision($state, true, false, 'duplicate-intent', $combat);
+    }
+
+    $proposedCombat = isset($op['combat']) && is_array($op['combat'])
+        ? normalizeCombatStatePayload($op['combat'])
+        : null;
+    $nowMs = (int) round(microtime(true) * 1000);
+
+    if ($type === 'combat.start') {
+        if (!$isGm) {
+            return combatIntentDecision($state, false, false, 'gm-required', $combat);
+        }
+        if (!empty($combat['active'])) {
+            return combatIntentDecision($state, false, false, 'combat-already-active', $combat);
+        }
+        if ($proposedCombat === null) {
+            return combatIntentDecision($state, false, false, 'missing-combat-state', $combat);
+        }
+
+        $next = $proposedCombat;
+        $next['active'] = true;
+        $next['round'] = 1;
+        $next['activeCombatantId'] = null;
+        $next['completedCombatantIds'] = [];
+        $next['turnPhase'] = 'pick';
+        $next['roundTurnCount'] = 0;
+        $next['lastTeam'] = null;
+        $next['turnLock'] = null;
+        $next['startingTeam'] = normalizeCombatTeamValue($next['startingTeam'])
+            ?? normalizeCombatTeamValue($next['currentTeam'])
+            ?? 'enemy';
+        $next['currentTeam'] = $next['startingTeam'];
+        if (($next['encounterId'] ?? null) === null) {
+            $next['encounterId'] = uniqid('enc-server-', true);
+        }
+        $combat = finalizeAcceptedCombatIntent($next, $combat, $intentId, $nowMs);
+    } elseif ($type === 'turn.start') {
+        if (empty($combat['active'])) {
+            return combatIntentDecision($state, false, false, 'combat-not-active', $combat);
+        }
+
+        $requestedId = isset($op['combatantId']) && is_string($op['combatantId'])
+            ? trim($op['combatantId'])
+            : '';
+        $combatantId = resolveCombatIntentRepresentativeId($combat, $requestedId);
+        if ($combatantId === '' || !combatIntentCombatantExists($state, $sceneId, $combat, $combatantId)) {
+            return combatIntentDecision($state, false, false, 'combatant-not-found', $combat);
+        }
+        if (!$isGm && !combatIntentCallerControlsCombatant($state, $sceneId, $combat, $combatantId, $userId)) {
+            return combatIntentDecision($state, false, false, 'not-authorized-for-combatant', $combat);
+        }
+        if (in_array($combatantId, $combat['completedCombatantIds'], true)) {
+            return combatIntentDecision($state, false, false, 'combatant-already-completed', $combat);
+        }
+
+        $targetTeam = combatIntentCombatantTeam($state, $sceneId, $combat, $combatantId);
+        if (!$isGm && $targetTeam !== 'ally') {
+            return combatIntentDecision($state, false, false, 'players-cannot-control-enemies', $combat);
+        }
+
+        $override = !empty($op['override']);
+        $activeCombatantId = is_string($combat['activeCombatantId'] ?? null)
+            ? trim($combat['activeCombatantId'])
+            : '';
+        if ($activeCombatantId === $combatantId) {
+            return combatIntentDecision($state, true, false, 'already-active', $combat);
+        }
+        if ($activeCombatantId !== '' && !$override) {
+            return combatIntentDecision($state, false, false, 'turn-already-active', $combat);
+        }
+
+        $existingLock = is_array($combat['turnLock'] ?? null) ? $combat['turnLock'] : null;
+        $existingHolderId = is_array($existingLock) && is_string($existingLock['holderId'] ?? null)
+            ? strtolower(trim($existingLock['holderId']))
+            : '';
+        if (
+            $activeCombatantId === ''
+            && $existingHolderId !== ''
+            && !$isGm
+            && $existingHolderId !== $userId
+            && !$override
+        ) {
+            return combatIntentDecision($state, false, false, 'turn-locked', $combat);
+        }
+
+        if ($activeCombatantId !== '') {
+            $previousRepresentative = resolveCombatIntentRepresentativeId($combat, $activeCombatantId);
+            if ($previousRepresentative !== '' && !in_array($previousRepresentative, $combat['completedCombatantIds'], true)) {
+                $combat['completedCombatantIds'][] = $previousRepresentative;
+            }
+            $previousTeam = combatIntentCombatantTeam($state, $sceneId, $combat, $previousRepresentative);
+            $combat['lastTeam'] = $previousTeam;
+            $combat['roundTurnCount'] = max(0, (int) ($combat['roundTurnCount'] ?? 0)) + 1;
+        }
+
+        $holderName = isset($op['holderName']) && is_string($op['holderName'])
+            ? trim($op['holderName'])
+            : '';
+        $holderId = $isGm ? ($userId !== '' ? $userId : 'gm') : $userId;
+        $combat['activeCombatantId'] = $combatantId;
+        $combat['turnPhase'] = 'active';
+        $combat['turnLock'] = [
+            'holderId' => $holderId !== '' ? $holderId : 'gm',
+            'holderName' => $holderName !== '' ? $holderName : ($isGm ? 'GM' : $userId),
+            'combatantId' => $combatantId,
+            'acquiredAt' => $nowMs,
+        ];
+        if ($isGm && $proposedCombat !== null) {
+            $combat = copyCombatIntentAuxiliaryState($combat, $proposedCombat);
+        }
+        $combat = finalizeAcceptedCombatIntent($combat, $storedCombat, $intentId, $nowMs);
+    } elseif ($type === 'turn.complete') {
+        if (empty($combat['active'])) {
+            return combatIntentDecision($state, false, false, 'combat-not-active', $combat);
+        }
+        $activeCombatantId = is_string($combat['activeCombatantId'] ?? null)
+            ? trim($combat['activeCombatantId'])
+            : '';
+        if ($activeCombatantId === '') {
+            return combatIntentDecision($state, false, false, 'no-active-turn', $combat);
+        }
+        $activeRepresentative = resolveCombatIntentRepresentativeId($combat, $activeCombatantId);
+        $requestedId = isset($op['combatantId']) && is_string($op['combatantId'])
+            ? resolveCombatIntentRepresentativeId($combat, trim($op['combatantId']))
+            : $activeRepresentative;
+        if ($requestedId === '' || $requestedId !== $activeRepresentative) {
+            return combatIntentDecision($state, false, false, 'active-combatant-mismatch', $combat);
+        }
+        if (!$isGm && !combatIntentCallerControlsCombatant($state, $sceneId, $combat, $activeRepresentative, $userId)) {
+            return combatIntentDecision($state, false, false, 'not-authorized-for-combatant', $combat);
+        }
+        $lock = is_array($combat['turnLock'] ?? null) ? $combat['turnLock'] : null;
+        $lockHolder = is_array($lock) && is_string($lock['holderId'] ?? null)
+            ? strtolower(trim($lock['holderId']))
+            : '';
+        if (!$isGm && $lockHolder !== '' && $lockHolder !== $userId) {
+            return combatIntentDecision($state, false, false, 'turn-locked', $combat);
+        }
+
+        if (!in_array($activeRepresentative, $combat['completedCombatantIds'], true)) {
+            $combat['completedCombatantIds'][] = $activeRepresentative;
+        }
+        $finishedTeam = combatIntentCombatantTeam($state, $sceneId, $combat, $activeRepresentative);
+        $combat['lastTeam'] = $finishedTeam;
+        $combat['currentTeam'] = $finishedTeam === 'ally' ? 'enemy' : 'ally';
+        $combat['roundTurnCount'] = max(0, (int) ($combat['roundTurnCount'] ?? 0)) + 1;
+        $combat['activeCombatantId'] = null;
+        $combat['turnPhase'] = 'pick';
+        $combat['turnLock'] = null;
+        if ($isGm && $proposedCombat !== null) {
+            $combat = copyCombatIntentAuxiliaryState($combat, $proposedCombat);
+        }
+        $combat = finalizeAcceptedCombatIntent($combat, $storedCombat, $intentId, $nowMs);
+    } elseif ($type === 'turn.cancel') {
+        if (empty($combat['active'])) {
+            return combatIntentDecision($state, false, false, 'combat-not-active', $combat);
+        }
+        $activeCombatantId = is_string($combat['activeCombatantId'] ?? null)
+            ? trim($combat['activeCombatantId'])
+            : '';
+        if ($activeCombatantId === '') {
+            return combatIntentDecision($state, false, false, 'no-active-turn', $combat);
+        }
+        $activeRepresentative = resolveCombatIntentRepresentativeId($combat, $activeCombatantId);
+        if (!$isGm && !combatIntentCallerControlsCombatant($state, $sceneId, $combat, $activeRepresentative, $userId)) {
+            return combatIntentDecision($state, false, false, 'not-authorized-for-combatant', $combat);
+        }
+        $lock = is_array($combat['turnLock'] ?? null) ? $combat['turnLock'] : null;
+        $lockHolder = is_array($lock) && is_string($lock['holderId'] ?? null)
+            ? strtolower(trim($lock['holderId']))
+            : '';
+        if (!$isGm && $lockHolder !== '' && $lockHolder !== $userId) {
+            return combatIntentDecision($state, false, false, 'turn-locked', $combat);
+        }
+        $combat['currentTeam'] = combatIntentCombatantTeam(
+            $state,
+            $sceneId,
+            $combat,
+            $activeRepresentative
+        );
+        $combat['activeCombatantId'] = null;
+        $combat['turnPhase'] = 'pick';
+        $combat['turnLock'] = null;
+        $combat = finalizeAcceptedCombatIntent($combat, $storedCombat, $intentId, $nowMs);
+    } elseif ($type === 'round.advance') {
+        if (!$isGm) {
+            return combatIntentDecision($state, false, false, 'gm-required', $combat);
+        }
+        if (empty($combat['active'])) {
+            return combatIntentDecision($state, false, false, 'combat-not-active', $combat);
+        }
+
+        $combat['round'] = max(1, (int) ($combat['round'] ?? 0) + 1);
+        $combat['activeCombatantId'] = null;
+        $combat['completedCombatantIds'] = [];
+        $combat['roundTurnCount'] = 0;
+        $combat['turnPhase'] = 'pick';
+        $combat['turnLock'] = null;
+        $combat['currentTeam'] = normalizeCombatTeamValue($combat['startingTeam'] ?? null)
+            ?? normalizeCombatTeamValue($combat['currentTeam'] ?? null)
+            ?? 'ally';
+        if ($proposedCombat !== null) {
+            $combat = copyCombatIntentAuxiliaryState($combat, $proposedCombat);
+        }
+        $combat = finalizeAcceptedCombatIntent($combat, $storedCombat, $intentId, $nowMs);
+    } else {
+        if (!$isGm) {
+            return combatIntentDecision($state, false, false, 'gm-required', $combat);
+        }
+        if (empty($combat['active'])) {
+            return combatIntentDecision($state, false, false, 'combat-not-active', $combat);
+        }
+        $requestedEncounterId = normalizeNullableStringValue(
+            $op['encounterId'] ?? (is_array($op['combat'] ?? null) ? ($op['combat']['encounterId'] ?? null) : null)
+        );
+        $existingEncounterId = normalizeNullableStringValue($combat['encounterId'] ?? null);
+        if (
+            $requestedEncounterId !== null
+            && $existingEncounterId !== null
+            && $requestedEncounterId !== $existingEncounterId
+        ) {
+            return combatIntentDecision($state, false, false, 'encounter-mismatch', $combat);
+        }
+
+        if ($proposedCombat !== null) {
+            $combat = copyCombatIntentAuxiliaryState($combat, $proposedCombat);
+        }
+        $combat['active'] = false;
+        $combat['round'] = 0;
+        $combat['activeCombatantId'] = null;
+        $combat['completedCombatantIds'] = [];
+        $combat['startingTeam'] = null;
+        $combat['currentTeam'] = null;
+        $combat['lastTeam'] = null;
+        $combat['turnPhase'] = 'idle';
+        $combat['roundTurnCount'] = 0;
+        $combat['malice'] = 0;
+        $combat['turnLock'] = null;
+        $combat = finalizeAcceptedCombatIntent($combat, $storedCombat, $intentId, $nowMs);
+    }
+
+    $state['sceneState'][$sceneId]['combat'] = $combat;
+    return combatIntentDecision($state, true, true, null, $combat);
+}
+
+/**
+ * @param array<string,mixed> $state
+ * @param array<string,mixed>|null $combat
+ * @return array<string,mixed>
+ */
+function combatIntentDecision(
+    array $state,
+    bool $accepted,
+    bool $applied,
+    ?string $reason,
+    ?array $combat = null
+): array {
+    $result = [
+        'state' => $state,
+        'accepted' => $accepted,
+        'applied' => $applied,
+        'reason' => $reason,
+    ];
+    if ($combat !== null) {
+        $result['combat'] = $combat;
+    }
+    return $result;
+}
+
+/**
+ * @param mixed $raw
+ * @return array<int,string>
+ */
+function normalizeCombatIntentHistory($raw): array
+{
+    if (!is_array($raw)) {
+        return [];
+    }
+    $history = [];
+    foreach ($raw as $value) {
+        if (!is_string($value)) {
+            continue;
+        }
+        $intentId = trim($value);
+        if ($intentId === '' || in_array($intentId, $history, true)) {
+            continue;
+        }
+        $history[] = $intentId;
+    }
+    return array_slice($history, -32);
+}
+
+/**
+ * @param array<string,mixed> $combat
+ * @param array<string,mixed> $existingCombat
+ * @return array<string,mixed>
+ */
+function finalizeAcceptedCombatIntent(
+    array $combat,
+    array $existingCombat,
+    string $intentId,
+    int $nowMs
+): array {
+    $history = normalizeCombatIntentHistory($existingCombat['intentHistory'] ?? []);
+    $history[] = $intentId;
+    $combat['intentHistory'] = array_slice(array_values(array_unique($history)), -32);
+    $combat['sequence'] = max(0, (int) ($existingCombat['sequence'] ?? 0)) + 1;
+    $combat['updatedAt'] = max($nowMs, (int) ($existingCombat['updatedAt'] ?? 0) + 1);
+    return normalizeCombatStatePayload($combat);
+}
+
+/**
+ * Copy non-transition combat data produced by existing GM-side automation.
+ * Player intents never use this path.
+ *
+ * @param array<string,mixed> $combat
+ * @param array<string,mixed> $proposed
+ * @return array<string,mixed>
+ */
+function copyCombatIntentAuxiliaryState(array $combat, array $proposed): array
+{
+    foreach (['malice', 'groups', 'lastEffect', 'lastEffects'] as $field) {
+        if (array_key_exists($field, $proposed)) {
+            $combat[$field] = $proposed[$field];
+        }
+    }
+    return $combat;
+}
+
+/**
+ * @param array<string,mixed> $combat
+ */
+function resolveCombatIntentRepresentativeId(array $combat, string $combatantId): string
+{
+    $candidate = trim($combatantId);
+    if ($candidate === '') {
+        return '';
+    }
+    $groups = isset($combat['groups']) && is_array($combat['groups']) ? $combat['groups'] : [];
+    foreach ($groups as $group) {
+        if (!is_array($group)) {
+            continue;
+        }
+        $representativeId = isset($group['representativeId']) && is_string($group['representativeId'])
+            ? trim($group['representativeId'])
+            : '';
+        $members = isset($group['memberIds']) && is_array($group['memberIds']) ? $group['memberIds'] : [];
+        if ($representativeId !== '' && ($representativeId === $candidate || in_array($candidate, $members, true))) {
+            return $representativeId;
+        }
+    }
+    return $candidate;
+}
+
+/**
+ * @param array<string,mixed> $combat
+ * @return array<int,string>
+ */
+function combatIntentGroupMemberIds(array $combat, string $combatantId): array
+{
+    $representativeId = resolveCombatIntentRepresentativeId($combat, $combatantId);
+    $ids = $representativeId !== '' ? [$representativeId] : [];
+    foreach (($combat['groups'] ?? []) as $group) {
+        if (!is_array($group) || ($group['representativeId'] ?? null) !== $representativeId) {
+            continue;
+        }
+        foreach (($group['memberIds'] ?? []) as $memberId) {
+            if (is_string($memberId) && trim($memberId) !== '') {
+                $ids[] = trim($memberId);
+            }
+        }
+    }
+    return array_values(array_unique($ids));
+}
+
+/**
+ * @param array<string,mixed> $state
+ * @param array<string,mixed> $combat
+ */
+function combatIntentCombatantExists(array $state, string $sceneId, array $combat, string $combatantId): bool
+{
+    foreach (combatIntentGroupMemberIds($combat, $combatantId) as $candidateId) {
+        if (findBoardStateEntryById($state, 'placements', $sceneId, $candidateId) !== null) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * @param array<string,mixed> $state
+ * @param array<string,mixed> $combat
+ */
+function combatIntentCallerControlsCombatant(
+    array $state,
+    string $sceneId,
+    array $combat,
+    string $combatantId,
+    string $userId
+): bool {
+    if ($userId === '') {
+        return false;
+    }
+    $claimedTokens = $state['sceneState'][$sceneId]['claimedTokens'] ?? [];
+    foreach (combatIntentGroupMemberIds($combat, $combatantId) as $candidateId) {
+        $claimedBy = is_array($claimedTokens) && is_string($claimedTokens[$candidateId] ?? null)
+            ? strtolower(trim($claimedTokens[$candidateId]))
+            : '';
+        if ($claimedBy === $userId) {
+            return true;
+        }
+        $placement = findBoardStateEntryById($state, 'placements', $sceneId, $candidateId);
+        if (!is_array($placement) || isPlacementHiddenFromPlayers($placement)) {
+            continue;
+        }
+        foreach (['profileId', 'profile', 'playerId', 'player', 'owner', 'controller'] as $field) {
+            $value = $placement[$field] ?? ($placement['metadata'][$field] ?? null);
+            if (is_string($value) && strtolower(trim($value)) === $userId) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/**
+ * @param array<string,mixed> $state
+ * @param array<string,mixed> $combat
+ */
+function combatIntentCombatantTeam(
+    array $state,
+    string $sceneId,
+    array $combat,
+    string $combatantId
+): string {
+    foreach (combatIntentGroupMemberIds($combat, $combatantId) as $candidateId) {
+        $placement = findBoardStateEntryById($state, 'placements', $sceneId, $candidateId);
+        if (!is_array($placement)) {
+            continue;
+        }
+        $team = normalizeCombatTeamValue(
+            $placement['combatTeam']
+                ?? $placement['team']
+                ?? ($placement['tags']['team'] ?? null)
+                ?? $placement['faction']
+                ?? $placement['alignment']
+                ?? null
+        );
+        if ($team !== null) {
+            return $team;
+        }
+    }
+    return 'ally';
 }
 
 /**
@@ -1076,14 +1736,6 @@ function applyBoardStateOp(array $state, array $op, array $context = []): array
     }
 
     if ($type === 'placement.remove') {
-        // Gate removals behind the GM-only rule the snapshot path
-        // already enforces (snapshot path uses `mergeSceneEntriesByTimestamp`
-        // which never deletes, so player removals are silently dropped
-        // today). We do the same here by ignoring the op when the
-        // caller is not a GM.
-        if (!$isGm) {
-            return $state;
-        }
         $sceneId = isset($op['sceneId']) && is_string($op['sceneId']) ? trim($op['sceneId']) : '';
         if ($sceneId === '') {
             return $state;
@@ -1095,6 +1747,32 @@ function applyBoardStateOp(array $state, array $op, array $context = []): array
         if (!isset($state['placements'][$sceneId]) || !is_array($state['placements'][$sceneId])) {
             return $state;
         }
+
+        // A player may delete only a visible token explicitly claimed by
+        // their authenticated profile. This matches the optimistic client UI
+        // without allowing guessed IDs to delete GM or another player's token.
+        if (!$isGm) {
+            $callerUserId = isset($context['userId']) && is_string($context['userId'])
+                ? strtolower(trim($context['userId']))
+                : '';
+            $claimedUserId = $state['sceneState'][$sceneId]['claimedTokens'][$placementId] ?? null;
+            $claimedUserId = is_string($claimedUserId) ? strtolower(trim($claimedUserId)) : '';
+            if ($callerUserId === '' || $claimedUserId !== $callerUserId) {
+                return $state;
+            }
+
+            $targetPlacement = null;
+            foreach ($state['placements'][$sceneId] as $entry) {
+                if (is_array($entry) && extractBoardEntryIdentifier($entry) === $placementId) {
+                    $targetPlacement = $entry;
+                    break;
+                }
+            }
+            if ($targetPlacement === null || isPlacementHiddenFromPlayers($targetPlacement)) {
+                return $state;
+            }
+        }
+
         $filtered = [];
         foreach ($state['placements'][$sceneId] as $entry) {
             if (!is_array($entry)) {
@@ -1110,6 +1788,9 @@ function applyBoardStateOp(array $state, array $op, array $context = []): array
         // Re-index so json_encode serializes as a JSON array, not an
         // object with numeric string keys.
         $state['placements'][$sceneId] = array_values($filtered);
+        if (isset($state['sceneState'][$sceneId]['claimedTokens'][$placementId])) {
+            unset($state['sceneState'][$sceneId]['claimedTokens'][$placementId]);
+        }
         return $state;
     }
 
@@ -1663,6 +2344,350 @@ function extractBoardStateOpPlacementId(array $op): string
  * @param array<string,mixed> $raw
  * @return array<string,mixed>
  */
+function findBoardStateEntryById(array $state, string $section, string $sceneId, string $entryId): ?array
+{
+    $entries = $state[$section][$sceneId] ?? null;
+    if (!is_array($entries)) {
+        return null;
+    }
+    foreach ($entries as $entry) {
+        if (!is_array($entry)) {
+            continue;
+        }
+        if (extractBoardEntryIdentifier($entry) === $entryId) {
+            return $entry;
+        }
+    }
+    return null;
+}
+
+/**
+ * Convert an accepted client op into the exact canonical value the server
+ * stored. Upserts intentionally carry complete entries so receivers never
+ * reconstruct server-normalized state from an untrusted submitted patch.
+ *
+ * @param array<string,mixed> $op
+ * @param array<string,mixed> $state
+ * @param array<string,mixed>|null $beforeState
+ * @return array<string,mixed>|null
+ */
+function buildAppliedBoardStateOp(array $op, array $state, ?array $beforeState = null): ?array
+{
+    $type = isset($op['type']) && is_string($op['type']) ? trim($op['type']) : '';
+    $sceneId = isset($op['sceneId']) && is_string($op['sceneId']) ? trim($op['sceneId']) : '';
+    if ($type === '' || $sceneId === '') {
+        return null;
+    }
+
+    if (in_array($type, ['placement.add', 'placement.move', 'placement.update'], true)) {
+        $entryId = $type === 'placement.add'
+            ? extractBoardEntryIdentifier(is_array($op['placement'] ?? null) ? $op['placement'] : [])
+            : extractBoardStateOpPlacementId($op);
+        if (!is_string($entryId) || $entryId === '') {
+            return null;
+        }
+        $placement = findBoardStateEntryById($state, 'placements', $sceneId, $entryId);
+        return $placement === null ? null : [
+            'type' => 'placement.add',
+            'sceneId' => $sceneId,
+            'placement' => $placement,
+        ];
+    }
+
+    if ($type === 'placement.remove') {
+        $entryId = extractBoardStateOpPlacementId($op);
+        if ($entryId === '') {
+            return null;
+        }
+        $removedPlacement = $beforeState !== null
+            ? findBoardStateEntryById($beforeState, 'placements', $sceneId, $entryId)
+            : null;
+        return [
+            'type' => 'placement.remove',
+            'sceneId' => $sceneId,
+            'placementId' => $entryId,
+            'publicVisible' =>
+                is_array($removedPlacement)
+                && !isPlacementHiddenFromPlayers($removedPlacement),
+        ];
+    }
+
+    if ($type === 'template.upsert') {
+        $entryId = extractBoardEntryIdentifier(is_array($op['template'] ?? null) ? $op['template'] : []);
+        if (!is_string($entryId) || $entryId === '') {
+            return null;
+        }
+        $template = findBoardStateEntryById($state, 'templates', $sceneId, $entryId);
+        return $template === null ? null : [
+            'type' => 'template.upsert',
+            'sceneId' => $sceneId,
+            'template' => $template,
+        ];
+    }
+
+    if ($type === 'drawing.add') {
+        $entryId = extractBoardEntryIdentifier(is_array($op['drawing'] ?? null) ? $op['drawing'] : []);
+        if (!is_string($entryId) || $entryId === '') {
+            return null;
+        }
+        $drawing = findBoardStateEntryById($state, 'drawings', $sceneId, $entryId);
+        return $drawing === null ? null : [
+            'type' => 'drawing.add',
+            'sceneId' => $sceneId,
+            'drawing' => $drawing,
+        ];
+    }
+
+    if ($type === 'combat.set' || isCombatIntentOpType($type)) {
+        $combat = $state['sceneState'][$sceneId]['combat'] ?? null;
+        return !is_array($combat) ? null : [
+            'type' => 'combat.set',
+            'sceneId' => $sceneId,
+            'combat' => $combat,
+        ];
+    }
+
+    return $op;
+}
+
+/**
+ * Select only the fields/scenes/entities touched by the request, but source
+ * their values from the canonical state after the write.
+ *
+ * @param array<string,mixed> $state
+ * @param array<string,mixed> $requestedUpdates
+ * @return array<string,mixed>
+ */
+function buildAppliedBoardStateBroadcastUpdates(
+    array $state,
+    array $requestedUpdates,
+    bool $deltaOnly
+): array {
+    $result = [];
+    foreach ([
+        'activeSceneId',
+        'mapUrl',
+        'playerMapDisabled',
+        'playerActiveSceneId',
+        'playerMapUrl',
+        'playerThumbnailUrl',
+    ] as $field) {
+        if (array_key_exists($field, $requestedUpdates) && array_key_exists($field, $state)) {
+            $result[$field] = $state[$field];
+        }
+    }
+
+    foreach (['placements', 'templates', 'drawings'] as $section) {
+        if (!isset($requestedUpdates[$section]) || !is_array($requestedUpdates[$section])) {
+            continue;
+        }
+        $result[$section] = [];
+        foreach ($requestedUpdates[$section] as $sceneId => $submittedEntries) {
+            $sceneKey = is_string($sceneId) ? trim($sceneId) : (string) $sceneId;
+            if ($sceneKey === '' || !is_array($submittedEntries)) {
+                continue;
+            }
+            $canonicalEntries = isset($state[$section][$sceneKey]) && is_array($state[$section][$sceneKey])
+                ? $state[$section][$sceneKey]
+                : [];
+            if (!$deltaOnly) {
+                $result[$section][$sceneKey] = array_values($canonicalEntries);
+                continue;
+            }
+            $submittedIds = [];
+            foreach ($submittedEntries as $entry) {
+                if (!is_array($entry)) {
+                    continue;
+                }
+                $entryId = extractBoardEntryIdentifier($entry);
+                if ($entryId !== null) {
+                    $submittedIds[$entryId] = true;
+                }
+            }
+            $result[$section][$sceneKey] = array_values(array_filter(
+                $canonicalEntries,
+                static function ($entry) use ($submittedIds): bool {
+                    if (!is_array($entry)) {
+                        return false;
+                    }
+                    $entryId = extractBoardEntryIdentifier($entry);
+                    return $entryId !== null && isset($submittedIds[$entryId]);
+                }
+            ));
+        }
+    }
+
+    if (isset($requestedUpdates['sceneState']) && is_array($requestedUpdates['sceneState'])) {
+        $result['sceneState'] = [];
+        foreach ($requestedUpdates['sceneState'] as $sceneId => $_submittedSceneState) {
+            $sceneKey = is_string($sceneId) ? trim($sceneId) : (string) $sceneId;
+            if ($sceneKey !== '' && isset($state['sceneState'][$sceneKey]) && is_array($state['sceneState'][$sceneKey])) {
+                $result['sceneState'][$sceneKey] = $state['sceneState'][$sceneKey];
+            }
+        }
+    }
+
+    if (array_key_exists('pings', $requestedUpdates)) {
+        $result['pings'] = isset($state['pings']) && is_array($state['pings'])
+            ? array_values($state['pings'])
+            : [];
+    }
+
+    return $result;
+}
+
+/**
+ * Shared-channel broadcasts are a player-safe projection. Hidden placements
+ * are omitted entirely, including their coordinates, and visible placements
+ * use the same stat-block filtering as authenticated player GET responses.
+ *
+ * @param array<string,mixed> $updates
+ * @param array<string,mixed> $canonicalState
+ * @return array<string,mixed>
+ */
+function sanitizeBoardStateBroadcastUpdatesForPlayers(
+    array $updates,
+    array $canonicalState = []
+): array
+{
+    if (isset($updates['placements']) && is_array($updates['placements'])) {
+        $safePlacements = [];
+        foreach ($updates['placements'] as $sceneId => $placements) {
+            if (!is_array($placements)) {
+                continue;
+            }
+            $safePlacements[$sceneId] = [];
+            foreach ($placements as $placement) {
+                if (!is_array($placement) || isPlacementHiddenFromPlayers($placement)) {
+                    continue;
+                }
+                $safePlacements[$sceneId][] = sanitizePlacementForPlayerView($placement);
+            }
+        }
+        $updates['placements'] = $safePlacements;
+    }
+
+    if (isset($updates['sceneState']) && is_array($updates['sceneState'])) {
+        foreach ($updates['sceneState'] as $sceneId => &$sceneEntry) {
+            if (!is_array($sceneEntry) || !isset($sceneEntry['combat']) || !is_array($sceneEntry['combat'])) {
+                continue;
+            }
+            $placements = $canonicalState['placements'][$sceneId] ?? [];
+            $sceneEntry['combat'] = sanitizeCombatStateForPlayerView(
+                $sceneEntry['combat'],
+                is_array($placements) ? $placements : []
+            );
+        }
+        unset($sceneEntry);
+    }
+
+    return $updates;
+}
+
+/**
+ * @param array<int,array<string,mixed>> $ops
+ * @param array<string,mixed> $canonicalState
+ * @return array<int,array<string,mixed>>
+ */
+function sanitizeBoardStateBroadcastOpsForPlayers(
+    array $ops,
+    array $canonicalState = []
+): array
+{
+    $safe = [];
+    foreach ($ops as $op) {
+        if (!is_array($op)) {
+            continue;
+        }
+        if (($op['type'] ?? null) === 'placement.add') {
+            $placement = $op['placement'] ?? null;
+            if (!is_array($placement) || isPlacementHiddenFromPlayers($placement)) {
+                continue;
+            }
+            $op['placement'] = sanitizePlacementForPlayerView($placement);
+        }
+        if (($op['type'] ?? null) === 'placement.remove') {
+            if (($op['publicVisible'] ?? false) !== true) {
+                continue;
+            }
+            unset($op['publicVisible']);
+        }
+        if (($op['type'] ?? null) === 'combat.set') {
+            $sceneId = isset($op['sceneId']) && is_string($op['sceneId'])
+                ? trim($op['sceneId'])
+                : '';
+            $combat = $op['combat'] ?? null;
+            if ($sceneId === '' || !is_array($combat)) {
+                continue;
+            }
+            $placements = $canonicalState['placements'][$sceneId] ?? [];
+            $op['combat'] = sanitizeCombatStateForPlayerView(
+                $combat,
+                is_array($placements) ? $placements : []
+            );
+        }
+        $safe[] = $op;
+    }
+    return $safe;
+}
+
+/**
+ * Build the shared-channel envelope for an applied ops-only write.
+ *
+ * If filtering removes every op (for example, a hidden placement move), still
+ * emit a content-free resync marker. That reveals no private entity data, lets
+ * players refresh their filtered version, and gives other GM clients the
+ * signal they need to fetch their authenticated canonical view.
+ *
+ * @param array<int,array<string,mixed>> $publicOps
+ * @return array<string,mixed>
+ */
+function buildPlayerSafeOpsBroadcast(
+    array $publicOps,
+    int $version,
+    int $timestampMs,
+    string $authorId,
+    string $authorRole,
+    int $submittedOpCount = 0
+): array {
+    $marker = [
+        'type' => 'ops-overflow',
+        'version' => $version,
+        'timestamp' => $timestampMs,
+        'authorId' => $authorId,
+        'authorRole' => $authorRole,
+        'publicView' => true,
+    ];
+    if (empty($publicOps)) {
+        return $marker;
+    }
+
+    $broadcast = [
+        'type' => 'ops',
+        'version' => $version,
+        'timestamp' => $timestampMs,
+        'authorId' => $authorId,
+        'authorRole' => $authorRole,
+        'publicView' => true,
+        'ops' => $publicOps,
+    ];
+
+    // Pusher's 10 KB per-message limit is a hard cap. If the safe projection
+    // still exceeds it, send the same content-free catch-up marker.
+    $encoded = json_encode($broadcast);
+    if ($encoded === false || strlen($encoded) > VTT_BROADCAST_MAX_BYTES) {
+        error_log(sprintf(
+            '[VTT] Phase 3-C ops broadcast exceeded %d bytes (was %d, %d ops); falling back to ops-overflow marker',
+            VTT_BROADCAST_MAX_BYTES,
+            $encoded === false ? -1 : strlen($encoded),
+            $submittedOpCount
+        ));
+        return $marker;
+    }
+
+    return $broadcast;
+}
+
 function sanitizeBoardStateUpdates(array $raw): array
 {
     $updates = [];
@@ -2031,7 +3056,14 @@ function normalizeDrawingEntry($entry): ?array
         'points' => $normalizedPoints,
         'color' => $color,
         'strokeWidth' => $strokeWidth,
+        'levelId' => isset($entry['levelId']) && is_string($entry['levelId']) && trim($entry['levelId']) !== ''
+            ? trim($entry['levelId'])
+            : 'level-0',
     ];
+
+    if (isset($entry['_lastModified']) && is_numeric($entry['_lastModified'])) {
+        $normalized['_lastModified'] = max(0, (int) $entry['_lastModified']);
+    }
 
     // Preserve authorId if present (for user-specific drawing management)
     if (isset($entry['authorId']) && is_string($entry['authorId'])) {
@@ -2883,6 +3915,7 @@ function normalizeCombatStatePayload($rawCombat): array
         'updatedAt' => time(),
         'sequence' => 0,
         'turnLock' => null,
+        'intentHistory' => [],
         'groups' => [],
         'lastEffect' => null,
         'lastEffects' => [],
@@ -2959,6 +3992,7 @@ function normalizeCombatStatePayload($rawCombat): array
     }
 
     $state['turnLock'] = normalizeCombatTurnLock($rawCombat['turnLock'] ?? null);
+    $state['intentHistory'] = normalizeCombatIntentHistory($rawCombat['intentHistory'] ?? []);
     $state['groups'] = normalizeCombatGroups(
         $rawCombat['groups'] ?? $rawCombat['groupings'] ?? $rawCombat['combatGroups'] ?? $rawCombat['combatantGroups'] ?? []
     );
@@ -2972,6 +4006,82 @@ function normalizeCombatStatePayload($rawCombat): array
     }
 
     return $state;
+}
+
+/**
+ * Legacy player combat snapshots are retained only for non-authoritative turn
+ * effect announcements. All encounter/turn/round/lock fields must exactly
+ * match canonical state; transitions must use a validated combat intent.
+ *
+ * @param mixed $existingCombat
+ * @param mixed $incomingCombat
+ * @return array{accepted:bool,applied:bool,reason:?string,combat:array<string,mixed>}
+ */
+function mergePlayerCombatAuxiliaryUpdate($existingCombat, $incomingCombat): array
+{
+    $existing = normalizeCombatStatePayload($existingCombat);
+    $incoming = normalizeCombatStatePayload($incomingCombat);
+    if (!is_array($existingCombat) || empty($existingCombat)) {
+        return [
+            'accepted' => false,
+            'applied' => false,
+            'reason' => 'server-authority-required',
+            'combat' => $existing,
+        ];
+    }
+
+    foreach ([
+        'active',
+        'round',
+        'activeCombatantId',
+        'completedCombatantIds',
+        'startingTeam',
+        'currentTeam',
+        'lastTeam',
+        'turnPhase',
+        'roundTurnCount',
+        'malice',
+        'encounterId',
+        'turnLock',
+        'groups',
+    ] as $field) {
+        if (($incoming[$field] ?? null) != ($existing[$field] ?? null)) {
+            return [
+                'accepted' => false,
+                'applied' => false,
+                'reason' => 'server-authority-required',
+                'combat' => $existing,
+            ];
+        }
+    }
+
+    $next = $existing;
+    $next['lastEffect'] = $incoming['lastEffect'];
+    $next['lastEffects'] = $incoming['lastEffects'];
+    if (
+        $next['lastEffect'] == $existing['lastEffect']
+        && $next['lastEffects'] == $existing['lastEffects']
+    ) {
+        return [
+            'accepted' => true,
+            'applied' => false,
+            'reason' => 'no-auxiliary-change',
+            'combat' => $existing,
+        ];
+    }
+
+    $next['intentHistory'] = normalizeCombatIntentHistory($existing['intentHistory'] ?? []);
+    $next['sequence'] = max(0, (int) ($existing['sequence'] ?? 0)) + 1;
+    $next['updatedAt'] = max(
+        (int) round(microtime(true) * 1000),
+        (int) ($existing['updatedAt'] ?? 0) + 1
+    );
+    return [
+        'accepted' => true,
+        'applied' => true,
+        'reason' => null,
+        'combat' => normalizeCombatStatePayload($next),
+    ];
 }
 
 /**
@@ -3537,6 +4647,12 @@ function normalizeTemplateEntry($entry): ?array
     }
 
     $color = sanitizeTemplateColor($entry['color'] ?? null);
+    $levelId = isset($entry['levelId']) && is_string($entry['levelId']) && trim($entry['levelId']) !== ''
+        ? trim($entry['levelId'])
+        : 'level-0';
+    $lastModified = isset($entry['_lastModified']) && is_numeric($entry['_lastModified'])
+        ? max(0, (int) $entry['_lastModified'])
+        : null;
 
     if ($type === 'circle') {
         $center = is_array($entry['center'] ?? null) ? $entry['center'] : [];
@@ -3549,9 +4665,13 @@ function normalizeTemplateEntry($entry): ?array
             'type' => 'circle',
             'center' => ['column' => $column, 'row' => $row],
             'radius' => $radius,
+            'levelId' => $levelId,
         ];
         if ($color !== null) {
             $normalized['color'] = $color;
+        }
+        if ($lastModified !== null) {
+            $normalized['_lastModified'] = $lastModified;
         }
 
         return $normalized;
@@ -3572,9 +4692,13 @@ function normalizeTemplateEntry($entry): ?array
             'length' => $length,
             'width' => $width,
             'rotation' => $rotation,
+            'levelId' => $levelId,
         ];
         if ($color !== null) {
             $normalized['color'] = $color;
+        }
+        if ($lastModified !== null) {
+            $normalized['_lastModified'] = $lastModified;
         }
 
         if (isset($entry['anchor']) && is_array($entry['anchor'])) {
@@ -3624,9 +4748,13 @@ function normalizeTemplateEntry($entry): ?array
             'id' => $id,
             'type' => 'wall',
             'squares' => $squares,
+            'levelId' => $levelId,
         ];
         if ($color !== null) {
             $normalized['color'] = $color;
+        }
+        if ($lastModified !== null) {
+            $normalized['_lastModified'] = $lastModified;
         }
         $wallColor = sanitizeWallColor($entry['wallColor'] ?? null);
         if ($wallColor !== null) {

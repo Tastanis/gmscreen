@@ -118,6 +118,10 @@ export function applyBoardStateOpLocally(boardState, op) {
     });
     if (filtered.length === list.length) return false;
     boardState.placements[sceneId] = filtered;
+    const claims = boardState?.sceneState?.[sceneId]?.claimedTokens;
+    if (claims && typeof claims === 'object') {
+      delete claims[placementId];
+    }
     return true;
   }
 

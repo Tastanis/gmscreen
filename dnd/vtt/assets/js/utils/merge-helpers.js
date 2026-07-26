@@ -135,14 +135,16 @@ export function mergeSceneKeyedSection(existingSection, incomingSection, { fullS
 }
 
 /**
- * Merge sceneState while preserving grid settings from existing state.
- * Grid size is a permanent scene setting that should NOT be overwritten by sync.
- * Only combat and other transient state should be synced.
+ * Merge sceneState from the canonical server snapshot.
  * @param {Object} existingSceneState - Current scene state
  * @param {Object} incomingSceneState - Incoming scene state from server
- * @returns {Object} Merged scene state with preserved grid settings
+ * @returns {Object} Merged scene state
  */
-export function mergeSceneStatePreservingGrid(existingSceneState, incomingSceneState) {
+export function mergeSceneStatePreservingGrid(
+  existingSceneState,
+  incomingSceneState,
+  { authoritative = false } = {}
+) {
   const existing = existingSceneState && typeof existingSceneState === 'object' ? existingSceneState : {};
   const incoming = incomingSceneState && typeof incomingSceneState === 'object' ? incomingSceneState : {};
 
@@ -173,15 +175,11 @@ export function mergeSceneStatePreservingGrid(existingSceneState, incomingSceneS
 
     // CRITICAL: Preserve grid settings from existing state — grid is a
     // permanent scene setting, not transient board state.
-    if (existingEntry && typeof existingEntry === 'object' && existingEntry.grid) {
-      mergedEntry.grid = JSON.parse(JSON.stringify(existingEntry.grid));
-    }
-
     // CRITICAL: Protect combat state from stale server data. A player's
     // keepalive save can overwrite the server's combat state with stale
     // data; the next poll would then revert the GM's changes ("popback").
     // Prefer the newer sequence number (clock-drift immune) or updatedAt.
-    if (existingEntry && typeof existingEntry === 'object' &&
+    if (!authoritative && existingEntry && typeof existingEntry === 'object' &&
         existingEntry.combat && typeof existingEntry.combat === 'object' &&
         mergedEntry.combat && typeof mergedEntry.combat === 'object') {
       const existingSeq = Number(existingEntry.combat.sequence) || 0;
@@ -268,7 +266,7 @@ export function mergeSceneStatePreservingGrid(existingSceneState, incomingSceneS
  * @param {Object} incoming - Incoming board state from server
  * @returns {Object} Merged board state
  */
-export function mergeBoardStateSnapshot(existing, incoming) {
+export function mergeBoardStateSnapshot(existing, incoming, { authoritative = false } = {}) {
   if (!incoming || typeof incoming !== 'object') {
     return existing ?? {};
   }
@@ -279,12 +277,20 @@ export function mergeBoardStateSnapshot(existing, incoming) {
     return {
       activeSceneId: typeof incoming.activeSceneId === 'string' ? incoming.activeSceneId : null,
       mapUrl: typeof incoming.mapUrl === 'string' ? incoming.mapUrl : null,
+      thumbnailUrl:
+        typeof incoming.thumbnailUrl === 'string' ? incoming.thumbnailUrl : incoming.thumbnailUrl ?? null,
+      playerMapDisabled: Boolean(incoming.playerMapDisabled),
+      playerActiveSceneId: incoming.playerActiveSceneId ?? null,
+      playerMapUrl: incoming.playerMapUrl ?? null,
+      playerThumbnailUrl: incoming.playerThumbnailUrl ?? null,
       placements: cloneSectionSimple(incoming.placements),
       sceneState: cloneSectionSimple(incoming.sceneState),
       templates: cloneSectionSimple(incoming.templates),
       drawings: cloneSectionSimple(incoming.drawings),
       pings: cloneArraySimple(incoming.pings),
       metadata: cloneSectionSimple(incoming.metadata ?? incoming.meta),
+      _version: Number(incoming._version) || 0,
+      _fullSync: Boolean(incoming._fullSync),
     };
   }
 
@@ -292,11 +298,32 @@ export function mergeBoardStateSnapshot(existing, incoming) {
   const snapshot = {
     activeSceneId: typeof incoming.activeSceneId === 'string' ? incoming.activeSceneId : existing.activeSceneId,
     mapUrl: typeof incoming.mapUrl === 'string' ? incoming.mapUrl : existing.mapUrl,
+    thumbnailUrl: Object.prototype.hasOwnProperty.call(incoming, 'thumbnailUrl')
+      ? incoming.thumbnailUrl
+      : existing.thumbnailUrl,
+    playerMapDisabled: Object.prototype.hasOwnProperty.call(incoming, 'playerMapDisabled')
+      ? Boolean(incoming.playerMapDisabled)
+      : Boolean(existing.playerMapDisabled),
+    playerActiveSceneId: Object.prototype.hasOwnProperty.call(incoming, 'playerActiveSceneId')
+      ? incoming.playerActiveSceneId
+      : existing.playerActiveSceneId,
+    playerMapUrl: Object.prototype.hasOwnProperty.call(incoming, 'playerMapUrl')
+      ? incoming.playerMapUrl
+      : existing.playerMapUrl,
+    playerThumbnailUrl: Object.prototype.hasOwnProperty.call(incoming, 'playerThumbnailUrl')
+      ? incoming.playerThumbnailUrl
+      : existing.playerThumbnailUrl,
     placements: mergeSceneKeyedSection(existing.placements, incoming.placements, mergeOptions),
-    sceneState: mergeSceneStatePreservingGrid(existing.sceneState, incoming.sceneState),
+    sceneState: mergeSceneStatePreservingGrid(
+      existing.sceneState,
+      incoming.sceneState,
+      { authoritative }
+    ),
     templates: mergeSceneKeyedSection(existing.templates, incoming.templates, mergeOptions),
     drawings: mergeSceneKeyedSection(existing.drawings, incoming.drawings, mergeOptions),
     pings: cloneArraySimple(incoming.pings),
+    _version: Number(incoming._version) || Number(existing._version) || 0,
+    _fullSync: fullSync,
   };
 
   const metadata = cloneSectionSimple(incoming.metadata ?? incoming.meta);

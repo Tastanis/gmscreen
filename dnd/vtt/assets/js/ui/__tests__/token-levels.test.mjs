@@ -40,7 +40,8 @@ describe('token level helpers', () => {
 
     assert.equal(resolveTokenLevelId({ levelId: ' ground ' }, mapLevels), 'ground');
     assert.equal(resolveTokenLevelId({ levelId: '', mapLevelId: 'ground' }, mapLevels), 'ground');
-    assert.equal(resolveTokenLevelId({}, mapLevels), 'upper');
+    assert.equal(resolveTokenLevelId({}, mapLevels), 'level-0');
+    assert.equal(resolveTokenLevelId({ levelId: 'level-0' }, mapLevels), 'level-0');
   });
 
   test('returns adjacent levels around the resolved current level', () => {
@@ -262,7 +263,7 @@ describe('token level helpers', () => {
 
     assert.equal(isPlacementOnPlayerVisibleMapLevel({ id: 'a', levelId: 'upper' }, mapLevels), true);
     assert.equal(isPlacementOnPlayerVisibleMapLevel({ id: 'b', levelId: 'ground' }, mapLevels), false);
-    assert.equal(isPlacementOnPlayerVisibleMapLevel({ id: 'legacy' }, mapLevels), true);
+    assert.equal(isPlacementOnPlayerVisibleMapLevel({ id: 'legacy' }, mapLevels), false);
     assert.equal(isPlacementOnPlayerVisibleMapLevel({ id: 'no-levels' }, { levels: [] }), true);
   });
 
@@ -681,7 +682,7 @@ describe('Levels v2 token presentation', () => {
     assert.equal(interaction.visible, false);
   });
 
-  test('placement referencing a deleted level reports not visible', () => {
+  test('placement referencing a deleted level remains visible to the GM', () => {
     const mapLevels = {
       levels: [
         { id: 'upper', name: 'Upper', visible: true, mapUrl: '/u.png', zIndex: 1 },
@@ -692,7 +693,7 @@ describe('Levels v2 token presentation', () => {
       mapLevels,
       { viewerLevelId: 'upper', gmViewing: true },
     );
-    assert.equal(orphan.visible, false);
+    assert.equal(orphan.visible, true);
   });
 });
 
