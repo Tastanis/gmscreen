@@ -26,8 +26,10 @@ describe('combat turn start validation', () => {
     const result = validateTurnStartState({
       combatActive: true,
       combatantId: 'member-1',
+      team: 'ally',
       representativeId: 'leader',
       currentPhase: TURN_PHASE.PICK,
+      currentTurnTeam: 'ally',
       completedCombatantIds: new Set(['leader']),
     });
 
@@ -38,7 +40,9 @@ describe('combat turn start validation', () => {
     const result = validateTurnStartState({
       combatActive: true,
       combatantId: 'token-2',
+      team: 'ally',
       currentPhase: TURN_PHASE.PICK,
+      currentTurnTeam: 'ally',
       turnLockState: {
         holderId: 'player-a',
         combatantId: 'token-1',
@@ -55,7 +59,9 @@ describe('combat turn start validation', () => {
       {
         combatActive: true,
         combatantId: 'token-2',
+        team: 'ally',
         currentPhase: TURN_PHASE.PICK,
+        currentTurnTeam: 'ally',
         turnLockState: {
           holderId: 'player-a',
           combatantId: 'token-1',
@@ -68,12 +74,14 @@ describe('combat turn start validation', () => {
     assert.equal(result.requiresConfirmation, false);
   });
 
-  test('allows pick phase and same active combatant starts', () => {
+  test('allows the current side to start during pick phase and the same active combatant to resume', () => {
     assert.equal(
       validateTurnStartState({
         combatActive: true,
         combatantId: 'token-1',
+        team: 'ally',
         currentPhase: TURN_PHASE.PICK,
+        currentTurnTeam: 'ally',
       }).valid,
       true
     );
@@ -87,6 +95,38 @@ describe('combat turn start validation', () => {
       }).valid,
       true
     );
+  });
+
+  test('requires explicit confirmation when the wrong side starts during pick phase', () => {
+    const result = validateTurnStartState({
+      combatActive: true,
+      combatantId: 'ally-1',
+      team: 'ally',
+      currentPhase: TURN_PHASE.PICK,
+      currentTurnTeam: 'enemy',
+    });
+
+    assert.equal(result.valid, false);
+    assert.equal(result.requiresConfirmation, true);
+    assert.equal(result.confirmationType, 'wrong_side_pick');
+    assert.equal(result.team, 'ally');
+    assert.equal(result.expectedTeam, 'enemy');
+  });
+
+  test('allows an explicit GM override to start the wrong side during pick phase', () => {
+    const result = validateTurnStartState(
+      {
+        combatActive: true,
+        combatantId: 'ally-1',
+        team: 'ally',
+        currentPhase: TURN_PHASE.PICK,
+        currentTurnTeam: 'enemy',
+      },
+      { override: true }
+    );
+
+    assert.equal(result.valid, true);
+    assert.equal(result.requiresConfirmation, false);
   });
 
   test('labels switching away from an active combatant as a turn switch', () => {
@@ -149,6 +189,30 @@ describe('combat turn state transitions', () => {
     assert.deepEqual(result.completedCombatantIds, []);
     assert.equal(result.activeCombatantId, null);
     assert.equal(result.roundTurnCount, 0);
+  });
+
+  test('ending a round completes the active turn before resetting round state', () => {
+    const completion = completeCombatantTurnState({
+      activeCombatantId: 'ally-1',
+      completedCombatantIds: ['enemy-1'],
+      roundTurnCount: 1,
+      getRepresentativeIdFor: (id) => id,
+      getCombatantTeam: () => 'ally',
+    });
+    assert.equal(completion.completed, true);
+    assert.deepEqual(completion.completedCombatantIds, ['enemy-1', 'ally-1']);
+    assert.equal(completion.roundTurnCount, 2);
+
+    const nextRound = advanceCombatRoundState({
+      combatActive: true,
+      combatRound: 4,
+      startingTeam: 'enemy',
+      currentTeam: completion.nextTeam,
+    });
+    assert.equal(nextRound.round, 5);
+    assert.equal(nextRound.activeCombatantId, null);
+    assert.deepEqual(nextRound.completedCombatantIds, []);
+    assert.equal(nextRound.roundTurnCount, 0);
   });
 });
 

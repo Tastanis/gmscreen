@@ -573,6 +573,153 @@ final class StatePostIntegrationTest extends TestCase
         $this->assertSame('hero-one', $second['combat']['activeCombatantId']);
     }
 
+    public function testTurnStartEnforcesCurrentSideAndRequiresGmForOverride(): void
+    {
+        $state = [
+            'placements' => [
+                'scene-1' => [
+                    ['id' => 'hero', 'team' => 'ally', 'profileId' => 'player one'],
+                    ['id' => 'enemy', 'team' => 'enemy'],
+                ],
+            ],
+            'sceneState' => [
+                'scene-1' => [
+                    'claimedTokens' => ['hero' => 'player one'],
+                    'combat' => [
+                        'active' => true,
+                        'round' => 1,
+                        'currentTeam' => 'enemy',
+                        'turnPhase' => 'pick',
+                        'sequence' => 4,
+                    ],
+                ],
+            ],
+        ];
+
+        $wrongSide = applyCombatIntentOp($state, [
+            'type' => 'turn.start',
+            'sceneId' => 'scene-1',
+            'intentId' => 'wrong-side',
+            'combatantId' => 'hero',
+        ], ['isGm' => false, 'userId' => 'player one']);
+        $this->assertFalse($wrongSide['accepted']);
+        $this->assertSame('wrong-side-for-current-pick', $wrongSide['reason']);
+
+        $missingTeamState = $state;
+        $missingTeamState['sceneState']['scene-1']['combat']['currentTeam'] = null;
+        $missingTeam = applyCombatIntentOp($missingTeamState, [
+            'type' => 'turn.start',
+            'sceneId' => 'scene-1',
+            'intentId' => 'missing-current-team',
+            'combatantId' => 'hero',
+        ], ['isGm' => false, 'userId' => 'player one']);
+        $this->assertFalse($missingTeam['accepted']);
+        $this->assertSame('wrong-side-for-current-pick', $missingTeam['reason']);
+
+        $playerOverride = applyCombatIntentOp($state, [
+            'type' => 'turn.start',
+            'sceneId' => 'scene-1',
+            'intentId' => 'player-override',
+            'combatantId' => 'hero',
+            'override' => true,
+        ], ['isGm' => false, 'userId' => 'player one']);
+        $this->assertFalse($playerOverride['accepted']);
+        $this->assertSame('gm-override-required', $playerOverride['reason']);
+
+        $correctSide = applyCombatIntentOp($state, [
+            'type' => 'turn.start',
+            'sceneId' => 'scene-1',
+            'intentId' => 'correct-side',
+            'combatantId' => 'enemy',
+        ], ['isGm' => true, 'userId' => 'gm']);
+        $this->assertTrue($correctSide['accepted']);
+        $this->assertSame('enemy', $correctSide['combat']['activeCombatantId']);
+
+        $gmOverride = applyCombatIntentOp($state, [
+            'type' => 'turn.start',
+            'sceneId' => 'scene-1',
+            'intentId' => 'gm-override',
+            'combatantId' => 'hero',
+            'override' => true,
+        ], ['isGm' => true, 'userId' => 'gm']);
+        $this->assertTrue($gmOverride['accepted']);
+        $this->assertSame('hero', $gmOverride['combat']['activeCombatantId']);
+    }
+
+    public function testCombatStartMakesOneRegisteredEncounterCanonical(): void
+    {
+        $state = [
+            'sceneState' => [
+                'scene-new' => ['combat' => ['active' => false, 'sequence' => 2]],
+                'scene-old' => [
+                    'grid' => ['size' => 70],
+                    'combat' => [
+                        'active' => true,
+                        'round' => 8,
+                        'currentTeam' => 'ally',
+                        'activeCombatantId' => 'old-hero',
+                        'sequence' => 11,
+                    ],
+                ],
+                'deleted-scene' => [
+                    'combat' => ['active' => true, 'round' => 99, 'sequence' => 80],
+                ],
+            ],
+        ];
+
+        $result = applyCombatIntentOp($state, [
+            'type' => 'combat.start',
+            'sceneId' => 'scene-new',
+            'intentId' => 'start-new',
+            'combat' => [
+                'active' => true,
+                'startingTeam' => 'enemy',
+                'encounterId' => 'enc-new',
+            ],
+        ], [
+            'isGm' => true,
+            'userId' => 'gm',
+            'registeredSceneIds' => ['scene-new', 'scene-old'],
+        ]);
+
+        $this->assertTrue($result['accepted']);
+        $this->assertTrue($result['state']['sceneState']['scene-new']['combat']['active']);
+        $this->assertFalse($result['state']['sceneState']['scene-old']['combat']['active']);
+        $this->assertSame(12, $result['state']['sceneState']['scene-old']['combat']['sequence']);
+        $this->assertSame(70, $result['state']['sceneState']['scene-old']['grid']['size']);
+        $this->assertTrue($result['state']['sceneState']['deleted-scene']['combat']['active']);
+    }
+
+    public function testAcceptedGmCombatSetAlsoDeactivatesOtherRegisteredEncounter(): void
+    {
+        $state = [
+            'sceneState' => [
+                'scene-new' => ['combat' => ['active' => false, 'sequence' => 1]],
+                'scene-old' => ['combat' => ['active' => true, 'round' => 4, 'sequence' => 7]],
+                'deleted-scene' => ['combat' => ['active' => true, 'round' => 20, 'sequence' => 30]],
+            ],
+        ];
+
+        $result = applyBoardStateOp($state, [
+            'type' => 'combat.set',
+            'sceneId' => 'scene-new',
+            'combat' => [
+                'active' => true,
+                'round' => 1,
+                'currentTeam' => 'ally',
+                'encounterId' => 'enc-new',
+                'sequence' => 2,
+            ],
+        ], [
+            'isGm' => true,
+            'registeredSceneIds' => ['scene-new', 'scene-old'],
+        ]);
+
+        $this->assertTrue($result['sceneState']['scene-new']['combat']['active']);
+        $this->assertFalse($result['sceneState']['scene-old']['combat']['active']);
+        $this->assertTrue($result['sceneState']['deleted-scene']['combat']['active']);
+    }
+
     public function testTurnCompleteRequiresOwnerAndAdvancesSide(): void
     {
         $state = [

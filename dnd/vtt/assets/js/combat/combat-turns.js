@@ -18,6 +18,8 @@ export function validateTurnStartState(
   const isSharonOverride = options.sharonOverride === true;
   const normalizedCombatantId = normalizeId(combatantId);
   const normalizedRepresentativeId = normalizeId(representativeId) || normalizedCombatantId;
+  const normalizedTeam = normalizeCombatTeam(team);
+  const normalizedCurrentTurnTeam = normalizeCombatTeam(currentTurnTeam);
   const completed = toStringSet(completedCombatantIds);
   const phase = Object.values(TURN_PHASE).includes(currentPhase) ? currentPhase : TURN_PHASE.IDLE;
   const result = {
@@ -54,6 +56,19 @@ export function validateTurnStartState(
   }
 
   if (phase === TURN_PHASE.PICK) {
+    if (
+      !normalizedTeam ||
+      !normalizedCurrentTurnTeam ||
+      normalizedTeam !== normalizedCurrentTurnTeam
+    ) {
+      if (isOverride || isSharonOverride) {
+        result.valid = true;
+        return result;
+      }
+      result.requiresConfirmation = true;
+      result.confirmationType = 'wrong_side_pick';
+      return result;
+    }
     result.valid = true;
     return result;
   }

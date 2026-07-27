@@ -439,6 +439,12 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                     $opContext = [
                         'isGm' => $isGm,
                         'userId' => $callerUserId,
+                        'registeredSceneIds' => array_values(array_filter(array_map(
+                            static fn ($scene): string => is_array($scene)
+                                ? trim((string) ($scene['id'] ?? ''))
+                                : '',
+                            loadVttScenes()['items'] ?? []
+                        ))),
                     ];
                     foreach ($ops as $opIndex => $op) {
                         $beforeOpState = $nextState;
@@ -1146,6 +1152,10 @@ function applyCombatIntentOp(array $state, array $op, array $context = []): arra
         ? normalizeCombatStatePayload($op['combat'])
         : null;
     $nowMs = (int) round(microtime(true) * 1000);
+    $registeredSceneIds = normalizeRegisteredCombatSceneIds($context['registeredSceneIds'] ?? null);
+    if (!empty($registeredSceneIds) && !in_array($sceneId, $registeredSceneIds, true)) {
+        return combatIntentDecision($state, false, false, 'scene-not-registered', $combat);
+    }
 
     if ($type === 'combat.start') {
         if (!$isGm) {
@@ -1175,6 +1185,12 @@ function applyCombatIntentOp(array $state, array $op, array $context = []): arra
             $next['encounterId'] = uniqid('enc-server-', true);
         }
         $combat = finalizeAcceptedCombatIntent($next, $combat, $intentId, $nowMs);
+        $state = deactivateOtherRegisteredCombatScenes(
+            $state,
+            $sceneId,
+            $registeredSceneIds,
+            $nowMs
+        );
     } elseif ($type === 'turn.start') {
         if (empty($combat['active'])) {
             return combatIntentDecision($state, false, false, 'combat-not-active', $combat);
@@ -1199,12 +1215,25 @@ function applyCombatIntentOp(array $state, array $op, array $context = []): arra
             return combatIntentDecision($state, false, false, 'players-cannot-control-enemies', $combat);
         }
 
-        $override = !empty($op['override']);
+        $overrideRequested = !empty($op['override']);
+        if ($overrideRequested && !$isGm) {
+            return combatIntentDecision($state, false, false, 'gm-override-required', $combat);
+        }
+        $override = $overrideRequested && $isGm;
+        $currentTeam = normalizeCombatTeamValue($combat['currentTeam'] ?? null);
         $activeCombatantId = is_string($combat['activeCombatantId'] ?? null)
             ? trim($combat['activeCombatantId'])
             : '';
         if ($activeCombatantId === $combatantId) {
             return combatIntentDecision($state, true, false, 'already-active', $combat);
+        }
+        if (
+            $activeCombatantId === ''
+            && ($combat['turnPhase'] ?? null) === 'pick'
+            && $targetTeam !== $currentTeam
+            && !$override
+        ) {
+            return combatIntentDecision($state, false, false, 'wrong-side-for-current-pick', $combat);
         }
         if ($activeCombatantId !== '' && !$override) {
             return combatIntentDecision($state, false, false, 'turn-already-active', $combat);
@@ -1406,6 +1435,74 @@ function combatIntentDecision(
         $result['combat'] = $combat;
     }
     return $result;
+}
+
+/**
+ * @param mixed $raw
+ * @return array<int,string>
+ */
+function normalizeRegisteredCombatSceneIds($raw): array
+{
+    if (!is_array($raw)) {
+        return [];
+    }
+    $ids = [];
+    foreach ($raw as $value) {
+        if (!is_string($value)) {
+            continue;
+        }
+        $id = trim($value);
+        if ($id !== '' && !in_array($id, $ids, true)) {
+            $ids[] = $id;
+        }
+    }
+    return $ids;
+}
+
+/**
+ * A newly activated registered encounter is canonical. Only other registered
+ * active combats are ended; orphan/unregistered records are left for the
+ * bounded repair path instead of being broadly erased during normal play.
+ *
+ * @param array<string,mixed> $state
+ * @param array<int,string> $registeredSceneIds
+ * @return array<string,mixed>
+ */
+function deactivateOtherRegisteredCombatScenes(
+    array $state,
+    string $canonicalSceneId,
+    array $registeredSceneIds,
+    int $nowMs
+): array {
+    foreach ($registeredSceneIds as $candidateSceneId) {
+        if ($candidateSceneId === $canonicalSceneId) {
+            continue;
+        }
+        $stored = $state['sceneState'][$candidateSceneId]['combat'] ?? null;
+        if (!is_array($stored)) {
+            continue;
+        }
+        $combat = normalizeCombatStatePayload($stored);
+        if (empty($combat['active'])) {
+            continue;
+        }
+        $combat['active'] = false;
+        $combat['round'] = 0;
+        $combat['activeCombatantId'] = null;
+        $combat['completedCombatantIds'] = [];
+        $combat['startingTeam'] = null;
+        $combat['currentTeam'] = null;
+        $combat['lastTeam'] = null;
+        $combat['turnPhase'] = 'idle';
+        $combat['roundTurnCount'] = 0;
+        $combat['malice'] = 0;
+        $combat['turnLock'] = null;
+        $combat['sequence'] = max(0, (int) ($stored['sequence'] ?? 0)) + 1;
+        $combat['updatedAt'] = max($nowMs, (int) ($stored['updatedAt'] ?? 0) + 1);
+        $state = ensureBoardStateSceneEntry($state, $candidateSceneId);
+        $state['sceneState'][$candidateSceneId]['combat'] = normalizeCombatStatePayload($combat);
+    }
+    return $state;
 }
 
 /**
@@ -2055,6 +2152,10 @@ function applyBoardStateOp(array $state, array $op, array $context = []): array
         if ($sceneId === '') {
             return $state;
         }
+        $registeredSceneIds = normalizeRegisteredCombatSceneIds($context['registeredSceneIds'] ?? null);
+        if (!empty($registeredSceneIds) && !in_array($sceneId, $registeredSceneIds, true)) {
+            return $state;
+        }
         if (!isset($op['combat']) || !is_array($op['combat'])) {
             return $state;
         }
@@ -2074,6 +2175,14 @@ function applyBoardStateOp(array $state, array $op, array $context = []): array
         }
         if ($hasExistingCombat) {
             $incomingCombat = advanceAcceptedGmCombatStatePayload($incomingCombat, $existingCombat);
+        }
+        if (!empty($incomingCombat['active'])) {
+            $state = deactivateOtherRegisteredCombatScenes(
+                $state,
+                $sceneId,
+                $registeredSceneIds,
+                (int) round(microtime(true) * 1000)
+            );
         }
         $state = ensureBoardStateSceneEntry($state, $sceneId);
         $state['sceneState'][$sceneId]['combat'] = $incomingCombat;

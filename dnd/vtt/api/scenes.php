@@ -2,20 +2,22 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../bootstrap.php';
+require_once __DIR__ . '/../lib/PusherClient.php';
 
+if (!defined('VTT_SCENES_API_INCLUDE_ONLY')) {
 header('Content-Type: application/json');
 
 try {
     $auth = getVttUserContext();
     if (!($auth['isLoggedIn'] ?? false)) {
-        respondJson(401, [
+        respondSceneJson(401, [
             'success' => false,
             'error' => 'Authentication required.',
         ]);
     }
 
     if (!($auth['isGM'] ?? false)) {
-        respondJson(403, [
+        respondSceneJson(403, [
             'success' => false,
             'error' => 'Only the GM can manage scenes.',
         ]);
@@ -24,19 +26,19 @@ try {
     $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
     if ($method === 'GET') {
-        respondJson(200, [
+        respondSceneJson(200, [
             'success' => true,
             'data' => loadScenesPayload(),
         ]);
     }
 
     if ($method === 'POST') {
-        $payload = readJsonInput();
+        $payload = readSceneJsonInput();
         $action = $payload['action'] ?? 'create-scene';
 
         if ($action === 'create-folder') {
             $folder = createFolder($payload);
-            respondJson(200, [
+            respondSceneJson(200, [
                 'success' => true,
                 'data' => $folder,
             ]);
@@ -44,7 +46,7 @@ try {
 
         if ($action === 'create-scene') {
             $scene = createScene($payload);
-            respondJson(200, [
+            respondSceneJson(200, [
                 'success' => true,
                 'data' => $scene,
             ]);
@@ -52,7 +54,7 @@ try {
 
         if ($action === 'update-scene-grid') {
             $scene = updateSceneGrid($payload);
-            respondJson(200, [
+            respondSceneJson(200, [
                 'success' => true,
                 'data' => $scene,
             ]);
@@ -60,49 +62,53 @@ try {
 
         if ($action === 'update-scene-visibility') {
             $scene = updateSceneVisibility($payload);
-            respondJson(200, [
+            respondSceneJson(200, [
                 'success' => true,
                 'data' => $scene,
             ]);
         }
 
-        respondJson(400, [
+        respondSceneJson(400, [
             'success' => false,
             'error' => 'Unsupported action.',
         ]);
     }
 
     if ($method === 'DELETE') {
-        $payload = readJsonInput();
+        $payload = readSceneJsonInput();
         $sceneId = (string) ($payload['sceneId'] ?? $payload['id'] ?? '');
         if ($sceneId === '') {
-            respondJson(400, [
+            respondSceneJson(400, [
                 'success' => false,
                 'error' => 'Scene id is required.',
             ]);
         }
 
-        deleteScene($sceneId);
+        $version = deleteScene($sceneId);
 
-        respondJson(200, [
+        respondSceneJson(200, [
             'success' => true,
-            'data' => [ 'sceneId' => $sceneId ],
+            'data' => [
+                'sceneId' => $sceneId,
+                'version' => $version,
+            ],
         ]);
     }
 
-    respondJson(405, [
+    respondSceneJson(405, [
         'success' => false,
         'error' => 'Method not allowed.',
     ]);
 } catch (Throwable $exception) {
     error_log('[VTT] Scene API error: ' . $exception->getMessage());
-    respondJson(500, [
+    respondSceneJson(500, [
         'success' => false,
         'error' => 'Unexpected server error.',
     ]);
 }
+}
 
-function readJsonInput(): array
+function readSceneJsonInput(): array
 {
     $raw = file_get_contents('php://input');
     if ($raw === false || $raw === '') {
@@ -130,7 +136,7 @@ function createFolder(array $payload): array
 {
     $name = trim((string) ($payload['name'] ?? ''));
     if ($name === '') {
-        respondJson(422, [
+        respondSceneJson(422, [
             'success' => false,
             'error' => 'Folder name cannot be empty.',
         ]);
@@ -154,7 +160,7 @@ function createScene(array $payload): array
 {
     $mapUrl = trim((string) ($payload['mapUrl'] ?? ''));
     if ($mapUrl === '') {
-        respondJson(422, [
+        respondSceneJson(422, [
             'success' => false,
             'error' => 'A map upload is required to save a scene.',
         ]);
@@ -174,7 +180,7 @@ function createScene(array $payload): array
         }
 
         if ($folder === null) {
-            respondJson(422, [
+            respondSceneJson(422, [
                 'success' => false,
                 'error' => 'Selected folder does not exist.',
             ]);
@@ -204,30 +210,165 @@ function createScene(array $payload): array
     return $scene;
 }
 
-function deleteScene(string $sceneId): void
+function deleteScene(string $sceneId, bool $broadcast = true): int
 {
-    $storage = loadScenesPayload();
-    $before = count($storage['items']);
-    $storage['items'] = array_values(array_filter(
-        $storage['items'],
-        static fn ($scene) => ($scene['id'] ?? null) !== $sceneId
-    ));
+    $result = withVttBoardStateLock(static function () use ($sceneId): array {
+        $storage = loadScenesPayload();
+        $before = count($storage['items']);
+        $storage['items'] = array_values(array_filter(
+            $storage['items'],
+            static fn ($scene) => ($scene['id'] ?? null) !== $sceneId
+        ));
 
-    if ($before === count($storage['items'])) {
-        respondJson(404, [
-            'success' => false,
-            'error' => 'Scene not found.',
+        if ($before === count($storage['items'])) {
+            respondSceneJson(404, [
+                'success' => false,
+                'error' => 'Scene not found.',
+            ]);
+        }
+
+        $rawBoardState = loadVttJson('board-state.json');
+        $boardState = is_array($rawBoardState) ? $rawBoardState : [];
+        $boardState = removeSceneBoardStateReferences($boardState, $sceneId);
+        $version = bumpSceneDeletionBoardStateVersion($boardState);
+
+        // Commit board cleanup first. If the following scenes.json write ever
+        // fails, the scene remains registered but cannot become an active
+        // combat ghost. The reverse ordering could permanently orphan an
+        // active encounter after a partial failure.
+        if (!saveVttJson('board-state.json', $boardState)) {
+            throw new RuntimeException('Failed to clean deleted scene board state.');
+        }
+
+        $payload = [
+            'folders' => normalizeCollection($storage['folders'] ?? []),
+            'scenes' => normalizeCollection($storage['items'] ?? []),
+        ];
+        if (!saveVttJson('scenes.json', $payload)) {
+            throw new RuntimeException('Failed to save scene deletion.');
+        }
+
+        return [
+            'version' => $version,
+            'state' => $boardState,
+        ];
+    });
+
+    $version = (int) ($result['version'] ?? 0);
+    if ($broadcast) {
+        broadcastSceneDeletionUpdate([
+            'type' => 'ops-overflow',
+            'version' => $version,
+            'timestamp' => (int) round(microtime(true) * 1000),
+            'authorId' => 'gm',
+            'authorRole' => 'gm',
+            'publicView' => true,
         ]);
     }
 
-    persistScenes($storage);
+    return $version;
+}
+
+/**
+ * @param array<string,mixed> $state
+ */
+function bumpSceneDeletionBoardStateVersion(array &$state): int
+{
+    $current = isset($state['_version']) ? max(0, (int) $state['_version']) : 0;
+    $state['_version'] = $current + 1;
+    return $state['_version'];
+}
+
+/**
+ * Scene deletion is served separately from state.php, so emit the same
+ * content-free resync marker without coupling the two API entrypoints.
+ *
+ * @param array<string,mixed> $update
+ */
+function broadcastSceneDeletionUpdate(array $update): bool
+{
+    $configPath = __DIR__ . '/../config/pusher.php';
+    if (!is_file($configPath)) {
+        return false;
+    }
+    $config = require $configPath;
+    if (
+        !is_array($config)
+        || empty($config['enabled'])
+        || empty($config['app_id'])
+        || empty($config['key'])
+        || empty($config['secret'])
+    ) {
+        return false;
+    }
+
+    try {
+        $client = new PusherClient(
+            (string) $config['app_id'],
+            (string) $config['key'],
+            (string) $config['secret'],
+            (string) ($config['cluster'] ?? 'us3'),
+            (int) ($config['timeout'] ?? 5)
+        );
+        return $client->trigger(
+            (string) ($config['channel'] ?? 'vtt-board'),
+            'state-updated',
+            $update
+        );
+    } catch (Throwable $exception) {
+        error_log('[VTT] Scene deletion broadcast failed: ' . $exception->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Removes only data owned by one deleted scene. Other scenes and unknown
+ * top-level board fields are preserved verbatim.
+ *
+ * @param array<string,mixed> $state
+ * @return array<string,mixed>
+ */
+function removeSceneBoardStateReferences(array $state, string $sceneId): array
+{
+    $sceneId = trim($sceneId);
+    if ($sceneId === '') {
+        return $state;
+    }
+
+    foreach (['placements', 'templates', 'drawings', 'sceneState', 'claims'] as $field) {
+        if (isset($state[$field]) && is_array($state[$field])) {
+            unset($state[$field][$sceneId]);
+        }
+    }
+
+    if (isset($state['pings']) && is_array($state['pings'])) {
+        unset($state['pings'][$sceneId]);
+        $state['pings'] = array_values(array_filter(
+            $state['pings'],
+            static fn ($ping) => !is_array($ping)
+                || !isset($ping['sceneId'])
+                || trim((string) $ping['sceneId']) !== $sceneId
+        ));
+    }
+
+    if (($state['activeSceneId'] ?? null) === $sceneId) {
+        $state['activeSceneId'] = null;
+        $state['mapUrl'] = null;
+    }
+    if (($state['playerActiveSceneId'] ?? null) === $sceneId) {
+        $state['playerActiveSceneId'] = null;
+        $state['playerMapUrl'] = null;
+        $state['playerThumbnailUrl'] = null;
+    }
+
+    return $state;
 }
 
 function updateSceneVisibility(array $payload): array
 {
     $sceneId = trim((string) ($payload['sceneId'] ?? $payload['id'] ?? ''));
     if ($sceneId === '') {
-        respondJson(400, [
+        respondSceneJson(400, [
             'success' => false,
             'error' => 'Scene id is required.',
         ]);
@@ -248,7 +389,7 @@ function updateSceneVisibility(array $payload): array
     }
     unset($scene);
 
-    respondJson(404, [
+    respondSceneJson(404, [
         'success' => false,
         'error' => 'Scene not found.',
     ]);
@@ -258,7 +399,7 @@ function updateSceneGrid(array $payload): array
 {
     $sceneId = trim((string) ($payload['sceneId'] ?? $payload['id'] ?? ''));
     if ($sceneId === '') {
-        respondJson(400, [
+        respondSceneJson(400, [
             'success' => false,
             'error' => 'Scene id is required.',
         ]);
@@ -279,7 +420,7 @@ function updateSceneGrid(array $payload): array
     }
     unset($scene);
 
-    respondJson(404, [
+    respondSceneJson(404, [
         'success' => false,
         'error' => 'Scene not found.',
     ]);
@@ -343,7 +484,7 @@ function persistScenes(array $storage): void
     ];
 
     if (!saveVttJson('scenes.json', $payload)) {
-        respondJson(500, [
+        respondSceneJson(500, [
             'success' => false,
             'error' => 'Failed to save scenes.',
         ]);
@@ -373,11 +514,13 @@ function generateId(string $prefix): string
     return $prefix . '_' . $random;
 }
 
-function respondJson(int $status, array $payload): void
-{
-    http_response_code($status);
-    echo json_encode($payload);
-    exit;
+if (!function_exists('respondSceneJson')) {
+    function respondSceneJson(int $status, array $payload): void
+    {
+        http_response_code($status);
+        echo json_encode($payload);
+        exit;
+    }
 }
 
 function truncateString(string $value, int $length): string

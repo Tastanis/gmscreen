@@ -17,12 +17,16 @@ describe('combat sync scene selection', () => {
     const result = getActiveSceneCombatState({
       boardState: {
         activeSceneId: ' scene-a ',
+        placements: {
+          'scene-a': [{ id: 'ally-1', team: 'ally' }],
+        },
         sceneState: {
           'scene-a': {
             combat: { active: true, sequence: 4 },
           },
         },
       },
+      scenes: { items: [{ id: 'scene-a' }] },
     });
 
     assert.equal(result.activeSceneId, 'scene-a');
@@ -40,6 +44,10 @@ describe('combat sync scene selection', () => {
     const result = getActiveSceneCombatState({
       boardState: {
         activeSceneId: 'player-map',
+        placements: {
+          'player-map': [{ id: 'viewer-1' }],
+          'gm-encounter': [{ id: 'enemy-1', team: 'enemy' }],
+        },
         sceneState: {
           'player-map': { combat: { active: false } },
           'gm-encounter': {
@@ -47,6 +55,7 @@ describe('combat sync scene selection', () => {
           },
         },
       },
+      scenes: { items: [{ id: 'player-map' }, { id: 'gm-encounter' }] },
     });
 
     assert.equal(result.activeSceneId, 'gm-encounter');
@@ -57,16 +66,156 @@ describe('combat sync scene selection', () => {
     const result = getActiveSceneCombatState({
       boardState: {
         activeSceneId: null,
+        placements: {
+          'gm-encounter': [{ id: 'ally-1', team: 'ally' }],
+        },
         sceneState: {
           'gm-encounter': {
             combat: { active: true, sequence: 3 },
           },
         },
       },
+      scenes: { items: [{ id: 'gm-encounter' }] },
     });
 
     assert.equal(result.activeSceneId, 'gm-encounter');
     assert.equal(result.combatState.active, true);
+  });
+
+  test('prefers an active routed scene over other active registered scenes', () => {
+    const result = getActiveSceneCombatState({
+      scenes: { items: [{ id: 'routed' }, { id: 'newer' }] },
+      boardState: {
+        activeSceneId: 'routed',
+        placements: {
+          routed: [{ id: 'ally-1' }],
+          newer: [{ id: 'enemy-1' }],
+        },
+        sceneState: {
+          routed: { combat: { active: true, sequence: 2, updatedAt: 20 } },
+          newer: { combat: { active: true, sequence: 50, updatedAt: 500 } },
+        },
+      },
+    });
+
+    assert.equal(result.activeSceneId, 'routed');
+    assert.equal(result.combatState.sequence, 2);
+  });
+
+  test('ignores active records for deleted scenes and empty registered scenes', () => {
+    const result = getActiveSceneCombatState({
+      scenes: { items: [{ id: 'routed' }, { id: 'empty' }, { id: 'valid' }] },
+      boardState: {
+        activeSceneId: 'routed',
+        placements: {
+          valid: [{ id: 'ally-1', team: 'ally' }],
+          empty: [],
+          deleted: [{ id: 'ancient-enemy' }],
+        },
+        sceneState: {
+          deleted: {
+            combat: { active: true, sequence: 999, updatedAt: 9999 },
+          },
+          empty: {
+            combat: { active: true, sequence: 500, updatedAt: 5000 },
+          },
+          routed: { combat: { active: false, sequence: 40 } },
+          valid: {
+            combat: { active: true, sequence: 41, updatedAt: 4100 },
+          },
+        },
+      },
+    });
+
+    assert.equal(result.activeSceneId, 'valid');
+    assert.equal(result.combatState.sequence, 41);
+  });
+
+  test('uses deterministic freshness rather than sceneState insertion order', () => {
+    const base = {
+      scenes: { items: [{ id: 'older' }, { id: 'newer' }, { id: 'tie-a' }, { id: 'tie-b' }] },
+      boardState: {
+        activeSceneId: 'inactive-route',
+        placements: {
+          older: [{ id: 'older-token' }],
+          newer: [{ id: 'newer-token' }],
+          'tie-a': [{ id: 'tie-a-token' }],
+          'tie-b': [{ id: 'tie-b-token' }],
+        },
+        sceneState: {
+          older: { combat: { active: true, sequence: 20, updatedAt: 9000 } },
+          'tie-b': { combat: { active: true, sequence: 21, updatedAt: 8000 } },
+          newer: { combat: { active: true, sequence: 21, updatedAt: 8500 } },
+          'tie-a': { combat: { active: true, sequence: 21, updatedAt: 8000 } },
+        },
+      },
+    };
+
+    assert.equal(getActiveSceneCombatState(base).activeSceneId, 'newer');
+
+    base.boardState.sceneState.newer.combat.updatedAt = 8000;
+    assert.equal(getActiveSceneCombatState(base).activeSceneId, 'newer');
+
+    delete base.boardState.sceneState.newer;
+    assert.equal(getActiveSceneCombatState(base).activeSceneId, 'tie-a');
+  });
+
+  test('does not resurrect an unregistered active record when routed scene is inactive', () => {
+    const result = getActiveSceneCombatState({
+      scenes: { items: [{ id: 'current' }] },
+      boardState: {
+        activeSceneId: 'current',
+        placements: {
+          deleted: [{ id: 'ghost' }],
+        },
+        sceneState: {
+          current: { combat: { active: false, sequence: 10 } },
+          deleted: { combat: { active: true, sequence: 11 } },
+        },
+      },
+    });
+
+    assert.equal(result.activeSceneId, 'current');
+    assert.equal(result.combatState.active, false);
+  });
+
+  test('long reload sequence never falls back to ancient deleted active records', () => {
+    const state = {
+      scenes: { items: [{ id: 'current-map' }, { id: 'encounter' }] },
+      boardState: {
+        activeSceneId: 'current-map',
+        placements: {
+          encounter: [{ id: 'ally-1' }, { id: 'enemy-1' }],
+          'deleted-october': [{ id: 'missing-active-combatant' }],
+        },
+        sceneState: {
+          'deleted-october': {
+            combat: {
+              active: true,
+              activeCombatantId: 'missing-active-combatant',
+              sequence: 900,
+              updatedAt: 1750000000000,
+            },
+          },
+          'current-map': { combat: { active: false, sequence: 101 } },
+          encounter: {
+            combat: {
+              active: true,
+              activeCombatantId: 'ally-1',
+              sequence: 102,
+              updatedAt: 1760000000000,
+            },
+          },
+        },
+      },
+    };
+
+    for (let reload = 0; reload < 250; reload += 1) {
+      const roundTripped = JSON.parse(JSON.stringify(state));
+      const result = getActiveSceneCombatState(roundTripped);
+      assert.equal(result.activeSceneId, 'encounter');
+      assert.equal(result.combatState.activeCombatantId, 'ally-1');
+    }
   });
 });
 

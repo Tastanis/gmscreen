@@ -69,6 +69,7 @@ import {
   normalizePlayerTokenFolderName,
 } from '../state/store.js';
 import { shouldApplyIncomingVersion } from '../state/version-guard.js';
+import { applyFreshAuthoritativeSnapshot } from '../state/authoritative-snapshot.js';
 import { close as closeMonsterStatBlock, open as openMonsterStatBlock } from './monster-stat-block.js';
 import { createCombatTimerService } from '../services/combat-timer-service.js';
 import { mountFogOfWar, renderFog, renderFogSelection, isFogSelectActive, isPositionFogged, createFogChecker } from './fog-of-war.js';
@@ -87,6 +88,12 @@ import {
   resolveSceneMapLevelsState,
 } from './map-level-renderer.js';
 import { createTokenInteractions } from './token-interactions.js';
+import {
+  applyCanonicalPrimaryTokenSelection,
+  ensureTokenSettingsElementConnected,
+  reconcileStaleTokenPointerTarget,
+  resolveCanonicalTokenPointerTarget,
+} from './token-pointer-routing.js';
 import { createTokenMovementController } from '../token-system/token-movement-controller.js';
 import {
   buildTokenStackOrderUpdate,
@@ -1287,14 +1294,8 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!boardState || typeof boardState !== 'object') {
       return false;
     }
-    const incomingVersion = typeof boardState._version === 'number'
-      ? boardState._version
-      : Number.parseInt(boardState._version, 10);
-    if (
-      Number.isFinite(incomingVersion) &&
-      incomingVersion > 0 &&
-      currentBoardStateVersion > incomingVersion
-    ) {
+    const incomingVersion = boardState._version;
+    if (!shouldApplyIncomingVersion(incomingVersion, currentBoardStateVersion)) {
       return false;
     }
 
@@ -1313,16 +1314,12 @@ export function mountBoardInteractions(store, routes = {}) {
         ...boardState,
         _fullSync: true,
       });
-      if (Number.isFinite(incomingVersion) && incomingVersion > 0) {
-        draft.boardState._version = incomingVersion;
-      }
+      draft.boardState._version = incomingVersion;
     });
 
-    if (Number.isFinite(incomingVersion) && incomingVersion > 0) {
-      currentBoardStateVersion = incomingVersion;
-      if (pusherInterface?.setLastAppliedVersion) {
-        pusherInterface.setLastAppliedVersion(incomingVersion);
-      }
+    currentBoardStateVersion = incomingVersion;
+    if (pusherInterface?.setLastAppliedVersion) {
+      pusherInterface.setLastAppliedVersion(incomingVersion);
     }
 
     const updatedState = boardApi.getState?.();
@@ -6561,29 +6558,22 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function applyAuthoritativeBoardStateSnapshot(boardState) {
-    if (!boardState || typeof boardState !== 'object') {
+    const currentState = boardApi.getState?.();
+    const result = applyFreshAuthoritativeSnapshot(
+      currentState?.boardState,
+      boardState,
+      currentBoardStateVersion
+    );
+    if (!result.applied) {
       return false;
     }
-    const incomingVersion = typeof boardState._version === 'number'
-      ? boardState._version
-      : Number.parseInt(boardState._version, 10);
+
     boardApi.updateState?.((draft) => {
-      const current = draft.boardState && typeof draft.boardState === 'object'
-        ? draft.boardState
-        : {};
-      draft.boardState = mergeBoardStateSnapshot(
-        current,
-        { ...boardState, _fullSync: true },
-        { authoritative: true }
-      );
-      if (Number.isFinite(incomingVersion) && incomingVersion > 0) {
-        draft.boardState._version = incomingVersion;
-      }
+      draft.boardState = result.boardState;
     });
-    if (Number.isFinite(incomingVersion) && incomingVersion > 0) {
-      currentBoardStateVersion = incomingVersion;
-      pusherInterface?.setLastAppliedVersion?.(incomingVersion);
-    }
+    currentBoardStateVersion = result.version;
+    pusherInterface?.setLastAppliedVersion?.(result.version);
+
     const updatedState = boardApi.getState?.();
     if (updatedState) {
       applyStateToBoard(updatedState);
@@ -7050,16 +7040,31 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (event.button === 0) {
       closeTokenSettings({ preserveMonsterStatBlock: true });
-      const placement = findRenderedPlacementAtPoint(event);
-      if (placement) {
-        const hasModifier = event.shiftKey || event.ctrlKey || event.metaKey;
-        const isSelected = selectedTokenIds.has(placement.id);
-        const selectionChanged = hasModifier || !isSelected
-          ? updateSelection(placement.id, {
-              additive: event.shiftKey,
-              toggle: event.ctrlKey || event.metaKey,
-            })
-          : false;
+      const tokenTarget = resolvePointerTokenTarget(event);
+      if (tokenTarget.kind === 'stale') {
+        templateTool.clearSelection();
+        focusBoard();
+        event.preventDefault();
+        return;
+      }
+      if (tokenTarget.kind === 'canonical') {
+        if (!isCanonicalPointerTargetInteractable(tokenTarget, event)) {
+          reconcileCanonicalPointerPresentation();
+          templateTool.clearSelection();
+          focusBoard();
+          event.preventDefault();
+          return;
+        }
+        const placement = tokenTarget.placement;
+        const { selectionChanged } = applyCanonicalPrimaryTokenSelection({
+          placementId: placement.id,
+          selectedTokenIds,
+          shiftKey: event.shiftKey,
+          ctrlKey: event.ctrlKey,
+          metaKey: event.metaKey,
+          updateSelection,
+          refreshSelection: notifySelectionChanged,
+        });
         if (selectionChanged) {
           renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState, { skipTracker: true });
         }
@@ -7084,8 +7089,22 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     if (event.button === 2) {
-      const placement = findRenderedPlacementAtPoint(event);
-      if (placement) {
+      const tokenTarget = resolvePointerTokenTarget(event);
+      if (tokenTarget.kind === 'stale') {
+        templateTool.clearSelection();
+        focusBoard();
+        event.preventDefault();
+        return;
+      }
+      if (tokenTarget.kind === 'canonical') {
+        if (!isCanonicalPointerTargetInteractable(tokenTarget, event)) {
+          reconcileCanonicalPointerPresentation();
+          templateTool.clearSelection();
+          focusBoard();
+          event.preventDefault();
+          return;
+        }
+        const placement = tokenTarget.placement;
         const opened = openTokenSettingsById(placement.id, event.clientX, event.clientY);
         if (opened) {
           const isSelected = selectedTokenIds.has(placement.id);
@@ -7104,6 +7123,21 @@ export function mountBoardInteractions(store, routes = {}) {
           event.preventDefault();
           return;
         }
+
+        // A canonical token occupies this point but the current viewer cannot
+        // interact with its settings (for example because level/fog state
+        // changed since the prior render). Reconcile the visible board and
+        // consume this event; token hits must never masquerade as empty-space
+        // panning.
+        closeTokenSettings({ preserveMonsterStatBlock: true });
+        clearDragCandidate();
+        if (viewState.dragState) {
+          endTokenDrag({ commit: false });
+        }
+        renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState, { skipTracker: true });
+        focusBoard();
+        event.preventDefault();
+        return;
       }
 
       closeTokenSettings({ preserveMonsterStatBlock: true });
@@ -7124,6 +7158,126 @@ export function mountBoardInteractions(store, routes = {}) {
     closeTokenSettings({ preserveMonsterStatBlock: true });
     return;
   });
+
+  function resolvePointerTokenTarget(event) {
+    return resolveCanonicalTokenPointerTarget({
+      renderedPlacement: findRenderedPlacementAtPoint(event),
+      getCanonicalPlacement: getPlacementFromStore,
+      onStaleToken: recoverStaleRenderedToken,
+    });
+  }
+
+  function isCanonicalPointerTargetInteractable(tokenTarget, event) {
+    const placement = tokenTarget?.placement;
+    const renderedPlacement = tokenTarget?.renderedPlacement;
+    const normalized = normalizePlacementForRender(placement);
+    if (!normalized || !renderedPlacement) {
+      return false;
+    }
+
+    // If the canonical token moved or resized after this rendered hit list was
+    // produced, consume the old visual hit and rerender before allowing any
+    // selection or drag to begin at the wrong location.
+    if (
+      normalized.column !== renderedPlacement.column ||
+      normalized.row !== renderedPlacement.row ||
+      normalized.width !== renderedPlacement.width ||
+      normalized.height !== renderedPlacement.height
+    ) {
+      return false;
+    }
+
+    if (isGmUser()) {
+      return true;
+    }
+    if (normalized.hidden) {
+      return false;
+    }
+
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneKey = state?.boardState?.activeSceneId ?? null;
+    const viewerLevelId = activeSceneKey
+      ? getViewerLevelIdForCurrentUser(state, activeSceneKey)
+      : null;
+    const tokenLevelState = getActiveSceneTokenLevelState(state);
+    const placementForLevel = {
+      ...placement,
+      column: normalized.column,
+      row: normalized.row,
+      width: normalized.width,
+      height: normalized.height,
+    };
+    const presentation = getTokenLevelPresentation(placementForLevel, tokenLevelState, {
+      viewerLevelId,
+      gmViewing: false,
+      mode: 'interaction',
+    });
+    if (!presentation.visible) {
+      return false;
+    }
+
+    const isCellFogged = createFogChecker(state, viewerLevelId);
+    if (typeof isCellFogged === 'function') {
+      let hasVisibleCell = false;
+      for (let dx = 0; dx < normalized.width && !hasVisibleCell; dx += 1) {
+        for (let dy = 0; dy < normalized.height; dy += 1) {
+          if (!isCellFogged(normalized.column + dx, normalized.row + dy)) {
+            hasVisibleCell = true;
+            break;
+          }
+        }
+      }
+      if (!hasVisibleCell) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  function reconcileCanonicalPointerPresentation() {
+    clearDragCandidate();
+    if (viewState.dragState) {
+      endTokenDrag({ commit: false });
+    }
+    renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState, { skipTracker: true });
+  }
+
+  function recoverStaleRenderedToken(placementId) {
+    reconcileStaleTokenPointerTarget({
+      placementId,
+      selectedTokenIds,
+      activeSettingsId: activeTokenSettingsId,
+      dragState: viewState.dragState,
+      closeSettings: () => closeTokenSettings({ preserveMonsterStatBlock: true }),
+      cancelActiveDrag: () => endTokenDrag({ commit: false }),
+      clearDragCandidate,
+      clearHover: (staleId) => {
+        if (hoveredTokenId === staleId) {
+          hoveredTokenId = null;
+        }
+        boardHoverTokenIds.delete(staleId);
+        trackerHoverTokenIds.delete(staleId);
+      },
+      // Always redispatch after a stale hit. The missing token may already
+      // have fallen out of selection while a tray still displays its summary.
+      refreshSelection: ({ selectionChanged }) => {
+        if (selectionChanged) {
+          notifySelectionChanged();
+        } else {
+          refreshTokenSelectionState();
+          dispatchTokenSelectionSummary();
+        }
+      },
+      rerender: () => renderTokens(
+        boardApi.getState?.() ?? {},
+        tokenLayer,
+        viewState,
+        { skipTracker: true }
+      ),
+      requestResync: triggerBoardStateResync,
+    });
+  }
 
   function updateHoverFromPointer(event) {
     if (!viewState.mapLoaded) {
@@ -21242,7 +21396,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function openTokenSettingsById(placementId, clientX, clientY) {
-    if (!placementId || !tokenSettingsMenu?.element) {
+    if (!placementId || !ensureTokenSettingsMenuConnected()) {
       return false;
     }
 
@@ -21313,7 +21467,13 @@ export function mountBoardInteractions(store, routes = {}) {
     removeTokenSettingsListeners = attachTokenSettingsListeners();
 
     focusTokenSettings();
-    return true;
+    return tokenSettingsMenu.element.isConnected === true;
+  }
+
+  function ensureTokenSettingsMenuConnected() {
+    const element = tokenSettingsMenu?.element;
+    const documentRef = typeof document !== 'undefined' ? document : null;
+    return ensureTokenSettingsElementConnected(element, documentRef);
   }
 
   function closeTokenSettings({ preserveMonsterStatBlock = false } = {}) {

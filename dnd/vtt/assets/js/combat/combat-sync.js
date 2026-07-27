@@ -66,8 +66,20 @@ export function getActiveSceneCombatState(state = {}) {
     boardState.sceneState && typeof boardState.sceneState === 'object'
       ? boardState.sceneState
       : {};
-  const routedCombat = activeSceneKey ? sceneState[activeSceneKey]?.combat ?? {} : {};
-  if (routedCombat?.active === true || routedCombat?.isActive === true) {
+  const registeredSceneIds = new Set(
+    Array.isArray(state?.scenes?.items)
+      ? state.scenes.items
+          .map((scene) => normalizeNullableId(scene?.id))
+          .filter(Boolean)
+      : []
+  );
+  const routedCombat = activeSceneKey && registeredSceneIds.has(activeSceneKey)
+    ? sceneState[activeSceneKey]?.combat ?? {}
+    : {};
+  if (
+    isActiveCombatState(routedCombat) &&
+    hasScenePlacements(boardState, activeSceneKey)
+  ) {
     return {
       activeSceneId: activeSceneKey,
       combatState: routedCombat,
@@ -75,23 +87,112 @@ export function getActiveSceneCombatState(state = {}) {
   }
 
   // Combat is table-global even when the GM routes players to another map.
-  // If the routed scene is inactive (or routing is disabled), follow the one
-  // canonical active encounter so player intents target the same scene the GM
-  // is tracking.
-  for (const [sceneId, sceneEntry] of Object.entries(sceneState)) {
-    const combatState = sceneEntry?.combat;
-    if (combatState?.active === true || combatState?.isActive === true) {
-      return {
-        activeSceneId: sceneId,
-        combatState,
-      };
-    }
+  // Only registered, populated scenes can be canonical. This prevents deleted
+  // sceneState ghosts and empty legacy encounters from becoming active again.
+  // When more than one valid active record remains, use combat freshness and a
+  // stable scene-id tie-break instead of object insertion order.
+  const candidates = Object.entries(sceneState)
+    .filter(([sceneId, sceneEntry]) => (
+      registeredSceneIds.has(sceneId) &&
+      isActiveCombatState(sceneEntry?.combat) &&
+      hasScenePlacements(boardState, sceneId)
+    ))
+    .map(([sceneId, sceneEntry]) => ({
+      activeSceneId: sceneId,
+      combatState: sceneEntry.combat,
+    }))
+    .sort(compareActiveCombatCandidates);
+
+  if (candidates.length > 0) {
+    return candidates[0];
   }
 
   return {
     activeSceneId: activeSceneKey,
     combatState: routedCombat,
   };
+}
+
+export function getCombatSceneRepairPlan(state = {}) {
+  const boardState = state?.boardState ?? {};
+  const sceneState =
+    boardState.sceneState && typeof boardState.sceneState === 'object'
+      ? boardState.sceneState
+      : {};
+  const registeredSceneIds = new Set(
+    Array.isArray(state?.scenes?.items)
+      ? state.scenes.items
+          .map((scene) => normalizeNullableId(scene?.id))
+          .filter(Boolean)
+      : []
+  );
+  const canonical = getActiveSceneCombatState(state);
+  const canonicalSceneId = isActiveCombatState(canonical.combatState)
+    ? canonical.activeSceneId
+    : null;
+  const deactivations = [];
+
+  Object.entries(sceneState).forEach(([sceneId, sceneEntry]) => {
+    if (!isActiveCombatState(sceneEntry?.combat) || sceneId === canonicalSceneId) {
+      return;
+    }
+
+    let reason = 'superseded_active_encounter';
+    if (!registeredSceneIds.has(sceneId)) {
+      reason = 'unregistered_scene';
+    } else if (!hasScenePlacements(boardState, sceneId)) {
+      reason = 'orphaned_no_placements';
+    }
+
+    deactivations.push({ sceneId, reason });
+  });
+
+  deactivations.sort((left, right) => left.sceneId.localeCompare(right.sceneId));
+  return {
+    canonicalSceneId,
+    deactivations,
+  };
+}
+
+function isActiveCombatState(combatState) {
+  return Boolean(
+    combatState &&
+      typeof combatState === 'object' &&
+      (combatState.active === true || combatState.isActive === true)
+  );
+}
+
+function hasScenePlacements(boardState, sceneId) {
+  if (!sceneId) {
+    return false;
+  }
+  const placements = boardState?.placements?.[sceneId];
+  if (Array.isArray(placements)) {
+    return placements.some((placement) => placement && typeof placement === 'object');
+  }
+  return Boolean(
+    placements &&
+      typeof placements === 'object' &&
+      Object.values(placements).some((placement) => placement && typeof placement === 'object')
+  );
+}
+
+function compareActiveCombatCandidates(left, right) {
+  const leftCombat = left?.combatState ?? {};
+  const rightCombat = right?.combatState ?? {};
+  const leftSequence = Math.max(0, Number(leftCombat.sequence ?? leftCombat.seq ?? 0) || 0);
+  const rightSequence = Math.max(0, Number(rightCombat.sequence ?? rightCombat.seq ?? 0) || 0);
+  if (leftSequence !== rightSequence) {
+    return rightSequence - leftSequence;
+  }
+
+  const leftUpdatedAt = Math.max(0, Number(leftCombat.updatedAt ?? 0) || 0);
+  const rightUpdatedAt = Math.max(0, Number(rightCombat.updatedAt ?? 0) || 0);
+  if (leftUpdatedAt !== rightUpdatedAt) {
+    return rightUpdatedAt - leftUpdatedAt;
+  }
+
+  return String(left?.activeSceneId ?? '').localeCompare(String(right?.activeSceneId ?? ''));
 }
 
 export function hasCombatMaliceValue(combatState) {
