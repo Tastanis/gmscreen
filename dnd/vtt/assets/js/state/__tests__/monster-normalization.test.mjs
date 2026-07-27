@@ -28,3 +28,25 @@ test('normalizeMonsterSnapshot preserves monster ability automation payloads', (
     ],
   });
 });
+
+test('normalizeMonsterSnapshot preserves case-variant nested characteristics', () => {
+  const monster = normalizeMonsterSnapshot({
+    id: 'm-2',
+    name: 'Imported Horror',
+    Characteristics: {
+      Might: 4,
+      Agility: 2,
+      Reason: -1,
+      Intuition: 3,
+      Presence: 1,
+    },
+  });
+
+  assert.deepEqual(monster.attributes, {
+    might: 4,
+    agility: 2,
+    reason: -1,
+    intuition: 3,
+    presence: 1,
+  });
+});

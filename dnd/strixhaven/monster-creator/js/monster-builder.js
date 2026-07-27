@@ -3980,7 +3980,13 @@ function normalizeImportedMonsterJson(raw) {
         throw new Error('Monster JSON must include a non-empty "name".');
     }
 
-    const attributes = source.attributes && typeof source.attributes === 'object' ? source.attributes : {};
+    const importedAttributes = window.MonsterJsonImportNormalize?.normalizeAttributes(source, 0) || {
+        might: toImportedInt(source.might ?? source.attributes?.might, 0),
+        agility: toImportedInt(source.agility ?? source.attributes?.agility, 0),
+        reason: toImportedInt(source.reason ?? source.attributes?.reason, 0),
+        intuition: toImportedInt(source.intuition ?? source.attributes?.intuition, 0),
+        presence: toImportedInt(source.presence ?? source.attributes?.presence, 0)
+    };
     const defenses = source.defenses && typeof source.defenses === 'object' ? source.defenses : {};
     const immunity = defenses.immunity && typeof defenses.immunity === 'object' ? defenses.immunity : {};
     const weakness = defenses.weakness && typeof defenses.weakness === 'object' ? defenses.weakness : {};
@@ -4030,11 +4036,11 @@ function normalizeImportedMonsterJson(raw) {
         immunity_value: firstImmunity.value,
         weakness_type: firstWeakness.type,
         weakness_value: firstWeakness.value,
-        might: toImportedInt(source.might ?? attributes.might, 0),
-        agility: toImportedInt(source.agility ?? attributes.agility, 0),
-        reason: toImportedInt(source.reason ?? attributes.reason, 0),
-        intuition: toImportedInt(source.intuition ?? attributes.intuition, 0),
-        presence: toImportedInt(source.presence ?? attributes.presence, 0),
+        might: importedAttributes.might,
+        agility: importedAttributes.agility,
+        reason: importedAttributes.reason,
+        intuition: importedAttributes.intuition,
+        presence: importedAttributes.presence,
         traits: Array.isArray(source.traits) ? source.traits.map(normalizeImportedTrait).filter(Boolean) : [],
         abilities,
         created: Date.now(),
@@ -4184,7 +4190,10 @@ function normalizeImportedAbility(rawAbility, category) {
         ability.trigger = cleanText(source.trigger ?? source.useWhen ?? '');
     }
     if (source.automation && typeof source.automation === 'object' && !Array.isArray(source.automation)) {
-        ability.automation = cloneImportedPlainObject(source.automation);
+        const automation = cloneImportedPlainObject(source.automation);
+        ability.automation = window.AbilityAutomationSchema?.normalizeAutomation
+            ? window.AbilityAutomationSchema.normalizeAutomation(automation)
+            : automation;
     }
 
     return ability;

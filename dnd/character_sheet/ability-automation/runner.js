@@ -1383,6 +1383,12 @@
           condition: block.condition || "",
           note: block.note || "",
           expires: block.expires || null,
+          // A trigger card embedded in a main action or maneuver is a delayed
+          // rider of that action, not a second triggered action. Standalone
+          // triggered actions keep their normal once-per-round gate.
+          freeTriggered: getActionKind(state) !== "triggered",
+          autoResolve: Boolean(block.autoResolve),
+          effectTarget: block.effectTarget || block.resolveTarget || "",
         });
         const lines = [`${state.heroName} - ${state.action.name || "Ability"} trigger listening:`];
         if (block.condition) lines.push(`When: ${block.condition}`);
@@ -2252,15 +2258,17 @@
       const result =
         typeof state.context.checkPotency === "function"
           ? await state.context.checkPotency({
-              placementId: target.id,
-              attribute: effect.attribute,
-              threshold: effect.level,
-              sourceStats: state.hero?.stats || {},
+            placementId: target.id,
+            attribute: effect.attribute,
+            threshold: Number.isFinite(Number(effect.threshold))
+              ? Number(effect.threshold)
+              : effect.level,
+            sourceStats: state.hero?.stats || {},
             })
           : { passes: true };
       if (!result?.passes) {
         await postChat(state.context, {
-          message: `${state.heroName} - ${state.action.name || "Ability"}: ${target.name || "Target"} resisted ${effect.attribute}<${effect.level}.`,
+          message: `${state.heroName} - ${state.action.name || "Ability"}: ${target.name || "Target"} resisted ${effect.attribute}<${Number.isFinite(Number(effect.threshold)) ? Number(effect.threshold) : effect.level}.`,
         });
         continue;
       }

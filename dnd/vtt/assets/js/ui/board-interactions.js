@@ -2510,12 +2510,12 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
-  function triggerUnregisterAuthoredByToken(tokenId) {
+  function triggerUnregisterAuthoredByToken(tokenId, { preserveRuntime = false } = {}) {
     if (!tokenId) return;
     const entries = triggerRegistry.byToken.get(tokenId) || [];
     const keep = [];
     for (const entry of entries) {
-      if (!entry?.authored) {
+      if (!entry?.authored || (preserveRuntime && entry?.registrationSource === 'runtime')) {
         keep.push(entry);
         continue;
       }
@@ -2537,6 +2537,10 @@ export function mountBoardInteractions(store, routes = {}) {
         if (entry?.authored) triggerUnregisterEntry(entry);
       }
     }
+  }
+
+  function hasAuthoredTriggerForToken(tokenId) {
+    return (triggerRegistry.byToken.get(tokenId) || []).some((entry) => entry?.authored);
   }
 
   function triggerFire(eventType, payload) {
@@ -5139,7 +5143,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const placementId = placement?.id || '';
     if (!placementId) return { registered: 0 };
     const hooks = collectMonsterTriggerHooksForPlacement(placement);
-    triggerUnregisterAuthoredByToken(placementId);
+    triggerUnregisterAuthoredByToken(placementId, { preserveRuntime: true });
     authoredTriggerTokenIds.delete(placementId);
     let registered = 0;
     hooks.forEach((hook, hookIndex) => {
@@ -5161,7 +5165,7 @@ export function mountBoardInteractions(store, routes = {}) {
         if (ok) registered += 1;
       });
     });
-    if (registered > 0) {
+    if (registered > 0 || hasAuthoredTriggerForToken(placementId)) {
       authoredTriggerTokenIds.add(placementId);
     }
     return { registered };
@@ -5185,7 +5189,7 @@ export function mountBoardInteractions(store, routes = {}) {
       const sheet = await getAutomationSheetForPlacement(placementId);
       const triggerActions = Array.isArray(sheet?.actions?.triggers) ? sheet.actions.triggers : [];
       let registered = 0;
-      triggerUnregisterAuthoredByToken(placementId);
+      triggerUnregisterAuthoredByToken(placementId, { preserveRuntime: true });
       authoredTriggerTokenIds.delete(placementId);
       triggerActions.forEach((action, actionIndex) => {
         const automation = normalizeAuthoredAutomation(action?.automation);
@@ -5197,7 +5201,7 @@ export function mountBoardInteractions(store, routes = {}) {
           }
         });
       });
-      if (registered > 0) {
+      if (registered > 0 || hasAuthoredTriggerForToken(placementId)) {
         authoredTriggerTokenIds.add(placementId);
       }
       return { registered };
@@ -5263,11 +5267,19 @@ export function mountBoardInteractions(store, routes = {}) {
       abilityName: payload.abilityName || '',
       freeTriggered: Boolean(payload.freeTriggered || isFreeTriggeredActionLabel(payload.actionLabel || '')),
       authored: true,
+      registrationSource: 'runtime',
       condition: payload.condition || '',
+      autoResolve: Boolean(payload.autoResolve),
+      effectTarget: payload.effectTarget || payload.resolveTarget || '',
+      effects: Array.isArray(payload.effects) ? JSON.parse(JSON.stringify(payload.effects)) : [],
+      usageLimit: payload.usageLimit && typeof payload.usageLimit === 'object' && payload.usageLimit.key
+        ? payload.usageLimit
+        : null,
       expires: payload.expires || payload.lifetime || null,
     };
     entry.predicate = buildAuthoredTriggerPredicate(entry);
     const registered = triggerRegister(entry);
+    if (registered) authoredTriggerTokenIds.add(casterId);
     resolve?.({ registered: Boolean(registered), abilityId: entry.abilityId, eventType: entry.eventType });
   }
 
@@ -18581,6 +18593,8 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function computeAutomationPotencyThreshold(stats = {}, threshold = 'weak') {
+    const numeric = Number(threshold);
+    if (Number.isFinite(numeric)) return numeric;
     const values = ['might', 'agility', 'reason', 'intuition', 'presence'].map((key) => Number.parseInt(stats[key] ?? 0, 10) || 0);
     const highest = values.length ? Math.max(...values) : 0;
     const normalized = String(threshold || 'weak').trim().toLowerCase();

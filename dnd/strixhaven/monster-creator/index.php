@@ -237,6 +237,7 @@ require_once '../../version.php';
     <script src="../../character_sheet/ability-automation/schema.js"></script>
     <script src="../../character_sheet/ability-automation/paste.js"></script>
     <script src="../../character_sheet/ability-automation/inspector.js"></script>
+    <script src="js/monster-json-import-normalize.js"></script>
     <script src="js/monster-builder.js"></script>
     <!-- monster-automation-ui.js wires the button hooks. Must load AFTER
          monster-builder.js so window.monsterData / markMonsterDirty exist. -->

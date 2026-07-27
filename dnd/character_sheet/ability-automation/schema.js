@@ -67,17 +67,44 @@
     return Boolean(value);
   }
 
+  function isExtraObject(value) {
+    return Boolean(value && typeof value === "object" && !Array.isArray(value));
+  }
+
+  function mergeLegacyExtraChain(target, value) {
+    if (!isExtraObject(value)) return;
+    const layers = [];
+    const seen = new Set();
+    let current = value;
+    while (isExtraObject(current) && !seen.has(current)) {
+      seen.add(current);
+      layers.push(current);
+      current = current._extra;
+    }
+    // Merge deepest-first so the value closest to the real schema node wins
+    // when malformed legacy layers repeat the same unknown key.
+    for (let index = layers.length - 1; index >= 0; index -= 1) {
+      for (const key of Object.keys(layers[index])) {
+        if (key !== "_extra") target[key] = layers[index][key];
+      }
+    }
+  }
+
   function pickExtras(input, knownKeys) {
     if (!input || typeof input !== "object") return null;
     const extras = {};
-    let count = 0;
+    mergeLegacyExtraChain(extras, input._extra);
     for (const key of Object.keys(input)) {
-      if (!knownKeys.has(key)) {
+      // `target` is a universal effect-routing field attached after the
+      // kind-specific normalizer runs. `_extra` is reserved metadata, never an
+      // unknown field; malformed legacy `_extra._extra...` chains are flattened
+      // above before direct unknown fields are merged.
+      const universalEffectTarget = key === "target" && knownKeys.has("kind");
+      if (key !== "_extra" && !universalEffectTarget && !knownKeys.has(key)) {
         extras[key] = input[key];
-        count += 1;
       }
     }
-    return count ? extras : null;
+    return Object.keys(extras).length ? extras : null;
   }
 
   function normalizeTextList(value) {
@@ -155,6 +182,13 @@
   }
 
   function attachEffectTarget(input, effect) {
+    // Potency historically used numeric `target` for the literal
+    // characteristic threshold (M<2, A<1, ...). Keep string/array targets as
+    // normal effect-routing references, but do not turn a numeric potency
+    // threshold into a target-group name such as "2".
+    if (effect?.kind === "potency" && Number.isFinite(Number(input?.target))) {
+      return effect;
+    }
     const target = normalizeTargetRef(input?.target);
     if (Array.isArray(target) ? target.length : target) {
       effect.target = target;
@@ -514,14 +548,19 @@
         return effect;
       }
       case "potency": {
-        const known = new Set(["kind", "attribute", "level", "onFail"]);
+        const known = new Set(["kind", "attribute", "level", "threshold", "target", "onFail"]);
         const attribute = P.normalizeAttribute(input.attribute || "Might");
         if (!P.ATTRIBUTES.includes(attribute) || attribute === "Strongest") {
           warnings.push(`${path}: potency attribute should be M/A/R/I/P (got "${input.attribute}").`);
         }
-        const level = P.normalizePotencyLevel(input.level || input.threshold || "weak");
+        const rawThreshold = input.threshold ?? input.target;
+        const numericThreshold = rawThreshold !== "" && rawThreshold !== null && rawThreshold !== undefined
+          ? Number(rawThreshold)
+          : Number.NaN;
+        const level = P.normalizePotencyLevel(input.level || "weak");
         const onFail = normalizeEffectList(input.onFail || input.effects || [], warnings, `${path}.onFail`);
         const effect = { kind: "potency", attribute, level, onFail };
+        if (Number.isFinite(numericThreshold)) effect.threshold = numericThreshold;
         const extras = pickExtras(input, known);
         if (extras) effect._extra = extras;
         return effect;
@@ -1260,6 +1299,38 @@
       .filter(Boolean);
   }
 
+  const AUTO_RESOLVE_EFFECT_KINDS = new Set([
+    "damage",
+    "heal",
+    "temporaryStamina",
+    "surgeGain",
+    "condition",
+    "floatingText",
+    "note",
+    "other",
+    "ifMark",
+  ]);
+
+  function validateAutoResolveEffects(effects, warnings, path) {
+    (Array.isArray(effects) ? effects : []).forEach((effect, index) => {
+      const effectPath = `${path}[${index}]`;
+      if (!AUTO_RESOLVE_EFFECT_KINDS.has(effect?.kind)) {
+        warnings.push(`${effectPath}: "${effect?.kind || "(blank)"}" is not supported by trigger autoResolve; resolve this trigger manually.`);
+        return;
+      }
+      if (effect?.target) {
+        warnings.push(`${effectPath}.target: per-effect target routing is not supported by trigger autoResolve; use the trigger block's effectTarget.`);
+      }
+      if ((effect?.kind === "heal" && effect?.recoveries) || effect?.amountFrom) {
+        warnings.push(`${effectPath}: recovery and amountFrom calculations are not supported by trigger autoResolve; resolve this trigger manually.`);
+      }
+      if (effect?.kind === "ifMark") {
+        validateAutoResolveEffects(effect.then, warnings, `${effectPath}.then`);
+        validateAutoResolveEffects(effect.else, warnings, `${effectPath}.else`);
+      }
+    });
+  }
+
   function normalizeTriggerBlock(input, warnings, path) {
     const known = new Set(["type", "id", "condition", "match", "target", "effectTarget", "resolveTarget", "effects", "note", "expires", "lifetime", "autoResolve", "automatic", "resolveAutomatically"]);
     const block = {
@@ -1274,7 +1345,10 @@
     if (match) block.match = match;
     const expires = normalizeTriggerLifetime(input.expires || input.lifetime, warnings, `${path}.expires`);
     if (expires) block.expires = expires;
-    if (input.autoResolve || input.automatic || input.resolveAutomatically) block.autoResolve = true;
+    if (input.autoResolve || input.automatic || input.resolveAutomatically) {
+      block.autoResolve = true;
+      validateAutoResolveEffects(block.effects, warnings, `${path}.effects`);
+    }
     if (!block.condition && !match) {
       warnings.push(`${path}: trigger has no condition text or match config.`);
     }
@@ -1551,6 +1625,8 @@
       label: asTrimmedString(input.label),
     };
     if (input.note) out.note = asTrimmedString(input.note);
+    const extras = pickExtras(input, new Set(["match", "apply", "label", "note"]));
+    if (extras) out._extra = extras;
     return out;
   }
 
@@ -1573,13 +1649,20 @@
     const preventConditions = rawPrevented
       .map((name) => P.normalizeCondition?.(name) || asTrimmedString(name).toLowerCase())
       .filter((name) => name === "prone" || name === "frightened");
-    return {
+    const passive = {
       kind: "standFirm",
       label: asTrimmedString(input.label || input.name || "Stand Firm"),
       condition: { kind: "adjacentAlly" },
       stabilityBonus: Math.max(0, asInt(input.stabilityBonus ?? input.stability ?? input.amount, 3)),
       preventConditions: preventConditions.length ? Array.from(new Set(preventConditions)) : ["prone", "frightened"],
     };
+    const extras = pickExtras(input, new Set([
+      "kind", "type", "passive", "id", "label", "name", "condition",
+      "preventConditions", "preventedConditions",
+      "stabilityBonus", "stability", "amount",
+    ]));
+    if (extras) passive._extra = extras;
+    return passive;
   }
 
   // ---------- top-level ----------
@@ -1606,12 +1689,15 @@
         ? input.blocks
         : [];
 
+    if (!input.schema) {
+      warnings.push(`Missing schema id; expected "${SCHEMA_ID}". Treating as v3.`);
+    }
     if (input.schema && input.schema !== SCHEMA_ID && input.schema !== "ability-automation/v2") {
       warnings.push(`Unknown schema "${input.schema}" — treating as v3.`);
     }
     if (input.schema === "ability-automation/v2") {
       warnings.push("v2 automation data was discarded. Re-author this ability as v3 JSON.");
-      return emptyAutomation();
+      return { ...emptyAutomation(), warnings };
     }
 
     const cards = rawCards
@@ -1638,7 +1724,7 @@
 
     const usageLimit = normalizeUsageLimit(input.usageLimit || input.limit || input.oncePer, warnings, "usageLimit");
 
-    return {
+    const normalized = {
       schema: SCHEMA_ID,
       version: SCHEMA_VERSION,
       cards,
@@ -1648,6 +1734,22 @@
       usageLimit,
       warnings,
     };
+    const topLevelKnown = new Set([
+      "schema",
+      "version",
+      "cards",
+      "blocks",
+      "modifiers",
+      "passives",
+      "keywords",
+      "usageLimit",
+      "limit",
+      "oncePer",
+      "warnings",
+    ]);
+    const extras = pickExtras(input, topLevelKnown);
+    if (extras) normalized._extra = extras;
+    return normalized;
   }
 
   function normalizeUsageLimit(input, warnings, path) {
@@ -1662,13 +1764,18 @@
       warnings.push(`${path}.key: usageLimit needs a key.`);
       return null;
     }
-    return {
+    const usageLimit = {
       scope,
       key,
       source,
       target,
       message,
     };
+    const extras = pickExtras(input, new Set([
+      "scope", "per", "key", "id", "name", "source", "target", "message", "blockedMessage",
+    ]));
+    if (extras) usageLimit._extra = extras;
+    return usageLimit;
   }
 
   function hasAutomation(input) {

@@ -1,0 +1,234 @@
+{
+  "schema": "ability-automation/v3",
+  "directTopUnknown": "keep-direct",
+  "_extra": {
+    "topExtraOuter": "keep-outer",
+    "_extra": {
+      "legacyDepth01": "value-1",
+      "_extra": {
+        "legacyDepth02": "value-2",
+        "_extra": {
+          "legacyDepth03": "value-3",
+          "_extra": {
+            "legacyDepth04": "value-4",
+            "_extra": {
+              "legacyDepth05": "value-5",
+              "_extra": {
+                "legacyDepth06": "value-6",
+                "_extra": {
+                  "legacyDepth07": "value-7",
+                  "_extra": {
+                    "legacyDepth08": "value-8",
+                    "_extra": {
+                      "legacyDepth09": "value-9",
+                      "_extra": {
+                        "legacyDepth10": "value-10",
+                        "_extra": {
+                          "legacyDepth11": "value-11",
+                          "_extra": {
+                            "legacyDepth12": "value-12",
+                            "_extra": {
+                              "legacyDepth13": "value-13",
+                              "_extra": {
+                                "legacyDepth14": "value-14",
+                                "_extra": {
+                                  "legacyDepth15": "value-15",
+                                  "_extra": {
+                                    "legacyDepth16": "value-16",
+                                    "_extra": {
+                                      "legacyDepth17": "value-17",
+                                      "_extra": {
+                                        "legacyDepth18": "value-18",
+                                        "_extra": {
+                                          "legacyDepth19": "value-19",
+                                          "_extra": {
+                                            "legacyDepth20": "value-20",
+                                            "_extra": {
+                                              "legacyDepth21": "value-21",
+                                              "_extra": {
+                                                "legacyDepth22": "value-22",
+                                                "_extra": {
+                                                  "legacyDepth23": "value-23",
+                                                  "_extra": {
+                                                    "legacyDepth24": "value-24",
+                                                    "_extra": {
+                                                      "legacyDepth25": "value-25",
+                                                      "_extra": {
+                                                        "legacyDepth26": "value-26",
+                                                        "_extra": {
+                                                          "legacyDepth27": "value-27",
+                                                          "_extra": {
+                                                            "legacyDepth28": "value-28",
+                                                            "_extra": {
+                                                              "legacyDepth29": "value-29",
+                                                              "_extra": {
+                                                                "legacyDepth30": "value-30",
+                                                                "_extra": {
+                                                                  "legacyDepth31": "value-31",
+                                                                  "_extra": {
+                                                                    "legacyDepth32": "value-32",
+                                                                    "_extra": {
+                                                                      "legacyDepth33": "value-33",
+                                                                      "_extra": {
+                                                                        "legacyDepth34": "value-34",
+                                                                        "_extra": {
+                                                                          "legacyDepth35": "value-35",
+                                                                          "_extra": {
+                                                                            "legacyDepth36": "value-36",
+                                                                            "_extra": {
+                                                                              "legacyDepth37": "value-37",
+                                                                              "_extra": {
+                                                                                "legacyDepth38": "value-38",
+                                                                                "_extra": {
+                                                                                  "legacyDepth39": "value-39",
+                                                                                  "_extra": {
+                                                                                    "legacyDepth40": "value-40",
+                                                                                    "_extra": {
+                                                                                      "legacyDepth41": "value-41",
+                                                                                      "_extra": {
+                                                                                        "legacyDepth42": "value-42",
+                                                                                        "_extra": {
+                                                                                          "legacyDepth43": "value-43",
+                                                                                          "_extra": {
+                                                                                            "legacyDepth44": "value-44",
+                                                                                            "_extra": {
+                                                                                              "legacyDepth45": "value-45",
+                                                                                              "_extra": {
+                                                                                                "deepestLegacyUnknown": "keep-deepest"
+                                                                                              }
+                                                                                            }
+                                                                                          }
+                                                                                        }
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "cards": [
+    {
+      "type": "effect",
+      "id": "legacy-effect-block",
+      "target": "primary",
+      "directBlockUnknown": "keep-block-direct",
+      "_extra": {
+        "blockOuterUnknown": "keep-block-outer",
+        "_extra": {
+          "blockDeepUnknown": "keep-block-deep"
+        }
+      },
+      "effects": [
+        {
+          "kind": "damage",
+          "amount": 3,
+          "directEffectUnknown": "keep-effect-direct",
+          "_extra": {
+            "effectOuterUnknown": "keep-effect-outer",
+            "_extra": {
+              "effectDeepUnknown": "keep-effect-deep"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "choice",
+      "id": "legacy-choice",
+      "name": "legacyChoice",
+      "options": [
+        {
+          "id": "legacy-option",
+          "label": "Legacy option",
+          "directOptionUnknown": "keep-option-direct",
+          "_extra": {
+            "optionOuterUnknown": "keep-option-outer",
+            "_extra": {
+              "optionDeepUnknown": "keep-option-deep"
+            }
+          },
+          "cards": []
+        }
+      ]
+    }
+  ],
+  "modifiers": [
+    {
+      "label": "Legacy modifier",
+      "match": {
+        "keywordsAny": [
+          "Melee"
+        ]
+      },
+      "apply": {
+        "damageBonus": 1
+      },
+      "directModifierUnknown": "keep-modifier-direct",
+      "_extra": {
+        "modifierOuterUnknown": "keep-modifier-outer",
+        "_extra": {
+          "modifierDeepUnknown": "keep-modifier-deep"
+        }
+      }
+    }
+  ],
+  "passives": [
+    {
+      "kind": "standFirm",
+      "directPassiveUnknown": "keep-passive-direct",
+      "_extra": {
+        "passiveOuterUnknown": "keep-passive-outer",
+        "_extra": {
+          "passiveDeepUnknown": "keep-passive-deep"
+        }
+      }
+    }
+  ],
+  "usageLimit": {
+    "scope": "round",
+    "key": "legacy-limit",
+    "directUsageUnknown": "keep-usage-direct",
+    "_extra": {
+      "usageOuterUnknown": "keep-usage-outer",
+      "_extra": {
+        "usageDeepUnknown": "keep-usage-deep"
+      }
+    }
+  }
+}

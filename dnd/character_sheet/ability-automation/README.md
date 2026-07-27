@@ -52,6 +52,8 @@ action.automation = {
 
 `automation.cards` (the field name is retained from v2 for minimal sheet-side churn) is the runtime execution order. Block types are orthogonal — multiple targets, multiple effects, etc. all allowed.
 
+Unknown properties are preserved under one `_extra` object on the normalized schema node. `_extra` is reserved normalization metadata, not an author-facing field. Loading or saving legacy data automatically flattens malformed `_extra._extra...` chains; fields nearest the real schema node win only when the same unknown key appears more than once.
+
 `automation.passives` is for always-on board-state traits on features, traits, or monster passive abilities. `standFirm` is active while adjacent to an ally, adds its temporary Stability bonus to forced-movement math, highlights the sidebar Stability value in green, and warns when `prone` or `frightened` is applied.
 
 ## Runtime flow

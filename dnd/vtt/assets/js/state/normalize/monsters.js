@@ -98,7 +98,12 @@ export function normalizeMonsterSnapshot(entry) {
     snapshot.defenses = defenses;
   }
 
-  const attributes = normalizeMonsterAttributes(entry.attributes ?? entry);
+  const attributeContainerKey = Object.keys(entry).find((key) =>
+    ['attributes', 'characteristics', 'stats'].includes(key.toLowerCase())
+  );
+  const attributes = normalizeMonsterAttributes(
+    attributeContainerKey ? entry[attributeContainerKey] : entry
+  );
   if (Object.keys(attributes).length > 0) {
     snapshot.attributes = attributes;
   }
@@ -160,7 +165,8 @@ export function normalizeMonsterAttributes(raw) {
 
   const result = {};
   ['might', 'agility', 'reason', 'intuition', 'presence'].forEach((key) => {
-    const value = toOptionalNumber(raw[key]);
+    const actualKey = Object.keys(raw).find((candidate) => candidate.toLowerCase() === key);
+    const value = toOptionalNumber(actualKey ? raw[actualKey] : undefined);
     if (value !== null) {
       result[key] = value;
     }

@@ -4,6 +4,10 @@ A flat reference of every value the JSON schema accepts, every runtime hook, and
 
 For *how* to write JSON, see `AUTHORING.md`. This file is `what is supported`.
 
+## Normalization metadata
+
+Unknown properties are ignored by the runtime but preserved in a single `_extra` object on the corresponding automation, card, effect, choice option, modifier, passive, or usage-limit node. `_extra` is reserved and is never itself collected as an unknown property. Legacy nested `_extra._extra...` chains are flattened during normalization; distinct fields survive, and the value closest to the real schema node wins if malformed layers repeat the same key. Repeated normalization is idempotent.
+
 ---
 
 ## Block types — `cards[].type`
@@ -13,7 +17,7 @@ For *how* to write JSON, see `AUTHORING.md`. This file is `what is supported`.
 | `target` | Full |
 | `powerRoll` | Full. Supports `flatBonus` (literal roll bonus that bypasses attribute lookup — monster-friendly), `whenWinded` overrides (see Universal Modifiers), and the runtime surge button that spends caster surges for +2 damage each on the first damage effect from the accepted roll. |
 | `effect` | Full. Supports `whenWinded` overrides (see Universal Modifiers). |
-| `trigger` | Schema + registration against `AbilityTriggerBus`. PC trigger actions in the Triggers list are always-on once that character token is present in the active VTT scene; opening the character summary is not required. Authored `match` config fires the blue `!` overlay when its event/filter matches; click to resolve with the captured event payload. Direct-clicking the trigger ability in the tray resolves the post-trigger cards manually even when no event payload was captured. `autoResolve:true` immediately runs the trigger block's own `effects` instead of showing the ready overlay; use only for passive no-choice effects. Trigger cards embedded in main actions/maneuvers execute in card order, so an ability can hit/select a target and then arm a delayed watcher against that target. No structured `match` -> chat reminder fallback. |
+| `trigger` | Schema + registration against `AbilityTriggerBus`. PC trigger actions in the Triggers list are always-on once that character token is present in the active VTT scene; opening the character summary is not required. Authored `match` config fires the blue `!` overlay when its event/filter matches; click to resolve with the captured event payload. Direct-clicking the trigger ability in the tray resolves the post-trigger cards manually even when no event payload was captured. `autoResolve:true` immediately runs the trigger block's own `effects` instead of showing the ready overlay; it uses the limited ongoing-effect subset documented in AUTHORING.md and schema validation warns on unsupported effects. Trigger cards embedded in PC main actions/maneuvers execute in card order, register as free delayed riders, and survive normal sheet/damage trigger refreshes. No structured `match` -> chat reminder fallback. |
 | `persistent` | Schema + registration as a board-side persistent zone. Requires a preceding area `target` block so the zone has a footprint. Ticks at owner's `tickAt` (startOfTurn or endOfTurn): deducts upkeep from owner's heroic resource, applies effects to every creature inside the zone footprint. `expiresAt` can auto-end the zone at owner start/end turn. Auto-ends on combat end or when owner can't pay upkeep. **In-memory only** — page reload wipes zones (Pass 2 will add persistence). |
 | `branch` | Full. Evaluates a `condition` and runs either nested `then` cards or nested `else` cards before continuing through top-level `cards`. Supports nested target, powerRoll, effect, persistent, and further branch cards. |
 | `choice` | Full. Prompts for one option, stores the selected option for the execution, can replace execution keywords, and runs the selected option's nested cards. Leading choice cards run before `actionUsed` trigger fan-out and feature-modifier matching. |
@@ -39,7 +43,7 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 | Triggered-action confirm | `category` is `triggered_action` | GM-clickable launcher fires a confirm dialog before invoking the runner. Ready triggers resolve with the captured event payload; manual fires pass `manualTriggerResolution` so trigger-card effects execute instead of arm-only. |
 | Triggered-action consumption | non-free `triggered_action` resolves | `consumeTriggeredAction` marks the token's triggered action used this round. A `resource_cost` containing "free" marks the listener free-triggered (exempt from the once-per-round gate). |
 | `getAttributeBonus` reads monster stats | fallback | Monsters should use `flatBonus` for authored power rolls. If a monster automation uses `attribute` or damage `attribute`, the runner currently resolves it from the monster's Might/Agility/Reason/Intuition/Presence fields. |
-| `getPotencyThreshold` returns 0 | always | Monster JSON should hard-code potency `target` integers. |
+| Literal monster potency | monster stat block prints `M<2`, etc. | Set potency `threshold` to that integer. Legacy numeric `target` is normalized to `threshold`. |
 | `isWinded()` | always | Derives from `placement.hp <= floor(placement.maxHp / 2)`. |
 | Visibility gate | tray/panel open | `window.canViewMonster(placement)` — GM OR `team === 'ally'` OR placement claimed by current user. |
 
@@ -55,7 +59,7 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 | `forcedMovement` (`vertical*`) | Partial | Falls through to horizontal push/pull/slide. Z-axis not modeled |
 | `forcedMovement` attribute scaling | Full | Optional `attribute` (M/A/R/I/P or full name) + `multiplier` (default 1). Total distance = `distance` + (attribute bonus × multiplier), e.g. `{ distance:0, attribute:"Reason", multiplier:2 }` = twice Reason. Resolves to flat `distance` when no character context is bound. |
 | `shift` | Full | Voluntary caster movement. Opens a slide-style picker for the caster, supports `distance: "speed"` and shared `pool` keys so split shifts can spend from one total movement allowance. |
-| `potency` | Full | Calls `checkPotency`, runs `onFail` effects on failed targets |
+| `potency` | Full | Calls `checkPotency`, runs `onFail` effects on failed targets. Use `level` (`weak`/`average`/`strong`) for caster-derived thresholds or numeric `threshold` for a literal monster stat-block value. |
 | `spend` | Full | PC runner checks and spends the caster's heroic resource before prompting/running nested effects. Fixed spends skip the prompt if the resource is missing or insufficient. `maxAmount` supports variable spends through a draggable VTT modal with stepper buttons. **Monster behavior:** the monster runtime context does not provide `spendHeroicResource`, so a monster `spend` card currently falls through to a native `confirm()` dialog (no heroic pool is tracked). Treat `spend` as PC-only; for monsters prefer `note`. |
 | `heal` | Full | Flat `amount` heals via board heal path (capped at max). Optional `attribute` adds the caster's attribute bonus, optional `amountFrom` adds a scaled trigger value (see Trigger value sources); both stack with `amount`. `recoveries` spends recoveries and heals by recovery value x N. Default recovery source is the healed target; set `recoverySource: "self"` (aliases: `"source"`, `"caster"`) to spend/read the caster's recovery value while healing another target. PC recovery spends decrement `hero.vitals.currentRecoveries`. If the recovery source sheet cannot be resolved, the runtime falls back to a chat reminder. **Monster behavior:** flat `amount` heals work fine. `recoveries` acts on the chosen recovery source sheet via `spendRecoveryForTarget` (passed through to monsters), so monster abilities can heal/drain PC target recoveries when the source is a PC target; monster-as-source recoveries still skip because monsters have no recovery pool. |
 | `temporaryStamina` | Full | Applies via board heal path with overage allowed (over-max shows as temp). Also accepts optional `attribute` and `amountFrom` (same as `heal`). |
@@ -143,6 +147,8 @@ Short form (damage `attribute` and potency `attribute`): `M`, `A`, `R`, `I`, `P`
 `weak`, `average`, `strong`
 
 (Resolves to caster-specific integer thresholds at runtime.)
+
+`potency.threshold` is an optional literal number that overrides `level`. Use it for monster lines such as `M<2`. Numeric `potency.target` remains a backward-compatible alias; string/array `target` continues to mean effect target-group routing.
 
 ## Spend timings — `spend.timing`
 

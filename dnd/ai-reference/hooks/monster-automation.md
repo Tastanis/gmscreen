@@ -32,7 +32,7 @@ The category is the array the ability sits in — there is no `category` field o
 |---|---|
 | Static numbers | No `7 + M` formulas. Damage amounts and distances are literal integers. |
 | `flatBonus` on power rolls | Use `"flatBonus": 2` instead of `"attribute"`. Attribute lookup exists as a fallback (reads the monster's M/A/R/I/P) but `flatBonus` is the convention. |
-| Static potency targets | `getPotencyThreshold` returns 0 for monsters — hard-code the potency `target` integer from the stat block (e.g. `M<2` → `"target": 2`). |
+| Static potency thresholds | Hard-code the potency `threshold` integer from the stat block (e.g. `M<2` → `"threshold": 2`). Numeric `target` is accepted only as a legacy alias; new JSON should not use it because string `target` means effect target-group routing. |
 | `whenWinded` | Works exactly like PCs: shallow-merge override on `powerRoll` (bonus/tiers) or `effect` (effects/target) when token HP ≤ half max. |
 | `usageLimit` | Works for monsters (scoped flags are placement-keyed). `{ "scope": "encounter", "key": "my-key", "target": "self", "message": "1/encounter." }` |
 | No heroic resources | `spend` falls back to a native confirm dialog; `resourceGain`/`surgeGain` post chat reminders. Prefer `note` for these mechanics. |
@@ -122,7 +122,7 @@ Full table in REGISTRY.md. Monster-relevant summary:
         "tier3": { "effects": [
           { "kind": "damage", "amount": 12 },
           { "kind": "forcedMovement", "verb": "push", "distance": 3 },
-          { "kind": "potency", "attribute": "M", "target": 2, "onFail": [
+          { "kind": "potency", "attribute": "M", "threshold": 2, "onFail": [
             { "kind": "condition", "name": "prone" }
           ] }
         ] }
@@ -166,7 +166,7 @@ When a PC's automated ability force-moves this monster, the `!` marker appears o
 
 1. Category key is one of the six exact strings; ability sits in that array.
 2. `schema` is `ability-automation/v3`; only fields listed in REGISTRY.md.
-3. Power rolls use `flatBonus`; all numbers literal; potency targets hard-coded.
+3. Power rolls use `flatBonus`; all numbers literal; potency `threshold` values hard-coded.
 4. Triggered actions have a `trigger` card with structured `match` (else they never light up).
 5. Malice cost is in `resource_cost`, not in automation.
 6. Unsupported mechanics are `note` cards, not invented fields.

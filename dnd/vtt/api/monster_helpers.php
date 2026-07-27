@@ -503,9 +503,34 @@ function buildMonsterAttributes(array $monster): array
 {
     $attributes = [];
     $keys = ['might', 'agility', 'reason', 'intuition', 'presence'];
+    $containers = [];
+    foreach (['attributes', 'characteristics', 'stats'] as $containerKey) {
+        if (isset($monster[$containerKey]) && is_array($monster[$containerKey])) {
+            $containers[] = $monster[$containerKey];
+        }
+    }
 
     foreach ($keys as $key) {
-        $value = sanitizeMonsterInt($monster[$key] ?? null, -1000, 1000, true);
+        $rawValue = null;
+        // Nested attributes are the documented import shape and take
+        // precedence over legacy top-level placeholder zeros.
+        foreach ($containers as $container) {
+            foreach ($container as $candidateKey => $candidateValue) {
+                if (is_string($candidateKey) && strtolower(trim($candidateKey)) === $key) {
+                    $rawValue = $candidateValue;
+                    break 2;
+                }
+            }
+        }
+        if ($rawValue === null) {
+            foreach ($monster as $candidateKey => $candidateValue) {
+                if (is_string($candidateKey) && strtolower(trim($candidateKey)) === $key) {
+                    $rawValue = $candidateValue;
+                    break;
+                }
+            }
+        }
+        $value = sanitizeMonsterInt($rawValue, -1000, 1000, true);
         if ($value !== null) {
             $attributes[$key] = $value;
         }

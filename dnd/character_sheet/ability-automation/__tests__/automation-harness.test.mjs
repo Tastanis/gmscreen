@@ -1,7 +1,45 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 
 import { createAbilityAutomationHarness } from './support/automation-harness.mjs';
+
+async function loadLegacyNestedExtraFixture() {
+  const source = await readFile(
+    new URL('./fixtures/legacy-nested-extra.json', import.meta.url),
+    'utf8'
+  );
+  return JSON.parse(source);
+}
+
+function extraChainDepth(node) {
+  let depth = 0;
+  let current = node;
+  const seen = new Set();
+  while (
+    current
+    && typeof current === 'object'
+    && !Array.isArray(current)
+    && current._extra
+    && typeof current._extra === 'object'
+    && !Array.isArray(current._extra)
+    && !seen.has(current._extra)
+  ) {
+    seen.add(current._extra);
+    depth += 1;
+    current = current._extra;
+  }
+  return depth;
+}
+
+function assertCanonicalExtra(node, label) {
+  assert.ok(node?._extra && typeof node._extra === 'object', `${label} keeps extras`);
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(node._extra, '_extra'),
+    false,
+    `${label} has no nested _extra container`
+  );
+}
 
 test('validation exposes schema warnings and unsupported extra fields', async () => {
   const harness = await createAbilityAutomationHarness();
@@ -27,6 +65,215 @@ test('validation exposes schema warnings and unsupported extra fields', async ()
     assert.ok(issues.some((issue) => issue.includes('mysteryBlockField')));
     assert.ok(issues.some((issue) => issue.includes('madeUpEffectField')));
     assert.equal(normalized.cards[0].effects[1].kind, 'note');
+  } finally {
+    harness.close();
+  }
+});
+
+test('schema normalization is idempotent for effect targets and preserved extras', async () => {
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const input = {
+      schema: 'ability-automation/v3',
+      customTopLevel: 'preserve-me',
+      cards: [
+        {
+          type: 'effect',
+          target: 'primary',
+          effects: [
+            { kind: 'damage', amount: 3, target: 'secondary', customEffectField: true },
+          ],
+        },
+      ],
+    };
+    const once = harness.window.AbilityAutomationSchema.normalizeAutomation(input);
+    const twice = harness.window.AbilityAutomationSchema.normalizeAutomation(once);
+
+    assert.deepEqual(JSON.parse(JSON.stringify(twice)), JSON.parse(JSON.stringify(once)));
+    assert.equal(once.cards[0].effects[0].target, 'secondary');
+    assert.deepEqual(once.cards[0].effects[0]._extra, { customEffectField: true });
+    assert.deepEqual(once._extra, { customTopLevel: 'preserve-me' });
+  } finally {
+    harness.close();
+  }
+});
+
+test('legacy nested extras collapse once and stay byte-stable across 100 normalization passes', async () => {
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const input = await loadLegacyNestedExtraFixture();
+    assert.ok(extraChainDepth(input) > 38, 'fixture represents the live deep-chain failure');
+
+    const once = harness.window.AbilityAutomationSchema.normalizeAutomation(input);
+    const canonicalJson = JSON.stringify(once);
+    let repeated = once;
+    for (let pass = 0; pass < 100; pass += 1) {
+      repeated = harness.window.AbilityAutomationSchema.normalizeAutomation(repeated);
+      assert.equal(JSON.stringify(repeated).length, canonicalJson.length, `pass ${pass + 1} keeps size stable`);
+      assert.equal(extraChainDepth(repeated), 1, `pass ${pass + 1} keeps one top-level _extra`);
+    }
+    assert.deepEqual(JSON.parse(JSON.stringify(repeated)), JSON.parse(canonicalJson));
+
+    assertCanonicalExtra(once, 'automation');
+    assert.equal(once._extra.directTopUnknown, 'keep-direct');
+    assert.equal(once._extra.topExtraOuter, 'keep-outer');
+    assert.equal(once._extra.legacyDepth01, 'value-1');
+    assert.equal(once._extra.legacyDepth45, 'value-45');
+    assert.equal(once._extra.deepestLegacyUnknown, 'keep-deepest');
+
+    const effectBlock = once.cards[0];
+    const damageEffect = effectBlock.effects[0];
+    const option = once.cards[1].options[0];
+    const modifier = once.modifiers[0];
+    const passive = once.passives[0];
+    const usageLimit = once.usageLimit;
+    [
+      [effectBlock, 'effect block'],
+      [damageEffect, 'damage effect'],
+      [option, 'choice option'],
+      [modifier, 'modifier'],
+      [passive, 'passive'],
+      [usageLimit, 'usage limit'],
+    ].forEach(([node, label]) => assertCanonicalExtra(node, label));
+
+    assert.deepEqual(effectBlock._extra, {
+      blockDeepUnknown: 'keep-block-deep',
+      blockOuterUnknown: 'keep-block-outer',
+      directBlockUnknown: 'keep-block-direct',
+    });
+    assert.deepEqual(damageEffect._extra, {
+      effectDeepUnknown: 'keep-effect-deep',
+      effectOuterUnknown: 'keep-effect-outer',
+      directEffectUnknown: 'keep-effect-direct',
+    });
+    assert.deepEqual(option._extra, {
+      optionDeepUnknown: 'keep-option-deep',
+      optionOuterUnknown: 'keep-option-outer',
+      directOptionUnknown: 'keep-option-direct',
+    });
+    assert.equal(modifier._extra.modifierDeepUnknown, 'keep-modifier-deep');
+    assert.equal(modifier._extra.directModifierUnknown, 'keep-modifier-direct');
+    assert.equal(passive._extra.passiveDeepUnknown, 'keep-passive-deep');
+    assert.equal(passive._extra.directPassiveUnknown, 'keep-passive-direct');
+    assert.equal(usageLimit._extra.usageDeepUnknown, 'keep-usage-deep');
+    assert.equal(usageLimit._extra.directUsageUnknown, 'keep-usage-direct');
+  } finally {
+    harness.close();
+  }
+});
+
+test('every card normalizer canonicalizes its preserved extras', async () => {
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const legacyExtras = (label) => ({
+      [`${label}OuterUnknown`]: `keep-${label}-outer`,
+      _extra: { [`${label}DeepUnknown`]: `keep-${label}-deep` },
+    });
+    const cardInputs = [
+      { type: 'target', id: 'target-extra', name: 'primary', mode: 'token', predicate: 'enemy' },
+      { type: 'powerRoll', id: 'power-roll-extra', attribute: 'Might', tiers: {} },
+      { type: 'effect', id: 'effect-extra', effects: [{ kind: 'note', text: 'Test' }] },
+      { type: 'trigger', id: 'trigger-extra', condition: 'A test event occurs.', effects: [] },
+      { type: 'persistent', id: 'persistent-extra', cost: 1, effects: [] },
+      {
+        type: 'branch',
+        id: 'branch-extra',
+        condition: { kind: 'prompt', question: 'Test?' },
+        then: [],
+        else: [],
+      },
+      {
+        type: 'choice',
+        id: 'choice-extra',
+        name: 'choiceExtra',
+        options: [{ id: 'choice-option', label: 'Choice option', cards: [] }],
+      },
+    ].map((card) => ({
+      ...card,
+      directCardUnknown: `keep-${card.type}-direct`,
+      _extra: legacyExtras(card.type),
+    }));
+
+    const normalized = harness.window.AbilityAutomationSchema.normalizeAutomation({
+      schema: 'ability-automation/v3',
+      cards: cardInputs,
+    });
+    assert.equal(normalized.cards.length, cardInputs.length);
+    normalized.cards.forEach((card) => {
+      assertCanonicalExtra(card, `${card.type} card`);
+      assert.equal(card._extra.directCardUnknown, `keep-${card.type}-direct`);
+      assert.equal(card._extra[`${card.type}OuterUnknown`], `keep-${card.type}-outer`);
+      assert.equal(card._extra[`${card.type}DeepUnknown`], `keep-${card.type}-deep`);
+    });
+  } finally {
+    harness.close();
+  }
+});
+
+test('character-sheet unchanged save cycles keep normalized automation metadata canonical', async () => {
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const sheetSource = await readFile(new URL('../../sheet.js', import.meta.url), 'utf8');
+    assert.match(
+      sheetSource,
+      /automation:\s*normalizeAutomationBlock\(existingAction\?\.automation\)/,
+      'captureActions routes saved action automation through schema normalization'
+    );
+    assert.match(
+      sheetSource,
+      /automation:\s*normalizeAutomationBlock\(existingFeature\?\.automation\)/,
+      'captureFeatures routes saved feature automation through schema normalization'
+    );
+
+    const input = await loadLegacyNestedExtraFixture();
+    const normalize = harness.window.AbilityAutomationSchema.normalizeAutomation;
+    let action = { name: 'Unchanged text edit', automation: input };
+    for (let save = 0; save < 100; save += 1) {
+      action = { ...action, automation: normalize(action.automation) };
+    }
+    const savedJson = JSON.stringify(action.automation);
+    action = { ...action, automation: normalize(action.automation) };
+    assert.equal(JSON.stringify(action.automation), savedJson);
+    assert.equal(extraChainDepth(action.automation), 1);
+    assert.equal(action.automation._extra.deepestLegacyUnknown, 'keep-deepest');
+  } finally {
+    harness.close();
+  }
+});
+
+test('v2 discard retains its migration warning', async () => {
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const normalized = harness.window.AbilityAutomationSchema.normalizeAutomation({
+      schema: 'ability-automation/v2',
+      cards: [{ type: 'effect', effects: [{ kind: 'damage', amount: 3 }] }],
+    });
+    assert.deepEqual(normalized.cards, []);
+    assert.ok(normalized.warnings.some((warning) => warning.includes('v2 automation data was discarded')));
+  } finally {
+    harness.close();
+  }
+});
+
+test('autoResolve validation warns when an effect requires the interactive runner', async () => {
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const { issues } = harness.validateAutomation({
+      schema: 'ability-automation/v3',
+      cards: [
+        {
+          type: 'trigger',
+          match: { event: 'move', filter: { whose: 'enemy' } },
+          autoResolve: true,
+          effects: [
+            { kind: 'forcedMovement', verb: 'push', distance: 2 },
+            { kind: 'heal', recoveries: 1 },
+          ],
+        },
+      ],
+    }, { strict: false });
+    assert.ok(issues.some((issue) => issue.includes('forcedMovement') && issue.includes('not supported')));
+    assert.ok(issues.some((issue) => issue.includes('recovery and amountFrom calculations')));
   } finally {
     harness.close();
   }
@@ -302,6 +549,7 @@ test('runner can arm a structured trigger and resolve it from a captured trigger
     assert.equal(armed.calls.registerTrigger.length, 1);
     assert.equal(armed.calls.registerTrigger[0].casterId, 'caster-1');
     assert.equal(armed.calls.registerTrigger[0].match.event, 'damage');
+    assert.equal(armed.calls.registerTrigger[0].freeTriggered, false);
     assert.equal(armed.calls.applyHeal.length, 0);
 
     const resolved = await harness.runAutomation({
@@ -326,6 +574,81 @@ test('runner can arm a structured trigger and resolve it from a captured trigger
       allowTempHp: false,
       abilityName: 'Half Damage',
     });
+  } finally {
+    harness.close();
+  }
+});
+
+test('main-action delayed triggers register as free riders with executable fields', async () => {
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const result = await harness.runAutomation({
+      automation: {
+        schema: 'ability-automation/v3',
+        cards: [
+          {
+            type: 'trigger',
+            condition: 'The selected creature moves.',
+            match: { event: 'move', filter: { whose: 'target' } },
+            effectTarget: 'eventActor',
+            autoResolve: true,
+            effects: [{ kind: 'damage', amount: 2 }],
+          },
+        ],
+      },
+      action: { id: 'thorn-in-foot', name: 'Thorn In Foot', actionLabel: 'Main Action' },
+      actionType: 'main',
+    });
+
+    assert.equal(result.calls.registerTrigger.length, 1);
+    assert.equal(result.calls.registerTrigger[0].freeTriggered, true);
+    assert.equal(result.calls.registerTrigger[0].autoResolve, true);
+    assert.equal(result.calls.registerTrigger[0].effectTarget, 'eventActor');
+  } finally {
+    harness.close();
+  }
+});
+
+test('numeric potency target normalizes to a literal threshold and reaches the board callback', async () => {
+  const harness = await createAbilityAutomationHarness({
+    targets: [{ id: 'enemy-1', name: 'Enemy' }],
+  });
+  try {
+    const automation = {
+      schema: 'ability-automation/v3',
+      cards: [
+        {
+          type: 'target',
+          name: 'primary',
+          mode: 'token',
+          predicate: 'enemy',
+          count: { value: 1, mode: 'exact' },
+        },
+        {
+          type: 'effect',
+          target: 'primary',
+          effects: [
+            {
+              kind: 'potency',
+              attribute: 'M',
+              target: 2,
+              onFail: [{ kind: 'condition', name: 'prone' }],
+            },
+          ],
+        },
+      ],
+    };
+    const normalized = harness.window.AbilityAutomationSchema.normalizeAutomation(automation);
+    assert.equal(normalized.cards[1].effects[0].threshold, 2);
+    assert.equal(normalized.cards[1].effects[0].target, undefined);
+
+    const result = await harness.runAutomation({
+      automation,
+      action: { id: 'stone-hit', name: 'Stone Hit', actionLabel: 'Main Action' },
+      targetSelections: [{ id: 'enemy-1', name: 'Enemy' }],
+      checkPotencyResults: [{ passes: true }],
+    });
+    assert.equal(result.calls.checkPotency[0].threshold, 2);
   } finally {
     harness.close();
   }

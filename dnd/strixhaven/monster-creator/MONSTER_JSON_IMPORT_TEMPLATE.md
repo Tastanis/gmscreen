@@ -4,6 +4,10 @@ Use this format when creating a complete monster for the Strixhaven Monster Crea
 
 The import creates a new monster in editor mode. Review it, then use **Save to Tab**.
 
+The importer accepts the canonical lowercase `attributes` object shown below. For compatibility with older or third-party exporters, attribute names are matched case-insensitively and the containers `characteristics` and `stats` are also accepted; imported data is always stored in the Monster Creator's flat lowercase fields. When both nested attributes and legacy top-level fields are present, the documented nested object wins so placeholder top-level zeros cannot mask real scores.
+
+Each imported ability's `automation` is normalized through the current ability-automation schema during import. Unsupported fields remain visible under `_extra` and schema warnings are retained for the automation inspector instead of silently bypassing validation.
+
 ---
 
 ## ⚠️ Two non-negotiable requirements (read before anything else)

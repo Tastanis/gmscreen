@@ -2,7 +2,7 @@
 
 This document is the format specification for **ability automation JSON**, paste-ready for the character-sheet automation button. An LLM reading **only this file** plus an ability's book text should be able to produce correct JSON.
 
-The runtime is lenient: unknown fields are preserved but ignored, missing fields default. Warnings are surfaced in the inspector. JSON parse errors block the save.
+The runtime is lenient: unknown fields are preserved but ignored, missing fields default. Warnings are surfaced in the inspector. JSON parse errors block the save. Do not author `_extra`; it is reserved normalization metadata. Existing malformed `_extra._extra...` chains are flattened automatically the next time an ability is loaded and saved, without discarding distinct unknown fields.
 
 ---
 
@@ -392,6 +392,8 @@ Triggered abilities use an always-listening/resolve flow when the first card is 
 Put trigger-resolution effects such as `halveTriggeringDamage`, teleport, optional `spend` riders, and reminders in an `effect` card after the `trigger` card. Do not rely on `trigger.effects` for effects that should run when the player clicks the ready trigger; the trigger card describes the passive listener.
 
 For passive no-choice effects, add `"autoResolve": true` to the trigger block and put the effects directly on that same trigger block. The VTT runs those trigger `effects` immediately instead of showing a ready `!`. This is intended for simple public banners and similar automatic effects, not for reactions that require a player choice.
+
+`autoResolve` uses the board's ongoing-effect dispatcher, not the full interactive runner. Supported kinds are `damage`, flat `heal`, `temporaryStamina`, `surgeGain`, `condition`, `floatingText`, `note`, `other`, and `ifMark` branches containing those kinds. It does not support forced movement, teleport, potency, resource spends/recoveries, `amountFrom`, or per-effect target routing. Use the trigger block's `effectTarget` for targeting; otherwise resolve manually. The schema warns when an auto-resolved trigger contains an unsupported effect.
 
 Clicking a structured trigger ability directly with no captured trigger payload registers only the trigger listener and then stops. Treat this as a fallback/debug path, not the default gameplay flow.
 
@@ -810,9 +812,10 @@ Wraps a list of effects gated by a potency check on the target.
 |---|---|
 | `attribute` | `"M"`, `"A"`, `"R"`, `"I"`, `"P"` (the target's attribute compared against caster's potency threshold) |
 | `level` | `"weak"`, `"average"`, `"strong"` (book reads `M<w`, `M<v`, `M<s`) |
+| `threshold` | optional literal numeric threshold, primarily for monster stat blocks such as `M<2`; overrides `level` |
 | `onFail` | list of effects that fire when the target's attribute is below the threshold |
 
-The runtime resolves `level` to a number using the caster's character data at run time.
+The runtime resolves `level` to a number using the caster's character data at run time. For a monster stat block that prints a literal potency value, use `"threshold": 2`. Legacy numeric `"target": 2` is accepted and normalized to `threshold`, but new JSON should use `threshold` so it cannot be confused with effect target-group routing.
 
 ### `spend` (rider)
 
@@ -1607,7 +1610,7 @@ To create a complete monster at once, use the Monster Creator **Import JSON** bu
 
 - **Keep the prose `effect` field to flavor; put tiers in `test`.** The monster stat block renders the tier table from `test.tier1/2/3`, not from prose. Do not restate "Tier 1: 5 damage. Tier 2: …" in `effect` — that duplicates the tiers and the copies drift. `effect` is one flavor sentence (or the full text for no-roll abilities). Per-tier flat riders ("pull 2", "prone") go in each tier's `tier_effect`; potency lines ("M<2 prone") go in the tier's attribute-check fields. See `dnd/strixhaven/monster-creator/MONSTER_JSON_IMPORT_TEMPLATE.md` for the full field-ownership table.
 - **Set `roll_bonus` to match `flatBonus`.** The ability's displayed roll uses `roll_bonus`; the automation uses `flatBonus`. They are the same number — set both, or the printed roll shows "2d10+0" while the VTT rolls the real bonus.
-- **Use static numbers.** Damage and potency in monster JSON are literals, not formulas. Write `"amount": 12` and `"target": 13`, never `"amount": "7+M"`.
+- **Use static numbers.** Damage and potency in monster JSON are literals, not formulas. Write `"amount": 12` and `"threshold": 13`, never `"amount": "7+M"`.
 - **Use `flatBonus` on `powerRoll`.** Set the literal roll bonus directly:
   ```json
   { "type": "powerRoll", "flatBonus": 6, "tiers": { ... } }
