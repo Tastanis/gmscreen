@@ -16,6 +16,8 @@ require_once __DIR__ . '/components/SceneBoard.php';
 require_once __DIR__ . '/components/TokenLibrary.php';
 
 const VTT_PLAYER_TOKEN_FOLDER = "PC's";
+const VTT_BACKUP_MIN_INTERVAL_SECONDS = 1800;
+const VTT_BACKUP_MAX_FILES_PER_DATA_FILE = 48;
 
 function normalizeTokenFolderKey($value): string
 {
@@ -79,7 +81,115 @@ function loadVttJson(string $filename)
 }
 
 /**
- * Persists JSON data to storage with a timestamped backup of the previous file.
+ * @return array<int,string>
+ */
+function listVttJsonBackups(string $backupDir, string $stem): array
+{
+    if (!is_dir($backupDir)) {
+        return [];
+    }
+
+    $entries = scandir($backupDir);
+    if (!is_array($entries)) {
+        return [];
+    }
+
+    $pattern = '/^' . preg_quote($stem, '/') . '-\d{8}_\d{6}\.json$/';
+    $backups = [];
+
+    foreach ($entries as $entry) {
+        if (!is_string($entry) || preg_match($pattern, $entry) !== 1) {
+            continue;
+        }
+
+        $path = $backupDir . '/' . $entry;
+        if (is_file($path)) {
+            $backups[] = $path;
+        }
+    }
+
+    usort($backups, static function (string $left, string $right): int {
+        $leftModified = @filemtime($left);
+        $rightModified = @filemtime($right);
+        $leftModified = is_int($leftModified) ? $leftModified : 0;
+        $rightModified = is_int($rightModified) ? $rightModified : 0;
+
+        if ($leftModified === $rightModified) {
+            return strcmp(basename($right), basename($left));
+        }
+
+        return $rightModified <=> $leftModified;
+    });
+
+    return $backups;
+}
+
+function pruneVttJsonBackups(
+    string $backupDir,
+    string $stem,
+    int $maxFiles = VTT_BACKUP_MAX_FILES_PER_DATA_FILE
+): void {
+    $maxFiles = max(0, $maxFiles);
+    $backups = listVttJsonBackups($backupDir, $stem);
+
+    foreach (array_slice($backups, $maxFiles) as $expiredBackup) {
+        @unlink($expiredBackup);
+    }
+}
+
+/**
+ * Creates a spaced recovery snapshot and enforces a hard per-file retention cap.
+ */
+function maintainVttJsonBackup(
+    string $filename,
+    string $sourcePath,
+    ?string $backupDir = null,
+    ?int $now = null
+): void {
+    if (!is_file($sourcePath)) {
+        return;
+    }
+
+    $backupDir = $backupDir ?? (__DIR__ . '/storage/backups');
+    if (
+        !is_dir($backupDir)
+        && !mkdir($backupDir, 0775, true)
+        && !is_dir($backupDir)
+    ) {
+        return;
+    }
+
+    $stem = basename($filename, '.json');
+    $now = $now ?? time();
+    $backups = listVttJsonBackups($backupDir, $stem);
+
+    // Enforce the cap even when the next spaced snapshot is not due yet.
+    if (count($backups) > VTT_BACKUP_MAX_FILES_PER_DATA_FILE) {
+        pruneVttJsonBackups($backupDir, $stem);
+        $backups = array_slice($backups, 0, VTT_BACKUP_MAX_FILES_PER_DATA_FILE);
+    }
+
+    $newestBackup = $backups[0] ?? null;
+    if (is_string($newestBackup)) {
+        $newestModified = @filemtime($newestBackup);
+        if (
+            is_int($newestModified)
+            && ($now - $newestModified) < VTT_BACKUP_MIN_INTERVAL_SECONDS
+        ) {
+            return;
+        }
+    }
+
+    $timestamp = date('Ymd_His', $now);
+    $backupPath = $backupDir . '/' . $stem . '-' . $timestamp . '.json';
+    if (@copy($sourcePath, $backupPath)) {
+        @touch($backupPath, $now);
+        pruneVttJsonBackups($backupDir, $stem);
+    }
+}
+
+/**
+ * Persists JSON data to storage with a retained backup of the previous file.
  */
 function saveVttJson(string $filename, $data): bool
 {
@@ -100,14 +210,7 @@ function saveVttJson(string $filename, $data): bool
         return false;
     }
 
-    if (is_file($path)) {
-        $backupDir = __DIR__ . '/storage/backups';
-        if (!is_dir($backupDir)) {
-            mkdir($backupDir, 0775, true);
-        }
-        $timestamp = date('Ymd_His');
-        @copy($path, $backupDir . '/' . basename($filename, '.json') . '-' . $timestamp . '.json');
-    }
+    maintainVttJsonBackup($filename, $path);
 
     return rename($tempPath, $path);
 }
