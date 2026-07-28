@@ -4,6 +4,18 @@ declare(strict_types=1);
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../lib/PusherClient.php';
 
+// This helper must be declared before the request router. Because the
+// declaration is guarded for include-based tests, PHP does not register it
+// until execution reaches this block.
+if (!function_exists('respondSceneJson')) {
+    function respondSceneJson(int $status, array $payload): void
+    {
+        http_response_code($status);
+        echo json_encode($payload);
+        exit;
+    }
+}
+
 if (!defined('VTT_SCENES_API_INCLUDE_ONLY')) {
 header('Content-Type: application/json');
 
@@ -512,15 +524,6 @@ function generateId(string $prefix): string
     }
 
     return $prefix . '_' . $random;
-}
-
-if (!function_exists('respondSceneJson')) {
-    function respondSceneJson(int $status, array $payload): void
-    {
-        http_response_code($status);
-        echo json_encode($payload);
-        exit;
-    }
 }
 
 function truncateString(string $value, int $length): string
