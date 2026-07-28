@@ -324,6 +324,41 @@ export function getRemovableSelectedTokenIds({
     .map((placement) => placement.id);
 }
 
+export function calculateTokenSettingsPopupLayout({
+  clientX,
+  clientY,
+  width,
+  height,
+  viewportWidth,
+  viewportHeight,
+  actionBarTop = null,
+  margin = 12,
+} = {}) {
+  const safeMargin = Math.max(0, Number(margin) || 0);
+  const safeViewportWidth = Math.max(0, Number(viewportWidth) || 0);
+  const safeViewportHeight = Math.max(0, Number(viewportHeight) || 0);
+  const popupWidth = Math.max(0, Number(width) || 0);
+  const popupHeight = Math.max(0, Number(height) || 0);
+  const baseX = Number.isFinite(clientX) ? clientX : safeViewportWidth / 2;
+  const baseY = Number.isFinite(clientY) ? clientY : safeViewportHeight / 2;
+  const requestedSafeBottom = Number(actionBarTop);
+  const viewportBottom = Math.max(safeMargin, safeViewportHeight - safeMargin);
+  const safeBottom = Number.isFinite(requestedSafeBottom) && requestedSafeBottom > 0
+    ? Math.min(viewportBottom, Math.max(safeMargin, requestedSafeBottom - safeMargin))
+    : viewportBottom;
+  const maxHeight = Math.max(0, safeBottom - safeMargin);
+  const effectiveHeight = Math.min(popupHeight, maxHeight);
+  const maxLeft = Math.max(safeMargin, safeViewportWidth - popupWidth - safeMargin);
+  const maxTop = Math.max(safeMargin, safeBottom - effectiveHeight);
+
+  return {
+    left: Math.min(Math.max(safeMargin, baseX + safeMargin), maxLeft),
+    top: Math.min(Math.max(safeMargin, baseY + safeMargin), maxTop),
+    maxHeight,
+    safeBottom,
+  };
+}
+
 // Board state merge helpers live in utils/merge-helpers.js (imported at
 // the top of this file). Re-export them so existing callers importing
 // these names from './board-interactions.js' keep working.
@@ -17261,6 +17296,10 @@ export function mountBoardInteractions(store, routes = {}) {
       document.addEventListener('keydown', onKeyDown);
       document.body.appendChild(container);
       automationDamageTypePrompt = { container, finish };
+      // Match target-selection and other automation popups: on desktop the
+      // picker opens immediately to the right of the character sidebar
+      // instead of covering the sheet the player is resolving from.
+      positionAutomationPopup(container);
       select?.focus();
     });
   }
@@ -21805,25 +21844,44 @@ export function mountBoardInteractions(store, routes = {}) {
     const margin = 12;
     const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
     const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
-    const baseX = Number.isFinite(clientX) ? clientX : viewportWidth / 2;
-    const baseY = Number.isFinite(clientY) ? clientY : viewportHeight / 2;
-
-    let left = baseX + margin;
-    let top = baseY + margin;
-
+    // Measure the natural content height on every open. A prior open may
+    // have added a smaller max-height for a shorter viewport/action bar.
+    element.style.maxHeight = '';
+    element.style.overflowY = '';
     const rect = element.getBoundingClientRect();
-    if (left + rect.width + margin > viewportWidth) {
-      left = viewportWidth - rect.width - margin;
-    }
-    if (top + rect.height + margin > viewportHeight) {
-      top = viewportHeight - rect.height - margin;
-    }
+    const actionBarTop = getVisibleAbilityActionBarTop(viewportHeight);
+    const layout = calculateTokenSettingsPopupLayout({
+      clientX,
+      clientY,
+      width: rect.width,
+      height: rect.height,
+      viewportWidth,
+      viewportHeight,
+      actionBarTop,
+      margin,
+    });
 
-    left = Math.max(margin, left);
-    top = Math.max(margin, top);
+    element.style.maxHeight = `${layout.maxHeight}px`;
+    element.style.overflowY = rect.height > layout.maxHeight ? 'auto' : '';
+    element.style.left = `${layout.left}px`;
+    element.style.top = `${layout.top}px`;
+  }
 
-    element.style.left = `${left}px`;
-    element.style.top = `${top}px`;
+  function getVisibleAbilityActionBarTop(viewportHeight) {
+    if (typeof document === 'undefined' || typeof document.querySelectorAll !== 'function') {
+      return null;
+    }
+    let top = Number.isFinite(viewportHeight) ? viewportHeight : null;
+    document.querySelectorAll('.vtt-character-ability-tab').forEach((tab) => {
+      const rect = tab?.getBoundingClientRect?.();
+      if (!rect || rect.width <= 0 || rect.height <= 0) {
+        return;
+      }
+      if (!Number.isFinite(top) || rect.top < top) {
+        top = rect.top;
+      }
+    });
+    return Number.isFinite(top) && top < viewportHeight ? top : null;
   }
 
   function refreshTokenSettings() {
