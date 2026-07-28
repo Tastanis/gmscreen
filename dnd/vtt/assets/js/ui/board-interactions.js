@@ -56,6 +56,7 @@ import {
   PLAYER_CHARACTER_USER_IDS,
   buildLevelViewModel,
   getClaimedUserIdForPlacement,
+  normalizeClaimedTokensMap,
   normalizeMapLevelsState,
   resolveActiveLevelIdForUser,
   resolvePlacementLevelId,
@@ -286,6 +287,41 @@ const MALICE_VICTORIES_ACTION = 'fetch-victories';
 
 export function isPlacementStaminaSyncSource(source) {
   return source === 'sheet' || source === 'vtt';
+}
+
+export function getRemovableSelectedTokenIds({
+  placements = [],
+  selectedIds = [],
+  isGM = false,
+  currentUserId = '',
+  claimedTokens = {},
+} = {}) {
+  const selectedSet = selectedIds instanceof Set
+    ? selectedIds
+    : new Set(Array.isArray(selectedIds) ? selectedIds : []);
+  if (!selectedSet.size || !Array.isArray(placements)) {
+    return [];
+  }
+
+  const normalizedUserId = typeof currentUserId === 'string'
+    ? currentUserId.trim().toLowerCase()
+    : '';
+  const normalizedClaims = normalizeClaimedTokensMap(claimedTokens);
+  return placements
+    .filter((placement) => (
+      placement
+      && typeof placement === 'object'
+      && selectedSet.has(placement.id)
+      && (
+        isGM
+        || (
+          !placement.hidden
+          && normalizedUserId
+          && normalizedClaims[placement.id] === normalizedUserId
+        )
+      )
+    ))
+    .map((placement) => placement.id);
 }
 
 // Board state merge helpers live in utils/merge-helpers.js (imported at
@@ -8743,11 +8779,21 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    const scenePlacements = state.boardState?.placements?.[activeSceneId] ?? [];
+    const removableIds = getRemovableSelectedTokenIds({
+      placements: scenePlacements,
+      selectedIds: selectedSet,
+      isGM,
+      currentUserId,
+      claimedTokens: state.boardState?.sceneState?.[activeSceneId]?.claimedTokens ?? {},
+    });
+    const removableSet = new Set(removableIds);
+    if (!removableSet.size) {
+      return;
+    }
+
     let removedCount = 0;
     const removedIds = [];
-    const claimedTokens = normalizeClaimedTokensMap(
-      state.boardState?.sceneState?.[activeSceneId]?.claimedTokens ?? {}
-    );
     boardApi.updateState?.((draft) => {
       const scenePlacements = ensureScenePlacementDraft(draft, activeSceneId);
       if (!Array.isArray(scenePlacements) || !scenePlacements.length) {
@@ -8757,16 +8803,7 @@ export function mountBoardInteractions(store, routes = {}) {
         if (!placement || typeof placement !== 'object') {
           return true;
         }
-        if (!selectedSet.has(placement.id)) {
-          return true;
-        }
-        // Players may remove only their own visible claimed token. The server
-        // repeats this check using the authenticated profile.
-        if (!isGM && (
-          placement.hidden
-          || !currentUserId
-          || claimedTokens[placement.id] !== currentUserId
-        )) {
+        if (!removableSet.has(placement.id)) {
           return true;
         }
         removedIds.push(placement.id);
