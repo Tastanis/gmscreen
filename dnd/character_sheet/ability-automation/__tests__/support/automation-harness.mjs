@@ -364,6 +364,7 @@ function createRecorder() {
   const byHook = {
     selectTarget: [],
     selectAreaTarget: [],
+    chooseDamageType: [],
     applyDamage: [],
     applyHeal: [],
     applyCondition: [],
@@ -503,6 +504,7 @@ export async function createAbilityAutomationHarness(options = {}) {
     const script = {
       targetSelections: [...(runOptions.targetSelections || options.targetSelections || [baseTargets[0]])],
       areaSelections: [...(runOptions.areaSelections || options.areaSelections || [])],
+      damageTypeChoices: [...(runOptions.damageTypeChoices || options.damageTypeChoices || [])],
       promptAnswers: [...(runOptions.promptAnswers || options.promptAnswers || [])],
       choiceSelections: [...(runOptions.choiceSelections || options.choiceSelections || [])],
       powerRollTiers: [...(runOptions.powerRollTiers || options.powerRollTiers || [])],
@@ -533,6 +535,7 @@ export async function createAbilityAutomationHarness(options = {}) {
     const context = {
       action: runOptions.action || options.action || { id: 'ability-under-test', name: 'Ability Under Test' },
       automation: runOptions.automation,
+      features: runOptions.features || options.features || [],
       hero: runOptions.hero || options.hero || { name: 'Harness Hero', resource: { value: 0 } },
       heroName: runOptions.heroName || options.heroName || 'Harness Hero',
       sourcePlacement: runOptions.sourcePlacement || options.sourcePlacement || createDefaultTarget('caster-1', 'Harness Hero'),
@@ -548,6 +551,10 @@ export async function createAbilityAutomationHarness(options = {}) {
       selectAreaTarget(config) {
         recorder.record('selectAreaTarget', config);
         return clone(script.areaSelections.shift() || { targets: [] });
+      },
+      chooseDamageType(config) {
+        recorder.record('chooseDamageType', config);
+        return clone(script.damageTypeChoices.shift() ?? null);
       },
       cancelTargetSelection() {
         recorder.record('cancelTargetSelection', {});

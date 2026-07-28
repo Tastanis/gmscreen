@@ -52,7 +52,7 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 | kind | Status | Runtime behavior |
 |---|---|---|
 | `damage` | Full | Applies via board, supports immunity/vulnerability on PC sheets, monster stat-block weakness/immunity, and temporary `damageWeakness` / `damageImmunity` conditions. Fields: `amount`, optional `amountDice` (`"1d6"`), optional `attribute`, optional `multiplier` (int, default 1 — multiplies the attribute bonus only, e.g. `attribute:"P", multiplier:2` = "twice your Presence score"; ignored without an attribute), optional `markBonusDice` + `markPredicate`, optional `damageType`, optional `amountFrom` (scales the captured trigger value into the amount sum — see Trigger value sources), optional `raw` (bool — when true this damage ignores feature modifiers: no `damageBonus`, no `damageType` override. Use for self-inflicted strained backlash and other flat damage that should not ride the ability's buffs). |
-| `condition` | Full | Applies via board condition tracker (save-ends durations integrate with token tracker) |
+| `condition` | Full | Applies via board condition tracker (save-ends durations integrate with token tracker). Optional `riders[]` attach bounded `turnStart`/`turnEnd` effects to the exact persisted condition instance. |
 | `forcedMovement` (`push`) | Full | Push works end-to-end (board preview, collisions) |
 | `forcedMovement` (`pull`) | Full | Legal cells strictly nearer to caster, monotonic-toward-source path |
 | `forcedMovement` (`slide`) | Full | Any cell within Chebyshev distance, no source-distance constraint |
@@ -100,6 +100,8 @@ When `name === "other"`, supply `text` describing the homebrew condition.
 
 Automated conditions store the applying token as `sourceId` plus `sourceName` when available. Source-linked rules use that metadata: taunted/grabbed creatures are penalized when the roll targets someone other than the source, and frightened applies the correct source/target edge or bane.
 
+Ordinary conditions may carry persistent `riders: [{ id, when, target, effects }]`. Supported timings are `turnStart` and `turnEnd`; targets are `bearer` and `source`; supported effects are `damage`, `heal`, `temporaryStamina`, `surgeGain`, `condition`, `floatingText`, `note`, and `other`. Amounts may be flat or dice-based; interactive damage-type choices, attributes, recoveries, and captured values are rejected in riders. Each stored condition receives a stable `instanceId`, and `riderExecutions` records the last handled combat boundary per rider. The marker is persisted before effects run, so stale replay/reload cannot double-apply a boundary. The conservative network-failure case is a skipped effect, not duplicated damage. Removing the condition removes its riders.
+
 `hiddenEffect` carries hidden ability-applied rider effects. It is not selectable in the normal condition picker and does not render as token condition text. It remains visible in the VTT character/monster sidebar with an `x` remove button and marks the token with a compact `FX` badge. Supported automatic rider type: `{ "type": "rollModifier", "modifier": "edge" | "bane" | "doubleEdge" | "doubleBane", "appliesTo": { ... }, "consume": "manual" | "nextMatchingRoll" }`.
 
 Board-hosted power roll modals can show clickable suggested edges/banes from current VTT state through `getPowerRollSuggestions`. These are runtime hints; normal board hints are not automation JSON fields. High Ground, Flanking, and Cover are always visible as suggestion toggles; High Ground and Flanking default on when board state proves them, while Cover is currently manual because line-of-effect obstruction is not modeled as a reliable roll predicate. Additional board-derived suggestions include prone/restrained/unconscious targets, hidden attackers, weakened/restrained/prone attackers, and source-linked frightened/grabbed/taunted attackers when those facts are present in board state. Ability-applied `hiddenEffect` rollModifier riders also appear as default-on suggestions when their `appliesTo` filters match, and `consume: "nextMatchingRoll"` riders are removed after the accepted matching roll.
@@ -116,7 +118,7 @@ Board-hosted power roll modals can show clickable suggested edges/banes from cur
 
 Forced-movement highlights account for target stability and size across PCs and monsters. The highlight is advisory only: the GM can still click any destination, including cells outside the legal highlight.
 
-Target and area range visuals are also advisory. Single-target abilities draw the caster's range/reach box, and area abilities draw the placement-within range box when the source and `distance.within` are known. Clicking outside those visuals is allowed.
+Target and area range visuals are also advisory. Single-target abilities draw the caster's range/reach box, and area abilities draw the placement-within range box when the source and `distance.within` are known. Numeric legacy `range` and optional `{ "selectionGuide": { "range": N, "form": "ranged" } }` normalize to the same overlay. `selectionGuide.enforce` is always false; clicking outside the visual is allowed.
 
 Target blocks support optional `promptTitle` and `promptText` fields. These control the target-picker modal title/instructions and board status text, but they do not affect targeting legality or the effects that run later. When omitted, a target block immediately followed by an effect card that damages the same target group gets a generic damage prompt such as "Pick Enemy to Damage"; the later `damage` effect still controls amount, attribute, dice, and damage type. Token target blocks with custom or inferred prompt text use the board picker as the single visible prompt; optional picks expose `Skip` in that picker.
 
@@ -141,6 +143,22 @@ For effect resolution, `target: "self"` is a special target group resolved direc
 Long form (power roll): `Might`, `Agility`, `Reason`, `Intuition`, `Presence`, `Strongest`
 
 Short form (damage `attribute` and potency `attribute`): `M`, `A`, `R`, `I`, `P`
+
+## Damage types — `damage.damageType` / `damage.damageTypeOptions`
+
+Registered values: `untyped`, `acid`, `cold`, `corruption`, `fire`, `holy`,
+`lightning`, `poison`, `psychic`, `sonic`.
+
+- `damageType` is one scalar type and does not prompt.
+- `damageTypeOptions` is an array of two or more allowed registered types. The
+  resolver chooses once per damage effect; that chosen type is used for every
+  target and all downstream damage rules and event payloads.
+- Options normalize to lowercase, preserve first occurrence order, remove
+  duplicates/unsupported entries, and warn when malformed or fewer than two
+  valid options remain.
+- Do not author both fields. When two or more valid options exist they are
+  authoritative and the scalar is discarded with a warning; no option is
+  silently chosen as a default.
 
 ## Potency levels — `potency.level`
 
@@ -204,7 +222,8 @@ These are called by `runner.js` and dispatched as `vtt:automation-*` CustomEvent
 |---|---|---|
 | `selectTarget(config)` | target block fields + `{ pickIndex, pickTotal, allowDone }`; may include `promptTitle` / `promptText` for picker wording | `{ id, name, hidden?, placement? }` or `{ skipped }` / `{ done }` / `{ canceled }` |
 | `selectAreaTarget(config)` | target block fields + `sourcePlacement` | `{ targets: [...] }` or `{ skipped }` / `{ canceled }` |
-| `applyDamage(payload)` | `{ placementId, amount, damageType, abilityName }` | `{ name, amount, current, max, hidden, vulnerability, immunity }` |
+| `chooseDamageType(payload)` | `{ abilityName, actionId, options }` for a normalized `damageTypeOptions` choice | selected type string or `{ damageType }`; `null`/an invalid type cancels before resource spending or effect application |
+| `applyDamage(payload)` | `{ placementId, amount, damageType, abilityName }`; `damageType` is the already-selected scalar even when the authored effect used `damageTypeOptions` | `{ name, amount, current, max, hidden, vulnerability, immunity }` |
 | `applyHeal(payload)` | `{ placementId, amount, allowTempHp, abilityName }` | `{ name, change, current, max, hidden, allowTempHp }` |
 | `applyCondition(payload)` | `{ placementId, condition: {name, duration}, sourceId, sourceName }` | `{ ok }` |
 | `checkPotency(payload)` | `{ placementId, attribute, threshold, sourceStats }` | `{ passes: bool }` |

@@ -192,13 +192,23 @@
 
   function normalizeEffect(effect = {}) {
     if (effect.kind === "damage") {
-      return {
+      const damageTypeOptions = Array.isArray(effect.damageTypeOptions)
+        ? [...new Set(effect.damageTypeOptions
+          .map(normalizeDamageType)
+          .filter((type) => DAMAGE_TYPES.includes(type)))]
+        : [];
+      const normalized = {
         kind: "damage",
         amount: parseInteger(effect.amount) || 0,
         attribute: effect.attribute || "",
         damageType: normalizeDamageType(effect.damageType || ""),
         raw: effect.raw || "",
       };
+      if (damageTypeOptions.length > 1) {
+        normalized.damageTypeOptions = damageTypeOptions;
+        delete normalized.damageType;
+      }
+      return normalized;
     }
     if (effect.kind === "push") {
       return {
@@ -241,7 +251,9 @@
     if (!effect) return "";
     if (effect.kind === "damage") {
       const attr = effect.attribute ? ` + ${effect.attribute}` : "";
-      const type = effect.damageType ? ` ${effect.damageType}` : "";
+      const type = Array.isArray(effect.damageTypeOptions) && effect.damageTypeOptions.length > 1
+        ? ` [choose ${effect.damageTypeOptions.join(" / ")}]`
+        : effect.damageType ? ` ${effect.damageType}` : "";
       return `${effect.amount}${attr}${type} damage`;
     }
     if (effect.kind === "push") return `Push ${effect.distance}`;

@@ -289,7 +289,7 @@
         var index = Number.isInteger(entry.index) ? entry.index : 0;
         var detail = entry.detail || '';
         var removeButton = placementId
-            ? '<button class="vtt-character-condition__remove" type="button" data-character-condition-remove data-placement-id="' + escapeAttribute(placementId) + '" data-condition-index="' + escapeAttribute(index) + '" aria-label="Remove ' + escapeAttribute(label) + '">x</button>'
+            ? '<button class="vtt-character-condition__remove" type="button" data-character-condition-remove data-placement-id="' + escapeAttribute(placementId) + '" data-condition-index="' + escapeAttribute(index) + '"' + (entry.instanceId ? ' data-condition-instance-id="' + escapeAttribute(entry.instanceId) + '"' : '') + ' aria-label="Remove ' + escapeAttribute(label) + '">x</button>'
             : '';
         return '<span class="vtt-character-condition ' + (entry.hidden ? 'vtt-character-condition--hidden-effect' : '') + '">' +
             '<span class="vtt-character-condition__body"><span class="vtt-character-condition__name">' + escapeHtml(label) + '</span>' +
@@ -311,11 +311,13 @@
                 event.stopPropagation();
                 var placementId = conditionRemove.dataset.placementId || '';
                 var conditionIndex = Number.parseInt(conditionRemove.dataset.conditionIndex || '', 10);
+                var conditionInstanceId = conditionRemove.dataset.conditionInstanceId || '';
                 if (placementId && Number.isInteger(conditionIndex) && conditionIndex >= 0) {
                     document.dispatchEvent(new CustomEvent('vtt:character-summary-remove-condition', {
                         detail: {
                             placementId: placementId,
-                            conditionIndex: conditionIndex
+                            conditionIndex: conditionIndex,
+                            conditionInstanceId: conditionInstanceId
                         }
                     }));
                 }
@@ -379,6 +381,8 @@
                     hidden: hidden,
                     sourceName: String(condition.sourceName ?? '').trim(),
                     sourceAbility: String(condition.sourceAbility ?? '').trim(),
+                    instanceId: String(condition.instanceId ?? '').trim(),
+                    riders: Array.isArray(condition.riders) ? condition.riders : [],
                     durationLabel: durationLabel,
                     detail: formatConditionDetail(condition, hidden, durationLabel)
                 };
@@ -404,13 +408,34 @@
 
     function formatConditionDetail(condition, hidden, durationLabel) {
         var parts = [];
-        if (hidden) {
-            parts.push(condition.sourceAbility, condition.sourceName);
+        if (condition.sourceAbility || condition.sourceName) {
+            parts.push([condition.sourceAbility, condition.sourceName ? 'from ' + condition.sourceName : ''].filter(Boolean).join(' '));
+        }
+        if (Array.isArray(condition.riders)) {
+            condition.riders.map(formatPersistentConditionRider).filter(Boolean).forEach(function (label) {
+                parts.push(label);
+            });
         }
         if (durationLabel && durationLabel !== 'instantaneous') {
             parts.push(durationLabel);
         }
         return parts.filter(Boolean).join(' - ');
+    }
+
+    function formatPersistentConditionRider(rider) {
+        if (!rider || typeof rider !== 'object') return '';
+        var timing = rider.when === 'turnEnd' ? 'at end of turn' : 'at start of turn';
+        var labels = (Array.isArray(rider.effects) ? rider.effects : []).map(function (effect) {
+            var amount = Number.parseInt(effect && effect.amount, 10) || 0;
+            var damageType = String(effect && effect.damageType || '').trim();
+            if (effect && effect.kind === 'damage') return 'takes ' + amount + (damageType ? ' ' + damageType : '') + ' damage';
+            if (effect && effect.kind === 'heal') return 'recovers ' + amount + ' stamina';
+            if (effect && effect.kind === 'temporaryStamina') return 'gains ' + amount + ' temporary stamina';
+            if (effect && effect.kind === 'condition') return 'gains ' + (effect.name || 'a condition');
+            if (effect && effect.kind === 'surgeGain') return (amount >= 0 ? 'gains ' : 'loses ') + Math.abs(amount) + ' surge' + (Math.abs(amount) === 1 ? '' : 's');
+            return String(effect && effect.text || '').trim();
+        }).filter(Boolean);
+        return labels.length ? labels.join(', ') + ' ' + timing : '';
     }
 
     function formatConditionDuration(duration) {
@@ -456,6 +481,10 @@
 
     window.MonsterSummaryPanel = {
         openFor: openFor,
-        close: close
+        close: close,
+        __testing: {
+            formatConditionLabel: formatConditionLabel,
+            normalizeConditions: normalizeConditions
+        }
     };
 })();

@@ -304,6 +304,9 @@ export function normalizeTurnEffect(raw) {
   const amount = Number.isFinite(amountRaw) ? Math.trunc(amountRaw) : null;
   const modeRaw = typeof raw.mode === 'string' ? raw.mode.trim().toLowerCase() : '';
   const mode = modeRaw === 'heal' ? 'heal' : modeRaw === 'damage' ? 'damage' : '';
+  const damageType = typeof raw.damageType === 'string'
+    ? raw.damageType.trim().toLowerCase()
+    : '';
 
   if (combatantId) {
     effect.combatantId = combatantId;
@@ -343,6 +346,10 @@ export function normalizeTurnEffect(raw) {
 
   if (mode) {
     effect.mode = mode;
+  }
+
+  if (damageType && damageType !== 'untyped') {
+    effect.damageType = damageType;
   }
 
   return effect;

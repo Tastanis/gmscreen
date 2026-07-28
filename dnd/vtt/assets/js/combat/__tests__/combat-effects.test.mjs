@@ -46,6 +46,20 @@ describe('combat turn effect signatures', () => {
     assert.equal(recorded.signature, 'draw-steel::2000');
     assert.equal(recordLocalTurnEffect({ triggeredAt: 2000 }).recorded, false);
   });
+
+  test('token damage floats retain the selected canonical damage type', () => {
+    const recorded = recordLocalTurnEffect({
+      type: TURN_EFFECT_TYPES.TOKEN_FLOAT,
+      placementId: 'target-1',
+      amount: 7,
+      mode: 'damage',
+      damageType: ' Fire ',
+      triggeredAt: 2100,
+    });
+
+    assert.equal(recorded.recorded, true);
+    assert.equal(recorded.effect.damageType, 'fire');
+  });
 });
 
 describe('synced combat turn effects', () => {

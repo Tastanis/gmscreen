@@ -1,5 +1,11 @@
 import { toNonNegativeInt, toBoolean } from './helpers.js';
 import { normalizeMonsterSnapshot, stripMonsterSnapshot } from './monsters.js';
+import {
+  buildConditionIdentityKey,
+  createConditionInstanceId,
+  normalizeRiderExecutions,
+  normalizeStoredConditionRiders,
+} from './condition-riders.js';
 
 export function normalizePlacements(raw = {}) {
   if (!raw || typeof raw !== 'object') {
@@ -389,6 +395,9 @@ function normalizeConditionDurationValue(value) {
   if (!normalized) {
     return 'save-ends';
   }
+  if (normalized.includes('save') || normalized === 'se') {
+    return 'save-ends';
+  }
   if (normalized.includes('eot') || normalized.includes('end')) {
     return 'end-of-turn';
   }
@@ -490,6 +499,28 @@ export function normalizePlacementCondition(value) {
   if (typeof value.sourceAbility === 'string' && value.sourceAbility.trim()) {
     normalized.sourceAbility = value.sourceAbility.trim();
   }
+  const riders = normalizeStoredConditionRiders(value.riders);
+  if (riders.length) {
+    normalized.riders = riders;
+    const instanceId = typeof value.instanceId === 'string' ? value.instanceId.trim() : '';
+    if (instanceId) normalized.instanceId = instanceId;
+    const executions = normalizeRiderExecutions(value.riderExecutions, riders.map((rider) => rider.id));
+    if (Object.keys(executions).length) normalized.riderExecutions = executions;
+  }
+  const numericRider = name.toLowerCase() === 'damageweakness'
+    || name.toLowerCase() === 'damageimmunity';
+  if (numericRider) {
+    const amount = Number.parseInt(value.amount, 10);
+    if (Number.isFinite(amount) && amount > 0) {
+      normalized.amount = amount;
+    }
+    const damageType = typeof value.damageType === 'string'
+      ? value.damageType.trim().toLowerCase()
+      : '';
+    if (damageType && damageType !== 'untyped') {
+      normalized.damageType = damageType;
+    }
+  }
 
   return normalized;
 }
@@ -517,6 +548,9 @@ export function normalizePlacementConditions(value) {
     if (!condition) {
       continue;
     }
+    if (condition.riders?.length && !condition.instanceId) {
+      condition.instanceId = createConditionInstanceId(condition, normalized.length);
+    }
 
     const key = buildConditionKey(condition);
     if (seen.has(key)) {
@@ -531,6 +565,9 @@ export function normalizePlacementConditions(value) {
 }
 
 function buildConditionKey(condition) {
+  if (condition?.instanceId || condition?.riders?.length) {
+    return buildConditionIdentityKey(condition);
+  }
   const name = typeof condition?.name === 'string' ? condition.name.trim().toLowerCase() : '';
   const type = condition?.duration?.type ?? 'save-ends';
   if (name === 'hiddeneffect') {
@@ -541,6 +578,13 @@ function buildConditionKey(condition) {
       ? JSON.stringify(condition.rider)
       : '';
     return `${name}|${type}|${label}|${sourceId}|${sourceAbility}|${rider}`;
+  }
+  if (name === 'damageweakness' || name === 'damageimmunity') {
+    const amount = Number.isFinite(condition.amount) ? condition.amount : 0;
+    const damageType = typeof condition.damageType === 'string'
+      ? condition.damageType.trim().toLowerCase()
+      : '';
+    return `${name}|${type}|${amount}|${damageType}`;
   }
   const targetId =
     typeof condition?.duration?.targetTokenId === 'string'

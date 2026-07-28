@@ -219,6 +219,7 @@
             // own internal no-op / chat-reminder paths.
             selectTarget: board.selectTarget,
             selectAreaTarget: board.selectAreaTarget,
+            chooseDamageType: board.chooseDamageType,
             applyDamage: board.applyDamage,
             applyCondition: board.applyCondition,
             checkPotency: board.checkPotency,

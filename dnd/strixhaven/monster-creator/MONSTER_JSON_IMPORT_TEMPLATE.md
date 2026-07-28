@@ -217,8 +217,25 @@ Every ability has **three channels**, and each owns a different job. The #1 mist
 ### Automation
 
 - For monster automation, use static numbers and `flatBonus`. Do not write PC-style `7 + M` formulas for monsters.
+- A fixed automated damage type uses scalar `"damageType": "fire"`. If the
+  monster's rules explicitly let the resolver choose among types, use
+  `"damageTypeOptions": ["acid", "cold", "fire"]` on each applicable damage
+  effect. Use at least two registered types; do not combine the options array
+  with scalar `damageType`. This field belongs inside `automation`, not the
+  display-only per-tier `damage_type`.
 - Effects that happen **before** the roll (a precondition, e.g. "first the hulk shifts") go in an `effect` card *before* the `powerRoll` card. Effects **after** the roll, or that apply regardless of tier, go in an `effect` card *after* the `powerRoll` card. Tier-specific effects go inside that tier's `effects` array.
 - Ability automation uses the shared v3 format documented in `../../character_sheet/ability-automation/AUTHORING.md` and `../../character_sheet/ability-automation/REGISTRY.md`. In target cards, put `mode`, `predicate`, `count`, `distance`, `shape`, and `size` directly on the card; do not use the old nested `{ "target": { "kind": ... } }` shape.
+- A target card's `distance` automatically displays the same advisory range
+  guide used for PC automation. It never enforces legality. Use explicit
+  `"selectionGuide": { "range": 8, "form": "ranged" }` only when the visual
+  guide intentionally differs from the rules distance.
+- A monster condition can carry a timed rider with
+  `"riders": [{ "id": "crushing-grab", "when": "turnStart", "target": "bearer", "effects": [{ "kind": "damage", "amount": 5, "damageType": "fire" }] }]`.
+  Use `turnStart` or `turnEnd`; target `bearer` or `source`. The VTT supplies
+  the internal condition identity and replay marker—do not author
+  `instanceId` or `riderExecutions`. Timed condition effects use plural
+  `riders`; singular `rider` remains reserved for `hiddenEffect` roll
+  modifiers.
 
 ### Immunities / weaknesses
 

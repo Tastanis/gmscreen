@@ -651,12 +651,14 @@ button.vtt-character-resource {
   flex-direction: column;
   gap: 1px;
   min-width: 0;
+  max-width: 300px;
 }
 
 .vtt-character-condition__detail {
   color: rgba(216, 204, 176, 0.82);
-  font-size: 0.66rem;
-  line-height: 1.05;
+  font-size: 0.72rem;
+  line-height: 1.25;
+  white-space: normal;
 }
 
 .vtt-character-condition--picker {

@@ -705,7 +705,11 @@ Main Action | Psionic Pyrokinesis Ranged Strike | Range: 10 | Target: one creatu
                 "markBonusDice": "",
                 "markPredicate": "",
                 "attribute": "Reason",
-                "damageType": "untyped"
+                "damageTypeOptions": [
+                  "acid",
+                  "corruption",
+                  "fire"
+                ]
               },
               {
                 "kind": "potency",
@@ -732,7 +736,11 @@ Main Action | Psionic Pyrokinesis Ranged Strike | Range: 10 | Target: one creatu
                 "markBonusDice": "",
                 "markPredicate": "",
                 "attribute": "Reason",
-                "damageType": "untyped"
+                "damageTypeOptions": [
+                  "acid",
+                  "corruption",
+                  "fire"
+                ]
               },
               {
                 "kind": "potency",
@@ -759,7 +767,11 @@ Main Action | Psionic Pyrokinesis Ranged Strike | Range: 10 | Target: one creatu
                 "markBonusDice": "",
                 "markPredicate": "",
                 "attribute": "Reason",
-                "damageType": "untyped"
+                "damageTypeOptions": [
+                  "acid",
+                  "corruption",
+                  "fire"
+                ]
               },
               {
                 "kind": "potency",
@@ -1795,4 +1807,3 @@ Start of your turn: +1d3First force move per round: +2 You can spend clarity you
 - **Can't Take Hold** - Your connection to the natural world allows you to resist certain supernatural effects. You ignore temporary difficult terrain created by magic and psionic abilities. Additionally, when you are force moved by a magic or psionic ability, you can reduce the forced movement distance by 1.
 - **Scan** - You can extend your psionic senses beyond their usual range. Onceon each of your turns, you can search for hidden creatures as a freemaneuver (see Hide and Sneak in Chapter 9: Tests). Additionally, onceyou establish line of effect to a thinking creature within distance ofyour Mind Spike ability, you always have line of effect to that creatureuntil they move beyond that distance.
 - **Spot the Tell** - Whenever you make a test to read a person and obtain a tier 3 outcome,you notice several tells that give away their true feelings. Any test youmake to read that person in the future gains an edge.
-

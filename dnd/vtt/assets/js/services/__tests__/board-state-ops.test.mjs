@@ -1119,7 +1119,7 @@ describe('Board State – delta ops persistence (phase 3-B commit 5)', () => {
       });
     };
 
-    persistCombatIntent(
+    const firstSave = persistCombatIntent(
       '/api/state',
       'scene-1',
       'turn.start',
@@ -1130,7 +1130,7 @@ describe('Board State – delta ops persistence (phase 3-B commit 5)', () => {
       },
       { _version: 9, _socketId: 'socket-1' }
     );
-    persistCombatIntent(
+    const secondSave = persistCombatIntent(
       '/api/state',
       'scene-1',
       'turn.start',
@@ -1142,7 +1142,21 @@ describe('Board State – delta ops persistence (phase 3-B commit 5)', () => {
       { _version: 9, _socketId: 'socket-1' }
     );
 
-    const payload = capturedPayloads[capturedPayloads.length - 1];
+    assert.equal(capturedPayloads.length, 1, 'the second intent waits for the first');
+    assert.equal(
+      capturedPayloads[0].ops[0].intentId,
+      'intent-a',
+      'the first authoritative intent is not aborted'
+    );
+    pendingFetchResolvers.shift()?.({
+      ok: true,
+      json: async () => ({ success: true, data: { _version: 10 } }),
+    });
+    await firstSave;
+    await Promise.resolve();
+
+    assert.equal(capturedPayloads.length, 2, 'the second intent is sent after the first');
+    const payload = capturedPayloads[1];
     assert.deepEqual(
       payload.ops.map((op) => op.intentId),
       ['intent-a', 'intent-b']
@@ -1153,6 +1167,69 @@ describe('Board State – delta ops persistence (phase 3-B commit 5)', () => {
     );
     assert.equal(payload.boardState._version, 9);
     assert.equal(payload.boardState._socketId, 'socket-1');
+    pendingFetchResolvers.shift()?.({
+      ok: true,
+      json: async () => ({ success: true, data: { _version: 11 } }),
+    });
+    const secondResult = await secondSave;
+    assert.equal(secondResult.success, true);
+  });
+
+  test('routine board ops cannot abort an in-flight combat intent', async () => {
+    const {
+      persistBoardStateOps,
+      persistCombatIntent,
+      _resetBoardStateOpsBufferForTest,
+    } = await import('../board-state-service.js');
+    _resetBoardStateOpsBufferForTest();
+
+    const requestSignals = [];
+    globalThis.fetch = async (_url, options = {}) => {
+      if (options?.body) capturedPayloads.push(JSON.parse(options.body));
+      requestSignals.push(options.signal);
+      return new Promise((resolve) => pendingFetchResolvers.push(resolve));
+    };
+
+    const combatSave = persistCombatIntent(
+      '/api/state',
+      'scene-1',
+      'combat.end',
+      { intentId: 'end-combat-once', encounterId: 'encounter-1' },
+      { _version: 20 }
+    );
+    const cleanupSave = persistBoardStateOps(
+      '/api/state',
+      [{
+        type: 'placement.update',
+        sceneId: 'scene-1',
+        placementId: 'hero',
+        patch: { triggeredActionReady: true },
+      }],
+      { _version: 20 }
+    );
+
+    assert.equal(capturedPayloads.length, 1, 'cleanup waits for the combat decision');
+    assert.equal(requestSignals[0].aborted, false, 'combat request remains in flight');
+
+    pendingFetchResolvers.shift()?.({
+      ok: true,
+      json: async () => ({
+        success: true,
+        data: { _version: 21 },
+        operationResults: [{ intentId: 'end-combat-once', accepted: true, applied: true }],
+      }),
+    });
+    const combatResult = await combatSave;
+    await Promise.resolve();
+    assert.equal(combatResult.success, true);
+    assert.equal(capturedPayloads.length, 2, 'cleanup follows the combat decision');
+
+    pendingFetchResolvers.shift()?.({
+      ok: true,
+      json: async () => ({ success: true, data: { _version: 22 } }),
+    });
+    const cleanupResult = await cleanupSave;
+    assert.equal(cleanupResult.success, true);
   });
 
   test('combat intent rejects unsupported types before saving', async () => {

@@ -12,6 +12,14 @@ async function loadLegacyNestedExtraFixture() {
   return JSON.parse(source);
 }
 
+async function loadAuthoredCharacterAbility(relativePath, abilityName) {
+  const source = await readFile(new URL(relativePath, import.meta.url), 'utf8');
+  const escapedName = abilityName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const section = source.match(new RegExp(`### ${escapedName}[\\s\\S]*?\`\`\`json\\s*([\\s\\S]*?)\`\`\``));
+  assert.ok(section, `found ${abilityName} JSON in ${relativePath}`);
+  return JSON.parse(section[1]);
+}
+
 function extraChainDepth(node) {
   let depth = 0;
   let current = node;
@@ -65,6 +73,193 @@ test('validation exposes schema warnings and unsupported extra fields', async ()
     assert.ok(issues.some((issue) => issue.includes('mysteryBlockField')));
     assert.ok(issues.some((issue) => issue.includes('madeUpEffectField')));
     assert.equal(normalized.cards[0].effects[1].kind, 'note');
+  } finally {
+    harness.close();
+  }
+});
+
+test('target selection guides and persistent condition riders normalize idempotently', async () => {
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const input = {
+      schema: 'ability-automation/v3',
+      cards: [
+        { type: 'target', id: 'target-1', name: 'primary', mode: 'token', range: 5 },
+        {
+          type: 'effect',
+          id: 'effect-1',
+          target: 'primary',
+          effects: [{
+            kind: 'condition',
+            name: 'grabbed',
+            duration: 'saveEnds',
+            riders: [{
+              id: 'crushing-grab',
+              when: 'turnStart',
+              target: 'bearer',
+              effects: [{ kind: 'damage', amount: 5, damageType: 'fire' }],
+            }],
+          }],
+        },
+      ],
+    };
+    const once = harness.window.AbilityAutomationSchema.normalizeAutomation(input);
+    let repeated = once;
+    for (let index = 0; index < 100; index += 1) {
+      repeated = harness.window.AbilityAutomationSchema.normalizeAutomation(repeated);
+    }
+    assert.deepEqual(repeated, once);
+    assert.equal(once.cards[0].distance.value, 5);
+    const explicitGuide = harness.window.AbilityAutomationSchema.normalizeAutomation({
+      schema: 'ability-automation/v3',
+      cards: [{ type: 'target', mode: 'token', selectionGuide: { range: 8, form: 'ranged' } }],
+    });
+    assert.deepEqual(explicitGuide.cards[0].selectionGuide, { range: 8, form: 'ranged', enforce: false });
+    assert.deepEqual(once.cards[1].effects[0].riders[0].effects[0], {
+      kind: 'damage',
+      amount: 5,
+      amountDice: '',
+      markBonusDice: '',
+      markPredicate: '',
+      attribute: '',
+      damageType: 'fire',
+    });
+  } finally {
+    harness.close();
+  }
+});
+
+test('damage type options normalize case and duplicates into one canonical choice list', async () => {
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const input = {
+      schema: 'ability-automation/v3',
+      cards: [{
+        type: 'effect',
+        target: 'primary',
+        effects: [{
+          kind: 'damage',
+          amount: 5,
+          damageType: 'psychic',
+          damageTypeOptions: [' Fire ', 'COLD', 'fire', 'radiant', '', null],
+        }],
+      }],
+    };
+    const once = harness.window.AbilityAutomationSchema.normalizeAutomation(input);
+    const effect = once.cards[0].effects[0];
+
+    assert.deepEqual([...effect.damageTypeOptions], ['fire', 'cold']);
+    assert.equal(Object.hasOwn(effect, 'damageType'), false, 'options do not retain a silent scalar default');
+    assert.ok(once.warnings.some((warning) => warning.includes('removed blank, duplicate, or unsupported')));
+    assert.ok(once.warnings.some((warning) => warning.includes('damageType: ignored')));
+
+    const canonicalInput = structuredClone(once);
+    canonicalInput.warnings = [];
+    const canonicalJson = JSON.stringify(canonicalInput);
+    let repeated = canonicalInput;
+    for (let pass = 0; pass < 100; pass += 1) {
+      repeated = harness.window.AbilityAutomationSchema.normalizeAutomation(repeated);
+      assert.deepEqual(repeated.warnings, [], `pass ${pass + 1} remains warning-free`);
+      assert.equal(JSON.stringify(repeated), canonicalJson, `pass ${pass + 1} remains byte-stable`);
+    }
+  } finally {
+    harness.close();
+  }
+});
+
+test('single, empty, and malformed damage type option lists warn and never create a choice', async () => {
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const single = harness.window.AbilityAutomationSchema.normalizeAutomation({
+      schema: 'ability-automation/v3',
+      cards: [{
+        type: 'effect',
+        effects: [{ kind: 'damage', amount: 3, damageTypeOptions: [' HOLY '] }],
+      }],
+    });
+    assert.equal(single.cards[0].effects[0].damageType, 'holy');
+    assert.equal(Object.hasOwn(single.cards[0].effects[0], 'damageTypeOptions'), false);
+    assert.ok(single.warnings.some((warning) => warning.includes('needs at least two valid')));
+
+    const empty = harness.window.AbilityAutomationSchema.normalizeAutomation({
+      schema: 'ability-automation/v3',
+      cards: [{
+        type: 'effect',
+        effects: [{ kind: 'damage', amount: 3, damageType: 'fire', damageTypeOptions: [] }],
+      }],
+    });
+    assert.equal(empty.cards[0].effects[0].damageType, 'fire');
+    assert.equal(Object.hasOwn(empty.cards[0].effects[0], 'damageTypeOptions'), false);
+    assert.ok(empty.warnings.some((warning) => warning.includes('needs at least two valid')));
+
+    const malformed = harness.window.AbilityAutomationSchema.normalizeAutomation({
+      schema: 'ability-automation/v3',
+      cards: [{
+        type: 'effect',
+        effects: [{ kind: 'damage', amount: 3, damageType: 'cold', damageTypeOptions: 'fire,cold' }],
+      }],
+    });
+    assert.equal(malformed.cards[0].effects[0].damageType, 'cold');
+    assert.ok(malformed.warnings.some((warning) => warning.includes('must be an array')));
+  } finally {
+    harness.close();
+  }
+});
+
+test('damage type choices are visible in unresolved and inspector-resolved summaries', async () => {
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const effect = {
+      kind: 'damage',
+      amount: 5,
+      attribute: 'Might',
+      damageTypeOptions: ['acid', 'cold'],
+    };
+    assert.equal(
+      harness.window.AbilityAutomationPrimitives.describeEffect(effect),
+      '5 + Might [choose acid / cold] damage'
+    );
+    assert.equal(
+      harness.window.AbilityAutomationPrimitives.describeEffectResolved(effect, {
+        getAttributeBonus: () => 2,
+      }),
+      '7 [choose acid / cold] damage'
+    );
+  } finally {
+    harness.close();
+  }
+});
+
+test('authored Hurl Element and Smolder records use their source-accurate damage type options', async () => {
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const hurl = await loadAuthoredCharacterAbility(
+      '../../../ai-reference/characters/zepha-automations.md',
+      'Hurl Element'
+    );
+    const smolder = await loadAuthoredCharacterAbility(
+      '../../../ai-reference/characters/indigo-automations.md',
+      'Smolder'
+    );
+    const expectedHurl = ['acid', 'cold', 'corruption', 'fire', 'lightning', 'poison', 'sonic'];
+    const expectedSmolder = ['acid', 'corruption', 'fire'];
+
+    for (const field of ['tier1DamageType', 'tier2DamageType', 'tier3DamageType']) {
+      assert.equal(field in hurl.fields, false, `display field ${field} does not falsely pin Hurl Element to fire`);
+    }
+    for (const tier of Object.values(hurl.automation.cards[1].tiers)) {
+      assert.deepEqual(tier.effects[0].damageTypeOptions, expectedHurl);
+    }
+    for (const tier of Object.values(smolder.automation.cards[2].tiers)) {
+      assert.deepEqual(tier.effects[0].damageTypeOptions, expectedSmolder);
+      const weakness = tier.effects[1].onFail.find((effect) => effect.name === 'damageWeakness');
+      assert.equal(weakness.damageType, '', 'Smolder weakness inherits the selected damage type at runtime');
+    }
+
+    const normalizedHurl = harness.window.AbilityAutomationSchema.normalizeAutomation(hurl.automation);
+    const normalizedSmolder = harness.window.AbilityAutomationSchema.normalizeAutomation(smolder.automation);
+    assert.deepEqual(normalizedHurl.warnings, []);
+    assert.deepEqual(normalizedSmolder.warnings, []);
   } finally {
     harness.close();
   }
@@ -826,6 +1021,61 @@ test('runner applies numeric damage weakness from a failed potency rider', async
         sourceName: 'Cal',
       },
     ]);
+  } finally {
+    harness.close();
+  }
+});
+
+test('runner forwards persistent condition riders with source attribution', async () => {
+  const harness = await createAbilityAutomationHarness({
+    targets: [{ id: 'enemy-1', name: 'Enemy' }],
+  });
+  try {
+    const automation = {
+      schema: 'ability-automation/v3',
+      cards: [
+        { type: 'target', id: 'target-1', name: 'primary', mode: 'token', range: 5 },
+        {
+          type: 'effect',
+          id: 'effect-1',
+          target: 'primary',
+          effects: [{
+            kind: 'condition',
+            name: 'grabbed',
+            duration: 'saveEnds',
+            riders: [{
+              id: 'crushing-grab',
+              when: 'turnStart',
+              target: 'bearer',
+              effects: [{ kind: 'damage', amount: 5, damageType: 'fire' }],
+            }],
+          }],
+        },
+      ],
+    };
+    const result = await harness.runAutomation({
+      automation,
+      action: { id: 'crushing-grip', name: 'Crushing Grip', actionLabel: 'Main Action' },
+      targetSelections: [{ id: 'enemy-1', name: 'Enemy' }],
+    });
+    assert.equal(result.calls.applyCondition.length, 1);
+    const applied = result.calls.applyCondition[0];
+    assert.equal(applied.condition.sourceName, 'Harness Hero');
+    assert.equal(applied.condition.sourceAbility, 'Crushing Grip');
+    assert.deepEqual(applied.condition.riders[0], {
+      id: 'crushing-grab',
+      when: 'turnStart',
+      target: 'bearer',
+      effects: [{
+        kind: 'damage',
+        amount: 5,
+        amountDice: '',
+        markBonusDice: '',
+        markPredicate: '',
+        attribute: '',
+        damageType: 'fire',
+      }],
+    });
   } finally {
     harness.close();
   }

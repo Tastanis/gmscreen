@@ -237,6 +237,20 @@
     return lower;
   }
 
+  function normalizeDamageTypeOptions(value) {
+    if (!Array.isArray(value)) return [];
+    const seen = new Set();
+    const result = [];
+    for (const item of value) {
+      if (item === null || item === undefined || !String(item).trim()) continue;
+      const damageType = normalizeDamageType(item);
+      if (!DAMAGE_TYPES.includes(damageType) || seen.has(damageType)) continue;
+      seen.add(damageType);
+      result.push(damageType);
+    }
+    return result;
+  }
+
   function normalizeCondition(value) {
     if (!value) return "";
     const raw = String(value).trim();
@@ -400,7 +414,9 @@
         const amount = effect.amount || 0;
         const mult = Number(effect.multiplier) || 1;
         const attr = effect.attribute ? ` + ${mult !== 1 ? `${mult}× ` : ""}${effect.attribute}` : "";
-        const type = effect.damageType && effect.damageType !== "untyped" ? ` ${effect.damageType}` : "";
+        const type = Array.isArray(effect.damageTypeOptions) && effect.damageTypeOptions.length > 1
+          ? ` [choose ${effect.damageTypeOptions.join(" / ")}]`
+          : effect.damageType && effect.damageType !== "untyped" ? ` ${effect.damageType}` : "";
         return `${amount}${attr}${type} damage${describeTriggerValue(effect.amountFrom)}`;
       }
       case "heal": {
@@ -535,7 +551,9 @@
     switch (effect.kind) {
       case "damage": {
         const total = resolveDamageAmount(effect, ctx);
-        const type = effect.damageType && effect.damageType !== "untyped" ? ` ${effect.damageType}` : "";
+        const type = Array.isArray(effect.damageTypeOptions) && effect.damageTypeOptions.length > 1
+          ? ` [choose ${effect.damageTypeOptions.join(" / ")}]`
+          : effect.damageType && effect.damageType !== "untyped" ? ` ${effect.damageType}` : "";
         return `${total}${type} damage${describeTriggerValue(effect.amountFrom)}`;
       }
       case "potency": {
@@ -584,6 +602,7 @@
     normalizeAttribute,
     normalizeAttributeOrList,
     normalizeDamageType,
+    normalizeDamageTypeOptions,
     normalizeCondition,
     normalizeDuration,
     normalizePotencyLevel,

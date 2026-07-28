@@ -86,6 +86,62 @@ test('queueSave keeps latest payload pending after aborting the prior request', 
   assert.equal(secondResult.aborted, false);
 });
 
+test('non-coalescing save is an ordering barrier for later coalescing saves', async (t) => {
+  const originalWindow = global.window;
+  const originalFetch = global.fetch;
+  const requests = [];
+
+  global.window = {
+    setTimeout(callback) {
+      callback();
+      return 0;
+    },
+  };
+  global.fetch = (endpoint, options = {}) =>
+    new Promise((resolve) => {
+      requests.push({ endpoint, options, resolve });
+    });
+
+  t.after(() => {
+    if (originalWindow === undefined) delete global.window;
+    else global.window = originalWindow;
+    if (originalFetch === undefined) delete global.fetch;
+    else global.fetch = originalFetch;
+  });
+
+  const { queueSave } = await import('../persistence.js');
+  const combatPromise = queueSave(
+    'combat-barrier-key',
+    { kind: 'combat-intent' },
+    '/save-board-state',
+    { immediate: true, coalesce: false }
+  );
+  const routinePromise = queueSave(
+    'combat-barrier-key',
+    { kind: 'routine-update' },
+    '/save-board-state',
+    { immediate: true }
+  );
+
+  assert.equal(requests.length, 1, 'routine save waits behind the combat intent');
+  assert.equal(
+    requests[0].options.signal.aborted,
+    false,
+    'routine save must not abort the combat intent'
+  );
+
+  requests[0].resolve({ ok: true, json: async () => ({ success: true }) });
+  const combatResult = await combatPromise;
+  await Promise.resolve();
+  assert.equal(combatResult.success, true);
+  assert.equal(requests.length, 2, 'routine save runs after the combat intent');
+  assert.deepEqual(JSON.parse(requests[1].options.body), { kind: 'routine-update' });
+
+  requests[1].resolve({ ok: true, json: async () => ({ success: true }) });
+  const routineResult = await routinePromise;
+  assert.equal(routineResult.success, true);
+});
+
 test('queueSave resolves completion listeners when save finishes', async (t) => {
   const originalWindow = global.window;
   const originalFetch = global.fetch;

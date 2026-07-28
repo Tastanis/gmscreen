@@ -94,6 +94,22 @@ import {
   reconcileStaleTokenPointerTarget,
   resolveCanonicalTokenPointerTarget,
 } from './token-pointer-routing.js';
+import {
+  calculateConditionDamageAdjustments,
+  getManualDamageTypeOptions as getCanonicalManualDamageTypeOptions,
+  openDamageWeaknessDialog,
+} from './typed-damage-condition.js';
+import { resolveSelectionRangeGuide } from './selection-range-guide.js';
+import {
+  buildConditionIdentityKey,
+  buildConditionRiderBoundaryKey,
+  createConditionInstanceId,
+  createNewConditionInstanceId,
+  getPendingConditionRiders,
+  markConditionRiderExecuted,
+  normalizeRiderExecutions,
+  normalizeStoredConditionRiders,
+} from '../state/normalize/condition-riders.js';
 import { createTokenMovementController } from '../token-system/token-movement-controller.js';
 import {
   buildTokenStackOrderUpdate,
@@ -849,6 +865,7 @@ export function mountBoardInteractions(store, routes = {}) {
     ['grappled', 'Grabbed'],
   ]);
   let activeCustomConditionDialog = null;
+  let activeDamageWeaknessDialog = null;
 
   function getCustomConditionOverlayElement() {
     const overlay = activeCustomConditionDialog?.overlay ?? null;
@@ -897,6 +914,7 @@ export function mountBoardInteractions(store, routes = {}) {
   let removeTokenSettingsListeners = null;
   let hitPointsEditSession = null;
   let damageHealUi = null;
+  let automationDamageTypePrompt = null;
   let pendingDamageHeal = null;
   let pendingAutomationTarget = null;
   let automationTargetPrompt = null;
@@ -4468,6 +4486,7 @@ export function mountBoardInteractions(store, routes = {}) {
           if (effect.hidden) condition.hidden = true;
           if (effect.label) condition.label = effect.label;
           if (effect.rider && typeof effect.rider === 'object') condition.rider = JSON.parse(JSON.stringify(effect.rider));
+          if (Array.isArray(effect.riders) && effect.riders.length) condition.riders = JSON.parse(JSON.stringify(effect.riders));
           if (effect.consume) condition.consume = effect.consume;
           const result = await dispatchAutomationBoardEvent('vtt:automation-apply-condition', {
             placementId: target.id,
@@ -7930,11 +7949,14 @@ export function mountBoardInteractions(store, routes = {}) {
   function handleCharacterSummaryConditionRemove(event) {
     const placementId = typeof event?.detail?.placementId === 'string' ? event.detail.placementId : '';
     const conditionIndex = Number.parseInt(event?.detail?.conditionIndex, 10);
+    const conditionInstanceId = typeof event?.detail?.conditionInstanceId === 'string'
+      ? event.detail.conditionInstanceId.trim()
+      : '';
     if (!placementId || !Number.isInteger(conditionIndex) || conditionIndex < 0) {
       return;
     }
 
-    removeConditionFromPlacement(placementId, conditionIndex);
+    removeConditionFromPlacement(placementId, conditionIndex, conditionInstanceId);
   }
 
   function getSelectedPcSummaryDetail() {
@@ -11130,6 +11152,9 @@ export function mountBoardInteractions(store, routes = {}) {
       openTurnPrompt(representativeId);
     }
     notifyConditionTurnStart(representativeId);
+    runConditionRidersAtBoundary(representativeId, 'turnStart').catch((error) => {
+      console.warn('[VTT] condition start-of-turn rider failed', error);
+    });
     queueCombatAuthorityIntent('turn.start', {
       combatantId: representativeId,
       holderName: initiatorName,
@@ -11173,6 +11198,74 @@ export function mountBoardInteractions(store, routes = {}) {
         description,
       });
     });
+  }
+
+  async function runConditionRidersAtBoundary(combatantId, when, options = {}) {
+    const memberIds = [...new Set(getGroupMembers(combatantId).filter(Boolean))];
+    const results = await Promise.all(
+      memberIds.map((memberId) => runConditionRidersForPlacement(memberId, when, options))
+    );
+    return {
+      applied: results.reduce((sum, result) => sum + (result?.applied || 0), 0),
+      boundaries: results.map((result) => result?.boundaryKey).filter(Boolean),
+    };
+  }
+
+  async function runConditionRidersForPlacement(combatantId, when, options = {}) {
+    if (!combatantId || (when !== 'turnStart' && when !== 'turnEnd')) return { applied: 0 };
+    const placement = getPlacementFromStore(combatantId);
+    if (!placement) return { applied: 0 };
+    const conditions = ensurePlacementConditions(placement?.conditions ?? placement?.condition ?? null);
+    const boundaryKey = buildConditionRiderBoundaryKey({
+      encounterId: combatEncounterId,
+      turnLockId: options.turnLockId || turnLockState.lockedAt,
+      combatantId,
+      round: combatRound,
+      roundTurnCount,
+      when,
+    });
+    const pending = [];
+    conditions.forEach((condition) => {
+      if (!condition?.instanceId) return;
+      getPendingConditionRiders(condition, when, boundaryKey).forEach((rider) => {
+        pending.push({ condition, rider });
+      });
+    });
+    if (!pending.length) return { applied: 0 };
+
+    // Mark before applying: a reload can never double-apply the same boundary.
+    // The conservative failure mode is one skipped rider if persistence fails.
+    const marked = updatePlacementById(combatantId, (target) => {
+      const current = ensurePlacementConditions(target?.conditions ?? target?.condition ?? null);
+      pending.forEach(({ condition, rider }) => {
+        const index = current.findIndex((entry) => entry.instanceId === condition.instanceId);
+        if (index >= 0) current[index] = markConditionRiderExecuted(current[index], rider.id, boundaryKey);
+      });
+      target.conditions = current;
+      target.condition = current[0];
+    });
+    if (!marked) return { applied: 0 };
+    syncConditionsAfterMutation(true);
+    dispatchTokenSelectionSummary();
+
+    let applied = 0;
+    for (const { condition, rider } of pending) {
+      const target = rider.target === 'source'
+        ? getPlacementFromStore(condition.sourceId)
+        : getPlacementFromStore(combatantId);
+      if (!target) continue;
+      await applyOngoingAutomationEffects({
+        sourceId: condition.sourceId || combatantId,
+        sourceName: condition.sourceName || tokenLabel(placement),
+        abilityId: condition.instanceId,
+        abilityName: condition.sourceAbility || condition.label || condition.name,
+        effects: rider.effects,
+        placements: [target],
+        reason: rider.label || (when === 'turnStart' ? 'start of turn' : 'end of turn'),
+      });
+      applied += 1;
+    }
+    return { applied, boundaryKey };
   }
 
   function cancelActiveCombatantTurn() {
@@ -11247,12 +11340,16 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
     const finishedId = turnCompletion.finishedId;
+    const finishedTurnLockId = turnLockState.lockedAt;
     if (isGmUser()) {
       combatTimerService.endTurn();
     }
     // Fan out turnEnd before any save-ends UI opens, so authored "at end of
     // turn" triggers can arm their owner before the resolution dialog appears.
     fireTimingBoundary('turnEnd', { placementId: finishedId, team: turnCompletion.finishedTeam });
+    runConditionRidersAtBoundary(finishedId, 'turnEnd', { turnLockId: finishedTurnLockId }).catch((error) => {
+      console.warn('[VTT] condition end-of-turn rider failed', error);
+    });
     // Tick zones owned by this combatant whose tickAt is endOfTurn.
     tickPersistentZonesForOwner(finishedId, 'endOfTurn').catch((err) => {
       console.warn('[VTT] persistent zone end-of-turn tick failed', err);
@@ -12926,7 +13023,7 @@ export function mountBoardInteractions(store, routes = {}) {
         result.effect?.placementId || '',
         result.effect?.amount || 0,
         result.effect?.mode === 'heal' ? 'heal' : 'damage',
-        { sync: false }
+        { sync: false, damageType: result.effect?.damageType || '' }
       );
     }
   }
@@ -13810,6 +13907,7 @@ export function mountBoardInteractions(store, routes = {}) {
   window.VTTBoardCallbacks = {
     selectTarget: function (cfg) { return dispatchBoardCustom('vtt:automation-select-target', 'targetConfig', cfg); },
     selectAreaTarget: function (cfg) { return dispatchBoardCustom('vtt:automation-select-area', 'targetConfig', cfg); },
+    chooseDamageType: function (payload) { return promptAutomationDamageType(payload); },
     cancelTargetSelection: function () { document.dispatchEvent(new CustomEvent('vtt:automation-cancel-target')); },
     cancelAreaSelection: function () { document.dispatchEvent(new CustomEvent('vtt:automation-cancel-area')); },
     applyDamage: function (payload) { return dispatchBoardCustom('vtt:automation-apply-damage', 'payload', payload); },
@@ -17062,18 +17160,72 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function getManualDamageTypeOptions() {
-    return [
-      { value: '', label: 'Untyped' },
-      { value: 'acid', label: 'Acid' },
-      { value: 'cold', label: 'Cold' },
-      { value: 'corruption', label: 'Corruption' },
-      { value: 'fire', label: 'Fire' },
-      { value: 'holy', label: 'Holy' },
-      { value: 'lightning', label: 'Lightning' },
-      { value: 'poison', label: 'Poison' },
-      { value: 'psychic', label: 'Psychic' },
-      { value: 'sonic', label: 'Sonic' },
-    ];
+    return getCanonicalManualDamageTypeOptions(window.AbilityAutomationPrimitives);
+  }
+
+  function promptAutomationDamageType(payload = {}) {
+    const registeredTypes = new Set(getManualDamageTypeOptions().map((option) => option.value || 'untyped'));
+    const allowed = [...new Set((Array.isArray(payload.options) ? payload.options : [])
+      .map((value) => normalizeAutomationDamageType(value))
+      .map((value) => value || 'untyped')
+      .filter((value) => registeredTypes.has(value)))];
+    if (allowed.length < 2 || typeof document === 'undefined') {
+      return Promise.resolve(null);
+    }
+    automationDamageTypePrompt?.finish?.(null);
+    return new Promise((resolve) => {
+      const container = document.createElement('section');
+      container.className = 'vtt-damage-heal vtt-automation-damage-type-picker';
+      container.setAttribute('role', 'dialog');
+      container.setAttribute('aria-modal', 'true');
+      container.setAttribute('aria-label', 'Choose damage type');
+      container.innerHTML = `
+        <header class="vtt-damage-heal__header">
+          <h2 class="vtt-damage-heal__title">Choose Damage Type</h2>
+          <button type="button" class="vtt-damage-heal__close" data-damage-type-cancel aria-label="Cancel">&times;</button>
+        </header>
+        <div class="vtt-damage-heal__field">
+          <label class="vtt-damage-heal__label" for="vtt-automation-damage-type">${escapeHtml(payload.abilityName || 'Ability')}</label>
+          <select id="vtt-automation-damage-type" class="vtt-damage-heal__select" data-damage-type-select>
+            <option value="" selected disabled>Choose a damage type</option>
+            ${allowed.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(formatDamageTypeLabel(value))}</option>`).join('')}
+          </select>
+        </div>
+        <div class="vtt-damage-heal__actions">
+          <button type="button" class="btn btn--small" data-damage-type-cancel>Cancel</button>
+          <button type="button" class="btn btn--small btn--danger is-active" data-damage-type-confirm disabled>Use Type</button>
+        </div>
+      `;
+      const select = container.querySelector('[data-damage-type-select]');
+      const confirmButton = container.querySelector('[data-damage-type-confirm]');
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        document.removeEventListener('keydown', onKeyDown);
+        container.remove();
+        if (automationDamageTypePrompt?.container === container) automationDamageTypePrompt = null;
+        resolve(value);
+      };
+      const onKeyDown = (event) => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          finish(null);
+        }
+      };
+      container.addEventListener('click', (event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        if (target?.closest('[data-damage-type-cancel]')) finish(null);
+        if (target?.closest('[data-damage-type-confirm]')) finish(select?.value || null);
+      });
+      select?.addEventListener('change', () => {
+        if (confirmButton) confirmButton.disabled = !allowed.includes(select.value);
+      });
+      document.addEventListener('keydown', onKeyDown);
+      document.body.appendChild(container);
+      automationDamageTypePrompt = { container, finish };
+      select?.focus();
+    });
   }
 
   function formatDamageTypeLabel(value) {
@@ -17232,26 +17384,14 @@ export function mountBoardInteractions(store, routes = {}) {
   function renderAutomationTargetRangeOverlay(targetConfig) {
     clearAutomationTargetRangeOverlay();
     if (!mapTransform || !targetConfig) return;
-    const source = resolveAutomationSourcePlacement(targetConfig.sourcePlacement)
+    const guide = resolveSelectionRangeGuide(targetConfig);
+    if (!guide) return;
+    const source = resolveAutomationSourcePlacement(guide.sourcePlacement)
       || (sourceTokenForRange());
     if (!source) return;
-    const distance = targetConfig.distance && typeof targetConfig.distance === 'object'
-      ? targetConfig.distance
-      : null;
-    if (!distance) return;
-    const form = String(distance.form || '').toLowerCase();
-    if (form === 'self') return;
     // For meleeOrRanged we draw the larger of the two — the secondary is the
     // ranged value, primary is the melee reach.
-    let range = Number.parseInt(distance.value, 10) || 0;
-    if (form === 'meleeorranged') {
-      range = Math.max(range, Number.parseInt(distance.secondary, 10) || 0);
-    }
-    if (form === 'cube' || form === 'line' || form === 'wall') {
-      // Area templates have their own placement overlay. Show the "within"
-      // range here so the player can see where they're allowed to drop it.
-      range = Number.parseInt(distance.within, 10) || range;
-    }
+    const range = guide.range;
     if (range <= 0) return;
     const width = Math.max(1, source.width || 1);
     const height = Math.max(1, source.height || 1);
@@ -17490,14 +17630,11 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!pendingAutomationArea || !automationAreaOverlay) return;
     const rangeNode = automationAreaOverlay.querySelector('[data-automation-area-range]');
     if (!(rangeNode instanceof HTMLElement)) return;
-    const source = pendingAutomationArea.targetConfig?.sourcePlacement || pendingAutomationArea.sourcePlacement || null;
+    const guide = resolveSelectionRangeGuide(pendingAutomationArea.targetConfig);
+    const source = guide?.sourcePlacement || pendingAutomationArea.sourcePlacement || null;
     // v3 sends distance.within (number); legacy sent range as a string like "10".
     // Pick whichever is present.
-    const within = pendingAutomationArea.targetConfig?.distance?.within;
-    const legacy = Number.parseInt(String(pendingAutomationArea.targetConfig?.range || '').match(/\d+/)?.[0] ?? '', 10);
-    const range = Number.isFinite(Number.parseInt(within, 10))
-      ? Number.parseInt(within, 10)
-      : legacy;
+    const range = guide?.range || 0;
     if (!source || !Number.isFinite(range) || range <= 0) {
       rangeNode.hidden = true;
       return;
@@ -17691,11 +17828,14 @@ export function mountBoardInteractions(store, routes = {}) {
     const resultPlacement = getPlacementFromStore(payload.placementId);
     if (!isAutomationPlacementHidden(resultPlacement)) {
       flashAutomationTargetToken(payload.placementId);
-      floatStaminaDelta(payload.placementId, adjustedAmount, 'damage');
+      floatStaminaDelta(payload.placementId, adjustedAmount, 'damage', {
+        damageType: payload.damageType || '',
+      });
     }
     const maxDisplay = result.max !== null ? result.max : DEFAULT_HP_PLACEHOLDER;
     const hpDisplay = result.max !== null ? `${result.current}/${maxDisplay}` : `${result.current}`;
-    updateStatus(`${result.name} takes ${adjustedAmount} stamina damage (${hpDisplay} stamina remaining).`);
+    const damageTypeLabel = normalizeAutomationDamageType(payload.damageType || '');
+    updateStatus(`${result.name} takes ${adjustedAmount}${damageTypeLabel ? ` ${damageTypeLabel}` : ''} stamina damage (${hpDisplay} stamina remaining).`);
     // Bus fan-out for authored triggers. `damage` covers "when this creature
     // takes damage" predicates; `staminaChange` covers the broader hook for
     // anything watching for stamina deltas.
@@ -17915,6 +18055,12 @@ export function mountBoardInteractions(store, routes = {}) {
     if (conditionPayload.sourceAbility) {
       condition.sourceAbility = String(conditionPayload.sourceAbility);
     }
+    if (Array.isArray(conditionPayload.riders)) {
+      condition.riders = normalizeStoredConditionRiders(conditionPayload.riders);
+      if (condition.riders.length) {
+        condition.instanceId = createNewConditionInstanceId(condition);
+      }
+    }
     // Numeric / typed riders for damageWeakness / damageImmunity. The damage
     // adjuster reads these directly off the placement's condition list.
     if (name === 'damageWeakness' || name === 'damageImmunity') {
@@ -18074,24 +18220,11 @@ export function mountBoardInteractions(store, routes = {}) {
       : placement?.condition
         ? [placement.condition]
         : [];
-    if (!conditions.length) return { immunity: 0, vulnerability: 0 };
-    const requestedType = normalizeAutomationDamageType(damageType);
-    let immunity = 0;
-    let vulnerability = 0;
-    for (const condition of conditions) {
-      if (!condition || typeof condition !== 'object') continue;
-      const name = typeof condition.name === 'string' ? condition.name : '';
-      if (name !== 'damageWeakness' && name !== 'damageImmunity') continue;
-      const amount = Number.parseInt(condition.amount, 10);
-      if (!Number.isFinite(amount) || amount <= 0) continue;
-      const conditionType = normalizeAutomationDamageType(condition.damageType || '');
-      // Empty conditionType means "matches every damage type". If the damage
-      // event itself is untyped, only "every type" riders bite.
-      if (conditionType && conditionType !== requestedType) continue;
-      if (name === 'damageWeakness') vulnerability += amount;
-      else immunity += amount;
-    }
-    return { immunity, vulnerability };
+    const result = calculateConditionDamageAdjustments(
+      conditions,
+      normalizeAutomationDamageType(damageType)
+    );
+    return { immunity: result.immunity, vulnerability: result.weakness };
   }
 
   async function getAutomationSheetForPlacement(placementId) {
@@ -19197,11 +19330,16 @@ export function mountBoardInteractions(store, routes = {}) {
     const numericAmount = Number.parseInt(amount, 10);
     if (!Number.isFinite(numericAmount) || numericAmount === 0) return;
     const key = String(placementId);
+    const damageType = mode === 'damage'
+      ? normalizeAutomationDamageType(options.damageType || '')
+      : '';
     const prior = staminaFloatQueues.get(key) || Promise.resolve();
     const next = prior
       .catch(() => {})
       .then(() => new Promise((resolve) => {
-        showStaminaFloatWhenTokenRenders(placementId, numericAmount, mode).finally(() => {
+        showStaminaFloatWhenTokenRenders(placementId, numericAmount, mode, undefined, {
+          damageType,
+        }).finally(() => {
           window.setTimeout(resolve, STAMINA_FLOAT_QUEUE_GAP_MS);
         });
       }));
@@ -19222,13 +19360,20 @@ export function mountBoardInteractions(store, routes = {}) {
       placementId: key,
       amount: Math.abs(numericAmount),
       mode: mode === 'heal' ? 'heal' : 'damage',
+      ...(damageType ? { damageType } : {}),
       triggeredAt: Date.now(),
     });
     syncCombatStateToStore();
   }
 
-  function showStaminaFloatWhenTokenRenders(placementId, amount, mode, attemptsLeft = STAMINA_FLOAT_RENDER_RETRY_ATTEMPTS) {
-    if (showStaminaFloatNow(placementId, amount, mode)) {
+  function showStaminaFloatWhenTokenRenders(
+    placementId,
+    amount,
+    mode,
+    attemptsLeft = STAMINA_FLOAT_RENDER_RETRY_ATTEMPTS,
+    options = {}
+  ) {
+    if (showStaminaFloatNow(placementId, amount, mode, options)) {
       return Promise.resolve(true);
     }
     if (attemptsLeft <= 0) {
@@ -19237,7 +19382,7 @@ export function mountBoardInteractions(store, routes = {}) {
     return new Promise((resolve) => {
       const retry = () => {
         window.setTimeout(() => {
-          showStaminaFloatWhenTokenRenders(placementId, amount, mode, attemptsLeft - 1)
+          showStaminaFloatWhenTokenRenders(placementId, amount, mode, attemptsLeft - 1, options)
             .then(resolve);
         }, STAMINA_FLOAT_RENDER_RETRY_DELAY_MS);
       };
@@ -19263,7 +19408,7 @@ export function mountBoardInteractions(store, routes = {}) {
     return `${prefix}-${random}`;
   }
 
-  function showStaminaFloatNow(placementId, amount, mode) {
+  function showStaminaFloatNow(placementId, amount, mode, options = {}) {
     const escapedId = window.CSS?.escape
       ? window.CSS.escape(String(placementId))
       : String(placementId).replace(/["\\]/g, '\\$&');
@@ -19273,7 +19418,10 @@ export function mountBoardInteractions(store, routes = {}) {
     const span = document.createElement('span');
     span.className = `vtt-token__float-number vtt-token__float-number--${mode === 'heal' ? 'heal' : 'damage'}`;
     const prefix = mode === 'heal' ? '+' : '-';
-    span.textContent = `${prefix}${Math.abs(amount)}`;
+    const damageType = mode === 'damage'
+      ? normalizeAutomationDamageType(options.damageType || '')
+      : '';
+    span.textContent = `${prefix}${Math.abs(amount)}${damageType ? ` ${formatDamageTypeLabel(damageType)}` : ''}`;
     token.appendChild(span);
     window.setTimeout(() => {
       if (span.parentNode === token) {
@@ -20473,6 +20621,14 @@ export function mountBoardInteractions(store, routes = {}) {
     if (typeof value.sourceAbility === 'string' && value.sourceAbility.trim()) {
       result.sourceAbility = value.sourceAbility.trim();
     }
+    const riders = normalizeStoredConditionRiders(value.riders);
+    if (riders.length) {
+      result.riders = riders;
+      const instanceId = typeof value.instanceId === 'string' ? value.instanceId.trim() : '';
+      if (instanceId) result.instanceId = instanceId;
+      const executions = normalizeRiderExecutions(value.riderExecutions, riders.map((rider) => rider.id));
+      if (Object.keys(executions).length) result.riderExecutions = executions;
+    }
     return result;
   }
 
@@ -20525,6 +20681,13 @@ export function mountBoardInteractions(store, routes = {}) {
     if (typeof normalized.sourceAbility === 'string' && normalized.sourceAbility) {
       condition.sourceAbility = normalized.sourceAbility;
     }
+    if (Array.isArray(normalized.riders) && normalized.riders.length) {
+      condition.riders = JSON.parse(JSON.stringify(normalized.riders));
+      condition.instanceId = normalized.instanceId || createConditionInstanceId(normalized);
+      if (normalized.riderExecutions && typeof normalized.riderExecutions === 'object') {
+        condition.riderExecutions = { ...normalized.riderExecutions };
+      }
+    }
 
     return condition;
   }
@@ -20551,6 +20714,9 @@ export function mountBoardInteractions(store, routes = {}) {
       const condition = normalizePlacementCondition(current);
       if (!condition) {
         continue;
+      }
+      if (condition.riders?.length && !condition.instanceId) {
+        condition.instanceId = createConditionInstanceId(condition, normalized.length);
       }
 
       const key = buildConditionKey(condition);
@@ -20640,6 +20806,9 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const name = condition.name.trim().toLowerCase();
     const type = normalizeConditionDurationValue(condition?.duration?.type ?? '');
+    if (condition.instanceId || condition.riders?.length) {
+      return buildConditionIdentityKey(condition);
+    }
     // damageWeakness / damageImmunity carry numeric riders (amount + damageType)
     // that differentiate "weakness 5 fire" from "weakness 5 cold". Factor them
     // into the dedup key so applying both produces two distinct condition
@@ -20781,8 +20950,9 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const conditionOptions = ['<option value="">None</option>']
       .concat(CONDITION_NAMES.map((name) => {
-        const label = escapeHtml(name);
-        return `<option value="${label}">${label}</option>`;
+        const value = escapeHtml(name);
+        const label = escapeHtml(name === 'damageWeakness' ? 'Weakness' : name);
+        return `<option value="${value}">${label}</option>`;
       }))
       .join('');
 
@@ -21484,6 +21654,8 @@ export function mountBoardInteractions(store, routes = {}) {
 
     dismissConditionPrompt();
     closeCustomConditionDialog();
+    activeDamageWeaknessDialog?.close?.();
+    activeDamageWeaknessDialog = null;
 
     if (tokenSettingsMenu?.element) {
       tokenSettingsMenu.element.hidden = true;
@@ -22710,6 +22882,15 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    if (selection.toLowerCase() === 'damageweakness') {
+      if (tokenSettingsMenu?.conditionSelect) {
+        tokenSettingsMenu.conditionSelect.value = '';
+      }
+      updateConditionControlState();
+      openTypedDamageWeaknessRequest();
+      return;
+    }
+
     if (selection.toLowerCase() !== CUSTOM_CONDITION_NAME.toLowerCase()) {
       return;
     }
@@ -22744,6 +22925,10 @@ export function mountBoardInteractions(store, routes = {}) {
       handleCustomConditionRequest(targetIds);
       return;
     }
+    if (conditionName.toLowerCase() === 'damageweakness') {
+      openTypedDamageWeaknessRequest(targetIds);
+      return;
+    }
 
     const duration = getSelectedConditionDuration();
     if (duration === 'save-ends') {
@@ -22755,6 +22940,30 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     promptConditionTargetSelection(targetIds, { name: conditionName });
+  }
+
+  function openTypedDamageWeaknessRequest(placementIds = null) {
+    const targetIds = placementIds ?? getTokenSettingsTargetIds(activeTokenSettingsId);
+    if (!targetIds.length) return;
+    activeDamageWeaknessDialog?.close?.();
+    activeDamageWeaknessDialog = openDamageWeaknessDialog({
+      document,
+      registry: window.AbilityAutomationPrimitives,
+      duration: getSelectedConditionDuration(),
+      onSubmit: (condition) => {
+        activeDamageWeaknessDialog = null;
+        if (condition.duration?.type === 'end-of-turn') {
+          promptConditionTargetSelection(targetIds, condition);
+        } else {
+          applyConditionToPlacements(targetIds, condition);
+        }
+        resetConditionControls();
+      },
+      onCancel: () => {
+        activeDamageWeaknessDialog = null;
+        resetConditionControls();
+      },
+    });
   }
 
   function handleCustomConditionRequest(placementIds = null) {
@@ -23289,21 +23498,28 @@ export function mountBoardInteractions(store, routes = {}) {
     removeConditionFromPlacement(activeTokenSettingsId, index);
   }
 
-  function removeConditionFromPlacement(placementId, index) {
+  function removeConditionFromPlacement(placementId, index, instanceId = '') {
     if (!placementId || !Number.isInteger(index) || index < 0) {
       return false;
     }
 
     const placement = getPlacementFromStore(placementId);
     const existingConditions = ensurePlacementConditions(placement?.conditions ?? placement?.condition ?? null);
-    if (index < 0 || index >= existingConditions.length) {
+    const resolvedIndex = instanceId
+      ? existingConditions.findIndex((condition) => condition.instanceId === instanceId)
+      : index;
+    if (resolvedIndex < 0 || resolvedIndex >= existingConditions.length) {
       return false;
     }
 
     let didChange = false;
     const updated = updatePlacementById(placementId, (target) => {
       const conditions = ensurePlacementConditions(target?.conditions ?? target?.condition ?? null);
-      conditions.splice(index, 1);
+      const liveIndex = instanceId
+        ? conditions.findIndex((condition) => condition.instanceId === instanceId)
+        : resolvedIndex;
+      if (liveIndex < 0 || liveIndex >= conditions.length) return;
+      conditions.splice(liveIndex, 1);
       didChange = true;
 
       if (conditions.length) {
@@ -23349,11 +23565,7 @@ export function mountBoardInteractions(store, routes = {}) {
   function promptConditionTargetSelection(placementIds, condition) {
     const targetIds = normalizePlacementIds(placementIds);
     const normalizedCondition = ensurePlacementCondition({
-      name: condition?.name,
-      description:
-        typeof condition?.description === 'string'
-          ? condition.description.trim()
-          : '',
+      ...condition,
       duration: { type: 'save-ends' },
     });
 
@@ -23404,6 +23616,7 @@ export function mountBoardInteractions(store, routes = {}) {
       const targetName = targetPlacement ? tokenLabel(targetPlacement) : tokenElement.dataset?.tokenName || '';
 
       const appliedCondition = {
+        ...normalizedCondition,
         name: normalizedName,
         duration: {
           type: 'end-of-turn',
@@ -23411,10 +23624,6 @@ export function mountBoardInteractions(store, routes = {}) {
           targetTokenName: targetName,
         },
       };
-
-      if (normalizedCondition.description) {
-        appliedCondition.description = normalizedCondition.description;
-      }
 
       applyConditionToPlacements(targetIds, appliedCondition);
 
@@ -27655,6 +27864,7 @@ function createTemplateTool() {
       removeConditionFromPlacementByCondition,
       clearEndOfTurnConditionsForTarget,
       syncConditionsAfterMutation,
+      runConditionRidersAtBoundary,
       applyDamageHealToPlacement,
       handleSheetStaminaBroadcast,
       fetchAndApplyCharacterStamina,

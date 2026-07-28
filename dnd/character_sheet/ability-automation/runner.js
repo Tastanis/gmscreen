@@ -1706,7 +1706,37 @@
       ? resolveAttributeBonusForDamage(state, effect.attribute) * damageMultiplier
       : 0;
     const triggerValue = resolveTriggerValue(state, effect.amountFrom);
-    const damageType = effect.damageType && effect.damageType !== "untyped" ? effect.damageType : "";
+    let damageType = effect.damageType && effect.damageType !== "untyped" ? effect.damageType : "";
+    const damageTypeOptions = Array.isArray(effect.damageTypeOptions)
+      ? [...new Set(effect.damageTypeOptions
+        .map((value) => String(value || "").trim().toLowerCase())
+        .filter(Boolean))]
+      : [];
+    if (damageTypeOptions.length >= 2) {
+      const choice = typeof state.context.chooseDamageType === "function"
+        ? await state.context.chooseDamageType({
+          abilityName: state.action.name || "Ability",
+          actionId: state.action?.id || "",
+          options: damageTypeOptions,
+        })
+        : null;
+      const selected = String(choice?.damageType ?? choice ?? "").trim().toLowerCase();
+      if (!damageTypeOptions.includes(selected)) {
+        state.aborted = true;
+        return;
+      }
+      damageType = selected === "untyped" ? "" : selected;
+      // Keep the choice in this effect-list execution context so a following
+      // typed rider (for example Smolder's weakness) can inherit the exact
+      // damage type that was just chosen.
+      if (ctx && typeof ctx === "object") ctx.selectedDamageType = damageType;
+    }
+    if (ctx && typeof ctx === "object") {
+      // Inheritance is intentionally limited to a choice-based damage effect
+      // immediately preceding the numeric rider. Any later fixed/untyped
+      // damage clears it so legacy universal weaknesses stay universal.
+      ctx.selectedDamageType = damageTypeOptions.length ? damageType : "";
+    }
     const lines = [];
     let visibleHidden = 0;
     const surgeBonus = await consumePowerRollSurgeBonus(state, ctx);
@@ -1773,7 +1803,7 @@
     });
   }
 
-  async function applyConditionEffect(state, effect, targets) {
+  async function applyConditionEffect(state, effect, targets, ctx = {}) {
     if (!targets.length) return;
     const duration = mapConditionDuration(effect.duration);
     const isNumeric = effect.name === "damageWeakness" || effect.name === "damageImmunity";
@@ -1788,7 +1818,8 @@
       const conditionPayload = { name, duration };
       if (isNumeric) {
         conditionPayload.amount = asInt(effect.amount, 0);
-        if (effect.damageType) conditionPayload.damageType = effect.damageType;
+        const damageType = effect.damageType || ctx.selectedDamageType || "";
+        if (damageType) conditionPayload.damageType = damageType;
       }
       if (effect.name === "hiddenEffect") {
         conditionPayload.hidden = true;
@@ -1810,6 +1841,15 @@
       if (effect.sourceAbility && !conditionPayload.sourceAbility) {
         conditionPayload.sourceAbility = effect.sourceAbility;
       }
+      if (Array.isArray(effect.riders) && effect.riders.length) {
+        conditionPayload.riders = JSON.parse(JSON.stringify(effect.riders));
+        if (!conditionPayload.sourceName) {
+          conditionPayload.sourceName = state.heroName || state.sourcePlacement?.name || "";
+        }
+        if (!conditionPayload.sourceAbility) {
+          conditionPayload.sourceAbility = state.action?.name || "";
+        }
+      }
       await state.context.applyCondition?.({
         placementId: target.id,
         condition: conditionPayload,
@@ -1817,8 +1857,11 @@
         sourceName: state.heroName || state.sourcePlacement?.name || "",
       });
     }
+    const describedEffect = isNumeric && !effect.damageType && ctx.selectedDamageType
+      ? { ...effect, damageType: ctx.selectedDamageType }
+      : effect;
     await postChat(state.context, {
-      message: `${state.heroName} - ${state.action.name || "Ability"}: applies ${P.describeEffect(effect)}.`,
+      message: `${state.heroName} - ${state.action.name || "Ability"}: applies ${P.describeEffect(describedEffect)}.`,
     });
   }
 
@@ -3300,6 +3343,77 @@
     });
   }
 
+  async function preflightDamageTypeChoices(state) {
+    const groups = new Map();
+    const collectEffects = (effects, path) => {
+      if (!Array.isArray(effects)) return;
+      effects.forEach((effect, index) => {
+        if (!effect || typeof effect !== "object") return;
+        const effectPath = `${path}.${index}`;
+        collectEffect(effect, effectPath);
+        for (const nested of ["then", "else", "effects", "onFail"]) {
+          if (Array.isArray(effect[nested])) collectEffects(effect[nested], `${effectPath}.${nested}`);
+        }
+      });
+    };
+    const collectEffect = (effect, path) => {
+      if (effect?.kind !== "damage" || !Array.isArray(effect.damageTypeOptions)) return;
+      const options = [...new Set(effect.damageTypeOptions
+        .map((value) => String(value || "").trim().toLowerCase())
+        .filter(Boolean))];
+      if (options.length < 2) return;
+      const key = `${path}|${[...options].sort().join("|")}`;
+      if (!groups.has(key)) groups.set(key, { options, effects: [] });
+      groups.get(key).effects.push(effect);
+    };
+    const collectBlocks = (blocks, path = "cards") => {
+      if (!Array.isArray(blocks)) return;
+      blocks.forEach((block, index) => {
+        if (!block || typeof block !== "object") return;
+        const blockPath = `${path}.${index}`;
+        if (block.type === "powerRoll" && block.tiers) {
+          // The same effect position in each outcome tier is one authored
+          // effect family, so it gets one choice before the roll.
+          for (const tier of P.TIER_KEYS) {
+            collectEffects(block.tiers[tier]?.effects, `${blockPath}.tiers.*.effects`);
+          }
+        } else {
+          collectEffects(block.effects, `${blockPath}.effects`);
+        }
+        if (block.type === "branch") {
+          collectBlocks(block.then, `${blockPath}.then`);
+          collectBlocks(block.else, `${blockPath}.else`);
+        } else if (block.type === "choice") {
+          (block.options || []).forEach((option, optionIndex) => {
+            collectBlocks(option?.cards, `${blockPath}.options.${optionIndex}.cards`);
+          });
+        }
+      });
+    };
+    collectBlocks(state.automation?.cards);
+    for (const group of groups.values()) {
+      const choice = typeof state.context.chooseDamageType === "function"
+        ? await state.context.chooseDamageType({
+          abilityName: state.action.name || "Ability",
+          actionId: state.action?.id || "",
+          options: group.options,
+        })
+        : null;
+      const selected = String(choice?.damageType ?? choice ?? "").trim().toLowerCase();
+      if (!group.options.includes(selected)) {
+        state.aborted = true;
+        return false;
+      }
+      for (const effect of group.effects) {
+        effect.damageType = selected;
+        // This is an execution-only normalized clone. Narrowing the options
+        // prevents a second prompt when the chosen tier/effect is resolved.
+        effect.damageTypeOptions = [selected];
+      }
+    }
+    return true;
+  }
+
   function walkBlockEffects(block, visit) {
     if (!block || typeof block !== "object") return;
     if (block.type === "powerRoll" && block.tiers) {
@@ -3460,6 +3574,10 @@
           if (block?.type !== "choice") break;
           await preflightChoiceBlock(state, block);
           if (state.aborted) return;
+        }
+        if (!await preflightDamageTypeChoices(state)) {
+          closeRunner();
+          return;
         }
       }
 

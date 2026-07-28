@@ -182,10 +182,13 @@ Asks the player to pick a token (or place an area template) on the VTT board.
 | `promptTitle` | string | Optional custom title for the target picker popup. |
 | `promptText` | string | Optional custom instructions for the target picker popup and board status. |
 | `distance` | `{ form, value, secondary?, within? }` | See distance forms below. |
+| `selectionGuide` | `{ range, form? }` | Optional reusable advisory range overlay. It never rejects a click. Normally omit it and let `distance` generate the same guide automatically. |
 
 If `promptTitle` / `promptText` are omitted and the next effect card uses this target group for damage, the runner supplies a generic damage prompt such as `"Pick Enemy to Damage"` and `"Choose one enemy to damage."` This only changes the UI wording; damage amount, attribute scaling, dice, and damage type still come from the later `damage` effect.
 
 When a token target card has custom or inferred prompt text in the VTT, the board picker shows a single compact prompt near the map selection area. Optional target cards put `Skip` in that picker; `Cancel` stops the automation. Keep `promptText` short and action-oriented, since it is meant as quick reference text.
+
+Target range is intentionally a guide, not a legality check. `distance` is canonical and automatically draws the same range/reach box used by movement tools. Legacy numeric `range` and explicit `selectionGuide.range` are normalized into that guide. The player or GM can still select outside it for unusual rules, elevations, or table rulings.
 
 For self-only resolution effects after a trigger, an `effect` card can use `"target": "self"` directly. The runner resolves that to the source token; do not add a separate target card that asks the player to pick themselves unless the ability genuinely needs a manual pick.
 
@@ -556,6 +559,7 @@ Any effect can include `target` to route that effect to a named target group ins
 
 ```json
 { "kind": "damage", "amount": 5, "attribute": "M", "damageType": "fire" }
+{ "kind": "damage", "amount": 5, "attribute": "M", "damageTypeOptions": ["acid", "cold", "fire"] }
 { "kind": "damage", "amount": 0, "amountDice": "1d6", "damageType": "fire" }
 { "kind": "damage", "amount": 0, "attribute": "P", "multiplier": 2, "damageType": "holy" }
 { "kind": "damage", "damageType": "psychic", "amountFrom": { "source": "triggeringDamage", "fraction": 0.5 } }
@@ -568,12 +572,22 @@ Any effect can include `target` to route that effect to a named target group ins
 | `attribute` | optional. Single string `"M"`/`"A"`/`"R"`/`"I"`/`"P"`/`"Strongest"`, OR an array like `["M", "A"]` meaning "highest of these specific attributes" (used for free strikes — highest of Might or Agility only) |
 | `multiplier` | optional int (default 1) — multiplies the **attribute** bonus only (not flat `amount`/`amountDice`). `2` = "damage equal to twice your Presence score" → `{ "attribute": "P", "multiplier": 2 }`. Total = `amount` + (attribute bonus × `multiplier`) + dice + trigger. Ignored when no `attribute` is set. Mirrors `forcedMovement`. |
 | `damageType` | `"untyped"`, `"acid"`, `"cold"`, `"corruption"`, `"fire"`, `"holy"`, `"lightning"`, `"poison"`, `"psychic"`, `"sonic"` |
+| `damageTypeOptions` | optional array containing **two or more** values from the `damageType` registry. Use when the resolver chooses the type as the effect resolves. Case and duplicates normalize; blank/unsupported entries are removed with a warning. Do not combine with `damageType`. |
 | `markBonusDice` | optional dice string like `"1d6"`. Rolls and adds only when `markPredicate` matches. |
 | `markPredicate` | optional mark predicate for `markBonusDice`. Defaults to `"targetJudgedBySelf"`. |
 | `amountFrom` | optional. Scales the **captured trigger value** and adds it on top of `amount` + `attribute` + `amountDice`. See [Scaling off the trigger (`amountFrom`)](#scaling-off-the-trigger-amountfrom). |
 | `raw` | optional bool. When `true`, this damage **ignores feature modifiers** — no `damageBonus` is added and no `damageType` override is applied to it. Use for self-inflicted strained backlash and other flat damage that should not ride the same buffs as the ability's attack. |
 
 `"Strongest"` means highest of all 5 characteristics. Use an array like `["M", "A"]` when the rule is "highest of these specific attributes only" — most often this is the free-strike rule (highest of M or A but never R/I/P).
+
+For a fixed type, continue using scalar `damageType`; it resolves without a
+popup. For a genuine choice, use `damageTypeOptions`. The VTT prompts once for
+that damage effect and uses the selected type for every target of the effect,
+including immunity/weakness matching, triggers, chat, and result summaries.
+Cancellation aborts that effect without silently choosing the first option.
+An empty/malformed list warns and falls back only to an explicitly authored
+scalar `damageType` (otherwise `untyped`); a one-item list warns and
+canonicalizes to scalar `damageType`.
 
 #### Scaling off the trigger (`amountFrom`)
 
@@ -653,6 +667,24 @@ Applies via the same heal path but allows the new total to exceed max stamina (t
 | `rider.appliesTo.keywordsAny` / `keywordsAll` | optional keyword filters matched against the ability's keywords/range text. |
 | `rider.appliesTo.actionKind` | optional action-kind filter such as `"main"`, `"maneuver"`, or `"triggered"`. |
 | `rider.consume` | `"manual"` or `"nextMatchingRoll"`. Use `"nextMatchingRoll"` for effects like "the target has a bane on their next attack." |
+
+Ordinary conditions can instead use persistent `riders`:
+
+```json
+{
+  "kind": "condition",
+  "name": "grabbed",
+  "duration": "saveEnds",
+  "riders": [{
+    "id": "crushing-grab",
+    "when": "turnStart",
+    "target": "bearer",
+    "effects": [{ "kind": "damage", "amount": 5, "damageType": "fire" }]
+  }]
+}
+```
+
+`when` is currently `turnStart` or `turnEnd`; `target` is `bearer` (default) or `source`. Supported rider effects are deliberately bounded to `damage`, `heal`, `temporaryStamina`, `surgeGain`, `condition`, `floatingText`, `note`, and `other`. Damage/healing amounts can be flat or dice-based, but riders cannot open interactive damage-type choices or resolve attributes, recoveries, or captured trigger values. The rider repeats at each matching boundary only while that exact condition instance remains present. The runtime persists an instance ID and last-handled turn boundary before applying the rider, preventing reload/replay duplicates. Start-of-turn riders run after the turn becomes active; end-of-turn riders run before condition cleanup. PC and monster sidebars show source, effect, amount/type, timing, and duration.
 
 `damageWeakness` and `damageImmunity` are numeric riders. The VTT damage handler stacks `amount` on top of the sheet's own immunity/vulnerability lists when applying damage to the affected target. Example: `{ "kind": "condition", "name": "damageWeakness", "amount": 5, "damageType": "fire", "duration": "saveEnds" }` makes the target take +5 damage from every fire effect until they save out. These riders are shown in the VTT character/monster condition sidebar with readable labels such as `Fire weakness 5` and an `x` remove button.
 

@@ -81,6 +81,7 @@ export function queueSave(key, payload, endpoint, options = {}) {
     attempts: 0,
     retryLimit: Math.max(1, Math.trunc(retryLimit) || 1),
     retryBackoffMs: Math.max(0, Math.trunc(retryBackoffMs) || 0),
+    coalesce: Boolean(coalesce),
     blocked: false,
     lastResult: null,
   };
@@ -96,6 +97,35 @@ export function queueSave(key, payload, endpoint, options = {}) {
   if (pending.has(key)) {
     const slot = pending.get(key);
     if (coalesce) {
+      const hasOrderedSave =
+        slot?.current?.coalesce === false ||
+        slot?.queue?.some((queuedEntry) => queuedEntry?.coalesce === false);
+      if (slot && hasOrderedSave) {
+        // A non-coalescing entry is an ordering barrier (authoritative combat
+        // intents use this path). Never abort it or discard it from the queue
+        // when a routine board update arrives. Coalesce only routine entries
+        // queued after the final barrier.
+        let finalBarrierIndex = -1;
+        for (let index = 0; index < slot.queue.length; index += 1) {
+          if (slot.queue[index]?.coalesce === false) {
+            finalBarrierIndex = index;
+          }
+        }
+        const trailingStart = finalBarrierIndex + 1;
+        const supersededEntries = slot.queue.splice(trailingStart);
+        for (const supersededEntry of supersededEntries) {
+          supersededEntry?.controller?.abort();
+          finalizeEntry(
+            supersededEntry,
+            createResult(false, {
+              aborted: true,
+              error: createAbortError(key),
+            })
+          );
+        }
+        slot.queue.push(entry);
+        return entry.promise;
+      }
       if (slot?.current) {
         slot.current.controller.abort();
         finalizeEntry(

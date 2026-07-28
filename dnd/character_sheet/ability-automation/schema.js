@@ -21,7 +21,8 @@
 //
 // Effect kinds: damage, heal, temporaryStamina, condition, forcedMovement,
 // teleport, swap, resourceGain, surgeGain, freeStrike, cascade, note, potency,
-// spend, floatingText, startTurn, other.
+// spend, floatingText, startTurn, other. Damage effects use either one
+// `damageType` or a `damageTypeOptions` array when resolution requires a choice.
 //
 // Lenient by design: unknown fields are kept under `_extra` so the inspector can
 // surface them; missing fields default; warnings are collected but never block save.
@@ -162,6 +163,62 @@
     return rider;
   }
 
+  function normalizeConditionRiders(input, warnings, path) {
+    if (input === undefined || input === null) return [];
+    if (!Array.isArray(input)) {
+      warnings.push(`${path}: must be an array.`);
+      return [];
+    }
+    const ids = new Set();
+    return input.map((raw, index) => {
+      const itemPath = `${path}[${index}]`;
+      if (!raw || typeof raw !== "object") {
+        warnings.push(`${itemPath}: rider must be an object.`);
+        return null;
+      }
+      const when = pickKnown(raw.when, ["turnStart", "turnEnd"], "");
+      if (!when) {
+        warnings.push(`${itemPath}.when: use turnStart or turnEnd.`);
+        return null;
+      }
+      const target = pickKnown(raw.target, ["bearer", "source"], "bearer");
+      const effects = normalizeEffectList(raw.effects || [], warnings, `${itemPath}.effects`)
+        .filter((effect, effectIndex) => {
+          if (!["damage", "heal", "temporaryStamina", "surgeGain", "condition", "floatingText", "note", "other"].includes(effect.kind)) {
+            warnings.push(`${itemPath}.effects[${effectIndex}]: effect kind "${effect.kind}" is not supported in a condition rider.`);
+            return false;
+          }
+          if (effect.damageTypeOptions?.length) {
+            warnings.push(`${itemPath}.effects[${effectIndex}]: condition riders cannot open a damage-type picker; use one damageType.`);
+            return false;
+          }
+          if (effect.attribute || effect.recoveries || effect.amountFrom) {
+            warnings.push(`${itemPath}.effects[${effectIndex}]: condition riders support flat/dice amounts, not attributes, recoveries, or captured values.`);
+            return false;
+          }
+          return true;
+        });
+      if (!effects.length) {
+        warnings.push(`${itemPath}: needs at least one supported persistent rider effect.`);
+        return null;
+      }
+      let id = asTrimmedString(raw.id)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+      if (!id) id = `rider-${index + 1}`;
+      if (ids.has(id)) {
+        warnings.push(`${itemPath}.id: duplicate rider id "${id}" removed.`);
+        return null;
+      }
+      ids.add(id);
+      const rider = { id, when, target, effects };
+      const label = asTrimmedString(raw.label);
+      if (label) rider.label = label;
+      return rider;
+    }).filter(Boolean);
+  }
+
   // ---------- effects ----------
 
   function normalizeEffectList(input, warnings, path) {
@@ -243,10 +300,26 @@
     }
     switch (kind) {
       case "damage": {
-        const known = new Set(["kind", "amount", "amountDice", "markBonusDice", "markPredicate", "attribute", "multiplier", "damageType", "raw", "amountFrom"]);
+        const known = new Set(["kind", "amount", "amountDice", "markBonusDice", "markPredicate", "attribute", "multiplier", "damageType", "damageTypeOptions", "raw", "amountFrom"]);
         const attribute = input.attribute !== undefined && input.attribute !== null
           ? (P.normalizeAttributeOrList ? P.normalizeAttributeOrList(input.attribute) : P.normalizeAttribute(input.attribute))
           : "";
+        const rawDamageTypeOptions = input.damageTypeOptions;
+        const damageTypeOptions = P.normalizeDamageTypeOptions
+          ? P.normalizeDamageTypeOptions(rawDamageTypeOptions)
+          : [];
+        if (rawDamageTypeOptions !== undefined && !Array.isArray(rawDamageTypeOptions)) {
+          warnings.push(`${path}.damageTypeOptions: must be an array of registered damage types.`);
+        } else if (Array.isArray(rawDamageTypeOptions)) {
+          const rawNonBlankCount = rawDamageTypeOptions.filter((value) => asTrimmedString(value)).length;
+          if (damageTypeOptions.length !== rawNonBlankCount) {
+            warnings.push(`${path}.damageTypeOptions: removed blank, duplicate, or unsupported damage types.`);
+          }
+          if (damageTypeOptions.length < 2) {
+            warnings.push(`${path}.damageTypeOptions: needs at least two valid damage types; use damageType for a single type.`);
+          }
+        }
+        const normalizedDamageType = P.normalizeDamageType(input.damageType || "untyped");
         const effect = {
           kind: "damage",
           amount: asInt(input.amount, 0),
@@ -254,8 +327,15 @@
           markBonusDice: asTrimmedString(input.markBonusDice),
           markPredicate: asTrimmedString(input.markPredicate),
           attribute,
-          damageType: P.normalizeDamageType(input.damageType || "untyped"),
+          damageType: damageTypeOptions.length === 1 ? damageTypeOptions[0] : normalizedDamageType,
         };
+        if (damageTypeOptions.length > 1) {
+          effect.damageTypeOptions = damageTypeOptions;
+          delete effect.damageType;
+          if (input.damageType !== undefined && input.damageType !== null && asTrimmedString(input.damageType)) {
+            warnings.push(`${path}.damageType: ignored because damageTypeOptions contains multiple valid types.`);
+          }
+        }
         // Optional attribute multiplier: total = amount + (attribute bonus × multiplier).
         // e.g. "holy damage equal to twice your Presence score" → attribute:"P", multiplier:2.
         // Only meaningful when an attribute is set; mirrors forcedMovement.
@@ -276,7 +356,7 @@
         if (!attrValid) {
           warnings.push(`${path}: damage attribute "${JSON.stringify(input.attribute)}" not in registry.`);
         }
-        if (!P.DAMAGE_TYPES.includes(effect.damageType)) {
+        if (effect.damageType && !P.DAMAGE_TYPES.includes(effect.damageType)) {
           warnings.push(`${path}: damage type "${input.damageType}" not in registry.`);
         }
         const extras = pickExtras(input, known);
@@ -372,6 +452,7 @@
           "damageType",
           "hidden",
           "rider",
+          "riders",
           "consume",
           "sourceId",
           "sourceName",
@@ -409,6 +490,13 @@
           if (!effect.rider) {
             warnings.push(`${path}: hiddenEffect has no supported rider; it will display as a removable effect only.`);
           }
+        }
+        if (name !== "hiddenEffect") {
+          if (input.rider !== undefined) {
+            warnings.push(`${path}.rider: singular rider is reserved for hiddenEffect; use riders[] for timed condition effects.`);
+          }
+          const riders = normalizeConditionRiders(input.riders, warnings, `${path}.riders`);
+          if (riders.length) effect.riders = riders;
         }
         const sourceId = asTrimmedString(input.sourceId);
         const sourceName = asTrimmedString(input.sourceName);
@@ -864,7 +952,7 @@
   function normalizeTargetBlock(input, warnings, path) {
     const known = new Set([
       "type", "id", "name", "mode", "predicate", "creature", "count", "optional",
-      "distance", "range", "shape", "size", "width", "height", "length", "note",
+      "distance", "range", "selectionGuide", "shape", "size", "width", "height", "length", "note",
       "promptTitle", "promptText", "excludeGroups", "excludeGroup",
       "structure", "wallColor",
     ]);
@@ -891,10 +979,29 @@
         ? [asTrimmedString(input.excludeGroup)]
         : [];
     if (excludeGroups.length) block.excludeGroups = excludeGroups;
-    const distance = normalizeDistance(input.distance, warnings, `${path}.distance`);
+    let distance = normalizeDistance(input.distance, warnings, `${path}.distance`);
+    const legacyRange = asNonNegInt(input.range, 0);
+    const rawGuide = input.selectionGuide && typeof input.selectionGuide === "object"
+      ? input.selectionGuide
+      : null;
+    const guideRange = asNonNegInt(rawGuide?.range, 0);
+    if (!distance && (guideRange || legacyRange)) {
+      distance = {
+        form: mode === "area" ? pickKnown(input.shape, P.AREA_SHAPES, "cube") : "ranged",
+        value: mode === "area" ? 0 : (guideRange || legacyRange),
+        secondary: 0,
+        within: mode === "area" ? (guideRange || legacyRange) : 0,
+      };
+    }
     if (distance) block.distance = distance;
-    const range = asNonNegInt(input.range, 0);
-    if (range) block.range = range;
+    if (legacyRange) block.range = legacyRange;
+    if (guideRange) {
+      block.selectionGuide = {
+        range: guideRange,
+        form: asTrimmedString(rawGuide?.form) || distance?.form || (mode === "area" ? "cube" : "ranged"),
+        enforce: false,
+      };
+    }
     if (mode === "area") {
       block.shape = pickKnown(input.shape, P.AREA_SHAPES, "cube");
       if (input.shape && !P.AREA_SHAPES.includes(input.shape)) {

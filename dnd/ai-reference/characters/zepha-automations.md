@@ -102,11 +102,8 @@ You cast a ball of elemental energy at a foe. Can be used as a ranged free strik
     "testLabel": "Power Roll + Reason",
     "testAdditionalEffect": "When you make this strike, choose the damage type from one of the following options: acid, cold, corruption, fire, lightning, poison, or sonic.",
     "tier1Damage": "2 + R",
-    "tier1DamageType": "fire",
     "tier2Damage": "4 + R",
-    "tier2DamageType": "fire",
-    "tier3Damage": "6 + R",
-    "tier3DamageType": "fire"
+    "tier3Damage": "6 + R"
   },
   "automation": {
     "schema": "ability-automation/v3",
@@ -147,7 +144,15 @@ You cast a ball of elemental energy at a foe. Can be used as a ranged free strik
                 "markBonusDice": "",
                 "markPredicate": "",
                 "attribute": "Reason",
-                "damageType": "fire"
+                "damageTypeOptions": [
+                  "acid",
+                  "cold",
+                  "corruption",
+                  "fire",
+                  "lightning",
+                  "poison",
+                  "sonic"
+                ]
               }
             ]
           },
@@ -160,7 +165,15 @@ You cast a ball of elemental energy at a foe. Can be used as a ranged free strik
                 "markBonusDice": "",
                 "markPredicate": "",
                 "attribute": "Reason",
-                "damageType": "fire"
+                "damageTypeOptions": [
+                  "acid",
+                  "cold",
+                  "corruption",
+                  "fire",
+                  "lightning",
+                  "poison",
+                  "sonic"
+                ]
               }
             ]
           },
@@ -173,7 +186,15 @@ You cast a ball of elemental energy at a foe. Can be used as a ranged free strik
                 "markBonusDice": "",
                 "markPredicate": "",
                 "attribute": "Reason",
-                "damageType": "fire"
+                "damageTypeOptions": [
+                  "acid",
+                  "cold",
+                  "corruption",
+                  "fire",
+                  "lightning",
+                  "poison",
+                  "sonic"
+                ]
               }
             ]
           }
@@ -1237,4 +1258,3 @@ You use the magic of fire to create a ward of explosive energy. Whenever an adja
 - **Elementalist Ward** - You create an invisible elemental ward that protects you. Choose one of the following wards. You can change your wand and enchantment by performing a complex ritual as a respite activity)Ward of Delightful ConsequencesA protective field of void absorbs violence aimed at you, then lets you hurl it back at your enemies. The first time each round that you take damage, you gain 1 surge.Ward of Excellent ProtectionYou weave a shield of all the elements around yourself, channeling their full protective power. You have immunity to acid, cold, corruption, fire, lightning, poison, or sonic damage equal to your Reason score.Ward of Nature's AffectionThe green energy writhing within your body allows you to produce powerful vines when you're in danger. Whenever a creature within a number of scores equal to your Reason score deals damage to you, you can use a free triggered action to slide that creature up to a number of squares equal to your Reason score.Ward of Surprising ReactivityYou use the magic of fire to create a ward of explosive energy. Whenever an adjacent creature deals damage to you, you can use a free triggered action to push that creature a number of squares equal to twice the Reason score.
 - **Disciple of Fire** - Your connection to fire allows you to protect yourself from it, even as you rip away the protection of others. You have fire immunity equal to 5 plus your level in this class. Additionally, fire damage you deal ignores a target's fire immunity.At the start of a combat encounter, you gain a number of surges equal to your Victories. Whenever you spend a surge to deal extra damage, you can make that damage fire damage.
 - **A Conversation With Fire** - When you spend 1 uninterrupted minuet in front of a fire, you can speak the name of another creature. If that creature is willing to speak to you, their image appears in the fire, and they can see you before them in a shimmering ball of light. The two of you can speak to each through these images as if you were together in person. As a maneuver, you or the creature can end the conversation.
-

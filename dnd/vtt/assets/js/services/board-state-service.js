@@ -462,7 +462,13 @@ export function persistCombatIntent(
     intentId,
   };
 
-  return persistBoardStateOps(endpoint, [op], envelope, options);
+  const normalizedOptions = options ?? {};
+  return persistBoardStateOps(
+    endpoint,
+    [op],
+    envelope,
+    { ...normalizedOptions, coalesce: normalizedOptions.coalesce ?? false }
+  );
 }
 
 function createCombatIntentId() {

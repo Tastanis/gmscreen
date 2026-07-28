@@ -977,6 +977,7 @@ function bindCharacterSummaryControls(panel, {
 
       const placementId = button.dataset.placementId || '';
       const conditionIndex = Number.parseInt(button.dataset.conditionIndex || '', 10);
+      const conditionInstanceId = button.dataset.conditionInstanceId || '';
       if (!placementId || !Number.isInteger(conditionIndex) || conditionIndex < 0) {
         return;
       }
@@ -986,6 +987,7 @@ function bindCharacterSummaryControls(panel, {
           detail: {
             placementId,
             conditionIndex,
+            conditionInstanceId,
           },
         })
       );
@@ -2121,7 +2123,7 @@ function renderCondition(condition, placementId) {
   const index = Number.isInteger(entry.index) ? entry.index : 0;
   const detail = entry.detail || '';
   const removeButton = placementId
-    ? `<button class="vtt-character-condition__remove" type="button" data-character-condition-remove data-placement-id="${escapeAttribute(placementId)}" data-condition-index="${escapeAttribute(index)}" aria-label="Remove ${escapeAttribute(label)}">x</button>`
+    ? `<button class="vtt-character-condition__remove" type="button" data-character-condition-remove data-placement-id="${escapeAttribute(placementId)}" data-condition-index="${escapeAttribute(index)}"${entry.instanceId ? ` data-condition-instance-id="${escapeAttribute(entry.instanceId)}"` : ''} aria-label="Remove ${escapeAttribute(label)}">x</button>`
     : '';
 
   return `
@@ -2261,6 +2263,8 @@ function normalizeConditions(value) {
           hidden,
           sourceName: String(entry.sourceName ?? '').trim(),
           sourceAbility: String(entry.sourceAbility ?? '').trim(),
+          instanceId: String(entry.instanceId ?? '').trim(),
+          riders: Array.isArray(entry.riders) ? entry.riders : [],
           durationLabel,
           detail: formatConditionDetail(entry, hidden, durationLabel),
         };
@@ -2289,13 +2293,32 @@ function formatConditionLabel(entry, hidden) {
 
 function formatConditionDetail(entry, hidden, durationLabel) {
   const parts = [];
-  if (hidden) {
-    parts.push(entry.sourceAbility, entry.sourceName);
+  if (entry.sourceAbility || entry.sourceName) {
+    parts.push([entry.sourceAbility, entry.sourceName ? `from ${entry.sourceName}` : ''].filter(Boolean).join(' '));
+  }
+  if (Array.isArray(entry.riders)) {
+    entry.riders.map(formatPersistentConditionRider).filter(Boolean).forEach((label) => parts.push(label));
   }
   if (durationLabel && durationLabel !== 'instantaneous') {
     parts.push(durationLabel);
   }
   return parts.filter(Boolean).join(' - ');
+}
+
+function formatPersistentConditionRider(rider) {
+  if (!rider || typeof rider !== 'object') return '';
+  const timing = rider.when === 'turnEnd' ? 'at end of turn' : 'at start of turn';
+  const labels = (Array.isArray(rider.effects) ? rider.effects : []).map((effect) => {
+    const amount = Number.parseInt(effect?.amount, 10) || 0;
+    const damageType = String(effect?.damageType || '').trim();
+    if (effect?.kind === 'damage') return `takes ${amount}${damageType ? ` ${damageType}` : ''} damage`;
+    if (effect?.kind === 'heal') return `recovers ${amount} stamina`;
+    if (effect?.kind === 'temporaryStamina') return `gains ${amount} temporary stamina`;
+    if (effect?.kind === 'condition') return `gains ${effect.name || 'a condition'}`;
+    if (effect?.kind === 'surgeGain') return `${amount >= 0 ? 'gains' : 'loses'} ${Math.abs(amount)} surge${Math.abs(amount) === 1 ? '' : 's'}`;
+    return String(effect?.text || '').trim();
+  }).filter(Boolean);
+  return labels.length ? `${labels.join(', ')} ${timing}` : '';
 }
 
 function formatConditionDuration(duration) {
@@ -2592,6 +2615,11 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
     postChat: postAutomationChat,
     selectTarget: requestAutomationTarget,
     selectAreaTarget: requestAutomationAreaTarget,
+    chooseDamageType: (payload) => (
+      window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.chooseDamageType === 'function'
+        ? window.VTTBoardCallbacks.chooseDamageType(clonePlain(payload || {}))
+        : Promise.resolve(null)
+    ),
     cancelTargetSelection: cancelAutomationTarget,
     cancelAreaSelection: cancelAutomationArea,
     applyDamage: requestAutomationDamage,
@@ -3511,6 +3539,8 @@ function parseAutoDice(value) {
 }
 
 export const __testing = {
+  formatConditionLabel,
+  normalizeConditions,
   renderResource,
   updateCharacterPanelCounter,
   resourceFloor,

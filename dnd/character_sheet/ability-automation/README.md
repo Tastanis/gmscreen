@@ -71,7 +71,27 @@ For each block in `automation.cards`:
 
 Effects can specify their own `target` to override the parent block target. `target` may be a single group name or an array of group names, allowing one power roll tier to damage multiple targets and apply different riders to each.
 
+Damage effects normally use one scalar `damageType`. When the rules let the
+resolver choose among two or more types, authors use
+`damageTypeOptions: ["fire", "cold"]` instead. The schema removes duplicates
+and unsupported values, and the runtime asks once per effect before applying
+that chosen type to all of the effect's targets. The scalar and options fields
+are alternatives; an options list never supplies a silent first-item default.
+
 `condition` effects can apply `hiddenEffect` riders. These are stored on the VTT placement like conditions, but they are hidden from token condition text and the normal condition picker. The sidebar still renders them under Auras, Conditions, & Effects with a remove button. Supported automatic hidden riders currently include `rollModifier` suggestions for edge/bane/double-edge/double-bane in the power-roll modal, with optional `nextMatchingRoll` consumption. Numeric condition riders such as `damageWeakness` and `damageImmunity` also stay removable in the sidebar and token settings, but render with player-facing labels such as `Fire weakness 5`.
+
+Target cards use `distance` to display an advisory selection range. The picker
+never rejects an out-of-range click. An explicit
+`selectionGuide: { range, form }` is available when the visual guide
+intentionally differs from the rules distance; legacy numeric `range` is
+normalized into the standard distance path.
+
+Ordinary conditions can carry persistent
+`riders: [{ id, when, target, effects }]`. The board assigns a stable
+condition-instance identity, records each handled turn boundary before
+applying effects, and runs the rider only while that exact condition remains.
+Supported timings are `turnStart` and `turnEnd`; see `AUTHORING.md` for the
+bounded effect list and paste-ready JSON.
 
 VTT-only utility effects include `floatingText` for the giant centered combat banner and `startTurn` for Hesitation-style turn claiming. `startTurn` is preflighted before action-cost spending so invalid timing can warn before heroic resource is spent.
 
