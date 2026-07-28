@@ -2488,10 +2488,98 @@ function buildAppliedBoardStateOp(array $op, array $state, ?array $beforeState =
         return null;
     }
 
-    if (in_array($type, ['placement.add', 'placement.move', 'placement.update'], true)) {
-        $entryId = $type === 'placement.add'
-            ? extractBoardEntryIdentifier(is_array($op['placement'] ?? null) ? $op['placement'] : [])
-            : extractBoardStateOpPlacementId($op);
+    if ($type === 'placement.update') {
+        $entryId = extractBoardStateOpPlacementId($op);
+        if ($entryId === '') {
+            return null;
+        }
+        $placement = findBoardStateEntryById($state, 'placements', $sceneId, $entryId);
+        if ($placement === null) {
+            return null;
+        }
+
+        $previousPlacement = $beforeState !== null
+            ? findBoardStateEntryById($beforeState, 'placements', $sceneId, $entryId)
+            : null;
+        $wasVisible = is_array($previousPlacement)
+            && !isPlacementHiddenFromPlayers($previousPlacement);
+        $isVisible = !isPlacementHiddenFromPlayers($placement);
+
+        // Visibility transitions need a structural op: remove a token that
+        // became hidden, or send the complete player-safe placement when it
+        // became visible. Ordinary visible updates remain a compact patch.
+        if ($wasVisible && !$isVisible) {
+            return [
+                'type' => 'placement.remove',
+                'sceneId' => $sceneId,
+                'placementId' => $entryId,
+                'publicVisible' => true,
+            ];
+        }
+        if (!$wasVisible && $isVisible) {
+            return [
+                'type' => 'placement.add',
+                'sceneId' => $sceneId,
+                'placement' => $placement,
+            ];
+        }
+        if (!$isVisible) {
+            return null;
+        }
+
+        $requestedPatch = isset($op['patch']) && is_array($op['patch'])
+            ? $op['patch']
+            : [];
+        $safePlacement = sanitizePlacementForPlayerView($placement);
+        $safePrevious = is_array($previousPlacement)
+            ? sanitizePlacementForPlayerView($previousPlacement)
+            : [];
+        $canonicalPatch = [];
+        foreach (array_keys($requestedPatch) as $key) {
+            if (!is_string($key) || $key === '' || $key === 'id') {
+                continue;
+            }
+            if (array_key_exists($key, $safePlacement)) {
+                $canonicalPatch[$key] = $safePlacement[$key];
+            } elseif (array_key_exists($key, $safePrevious)) {
+                // Preserve the placement.update deletion contract.
+                $canonicalPatch[$key] = null;
+            }
+        }
+        if ($canonicalPatch === []) {
+            return null;
+        }
+
+        return [
+            'type' => 'placement.update',
+            'sceneId' => $sceneId,
+            'placementId' => $entryId,
+            'patch' => $canonicalPatch,
+        ];
+    }
+
+    if ($type === 'placement.move') {
+        $entryId = extractBoardStateOpPlacementId($op);
+        if ($entryId === '') {
+            return null;
+        }
+        $placement = findBoardStateEntryById($state, 'placements', $sceneId, $entryId);
+        if ($placement === null) {
+            return null;
+        }
+        return [
+            'type' => 'placement.move',
+            'sceneId' => $sceneId,
+            'placementId' => $entryId,
+            // Source canonical coordinates after the server applies the op.
+            'x' => $placement['column'] ?? 0,
+            'y' => $placement['row'] ?? 0,
+            'publicVisible' => !isPlacementHiddenFromPlayers($placement),
+        ];
+    }
+
+    if ($type === 'placement.add') {
+        $entryId = extractBoardEntryIdentifier(is_array($op['placement'] ?? null) ? $op['placement'] : []);
         if (!is_string($entryId) || $entryId === '') {
             return null;
         }
@@ -2716,6 +2804,12 @@ function sanitizeBoardStateBroadcastOpsForPlayers(
             $op['placement'] = sanitizePlacementForPlayerView($placement);
         }
         if (($op['type'] ?? null) === 'placement.remove') {
+            if (($op['publicVisible'] ?? false) !== true) {
+                continue;
+            }
+            unset($op['publicVisible']);
+        }
+        if (($op['type'] ?? null) === 'placement.move') {
             if (($op['publicVisible'] ?? false) !== true) {
                 continue;
             }

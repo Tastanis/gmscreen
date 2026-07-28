@@ -1232,6 +1232,127 @@ describe('Board State – delta ops persistence (phase 3-B commit 5)', () => {
     assert.equal(cleanupResult.success, true);
   });
 
+  test('combat snapshots do not abort an in-flight HP update', async () => {
+    const {
+      persistBoardStateOps,
+      _resetBoardStateOpsBufferForTest,
+    } = await import('../board-state-service.js');
+    _resetBoardStateOpsBufferForTest();
+
+    const requestSignals = [];
+    globalThis.fetch = async (_url, options = {}) => {
+      if (options?.body) capturedPayloads.push(JSON.parse(options.body));
+      requestSignals.push(options.signal);
+      return new Promise((resolve) => pendingFetchResolvers.push(resolve));
+    };
+
+    const hpSave = persistBoardStateOps(
+      '/api/state',
+      [{
+        type: 'placement.update',
+        sceneId: 'scene-1',
+        placementId: 'monster-1',
+        patch: {
+          hp: { current: '20', max: '30' },
+          overlays: { hitPoints: { value: { current: '20', max: '30' } } },
+        },
+      }],
+      { _version: 50 }
+    );
+    const combatSave = persistBoardStateOps(
+      '/api/state',
+      [{
+        type: 'combat.set',
+        sceneId: 'scene-1',
+        combat: {
+          active: true,
+          sequence: 12,
+          lastEffects: [{ type: 'damage', placementId: 'monster-1', amount: 10 }],
+        },
+      }],
+      { _version: 50 }
+    );
+
+    assert.equal(capturedPayloads.length, 1, 'combat waits behind the HP write');
+    assert.equal(requestSignals[0].aborted, false, 'HP write remains in flight');
+
+    pendingFetchResolvers.shift()?.({
+      ok: true,
+      json: async () => ({ success: true, data: { _version: 51 } }),
+    });
+    const hpResult = await hpSave;
+    await Promise.resolve();
+
+    assert.equal(hpResult.success, true, 'sheet sync sees a successful HP save');
+    assert.equal(capturedPayloads.length, 2, 'combat snapshot follows the HP write');
+    assert.deepEqual(
+      capturedPayloads[1].ops.map((op) => op.type),
+      ['placement.update', 'combat.set'],
+      'the queued snapshot retains both the HP update and combat effect'
+    );
+
+    pendingFetchResolvers.shift()?.({
+      ok: true,
+      json: async () => ({ success: true, data: { _version: 52 } }),
+    });
+    const combatResult = await combatSave;
+    assert.equal(combatResult.success, true);
+  });
+
+  test('routine placement updates do not abort an in-flight combat snapshot', async () => {
+    const {
+      persistBoardStateOps,
+      _resetBoardStateOpsBufferForTest,
+    } = await import('../board-state-service.js');
+    _resetBoardStateOpsBufferForTest();
+
+    const requestSignals = [];
+    globalThis.fetch = async (_url, options = {}) => {
+      if (options?.body) capturedPayloads.push(JSON.parse(options.body));
+      requestSignals.push(options.signal);
+      return new Promise((resolve) => pendingFetchResolvers.push(resolve));
+    };
+
+    const combatSave = persistBoardStateOps(
+      '/api/state',
+      [{
+        type: 'combat.set',
+        sceneId: 'scene-1',
+        combat: { active: true, sequence: 20 },
+      }],
+      { _version: 60 }
+    );
+    const conditionSave = persistBoardStateOps(
+      '/api/state',
+      [{
+        type: 'placement.update',
+        sceneId: 'scene-1',
+        placementId: 'monster-1',
+        patch: { conditions: [{ name: 'bleeding' }] },
+      }],
+      { _version: 60 }
+    );
+
+    assert.equal(capturedPayloads.length, 1, 'placement update waits behind combat');
+    assert.equal(requestSignals[0].aborted, false, 'combat snapshot remains in flight');
+
+    pendingFetchResolvers.shift()?.({
+      ok: true,
+      json: async () => ({ success: true, data: { _version: 61 } }),
+    });
+    const combatResult = await combatSave;
+    await Promise.resolve();
+    assert.equal(combatResult.success, true);
+    assert.equal(capturedPayloads.length, 2);
+
+    pendingFetchResolvers.shift()?.({
+      ok: true,
+      json: async () => ({ success: true, data: { _version: 62 } }),
+    });
+    const conditionResult = await conditionSave;
+    assert.equal(conditionResult.success, true);
+  });
+
   test('combat intent rejects unsupported types before saving', async () => {
     const { persistCombatIntent, _resetBoardStateOpsBufferForTest } = await import(
       '../board-state-service.js'

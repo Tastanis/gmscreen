@@ -316,9 +316,150 @@ final class StatePostIntegrationTest extends TestCase
             'y' => 4,
         ], $state);
 
-        $this->assertSame('placement.add', $op['type']);
-        $this->assertSame(8, $op['placement']['column']);
-        $this->assertSame(9000, $op['placement']['_lastModified']);
+        $this->assertSame('placement.move', $op['type']);
+        $this->assertSame(8, $op['x']);
+        $this->assertSame(4, $op['y']);
+        $this->assertTrue($op['publicVisible']);
+        $this->assertArrayNotHasKey('placement', $op);
+    }
+
+    public function testVisibleMonsterMovementBroadcastDoesNotCarryLargeStatBlock(): void
+    {
+        $state = [
+            'placements' => [
+                'scene-1' => [[
+                    'id' => 'monster-1',
+                    'hidden' => false,
+                    'column' => 12,
+                    'row' => 7,
+                    'monster' => [
+                        'abilities' => array_fill(0, 80, str_repeat('ability text ', 20)),
+                    ],
+                ]],
+            ],
+        ];
+
+        $applied = buildAppliedBoardStateOp([
+            'type' => 'placement.move',
+            'sceneId' => 'scene-1',
+            'placementId' => 'monster-1',
+            'x' => 999,
+            'y' => 999,
+        ], $state);
+        $safe = sanitizeBoardStateBroadcastOpsForPlayers([$applied], $state);
+        $broadcast = buildPlayerSafeOpsBroadcast($safe, 10, 123456, 'gm', 'gm', 1);
+
+        $this->assertSame('ops', $broadcast['type']);
+        $this->assertSame('placement.move', $broadcast['ops'][0]['type']);
+        $this->assertSame(12, $broadcast['ops'][0]['x']);
+        $this->assertSame(7, $broadcast['ops'][0]['y']);
+        $this->assertLessThan(1000, strlen((string) json_encode($broadcast)));
+        $this->assertStringNotContainsString('ability text', (string) json_encode($broadcast));
+    }
+
+    public function testHiddenMonsterMovementIsNotBroadcastToPlayers(): void
+    {
+        $state = [
+            'placements' => [
+                'scene-1' => [[
+                    'id' => 'hidden-monster',
+                    'hidden' => true,
+                    'column' => 12,
+                    'row' => 7,
+                ]],
+            ],
+        ];
+
+        $applied = buildAppliedBoardStateOp([
+            'type' => 'placement.move',
+            'sceneId' => 'scene-1',
+            'placementId' => 'hidden-monster',
+            'x' => 12,
+            'y' => 7,
+        ], $state);
+        $safe = sanitizeBoardStateBroadcastOpsForPlayers([$applied], $state);
+
+        $this->assertSame([], $safe);
+    }
+
+    public function testVisiblePlacementUpdateBroadcastStaysCompactAndCanonical(): void
+    {
+        $largeMonster = [
+            'name' => 'Large Monster',
+            'abilities' => array_fill(0, 80, str_repeat('ability text ', 20)),
+        ];
+        $before = [
+            'placements' => [
+                'scene-1' => [[
+                    'id' => 'monster-1',
+                    'hidden' => false,
+                    'hp' => ['current' => '30', 'max' => '30'],
+                    'monster' => $largeMonster,
+                ]],
+            ],
+        ];
+        $after = $before;
+        $after['placements']['scene-1'][0]['hp']['current'] = '20';
+        $after['placements']['scene-1'][0]['_lastModified'] = 9001;
+
+        $applied = buildAppliedBoardStateOp([
+            'type' => 'placement.update',
+            'sceneId' => 'scene-1',
+            'placementId' => 'monster-1',
+            'patch' => [
+                // Deliberately stale input proves the broadcast is sourced
+                // from canonical post-write state, not the submitted patch.
+                'hp' => ['current' => '999', 'max' => '30'],
+            ],
+        ], $after, $before);
+
+        $this->assertSame('placement.update', $applied['type']);
+        $this->assertSame('monster-1', $applied['placementId']);
+        $this->assertSame(
+            ['hp' => ['current' => '20', 'max' => '30']],
+            $applied['patch']
+        );
+        $this->assertArrayNotHasKey('placement', $applied);
+
+        $safe = sanitizeBoardStateBroadcastOpsForPlayers([$applied], $after);
+        $broadcast = buildPlayerSafeOpsBroadcast($safe, 11, 123456, 'gm', 'gm', 1);
+        $this->assertSame('ops', $broadcast['type']);
+        $this->assertSame('placement.update', $broadcast['ops'][0]['type']);
+        $this->assertLessThan(1000, strlen((string) json_encode($broadcast)));
+        $this->assertStringNotContainsString('ability text', (string) json_encode($broadcast));
+    }
+
+    public function testPlacementUpdateVisibilityTransitionsUseStructuralBroadcastOps(): void
+    {
+        $visible = [
+            'placements' => [
+                'scene-1' => [[
+                    'id' => 'monster-1',
+                    'hidden' => false,
+                    'hp' => ['current' => '20', 'max' => '30'],
+                ]],
+            ],
+        ];
+        $hidden = $visible;
+        $hidden['placements']['scene-1'][0]['hidden'] = true;
+
+        $hideOp = buildAppliedBoardStateOp([
+            'type' => 'placement.update',
+            'sceneId' => 'scene-1',
+            'placementId' => 'monster-1',
+            'patch' => ['hidden' => true],
+        ], $hidden, $visible);
+        $this->assertSame('placement.remove', $hideOp['type']);
+        $this->assertTrue($hideOp['publicVisible']);
+
+        $showOp = buildAppliedBoardStateOp([
+            'type' => 'placement.update',
+            'sceneId' => 'scene-1',
+            'placementId' => 'monster-1',
+            'patch' => ['hidden' => false],
+        ], $visible, $hidden);
+        $this->assertSame('placement.add', $showOp['type']);
+        $this->assertSame('monster-1', $showOp['placement']['id']);
     }
 
     public function testSharedBroadcastOmitsHiddenPlacementsAndMonsterData(): void

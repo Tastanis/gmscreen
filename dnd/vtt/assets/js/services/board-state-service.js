@@ -335,7 +335,18 @@ export function persistBoardStateOps(endpoint, ops, envelope = {}, options = {})
     wirePayload.boardState = boardStateEnvelope;
   }
 
-  const normalizedOptions = { immediate: true, ...options };
+  // A combat snapshot is coupled to nearby placement mutations such as HP,
+  // conditions, triggered-action readiness, and movement riders. Treat it as
+  // an ordering barrier just like an authoritative combat intent: aborting
+  // either side of that pair can leave the sender looking correct while
+  // remote clients retain stale placement state (and can also cancel the
+  // character-sheet stamina sync that waits on the placement save).
+  const includesCombatSnapshot = bufferedOps.some((op) => op?.type === 'combat.set');
+  const normalizedOptions = {
+    immediate: true,
+    ...options,
+    ...(includesCombatSnapshot ? { coalesce: false } : null),
+  };
   const savePromise = queueSave(SAVE_KEY, wirePayload, endpoint, normalizedOptions);
 
   if (savePromise && typeof savePromise.then === 'function') {
