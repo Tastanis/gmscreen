@@ -11,6 +11,11 @@ See `../../character_sheet/ability-automation/AUTHORING.md` and `REGISTRY.md` fo
 - **Ranges are baked per her sheet** (which already includes the kit's +1 melee distance, e.g. Get In Get Out = Melee 2). The kit JSON does not also add a distance modifier.
 - **Book rules text lives in `fields`** so each card stays human-readable; `automation` is what the VTT runs.
 - Effects flagged `"raw": true` ignore feature modifiers (used so the kit +1 isn't double-counted on rider damage).
+- **Enable the Insight edge discount:** edit Sharon's resource card and check
+  **Edge costs 1 less (Shadow)**. Heroic abilities still spend their listed
+  Insight up front. If an accepted power roll has an edge or double edge, the
+  VTT refunds exactly 1 Insight after the automation finishes. One qualifying
+  roll/target is enough, and an ability never receives more than one refund.
 
 ---
 
@@ -597,7 +602,7 @@ No kit bonus (kit is melee-only) → 5/8/10 at Agility 3. Her PDF card shows 4/6
 }
 ```
 
-Covers: combat-start = Victories, +1d3 each turn, first surge-damage each round = **+2** (Surge of Insight folded in), reset at combat end. The "power-roll ability costs 1 less Insight with an edge" rule has no resource hook — adjust manually.
+Covers: combat-start = Victories, +1d3 each turn, first surge-damage each round = **+2** (Surge of Insight folded in), reset at combat end. The power-roll discount is not a heroic-resource rule in this JSON; enable the resource-card checkbox **Edge costs 1 less (Shadow)**. The runner refunds 1 Insight once after a paid heroic ability accepts an edge or double-edge power roll.
 
 ---
 

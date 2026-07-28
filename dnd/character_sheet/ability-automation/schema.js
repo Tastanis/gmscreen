@@ -954,7 +954,7 @@
       "type", "id", "name", "mode", "predicate", "creature", "count", "optional",
       "distance", "range", "selectionGuide", "shape", "size", "width", "height", "length", "note",
       "promptTitle", "promptText", "excludeGroups", "excludeGroup",
-      "structure", "wallColor",
+      "rangeOrigin", "structure", "wallColor",
     ]);
     const mode = pickKnown(input.mode, P.TARGET_MODES, "token");
     const predicateRaw = input.predicate || input.creature || "creature";
@@ -973,6 +973,14 @@
     const promptText = asTrimmedString(input.promptText);
     if (promptTitle) block.promptTitle = promptTitle;
     if (promptText) block.promptText = promptText;
+    if (input.rangeOrigin !== undefined && input.rangeOrigin !== null) {
+      const rangeOrigin = typeof input.rangeOrigin === "string" ? input.rangeOrigin.trim() : "";
+      if (rangeOrigin) {
+        block.rangeOrigin = rangeOrigin;
+      } else if (input.rangeOrigin !== "") {
+        warnings.push(`${path}.rangeOrigin: must be "self" or the name of an earlier target/area block.`);
+      }
+    }
     const excludeGroups = Array.isArray(input.excludeGroups)
       ? input.excludeGroups.map((group) => asTrimmedString(group)).filter(Boolean)
       : asTrimmedString(input.excludeGroup)
@@ -1946,7 +1954,8 @@
         }
         const count = block.count?.mode === "upTo" ? `up to ${block.count.value}` : `${block.count?.value ?? 1}`;
         const distance = block.distance?.value ? ` within ${block.distance.value}` : "";
-        return `Pick ${count} ${block.predicate}${distance}${block.optional ? " (optional)" : ""}.`;
+        const origin = block.rangeOrigin && block.rangeOrigin !== "self" ? ` from ${block.rangeOrigin}` : "";
+        return `Pick ${count} ${block.predicate}${distance}${origin}${block.optional ? " (optional)" : ""}.`;
       }
       case "powerRoll":
         return `Roll ${block.rollFormula || "2d10"} + ${block.attribute || "Strongest"}${block.bonus ? ` ${block.bonus >= 0 ? "+" : ""}${block.bonus}` : ""}.`;

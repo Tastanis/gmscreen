@@ -716,6 +716,43 @@
     return Math.max(1, asInt(count.value, 1));
   }
 
+  function getRangeOriginPlacement(state, block) {
+    const originName = String(block?.rangeOrigin || "self").trim();
+    if (!originName || originName.toLowerCase() === "self") {
+      return state.sourcePlacement || null;
+    }
+
+    // Area target blocks preserve their selected map footprint separately
+    // from the creatures caught in it. Prefer that location when the named
+    // group is an area so follow-up ranges start at the chosen space.
+    const area = state.areas?.[originName];
+    const template = area?.template;
+    if (template && typeof template === "object") {
+      return {
+        id: `automation-area:${originName}`,
+        name: originName,
+        column: asInt(template.column, 0),
+        row: asInt(template.row, 0),
+        width: Math.max(1, asInt(template.width, 1)),
+        height: Math.max(1, asInt(template.height, 1)),
+      };
+    }
+
+    // Token picks retain both a lightweight id/name and (on the VTT) a
+    // placement snapshot. The first selected member is the deterministic
+    // origin when a group contains more than one token.
+    const originTarget = getTargetGroup(state, originName)[0];
+    if (originTarget) {
+      return originTarget.placement && typeof originTarget.placement === "object"
+        ? originTarget.placement
+        : originTarget;
+    }
+
+    // Old/malformed automations should remain usable. The documented default
+    // is the caster, so an unresolved reference degrades to that same default.
+    return state.sourcePlacement || null;
+  }
+
   async function runTargetBlock(state, block) {
     const useBoardOnlyPrompt = block.mode === "token" && Boolean(block.promptTitle || block.promptText);
     const host = useBoardOnlyPrompt ? null : showTargetPrompt(state, block);
@@ -760,7 +797,7 @@
             // both shapes so v3 `predicate` and v2 `creature` both work.
             creature: block.predicate,
             affects: block.predicate,
-            sourcePlacement: state.sourcePlacement || null,
+            sourcePlacement: getRangeOriginPlacement(state, block),
           }),
           skipPromise,
           cancelPromise,
@@ -807,6 +844,7 @@
 
       const desired = getTokenTargetCount(block);
       const upTo = block.count?.mode === "upTo";
+      const rangeOriginPlacement = getRangeOriginPlacement(state, block);
       const selected = [];
       const seen = new Set();
       const excludedIds = new Set(
@@ -824,6 +862,9 @@
           affects: block.predicate,
           pickIndex: pickIndex + 1,
           pickTotal: Number.isFinite(desired) ? desired : 0,
+          // Multi-pick flows need the board prompt even when authors did not
+          // provide custom wording; that prompt owns the early Done button.
+          showPrompt: Boolean(block.promptTitle || block.promptText || block.optional || upTo || desired > 1),
           // "Done" finishes early with the targets picked so far without
           // cancelling the ability. Always offer it once at least one target
           // is locked in, so a multi-target ability can hit a single target.
@@ -832,9 +873,10 @@
           // opp-attack). Picker pulses this token red but the player can
           // still click anyone.
           suggestedTargetId: state.suggestedTargetId || "",
-          // Source token, used by the board to draw the reach/range box
-          // around the caster while the player is picking a target.
-          sourcePlacement: state.sourcePlacement || null,
+          // Source token/location used only by the advisory reach/range box.
+          // It defaults to the caster, but rangeOrigin can reference an
+          // earlier token target group or placed area.
+          sourcePlacement: rangeOriginPlacement,
           excludeTargetIds: [...excludedIds, ...seen],
         };
         const result = await Promise.race([
@@ -1243,6 +1285,10 @@
         return;
       }
       if (target.closest("[data-power-roll-accept]") && state.roll && state.selectedTier) {
+        const acceptedEdgeState = getPowerRollTotal(state, block).edgeState;
+        if (acceptedEdgeState.net > 0) {
+          state.acceptedPowerRollWithEdge = true;
+        }
         host.removeEventListener("click", onClick);
         closeRunner();
         resolve();
@@ -3414,6 +3460,38 @@
     return true;
   }
 
+  async function applyPowerRollEdgeCostDiscount(state) {
+    if (state.edgeCostDiscountHandled) return;
+    state.edgeCostDiscountHandled = true;
+    const enabled = Boolean(state.hero?.resource?.discountOnPowerRollEdge);
+    const spent = Math.max(0, asInt(state.abilityResourceSpend?.spent, 0));
+    if (!enabled || !state.acceptedPowerRollWithEdge || spent < 1) return;
+    const resource = state.abilityResourceSpend?.resource
+      || state.hero?.resource?.title
+      || "";
+    if (typeof state.context.applyResourceGain !== "function") {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: edge reduces the cost by 1 ${resource || "resource"}; refund it manually.`,
+      });
+      return;
+    }
+    const result = await state.context.applyResourceGain({
+      amount: 1,
+      resource,
+      abilityName: state.action.name || "Ability",
+      reason: "powerRollEdgeCostDiscount",
+    });
+    if (result?.skipped) {
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: edge cost discount could not update ${resource || "the resource"} automatically; refund 1 manually.`,
+      });
+      return;
+    }
+    await postChat(state.context, {
+      message: `${state.heroName} - ${state.action.name || "Ability"}: edge reduces the cost by 1 ${result?.resource || resource || "resource"} (${result?.current ?? "refunded"}).`,
+    });
+  }
+
   function walkBlockEffects(block, visit) {
     if (!block || typeof block !== "object") return;
     if (block.type === "powerRoll" && block.tiers) {
@@ -3551,6 +3629,9 @@
       resultText: "",
       aborted: false,
       appliedModifiers: [],
+      abilityResourceSpend: null,
+      acceptedPowerRollWithEdge: false,
+      edgeCostDiscountHandled: false,
     };
 
     try {
@@ -3611,6 +3692,7 @@
           closeRunner();
           return;
         }
+        state.abilityResourceSpend = spendResult || null;
       }
 
       if (isArmingOnly) {
@@ -3668,6 +3750,12 @@
       await postChat(state.context, {
         message: `${state.action.name || "Ability"} automation stopped: ${error?.message || "unknown error"}.`,
       });
+    } finally {
+      try {
+        await applyPowerRollEdgeCostDiscount(state);
+      } catch (discountError) {
+        console.warn("[AbilityAutomationRunner] edge cost discount failed", discountError);
+      }
     }
   }
 

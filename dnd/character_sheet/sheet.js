@@ -196,7 +196,14 @@ const defaultSheet = {
     victories: "",
     surges: "",
     surgesUsed: 0,
-    resource: { title: "Resource", value: 0, autoDice: "", allowNegative: false, automation: null },
+    resource: {
+      title: "Resource",
+      value: 0,
+      autoDice: "",
+      allowNegative: false,
+      discountOnPowerRollEdge: false,
+      automation: null,
+    },
     heroTokens: [false, false],
     stats: {
       might: 0,
@@ -490,6 +497,9 @@ function mergeWithDefaults(data) {
     inputHero.resource?.value ?? merged.hero.resource.value
   );
   merged.hero.resource.allowNegative = Boolean(merged.hero.resource.allowNegative);
+  merged.hero.resource.discountOnPowerRollEdge = Boolean(
+    merged.hero.resource.discountOnPowerRollEdge
+  );
   merged.hero.stats = { ...merged.hero.stats, ...(inputHero.stats || {}) };
   merged.hero.vitals = normalizeVitals(inputHero.vitals);
   merged.hero.culture = normalizeIdentityGroup(inputHero.culture, DEFAULT_CULTURE_FIELDS);
@@ -1308,6 +1318,14 @@ function renderHeroPane() {
                     />
                     <span>Allow negative (Talent)</span>
                   </label>
+                  <label class="resource-allow-negative" title="For Shadow's Insight: refund 1 spent resource after a heroic ability resolves with an accepted edge or double edge power roll.">
+                    <input
+                      type="checkbox"
+                      data-model="hero.resource.discountOnPowerRollEdge"
+                      ${hero.resource.discountOnPowerRollEdge ? "checked" : ""}
+                    />
+                    <span>Edge costs 1 less (Shadow)</span>
+                  </label>
                   <button
                     class="text-btn resource-automation-btn ${resourceAutomationConfigured ? "automation-action-btn--configured" : ""}"
                     type="button"
@@ -2050,6 +2068,19 @@ function bindResourceControls() {
   if (allowNegativeToggle) {
     allowNegativeToggle.addEventListener("change", () => {
       setByPath("hero.resource.allowNegative", Boolean(allowNegativeToggle.checked));
+      queueAutoSave();
+    });
+  }
+
+  const edgeDiscountToggle = document.querySelector(
+    '[data-model="hero.resource.discountOnPowerRollEdge"]'
+  );
+  if (edgeDiscountToggle) {
+    edgeDiscountToggle.addEventListener("change", () => {
+      setByPath(
+        "hero.resource.discountOnPowerRollEdge",
+        Boolean(edgeDiscountToggle.checked)
+      );
       queueAutoSave();
     });
   }

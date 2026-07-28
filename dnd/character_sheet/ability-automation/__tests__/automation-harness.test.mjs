@@ -84,7 +84,14 @@ test('target selection guides and persistent condition riders normalize idempote
     const input = {
       schema: 'ability-automation/v3',
       cards: [
-        { type: 'target', id: 'target-1', name: 'primary', mode: 'token', range: 5 },
+        {
+          type: 'target',
+          id: 'target-1',
+          name: 'primary',
+          mode: 'token',
+          range: 5,
+          rangeOrigin: 'setupTarget',
+        },
         {
           type: 'effect',
           id: 'effect-1',
@@ -110,6 +117,7 @@ test('target selection guides and persistent condition riders normalize idempote
     }
     assert.deepEqual(repeated, once);
     assert.equal(once.cards[0].distance.value, 5);
+    assert.equal(once.cards[0].rangeOrigin, 'setupTarget');
     const explicitGuide = harness.window.AbilityAutomationSchema.normalizeAutomation({
       schema: 'ability-automation/v3',
       cards: [{ type: 'target', mode: 'token', selectionGuide: { range: 8, form: 'ranged' } }],
@@ -124,6 +132,173 @@ test('target selection guides and persistent condition riders normalize idempote
       attribute: '',
       damageType: 'fire',
     });
+  } finally {
+    harness.close();
+  }
+});
+
+test('follow-up target ranges can originate at an earlier token or placed area', async () => {
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const tokenOrigin = await harness.runAutomation({
+      automation: {
+        schema: 'ability-automation/v3',
+        cards: [
+          {
+            type: 'target',
+            name: 'firstTarget',
+            mode: 'token',
+            count: { value: 1, mode: 'exact' },
+          },
+          {
+            type: 'target',
+            name: 'nearFirstTarget',
+            mode: 'token',
+            count: { value: 1, mode: 'exact' },
+            distance: { form: 'ranged', value: 3 },
+            rangeOrigin: 'firstTarget',
+          },
+        ],
+      },
+      sourcePlacement: { id: 'caster', name: 'Caster', column: 1, row: 1 },
+      targetSelections: [
+        { id: 'enemy-1', name: 'Enemy', placement: { id: 'enemy-1', column: 8, row: 9, width: 1, height: 1 } },
+        { id: 'enemy-2', name: 'Nearby Enemy' },
+      ],
+    });
+    assert.deepEqual(tokenOrigin.calls.selectTarget[1].sourcePlacement, {
+      id: 'enemy-1',
+      column: 8,
+      row: 9,
+      width: 1,
+      height: 1,
+    });
+
+    const areaOrigin = await harness.runAutomation({
+      automation: {
+        schema: 'ability-automation/v3',
+        cards: [
+          {
+            type: 'target',
+            name: 'chosenLocation',
+            mode: 'area',
+            shape: 'cube',
+            size: 1,
+            count: { value: 1, mode: 'exact' },
+          },
+          {
+            type: 'target',
+            name: 'nearLocation',
+            mode: 'token',
+            count: { value: 1, mode: 'exact' },
+            distance: { form: 'ranged', value: 5 },
+            rangeOrigin: 'chosenLocation',
+          },
+        ],
+      },
+      areaSelections: [{
+        targets: [],
+        template: { column: 11, row: 12, width: 2, height: 3 },
+      }],
+      targetSelections: [{ id: 'enemy-3', name: 'Enemy Three' }],
+    });
+    assert.deepEqual(areaOrigin.calls.selectTarget.at(-1).sourcePlacement, {
+      id: 'automation-area:chosenLocation',
+      name: 'chosenLocation',
+      column: 11,
+      row: 12,
+      width: 2,
+      height: 3,
+    });
+  } finally {
+    harness.close();
+  }
+});
+
+test('multi-target selection exposes Done after one pick without canceling the ability', async () => {
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const result = await harness.runAutomation({
+      automation: {
+        schema: 'ability-automation/v3',
+        cards: [
+          {
+            type: 'target',
+            name: 'targets',
+            mode: 'token',
+            predicate: 'creatureOrObject',
+            count: { value: 2, mode: 'exact' },
+          },
+          {
+            type: 'effect',
+            target: 'targets',
+            effects: [{ kind: 'damage', amount: 4, damageType: 'fire' }],
+          },
+        ],
+      },
+      targetSelections: [
+        { id: 'target-1', name: 'Only Target' },
+        { done: true },
+      ],
+    });
+
+    assert.equal(result.calls.selectTarget.length, 2);
+    assert.equal(result.calls.selectTarget[0].showPrompt, true);
+    assert.equal(result.calls.selectTarget[0].allowDone, false);
+    assert.equal(result.calls.selectTarget[1].showPrompt, true);
+    assert.equal(result.calls.selectTarget[1].allowDone, true);
+    assert.equal(result.calls.applyDamage.length, 1);
+    assert.equal(result.calls.applyDamage[0].placementId, 'target-1');
+  } finally {
+    harness.close();
+  }
+});
+
+test('authored Materialize chains its strained range from the hit target', async () => {
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const materialize = await loadAuthoredCharacterAbility(
+      '../../../ai-reference/characters/indigo-automations.md',
+      'Materialize'
+    );
+    const branch = materialize.automation.cards.find((card) => card.type === 'branch');
+    const adjacentPick = branch?.then?.find((card) => card.type === 'target');
+    assert.equal(adjacentPick?.rangeOrigin, 'target');
+    assert.deepEqual(adjacentPick?.distance, {
+      form: 'melee',
+      value: 1,
+      secondary: 0,
+      within: 0,
+    });
+    assert.deepEqual(
+      harness.window.AbilityAutomationSchema.normalizeAutomation(materialize.automation).warnings,
+      []
+    );
+  } finally {
+    harness.close();
+  }
+});
+
+test('authored Bifurcated Incineration can continue with one selected target', async () => {
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const bifurcated = await loadAuthoredCharacterAbility(
+      '../../../ai-reference/characters/zepha-automations.md',
+      'Bifurcated Incineration'
+    );
+    const result = await harness.runAutomation({
+      automation: bifurcated.automation,
+      targetSelections: [
+        { id: 'target-1', name: 'Only Target' },
+        { done: true },
+      ],
+      powerRollTiers: ['tier2'],
+    });
+    assert.equal(result.calls.selectTarget.length, 2);
+    assert.equal(result.calls.selectTarget[1].allowDone, true);
+    assert.equal(result.calls.applyDamage.length, 1);
+    assert.equal(result.calls.applyDamage[0].placementId, 'target-1');
+    assert.equal(result.calls.applyDamage[0].damageType, 'fire');
   } finally {
     harness.close();
   }
@@ -434,6 +609,17 @@ test('character-sheet unchanged save cycles keep normalized automation metadata 
   } finally {
     harness.close();
   }
+});
+
+test('character sheet persists the Shadow edge-cost resource toggle through autosave', async () => {
+  const sheetSource = await readFile(
+    new URL('../../sheet.js', import.meta.url),
+    'utf8'
+  );
+  assert.match(sheetSource, /discountOnPowerRollEdge:\s*false/);
+  assert.match(sheetSource, /merged\.hero\.resource\.discountOnPowerRollEdge\s*=\s*Boolean/);
+  assert.match(sheetSource, /data-model="hero\.resource\.discountOnPowerRollEdge"/);
+  assert.match(sheetSource, /setByPath\(\s*"hero\.resource\.discountOnPowerRollEdge"/);
 });
 
 test('v2 discard retains its migration warning', async () => {

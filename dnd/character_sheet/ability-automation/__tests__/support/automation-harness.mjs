@@ -429,6 +429,15 @@ function createUiDriver(window, script) {
     const rollButton = document.querySelector('[data-power-roll-roll]');
     const acceptButton = document.querySelector('[data-power-roll-accept]');
     if (rollButton && !acceptButton) {
+      const host = document.getElementById('ability-automation-runner');
+      if (host && host.getAttribute('data-harness-edge-selected') !== 'true') {
+        const requestedEdge = Number(script.powerRollEdges[acceptedPowerRolls] || 0);
+        host.setAttribute('data-harness-edge-selected', 'true');
+        if (requestedEdge > 0) {
+          document.querySelector(`[data-power-roll-edge-adjust="${Math.min(2, requestedEdge)}"]`)?.click();
+          return;
+        }
+      }
       rollButton.click();
       return;
     }
@@ -508,9 +517,12 @@ export async function createAbilityAutomationHarness(options = {}) {
       promptAnswers: [...(runOptions.promptAnswers || options.promptAnswers || [])],
       choiceSelections: [...(runOptions.choiceSelections || options.choiceSelections || [])],
       powerRollTiers: [...(runOptions.powerRollTiers || options.powerRollTiers || [])],
+      powerRollEdges: [...(runOptions.powerRollEdges || options.powerRollEdges || [])],
       powerRollSurges: [...(runOptions.powerRollSurges || options.powerRollSurges || [])],
       randomValues: [...(runOptions.randomValues || options.randomValues || [0.45, 0.45])],
       spendHeroicResourceResults: [...(runOptions.spendHeroicResourceResults || options.spendHeroicResourceResults || [])],
+      spendResourceResults: [...(runOptions.spendResourceResults || options.spendResourceResults || [])],
+      resourceGainResults: [...(runOptions.resourceGainResults || options.resourceGainResults || [])],
       recoveryValueResults: [...(runOptions.recoveryValueResults || options.recoveryValueResults || [])],
       spendRecoveryResults: [...(runOptions.spendRecoveryResults || options.spendRecoveryResults || [])],
       checkPotencyResults: [...(runOptions.checkPotencyResults || options.checkPotencyResults || [])],
@@ -600,7 +612,7 @@ export async function createAbilityAutomationHarness(options = {}) {
       },
       spendResource(action) {
         recorder.record('spendResource', action);
-        return { spent: 0 };
+        return clone(script.spendResourceResults.shift() || { spent: 0 });
       },
       registerTrigger(payload) {
         recorder.record('registerTrigger', payload);
@@ -612,6 +624,18 @@ export async function createAbilityAutomationHarness(options = {}) {
       postChat(entry) {
         recorder.record('postChat', entry);
         return true;
+      },
+      applyResourceGain(payload) {
+        recorder.record('applyResourceGain', payload);
+        const current = Number(context.hero?.resource?.value || 0);
+        const next = current + Number(payload.amount || 0);
+        if (context.hero?.resource) context.hero.resource.value = next;
+        return clone(script.resourceGainResults.shift() || {
+          applied: Number(payload.amount || 0),
+          delta: Number(payload.amount || 0),
+          resource: payload.resource || context.hero?.resource?.title || 'Resource',
+          current: next,
+        });
       },
       applySurgeGain(payload) {
         recorder.record('applySurgeGain', payload);

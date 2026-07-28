@@ -403,6 +403,13 @@ You picture an object in your mind and give it form--directly above your opponen
             "optional": false,
             "promptTitle": "Materialize - Strained",
             "promptText": "Choose each creature adjacent to the target. Click Done when all adjacent creatures are selected.",
+            "rangeOrigin": "target",
+            "distance": {
+              "form": "melee",
+              "value": 1,
+              "secondary": 0,
+              "within": 0
+            },
             "excludeGroups": [
               "target"
             ]

@@ -86,6 +86,10 @@ never rejects an out-of-range click. An explicit
 intentionally differs from the rules distance; legacy numeric `range` is
 normalized into the standard distance path.
 
+Follow-up target or area blocks can set `rangeOrigin` to the name of an earlier
+target/area block. The guide is then centered on that selected token or placed
+location; omitting it retains the caster default.
+
 Ordinary conditions can carry persistent
 `riders: [{ id, when, target, effects }]`. The board assigns a stable
 condition-instance identity, records each handled turn boundary before

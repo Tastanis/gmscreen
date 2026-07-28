@@ -176,11 +176,12 @@ Asks the player to pick a token (or place an area template) on the VTT board.
 | `name` | string | Optional. Used by later blocks to reference this group (e.g. `"target": "primary"`). Defaults to `"primary"`. |
 | `mode` | `"token"` \| `"area"` | Required. Token = pick tokens. Area = place template. |
 | `predicate` | `"creature"`, `"enemy"`, `"ally"`, `"object"`, `"creatureOrObject"`, `"self"`, `"selfOrAlly"`, `"selfAndAlly"` | Who's a legal target. |
-| `count` | `{ value, mode }` | `mode`: `"exact"` (must pick all) or `"upTo"` (player can stop early). Token mode only. |
+| `count` | `{ value, mode }` | Token mode only. `"exact"` requires the first pick, then permits **Done** before a multi-target maximum is filled. `"upTo"` also permits **Done** before the first pick. |
 | `optional` | bool | If true, runtime shows a "Skip" button. The automation continues with an empty target group. |
 | `excludeGroups` | string array | Token mode only. Prevents selecting targets already in the named groups. Use for split-role target picks that must be different. |
 | `promptTitle` | string | Optional custom title for the target picker popup. |
 | `promptText` | string | Optional custom instructions for the target picker popup and board status. |
+| `rangeOrigin` | string | Optional name of an earlier token or area target block. Starts this block's advisory range box at that selected token/location instead of the caster. Omit it or use `"self"` for the caster. A multi-token group uses its first selected token. |
 | `distance` | `{ form, value, secondary?, within? }` | See distance forms below. |
 | `selectionGuide` | `{ range, form? }` | Optional reusable advisory range overlay. It never rejects a click. Normally omit it and let `distance` generate the same guide automatically. |
 
@@ -189,6 +190,39 @@ If `promptTitle` / `promptText` are omitted and the next effect card uses this t
 When a token target card has custom or inferred prompt text in the VTT, the board picker shows a single compact prompt near the map selection area. Optional target cards put `Skip` in that picker; `Cancel` stops the automation. Keep `promptText` short and action-oriented, since it is meant as quick reference text.
 
 Target range is intentionally a guide, not a legality check. `distance` is canonical and automatically draws the same range/reach box used by movement tools. Legacy numeric `range` and explicit `selectionGuide.range` are normalized into that guide. The player or GM can still select outside it for unusual rules, elevations, or table rulings.
+
+For a follow-up pick measured from something selected earlier, reference the
+earlier block by name:
+
+```json
+[
+  {
+    "type": "target",
+    "name": "firstTarget",
+    "mode": "token",
+    "predicate": "enemy",
+    "count": { "value": 1, "mode": "exact" },
+    "distance": { "form": "ranged", "value": 10 }
+  },
+  {
+    "type": "target",
+    "name": "nearFirstTarget",
+    "mode": "token",
+    "predicate": "creature",
+    "count": { "value": 3, "mode": "upTo" },
+    "rangeOrigin": "firstTarget",
+    "distance": { "form": "ranged", "value": 3 }
+  }
+]
+```
+
+If the referenced block placed an area, the guide begins at that chosen map
+location rather than at a creature caught in the area. An unavailable
+`rangeOrigin` safely falls back to the caster.
+
+All multi-target token blocks show the board prompt. After the first pick, the
+next prompt includes **Done**, so an ability listing two targets can resolve
+against one. Use `"mode": "upTo"` when choosing zero targets is also legal.
 
 For self-only resolution effects after a trigger, an `effect` card can use `"target": "self"` directly. The runner resolves that to the source token; do not add a separate target card that asks the player to pick themselves unless the ability genuinely needs a manual pick.
 
@@ -787,6 +821,13 @@ Caster and target atomically transpose their (column, row). Best-effort footprin
 ```
 
 Modifies the caster's heroic resource. Negative `amount` = loss. If the named `resource` doesn't match the caster's resource bar title, posts a chat reminder for manual adjust. Floors at 0.
+
+Shadow's "heroic power-roll ability costs 1 less Insight with an edge" rule is
+configured on the character sheet's resource card, not in each ability JSON.
+Check **Edge costs 1 less (Shadow)**. The listed ability cost is spent first;
+after the automation finishes, one accepted edge or double-edge power roll
+refunds exactly 1 resource. Multiple targets or multiple qualifying rolls
+still produce only one refund. Do not invent a `refundOnEdge` automation field.
 
 ### `surgeGain`
 

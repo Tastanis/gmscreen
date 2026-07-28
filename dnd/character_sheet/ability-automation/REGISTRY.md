@@ -90,6 +90,16 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 
 `untyped`, `acid`, `cold`, `corruption`, `fire`, `holy`, `lightning`, `poison`, `psychic`, `sonic`
 
+### Character resource switches
+
+The character resource card has an **Edge costs 1 less (Shadow)** switch
+(`hero.resource.discountOnPowerRollEdge`). This is sheet configuration, not an
+ability-automation JSON field. When enabled, a paid heroic ability that
+accepts at least one power roll with a net edge or double edge receives one
+resource back after resolution. It refunds at most once per ability use and
+does not refund a canceled or unaccepted roll, a normal or bane roll, or an
+ability whose cost hook spent nothing.
+
 ## Conditions — `condition.name`
 
 `bleeding`, `dazed`, `dying`, `frightened`, `grabbed`, `hidden`, `hiddenEffect`, `prone`, `restrained`, `slowed`, `taunted`, `unconscious`, `weakened`, `damageWeakness`, `damageImmunity`, `other`
@@ -118,11 +128,16 @@ Board-hosted power roll modals can show clickable suggested edges/banes from cur
 
 Forced-movement highlights account for target stability and size across PCs and monsters. The highlight is advisory only: the GM can still click any destination, including cells outside the legal highlight.
 
-Target and area range visuals are also advisory. Single-target abilities draw the caster's range/reach box, and area abilities draw the placement-within range box when the source and `distance.within` are known. Numeric legacy `range` and optional `{ "selectionGuide": { "range": N, "form": "ranged" } }` normalize to the same overlay. `selectionGuide.enforce` is always false; clicking outside the visual is allowed.
+Target and area range visuals are also advisory. They default to the caster. A target block can set `rangeOrigin` to the `name` of an earlier token or area target block; the overlay then starts from the first selected token in that group or from the chosen area location. Missing references safely fall back to self. Numeric legacy `range` and optional `{ "selectionGuide": { "range": N, "form": "ranged" } }` normalize to the same overlay. `selectionGuide.enforce` is always false; clicking outside the visual is allowed.
 
 Target blocks support optional `promptTitle` and `promptText` fields. These control the target-picker modal title/instructions and board status text, but they do not affect targeting legality or the effects that run later. When omitted, a target block immediately followed by an effect card that damages the same target group gets a generic damage prompt such as "Pick Enemy to Damage"; the later `damage` effect still controls amount, attribute, dice, and damage type. Token target blocks with custom or inferred prompt text use the board picker as the single visible prompt; optional picks expose `Skip` in that picker.
 
 Token target blocks support `excludeGroups: ["groupName"]`, which prevents selecting a token already stored in one of those target groups. Use this for split-role abilities where the second prompted target must be different from the first.
+
+Multi-target token blocks always show the board picker. After the first target,
+the next picker exposes **Done** and continues with the selected targets.
+`count.mode: "upTo"` additionally exposes **Done** before the first selection,
+allowing an empty target group.
 
 ## Target predicates — `target.predicate`
 
@@ -192,7 +207,8 @@ Registered values: `untyped`, `acid`, `cold`, `corruption`, `fire`, `holy`,
 
 ## Count modes — `target.count.mode`
 
-`exact` (must pick all), `upTo` (player can stop early), `all` (every legal token).
+`exact` (requires a first pick, then may finish a multi-target block early),
+`upTo` (may finish before selecting any), `all` (every legal token).
 
 ## Branch condition kinds
 

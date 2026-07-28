@@ -103,6 +103,7 @@ prompt shows the dice formula and the applied result reports the actual amount.
 | Shadow | Keen Insight: start-turn gain becomes `1d3 + 1`. | Codeable now with `bonusByLevel` or edited JSON. |
 | Shadow | First surge-including damage each round gives Insight, upgraded by Surge of Insight and Death Pool. | Codeable now for automated power-roll damage with the surge button: `damageDealt`, `includesSurge:true`, round limit. Upgrade amount by editing the rule amount. |
 | Shadow | Combat end: lose remaining Insight. | Codeable now: `combatEnd` + `set:0`. |
+| Shadow | A heroic ability with a power roll costs 1 less Insight when it has an edge or double edge. | Codeable now through the resource-card checkbox **Edge costs 1 less (Shadow)**. This is runner cost handling, not a `heroic-resource/v1` event rule: the listed cost is spent first and 1 Insight is refunded once after an accepted qualifying roll. |
 | Censor | Combat start: gain Wrath equal to Victories. | Codeable now. |
 | Censor | Start turn: gain 2 Wrath; Focused Wrath upgrades to 3. | Codeable now with level-based amount or edited JSON. |
 | Censor | First each round that a judged creature damages you: gain 1 Wrath. | Codeable now: `damage`, `whose:self`, `sourceWhose:judgedTarget`, round limit. |
