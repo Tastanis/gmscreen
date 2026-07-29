@@ -92,6 +92,12 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 - If code changes touch ability automation fields, effect kinds, trigger events, hook payloads, monster import fields, monster ability categories, malice behavior, or monster runtime behavior, update the matching docs listed in `/dnd/ai-reference/UPDATE-GUIDE.md`.
 - Do not invent automation JSON fields or hook names. If the current code does not support a mechanic, represent it with `note` or `other` and document the limitation where appropriate.
 
+### VTT Sync V2 Migration
+- Before changing VTT persistence, Pusher delivery, board-state merging, combat authority, store subscriptions, or broad board rendering, read `/docs/vtt-sync-v2/README.md`.
+- That document is the canonical implementation and AI-handoff plan. Update its phase checklist and decisions as work lands.
+- Never allow V1 and V2 to write the same shared-state domain at the same time. Migrate and delete by domain using the documented gates.
+- Current map, scene, fog, drawing, template, combat, and board-placement runtime state may be reset during the migration. Preserve token-library metadata and token images when practical. This does not authorize deletion of character, monster, automation, chat, Strixhaven, or other campaign data.
+
 ### Debugging
 - Enable debug info boxes for troubleshooting
 - Use console.log statements for JavaScript debugging

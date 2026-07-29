@@ -64,6 +64,7 @@ import {
 import { initializePusher, getSocketId, isPusherConnected } from '../services/pusher-service.js';
 import { createBoardStatePoller } from '../services/board-state-poller.js';
 import { applyBoardStateOpsLocally } from '../services/board-state-op-applier.js';
+import { recordSyncDiagnostic } from '../services/sync-diagnostics.js';
 import {
   PLAYER_VISIBLE_TOKEN_FOLDER,
   normalizeMonsterSnapshot,
@@ -6240,6 +6241,10 @@ export function mountBoardInteractions(store, routes = {}) {
    * token move is exactly the lag this phase is supposed to kill.
    */
   function triggerBoardStateResync(reason) {
+    recordSyncDiagnostic('recoveryRequests', {
+      reason: typeof reason === 'string' ? reason : 'unknown',
+      currentVersion: currentBoardStateVersion,
+    });
     const hasPendingSave = Boolean(
       pendingBoardStateSave?.promise || pendingCombatStateSave?.promise
     );
@@ -6339,6 +6344,10 @@ export function mountBoardInteractions(store, routes = {}) {
       // the ops on top of the wrong base state would compound the
       // drift.
       if (incomingVersion !== currentBoardStateVersion + 1) {
+        recordSyncDiagnostic('revisionGaps', {
+          currentVersion: currentBoardStateVersion,
+          incomingVersion,
+        });
         console.warn(
           '[VTT Pusher] ops version gap detected (current:',
           currentBoardStateVersion,
@@ -6667,6 +6676,10 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!result.applied) {
       return false;
     }
+    recordSyncDiagnostic('recoverySnapshotsApplied', {
+      version: result.version,
+      source: 'save-response',
+    });
 
     boardApi.updateState?.((draft) => {
       draft.boardState = result.boardState;
@@ -7788,6 +7801,10 @@ export function mountBoardInteractions(store, routes = {}) {
     if (isApplyingState) {
       return;
     }
+    recordSyncDiagnostic('boardStateApplications', {
+      version: Number(state?.boardState?._version) || 0,
+      sceneId: state?.boardState?.activeSceneId ?? null,
+    });
     isApplyingState = true;
     try {
       const storeVersion = Number(state?.boardState?._version);
@@ -8904,6 +8921,9 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function loadMap(url) {
+    recordSyncDiagnostic('mapLoads', {
+      hasUrl: Boolean(url),
+    });
     const loadToken = ++mapLoadSequence;
     if (gridCalibration.active) {
       stopGridCalibration('Grid alignment canceled.');
@@ -9677,6 +9697,10 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function renderTokens(state = {}, layer, view, options = {}) {
+    recordSyncDiagnostic('tokenLayerReconciliations', {
+      sceneId: state?.boardState?.activeSceneId ?? null,
+      skipTracker: Boolean(options?.skipTracker),
+    });
     if (!layer) {
       updateCombatTracker([], { activeIds: [], skipCache: true, skipPrune: true });
       return;

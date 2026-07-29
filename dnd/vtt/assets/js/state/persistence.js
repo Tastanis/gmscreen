@@ -1,3 +1,5 @@
+import { recordSyncDiagnostic } from '../services/sync-diagnostics.js';
+
 const pending = new Map();
 const globalWindow = typeof window === 'undefined' ? null : window;
 const globalDocument = typeof document === 'undefined' ? null : document;
@@ -67,6 +69,12 @@ export function queueSave(key, payload, endpoint, options = {}) {
     immediate = false,
   } =
     normalizedOptions;
+
+  recordSyncDiagnostic('legacySavesQueued', {
+    key,
+    coalesce: Boolean(coalesce),
+    immediate: Boolean(immediate),
+  });
 
   const entry = {
     payload,
@@ -182,6 +190,10 @@ function schedulePersist(key, entry) {
 
 async function persist(key, entry) {
   entry.attempts += 1;
+  recordSyncDiagnostic('legacySaveAttempts', {
+    key,
+    attempt: entry.attempts,
+  });
   const { payload, endpoint, controller, keepalive } = entry;
   let result = null;
   try {
@@ -314,6 +326,12 @@ async function persist(key, entry) {
     entry.blocked = !entry.lastResult.success;
 
     if (entry.lastResult.success || !stillPending) {
+      if (entry.lastResult.success) {
+        recordSyncDiagnostic('legacySavesSucceeded', {
+          key,
+          attempts: entry.attempts,
+        });
+      }
       if (stillPending && slot) {
         const next = slot.queue.shift() ?? null;
         if (next) {
@@ -367,6 +385,12 @@ async function persist(key, entry) {
       }
     }
 
+    recordSyncDiagnostic('legacySavesFailed', {
+      key,
+      attempts: entry.attempts,
+      aborted: Boolean(entry.lastResult.aborted),
+      status: Number(entry.lastResult.error?.status) || null,
+    });
     finalizeEntry(entry, entry.lastResult);
   }
 }

@@ -9,6 +9,8 @@
  * - Deduplication of own updates
  */
 
+import { recordSyncDiagnostic } from './sync-diagnostics.js';
+
 // Pusher instance (singleton)
 let pusherInstance = null;
 let pusherChannel = null;
@@ -275,6 +277,25 @@ function handleStateUpdated(data) {
     playerMapUrl,
     playerThumbnailUrl,
   } = data;
+
+  recordSyncDiagnostic('pusherEventsReceived', {
+    type: type || 'full',
+    version: typeof version === 'number' ? version : null,
+  });
+  if (type === 'ops') {
+    recordSyncDiagnostic('pusherOpsReceived', {
+      version: typeof version === 'number' ? version : null,
+      opCount: Array.isArray(ops) ? ops.length : 0,
+    });
+  } else if (type === 'ops-overflow') {
+    recordSyncDiagnostic('pusherOverflowReceived', {
+      version: typeof version === 'number' ? version : null,
+    });
+  } else {
+    recordSyncDiagnostic('pusherFullReceived', {
+      version: typeof version === 'number' ? version : null,
+    });
+  }
 
   // Version check - skip if we've already applied a newer version.
   // Applies uniformly to ops, ops-overflow, and full-state broadcasts.

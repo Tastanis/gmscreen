@@ -2,6 +2,17 @@
 
 The `/dnd/vtt` directory holds the browser-based tabletop experience that mirrors the GM dashboard.
 
+## Sync V2 Migration
+
+The canonical replacement plan for multiplayer state, Pusher delivery,
+incremental rendering, migration gates, and permitted runtime-data reset is:
+
+`docs/vtt-sync-v2/README.md`
+
+Read that plan before changing board persistence, realtime delivery, combat
+authority, store subscriptions, or broad board rendering. V1 and V2 must never
+write the same shared domain simultaneously.
+
 ## Main Areas
 
 ```text

@@ -15,6 +15,7 @@
  */
 
 import { isPusherConnected } from './pusher-service.js';
+import { recordSyncDiagnostic } from './sync-diagnostics.js';
 
 // Board state poller intervals. See phase-1-2-dynamic-poller.md.
 // Fallback mode: Pusher is down, poll aggressively as an active fallback.
@@ -214,6 +215,13 @@ export function createBoardStatePoller({
           { authoritative }
         );
       });
+      recordSyncDiagnostic(
+        authoritative ? 'recoverySnapshotsApplied' : 'pollSnapshotsApplied',
+        {
+          version: incomingVersion,
+          authoritative: Boolean(authoritative),
+        }
+      );
 
       // Update version tracking if polling response has a newer version
       if (incomingVersion > currentVersion && typeof onVersionUpdated === 'function') {
