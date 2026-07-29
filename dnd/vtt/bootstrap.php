@@ -316,6 +316,22 @@ function getVttBootstrapConfig(?array $authContext = null): array
     // Load Pusher config if available
     $pusherConfig = null;
     $chatPusherConfig = null;
+    $syncV2PublicConfig = [
+        'mode' => 'disabled',
+        'domains' => [],
+    ];
+    $syncV2ConfigPath = __DIR__ . '/config/sync-v2.php';
+    if (is_file($syncV2ConfigPath)) {
+        $syncV2Config = require $syncV2ConfigPath;
+        if (is_array($syncV2Config)) {
+            $syncV2PublicConfig = [
+                'mode' => (string) ($syncV2Config['mode'] ?? 'disabled'),
+                'domains' => is_array($syncV2Config['domains'] ?? null)
+                    ? $syncV2Config['domains']
+                    : [],
+            ];
+        }
+    }
     $pusherConfigPath = __DIR__ . '/config/pusher.php';
     if (is_file($pusherConfigPath)) {
         $pusherData = require $pusherConfigPath;
@@ -350,6 +366,7 @@ function getVttBootstrapConfig(?array $authContext = null): array
         'chatHandlerUrl' => $routes['chat'] ?? '/dnd/chat_handler.php',
         'pusher' => $pusherConfig,
         'chatPusher' => $chatPusherConfig,
+        'syncV2' => $syncV2PublicConfig,
     ];
 }
 

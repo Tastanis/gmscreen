@@ -1,6 +1,6 @@
 # VTT Sync V2 — Canonical Implementation Plan
 
-**Status:** Phase 0 complete; Phase 1 is the next implementation stage
+**Status:** Phase 1 complete; Phase 2 is the next implementation stage
 **Canonical handoff:** This file is the source of truth for the synchronization
 replacement. Read it before changing VTT persistence, Pusher delivery, board
 state, combat turns, or rendering subscriptions.
@@ -192,6 +192,12 @@ vtt_events
   payload_json
   created_at
 
+vtt_operations
+  world_id
+  operation_id
+  event_json
+  created_at
+
 vtt_snapshots
   revision
   state_json
@@ -279,8 +285,39 @@ Add SQLite schema/bootstrap, operation idempotency, monotonic revisions, event
 replay, recovery snapshots, and Pusher transport adapter. Keep V2 read-only or
 shadowed at this gate.
 
+- [x] Add a separate SQLite authority that never reads or writes V1 board JSON.
+- [x] Add an unpruned operation ledger so idempotency outlives event retention.
+- [x] Add GM-only `shadow.observe` command handling with atomic state/event
+      persistence and strict base-revision conflicts.
+- [x] Add ordered HTTP replay and current-snapshot recovery fallback.
+- [x] Add a disabled-by-default Pusher delivery adapter.
+- [x] Add the entity store, single event reducer, command client, pending
+      commands, recovery client, event stream, and change router.
+- [x] Keep every live-domain ownership flag disabled.
+- [x] Verify acknowledgement/broadcast deduplication, revision monotonicity,
+      gap recovery, retention fallback, and three-client convergence under
+      reorder, duplicate, loss, and disconnect.
+
 **Gate:** Duplicate acknowledgements/broadcasts apply once; revisions never
 decrease; missing revisions recover deterministically.
+
+#### Phase 1 operating boundary
+
+- The browser receives `syncV2.mode = "shadow"` and eight domain flags set to
+  `false` from `dnd/vtt/config/sync-v2.php`.
+- The new client modules are intentionally not imported by the production VTT
+  bootstrap yet.
+- The only accepted command type is `shadow.observe`; live types such as
+  `token.move` are rejected.
+- Phase 1 endpoints are GM-only because audience-specific private-channel
+  authentication is not implemented yet.
+- Sync V2 Pusher publishing requires the explicit server environment flag
+  `VTT_SYNC_V2_PUSHER_ENABLED=1`; do not set it before credential rotation and
+  private-channel authentication are complete.
+- The server must have PHP's `pdo_sqlite` extension enabled. The local Windows
+  PHP install includes the extension DLL but test commands load it explicitly
+  because the CLI has no default `php.ini`.
+- The ignored runtime database is `dnd/vtt/storage/sync-v2.sqlite`.
 
 ### Phase 2 — Incremental store and render coordinator
 

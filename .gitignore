@@ -37,6 +37,9 @@ pnpm-lock.yaml
 /dnd/vtt/storage/board-state.json
 /dnd/vtt/storage/tokens.json
 /dnd/vtt/storage/tokens/
+/dnd/vtt/storage/sync-v2.sqlite
+/dnd/vtt/storage/sync-v2.sqlite-shm
+/dnd/vtt/storage/sync-v2.sqlite-wal
 
 # Schedule data
 /dnd/schedule/data/schedules.json
