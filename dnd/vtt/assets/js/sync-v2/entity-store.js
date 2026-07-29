@@ -26,6 +26,10 @@ export function createEntityStore(initialSnapshot = {}) {
     return clone(confirmed);
   }
 
+  function getConfirmedSnapshot() {
+    return confirmed;
+  }
+
   function replaceSnapshot(snapshot, metadata = {}) {
     const incoming = normalizeEntitySnapshot(snapshot);
     if (incoming.revision < confirmed.revision) {
@@ -41,18 +45,27 @@ export function createEntityStore(initialSnapshot = {}) {
       snapshot: true,
       source: metadata.source ?? 'snapshot',
     };
-    listeners.forEach((listener) => listener(getSnapshot(), changeSet));
+    listeners.forEach((listener) => listener(getConfirmedSnapshot(), changeSet));
     return { applied: true, changeSet };
   }
 
   function commit(nextSnapshot, changeSet) {
-    const normalized = normalizeEntitySnapshot(nextSnapshot);
-    if (normalized.revision < confirmed.revision) {
-      throw new Error('Sync V2 store revisions cannot decrease');
+    const normalized = {
+      revision: normalizeRevision(nextSnapshot?.revision),
+      state:
+        nextSnapshot?.state && typeof nextSnapshot.state === 'object'
+          ? nextSnapshot.state
+          : {},
+      appliedOperationIds: Array.isArray(nextSnapshot?.appliedOperationIds)
+        ? nextSnapshot.appliedOperationIds.slice()
+        : [],
+    };
+    if (normalized.revision !== confirmed.revision + 1) {
+      throw new Error('Sync V2 event commits must advance exactly one revision');
     }
     confirmed = normalized;
-    listeners.forEach((listener) => listener(getSnapshot(), clone(changeSet)));
-    return getSnapshot();
+    listeners.forEach((listener) => listener(getConfirmedSnapshot(), clone(changeSet)));
+    return getConfirmedSnapshot();
   }
 
   function subscribe(listener) {
@@ -65,6 +78,7 @@ export function createEntityStore(initialSnapshot = {}) {
 
   return {
     getSnapshot,
+    getConfirmedSnapshot,
     getRevision: () => confirmed.revision,
     replaceSnapshot,
     commit,

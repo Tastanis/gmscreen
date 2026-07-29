@@ -1,6 +1,6 @@
 # VTT Sync V2 — Canonical Implementation Plan
 
-**Status:** Phase 1 complete; Phase 2 is the next implementation stage
+**Status:** Phase 2 complete; Phase 3 is the next implementation stage
 **Canonical handoff:** This file is the source of truth for the synchronization
 replacement. Read it before changing VTT persistence, Pusher delivery, board
 state, combat turns, or rendering subscriptions.
@@ -250,6 +250,8 @@ sync_v2.scenes
 
 ## Phases and deletion gates
 
+There are nine phases total, numbered 0 through 8.
+
 ### Phase 0 — Baseline, diagnostics, and fault harness
 
 - [x] Record the canonical implementation plan.
@@ -324,8 +326,35 @@ decrease; missing revisions recover deterministically.
 Introduce focused token, combat, fog, template, drawing, and scene renderers.
 Canonical reducer output becomes a change set.
 
+- [x] Replace routine full-state reducer cloning with structural domain updates.
+- [x] Add a render coordinator that consumes only canonical change sets.
+- [x] Add focused token, combat, fog, template, drawing, level, and scene
+      renderer adapters.
+- [x] Add render metrics that distinguish one-token patches, domain patches,
+      scene/map mounts, and explicit full-board recovery reconciliation.
+- [x] Expand the shadow reducer event catalog without enabling live-domain
+      commands or production imports.
+- [x] Prove with a deterministic DOM fixture that `token.moved` changes one
+      token node, preserves every unrelated node/map surface, performs zero map
+      loads, and invokes no unrelated renderer.
+- [x] Prove unaffected state branches retain reference identity after a token
+      move.
+
 **Gate:** A synthetic `token.moved` event touches only one token and its direct
 dependencies.
+
+#### Phase 2 operating boundary
+
+- The render coordinator lives at
+  `dnd/vtt/assets/js/sync-v2/render-coordinator.js`.
+- Focused adapters live under `dnd/vtt/assets/js/sync-v2/renderers/`.
+- `entity-store.js` exposes an internal confirmed snapshot for reducer/render
+  coordination and retains cloned public snapshots for mutation safety.
+- Full-board reconciliation is reachable only through an explicit snapshot
+  change set.
+- Scene activation is the only Phase 2 route that may report a map load.
+- The production VTT bootstrap still does not import Sync V2, and all eight
+  ownership flags remain `false`. Phase 3 is the first live vertical slice.
 
 ### Phase 3 — Token movement vertical slice
 

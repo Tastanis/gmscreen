@@ -7,6 +7,7 @@ export function createChangeRouter(handlers = {}) {
     fog: handlers.fog,
     templates: handlers.templates,
     drawings: handlers.drawings,
+    levels: handlers.levels,
     sceneRouting: handlers.sceneRouting,
     shadow: handlers.shadow,
     snapshot: handlers.snapshot,
@@ -35,7 +36,15 @@ export function createChangeRouter(handlers = {}) {
     for (const id of changeSet.placements?.removed ?? []) {
       call('placementRemoved', id, context);
     }
-    for (const domain of ['combat', 'fog', 'templates', 'drawings', 'sceneRouting', 'shadow']) {
+    for (const domain of [
+      'combat',
+      'fog',
+      'templates',
+      'drawings',
+      'levels',
+      'sceneRouting',
+      'shadow',
+    ]) {
       if (changeSet[domain]) {
         call(domain, changeSet, context);
       }

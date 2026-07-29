@@ -50,6 +50,13 @@ test('entity store refuses revision decrease even for a recovery snapshot', () =
   assert.equal(result.reason, 'revision_decrease');
   assert.equal(store.getRevision(), 5);
   assert.equal(store.getSnapshot().state.marker, 'confirmed');
+  assert.throws(
+    () => store.commit(
+      { revision: 5, state: { marker: 'same-revision-write' } },
+      { revision: 5 }
+    ),
+    /advance exactly one revision/
+  );
 });
 
 test('token movement reducer returns a one-token change set without broad domains', () => {

@@ -17,9 +17,11 @@ export function createEventStream({
 
   const buffer = new Map();
   let recoveryPromise = null;
+  const getConfirmedSnapshot = () =>
+    store.getConfirmedSnapshot?.() ?? store.getSnapshot();
 
   function applyOne(event, source) {
-    const result = reduceCanonicalEvent(store.getSnapshot(), event);
+    const result = reduceCanonicalEvent(getConfirmedSnapshot(), event);
     if (result.status === 'applied') {
       store.commit(result.snapshot, { ...result.changeSet, source });
       changeRouter?.route?.(result.changeSet, { source, event });
