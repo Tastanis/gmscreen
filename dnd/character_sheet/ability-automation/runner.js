@@ -1042,12 +1042,15 @@
     const count = clampPowerRollSurges(state, block);
     const disabledMinus = count <= 0 ? "disabled" : "";
     const disabledPlus = count >= available ? "disabled" : "";
+    const plusTitle = available <= 0
+      ? ' title="No surges available on this character" aria-label="No surges available"'
+      : ' title="Spend one surge for +2 damage"';
     return `
       <div class="power-roll-runner__surges">
         <span>Surges: ${escapeHtml(available)}</span>
         <button class="power-roll-runner__mini-btn" type="button" data-power-roll-surge-adjust="-1" ${disabledMinus}>-</button>
         <strong data-power-roll-surge-count>${escapeHtml(count)} (+${escapeHtml(count * 2)} damage)</strong>
-        <button class="power-roll-runner__mini-btn" type="button" data-power-roll-surge-adjust="1" ${disabledPlus}>Surge +2</button>
+        <button class="power-roll-runner__mini-btn" type="button" data-power-roll-surge-adjust="1" ${disabledPlus}${plusTitle}>Surge +2</button>
       </div>
     `;
   }

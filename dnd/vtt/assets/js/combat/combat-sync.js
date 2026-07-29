@@ -74,11 +74,13 @@ export function getActiveSceneCombatState(state = {}) {
       : []
   );
   const routedCombat = activeSceneKey && registeredSceneIds.has(activeSceneKey)
-    ? sceneState[activeSceneKey]?.combat ?? {}
-    : {};
+    ? getStoredCombatRecord(sceneState[activeSceneKey])
+    : null;
   if (
     isActiveCombatState(routedCombat) &&
-    hasScenePlacements(boardState, activeSceneKey)
+    isValidActiveCombatCandidate(state, activeSceneKey, routedCombat, {
+      requireEncounterId: false,
+    })
   ) {
     return {
       activeSceneId: activeSceneKey,
@@ -94,8 +96,13 @@ export function getActiveSceneCombatState(state = {}) {
   const candidates = Object.entries(sceneState)
     .filter(([sceneId, sceneEntry]) => (
       registeredSceneIds.has(sceneId) &&
-      isActiveCombatState(sceneEntry?.combat) &&
-      hasScenePlacements(boardState, sceneId)
+      isValidActiveCombatCandidate(state, sceneId, sceneEntry?.combat, {
+        // Cross-scene routing is necessary for players viewing a different
+        // map, but it must only follow a real modern encounter. Legacy
+        // active flags without encounter identity are the exact shape of the
+        // stale records that used to resurrect months-old turns on refresh.
+        requireEncounterId: sceneId !== activeSceneKey,
+      })
     ))
     .map(([sceneId, sceneEntry]) => ({
       activeSceneId: sceneId,
@@ -160,6 +167,68 @@ function isActiveCombatState(combatState) {
       typeof combatState === 'object' &&
       (combatState.active === true || combatState.isActive === true)
   );
+}
+
+function getStoredCombatRecord(sceneEntry) {
+  const combat = sceneEntry?.combat;
+  return combat && typeof combat === 'object' ? combat : null;
+}
+
+function isValidActiveCombatCandidate(
+  state,
+  sceneId,
+  combatState,
+  { requireEncounterId = false } = {}
+) {
+  if (
+    !isActiveCombatState(combatState) ||
+    !hasScenePlacements(state?.boardState, sceneId)
+  ) {
+    return false;
+  }
+
+  if (requireEncounterId && !normalizeNullableId(
+    combatState?.encounterId ?? combatState?.combatEncounterId ?? null
+  )) {
+    return false;
+  }
+
+  // A GM receives the full placement list, so an active combatant that does
+  // not exist in that scene is a clearly orphaned record. Players can
+  // legitimately lack the active enemy placement because hidden tokens are
+  // removed from their board payload, so this strict check is GM-only.
+  if (state?.user?.isGM === true) {
+    const activeCombatantId = normalizeNullableId(combatState?.activeCombatantId);
+    if (
+      activeCombatantId &&
+      !combatStateReferencesPlacement(state?.boardState, sceneId, combatState, activeCombatantId)
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function combatStateReferencesPlacement(boardState, sceneId, combatState, combatantId) {
+  const placements = boardState?.placements?.[sceneId];
+  const entries = Array.isArray(placements)
+    ? placements
+    : placements && typeof placements === 'object'
+    ? Object.values(placements)
+    : [];
+  if (entries.some((placement) => normalizeNullableId(placement?.id) === combatantId)) {
+    return true;
+  }
+
+  const groups = Array.isArray(combatState?.groups) ? combatState.groups : [];
+  return groups.some((group) => (
+    normalizeNullableId(group?.representativeId) === combatantId &&
+    Array.isArray(group?.memberIds) &&
+    group.memberIds.some((memberId) => (
+      entries.some((placement) => normalizeNullableId(placement?.id) === normalizeNullableId(memberId))
+    ))
+  ));
 }
 
 function hasScenePlacements(boardState, sceneId) {

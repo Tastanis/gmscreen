@@ -144,6 +144,7 @@ import {
 import {
   TURN_PHASE,
   createCombatStateSnapshot as buildCombatStateSnapshot,
+  getCombatStateVersion,
   getTurnPhase as getCombatTurnPhase,
   isCombatStateNewer,
   mergeTurnEffects,
@@ -287,6 +288,15 @@ const MALICE_VICTORIES_ACTION = 'fetch-victories';
 
 export function isPlacementStaminaSyncSource(source) {
   return source === 'sheet' || source === 'vtt';
+}
+
+export function escapeHtmlAttribute(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 export function getRemovableSelectedTokenIds({
@@ -3512,10 +3522,10 @@ export function mountBoardInteractions(store, routes = {}) {
           <label class="vtt-token-settings__automation-aura-toggle">
             <input
               type="checkbox"
-              data-token-settings-automation-aura-toggle="${escapeAttribute(record.id)}"
+              data-token-settings-automation-aura-toggle="${escapeHtmlAttribute(record.id)}"
               ${checked}
             />
-            <span class="vtt-token-settings__automation-aura-swatch" style="--aura-color:${escapeAttribute(color)}"></span>
+            <span class="vtt-token-settings__automation-aura-swatch" style="--aura-color:${escapeHtmlAttribute(color)}"></span>
             <span class="vtt-token-settings__automation-aura-name">${escapeHtml(name)}</span>
             <span class="vtt-token-settings__automation-aura-radius">${radius} sq</span>
           </label>
@@ -12855,7 +12865,11 @@ export function mountBoardInteractions(store, routes = {}) {
       activeSceneId: activeSceneKey,
       combatState,
     } = getActiveSceneCombatState(state);
-    if (!activeSceneKey) {
+    if (
+      !activeSceneKey ||
+      !combatState ||
+      typeof combatState !== 'object'
+    ) {
       return;
     }
 
@@ -12985,15 +12999,21 @@ export function mountBoardInteractions(store, routes = {}) {
       if (combatActive && isGmUser()) {
         checkForRoundCompletion();
       }
-      // Use sequence number as the version (or fall back to timestamp for backwards compatibility)
-      const appliedVersion = normalized.sequence > 0 ? normalized.sequence : (normalized.updatedAt || Date.now());
+      // A missing/unhydrated combat record has no authoritative revision.
+      // Never manufacture a timestamp-sized version: doing so makes a later
+      // real sequence (for example 22) look stale for the rest of the session.
+      const appliedVersion = getCombatStateVersion(normalized);
       combatStateVersion = appliedVersion;
-      combatStateUpdatedAt = normalized.updatedAt || Date.now();
+      combatStateUpdatedAt = normalized.updatedAt || 0;
       // Sync local sequence to match the applied version to prevent duplicate sequence numbers
       if (normalized.sequence > 0 && normalized.sequence > combatSequence) {
         combatSequence = normalized.sequence;
       }
-      const snapshot = { ...normalized, updatedAt: normalized.updatedAt || Date.now(), sequence: appliedVersion };
+      const snapshot = {
+        ...normalized,
+        updatedAt: normalized.updatedAt || 0,
+        sequence: normalized.sequence || 0,
+      };
       lastCombatStateSnapshot = JSON.stringify(snapshot);
       if (Array.isArray(normalized.lastEffects) && normalized.lastEffects.length > 0) {
         applyTurnEffectsFromState(normalized.lastEffects);

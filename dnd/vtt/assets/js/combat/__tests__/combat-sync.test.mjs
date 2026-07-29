@@ -33,11 +33,50 @@ describe('combat sync scene selection', () => {
     assert.deepEqual(result.combatState, { active: true, sequence: 4 });
   });
 
-  test('returns an empty combat object when there is no active scene', () => {
+  test('returns no combat record when there is no active scene', () => {
     assert.deepEqual(getActiveSceneCombatState({ boardState: {} }), {
       activeSceneId: '',
-      combatState: {},
+      combatState: null,
     });
+  });
+
+  test('does not manufacture combat state before scene data hydrates', () => {
+    const loading = getActiveSceneCombatState({
+      boardState: {
+        activeSceneId: 'scene-a',
+        placements: {},
+        sceneState: {},
+      },
+      scenes: { items: [] },
+    });
+    assert.deepEqual(loading, {
+      activeSceneId: 'scene-a',
+      combatState: null,
+    });
+
+    const hydrated = getActiveSceneCombatState({
+      boardState: {
+        activeSceneId: 'scene-a',
+        placements: {
+          'scene-a': [{ id: 'ally-1', team: 'ally' }],
+        },
+        sceneState: {
+          'scene-a': {
+            combat: {
+              active: true,
+              encounterId: 'enc-1',
+              sequence: 22,
+              currentTeam: 'ally',
+              completedCombatantIds: ['enemy-1'],
+            },
+          },
+        },
+      },
+      scenes: { items: [{ id: 'scene-a' }] },
+    });
+    assert.equal(hydrated.combatState.sequence, 22);
+    assert.equal(hydrated.combatState.currentTeam, 'ally');
+    assert.deepEqual(hydrated.combatState.completedCombatantIds, ['enemy-1']);
   });
 
   test('follows the canonical active encounter when player map routing differs', () => {
@@ -71,7 +110,7 @@ describe('combat sync scene selection', () => {
         },
         sceneState: {
           'gm-encounter': {
-            combat: { active: true, sequence: 3 },
+            combat: { active: true, encounterId: 'enc-3', sequence: 3 },
           },
         },
       },
@@ -121,7 +160,7 @@ describe('combat sync scene selection', () => {
           },
           routed: { combat: { active: false, sequence: 40 } },
           valid: {
-            combat: { active: true, sequence: 41, updatedAt: 4100 },
+            combat: { active: true, encounterId: 'enc-valid', sequence: 41, updatedAt: 4100 },
           },
         },
       },
@@ -143,10 +182,10 @@ describe('combat sync scene selection', () => {
           'tie-b': [{ id: 'tie-b-token' }],
         },
         sceneState: {
-          older: { combat: { active: true, sequence: 20, updatedAt: 9000 } },
-          'tie-b': { combat: { active: true, sequence: 21, updatedAt: 8000 } },
-          newer: { combat: { active: true, sequence: 21, updatedAt: 8500 } },
-          'tie-a': { combat: { active: true, sequence: 21, updatedAt: 8000 } },
+          older: { combat: { active: true, encounterId: 'enc-older', sequence: 20, updatedAt: 9000 } },
+          'tie-b': { combat: { active: true, encounterId: 'enc-tie-b', sequence: 21, updatedAt: 8000 } },
+          newer: { combat: { active: true, encounterId: 'enc-newer', sequence: 21, updatedAt: 8500 } },
+          'tie-a': { combat: { active: true, encounterId: 'enc-tie-a', sequence: 21, updatedAt: 8000 } },
         },
       },
     };
@@ -179,6 +218,89 @@ describe('combat sync scene selection', () => {
     assert.equal(result.combatState.active, false);
   });
 
+  test('does not resurrect a registered legacy active flag while routed scene is inactive', () => {
+    const result = getActiveSceneCombatState({
+      scenes: { items: [{ id: 'current' }, { id: 'legacy-ghost' }] },
+      boardState: {
+        activeSceneId: 'current',
+        placements: {
+          current: [{ id: 'current-token' }],
+          'legacy-ghost': [{ id: 'old-token' }],
+        },
+        sceneState: {
+          current: { combat: { active: false, sequence: 40 } },
+          'legacy-ghost': {
+            combat: {
+              active: true,
+              sequence: 0,
+              currentTeam: 'enemy',
+              completedCombatantIds: ['old-token'],
+            },
+          },
+        },
+      },
+    });
+
+    assert.equal(result.activeSceneId, 'current');
+    assert.equal(result.combatState.active, false);
+  });
+
+  test('GM rejects an orphan encounter whose active combatant is absent', () => {
+    const result = getActiveSceneCombatState({
+      user: { isGM: true },
+      scenes: { items: [{ id: 'current' }, { id: 'orphan' }] },
+      boardState: {
+        activeSceneId: 'current',
+        placements: {
+          current: [{ id: 'current-token' }],
+          orphan: [{ id: 'different-token' }],
+        },
+        sceneState: {
+          current: { combat: { active: false, sequence: 50 } },
+          orphan: {
+            combat: {
+              active: true,
+              encounterId: 'enc-orphan',
+              activeCombatantId: 'missing-token',
+              sequence: 51,
+            },
+          },
+        },
+      },
+    });
+
+    assert.equal(result.activeSceneId, 'current');
+    assert.equal(result.combatState.active, false);
+  });
+
+  test('player routing permits a hidden active enemy in a valid encounter', () => {
+    const result = getActiveSceneCombatState({
+      user: { isGM: false },
+      scenes: { items: [{ id: 'player-map' }, { id: 'encounter' }] },
+      boardState: {
+        activeSceneId: 'player-map',
+        placements: {
+          'player-map': [{ id: 'ally-1' }],
+          encounter: [{ id: 'ally-2' }],
+        },
+        sceneState: {
+          'player-map': { combat: { active: false, sequence: 60 } },
+          encounter: {
+            combat: {
+              active: true,
+              encounterId: 'enc-hidden-enemy',
+              activeCombatantId: 'hidden-enemy',
+              sequence: 61,
+            },
+          },
+        },
+      },
+    });
+
+    assert.equal(result.activeSceneId, 'encounter');
+    assert.equal(result.combatState.activeCombatantId, 'hidden-enemy');
+  });
+
   test('long reload sequence never falls back to ancient deleted active records', () => {
     const state = {
       scenes: { items: [{ id: 'current-map' }, { id: 'encounter' }] },
@@ -201,6 +323,7 @@ describe('combat sync scene selection', () => {
           encounter: {
             combat: {
               active: true,
+              encounterId: 'enc-current',
               activeCombatantId: 'ally-1',
               sequence: 102,
               updatedAt: 1760000000000,

@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { calculateTokenSettingsPopupLayout } from '../board-interactions.js';
+import {
+  calculateTokenSettingsPopupLayout,
+  escapeHtmlAttribute,
+} from '../board-interactions.js';
+
+test('token settings automation aura attributes are safely escaped', () => {
+  assert.equal(
+    escapeHtmlAttribute(`aura"&'<id>`),
+    'aura&quot;&amp;&#039;&lt;id&gt;'
+  );
+});
 
 test('token settings popup stays entirely above the visible action bar', () => {
   const layout = calculateTokenSettingsPopupLayout({
