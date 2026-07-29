@@ -31,6 +31,7 @@ async function fetchSnapshot(endpoint, fetchImpl, signal) {
  */
 export function createTokenMovementRuntime({
   enabled = false,
+  placementsEnabled = false,
   commandsEndpoint,
   eventsEndpoint,
   snapshotEndpoint,
@@ -41,6 +42,7 @@ export function createTokenMovementRuntime({
   pollIntervalMs = 500,
   previewPlacement = () => {},
   applyConfirmedPlacement = () => {},
+  applyConfirmedPlacementBatch = () => {},
   reconcileSnapshot = () => {},
   onError = (error) => console.warn('[VTT Sync V2] Token movement failed', error),
 } = {}) {
@@ -50,8 +52,10 @@ export function createTokenMovementRuntime({
       start: async () => false,
       stop: () => {},
       submitMoves: async () => [],
+      submitPlacementOps: async () => null,
       overlayBoardState: (boardState) => boardState,
       getEffectivePlacement: () => null,
+      getConfirmedSnapshot: () => ({ revision: 0, state: {} }),
       getRevision: () => 0,
     };
   }
@@ -82,6 +86,21 @@ export function createTokenMovementRuntime({
         if (!placement) continue;
         pendingPreview.delete(`${sceneId}:${placementId}`);
         applyConfirmedPlacement(sceneId, placementId, placement, context);
+      }
+      if (
+        context?.event?.type === 'placement.batchApplied'
+        && (
+          changeSet?.placements?.added?.length
+          || changeSet?.placements?.updated?.length
+          || changeSet?.placements?.removed?.length
+          || changeSet?.claims
+        )
+      ) {
+        applyConfirmedPlacementBatch(
+          store.getConfirmedSnapshot(),
+          context.event.payload?.mutations ?? [],
+          context
+        );
       }
     },
   };
@@ -197,6 +216,18 @@ export function createTokenMovementRuntime({
       previewPlacement(sceneId, placementId, preview);
     }
     await start();
+    if (placementsEnabled && (moves?.length ?? 0) > 1) {
+      const result = await submitPlacementOps(
+        moves.map((move) => ({
+          type: 'placement.move',
+          sceneId,
+          placementId: String(move?.placementId ?? move?.id ?? '').trim(),
+          column: Number(move?.column),
+          row: Number(move?.row),
+        }))
+      );
+      return [result];
+    }
     const results = [];
     for (const move of moves ?? []) {
       results.push(await submitOne(sceneId, move));
@@ -204,19 +235,102 @@ export function createTokenMovementRuntime({
     return results;
   }
 
+  function legacyOpsToActions(ops) {
+    const actions = [];
+    const patchIndex = new Map();
+    for (const op of ops ?? []) {
+      const sceneId = String(op?.sceneId ?? '').trim();
+      const placementId = String(op?.placementId ?? op?.placement?.id ?? '').trim();
+      if (!sceneId || !placementId) continue;
+      const current = placementFromSnapshot(store.getConfirmedSnapshot(), sceneId, placementId);
+      if (op.type === 'placement.add') {
+        actions.push({
+          kind: 'add',
+          sceneId,
+          placementId,
+          placement: { ...(op.placement ?? {}), id: placementId },
+        });
+      } else if (op.type === 'placement.remove') {
+        actions.push({
+          kind: 'remove',
+          sceneId,
+          placementId,
+          entityRevision: Number(current?._entityRevision) || 0,
+        });
+      } else if (op.type === 'placement.update' || op.type === 'placement.move') {
+        const patch = op.type === 'placement.move'
+          ? { column: Number(op.column), row: Number(op.row) }
+          : { ...(op.patch ?? {}) };
+        const key = `${sceneId}:${placementId}`;
+        const existingIndex = patchIndex.get(key);
+        if (Number.isInteger(existingIndex) && actions[existingIndex]?.kind === 'patch') {
+          actions[existingIndex].patch = { ...actions[existingIndex].patch, ...patch };
+        } else {
+          patchIndex.set(key, actions.length);
+          actions.push({
+            kind: 'patch',
+            sceneId,
+            placementId,
+            patch,
+            entityRevision: Number(current?._entityRevision) || 0,
+          });
+        }
+      } else if (op.type === 'claim.set') {
+        actions.push({
+          kind: 'claim.set',
+          sceneId,
+          placementId,
+          owner: op.userId ?? op.owner ?? null,
+        });
+      } else if (op.type === 'claim.clear') {
+        actions.push({ kind: 'claim.clear', sceneId, placementId });
+      }
+    }
+    return actions;
+  }
+
+  async function submitPlacementOps(ops, retry = true) {
+    if (!placementsEnabled) return null;
+    await start();
+    const actions = legacyOpsToActions(ops);
+    if (!actions.length) return null;
+    try {
+      return await commandClient.submit('placement.batch', { actions });
+    } catch (error) {
+      const conflictSnapshot = error?.response?.snapshot;
+      if (retry && error?.status === 409 && conflictSnapshot) {
+        store.replaceSnapshot(conflictSnapshot, { authoritative: true, source: 'conflict' });
+        reconcileSnapshot(store.getConfirmedSnapshot(), { source: 'conflict' });
+        return submitPlacementOps(ops, false);
+      }
+      reconcileSnapshot(store.getConfirmedSnapshot(), { source: 'rejected' });
+      throw error;
+    }
+  }
+
   function overlayBoardState(boardState) {
     if (!boardState || typeof boardState !== 'object') return boardState;
     const snapshot = store.getConfirmedSnapshot();
+    boardState.placements =
+      boardState.placements && typeof boardState.placements === 'object'
+        ? boardState.placements
+        : {};
     for (const [sceneId, placements] of Object.entries(snapshot?.state?.placements ?? {})) {
-      const target = boardState?.placements?.[sceneId];
-      if (!Array.isArray(target)) continue;
-      for (const placement of target) {
-        const canonical = placements?.[placement?.id];
-        if (!canonical) continue;
-        placement.column = canonical.column;
-        placement.row = canonical.row;
-        placement._syncV2EntityRevision = canonical._entityRevision;
-      }
+      boardState.placements[sceneId] = Object.values(placements ?? {}).map((placement) => ({
+        ...placement,
+        _syncV2EntityRevision: placement._entityRevision,
+      }));
+    }
+    boardState.sceneState =
+      boardState.sceneState && typeof boardState.sceneState === 'object'
+        ? boardState.sceneState
+        : {};
+    for (const [sceneId, claims] of Object.entries(snapshot?.state?.claims ?? {})) {
+      boardState.sceneState[sceneId] =
+        boardState.sceneState[sceneId] && typeof boardState.sceneState[sceneId] === 'object'
+          ? boardState.sceneState[sceneId]
+          : {};
+      boardState.sceneState[sceneId].claimedTokens = { ...(claims ?? {}) };
     }
     return boardState;
   }
@@ -231,8 +345,10 @@ export function createTokenMovementRuntime({
     start,
     stop,
     submitMoves,
+    submitPlacementOps,
     overlayBoardState,
     getEffectivePlacement,
+    getConfirmedSnapshot: () => store.getSnapshot(),
     getRevision: () => store.getRevision(),
     __testing: { store, eventStream, pendingPreview, pusherTransport },
   };

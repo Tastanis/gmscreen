@@ -16,7 +16,7 @@ return [
     'pusher_enabled' => getenv('VTT_SYNC_V2_PUSHER_ENABLED') === '1',
     'domains' => [
         'token_movement' => true,
-        'placements' => false,
+        'placements' => true,
         'combat' => false,
         'templates' => false,
         'drawings' => false,

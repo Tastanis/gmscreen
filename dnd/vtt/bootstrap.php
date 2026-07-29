@@ -248,6 +248,53 @@ function withVttBoardStateLock(callable $callback)
 }
 
 /**
+ * Overlay Phase 4 canonical placements and claims onto the legacy board
+ * document in memory. The JSON file remains a compatibility projection for
+ * domains that have not migrated; it is no longer placement authority.
+ */
+function overlaySyncV2Placements(array $boardState): array
+{
+    $configPath = __DIR__ . '/config/sync-v2.php';
+    $config = is_file($configPath) ? require $configPath : [];
+    if (!is_array($config) || ($config['domains']['placements'] ?? false) !== true) {
+        return $boardState;
+    }
+    try {
+        require_once __DIR__ . '/lib/SyncV2Store.php';
+        $configuredPath = getenv('VTT_SYNC_V2_DATABASE');
+        $databasePath = is_string($configuredPath) && trim($configuredPath) !== ''
+            ? trim($configuredPath)
+            : (__DIR__ . '/storage/sync-v2.sqlite');
+        $store = new SyncV2Store(
+            $databasePath,
+            (string) ($config['world_id'] ?? 'default'),
+            (int) ($config['event_retention'] ?? 1000),
+            (int) ($config['snapshot_interval'] ?? 100)
+        );
+        $store->migrateLegacyPlacements($boardState);
+        $snapshot = $store->getSnapshot();
+        $boardState['placements'] = [];
+        foreach (($snapshot['state']['placements'] ?? []) as $sceneId => $placements) {
+            if (is_string($sceneId) && is_array($placements)) {
+                $boardState['placements'][$sceneId] = array_values($placements);
+            }
+        }
+        foreach (($snapshot['state']['claims'] ?? []) as $sceneId => $claims) {
+            if (!is_string($sceneId) || !is_array($claims)) {
+                continue;
+            }
+            $boardState['sceneState'][$sceneId] = is_array($boardState['sceneState'][$sceneId] ?? null)
+                ? $boardState['sceneState'][$sceneId]
+                : [];
+            $boardState['sceneState'][$sceneId]['claimedTokens'] = $claims;
+        }
+    } catch (Throwable $error) {
+        error_log('[VTT Sync V2] Placement overlay failed: ' . $error->getMessage());
+    }
+    return $boardState;
+}
+
+/**
  * Provides a configuration snapshot for bootstrapping the front end.
  */
 function getVttBootstrapConfig(?array $authContext = null): array
@@ -259,7 +306,7 @@ function getVttBootstrapConfig(?array $authContext = null): array
 
     $scenes = loadVttScenes();
     $tokens = loadVttTokens();
-    $boardState = loadVttJson('board-state.json');
+    $boardState = overlaySyncV2Placements(loadVttJson('board-state.json'));
 
     // Normalize fogOfWar revealedCells to ensure they're always JSON objects, not arrays.
     // PHP's json_encode() turns empty PHP arrays into [] (JSON array) instead of {} (JSON object).

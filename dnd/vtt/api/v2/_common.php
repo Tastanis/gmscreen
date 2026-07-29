@@ -75,6 +75,11 @@ function vttSyncV2DomainEnabled(string $domain): bool
 
 function vttSyncV2FindLegacyPlacement(string $sceneId, string $placementId): ?array
 {
+    if (vttSyncV2DomainEnabled('placements')) {
+        $snapshot = vttSyncV2Store()->getSnapshot();
+        $placement = $snapshot['state']['placements'][$sceneId][$placementId] ?? null;
+        return is_array($placement) ? $placement : null;
+    }
     $boardState = loadVttJson('board-state.json');
     $placements = $boardState['placements'][$sceneId] ?? [];
     if (!is_array($placements)) {
@@ -115,45 +120,57 @@ function vttSyncV2CanMovePlacement(
     if ($userId === '') {
         return false;
     }
-    $boardState = loadVttJson('board-state.json');
-    $claimedBy = strtolower(trim((string) (
-        $boardState['sceneState'][$sceneId]['claimedTokens'][$placementId] ?? ''
-    )));
+    if (vttSyncV2DomainEnabled('placements')) {
+        $snapshot = vttSyncV2Store()->getSnapshot();
+        $claimedBy = strtolower(trim((string) (
+            $snapshot['state']['claims'][$sceneId][$placementId] ?? ''
+        )));
+    } else {
+        $boardState = loadVttJson('board-state.json');
+        $claimedBy = strtolower(trim((string) (
+            $boardState['sceneState'][$sceneId]['claimedTokens'][$placementId] ?? ''
+        )));
+    }
     return $claimedBy !== '' && $claimedBy === $userId;
 }
 
 function vttSyncV2ProjectSnapshotForUser(array $snapshot, array $auth): array
 {
-    $boardState = loadVttJson('board-state.json');
     if (!isset($snapshot['state']) || !is_array($snapshot['state'])) {
         $snapshot['state'] = [];
     }
     $canonical = $snapshot['state']['placements'] ?? [];
     $projected = [];
-    foreach (($boardState['placements'] ?? []) as $sceneId => $placements) {
+    foreach ($canonical as $sceneId => $placements) {
         if (!is_string($sceneId) || !is_array($placements)) {
             continue;
         }
-        foreach ($placements as $placement) {
-            if (!is_array($placement) || (!($auth['isGM'] ?? false) && vttSyncV2PlacementHidden($placement))) {
+        foreach ($placements as $placementId => $placement) {
+            if (
+                !is_string($placementId)
+                || !is_array($placement)
+                || (!($auth['isGM'] ?? false) && vttSyncV2PlacementHidden($placement))
+            ) {
                 continue;
             }
-            $placementId = trim((string) ($placement['id'] ?? ''));
-            if ($placementId === '') {
-                continue;
-            }
-            $current = $canonical[$sceneId][$placementId] ?? [];
-            $projected[$sceneId][$placementId] = [
-                'id' => $placementId,
-                'column' => (float) ($current['column'] ?? $placement['column'] ?? 0),
-                'row' => (float) ($current['row'] ?? $placement['row'] ?? 0),
-                'width' => max(1, (float) ($placement['width'] ?? 1)),
-                'height' => max(1, (float) ($placement['height'] ?? 1)),
-                '_entityRevision' => max(0, (int) ($current['_entityRevision'] ?? 0)),
-            ];
+            $projected[$sceneId][$placementId] = ($auth['isGM'] ?? false)
+                ? $placement
+                : sanitizePlacementForPlayerView($placement);
         }
     }
     $snapshot['state']['placements'] = $projected;
+    $visibleClaims = [];
+    foreach (($snapshot['state']['claims'] ?? []) as $sceneId => $claims) {
+        if (!is_array($claims)) {
+            continue;
+        }
+        foreach ($claims as $placementId => $owner) {
+            if (isset($projected[$sceneId][$placementId])) {
+                $visibleClaims[$sceneId][$placementId] = $owner;
+            }
+        }
+    }
+    $snapshot['state']['claims'] = $visibleClaims;
     return $snapshot;
 }
 
@@ -166,24 +183,20 @@ function vttSyncV2ProjectRecoveryForUser(array $recovery, array $auth): array
     if (!is_array($recovery['events'] ?? null)) {
         return $recovery;
     }
-    $boardState = loadVttJson('board-state.json');
     foreach ($recovery['events'] as $index => $event) {
-        if (!is_array($event) || ($event['type'] ?? '') !== 'token.moved') {
+        if (!is_array($event)) {
             continue;
         }
-        $sceneId = (string) ($event['sceneId'] ?? '');
-        $entityId = (string) ($event['entityId'] ?? '');
-        $placement = null;
-        foreach (($boardState['placements'][$sceneId] ?? []) as $candidate) {
-            if (is_array($candidate) && (string) ($candidate['id'] ?? '') === $entityId) {
-                $placement = $candidate;
-                break;
-            }
+        if (($event['type'] ?? '') === 'placement.batchApplied') {
+            $recovery['events'][$index] = vttSyncV2ProjectPlacementEventForUser($event, $auth);
+            continue;
         }
-        if (
-            $placement === null
-            || (!($auth['isGM'] ?? false) && vttSyncV2PlacementHidden($placement))
-        ) {
+        if (($event['type'] ?? '') !== 'token.moved') {
+            continue;
+        }
+        $snapshot = vttSyncV2Store()->getSnapshot();
+        $placement = $snapshot['state']['placements'][$event['sceneId']][$event['entityId']] ?? null;
+        if (!is_array($placement) || (!($auth['isGM'] ?? false) && vttSyncV2PlacementHidden($placement))) {
             $recovery['events'][$index] = [
                 'revision' => $event['revision'],
                 'operationId' => $event['operationId'],
@@ -200,20 +213,86 @@ function vttSyncV2ProjectRecoveryForUser(array $recovery, array $auth): array
     return $recovery;
 }
 
+function vttSyncV2ProjectPlacementEventForUser(array $event, array $auth): array
+{
+    if (($auth['isGM'] ?? false) === true) {
+        return $event;
+    }
+    $projected = [];
+    foreach (($event['payload']['mutations'] ?? []) as $mutation) {
+        if (!is_array($mutation)) {
+            continue;
+        }
+        if (($mutation['kind'] ?? '') === 'upsert') {
+            $placement = $mutation['placement'] ?? null;
+            if (!is_array($placement) || vttSyncV2PlacementHidden($placement)) {
+                if (($mutation['wasPlayerVisible'] ?? false) === true) {
+                    $projected[] = [
+                        'kind' => 'remove',
+                        'sceneId' => $mutation['sceneId'] ?? null,
+                        'placementId' => $mutation['placementId'] ?? null,
+                        'entityRevision' => $mutation['entityRevision'] ?? null,
+                    ];
+                }
+                continue;
+            }
+            $mutation['placement'] = sanitizePlacementForPlayerView($placement);
+        } elseif (
+            in_array(($mutation['kind'] ?? ''), ['remove', 'claim.set', 'claim.clear'], true)
+            && ($mutation['playerVisible'] ?? false) !== true
+        ) {
+            continue;
+        }
+        unset($mutation['playerVisible'], $mutation['wasPlayerVisible']);
+        $projected[] = $mutation;
+    }
+    $event['payload']['mutations'] = $projected;
+    $event['actorId'] = null;
+    return $event;
+}
+
+function vttSyncV2PlacementEventIsPublicSafe(array $event): bool
+{
+    foreach (($event['payload']['mutations'] ?? []) as $mutation) {
+        if (!is_array($mutation) || ($mutation['kind'] ?? '') !== 'upsert') {
+            return false;
+        }
+        $placement = $mutation['placement'] ?? null;
+        if (
+            !is_array($placement)
+            || vttSyncV2PlacementHidden($placement)
+            || sanitizePlacementForPlayerView($placement) !== $placement
+        ) {
+            return false;
+        }
+    }
+    return true;
+}
+
 function vttSyncV2Store(): SyncV2Store
 {
+    static $store = null;
+    static $migrated = false;
+    if ($store instanceof SyncV2Store) {
+        return $store;
+    }
     $config = vttSyncV2Config();
     $configuredPath = getenv('VTT_SYNC_V2_DATABASE');
     $databasePath = is_string($configuredPath) && trim($configuredPath) !== ''
         ? trim($configuredPath)
         : (__DIR__ . '/../../storage/sync-v2.sqlite');
 
-    return new SyncV2Store(
+    $store = new SyncV2Store(
         $databasePath,
         (string) ($config['world_id'] ?? 'default'),
         (int) ($config['event_retention'] ?? 1000),
         (int) ($config['snapshot_interval'] ?? 100)
     );
+    if (!$migrated && vttSyncV2DomainEnabled('placements')) {
+        $store->migrateLegacyPlacements(loadVttJson('board-state.json'));
+        $migrated = true;
+    }
+    return $store;
 }
 
 function vttSyncV2HandleFailure(Throwable $error): void

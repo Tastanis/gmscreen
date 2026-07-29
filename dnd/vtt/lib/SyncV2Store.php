@@ -71,6 +71,283 @@ final class SyncV2Store
     }
 
     /**
+     * One-time Phase 4 import of legacy placements and claims. Existing
+     * Phase 3 movement coordinates and entity revisions win over legacy
+     * values so enabling the broader placement domain cannot pop tokens back.
+     */
+    public function migrateLegacyPlacements(array $boardState): void
+    {
+        $this->pdo->exec('BEGIN IMMEDIATE');
+        try {
+            $snapshot = $this->getSnapshot();
+            $state = $snapshot['state'];
+            if (($state['placementMigration']['version'] ?? 0) >= 1) {
+                $this->pdo->exec('COMMIT');
+                return;
+            }
+
+            $canonical = isset($state['placements']) && is_array($state['placements'])
+                ? $state['placements']
+                : [];
+            foreach (($boardState['placements'] ?? []) as $sceneId => $placements) {
+                if (!is_string($sceneId) || !is_array($placements)) {
+                    continue;
+                }
+                $canonical[$sceneId] = is_array($canonical[$sceneId] ?? null)
+                    ? $canonical[$sceneId]
+                    : [];
+                foreach ($placements as $placement) {
+                    if (!is_array($placement)) {
+                        continue;
+                    }
+                    $placementId = $this->normalizeOptionalId($placement['id'] ?? null);
+                    if ($placementId === null) {
+                        continue;
+                    }
+                    $existing = is_array($canonical[$sceneId][$placementId] ?? null)
+                        ? $canonical[$sceneId][$placementId]
+                        : [];
+                    $canonical[$sceneId][$placementId] = [
+                        ...$placement,
+                        ...$existing,
+                        'id' => $placementId,
+                        '_entityRevision' => max(0, (int) ($existing['_entityRevision'] ?? 0)),
+                    ];
+                }
+            }
+
+            $claims = [];
+            foreach (($boardState['sceneState'] ?? []) as $sceneId => $sceneState) {
+                if (!is_string($sceneId) || !is_array($sceneState)) {
+                    continue;
+                }
+                $sceneClaims = $sceneState['claimedTokens'] ?? [];
+                if (!is_array($sceneClaims)) {
+                    continue;
+                }
+                foreach ($sceneClaims as $placementId => $owner) {
+                    if (!is_string($placementId) || !is_string($owner) || trim($owner) === '') {
+                        continue;
+                    }
+                    $claims[$sceneId][$placementId] = trim($owner);
+                }
+            }
+            $state['placements'] = $canonical;
+            $state['claims'] = $claims;
+            $state['placementMigration'] = [
+                'version' => 1,
+                'migratedAt' => $this->nowMilliseconds(),
+            ];
+            $this->updateWorldState(
+                $snapshot['revision'],
+                $state,
+                $this->nowMilliseconds()
+            );
+            $this->pdo->exec('COMMIT');
+        } catch (Throwable $error) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $error;
+        }
+    }
+
+    /**
+     * Apply all placement and ownership mutations under one SQLite write
+     * lock. Validation is performed against a working copy and no state or
+     * event is written unless every action succeeds.
+     *
+     * @return array{status:string,event?:array,snapshot?:array,idempotent?:bool,error?:string}
+     */
+    public function acceptPlacementBatch(
+        array $command,
+        string $actorId,
+        bool $isGm
+    ): array {
+        $normalized = $this->normalizePlacementBatch($command);
+        $actorId = trim($actorId);
+        if ($actorId === '') {
+            throw new InvalidArgumentException('An authenticated actor ID is required.');
+        }
+
+        $this->pdo->exec('BEGIN IMMEDIATE');
+        try {
+            $existing = $this->findEventByOperationId($normalized['operationId']);
+            if ($existing !== null) {
+                $this->pdo->exec('COMMIT');
+                return ['status' => 'accepted', 'event' => $existing, 'idempotent' => true];
+            }
+            $snapshot = $this->getSnapshot();
+            if ($normalized['baseRevision'] > $snapshot['revision']) {
+                $this->pdo->exec('ROLLBACK');
+                return [
+                    'status' => 'conflict',
+                    'error' => 'base_revision_ahead',
+                    'snapshot' => $snapshot,
+                ];
+            }
+
+            $state = $snapshot['state'];
+            $state['placements'] = is_array($state['placements'] ?? null)
+                ? $state['placements']
+                : [];
+            $state['claims'] = is_array($state['claims'] ?? null) ? $state['claims'] : [];
+            $mutations = [];
+
+            foreach ($normalized['actions'] as $action) {
+                $sceneId = $action['sceneId'];
+                $placementId = $action['placementId'];
+                $state['placements'][$sceneId] = is_array($state['placements'][$sceneId] ?? null)
+                    ? $state['placements'][$sceneId]
+                    : [];
+                $state['claims'][$sceneId] = is_array($state['claims'][$sceneId] ?? null)
+                    ? $state['claims'][$sceneId]
+                    : [];
+                $current = $state['placements'][$sceneId][$placementId] ?? null;
+                $owner = trim((string) ($state['claims'][$sceneId][$placementId] ?? ''));
+                $ownsPlacement = $owner !== ''
+                    && strtolower($owner) === strtolower($actorId);
+
+                if ($action['kind'] === 'add') {
+                    if ($current !== null) {
+                        return $this->rollbackConflict('placement_exists', $snapshot);
+                    }
+                    $placement = $action['placement'];
+                    if (!$isGm && $this->placementIsHidden($placement)) {
+                        throw new InvalidArgumentException('Players cannot add hidden placements.');
+                    }
+                    $placement['id'] = $placementId;
+                    $placement['_entityRevision'] = 1;
+                    $state['placements'][$sceneId][$placementId] = $placement;
+                    $mutations[] = [
+                        'kind' => 'upsert',
+                        'sceneId' => $sceneId,
+                        'placementId' => $placementId,
+                        'placement' => $placement,
+                        'entityRevision' => 1,
+                        'changedFields' => ['*'],
+                        'wasPlayerVisible' => false,
+                    ];
+                    continue;
+                }
+
+                if ($action['kind'] === 'claim.set') {
+                    if (!is_array($current)) {
+                        return $this->rollbackConflict('placement_missing', $snapshot);
+                    }
+                    $requestedOwner = $action['owner'] ?? $actorId;
+                    if (!$isGm && strtolower($requestedOwner) !== strtolower($actorId)) {
+                        throw new InvalidArgumentException('Players may only claim tokens for themselves.');
+                    }
+                    if (!$isGm && $this->placementIsHidden($current)) {
+                        throw new InvalidArgumentException('Hidden placements cannot be claimed.');
+                    }
+                    if (!$isGm && $owner !== '' && !$ownsPlacement) {
+                        return $this->rollbackConflict('placement_already_claimed', $snapshot);
+                    }
+                    $state['claims'][$sceneId][$placementId] = $requestedOwner;
+                    $mutations[] = [
+                        'kind' => 'claim.set',
+                        'sceneId' => $sceneId,
+                        'placementId' => $placementId,
+                        'owner' => $requestedOwner,
+                        'playerVisible' => !$this->placementIsHidden($current),
+                    ];
+                    continue;
+                }
+
+                if ($action['kind'] === 'claim.clear') {
+                    if (!$isGm && $owner !== '' && !$ownsPlacement) {
+                        throw new InvalidArgumentException('Players may only release their own claims.');
+                    }
+                    unset($state['claims'][$sceneId][$placementId]);
+                    $mutations[] = [
+                        'kind' => 'claim.clear',
+                        'sceneId' => $sceneId,
+                        'placementId' => $placementId,
+                        'playerVisible' => is_array($current)
+                            && !$this->placementIsHidden($current),
+                    ];
+                    continue;
+                }
+
+                if (!is_array($current)) {
+                    return $this->rollbackConflict('placement_missing', $snapshot);
+                }
+                $currentRevision = max(0, (int) ($current['_entityRevision'] ?? 0));
+                if ($action['entityRevision'] !== $currentRevision) {
+                    return $this->rollbackConflict('entity_revision_mismatch', $snapshot);
+                }
+                if (!$isGm && (!$ownsPlacement || $this->placementIsHidden($current))) {
+                    throw new InvalidArgumentException('You cannot change this placement.');
+                }
+                $nextRevision = $currentRevision + 1;
+
+                if ($action['kind'] === 'remove') {
+                    unset(
+                        $state['placements'][$sceneId][$placementId],
+                        $state['claims'][$sceneId][$placementId]
+                    );
+                    $mutations[] = [
+                        'kind' => 'remove',
+                        'sceneId' => $sceneId,
+                        'placementId' => $placementId,
+                        'entityRevision' => $nextRevision,
+                        'playerVisible' => !$this->placementIsHidden($current),
+                    ];
+                    continue;
+                }
+
+                $patch = $action['patch'];
+                if (!$isGm) {
+                    $this->assertPlayerPatchAllowed($patch);
+                }
+                unset($patch['id'], $patch['_entityRevision']);
+                $next = [...$current, ...$patch];
+                $next['id'] = $placementId;
+                $next['_entityRevision'] = $nextRevision;
+                $state['placements'][$sceneId][$placementId] = $next;
+                $mutations[] = [
+                    'kind' => 'upsert',
+                    'sceneId' => $sceneId,
+                    'placementId' => $placementId,
+                    'placement' => $next,
+                    'entityRevision' => $nextRevision,
+                    'changedFields' => array_values(array_keys($patch)),
+                    'wasPlayerVisible' => !$this->placementIsHidden($current),
+                ];
+            }
+
+            $revision = $snapshot['revision'] + 1;
+            $serverTime = $this->nowMilliseconds();
+            $event = [
+                'revision' => $revision,
+                'operationId' => $normalized['operationId'],
+                'type' => 'placement.batchApplied',
+                'actorId' => $actorId,
+                'sceneId' => null,
+                'entityId' => null,
+                'entityRevision' => null,
+                'payload' => ['mutations' => $mutations],
+                'serverTime' => $serverTime,
+            ];
+            $this->insertEvent($event);
+            $this->updateWorldState($revision, $state, $serverTime);
+            if ($revision % $this->snapshotInterval === 0) {
+                $this->insertSnapshot($revision, $state, $serverTime);
+            }
+            $this->pruneEvents($revision);
+            $this->pdo->exec('COMMIT');
+            return ['status' => 'accepted', 'event' => $event, 'idempotent' => false];
+        } catch (Throwable $error) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $error;
+        }
+    }
+
+    /**
      * Accept a Phase 1 shadow command atomically.
      *
      * @return array{status:string,event?:array,snapshot?:array,idempotent?:bool,error?:string}
@@ -527,6 +804,113 @@ final class SyncV2Store
             'column' => $column,
             'row' => $row,
         ];
+    }
+
+    private function normalizePlacementBatch(array $command): array
+    {
+        $operationId = trim((string) ($command['operationId'] ?? ''));
+        if (
+            strlen($operationId) < 8
+            || strlen($operationId) > 128
+            || preg_match('/^[A-Za-z0-9._:-]+$/', $operationId) !== 1
+        ) {
+            throw new InvalidArgumentException('operationId is invalid.');
+        }
+        if (($command['type'] ?? null) !== 'placement.batch') {
+            throw new InvalidArgumentException('Expected placement.batch.');
+        }
+        $baseRevision = filter_var(
+            $command['baseRevision'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 0]]
+        );
+        $actions = $command['payload']['actions'] ?? null;
+        if ($baseRevision === false || !is_array($actions) || $actions === [] || count($actions) > 100) {
+            throw new InvalidArgumentException('placement.batch requires 1 to 100 actions.');
+        }
+        if (strlen($this->encodeJson(['actions' => $actions])) > 1048576) {
+            throw new InvalidArgumentException('placement.batch payload is too large.');
+        }
+        $normalized = [];
+        foreach ($actions as $action) {
+            if (!is_array($action)) {
+                throw new InvalidArgumentException('Each placement action must be an object.');
+            }
+            $kind = (string) ($action['kind'] ?? '');
+            if (!in_array($kind, ['add', 'patch', 'remove', 'claim.set', 'claim.clear'], true)) {
+                throw new InvalidArgumentException('Unsupported placement action.');
+            }
+            $sceneId = $this->normalizeOptionalId($action['sceneId'] ?? null);
+            $placementId = $this->normalizeOptionalId($action['placementId'] ?? null);
+            if ($sceneId === null || $placementId === null) {
+                throw new InvalidArgumentException('Placement actions require sceneId and placementId.');
+            }
+            $entry = compact('kind', 'sceneId', 'placementId');
+            if ($kind === 'add') {
+                if (!is_array($action['placement'] ?? null)) {
+                    throw new InvalidArgumentException('add requires placement.');
+                }
+                $entry['placement'] = $action['placement'];
+            } elseif ($kind === 'patch') {
+                if (!is_array($action['patch'] ?? null)) {
+                    throw new InvalidArgumentException('patch requires a patch object.');
+                }
+                $entry['patch'] = $action['patch'];
+                $entry['entityRevision'] = $this->normalizeEntityRevision($action);
+            } elseif ($kind === 'remove') {
+                $entry['entityRevision'] = $this->normalizeEntityRevision($action);
+            } elseif ($kind === 'claim.set') {
+                $owner = trim((string) ($action['owner'] ?? ''));
+                $entry['owner'] = $owner === '' ? null : $owner;
+            }
+            $normalized[] = $entry;
+        }
+        return [
+            'operationId' => $operationId,
+            'baseRevision' => (int) $baseRevision,
+            'actions' => $normalized,
+        ];
+    }
+
+    private function normalizeEntityRevision(array $action): int
+    {
+        $revision = filter_var(
+            $action['entityRevision'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 0]]
+        );
+        if ($revision === false) {
+            throw new InvalidArgumentException('Placement entityRevision must be non-negative.');
+        }
+        return (int) $revision;
+    }
+
+    private function rollbackConflict(string $error, array $snapshot): array
+    {
+        $this->pdo->exec('ROLLBACK');
+        return ['status' => 'conflict', 'error' => $error, 'snapshot' => $snapshot];
+    }
+
+    private function placementIsHidden(array $placement): bool
+    {
+        return !empty($placement['hidden'])
+            || !empty($placement['isHidden'])
+            || !empty($placement['flags']['hidden']);
+    }
+
+    private function assertPlayerPatchAllowed(array $patch): void
+    {
+        $gmOnly = [
+            'id', 'hidden', 'isHidden', 'flags', 'levelId', 'width', 'height',
+            'size', 'stackOrder', 'monster', 'monsterId', 'monsterRef',
+            'team', 'name', 'label', 'image', 'imageUrl', 'tokenId',
+            'metadata', 'authorId', 'authorRole', 'authorIsGm',
+        ];
+        foreach (array_keys($patch) as $field) {
+            if (in_array((string) $field, $gmOnly, true)) {
+                throw new InvalidArgumentException('Only the GM may change placement field: ' . $field);
+            }
+        }
     }
 
     private function normalizeOptionalId($value): ?string

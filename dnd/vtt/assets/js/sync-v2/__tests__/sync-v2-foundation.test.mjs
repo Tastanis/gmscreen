@@ -93,6 +93,57 @@ test('token movement reducer returns a one-token change set without broad domain
   );
 });
 
+test('placement batch reducer applies add, patch, claim, and remove as one revision', () => {
+  const initial = {
+    revision: 10,
+    state: {
+      placements: {
+        'scene-1': {
+          'token-1': { id: 'token-1', stamina: 20, _entityRevision: 4 },
+        },
+      },
+      claims: {},
+    },
+  };
+  const result = reduceCanonicalEvent(initial, {
+    revision: 11,
+    operationId: 'placement-batch-1',
+    type: 'placement.batchApplied',
+    payload: {
+      mutations: [
+        {
+          kind: 'upsert',
+          sceneId: 'scene-1',
+          placementId: 'token-1',
+          entityRevision: 5,
+          placement: { id: 'token-1', stamina: 12 },
+        },
+        {
+          kind: 'upsert',
+          sceneId: 'scene-1',
+          placementId: 'token-2',
+          entityRevision: 1,
+          placement: { id: 'token-2', stamina: 8 },
+        },
+        {
+          kind: 'claim.set',
+          sceneId: 'scene-1',
+          placementId: 'token-2',
+          owner: 'player-a',
+        },
+      ],
+    },
+  });
+  assert.equal(result.status, 'applied');
+  assert.deepEqual(result.changeSet.placements.updated, ['token-1']);
+  assert.deepEqual(result.changeSet.placements.added, ['token-2']);
+  assert.equal(result.changeSet.claims, true);
+  assert.equal(result.snapshot.state.placements['scene-1']['token-1'].stamina, 12);
+  assert.equal(result.snapshot.state.claims['scene-1']['token-2'], 'player-a');
+  assert.equal(result.changeSet.combat, false);
+  assert.equal(result.changeSet.fog, false);
+});
+
 test('event stream buffers a gap and deterministically replays missing events', async () => {
   const store = createEntityStore();
   const routed = [];

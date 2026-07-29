@@ -761,6 +761,8 @@ export function mountBoardInteractions(store, routes = {}) {
       : {};
   const tokenMovementV2Enabled =
     syncV2Config?.domains?.token_movement === true;
+  const placementsV2Enabled =
+    syncV2Config?.domains?.placements === true;
   const combatTimerService = createCombatTimerService();
   let mapLevelCutoutEditorActive = false;
   const mapLevelCutoutTool = createMapLevelCutoutTool();
@@ -887,6 +889,10 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function reconcileTokenMovementSnapshot(snapshot, context = {}) {
     boardApi.updateStateSilently?.((draft) => {
+      if (placementsV2Enabled) {
+        tokenMovementRuntime?.overlayBoardState(draft.boardState);
+        return;
+      }
       for (const [sceneId, canonicalPlacements] of Object.entries(
         snapshot?.state?.placements ?? {}
       )) {
@@ -915,8 +921,75 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  function applyConfirmedPlacementBatch(snapshot, mutations, context = {}) {
+    boardApi.updateStateSilently?.((draft) => {
+      tokenMovementRuntime?.overlayBoardState(draft.boardState);
+    });
+    const activeSceneId = boardApi.getState?.()?.boardState?.activeSceneId ?? null;
+    const activeMutations = mutations.filter(
+      (mutation) => mutation?.sceneId === activeSceneId
+    );
+    if (activeSceneId && activeMutations.length && tokenLayer && viewState.mapLoaded) {
+      const overlayOnlyFields = new Set([
+        'hp', 'stamina', 'currentStamina', 'conditions', 'overlays',
+        'triggeredActionReady', 'triggeredActionUsedThisRound',
+        'mainActionUsedThisTurn', 'maneuverUsedThisTurn',
+        'hasReadyTrigger', 'readyTriggerAbilities', 'readyTriggerSources',
+        'readyTriggerPayloads', 'triggerMarkRound', 'triggerMarkCombatantId',
+        'triggerSetAtPhase', 'usedActions', 'usedAbilities', 'resources',
+        '_lastModified',
+      ]);
+      const canPatchFocused = activeMutations.every((mutation) => (
+        mutation?.kind === 'upsert'
+        && Array.isArray(mutation.changedFields)
+        && mutation.changedFields.length > 0
+        && mutation.changedFields.every((field) => overlayOnlyFields.has(field))
+        && Array.from(tokenLayer.children ?? []).some(
+          (node) => node?.dataset?.placementId === mutation.placementId
+        )
+      ));
+      if (canPatchFocused) {
+        for (const mutation of activeMutations) {
+          const placement = mutation.placement;
+          const normalized = normalizePlacementForRender(placement);
+          const node = Array.from(tokenLayer.children ?? []).find(
+            (candidate) => candidate?.dataset?.placementId === mutation.placementId
+          );
+          if (!normalized || !node) continue;
+          applyTokenOverlays(node, normalized);
+          node.dataset.entityRevision = String(mutation.entityRevision ?? '');
+          const trackerIndex = lastCombatTrackerEntries.findIndex(
+            (entry) => entry?.id === mutation.placementId
+          );
+          if (trackerIndex >= 0) {
+            lastCombatTrackerEntries[trackerIndex] = normalized;
+          }
+          if (selectedTokenIds.has(mutation.placementId)) {
+            dispatchTokenSelectionSummary();
+          }
+          recordSyncDiagnostic('syncV2TokenPatches', {
+            sceneId: activeSceneId,
+            placementId: mutation.placementId,
+          });
+        }
+        refreshCombatTracker();
+      } else {
+        // Structural placement changes reconcile only the token layer. They
+        // never reload the page, map, fog, drawings, templates, or stairs.
+        renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+      }
+    }
+    if (context?.source === 'conflict' || context?.source === 'recovery') {
+      recordSyncDiagnostic('recoverySnapshotsApplied', {
+        source: `sync-v2-placement-${context.source}`,
+        revision: snapshot?.revision ?? 0,
+      });
+    }
+  }
+
   tokenMovementRuntime = createTokenMovementRuntime({
     enabled: tokenMovementV2Enabled,
+    placementsEnabled: placementsV2Enabled,
     commandsEndpoint: routes.syncV2Commands,
     eventsEndpoint: routes.syncV2Events,
     snapshotEndpoint: routes.syncV2Snapshot,
@@ -926,6 +999,7 @@ export function mountBoardInteractions(store, routes = {}) {
         : null,
     previewPlacement: patchTokenMovementNode,
     applyConfirmedPlacement: applyConfirmedTokenMovement,
+    applyConfirmedPlacementBatch,
     reconcileSnapshot: reconcileTokenMovementSnapshot,
     onError: (error) => reportSyncFailure(error, 'token movement'),
   });
@@ -1255,6 +1329,10 @@ export function mountBoardInteractions(store, routes = {}) {
 
   // Helper functions for dirty tracking
   function markPlacementDirty(sceneId, placementId) {
+    // Phase 4: V2 placement commands carry their own complete mutation.
+    // Dirty placement snapshots are retained only for the disabled-domain
+    // rollback path and are never populated while V2 owns placements.
+    if (placementsV2Enabled) return;
     if (!sceneId || !placementId) return;
     if (!dirtyPlacements.has(sceneId)) {
       dirtyPlacements.set(sceneId, new Set());
@@ -3499,7 +3577,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!updated) return false;
     markPlacementDirty(activeSceneId, placementId);
     let ops = null;
-    if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
+    if (USE_DELTA_SAVES && (placementsV2Enabled || !hasNonPlacementDirtyState())) {
       ops = [{
         type: 'placement.update',
         sceneId: activeSceneId,
@@ -3546,7 +3624,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!updated) return false;
     markPlacementDirty(activeSceneId, placementId);
     let ops = null;
-    if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
+    if (USE_DELTA_SAVES && (placementsV2Enabled || !hasNonPlacementDirtyState())) {
       ops = [{
         type: 'placement.update',
         sceneId: activeSceneId,
@@ -4381,7 +4459,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!clearedIds.length) return;
     clearedIds.forEach((id) => markPlacementDirty(sceneId, id));
     let ops = null;
-    if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
+    if (USE_DELTA_SAVES && (placementsV2Enabled || !hasNonPlacementDirtyState())) {
       ops = clearedIds.map((id) => ({
         type: 'placement.update',
         sceneId,
@@ -5641,6 +5719,62 @@ export function mountBoardInteractions(store, routes = {}) {
   // stale-version check.
   let snapshotSaveQueue = Promise.resolve();
 
+  const isSyncV2PlacementOp = (op) => (
+    placementsV2Enabled
+    && typeof op?.type === 'string'
+    && (
+      op.type.startsWith('placement.')
+      || op.type === 'claim.set'
+      || op.type === 'claim.clear'
+    )
+  );
+
+  function deriveDirtyPlacementOps() {
+    if (!placementsV2Enabled) return [];
+    const canonical =
+      tokenMovementRuntime?.getConfirmedSnapshot?.()?.state?.placements ?? {};
+    const local = boardApi.getState?.()?.boardState?.placements ?? {};
+    const ops = [];
+    dirtyPlacements.forEach((ids, sceneId) => {
+      const localById = new Map(
+        (Array.isArray(local?.[sceneId]) ? local[sceneId] : [])
+          .filter((entry) => entry?.id)
+          .map((entry) => [entry.id, entry])
+      );
+      for (const placementId of ids) {
+        const current = canonical?.[sceneId]?.[placementId] ?? null;
+        const next = localById.get(placementId) ?? null;
+        if (!current && next) {
+          ops.push({ type: 'placement.add', sceneId, placementId, placement: next });
+        } else if (current && !next) {
+          ops.push({ type: 'placement.remove', sceneId, placementId });
+        } else if (current && next) {
+          const patch = buildPlacementUpdatePatch(current, next);
+          if (patch) {
+            ops.push({ type: 'placement.update', sceneId, placementId, patch });
+          }
+        }
+      }
+    });
+    return ops;
+  }
+
+  function persistSyncV2PlacementOps(placementOps) {
+    if (!placementOps.length) return Promise.resolve({ success: true, mode: 'live' });
+    return tokenMovementRuntime.submitPlacementOps(placementOps).then((result) => {
+      clearDirtyTrackingForSave({ kind: 'ops', ops: placementOps });
+      clearSyncFailure();
+      return {
+        success: true,
+        mode: 'live',
+        event: result?.event ?? null,
+      };
+    }).catch((error) => {
+      reportSyncFailure(error, 'placement');
+      return { success: false, error };
+    });
+  }
+
   const doPersistBoardStateSnapshot = (options = {}, opsOverride = null) => {
     if (!routes?.state || typeof boardApi.getState !== 'function') {
       console.warn('[VTT] Cannot persist board state: routes.state missing or boardApi.getState unavailable');
@@ -6044,6 +6178,32 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    if (placementsV2Enabled && Array.isArray(opsOverride) && opsOverride.some(isSyncV2PlacementOp)) {
+      const placementOps = opsOverride.filter(isSyncV2PlacementOp);
+      const remainingOps = opsOverride.filter((op) => !isSyncV2PlacementOp(op));
+      const placementPromise = persistSyncV2PlacementOps(placementOps);
+      if (!remainingOps.length) {
+        return placementPromise;
+      }
+      return placementPromise.then((placementResult) => {
+        if (!placementResult?.success) return placementResult;
+        return doPersistBoardStateSnapshot(options, remainingOps);
+      });
+    }
+
+    if (placementsV2Enabled && !Array.isArray(opsOverride) && dirtyPlacements.size > 0) {
+      const derivedOps = deriveDirtyPlacementOps();
+      if (derivedOps.length > 0) {
+        return persistSyncV2PlacementOps(derivedOps).then((placementResult) => {
+          if (!placementResult?.success || !hasNonPlacementDirtyState()) {
+            return placementResult;
+          }
+          return doPersistBoardStateSnapshot(options, null);
+        });
+      }
+      dirtyPlacements.clear();
+    }
+
     const placements = getActiveScenePlacements(state);
     if (Array.isArray(placements) && placements.length > 0) {
       return;
@@ -6164,10 +6324,12 @@ export function mountBoardInteractions(store, routes = {}) {
       snapshot.activeSceneId = boardState.activeSceneId ?? null;
     }
 
-    snapshot.placements = sanitizePlacementsForPersistence(
-      boardState.placements,
-      { includeHidden: isGm }
-    );
+    if (!placementsV2Enabled) {
+      snapshot.placements = sanitizePlacementsForPersistence(
+        boardState.placements,
+        { includeHidden: isGm }
+      );
+    }
     snapshot.templates = sanitizeTemplatesForPersistence(boardState.templates);
     snapshot.drawings = sanitizeDrawingsForPersistence(boardState.drawings);
     snapshot.pings = mapPings.sanitizePingsForPersistence(boardState.pings);
@@ -7854,7 +8016,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     let tokenAddOps = null;
-    if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
+    if (USE_DELTA_SAVES && (placementsV2Enabled || !hasNonPlacementDirtyState())) {
       tokenAddOps = [
         {
           type: 'placement.add',
@@ -8924,7 +9086,7 @@ export function mountBoardInteractions(store, routes = {}) {
       // the freshly-committed store and hand it to
       // `persistBoardStateSnapshot` so the delta-op save path runs.
       let keyboardMoveOps = null;
-      if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
+      if (USE_DELTA_SAVES && (placementsV2Enabled || !hasNonPlacementDirtyState())) {
         const latestPlacements =
           boardApi.getState?.()?.boardState?.placements?.[activeSceneId] ?? [];
         const opsList = [];
@@ -8997,7 +9159,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     markPlacementDirty(sceneId, placementId);
     let undoMoveOps = null;
-    if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
+    if (USE_DELTA_SAVES && (placementsV2Enabled || !hasNonPlacementDirtyState())) {
       const latestPlacements = boardApi.getState?.()?.boardState?.placements?.[sceneId] ?? [];
       const placement = latestPlacements.find((entry) => entry?.id === placementId);
       if (placement) {
@@ -11042,7 +11204,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!expirableIds.length) return;
     expirableIds.forEach((id) => markPlacementDirty(activeSceneId, id));
     let ops = null;
-    if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
+    if (USE_DELTA_SAVES && (placementsV2Enabled || !hasNonPlacementDirtyState())) {
       ops = expirableIds.map((id) => ({
         type: 'placement.update',
         sceneId: activeSceneId,
@@ -11079,7 +11241,20 @@ export function mountBoardInteractions(store, routes = {}) {
     });
     if (!ids.length) return;
     ids.forEach((id) => markPlacementDirty(activeSceneId, id));
-    persistBoardStateSnapshot({});
+    persistBoardStateSnapshot({}, ids.map((placementId) => ({
+      type: 'placement.update',
+      sceneId: activeSceneId,
+      placementId,
+      patch: {
+        hasReadyTrigger: false,
+        readyTriggerAbilities: [],
+        readyTriggerSources: {},
+        readyTriggerPayloads: {},
+        triggerMarkRound: null,
+        triggerMarkCombatantId: null,
+        triggerSetAtPhase: null,
+      },
+    })));
     ids.forEach((id) => dispatchTriggerStateChanged(id));
   }
 
@@ -13969,7 +14144,11 @@ export function mountBoardInteractions(store, routes = {}) {
       // placements. Emit one `placement.update` op per mutated id
       // instead of a full snapshot.
       let resetOps = null;
-      if (USE_DELTA_SAVES && !hasNonPlacementDirtyState() && mutatedIds.length > 0) {
+      if (
+        USE_DELTA_SAVES
+        && (placementsV2Enabled || !hasNonPlacementDirtyState())
+        && mutatedIds.length > 0
+      ) {
         resetOps = mutatedIds.map((id) => ({
           type: 'placement.update',
           sceneId: activeSceneId,
@@ -16646,7 +16825,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     markPlacementDirty(activeSceneId, placementId);
     let ops = null;
-    if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
+    if (USE_DELTA_SAVES && (placementsV2Enabled || !hasNonPlacementDirtyState())) {
       ops = [{
         type: 'placement.update',
         sceneId: activeSceneId,
@@ -16795,7 +16974,7 @@ export function mountBoardInteractions(store, routes = {}) {
     // snapshot path if the delta flag is off or non-placement state is
     // also waiting to flush.
     let triggeredOps = null;
-    if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
+    if (USE_DELTA_SAVES && (placementsV2Enabled || !hasNonPlacementDirtyState())) {
       triggeredOps = [
         {
           type: 'placement.update',
@@ -16862,7 +17041,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     markPlacementDirty(activeSceneId, placementId);
     let ops = null;
-    if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
+    if (USE_DELTA_SAVES && (placementsV2Enabled || !hasNonPlacementDirtyState())) {
       ops = [{
         type: 'placement.update',
         sceneId: activeSceneId,
@@ -20069,7 +20248,7 @@ export function mountBoardInteractions(store, routes = {}) {
       // empty (mutator was a no-op) or non-placement state is also
       // dirty, fall through to the snapshot path unchanged.
       let updateOps = null;
-      if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
+      if (USE_DELTA_SAVES && (placementsV2Enabled || !hasNonPlacementDirtyState())) {
         const patch = buildPlacementUpdatePatch(beforeSnapshot, afterSnapshot);
         if (patch) {
           updateOps = [
@@ -20161,7 +20340,7 @@ export function mountBoardInteractions(store, routes = {}) {
       // changed placement from the per-id before/after diff and route
       // through the delta-op path.
       let updateOps = null;
-      if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
+      if (USE_DELTA_SAVES && (placementsV2Enabled || !hasNonPlacementDirtyState())) {
         const opsList = [];
         updatedIds.forEach((id) => {
           const patch = buildPlacementUpdatePatch(

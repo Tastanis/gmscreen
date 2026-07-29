@@ -103,6 +103,67 @@ function reduceTokenMoved(state, event, changes) {
   changes.placements.updated.push(entityId);
 }
 
+function pushUnique(target, value) {
+  if (!target.includes(value)) target.push(value);
+}
+
+function reducePlacementBatch(state, event, changes) {
+  const mutations = event.payload?.mutations;
+  if (!Array.isArray(mutations)) {
+    throw new Error('placement.batchApplied requires mutations');
+  }
+  for (const mutation of mutations) {
+    const sceneId = typeof mutation?.sceneId === 'string' ? mutation.sceneId.trim() : '';
+    const placementId =
+      typeof mutation?.placementId === 'string' ? mutation.placementId.trim() : '';
+    if (!sceneId || !placementId) {
+      throw new Error('Placement mutation requires sceneId and placementId');
+    }
+    if (mutation.kind === 'claim.set' || mutation.kind === 'claim.clear') {
+      const claims = getSceneCollection(state, 'claims', sceneId);
+      if (mutation.kind === 'claim.set') {
+        claims[placementId] = String(mutation.owner ?? '');
+      } else {
+        delete claims[placementId];
+      }
+      changes.claims = true;
+      continue;
+    }
+    const placements = getSceneCollection(state, 'placements', sceneId);
+    const current = placements[placementId];
+    if (mutation.kind === 'remove') {
+      // A player projection may receive a remove for a token that was hidden
+      // before this client joined. Treat that as an idempotent no-op.
+      if (current) {
+        delete placements[placementId];
+        pushUnique(changes.placements.removed, placementId);
+      }
+      const claims = getSceneCollection(state, 'claims', sceneId);
+      delete claims[placementId];
+      continue;
+    }
+    if (mutation.kind !== 'upsert' || !mutation.placement || typeof mutation.placement !== 'object') {
+      throw new Error('Unsupported placement mutation');
+    }
+    const entityRevision = Number(mutation.entityRevision);
+    if (!Number.isSafeInteger(entityRevision) || entityRevision < 1) {
+      throw new Error('Placement upsert requires a positive entity revision');
+    }
+    if (current && entityRevision <= (Number(current._entityRevision) || 0)) {
+      throw new Error('Placement upsert entity revision must increase');
+    }
+    placements[placementId] = {
+      ...clone(mutation.placement),
+      id: placementId,
+      _entityRevision: entityRevision,
+    };
+    pushUnique(
+      current ? changes.placements.updated : changes.placements.added,
+      placementId
+    );
+  }
+}
+
 function reduceTokenAdded(state, event, changes) {
   const { sceneId, entityId } = requireSceneAndEntity(event);
   const placements = getSceneCollection(state, 'placements', sceneId);
@@ -272,6 +333,7 @@ const reducers = Object.freeze({
       }
       return clone(value);
     }),
+  'placement.batchApplied': reducePlacementBatch,
   'turn.started': reduceCombatEvent,
   'turn.completed': reduceCombatEvent,
   'template.updated': (state, event, changes) =>

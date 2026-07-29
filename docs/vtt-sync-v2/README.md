@@ -1,6 +1,6 @@
 # VTT Sync V2 — Canonical Implementation Plan
 
-**Status:** Phase 3 complete; Phase 4 is the next implementation stage
+**Status:** Phase 4 complete; Phase 5 is the next implementation stage
 **Canonical handoff:** This file is the source of truth for the synchronization
 replacement. Read it before changing VTT persistence, Pusher delivery, board
 state, combat turns, or rendering subscriptions.
@@ -406,9 +406,57 @@ Migrate add, remove, stamina, conditions, visibility, levels, size, ownership,
 stack order, monster references, and automation-driven placement changes.
 Support atomic batch commands for legitimate multi-token effects.
 
+- [x] Import full legacy placement data and claims once without overwriting
+      Phase 3 canonical coordinates or entity revisions.
+- [x] Make `placement.batch` the exclusive authority for add, remove, patch,
+      ownership, and legitimate multi-token mutations.
+- [x] Validate the complete batch against one SQLite write-locked working copy
+      and commit one state revision/event or roll back every action.
+- [x] Move claim permission checks inside the same canonical transaction as
+      ownership changes and placement mutations.
+- [x] Route the existing placement writer choke point through V2, including
+      stamina, conditions, visibility, level, size, stack order, monster data,
+      automation markers, and direct token settings.
+- [x] Make multi-token drag and keyboard movement atomic rather than a
+      sequential series of single-token commits.
+- [x] Overlay canonical placements and claims during PHP bootstrap so stale
+      compatibility JSON cannot flash old placement state on reload.
+- [x] Reject cached V1 placement/claim ops and strip placement collections
+      from legacy full-snapshot writes while the V2 domain flag is enabled.
+- [x] Disable live legacy placement dirty tracking and omit placements from
+      non-placement full-snapshot payloads.
+- [x] Apply frequent overlay-only updates (stamina, conditions, action usage)
+      to affected token nodes and tracker/summary dependencies without a page,
+      map, or full-board render.
+- [x] Verify atomic multi-token success, whole-batch rollback, idempotency,
+      ownership permissions, reducer change sets, and the full JS suite.
+
 **Deletion gate:** Remove legacy placement dirty tracking, snapshot saves,
 timestamp arbitration, and placement full-broadcast merges only after every
 placement writer uses V2.
+
+#### Phase 4 operating boundary
+
+- `sync_v2.placements` is live. SQLite is the authority for the complete
+  placement objects and `claimedTokens`; `board-state.json` is only an
+  in-memory compatibility projection for domains that still use V1.
+- Existing feature code may still construct legacy-shaped placement ops, but
+  the persistence choke point translates them into one canonical
+  `placement.batch` command. They never reach `state.php`.
+- Entity revisions are the conflict boundary. A behind world revision may
+  mutate unrelated tokens, while a stale revision for any token rejects the
+  entire batch without partial state changes.
+- Single-token movement retains the Phase 3 transform-only path. Multi-token
+  movement uses one atomic placement batch. Frequent overlay-only placement
+  fields patch affected token nodes; structural changes reconcile the token
+  layer only. Neither path reloads the page or map or applies the full board.
+- The shared Pusher channel is used only when a placement event is
+  byte-for-byte safe for all viewers. Events containing hidden or GM-only
+  placement data use authenticated HTTP replay (normally within 500 ms) until
+  Phase 7 supplies private audience channels.
+- V1 continues to own combat, templates, drawings, pings, fog, map-level
+  definitions, scenes, grid, and viewer routing. Placement `levelId` itself is
+  V2-owned; the wider map-level domain migrates in Phase 6.
 
 ### Phase 5 — Server-authoritative combat
 

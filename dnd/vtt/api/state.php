@@ -32,6 +32,13 @@ const VTT_USE_DELTA_BROADCASTS = true;
  */
 const VTT_BROADCAST_MAX_BYTES = 9500;
 
+function vttSyncV2PlacementsOwnState(): bool
+{
+    $configPath = __DIR__ . '/../config/sync-v2.php';
+    $config = is_file($configPath) ? require $configPath : [];
+    return is_array($config) && ($config['domains']['placements'] ?? false) === true;
+}
+
 /**
  * Resolve the on-disk path to the version file.
  */
@@ -356,6 +363,16 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
             }
 
             $updates = sanitizeBoardStateUpdates($rawState);
+            if (vttSyncV2PlacementsOwnState()) {
+                unset($updates['placements']);
+                $ops = array_values(array_filter(
+                    $ops,
+                    static fn (array $op): bool => !(
+                        str_starts_with((string) ($op['type'] ?? ''), 'placement.')
+                        || in_array(($op['type'] ?? ''), ['claim.set', 'claim.clear'], true)
+                    )
+                ));
+            }
             if (empty($updates) && empty($ops)) {
                 respondJson(422, [
                     'success' => false,

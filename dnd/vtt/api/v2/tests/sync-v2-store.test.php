@@ -145,6 +145,128 @@ try {
     expect($moveDuplicate['idempotent'] === true, 'Duplicate token operation must apply once.');
     expect($store->getSnapshot()['revision'] === 5, 'Duplicate token move must not advance revision.');
 
+    $store->migrateLegacyPlacements([
+        'placements' => [
+            'scene-1' => [
+                ['id' => 'token-1', 'name' => 'Hero', 'column' => 1, 'row' => 1, 'stamina' => 20],
+                ['id' => 'token-2', 'name' => 'Ally', 'column' => 2, 'row' => 2, 'stamina' => 15],
+            ],
+        ],
+        'sceneState' => [
+            'scene-1' => ['claimedTokens' => ['token-1' => 'player-a']],
+        ],
+    ]);
+    $migrated = $store->getSnapshot();
+    expect(
+        (float) $migrated['state']['placements']['scene-1']['token-1']['column'] === 8.0,
+        'Migration must preserve canonical Phase 3 coordinates.'
+    );
+    expect(
+        $migrated['state']['placements']['scene-1']['token-1']['name'] === 'Hero',
+        'Migration must enrich Phase 3 movement entities with full placement data.'
+    );
+
+    $batch = $store->acceptPlacementBatch([
+        'operationId' => 'placement-batch-0001',
+        'type' => 'placement.batch',
+        'baseRevision' => 5,
+        'payload' => [
+            'actions' => [
+                [
+                    'kind' => 'patch',
+                    'sceneId' => 'scene-1',
+                    'placementId' => 'token-1',
+                    'entityRevision' => 1,
+                    'patch' => ['stamina' => 12],
+                ],
+                [
+                    'kind' => 'patch',
+                    'sceneId' => 'scene-1',
+                    'placementId' => 'token-2',
+                    'entityRevision' => 1,
+                    'patch' => ['stamina' => 10],
+                ],
+            ],
+        ],
+    ], 'GM', true);
+    expect($batch['status'] === 'accepted', 'A valid multi-token batch must be accepted.');
+    expect($batch['event']['revision'] === 6, 'A whole batch must consume one world revision.');
+    expect(
+        $store->getSnapshot()['state']['placements']['scene-1']['token-1']['stamina'] === 12,
+        'First atomic batch mutation must persist.'
+    );
+    expect(
+        $store->getSnapshot()['state']['placements']['scene-1']['token-2']['stamina'] === 10,
+        'Second atomic batch mutation must persist.'
+    );
+
+    $beforeRejectedBatch = $store->getSnapshot();
+    $rejectedBatch = $store->acceptPlacementBatch([
+        'operationId' => 'placement-batch-rejected',
+        'type' => 'placement.batch',
+        'baseRevision' => 6,
+        'payload' => [
+            'actions' => [
+                [
+                    'kind' => 'patch',
+                    'sceneId' => 'scene-1',
+                    'placementId' => 'token-1',
+                    'entityRevision' => 2,
+                    'patch' => ['stamina' => 1],
+                ],
+                [
+                    'kind' => 'patch',
+                    'sceneId' => 'scene-1',
+                    'placementId' => 'token-2',
+                    'entityRevision' => 0,
+                    'patch' => ['stamina' => 1],
+                ],
+            ],
+        ],
+    ], 'GM', true);
+    expect($rejectedBatch['status'] === 'conflict', 'One stale action must reject the whole batch.');
+    expect(
+        $store->getSnapshot() === $beforeRejectedBatch,
+        'A rejected batch must leave every placement and revision unchanged.'
+    );
+
+    $playerPatch = $store->acceptPlacementBatch([
+        'operationId' => 'placement-player-patch',
+        'type' => 'placement.batch',
+        'baseRevision' => 6,
+        'payload' => [
+            'actions' => [[
+                'kind' => 'patch',
+                'sceneId' => 'scene-1',
+                'placementId' => 'token-1',
+                'entityRevision' => 2,
+                'patch' => ['stamina' => 9],
+            ]],
+        ],
+    ], 'player-a', false);
+    expect($playerPatch['status'] === 'accepted', 'The canonical owner may change gameplay fields.');
+
+    $playerPrivilegedRejected = false;
+    try {
+        $store->acceptPlacementBatch([
+            'operationId' => 'placement-player-hidden',
+            'type' => 'placement.batch',
+            'baseRevision' => 7,
+            'payload' => [
+                'actions' => [[
+                    'kind' => 'patch',
+                    'sceneId' => 'scene-1',
+                    'placementId' => 'token-1',
+                    'entityRevision' => 3,
+                    'patch' => ['hidden' => true],
+                ]],
+            ],
+        ], 'player-a', false);
+    } catch (InvalidArgumentException $error) {
+        $playerPrivilegedRejected = true;
+    }
+    expect($playerPrivilegedRejected, 'Players must not change GM-only placement fields.');
+
     echo json_encode([
         'success' => true,
         'revision' => $store->getSnapshot()['revision'],
