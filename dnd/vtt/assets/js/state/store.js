@@ -159,6 +159,22 @@ export function updateState(updater) {
   invalidateStateSnapshot();
 }
 
+/**
+ * Update the compatibility projection without notifying broad legacy
+ * subscribers. Sync V2 uses this only after a canonical event, then patches
+ * the affected token node directly.
+ */
+export function updateStateSilently(updater) {
+  updater(state);
+  applySceneGridState(state);
+  if (!state.user?.isGM) {
+    state.boardState.placements = restrictPlacementsToPlayerView(state.boardState.placements);
+    state.tokens = restrictTokensToPlayerView(state.tokens);
+  }
+  state.boardState.pings = normalizePings(state.boardState.pings);
+  invalidateStateSnapshot();
+}
+
 function notify() {
   listeners.forEach((listener) => listener(getState()));
 }

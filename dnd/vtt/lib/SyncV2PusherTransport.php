@@ -54,4 +54,45 @@ final class SyncV2PusherTransport
             return false;
         }
     }
+
+    /**
+     * Publish a caller-confirmed player-safe event on the existing public
+     * board channel. Hidden movement must never call this method.
+     */
+    public static function publishPublic(array $event, ?string $excludeSocketId = null): bool
+    {
+        $configPath = __DIR__ . '/../config/pusher.php';
+        if (!is_file($configPath)) {
+            return false;
+        }
+        $config = require $configPath;
+        if (!is_array($config) || empty($config['enabled'])) {
+            return false;
+        }
+        $appId = (string) ($config['app_id'] ?? '');
+        $key = (string) ($config['key'] ?? '');
+        $secret = (string) ($config['secret'] ?? '');
+        $channel = (string) ($config['channel'] ?? '');
+        if ($appId === '' || $key === '' || $secret === '' || $channel === '') {
+            return false;
+        }
+        $client = new PusherClient(
+            $appId,
+            $key,
+            $secret,
+            (string) ($config['cluster'] ?? 'us3'),
+            (int) ($config['timeout'] ?? 5)
+        );
+        try {
+            return $client->trigger(
+                $channel,
+                'sync-v2-event',
+                ['event' => $event],
+                $excludeSocketId
+            );
+        } catch (Throwable $error) {
+            error_log('[VTT Sync V2] Public Pusher delivery failed: ' . $error->getMessage());
+            return false;
+        }
+    }
 }

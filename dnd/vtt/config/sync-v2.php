@@ -9,13 +9,13 @@ declare(strict_types=1);
  * writer remains active.
  */
 return [
-    'mode' => 'shadow',
+    'mode' => 'live',
     'world_id' => getenv('VTT_SYNC_V2_WORLD_ID') ?: 'default',
     'event_retention' => 1000,
     'snapshot_interval' => 100,
     'pusher_enabled' => getenv('VTT_SYNC_V2_PUSHER_ENABLED') === '1',
     'domains' => [
-        'token_movement' => false,
+        'token_movement' => true,
         'placements' => false,
         'combat' => false,
         'templates' => false,

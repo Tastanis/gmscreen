@@ -645,6 +645,9 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                         $nextState['pings'] = $pingUpdates;
                     }
 
+                    if (vttSyncV2OwnsTokenMovement()) {
+                        $nextState = preserveVttSyncV2PlacementCoordinates($nextState, $stateBeforeWrite);
+                    }
                     $stateChanged = $nextState !== $stateBeforeWrite;
                     if (!$stateChanged) {
                         $playerView = filterPlacementsForPlayerView($nextState);
@@ -802,6 +805,9 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                     $nextState[$key] = $value;
                 }
 
+                if (vttSyncV2OwnsTokenMovement()) {
+                    $nextState = preserveVttSyncV2PlacementCoordinates($nextState, $stateBeforeWrite);
+                }
                 $stateChanged = $nextState !== $stateBeforeWrite;
                 if (!$stateChanged) {
                     $nextState['_version'] = $previousVersion;
@@ -1726,12 +1732,65 @@ function combatIntentCombatantTeam(
  *     destructive ops (`placement.remove`) to be applied.
  * @return array<string,mixed>
  */
+function vttSyncV2OwnsTokenMovement(): bool
+{
+    static $ownsMovement = null;
+    if ($ownsMovement !== null) {
+        return $ownsMovement;
+    }
+    $configPath = __DIR__ . '/../config/sync-v2.php';
+    $config = is_file($configPath) ? require $configPath : [];
+    $ownsMovement =
+        is_array($config)
+        && (($config['domains']['token_movement'] ?? false) === true);
+    return $ownsMovement;
+}
+
+function preserveVttSyncV2PlacementCoordinates(array $next, array $before): array
+{
+    $beforeById = [];
+    foreach (($before['placements'] ?? []) as $sceneId => $placements) {
+        if (!is_array($placements)) continue;
+        foreach ($placements as $placement) {
+            $id = is_array($placement) ? extractBoardEntryIdentifier($placement) : null;
+            if ($id !== null) {
+                $beforeById[(string) $sceneId][$id] = $placement;
+            }
+        }
+    }
+    foreach (($next['placements'] ?? []) as $sceneId => &$placements) {
+        if (!is_array($placements)) continue;
+        foreach ($placements as &$placement) {
+            $id = is_array($placement) ? extractBoardEntryIdentifier($placement) : null;
+            $prior = $id !== null ? ($beforeById[(string) $sceneId][$id] ?? null) : null;
+            if (!is_array($prior)) continue;
+            foreach (['column', 'row', 'x', 'y'] as $coordinate) {
+                if (array_key_exists($coordinate, $prior)) {
+                    $placement[$coordinate] = $prior[$coordinate];
+                } else {
+                    unset($placement[$coordinate]);
+                }
+            }
+        }
+        unset($placement);
+    }
+    unset($placements);
+    return $next;
+}
+
 function applyBoardStateOp(array $state, array $op, array $context = []): array
 {
     $type = isset($op['type']) && is_string($op['type']) ? $op['type'] : '';
     $isGm = (bool) ($context['isGm'] ?? false);
+    $syncV2OwnsMovement = vttSyncV2OwnsTokenMovement();
 
     if ($type === 'placement.move') {
+        // Phase 3 ownership gate: token coordinates have one authority. Old
+        // cached clients may still submit V1 movement ops, but they cannot
+        // overwrite a canonical Sync V2 position.
+        if ($syncV2OwnsMovement) {
+            return $state;
+        }
         $sceneId = isset($op['sceneId']) && is_string($op['sceneId']) ? trim($op['sceneId']) : '';
         if ($sceneId === '') {
             return $state;
@@ -1910,6 +1969,12 @@ function applyBoardStateOp(array $state, array $op, array $context = []): array
             return $state;
         }
         $patch = $op['patch'];
+        if ($syncV2OwnsMovement) {
+            unset($patch['column'], $patch['row'], $patch['x'], $patch['y']);
+            if ($patch === []) {
+                return $state;
+            }
+        }
         if (!isset($state['placements'][$sceneId]) || !is_array($state['placements'][$sceneId])) {
             return $state;
         }

@@ -90,6 +90,7 @@ import {
   resolveSceneMapLevelsState,
 } from './map-level-renderer.js';
 import { createTokenInteractions } from './token-interactions.js';
+import { createTokenMovementRuntime } from '../sync-v2/token-movement-runtime.js';
 import {
   applyCanonicalPrimaryTokenSelection,
   ensureTokenSettingsElementConnected,
@@ -754,6 +755,12 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   const boardApi = store ?? {};
+  const syncV2Config =
+    typeof window !== 'undefined' && window.vttConfig?.syncV2
+      ? window.vttConfig.syncV2
+      : {};
+  const tokenMovementV2Enabled =
+    syncV2Config?.domains?.token_movement === true;
   const combatTimerService = createCombatTimerService();
   let mapLevelCutoutEditorActive = false;
   const mapLevelCutoutTool = createMapLevelCutoutTool();
@@ -807,6 +814,152 @@ export function mountBoardInteractions(store, routes = {}) {
   const MAX_QUEUED_MOVEMENTS = 12;
   const DRAG_ACTIVATION_DISTANCE = 6;
   let tokenMovementController = null;
+  let tokenMovementRuntime = null;
+
+  function patchTokenMovementNode(sceneId, placementId, placement) {
+    const activeSceneId = boardApi.getState?.()?.boardState?.activeSceneId ?? null;
+    if (!tokenLayer || !viewState.mapLoaded || sceneId !== activeSceneId) {
+      return;
+    }
+    const node = Array.from(tokenLayer.children ?? []).find(
+      (child) => child?.dataset?.placementId === placementId
+    );
+    if (!node) {
+      return;
+    }
+    const rendered = renderedPlacements.find((entry) => entry?.id === placementId);
+    const gridSize = Math.max(8, Number(viewState.gridSize) || 64);
+    const left = (Number(viewState.gridOffsets?.left) || 0) + Number(placement.column) * gridSize;
+    const top = (Number(viewState.gridOffsets?.top) || 0) + Number(placement.row) * gridSize;
+    const scale = Number.isFinite(rendered?.scale) && rendered.scale > 0 ? rendered.scale : 1;
+    node.style.transform = buildTokenLevelTransform(left, top, scale);
+    node.dataset.entityRevision = String(placement._entityRevision ?? '');
+    if (rendered) {
+      rendered.column = Number(placement.column);
+      rendered.row = Number(placement.row);
+    }
+    recordSyncDiagnostic('syncV2TokenPatches', { sceneId, placementId });
+  }
+
+  function applyConfirmedTokenMovement(sceneId, placementId, placement, context = {}) {
+    const previous =
+      boardApi.getState?.()?.boardState?.placements?.[sceneId]?.find(
+        (entry) => entry?.id === placementId
+      ) ?? null;
+    boardApi.updateStateSilently?.((draft) => {
+      const placements = draft?.boardState?.placements?.[sceneId];
+      const target = Array.isArray(placements)
+        ? placements.find((entry) => entry?.id === placementId)
+        : null;
+      if (!target) return;
+      target.column = Number(placement.column);
+      target.row = Number(placement.row);
+      target._syncV2EntityRevision = Number(placement._entityRevision) || 0;
+    });
+    patchTokenMovementNode(sceneId, placementId, placement);
+
+    if (
+      context?.source === 'acknowledgement'
+      && previous
+      && (previous.column !== placement.column || previous.row !== placement.row)
+    ) {
+      document.dispatchEvent(new CustomEvent('vtt:token-moved', {
+        detail: {
+          placementId,
+          sceneId,
+          from: {
+            column: previous.column ?? 0,
+            row: previous.row ?? 0,
+            width: previous.width ?? 1,
+            height: previous.height ?? 1,
+          },
+          to: {
+            column: placement.column,
+            row: placement.row,
+            width: previous.width ?? 1,
+            height: previous.height ?? 1,
+          },
+          kind: 'normal',
+        },
+      }));
+    }
+  }
+
+  function reconcileTokenMovementSnapshot(snapshot, context = {}) {
+    boardApi.updateStateSilently?.((draft) => {
+      for (const [sceneId, canonicalPlacements] of Object.entries(
+        snapshot?.state?.placements ?? {}
+      )) {
+        const placements = draft?.boardState?.placements?.[sceneId];
+        if (!Array.isArray(placements)) continue;
+        for (const target of placements) {
+          const canonical = canonicalPlacements?.[target?.id];
+          if (!canonical) continue;
+          target.column = Number(canonical.column);
+          target.row = Number(canonical.row);
+          target._syncV2EntityRevision = Number(canonical._entityRevision) || 0;
+        }
+      }
+    });
+    const activeSceneId = boardApi.getState?.()?.boardState?.activeSceneId ?? null;
+    for (const [placementId, placement] of Object.entries(
+      snapshot?.state?.placements?.[activeSceneId] ?? {}
+    )) {
+      patchTokenMovementNode(activeSceneId, placementId, placement);
+    }
+    if (context?.source === 'conflict' || context?.source === 'recovery') {
+      recordSyncDiagnostic('recoverySnapshotsApplied', {
+        source: `sync-v2-${context.source}`,
+        revision: snapshot?.revision ?? 0,
+      });
+    }
+  }
+
+  tokenMovementRuntime = createTokenMovementRuntime({
+    enabled: tokenMovementV2Enabled,
+    commandsEndpoint: routes.syncV2Commands,
+    eventsEndpoint: routes.syncV2Events,
+    snapshotEndpoint: routes.syncV2Snapshot,
+    pusherConfig:
+      typeof window !== 'undefined'
+        ? (window.vttPusherConfig ?? window.vttConfig?.pusher ?? null)
+        : null,
+    previewPlacement: patchTokenMovementNode,
+    applyConfirmedPlacement: applyConfirmedTokenMovement,
+    reconcileSnapshot: reconcileTokenMovementSnapshot,
+    onError: (error) => reportSyncFailure(error, 'token movement'),
+  });
+
+  function commitCanonicalTokenMoves({ sceneId, moves, source, originalPositions = null }) {
+    tokenMovementRuntime.submitMoves(sceneId, moves)
+      .then(() => {
+        clearSyncFailure();
+        const movedIds = moves.map((move) => move.placementId);
+        const fallenIds = source === 'drag'
+          ? processPlacementFalls(sceneId, movedIds)
+          : [];
+        if (fallenIds.length) {
+          triggerTokenFallAnimations(fallenIds);
+        }
+        if (status) {
+          const noun = moves.length === 1 ? 'token' : 'tokens';
+          status.textContent = fallenIds.length
+            ? `Moved ${moves.length} ${noun}; ${fallenIds.length} fell.`
+            : `Moved ${moves.length} ${noun}.`;
+        }
+        tokenMovementController?.handleDragCommitted?.({
+          sceneId,
+          movedIds,
+          originalPositions,
+          preview: new Map(moves.map((move) => [move.placementId, move])),
+        });
+      })
+      .catch((error) => {
+        reportSyncFailure(error, 'token movement');
+        updateStatus(error?.message || 'Token movement was rejected.');
+      });
+  }
+
   const tokenInteractions = createTokenInteractions({
     mapSurface,
     tokenLayer,
@@ -837,6 +990,9 @@ export function mountBoardInteractions(store, routes = {}) {
     toNonNegativeNumber: (value, fallback) => toNonNegativeNumber(value, fallback),
     persistBoardStateSnapshot: (options, opsOverride) =>
       persistBoardStateSnapshot(options, opsOverride),
+    commitCanonicalMoves: tokenMovementV2Enabled
+      ? commitCanonicalTokenMoves
+      : null,
     onTokenDragStart: (payload) => tokenMovementController?.handleDragStart(payload),
     onTokenDragMove: (payload) => tokenMovementController?.handleDragMove(payload),
     onTokenDragEnd: (payload) => tokenMovementController?.handleDragEnd(payload),
@@ -6158,7 +6314,10 @@ export function mountBoardInteractions(store, routes = {}) {
       documentRef: typeof document === 'undefined' ? undefined : document,
       hashBoardStateSnapshotFn: hashBoardStateSnapshot,
       safeJsonStringifyFn: safeJsonStringify,
-      mergeBoardStateSnapshotFn: mergeBoardStateSnapshot,
+      mergeBoardStateSnapshotFn: (existing, incoming, options) =>
+        tokenMovementRuntime.overlayBoardState(
+          mergeBoardStateSnapshot(existing, incoming, options)
+        ),
       getCurrentUserIdFn: getCurrentUserId,
       normalizeProfileIdFn: normalizeProfileId,
       getPendingSaveInfo: getPendingBoardStateSaveInfo,
@@ -6619,6 +6778,7 @@ export function mountBoardInteractions(store, routes = {}) {
       if (typeof delta.version === 'number') {
         draft.boardState._version = delta.version;
       }
+      tokenMovementRuntime.overlayBoardState(draft.boardState);
     });
 
     // Re-render the board with updated state
@@ -7966,6 +8126,10 @@ export function mountBoardInteractions(store, routes = {}) {
   // connected or timed out. This prevents the poller from locking its
   // interval at "1 second fallback mode" while Pusher is still handshaking.
   const pusherReady = initializePusherSync();
+  tokenMovementRuntime.start().catch(() => {
+    // reportSyncFailure is invoked by the runtime; V1 remains available for
+    // non-movement domains while the movement error is visible to the user.
+  });
   Promise.resolve(pusherReady).then(() => {
     startBoardStatePoller();
     // (combat refresh removed — covered by Pusher + main poller)
@@ -8649,6 +8813,41 @@ export function mountBoardInteractions(store, routes = {}) {
     const state = boardApi.getState?.() ?? {};
     const activeSceneId = state.boardState?.activeSceneId ?? null;
     if (!activeSceneId) {
+      return;
+    }
+
+    if (tokenMovementV2Enabled) {
+      const scenePlacements = state.boardState?.placements?.[activeSceneId] ?? [];
+      const moves = [];
+      for (const placementId of selectedIds) {
+        const placement = scenePlacements.find((entry) => entry?.id === placementId);
+        if (!placement) continue;
+        const effective =
+          tokenMovementRuntime.getEffectivePlacement(activeSceneId, placementId)
+          ?? placement;
+        const width = Math.max(1, Number(placement.width) || 1);
+        const height = Math.max(1, Number(placement.height) || 1);
+        const maxColumn = Math.max(0, gridColumns - width);
+        const maxRow = Math.max(0, gridRows - height);
+        const nextColumn = clamp((Number(effective.column) || 0) + stepX, 0, maxColumn);
+        const nextRow = clamp((Number(effective.row) || 0) + stepY, 0, maxRow);
+        if (nextColumn !== Number(effective.column) || nextRow !== Number(effective.row)) {
+          moves.push({
+            placementId,
+            column: nextColumn,
+            row: nextRow,
+            width,
+            height,
+          });
+        }
+      }
+      if (moves.length) {
+        commitCanonicalTokenMoves({
+          sceneId: activeSceneId,
+          moves,
+          source: 'keyboard',
+        });
+      }
       return;
     }
 

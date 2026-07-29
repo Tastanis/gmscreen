@@ -44,6 +44,7 @@ export function createTokenInteractions({
   ensureScenePlacementDraft,
   toNonNegativeNumber,
   persistBoardStateSnapshot,
+  commitCanonicalMoves = null,
   onTokenDragStart = null,
   onTokenDragMove = null,
   onTokenDragEnd = null,
@@ -812,6 +813,23 @@ export function createTokenInteractions({
 
     if (!updates.size && !deferredToApply.length) {
       renderTokens(state, tokenLayer, viewState);
+      return;
+    }
+
+    // Phase 3 Sync V2 owns token coordinates exclusively. Keep the pointer
+    // preview ephemeral and hand the final intent to the server; do not touch
+    // the legacy store, dirty flags, snapshot persistence, or full renderer.
+    if (typeof commitCanonicalMoves === 'function' && updates.size) {
+      const moves = Array.from(updates.entries()).map(([placementId, position]) => ({
+        placementId,
+        ...position,
+      }));
+      commitCanonicalMoves({
+        sceneId: activeSceneId,
+        moves,
+        originalPositions,
+        source: 'drag',
+      });
       return;
     }
 

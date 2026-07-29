@@ -1,6 +1,6 @@
 # VTT Sync V2 — Canonical Implementation Plan
 
-**Status:** Phase 2 complete; Phase 3 is the next implementation stage
+**Status:** Phase 3 complete; Phase 4 is the next implementation stage
 **Canonical handoff:** This file is the source of truth for the synchronization
 replacement. Read it before changing VTT persistence, Pusher delivery, board
 state, combat turns, or rendering subscriptions.
@@ -362,8 +362,43 @@ Move drag/drop and keyboard movement to `token.move`. Use ephemeral visual
 preview, server validation, entity revision conflict handling, and canonical
 commit.
 
+- [x] Make Sync V2 the exclusive owner of existing-token coordinates.
+- [x] Route drag release and keyboard movement through `token.move`.
+- [x] Preserve local GPU-composited previews without writing shared state.
+- [x] Validate authenticated movement permissions on the server.
+- [x] Use per-token entity revisions for simultaneous same-token conflicts.
+- [x] Allow unrelated tokens to move without a whole-world revision lock.
+- [x] Apply acknowledgement and HTTP replay through the same event reducer.
+- [x] Patch one token transform after a canonical event without a board/map
+      reload.
+- [x] Overlay V2 coordinates after legacy non-movement snapshot merges.
+- [x] Reject or strip legacy V1 coordinate writes while the domain flag is on.
+- [x] Preserve private information by redacting hidden-token replay events
+      without creating revision gaps.
+- [x] Verify three-client convergence, missed-event recovery, duplicate
+      handling, and simultaneous same-token retry.
+
 **Gate:** Three clients converge under latency, reorder, duplicate, loss,
 disconnect, and simultaneous same-token moves without reload or map reload.
+
+#### Phase 3 operating boundary
+
+- `sync_v2.token_movement` is live and is the only owner of `column`/`row` for
+  existing placements.
+- Drag previews and pending keyboard positions are ephemeral. Confirmed
+  compatibility-store coordinates change only after a canonical event.
+- Player-visible movement uses the existing Pusher board channel for fast
+  delivery, with authenticated HTTP acknowledgement and ordered replay as the
+  authority and recovery path. Hidden movement never enters that shared
+  channel; private audience channels remain a Phase 7 hardening item.
+- V1 still owns placement creation/removal and every non-coordinate placement
+  field until Phase 4. V1 snapshot and op handling preserves existing legacy
+  coordinates so old or cached clients cannot become a second movement owner.
+- Recovery/conflict snapshots are projected per authenticated viewer. Hidden
+  token events become revision-preserving `sync.redacted` no-ops for players.
+- A normal accepted move performs one focused token transform patch. It does
+  not call the legacy board persistence path, reload the page/map, or apply the
+  full board.
 
 ### Phase 4 — Remaining placement mutations
 

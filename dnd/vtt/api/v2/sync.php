@@ -10,7 +10,9 @@ try {
             'error' => 'Method not allowed.',
         ]);
     }
-    vttSyncV2RequireShadowGm();
+    $auth = vttSyncV2DomainEnabled('token_movement')
+        ? vttSyncV2RequireAuthenticated()
+        : vttSyncV2RequireShadowGm();
 
     $after = filter_var(
         $_GET['after'] ?? 0,
@@ -26,8 +28,11 @@ try {
 
     vttSyncV2Respond(200, [
         'success' => true,
-        'mode' => 'shadow',
-        'recovery' => vttSyncV2Store()->replayAfter((int) $after),
+        'mode' => vttSyncV2DomainEnabled('token_movement') ? 'live' : 'shadow',
+        'recovery' => vttSyncV2ProjectRecoveryForUser(
+            vttSyncV2Store()->replayAfter((int) $after),
+            $auth
+        ),
     ]);
 } catch (Throwable $error) {
     vttSyncV2HandleFailure($error);

@@ -5,6 +5,7 @@ import {
   getUserName,
   subscribe,
   updateState,
+  updateStateSilently,
   restrictTokensToPlayerView,
   restrictPlacementsToPlayerView,
 } from './state/store.js';
@@ -64,7 +65,14 @@ async function bootstrap() {
     user: userContext,
   });
 
-  const storeApi = { getState, getIsGm, getUserName, subscribe, updateState };
+  const storeApi = {
+    getState,
+    getIsGm,
+    getUserName,
+    subscribe,
+    updateState,
+    updateStateSilently,
+  };
 
   mountSettingsPanel(routes, storeApi, userContext);
   mountCharacterSummaryPanel(routes, userContext);

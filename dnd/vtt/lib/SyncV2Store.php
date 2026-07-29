@@ -167,6 +167,124 @@ final class SyncV2Store
     }
 
     /**
+     * Atomically validate and accept one canonical token movement.
+     *
+     * The global base revision is an observation/recovery cursor, not a lock
+     * on the whole world. A client may be behind because an unrelated token
+     * moved; the per-entity revision is the conflict boundary that prevents
+     * simultaneous moves of the same token from silently overwriting.
+     *
+     * @return array{status:string,event?:array,snapshot?:array,idempotent?:bool,error?:string}
+     */
+    public function acceptTokenMove(array $command, string $actorId, array $legacyPlacement): array
+    {
+        $normalized = $this->normalizeTokenMove($command);
+        $actorId = trim($actorId);
+        if ($actorId === '') {
+            throw new InvalidArgumentException('An authenticated actor ID is required.');
+        }
+
+        $this->pdo->exec('BEGIN IMMEDIATE');
+        try {
+            $existing = $this->findEventByOperationId($normalized['operationId']);
+            if ($existing !== null) {
+                $this->pdo->exec('COMMIT');
+                return [
+                    'status' => 'accepted',
+                    'event' => $existing,
+                    'idempotent' => true,
+                ];
+            }
+
+            $snapshot = $this->getSnapshot();
+            if ($normalized['baseRevision'] > $snapshot['revision']) {
+                $this->pdo->exec('ROLLBACK');
+                return [
+                    'status' => 'conflict',
+                    'error' => 'base_revision_ahead',
+                    'snapshot' => $snapshot,
+                ];
+            }
+
+            $state = $snapshot['state'];
+            if (!isset($state['placements']) || !is_array($state['placements'])) {
+                $state['placements'] = [];
+            }
+            if (!isset($state['placements'][$normalized['sceneId']])
+                || !is_array($state['placements'][$normalized['sceneId']])) {
+                $state['placements'][$normalized['sceneId']] = [];
+            }
+            $current = $state['placements'][$normalized['sceneId']][$normalized['entityId']] ?? [
+                'id' => $normalized['entityId'],
+                'column' => (float) ($legacyPlacement['column'] ?? 0),
+                'row' => (float) ($legacyPlacement['row'] ?? 0),
+                'width' => max(1, (float) ($legacyPlacement['width'] ?? 1)),
+                'height' => max(1, (float) ($legacyPlacement['height'] ?? 1)),
+                '_entityRevision' => 0,
+            ];
+            $currentEntityRevision = max(0, (int) ($current['_entityRevision'] ?? 0));
+            if ($normalized['entityRevision'] !== $currentEntityRevision) {
+                $this->pdo->exec('ROLLBACK');
+                return [
+                    'status' => 'conflict',
+                    'error' => 'entity_revision_mismatch',
+                    'snapshot' => $snapshot,
+                ];
+            }
+
+            $revision = $snapshot['revision'] + 1;
+            $entityRevision = $currentEntityRevision + 1;
+            $serverTime = $this->nowMilliseconds();
+            $event = [
+                'revision' => $revision,
+                'operationId' => $normalized['operationId'],
+                'type' => 'token.moved',
+                'actorId' => $actorId,
+                'sceneId' => $normalized['sceneId'],
+                'entityId' => $normalized['entityId'],
+                'entityRevision' => $entityRevision,
+                'payload' => [
+                    'column' => $normalized['column'],
+                    'row' => $normalized['row'],
+                ],
+                'serverTime' => $serverTime,
+            ];
+            $state['placements'][$normalized['sceneId']][$normalized['entityId']] = [
+                ...$current,
+                'id' => $normalized['entityId'],
+                'column' => $normalized['column'],
+                'row' => $normalized['row'],
+                '_entityRevision' => $entityRevision,
+            ];
+
+            $this->insertEvent($event);
+            $this->updateWorldState($revision, $state, $serverTime);
+            if ($revision % $this->snapshotInterval === 0) {
+                $this->insertSnapshot($revision, $state, $serverTime);
+            }
+            $this->pruneEvents($revision);
+            $this->pdo->exec('COMMIT');
+
+            return [
+                'status' => 'accepted',
+                'event' => $event,
+                'idempotent' => false,
+            ];
+        } catch (Throwable $error) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            } else {
+                try {
+                    $this->pdo->exec('ROLLBACK');
+                } catch (Throwable $ignored) {
+                    // Preserve the original failure.
+                }
+            }
+            throw $error;
+        }
+    }
+
+    /**
      * Return ordered events after a revision, or a canonical snapshot when
      * the caller's gap predates retention or exceeds the response limit.
      */
@@ -353,6 +471,61 @@ final class SyncV2Store
             'entityId' => $this->normalizeOptionalId($command['entityId'] ?? null),
             'entityRevision' => $entityRevision,
             'payload' => $payload,
+        ];
+    }
+
+    private function normalizeTokenMove(array $command): array
+    {
+        $operationId = trim((string) ($command['operationId'] ?? ''));
+        if (
+            strlen($operationId) < 8
+            || strlen($operationId) > 128
+            || preg_match('/^[A-Za-z0-9._:-]+$/', $operationId) !== 1
+        ) {
+            throw new InvalidArgumentException('operationId is invalid.');
+        }
+        if (($command['type'] ?? null) !== 'token.move') {
+            throw new InvalidArgumentException('Expected token.move.');
+        }
+        $sceneId = $this->normalizeOptionalId($command['sceneId'] ?? null);
+        $entityId = $this->normalizeOptionalId(
+            $command['entityId'] ?? $command['payload']['placementId'] ?? null
+        );
+        if ($sceneId === null || $entityId === null) {
+            throw new InvalidArgumentException('token.move requires sceneId and entityId.');
+        }
+        $baseRevision = filter_var(
+            $command['baseRevision'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 0]]
+        );
+        $entityRevision = filter_var(
+            $command['entityRevision'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 0]]
+        );
+        if ($baseRevision === false || $entityRevision === false) {
+            throw new InvalidArgumentException('Revisions must be non-negative integers.');
+        }
+        $column = $command['payload']['column'] ?? null;
+        $row = $command['payload']['row'] ?? null;
+        if (!is_numeric($column) || !is_numeric($row)) {
+            throw new InvalidArgumentException('token.move requires numeric column and row.');
+        }
+        $column = (float) $column;
+        $row = (float) $row;
+        if (!is_finite($column) || !is_finite($row) || $column < 0 || $row < 0
+            || $column > 100000 || $row > 100000) {
+            throw new InvalidArgumentException('token.move coordinates are out of range.');
+        }
+        return [
+            'operationId' => $operationId,
+            'baseRevision' => (int) $baseRevision,
+            'entityRevision' => (int) $entityRevision,
+            'sceneId' => $sceneId,
+            'entityId' => $entityId,
+            'column' => $column,
+            'row' => $row,
         ];
     }
 

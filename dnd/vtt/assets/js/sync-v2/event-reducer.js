@@ -252,6 +252,7 @@ function reduceSceneActivated(state, event, changes) {
 }
 
 const reducers = Object.freeze({
+  'sync.redacted': () => {},
   'shadow.observed': reduceShadowObservation,
   'token.added': reduceTokenAdded,
   'token.moved': reduceTokenMoved,

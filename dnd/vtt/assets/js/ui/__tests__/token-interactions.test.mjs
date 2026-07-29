@@ -31,7 +31,7 @@ function stubEl() {
   };
 }
 
-function createTokenDragHarness({ measureActive = false } = {}) {
+function createTokenDragHarness({ measureActive = false, commitCanonicalMoves = null } = {}) {
   const viewState = buildViewState();
   const placements = [
     { id: 'token-1', column: 1, row: 1, width: 1, height: 1 },
@@ -42,6 +42,7 @@ function createTokenDragHarness({ measureActive = false } = {}) {
     finalize: [],
     cancel: 0,
     render: 0,
+    persist: 0,
   };
 
   const ti = createTokenInteractions({
@@ -93,7 +94,10 @@ function createTokenDragHarness({ measureActive = false } = {}) {
       const numeric = Number(value);
       return Number.isFinite(numeric) ? numeric : fallback;
     },
-    persistBoardStateSnapshot: () => {},
+    persistBoardStateSnapshot: () => {
+      calls.persist += 1;
+    },
+    commitCanonicalMoves,
     windowRef: {
       requestAnimationFrame(callback) {
         callback();
@@ -304,4 +308,34 @@ test('endTokenDrag promotes cursorSquare into previewPositions before commit', (
   // called with the cursor-aligned position the user landed on, which proves
   // cursorSquare was promoted into previewPositions before commitDragPreview.
   assert.deepEqual(calls.finalize, [{ column: 4, row: 3, mapX: 288, mapY: 224 }]);
+});
+
+test('Sync V2 drag delegates one movement intent without mutating or saving legacy state', () => {
+  const canonicalCommits = [];
+  const { ti, placements, calls } = createTokenDragHarness({
+    commitCanonicalMoves: (payload) => canonicalCommits.push(payload),
+  });
+  const startEvent = { pointerId: 1, clientX: 64, clientY: 64, localX: 64, localY: 64 };
+
+  ti.prepareTokenDrag(startEvent, placements[0]);
+  ti.beginTokenDrag(startEvent);
+  ti.updateTokenDrag({ pointerId: 1, buttons: 1, localX: 256, localY: 192 });
+  ti.endTokenDrag({ commit: true, pointerId: 1 });
+
+  assert.equal(canonicalCommits.length, 1);
+  assert.deepEqual(canonicalCommits[0].moves, [{
+    placementId: 'token-1',
+    column: 4,
+    row: 3,
+    width: 1,
+    height: 1,
+  }]);
+  assert.equal(calls.persist, 0);
+  assert.deepEqual(placements[0], {
+    id: 'token-1',
+    column: 1,
+    row: 1,
+    width: 1,
+    height: 1,
+  });
 });

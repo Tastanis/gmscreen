@@ -96,6 +96,55 @@ try {
     }
     expect($invalidRejected, 'Phase 1 must reject live-domain commands.');
 
+    $moveOne = [
+        'operationId' => 'movement-operation-0001',
+        'type' => 'token.move',
+        'baseRevision' => 3,
+        'entityRevision' => 0,
+        'sceneId' => 'scene-1',
+        'entityId' => 'token-1',
+        'payload' => ['placementId' => 'token-1', 'column' => 8, 'row' => 5],
+    ];
+    $legacyToken = ['id' => 'token-1', 'column' => 1, 'row' => 1, 'width' => 1, 'height' => 1];
+    $moveAccepted = $store->acceptTokenMove($moveOne, 'GM', $legacyToken);
+    expect($moveAccepted['status'] === 'accepted', 'A valid token move must be accepted.');
+    expect($moveAccepted['event']['revision'] === 4, 'Token move must advance world revision.');
+    expect($moveAccepted['event']['entityRevision'] === 1, 'First token move must advance entity revision.');
+
+    $sameTokenConflict = $store->acceptTokenMove([
+        ...$moveOne,
+        'operationId' => 'movement-operation-stale',
+        'payload' => ['placementId' => 'token-1', 'column' => 9, 'row' => 5],
+    ], 'GM', $legacyToken);
+    expect($sameTokenConflict['status'] === 'conflict', 'A stale same-token move must conflict.');
+    expect(
+        $sameTokenConflict['error'] === 'entity_revision_mismatch',
+        'Same-token conflict must identify the entity revision.'
+    );
+
+    $otherToken = ['id' => 'token-2', 'column' => 2, 'row' => 2, 'width' => 1, 'height' => 1];
+    $unrelatedAccepted = $store->acceptTokenMove([
+        'operationId' => 'movement-operation-0002',
+        'type' => 'token.move',
+        // Deliberately behind the world revision: unrelated entity revisions
+        // are the concurrency boundary, not a global whole-board lock.
+        'baseRevision' => 3,
+        'entityRevision' => 0,
+        'sceneId' => 'scene-1',
+        'entityId' => 'token-2',
+        'payload' => ['placementId' => 'token-2', 'column' => 4, 'row' => 6],
+    ], 'GM', $otherToken);
+    expect($unrelatedAccepted['status'] === 'accepted', 'An unrelated token may move from a behind base revision.');
+    expect($unrelatedAccepted['event']['revision'] === 5, 'Unrelated move must receive the next world revision.');
+    expect(
+        (float) $store->getSnapshot()['state']['placements']['scene-1']['token-1']['column'] === 8.0,
+        'Rejected same-token move must not alter canonical coordinates.'
+    );
+
+    $moveDuplicate = $store->acceptTokenMove($moveOne, 'GM', $legacyToken);
+    expect($moveDuplicate['idempotent'] === true, 'Duplicate token operation must apply once.');
+    expect($store->getSnapshot()['revision'] === 5, 'Duplicate token move must not advance revision.');
+
     echo json_encode([
         'success' => true,
         'revision' => $store->getSnapshot()['revision'],

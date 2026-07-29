@@ -10,12 +10,14 @@ try {
             'error' => 'Method not allowed.',
         ]);
     }
-    vttSyncV2RequireShadowGm();
+    $auth = vttSyncV2DomainEnabled('token_movement')
+        ? vttSyncV2RequireAuthenticated()
+        : vttSyncV2RequireShadowGm();
 
     vttSyncV2Respond(200, [
         'success' => true,
-        'mode' => 'shadow',
-        'snapshot' => vttSyncV2Store()->getSnapshot(),
+        'mode' => vttSyncV2DomainEnabled('token_movement') ? 'live' : 'shadow',
+        'snapshot' => vttSyncV2ProjectSnapshotForUser(vttSyncV2Store()->getSnapshot(), $auth),
     ]);
 } catch (Throwable $error) {
     vttSyncV2HandleFailure($error);
