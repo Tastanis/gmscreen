@@ -146,7 +146,7 @@ test('token movement reducer returns a one-token change set without broad domain
   );
 });
 
-test('placement batch reducer applies add, patch, claim, and remove as one revision', () => {
+test('placement batch reducer applies add and patch as one revision', () => {
   const initial = {
     revision: 10,
     state: {
@@ -155,7 +155,6 @@ test('placement batch reducer applies add, patch, claim, and remove as one revis
           'token-1': { id: 'token-1', stamina: 20, _entityRevision: 4 },
         },
       },
-      claims: {},
     },
   };
   const result = reduceCanonicalEvent(initial, {
@@ -178,21 +177,13 @@ test('placement batch reducer applies add, patch, claim, and remove as one revis
           entityRevision: 1,
           placement: { id: 'token-2', stamina: 8 },
         },
-        {
-          kind: 'claim.set',
-          sceneId: 'scene-1',
-          placementId: 'token-2',
-          owner: 'player-a',
-        },
       ],
     },
   });
   assert.equal(result.status, 'applied');
   assert.deepEqual(result.changeSet.placements.updated, ['token-1']);
   assert.deepEqual(result.changeSet.placements.added, ['token-2']);
-  assert.equal(result.changeSet.claims, true);
   assert.equal(result.snapshot.state.placements['scene-1']['token-1'].stamina, 12);
-  assert.equal(result.snapshot.state.claims['scene-1']['token-2'], 'player-a');
   assert.equal(result.changeSet.combat, false);
   assert.equal(result.changeSet.fog, false);
 });
@@ -470,7 +461,6 @@ test('scene.deleted removes every scene-owned canonical domain in one event', ()
     revision: 4,
     state: {
       placements: { 'scene-1': { token: { id: 'token' } } },
-      claims: { 'scene-1': { token: 'player-a' } },
       combat: { 'scene-1': { active: true } },
       templates: { 'scene-1': { template: { id: 'template' } } },
       drawings: { 'scene-1': { drawing: { id: 'drawing' } } },
@@ -495,7 +485,7 @@ test('scene.deleted removes every scene-owned canonical domain in one event', ()
   });
 
   assert.equal(result.status, 'applied');
-  for (const domain of ['placements', 'claims', 'combat', 'templates', 'drawings', 'sceneConfig']) {
+  for (const domain of ['placements', 'combat', 'templates', 'drawings', 'sceneConfig']) {
     assert.equal(result.snapshot.state[domain]['scene-1'], undefined);
   }
   assert.equal(result.snapshot.state.pings.old, undefined);

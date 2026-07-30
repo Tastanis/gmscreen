@@ -97,7 +97,7 @@ applying effects, and runs the rider only while that exact condition remains.
 Supported timings are `turnStart` and `turnEnd`; see `AUTHORING.md` for the
 bounded effect list and paste-ready JSON.
 
-VTT-only utility effects include `floatingText` for the giant centered combat banner and `startTurn` for Hesitation-style turn claiming. `startTurn` is preflighted before action-cost spending so invalid timing can warn before heroic resource is spent.
+VTT-only utility effects include `floatingText` for the giant centered combat banner and `startTurn` for Hesitation-style turn starts. `startTurn` is preflighted before action-cost spending so invalid timing can warn before heroic resource is spent.
 
 Token `aura` effects can be visual-only or automated. Automated auras store `affects`, `triggers`, `effects`, and optional `expires` on the VTT placement, move with the owning token, and resolve against the live occupants at timing boundaries or when a token enters the aura. Multiple automated auras can coexist on one token and are toggled separately from that token's right-click settings. Aura ticks support damage, healing, temporary stamina, surge gain, conditions, mark-gated branches, floating text, and notes.
 
@@ -114,9 +114,14 @@ Each effect is dispatched by `kind`:
 
 On the VTT, automated damage and forced movement resolve only after the
 canonical board save succeeds. Authenticated players may use ability effects
-against any visible placement, including enemies and tokens claimed by another
-player. This does not grant ordinary drag control of enemy tokens, and hidden
-or GM-only placement fields remain protected.
+against any visible placement, including enemies. This does not grant ordinary
+drag control of enemy tokens, and hidden or GM-only placement fields remain
+protected.
+
+Canonical turn transitions route start-of-turn and end-of-turn questions to
+the user who initiated that transition, while resolving automation from the
+selected token's linked character sheet. Players may start allied turns only;
+enemy turns remain GM-only.
 
 ## Authoring flow
 

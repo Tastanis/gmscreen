@@ -45,7 +45,7 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 | `getAttributeBonus` reads monster stats | fallback | Monsters should use `flatBonus` for authored power rolls. If a monster automation uses `attribute` or damage `attribute`, the runner currently resolves it from the monster's Might/Agility/Reason/Intuition/Presence fields. |
 | Literal monster potency | monster stat block prints `M<2`, etc. | Set potency `threshold` to that integer. Legacy numeric `target` is normalized to `threshold`. |
 | `isWinded()` | always | Derives from `placement.hp <= floor(placement.maxHp / 2)`. |
-| Visibility gate | tray/panel open | `window.canViewMonster(placement)` — GM OR `team === 'ally'` OR placement claimed by current user. |
+| Visibility gate | tray/panel open | `window.canViewMonster(placement)` — GM or `team === 'ally'`. Enemy monster sheets remain GM-only. |
 
 ## Effect kinds — `effect.kind` (used inside `tier.effects`, `effect.effects`, `trigger.effects`, `persistent.effects`, `potency.onFail`, `spend.effects`)
 
@@ -300,8 +300,8 @@ Lightweight event-driven registry for triggered abilities. JSON-authored `trigge
 | `potency` | `{ actorId, sourceId, targetId, targetIds, targetCount, actionId, actionName, actionKind, cost, keywords, attribute, level }` | Fires before an automated potency check resolves. Predicates resolve `whose` against the actor/source using the potency. |
 | `damage` | `{ placementId, targetId, sourceId, amount, originalAmount, damageType, abilityName }` | Fires from `handleAutomationDamageRequest` after the stamina mutation. Manual / non-automation damage paths do NOT fire this yet — Phase B work. |
 | `staminaChange` | `{ placementId, before, after, delta, kind }` | Fires from both `handleAutomationDamageRequest` and `handleAutomationHealRequest`. `kind` ∈ {`damage`, `heal`, `temporaryStamina`}. |
-| `turnStart` | `{ placementId, team }` | Fires from `transitionToActiveTurn` whenever a token becomes the active combatant. |
-| `turnEnd` | `{ placementId, team }` | Fires from `completeActiveCombatant` immediately before the save-ends UI opens. |
+| `turnStart` | `{ placementId, team }` | Fires once from an accepted canonical `turn.start` transition on the initiating user's client. The selected token's linked sheet supplies resource and feature rules. |
+| `turnEnd` | `{ placementId, team }` | Fires once from an accepted canonical turn completion or override on the user who initiated that boundary, immediately before save-ends UI opens. |
 | `roundStart` | `{ round }` | Fires when a new combat round begins, including round 1 when combat starts. |
 | `roundEnd` | `{ round }` | Fires immediately before the GM advances out of the current combat round. |
 | `combatStart` | `{ round }` | Fires when combat starts. |

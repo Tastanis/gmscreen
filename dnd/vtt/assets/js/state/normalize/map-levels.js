@@ -34,11 +34,8 @@ export const KNOWN_LEVEL_USER_IDS = Object.freeze([
   'zepha',
 ]);
 
-// Levels v2 (§5.4): the four player-character profile ids in claim order. The
-// GM's claim assignment dropdown iterates this list; PC auto-claim on first
-// drag matches a token name against this set. `KNOWN_LEVEL_USER_IDS` includes
-// `'gm'` for Activate's roster purpose, but the GM is never a claim target —
-// unclaimed and GM-owned are equivalent per the plan.
+// The player-character profile ids used by name/profile-based character-sheet
+// association. Token permissions are team-based and do not use ownership.
 export const PLAYER_CHARACTER_USER_IDS = Object.freeze([
   'cal',
   'sharon',
@@ -334,7 +331,7 @@ export function levelIdExistsInViewModel(levelId, viewModel = []) {
   return viewModel.some((entry) => entry && entry.id === trimmed);
 }
 
-const USER_LEVEL_STATE_SOURCES = new Set(['manual', 'activate', 'claim']);
+const USER_LEVEL_STATE_SOURCES = new Set(['manual', 'activate']);
 
 /**
  * Levels v2: normalize a single user's active-level entry. Returns null
@@ -351,7 +348,6 @@ export function normalizeUserLevelStateEntry(raw) {
   }
   const sourceSource = typeof raw.source === 'string' ? raw.source.trim().toLowerCase() : '';
   const source = USER_LEVEL_STATE_SOURCES.has(sourceSource) ? sourceSource : 'manual';
-  const tokenIdSource = typeof raw.tokenId === 'string' ? raw.tokenId.trim() : '';
   const updatedAtRaw = Number(raw.updatedAt);
   const updatedAt = Number.isFinite(updatedAtRaw) ? Math.max(0, Math.trunc(updatedAtRaw)) : 0;
 
@@ -360,9 +356,6 @@ export function normalizeUserLevelStateEntry(raw) {
     source,
     updatedAt,
   };
-  if (tokenIdSource) {
-    entry.tokenId = tokenIdSource;
-  }
   return entry;
 }
 
@@ -395,17 +388,14 @@ export function normalizeUserLevelStateMap(raw) {
 
 /**
  * Levels v2 helper: resolve a user's active level id for a scene,
- * following the priority chain in §4.2 of LEVELS_V2_PLAN.md:
+ * following this priority chain:
  *   1. Valid `userLevelState[userId].levelId`
- *   2. Most recently modified claimed token's level (when claims drive
- *      view-follow). Requires `placements` to look up token levels.
- *   3. `BASE_MAP_LEVEL_ID`.
+ *   2. `BASE_MAP_LEVEL_ID`.
  *
  * The signature accepts a per-scene `sceneState` entry plus the user id.
- * `placements` is the per-scene placement list (boardState.placements[sceneId]).
  * `validLevelIds`, when provided, restricts resolution to known level ids
  * (including `BASE_MAP_LEVEL_ID`). Unknown/invalid stored ids fall through
- * to claim/base resolution. When `validLevelIds` is null/empty the
+ * to base resolution. When `validLevelIds` is null/empty the
  * stored id is returned as-is unless it is missing, in which case we
  * still fall through.
  *
@@ -416,7 +406,6 @@ export function normalizeUserLevelStateMap(raw) {
 export function resolveActiveLevelIdForUser({
   sceneState = null,
   userId = null,
-  placements = null,
   validLevelIds = null,
 } = {}) {
   const userKey = typeof userId === 'string' ? userId.trim().toLowerCase() : '';
@@ -445,39 +434,16 @@ export function resolveActiveLevelIdForUser({
       }
     }
 
-    const claims = sceneState.claimedTokens;
-    if (claims && typeof claims === 'object' && Array.isArray(placements)) {
-      let bestLevelId = null;
-      let bestModified = -Infinity;
-      for (const placement of placements) {
-        if (!placement || typeof placement !== 'object') continue;
-        const placementId = typeof placement.id === 'string' ? placement.id : '';
-        if (!placementId) continue;
-        if (claims[placementId] !== userKey) continue;
-        const modified = Number(placement._lastModified);
-        const score = Number.isFinite(modified) ? modified : 0;
-        if (score < bestModified) continue;
-        const placementLevelId = resolvePlacementLevelId(placement);
-        if (!isValidLevelId(placementLevelId)) continue;
-        bestLevelId = placementLevelId;
-        bestModified = score;
-      }
-      if (bestLevelId) {
-        return bestLevelId;
-      }
-    }
   }
 
   return BASE_MAP_LEVEL_ID;
 }
 
 /**
- * Login-time helper: resolve the level id of the user's claimed PC token
- * for a scene, matching board-interactions' name-based PC inference. A
- * placement is treated as a PC token when (a) it is claimed by `userId`
- * in `sceneState.claimedTokens` and (b) its `name`, normalized to
- * lowercased space-separated words, contains `userId` as a whole word
- * (the same rule as `matchProfileByName` / auto-claim on first drag).
+ * Login-time helper: resolve the level id of the user's PC token for a scene,
+ * matching board-interactions' name-based character-sheet association. A
+ * placement is treated as the user's PC when its normalized name contains
+ * `userId` as a whole word (the same rule as `matchProfileByName`).
  *
  * Returns the matching placement's level id only when exactly one PC
  * token exists for the user. With zero or two-plus PC matches we return
@@ -487,17 +453,15 @@ export function resolveActiveLevelIdForUser({
  * `userLevelState[userId]` entry — it is not a per-render resolver.
  */
 export function resolvePcTokenLevelIdForUser({
-  sceneState = null,
   userId = null,
   placements = null,
   validLevelIds = null,
 } = {}) {
   const userKey = typeof userId === 'string' ? userId.trim().toLowerCase() : '';
-  if (!userKey || !sceneState || typeof sceneState !== 'object') {
+  if (!userKey) {
     return null;
   }
-  const claims = sceneState.claimedTokens;
-  if (!claims || typeof claims !== 'object' || !Array.isArray(placements)) {
+  if (!Array.isArray(placements)) {
     return null;
   }
   const validSet = Array.isArray(validLevelIds)
@@ -518,12 +482,33 @@ export function resolvePcTokenLevelIdForUser({
   let matchCount = 0;
   for (const placement of placements) {
     if (!placement || typeof placement !== 'object') continue;
-    const placementId = typeof placement.id === 'string' ? placement.id : '';
-    if (!placementId) continue;
-    if (claims[placementId] !== userKey) continue;
+    const metadata = placement.metadata && typeof placement.metadata === 'object'
+      ? placement.metadata
+      : placement.meta && typeof placement.meta === 'object'
+        ? placement.meta
+        : {};
+    const explicitProfile = [
+      placement.profileId,
+      placement.profile,
+      placement.playerId,
+      placement.player,
+      metadata.profileId,
+      metadata.profile,
+      metadata.playerId,
+      metadata.player,
+    ].find((value) => typeof value === 'string' && value.trim());
+    const explicitProfileId = typeof explicitProfile === 'string'
+      ? explicitProfile.trim().toLowerCase()
+      : '';
     const rawName = typeof placement.name === 'string' ? placement.name : '';
     const normalizedName = rawName.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-    if (!normalizedName || !namePattern.test(normalizedName)) continue;
+    if (
+      explicitProfileId
+        ? explicitProfileId !== userKey
+        : !normalizedName || !namePattern.test(normalizedName)
+    ) {
+      continue;
+    }
     const placementLevelId = resolvePlacementLevelId(placement);
     if (!isValidLevelId(placementLevelId)) continue;
     matchCount += 1;
@@ -533,67 +518,6 @@ export function resolvePcTokenLevelIdForUser({
     matchedLevelId = placementLevelId;
   }
   return matchCount === 1 ? matchedLevelId : null;
-}
-
-/**
- * Levels v2: normalize the per-scene `claimedTokens` map. Keys are
- * placement ids, values are normalized profile ids. Invalid entries are
- * dropped silently.
- */
-export function normalizeClaimedTokensMap(raw) {
-  if (!raw || typeof raw !== 'object') {
-    return {};
-  }
-  const out = {};
-  Object.keys(raw).forEach((key) => {
-    if (typeof key !== 'string') {
-      return;
-    }
-    const placementId = key.trim();
-    if (!placementId) {
-      return;
-    }
-    const value = raw[key];
-    if (typeof value !== 'string') {
-      return;
-    }
-    const userId = value.trim().toLowerCase();
-    if (!userId) {
-      return;
-    }
-    out[placementId] = userId;
-  });
-  return out;
-}
-
-/**
- * Levels v2 (§5.4): resolve the claimant profile id for a placement from a
- * scene's `claimedTokens` map. Returns a normalized lowercase profile id, or
- * null when the placement is unclaimed (which the plan treats as GM-owned for
- * display and permission purposes).
- *
- * Accepts the per-scene `sceneState` entry (the same object passed to
- * `resolveActiveLevelIdForUser`) so callers do not need to know the storage
- * shape; an unstructured/missing scene entry resolves to null.
- */
-export function getClaimedUserIdForPlacement(sceneState, placementId) {
-  if (!sceneState || typeof sceneState !== 'object') {
-    return null;
-  }
-  const placementKey = typeof placementId === 'string' ? placementId.trim() : '';
-  if (!placementKey) {
-    return null;
-  }
-  const claims = sceneState.claimedTokens;
-  if (!claims || typeof claims !== 'object') {
-    return null;
-  }
-  const value = claims[placementKey];
-  if (typeof value !== 'string') {
-    return null;
-  }
-  const userId = value.trim().toLowerCase();
-  return userId || null;
 }
 
 function resolveActiveLevelId(preferredId, levels = []) {

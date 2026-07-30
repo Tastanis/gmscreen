@@ -189,6 +189,7 @@ test('combat commands apply one focused canonical transition without snapshot re
         sceneId: command.sceneId,
         payload: {
           transitionOperationId: command.payload.transitionOperationId,
+          boundary: command.payload.boundary,
         },
       };
       return response(200, {
@@ -261,6 +262,7 @@ test('combat commands apply one focused canonical transition without snapshot re
   );
   assert.equal(firstClaim.idempotent, false);
   assert.equal(duplicateClaim.idempotent, true);
+  assert.equal(automationClaimEvent.payload.boundary, 'transition');
   assert.equal(applied.length, 1, 'automation claim events do not replay combat transitions');
 });
 

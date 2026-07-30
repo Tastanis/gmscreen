@@ -153,15 +153,6 @@ try {
                 ['id' => 'token-3', 'name' => 'Second Hero', 'column' => 3, 'row' => 2, 'stamina' => 18],
             ],
         ],
-        'sceneState' => [
-            'scene-1' => [
-                'claimedTokens' => [
-                    'token-1' => 'player-a',
-                    'token-2' => 'player-b',
-                    'token-3' => 'player-b',
-                ],
-            ],
-        ],
     ]);
     $migrated = $store->getSnapshot();
     expect(
@@ -331,7 +322,7 @@ try {
         'sceneId' => 'scene-1',
         'payload' => ['combatantId' => 'token-1', 'holderName' => 'Player A'],
     ], 'player-a', false);
-    expect($playerTurn['status'] === 'accepted', 'A player may start a claimed ally turn.');
+    expect($playerTurn['status'] === 'accepted', 'A player may start any ally turn.');
     expect(
         $playerTurn['event']['payload']['combat']['activeCombatantId'] === 'token-1',
         'The accepted event must contain the canonical active combatant.'
@@ -351,33 +342,37 @@ try {
         'The race loser must receive the current-state reason.'
     );
 
-    $unauthorizedComplete = false;
-    try {
-        $store->acceptCombatCommand([
-            'operationId' => 'combat-wrong-player',
-            'type' => 'turn.complete',
-            'baseRevision' => 10,
-            'sceneId' => 'scene-1',
-            'payload' => ['combatantId' => 'token-1'],
-        ], 'player-b', false);
-    } catch (InvalidArgumentException $error) {
-        $unauthorizedComplete = true;
-    }
-    expect($unauthorizedComplete, 'Another player must not complete a claimed combatant turn.');
-    expect($store->getSnapshot()['revision'] === 10, 'Rejected races and permissions must not write.');
-
     $turnComplete = $store->acceptCombatCommand([
         'operationId' => 'combat-turn-complete',
         'type' => 'turn.complete',
         'baseRevision' => 10,
         'sceneId' => 'scene-1',
         'payload' => ['combatantId' => 'token-1'],
-    ], 'player-a', false);
+    ], 'player-b', false);
     expect($turnComplete['event']['revision'] === 11, 'Turn completion must write once.');
     expect(
         $turnComplete['event']['payload']['combat']['currentTeam'] === 'enemy',
         'Turn completion must atomically hand the pick to the other side.'
     );
+    expect(
+        $turnComplete['event']['payload']['transition']['turnEndInteractionOwnerId'] === 'player-b',
+        'The user who ends an allied turn must own its end-of-turn questions.'
+    );
+
+    $playerEnemyTurn = false;
+    try {
+        $store->acceptCombatCommand([
+            'operationId' => 'combat-player-enemy-turn',
+            'type' => 'turn.start',
+            'baseRevision' => 11,
+            'sceneId' => 'scene-1',
+            'payload' => ['combatantId' => 'token-2'],
+        ], 'player-a', false);
+    } catch (InvalidArgumentException $error) {
+        $playerEnemyTurn = true;
+    }
+    expect($playerEnemyTurn, 'Players must not be able to start enemy turns.');
+    expect($store->getSnapshot()['revision'] === 11, 'A rejected enemy turn must not write.');
 
     $enemyTurn = $store->acceptCombatCommand([
         'operationId' => 'combat-enemy-turn',
@@ -404,6 +399,11 @@ try {
         $playerOverride['event']['revision'] === 13
             && $playerOverride['event']['payload']['combat']['activeCombatantId'] === 'token-3',
         'A player-confirmed override must canonically replace an active enemy turn.'
+    );
+    expect(
+        $playerOverride['event']['payload']['transition']['interactionOwnerId'] === 'player-b'
+            && $playerOverride['event']['payload']['transition']['turnEndInteractionOwnerId'] === 'player-b',
+        'The overriding user must own both the replaced turn end and selected ally turn start.'
     );
 
     $roundAdvance = $store->acceptCombatCommand([
@@ -469,6 +469,47 @@ try {
         'Only one GM tab or device may win an automation claim.'
     );
     expect($store->getSnapshot()['revision'] === 17, 'Duplicate automation claims must not advance revision.');
+
+    $wrongBoundaryOwner = false;
+    try {
+        $store->acceptCombatCommand([
+            'operationId' => 'combat-automation:turn-start:wrong-user',
+            'type' => 'combat.automation.claim',
+            'baseRevision' => 17,
+            'sceneId' => 'scene-1',
+            'payload' => [
+                'transitionOperationId' => 'combat-player-override',
+                'boundary' => 'turn-start',
+            ],
+        ], 'player-a', false);
+    } catch (InvalidArgumentException $error) {
+        $wrongBoundaryOwner = true;
+    }
+    expect($wrongBoundaryOwner, 'A different user must not receive another initiator\'s turn prompts.');
+
+    $turnStartClaim = $store->acceptCombatCommand([
+        'operationId' => 'combat-automation:turn-start:combat-player-override',
+        'type' => 'combat.automation.claim',
+        'baseRevision' => 17,
+        'sceneId' => 'scene-1',
+        'payload' => [
+            'transitionOperationId' => 'combat-player-override',
+            'boundary' => 'turn-start',
+        ],
+    ], 'player-b', false);
+    expect($turnStartClaim['event']['revision'] === 18, 'The ally turn initiator may claim start-of-turn prompts.');
+
+    $turnEndClaim = $store->acceptCombatCommand([
+        'operationId' => 'combat-automation:turn-end:combat-player-override',
+        'type' => 'combat.automation.claim',
+        'baseRevision' => 18,
+        'sceneId' => 'scene-1',
+        'payload' => [
+            'transitionOperationId' => 'combat-player-override',
+            'boundary' => 'turn-end',
+        ],
+    ], 'player-b', false);
+    expect($turnEndClaim['event']['revision'] === 19, 'The overriding user may resolve the replaced turn end.');
 
     $store->migrateLegacyBoardDomains([
         'activeSceneId' => 'scene-1',
@@ -561,11 +602,11 @@ try {
         'Canonical grid state must retain the accepted update.'
     );
     $operationalStatus = $store->getOperationalStatus();
-    expect($operationalStatus['revision'] === 21, 'Operational status must report current revision.');
+    expect($operationalStatus['revision'] === 23, 'Operational status must report current revision.');
     expect($operationalStatus['retainedEvents'] <= 2, 'Event retention must remain bounded.');
     expect($operationalStatus['snapshots'] <= 3, 'Snapshot retention must remain bounded.');
     expect(
-        $operationalStatus['operationLedgerEntries'] === 21,
+        $operationalStatus['operationLedgerEntries'] === 23,
         'Idempotency ledger must outlive event and snapshot retention.'
     );
     $hiddenAudienceEvent = [
@@ -707,7 +748,7 @@ try {
     $enemyPlacement = $movementSnapshot['state']['placements']['scene-1']['token-2'];
     expect(
         $store->playerMayMovePlacement($allyPlacement),
-        'Players may move visible allied placements regardless of claim ownership.'
+        'Players may move visible allied placements.'
     );
     expect(
         !$store->playerMayMovePlacement($enemyPlacement),
@@ -734,7 +775,7 @@ try {
     ], 'player-b', false);
     expect(
         $allyMovement['status'] === 'accepted',
-        'A player may move an allied token claimed by another player.'
+        'A player may move any allied token.'
     );
 
     $beforeAbilityEffect = $store->getSnapshot();
@@ -767,11 +808,11 @@ try {
     $sceneDeletion = $store->deleteScene('scene-1', 'GM');
     expect(
         $sceneDeletion['event']['type'] === 'scene.deleted'
-            && $sceneDeletion['event']['revision'] === 24,
+            && $sceneDeletion['event']['revision'] === 26,
         'Scene deletion must emit one canonical revisioned event.'
     );
     $afterSceneDeletion = $store->getSnapshot();
-    foreach (['placements', 'claims', 'combat', 'templates', 'drawings', 'sceneConfig'] as $domain) {
+    foreach (['placements', 'combat', 'templates', 'drawings', 'sceneConfig'] as $domain) {
         expect(
             !isset($afterSceneDeletion['state'][$domain]['scene-1']),
             'Scene deletion must remove scene-owned ' . $domain . '.'

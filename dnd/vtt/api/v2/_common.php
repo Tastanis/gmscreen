@@ -273,18 +273,7 @@ function vttSyncV2ProjectSnapshotForUser(array $snapshot, array $auth): array
         }
     }
     $snapshot['state']['placements'] = $projected;
-    $visibleClaims = [];
-    foreach (($snapshot['state']['claims'] ?? []) as $sceneId => $claims) {
-        if (!is_array($claims)) {
-            continue;
-        }
-        foreach ($claims as $placementId => $owner) {
-            if (isset($projected[$sceneId][$placementId])) {
-                $visibleClaims[$sceneId][$placementId] = $owner;
-            }
-        }
-    }
-    $snapshot['state']['claims'] = $visibleClaims;
+    unset($snapshot['state']['claims']);
     if (!($auth['isGM'] ?? false)) {
         foreach ($sceneConfig as $sceneId => $config) {
             if (is_string($sceneId) && is_array($config)) {
@@ -545,7 +534,7 @@ function vttSyncV2ProjectPlacementEventForUser(array $event, array $auth): array
             }
             $mutation['placement'] = sanitizePlacementForPlayerView($placement);
         } elseif (
-            in_array(($mutation['kind'] ?? ''), ['remove', 'claim.set', 'claim.clear'], true)
+            ($mutation['kind'] ?? '') === 'remove'
             && ($mutation['playerVisible'] ?? false) !== true
         ) {
             continue;

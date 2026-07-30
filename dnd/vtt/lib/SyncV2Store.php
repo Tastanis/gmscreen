@@ -66,9 +66,14 @@ final class SyncV2Store
             throw new RuntimeException('Sync V2 world state is unavailable.');
         }
 
+        $state = $this->decodeObject((string) $row['state_json']);
+        // Token claims were removed in favor of the ally/enemy model. Ignore
+        // any stale claim domain left by an older deployment; the next
+        // canonical write permanently drops it.
+        unset($state['claims']);
         return [
             'revision' => max(0, (int) $row['revision']),
-            'state' => $this->decodeObject((string) $row['state_json']),
+            'state' => $state,
             'serverTime' => (int) $row['updated_at'],
         ];
     }
@@ -90,7 +95,7 @@ final class SyncV2Store
         try {
             $snapshot = $this->getSnapshot();
             $state = $snapshot['state'];
-            foreach (['placements', 'claims', 'combat', 'templates', 'drawings', 'sceneConfig'] as $domain) {
+            foreach (['placements', 'combat', 'templates', 'drawings', 'sceneConfig'] as $domain) {
                 if (is_array($state[$domain] ?? null)) {
                     unset($state[$domain][$sceneId]);
                 }
@@ -142,7 +147,7 @@ final class SyncV2Store
     }
 
     /**
-     * One-time Phase 4 import of legacy placements and claims. Existing
+     * One-time Phase 4 import of legacy placements. Existing
      * Phase 3 movement coordinates and entity revisions win over legacy
      * values so enabling the broader placement domain cannot pop tokens back.
      */
@@ -187,24 +192,8 @@ final class SyncV2Store
                 }
             }
 
-            $claims = [];
-            foreach (($boardState['sceneState'] ?? []) as $sceneId => $sceneState) {
-                if (!is_string($sceneId) || !is_array($sceneState)) {
-                    continue;
-                }
-                $sceneClaims = $sceneState['claimedTokens'] ?? [];
-                if (!is_array($sceneClaims)) {
-                    continue;
-                }
-                foreach ($sceneClaims as $placementId => $owner) {
-                    if (!is_string($placementId) || !is_string($owner) || trim($owner) === '') {
-                        continue;
-                    }
-                    $claims[$sceneId][$placementId] = trim($owner);
-                }
-            }
             $state['placements'] = $canonical;
-            $state['claims'] = $claims;
+            unset($state['claims']);
             $state['placementMigration'] = [
                 'version' => 1,
                 'migratedAt' => $this->nowMilliseconds(),
@@ -573,15 +562,12 @@ final class SyncV2Store
             $state = $snapshot['state'];
             $state['combat'] = is_array($state['combat'] ?? null) ? $state['combat'] : [];
             $state['placements'] = is_array($state['placements'] ?? null) ? $state['placements'] : [];
-            $state['claims'] = is_array($state['claims'] ?? null) ? $state['claims'] : [];
             $sceneId = $normalized['sceneId'];
             $type = $normalized['type'];
             $payload = $normalized['payload'];
             if ($type === 'combat.automation.claim') {
-                if (!$isGm) {
-                    throw new InvalidArgumentException('Only the GM may claim combat automation.');
-                }
                 $transitionOperationId = trim((string) ($payload['transitionOperationId'] ?? ''));
+                $boundary = trim((string) ($payload['boundary'] ?? 'transition'));
                 $transitionEvent = $this->findEventByOperationId($transitionOperationId);
                 if (
                     $transitionOperationId === ''
@@ -590,6 +576,28 @@ final class SyncV2Store
                     || ($transitionEvent['sceneId'] ?? null) !== $sceneId
                 ) {
                     throw new InvalidArgumentException('Combat automation claim references an unknown transition.');
+                }
+                $transitionPayload = is_array($transitionEvent['payload']['transition'] ?? null)
+                    ? $transitionEvent['payload']['transition']
+                    : [];
+                $ownerId = null;
+                if ($boundary === 'turn-start') {
+                    $ownerId = $this->normalizeOptionalId($transitionPayload['interactionOwnerId'] ?? null);
+                } elseif ($boundary === 'turn-end') {
+                    $ownerId = $this->normalizeOptionalId(
+                        $transitionPayload['turnEndInteractionOwnerId']
+                            ?? $transitionPayload['interactionOwnerId']
+                            ?? $transitionPayload['previousInteractionOwnerId']
+                            ?? null
+                    );
+                } elseif ($boundary !== 'transition') {
+                    throw new InvalidArgumentException('Unknown combat automation boundary.');
+                }
+                if (
+                    !$isGm
+                    && ($ownerId === null || strtolower($ownerId) !== strtolower($actorId))
+                ) {
+                    throw new InvalidArgumentException('Only the turn initiator may claim this automation boundary.');
                 }
                 $revision = $snapshot['revision'] + 1;
                 $serverTime = $this->nowMilliseconds();
@@ -601,7 +609,10 @@ final class SyncV2Store
                     'sceneId' => $sceneId,
                     'entityId' => null,
                     'entityRevision' => null,
-                    'payload' => ['transitionOperationId' => $transitionOperationId],
+                    'payload' => [
+                        'transitionOperationId' => $transitionOperationId,
+                        'boundary' => $boundary,
+                    ],
                     'serverTime' => $serverTime,
                 ];
                 $this->insertEvent($event);
@@ -620,6 +631,11 @@ final class SyncV2Store
                 'combatantId' => null,
                 'previousCombatantId' => $combat['activeCombatantId'],
                 'previousRound' => $combat['round'],
+                'interactionOwnerId' => null,
+                'previousInteractionOwnerId' => $this->normalizeOptionalId(
+                    $combat['turnLock']['holderId'] ?? null
+                ),
+                'turnEndInteractionOwnerId' => null,
             ];
 
             if ($type === 'combat.start') {
@@ -667,16 +683,11 @@ final class SyncV2Store
                     return $this->rollbackConflict('combatant_not_found', $snapshot);
                 }
                 $team = $this->combatantTeam($placement);
-                $actorControlsCombatant = $isGm
-                    || $this->actorControlsCombatant($state, $sceneId, $combatantId, $actorId, $combat);
-                if (!$actorControlsCombatant) {
-                    throw new InvalidArgumentException('You do not control this combatant.');
-                }
                 if (!$isGm && $team !== 'ally') {
                     throw new InvalidArgumentException('Players cannot control enemy turns.');
                 }
                 $override = !empty($payload['override'])
-                    && ($isGm || ($actorControlsCombatant && $team === 'ally'));
+                    && ($isGm || $team === 'ally');
                 if (in_array($combatantId, $combat['completedCombatantIds'], true)) {
                     return $this->rollbackConflict('combatant_already_completed', $snapshot);
                 }
@@ -714,6 +725,10 @@ final class SyncV2Store
                     'lockedAt' => $now,
                 ];
                 $transition['combatantId'] = $combatantId;
+                $transition['interactionOwnerId'] = $actorId;
+                if ($activeId !== null) {
+                    $transition['turnEndInteractionOwnerId'] = $actorId;
+                }
             } elseif ($type === 'turn.complete' || $type === 'turn.cancel') {
                 if (!$combat['active'] || $combat['activeCombatantId'] === null) {
                     return $this->rollbackConflict('no_active_turn', $snapshot);
@@ -726,11 +741,13 @@ final class SyncV2Store
                 if ($activeId === null || $requestedId !== $activeId) {
                     return $this->rollbackConflict('active_combatant_mismatch', $snapshot);
                 }
-                if (!$isGm && !$this->actorControlsCombatant($state, $sceneId, $activeId, $actorId, $combat)) {
-                    throw new InvalidArgumentException('You do not control the active combatant.');
-                }
                 $activePlacement = $state['placements'][$sceneId][$activeId] ?? [];
                 $finishedTeam = $this->combatantTeam(is_array($activePlacement) ? $activePlacement : []);
+                if (!$isGm && $finishedTeam !== 'ally') {
+                    throw new InvalidArgumentException('Players cannot control enemy turns.');
+                }
+                $transition['interactionOwnerId'] = $actorId;
+                $transition['turnEndInteractionOwnerId'] = $actorId;
                 if ($type === 'turn.complete') {
                     if (!in_array($activeId, $combat['completedCombatantIds'], true)) {
                         $combat['completedCombatantIds'][] = $activeId;
@@ -887,7 +904,6 @@ final class SyncV2Store
             $state['placements'] = is_array($state['placements'] ?? null)
                 ? $state['placements']
                 : [];
-            $state['claims'] = is_array($state['claims'] ?? null) ? $state['claims'] : [];
             $mutations = [];
 
             foreach ($normalized['actions'] as $action) {
@@ -896,13 +912,7 @@ final class SyncV2Store
                 $state['placements'][$sceneId] = is_array($state['placements'][$sceneId] ?? null)
                     ? $state['placements'][$sceneId]
                     : [];
-                $state['claims'][$sceneId] = is_array($state['claims'][$sceneId] ?? null)
-                    ? $state['claims'][$sceneId]
-                    : [];
                 $current = $state['placements'][$sceneId][$placementId] ?? null;
-                $owner = trim((string) ($state['claims'][$sceneId][$placementId] ?? ''));
-                $ownsPlacement = $owner !== ''
-                    && strtolower($owner) === strtolower($actorId);
 
                 if ($action['kind'] === 'add') {
                     if ($current !== null) {
@@ -927,46 +937,6 @@ final class SyncV2Store
                     continue;
                 }
 
-                if ($action['kind'] === 'claim.set') {
-                    if (!is_array($current)) {
-                        return $this->rollbackConflict('placement_missing', $snapshot);
-                    }
-                    $requestedOwner = $action['owner'] ?? $actorId;
-                    if (!$isGm && strtolower($requestedOwner) !== strtolower($actorId)) {
-                        throw new InvalidArgumentException('Players may only claim tokens for themselves.');
-                    }
-                    if (!$isGm && $this->placementIsHidden($current)) {
-                        throw new InvalidArgumentException('Hidden placements cannot be claimed.');
-                    }
-                    if (!$isGm && $owner !== '' && !$ownsPlacement) {
-                        return $this->rollbackConflict('placement_already_claimed', $snapshot);
-                    }
-                    $state['claims'][$sceneId][$placementId] = $requestedOwner;
-                    $mutations[] = [
-                        'kind' => 'claim.set',
-                        'sceneId' => $sceneId,
-                        'placementId' => $placementId,
-                        'owner' => $requestedOwner,
-                        'playerVisible' => !$this->placementIsHidden($current),
-                    ];
-                    continue;
-                }
-
-                if ($action['kind'] === 'claim.clear') {
-                    if (!$isGm && $owner !== '' && !$ownsPlacement) {
-                        throw new InvalidArgumentException('Players may only release their own claims.');
-                    }
-                    unset($state['claims'][$sceneId][$placementId]);
-                    $mutations[] = [
-                        'kind' => 'claim.clear',
-                        'sceneId' => $sceneId,
-                        'placementId' => $placementId,
-                        'playerVisible' => is_array($current)
-                            && !$this->placementIsHidden($current),
-                    ];
-                    continue;
-                }
-
                 if (!is_array($current)) {
                     return $this->rollbackConflict('placement_missing', $snapshot);
                 }
@@ -977,16 +947,13 @@ final class SyncV2Store
                 if (!$isGm && $this->placementIsHidden($current)) {
                     throw new InvalidArgumentException('You cannot change this placement.');
                 }
-                if (!$isGm && $action['kind'] === 'remove' && !$ownsPlacement) {
-                    throw new InvalidArgumentException('You cannot change this placement.');
+                if (!$isGm && $action['kind'] === 'remove') {
+                    throw new InvalidArgumentException('Only the GM may remove placements.');
                 }
                 $nextRevision = $currentRevision + 1;
 
                 if ($action['kind'] === 'remove') {
-                    unset(
-                        $state['placements'][$sceneId][$placementId],
-                        $state['claims'][$sceneId][$placementId]
-                    );
+                    unset($state['placements'][$sceneId][$placementId]);
                     $mutations[] = [
                         'kind' => 'remove',
                         'sceneId' => $sceneId,
@@ -1713,7 +1680,7 @@ final class SyncV2Store
                 throw new InvalidArgumentException('Each placement action must be an object.');
             }
             $kind = (string) ($action['kind'] ?? '');
-            if (!in_array($kind, ['add', 'patch', 'remove', 'claim.set', 'claim.clear'], true)) {
+            if (!in_array($kind, ['add', 'patch', 'remove'], true)) {
                 throw new InvalidArgumentException('Unsupported placement action.');
             }
             $sceneId = $this->normalizeOptionalId($action['sceneId'] ?? null);
@@ -1735,9 +1702,6 @@ final class SyncV2Store
                 $entry['entityRevision'] = $this->normalizeEntityRevision($action);
             } elseif ($kind === 'remove') {
                 $entry['entityRevision'] = $this->normalizeEntityRevision($action);
-            } elseif ($kind === 'claim.set') {
-                $owner = trim((string) ($action['owner'] ?? ''));
-                $entry['owner'] = $owner === '' ? null : $owner;
             }
             $normalized[] = $entry;
         }
@@ -1927,30 +1891,6 @@ final class SyncV2Store
             || !empty($metadata['monsterId'])
             ? 'enemy'
             : 'ally';
-    }
-
-    private function actorControlsCombatant(
-        array $state,
-        string $sceneId,
-        string $combatantId,
-        string $actorId,
-        array $combat
-    ): bool {
-        $actorKey = strtolower(trim($actorId));
-        $ids = [$combatantId];
-        foreach (($combat['groups'] ?? []) as $group) {
-            if (!is_array($group) || ($group['representativeId'] ?? null) !== $combatantId) {
-                continue;
-            }
-            $ids = array_merge($ids, is_array($group['memberIds'] ?? null) ? $group['memberIds'] : []);
-        }
-        foreach (array_unique($ids) as $id) {
-            $owner = strtolower(trim((string) ($state['claims'][$sceneId][$id] ?? '')));
-            if ($owner !== '' && $owner === $actorKey) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private function endCombatState(array $combat): array

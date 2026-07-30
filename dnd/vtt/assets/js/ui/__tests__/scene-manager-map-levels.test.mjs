@@ -310,7 +310,7 @@ describe('Levels v2 — deleteSceneMapLevelCascade (Step 9)', () => {
     assert.notEqual(mapLevels.activeLevelId, 'upper');
   });
 
-  test('remaps userLevelState entries pointing at the deleted level (preserving source/tokenId)', () => {
+  test('remaps userLevelState entries pointing at the deleted level while preserving source', () => {
     const store = createStore(
       createInitialState({
         mapLevels: {
@@ -341,70 +341,6 @@ describe('Levels v2 — deleteSceneMapLevelCascade (Step 9)', () => {
     assert.ok(userLevelState.gm.updatedAt >= 100);
   });
 
-  test('claim-driven invariant: remapped claimed token overwrites claimant userLevelState to source: claim', () => {
-    const store = createStore(
-      createInitialState({
-        mapLevels: {
-          activeLevelId: 'upper',
-          levels: [
-            { id: 'ground', name: 'Ground', mapUrl: '/maps/ground.png', zIndex: 0 },
-            { id: 'upper', name: 'Upper', mapUrl: '/maps/upper.png', zIndex: 1 },
-          ],
-        },
-        placements: [
-          { id: 'p-cal', levelId: 'upper', column: 2, row: 2 },
-        ],
-        claimedTokens: {
-          'p-cal': 'cal',
-        },
-        // Cal's state happens to point at a non-deleted level. The claim-driven
-        // invariant should still pull cal to the fallback when the token moves.
-        userLevelState: {
-          cal: { levelId: 'ground', source: 'manual', updatedAt: 100 },
-        },
-      })
-    );
-
-    const result = sceneManager.deleteSceneMapLevelCascade(store, 'scene-1', 'upper');
-    assert.deepEqual(result.remappedClaimUserIds, ['cal']);
-
-    const userLevelState = store.getState().boardState.sceneState['scene-1'].userLevelState;
-    assert.equal(userLevelState.cal.levelId, 'ground');
-    assert.equal(userLevelState.cal.source, 'claim');
-    assert.equal(userLevelState.cal.tokenId, 'p-cal');
-    assert.ok(userLevelState.cal.updatedAt > 100);
-  });
-
-  test('claim source overrides pass-A remap when the same user has both signals', () => {
-    const store = createStore(
-      createInitialState({
-        mapLevels: {
-          activeLevelId: 'upper',
-          levels: [
-            { id: 'ground', name: 'Ground', mapUrl: '/maps/ground.png', zIndex: 0 },
-            { id: 'upper', name: 'Upper', mapUrl: '/maps/upper.png', zIndex: 1 },
-          ],
-        },
-        placements: [
-          { id: 'p-indigo', levelId: 'upper', column: 2, row: 2 },
-        ],
-        claimedTokens: {
-          'p-indigo': 'indigo',
-        },
-        userLevelState: {
-          // Indigo's state pointed at the deleted level AND the claim is on it.
-          indigo: { levelId: 'upper', source: 'claim', tokenId: 'p-indigo', updatedAt: 100 },
-        },
-      })
-    );
-
-    sceneManager.deleteSceneMapLevelCascade(store, 'scene-1', 'upper');
-
-    const userLevelState = store.getState().boardState.sceneState['scene-1'].userLevelState;
-    assert.equal(userLevelState.indigo.levelId, 'ground');
-    assert.equal(userLevelState.indigo.source, 'claim');
-    assert.equal(userLevelState.indigo.tokenId, 'p-indigo');
-  });
 });
 
 function createStore(initialState) {
@@ -423,7 +359,6 @@ function createInitialState({
   mapLevels = { levels: [], activeLevelId: null },
   placements = [],
   userLevelState = {},
-  claimedTokens = {},
 } = {}) {
   return {
     grid: { size: 64, visible: true, locked: false, offsetX: 0, offsetY: 0 },
@@ -449,7 +384,6 @@ function createInitialState({
           overlay: { mapUrl: null, mask: { visible: true, polygons: [] }, layers: [], activeLayerId: null },
           mapLevels,
           userLevelState,
-          claimedTokens,
         },
       },
       overlay: { mapUrl: null, mask: { visible: true, polygons: [] }, layers: [], activeLayerId: null },

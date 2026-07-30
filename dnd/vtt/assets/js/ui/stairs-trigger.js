@@ -355,17 +355,6 @@ export function resolveStairLevelFollower(sceneState, placementId, moverUserId) 
   const normalizedMover = typeof moverUserId === 'string'
     ? moverUserId.trim().toLowerCase()
     : '';
-  const claimedRaw = sceneState?.claimedTokens?.[placementId];
-  const claimedUserId = typeof claimedRaw === 'string'
-    ? claimedRaw.trim().toLowerCase()
-    : '';
-  if (claimedUserId) {
-    return {
-      userId: claimedUserId,
-      source: 'claim',
-      tokenId: placementId,
-    };
-  }
   return {
     userId: normalizedMover,
     source: 'manual',

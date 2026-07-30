@@ -2,7 +2,6 @@ import { normalizeGridState } from './grid.js';
 import { normalizeCombatStateEntry } from './combat.js';
 import { normalizeFogOfWarEntry } from './fog.js';
 import {
-  normalizeClaimedTokensMap,
   normalizeMapLevelsState,
   normalizeUserLevelStateMap,
 } from './map-levels.js';
@@ -28,9 +27,8 @@ export function normalizeSceneBoardState(raw = {}) {
     const combat = normalizeCombatStateEntry(value.combat ?? value.combatState ?? null);
     const mapLevels = normalizeMapLevelsState(value.mapLevels ?? null, { sceneGrid: grid });
     const fogOfWar = normalizeFogOfWarEntry(value.fogOfWar ?? null);
-    const claimedTokens = normalizeClaimedTokensMap(value.claimedTokens ?? null);
     const userLevelState = normalizeUserLevelStateMap(value.userLevelState ?? null);
-    const entry = { grid, mapLevels, claimedTokens, userLevelState };
+    const entry = { grid, mapLevels, userLevelState };
 
     if (combat) {
       entry.combat = combat;

@@ -106,7 +106,6 @@ export function createTokenMovementRuntime({
           changeSet?.placements?.added?.length
           || changeSet?.placements?.updated?.length
           || changeSet?.placements?.removed?.length
-          || changeSet?.claims
         )
       ) {
         applyConfirmedPlacementBatch(
@@ -325,15 +324,6 @@ export function createTokenMovementRuntime({
             entityRevision: Number(current?._entityRevision) || 0,
           });
         }
-      } else if (op.type === 'claim.set') {
-        actions.push({
-          kind: 'claim.set',
-          sceneId,
-          placementId,
-          owner: op.userId ?? op.owner ?? null,
-        });
-      } else if (op.type === 'claim.clear') {
-        actions.push({ kind: 'claim.clear', sceneId, placementId });
       }
     }
     return actions;
@@ -446,20 +436,21 @@ export function createTokenMovementRuntime({
     return results;
   }
 
-  function automationClaimOperationId(transitionOperationId) {
-    const direct = `combat-automation:${transitionOperationId}`;
+  function automationClaimOperationId(transitionOperationId, boundary = 'transition') {
+    const direct = `combat-automation:${boundary}:${transitionOperationId}`;
     if (direct.length <= 128) return direct;
     let first = 2166136261;
     let second = 2246822519;
-    for (let index = 0; index < transitionOperationId.length; index += 1) {
-      const code = transitionOperationId.charCodeAt(index);
+    const hashInput = `${boundary}:${transitionOperationId}`;
+    for (let index = 0; index < hashInput.length; index += 1) {
+      const code = hashInput.charCodeAt(index);
       first = Math.imul(first ^ code, 16777619) >>> 0;
       second = Math.imul(second ^ code, 3266489917) >>> 0;
     }
     return `combat-automation:${first.toString(16)}${second.toString(16)}`;
   }
 
-  async function claimCombatAutomation(sceneId, transitionOperationId) {
+  async function claimCombatAutomation(sceneId, transitionOperationId, boundary = 'transition') {
     if (!combatEnabled) return null;
     const target = String(transitionOperationId ?? '').trim();
     if (!sceneId || !target) {
@@ -468,10 +459,10 @@ export function createTokenMovementRuntime({
     await start();
     return commandClient.submit(
       'combat.automation.claim',
-      { transitionOperationId: target },
+      { transitionOperationId: target, boundary },
       {
         sceneId,
-        operationId: automationClaimOperationId(target),
+        operationId: automationClaimOperationId(target, boundary),
       }
     );
   }
@@ -493,13 +484,6 @@ export function createTokenMovementRuntime({
       boardState.sceneState && typeof boardState.sceneState === 'object'
         ? boardState.sceneState
         : {};
-    for (const [sceneId, claims] of Object.entries(snapshot?.state?.claims ?? {})) {
-      boardState.sceneState[sceneId] =
-        boardState.sceneState[sceneId] && typeof boardState.sceneState[sceneId] === 'object'
-          ? boardState.sceneState[sceneId]
-          : {};
-      boardState.sceneState[sceneId].claimedTokens = { ...(claims ?? {}) };
-    }
     for (const [sceneId, combat] of Object.entries(snapshot?.state?.combat ?? {})) {
       boardState.sceneState[sceneId] =
         boardState.sceneState[sceneId] && typeof boardState.sceneState[sceneId] === 'object'

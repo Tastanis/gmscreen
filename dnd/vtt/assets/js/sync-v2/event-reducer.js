@@ -121,16 +121,6 @@ function reducePlacementBatch(state, event, changes) {
     if (!sceneId || !placementId) {
       throw new Error('Placement mutation requires sceneId and placementId');
     }
-    if (mutation.kind === 'claim.set' || mutation.kind === 'claim.clear') {
-      const claims = getSceneCollection(state, 'claims', sceneId);
-      if (mutation.kind === 'claim.set') {
-        claims[placementId] = String(mutation.owner ?? '');
-      } else {
-        delete claims[placementId];
-      }
-      changes.claims = true;
-      continue;
-    }
     const placements = getSceneCollection(state, 'placements', sceneId);
     const current = placements[placementId];
     if (mutation.kind === 'remove') {
@@ -140,8 +130,6 @@ function reducePlacementBatch(state, event, changes) {
         delete placements[placementId];
         pushUnique(changes.placements.removed, placementId);
       }
-      const claims = getSceneCollection(state, 'claims', sceneId);
-      delete claims[placementId];
       continue;
     }
     if (mutation.kind !== 'upsert' || !mutation.placement || typeof mutation.placement !== 'object') {
@@ -433,7 +421,7 @@ function reduceSceneDeleted(state, event, changes) {
   if (!sceneId) {
     throw new Error('scene.deleted requires sceneId');
   }
-  for (const domain of ['placements', 'claims', 'combat', 'templates', 'drawings', 'sceneConfig']) {
+  for (const domain of ['placements', 'combat', 'templates', 'drawings', 'sceneConfig']) {
     if (state[domain] && typeof state[domain] === 'object') {
       state[domain] = { ...state[domain] };
       delete state[domain][sceneId];

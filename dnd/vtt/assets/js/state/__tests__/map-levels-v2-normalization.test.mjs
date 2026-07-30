@@ -6,9 +6,7 @@ import {
   KNOWN_LEVEL_USER_IDS,
   PLAYER_CHARACTER_USER_IDS,
   buildLevelViewModel,
-  getClaimedUserIdForPlacement,
   levelIdExistsInViewModel,
-  normalizeClaimedTokensMap,
   normalizeUserLevelStateEntry,
   normalizeUserLevelStateMap,
   resolveActiveLevelIdForUser,
@@ -18,487 +16,145 @@ import {
 } from '../normalize/map-levels.js';
 import { normalizeSceneBoardState } from '../normalize/scene-board-state.js';
 
-// Levels v2 (Step 1): exercises the new constant, view-model helper, and
-// per-scene normalization for claim and user-level state. The plan in
-// `dnd/vtt/LEVELS_V2_PLAN.md` keeps Level 0 virtual (derived from the
-// scene's base map URL) and stores Level 1+ in the existing levels array.
-
-describe('Levels v2 — base level constant and placement resolution', () => {
-  test('BASE_MAP_LEVEL_ID is the canonical level-0 id', () => {
+describe('map-level normalization', () => {
+  test('uses the virtual base level for placements without an explicit level', () => {
     assert.equal(BASE_MAP_LEVEL_ID, 'level-0');
+    assert.equal(resolvePlacementLevelId({}), BASE_MAP_LEVEL_ID);
+    assert.equal(resolvePlacementLevelId({ levelId: ' upper ' }), 'upper');
   });
 
-  test('resolvePlacementLevelId returns Level 0 when missing/null/blank', () => {
-    assert.equal(resolvePlacementLevelId({}), 'level-0');
-    assert.equal(resolvePlacementLevelId({ levelId: null }), 'level-0');
-    assert.equal(resolvePlacementLevelId({ levelId: '' }), 'level-0');
-    assert.equal(resolvePlacementLevelId({ levelId: '   ' }), 'level-0');
-  });
-
-  test('resolvePlacementLevelId trims and returns a stored level id', () => {
-    assert.equal(resolvePlacementLevelId({ levelId: '  map-level-a  ' }), 'map-level-a');
-  });
-});
-
-describe('Levels v2 — KNOWN_LEVEL_USER_IDS roster', () => {
-  test('lists the configured chat/player roster as lowercase profile ids', () => {
-    // Step 4 (§5.3): Activate must pull every known user, not only
-    // currently connected websocket clients. The roster mirrors the
-    // password→user map in dnd/index.php normalized to lowercase.
-    assert.deepEqual(KNOWN_LEVEL_USER_IDS, ['gm', 'cal', 'sharon', 'indigo', 'zepha']);
-  });
-
-  test('is frozen so callers cannot mutate the shared roster', () => {
-    assert.equal(Object.isFrozen(KNOWN_LEVEL_USER_IDS), true);
-  });
-});
-
-describe('Levels v2 — buildLevelViewModel', () => {
-  test('places a virtual Level 0 entry first with the scene base map url', () => {
+  test('builds a sorted view model with the base map first', () => {
     const view = buildLevelViewModel({
       baseMapUrl: '/maps/base.png',
-      mapLevels: { levels: [{ id: 'a', name: 'Upper', zIndex: 1 }] },
-      sceneGrid: { size: 80 },
-    });
-    assert.equal(view.length, 2);
-    assert.equal(view[0].id, 'level-0');
-    assert.equal(view[0].mapUrl, '/maps/base.png');
-    assert.equal(view[0].isBaseLevel, true);
-    assert.equal(view[0].grid.size, 80);
-    assert.equal(view[1].id, 'a');
-    assert.equal(view[1].isBaseLevel, false);
-  });
-
-  test('sorts stored levels by zIndex ascending', () => {
-    const view = buildLevelViewModel({
-      baseMapUrl: '/m.png',
       mapLevels: {
         levels: [
           { id: 'top', zIndex: 5 },
-          { id: 'mid', zIndex: 2 },
-          { id: 'low', zIndex: 0 },
+          { id: 'low', zIndex: 1 },
         ],
       },
+      sceneGrid: { size: 80 },
     });
+    assert.deepEqual(view.map((entry) => entry.id), ['level-0', 'low', 'top']);
+    assert.equal(view[0].mapUrl, '/maps/base.png');
+    assert.equal(view[0].grid.size, 80);
+    assert.equal(levelIdExistsInViewModel('top', view), true);
+    assert.equal(resolveTopmostLevelId({ mapLevels: { levels: view.slice(1) } }), 'top');
+  });
+
+  test('normalizes user level state without ownership metadata', () => {
     assert.deepEqual(
-      view.map((entry) => entry.id),
-      ['level-0', 'low', 'mid', 'top']
-    );
-  });
-
-  test('handles missing baseMapUrl by setting null', () => {
-    const view = buildLevelViewModel({ baseMapUrl: null, mapLevels: { levels: [] } });
-    assert.equal(view.length, 1);
-    assert.equal(view[0].mapUrl, null);
-  });
-
-  test('levelIdExistsInViewModel matches level-0 and stored ids', () => {
-    const view = buildLevelViewModel({
-      baseMapUrl: '/m.png',
-      mapLevels: { levels: [{ id: 'a' }] },
-    });
-    assert.equal(levelIdExistsInViewModel('level-0', view), true);
-    assert.equal(levelIdExistsInViewModel('a', view), true);
-    assert.equal(levelIdExistsInViewModel('missing', view), false);
-    assert.equal(levelIdExistsInViewModel('', view), false);
-  });
-});
-
-describe('Levels v2 — resolveTopmostLevelId', () => {
-  test('returns the highest-zIndex stored level id', () => {
-    assert.equal(
-      resolveTopmostLevelId({
-        baseMapUrl: '/m.png',
-        mapLevels: {
-          levels: [
-            { id: 'low', zIndex: 0 },
-            { id: 'top', zIndex: 5 },
-            { id: 'mid', zIndex: 2 },
-          ],
-        },
+      normalizeUserLevelStateEntry({
+        levelId: ' upper ',
+        source: 'claim',
+        tokenId: 'token-1',
+        updatedAt: '12',
       }),
-      'top'
+      { levelId: 'upper', source: 'manual', updatedAt: 12 },
+    );
+    assert.deepEqual(
+      normalizeUserLevelStateMap({
+        Indigo: { levelId: 'upper', source: 'activate', updatedAt: 4 },
+        '': { levelId: 'ignored' },
+      }),
+      { indigo: { levelId: 'upper', source: 'activate', updatedAt: 4 } },
     );
   });
 
-  test('falls back to BASE_MAP_LEVEL_ID when no stored levels exist', () => {
-    assert.equal(
-      resolveTopmostLevelId({ baseMapUrl: null, mapLevels: { levels: [] } }),
-      BASE_MAP_LEVEL_ID
-    );
-    assert.equal(resolveTopmostLevelId({}), BASE_MAP_LEVEL_ID);
-  });
-});
-
-describe('Levels v2 — normalizeUserLevelStateEntry', () => {
-  test('rejects entries without a levelId', () => {
-    assert.equal(normalizeUserLevelStateEntry({}), null);
-    assert.equal(normalizeUserLevelStateEntry({ levelId: '' }), null);
-  });
-
-  test('coerces an unknown source to manual and clamps updatedAt', () => {
-    const entry = normalizeUserLevelStateEntry({
-      levelId: '  level-0  ',
-      source: 'BoGuS',
-      updatedAt: '12345',
-    });
-    assert.equal(entry.levelId, 'level-0');
-    assert.equal(entry.source, 'manual');
-    assert.equal(entry.updatedAt, 12345);
-  });
-
-  test('preserves a tokenId when present', () => {
-    const entry = normalizeUserLevelStateEntry({
-      levelId: 'a',
-      source: 'claim',
-      tokenId: ' placement-1 ',
-    });
-    assert.equal(entry.tokenId, 'placement-1');
-  });
-});
-
-describe('Levels v2 — normalizeUserLevelStateMap and normalizeClaimedTokensMap', () => {
-  test('normalizes profile id keys to lowercase and drops invalid entries', () => {
-    const result = normalizeUserLevelStateMap({
-      Indigo: { levelId: 'level-0' },
-      '': { levelId: 'a' },
-      sharon: 'not-an-object',
-      bogus: { levelId: '' },
-    });
-    assert.deepEqual(Object.keys(result).sort(), ['indigo']);
-    assert.equal(result.indigo.levelId, 'level-0');
-  });
-
-  test('normalizes claim map keys (placement ids) and values (profile ids)', () => {
-    const result = normalizeClaimedTokensMap({
-      'placement-1': 'Indigo',
-      '': 'sharon',
-      'placement-2': '',
-      'placement-3': 'CAL',
-    });
-    assert.deepEqual(result, {
-      'placement-1': 'indigo',
-      'placement-3': 'cal',
-    });
-  });
-});
-
-describe('Levels v2 — scene-board-state normalization preserves new fields', () => {
-  test('claimedTokens and userLevelState round-trip through the scene normalizer', () => {
+  test('scene normalization drops obsolete token-claim state', () => {
     const normalized = normalizeSceneBoardState({
       'scene-1': {
         grid: { size: 64 },
-        claimedTokens: { 'placement-1': 'Indigo' },
+        claimedTokens: { 'token-1': 'indigo' },
         userLevelState: {
-          Indigo: { levelId: 'level-0', source: 'claim', tokenId: 'placement-1', updatedAt: 100 },
+          Indigo: { levelId: 'upper', source: 'manual', updatedAt: 10 },
         },
       },
     });
-    assert.deepEqual(normalized['scene-1'].claimedTokens, { 'placement-1': 'indigo' });
-    assert.deepEqual(normalized['scene-1'].userLevelState.indigo, {
-      levelId: 'level-0',
-      source: 'claim',
-      updatedAt: 100,
-      tokenId: 'placement-1',
-    });
-  });
-
-  test('absent fields default to empty maps', () => {
-    const normalized = normalizeSceneBoardState({
-      'scene-1': { grid: { size: 64 } },
-    });
-    assert.deepEqual(normalized['scene-1'].claimedTokens, {});
-    assert.deepEqual(normalized['scene-1'].userLevelState, {});
-  });
-});
-
-describe('Levels v2 — resolveActiveLevelIdForUser', () => {
-  test('returns BASE_MAP_LEVEL_ID when no scene state is provided', () => {
-    assert.equal(
-      resolveActiveLevelIdForUser({ userId: 'gm' }),
-      BASE_MAP_LEVEL_ID,
+    assert.equal(Object.hasOwn(normalized['scene-1'], 'claimedTokens'), false);
+    assert.deepEqual(
+      normalized['scene-1'].userLevelState.indigo,
+      { levelId: 'upper', source: 'manual', updatedAt: 10 },
     );
   });
 
-  test('returns BASE_MAP_LEVEL_ID when the user has no entry', () => {
-    const sceneState = { userLevelState: {} };
-    assert.equal(
-      resolveActiveLevelIdForUser({ sceneState, userId: 'sharon' }),
-      BASE_MAP_LEVEL_ID,
-    );
-  });
-
-  test('returns the stored level id from userLevelState (lowercased userId match)', () => {
-    const sceneState = {
-      userLevelState: { gm: { levelId: 'map-level-a', source: 'manual', updatedAt: 1 } },
-    };
-    assert.equal(
-      resolveActiveLevelIdForUser({ sceneState, userId: 'GM' }),
-      'map-level-a',
-    );
-  });
-
-  test('rejects an unknown level id when validLevelIds is provided', () => {
-    const sceneState = {
-      userLevelState: { gm: { levelId: 'gone', source: 'manual', updatedAt: 1 } },
-    };
+  test('resolves a user level from explicit state and otherwise uses the base map', () => {
     assert.equal(
       resolveActiveLevelIdForUser({
-        sceneState,
-        userId: 'gm',
-        validLevelIds: ['level-0', 'map-level-a'],
+        sceneState: {
+          userLevelState: {
+            indigo: { levelId: 'upper', source: 'manual', updatedAt: 1 },
+          },
+        },
+        userId: 'INDIGO',
+        validLevelIds: ['level-0', 'upper'],
       }),
-      BASE_MAP_LEVEL_ID,
+      'upper',
     );
-  });
-
-  test('falls back to the most recent claimed token level', () => {
-    const sceneState = {
-      claimedTokens: { 't1': 'indigo', 't2': 'indigo' },
-      userLevelState: {},
-    };
-    const placements = [
-      { id: 't1', levelId: 'map-level-a', _lastModified: 100 },
-      { id: 't2', levelId: 'map-level-b', _lastModified: 500 },
-    ];
     assert.equal(
       resolveActiveLevelIdForUser({
-        sceneState,
+        sceneState: {
+          userLevelState: {
+            indigo: { levelId: 'deleted', source: 'manual', updatedAt: 1 },
+          },
+        },
         userId: 'indigo',
-        placements,
-        validLevelIds: ['level-0', 'map-level-a', 'map-level-b'],
-      }),
-      'map-level-b',
-    );
-  });
-
-  test('userLevelState takes priority over claimed token level', () => {
-    const sceneState = {
-      claimedTokens: { 't1': 'indigo' },
-      userLevelState: {
-        indigo: { levelId: 'map-level-x', source: 'manual', updatedAt: 200 },
-      },
-    };
-    const placements = [
-      { id: 't1', levelId: 'map-level-a', _lastModified: 999 },
-    ];
-    assert.equal(
-      resolveActiveLevelIdForUser({
-        sceneState,
-        userId: 'indigo',
-        placements,
-        validLevelIds: ['level-0', 'map-level-a', 'map-level-x'],
-      }),
-      'map-level-x',
-    );
-  });
-
-  test('claim fallback skips other users tokens', () => {
-    const sceneState = {
-      claimedTokens: { 't1': 'sharon' },
-      userLevelState: {},
-    };
-    const placements = [
-      { id: 't1', levelId: 'map-level-a', _lastModified: 1 },
-    ];
-    assert.equal(
-      resolveActiveLevelIdForUser({
-        sceneState,
-        userId: 'indigo',
-        placements,
+        validLevelIds: ['level-0', 'upper'],
       }),
       BASE_MAP_LEVEL_ID,
     );
   });
 });
 
-describe('Login-time PC token resolver — resolvePcTokenLevelIdForUser', () => {
-  test('returns null without a userId or sceneState', () => {
-    assert.equal(resolvePcTokenLevelIdForUser({}), null);
-    assert.equal(resolvePcTokenLevelIdForUser({ userId: 'sharon' }), null);
-    assert.equal(
-      resolvePcTokenLevelIdForUser({ sceneState: { claimedTokens: {} } }),
-      null,
-    );
-  });
-
-  test('returns the level of a single PC-named claimed token', () => {
-    const sceneState = { claimedTokens: { 't1': 'sharon' } };
-    const placements = [
-      { id: 't1', name: 'Sharon Stormwind', levelId: 'map-level-a' },
-    ];
-    assert.equal(
-      resolvePcTokenLevelIdForUser({
-        sceneState,
-        userId: 'SHARON',
-        placements,
-        validLevelIds: ['level-0', 'map-level-a'],
-      }),
-      'map-level-a',
-    );
-  });
-
-  test('ignores claimed tokens whose name does not contain the PC alias', () => {
-    // e.g. a familiar/summon claimed by the player but not named after them.
-    const sceneState = { claimedTokens: { 't1': 'sharon', 't2': 'sharon' } };
-    const placements = [
-      { id: 't1', name: 'Inkfang the Familiar', levelId: 'map-level-a' },
-      { id: 't2', name: 'Sharon Stormwind', levelId: 'map-level-b' },
-    ];
-    assert.equal(
-      resolvePcTokenLevelIdForUser({
-        sceneState,
-        userId: 'sharon',
-        placements,
-        validLevelIds: ['level-0', 'map-level-a', 'map-level-b'],
-      }),
-      'map-level-b',
-    );
-  });
-
-  test('returns null when two PC-named tokens are claimed', () => {
-    const sceneState = { claimedTokens: { 't1': 'sharon', 't2': 'sharon' } };
-    const placements = [
-      { id: 't1', name: 'Sharon (illusion)', levelId: 'map-level-a' },
-      { id: 't2', name: 'Sharon Stormwind', levelId: 'map-level-b' },
-    ];
-    assert.equal(
-      resolvePcTokenLevelIdForUser({
-        sceneState,
-        userId: 'sharon',
-        placements,
-        validLevelIds: ['level-0', 'map-level-a', 'map-level-b'],
-      }),
-      null,
-    );
-  });
-
-  test('returns null when the only PC token is on an unknown level', () => {
-    const sceneState = { claimedTokens: { 't1': 'indigo' } };
-    const placements = [
-      { id: 't1', name: 'Indigo', levelId: 'map-level-deleted' },
-    ];
-    assert.equal(
-      resolvePcTokenLevelIdForUser({
-        sceneState,
-        userId: 'indigo',
-        placements,
-        validLevelIds: ['level-0', 'map-level-a'],
-      }),
-      null,
-    );
-  });
-
-  test('does not match a token claimed by another user', () => {
-    const sceneState = { claimedTokens: { 't1': 'sharon' } };
-    const placements = [
-      { id: 't1', name: 'Sharon Stormwind', levelId: 'map-level-a' },
-    ];
-    assert.equal(
-      resolvePcTokenLevelIdForUser({
-        sceneState,
-        userId: 'indigo',
-        placements,
-      }),
-      null,
-    );
-  });
-
-  test('matches the alias only on word boundaries (no substring hits)', () => {
-    // Guards against e.g. "Calster" matching "cal" — board-interactions'
-    // matchProfileByName uses the same word-boundary rule.
-    const sceneState = { claimedTokens: { 't1': 'cal' } };
-    const placements = [
-      { id: 't1', name: 'Calster Lookalike', levelId: 'map-level-a' },
-    ];
-    assert.equal(
-      resolvePcTokenLevelIdForUser({
-        sceneState,
-        userId: 'cal',
-        placements,
-      }),
-      null,
-    );
-  });
-
-  test('returns the PC token level even when claims map has stale entries', () => {
-    // claim entries pointing at placements that no longer exist must not
-    // crash or count toward the match total.
-    const sceneState = {
-      claimedTokens: { 't1': 'zepha', 'gone': 'zepha' },
-    };
-    const placements = [
-      { id: 't1', name: 'Zepha Brightspark', levelId: 'map-level-a' },
-    ];
-    assert.equal(
-      resolvePcTokenLevelIdForUser({
-        sceneState,
-        userId: 'zepha',
-        placements,
-      }),
-      'map-level-a',
-    );
-  });
-});
-
-describe('Levels v2 — PLAYER_CHARACTER_USER_IDS roster (Step 6)', () => {
-  test('lists the four PCs in the documented order without the GM', () => {
-    // Step 6 (§5.4): PC auto-claim and the GM claim assignment dropdown
-    // both iterate this list. The GM is intentionally omitted because the
-    // plan treats unclaimed and GM-owned as equivalent — there is no
-    // "claim for GM" action.
+describe('character profile association remains name-based', () => {
+  test('keeps the configured character profile roster', () => {
     assert.deepEqual(PLAYER_CHARACTER_USER_IDS, ['cal', 'sharon', 'indigo', 'zepha']);
+    PLAYER_CHARACTER_USER_IDS.forEach((id) => assert.ok(KNOWN_LEVEL_USER_IDS.includes(id)));
   });
 
-  test('is frozen so callers cannot mutate the shared roster', () => {
-    assert.equal(Object.isFrozen(PLAYER_CHARACTER_USER_IDS), true);
+  test('resolves the matching character token without a claim map', () => {
+    assert.equal(
+      resolvePcTokenLevelIdForUser({
+        userId: 'SHARON',
+        placements: [
+          { id: 'familiar', name: 'Inkfang', levelId: 'level-0' },
+          { id: 'hero', name: 'Sharon Stormwind', levelId: 'upper' },
+        ],
+        validLevelIds: ['level-0', 'upper'],
+      }),
+      'upper',
+    );
   });
 
-  test('every PC roster id appears in KNOWN_LEVEL_USER_IDS', () => {
-    PLAYER_CHARACTER_USER_IDS.forEach((id) => {
-      assert.ok(
-        KNOWN_LEVEL_USER_IDS.includes(id),
-        `Expected KNOWN_LEVEL_USER_IDS to include ${id}`,
-      );
-    });
-  });
-});
-
-describe('Levels v2 — getClaimedUserIdForPlacement (Step 6)', () => {
-  test('returns null when no scene state is provided', () => {
-    assert.equal(getClaimedUserIdForPlacement(null, 'placement-1'), null);
-    assert.equal(getClaimedUserIdForPlacement({}, 'placement-1'), null);
+  test('prefers explicit profile metadata when a token name differs', () => {
+    assert.equal(
+      resolvePcTokenLevelIdForUser({
+        userId: 'indigo',
+        placements: [
+          { id: 'hero', name: 'The Living Shadow', profileId: 'Indigo', levelId: 'upper' },
+        ],
+        validLevelIds: ['level-0', 'upper'],
+      }),
+      'upper',
+    );
   });
 
-  test('returns null when claimedTokens is missing or not an object', () => {
-    assert.equal(getClaimedUserIdForPlacement({ claimedTokens: null }, 'p'), null);
-    assert.equal(getClaimedUserIdForPlacement({ claimedTokens: 'nope' }, 'p'), null);
-  });
-
-  test('returns null when the placement id is not claimed', () => {
-    const sceneState = { claimedTokens: { 'other': 'indigo' } };
-    assert.equal(getClaimedUserIdForPlacement(sceneState, 'placement-1'), null);
-  });
-
-  test('returns the normalized lowercase user id when claimed', () => {
-    const sceneState = { claimedTokens: { 'placement-1': 'Indigo' } };
-    assert.equal(getClaimedUserIdForPlacement(sceneState, 'placement-1'), 'indigo');
-  });
-
-  test('returns null for blank placement ids', () => {
-    const sceneState = { claimedTokens: { '': 'indigo' } };
-    assert.equal(getClaimedUserIdForPlacement(sceneState, ''), null);
-    assert.equal(getClaimedUserIdForPlacement(sceneState, '   '), null);
-  });
-
-  test('trims placement id input before lookup', () => {
-    const sceneState = { claimedTokens: { 'placement-1': 'sharon' } };
-    assert.equal(getClaimedUserIdForPlacement(sceneState, '  placement-1  '), 'sharon');
-  });
-
-  test('drops blank stored values to null', () => {
-    const sceneState = { claimedTokens: { 'placement-1': '   ' } };
-    assert.equal(getClaimedUserIdForPlacement(sceneState, 'placement-1'), null);
+  test('uses word boundaries and refuses ambiguous duplicate character tokens', () => {
+    assert.equal(
+      resolvePcTokenLevelIdForUser({
+        userId: 'cal',
+        placements: [{ id: 'lookalike', name: 'Calster', levelId: 'upper' }],
+      }),
+      null,
+    );
+    assert.equal(
+      resolvePcTokenLevelIdForUser({
+        userId: 'sharon',
+        placements: [
+          { id: 'one', name: 'Sharon', levelId: 'level-0' },
+          { id: 'two', name: 'Sharon Illusion', levelId: 'upper' },
+        ],
+      }),
+      null,
+    );
   });
 });
-

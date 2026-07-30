@@ -288,15 +288,6 @@ function overlaySyncV2Placements(array $boardState): array
                 $boardState['placements'][$sceneId] = array_values($placements);
             }
         }
-        foreach (($snapshot['state']['claims'] ?? []) as $sceneId => $claims) {
-            if (!is_string($sceneId) || !is_array($claims)) {
-                continue;
-            }
-            $boardState['sceneState'][$sceneId] = is_array($boardState['sceneState'][$sceneId] ?? null)
-                ? $boardState['sceneState'][$sceneId]
-                : [];
-            $boardState['sceneState'][$sceneId]['claimedTokens'] = $claims;
-        }
         if (($config['domains']['combat'] ?? false) === true) {
             foreach (($snapshot['state']['combat'] ?? []) as $sceneId => $combat) {
                 if (!is_string($sceneId) || !is_array($combat)) {

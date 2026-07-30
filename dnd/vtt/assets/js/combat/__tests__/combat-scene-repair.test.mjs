@@ -22,7 +22,7 @@ describe('bounded combat scene repair', () => {
         },
         older: {
           combat: { active: true, sequence: 29, updatedAt: 2900 },
-          claimedTokens: { 'enemy-1': 'gm' },
+          customData: { keep: 'older' },
         },
         empty: {
           combat: { active: true, isActive: true, sequence: 50, activeCombatantId: 'missing' },
@@ -63,7 +63,7 @@ describe('bounded combat scene repair', () => {
     assert.equal(repaired.sceneState.deleted.combat.sequence, 101);
     assert.equal(repaired.sceneState.deleted.combat.updatedAt, 123456);
     assert.deepEqual(repaired.sceneState.current.fogOfWar, { keep: 'current' });
-    assert.deepEqual(repaired.sceneState.older.claimedTokens, { 'enemy-1': 'gm' });
+    assert.deepEqual(repaired.sceneState.older.customData, { keep: 'older' });
     assert.deepEqual(repaired.sceneState.empty.drawings, [{ id: 'keep-empty-drawing' }]);
     assert.deepEqual(repaired.sceneState.deleted.customData, { keep: true });
     assert.deepEqual(repaired.sceneState.inactive, boardState.sceneState.inactive);

@@ -48,8 +48,6 @@ import {
   KNOWN_LEVEL_USER_IDS,
   PLAYER_CHARACTER_USER_IDS,
   buildLevelViewModel,
-  getClaimedUserIdForPlacement,
-  normalizeClaimedTokensMap,
   normalizeMapLevelsState,
   resolveActiveLevelIdForUser,
   resolvePlacementLevelId,
@@ -69,10 +67,6 @@ import { mountStairsTool } from './stairs-tool.js';
 import { mountStairsTrigger } from './stairs-trigger.js';
 import { createConditionTooltips } from './condition-tooltips.js';
 import { createMapPings } from './map-pings.js';
-import {
-  computePlacementNormalizedCenter,
-  createLevelViewFollowTracker,
-} from './level-view-follow.js';
 import {
   createMapLevelRenderer,
   resolveSceneMapLevelsState,
@@ -294,8 +288,6 @@ export function getRemovableSelectedTokenIds({
   placements = [],
   selectedIds = [],
   isGM = false,
-  currentUserId = '',
-  claimedTokens = {},
 } = {}) {
   const selectedSet = selectedIds instanceof Set
     ? selectedIds
@@ -304,25 +296,57 @@ export function getRemovableSelectedTokenIds({
     return [];
   }
 
-  const normalizedUserId = typeof currentUserId === 'string'
-    ? currentUserId.trim().toLowerCase()
-    : '';
-  const normalizedClaims = normalizeClaimedTokensMap(claimedTokens);
+  if (!isGM) {
+    return [];
+  }
   return placements
     .filter((placement) => (
       placement
       && typeof placement === 'object'
       && selectedSet.has(placement.id)
-      && (
-        isGM
-        || (
-          !placement.hidden
-          && normalizedUserId
-          && normalizedClaims[placement.id] === normalizedUserId
-        )
-      )
+      && isGM
     ))
     .map((placement) => placement.id);
+}
+
+export function getCombatAutomationBoundariesForUser(
+  transition,
+  currentUserId,
+  { isGM = false } = {},
+) {
+  if (!transition || typeof transition !== 'object') return [];
+  const normalizeId = (value) => (
+    typeof value === 'string' && value.trim() ? value.trim().toLowerCase() : null
+  );
+  const userId = normalizeId(currentUserId);
+  if (!userId) return [];
+  const type = transition.type;
+  const boundaries = [];
+
+  if (type === 'turn.start') {
+    if (
+      transition.previousCombatantId
+      && normalizeId(transition.turnEndInteractionOwnerId) === userId
+    ) {
+      boundaries.push('turn-end');
+    }
+    if (normalizeId(transition.interactionOwnerId) === userId) {
+      boundaries.push('turn-start');
+    }
+    return boundaries;
+  }
+
+  if (
+    type === 'turn.complete'
+    && normalizeId(transition.turnEndInteractionOwnerId) === userId
+  ) {
+    return ['turn-end'];
+  }
+
+  if (isGM && ['combat.start', 'round.advance', 'combat.end'].includes(type)) {
+    return ['transition'];
+  }
+  return [];
 }
 
 export function calculateTokenSettingsPopupLayout({
@@ -690,9 +714,6 @@ export function mountBoardInteractions(store, routes = {}) {
     markPingsDirty: () => markPingsDirty(),
     persistBoardStateSnapshot: () => persistBoardStateSnapshot(),
   });
-  // Levels v2 §5.2: track the current user's claim-sourced userLevelState
-  // so claim-driven level changes pan the view to the claimed token.
-  const levelViewFollowTracker = createLevelViewFollowTracker();
   const TOKEN_DRAG_TYPE = 'application/x-vtt-token-template';
   const TOKEN_DRAG_FALLBACK_TYPE = 'text/plain';
   const MAP_LOAD_WATCHDOG_DELAY_MS = 5000;
@@ -900,11 +921,10 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
-  function runAcceptedCombatTransitionEffects(transition, combat) {
+  function runAcceptedCombatTransitionEffects(transition, combat, { boundary = 'transition' } = {}) {
     if (
       !combatV2Enabled
       || !transition
-      || !isGmUser()
     ) {
       return;
     }
@@ -954,6 +974,48 @@ export function mountBoardInteractions(store, routes = {}) {
       });
     };
 
+    if (boundary === 'turn-end') {
+      const finishedId = type === 'turn.start' ? previousCombatantId : combatantId;
+      runTurnEnd(finishedId);
+      return;
+    }
+
+    if (boundary === 'turn-start') {
+      if (type !== 'turn.start' || !combatantId) {
+        return;
+      }
+      resetTurnActionUsageForPlacement(combatantId);
+      fireTimingBoundary('turnStart', {
+        placementId: combatantId,
+        team: getCombatantTeam(combatantId),
+      });
+      expirePersistentZonesForOwner(combatantId, 'startOfTurn');
+      tickPersistentZonesForOwner(combatantId, 'startOfTurn').catch((error) => {
+        console.warn('[VTT] canonical persistent zone start-of-turn tick failed', error);
+      });
+      fireOccupantTurnStartZones(combatantId).catch((error) => {
+        console.warn('[VTT] canonical occupant-turn-start zone failed', error);
+      });
+      notifyConditionTurnStart(combatantId);
+      runConditionRidersAtBoundary(combatantId, 'turnStart', {
+        turnLockId: `sync-v2:${combat?.sequence ?? 0}`,
+      }).catch((error) => {
+        console.warn('[VTT] canonical condition start-of-turn rider failed', error);
+      });
+      combatTimerService.startTurn({
+        displayName: getCombatantLabel(combatantId) || 'Combatant',
+        team: getCombatantTeam(combatantId) ?? 'ally',
+        round: Number(combat?.round) || 1,
+        combatantId,
+      });
+      openTurnPrompt(combatantId);
+      return;
+    }
+
+    if (boundary !== 'transition' || !isGmUser()) {
+      return;
+    }
+
     if (type === 'combat.start') {
       resetPlayerSurgesToZero('combat-start').finally(() => {
         fireTimingBoundary('combatStart', { round: 1 });
@@ -963,42 +1025,6 @@ export function mountBoardInteractions(store, routes = {}) {
       computeInitialMalice().then((initialMalice) => {
         setMaliceCount(initialMalice);
       });
-      return;
-    }
-    if (type === 'turn.start') {
-      if (previousCombatantId && previousCombatantId !== combatantId) {
-        runTurnEnd(previousCombatantId);
-      }
-      if (combatantId) {
-        resetTurnActionUsageForPlacement(combatantId);
-        fireTimingBoundary('turnStart', {
-          placementId: combatantId,
-          team: getCombatantTeam(combatantId),
-        });
-        expirePersistentZonesForOwner(combatantId, 'startOfTurn');
-        tickPersistentZonesForOwner(combatantId, 'startOfTurn').catch((error) => {
-          console.warn('[VTT] canonical persistent zone start-of-turn tick failed', error);
-        });
-        fireOccupantTurnStartZones(combatantId).catch((error) => {
-          console.warn('[VTT] canonical occupant-turn-start zone failed', error);
-        });
-        notifyConditionTurnStart(combatantId);
-        runConditionRidersAtBoundary(combatantId, 'turnStart', {
-          turnLockId: `sync-v2:${combat?.sequence ?? 0}`,
-        }).catch((error) => {
-          console.warn('[VTT] canonical condition start-of-turn rider failed', error);
-        });
-        combatTimerService.startTurn({
-          displayName: getCombatantLabel(combatantId) || 'Combatant',
-          team: getCombatantTeam(combatantId) ?? 'ally',
-          round: Number(combat?.round) || 1,
-          combatantId,
-        });
-      }
-      return;
-    }
-    if (type === 'turn.complete') {
-      runTurnEnd(combatantId);
       return;
     }
     if (type === 'round.advance') {
@@ -1036,29 +1062,25 @@ export function mountBoardInteractions(store, routes = {}) {
       closeTurnPrompt();
     }
     applyCombatStateFromBoardState(boardApi.getState?.() ?? {});
-    const automationTypes = new Set([
-      'combat.start',
-      'turn.start',
-      'turn.complete',
-      'round.advance',
-      'combat.end',
-    ]);
     const operationId = String(context?.event?.operationId ?? '').trim();
-    if (
-      isGmUser()
-      && operationId
-      && automationTypes.has(transition?.type)
-    ) {
+    const currentUserId = normalizeProfileId(getCurrentUserId());
+    const claimBoundary = (boundary) => {
       tokenMovementRuntime
-        .claimCombatAutomation(sceneId, operationId)
+        .claimCombatAutomation(sceneId, operationId, boundary)
         .then((result) => {
           if (result?.idempotent !== true) {
-            runAcceptedCombatTransitionEffects(transition, combat);
+            runAcceptedCombatTransitionEffects(transition, combat, { boundary });
           }
         })
         .catch((error) => {
-          console.warn('[VTT] Failed to claim canonical combat automation', error);
+          console.warn(`[VTT] Failed to claim canonical combat ${boundary} automation`, error);
         });
+    };
+
+    if (operationId) {
+      getCombatAutomationBoundariesForUser(transition, currentUserId, {
+        isGM: isGmUser(),
+      }).forEach(claimBoundary);
     }
     recordSyncDiagnostic('syncV2CombatPatches', {
       sceneId,
@@ -1084,7 +1106,6 @@ export function mountBoardInteractions(store, routes = {}) {
     if (changeSet.levels) {
       syncMapLevelsForState(state, activeSceneId);
       renderStairs(state);
-      maybeFollowClaimedTokenView(state, activeSceneId);
     }
     if (changeSet.fog) {
       renderFog(state);
@@ -1405,7 +1426,7 @@ export function mountBoardInteractions(store, routes = {}) {
   let dirtyPings = false;
   // Maps sceneId -> Set of changed scene-state fields. A wildcard marks a
   // mutation whose exact field is unknown. Field-level tracking prevents a
-  // successful claim/level op from clearing an unrelated pending fog change.
+  // successful level op from clearing an unrelated pending fog change.
   const dirtySceneState = new Map();
   // Track if top-level fields changed
   const dirtyTopLevel = new Set();
@@ -1581,9 +1602,6 @@ export function mountBoardInteractions(store, routes = {}) {
       ) {
         clearDirtySceneStateField(sceneId, 'userLevelState');
         return;
-      }
-      if (op.type === 'claim.set' || op.type === 'claim.clear') {
-        clearDirtySceneStateField(sceneId, 'claimedTokens');
       }
     });
   }
@@ -2080,7 +2098,7 @@ export function mountBoardInteractions(store, routes = {}) {
   function getActiveTokenPlacementLevelId(state = boardApi.getState?.() ?? {}) {
     // Levels v2 (§5.1): new tokens land on the user's active level — for
     // the GM that's whichever level the up/down nav is on, for players
-    // it's their resolved per-user level (claim-driven or activate-pulled).
+    // it's their resolved per-user level.
     // The user's active level may be `BASE_MAP_LEVEL_ID`, which is a
     // valid placement target now that Level 0 is a real, addressable
     // level.
@@ -3119,12 +3137,10 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
-  // Heroic-resource prompts belong to whoever is RUNNING the hero — the
-  // token's claim when set (so the GM or a covering player can run an
-  // absent player's character), defaulting to the hero's own player:
-  // - Events for a hero this client controls are handled (prompted) locally.
-  // - turnStart/turnEnd fire on EVERY client via combat state sync, so
-  //   non-controllers skip them — the controller's client handles its hero.
+  // Heroic-resource prompts at turn boundaries belong to the user who
+  // initiated the accepted canonical transition. The selected token's linked
+  // character sheet still supplies the resource and feature rules.
+  // - turnStart/turnEnd run only on the canonical boundary winner.
   // - All other events (damage, power rolls, ...) fire only on the single
   //   client that ran the action. That client routes the offer to the
   //   controller by writing a pending-prompt record onto the hero's
@@ -3142,7 +3158,9 @@ export function mountBoardInteractions(store, routes = {}) {
     for (const placement of placements) {
       const profileId = getAutomationProfileIdForPlacement(placement.id);
       if (!profileId) continue;
-      const controllerId = getControllingUserIdForPlacement(placement.id) || normalizeProfileId(profileId);
+      const controllerId = isTurnBoundary
+        ? currentUserId
+        : getLinkedProfileUserIdForPlacement(placement.id) || normalizeProfileId(profileId);
       const isController = Boolean(controllerId) && controllerId === currentUserId;
       if (!isController && isTurnBoundary) continue;
       const sheet = await getAutomationSheetForPlacement(placement.id);
@@ -3214,9 +3232,8 @@ export function mountBoardInteractions(store, routes = {}) {
       id: `hrp_${Date.now()}_${pendingHeroResourcePromptCounter}_${Math.random().toString(36).slice(2, 7)}`,
       // Whose CHARACTER the resource belongs to (the sheet that gets written).
       profileId: normalizeProfileId(profileId),
-      // Whose CLIENT should show the prompt — the token's controller per the
-      // claim system. Falls back to profileId for records written by older
-      // clients.
+      // Whose client should show a non-turn prompt. Falls back to the linked
+      // character profile for records written by older clients.
       recipientUserId: normalizeProfileId(recipientUserId) ?? normalizeProfileId(profileId),
       eventType,
       eventTargetId: typeof eventTargetId === 'string' ? eventTargetId : '',
@@ -3365,7 +3382,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (isGmUser() || normalizeProfileId(profileId) === applierUserId) {
       await saveAutomationSheetForProfile(profileId, sheet, 'resource');
     } else {
-      // A player covering someone else's hero (via the token claim) can't
+      // A player running someone else's hero can't
       // save that character's full sheet — use the narrow resource sync the
       // sheet handler allows for any authenticated VTT user.
       await syncHeroResourceValueForProfile(profileId, change.next, sheet);
@@ -4097,14 +4114,13 @@ export function mountBoardInteractions(store, routes = {}) {
     return getPersistentZonesForScene(sceneId);
   }
 
-  // Only the GM or whoever currently controls the casting token (per the
-  // token claim, defaulting to the character's own player) may end a zone
-  // from the overlay button. (Zones cast by GM-run tokens are GM-only.)
+  // The GM or any player may end an allied caster's zone. Enemy zones remain
+  // GM-controlled.
   function canEndPersistentZone(zone) {
     if (isGmUser()) return true;
     if (!zone?.casterId) return false;
-    const controllerId = getControllingUserIdForPlacement(zone.casterId);
-    return Boolean(controllerId) && controllerId === normalizeProfileId(getCurrentUserId());
+    const caster = getPlacementFromStore(zone.casterId);
+    return Boolean(caster) && getPlacementCombatTeam(caster) === 'ally';
   }
 
   // (startWallPlacementForAutomation lives inside createTemplateTool so it
@@ -5583,11 +5599,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const isSyncV2PlacementOp = (op) => (
     placementsV2Enabled
     && typeof op?.type === 'string'
-    && (
-      op.type.startsWith('placement.')
-      || op.type === 'claim.set'
-      || op.type === 'claim.clear'
-    )
+    && op.type.startsWith('placement.')
   );
 
   function deriveDirtyPlacementOps() {
@@ -6946,20 +6958,6 @@ export function mountBoardInteractions(store, routes = {}) {
     // fall back to the legacy snapshot path to avoid losing those
     // changes. This guard is applied at every commit-3 call site for
     // the same reason.
-    // Levels v2 (§5.4): PC tokens auto-claim to the matching profile id the
-    // first time they are dragged into a scene. The claim must be batched
-    // with placement.add into a single ops payload — sending claim.set as a
-    // separate save races the placement.add response (the server bumps the
-    // version on add, so the second save's tracked version is stale and 409s,
-    // silently dropping the auto-claim). One payload, one server lock, no race.
-    let autoClaimUserId = null;
-    if (isTokenSourcePlayerVisible(template)) {
-      const inferredProfileId = matchProfileByName(template?.name ?? '');
-      if (inferredProfileId && PLAYER_CHARACTER_USER_IDS.includes(inferredProfileId)) {
-        autoClaimUserId = inferredProfileId;
-      }
-    }
-
     let tokenAddOps = null;
     if (USE_DELTA_SAVES && (placementsV2Enabled || !hasNonPlacementDirtyState())) {
       tokenAddOps = [
@@ -6969,34 +6967,6 @@ export function mountBoardInteractions(store, routes = {}) {
           placement,
         },
       ];
-    }
-
-    if (autoClaimUserId) {
-      let claimMutated = false;
-      boardApi.updateState?.((draft) => {
-        const sceneEntry = ensureSceneStateDraftEntry(draft, activeSceneId);
-        if (!sceneEntry) {
-          return;
-        }
-        if (!sceneEntry.claimedTokens || typeof sceneEntry.claimedTokens !== 'object') {
-          sceneEntry.claimedTokens = {};
-        }
-        if (sceneEntry.claimedTokens[placement.id] !== autoClaimUserId) {
-          sceneEntry.claimedTokens[placement.id] = autoClaimUserId;
-          claimMutated = true;
-        }
-      });
-      if (claimMutated) {
-        markSceneStateDirty(activeSceneId, 'claimedTokens');
-        if (tokenAddOps) {
-          tokenAddOps.push({
-            type: 'claim.set',
-            sceneId: activeSceneId,
-            placementId: placement.id,
-            userId: autoClaimUserId,
-          });
-        }
-      }
     }
 
     const dropSavePromise = persistBoardStateSnapshot({}, tokenAddOps);
@@ -7074,7 +7044,6 @@ export function mountBoardInteractions(store, routes = {}) {
         // Levels v2 §5.2: drop the previous scene's view-follow baseline so
         // entering a new scene establishes a fresh baseline (no auto-pan on
         // first observation).
-        levelViewFollowTracker.reset();
         selectedTokenIds.clear();
         notifySelectionChanged();
         resetCombatGroups();
@@ -7130,8 +7099,6 @@ export function mountBoardInteractions(store, routes = {}) {
       // placement state; pick up any new ones. Async + internally deduped.
       processPendingHeroResourcePrompts(state);
       mapPings.processIncomingPings(state.boardState?.pings ?? [], activeSceneId);
-      // Levels v2 §5.2: pan the view to a claim-sourced level update.
-      maybeFollowClaimedTokenView(state, activeSceneId);
       // Use the active scene ID or fall back to the default scene ID.
       // This ensures drawings sync even when no scene is explicitly selected.
       syncDrawingsFromState(state.boardState, activeSceneId || DEFAULT_SCENE_ID);
@@ -8112,8 +8079,6 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const state = boardApi.getState?.() ?? {};
     const isGM = Boolean(state?.user?.isGM);
-    const currentUserId = normalizeProfileId(getCurrentUserId());
-
     const activeSceneId = state.boardState?.activeSceneId ?? null;
     if (!activeSceneId) {
       return;
@@ -8129,8 +8094,6 @@ export function mountBoardInteractions(store, routes = {}) {
       placements: scenePlacements,
       selectedIds: selectedSet,
       isGM,
-      currentUserId,
-      claimedTokens: state.boardState?.sceneState?.[activeSceneId]?.claimedTokens ?? {},
     });
     const removableSet = new Set(removableIds);
     if (!removableSet.size) {
@@ -8157,12 +8120,6 @@ export function mountBoardInteractions(store, routes = {}) {
       removedCount = scenePlacements.length - nextPlacements.length;
       if (removedCount > 0) {
         draft.boardState.placements[activeSceneId] = nextPlacements;
-        const sceneEntry = draft.boardState?.sceneState?.[activeSceneId];
-        if (sceneEntry?.claimedTokens && typeof sceneEntry.claimedTokens === 'object') {
-          removedIds.forEach((placementId) => {
-            delete sceneEntry.claimedTokens[placementId];
-          });
-        }
       }
     });
 
@@ -8199,7 +8156,7 @@ export function mountBoardInteractions(store, routes = {}) {
         status.textContent = `Removed ${removedCount} ${noun} from the scene.`;
       }
     } else if (!isGM && status) {
-      status.textContent = 'You can only remove a visible token claimed by your profile.';
+      status.textContent = 'Only the GM can remove tokens from the scene.';
     }
   }
 
@@ -8479,47 +8436,6 @@ export function mountBoardInteractions(store, routes = {}) {
     return null;
   }
 
-  // Levels v2 §5.2: when the current user's per-scene userLevelState is
-  // updated by a claim-driven level change (source: 'claim' with a
-  // `tokenId`), pan the view to that token so the player automatically
-  // follows their character/NPC across levels. The tracker filters first
-  // observations so opening a scene does not auto-pan.
-  function maybeFollowClaimedTokenView(state = {}, sceneId = null) {
-    if (typeof sceneId !== 'string' || !sceneId) {
-      return;
-    }
-    const userId = getCurrentUserId();
-    if (!userId) {
-      return;
-    }
-    const sceneEntry = state?.boardState?.sceneState?.[sceneId];
-    const userLevelEntry = sceneEntry && typeof sceneEntry === 'object'
-      ? sceneEntry?.userLevelState?.[userId] ?? null
-      : null;
-    const fresh = levelViewFollowTracker.consume({ sceneId, userLevelEntry });
-    if (!fresh) {
-      return;
-    }
-    const placements = state?.boardState?.placements?.[sceneId];
-    if (!Array.isArray(placements)) {
-      return;
-    }
-    const tokenId = userLevelEntry?.tokenId;
-    const placement = placements.find((entry) => entry && entry.id === tokenId);
-    if (!placement) {
-      return;
-    }
-    const center = computePlacementNormalizedCenter(placement, {
-      gridSize: viewState?.gridSize,
-      mapPixelSize: viewState?.mapPixelSize,
-      gridOffsets: viewState?.gridOffsets,
-    });
-    if (!center) {
-      return;
-    }
-    mapPings.centerViewOnPoint(center);
-  }
-
   function syncMapLevelsForState(state = {}, sceneId = null) {
     const mapLevels = resolveSceneMapLevelsState(state.boardState ?? {}, sceneId);
     const viewerLevelId = getViewerLevelIdForCurrentUser(state, sceneId);
@@ -8687,8 +8603,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
   // Levels v2 (§5.3): GM-only Activate. Pulls every known user (the
   // configured chat/player roster, not just connected sockets) to the
-  // GM's current viewing level. Tokens are not moved; the next
-  // claimed-token level change overrides activate for that player.
+  // GM's current viewing level. Tokens are not moved.
   function handleMapLevelActivateClick() {
     if (!isGmUser()) {
       return;
@@ -8772,10 +8687,6 @@ export function mountBoardInteractions(store, routes = {}) {
         Object.keys(userLevelState).forEach(add);
       }
 
-      const claimedTokens = sceneEntry.claimedTokens;
-      if (claimedTokens && typeof claimedTokens === 'object') {
-        Object.values(claimedTokens).forEach(add);
-      }
     }
 
     return Array.from(ids);
@@ -9068,12 +8979,6 @@ export function mountBoardInteractions(store, routes = {}) {
     // Pre-compute fog checker once (null when fog inactive or GM viewing).
     // Per-level fog: gate on the viewer's current level.
     const isCellFogged = gmViewing ? null : createFogChecker(state, viewerLevelId);
-    // Levels v2 (§5.4): the per-scene `claimedTokens` map drives the colored
-    // ring on PC tokens. Look the scene entry up once outside the loop.
-    const activeSceneEntry = activeSceneKey
-      ? state?.boardState?.sceneState?.[activeSceneKey] ?? null
-      : null;
-
     placements.forEach((placement, placementIndex) => {
       const normalized = normalizePlacementForRender(placement);
       if (!normalized) {
@@ -9173,9 +9078,6 @@ export function mountBoardInteractions(store, routes = {}) {
       token.style.transformOrigin = '50% 50%';
       clearTokenMapLevelVisibilityMask(token);
       applyTokenLevelPresentation(token, presentation);
-      const claimedUserId = getClaimedUserIdForPlacement(activeSceneEntry, normalized.id);
-      applyTokenClaimPresentation(token, claimedUserId);
-
       token.classList.toggle('vtt-token--hidden', Boolean(normalized.hidden));
 
       if (normalized.imageUrl) {
@@ -9539,35 +9441,6 @@ export function mountBoardInteractions(store, routes = {}) {
     if (arrow) {
       arrow.textContent = direction === 'above' ? '\u25B2' : '\u25BC';
     }
-  }
-
-  // Levels v2 (§5.4): paint a colored ring on tokens claimed by a player so
-  // every viewer can see whose token is whose at a glance. Color is driven
-  // entirely from CSS via `data-claimed-by` so the palette is centralized
-  // (Indigo = purple, Sharon = light grey, Cal = red, Zepha = brown-orange,
-  // GM = gold). Unclaimed tokens (or any unknown claimant) get no ring.
-  function applyTokenClaimPresentation(token, claimedUserId) {
-    if (!token) {
-      return;
-    }
-    const ring = token.querySelector('.vtt-token__claim-ring');
-    const userKey = typeof claimedUserId === 'string' ? claimedUserId.trim().toLowerCase() : '';
-    if (!userKey || (userKey !== 'gm' && !PLAYER_CHARACTER_USER_IDS.includes(userKey))) {
-      delete token.dataset.claimedBy;
-      if (ring) {
-        ring.remove();
-      }
-      return;
-    }
-    token.dataset.claimedBy = userKey;
-    let ringEl = ring;
-    if (!ringEl) {
-      ringEl = document.createElement('div');
-      ringEl.className = 'vtt-token__claim-ring';
-      ringEl.setAttribute('aria-hidden', 'true');
-      token.insertBefore(ringEl, token.firstChild);
-    }
-    ringEl.dataset.claimedBy = userKey;
   }
 
   function applyTokenMapLevelVisibilityMask(token, visibility, { column, row, width, height, gridSize } = {}) {
@@ -10284,9 +10157,6 @@ export function mountBoardInteractions(store, routes = {}) {
     tokenMovementController?.syncCombatTurn();
 
     if (!isGmUser()) {
-      if (combatActive && normalizedNextId && nextTeam === 'ally' && !activeTurnDialog && isCurrentUserTurnCombatant(normalizedNextId)) {
-        openTurnPrompt(normalizedNextId);
-      }
       return;
     }
 
@@ -10441,6 +10311,27 @@ export function mountBoardInteractions(store, routes = {}) {
         });
       }
       syncCombatStateToStore();
+      return;
+    }
+
+    if (combatV2Enabled) {
+      if (activeCombatantId === representativeId) {
+        completeActiveCombatant();
+        return;
+      }
+      const switchingActiveTurn = Boolean(activeCombatantId && activeCombatantId !== representativeId);
+      if (switchingActiveTurn) {
+        const currentLabel = getCombatantLabel(activeCombatantId) || 'the current combatant';
+        const nextLabel = getCombatantLabel(representativeId) || 'this combatant';
+        if (!(await confirmSwitchActiveTurn(currentLabel, nextLabel))) {
+          return;
+        }
+      }
+      await submitCanonicalCombatIntent('turn.start', {
+        combatantId: representativeId,
+        holderName: getCurrentUserName(),
+        override: switchingActiveTurn,
+      });
       return;
     }
 
@@ -10693,6 +10584,12 @@ export function mountBoardInteractions(store, routes = {}) {
       ? getRepresentativeIdFor(activeCombatantId) || activeCombatantId
       : null;
     const canceledTeam = canceledId ? getCombatantTeam(canceledId) : null;
+    if (combatV2Enabled && canceledId) {
+      submitCanonicalCombatIntent('turn.cancel', {
+        combatantId: canceledId,
+      });
+      return;
+    }
 
     // When canceling a turn, stay on the SAME team's pick phase
     // This allows the player to select a different token if they changed their mind
@@ -10744,11 +10641,10 @@ export function mountBoardInteractions(store, routes = {}) {
             : null);
     if (
       combatV2Enabled
-      && !isGmUser()
       && options.canonicalConfirmed !== true
       && completionTargetId
     ) {
-      submitPlayerCombatIntent('turn.complete', {
+      submitCanonicalCombatIntent('turn.complete', {
         combatantId: completionTargetId,
       });
       return;
@@ -11682,18 +11578,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     const representativeId = getRepresentativeIdFor(combatantId) || combatantId;
     const profileId = normalizeProfileId(getCombatantProfileId(representativeId));
-    if (profileId && profileId === userId) {
-      return true;
-    }
-    const state = boardApi.getState?.() ?? {};
-    const activeSceneId = state?.boardState?.activeSceneId ?? null;
-    const sceneEntry = activeSceneId ? state?.boardState?.sceneState?.[activeSceneId] ?? null : null;
-    const claimedTokens = sceneEntry?.claimedTokens;
-    if (claimedTokens && typeof claimedTokens === 'object') {
-      return normalizeProfileId(claimedTokens[combatantId]) === userId ||
-        normalizeProfileId(claimedTokens[representativeId]) === userId;
-    }
-    return false;
+    return Boolean(profileId && profileId === userId);
   }
 
   function closePlayerTurnStartButton() {
@@ -11722,25 +11607,9 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const state = boardApi.getState?.() ?? {};
     const activeSceneId = state?.boardState?.activeSceneId ?? null;
-    const sceneEntry = activeSceneId ? state?.boardState?.sceneState?.[activeSceneId] ?? null : null;
-    const claimedTokens = sceneEntry?.claimedTokens;
-    const claimedPlacementIds = [];
     const livePlacements = activeSceneId ? getActiveScenePlacements(state) : [];
 
-    if (claimedTokens && typeof claimedTokens === 'object') {
-      Object.entries(claimedTokens).forEach(([placementId, claimedUserId]) => {
-        if (normalizeProfileId(claimedUserId) === userId && typeof placementId === 'string' && placementId) {
-          claimedPlacementIds.push(placementId);
-        }
-      });
-    }
-
     const candidateIds = new Set();
-    claimedPlacementIds.forEach((id) => {
-      if (typeof id === 'string' && id) {
-        candidateIds.add(id);
-      }
-    });
     lastCombatTrackerEntries.forEach((entry) => {
       const id = entry && typeof entry.id === 'string' ? entry.id : null;
       if (id && normalizeProfileId(getCombatantProfileId(id)) === userId) {
@@ -12534,8 +12403,8 @@ export function mountBoardInteractions(store, routes = {}) {
       });
   }
 
-  function submitPlayerCombatIntent(type, details = {}) {
-    if (!combatV2Enabled || isGmUser()) {
+  function submitCanonicalCombatIntent(type, details = {}) {
+    if (!combatV2Enabled) {
       return Promise.resolve(null);
     }
     if (pendingCombatStateSave?.promise) {
@@ -13681,6 +13550,18 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const representativeId = getRepresentativeIdFor(placementId) || placementId;
     const switchingActiveTurn = Boolean(activeCombatantId && activeCombatantId !== representativeId);
+    if (combatV2Enabled) {
+      const result = await submitCanonicalCombatIntent('turn.start', {
+        combatantId: representativeId,
+        holderName: getCurrentUserName(),
+        override: switchingActiveTurn || !check.valid,
+      });
+      return {
+        started: Boolean(result),
+        valid: check.valid,
+        reason: check.reason,
+      };
+    }
     if (switchingActiveTurn) {
       completeActiveCombatant({
         forceReleaseLock: true,
@@ -13755,7 +13636,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const representativeId = getRepresentativeIdFor(combatantId) || combatantId;
     const switchingActiveTurn = Boolean(activeCombatantId && activeCombatantId !== representativeId);
     const initiatorName = getCurrentUserName();
-    await submitPlayerCombatIntent('turn.start', {
+    await submitCanonicalCombatIntent('turn.start', {
       combatantId: representativeId,
       holderName: initiatorName,
       override: switchingActiveTurn || overrideAccepted,
@@ -14193,8 +14074,8 @@ export function mountBoardInteractions(store, routes = {}) {
     showBigTextPopup({ text: 'DRAW STEEL!', tone: 'gold' });
   }
 
-  function showClaimYourTurnPopup(options = {}) {
-    showBigTextPopup({ text: 'CLAIM YOUR TURN', tone: 'ally', durationMs: options.durationMs || 2100 });
+  function showStartYourTurnPopup(options = {}) {
+    showBigTextPopup({ text: 'START YOUR TURN', tone: 'ally', durationMs: options.durationMs || 2100 });
   }
 
   function announceFloatingTextFromAutomation(payload = {}) {
@@ -14221,11 +14102,11 @@ export function mountBoardInteractions(store, routes = {}) {
     return { shown: true, audience, text };
   }
 
-  function announceClaimYourTurn(options = {}) {
-    showClaimYourTurnPopup(options);
+  function announceStartYourTurn(options = {}) {
+    showStartYourTurnPopup(options);
     recordTurnEffect({
       type: TURN_EFFECT_TYPES.FLOATING_TEXT,
-      text: 'CLAIM YOUR TURN',
+      text: 'START YOUR TURN',
       tone: 'ally',
       audience: 'all',
       durationMs: options.durationMs || 2100,
@@ -14241,12 +14122,12 @@ export function mountBoardInteractions(store, routes = {}) {
     if (delayMs && typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
       window.setTimeout(() => {
         if (!combatActive || activeCombatantId || currentTurnTeam !== 'ally') return;
-        announceClaimYourTurn(options);
+        announceStartYourTurn(options);
         syncCombatStateToStore();
       }, delayMs);
       return true;
     }
-    announceClaimYourTurn(options);
+    announceStartYourTurn(options);
     return true;
   }
 
@@ -17557,19 +17438,12 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function getAutomationProfileIdForPlacement(placementId) {
-    const placement = getPlacementFromStore(placementId);
-    if (!placement) return '';
-    const profileId = matchProfileByName(tokenLabel(placement));
+    const profileId = normalizeProfileId(getCombatantProfileId(placementId));
     return profileId && PLAYER_CHARACTER_USER_IDS.includes(profileId) ? profileId : '';
   }
 
-  // Who is RUNNING this token right now. The token-settings claim wins
-  // (the GM can claim a token as 'gm', or reassign an absent player's hero
-  // to whoever is covering them); with no claim it falls back to the
-  // character's own player (token-name match) — the pre-claim default.
-  function getControllingUserIdForPlacement(placementId) {
-    const claimed = getClaimedUserIdForActivePlacement(placementId);
-    if (claimed) return normalizeProfileId(claimed);
+  // Resolve the user profile associated with this token's linked sheet.
+  function getLinkedProfileUserIdForPlacement(placementId) {
     return normalizeProfileId(getAutomationProfileIdForPlacement(placementId));
   }
 
@@ -18378,7 +18252,7 @@ export function mountBoardInteractions(store, routes = {}) {
         // Ignore capture failures — pan still works via mouse-move events.
       }
       // Don't preventDefault; let the contextmenu listener suppress the menu.
-      return true; // claim it so the capture listener calls stopImmediatePropagation
+      return true; // handle it so the capture listener calls stopImmediatePropagation
     }
     if (event.button !== 0) {
       return false;
@@ -20341,48 +20215,6 @@ export function mountBoardInteractions(store, routes = {}) {
       `
       : '';
 
-    // Levels v2 (§5.4): the GM gets a dropdown that assigns the token to any
-    // PC profile or releases it back to unclaimed. Players get a single
-    // toggle button — Claim, Take (when another player holds it), or
-    // Unclaim. Both surfaces share the same status row so the current
-    // claimant is visible regardless of who is viewing.
-    const playerClaimOptionsMarkup = PLAYER_CHARACTER_USER_IDS
-      .map((profileId) => {
-        const label = escapeHtml(formatProfileDisplayName(profileId));
-        return `<option value="${escapeHtml(profileId)}">${label}</option>`;
-      })
-      .join('');
-    const claimControlsMarkup = `
-        <div class="vtt-token-settings__section" data-token-settings-claim-section hidden>
-          <div class="vtt-token-settings__row vtt-token-settings__row--claim">
-            <span class="vtt-token-settings__claim-label">Claimed by</span>
-            <span class="vtt-token-settings__claim-name" data-token-settings-claim-name>Unclaimed</span>
-            ${gmUser
-              ? `
-            <select
-              class="vtt-token-settings__claim-select"
-              data-token-settings-claim-select
-              aria-label="Assign token to player"
-            >
-              <option value="">Unclaimed</option>
-              ${playerClaimOptionsMarkup}
-              <option value="gm">GM</option>
-            </select>
-              `
-              : `
-            <button
-              type="button"
-              class="vtt-token-settings__claim-button"
-              data-token-settings-claim-toggle
-              hidden
-            >
-              Claim
-            </button>
-              `}
-          </div>
-        </div>
-      `;
-
     const sizeOptions = ['1x1', '2x2', '3x3', '4x4', '5x5']
       .map((label) => {
         const size = parseInt(label, 10);
@@ -20518,7 +20350,6 @@ export function mountBoardInteractions(store, routes = {}) {
           <ul class="vtt-token-settings__automation-aura-list" data-token-settings-automation-aura-list></ul>
         </div>
         ${levelControlsMarkup}
-        ${claimControlsMarkup}
         ${hiddenToggleMarkup}
       </form>
     `;
@@ -20551,10 +20382,6 @@ export function mountBoardInteractions(store, routes = {}) {
       levelName: element.querySelector('[data-token-settings-level-name]'),
       levelDownButton: element.querySelector('[data-token-settings-level="down"]'),
       levelUpButton: element.querySelector('[data-token-settings-level="up"]'),
-      claimSection: element.querySelector('[data-token-settings-claim-section]'),
-      claimName: element.querySelector('[data-token-settings-claim-name]'),
-      claimSelect: element.querySelector('[data-token-settings-claim-select]'),
-      claimToggleButton: element.querySelector('[data-token-settings-claim-toggle]'),
       auraToggle: element.querySelector('[data-token-settings-toggle="aura"]'),
       auraField: element.querySelector('[data-token-settings-field="aura"]'),
       auraRadiusInput: element.querySelector('[data-token-settings-input="auraRadius"]'),
@@ -20598,14 +20425,6 @@ export function mountBoardInteractions(store, routes = {}) {
 
     menu.levelUpButton?.addEventListener('click', () => {
       handleTokenLevelMoveClick('up');
-    });
-
-    menu.claimSelect?.addEventListener('change', () => {
-      handleTokenClaimSelectChange(menu.claimSelect.value);
-    });
-
-    menu.claimToggleButton?.addEventListener('click', () => {
-      handleTokenClaimToggleClick();
     });
 
     if (menu.conditionSelect) {
@@ -21214,10 +21033,6 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    // Levels v2 (§4.2): if the moved token is claimed, the same logical
-    // mutation must also update that claimant's `userLevelState` so reload
-    // persistence and "follow your token" stay coherent. Activate-pulled
-    // entries get overwritten by the new `claim`-source entry.
     const levelMoveOps = movedIds
       .map((placementId) => {
         const targetLevel = targetLevelById.get(placementId);
@@ -21233,16 +21048,6 @@ export function mountBoardInteractions(store, routes = {}) {
         };
       })
       .filter(Boolean);
-    targetLevelById.forEach((targetLevel, placementId) => {
-      const claimOp = applyClaimDrivenUserLevelUpdate({
-        sceneId: activeSceneId,
-        placementId,
-        levelId: targetLevel.id,
-      }, { persist: false });
-      if (claimOp) {
-        levelMoveOps.push(claimOp);
-      }
-    });
     if (levelMoveOps.length) {
       persistBoardStateSnapshot({}, levelMoveOps);
     }
@@ -21283,78 +21088,12 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
-  // Levels v2 (§4.2): push a `user-level.set` op (with `source: 'claim'`
-  // and `tokenId`) for the claimant of the supplied placement, and mirror
-  // the entry into local state so the originating client's view-follow
-  // resolves immediately without waiting for the broadcast round-trip.
-  // No-op when the placement is unclaimed, or when the new level matches
-  // the claimant's existing userLevelState entry.
-  function applyClaimDrivenUserLevelUpdate({ sceneId, placementId, levelId }, { persist = true } = {}) {
-    if (
-      typeof sceneId !== 'string' || !sceneId
-      || typeof placementId !== 'string' || !placementId
-      || typeof levelId !== 'string' || !levelId
-      || typeof boardApi.updateState !== 'function'
-    ) {
-      return null;
-    }
-    const state = boardApi.getState?.() ?? {};
-    const sceneEntry = state.boardState?.sceneState?.[sceneId] ?? null;
-    const claimedUserId = getClaimedUserIdForPlacement(sceneEntry, placementId);
-    if (!claimedUserId) {
-      return null;
-    }
-    const updatedAt = Date.now();
-    let mutated = false;
-    boardApi.updateState?.((draft) => {
-      const draftScene = ensureSceneStateDraftEntry(draft, sceneId);
-      if (!draftScene) {
-        return;
-      }
-      if (!draftScene.userLevelState || typeof draftScene.userLevelState !== 'object') {
-        draftScene.userLevelState = {};
-      }
-      const existing = draftScene.userLevelState[claimedUserId];
-      if (
-        existing
-        && existing.levelId === levelId
-        && existing.source === 'claim'
-        && existing.tokenId === placementId
-      ) {
-        return;
-      }
-      draftScene.userLevelState[claimedUserId] = {
-        levelId,
-        source: 'claim',
-        tokenId: placementId,
-        updatedAt,
-      };
-      mutated = true;
-    });
-    if (!mutated) {
-      return null;
-    }
-    markSceneStateDirty(sceneId, 'userLevelState');
-    const op = {
-      type: 'user-level.set',
-      sceneId,
-      userId: claimedUserId,
-      levelId,
-      source: 'claim',
-      tokenId: placementId,
-    };
-    if (persist) {
-      persistBoardStateSnapshot({}, [op]);
-    }
-    return op;
-  }
-
   // Levels v2 (§5.6): after a token movement (drag commit or level-move),
   // detect placements that landed entirely inside the raw cutouts of their
   // current level and drop them to the next valid level. Chained falls are
   // applied in `getFallingDestinationLevelId` (which walks down until the
   // resting level). Persists the level change as one logical mutation per
-  // placement, mirrors claimant `userLevelState` updates, and returns the
+  // placement and returns the
   // list of placement ids that fell so callers can trigger the animation
   // after their re-render.
   function processPlacementFalls(sceneId, placementIds) {
@@ -21437,18 +21176,6 @@ export function mountBoardInteractions(store, routes = {}) {
     if (ops.length > 0) {
       persistBoardStateSnapshot({}, ops);
     }
-
-    // Levels v2 (§4.2 + §5.6): when a claimed token falls, the same
-    // logical mutation must update the claimant's `userLevelState` so
-    // their view follows. `applyClaimDrivenUserLevelUpdate` short-circuits
-    // for unclaimed placements and emits its own `user-level.set` op.
-    fallTargets.forEach(({ placementId, toLevelId }) => {
-      applyClaimDrivenUserLevelUpdate({
-        sceneId,
-        placementId,
-        levelId: toLevelId,
-      });
-    });
 
     return fallTargets.map((entry) => entry.placementId);
   }
@@ -21536,173 +21263,6 @@ export function mountBoardInteractions(store, routes = {}) {
     setStackButtonState(tokenSettingsMenu.levelUpButton, !controls.canMoveUp);
   }
 
-  // Levels v2 (§5.4): keep the token-settings claim row in sync with the
-  // current claim. The GM gets a select; players get a single Claim/Take/
-  // Unclaim button. Both surfaces show the current claimant's name.
-  function syncTokenClaimControls(placement = null) {
-    if (!tokenSettingsMenu?.claimSection) {
-      return;
-    }
-    if (!placement || typeof placement !== 'object' || !placement.id) {
-      tokenSettingsMenu.claimSection.hidden = true;
-      tokenSettingsMenu.claimSection.setAttribute('aria-hidden', 'true');
-      return;
-    }
-
-    tokenSettingsMenu.claimSection.hidden = false;
-    tokenSettingsMenu.claimSection.setAttribute('aria-hidden', 'false');
-
-    const claimedUserId = getClaimedUserIdForActivePlacement(placement.id);
-    if (tokenSettingsMenu.claimName) {
-      tokenSettingsMenu.claimName.textContent = claimedUserId
-        ? formatProfileDisplayName(claimedUserId)
-        : 'Unclaimed';
-      tokenSettingsMenu.claimName.dataset.claimedBy = claimedUserId ?? '';
-    }
-
-    if (tokenSettingsMenu.claimSelect) {
-      tokenSettingsMenu.claimSelect.value = claimedUserId ?? '';
-    }
-
-    if (tokenSettingsMenu.claimToggleButton) {
-      const button = tokenSettingsMenu.claimToggleButton;
-      const userId = getCurrentUserId();
-      const canPlayerClaim = !isGmUser()
-        && typeof userId === 'string'
-        && PLAYER_CHARACTER_USER_IDS.includes(userId);
-      if (!canPlayerClaim) {
-        button.hidden = true;
-        button.setAttribute('aria-hidden', 'true');
-      } else {
-        button.hidden = false;
-        button.setAttribute('aria-hidden', 'false');
-        if (claimedUserId === userId) {
-          button.textContent = 'Unclaim';
-          button.dataset.claimAction = 'clear';
-        } else if (claimedUserId) {
-          button.textContent = 'Take Claim';
-          button.dataset.claimAction = 'take';
-        } else {
-          button.textContent = 'Claim';
-          button.dataset.claimAction = 'set';
-        }
-      }
-    }
-  }
-
-  function getClaimedUserIdForActivePlacement(placementId) {
-    if (typeof placementId !== 'string' || !placementId) {
-      return null;
-    }
-    const state = boardApi.getState?.() ?? {};
-    const activeSceneId = state.boardState?.activeSceneId ?? null;
-    if (!activeSceneId) {
-      return null;
-    }
-    const sceneEntry = state.boardState?.sceneState?.[activeSceneId] ?? null;
-    return getClaimedUserIdForPlacement(sceneEntry, placementId);
-  }
-
-  function handleTokenClaimSelectChange(rawValue) {
-    if (!isGmUser() || !activeTokenSettingsId) {
-      return;
-    }
-    const targetUserId = typeof rawValue === 'string' ? rawValue.trim().toLowerCase() : '';
-    if (targetUserId && targetUserId !== 'gm' && !PLAYER_CHARACTER_USER_IDS.includes(targetUserId)) {
-      // Defensive: select options are constrained, but bail if a stray
-      // value sneaks in so we never broadcast an invalid claim.
-      syncTokenClaimControls(getPlacementFromStore(activeTokenSettingsId));
-      return;
-    }
-    if (targetUserId) {
-      submitTokenClaimChange(activeTokenSettingsId, targetUserId);
-    } else {
-      submitTokenClaimChange(activeTokenSettingsId, null);
-    }
-  }
-
-  function handleTokenClaimToggleClick() {
-    if (!activeTokenSettingsId) {
-      return;
-    }
-    const userId = getCurrentUserId();
-    if (!userId || !PLAYER_CHARACTER_USER_IDS.includes(userId)) {
-      return;
-    }
-    const claimedUserId = getClaimedUserIdForActivePlacement(activeTokenSettingsId);
-    if (claimedUserId === userId) {
-      submitTokenClaimChange(activeTokenSettingsId, null);
-    } else {
-      submitTokenClaimChange(activeTokenSettingsId, userId);
-    }
-  }
-
-  // Levels v2 (§5.4): single mutation point for claim changes from the
-  // token-settings UI. `targetUserId === null` clears the claim (claim.clear);
-  // otherwise it writes a new claim (claim.set, replacing any existing one).
-  // The op applier mirror-writes are no-ops on the originating client; the
-  // ops broadcast picks up remote clients via Pusher.
-  function submitTokenClaimChange(placementId, targetUserId) {
-    if (typeof placementId !== 'string' || !placementId) {
-      return;
-    }
-    const activeSceneId = getActiveSceneId();
-    if (!activeSceneId || typeof boardApi.updateState !== 'function') {
-      return;
-    }
-    const currentClaim = getClaimedUserIdForActivePlacement(placementId);
-    if (currentClaim === (targetUserId ?? null)) {
-      syncTokenClaimControls(getPlacementFromStore(placementId));
-      return;
-    }
-
-    let mutated = false;
-    boardApi.updateState?.((draft) => {
-      const sceneEntry = ensureSceneStateDraftEntry(draft, activeSceneId);
-      if (!sceneEntry) {
-        return;
-      }
-      if (!sceneEntry.claimedTokens || typeof sceneEntry.claimedTokens !== 'object') {
-        sceneEntry.claimedTokens = {};
-      }
-      if (targetUserId) {
-        if (sceneEntry.claimedTokens[placementId] === targetUserId) {
-          return;
-        }
-        sceneEntry.claimedTokens[placementId] = targetUserId;
-        mutated = true;
-      } else if (placementId in sceneEntry.claimedTokens) {
-        delete sceneEntry.claimedTokens[placementId];
-        mutated = true;
-      }
-    });
-
-    if (!mutated) {
-      syncTokenClaimControls(getPlacementFromStore(placementId));
-      return;
-    }
-
-    markSceneStateDirty(activeSceneId, 'claimedTokens');
-    const op = targetUserId
-      ? { type: 'claim.set', sceneId: activeSceneId, placementId, userId: targetUserId }
-      : { type: 'claim.clear', sceneId: activeSceneId, placementId };
-    persistBoardStateSnapshot({}, [op]);
-
-    const placement = getPlacementFromStore(placementId);
-    syncTokenClaimControls(placement);
-    renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
-
-    if (status) {
-      const label = tokenLabel(placement);
-      if (targetUserId) {
-        const ownerLabel = formatProfileDisplayName(targetUserId);
-        status.textContent = `Claimed ${label} for ${ownerLabel}.`;
-      } else {
-        status.textContent = `Released ${label} to unclaimed.`;
-      }
-    }
-  }
-
   function setStackButtonState(button, disabled) {
     if (!button) {
       return;
@@ -21725,8 +21285,6 @@ export function mountBoardInteractions(store, routes = {}) {
     syncMonsterStatBlockControls(placement);
     syncTokenStackControls(placement?.id);
     syncTokenLevelControls(placement);
-    syncTokenClaimControls(placement);
-
     syncConditionControls(placement);
 
     const canShowHitPointValues = !shouldHideEnemyHitPointValues(placement);
@@ -21985,18 +21543,7 @@ export function mountBoardInteractions(store, routes = {}) {
       return true;
     }
 
-    // Per-user claim grants visibility — same idea as PC token claims. A
-    // monster claimed to the current user is treated as theirs to see.
-    const userId = typeof getCurrentUserId === 'function' ? getCurrentUserId() : null;
-    if (!userId) return false;
-    const state = boardApi?.getState?.() ?? {};
-    const activeSceneId = state?.boardState?.activeSceneId ?? null;
-    const sceneEntry = activeSceneId ? state?.boardState?.sceneState?.[activeSceneId] ?? null : null;
-    const claimedTokens = sceneEntry?.claimedTokens;
-    if (!claimedTokens || typeof claimedTokens !== 'object') return false;
-    const claimedUserId = claimedTokens[placement.id];
-    if (!claimedUserId) return false;
-    return normalizeProfileId(claimedUserId) === userId;
+    return false;
   }
 
   // Expose the visibility check so the monster ability tray (Phase 5) and the

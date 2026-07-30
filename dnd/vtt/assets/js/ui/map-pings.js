@@ -374,8 +374,8 @@ export function createMapPings({
     }
   }
 
-  // Levels v2 §5.2: expose the pan helper so claim-driven view-follow can
-  // reuse the same camera-centering math as alt-shift-click focus pings.
+  // Expose the pan helper so map-level navigation can reuse the same
+  // camera-centering math as alt-shift-click focus pings.
   // Accepts a `{ x, y }` pair already normalized to [0, 1] of the active
   // map; returns false when the view isn't ready (no map loaded, missing
   // dimensions) so the caller can decide whether to retry.

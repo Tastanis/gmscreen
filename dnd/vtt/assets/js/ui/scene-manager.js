@@ -893,8 +893,6 @@ let mapLevelSequence = 0;
 //   - `userLevelState` entries pointing at the deleted level are remapped to
 //     the fallback (preserving `source` / `tokenId`).
 //   - Claim-driven invariant from §4.2: every remapped claimed placement
-//     overwrites its claimant's `userLevelState` to `{levelId: fallback,
-//     source: 'claim', tokenId: <placementId>, updatedAt}`.
 function deleteSceneMapLevelCascade(stateApi, sceneId, levelId) {
   if (!sceneId || typeof levelId !== 'string' || !levelId || levelId === BASE_MAP_LEVEL_ID) {
     return null;
@@ -945,7 +943,7 @@ function deleteSceneMapLevelCascade(stateApi, sceneId, levelId) {
     }
 
     if (!ctx?.sceneBoardState) {
-      summary = { fallbackLevelId, remappedPlacementIds, remappedUserIds: [], remappedClaimUserIds: [] };
+      summary = { fallbackLevelId, remappedPlacementIds, remappedUserIds: [] };
       return true;
     }
     if (!ctx.sceneBoardState.userLevelState || typeof ctx.sceneBoardState.userLevelState !== 'object') {
@@ -969,33 +967,10 @@ function deleteSceneMapLevelCascade(stateApi, sceneId, levelId) {
       remappedUserIds.push(userId);
     });
 
-    const remappedClaimUserIds = [];
-    const claimedTokens = ctx.sceneBoardState.claimedTokens;
-    if (claimedTokens && typeof claimedTokens === 'object' && remappedPlacementIds.length) {
-      remappedPlacementIds.forEach((placementId) => {
-        const raw = claimedTokens[placementId];
-        if (typeof raw !== 'string') {
-          return;
-        }
-        const claimant = raw.trim().toLowerCase();
-        if (!claimant) {
-          return;
-        }
-        userLevelState[claimant] = {
-          levelId: fallbackLevelId,
-          source: 'claim',
-          tokenId: placementId,
-          updatedAt: remapTimestamp,
-        };
-        remappedClaimUserIds.push(claimant);
-      });
-    }
-
     summary = {
       fallbackLevelId,
       remappedPlacementIds,
       remappedUserIds,
-      remappedClaimUserIds,
     };
     return true;
   });
