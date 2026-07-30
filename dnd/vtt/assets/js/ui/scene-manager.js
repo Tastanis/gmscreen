@@ -4,7 +4,6 @@ import {
   deleteScene,
   updateSceneVisibility,
 } from '../services/scene-service.js';
-import { persistBoardState } from '../services/board-state-service.js';
 import { normalizeGridState } from '../state/normalize/grid.js';
 import {
   BASE_MAP_LEVEL_ID,
@@ -134,7 +133,7 @@ export function renderSceneList(routes, store) {
   stateApi.subscribe?.((nextState) => render(nextState));
 
   const persistBoardStateSnapshot = (dirtySceneId = null, options = {}) => {
-    if (!endpoints.state || typeof stateApi.getState !== 'function') {
+    if (typeof stateApi.getState !== 'function') {
       return;
     }
 
@@ -145,31 +144,8 @@ export function renderSceneList(routes, store) {
     if (typeof stateApi._persistBoardState === 'function') {
       return stateApi._persistBoardState(options);
     }
-
-    const latest = stateApi.getState?.();
-    const boardState = latest?.boardState ?? null;
-    if (!boardState || typeof boardState !== 'object') {
-      return;
-    }
-
-    const savePromise = persistBoardState(endpoints.state, boardState, options);
-    if (savePromise && typeof savePromise.then === 'function') {
-      savePromise.then((result) => {
-        const version = normalizeBoardStateVersion(result?.data?._version);
-        if (!result?.success || version <= 0) {
-          return result;
-        }
-
-        stateApi.updateState?.((draft) => {
-          if (!draft.boardState || typeof draft.boardState !== 'object') {
-            draft.boardState = {};
-          }
-          draft.boardState._version = version;
-        });
-        return result;
-      });
-    }
-    return savePromise;
+    console.error('[VTT] Sync V2 command adapter is unavailable.');
+    return null;
   };
 
   container.addEventListener('click', async (event) => {

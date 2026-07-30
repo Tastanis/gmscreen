@@ -24,7 +24,6 @@ import { mountDiceRoller } from './ui/dice-roller.js';
 import { mountMemoryMonitor } from './ui/memory-monitor.js'; // [REMOVABLE] Memory monitor widget
 import { fetchScenes } from './services/scene-service.js';
 import { fetchTokens } from './services/token-service.js';
-import { fetchBoardState } from './services/board-state-service.js';
 import {
   BASE_MAP_LEVEL_ID,
   normalizeMapLevelsState,
@@ -48,14 +47,6 @@ async function bootstrap() {
     : {
         ...rawBoardState,
         placements: restrictPlacementsToPlayerView(rawBoardState.placements ?? {}),
-        // Reset metadata for non-GM users to prevent them from inheriting
-        // GM-authored metadata which would cause the poller authority check
-        // to incorrectly trigger and skip new placement syncs.
-        metadata: {
-          ...(rawBoardState.metadata ?? {}),
-          authorIsGm: false,
-          authorRole: 'player',
-        },
       };
 
   initializeState({
@@ -120,15 +111,16 @@ async function hydrateFromServer(routes, userContext, storeApi = null) {
 
   try {
     // Only GM can access scenes.php directly - players get scene data from state.php
-    const [scenesResult, tokensResult, boardStateResult] = await Promise.all([
+    const [scenesResult, tokensResult] = await Promise.all([
       isGM && routes.scenes ? fetchScenes(routes.scenes) : Promise.resolve([]),
       routes.tokens ? fetchTokens(routes.tokens) : Promise.resolve([]),
-      routes.state ? fetchBoardState(routes.state) : Promise.resolve(null),
     ]);
 
-    const scenes = boardStateResult?.scenes ?? scenesResult;
-    const tokens = boardStateResult?.tokens ?? tokensResult;
-    const boardStateSnapshot = boardStateResult?.boardState ?? null;
+    const scenes = isGM ? scenesResult : null;
+    const tokens = tokensResult;
+    // Sync V2 bootstraps and recovers canonical board state independently.
+    // Catalog hydration must never fetch or merge a legacy board snapshot.
+    const boardStateSnapshot = null;
 
     const currentState = getState();
     // Use the fresh isGM value from the current state (which may have been updated)

@@ -35,11 +35,6 @@ import {
   isDrawingToolMounted,
   consumeFullSyncNeeded,
 } from './drawing-tool.js';
-import {
-  acknowledgeBoardStateSnapshot,
-  persistBoardState,
-  persistBoardStateOps,
-} from '../services/board-state-service.js';
 import { updateSceneGrid } from '../services/scene-service.js';
 import {
   GRID_SIZE_DEFAULT,
@@ -59,17 +54,12 @@ import {
   resolveActiveLevelIdForUser,
   resolvePlacementLevelId,
 } from '../state/normalize/map-levels.js';
-import { initializePusher, getSocketId, isPusherConnected } from '../services/pusher-service.js';
-import { createBoardStatePoller } from '../services/board-state-poller.js';
-import { applyBoardStateOpsLocally } from '../services/board-state-op-applier.js';
 import { recordSyncDiagnostic } from '../services/sync-diagnostics.js';
 import {
   PLAYER_VISIBLE_TOKEN_FOLDER,
   normalizeMonsterSnapshot,
   normalizePlayerTokenFolderName,
 } from '../state/store.js';
-import { shouldApplyIncomingVersion } from '../state/version-guard.js';
-import { applyFreshAuthoritativeSnapshot } from '../state/authoritative-snapshot.js';
 import { close as closeMonsterStatBlock, open as openMonsterStatBlock } from './monster-stat-block.js';
 import { createCombatTimerService } from '../services/combat-timer-service.js';
 import { mountFogOfWar, renderFog, renderFogSelection, isFogSelectActive, isPositionFogged, createFogChecker } from './fog-of-war.js';
@@ -139,7 +129,6 @@ import {
   cloneArraySimple,
   mergeArrayByIdWithTimestamp,
   mergeSceneKeyedSection,
-  mergeBoardStateSnapshot,
 } from '../utils/merge-helpers.js';
 import {
   TURN_PHASE,
@@ -206,9 +195,6 @@ const DEFAULT_SCENE_ID = '_default';
 // When true, any calls to syncCombatStateToStore() or boardApi.updateState()
 // that would trigger subscribers are blocked to prevent infinite recursion.
 let isApplyingState = false;
-
-// Re-exported so existing tests importing from board-interactions.js keep working.
-export { createBoardStatePoller };
 
 export async function uploadMap(file, endpoint, fileName, options) {
   if (!endpoint) {
@@ -369,7 +355,6 @@ export {
   cloneArraySimple,
   mergeArrayByIdWithTimestamp,
   mergeSceneKeyedSection,
-  mergeBoardStateSnapshot,
 };
 
 export function shouldRenderWallDiagonalConnector(startSquare, endSquare, squareKeySet) {
@@ -6057,8 +6042,8 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   const doPersistBoardStateSnapshot = (options = {}, opsOverride = null) => {
-    if (!routes?.state || typeof boardApi.getState !== 'function') {
-      console.warn('[VTT] Cannot persist board state: routes.state missing or boardApi.getState unavailable');
+    if (typeof boardApi.getState !== 'function') {
+      console.warn('[VTT] Cannot submit board command: boardApi.getState unavailable');
       return;
     }
 
@@ -6069,6 +6054,54 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    // Phase 8: every shared board domain is V2-owned. Keep the historical
+    // function name as a compatibility surface for feature modules, but route
+    // it exclusively to explicit canonical commands. There is deliberately no
+    // snapshot, V1 op-buffer, version/hash arbitration, or public-board
+    // transport fallback after this point.
+    const suppliedOps = Array.isArray(opsOverride) ? opsOverride : [];
+    const placementOps = suppliedOps.filter(isSyncV2PlacementOp);
+    const domainOps = suppliedOps.filter(isSyncV2BoardDomainOp);
+    const unsupportedOps = suppliedOps.filter(
+      (op) => !placementOps.includes(op) && !domainOps.includes(op)
+    );
+    if (unsupportedOps.length) {
+      const error = new Error(
+        `Unsupported legacy board operations: ${unsupportedOps
+          .map((op) => String(op?.type ?? 'unknown'))
+          .join(', ')}`
+      );
+      reportSyncFailure(error, 'command');
+      return Promise.resolve({ success: false, error });
+    }
+
+    const derivedPlacementOps =
+      !suppliedOps.length && dirtyPlacements.size > 0
+        ? deriveDirtyPlacementOps()
+        : [];
+    const routedPlacementOps = placementOps.length ? placementOps : derivedPlacementOps;
+    const boardCommands = deriveSyncV2BoardDomainCommands(boardState, domainOps);
+    if (!routedPlacementOps.length && !boardCommands.length) {
+      return Promise.resolve({ success: true, mode: 'live', noChanges: true });
+    }
+
+    let commandPromise = Promise.resolve({ success: true, mode: 'live' });
+    if (routedPlacementOps.length) {
+      commandPromise = commandPromise.then(
+        () => persistSyncV2PlacementOps(routedPlacementOps)
+      );
+    }
+    if (boardCommands.length) {
+      commandPromise = commandPromise.then((result) => (
+        result?.success === false
+          ? result
+          : persistSyncV2BoardDomains(boardState, domainOps)
+      ));
+    }
+    return commandPromise;
+
+    /* c8 ignore start -- unreachable V1 migration shell retained temporarily
+       only to keep this large feature module reviewable during the final cut. */
     const isGmUser = Boolean(latest?.user?.isGM);
 
     if (options?.__syncV2Routed !== true) {
@@ -6361,17 +6394,9 @@ export function mountBoardInteractions(store, routes = {}) {
     return savePromise ?? null;
   };
 
+  /* c8 ignore stop */
   const persistBoardStateSnapshot = (options = {}, opsOverride = null) => {
-    const hasOpsOverride = Array.isArray(opsOverride) && opsOverride.length > 0;
-    if ((hasOpsOverride && options?.serializeWithSnapshots !== true) || options?.keepalive === true) {
-      return doPersistBoardStateSnapshot(options, opsOverride);
-    }
-    const previous = snapshotSaveQueue;
-    const next = previous
-      .catch(() => null)
-      .then(() => doPersistBoardStateSnapshot(options, opsOverride));
-    snapshotSaveQueue = next.catch(() => null);
-    return next;
+    return doPersistBoardStateSnapshot(options, opsOverride);
   };
 
   let keepaliveFlushScheduled = false;
@@ -8429,16 +8454,10 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
     recordSyncDiagnostic('boardStateApplications', {
-      version: Number(state?.boardState?._version) || 0,
       sceneId: state?.boardState?.activeSceneId ?? null,
     });
     isApplyingState = true;
     try {
-      const storeVersion = Number(state?.boardState?._version);
-      if (Number.isFinite(storeVersion) && storeVersion > currentBoardStateVersion) {
-        currentBoardStateVersion = storeVersion;
-        pusherInterface?.setLastAppliedVersion?.(storeVersion);
-      }
       const sceneState = normalizeSceneState(state.scenes);
       const activeSceneId = state.boardState?.activeSceneId ?? null;
       if (activeSceneId !== lastActiveSceneId) {
@@ -8523,9 +8542,8 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   };
 
-  if (typeof boardApi.subscribe === 'function') {
-    boardApi.subscribe(applyStateToBoard);
-  }
+  // Canonical events use the focused Sync V2 render coordinator. A broad
+  // compatibility-store subscription would redraw unrelated board domains.
   scheduleActiveSceneTriggerRegistration();
 
   if (grid && (!boardApi || typeof boardApi.updateState !== 'function')) {
@@ -8589,16 +8607,13 @@ export function mountBoardInteractions(store, routes = {}) {
 
   applyStateToBoard(boardApi.getState?.() ?? {});
 
-  // Start Pusher first, then start the poller only after Pusher has either
-  // connected or timed out. This prevents the poller from locking its
-  // interval at "1 second fallback mode" while Pusher is still handshaking.
-  const pusherReady = initializePusherSync();
+  // Sync V2 starts its authenticated private transport and ordered recovery.
   tokenMovementRuntime.start().catch(() => {
     // reportSyncFailure is invoked by the runtime; V1 remains available for
     // non-movement domains while the movement error is visible to the user.
   });
-  Promise.resolve(pusherReady).then(() => {
-    startBoardStatePoller();
+  Promise.resolve().then(() => {
+    // Sync V2 owns replay/reconnect recovery; no V1 poller is started.
     // (combat refresh removed — covered by Pusher + main poller)
   });
 
@@ -9670,7 +9685,6 @@ export function mountBoardInteractions(store, routes = {}) {
       updateSceneMeta(activeSceneFromState());
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
       templateTool.notifyMapState();
-      maybeNudgeBoardState('map-ready');
     };
     const handleMapImageError = () => {
       if (loadHandled || loadToken !== mapLoadSequence) {

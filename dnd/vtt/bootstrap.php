@@ -248,9 +248,8 @@ function withVttBoardStateLock(callable $callback)
 }
 
 /**
- * Overlay canonical Sync V2 domains onto the legacy-shaped bootstrap object.
- * The JSON file remains only a compatibility projection for domains that
- * have not migrated.
+ * Build the browser's compatibility-shaped board projection exclusively from
+ * canonical Sync V2 state.
  */
 function overlaySyncV2Placements(array $boardState): array
 {
@@ -272,10 +271,6 @@ function overlaySyncV2Placements(array $boardState): array
             (int) ($config['snapshot_interval'] ?? 100),
             (int) ($config['snapshot_retention'] ?? 20)
         );
-        $store->migrateLegacyPlacements($boardState);
-        if (($config['domains']['combat'] ?? false) === true) {
-            $store->migrateLegacyCombat($boardState);
-        }
         $boardDomainsEnabled = false;
         foreach ([
             'templates', 'drawings', 'pings', 'fog',
@@ -285,9 +280,6 @@ function overlaySyncV2Placements(array $boardState): array
                 $boardDomainsEnabled = true;
                 break;
             }
-        }
-        if ($boardDomainsEnabled) {
-            $store->migrateLegacyBoardDomains($boardState);
         }
         $snapshot = $store->getSnapshot();
         $boardState['placements'] = [];
@@ -377,7 +369,7 @@ function getVttBootstrapConfig(?array $authContext = null): array
 
     $scenes = loadVttScenes();
     $tokens = loadVttTokens();
-    $boardState = overlaySyncV2Placements(loadVttJson('board-state.json'));
+    $boardState = overlaySyncV2Placements([]);
 
     // Normalize fogOfWar revealedCells to ensure they're always JSON objects, not arrays.
     // PHP's json_encode() turns empty PHP arrays into [] (JSON array) instead of {} (JSON object).
@@ -457,7 +449,6 @@ function getVttBootstrapConfig(?array $authContext = null): array
             $pusherConfig = [
                 'key' => $pusherData['key'] ?? '',
                 'cluster' => $pusherData['cluster'] ?? 'us3',
-                'channel' => $pusherData['channel'] ?? 'vtt-board',
                 'syncV2Channel' => $isGm
                     ? ($pusherData['sync_v2_gm_channel'] ?? 'private-vtt-sync-v2-gm')
                     : ($pusherData['sync_v2_player_channel'] ?? 'private-vtt-sync-v2-players'),

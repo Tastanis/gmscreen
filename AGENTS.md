@@ -109,17 +109,17 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 - Debug info should be removed before production
 - Import button requires GM login (user: 'GM', password: 'harms')
 
-## VTT Sync V2 Phase 7
+## VTT Sync V2 Final Boundary
 
-- Phase 7 is complete. Sync V2 uses authenticated private GM/player Pusher
-  audiences, immediate reconnect replay, strict contiguous gap recovery,
-  bounded event/snapshot buffers, exact-operation retry, and GM operational
-  status.
-- The implementation plan and current operating boundary are in
-  `/docs/vtt-sync-v2/README.md`; Phase 8 is next.
-- Do not restore public Sync V2 event delivery or re-enable V1 writers for an
-  owned domain. Phase 8 deletion must wait for the documented real three-client
-  soak test.
+- Phase 8 is complete. Sync V2 is the only shared-board writer, delivery, and
+  recovery system. The final operating boundary is in
+  `/docs/vtt-sync-v2/README.md`.
+- Do not restore `api/state.php`, the public board Pusher channel, legacy
+  snapshot/op services, the V1 poller, timestamp/version arbitration, or a
+  broad `applyStateToBoard` store subscriber.
+- The historical `_persistBoardState` feature-module name is a V2 command
+  adapter. It must never serialize or send a whole board.
 - The legacy checked-in Pusher secret still requires rotation in the external
   Pusher dashboard. Put the replacement in the server-only
-  `VTT_PUSHER_SECRET` environment variable.
+  `VTT_PUSHER_SECRET` environment variable, then perform the documented GM plus
+  two-player production soak test.

@@ -611,7 +611,6 @@ function vttSyncV2PlacementEventIsPublicSafe(array $event): bool
 function vttSyncV2Store(): SyncV2Store
 {
     static $store = null;
-    static $migrated = false;
     if ($store instanceof SyncV2Store) {
         return $store;
     }
@@ -628,25 +627,6 @@ function vttSyncV2Store(): SyncV2Store
         (int) ($config['snapshot_interval'] ?? 100),
         (int) ($config['snapshot_retention'] ?? 20)
     );
-    if (!$migrated && vttSyncV2DomainEnabled('placements')) {
-        $store->migrateLegacyPlacements(loadVttJson('board-state.json'));
-        $migrated = true;
-    }
-    if (vttSyncV2DomainEnabled('combat')) {
-        $store->migrateLegacyCombat(loadVttJson('board-state.json'));
-    }
-    if (
-        vttSyncV2DomainEnabled('templates')
-        || vttSyncV2DomainEnabled('drawings')
-        || vttSyncV2DomainEnabled('pings')
-        || vttSyncV2DomainEnabled('fog')
-        || vttSyncV2DomainEnabled('levels')
-        || vttSyncV2DomainEnabled('scenes')
-        || vttSyncV2DomainEnabled('grid')
-        || vttSyncV2DomainEnabled('routing')
-    ) {
-        $store->migrateLegacyBoardDomains(loadVttJson('board-state.json'));
-    }
     return $store;
 }
 

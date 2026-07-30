@@ -20,7 +20,7 @@ import {
   updateState,
 } from '../store.js';
 
-import { mergeBoardStateSnapshot } from '../../ui/board-interactions.js';
+import { mergeBoardStateSnapshot } from '../../utils/merge-helpers.js';
 
 // ---------------------------------------------------------------------------
 // store.js — normalizeFogOfWarEntry (via initializeState)

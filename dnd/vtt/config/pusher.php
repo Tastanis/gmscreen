@@ -30,9 +30,6 @@ return [
     // Enable/disable Pusher integration (set to false to disable without removing config)
     'enabled' => true,
 
-    // Channel name for VTT board state updates
-    'channel' => 'vtt-board',
-
     // Authenticated Sync V2 audience channels. The browser receives only the
     // one channel permitted for its current authenticated role.
     'sync_v2_gm_channel' => 'private-vtt-sync-v2-gm',
@@ -47,14 +44,4 @@ return [
     // HTTP request timeout in seconds
     'timeout' => 5,
 
-    // Event types that should trigger broadcasts
-    'broadcast_events' => [
-        'placements' => true,      // Token position changes
-        'templates' => true,       // Area effect templates
-        'drawings' => true,        // Freehand drawings
-        'pings' => true,           // Map pings
-        'combat' => true,          // Combat state changes
-        'scene' => true,           // Scene changes (GM only)
-        'overlay' => true,         // Fog of war (GM only)
-    ],
 ];

@@ -1,6 +1,6 @@
 # VTT Sync V2 — Canonical Implementation Plan
 
-**Status:** Phase 7 complete; Phase 8 is the next implementation stage
+**Status:** Phase 8 complete; Sync V2 is the only shared-board synchronization system
 **Canonical handoff:** This file is the source of truth for the synchronization
 replacement. Read it before changing VTT persistence, Pusher delivery, board
 state, combat turns, or rendering subscriptions.
@@ -636,6 +636,55 @@ Remove routine snapshots, legacy Pusher full merges, grace-period guards,
 authored-snapshot suppression, obsolete op buffers, and the broad store
 subscriber only after every domain passes its deletion gate and real-session
 soak testing.
+
+- [x] Remove the V1 board-state route from browser configuration and stop
+      bootstrap hydration from fetching or merging board snapshots.
+- [x] Retire `api/state.php` with HTTP 410 so cached clients cannot perform
+      whole-board reads, writes, version bumps, or public broadcasts.
+- [x] Remove the V1 board-state service, op buffer, HTTP poller, public Pusher
+      subscriber, local op applier, timestamp/version guard, and authoritative
+      V1 snapshot merger from the production module graph.
+- [x] Remove the public board Pusher channel from server and browser
+      configuration; only authenticated Sync V2 audience channels remain.
+- [x] Stop live bootstrap and API requests from re-running legacy JSON-to-V2
+      migration or reading `board-state.json` as shared authority.
+- [x] Keep the historical `_persistBoardState` feature-module interface only as
+      a thin V2 command adapter; unsupported legacy operations fail closed
+      instead of falling back to a snapshot.
+- [x] Remove the broad `boardApi.subscribe(applyStateToBoard)` renderer.
+      Canonical events now use focused V2 render callbacks, with full board
+      reconciliation reserved for initial bootstrap, recovery snapshots, and
+      actual scene-routing changes.
+- [x] Remove obsolete V1 tests and add a source-boundary regression test that
+      prevents retired modules, routes, broad subscriptions, and startup calls
+      from returning.
+- [x] Verify the remaining VTT and ability-automation suite, Sync V2
+      replay/reconnect/race tests, PHP syntax, and SQLite authority tests.
+
+**Gate:** The running browser has one shared-state writer and one recovery
+protocol. Ordinary mutations cannot reach a board snapshot endpoint, public
+board broadcast, V1 poller, version/grace winner, or broad render subscriber.
+
+#### Final operating boundary
+
+- SQLite, authenticated V2 commands, monotonically revised canonical events,
+  private Pusher delivery, and ordered HTTP recovery are the complete
+  multiplayer synchronization spine.
+- Feature modules may still call `_persistBoardState` by its historical name,
+  but it accepts only recognized placement or board-domain operations and
+  derives explicit V2 commands from dirty domain markers. It never serializes
+  or transmits the board.
+- `api/state.php` intentionally returns 410 for every request. Do not restore
+  it as a compatibility fallback; cached clients must refresh.
+- Initial load and an authoritative recovery snapshot may reconcile the full
+  board. An actual scene-routing change may mount a full scene. Token,
+  placement, combat, fog, grid, level, template, drawing, and ping events use
+  their focused render paths.
+- Scene catalog and uploaded asset CRUD remain in their dedicated APIs.
+  Runtime scene selection and every shared board domain remain V2-owned.
+- Before production sign-off, rotate the external Pusher credential into
+  `VTT_PUSHER_SECRET` and run the documented GM plus two-player soak session.
+  These are deployment validation tasks, not reasons to restore V1 code.
 
 ## Required verification
 

@@ -1,6 +1,5 @@
 import { renderSceneList } from './scene-manager.js';
 import { renderTokenLibrary } from './token-library.js';
-import { persistBoardState } from '../services/board-state-service.js';
 import { updateSceneGrid } from '../services/scene-service.js';
 import { normalizeGridState } from '../state/normalize/grid.js';
 
@@ -100,7 +99,7 @@ export function mountSettingsPanel(routes, store, user = {}) {
   };
 
   const persistBoardStateSnapshot = () => {
-    if (!routes?.state || typeof storeApi.getState !== 'function') {
+    if (typeof storeApi.getState !== 'function') {
       return;
     }
 
@@ -117,35 +116,10 @@ export function mountSettingsPanel(routes, store, user = {}) {
     }
 
     if (typeof storeApi._persistBoardState === 'function') {
-      return storeApi._persistBoardState({ forceFullSnapshot: true });
+      return storeApi._persistBoardState();
     }
-
-    const boardState = latest?.boardState ?? null;
-    if (!boardState || typeof boardState !== 'object') {
-      return;
-    }
-
-    const savePromise = persistBoardState(routes.state, boardState);
-    if (savePromise && typeof savePromise.then === 'function') {
-      savePromise.then((result) => {
-        const numericVersion =
-          typeof result?.data?._version === 'number'
-            ? result.data._version
-            : Number.parseInt(result?.data?._version, 10);
-        if (!result?.success || !Number.isFinite(numericVersion) || numericVersion <= 0) {
-          return result;
-        }
-
-        storeApi.updateState?.((draft) => {
-          if (!draft.boardState || typeof draft.boardState !== 'object') {
-            draft.boardState = {};
-          }
-          draft.boardState._version = Math.trunc(numericVersion);
-        });
-        return result;
-      });
-    }
-    return savePromise;
+    console.error('[VTT] Sync V2 command adapter is unavailable.');
+    return null;
   };
 
   const syncGridControls = (state) => {
