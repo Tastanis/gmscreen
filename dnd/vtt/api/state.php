@@ -39,6 +39,13 @@ function vttSyncV2PlacementsOwnState(): bool
     return is_array($config) && ($config['domains']['placements'] ?? false) === true;
 }
 
+function vttSyncV2CombatOwnsState(): bool
+{
+    $configPath = __DIR__ . '/../config/sync-v2.php';
+    $config = is_file($configPath) ? require $configPath : [];
+    return is_array($config) && ($config['domains']['combat'] ?? false) === true;
+}
+
 /**
  * Resolve the on-disk path to the version file.
  */
@@ -370,6 +377,31 @@ if (!defined('VTT_STATE_API_INCLUDE_ONLY')) {
                     static fn (array $op): bool => !(
                         str_starts_with((string) ($op['type'] ?? ''), 'placement.')
                         || in_array(($op['type'] ?? ''), ['claim.set', 'claim.clear'], true)
+                    )
+                ));
+            }
+            if (vttSyncV2CombatOwnsState()) {
+                if (isset($updates['sceneState']) && is_array($updates['sceneState'])) {
+                    foreach ($updates['sceneState'] as &$sceneEntry) {
+                        if (is_array($sceneEntry)) {
+                            unset($sceneEntry['combat']);
+                        }
+                    }
+                    unset($sceneEntry);
+                    $updates['sceneState'] = array_filter(
+                        $updates['sceneState'],
+                        static fn ($entry): bool => is_array($entry) && $entry !== []
+                    );
+                    if ($updates['sceneState'] === []) {
+                        unset($updates['sceneState']);
+                    }
+                }
+                $ops = array_values(array_filter(
+                    $ops,
+                    static fn (array $op): bool => !(
+                        str_starts_with((string) ($op['type'] ?? ''), 'combat.')
+                        || str_starts_with((string) ($op['type'] ?? ''), 'turn.')
+                        || ($op['type'] ?? '') === 'round.advance'
                     )
                 ));
             }

@@ -171,6 +171,18 @@ function vttSyncV2ProjectSnapshotForUser(array $snapshot, array $auth): array
         }
     }
     $snapshot['state']['claims'] = $visibleClaims;
+    if (!($auth['isGM'] ?? false)) {
+        foreach (($snapshot['state']['combat'] ?? []) as $sceneId => $combat) {
+            if (!is_array($combat)) {
+                continue;
+            }
+            $placements = array_values($canonical[$sceneId] ?? []);
+            $snapshot['state']['combat'][$sceneId] = sanitizeCombatStateForPlayerView(
+                $combat,
+                $placements
+            );
+        }
+    }
     return $snapshot;
 }
 
@@ -189,6 +201,10 @@ function vttSyncV2ProjectRecoveryForUser(array $recovery, array $auth): array
         }
         if (($event['type'] ?? '') === 'placement.batchApplied') {
             $recovery['events'][$index] = vttSyncV2ProjectPlacementEventForUser($event, $auth);
+            continue;
+        }
+        if (($event['type'] ?? '') === 'combat.transitioned') {
+            $recovery['events'][$index] = vttSyncV2ProjectCombatEventForUser($event, $auth);
             continue;
         }
         if (($event['type'] ?? '') !== 'token.moved') {
@@ -211,6 +227,50 @@ function vttSyncV2ProjectRecoveryForUser(array $recovery, array $auth): array
         }
     }
     return $recovery;
+}
+
+function vttSyncV2ProjectCombatEventForUser(array $event, array $auth): array
+{
+    if (($auth['isGM'] ?? false) === true) {
+        return $event;
+    }
+    $sceneId = (string) ($event['sceneId'] ?? '');
+    $combat = $event['payload']['combat'] ?? null;
+    if (!is_array($combat)) {
+        $event['actorId'] = null;
+        return $event;
+    }
+    $snapshot = vttSyncV2Store()->getSnapshot();
+    $placements = array_values($snapshot['state']['placements'][$sceneId] ?? []);
+    $event['payload']['combat'] = sanitizeCombatStateForPlayerView($combat, $placements);
+    $visibleIds = [];
+    foreach ($placements as $placement) {
+        if (
+            is_array($placement)
+            && !vttSyncV2PlacementHidden($placement)
+            && is_string($placement['id'] ?? null)
+            && trim($placement['id']) !== ''
+        ) {
+            $visibleIds[trim($placement['id'])] = true;
+        }
+    }
+    if (is_array($event['payload']['transition'] ?? null)) {
+        foreach (['combatantId', 'previousCombatantId'] as $field) {
+            $id = $event['payload']['transition'][$field] ?? null;
+            if (is_string($id) && trim($id) !== '' && !isset($visibleIds[trim($id)])) {
+                $event['payload']['transition'][$field] = '__hidden_enemy__';
+            }
+        }
+    }
+    $event['actorId'] = null;
+    return $event;
+}
+
+function vttSyncV2CombatEventIsPublicSafe(array $event): bool
+{
+    $projected = vttSyncV2ProjectCombatEventForUser($event, ['isGM' => false]);
+    return ($projected['payload']['combat'] ?? null) === ($event['payload']['combat'] ?? null)
+        && ($projected['payload']['transition'] ?? null) === ($event['payload']['transition'] ?? null);
 }
 
 function vttSyncV2ProjectPlacementEventForUser(array $event, array $auth): array
@@ -291,6 +351,9 @@ function vttSyncV2Store(): SyncV2Store
     if (!$migrated && vttSyncV2DomainEnabled('placements')) {
         $store->migrateLegacyPlacements(loadVttJson('board-state.json'));
         $migrated = true;
+    }
+    if (vttSyncV2DomainEnabled('combat')) {
+        $store->migrateLegacyCombat(loadVttJson('board-state.json'));
     }
     return $store;
 }

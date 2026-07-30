@@ -272,6 +272,9 @@ function overlaySyncV2Placements(array $boardState): array
             (int) ($config['snapshot_interval'] ?? 100)
         );
         $store->migrateLegacyPlacements($boardState);
+        if (($config['domains']['combat'] ?? false) === true) {
+            $store->migrateLegacyCombat($boardState);
+        }
         $snapshot = $store->getSnapshot();
         $boardState['placements'] = [];
         foreach (($snapshot['state']['placements'] ?? []) as $sceneId => $placements) {
@@ -287,6 +290,17 @@ function overlaySyncV2Placements(array $boardState): array
                 ? $boardState['sceneState'][$sceneId]
                 : [];
             $boardState['sceneState'][$sceneId]['claimedTokens'] = $claims;
+        }
+        if (($config['domains']['combat'] ?? false) === true) {
+            foreach (($snapshot['state']['combat'] ?? []) as $sceneId => $combat) {
+                if (!is_string($sceneId) || !is_array($combat)) {
+                    continue;
+                }
+                $boardState['sceneState'][$sceneId] = is_array($boardState['sceneState'][$sceneId] ?? null)
+                    ? $boardState['sceneState'][$sceneId]
+                    : [];
+                $boardState['sceneState'][$sceneId]['combat'] = $combat;
+            }
         }
     } catch (Throwable $error) {
         error_log('[VTT Sync V2] Placement overlay failed: ' . $error->getMessage());

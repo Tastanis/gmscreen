@@ -1,6 +1,6 @@
 # VTT Sync V2 — Canonical Implementation Plan
 
-**Status:** Phase 4 complete; Phase 5 is the next implementation stage
+**Status:** Phase 5 complete; Phase 6 is the next implementation stage
 **Canonical handoff:** This file is the source of truth for the synchronization
 replacement. Read it before changing VTT persistence, Pusher delivery, board
 state, combat turns, or rendering subscriptions.
@@ -454,9 +454,9 @@ placement writer uses V2.
   byte-for-byte safe for all viewers. Events containing hidden or GM-only
   placement data use authenticated HTTP replay (normally within 500 ms) until
   Phase 7 supplies private audience channels.
-- V1 continues to own combat, templates, drawings, pings, fog, map-level
-  definitions, scenes, grid, and viewer routing. Placement `levelId` itself is
-  V2-owned; the wider map-level domain migrates in Phase 6.
+- V1 continues to own templates, drawings, pings, fog, map-level definitions,
+  scenes, grid, and viewer routing. Placement `levelId` itself is V2-owned;
+  the wider map-level domain migrates in Phase 6.
 
 ### Phase 5 — Server-authoritative combat
 
@@ -464,9 +464,55 @@ The server exclusively decides combat start/end, encounter, round, phase,
 active combatant, completed combatants, permissions, and conflicting turns.
 Automation runs from accepted canonical transitions.
 
+- [x] Import each legacy scene combat record once without granting it ongoing
+      write authority.
+- [x] Add explicit `combat.start`, `turn.start`, `turn.complete`,
+      `turn.cancel`, `combat.uncomplete`, `round.advance`, `combat.end`, and
+      restricted `combat.patch` commands.
+- [x] Decide every transition under SQLite `BEGIN IMMEDIATE`, then persist
+      canonical combat and append one `combat.transitioned` event atomically.
+- [x] Resolve simultaneous turn starts against current canonical state so one
+      wins and later contenders receive a conflict snapshot.
+- [x] Enforce GM-only encounter/round control and canonical player ownership
+      checks for ally turns.
+- [x] Route acknowledgement, Pusher delivery, replay, and conflict recovery
+      through the same exact-replacement combat reducer.
+- [x] Strip combat from ordinary board snapshots and reject cached V1 combat,
+      turn, and round writes at `state.php`.
+- [x] Remove the live client sequence/timestamp winner, GM intent reassertion,
+      and legacy `combat.set` writer path.
+- [x] Trigger combat automation only after an accepted canonical transition;
+      one idempotent server-side automation claim elects exactly one GM client
+      across tabs and devices.
+- [x] Project hidden combat identities out of player snapshots, recovery,
+      acknowledgements, and shared-channel events.
+- [x] Verify atomic races, permission rejection, idempotency, focused reducer
+      changes, no snapshot reconciliation for normal combat, and the full JS
+      suite.
+
 **Deletion gate:** Remove client combat sequences, timestamp comparisons,
 synced advisory locks, local intent reassertion, legacy combat snapshots, and
 remote/local winner logic only after all combat transitions use V2.
+
+#### Phase 5 operating boundary
+
+- `sync_v2.combat` is live. SQLite is the sole shared authority for encounter,
+  round, pick side, active/completed combatants, and the canonical turn lock.
+- Browser turn locks and optimistic tracker changes are advisory/ephemeral.
+  They cannot win a race or overwrite the accepted server result.
+- Ordinary board, movement, visibility-change, and unload saves contain no
+  combat record. Cached V1 combat operations are stripped server-side.
+- `combat.patch` is deliberately narrow: auxiliary malice, groups, effect
+  display history, and intent history may change without replacing turn
+  authority. Player patches are limited to effect-display fields.
+- Internal GM-only `combat.automation.claim` operations elect one automation
+  executor by deriving an idempotency key from the accepted transition.
+- A normal combat transition patches only the scene combat compatibility
+  record and its directly dependent combat UI. It does not reload the page,
+  map, fog, drawings, templates, stairs, or full board.
+- Player-visible combat events may use the existing shared Pusher channel.
+  Events whose combat or transition payload would reveal a hidden placement
+  use authenticated HTTP replay until Phase 7 adds private audience channels.
 
 ### Phase 6 — Remaining board domains
 

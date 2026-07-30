@@ -39,8 +39,6 @@ import {
   acknowledgeBoardStateSnapshot,
   persistBoardState,
   persistBoardStateOps,
-  persistCombatIntent,
-  persistCombatState,
 } from '../services/board-state-service.js';
 import { updateSceneGrid } from '../services/scene-service.js';
 import {
@@ -146,9 +144,7 @@ import {
 import {
   TURN_PHASE,
   createCombatStateSnapshot as buildCombatStateSnapshot,
-  getCombatStateVersion,
   getTurnPhase as getCombatTurnPhase,
-  isCombatStateNewer,
   mergeTurnEffects,
   normalizeCombatGroups,
   normalizeCombatState,
@@ -158,12 +154,7 @@ import {
 import {
   createCombatDirtyFieldTracker,
   getActiveSceneCombatState,
-  getCombatStateMaliceSnapshot,
   hasCombatMaliceValue,
-  haveCombatGroupsChanged,
-  prepareCombatSnapshotForSync,
-  shouldApplyRemoteCombatState,
-  shouldProtectLocalCombatIntent,
 } from '../combat/combat-sync.js';
 import {
   acquireTurnLock as acquireCombatTurnLock,
@@ -763,6 +754,8 @@ export function mountBoardInteractions(store, routes = {}) {
     syncV2Config?.domains?.token_movement === true;
   const placementsV2Enabled =
     syncV2Config?.domains?.placements === true;
+  const combatV2Enabled =
+    syncV2Config?.domains?.combat === true;
   const combatTimerService = createCombatTimerService();
   let mapLevelCutoutEditorActive = false;
   const mapLevelCutoutTool = createMapLevelCutoutTool();
@@ -907,6 +900,9 @@ export function mountBoardInteractions(store, routes = {}) {
         }
       }
     });
+    if (combatV2Enabled) {
+      applyCombatStateFromBoardState(boardApi.getState?.() ?? {});
+    }
     const activeSceneId = boardApi.getState?.()?.boardState?.activeSceneId ?? null;
     for (const [placementId, placement] of Object.entries(
       snapshot?.state?.placements?.[activeSceneId] ?? {}
@@ -987,9 +983,174 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  function runAcceptedCombatTransitionEffects(transition, combat) {
+    if (
+      !combatV2Enabled
+      || !transition
+      || !isGmUser()
+    ) {
+      return;
+    }
+    const type = transition.type;
+    const combatantId = transition.combatantId || null;
+    const previousCombatantId = transition.previousCombatantId || null;
+    const previousRound = Number(transition.previousRound) || 0;
+
+    const runTurnEnd = (finishedId) => {
+      if (!finishedId) return;
+      const finishingPlacement = getPlacementFromStore(finishedId);
+      fireTimingBoundary('turnEnd', {
+        placementId: finishedId,
+        team: getCombatantTeam(finishedId),
+      });
+      runConditionRidersAtBoundary(finishedId, 'turnEnd', {
+        turnLockId: `sync-v2:${combat?.sequence ?? 0}`,
+      }).catch((error) => {
+        console.warn('[VTT] canonical condition end-of-turn rider failed', error);
+      });
+      tickPersistentZonesForOwner(finishedId, 'endOfTurn').catch((error) => {
+        console.warn('[VTT] canonical persistent zone end-of-turn tick failed', error);
+      });
+      expirePersistentZonesForOwner(finishedId, 'endOfTurn');
+      expireReadyTriggersAtTurnEnd(finishedId);
+      const finishingConditions = ensurePlacementConditions(
+        finishingPlacement?.conditions ?? finishingPlacement?.condition ?? null
+      );
+      const saveEndsConditions = finishingConditions.filter(
+        (condition) => getConditionDurationType(condition) === 'save-ends'
+      );
+      if (saveEndsConditions.length > 0) {
+        openSaveEndsPrompt(
+          finishedId,
+          tokenLabel(finishingPlacement),
+          saveEndsConditions
+        );
+      }
+      clearEndOfTurnConditionsForTarget(finishedId).forEach((entry) => {
+        const possessive = formatPossessiveName(entry?.tokenName ?? 'Token');
+        (Array.isArray(entry?.conditions) ? entry.conditions : []).forEach((condition) => {
+          const name = typeof condition?.name === 'string' ? condition.name.trim() : '';
+          if (name) {
+            showConditionBanner(`${possessive} ${name} has ended.`, { tone: 'reminder' });
+          }
+        });
+      });
+    };
+
+    if (type === 'combat.start') {
+      resetPlayerSurgesToZero('combat-start').finally(() => {
+        fireTimingBoundary('combatStart', { round: 1 });
+        fireTimingBoundary('roundStart', { round: 1 });
+      });
+      resetTriggeredActionsForActiveScene();
+      computeInitialMalice().then((initialMalice) => {
+        setMaliceCount(initialMalice);
+      });
+      return;
+    }
+    if (type === 'turn.start') {
+      if (previousCombatantId && previousCombatantId !== combatantId) {
+        runTurnEnd(previousCombatantId);
+      }
+      if (combatantId) {
+        resetTurnActionUsageForPlacement(combatantId);
+        fireTimingBoundary('turnStart', {
+          placementId: combatantId,
+          team: getCombatantTeam(combatantId),
+        });
+        expirePersistentZonesForOwner(combatantId, 'startOfTurn');
+        tickPersistentZonesForOwner(combatantId, 'startOfTurn').catch((error) => {
+          console.warn('[VTT] canonical persistent zone start-of-turn tick failed', error);
+        });
+        fireOccupantTurnStartZones(combatantId).catch((error) => {
+          console.warn('[VTT] canonical occupant-turn-start zone failed', error);
+        });
+        notifyConditionTurnStart(combatantId);
+        runConditionRidersAtBoundary(combatantId, 'turnStart', {
+          turnLockId: `sync-v2:${combat?.sequence ?? 0}`,
+        }).catch((error) => {
+          console.warn('[VTT] canonical condition start-of-turn rider failed', error);
+        });
+        combatTimerService.startTurn({
+          displayName: getCombatantLabel(combatantId) || 'Combatant',
+          team: getCombatantTeam(combatantId) ?? 'ally',
+          round: Number(combat?.round) || 1,
+          combatantId,
+        });
+      }
+      return;
+    }
+    if (type === 'turn.complete') {
+      runTurnEnd(combatantId);
+      return;
+    }
+    if (type === 'round.advance') {
+      runTurnEnd(combatantId);
+      if (previousRound > 0) {
+        fireTimingBoundary('roundEnd', { round: previousRound });
+      }
+      resetTriggeredActionsForActiveScene();
+      resetAutomationScopedFlags('round');
+      resetPersistentZoneRoundState();
+      fireTimingBoundary('roundStart', { round: combat?.round ?? previousRound + 1 });
+      const profiles = getUniquePlayerProfiles(boardApi.getState?.() ?? {});
+      setMaliceCount((Number(combat?.malice) || 0) + profiles.length + (Number(combat?.round) || 1));
+      return;
+    }
+    if (type === 'combat.end') {
+      fireTimingBoundary('combatEnd', { round: previousRound });
+      resetPlayerSurgesToZero('combat-end');
+      clearAllPersistentZones({ reason: 'combat ended' });
+      clearAllMarksForActiveScene({ reason: 'combat ended' });
+      resetAutomationScopedFlags('all');
+    }
+  }
+
+  function applyConfirmedCombat(snapshot, combat, transition, context = {}) {
+    const sceneId = context?.event?.sceneId;
+    if (!sceneId || !combat || typeof combat !== 'object') {
+      return;
+    }
+    boardApi.updateStateSilently?.((draft) => {
+      const sceneEntry = ensureSceneStateDraftEntry(draft, sceneId);
+      sceneEntry.combat = JSON.parse(JSON.stringify(combat));
+    });
+    applyCombatStateFromBoardState(boardApi.getState?.() ?? {});
+    const automationTypes = new Set([
+      'combat.start',
+      'turn.start',
+      'turn.complete',
+      'round.advance',
+      'combat.end',
+    ]);
+    const operationId = String(context?.event?.operationId ?? '').trim();
+    if (
+      isGmUser()
+      && operationId
+      && automationTypes.has(transition?.type)
+    ) {
+      tokenMovementRuntime
+        .claimCombatAutomation(sceneId, operationId)
+        .then((result) => {
+          if (result?.idempotent !== true) {
+            runAcceptedCombatTransitionEffects(transition, combat);
+          }
+        })
+        .catch((error) => {
+          console.warn('[VTT] Failed to claim canonical combat automation', error);
+        });
+    }
+    recordSyncDiagnostic('syncV2CombatPatches', {
+      sceneId,
+      transition: transition?.type ?? 'patch',
+      revision: snapshot?.revision ?? 0,
+    });
+  }
+
   tokenMovementRuntime = createTokenMovementRuntime({
     enabled: tokenMovementV2Enabled,
     placementsEnabled: placementsV2Enabled,
+    combatEnabled: combatV2Enabled,
     commandsEndpoint: routes.syncV2Commands,
     eventsEndpoint: routes.syncV2Events,
     snapshotEndpoint: routes.syncV2Snapshot,
@@ -1000,6 +1161,7 @@ export function mountBoardInteractions(store, routes = {}) {
     previewPlacement: patchTokenMovementNode,
     applyConfirmedPlacement: applyConfirmedTokenMovement,
     applyConfirmedPlacementBatch,
+    applyConfirmedCombat,
     reconcileSnapshot: reconcileTokenMovementSnapshot,
     onError: (error) => reportSyncFailure(error, 'token movement'),
   });
@@ -1272,7 +1434,6 @@ export function mountBoardInteractions(store, routes = {}) {
   // This handles the window between save completion and server state propagation
   let lastBoardStateSaveCompletedAt = 0;
   const SAVE_GRACE_PERIOD_MS = 1500;
-  const LOCAL_COMBAT_INTENT_PROTECTION_MS = 10000;
 
   // Delta tracking for efficient saves - only send what changed
   // Maps sceneId -> Set of placement IDs that were modified
@@ -1633,13 +1794,6 @@ export function mountBoardInteractions(store, routes = {}) {
       return false;
     }
 
-    // Capture pre-conflict combat intent so a stale-version 409 can't
-    // silently revert a GM action like End Combat. The server's snapshot
-    // still carries the previous combat state; without re-asserting our
-    // local intent here, applyCombatStateFromBoardState below would set
-    // combatActive back to true and the GM could never end combat.
-    const intentSnapshot = isGmUser() ? captureLocalCombatIntent() : null;
-
     boardApi.updateState?.((draft) => {
       const current = draft.boardState && typeof draft.boardState === 'object'
         ? draft.boardState
@@ -1662,152 +1816,7 @@ export function mountBoardInteractions(store, routes = {}) {
       applyCombatStateFromBoardState(updatedState);
     }
 
-    if (intentSnapshot) {
-      maybeReassertCombatIntent(intentSnapshot);
-    }
     return true;
-  }
-
-  function captureLocalCombatIntent() {
-    const activeSceneId = boardApi.getState?.()?.boardState?.activeSceneId ?? null;
-    if (!activeSceneId) {
-      return null;
-    }
-    return {
-      activeSceneId,
-      active: combatActive,
-      round: combatRound,
-      encounterId: combatEncounterId,
-      startingTeam: startingCombatTeam,
-      currentTeam: currentTurnTeam,
-      lastTeam: lastActingTeam,
-      roundTurnCount,
-      activeCombatantId,
-      completedCombatantIds: Array.from(completedCombatants),
-    };
-  }
-
-  function rememberGmCombatIntent() {
-    if (!isGmUser()) {
-      pendingGmCombatIntent = null;
-      return null;
-    }
-    const intent = captureLocalCombatIntent();
-    if (!intent) {
-      return null;
-    }
-    pendingGmCombatIntent = {
-      ...intent,
-      recordedAt: Date.now(),
-    };
-    return pendingGmCombatIntent;
-  }
-
-  function hasPendingCombatIntentSave() {
-    return Boolean(pendingBoardStateSave?.promise || pendingCombatStateSave?.promise);
-  }
-
-  function maybeReassertCombatIntent(intent) {
-    const updated = boardApi.getState?.();
-    const serverCombat =
-      updated?.boardState?.sceneState?.[intent.activeSceneId]?.combat ?? null;
-    if (combatIntentMatchesServer(intent, serverCombat)) {
-      if (hasPendingCombatIntentSave() || registeringLocalCombatSave) {
-        return;
-      }
-      combatConflictRetryAttempts = 0;
-      if (pendingGmCombatIntent?.activeSceneId === intent.activeSceneId) {
-        pendingGmCombatIntent = null;
-      }
-      return;
-    }
-    if (combatConflictRetryAttempts >= MAX_COMBAT_CONFLICT_RETRY_ATTEMPTS) {
-      console.warn(
-        '[VTT] Combat-intent retry limit reached after stale-version conflict;',
-        'accepting server combat state.'
-      );
-      combatConflictRetryAttempts = 0;
-      return;
-    }
-    combatConflictRetryAttempts += 1;
-    console.log(
-      '[VTT] Re-asserting GM combat intent after stale-version conflict',
-      `(attempt ${combatConflictRetryAttempts}).`
-    );
-    combatActive = intent.active;
-    combatRound = intent.round;
-    startingCombatTeam = intent.startingTeam;
-    combatEncounterId = intent.encounterId ?? combatEncounterId;
-    currentTurnTeam = intent.currentTeam;
-    lastActingTeam = intent.lastTeam;
-    roundTurnCount = intent.roundTurnCount;
-    completedCombatants.clear();
-    intent.completedCombatantIds.forEach((id) => completedCombatants.add(id));
-    if (!combatActive) {
-      stopAllyTurnTimer();
-      clearTurnBorderFlash();
-      setActiveCombatantId(null);
-    } else {
-      setActiveCombatantId(intent.activeCombatantId);
-    }
-    updateStartCombatButton();
-    updateCombatModeIndicators();
-    refreshCombatTracker();
-    markCombatEncounterStateDirty();
-    syncCombatStateToStore();
-  }
-
-  function combatIntentMatchesServer(intent, serverCombat) {
-    if (!intent || !serverCombat || typeof serverCombat !== 'object') {
-      return false;
-    }
-
-    return (
-      Boolean(serverCombat.active) === Boolean(intent.active) &&
-      toCombatIntentNumber(serverCombat.round) === toCombatIntentNumber(intent.round) &&
-      toCombatIntentNumber(serverCombat.roundTurnCount) === toCombatIntentNumber(intent.roundTurnCount) &&
-      normalizeCombatIntentId(serverCombat.activeCombatantId) === normalizeCombatIntentId(intent.activeCombatantId) &&
-      normalizeCombatTeam(serverCombat.startingTeam) === normalizeCombatTeam(intent.startingTeam) &&
-      normalizeCombatTeam(serverCombat.currentTeam) === normalizeCombatTeam(intent.currentTeam) &&
-      normalizeCombatTeam(serverCombat.lastTeam) === normalizeCombatTeam(intent.lastTeam) &&
-      normalizeCombatIntentId(serverCombat.encounterId) === normalizeCombatIntentId(intent.encounterId) &&
-      sameCombatIntentIds(serverCombat.completedCombatantIds, intent.completedCombatantIds)
-    );
-  }
-
-  function toCombatIntentNumber(value) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : 0;
-  }
-
-  function normalizeCombatIntentId(value) {
-    return typeof value === 'string' && value.trim() ? value.trim() : null;
-  }
-
-  function sameCombatIntentIds(left, right) {
-    const leftIds = toCombatIntentIdSet(left);
-    const rightIds = toCombatIntentIdSet(right);
-    if (leftIds.size !== rightIds.size) {
-      return false;
-    }
-    for (const id of leftIds) {
-      if (!rightIds.has(id)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  function toCombatIntentIdSet(values) {
-    if (!values || typeof values === 'string' || typeof values[Symbol.iterator] !== 'function') {
-      return new Set();
-    }
-    return new Set(
-      Array.from(values)
-        .filter((value) => typeof value === 'string')
-        .map((value) => value.trim())
-        .filter(Boolean)
-    );
   }
 
   // Phase 3-B (commit 3): helpers for building `placement.update` ops
@@ -2072,20 +2081,8 @@ export function mountBoardInteractions(store, routes = {}) {
   let boardStatePollerHandle = null;
   let suppressCombatStateSync = false;
   let pendingCombatStateSync = false;
-  let combatStateVersion = 0;
-  let combatStateUpdatedAt = 0;
-  // Counter that bounds 409-conflict retries when re-asserting a GM's
-  // combat-state intent. Reset on each fresh user action and on save success.
-  let combatConflictRetryAttempts = 0;
-  const MAX_COMBAT_CONFLICT_RETRY_ATTEMPTS = 3;
-  // Sequence number for combat state sync - increments on each local change
-  // Used instead of timestamps to avoid clock drift issues between clients
-  let combatSequence = 0;
   let combatEncounterId = null;
-  let lastCombatStateSnapshot = null;
-  let pendingGmCombatIntent = null;
   let pendingCombatAuthorityIntent = null;
-  let registeringLocalCombatSave = false;
   let startingCombatTeam = null;
   let currentTurnTeam = null;
   let activeTeam = null;
@@ -5950,7 +5947,6 @@ export function mountBoardInteractions(store, routes = {}) {
           lastPersistedBoardStateHash = snapshotHash;
           lastBoardStateSaveCompletedAt = Date.now();
           pendingBoardStateSave = null;
-          combatConflictRetryAttempts = 0;
           // Clear only the dirty entries this save actually flushed. Ops
           // saves intentionally leave unrelated dirty board state queued.
           clearDirtyTrackingForSave(saveFlushDescriptor);
@@ -6066,46 +6062,13 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }
 
-    const latestState = typeof boardApi.getState === 'function' ? boardApi.getState() : null;
-    const isGmUser = Boolean(latestState?.user?.isGM);
-    const activeSceneId = latestState?.boardState?.activeSceneId ?? null;
+    // Combat is never flushed here. Sync V2 commands own that domain.
 
     // Only save combat state for non-GM users if the player actually made
     // combat changes (dirty fields exist).  Previously this saved on EVERY
     // tab switch / visibility change, which overwrote the GM's newer combat
     // state on the server with the player's stale local copy — causing the
     // "popback" reversion bug after ~20 minutes of play.
-    if (!isGmUser && routes?.state && activeSceneId && dirtyCombatFields.size > 0) {
-      const combatSnapshot = createCombatStateSnapshot();
-      const existingCombatState =
-        latestState?.boardState?.sceneState?.[activeSceneId]?.combat ?? null;
-      const existingNormalized = normalizeCombatState(existingCombatState ?? {});
-      const existingHasMaliceValue =
-        existingCombatState &&
-        typeof existingCombatState === 'object' &&
-        (Object.prototype.hasOwnProperty.call(existingCombatState, 'malice') ||
-          Object.prototype.hasOwnProperty.call(existingCombatState, 'maliceCount'));
-      if (existingNormalized) {
-        if (existingHasMaliceValue) {
-          combatSnapshot.malice = existingNormalized.malice;
-        } else {
-          const fallbackMalice = getCombatStateMaliceSnapshot(lastCombatStateSnapshot);
-          if (fallbackMalice !== null) {
-            combatSnapshot.malice = fallbackMalice;
-          }
-        }
-        combatSnapshot.groups = existingNormalized.groups;
-      }
-      const combatPromise = persistCombatState(routes.state, activeSceneId, combatSnapshot, {
-        keepalive: unloading,
-        _version: currentBoardStateVersion,
-        _socketId: getSocketId?.() || undefined,
-      });
-      if (combatPromise && typeof combatPromise.then === 'function') {
-        tasks.push(combatPromise);
-      }
-    }
-
     const finalize = () => {
       keepaliveFlushScheduled = false;
     };
@@ -6289,6 +6252,9 @@ export function mountBoardInteractions(store, routes = {}) {
         dirtySceneState.forEach((_fields, sceneId) => {
           if (sceneStateClone[sceneId]) {
             filteredSceneState[sceneId] = sceneStateClone[sceneId];
+            if (combatV2Enabled) {
+              delete filteredSceneState[sceneId].combat;
+            }
           }
         });
         if (Object.keys(filteredSceneState).length > 0) {
@@ -6341,6 +6307,13 @@ export function mountBoardInteractions(store, routes = {}) {
       snapshot.playerMapUrl = boardState.playerMapUrl ?? null;
       snapshot.playerThumbnailUrl = boardState.playerThumbnailUrl ?? null;
       snapshot.sceneState = cloneBoardSection(boardState.sceneState);
+      if (combatV2Enabled && snapshot.sceneState && typeof snapshot.sceneState === 'object') {
+        Object.values(snapshot.sceneState).forEach((sceneState) => {
+          if (sceneState && typeof sceneState === 'object') {
+            delete sceneState.combat;
+          }
+        });
+      }
     }
 
     return snapshot;
@@ -11328,7 +11301,12 @@ export function mountBoardInteractions(store, routes = {}) {
     //     state syncs that re-set the same id)
     //   - the new id is non-null (clearing the active turn fires turnEnd
     //     via completeActiveCombatant, not turnStart)
-    if (combatActive && normalizedNextId && normalizedNextId !== previousCombatantId) {
+    if (
+      !combatV2Enabled
+      && combatActive
+      && normalizedNextId
+      && normalizedNextId !== previousCombatantId
+    ) {
       resetTurnActionUsageForPlacement(normalizedNextId);
       fireTimingBoundary('turnStart', { placementId: normalizedNextId, team: nextTeam ?? null });
       expirePersistentZonesForOwner(normalizedNextId, 'startOfTurn');
@@ -11509,6 +11487,11 @@ export function mountBoardInteractions(store, routes = {}) {
       setFocusedCombatantId(representativeId);
       refreshCombatTracker();
       updateCombatModeIndicators();
+      if (combatV2Enabled) {
+        queueCombatAuthorityIntent('combat.uncomplete', {
+          combatantId: representativeId,
+        });
+      }
       syncCombatStateToStore();
       return;
     }
@@ -11631,10 +11614,12 @@ export function mountBoardInteractions(store, routes = {}) {
     if (shouldShowPrompt) {
       openTurnPrompt(representativeId);
     }
-    notifyConditionTurnStart(representativeId);
-    runConditionRidersAtBoundary(representativeId, 'turnStart').catch((error) => {
-      console.warn('[VTT] condition start-of-turn rider failed', error);
-    });
+    if (!combatV2Enabled) {
+      notifyConditionTurnStart(representativeId);
+      runConditionRidersAtBoundary(representativeId, 'turnStart').catch((error) => {
+        console.warn('[VTT] condition start-of-turn rider failed', error);
+      });
+    }
     queueCombatAuthorityIntent('turn.start', {
       combatantId: representativeId,
       holderName: initiatorName,
@@ -11826,15 +11811,17 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     // Fan out turnEnd before any save-ends UI opens, so authored "at end of
     // turn" triggers can arm their owner before the resolution dialog appears.
-    fireTimingBoundary('turnEnd', { placementId: finishedId, team: turnCompletion.finishedTeam });
-    runConditionRidersAtBoundary(finishedId, 'turnEnd', { turnLockId: finishedTurnLockId }).catch((error) => {
-      console.warn('[VTT] condition end-of-turn rider failed', error);
-    });
-    // Tick zones owned by this combatant whose tickAt is endOfTurn.
-    tickPersistentZonesForOwner(finishedId, 'endOfTurn').catch((err) => {
-      console.warn('[VTT] persistent zone end-of-turn tick failed', err);
-    });
-    expirePersistentZonesForOwner(finishedId, 'endOfTurn');
+    if (!combatV2Enabled) {
+      fireTimingBoundary('turnEnd', { placementId: finishedId, team: turnCompletion.finishedTeam });
+      runConditionRidersAtBoundary(finishedId, 'turnEnd', { turnLockId: finishedTurnLockId }).catch((error) => {
+        console.warn('[VTT] condition end-of-turn rider failed', error);
+      });
+      // Tick zones owned by this combatant whose tickAt is endOfTurn.
+      tickPersistentZonesForOwner(finishedId, 'endOfTurn').catch((err) => {
+        console.warn('[VTT] persistent zone end-of-turn tick failed', err);
+      });
+      expirePersistentZonesForOwner(finishedId, 'endOfTurn');
+    }
     const finishingPlacement = getPlacementFromStore(finishedId);
     const finishingConditions = ensurePlacementConditions(
       finishingPlacement?.conditions ?? finishingPlacement?.condition ?? null
@@ -11892,10 +11879,10 @@ export function mountBoardInteractions(store, routes = {}) {
         saveEndsConditions.push(normalized);
       });
     }
-    if (saveEndsConditions.length) {
+    if (!combatV2Enabled && saveEndsConditions.length) {
       openSaveEndsPrompt(finishedId, tokenLabel(finishingPlacement), saveEndsConditions);
     }
-    const clearedEndOfTurn = clearEndOfTurnConditionsForTarget(finishedId);
+    const clearedEndOfTurn = combatV2Enabled ? [] : clearEndOfTurnConditionsForTarget(finishedId);
     if (clearedEndOfTurn.length) {
       clearedEndOfTurn.forEach((entry) => {
         const baseName = entry?.tokenName ?? 'Token';
@@ -13093,7 +13080,6 @@ export function mountBoardInteractions(store, routes = {}) {
     combatActive = true;
     combatRound = 1;
     combatEncounterId = generateCombatEncounterId();
-    combatConflictRetryAttempts = 0;
     setMaliceCount(0, { sync: false });
     if (isGmUser()) {
       combatTimerService.startCombat({ round: combatRound });
@@ -13111,10 +13097,12 @@ export function mountBoardInteractions(store, routes = {}) {
     startingCombatTeam = initialTeam;
     currentTurnTeam = initialTeam;
     const startRound = combatRound;
-    resetPlayerSurgesToZero('combat-start').finally(() => {
-      fireTimingBoundary('combatStart', { round: startRound });
-      fireTimingBoundary('roundStart', { round: startRound });
-    });
+    if (!combatV2Enabled) {
+      resetPlayerSurgesToZero('combat-start').finally(() => {
+        fireTimingBoundary('combatStart', { round: startRound });
+        fireTimingBoundary('roundStart', { round: startRound });
+      });
+    }
     updateStartCombatButton();
     refreshCombatTracker();
     focusNextCombatant([
@@ -13128,13 +13116,10 @@ export function mountBoardInteractions(store, routes = {}) {
       type: TURN_EFFECT_TYPES.DRAW_STEEL,
       triggeredAt: Date.now(),
     });
-    rememberGmCombatIntent();
     queueCombatAuthorityIntent('combat.start');
     syncCombatStateToStore();
-    const startCombatIntent = rememberGmCombatIntent();
-    resetTriggeredActionsForActiveScene();
-    if (startCombatIntent) {
-      maybeReassertCombatIntent(startCombatIntent);
+    if (!combatV2Enabled) {
+      resetTriggeredActionsForActiveScene();
     }
     updateStartCombatButton();
     refreshCombatTracker();
@@ -13144,7 +13129,7 @@ export function mountBoardInteractions(store, routes = {}) {
       maybeAnnounceAllyPick({ delayMs: 2200 });
     }
 
-    if (isGmUser()) {
+    if (isGmUser() && !combatV2Enabled) {
       computeInitialMalice().then((initialMalice) => {
         setMaliceCount(initialMalice);
       });
@@ -13174,15 +13159,18 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     markCombatEncounterStateDirty();
-    fireTimingBoundary('combatEnd', { round: combatRound });
-    resetPlayerSurgesToZero('combat-end');
+    if (!combatV2Enabled) {
+      fireTimingBoundary('combatEnd', { round: combatRound });
+      resetPlayerSurgesToZero('combat-end');
+    }
     combatActive = false;
     combatRound = 0;
     // Persistent zones auto-end at encounter end per Draw Steel rules.
-    clearAllPersistentZones({ reason: 'combat ended' });
-    clearAllMarksForActiveScene({ reason: 'combat ended' });
-    resetAutomationScopedFlags('all');
-    combatConflictRetryAttempts = 0;
+    if (!combatV2Enabled) {
+      clearAllPersistentZones({ reason: 'combat ended' });
+      clearAllMarksForActiveScene({ reason: 'combat ended' });
+      resetAutomationScopedFlags('all');
+    }
     completedCombatants.clear();
     pendingRoundConfirmation = false;
     closeTurnPrompt();
@@ -13209,13 +13197,13 @@ export function mountBoardInteractions(store, routes = {}) {
     // the local combatActive flag back to true. The next snapshot we
     // build then carries active=true and persists a Start-Combat-shaped
     // payload, defeating the End Combat click.
-    rememberGmCombatIntent();
     queueCombatAuthorityIntent('combat.end', {
       encounterId: combatEncounterId,
     });
     syncCombatStateToStore();
-    rememberGmCombatIntent();
-    resetTriggeredActionsForActiveScene();
+    if (!combatV2Enabled) {
+      resetTriggeredActionsForActiveScene();
+    }
     if (status) {
       status.textContent = 'Combat ended.';
     }
@@ -13273,59 +13261,6 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const hasMaliceValue = hasCombatMaliceValue(combatState);
     const normalized = normalizeCombatState(combatState);
-    if (
-      shouldProtectLocalCombatIntent(normalized, {
-        intent: pendingGmCombatIntent,
-        activeSceneId: activeSceneKey,
-        currentVersion: combatStateVersion,
-        currentUpdatedAt: combatStateUpdatedAt,
-        hasPendingSave: hasPendingCombatIntentSave() || registeringLocalCombatSave,
-        maxAgeMs: LOCAL_COMBAT_INTENT_PROTECTION_MS,
-      })
-    ) {
-      updateStartCombatButton();
-      updateCombatModeIndicators();
-      refreshCombatTracker();
-      return;
-    }
-
-    if (
-      pendingGmCombatIntent?.activeSceneId === activeSceneKey &&
-      normalized.active === pendingGmCombatIntent.active &&
-      !hasPendingCombatIntentSave() &&
-      !registeringLocalCombatSave
-    ) {
-      pendingGmCombatIntent = null;
-    }
-
-    // Allow updates on initial load (combatStateVersion === 0) even if sequence matches.
-    // Also check if groups have changed - partial group data can arrive initially and
-    // we need to apply complete group data when it arrives, even with the same sequence.
-    // Use sequence numbers for reliable ordering (avoids clock drift between clients)
-    // Fall back to timestamp comparison if sequence is not available (backwards compatibility).
-    const remoteCombatIsNewer = isCombatStateNewer(normalized, {
-      version: combatStateVersion,
-      updatedAt: combatStateUpdatedAt,
-    });
-    const remoteCombatGroupsChanged = haveCombatGroupsChanged(normalized.groups, combatTrackerGroups);
-    if (!shouldApplyRemoteCombatState(normalized, {
-      currentVersion: combatStateVersion,
-      currentUpdatedAt: combatStateUpdatedAt,
-      currentGroups: combatTrackerGroups,
-    })) {
-      return;
-    }
-    if (combatStateVersion !== 0 && !remoteCombatIsNewer && remoteCombatGroupsChanged) {
-      suppressCombatStateSync = true;
-      try {
-        applyCombatGroupsFromState(normalized.groups);
-        refreshCombatTracker();
-        updateCombatModeIndicators();
-      } finally {
-        suppressCombatStateSync = false;
-      }
-      return;
-    }
 
     suppressCombatStateSync = true;
     try {
@@ -13397,22 +13332,6 @@ export function mountBoardInteractions(store, routes = {}) {
       if (combatActive && isGmUser()) {
         checkForRoundCompletion();
       }
-      // A missing/unhydrated combat record has no authoritative revision.
-      // Never manufacture a timestamp-sized version: doing so makes a later
-      // real sequence (for example 22) look stale for the rest of the session.
-      const appliedVersion = getCombatStateVersion(normalized);
-      combatStateVersion = appliedVersion;
-      combatStateUpdatedAt = normalized.updatedAt || 0;
-      // Sync local sequence to match the applied version to prevent duplicate sequence numbers
-      if (normalized.sequence > 0 && normalized.sequence > combatSequence) {
-        combatSequence = normalized.sequence;
-      }
-      const snapshot = {
-        ...normalized,
-        updatedAt: normalized.updatedAt || 0,
-        sequence: normalized.sequence || 0,
-      };
-      lastCombatStateSnapshot = JSON.stringify(snapshot);
       if (Array.isArray(normalized.lastEffects) && normalized.lastEffects.length > 0) {
         applyTurnEffectsFromState(normalized.lastEffects);
       } else if (normalized.lastEffect) {
@@ -13567,15 +13486,87 @@ export function mountBoardInteractions(store, routes = {}) {
       roundTurnCount,
       malice: maliceCount,
       encounterId: combatEncounterId,
-      sequence: combatSequence,
+      sequence: 0,
       turnLock: serializeTurnLockState(),
       intentHistory: combatIntentHistory,
       lastEffect: lastTurnEffect,
       lastEffects: lastTurnEffects,
       groups: serializeCombatGroups(combatTrackerGroups),
     });
-    combatSequence = snapshot.sequence;
     return snapshot;
+  }
+
+  function submitCombatV2State(activeSceneId, snapshot, authorityIntent, dirtyFields) {
+    const dirty = new Set(dirtyFields);
+    let commandType = authorityIntent?.type ?? 'combat.patch';
+    let payload;
+
+    if (authorityIntent) {
+      payload = {
+        ...authorityIntent.details,
+        combat: snapshot,
+        startingTeam: snapshot.startingTeam,
+        encounterId: snapshot.encounterId,
+      };
+    } else {
+      const patch = {};
+      if (isGmUser() && dirty.has('malice')) {
+        patch.malice = snapshot.malice;
+      }
+      if (isGmUser() && dirty.has('groups')) {
+        patch.groups = snapshot.groups;
+      }
+      if (isGmUser() && dirty.has('intentHistory')) {
+        patch.intentHistory = snapshot.intentHistory;
+      }
+      if (dirty.has('turnEffects')) {
+        patch.lastEffect = snapshot.lastEffect;
+        patch.lastEffects = snapshot.lastEffects;
+      }
+      if (Object.keys(patch).length === 0) {
+        clearDirtyCombatFields(dirtyFields);
+        return;
+      }
+      payload = { patch };
+    }
+
+    const savePromise = tokenMovementRuntime.submitCombatCommand(
+      commandType,
+      activeSceneId,
+      payload
+    );
+    if (!savePromise || typeof savePromise.then !== 'function') {
+      clearDirtyCombatFields(dirtyFields);
+      return;
+    }
+
+    pendingCombatStateSave = {
+      promise: savePromise,
+      sceneId: activeSceneId,
+      timestamp: Date.now(),
+    };
+    savePromise
+      .then(() => {
+        clearSyncFailure();
+        clearDirtyCombatFields(dirtyFields);
+      })
+      .catch((error) => {
+        clearDirtyCombatFields(dirtyFields);
+        const reason = error?.response?.error || error?.message || 'rejected';
+        const message = `Combat action rejected by the server (${reason}).`;
+        if (status) {
+          status.textContent = message;
+        }
+        if (typeof window !== 'undefined' && window.UIKit?.toast) {
+          window.UIKit.toast(message, 'warning');
+        }
+        reportSyncFailure(error, 'combat action');
+      })
+      .finally(() => {
+        if (pendingCombatStateSave?.promise === savePromise) {
+          pendingCombatStateSave = null;
+        }
+      });
   }
 
   function serializeTurnLockState() {
@@ -13605,255 +13596,16 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    const existingCombatState = state.boardState?.sceneState?.[activeSceneId]?.combat ?? null;
-    const currentIsGm = isGmUser();
     const dirtyFieldsForSnapshot = dirtyCombatFields.snapshot();
-    if (currentIsGm && dirtyFieldsForSnapshot.length > 0) {
-      rememberGmCombatIntent();
-    }
-    const {
-      snapshot,
-      isRemoteNewer,
-      localStatePatch,
-    } = prepareCombatSnapshotForSync(createCombatStateSnapshot(), {
-      existingCombatState,
-      currentVersion: combatStateVersion,
-      currentUpdatedAt: combatStateUpdatedAt,
-      dirtyFields: dirtyCombatFields,
-      isGm: currentIsGm,
-      lastCombatStateSnapshot,
-    });
-
-    combatSequence = snapshot.sequence;
-
-    if (isRemoteNewer && localStatePatch) {
-      // Also update local in-memory state to match the snapshot we're saving.
-      // This prevents UI from using stale local state when refresh loop runs.
-      if (localStatePatch.applyActive) {
-        combatActive = localStatePatch.active;
-      }
-      if (localStatePatch.applyRound) {
-        combatRound = localStatePatch.round;
-      }
-      if (localStatePatch.applyCompletedCombatants) {
-        completedCombatants.clear();
-        localStatePatch.completedCombatantIds.forEach((id) => completedCombatants.add(id));
-      }
-      if (localStatePatch.applyTeams) {
-        startingCombatTeam = localStatePatch.startingTeam;
-        currentTurnTeam = localStatePatch.currentTeam;
-        lastActingTeam = localStatePatch.lastTeam;
-      }
-      if (localStatePatch.applyTurnPhase) {
-        turnPhase = localStatePatch.turnPhase;
-      }
-      if (localStatePatch.applyRoundTurnCount) {
-        roundTurnCount = localStatePatch.roundTurnCount;
-      }
-      if (localStatePatch.applyMalice) {
-        maliceCount = localStatePatch.malice;
-      }
-      if (localStatePatch.applyEncounterId) {
-        combatEncounterId = localStatePatch.encounterId ?? null;
-      }
-      if (localStatePatch.applyTurnLock) {
-        updateTurnLockState(localStatePatch.turnLock);
-      }
-      if (localStatePatch.applyTurnEffects) {
-        applyTurnEffectsFromState(localStatePatch.lastEffects);
-      }
-      if (localStatePatch.applyGroups) {
-        applyCombatGroupsFromState(localStatePatch.groups);
-      }
-      combatStateVersion = localStatePatch.existingVersion;
-      combatStateUpdatedAt = localStatePatch.existingUpdatedAt || combatStateUpdatedAt;
-
-      // Use setter to properly update active combatant with highlights and handlers
-      if (localStatePatch.applyActiveCombatantId) {
-        setActiveCombatantId(localStatePatch.activeCombatantId);
-      }
-
-      // Refresh UI to reflect the new state immediately
-      updateCombatModeIndicators();
-      refreshCombatTracker();
-    }
-
+    const localSnapshot = createCombatStateSnapshot();
     const authorityIntent = pendingCombatAuthorityIntent;
     pendingCombatAuthorityIntent = null;
-    const serialized = JSON.stringify(snapshot);
-    if (serialized === lastCombatStateSnapshot && !authorityIntent) {
-      clearDirtyCombatFields(dirtyFieldsForSnapshot);
-      return;
-    }
-
-    const latestBeforeStoreSync = boardApi.getState?.() ?? state;
-    registeringLocalCombatSave = latestBeforeStoreSync?.user?.isGM === true;
-    try {
-      boardApi.updateState?.((draft) => {
-        const sceneStateEntry = ensureSceneStateDraftEntry(draft, activeSceneId);
-        sceneStateEntry.combat = {
-          ...snapshot,
-          completedCombatantIds: [...snapshot.completedCombatantIds],
-          lastEffect: snapshot.lastEffect ? { ...snapshot.lastEffect } : null,
-          lastEffects: Array.isArray(snapshot.lastEffects)
-            ? snapshot.lastEffects.map((effect) => ({ ...effect }))
-            : [],
-        };
-      });
-    } finally {
-      registeringLocalCombatSave = false;
-    }
-
-    const latest = boardApi.getState?.() ?? latestBeforeStoreSync;
-    let combatSavePromise = null;
-    if (authorityIntent && routes?.state) {
-      combatSavePromise = persistCombatIntent(
-        routes.state,
-        activeSceneId,
-        authorityIntent.type,
-        {
-          ...authorityIntent.details,
-          combat: snapshot,
-        },
-        {
-          _version: currentBoardStateVersion,
-          _socketId: getSocketId?.() || undefined,
-        }
-      );
-    } else if (latest?.user?.isGM) {
-      combatSavePromise = persistBoardStateSnapshot({}, [
-        {
-          type: 'combat.set',
-          sceneId: activeSceneId,
-          combat: snapshot,
-        },
-      ]);
-    } else if (routes?.state) {
-      // Track pending combat state save to prevent poller from overwriting during save
-      const savePromise = persistCombatState(routes.state, activeSceneId, snapshot, {
-        _version: currentBoardStateVersion,
-        _socketId: getSocketId?.() || undefined,
-      });
-      combatSavePromise = savePromise;
-      if (savePromise && typeof savePromise.then === 'function') {
-        pendingCombatStateSave = {
-          promise: savePromise,
-          sceneId: activeSceneId,
-          timestamp: snapshot.updatedAt,
-        };
-        const flushDeferredCombatResync = () => {
-          if (pendingResyncAfterSave) {
-            pendingResyncAfterSave = false;
-            triggerBoardStateResync('post-combat-save-flush');
-          }
-        };
-        savePromise
-          .then(() => {
-            if (pendingCombatStateSave?.promise === savePromise) {
-              pendingCombatStateSave = null;
-              flushDeferredCombatResync();
-            }
-          })
-          .catch(() => {
-            if (pendingCombatStateSave?.promise === savePromise) {
-              pendingCombatStateSave = null;
-              flushDeferredCombatResync();
-            }
-          });
-      }
-    }
-
-    if (
-      authorityIntent
-      && combatSavePromise
-      && typeof combatSavePromise.then === 'function'
-    ) {
-      pendingCombatStateSave = {
-        promise: combatSavePromise,
-        sceneId: activeSceneId,
-        timestamp: snapshot.updatedAt,
-      };
-      const finishAuthoritySave = () => {
-        if (pendingCombatStateSave?.promise !== combatSavePromise) {
-          return;
-        }
-        pendingCombatStateSave = null;
-        if (pendingResyncAfterSave) {
-          pendingResyncAfterSave = false;
-          triggerBoardStateResync('post-combat-intent-flush');
-        }
-      };
-      combatSavePromise.then(finishAuthoritySave, finishAuthoritySave);
-    }
-
-    if (combatSavePromise && typeof combatSavePromise.then === 'function') {
-      combatSavePromise.then((result) => {
-        if (authorityIntent) {
-          const operationResults = Array.isArray(result?.meta?.operationResults)
-            ? result.meta.operationResults
-            : [];
-          const intentResult = operationResults.find(
-            (entry) => entry?.intentId === authorityIntent.details.intentId
-          ) ?? null;
-          const intentAccepted = intentResult?.accepted === true;
-          clearDirtyCombatFields(dirtyFieldsForSnapshot);
-          if (result?.data) {
-            applyAuthoritativeBoardStateSnapshot(result.data);
-          }
-          if (
-            result?.success !== false
-            && !isBoardStateVersionConflictResult(result)
-            && intentAccepted
-          ) {
-            clearSyncFailure();
-            const newVersion = result?.data?._version;
-            if (shouldApplyIncomingVersion(newVersion, currentBoardStateVersion)) {
-              currentBoardStateVersion = newVersion;
-              pusherInterface?.setLastAppliedVersion?.(newVersion);
-            }
-          } else {
-            const reason = intentResult?.reason || result?.error?.message || 'rejected';
-            const message = `Combat action rejected by the server (${reason}).`;
-            if (status) {
-              status.textContent = message;
-            }
-            if (typeof window !== 'undefined' && window.UIKit?.toast) {
-              window.UIKit.toast(message, 'warning');
-            }
-            if (!result?.data && result?.success === false) {
-              reportSyncFailure(result?.error, 'combat action');
-            }
-          }
-          return;
-        }
-        const combatResult = result?.meta?.combatResults?.[activeSceneId] ?? null;
-        const combatApplied = combatResult?.applied !== false && result?.meta?.applied !== false;
-        if (
-          result?.success !== false
-          && !isBoardStateVersionConflictResult(result)
-          && combatApplied
-        ) {
-          clearSyncFailure();
-          clearDirtyCombatFields(dirtyFieldsForSnapshot);
-          const newVersion = result?.data?._version;
-          if (shouldApplyIncomingVersion(newVersion, currentBoardStateVersion)) {
-            currentBoardStateVersion = newVersion;
-            pusherInterface?.setLastAppliedVersion?.(newVersion);
-          }
-        } else if (result?.data) {
-          applyAuthoritativeBoardStateSnapshot(result.data);
-        } else if (result?.success === false) {
-          reportSyncFailure(result?.error, 'combat save');
-        }
-      }).catch(() => {});
-    } else {
-      clearDirtyCombatFields(dirtyFieldsForSnapshot);
-    }
-
-    // Use sequence number as version (or fall back to timestamp)
-    combatStateVersion = snapshot.sequence > 0 ? snapshot.sequence : snapshot.updatedAt;
-    combatStateUpdatedAt = snapshot.updatedAt;
-    lastCombatStateSnapshot = serialized;
+    submitCombatV2State(
+      activeSceneId,
+      localSnapshot,
+      authorityIntent,
+      dirtyFieldsForSnapshot
+    );
   }
 
   function acquireTurnLock(holderId, holderName, combatantId, options = {}) {
@@ -14016,7 +13768,7 @@ export function mountBoardInteractions(store, routes = {}) {
       });
     }
 
-    if (combatActive) {
+    if (combatActive && !combatV2Enabled) {
       fireTimingBoundary('roundEnd', { round: combatRound });
     }
     const roundState = advanceCombatRoundState({
@@ -14038,16 +13790,20 @@ export function mountBoardInteractions(store, routes = {}) {
       combatTimerService.updateRound(combatRound);
     }
     roundTurnCount = roundState.roundTurnCount;
-    if (isGmUser()) {
+    if (isGmUser() && !combatV2Enabled) {
       const profiles = getUniquePlayerProfiles(boardApi.getState?.() ?? {});
       const maliceIncrease = profiles.length + combatRound;
       setMaliceCount(maliceCount + maliceIncrease);
     }
-    resetTriggeredActionsForActiveScene();
-    resetAutomationScopedFlags('round');
-    resetPersistentZoneRoundState();
+    if (!combatV2Enabled) {
+      resetTriggeredActionsForActiveScene();
+      resetAutomationScopedFlags('round');
+      resetPersistentZoneRoundState();
+    }
     currentTurnTeam = roundState.currentTeam;
-    fireTimingBoundary('roundStart', { round: combatRound });
+    if (!combatV2Enabled) {
+      fireTimingBoundary('roundStart', { round: combatRound });
+    }
     updateStartCombatButton();
     refreshCombatTracker();
 

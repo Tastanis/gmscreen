@@ -267,6 +267,185 @@ try {
     }
     expect($playerPrivilegedRejected, 'Players must not change GM-only placement fields.');
 
+    $enemyTeamPatch = $store->acceptPlacementBatch([
+        'operationId' => 'placement-enemy-team',
+        'type' => 'placement.batch',
+        'baseRevision' => 7,
+        'payload' => [
+            'actions' => [[
+                'kind' => 'patch',
+                'sceneId' => 'scene-1',
+                'placementId' => 'token-2',
+                'entityRevision' => 2,
+                'patch' => ['team' => 'enemy'],
+            ]],
+        ],
+    ], 'GM', true);
+    expect($enemyTeamPatch['event']['revision'] === 8, 'Enemy team setup must advance revision.');
+
+    $store->migrateLegacyCombat([
+        'sceneState' => [
+            'scene-1' => [
+                'combat' => [
+                    'active' => false,
+                    'groups' => [],
+                    'malice' => 99,
+                ],
+            ],
+        ],
+    ]);
+    expect(
+        $store->getSnapshot()['state']['combat']['scene-1']['active'] === false,
+        'Legacy combat migration must establish a canonical inactive record.'
+    );
+
+    $combatStart = $store->acceptCombatCommand([
+        'operationId' => 'combat-start-0001',
+        'type' => 'combat.start',
+        'baseRevision' => 8,
+        'sceneId' => 'scene-1',
+        'payload' => [
+            'startingTeam' => 'ally',
+            'encounterId' => 'encounter-test',
+            'combat' => ['groups' => [], 'lastEffects' => []],
+        ],
+    ], 'GM', true);
+    expect($combatStart['status'] === 'accepted', 'The GM must be able to start combat.');
+    expect($combatStart['event']['revision'] === 9, 'Combat start must consume one revision.');
+    expect(
+        $combatStart['event']['payload']['combat']['currentTeam'] === 'ally',
+        'The server must decide the first side from the accepted start command.'
+    );
+
+    $playerTurn = $store->acceptCombatCommand([
+        'operationId' => 'combat-turn-player-a',
+        'type' => 'turn.start',
+        'baseRevision' => 9,
+        'sceneId' => 'scene-1',
+        'payload' => ['combatantId' => 'token-1', 'holderName' => 'Player A'],
+    ], 'player-a', false);
+    expect($playerTurn['status'] === 'accepted', 'A player may start a claimed ally turn.');
+    expect(
+        $playerTurn['event']['payload']['combat']['activeCombatantId'] === 'token-1',
+        'The accepted event must contain the canonical active combatant.'
+    );
+
+    $racingTurn = $store->acceptCombatCommand([
+        'operationId' => 'combat-racing-turn',
+        'type' => 'turn.start',
+        // This client observed combat start but not the accepted player turn.
+        'baseRevision' => 9,
+        'sceneId' => 'scene-1',
+        'payload' => ['combatantId' => 'token-2'],
+    ], 'GM', true);
+    expect($racingTurn['status'] === 'conflict', 'A racing second turn must not replace the winner.');
+    expect(
+        $racingTurn['error'] === 'turn_already_active',
+        'The race loser must receive the current-state reason.'
+    );
+
+    $unauthorizedComplete = false;
+    try {
+        $store->acceptCombatCommand([
+            'operationId' => 'combat-wrong-player',
+            'type' => 'turn.complete',
+            'baseRevision' => 10,
+            'sceneId' => 'scene-1',
+            'payload' => ['combatantId' => 'token-1'],
+        ], 'player-b', false);
+    } catch (InvalidArgumentException $error) {
+        $unauthorizedComplete = true;
+    }
+    expect($unauthorizedComplete, 'Another player must not complete a claimed combatant turn.');
+    expect($store->getSnapshot()['revision'] === 10, 'Rejected races and permissions must not write.');
+
+    $turnComplete = $store->acceptCombatCommand([
+        'operationId' => 'combat-turn-complete',
+        'type' => 'turn.complete',
+        'baseRevision' => 10,
+        'sceneId' => 'scene-1',
+        'payload' => ['combatantId' => 'token-1'],
+    ], 'player-a', false);
+    expect($turnComplete['event']['revision'] === 11, 'Turn completion must write once.');
+    expect(
+        $turnComplete['event']['payload']['combat']['currentTeam'] === 'enemy',
+        'Turn completion must atomically hand the pick to the other side.'
+    );
+
+    $enemyTurn = $store->acceptCombatCommand([
+        'operationId' => 'combat-enemy-turn',
+        'type' => 'turn.start',
+        // Behind on unrelated world history is allowed; canonical combat state decides.
+        'baseRevision' => 9,
+        'sceneId' => 'scene-1',
+        'payload' => ['combatantId' => 'token-2'],
+    ], 'GM', true);
+    expect($enemyTurn['event']['revision'] === 12, 'The GM may start the current enemy turn.');
+
+    $roundAdvance = $store->acceptCombatCommand([
+        'operationId' => 'combat-round-advance',
+        'type' => 'round.advance',
+        'baseRevision' => 12,
+        'sceneId' => 'scene-1',
+        'payload' => [],
+    ], 'GM', true);
+    expect($roundAdvance['event']['revision'] === 13, 'Round advance must be one atomic write.');
+    expect(
+        $roundAdvance['event']['payload']['combat']['round'] === 2
+        && $roundAdvance['event']['payload']['combat']['activeCombatantId'] === null
+        && $roundAdvance['event']['payload']['combat']['completedCombatantIds'] === [],
+        'Round advance must finish the active turn and reset round picks atomically.'
+    );
+
+    $combatPatch = $store->acceptCombatCommand([
+        'operationId' => 'combat-malice-patch',
+        'type' => 'combat.patch',
+        'baseRevision' => 13,
+        'sceneId' => 'scene-1',
+        'payload' => ['patch' => ['malice' => 7]],
+    ], 'GM', true);
+    expect(
+        $combatPatch['event']['payload']['combat']['malice'] === 7,
+        'Auxiliary combat fields must patch without replacing turn state.'
+    );
+
+    $combatEndCommand = [
+        'operationId' => 'combat-end-0001',
+        'type' => 'combat.end',
+        'baseRevision' => 14,
+        'sceneId' => 'scene-1',
+        'payload' => ['encounterId' => 'encounter-test'],
+    ];
+    $combatEnd = $store->acceptCombatCommand($combatEndCommand, 'GM', true);
+    expect($combatEnd['event']['revision'] === 15, 'Combat end must write once.');
+    expect(
+        $combatEnd['event']['payload']['combat']['active'] === false,
+        'Combat end must publish the canonical inactive state.'
+    );
+    $combatEndDuplicate = $store->acceptCombatCommand($combatEndCommand, 'GM', true);
+    expect($combatEndDuplicate['idempotent'] === true, 'A duplicate combat command must apply once.');
+    expect($store->getSnapshot()['revision'] === 15, 'A duplicate combat command must not advance revision.');
+
+    $automationClaimCommand = [
+        'operationId' => 'combat-automation:combat-end-0001',
+        'type' => 'combat.automation.claim',
+        'baseRevision' => 15,
+        'sceneId' => 'scene-1',
+        'payload' => ['transitionOperationId' => 'combat-end-0001'],
+    ];
+    $automationClaim = $store->acceptCombatCommand($automationClaimCommand, 'GM', true);
+    expect($automationClaim['event']['revision'] === 16, 'The first automation claim must write once.');
+    expect(
+        $automationClaim['event']['type'] === 'combat.automationClaimed',
+        'Automation claims must publish a reducer-safe canonical event.'
+    );
+    $automationClaimDuplicate = $store->acceptCombatCommand($automationClaimCommand, 'GM', true);
+    expect(
+        $automationClaimDuplicate['idempotent'] === true,
+        'Only one GM tab or device may win an automation claim.'
+    );
+    expect($store->getSnapshot()['revision'] === 16, 'Duplicate automation claims must not advance revision.');
+
     echo json_encode([
         'success' => true,
         'revision' => $store->getSnapshot()['revision'],

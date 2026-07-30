@@ -3,6 +3,10 @@ import { createEventStream, createPusherEventTransport } from './event-stream.js
 import { createRecoveryClient } from './recovery-client.js';
 import { createCommandClient } from './command-client.js';
 
+function clone(value) {
+  return JSON.parse(JSON.stringify(value ?? {}));
+}
+
 function placementFromSnapshot(snapshot, sceneId, placementId) {
   return snapshot?.state?.placements?.[sceneId]?.[placementId] ?? null;
 }
@@ -32,6 +36,7 @@ async function fetchSnapshot(endpoint, fetchImpl, signal) {
 export function createTokenMovementRuntime({
   enabled = false,
   placementsEnabled = false,
+  combatEnabled = false,
   commandsEndpoint,
   eventsEndpoint,
   snapshotEndpoint,
@@ -43,6 +48,7 @@ export function createTokenMovementRuntime({
   previewPlacement = () => {},
   applyConfirmedPlacement = () => {},
   applyConfirmedPlacementBatch = () => {},
+  applyConfirmedCombat = () => {},
   reconcileSnapshot = () => {},
   onError = (error) => console.warn('[VTT Sync V2] Token movement failed', error),
 } = {}) {
@@ -53,6 +59,8 @@ export function createTokenMovementRuntime({
       stop: () => {},
       submitMoves: async () => [],
       submitPlacementOps: async () => null,
+      submitCombatCommand: async () => null,
+      claimCombatAutomation: async () => null,
       overlayBoardState: (boardState) => boardState,
       getEffectivePlacement: () => null,
       getConfirmedSnapshot: () => ({ revision: 0, state: {} }),
@@ -99,6 +107,14 @@ export function createTokenMovementRuntime({
         applyConfirmedPlacementBatch(
           store.getConfirmedSnapshot(),
           context.event.payload?.mutations ?? [],
+          context
+        );
+      }
+      if (changeSet?.combat && context?.event?.type === 'combat.transitioned') {
+        applyConfirmedCombat(
+          store.getConfirmedSnapshot(),
+          context.event.payload?.combat ?? null,
+          context.event.payload?.transition ?? null,
           context
         );
       }
@@ -308,6 +324,54 @@ export function createTokenMovementRuntime({
     }
   }
 
+  async function submitCombatCommand(type, sceneId, payload = {}) {
+    if (!combatEnabled) return null;
+    if (!sceneId) {
+      throw new TypeError('A combat command requires sceneId');
+    }
+    await start();
+    try {
+      return await commandClient.submit(type, payload, { sceneId });
+    } catch (error) {
+      const conflictSnapshot = error?.response?.snapshot;
+      if (error?.status === 409 && conflictSnapshot) {
+        store.replaceSnapshot(conflictSnapshot, { authoritative: true, source: 'conflict' });
+        reconcileSnapshot(store.getConfirmedSnapshot(), { source: 'conflict' });
+      }
+      throw error;
+    }
+  }
+
+  function automationClaimOperationId(transitionOperationId) {
+    const direct = `combat-automation:${transitionOperationId}`;
+    if (direct.length <= 128) return direct;
+    let first = 2166136261;
+    let second = 2246822519;
+    for (let index = 0; index < transitionOperationId.length; index += 1) {
+      const code = transitionOperationId.charCodeAt(index);
+      first = Math.imul(first ^ code, 16777619) >>> 0;
+      second = Math.imul(second ^ code, 3266489917) >>> 0;
+    }
+    return `combat-automation:${first.toString(16)}${second.toString(16)}`;
+  }
+
+  async function claimCombatAutomation(sceneId, transitionOperationId) {
+    if (!combatEnabled) return null;
+    const target = String(transitionOperationId ?? '').trim();
+    if (!sceneId || !target) {
+      throw new TypeError('A combat automation claim requires sceneId and transition operation ID');
+    }
+    await start();
+    return commandClient.submit(
+      'combat.automation.claim',
+      { transitionOperationId: target },
+      {
+        sceneId,
+        operationId: automationClaimOperationId(target),
+      }
+    );
+  }
+
   function overlayBoardState(boardState) {
     if (!boardState || typeof boardState !== 'object') return boardState;
     const snapshot = store.getConfirmedSnapshot();
@@ -332,6 +396,13 @@ export function createTokenMovementRuntime({
           : {};
       boardState.sceneState[sceneId].claimedTokens = { ...(claims ?? {}) };
     }
+    for (const [sceneId, combat] of Object.entries(snapshot?.state?.combat ?? {})) {
+      boardState.sceneState[sceneId] =
+        boardState.sceneState[sceneId] && typeof boardState.sceneState[sceneId] === 'object'
+          ? boardState.sceneState[sceneId]
+          : {};
+      boardState.sceneState[sceneId].combat = clone(combat);
+    }
     return boardState;
   }
 
@@ -346,6 +417,8 @@ export function createTokenMovementRuntime({
     stop,
     submitMoves,
     submitPlacementOps,
+    submitCombatCommand,
+    claimCombatAutomation,
     overlayBoardState,
     getEffectivePlacement,
     getConfirmedSnapshot: () => store.getSnapshot(),

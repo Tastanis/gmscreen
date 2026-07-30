@@ -144,3 +144,121 @@ test('three clients converge through replay and simultaneous same-token conflict
   assert.ok(clients[0].previews.length > 0, 'movement uses an ephemeral preview');
   assert.equal(clients[2].snapshotReconciliations, 1, 'ordinary replay does not reconcile the full board');
 });
+
+test('combat commands apply one focused canonical transition without snapshot reconciliation', async () => {
+  const combat = {
+    active: false,
+    round: 0,
+    activeCombatantId: null,
+    completedCombatantIds: [],
+    sequence: 0,
+  };
+  let revision = 0;
+  let reconciliations = 0;
+  let automationClaimEvent = null;
+  const applied = [];
+  const fetchImpl = async (url, options = {}) => {
+    if (String(url).includes('snapshot')) {
+      return response(200, {
+        success: true,
+        snapshot: { revision, state: { combat: { 'scene-1': clone(combat) } } },
+      });
+    }
+    if (String(url).includes('sync')) {
+      return response(200, {
+        success: true,
+        recovery: { mode: 'events', revision, events: [] },
+      });
+    }
+    const command = JSON.parse(options.body);
+    if (command.type === 'combat.automation.claim') {
+      if (automationClaimEvent) {
+        return response(200, {
+          success: true,
+          event: automationClaimEvent,
+          idempotent: true,
+        });
+      }
+      revision += 1;
+      automationClaimEvent = {
+        revision,
+        operationId: command.operationId,
+        type: 'combat.automationClaimed',
+        actorId: null,
+        sceneId: command.sceneId,
+        payload: {
+          transitionOperationId: command.payload.transitionOperationId,
+        },
+      };
+      return response(200, {
+        success: true,
+        event: automationClaimEvent,
+        idempotent: false,
+      });
+    }
+    revision += 1;
+    const nextCombat = {
+      ...combat,
+      active: true,
+      round: 1,
+      currentTeam: command.payload.startingTeam,
+      startingTeam: command.payload.startingTeam,
+      sequence: 1,
+    };
+    const event = {
+      revision,
+      operationId: command.operationId,
+      type: 'combat.transitioned',
+      actorId: 'GM',
+      sceneId: command.sceneId,
+      payload: {
+        combat: nextCombat,
+        transition: { type: command.type, combatantId: null },
+      },
+    };
+    return response(200, { success: true, event, idempotent: false });
+  };
+  const runtime = createTokenMovementRuntime({
+    enabled: true,
+    combatEnabled: true,
+    commandsEndpoint: '/commands',
+    eventsEndpoint: '/sync',
+    snapshotEndpoint: '/snapshot',
+    fetchImpl,
+    windowRef: {},
+    applyConfirmedCombat: (snapshot, confirmedCombat, transition) => {
+      applied.push({
+        revision: snapshot.revision,
+        combat: clone(confirmedCombat),
+        transition: clone(transition),
+      });
+    },
+    reconcileSnapshot: () => {
+      reconciliations += 1;
+    },
+  });
+
+  await runtime.start();
+  assert.equal(reconciliations, 1, 'bootstrap reconciles once');
+  const transitionResult = await runtime.submitCombatCommand('combat.start', 'scene-1', {
+    startingTeam: 'ally',
+  });
+
+  assert.equal(reconciliations, 1, 'accepted combat events do not reconcile the board snapshot');
+  assert.equal(applied.length, 1);
+  assert.equal(applied[0].revision, 1);
+  assert.equal(applied[0].combat.currentTeam, 'ally');
+  assert.equal(applied[0].transition.type, 'combat.start');
+
+  const firstClaim = await runtime.claimCombatAutomation(
+    'scene-1',
+    transitionResult.event.operationId
+  );
+  const duplicateClaim = await runtime.claimCombatAutomation(
+    'scene-1',
+    transitionResult.event.operationId
+  );
+  assert.equal(firstClaim.idempotent, false);
+  assert.equal(duplicateClaim.idempotent, true);
+  assert.equal(applied.length, 1, 'automation claim events do not replay combat transitions');
+});

@@ -234,6 +234,20 @@ function reduceCombatEvent(state, event, changes) {
   changes.combat = true;
 }
 
+function reduceCombatTransitioned(state, event, changes) {
+  const sceneId = typeof event.sceneId === 'string' ? event.sceneId.trim() : '';
+  const combat = event.payload?.combat;
+  if (!sceneId || !combat || typeof combat !== 'object') {
+    throw new Error('combat.transitioned requires sceneId and combat');
+  }
+  const combatByScene = state.combat && typeof state.combat === 'object'
+    ? { ...state.combat }
+    : {};
+  combatByScene[sceneId] = clone(combat);
+  state.combat = combatByScene;
+  changes.combat = true;
+}
+
 function reduceSceneEntityUpsert(state, event, changes, domain, changeKey, payloadKey) {
   const { sceneId, entityId } = requireSceneAndEntity(event);
   const entities = getSceneCollection(state, domain, sceneId);
@@ -334,6 +348,8 @@ const reducers = Object.freeze({
       return clone(value);
     }),
   'placement.batchApplied': reducePlacementBatch,
+  'combat.transitioned': reduceCombatTransitioned,
+  'combat.automationClaimed': () => {},
   'turn.started': reduceCombatEvent,
   'turn.completed': reduceCombatEvent,
   'template.updated': (state, event, changes) =>

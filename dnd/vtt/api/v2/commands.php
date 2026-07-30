@@ -14,7 +14,19 @@ try {
 
     $command = vttSyncV2ReadJson();
     $type = (string) ($command['type'] ?? '');
-    if ($type === 'placement.batch' && vttSyncV2DomainEnabled('placements')) {
+    $combatTypes = [
+        'combat.start', 'turn.start', 'turn.complete', 'turn.cancel',
+        'combat.uncomplete', 'round.advance', 'combat.end', 'combat.patch',
+        'combat.automation.claim',
+    ];
+    if (in_array($type, $combatTypes, true) && vttSyncV2DomainEnabled('combat')) {
+        $auth = vttSyncV2RequireAuthenticated();
+        $result = vttSyncV2Store()->acceptCombatCommand(
+            $command,
+            (string) ($auth['user'] ?? ''),
+            (bool) ($auth['isGM'] ?? false)
+        );
+    } elseif ($type === 'placement.batch' && vttSyncV2DomainEnabled('placements')) {
         $auth = vttSyncV2RequireAuthenticated();
         $result = vttSyncV2Store()->acceptPlacementBatch(
             $command,
@@ -43,7 +55,10 @@ try {
 
     if ($result['status'] === 'conflict') {
         $conflictSnapshot = $result['snapshot'] ?? null;
-        if (in_array($type, ['token.move', 'placement.batch'], true) && is_array($conflictSnapshot)) {
+        if (
+            (in_array($type, ['token.move', 'placement.batch'], true) || in_array($type, $combatTypes, true))
+            && is_array($conflictSnapshot)
+        ) {
             $conflictSnapshot = vttSyncV2ProjectSnapshotForUser($conflictSnapshot, $auth);
         }
         vttSyncV2Respond(409, [
@@ -59,7 +74,14 @@ try {
             ? trim($command['socketId'])
             : null;
         $socketId = $socketId === '' ? null : $socketId;
-        if ($type === 'placement.batch') {
+        if (in_array($type, $combatTypes, true)) {
+            if (vttSyncV2CombatEventIsPublicSafe($event)) {
+                SyncV2PusherTransport::publishPublic(
+                    vttSyncV2ProjectCombatEventForUser($event, ['isGM' => false]),
+                    $socketId
+                );
+            }
+        } elseif ($type === 'placement.batch') {
             // Until Phase 7 introduces audience-specific private channels,
             // only payloads that are byte-for-byte safe for every connected
             // user may use the shared board channel. Other accepted batches
@@ -80,11 +102,23 @@ try {
         }
     }
 
+    $responseEvent = $event;
+    if (
+        is_array($event)
+        && in_array($type, $combatTypes, true)
+        && is_array($auth ?? null)
+    ) {
+        $responseEvent = vttSyncV2ProjectCombatEventForUser($event, $auth);
+    }
+
     vttSyncV2Respond(200, [
         'success' => true,
-        'mode' => in_array($type, ['token.move', 'placement.batch'], true) ? 'live' : 'shadow',
+        'mode' => (
+            in_array($type, ['token.move', 'placement.batch'], true)
+            || in_array($type, $combatTypes, true)
+        ) ? 'live' : 'shadow',
         'idempotent' => (bool) ($result['idempotent'] ?? false),
-        'event' => $event,
+        'event' => $responseEvent,
     ]);
 } catch (Throwable $error) {
     vttSyncV2HandleFailure($error);

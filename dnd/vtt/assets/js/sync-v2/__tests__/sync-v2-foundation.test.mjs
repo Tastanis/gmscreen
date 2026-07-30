@@ -144,6 +144,46 @@ test('placement batch reducer applies add, patch, claim, and remove as one revis
   assert.equal(result.changeSet.fog, false);
 });
 
+test('combat transition reducer replaces only the scene combat record', () => {
+  const initial = {
+    revision: 20,
+    state: {
+      combat: {
+        'scene-1': { active: true, round: 1, activeCombatantId: 'old-token' },
+        'scene-2': { active: false, round: 0 },
+      },
+      fog: { 'scene-1': { enabled: true } },
+    },
+  };
+  const combat = {
+    active: true,
+    round: 1,
+    activeCombatantId: 'token-1',
+    completedCombatantIds: [],
+    currentTeam: 'ally',
+    sequence: 4,
+  };
+  const result = reduceCanonicalEvent(initial, {
+    revision: 21,
+    operationId: 'combat-turn-started',
+    type: 'combat.transitioned',
+    actorId: 'player-a',
+    sceneId: 'scene-1',
+    payload: {
+      combat,
+      transition: { type: 'turn.start', combatantId: 'token-1' },
+    },
+  });
+
+  assert.equal(result.status, 'applied');
+  assert.equal(result.changeSet.combat, true);
+  assert.deepEqual(result.changeSet.placements, { added: [], updated: [], removed: [] });
+  assert.equal(result.changeSet.fog, false);
+  assert.deepEqual(result.snapshot.state.combat['scene-1'], combat);
+  assert.deepEqual(result.snapshot.state.combat['scene-2'], initial.state.combat['scene-2']);
+  assert.deepEqual(result.snapshot.state.fog, initial.state.fog);
+});
+
 test('event stream buffers a gap and deterministically replays missing events', async () => {
   const store = createEntityStore();
   const routed = [];

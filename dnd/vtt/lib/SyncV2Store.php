@@ -145,9 +145,342 @@ final class SyncV2Store
             );
             $this->pdo->exec('COMMIT');
         } catch (Throwable $error) {
-            if ($this->pdo->inTransaction()) {
-                $this->pdo->rollBack();
+            $this->rollbackTransactionSilently();
+            throw $error;
+        }
+    }
+
+    /**
+     * One-time Phase 5 import of the legacy per-scene combat records.
+     */
+    public function migrateLegacyCombat(array $boardState): void
+    {
+        $this->pdo->exec('BEGIN IMMEDIATE');
+        try {
+            $snapshot = $this->getSnapshot();
+            $state = $snapshot['state'];
+            if (($state['combatMigration']['version'] ?? 0) >= 1) {
+                $this->pdo->exec('COMMIT');
+                return;
             }
+            $combatByScene = is_array($state['combat'] ?? null) ? $state['combat'] : [];
+            foreach (($boardState['sceneState'] ?? []) as $sceneId => $sceneState) {
+                if (!is_string($sceneId) || !is_array($sceneState) || !is_array($sceneState['combat'] ?? null)) {
+                    continue;
+                }
+                $combatByScene[$sceneId] = $this->normalizeCombatState($sceneState['combat']);
+            }
+            $state['combat'] = $combatByScene;
+            $state['combatMigration'] = [
+                'version' => 1,
+                'migratedAt' => $this->nowMilliseconds(),
+            ];
+            $this->updateWorldState($snapshot['revision'], $state, $this->nowMilliseconds());
+            $this->pdo->exec('COMMIT');
+        } catch (Throwable $error) {
+            $this->rollbackTransactionSilently();
+            throw $error;
+        }
+    }
+
+    /**
+     * Decide one combat transition from canonical state under the same SQLite
+     * write lock used to append its event. Advisory browser locks, timestamps,
+     * and submitted full-board snapshots have no authority here.
+     *
+     * @return array{status:string,event?:array,snapshot?:array,idempotent?:bool,error?:string}
+     */
+    public function acceptCombatCommand(array $command, string $actorId, bool $isGm): array
+    {
+        $normalized = $this->normalizeCombatCommand($command);
+        $actorId = trim($actorId);
+        if ($actorId === '') {
+            throw new InvalidArgumentException('An authenticated actor ID is required.');
+        }
+
+        $this->pdo->exec('BEGIN IMMEDIATE');
+        try {
+            $existing = $this->findEventByOperationId($normalized['operationId']);
+            if ($existing !== null) {
+                $this->pdo->exec('COMMIT');
+                return ['status' => 'accepted', 'event' => $existing, 'idempotent' => true];
+            }
+            $snapshot = $this->getSnapshot();
+            if ($normalized['baseRevision'] > $snapshot['revision']) {
+                return $this->rollbackConflict('base_revision_ahead', $snapshot);
+            }
+
+            $state = $snapshot['state'];
+            $state['combat'] = is_array($state['combat'] ?? null) ? $state['combat'] : [];
+            $state['placements'] = is_array($state['placements'] ?? null) ? $state['placements'] : [];
+            $state['claims'] = is_array($state['claims'] ?? null) ? $state['claims'] : [];
+            $sceneId = $normalized['sceneId'];
+            $type = $normalized['type'];
+            $payload = $normalized['payload'];
+            if ($type === 'combat.automation.claim') {
+                if (!$isGm) {
+                    throw new InvalidArgumentException('Only the GM may claim combat automation.');
+                }
+                $transitionOperationId = trim((string) ($payload['transitionOperationId'] ?? ''));
+                $transitionEvent = $this->findEventByOperationId($transitionOperationId);
+                if (
+                    $transitionOperationId === ''
+                    || !is_array($transitionEvent)
+                    || ($transitionEvent['type'] ?? '') !== 'combat.transitioned'
+                    || ($transitionEvent['sceneId'] ?? null) !== $sceneId
+                ) {
+                    throw new InvalidArgumentException('Combat automation claim references an unknown transition.');
+                }
+                $revision = $snapshot['revision'] + 1;
+                $serverTime = $this->nowMilliseconds();
+                $event = [
+                    'revision' => $revision,
+                    'operationId' => $normalized['operationId'],
+                    'type' => 'combat.automationClaimed',
+                    'actorId' => $actorId,
+                    'sceneId' => $sceneId,
+                    'entityId' => null,
+                    'entityRevision' => null,
+                    'payload' => ['transitionOperationId' => $transitionOperationId],
+                    'serverTime' => $serverTime,
+                ];
+                $this->insertEvent($event);
+                $this->updateWorldState($revision, $state, $serverTime);
+                if ($revision % $this->snapshotInterval === 0) {
+                    $this->insertSnapshot($revision, $state, $serverTime);
+                }
+                $this->pruneEvents($revision);
+                $this->pdo->exec('COMMIT');
+                return ['status' => 'accepted', 'event' => $event, 'idempotent' => false];
+            }
+            $combat = $this->normalizeCombatState($state['combat'][$sceneId] ?? []);
+            $before = $combat;
+            $transition = [
+                'type' => $type,
+                'combatantId' => null,
+                'previousCombatantId' => $combat['activeCombatantId'],
+                'previousRound' => $combat['round'],
+            ];
+
+            if ($type === 'combat.start') {
+                if (!$isGm) {
+                    throw new InvalidArgumentException('Only the GM may start combat.');
+                }
+                if ($combat['active']) {
+                    return $this->rollbackConflict('combat_already_active', $snapshot);
+                }
+                $startingTeam = $this->normalizeCombatTeam($payload['startingTeam'] ?? null) ?? 'enemy';
+                $combat = $this->normalizeCombatState($payload['combat'] ?? []);
+                $combat['active'] = true;
+                $combat['isActive'] = true;
+                $combat['round'] = 1;
+                $combat['activeCombatantId'] = null;
+                $combat['completedCombatantIds'] = [];
+                $combat['startingTeam'] = $startingTeam;
+                $combat['currentTeam'] = $startingTeam;
+                $combat['lastTeam'] = null;
+                $combat['turnPhase'] = 'pick';
+                $combat['roundTurnCount'] = 0;
+                $combat['turnLock'] = null;
+                $combat['encounterId'] = $this->normalizeOptionalId($payload['encounterId'] ?? null)
+                    ?? ('enc-server-' . bin2hex(random_bytes(10)));
+                foreach ($state['combat'] as $otherSceneId => $otherCombat) {
+                    if ($otherSceneId === $sceneId || !is_array($otherCombat)) {
+                        continue;
+                    }
+                    $other = $this->normalizeCombatState($otherCombat);
+                    if ($other['active']) {
+                        $state['combat'][$otherSceneId] = $this->endCombatState($other);
+                    }
+                }
+            } elseif ($type === 'turn.start') {
+                if (!$combat['active']) {
+                    return $this->rollbackConflict('combat_not_active', $snapshot);
+                }
+                $requestedId = $this->normalizeOptionalId($payload['combatantId'] ?? null);
+                $combatantId = $this->resolveCombatRepresentative($combat, $requestedId);
+                if ($combatantId === null) {
+                    return $this->rollbackConflict('combatant_not_found', $snapshot);
+                }
+                $placement = $state['placements'][$sceneId][$combatantId] ?? null;
+                if (!is_array($placement)) {
+                    return $this->rollbackConflict('combatant_not_found', $snapshot);
+                }
+                $team = $this->combatantTeam($placement);
+                $override = $isGm && !empty($payload['override']);
+                if (!$isGm && !$this->actorControlsCombatant($state, $sceneId, $combatantId, $actorId, $combat)) {
+                    throw new InvalidArgumentException('You do not control this combatant.');
+                }
+                if (!$isGm && $team !== 'ally') {
+                    throw new InvalidArgumentException('Players cannot control enemy turns.');
+                }
+                if (in_array($combatantId, $combat['completedCombatantIds'], true)) {
+                    return $this->rollbackConflict('combatant_already_completed', $snapshot);
+                }
+                $activeId = $combat['activeCombatantId'];
+                if ($activeId === $combatantId) {
+                    return $this->rollbackConflict('combatant_already_active', $snapshot);
+                }
+                if ($activeId !== null && !$override) {
+                    return $this->rollbackConflict('turn_already_active', $snapshot);
+                }
+                if ($activeId === null && $team !== $combat['currentTeam'] && !$override) {
+                    return $this->rollbackConflict('wrong_side_for_current_pick', $snapshot);
+                }
+                if ($activeId !== null) {
+                    $previousId = $this->resolveCombatRepresentative($combat, $activeId);
+                    if ($previousId !== null && !in_array($previousId, $combat['completedCombatantIds'], true)) {
+                        $combat['completedCombatantIds'][] = $previousId;
+                    }
+                    $previousPlacement = $state['placements'][$sceneId][$previousId] ?? [];
+                    $combat['lastTeam'] = $this->combatantTeam(is_array($previousPlacement) ? $previousPlacement : []);
+                    $combat['roundTurnCount']++;
+                }
+                $combat['completedCombatantIds'] = array_values(array_filter(
+                    $combat['completedCombatantIds'],
+                    static fn ($id): bool => $id !== $combatantId
+                ));
+                $combat['activeCombatantId'] = $combatantId;
+                $combat['turnPhase'] = 'active';
+                $now = $this->nowMilliseconds();
+                $combat['turnLock'] = [
+                    'holderId' => $actorId,
+                    'holderName' => trim((string) ($payload['holderName'] ?? '')) ?: ($isGm ? 'GM' : $actorId),
+                    'combatantId' => $combatantId,
+                    'acquiredAt' => $now,
+                    'lockedAt' => $now,
+                ];
+                $transition['combatantId'] = $combatantId;
+            } elseif ($type === 'turn.complete' || $type === 'turn.cancel') {
+                if (!$combat['active'] || $combat['activeCombatantId'] === null) {
+                    return $this->rollbackConflict('no_active_turn', $snapshot);
+                }
+                $activeId = $this->resolveCombatRepresentative($combat, $combat['activeCombatantId']);
+                $requestedId = $this->resolveCombatRepresentative(
+                    $combat,
+                    $this->normalizeOptionalId($payload['combatantId'] ?? null) ?? $activeId
+                );
+                if ($activeId === null || $requestedId !== $activeId) {
+                    return $this->rollbackConflict('active_combatant_mismatch', $snapshot);
+                }
+                if (!$isGm && !$this->actorControlsCombatant($state, $sceneId, $activeId, $actorId, $combat)) {
+                    throw new InvalidArgumentException('You do not control the active combatant.');
+                }
+                $activePlacement = $state['placements'][$sceneId][$activeId] ?? [];
+                $finishedTeam = $this->combatantTeam(is_array($activePlacement) ? $activePlacement : []);
+                if ($type === 'turn.complete') {
+                    if (!in_array($activeId, $combat['completedCombatantIds'], true)) {
+                        $combat['completedCombatantIds'][] = $activeId;
+                    }
+                    $combat['lastTeam'] = $finishedTeam;
+                    $combat['currentTeam'] = $finishedTeam === 'ally' ? 'enemy' : 'ally';
+                    $combat['roundTurnCount']++;
+                } else {
+                    $combat['currentTeam'] = $finishedTeam;
+                }
+                $combat['activeCombatantId'] = null;
+                $combat['turnPhase'] = 'pick';
+                $combat['turnLock'] = null;
+                $transition['combatantId'] = $activeId;
+            } elseif ($type === 'combat.uncomplete') {
+                if (!$isGm) {
+                    throw new InvalidArgumentException('Only the GM may reopen a completed combatant.');
+                }
+                $combatantId = $this->resolveCombatRepresentative(
+                    $combat,
+                    $this->normalizeOptionalId($payload['combatantId'] ?? null)
+                );
+                if ($combatantId === null) {
+                    throw new InvalidArgumentException('combat.uncomplete requires combatantId.');
+                }
+                $combat['completedCombatantIds'] = array_values(array_filter(
+                    $combat['completedCombatantIds'],
+                    static fn ($id): bool => $id !== $combatantId
+                ));
+                if ($combat['activeCombatantId'] === $combatantId) {
+                    $combat['activeCombatantId'] = null;
+                    $combat['turnLock'] = null;
+                    $combat['turnPhase'] = 'pick';
+                }
+                $transition['combatantId'] = $combatantId;
+            } elseif ($type === 'round.advance') {
+                if (!$isGm) {
+                    throw new InvalidArgumentException('Only the GM may advance the round.');
+                }
+                if (!$combat['active']) {
+                    return $this->rollbackConflict('combat_not_active', $snapshot);
+                }
+                if ($combat['activeCombatantId'] !== null) {
+                    $finishedId = $this->resolveCombatRepresentative($combat, $combat['activeCombatantId']);
+                    if ($finishedId !== null && !in_array($finishedId, $combat['completedCombatantIds'], true)) {
+                        $combat['completedCombatantIds'][] = $finishedId;
+                    }
+                    $transition['combatantId'] = $finishedId;
+                }
+                $combat['round'] = max(1, $combat['round'] + 1);
+                $combat['activeCombatantId'] = null;
+                $combat['completedCombatantIds'] = [];
+                $combat['roundTurnCount'] = 0;
+                $combat['turnPhase'] = 'pick';
+                $combat['turnLock'] = null;
+                $combat['currentTeam'] = $combat['startingTeam'] ?? $combat['currentTeam'] ?? 'ally';
+            } elseif ($type === 'combat.end') {
+                if (!$isGm) {
+                    throw new InvalidArgumentException('Only the GM may end combat.');
+                }
+                if (!$combat['active']) {
+                    return $this->rollbackConflict('combat_not_active', $snapshot);
+                }
+                $requestedEncounter = $this->normalizeOptionalId($payload['encounterId'] ?? null);
+                if ($requestedEncounter !== null && $combat['encounterId'] !== null
+                    && $requestedEncounter !== $combat['encounterId']) {
+                    return $this->rollbackConflict('encounter_mismatch', $snapshot);
+                }
+                $combat = $this->endCombatState($combat);
+            } else {
+                $allowed = ['malice', 'groups', 'lastEffect', 'lastEffects', 'intentHistory'];
+                $patch = is_array($payload['patch'] ?? null) ? $payload['patch'] : [];
+                if (!$isGm) {
+                    $allowed = ['lastEffect', 'lastEffects'];
+                }
+                foreach ($patch as $field => $value) {
+                    if (!in_array((string) $field, $allowed, true)) {
+                        throw new InvalidArgumentException('Combat patch field is not permitted: ' . $field);
+                    }
+                    $combat[$field] = $value;
+                }
+                $combat = $this->normalizeCombatState($combat);
+            }
+
+            $combat['sequence'] = $before['sequence'] + 1;
+            $combat['updatedAt'] = $this->nowMilliseconds();
+            $state['combat'][$sceneId] = $combat;
+            $revision = $snapshot['revision'] + 1;
+            $serverTime = $this->nowMilliseconds();
+            $event = [
+                'revision' => $revision,
+                'operationId' => $normalized['operationId'],
+                'type' => 'combat.transitioned',
+                'actorId' => $actorId,
+                'sceneId' => $sceneId,
+                'entityId' => null,
+                'entityRevision' => null,
+                'payload' => [
+                    'combat' => $combat,
+                    'transition' => $transition,
+                ],
+                'serverTime' => $serverTime,
+            ];
+            $this->insertEvent($event);
+            $this->updateWorldState($revision, $state, $serverTime);
+            if ($revision % $this->snapshotInterval === 0) {
+                $this->insertSnapshot($revision, $state, $serverTime);
+            }
+            $this->pruneEvents($revision);
+            $this->pdo->exec('COMMIT');
+            return ['status' => 'accepted', 'event' => $event, 'idempotent' => false];
+        } catch (Throwable $error) {
+            $this->rollbackTransactionSilently();
             throw $error;
         }
     }
@@ -340,9 +673,7 @@ final class SyncV2Store
             $this->pdo->exec('COMMIT');
             return ['status' => 'accepted', 'event' => $event, 'idempotent' => false];
         } catch (Throwable $error) {
-            if ($this->pdo->inTransaction()) {
-                $this->pdo->rollBack();
-            }
+            $this->rollbackTransactionSilently();
             throw $error;
         }
     }
@@ -430,15 +761,7 @@ final class SyncV2Store
                 'idempotent' => false,
             ];
         } catch (Throwable $error) {
-            if ($this->pdo->inTransaction()) {
-                $this->pdo->rollBack();
-            } else {
-                try {
-                    $this->pdo->exec('ROLLBACK');
-                } catch (Throwable $ignored) {
-                    // Preserve the original failure.
-                }
-            }
+            $this->rollbackTransactionSilently();
             throw $error;
         }
     }
@@ -548,15 +871,7 @@ final class SyncV2Store
                 'idempotent' => false,
             ];
         } catch (Throwable $error) {
-            if ($this->pdo->inTransaction()) {
-                $this->pdo->rollBack();
-            } else {
-                try {
-                    $this->pdo->exec('ROLLBACK');
-                } catch (Throwable $ignored) {
-                    // Preserve the original failure.
-                }
-            }
+            $this->rollbackTransactionSilently();
             throw $error;
         }
     }
@@ -872,6 +1187,230 @@ final class SyncV2Store
         ];
     }
 
+    private function normalizeCombatCommand(array $command): array
+    {
+        $operationId = trim((string) ($command['operationId'] ?? ''));
+        if (
+            strlen($operationId) < 8
+            || strlen($operationId) > 128
+            || preg_match('/^[A-Za-z0-9._:-]+$/', $operationId) !== 1
+        ) {
+            throw new InvalidArgumentException('operationId is invalid.');
+        }
+        $type = (string) ($command['type'] ?? '');
+        if (!in_array($type, [
+            'combat.start', 'turn.start', 'turn.complete', 'turn.cancel',
+            'combat.uncomplete', 'round.advance', 'combat.end', 'combat.patch',
+            'combat.automation.claim',
+        ], true)) {
+            throw new InvalidArgumentException('Unsupported combat command.');
+        }
+        $sceneId = $this->normalizeOptionalId($command['sceneId'] ?? null);
+        $baseRevision = filter_var(
+            $command['baseRevision'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 0]]
+        );
+        $payload = $command['payload'] ?? [];
+        if ($sceneId === null || $baseRevision === false || !is_array($payload)) {
+            throw new InvalidArgumentException('Combat commands require sceneId, baseRevision, and payload.');
+        }
+        if (strlen($this->encodeJson($payload)) > 262144) {
+            throw new InvalidArgumentException('Combat command payload is too large.');
+        }
+        return [
+            'operationId' => $operationId,
+            'type' => $type,
+            'sceneId' => $sceneId,
+            'baseRevision' => (int) $baseRevision,
+            'payload' => $payload,
+        ];
+    }
+
+    private function normalizeCombatState($raw): array
+    {
+        $raw = is_array($raw) ? $raw : [];
+        $active = !empty($raw['active']) || !empty($raw['isActive']);
+        $round = isset($raw['round']) && is_numeric($raw['round'])
+            ? max(0, (int) $raw['round'])
+            : 0;
+        $activeId = $this->normalizeOptionalId($raw['activeCombatantId'] ?? null);
+        $completed = [];
+        $rawCompleted = is_array($raw['completedCombatantIds'] ?? null)
+            ? $raw['completedCombatantIds']
+            : [];
+        foreach ($rawCompleted as $id) {
+            $normalized = $this->normalizeOptionalId($id);
+            if ($normalized !== null && !in_array($normalized, $completed, true)) {
+                $completed[] = $normalized;
+            }
+        }
+        $groups = [];
+        $rawGroups = is_array($raw['groups'] ?? null) ? $raw['groups'] : [];
+        foreach ($rawGroups as $group) {
+            if (!is_array($group)) {
+                continue;
+            }
+            $representativeId = $this->normalizeOptionalId($group['representativeId'] ?? null);
+            $memberIds = [];
+            $rawMemberIds = is_array($group['memberIds'] ?? null)
+                ? $group['memberIds']
+                : [];
+            foreach ($rawMemberIds as $memberId) {
+                $member = $this->normalizeOptionalId($memberId);
+                if ($member !== null && !in_array($member, $memberIds, true)) {
+                    $memberIds[] = $member;
+                }
+            }
+            if ($representativeId !== null && !in_array($representativeId, $memberIds, true)) {
+                array_unshift($memberIds, $representativeId);
+            }
+            if ($representativeId !== null && $memberIds !== []) {
+                $groups[] = [
+                    ...$group,
+                    'representativeId' => $representativeId,
+                    'memberIds' => $memberIds,
+                ];
+            }
+        }
+        $startingTeam = $this->normalizeCombatTeam($raw['startingTeam'] ?? null);
+        $currentTeam = $this->normalizeCombatTeam($raw['currentTeam'] ?? null);
+        $lastTeam = $this->normalizeCombatTeam($raw['lastTeam'] ?? null);
+        return [
+            ...$raw,
+            'active' => $active,
+            'isActive' => $active,
+            'round' => $active ? max(1, $round) : 0,
+            'activeCombatantId' => $active ? $activeId : null,
+            'completedCombatantIds' => $active ? $completed : [],
+            'startingTeam' => $active ? $startingTeam : null,
+            'currentTeam' => $active ? $currentTeam : null,
+            'lastTeam' => $active ? $lastTeam : null,
+            'turnPhase' => !$active ? 'idle' : ($activeId !== null ? 'active' : 'pick'),
+            'roundTurnCount' => $active && is_numeric($raw['roundTurnCount'] ?? null)
+                ? max(0, (int) $raw['roundTurnCount'])
+                : 0,
+            'malice' => $active && is_numeric($raw['malice'] ?? null)
+                ? max(0, (int) $raw['malice'])
+                : 0,
+            'encounterId' => $this->normalizeOptionalId($raw['encounterId'] ?? null),
+            'sequence' => is_numeric($raw['sequence'] ?? null)
+                ? max(0, (int) $raw['sequence'])
+                : 0,
+            'updatedAt' => is_numeric($raw['updatedAt'] ?? null)
+                ? max(0, (int) $raw['updatedAt'])
+                : 0,
+            'turnLock' => $activeId !== null && is_array($raw['turnLock'] ?? null)
+                ? $raw['turnLock']
+                : null,
+            'intentHistory' => is_array($raw['intentHistory'] ?? null)
+                ? array_values($raw['intentHistory'])
+                : [],
+            'lastEffect' => is_array($raw['lastEffect'] ?? null) ? $raw['lastEffect'] : null,
+            'lastEffects' => is_array($raw['lastEffects'] ?? null)
+                ? array_values($raw['lastEffects'])
+                : [],
+            'groups' => $groups,
+        ];
+    }
+
+    private function normalizeCombatTeam($value): ?string
+    {
+        if (!is_string($value)) {
+            return null;
+        }
+        $team = strtolower(trim($value));
+        if (in_array($team, ['ally', 'allies', 'player', 'players', 'hero', 'heroes'], true)) {
+            return 'ally';
+        }
+        if (in_array($team, ['enemy', 'enemies', 'monster', 'monsters', 'foe'], true)) {
+            return 'enemy';
+        }
+        return null;
+    }
+
+    private function resolveCombatRepresentative(array $combat, ?string $combatantId): ?string
+    {
+        if ($combatantId === null) {
+            return null;
+        }
+        foreach (($combat['groups'] ?? []) as $group) {
+            if (!is_array($group)) {
+                continue;
+            }
+            $representative = $this->normalizeOptionalId($group['representativeId'] ?? null);
+            $members = is_array($group['memberIds'] ?? null) ? $group['memberIds'] : [];
+            if ($representative !== null && ($combatantId === $representative || in_array($combatantId, $members, true))) {
+                return $representative;
+            }
+        }
+        return $combatantId;
+    }
+
+    private function combatantTeam(array $placement): ?string
+    {
+        $metadata = is_array($placement['metadata'] ?? null) ? $placement['metadata'] : [];
+        $team = $this->normalizeCombatTeam(
+            $placement['team']
+                ?? $placement['combatTeam']
+                ?? $metadata['team']
+                ?? $metadata['combatTeam']
+                ?? null
+        );
+        if ($team !== null) {
+            return $team;
+        }
+        return !empty($placement['monster'])
+            || !empty($placement['monsterId'])
+            || !empty($metadata['monster'])
+            || !empty($metadata['monsterId'])
+            ? 'enemy'
+            : 'ally';
+    }
+
+    private function actorControlsCombatant(
+        array $state,
+        string $sceneId,
+        string $combatantId,
+        string $actorId,
+        array $combat
+    ): bool {
+        $actorKey = strtolower(trim($actorId));
+        $ids = [$combatantId];
+        foreach (($combat['groups'] ?? []) as $group) {
+            if (!is_array($group) || ($group['representativeId'] ?? null) !== $combatantId) {
+                continue;
+            }
+            $ids = array_merge($ids, is_array($group['memberIds'] ?? null) ? $group['memberIds'] : []);
+        }
+        foreach (array_unique($ids) as $id) {
+            $owner = strtolower(trim((string) ($state['claims'][$sceneId][$id] ?? '')));
+            if ($owner !== '' && $owner === $actorKey) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private function endCombatState(array $combat): array
+    {
+        return [
+            ...$combat,
+            'active' => false,
+            'isActive' => false,
+            'round' => 0,
+            'activeCombatantId' => null,
+            'completedCombatantIds' => [],
+            'startingTeam' => null,
+            'currentTeam' => null,
+            'lastTeam' => null,
+            'turnPhase' => 'idle',
+            'roundTurnCount' => 0,
+            'malice' => 0,
+            'turnLock' => null,
+        ];
+    }
+
     private function normalizeEntityRevision(array $action): int
     {
         $revision = filter_var(
@@ -889,6 +1428,21 @@ final class SyncV2Store
     {
         $this->pdo->exec('ROLLBACK');
         return ['status' => 'conflict', 'error' => $error, 'snapshot' => $snapshot];
+    }
+
+    private function rollbackTransactionSilently(): void
+    {
+        try {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+                return;
+            }
+            // BEGIN IMMEDIATE issued through exec() is not reported by
+            // PDO::inTransaction() on every Windows SQLite build.
+            $this->pdo->exec('ROLLBACK');
+        } catch (Throwable $ignored) {
+            // Preserve the original validation or persistence failure.
+        }
     }
 
     private function placementIsHidden(array $placement): bool

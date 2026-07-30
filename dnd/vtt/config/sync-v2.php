@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * Sync V2 remains isolated from all live VTT domains during Phase 1.
+ * Sync V2 owns each domain whose flag is enabled below.
  *
  * Flip domain ownership only in the phase dedicated to that domain and only
  * after its migration gate passes. Never enable a V2 domain while its V1
@@ -17,7 +17,7 @@ return [
     'domains' => [
         'token_movement' => true,
         'placements' => true,
-        'combat' => false,
+        'combat' => true,
         'templates' => false,
         'drawings' => false,
         'fog' => false,
