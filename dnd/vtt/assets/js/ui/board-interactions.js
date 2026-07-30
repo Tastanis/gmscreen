@@ -269,6 +269,18 @@ export function isPlacementStaminaSyncSource(source) {
   return source === 'sheet' || source === 'vtt';
 }
 
+export async function awaitSuccessfulPlacementSave(result) {
+  const savePromise = result?.savePromise;
+  if (!savePromise || typeof savePromise.then !== 'function') {
+    return result;
+  }
+  const saveResult = await savePromise;
+  if (saveResult?.success === false) {
+    throw saveResult.error ?? new Error('The server rejected that placement change.');
+  }
+  return result;
+}
+
 export function escapeHtmlAttribute(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -1020,6 +1032,9 @@ export function mountBoardInteractions(store, routes = {}) {
       const sceneEntry = ensureSceneStateDraftEntry(draft, sceneId);
       sceneEntry.combat = JSON.parse(JSON.stringify(combat));
     });
+    if (transition?.type === 'turn.complete' || transition?.type === 'turn.cancel') {
+      closeTurnPrompt();
+    }
     applyCombatStateFromBoardState(boardApi.getState?.() ?? {});
     const automationTypes = new Set([
       'combat.start',
@@ -10725,8 +10740,19 @@ export function mountBoardInteractions(store, routes = {}) {
     const completionTargetId =
       (activeCombatantId ? getRepresentativeIdFor(activeCombatantId) || activeCombatantId : null) ||
       (activeTurnDialog?.combatantId
-        ? getRepresentativeIdFor(activeTurnDialog.combatantId) || activeTurnDialog.combatantId
-        : null);
+            ? getRepresentativeIdFor(activeTurnDialog.combatantId) || activeTurnDialog.combatantId
+            : null);
+    if (
+      combatV2Enabled
+      && !isGmUser()
+      && options.canonicalConfirmed !== true
+      && completionTargetId
+    ) {
+      submitPlayerCombatIntent('turn.complete', {
+        combatantId: completionTargetId,
+      });
+      return;
+    }
     const turnCompletion = completeCombatantTurnState({
       activeCombatantId: completionTargetId,
       completedCombatantIds: completedCombatants,
@@ -12245,6 +12271,12 @@ export function mountBoardInteractions(store, routes = {}) {
         clearTurnBorderFlash();
       }
 
+      if (
+        activeTurnDialog?.combatantId
+        && activeTurnDialog.combatantId !== effectiveActiveCombatantId
+      ) {
+        closeTurnPrompt();
+      }
       if (effectiveActiveCombatantId !== previousActive) {
         setActiveCombatantId(effectiveActiveCombatantId);
       } else {
@@ -12500,6 +12532,50 @@ export function mountBoardInteractions(store, routes = {}) {
           pendingCombatStateSave = null;
         }
       });
+  }
+
+  function submitPlayerCombatIntent(type, details = {}) {
+    if (!combatV2Enabled || isGmUser()) {
+      return Promise.resolve(null);
+    }
+    if (pendingCombatStateSave?.promise) {
+      return pendingCombatStateSave.promise;
+    }
+    const state = boardApi.getState?.() ?? {};
+    const { activeSceneId } = getActiveSceneCombatState(state);
+    if (!activeSceneId) {
+      return Promise.resolve(null);
+    }
+
+    const request = tokenMovementRuntime.submitCombatCommand(type, activeSceneId, details);
+    const handled = request
+      .then((result) => {
+        clearSyncFailure();
+        return result;
+      })
+      .catch((error) => {
+        const reason = error?.response?.error || error?.message || 'rejected';
+        const message = `Combat action rejected by the server (${reason}).`;
+        if (status) {
+          status.textContent = message;
+        }
+        if (typeof window !== 'undefined' && window.UIKit?.toast) {
+          window.UIKit.toast(message, 'warning');
+        }
+        reportSyncFailure(error, 'combat action');
+        return null;
+      })
+      .finally(() => {
+        if (pendingCombatStateSave?.promise === handled) {
+          pendingCombatStateSave = null;
+        }
+      });
+    pendingCombatStateSave = {
+      promise: handled,
+      sceneId: activeSceneId,
+      timestamp: Date.now(),
+    };
+    return handled;
   }
 
   function serializeTurnLockState() {
@@ -13643,6 +13719,7 @@ export function mountBoardInteractions(store, routes = {}) {
     // Validate turn start using state machine
     const validation = validateTurnStart(combatantId);
 
+    let overrideAccepted = false;
     if (!validation.valid && validation.requiresConfirmation) {
       // Need user confirmation to proceed
       if (validation.confirmationType === 'override_active_turn') {
@@ -13655,17 +13732,20 @@ export function mountBoardInteractions(store, routes = {}) {
         if (!overrideTurn) {
           return;
         }
+        overrideAccepted = true;
       } else if (validation.confirmationType === 'switch_active_turn') {
         const currentLabel = getCombatantLabel(activeCombatantId) || 'the current combatant';
         const nextLabel = getCombatantLabel(combatantId) || 'your character';
         if (!(await confirmSwitchActiveTurn(currentLabel, nextLabel))) {
           return;
         }
+        overrideAccepted = true;
       } else {
         // Unknown confirmation type, use generic
         if (!(await confirmPlayerTurnOverride())) {
           return;
         }
+        overrideAccepted = true;
       }
     } else if (!validation.valid) {
       // Invalid and no confirmation option
@@ -13674,30 +13754,11 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const representativeId = getRepresentativeIdFor(combatantId) || combatantId;
     const switchingActiveTurn = Boolean(activeCombatantId && activeCombatantId !== representativeId);
-    if (switchingActiveTurn) {
-      completeActiveCombatant({
-        forceReleaseLock: true,
-        suppressAnnouncements: true,
-        suppressRoundCompletionCheck: true,
-        suppressSync: true,
-      });
-    }
-
-    const expectedTeam = context.expectedTeam ?? currentTurnTeam ?? team;
     const initiatorName = getCurrentUserName();
-
-    beginCombatantTurn(combatantId, {
-      initiatorProfileId: userId,
-      initiatorName,
-      expectedTeam,
-      previousTeam: context.previousTeam ?? lastActingTeam ?? null,
-      isFirstTurnOfRound:
-        typeof context.isFirstTurnOfRound === 'boolean'
-          ? context.isFirstTurnOfRound
-          : combatActive
-          ? roundTurnCount === 0
-          : false,
-      forceTurnLock: switchingActiveTurn,
+    await submitPlayerCombatIntent('turn.start', {
+      combatantId: representativeId,
+      holderName: initiatorName,
+      override: switchingActiveTurn || overrideAccepted,
     });
   }
 
@@ -17045,6 +17106,14 @@ export function mountBoardInteractions(store, routes = {}) {
       reject?.(new Error('Unable to update stamina for that token.'));
       return;
     }
+    try {
+      await awaitSuccessfulPlacementSave(result);
+    } catch (error) {
+      renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState, { skipTracker: true });
+      refreshTokenSettings();
+      reject?.(error);
+      return;
+    }
     const resultPlacement = getPlacementFromStore(payload.placementId);
     if (!isAutomationPlacementHidden(resultPlacement)) {
       flashAutomationTargetToken(payload.placementId);
@@ -17117,8 +17186,9 @@ export function mountBoardInteractions(store, routes = {}) {
     } catch (err) {
       console.warn('[VTT] triggerFire(damage/staminaChange) failed', err);
     }
+    const { savePromise: _savePromise, ...confirmedResult } = result;
     resolve?.({
-      ...result,
+      ...confirmedResult,
       originalAmount: amount,
       amount: adjustedAmount,
       damageType: payload.damageType || '',
@@ -18340,6 +18410,14 @@ export function mountBoardInteractions(store, routes = {}) {
       return true;
     }
     try {
+      await awaitSuccessfulPlacementSave(moveResult);
+    } catch (error) {
+      renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState, { skipTracker: true });
+      clearAutomationMoveOverlay();
+      request.reject?.(error);
+      return true;
+    }
+    try {
       checkPersistentZoneEntries(request.targetSnapshot.id, request.targetSnapshot, {
         ...request.targetSnapshot,
         column: clamped.column,
@@ -18351,14 +18429,21 @@ export function mountBoardInteractions(store, routes = {}) {
 
     let collision = null;
     if (collisionPlacement) {
-      const collisionDamage = Math.max(1, request.effectiveDistance - movedDistance);
-      const targetDamage = await applyAutomationCollisionDamage(request.targetSnapshot.id, collisionDamage, request.collisionDamageType);
-      const otherDamage = await applyAutomationCollisionDamage(collisionPlacement.id, collisionDamage, request.collisionDamageType);
-      collision = {
-        targetName: targetDamage?.name || request.targetSnapshot.name,
-        collidedName: otherDamage?.name || tokenLabel(collisionPlacement),
-        damage: collisionDamage,
-      };
+      try {
+        const collisionDamage = Math.max(1, request.effectiveDistance - movedDistance);
+        const targetDamage = await applyAutomationCollisionDamage(request.targetSnapshot.id, collisionDamage, request.collisionDamageType);
+        const otherDamage = await applyAutomationCollisionDamage(collisionPlacement.id, collisionDamage, request.collisionDamageType);
+        collision = {
+          targetName: targetDamage?.name || request.targetSnapshot.name,
+          collidedName: otherDamage?.name || tokenLabel(collisionPlacement),
+          damage: collisionDamage,
+        };
+      } catch (error) {
+        renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState, { skipTracker: true });
+        clearAutomationMoveOverlay();
+        request.reject?.(error);
+        return true;
+      }
     }
 
     flashAutomationTargetToken(request.targetSnapshot.id);
@@ -18379,7 +18464,10 @@ export function mountBoardInteractions(store, routes = {}) {
       return getZeroDamageResult(placementId);
     }
     const result = applyDamageHealToPlacement(placementId, 'damage', adjustedAmount);
-    if (result) floatStaminaDelta(placementId, adjustedAmount, 'damage');
+    if (result) {
+      await awaitSuccessfulPlacementSave(result);
+      floatStaminaDelta(placementId, adjustedAmount, 'damage');
+    }
     return result;
   }
 
@@ -18812,6 +18900,7 @@ export function mountBoardInteractions(store, routes = {}) {
     return {
       ...result,
       name,
+      savePromise: updateResult.savePromise ?? null,
     };
   }
 

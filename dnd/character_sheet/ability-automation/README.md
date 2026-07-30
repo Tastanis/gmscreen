@@ -112,6 +112,12 @@ Each effect is dispatched by `kind`:
 - `heal`, `temporaryStamina`, `teleport`, `swap`, `freeStrike`, `resourceGain`, `floatingText`, `startTurn`, `note` — full implementation via board/sheet hooks.
 - `cascade`, `other` — chat reminder; manual application required.
 
+On the VTT, automated damage and forced movement resolve only after the
+canonical board save succeeds. Authenticated players may use ability effects
+against any visible placement, including enemies and tokens claimed by another
+player. This does not grant ordinary drag control of enemy tokens, and hidden
+or GM-only placement fields remain protected.
+
 ## Authoring flow
 
 1. The user types ability text on the character sheet (name, description, range, cost, tests). The sheet handles all of that.

@@ -9,7 +9,10 @@ import {
   restrictTokensToPlayerView,
   restrictPlacementsToPlayerView,
 } from '../../state/store.js';
-import { isPlacementStaminaSyncSource } from '../board-interactions.js';
+import {
+  awaitSuccessfulPlacementSave,
+  isPlacementStaminaSyncSource,
+} from '../board-interactions.js';
 
 // ============================================================
 // normalizePlayerTokenFolderName — PC folder matching
@@ -52,6 +55,36 @@ test('placement stamina sync accepts sheet and VTT sidebar broadcasts', () => {
   assert.equal(isPlacementStaminaSyncSource('vtt'), true);
   assert.equal(isPlacementStaminaSyncSource('monster'), false);
   assert.equal(isPlacementStaminaSyncSource(undefined), false);
+});
+
+test('automation waits for the canonical placement save before reporting damage success', async () => {
+  let releaseSave;
+  const savePromise = new Promise((resolve) => {
+    releaseSave = resolve;
+  });
+  let settled = false;
+  const pending = awaitSuccessfulPlacementSave({ current: 7, savePromise })
+    .then(() => {
+      settled = true;
+    });
+
+  await Promise.resolve();
+  assert.equal(settled, false);
+
+  releaseSave({ success: true });
+  await pending;
+  assert.equal(settled, true);
+});
+
+test('automation treats a rejected canonical placement save as a failed effect', async () => {
+  const rejection = new Error('server rejected damage');
+  await assert.rejects(
+    awaitSuccessfulPlacementSave({
+      current: 7,
+      savePromise: Promise.resolve({ success: false, error: rejection }),
+    }),
+    rejection
+  );
 });
 
 // ============================================================

@@ -150,6 +150,7 @@ try {
             'scene-1' => [
                 ['id' => 'token-1', 'name' => 'Hero', 'column' => 1, 'row' => 1, 'stamina' => 20],
                 ['id' => 'token-2', 'name' => 'Ally', 'column' => 2, 'row' => 2, 'stamina' => 15],
+                ['id' => 'token-3', 'name' => 'Second Hero', 'column' => 3, 'row' => 2, 'stamina' => 18],
             ],
         ],
         'sceneState' => [
@@ -157,6 +158,7 @@ try {
                 'claimedTokens' => [
                     'token-1' => 'player-a',
                     'token-2' => 'player-b',
+                    'token-3' => 'player-b',
                 ],
             ],
         ],
@@ -387,6 +389,23 @@ try {
     ], 'GM', true);
     expect($enemyTurn['event']['revision'] === 12, 'The GM may start the current enemy turn.');
 
+    $playerOverride = $store->acceptCombatCommand([
+        'operationId' => 'combat-player-override',
+        'type' => 'turn.start',
+        'baseRevision' => 12,
+        'sceneId' => 'scene-1',
+        'payload' => [
+            'combatantId' => 'token-3',
+            'holderName' => 'Player B',
+            'override' => true,
+        ],
+    ], 'player-b', false);
+    expect(
+        $playerOverride['event']['revision'] === 13
+            && $playerOverride['event']['payload']['combat']['activeCombatantId'] === 'token-3',
+        'A player-confirmed override must canonically replace an active enemy turn.'
+    );
+
     $roundAdvance = $store->acceptCombatCommand([
         'operationId' => 'combat-round-advance',
         'type' => 'round.advance',
@@ -394,7 +413,7 @@ try {
         'sceneId' => 'scene-1',
         'payload' => [],
     ], 'GM', true);
-    expect($roundAdvance['event']['revision'] === 13, 'Round advance must be one atomic write.');
+    expect($roundAdvance['event']['revision'] === 14, 'Round advance must be one atomic write.');
     expect(
         $roundAdvance['event']['payload']['combat']['round'] === 2
         && $roundAdvance['event']['payload']['combat']['activeCombatantId'] === null
@@ -422,14 +441,14 @@ try {
         'payload' => ['encounterId' => 'encounter-test'],
     ];
     $combatEnd = $store->acceptCombatCommand($combatEndCommand, 'GM', true);
-    expect($combatEnd['event']['revision'] === 15, 'Combat end must write once.');
+    expect($combatEnd['event']['revision'] === 16, 'Combat end must write once.');
     expect(
         $combatEnd['event']['payload']['combat']['active'] === false,
         'Combat end must publish the canonical inactive state.'
     );
     $combatEndDuplicate = $store->acceptCombatCommand($combatEndCommand, 'GM', true);
     expect($combatEndDuplicate['idempotent'] === true, 'A duplicate combat command must apply once.');
-    expect($store->getSnapshot()['revision'] === 15, 'A duplicate combat command must not advance revision.');
+    expect($store->getSnapshot()['revision'] === 16, 'A duplicate combat command must not advance revision.');
 
     $automationClaimCommand = [
         'operationId' => 'combat-automation:combat-end-0001',
@@ -439,7 +458,7 @@ try {
         'payload' => ['transitionOperationId' => 'combat-end-0001'],
     ];
     $automationClaim = $store->acceptCombatCommand($automationClaimCommand, 'GM', true);
-    expect($automationClaim['event']['revision'] === 16, 'The first automation claim must write once.');
+    expect($automationClaim['event']['revision'] === 17, 'The first automation claim must write once.');
     expect(
         $automationClaim['event']['type'] === 'combat.automationClaimed',
         'Automation claims must publish a reducer-safe canonical event.'
@@ -449,7 +468,7 @@ try {
         $automationClaimDuplicate['idempotent'] === true,
         'Only one GM tab or device may win an automation claim.'
     );
-    expect($store->getSnapshot()['revision'] === 16, 'Duplicate automation claims must not advance revision.');
+    expect($store->getSnapshot()['revision'] === 17, 'Duplicate automation claims must not advance revision.');
 
     $store->migrateLegacyBoardDomains([
         'activeSceneId' => 'scene-1',
@@ -542,11 +561,11 @@ try {
         'Canonical grid state must retain the accepted update.'
     );
     $operationalStatus = $store->getOperationalStatus();
-    expect($operationalStatus['revision'] === 20, 'Operational status must report current revision.');
+    expect($operationalStatus['revision'] === 21, 'Operational status must report current revision.');
     expect($operationalStatus['retainedEvents'] <= 2, 'Event retention must remain bounded.');
     expect($operationalStatus['snapshots'] <= 3, 'Snapshot retention must remain bounded.');
     expect(
-        $operationalStatus['operationLedgerEntries'] === 20,
+        $operationalStatus['operationLedgerEntries'] === 21,
         'Idempotency ledger must outlive event and snapshot retention.'
     );
     $hiddenAudienceEvent = [
@@ -718,36 +737,37 @@ try {
         'A player may move an allied token claimed by another player.'
     );
 
-    $beforeEnemyMovement = $store->getSnapshot();
-    $enemyMovementRejected = false;
-    try {
-        $store->acceptPlacementBatch([
-            'operationId' => 'placement-player-enemy-move',
-            'type' => 'placement.batch',
-            'baseRevision' => $beforeEnemyMovement['revision'],
-            'payload' => [
-                'actions' => [[
-                    'kind' => 'patch',
-                    'sceneId' => 'scene-1',
-                    'placementId' => 'token-2',
-                    'entityRevision' => $enemyPlacement['_entityRevision'],
-                    'patch' => ['column' => 9, 'row' => 8],
-                ]],
-            ],
-        ], 'player-b', false);
-    } catch (InvalidArgumentException $error) {
-        $enemyMovementRejected = true;
-    }
-    expect($enemyMovementRejected, 'A player movement batch must reject enemy tokens.');
+    $beforeAbilityEffect = $store->getSnapshot();
+    $enemyBeforeAbility = $beforeAbilityEffect['state']['placements']['scene-1']['token-2'];
+    $abilityEffect = $store->acceptPlacementBatch([
+        'operationId' => 'placement-player-enemy-ability',
+        'type' => 'placement.batch',
+        'baseRevision' => $beforeAbilityEffect['revision'],
+        'payload' => [
+            'actions' => [[
+                'kind' => 'patch',
+                'sceneId' => 'scene-1',
+                'placementId' => 'token-2',
+                'entityRevision' => $enemyBeforeAbility['_entityRevision'],
+                'patch' => [
+                    'column' => 9,
+                    'row' => 8,
+                    'hp' => ['current' => '3', 'max' => '15'],
+                ],
+            ]],
+        ],
+    ], 'player-a', false);
+    expect($abilityEffect['status'] === 'accepted', 'Player abilities may affect visible enemy tokens.');
     expect(
-        $store->getSnapshot() === $beforeEnemyMovement,
-        'A rejected enemy movement must leave canonical state unchanged.'
+        (float) $store->getSnapshot()['state']['placements']['scene-1']['token-2']['column'] === 9.0
+            && $store->getSnapshot()['state']['placements']['scene-1']['token-2']['hp']['current'] === '3',
+        'Ability movement and damage must persist in the canonical enemy placement.'
     );
 
     $sceneDeletion = $store->deleteScene('scene-1', 'GM');
     expect(
         $sceneDeletion['event']['type'] === 'scene.deleted'
-            && $sceneDeletion['event']['revision'] === 22,
+            && $sceneDeletion['event']['revision'] === 24,
         'Scene deletion must emit one canonical revisioned event.'
     );
     $afterSceneDeletion = $store->getSnapshot();

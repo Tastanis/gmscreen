@@ -667,13 +667,16 @@ final class SyncV2Store
                     return $this->rollbackConflict('combatant_not_found', $snapshot);
                 }
                 $team = $this->combatantTeam($placement);
-                $override = $isGm && !empty($payload['override']);
-                if (!$isGm && !$this->actorControlsCombatant($state, $sceneId, $combatantId, $actorId, $combat)) {
+                $actorControlsCombatant = $isGm
+                    || $this->actorControlsCombatant($state, $sceneId, $combatantId, $actorId, $combat);
+                if (!$actorControlsCombatant) {
                     throw new InvalidArgumentException('You do not control this combatant.');
                 }
                 if (!$isGm && $team !== 'ally') {
                     throw new InvalidArgumentException('Players cannot control enemy turns.');
                 }
+                $override = !empty($payload['override'])
+                    && ($isGm || ($actorControlsCombatant && $team === 'ally'));
                 if (in_array($combatantId, $combat['completedCombatantIds'], true)) {
                     return $this->rollbackConflict('combatant_already_completed', $snapshot);
                 }
@@ -971,12 +974,10 @@ final class SyncV2Store
                 if ($action['entityRevision'] !== $currentRevision) {
                     return $this->rollbackConflict('entity_revision_mismatch', $snapshot);
                 }
-                $isMovementPatch = $action['kind'] === 'patch'
-                    && $this->isCoordinateOnlyPatch($action['patch']);
-                $playerMayChange = $isMovementPatch
-                    ? $this->playerMayMovePlacement($current)
-                    : $ownsPlacement;
-                if (!$isGm && (!$playerMayChange || $this->placementIsHidden($current))) {
+                if (!$isGm && $this->placementIsHidden($current)) {
+                    throw new InvalidArgumentException('You cannot change this placement.');
+                }
+                if (!$isGm && $action['kind'] === 'remove' && !$ownsPlacement) {
                     throw new InvalidArgumentException('You cannot change this placement.');
                 }
                 $nextRevision = $currentRevision + 1;
@@ -2010,19 +2011,6 @@ final class SyncV2Store
         return !empty($placement['hidden'])
             || !empty($placement['isHidden'])
             || !empty($placement['flags']['hidden']);
-    }
-
-    private function isCoordinateOnlyPatch(array $patch): bool
-    {
-        if ($patch === []) {
-            return false;
-        }
-        foreach (array_keys($patch) as $field) {
-            if (!in_array((string) $field, ['column', 'row'], true)) {
-                return false;
-            }
-        }
-        return true;
     }
 
     private function assertPlayerPatchAllowed(array $patch): void

@@ -34,5 +34,5 @@ test('PHP Sync V2 store enforces atomic revisions, idempotency, replay, and snap
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const payload = JSON.parse(result.stdout);
-  assert.deepEqual(payload, { success: true, revision: 22 });
+  assert.deepEqual(payload, { success: true, revision: 24 });
 });

@@ -239,11 +239,11 @@ These are called by `runner.js` and dispatched as `vtt:automation-*` CustomEvent
 | `selectTarget(config)` | target block fields + `{ pickIndex, pickTotal, allowDone }`; may include `promptTitle` / `promptText` for picker wording | `{ id, name, hidden?, placement? }` or `{ skipped }` / `{ done }` / `{ canceled }` |
 | `selectAreaTarget(config)` | target block fields + `sourcePlacement` | `{ targets: [...] }` or `{ skipped }` / `{ canceled }` |
 | `chooseDamageType(payload)` | `{ abilityName, actionId, options }` for a normalized `damageTypeOptions` choice | selected type string or `{ damageType }`; `null`/an invalid type cancels before resource spending or effect application |
-| `applyDamage(payload)` | `{ placementId, amount, damageType, abilityName }`; `damageType` is the already-selected scalar even when the authored effect used `damageTypeOptions` | `{ name, amount, current, max, hidden, vulnerability, immunity }` |
+| `applyDamage(payload)` | `{ placementId, amount, damageType, abilityName }`; `damageType` is the already-selected scalar even when the authored effect used `damageTypeOptions` | Resolves after the canonical placement save with `{ name, amount, current, max, hidden, vulnerability, immunity }`; rejects when the server rejects the effect. Players may damage any visible placement. |
 | `applyHeal(payload)` | `{ placementId, amount, allowTempHp, abilityName }` | `{ name, change, current, max, hidden, allowTempHp }` |
 | `applyCondition(payload)` | `{ placementId, condition: {name, duration}, sourceId, sourceName }` | `{ ok }` |
 | `checkPotency(payload)` | `{ placementId, attribute, threshold, sourceStats }` | `{ passes: bool }` |
-| `forceMove(payload)` | `{ movement, verb, verbLabel?, distance, upTo, ignoreStability?, targetId, target, sourcePlacement, sourceTraits, abilityName }` | `{ name, movedDistance, collision?, skipped? }` |
+| `forceMove(payload)` | `{ movement, verb, verbLabel?, distance, upTo, ignoreStability?, targetId, target, sourcePlacement, sourceTraits, abilityName }` | Resolves after the canonical placement save with `{ name, movedDistance, collision?, skipped? }`; rejects when the server rejects the move. Players may force-move any visible placement, including enemies. |
 | `cancelTargetSelection()` | none | none |
 | `cancelAreaSelection()` | none | none |
 | `getAttributeBonus(name)` | string attribute name | int |
