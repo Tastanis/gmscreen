@@ -53,6 +53,7 @@ export function createTokenMovementRuntime({
   applyConfirmedBoardDomain = () => {},
   reconcileSnapshot = () => {},
   onError = (error) => console.warn('[VTT Sync V2] Token movement failed', error),
+  onDiagnostic = () => {},
 } = {}) {
   if (!enabled) {
     return {
@@ -143,13 +144,25 @@ export function createTokenMovementRuntime({
     recoveryClient,
     changeRouter,
     onError,
+    onDiagnostic,
   });
+  let hasConnectedOnce = false;
   const pusherTransport = createPusherEventTransport({
     PusherClass,
     key: pusherConfig?.key,
     cluster: pusherConfig?.cluster,
-    channel: pusherConfig?.channel,
+    channel: pusherConfig?.syncV2Channel ?? pusherConfig?.channel,
+    authEndpoint: pusherConfig?.syncV2AuthEndpoint ?? null,
     onEvent: (event, source) => eventStream.ingest(event, source).catch(onError),
+    onConnectionChange: (change = {}) => {
+      onDiagnostic('connectionStateChanged', change);
+      if (change.current === 'connected') {
+        const reason = hasConnectedOnce ? 'reconnected' : 'connected';
+        hasConnectedOnce = true;
+        onDiagnostic('connectionRecovery', { reason, revision: store.getRevision() });
+        eventStream.recover().catch(onError);
+      }
+    },
   });
   const commandClient = createCommandClient({
     endpoint: commandsEndpoint,
@@ -157,6 +170,7 @@ export function createTokenMovementRuntime({
     fetchImpl,
     getRevision: () => store.getRevision(),
     getSocketId: () => pusherTransport.getSocketId(),
+    onDiagnostic,
   });
 
   async function start() {
@@ -164,6 +178,7 @@ export function createTokenMovementRuntime({
     startPromise = (async () => {
       const snapshot = await fetchSnapshot(snapshotEndpoint, fetchImpl);
       store.replaceSnapshot(snapshot, { authoritative: true, source: 'bootstrap' });
+      onDiagnostic('bootstrapSnapshotApplied', { revision: store.getRevision() });
       reconcileSnapshot(store.getConfirmedSnapshot(), { source: 'bootstrap' });
       pusherTransport.connect();
       if (!stopped && typeof windowRef?.setInterval === 'function') {

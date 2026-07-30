@@ -250,6 +250,8 @@ test('event stream buffers a gap and deterministically replays missing events', 
         assert.equal(revision, 0);
         return {
           mode: 'events',
+          fromRevision: revision,
+          revision: 2,
           events: [
             shadowEvent(1, 'operation-1'),
             shadowEvent(2, 'operation-2'),
@@ -283,6 +285,8 @@ test('three clients converge through reorder, duplicate, disconnect, and recover
       recoveryClient: {
         recoverAfter: async (revision) => ({
           mode: 'events',
+          fromRevision: revision,
+          revision: 3,
           events: canonicalEvents.filter((event) => event.revision > revision),
         }),
       },
@@ -355,14 +359,76 @@ test('command acknowledgements and duplicate Pusher delivery share one reducer',
   assert.equal(client.pendingCommands.get('operation-command').status, 'acknowledged');
 });
 
+test('ambiguous command transport failure retries the same operation id exactly once', async () => {
+  const store = createEntityStore();
+  const stream = createEventStream({ store });
+  const event = shadowEvent(1, 'operation-retry', { source: 'retry' });
+  const bodies = [];
+  let attempt = 0;
+  const client = createCommandClient({
+    endpoint: '/api/v2/commands.php',
+    eventStream: stream,
+    getRevision: () => store.getRevision(),
+    operationIdFactory: () => 'operation-retry',
+    retryDelayMs: 0,
+    sleep: async () => {},
+    fetchImpl: async (_url, options) => {
+      bodies.push(JSON.parse(options.body));
+      attempt += 1;
+      if (attempt === 1) throw new TypeError('connection reset');
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true, idempotent: true, event }),
+      };
+    },
+  });
+
+  const result = await client.submit('shadow.observe', { source: 'retry' });
+  assert.equal(result.applyResult.status, 'applied');
+  assert.equal(bodies.length, 2);
+  assert.equal(bodies[0].operationId, 'operation-retry');
+  assert.equal(bodies[1].operationId, 'operation-retry');
+  assert.deepEqual(bodies[1], bodies[0]);
+  assert.equal(client.pendingCommands.get('operation-retry').attempts, 2);
+  assert.equal(client.pendingCommands.get('operation-retry').status, 'acknowledged');
+});
+
+test('recovery refuses a truncated event response instead of advancing past a gap', async () => {
+  const store = createEntityStore();
+  const errors = [];
+  const stream = createEventStream({
+    store,
+    onError: (error) => errors.push(error.message),
+    recoveryClient: {
+      recoverAfter: async (revision) => ({
+        mode: 'events',
+        fromRevision: revision,
+        revision: 2,
+        events: [shadowEvent(1, 'operation-1')],
+      }),
+    },
+  });
+
+  await assert.rejects(
+    stream.ingest(shadowEvent(2, 'operation-2'), 'pusher'),
+    /ended before its declared revision/
+  );
+  assert.equal(store.getRevision(), 0);
+  assert.deepEqual(stream.getBufferedRevisions(), [1, 2]);
+  assert.equal(errors.some((message) => message.includes('ended before')), true);
+});
+
 test('Pusher adapter only forwards canonical event envelopes', () => {
   let boundHandler = null;
   let forwarded = null;
+  let pusherOptions = null;
   class FakePusher {
     constructor(key, options) {
       this.key = key;
       this.options = options;
-      this.connection = { bind() {}, socket_id: '123.456' };
+      pusherOptions = options;
+      this.connection = { bind() {}, socket_id: '123.456', state: 'connected' };
     }
     subscribe() {
       return {
@@ -382,11 +448,17 @@ test('Pusher adapter only forwards canonical event envelopes', () => {
     key: 'public-key',
     cluster: 'us3',
     channel: 'private-shadow',
+    authEndpoint: '/dnd/vtt/api/v2/pusher-auth.php',
     onEvent: (event, source) => {
       forwarded = { event, source };
     },
   });
   assert.equal(transport.connect(), true);
+  assert.equal(
+    pusherOptions.channelAuthorization.endpoint,
+    '/dnd/vtt/api/v2/pusher-auth.php'
+  );
+  assert.equal(transport.getState(), 'connected');
   boundHandler({ event: shadowEvent(1, 'operation-1') });
   assert.equal(forwarded.source, 'pusher');
   assert.equal(forwarded.event.revision, 1);

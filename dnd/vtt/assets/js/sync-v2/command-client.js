@@ -19,6 +19,10 @@ export function createCommandClient({
   getRevision = () => 0,
   getSocketId = () => null,
   operationIdFactory = () => createOperationId(),
+  maxNetworkAttempts = 2,
+  retryDelayMs = 100,
+  sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay)),
+  onDiagnostic = () => {},
 } = {}) {
   if (!endpoint || typeof endpoint !== 'string') {
     throw new TypeError('Command endpoint is required');
@@ -46,26 +50,67 @@ export function createCommandClient({
     }
 
     pendingCommands.add(command);
-    pendingCommands.markAttempt(command.operationId);
-
     let response;
     let body;
-    try {
-      response = await fetchImpl(endpoint, {
-        method: 'POST',
-        credentials: 'same-origin',
-        cache: 'no-store',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(command),
-        signal: options.signal,
-      });
-      body = await response.json().catch(() => ({}));
-    } catch (error) {
-      pendingCommands.fail(command.operationId, { error: error?.message ?? 'network_error' });
-      throw error;
+    const attempts = Math.max(1, Math.min(5, Math.trunc(Number(maxNetworkAttempts)) || 2));
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      pendingCommands.markAttempt(command.operationId);
+      try {
+        response = await fetchImpl(endpoint, {
+          method: 'POST',
+          credentials: 'same-origin',
+          cache: 'no-store',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(command),
+          signal: options.signal,
+        });
+        body = await response.json().catch(() => ({}));
+      } catch (error) {
+        if (options.signal?.aborted || attempt >= attempts) {
+          pendingCommands.fail(command.operationId, { error: error?.message ?? 'network_error' });
+          throw error;
+        }
+        onDiagnostic('commandRetry', {
+          operationId: command.operationId,
+          type,
+          attempt,
+          reason: 'network_error',
+        });
+        await sleep(Math.max(0, Number(retryDelayMs) || 0) * attempt);
+        continue;
+      }
+      const retryableStatus =
+        response.status === 408
+        || response.status === 429
+        || response.status >= 500;
+      if (!response.ok && retryableStatus && attempt < attempts) {
+        onDiagnostic('commandRetry', {
+          operationId: command.operationId,
+          type,
+          attempt,
+          reason: `http_${response.status}`,
+        });
+        await sleep(Math.max(0, Number(retryDelayMs) || 0) * attempt);
+        continue;
+      }
+      if (
+        response.ok
+        && (body?.success !== true || !body?.event)
+        && attempt < attempts
+      ) {
+        onDiagnostic('commandRetry', {
+          operationId: command.operationId,
+          type,
+          attempt,
+          reason: 'invalid_success_body',
+        });
+        await sleep(Math.max(0, Number(retryDelayMs) || 0) * attempt);
+        continue;
+      }
+      break;
     }
 
     if (!response.ok || body?.success !== true || !body?.event) {

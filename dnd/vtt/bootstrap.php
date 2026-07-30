@@ -269,7 +269,8 @@ function overlaySyncV2Placements(array $boardState): array
             $databasePath,
             (string) ($config['world_id'] ?? 'default'),
             (int) ($config['event_retention'] ?? 1000),
-            (int) ($config['snapshot_interval'] ?? 100)
+            (int) ($config['snapshot_interval'] ?? 100),
+            (int) ($config['snapshot_retention'] ?? 20)
         );
         $store->migrateLegacyPlacements($boardState);
         if (($config['domains']['combat'] ?? false) === true) {
@@ -457,6 +458,10 @@ function getVttBootstrapConfig(?array $authContext = null): array
                 'key' => $pusherData['key'] ?? '',
                 'cluster' => $pusherData['cluster'] ?? 'us3',
                 'channel' => $pusherData['channel'] ?? 'vtt-board',
+                'syncV2Channel' => $isGm
+                    ? ($pusherData['sync_v2_gm_channel'] ?? 'private-vtt-sync-v2-gm')
+                    : ($pusherData['sync_v2_player_channel'] ?? 'private-vtt-sync-v2-players'),
+                'syncV2AuthEndpoint' => $routes['syncV2Auth'] ?? '/dnd/vtt/api/v2/pusher-auth.php',
             ];
             $chatChannel = $pusherData['chat_channel'] ?? 'dnd-chat';
             if (!empty($pusherData['key']) && $chatChannel !== '') {

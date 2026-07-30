@@ -13,12 +13,14 @@ final class SyncV2Store
     private string $worldId;
     private int $eventRetention;
     private int $snapshotInterval;
+    private int $snapshotRetention;
 
     public function __construct(
         string $databasePath,
         string $worldId = 'default',
         int $eventRetention = 1000,
-        int $snapshotInterval = 100
+        int $snapshotInterval = 100,
+        int $snapshotRetention = 20
     ) {
         if (!extension_loaded('pdo_sqlite')) {
             throw new RuntimeException('Sync V2 requires the PDO SQLite extension.');
@@ -47,6 +49,7 @@ final class SyncV2Store
         $this->worldId = $worldId;
         $this->eventRetention = max(1, $eventRetention);
         $this->snapshotInterval = max(1, $snapshotInterval);
+        $this->snapshotRetention = max(2, min(200, $snapshotRetention));
         $this->initializeSchema();
     }
 
@@ -1222,6 +1225,31 @@ final class SyncV2Store
         ];
     }
 
+    public function getOperationalStatus(): array
+    {
+        $snapshot = $this->getSnapshot();
+        $counts = [];
+        foreach (['vtt_events', 'vtt_operations', 'vtt_snapshots'] as $table) {
+            $statement = $this->pdo->prepare(
+                "SELECT COUNT(*) FROM {$table} WHERE world_id = :world_id"
+            );
+            $statement->execute(['world_id' => $this->worldId]);
+            $counts[$table] = (int) $statement->fetchColumn();
+        }
+        return [
+            'worldId' => $this->worldId,
+            'revision' => $snapshot['revision'],
+            'updatedAt' => $snapshot['serverTime'],
+            'minimumRetainedRevision' => $this->minimumRetainedRevision(),
+            'retainedEvents' => $counts['vtt_events'],
+            'operationLedgerEntries' => $counts['vtt_operations'],
+            'snapshots' => $counts['vtt_snapshots'],
+            'eventRetention' => $this->eventRetention,
+            'snapshotInterval' => $this->snapshotInterval,
+            'snapshotRetention' => $this->snapshotRetention,
+        ];
+    }
+
     private function initializeSchema(): void
     {
         $this->pdo->exec(
@@ -2015,6 +2043,20 @@ final class SyncV2Store
             'state_json' => $this->encodeJson($state),
             'created_at' => $serverTime,
         ]);
+        $prune = $this->pdo->prepare(
+            'DELETE FROM vtt_snapshots
+             WHERE world_id = :world_id
+               AND revision NOT IN (
+                   SELECT revision FROM vtt_snapshots
+                   WHERE world_id = :sub_world_id
+                   ORDER BY revision DESC
+                   LIMIT :snapshot_limit
+               )'
+        );
+        $prune->bindValue(':world_id', $this->worldId, PDO::PARAM_STR);
+        $prune->bindValue(':sub_world_id', $this->worldId, PDO::PARAM_STR);
+        $prune->bindValue(':snapshot_limit', $this->snapshotRetention, PDO::PARAM_INT);
+        $prune->execute();
     }
 
     private function pruneEvents(int $currentRevision): void

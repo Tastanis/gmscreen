@@ -101,51 +101,25 @@ try {
             ? trim($command['socketId'])
             : null;
         $socketId = $socketId === '' ? null : $socketId;
-        if ($isBoardDomainCommand) {
-            // Phase 6 payloads contain no hidden placement identity. They
-            // travel over the existing board event transport; HTTP replay
-            // remains authoritative if delivery is missed.
-            SyncV2PusherTransport::publishPublic(
-                vttSyncV2ProjectBoardEventForUser($event, ['isGM' => false]),
+        $isLiveCommand = (
+            $isBoardDomainCommand
+            || in_array($type, ['token.move', 'placement.batch'], true)
+            || in_array($type, $combatTypes, true)
+        );
+        if ($isLiveCommand) {
+            SyncV2PusherTransport::publishAudiences(
+                $event,
+                vttSyncV2ProjectEventForUser($event, ['isGM' => false]),
                 $socketId
             );
-        } elseif (in_array($type, $combatTypes, true)) {
-            if (vttSyncV2CombatEventIsPublicSafe($event)) {
-                SyncV2PusherTransport::publishPublic(
-                    vttSyncV2ProjectCombatEventForUser($event, ['isGM' => false]),
-                    $socketId
-                );
-            }
-        } elseif ($type === 'placement.batch') {
-            // Until Phase 7 introduces audience-specific private channels,
-            // only payloads that are byte-for-byte safe for every connected
-            // user may use the shared board channel. Other accepted batches
-            // arrive through authenticated HTTP replay (normally <=500 ms).
-            if (vttSyncV2PlacementEventIsPublicSafe($event)) {
-                $publicEvent = vttSyncV2ProjectPlacementEventForUser($event, ['isGM' => false]);
-                SyncV2PusherTransport::publishPublic($publicEvent, $socketId);
-            }
-        } elseif ($type === 'token.move') {
-            // Only already-player-visible movement may use the shared board
-            // channel. Hidden movement remains available solely through the
-            // authenticated, redacted HTTP recovery projection.
-            if (!vttSyncV2PlacementHidden($placement)) {
-                SyncV2PusherTransport::publishPublic($event, $socketId);
-            }
         } else {
             SyncV2PusherTransport::publish($event, $socketId);
         }
     }
 
     $responseEvent = $event;
-    if (
-        is_array($event)
-        && in_array($type, $combatTypes, true)
-        && is_array($auth ?? null)
-    ) {
-        $responseEvent = vttSyncV2ProjectCombatEventForUser($event, $auth);
-    } elseif (is_array($event) && $isBoardDomainCommand && is_array($auth ?? null)) {
-        $responseEvent = vttSyncV2ProjectBoardEventForUser($event, $auth);
+    if (is_array($event) && is_array($auth ?? null)) {
+        $responseEvent = vttSyncV2ProjectEventForUser($event, $auth);
     }
 
     vttSyncV2Respond(200, [

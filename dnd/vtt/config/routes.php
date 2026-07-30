@@ -13,4 +13,6 @@ return [
     'syncV2Commands' => '/dnd/vtt/api/v2/commands.php',
     'syncV2Events' => '/dnd/vtt/api/v2/sync.php',
     'syncV2Snapshot' => '/dnd/vtt/api/v2/snapshot.php',
+    'syncV2Auth' => '/dnd/vtt/api/v2/pusher-auth.php',
+    'syncV2Status' => '/dnd/vtt/api/v2/status.php',
 ];

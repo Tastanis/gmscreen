@@ -1,6 +1,6 @@
 # VTT Sync V2 — Canonical Implementation Plan
 
-**Status:** Phase 6 complete; Phase 7 is the next implementation stage
+**Status:** Phase 7 complete; Phase 8 is the next implementation stage
 **Canonical handoff:** This file is the source of truth for the synchronization
 replacement. Read it before changing VTT persistence, Pusher delivery, board
 state, combat turns, or rendering subscriptions.
@@ -568,14 +568,67 @@ Phase 8 removal are complete.
   matching compatibility update and renderer. `scene.activated` and a viewer
   route that changes the displayed map are the intentional full-scene mount
   exceptions.
-- The existing shared Pusher board channel remains the low-latency delivery
-  path. Authenticated HTTP replay is still the authority and Phase 7 will add
-  private audience channels and complete reconnect/retention hardening.
+- Sync V2 no longer publishes live canonical events on the shared public board
+  channel. Authenticated role-specific channels now carry projected
+  low-latency delivery; HTTP replay remains authoritative.
 
 ### Phase 7 — Recovery and reconnect hardening
 
 Complete event replay, snapshot fallback, gap buffering, private audience
 recovery, retention, and operational visibility.
+
+- [x] Authenticate Pusher subscriptions and split canonical delivery into
+      private GM and player audience channels.
+- [x] Project every acknowledgement, live event, replay event, and recovery
+      snapshot through the same server audience filter.
+- [x] Remove hidden placements and hidden-level maps, fog, stairs, viewer
+      state, and placements from player payloads while preserving revision
+      continuity with redacted no-op events.
+- [x] Recover immediately after first Pusher connection and every reconnect
+      instead of waiting for the next periodic poll.
+- [x] Require replay cursor metadata and a strictly contiguous event sequence;
+      reject truncated replay responses without advancing confirmed state.
+- [x] Bound the out-of-order buffer, detect conflicting events claiming one
+      revision, and fall back to authoritative recovery on invalid input.
+- [x] Retry ambiguous network, timeout, rate-limit, server, and malformed
+      success responses with the exact same operation ID and command body.
+- [x] Add recovery request timeouts and preserve caller cancellation.
+- [x] Bound retained recovery snapshots independently from retained events
+      while keeping the operation ledger long-lived for idempotency.
+- [x] Add GM-only operational status for current/minimum revisions, retained
+      events, snapshots, operation-ledger size, and configured retention.
+- [x] Add recovery, reconnect, retry, overflow, and revision-conflict
+      diagnostics and deterministic regression coverage.
+
+**Gate:** Reconnect starts ordered HTTP healing immediately; gaps cannot advance
+past missing revisions; duplicate or ambiguous submissions preserve one
+operation identity; player transports never receive the GM projection; ordinary
+recovery does not reload the page or map.
+
+#### Phase 7 operating boundary
+
+- Pusher remains transport only. Live commands commit to SQLite before
+  `SyncV2PusherTransport::publishAudiences()` sends the accepted event.
+- GM clients subscribe to `private-vtt-sync-v2-gm`; players subscribe to
+  `private-vtt-sync-v2-players`. `/dnd/vtt/api/v2/pusher-auth.php` authorizes
+  only the channel matching the authenticated role.
+- HTTP acknowledgement, private Pusher delivery, ordered replay, and snapshot
+  recovery use the same reducer. Pusher loss cannot lose canonical state.
+- The 500 ms recovery poll remains a fallback, but a Pusher connection or
+  reconnection also requests replay immediately from the last confirmed
+  revision.
+- Event retention defaults to 1,000, snapshots are created every 100 revisions,
+  and only the newest 20 snapshots are retained. The operation ledger is not
+  pruned with either recovery store.
+- `/dnd/vtt/api/v2/status.php` is a read-only GM endpoint for operational
+  revision and retention visibility.
+- `VTT_PUSHER_SECRET` now overrides the legacy checked-in credential. The
+  Pusher dashboard credential still must be rotated and the new secret placed
+  in that server environment variable before treating the private channels as
+  production-secure; code cannot perform that external dashboard rotation.
+- Phase 8 removal must wait for a real three-client soak session exercising
+  disconnect/reconnect and every deletion gate. Phase 7's automated fault
+  harness is necessary but is not a substitute for that live soak.
 
 ### Phase 8 — Remove V1 synchronization
 

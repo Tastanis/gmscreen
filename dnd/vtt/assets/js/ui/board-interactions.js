@@ -1218,6 +1218,14 @@ export function mountBoardInteractions(store, routes = {}) {
     applyConfirmedBoardDomain,
     reconcileSnapshot: reconcileTokenMovementSnapshot,
     onError: (error) => reportSyncFailure(error, 'token movement'),
+    onDiagnostic: (name, details) => {
+      if (name === 'revisionGap') {
+        recordSyncDiagnostic('revisionGaps', details);
+      } else if (name === 'recoveryStarted') {
+        recordSyncDiagnostic('recoveryRequests', details);
+      }
+      recordSyncDiagnostic(`syncV2${String(name || 'Event')}`, details);
+    },
   });
 
   function commitCanonicalTokenMoves({ sceneId, moves, source, originalPositions = null }) {

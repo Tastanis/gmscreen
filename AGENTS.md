@@ -109,13 +109,17 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 - Debug info should be removed before production
 - Import button requires GM login (user: 'GM', password: 'harms')
 
-## VTT Sync V2 Phase 6
+## VTT Sync V2 Phase 7
 
-- Phase 6 is complete; canonical SQLite state now owns templates, drawings,
-  pings, fog, map levels/stairs, runtime grid state, active-scene selection,
-  and player viewer routing.
+- Phase 7 is complete. Sync V2 uses authenticated private GM/player Pusher
+  audiences, immediate reconnect replay, strict contiguous gap recovery,
+  bounded event/snapshot buffers, exact-operation retry, and GM operational
+  status.
 - The implementation plan and current operating boundary are in
-  `/docs/vtt-sync-v2/README.md`; Phase 7 is next.
-- Do not add a generic board snapshot command or re-enable V1 writers for an
-  owned domain. Use the explicit Phase 6 command types in
-  `/dnd/vtt/api/v2/commands.php`.
+  `/docs/vtt-sync-v2/README.md`; Phase 8 is next.
+- Do not restore public Sync V2 event delivery or re-enable V1 writers for an
+  owned domain. Phase 8 deletion must wait for the documented real three-client
+  soak test.
+- The legacy checked-in Pusher secret still requires rotation in the external
+  Pusher dashboard. Put the replacement in the server-only
+  `VTT_PUSHER_SECRET` environment variable.

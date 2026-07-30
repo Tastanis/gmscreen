@@ -13,6 +13,7 @@ return [
     'world_id' => getenv('VTT_SYNC_V2_WORLD_ID') ?: 'default',
     'event_retention' => 1000,
     'snapshot_interval' => 100,
+    'snapshot_retention' => 20,
     'pusher_enabled' => getenv('VTT_SYNC_V2_PUSHER_ENABLED') === '1',
     'domains' => [
         'token_movement' => true,

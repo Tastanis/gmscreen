@@ -165,9 +165,10 @@ test('combat commands apply one focused canonical transition without snapshot re
       });
     }
     if (String(url).includes('sync')) {
+      const after = Number(new URL(String(url), 'http://local').searchParams.get('after') || 0);
       return response(200, {
         success: true,
-        recovery: { mode: 'events', revision, events: [] },
+        recovery: { mode: 'events', fromRevision: after, revision, events: [] },
       });
     }
     const command = JSON.parse(options.body);
@@ -262,3 +263,83 @@ test('combat commands apply one focused canonical transition without snapshot re
   assert.equal(duplicateClaim.idempotent, true);
   assert.equal(applied.length, 1, 'automation claim events do not replay combat transitions');
 });
+
+test('Pusher reconnect immediately recovers missed private-audience events', async () => {
+  let revision = 0;
+  const events = [];
+  let connectionHandler = null;
+  let pusherOptions = null;
+  class FakePusher {
+    constructor(_key, options) {
+      pusherOptions = options;
+      this.connection = {
+        state: 'initialized',
+        socket_id: '10.20',
+        bind(name, handler) {
+          if (name === 'state_change') connectionHandler = handler;
+        },
+      };
+    }
+    subscribe(channel) {
+      assert.equal(channel, 'private-vtt-sync-v2-players');
+      return { bind() {} };
+    }
+    unsubscribe() {}
+    disconnect() {}
+  }
+  const fetchImpl = async (url) => {
+    if (String(url).includes('snapshot')) {
+      return response(200, { success: true, snapshot: { revision: 0, state: {} } });
+    }
+    const after = Number(new URL(String(url), 'http://local').searchParams.get('after') || 0);
+    return response(200, {
+      success: true,
+      recovery: {
+        mode: 'events',
+        fromRevision: after,
+        revision,
+        events: events.filter((event) => event.revision > after),
+      },
+    });
+  };
+  const runtime = createTokenMovementRuntime({
+    enabled: true,
+    commandsEndpoint: '/commands',
+    eventsEndpoint: '/sync',
+    snapshotEndpoint: '/snapshot',
+    fetchImpl,
+    PusherClass: FakePusher,
+    pusherConfig: {
+      key: 'key',
+      cluster: 'us3',
+      syncV2Channel: 'private-vtt-sync-v2-players',
+      syncV2AuthEndpoint: '/dnd/vtt/api/v2/pusher-auth.php',
+    },
+    windowRef: { setInterval: () => 1, clearInterval() {} },
+  });
+  await runtime.start();
+  revision = 1;
+  events.push(shadowEventForRuntime(1, 'reconnect-event'));
+  connectionHandler({ previous: 'unavailable', current: 'connected' });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(runtime.getRevision(), 1);
+  assert.equal(
+    pusherOptions.channelAuthorization.endpoint,
+    '/dnd/vtt/api/v2/pusher-auth.php'
+  );
+});
+
+function shadowEventForRuntime(revision, operationId) {
+  return {
+    revision,
+    operationId,
+    type: 'shadow.observed',
+    actorId: null,
+    sceneId: null,
+    entityId: null,
+    entityRevision: null,
+    payload: { reconnect: true },
+    serverTime: revision,
+  };
+}

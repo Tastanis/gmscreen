@@ -10,12 +10,15 @@ export function createEventStream({
   recoveryClient = null,
   changeRouter = null,
   onError = () => {},
+  onDiagnostic = () => {},
+  maxBufferedEvents = 1000,
 } = {}) {
   if (!store || typeof store.getSnapshot !== 'function' || typeof store.commit !== 'function') {
     throw new TypeError('Event stream requires a Sync V2 entity store');
   }
 
   const buffer = new Map();
+  const bufferLimit = Math.max(10, Math.trunc(Number(maxBufferedEvents)) || 1000);
   let recoveryPromise = null;
   const getConfirmedSnapshot = () =>
     store.getConfirmedSnapshot?.() ?? store.getSnapshot();
@@ -25,6 +28,7 @@ export function createEventStream({
     if (result.status === 'applied') {
       store.commit(result.snapshot, { ...result.changeSet, source });
       changeRouter?.route?.(result.changeSet, { source, event });
+      onDiagnostic('eventApplied', { source, revision: event.revision, type: event.type });
     }
     return result;
   }
@@ -38,6 +42,7 @@ export function createEventStream({
       const result = applyOne(event, 'buffer');
       if (result.status !== 'applied') {
         onError(new Error(`Buffered Sync V2 event ${revision} could not be applied`), result);
+        onDiagnostic('bufferApplyFailed', { revision, reason: result.reason ?? result.status });
         break;
       }
       applied += 1;
@@ -54,7 +59,12 @@ export function createEventStream({
     }
 
     recoveryPromise = (async () => {
-      const recovery = await recoveryClient.recoverAfter(store.getRevision());
+      const requestedRevision = store.getRevision();
+      onDiagnostic('recoveryStarted', {
+        afterRevision: requestedRevision,
+        bufferedRevisions: buffer.size,
+      });
+      const recovery = await recoveryClient.recoverAfter(requestedRevision);
       if (recovery?.mode === 'snapshot' && recovery.snapshot) {
         const replaced = store.replaceSnapshot(recovery.snapshot, {
           authoritative: true,
@@ -64,18 +74,40 @@ export function createEventStream({
           throw new Error('Authoritative Sync V2 recovery snapshot was rejected');
         }
         changeRouter?.route?.(replaced.changeSet, { source: 'recovery' });
+        onDiagnostic('recoverySnapshotApplied', {
+          revision: store.getRevision(),
+          reason: recovery.reason ?? null,
+        });
         for (const revision of buffer.keys()) {
           if (revision <= store.getRevision()) {
             buffer.delete(revision);
           }
         }
       } else if (recovery?.mode === 'events' && Array.isArray(recovery.events)) {
+        if (
+          Number(recovery.fromRevision) !== requestedRevision
+          || !Number.isSafeInteger(Number(recovery.revision))
+          || Number(recovery.revision) < requestedRevision
+        ) {
+          throw new Error('Sync V2 recovery cursor metadata is invalid');
+        }
+        let expected = requestedRevision + 1;
         for (const event of recovery.events) {
           const revision = eventRevision(event);
-          if (revision !== null && revision > store.getRevision()) {
-            buffer.set(revision, event);
+          if (revision !== expected) {
+            throw new Error(`Sync V2 recovery events are not contiguous at revision ${expected}`);
           }
+          buffer.set(revision, event);
+          expected += 1;
         }
+        if (expected - 1 !== Number(recovery.revision)) {
+          throw new Error('Sync V2 recovery response ended before its declared revision');
+        }
+        onDiagnostic('recoveryEventsReceived', {
+          fromRevision: requestedRevision,
+          throughRevision: Number(recovery.revision),
+          count: recovery.events.length,
+        });
       } else {
         throw new Error('Sync V2 recovery response has an unsupported shape');
       }
@@ -86,6 +118,10 @@ export function createEventStream({
           `Sync V2 recovery remained incomplete at revision ${store.getRevision()}`
         );
       }
+      onDiagnostic('recoveryCompleted', {
+        revision: store.getRevision(),
+        bufferedRevisions: buffer.size,
+      });
       return recovery;
     })()
       .catch((error) => {
@@ -107,7 +143,24 @@ export function createEventStream({
       return applyOne(event, source);
     }
     if (revision > store.getRevision() + 1) {
-      buffer.set(revision, event);
+      const buffered = buffer.get(revision);
+      if (
+        buffered
+        && buffered.operationId !== event.operationId
+      ) {
+        onError(new Error(`Conflicting Sync V2 events claimed revision ${revision}`));
+        onDiagnostic('bufferRevisionConflict', { revision });
+      } else {
+        buffer.set(revision, event);
+      }
+      if (buffer.size > bufferLimit) {
+        buffer.clear();
+        onDiagnostic('bufferOverflow', { limit: bufferLimit });
+      }
+      onDiagnostic('revisionGap', {
+        currentRevision: store.getRevision(),
+        receivedRevision: revision,
+      });
       await runRecovery();
       return {
         status: 'buffered',
@@ -118,6 +171,9 @@ export function createEventStream({
     const result = applyOne(event, source);
     if (result.status === 'applied') {
       flushBuffer();
+    } else if (result.status === 'invalid' && recoveryClient) {
+      onDiagnostic('invalidEventRecovery', { revision, reason: result.reason });
+      await runRecovery();
     }
     return result;
   }
@@ -148,6 +204,7 @@ export function createPusherEventTransport({
       connect: () => false,
       disconnect: () => {},
       getSocketId: () => null,
+      getState: () => 'unavailable',
     };
   }
   if (typeof onEvent !== 'function') {
@@ -167,6 +224,9 @@ export function createPusherEventTransport({
     client = new PusherClass(key, options);
     client.connection?.bind?.('state_change', (change) => onConnectionChange(change));
     subscription = client.subscribe(channel);
+    subscription.bind?.('pusher:subscription_error', (error) => {
+      onConnectionChange({ current: 'subscription_error', error });
+    });
     subscription.bind('sync-v2-event', (message) => {
       if (message?.event && typeof message.event === 'object') {
         onEvent(message.event, 'pusher');
@@ -188,5 +248,6 @@ export function createPusherEventTransport({
     connect,
     disconnect,
     getSocketId: () => client?.connection?.socket_id ?? null,
+    getState: () => client?.connection?.state ?? (client ? 'initialized' : 'disconnected'),
   };
 }

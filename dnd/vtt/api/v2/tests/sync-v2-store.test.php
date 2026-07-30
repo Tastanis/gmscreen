@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-require_once __DIR__ . '/../../../lib/SyncV2Store.php';
+require_once __DIR__ . '/../_common.php';
 
 function expect(bool $condition, string $message): void
 {
@@ -17,7 +17,7 @@ $databasePath = sys_get_temp_dir()
     . '.sqlite';
 
 try {
-    $store = new SyncV2Store($databasePath, 'test-world', 2, 2);
+    $store = new SyncV2Store($databasePath, 'test-world', 2, 2, 3);
     $initial = $store->getSnapshot();
     expect($initial['revision'] === 0, 'Initial revision must be zero.');
 
@@ -535,6 +535,147 @@ try {
     expect(
         $store->getSnapshot()['state']['sceneConfig']['scene-1']['grid']['size'] === 72,
         'Canonical grid state must retain the accepted update.'
+    );
+    $operationalStatus = $store->getOperationalStatus();
+    expect($operationalStatus['revision'] === 20, 'Operational status must report current revision.');
+    expect($operationalStatus['retainedEvents'] <= 2, 'Event retention must remain bounded.');
+    expect($operationalStatus['snapshots'] <= 3, 'Snapshot retention must remain bounded.');
+    expect(
+        $operationalStatus['operationLedgerEntries'] === 20,
+        'Idempotency ledger must outlive event and snapshot retention.'
+    );
+    $hiddenAudienceEvent = [
+        'revision' => 20,
+        'operationId' => 'hidden-audience-event',
+        'type' => 'placement.batchApplied',
+        'actorId' => 'GM',
+        'sceneId' => null,
+        'entityId' => null,
+        'entityRevision' => null,
+        'payload' => [
+            'mutations' => [[
+                'kind' => 'upsert',
+                'sceneId' => 'scene-1',
+                'placementId' => 'hidden-token',
+                'entityRevision' => 1,
+                'placement' => ['id' => 'hidden-token', 'hidden' => true],
+                'wasPlayerVisible' => false,
+            ]],
+        ],
+        'serverTime' => 1234,
+    ];
+    $playerAudienceEvent = vttSyncV2ProjectEventForUser(
+        $hiddenAudienceEvent,
+        ['isGM' => false]
+    );
+    expect(
+        $playerAudienceEvent['payload']['mutations'] === [],
+        'Player audience events must not contain hidden placement payloads.'
+    );
+    expect(
+        vttSyncV2ProjectEventForUser($hiddenAudienceEvent, ['isGM' => true])
+            === $hiddenAudienceEvent,
+        'GM audience events must retain the complete canonical payload.'
+    );
+    $hiddenLevelSnapshot = [
+        'revision' => 20,
+        'state' => [
+            'placements' => [
+                'scene-1' => [
+                    'visible-token' => ['id' => 'visible-token', 'levelId' => 'ground'],
+                    'hidden-level-token' => ['id' => 'hidden-level-token', 'levelId' => 'secret'],
+                ],
+            ],
+            'claims' => [],
+            'combat' => [],
+            'routing' => [],
+            'sceneConfig' => [
+                'scene-1' => [
+                    'mapLevels' => [
+                        'levels' => [
+                            ['id' => 'ground', 'defaultForPlayers' => true],
+                            ['id' => 'secret', 'hidden' => true, 'mapUrl' => '/secret-map.webp'],
+                        ],
+                        'activeLevelId' => 'secret',
+                        'baseStairs' => [
+                            ['id' => 'secret-stair', 'linkedLevelId' => 'secret'],
+                        ],
+                    ],
+                    'fogOfWar' => [
+                        'byLevel' => [
+                            'ground' => ['revealedCells' => []],
+                            'secret' => ['revealedCells' => ['1,1' => true]],
+                        ],
+                    ],
+                    'userLevelState' => [
+                        'cal' => ['levelId' => 'secret'],
+                    ],
+                ],
+            ],
+        ],
+    ];
+    $projectedHiddenLevelSnapshot = vttSyncV2ProjectSnapshotForUser(
+        $hiddenLevelSnapshot,
+        ['isGM' => false]
+    );
+    expect(
+        !isset($projectedHiddenLevelSnapshot['state']['placements']['scene-1']['hidden-level-token']),
+        'Player snapshots must omit placements on GM-hidden map levels.'
+    );
+    expect(
+        count($projectedHiddenLevelSnapshot['state']['sceneConfig']['scene-1']['mapLevels']['levels'])
+            === 1,
+        'Player snapshots must omit GM-hidden map definitions.'
+    );
+    expect(
+        $projectedHiddenLevelSnapshot['state']['sceneConfig']['scene-1']['mapLevels']['activeLevelId']
+            === 'ground',
+        'Player snapshots must recover to a visible active map level.'
+    );
+    expect(
+        !isset(
+            $projectedHiddenLevelSnapshot['state']['sceneConfig']['scene-1']
+                ['fogOfWar']['byLevel']['secret']
+        ),
+        'Player snapshots must omit fog data belonging to hidden map levels.'
+    );
+    $hiddenLevelsEvent = [
+        'revision' => 21,
+        'operationId' => 'hidden-level-event',
+        'type' => 'levels.replaced',
+        'actorId' => 'GM',
+        'sceneId' => 'scene-1',
+        'entityId' => 'scene-1',
+        'entityRevision' => 2,
+        'payload' => [
+            'mapLevels' => $hiddenLevelSnapshot['state']['sceneConfig']['scene-1']['mapLevels'],
+        ],
+        'serverTime' => 1235,
+    ];
+    $projectedHiddenLevelsEvent = vttSyncV2ProjectEventForUser(
+        $hiddenLevelsEvent,
+        ['isGM' => false]
+    );
+    expect(
+        count($projectedHiddenLevelsEvent['payload']['mapLevels']['levels']) === 1,
+        'Player live events must omit GM-hidden map definitions.'
+    );
+    $pusherAuthorization = vttSyncV2BuildPusherAuthorization(
+        '123.456',
+        'private-vtt-sync-v2-players',
+        'public-key',
+        'server-secret'
+    );
+    expect(
+        hash_equals(
+            'public-key:' . hash_hmac(
+                'sha256',
+                '123.456:private-vtt-sync-v2-players',
+                'server-secret'
+            ),
+            $pusherAuthorization['auth']
+        ),
+        'Private audience authorization must use the exact Pusher HMAC contract.'
     );
 
     echo json_encode([

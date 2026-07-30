@@ -32,6 +32,13 @@ function vttSyncV2ReadJson(): array
 
 function vttSyncV2RequireShadowGm(): array
 {
+    return vttSyncV2RequireGm(
+        'Sync V2 shadow endpoints are GM-only during Phase 1.'
+    );
+}
+
+function vttSyncV2RequireGm(string $message = 'GM access required.'): array
+{
     $auth = getVttUserContext();
     if (!($auth['isLoggedIn'] ?? false)) {
         vttSyncV2Respond(401, [
@@ -42,7 +49,7 @@ function vttSyncV2RequireShadowGm(): array
     if (!($auth['isGM'] ?? false)) {
         vttSyncV2Respond(403, [
             'success' => false,
-            'error' => 'Sync V2 shadow endpoints are GM-only during Phase 1.',
+            'error' => $message,
         ]);
     }
     return $auth;
@@ -58,6 +65,29 @@ function vttSyncV2RequireAuthenticated(): array
         ]);
     }
     return $auth;
+}
+
+function vttSyncV2BuildPusherAuthorization(
+    string $socketId,
+    string $channelName,
+    string $key,
+    string $secret
+): array {
+    $socketId = trim($socketId);
+    $channelName = trim($channelName);
+    $key = trim($key);
+    $secret = trim($secret);
+    if (
+        preg_match('/^\d+\.\d+$/', $socketId) !== 1
+        || preg_match('/^private-[A-Za-z0-9_-]{1,90}$/', $channelName) !== 1
+        || $key === ''
+        || $secret === ''
+    ) {
+        throw new InvalidArgumentException('Invalid Pusher authorization request.');
+    }
+    return [
+        'auth' => $key . ':' . hash_hmac('sha256', $socketId . ':' . $channelName, $secret),
+    ];
 }
 
 function vttSyncV2Config(): array
@@ -104,6 +134,113 @@ function vttSyncV2PlacementHidden(array $placement): bool
         || !empty($placement['flags']['hidden']);
 }
 
+/**
+ * @return array<string,bool>
+ */
+function vttSyncV2HiddenMapLevelIds(array $sceneConfig): array
+{
+    $hidden = [];
+    foreach (($sceneConfig['mapLevels']['levels'] ?? []) as $level) {
+        if (
+            is_array($level)
+            && !empty($level['hidden'])
+            && is_string($level['id'] ?? null)
+            && trim($level['id']) !== ''
+        ) {
+            $hidden[trim($level['id'])] = true;
+        }
+    }
+    return $hidden;
+}
+
+function vttSyncV2PlacementHiddenForPlayer(array $placement, array $sceneConfig): bool
+{
+    if (vttSyncV2PlacementHidden($placement)) {
+        return true;
+    }
+    $levelId = is_string($placement['levelId'] ?? null)
+        ? trim($placement['levelId'])
+        : '';
+    return $levelId !== ''
+        && isset(vttSyncV2HiddenMapLevelIds($sceneConfig)[$levelId]);
+}
+
+function vttSyncV2ProjectSceneConfigForPlayer(array $sceneConfig): array
+{
+    $hiddenLevelIds = vttSyncV2HiddenMapLevelIds($sceneConfig);
+    if ($hiddenLevelIds === []) {
+        return $sceneConfig;
+    }
+
+    $mapLevels = is_array($sceneConfig['mapLevels'] ?? null)
+        ? $sceneConfig['mapLevels']
+        : [];
+    $visibleLevels = [];
+    foreach (($mapLevels['levels'] ?? []) as $level) {
+        if (!is_array($level)) {
+            continue;
+        }
+        $levelId = is_string($level['id'] ?? null) ? trim($level['id']) : '';
+        if ($levelId === '' || isset($hiddenLevelIds[$levelId])) {
+            continue;
+        }
+        if (is_array($level['stairs'] ?? null)) {
+            $level['stairs'] = array_values(array_filter(
+                $level['stairs'],
+                static function ($stair) use ($hiddenLevelIds): bool {
+                    $linkedLevelId = is_array($stair)
+                        && is_string($stair['linkedLevelId'] ?? null)
+                        ? trim($stair['linkedLevelId'])
+                        : '';
+                    return $linkedLevelId === '' || !isset($hiddenLevelIds[$linkedLevelId]);
+                }
+            ));
+        }
+        $visibleLevels[] = $level;
+    }
+    $mapLevels['levels'] = $visibleLevels;
+    if (isset($hiddenLevelIds[(string) ($mapLevels['activeLevelId'] ?? '')])) {
+        $mapLevels['activeLevelId'] = null;
+        foreach ($visibleLevels as $level) {
+            if (!empty($level['defaultForPlayers'])) {
+                $mapLevels['activeLevelId'] = $level['id'];
+                break;
+            }
+        }
+        if ($mapLevels['activeLevelId'] === null && isset($visibleLevels[0]['id'])) {
+            $mapLevels['activeLevelId'] = $visibleLevels[0]['id'];
+        }
+    }
+    if (is_array($mapLevels['baseStairs'] ?? null)) {
+        $mapLevels['baseStairs'] = array_values(array_filter(
+            $mapLevels['baseStairs'],
+            static function ($stair) use ($hiddenLevelIds): bool {
+                $linkedLevelId = is_array($stair)
+                    && is_string($stair['linkedLevelId'] ?? null)
+                    ? trim($stair['linkedLevelId'])
+                    : '';
+                return $linkedLevelId === '' || !isset($hiddenLevelIds[$linkedLevelId]);
+            }
+        ));
+    }
+    $sceneConfig['mapLevels'] = $mapLevels;
+
+    if (is_array($sceneConfig['fogOfWar']['byLevel'] ?? null)) {
+        foreach (array_keys($hiddenLevelIds) as $hiddenLevelId) {
+            unset($sceneConfig['fogOfWar']['byLevel'][$hiddenLevelId]);
+        }
+    }
+    foreach (($sceneConfig['userLevelState'] ?? []) as $userId => $entry) {
+        $levelId = is_array($entry) && is_string($entry['levelId'] ?? null)
+            ? trim($entry['levelId'])
+            : '';
+        if ($levelId !== '' && isset($hiddenLevelIds[$levelId])) {
+            unset($sceneConfig['userLevelState'][$userId]);
+        }
+    }
+    return $sceneConfig;
+}
+
 function vttSyncV2CanMovePlacement(
     array $auth,
     string $sceneId,
@@ -140,6 +277,9 @@ function vttSyncV2ProjectSnapshotForUser(array $snapshot, array $auth): array
         $snapshot['state'] = [];
     }
     $canonical = $snapshot['state']['placements'] ?? [];
+    $sceneConfig = is_array($snapshot['state']['sceneConfig'] ?? null)
+        ? $snapshot['state']['sceneConfig']
+        : [];
     $projected = [];
     foreach ($canonical as $sceneId => $placements) {
         if (!is_string($sceneId) || !is_array($placements)) {
@@ -149,7 +289,13 @@ function vttSyncV2ProjectSnapshotForUser(array $snapshot, array $auth): array
             if (
                 !is_string($placementId)
                 || !is_array($placement)
-                || (!($auth['isGM'] ?? false) && vttSyncV2PlacementHidden($placement))
+                || (
+                    !($auth['isGM'] ?? false)
+                    && vttSyncV2PlacementHiddenForPlayer(
+                        $placement,
+                        is_array($sceneConfig[$sceneId] ?? null) ? $sceneConfig[$sceneId] : []
+                    )
+                )
             ) {
                 continue;
             }
@@ -172,11 +318,17 @@ function vttSyncV2ProjectSnapshotForUser(array $snapshot, array $auth): array
     }
     $snapshot['state']['claims'] = $visibleClaims;
     if (!($auth['isGM'] ?? false)) {
+        foreach ($sceneConfig as $sceneId => $config) {
+            if (is_string($sceneId) && is_array($config)) {
+                $snapshot['state']['sceneConfig'][$sceneId] =
+                    vttSyncV2ProjectSceneConfigForPlayer($config);
+            }
+        }
         foreach (($snapshot['state']['combat'] ?? []) as $sceneId => $combat) {
             if (!is_array($combat)) {
                 continue;
             }
-            $placements = array_values($canonical[$sceneId] ?? []);
+            $placements = array_values($projected[$sceneId] ?? []);
             $snapshot['state']['combat'][$sceneId] = sanitizeCombatStateForPlayerView(
                 $combat,
                 $placements
@@ -224,38 +376,93 @@ function vttSyncV2ProjectRecoveryForUser(array $recovery, array $auth): array
         if (!is_array($event)) {
             continue;
         }
-        if (($event['type'] ?? '') === 'placement.batchApplied') {
-            $recovery['events'][$index] = vttSyncV2ProjectPlacementEventForUser($event, $auth);
-            continue;
-        }
-        if (($event['type'] ?? '') === 'combat.transitioned') {
-            $recovery['events'][$index] = vttSyncV2ProjectCombatEventForUser($event, $auth);
-            continue;
-        }
-        if (in_array(($event['type'] ?? ''), ['scene.activated', 'routing.changed'], true)) {
-            $recovery['events'][$index] = vttSyncV2ProjectBoardEventForUser($event, $auth);
-            continue;
-        }
-        if (($event['type'] ?? '') !== 'token.moved') {
-            continue;
-        }
-        $snapshot = vttSyncV2Store()->getSnapshot();
-        $placement = $snapshot['state']['placements'][$event['sceneId']][$event['entityId']] ?? null;
-        if (!is_array($placement) || (!($auth['isGM'] ?? false) && vttSyncV2PlacementHidden($placement))) {
-            $recovery['events'][$index] = [
-                'revision' => $event['revision'],
-                'operationId' => $event['operationId'],
-                'type' => 'sync.redacted',
-                'actorId' => null,
-                'sceneId' => null,
-                'entityId' => null,
-                'entityRevision' => null,
-                'payload' => [],
-                'serverTime' => $event['serverTime'] ?? null,
-            ];
-        }
+        $recovery['events'][$index] = vttSyncV2ProjectEventForUser($event, $auth);
     }
     return $recovery;
+}
+
+function vttSyncV2RedactedEvent(array $event): array
+{
+    return [
+        'revision' => $event['revision'],
+        'operationId' => $event['operationId'],
+        'type' => 'sync.redacted',
+        'actorId' => null,
+        'sceneId' => null,
+        'entityId' => null,
+        'entityRevision' => null,
+        'payload' => [],
+        'serverTime' => $event['serverTime'] ?? null,
+    ];
+}
+
+function vttSyncV2ProjectEventForUser(array $event, array $auth): array
+{
+    if (($auth['isGM'] ?? false) === true) {
+        return $event;
+    }
+    $type = (string) ($event['type'] ?? '');
+    if ($type === 'placement.batchApplied') {
+        return vttSyncV2ProjectPlacementEventForUser($event, $auth);
+    }
+    if ($type === 'combat.transitioned') {
+        return vttSyncV2ProjectCombatEventForUser($event, $auth);
+    }
+    if (in_array($type, ['scene.activated', 'routing.changed'], true)) {
+        return vttSyncV2ProjectBoardEventForUser($event, $auth);
+    }
+    if ($type === 'levels.replaced' && is_array($event['payload']['mapLevels'] ?? null)) {
+        $event['payload']['mapLevels'] = vttSyncV2ProjectSceneConfigForPlayer([
+            'mapLevels' => $event['payload']['mapLevels'],
+        ])['mapLevels'];
+    }
+    if ($type === 'fog.replaced' && is_array($event['payload']['fogOfWar'] ?? null)) {
+        $snapshot = vttSyncV2Store()->getSnapshot();
+        $sceneConfig = $snapshot['state']['sceneConfig'][$event['sceneId']] ?? [];
+        $projectedConfig = vttSyncV2ProjectSceneConfigForPlayer(
+            is_array($sceneConfig) ? $sceneConfig : []
+        );
+        $event['payload']['fogOfWar'] = is_array($projectedConfig['fogOfWar'] ?? null)
+            ? $projectedConfig['fogOfWar']
+            : [];
+    }
+    if (in_array($type, ['level.userChanged', 'level.activated'], true)) {
+        $snapshot = vttSyncV2Store()->getSnapshot();
+        $sceneConfig = $snapshot['state']['sceneConfig'][$event['sceneId']] ?? [];
+        $hiddenLevelIds = vttSyncV2HiddenMapLevelIds(
+            is_array($sceneConfig) ? $sceneConfig : []
+        );
+        $levelId = $type === 'level.userChanged'
+            ? ($event['payload']['entry']['levelId'] ?? null)
+            : ($event['payload']['levelId'] ?? null);
+        $levelId = is_string($levelId) ? trim($levelId) : '';
+        if ($levelId !== '' && isset($hiddenLevelIds[$levelId])) {
+            return vttSyncV2RedactedEvent($event);
+        }
+        if ($type === 'level.activated') {
+            $projectedConfig = vttSyncV2ProjectSceneConfigForPlayer(
+                is_array($sceneConfig) ? $sceneConfig : []
+            );
+            $event['payload']['userLevelState'] =
+                $projectedConfig['userLevelState'] ?? [];
+        }
+    }
+    if ($type === 'token.moved') {
+        $snapshot = vttSyncV2Store()->getSnapshot();
+        $placement = $snapshot['state']['placements'][$event['sceneId']][$event['entityId']] ?? null;
+        $sceneConfig = $snapshot['state']['sceneConfig'][$event['sceneId']] ?? [];
+        if (
+            !is_array($placement)
+            || vttSyncV2PlacementHiddenForPlayer(
+                $placement,
+                is_array($sceneConfig) ? $sceneConfig : []
+            )
+        ) {
+            return vttSyncV2RedactedEvent($event);
+        }
+    }
+    $event['actorId'] = null;
+    return $event;
 }
 
 function vttSyncV2ProjectBoardEventForUser(array $event, array $auth): array
@@ -292,7 +499,17 @@ function vttSyncV2ProjectCombatEventForUser(array $event, array $auth): array
         return $event;
     }
     $snapshot = vttSyncV2Store()->getSnapshot();
-    $placements = array_values($snapshot['state']['placements'][$sceneId] ?? []);
+    $sceneConfig = $snapshot['state']['sceneConfig'][$sceneId] ?? [];
+    $placements = array_values(array_filter(
+        $snapshot['state']['placements'][$sceneId] ?? [],
+        static function ($placement) use ($sceneConfig): bool {
+            return is_array($placement)
+                && !vttSyncV2PlacementHiddenForPlayer(
+                    $placement,
+                    is_array($sceneConfig) ? $sceneConfig : []
+                );
+        }
+    ));
     $event['payload']['combat'] = sanitizeCombatStateForPlayerView($combat, $placements);
     $visibleIds = [];
     foreach ($placements as $placement) {
@@ -336,7 +553,18 @@ function vttSyncV2ProjectPlacementEventForUser(array $event, array $auth): array
         }
         if (($mutation['kind'] ?? '') === 'upsert') {
             $placement = $mutation['placement'] ?? null;
-            if (!is_array($placement) || vttSyncV2PlacementHidden($placement)) {
+            $sceneId = is_string($mutation['sceneId'] ?? null)
+                ? $mutation['sceneId']
+                : '';
+            $snapshot = vttSyncV2Store()->getSnapshot();
+            $sceneConfig = $snapshot['state']['sceneConfig'][$sceneId] ?? [];
+            if (
+                !is_array($placement)
+                || vttSyncV2PlacementHiddenForPlayer(
+                    $placement,
+                    is_array($sceneConfig) ? $sceneConfig : []
+                )
+            ) {
                 if (($mutation['wasPlayerVisible'] ?? false) === true) {
                     $projected[] = [
                         'kind' => 'remove',
@@ -397,7 +625,8 @@ function vttSyncV2Store(): SyncV2Store
         $databasePath,
         (string) ($config['world_id'] ?? 'default'),
         (int) ($config['event_retention'] ?? 1000),
-        (int) ($config['snapshot_interval'] ?? 100)
+        (int) ($config['snapshot_interval'] ?? 100),
+        (int) ($config['snapshot_retention'] ?? 20)
     );
     if (!$migrated && vttSyncV2DomainEnabled('placements')) {
         $store->migrateLegacyPlacements(loadVttJson('board-state.json'));
