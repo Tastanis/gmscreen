@@ -236,15 +236,7 @@ function vttSyncV2CanMovePlacement(
     if (vttSyncV2PlacementHidden($placement)) {
         return false;
     }
-    $userId = strtolower(trim((string) ($auth['user'] ?? '')));
-    if ($userId === '') {
-        return false;
-    }
-    $snapshot = vttSyncV2Store()->getSnapshot();
-    $claimedBy = strtolower(trim((string) (
-        $snapshot['state']['claims'][$sceneId][$placementId] ?? ''
-    )));
-    return $claimedBy !== '' && $claimedBy === $userId;
+    return vttSyncV2Store()->playerMayMovePlacement($placement);
 }
 
 function vttSyncV2ProjectSnapshotForUser(array $snapshot, array $auth): array

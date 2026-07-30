@@ -1184,6 +1184,7 @@ export function mountBoardInteractions(store, routes = {}) {
     commitCanonicalMoves: tokenMovementV2Enabled
       ? commitCanonicalTokenMoves
       : null,
+    canDragPlacement: (placement) => canCurrentUserMovePlacement(placement),
     onTokenDragStart: (payload) => tokenMovementController?.handleDragStart(payload),
     onTokenDragMove: (payload) => tokenMovementController?.handleDragMove(payload),
     onTokenDragEnd: (payload) => tokenMovementController?.handleDragEnd(payload),
@@ -7889,7 +7890,7 @@ export function mountBoardInteractions(store, routes = {}) {
       const moves = [];
       for (const placementId of selectedIds) {
         const placement = scenePlacements.find((entry) => entry?.id === placementId);
-        if (!placement) continue;
+        if (!placement || !canCurrentUserMovePlacement(placement)) continue;
         const effective =
           tokenMovementRuntime.getEffectivePlacement(activeSceneId, placementId)
           ?? placement;
@@ -13779,6 +13780,39 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     const normalized = rawName.trim().toLowerCase();
     return normalized || null;
+  }
+
+  function canCurrentUserMovePlacement(placement) {
+    if (!placement || typeof placement !== 'object') {
+      return false;
+    }
+    if (isGmUser()) {
+      return true;
+    }
+    const normalized = normalizePlacementForRender(placement);
+    if (!normalized || normalized.hidden) {
+      return false;
+    }
+    const metadata =
+      placement.metadata && typeof placement.metadata === 'object'
+        ? placement.metadata
+        : {};
+    const explicitTeam = normalizeCombatTeam(
+      placement.team
+        ?? placement.combatTeam
+        ?? metadata.team
+        ?? metadata.combatTeam
+        ?? null
+    );
+    if (explicitTeam) {
+      return explicitTeam === 'ally';
+    }
+    return !(
+      placement.monster
+      || placement.monsterId
+      || metadata.monster
+      || metadata.monsterId
+    );
   }
 
   function normalizeProfileId(value) {

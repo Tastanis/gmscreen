@@ -153,7 +153,12 @@ try {
             ],
         ],
         'sceneState' => [
-            'scene-1' => ['claimedTokens' => ['token-1' => 'player-a']],
+            'scene-1' => [
+                'claimedTokens' => [
+                    'token-1' => 'player-a',
+                    'token-2' => 'player-b',
+                ],
+            ],
         ],
     ]);
     $migrated = $store->getSnapshot();
@@ -678,10 +683,71 @@ try {
         'Private audience authorization must use the exact Pusher HMAC contract.'
     );
 
+    $movementSnapshot = $store->getSnapshot();
+    $allyPlacement = $movementSnapshot['state']['placements']['scene-1']['token-1'];
+    $enemyPlacement = $movementSnapshot['state']['placements']['scene-1']['token-2'];
+    expect(
+        $store->playerMayMovePlacement($allyPlacement),
+        'Players may move visible allied placements regardless of claim ownership.'
+    );
+    expect(
+        !$store->playerMayMovePlacement($enemyPlacement),
+        'Players must not move enemy placements.'
+    );
+    expect(
+        !$store->playerMayMovePlacement([...$allyPlacement, 'hidden' => true]),
+        'Players must not move hidden allied placements.'
+    );
+
+    $allyMovement = $store->acceptPlacementBatch([
+        'operationId' => 'placement-player-ally-move',
+        'type' => 'placement.batch',
+        'baseRevision' => $movementSnapshot['revision'],
+        'payload' => [
+            'actions' => [[
+                'kind' => 'patch',
+                'sceneId' => 'scene-1',
+                'placementId' => 'token-1',
+                'entityRevision' => $allyPlacement['_entityRevision'],
+                'patch' => ['column' => 9, 'row' => 7],
+            ]],
+        ],
+    ], 'player-b', false);
+    expect(
+        $allyMovement['status'] === 'accepted',
+        'A player may move an allied token claimed by another player.'
+    );
+
+    $beforeEnemyMovement = $store->getSnapshot();
+    $enemyMovementRejected = false;
+    try {
+        $store->acceptPlacementBatch([
+            'operationId' => 'placement-player-enemy-move',
+            'type' => 'placement.batch',
+            'baseRevision' => $beforeEnemyMovement['revision'],
+            'payload' => [
+                'actions' => [[
+                    'kind' => 'patch',
+                    'sceneId' => 'scene-1',
+                    'placementId' => 'token-2',
+                    'entityRevision' => $enemyPlacement['_entityRevision'],
+                    'patch' => ['column' => 9, 'row' => 8],
+                ]],
+            ],
+        ], 'player-b', false);
+    } catch (InvalidArgumentException $error) {
+        $enemyMovementRejected = true;
+    }
+    expect($enemyMovementRejected, 'A player movement batch must reject enemy tokens.');
+    expect(
+        $store->getSnapshot() === $beforeEnemyMovement,
+        'A rejected enemy movement must leave canonical state unchanged.'
+    );
+
     $sceneDeletion = $store->deleteScene('scene-1', 'GM');
     expect(
         $sceneDeletion['event']['type'] === 'scene.deleted'
-            && $sceneDeletion['event']['revision'] === 21,
+            && $sceneDeletion['event']['revision'] === 22,
         'Scene deletion must emit one canonical revisioned event.'
     );
     $afterSceneDeletion = $store->getSnapshot();

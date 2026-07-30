@@ -31,9 +31,15 @@ function stubEl() {
   };
 }
 
-function createTokenDragHarness({ measureActive = false, commitCanonicalMoves = null } = {}) {
+function createTokenDragHarness({
+  measureActive = false,
+  commitCanonicalMoves = null,
+  placements: placementOverrides = null,
+  selectedTokenIds = new Set(),
+  canDragPlacement = () => true,
+} = {}) {
   const viewState = buildViewState();
-  const placements = [
+  const placements = placementOverrides ?? [
     { id: 'token-1', column: 1, row: 1, width: 1, height: 1 },
   ];
   const calls = {
@@ -50,7 +56,7 @@ function createTokenDragHarness({ measureActive = false, commitCanonicalMoves = 
     tokenLayer: null,
     selectionBox: stubEl(),
     viewState,
-    selectedTokenIds: new Set(),
+    selectedTokenIds,
     boardApi: {
       getState: () => ({
         boardState: {
@@ -98,6 +104,7 @@ function createTokenDragHarness({ measureActive = false, commitCanonicalMoves = 
       calls.persist += 1;
     },
     commitCanonicalMoves,
+    canDragPlacement,
     windowRef: {
       requestAnimationFrame(callback) {
         callback();
@@ -338,4 +345,57 @@ test('Sync V2 drag delegates one movement intent without mutating or saving lega
     width: 1,
     height: 1,
   });
+});
+
+test('player group drag includes allied tokens and excludes selected enemy tokens', () => {
+  const canonicalCommits = [];
+  const placements = [
+    { id: 'ally-token', column: 1, row: 1, width: 1, height: 1 },
+    { id: 'enemy-token', column: 3, row: 1, width: 1, height: 1 },
+  ];
+  const { ti } = createTokenDragHarness({
+    placements,
+    selectedTokenIds: new Set(['ally-token', 'enemy-token']),
+    canDragPlacement: (placement) => placement.id === 'ally-token',
+    commitCanonicalMoves: (payload) => canonicalCommits.push(payload),
+  });
+  const startEvent = {
+    pointerId: 1,
+    clientX: 64,
+    clientY: 64,
+    localX: 64,
+    localY: 64,
+  };
+
+  ti.prepareTokenDrag(startEvent, placements[0]);
+  assert.equal(ti.beginTokenDrag(startEvent), true);
+  ti.updateTokenDrag({ pointerId: 1, buttons: 1, localX: 128, localY: 64 });
+  ti.endTokenDrag({ commit: true, pointerId: 1 });
+
+  assert.equal(canonicalCommits.length, 1);
+  assert.deepEqual(canonicalCommits[0].moves.map((move) => move.placementId), ['ally-token']);
+});
+
+test('player cannot begin a drag from an enemy primary placement', () => {
+  const placements = [
+    { id: 'ally-token', column: 1, row: 1, width: 1, height: 1 },
+    { id: 'enemy-token', column: 3, row: 1, width: 1, height: 1 },
+  ];
+  const { ti, viewState } = createTokenDragHarness({
+    placements,
+    selectedTokenIds: new Set(['ally-token', 'enemy-token']),
+    canDragPlacement: (placement) => placement.id === 'ally-token',
+  });
+  const startEvent = {
+    pointerId: 1,
+    clientX: 192,
+    clientY: 64,
+    localX: 192,
+    localY: 64,
+  };
+
+  ti.prepareTokenDrag(startEvent, placements[1]);
+
+  assert.equal(viewState.dragCandidate, null);
+  assert.equal(ti.beginTokenDrag(startEvent), false);
 });

@@ -45,6 +45,7 @@ export function createTokenInteractions({
   toNonNegativeNumber,
   persistBoardStateSnapshot,
   commitCanonicalMoves = null,
+  canDragPlacement = () => true,
   onTokenDragStart = null,
   onTokenDragMove = null,
   onTokenDragEnd = null,
@@ -265,6 +266,9 @@ export function createTokenInteractions({
     if (!placement || typeof placement !== 'object' || !placement.id) {
       return;
     }
+    if (!canDragPlacement(placement)) {
+      return;
+    }
 
     const pointer = getLocalMapPoint(event);
     if (!pointer) {
@@ -297,7 +301,7 @@ export function createTokenInteractions({
     const originals = new Map();
     candidateIds.forEach((id) => {
       const info = placementMap.get(id);
-      if (!info) {
+      if (!info || !canDragPlacement(info)) {
         return;
       }
       tokens.push({ ...info });

@@ -971,7 +971,12 @@ final class SyncV2Store
                 if ($action['entityRevision'] !== $currentRevision) {
                     return $this->rollbackConflict('entity_revision_mismatch', $snapshot);
                 }
-                if (!$isGm && (!$ownsPlacement || $this->placementIsHidden($current))) {
+                $isMovementPatch = $action['kind'] === 'patch'
+                    && $this->isCoordinateOnlyPatch($action['patch']);
+                $playerMayChange = $isMovementPatch
+                    ? $this->playerMayMovePlacement($current)
+                    : $ownsPlacement;
+                if (!$isGm && (!$playerMayChange || $this->placementIsHidden($current))) {
                     throw new InvalidArgumentException('You cannot change this placement.');
                 }
                 $nextRevision = $currentRevision + 1;
@@ -1234,6 +1239,12 @@ final class SyncV2Store
             $this->rollbackTransactionSilently();
             throw $error;
         }
+    }
+
+    public function playerMayMovePlacement(array $placement): bool
+    {
+        return !$this->placementIsHidden($placement)
+            && $this->combatantTeam($placement) === 'ally';
     }
 
     /**
@@ -1999,6 +2010,19 @@ final class SyncV2Store
         return !empty($placement['hidden'])
             || !empty($placement['isHidden'])
             || !empty($placement['flags']['hidden']);
+    }
+
+    private function isCoordinateOnlyPatch(array $patch): bool
+    {
+        if ($patch === []) {
+            return false;
+        }
+        foreach (array_keys($patch) as $field) {
+            if (!in_array((string) $field, ['column', 'row'], true)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private function assertPlayerPatchAllowed(array $patch): void
