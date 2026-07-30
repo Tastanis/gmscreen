@@ -22,10 +22,11 @@ async function doesNotExist(relativePath) {
 }
 
 test('production bootstrap has no V1 board transport, poller, or snapshot writer', async () => {
-  const [bootstrap, interactions, routes] = await Promise.all([
+  const [bootstrap, interactions, routes, scenesApi] = await Promise.all([
     source('assets/js/bootstrap.js'),
     source('assets/js/ui/board-interactions.js'),
     source('config/routes.php'),
+    source('api/scenes.php'),
   ]);
 
   for (const retiredImport of [
@@ -49,7 +50,14 @@ test('production bootstrap has no V1 board transport, poller, or snapshot writer
   assert.equal(interactions.includes('boardApi.subscribe(applyStateToBoard)'), false);
   assert.equal(interactions.includes('const pusherReady = initializePusherSync()'), false);
   assert.equal(interactions.includes('startBoardStatePoller();'), false);
+  assert.equal(interactions.includes('handlePusherStateUpdate'), false);
+  assert.equal(interactions.includes('currentBoardStateVersion'), false);
+  assert.equal(interactions.includes('persistBoardStateOps'), false);
+  assert.equal(bootstrap.includes('boardStateSnapshot'), false);
   assert.equal(routes.includes("'state'"), false);
+  assert.equal(scenesApi.includes("loadVttJson('board-state.json')"), false);
+  assert.equal(scenesApi.includes("'state-updated'"), false);
+  assert.equal(scenesApi.includes("'vtt-board'"), false);
 });
 
 test('retired V1 synchronization modules are absent and the old endpoint is closed', async () => {

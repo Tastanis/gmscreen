@@ -74,6 +74,74 @@ final class SyncV2Store
     }
 
     /**
+     * Atomically remove every canonical record owned by a deleted scene.
+     *
+     * @return array{status:string,event:array}
+     */
+    public function deleteScene(string $sceneId, string $actorId): array
+    {
+        $sceneId = trim($sceneId);
+        $actorId = trim($actorId);
+        if ($sceneId === '' || $actorId === '') {
+            throw new InvalidArgumentException('Scene deletion requires a scene ID and actor ID.');
+        }
+
+        $this->pdo->exec('BEGIN IMMEDIATE');
+        try {
+            $snapshot = $this->getSnapshot();
+            $state = $snapshot['state'];
+            foreach (['placements', 'claims', 'combat', 'templates', 'drawings', 'sceneConfig'] as $domain) {
+                if (is_array($state[$domain] ?? null)) {
+                    unset($state[$domain][$sceneId]);
+                }
+            }
+            if (is_array($state['pings'] ?? null)) {
+                foreach ($state['pings'] as $pingId => $ping) {
+                    if (is_array($ping) && trim((string) ($ping['sceneId'] ?? '')) === $sceneId) {
+                        unset($state['pings'][$pingId]);
+                    }
+                }
+            }
+            $state['routing'] = is_array($state['routing'] ?? null) ? $state['routing'] : [];
+            if (($state['routing']['activeSceneId'] ?? null) === $sceneId) {
+                $state['routing']['activeSceneId'] = null;
+                $state['routing']['mapUrl'] = null;
+            }
+            if (($state['routing']['playerActiveSceneId'] ?? null) === $sceneId) {
+                $state['routing']['playerActiveSceneId'] = null;
+                $state['routing']['playerMapUrl'] = null;
+                $state['routing']['playerThumbnailUrl'] = null;
+            }
+            $state['routing']['_revision'] = max(0, (int) ($state['routing']['_revision'] ?? 0)) + 1;
+
+            $revision = $snapshot['revision'] + 1;
+            $serverTime = $this->nowMilliseconds();
+            $event = [
+                'revision' => $revision,
+                'operationId' => 'scene-delete:' . $sceneId . ':' . $revision,
+                'type' => 'scene.deleted',
+                'actorId' => $actorId,
+                'sceneId' => $sceneId,
+                'entityId' => null,
+                'entityRevision' => $state['routing']['_revision'],
+                'payload' => ['routing' => $state['routing']],
+                'serverTime' => $serverTime,
+            ];
+            $this->insertEvent($event);
+            $this->updateWorldState($revision, $state, $serverTime);
+            if ($revision % $this->snapshotInterval === 0) {
+                $this->insertSnapshot($revision, $state, $serverTime);
+            }
+            $this->pruneEvents($revision);
+            $this->pdo->exec('COMMIT');
+            return ['status' => 'accepted', 'event' => $event];
+        } catch (Throwable $error) {
+            $this->rollbackTransactionSilently();
+            throw $error;
+        }
+    }
+
+    /**
      * One-time Phase 4 import of legacy placements and claims. Existing
      * Phase 3 movement coordinates and entity revisions win over legacy
      * values so enabling the broader placement domain cannot pop tokens back.

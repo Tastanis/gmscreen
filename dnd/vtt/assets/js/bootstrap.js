@@ -24,13 +24,6 @@ import { mountDiceRoller } from './ui/dice-roller.js';
 import { mountMemoryMonitor } from './ui/memory-monitor.js'; // [REMOVABLE] Memory monitor widget
 import { fetchScenes } from './services/scene-service.js';
 import { fetchTokens } from './services/token-service.js';
-import {
-  BASE_MAP_LEVEL_ID,
-  normalizeMapLevelsState,
-  resolvePcTokenLevelIdForUser,
-  resolveTopmostLevelId,
-} from './state/normalize/map-levels.js';
-
 async function bootstrap() {
   const config = window.vttConfig ?? {};
   const routes = config.routes ?? {};
@@ -102,12 +95,11 @@ async function bootstrap() {
   mountDiceRoller();
   mountMemoryMonitor({ getState }); // [REMOVABLE] Memory monitor widget
 
-  await hydrateFromServer(routes, userContext, storeApi);
+  await hydrateFromServer(routes, userContext);
 }
 
-async function hydrateFromServer(routes, userContext, storeApi = null) {
+async function hydrateFromServer(routes, userContext) {
   const isGM = Boolean(userContext?.isGM);
-  let levelOverrideOp = null;
 
   try {
     // Only GM can access scenes.php directly - players get scene data from state.php
@@ -118,10 +110,6 @@ async function hydrateFromServer(routes, userContext, storeApi = null) {
 
     const scenes = isGM ? scenesResult : null;
     const tokens = tokensResult;
-    // Sync V2 bootstraps and recovers canonical board state independently.
-    // Catalog hydration must never fetch or merge a legacy board snapshot.
-    const boardStateSnapshot = null;
-
     const currentState = getState();
     // Use the fresh isGM value from the current state (which may have been updated)
     // instead of the initial userContext value. Renamed to avoid TDZ shadowing issue.
@@ -135,348 +123,13 @@ async function hydrateFromServer(routes, userContext, storeApi = null) {
         const normalized = normalizeTokenState(tokens);
         draft.tokens = currentIsGM ? normalized : restrictTokensToPlayerView(normalized);
       }
-      if (boardStateSnapshot && typeof boardStateSnapshot === 'object') {
-        const normalizedBoard = normalizeBoardStateSnapshot(boardStateSnapshot);
-        if (normalizedBoard && Object.keys(normalizedBoard).length > 0) {
-          // Preserve existing fogOfWar data so locally-set fog cells are not
-          // overwritten when the hydration response replaces sceneState.
-          const existingSceneState = draft.boardState?.sceneState;
-          const nextBoardState = {
-            ...draft.boardState,
-            ...normalizedBoard,
-          };
-          // Re-merge fogOfWar from existing scene entries that had cells.
-          // Per-level shape: walk byLevel[levelId].revealedCells.
-          if (existingSceneState && typeof existingSceneState === 'object' &&
-              nextBoardState.sceneState && typeof nextBoardState.sceneState === 'object') {
-            Object.keys(existingSceneState).forEach((sid) => {
-              const existingFog = existingSceneState[sid]?.fogOfWar;
-              if (!existingFog || typeof existingFog !== 'object') return;
-              const existingByLevel = existingFog.byLevel;
-              if (!existingByLevel || typeof existingByLevel !== 'object') return;
-
-              const target = nextBoardState.sceneState[sid];
-              if (!target || typeof target !== 'object') return;
-              if (!target.fogOfWar || typeof target.fogOfWar !== 'object') {
-                target.fogOfWar = JSON.parse(JSON.stringify(existingFog));
-                return;
-              }
-              if (!target.fogOfWar.byLevel || typeof target.fogOfWar.byLevel !== 'object'
-                  || Array.isArray(target.fogOfWar.byLevel)) {
-                target.fogOfWar.byLevel = {};
-              }
-
-              Object.keys(existingByLevel).forEach((levelId) => {
-                const existingLevel = existingByLevel[levelId];
-                if (!existingLevel || typeof existingLevel !== 'object') return;
-                const existingCells = existingLevel.revealedCells;
-                if (!existingCells || typeof existingCells !== 'object'
-                    || Object.keys(existingCells).length === 0) return;
-
-                let targetLevel = target.fogOfWar.byLevel[levelId];
-                if (!targetLevel || typeof targetLevel !== 'object') {
-                  target.fogOfWar.byLevel[levelId] = JSON.parse(JSON.stringify(existingLevel));
-                  return;
-                }
-                if (!targetLevel.revealedCells || typeof targetLevel.revealedCells !== 'object'
-                    || Array.isArray(targetLevel.revealedCells)) {
-                  targetLevel.revealedCells = {};
-                }
-                Object.keys(existingCells).forEach((key) => {
-                  if (!(key in targetLevel.revealedCells)) {
-                    targetLevel.revealedCells[key] = true;
-                  }
-                });
-              });
-            });
-          }
-          if (!currentIsGM) {
-            nextBoardState.placements = restrictPlacementsToPlayerView(
-              nextBoardState.placements ?? {}
-            );
-            // Reset metadata for non-GM users to prevent inheriting GM-authored
-            // metadata which would cause the poller authority check to incorrectly
-            // trigger and skip syncing new placements from other users.
-            nextBoardState.metadata = {
-              ...(nextBoardState.metadata ?? {}),
-              authorIsGm: false,
-              authorRole: 'player',
-            };
-            levelOverrideOp = applyPcTokenLevelOverride(
-              nextBoardState,
-              currentState?.user?.name
-            );
-          } else {
-            levelOverrideOp = applyGmActiveLevelOverride(
-              nextBoardState,
-              currentState?.user?.name
-            );
-          }
-          draft.boardState = nextBoardState;
-        }
-      }
     });
-    if (levelOverrideOp && typeof storeApi?._persistBoardState === 'function') {
-      await storeApi._persistBoardState(
-        { serializeWithSnapshots: true },
-        [levelOverrideOp]
-      );
-    }
   } catch (error) {
     console.warn('[VTT] Failed to hydrate data', error);
   }
 }
 
-// On player login, snap the viewer to the level of their claimed PC token
-// so a stale `userLevelState[userId]` (mutated by a GM Activate while the
-// player was away) does not strand them on the wrong level. The override
-// only fires here, on page load — once it writes a fresh entry, the normal
-// resolver chain handles in-session navigation. We skip silently when the
-// player has zero or 2+ PC-named claims (the existing chain handles those).
-function applyPcTokenLevelOverride(nextBoardState, userName) {
-  const userKey = typeof userName === 'string' ? userName.trim().toLowerCase() : '';
-  if (!userKey) return;
-  const sceneId =
-    typeof nextBoardState?.activeSceneId === 'string' ? nextBoardState.activeSceneId : '';
-  if (!sceneId) return;
-  if (!nextBoardState.sceneState || typeof nextBoardState.sceneState !== 'object') {
-    nextBoardState.sceneState = {};
-  }
-  const sceneEntry =
-    nextBoardState.sceneState[sceneId] && typeof nextBoardState.sceneState[sceneId] === 'object'
-      ? nextBoardState.sceneState[sceneId]
-      : null;
-  if (!sceneEntry) return;
-  const placements = Array.isArray(nextBoardState.placements?.[sceneId])
-    ? nextBoardState.placements[sceneId]
-    : [];
-  const normalizedMapLevels = normalizeMapLevelsState(sceneEntry.mapLevels ?? null, {
-    sceneGrid: sceneEntry.grid ?? null,
-  });
-  const validLevelIds = [BASE_MAP_LEVEL_ID];
-  normalizedMapLevels.levels.forEach((level) => {
-    if (level && typeof level.id === 'string' && level.id) {
-      validLevelIds.push(level.id);
-    }
-  });
-  const pcLevelId = resolvePcTokenLevelIdForUser({
-    sceneState: sceneEntry,
-    userId: userKey,
-    placements,
-    validLevelIds,
-  });
-  if (!pcLevelId) return;
-  const existingLevelId =
-    typeof sceneEntry.userLevelState?.[userKey]?.levelId === 'string'
-      ? sceneEntry.userLevelState[userKey].levelId.trim()
-      : '';
-  if (existingLevelId === pcLevelId) {
-    return null;
-  }
-  if (!sceneEntry.userLevelState || typeof sceneEntry.userLevelState !== 'object') {
-    sceneEntry.userLevelState = {};
-  }
-  sceneEntry.userLevelState[userKey] = {
-    levelId: pcLevelId,
-    source: 'manual',
-    updatedAt: Date.now(),
-  };
-  return {
-    type: 'user-level.set',
-    sceneId,
-    userId: userKey,
-    levelId: pcLevelId,
-    source: 'manual',
-  };
-}
-
-// On GM login, ensure `userLevelState[gm]` for the active scene names a
-// valid level. The fog renderer and the top-right level indicator both
-// resolve through this entry; when it is missing they fall back to
-// Level 0, so fog edits made on what visually looks like Level 1 land on
-// Level 0 instead. We preserve any saved entry so the GM resumes where
-// they left off, and only default to the topmost level when no prior
-// entry exists or it points at a level that has since been deleted.
-function applyGmActiveLevelOverride(nextBoardState, userName) {
-  const userKey = typeof userName === 'string' ? userName.trim().toLowerCase() : '';
-  if (!userKey) return;
-  const sceneId =
-    typeof nextBoardState?.activeSceneId === 'string' ? nextBoardState.activeSceneId : '';
-  if (!sceneId) return;
-  if (!nextBoardState.sceneState || typeof nextBoardState.sceneState !== 'object') {
-    nextBoardState.sceneState = {};
-  }
-  const sceneEntry =
-    nextBoardState.sceneState[sceneId] && typeof nextBoardState.sceneState[sceneId] === 'object'
-      ? nextBoardState.sceneState[sceneId]
-      : null;
-  if (!sceneEntry) return;
-
-  const normalizedMapLevels = normalizeMapLevelsState(sceneEntry.mapLevels ?? null, {
-    sceneGrid: sceneEntry.grid ?? null,
-  });
-  const validLevelIds = new Set([BASE_MAP_LEVEL_ID]);
-  normalizedMapLevels.levels.forEach((level) => {
-    if (level && typeof level.id === 'string' && level.id) {
-      validLevelIds.add(level.id);
-    }
-  });
-
-  const existing =
-    sceneEntry.userLevelState && typeof sceneEntry.userLevelState === 'object'
-      ? sceneEntry.userLevelState[userKey]
-      : null;
-  const existingLevelId =
-    existing && typeof existing === 'object' && typeof existing.levelId === 'string'
-      ? existing.levelId.trim()
-      : '';
-  if (existingLevelId && validLevelIds.has(existingLevelId)) {
-    return;
-  }
-
-  const topmostLevelId = resolveTopmostLevelId({
-    baseMapUrl: nextBoardState.mapUrl ?? null,
-    mapLevels: sceneEntry.mapLevels ?? null,
-    sceneGrid: sceneEntry.grid ?? null,
-  });
-  if (!sceneEntry.userLevelState || typeof sceneEntry.userLevelState !== 'object') {
-    sceneEntry.userLevelState = {};
-  }
-  sceneEntry.userLevelState[userKey] = {
-    levelId: topmostLevelId,
-    source: 'manual',
-    updatedAt: Date.now(),
-  };
-  return {
-    type: 'user-level.set',
-    sceneId,
-    userId: userKey,
-    levelId: topmostLevelId,
-    source: 'manual',
-  };
-}
-
 document.addEventListener('DOMContentLoaded', bootstrap);
-
-function normalizeBoardStateSnapshot(raw = {}) {
-  if (!raw || typeof raw !== 'object') {
-    return null;
-  }
-
-  const snapshot = {};
-
-  if (Object.prototype.hasOwnProperty.call(raw, '_version')) {
-    const version = Number(raw._version);
-    if (Number.isFinite(version) && version >= 0) {
-      snapshot._version = Math.trunc(version);
-    }
-  }
-  if (Object.prototype.hasOwnProperty.call(raw, '_fullSync')) {
-    snapshot._fullSync = Boolean(raw._fullSync);
-  }
-
-  if (Object.prototype.hasOwnProperty.call(raw, 'activeSceneId')) {
-    const rawId = raw.activeSceneId;
-    snapshot.activeSceneId =
-      typeof rawId === 'string'
-        ? rawId
-        : rawId == null
-        ? null
-        : String(rawId);
-  }
-
-  if (Object.prototype.hasOwnProperty.call(raw, 'mapUrl')) {
-    const mapUrl = raw.mapUrl;
-    if (typeof mapUrl === 'string') {
-      snapshot.mapUrl = mapUrl;
-    } else if (mapUrl === null) {
-      snapshot.mapUrl = null;
-    }
-  }
-
-  if (Object.prototype.hasOwnProperty.call(raw, 'thumbnailUrl')) {
-    const thumbnailUrl = raw.thumbnailUrl;
-    if (typeof thumbnailUrl === 'string') {
-      snapshot.thumbnailUrl = thumbnailUrl;
-    } else if (thumbnailUrl === null) {
-      snapshot.thumbnailUrl = null;
-    }
-  }
-
-  if (Object.prototype.hasOwnProperty.call(raw, 'playerMapDisabled')) {
-    snapshot.playerMapDisabled = Boolean(raw.playerMapDisabled);
-  }
-
-  if (Object.prototype.hasOwnProperty.call(raw, 'playerActiveSceneId')) {
-    const rawId = raw.playerActiveSceneId;
-    snapshot.playerActiveSceneId =
-      typeof rawId === 'string'
-        ? rawId
-        : rawId == null
-        ? null
-        : String(rawId);
-  }
-
-  if (Object.prototype.hasOwnProperty.call(raw, 'playerMapUrl')) {
-    const playerMapUrl = raw.playerMapUrl;
-    if (typeof playerMapUrl === 'string') {
-      snapshot.playerMapUrl = playerMapUrl;
-    } else if (playerMapUrl === null) {
-      snapshot.playerMapUrl = null;
-    }
-  }
-
-  if (Object.prototype.hasOwnProperty.call(raw, 'playerThumbnailUrl')) {
-    const playerThumbnailUrl = raw.playerThumbnailUrl;
-    if (typeof playerThumbnailUrl === 'string') {
-      snapshot.playerThumbnailUrl = playerThumbnailUrl;
-    } else if (playerThumbnailUrl === null) {
-      snapshot.playerThumbnailUrl = null;
-    }
-  }
-
-  if (Object.prototype.hasOwnProperty.call(raw, 'placements')) {
-    snapshot.placements = cloneBoardSection(raw.placements);
-  }
-
-  if (Object.prototype.hasOwnProperty.call(raw, 'sceneState')) {
-    snapshot.sceneState = cloneBoardSection(raw.sceneState);
-  }
-
-  if (Object.prototype.hasOwnProperty.call(raw, 'templates')) {
-    snapshot.templates = cloneBoardSection(raw.templates);
-  }
-
-  if (Object.prototype.hasOwnProperty.call(raw, 'drawings')) {
-    snapshot.drawings = cloneBoardSection(raw.drawings);
-  }
-
-  if (Object.prototype.hasOwnProperty.call(raw, 'pings')) {
-    snapshot.pings = Array.isArray(raw.pings) ? [...raw.pings] : [];
-  }
-
-  if (Object.prototype.hasOwnProperty.call(raw, 'metadata')) {
-    const metadata = cloneBoardSection(raw.metadata);
-    if (metadata && typeof metadata === 'object') {
-      snapshot.metadata = metadata;
-    } else if (raw.metadata === null) {
-      snapshot.metadata = null;
-    }
-  }
-
-  return snapshot;
-}
-
-function cloneBoardSection(section) {
-  if (!section || typeof section !== 'object') {
-    return {};
-  }
-  try {
-    return JSON.parse(JSON.stringify(section));
-  } catch (error) {
-    return {};
-  }
-}
 
 function normalizeSceneState(raw = {}) {
   if (Array.isArray(raw)) {

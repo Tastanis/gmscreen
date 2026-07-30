@@ -678,6 +678,24 @@ try {
         'Private audience authorization must use the exact Pusher HMAC contract.'
     );
 
+    $sceneDeletion = $store->deleteScene('scene-1', 'GM');
+    expect(
+        $sceneDeletion['event']['type'] === 'scene.deleted'
+            && $sceneDeletion['event']['revision'] === 21,
+        'Scene deletion must emit one canonical revisioned event.'
+    );
+    $afterSceneDeletion = $store->getSnapshot();
+    foreach (['placements', 'claims', 'combat', 'templates', 'drawings', 'sceneConfig'] as $domain) {
+        expect(
+            !isset($afterSceneDeletion['state'][$domain]['scene-1']),
+            'Scene deletion must remove scene-owned ' . $domain . '.'
+        );
+    }
+    expect(
+        ($afterSceneDeletion['state']['routing']['activeSceneId'] ?? null) === null,
+        'Deleting the active scene must clear canonical routing.'
+    );
+
     echo json_encode([
         'success' => true,
         'revision' => $store->getSnapshot()['revision'],

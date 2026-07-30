@@ -103,28 +103,11 @@ function vttSyncV2DomainEnabled(string $domain): bool
     return ($config['domains'][$domain] ?? false) === true;
 }
 
-function vttSyncV2FindLegacyPlacement(string $sceneId, string $placementId): ?array
+function vttSyncV2FindPlacement(string $sceneId, string $placementId): ?array
 {
-    if (vttSyncV2DomainEnabled('placements')) {
-        $snapshot = vttSyncV2Store()->getSnapshot();
-        $placement = $snapshot['state']['placements'][$sceneId][$placementId] ?? null;
-        return is_array($placement) ? $placement : null;
-    }
-    $boardState = loadVttJson('board-state.json');
-    $placements = $boardState['placements'][$sceneId] ?? [];
-    if (!is_array($placements)) {
-        return null;
-    }
-    foreach ($placements as $placement) {
-        if (!is_array($placement)) {
-            continue;
-        }
-        $id = isset($placement['id']) ? trim((string) $placement['id']) : '';
-        if ($id === $placementId) {
-            return $placement;
-        }
-    }
-    return null;
+    $snapshot = vttSyncV2Store()->getSnapshot();
+    $placement = $snapshot['state']['placements'][$sceneId][$placementId] ?? null;
+    return is_array($placement) ? $placement : null;
 }
 
 function vttSyncV2PlacementHidden(array $placement): bool
@@ -257,17 +240,10 @@ function vttSyncV2CanMovePlacement(
     if ($userId === '') {
         return false;
     }
-    if (vttSyncV2DomainEnabled('placements')) {
-        $snapshot = vttSyncV2Store()->getSnapshot();
-        $claimedBy = strtolower(trim((string) (
-            $snapshot['state']['claims'][$sceneId][$placementId] ?? ''
-        )));
-    } else {
-        $boardState = loadVttJson('board-state.json');
-        $claimedBy = strtolower(trim((string) (
-            $boardState['sceneState'][$sceneId]['claimedTokens'][$placementId] ?? ''
-        )));
-    }
+    $snapshot = vttSyncV2Store()->getSnapshot();
+    $claimedBy = strtolower(trim((string) (
+        $snapshot['state']['claims'][$sceneId][$placementId] ?? ''
+    )));
     return $claimedBy !== '' && $claimedBy === $userId;
 }
 

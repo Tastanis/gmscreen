@@ -60,7 +60,7 @@ try {
         $auth = vttSyncV2RequireAuthenticated();
         $sceneId = trim((string) ($command['sceneId'] ?? ''));
         $placementId = trim((string) ($command['entityId'] ?? $command['payload']['placementId'] ?? ''));
-        $placement = vttSyncV2FindLegacyPlacement($sceneId, $placementId);
+        $placement = vttSyncV2FindPlacement($sceneId, $placementId);
         if ($placement === null) {
             vttSyncV2Respond(404, ['success' => false, 'error' => 'Placement not found.']);
         }

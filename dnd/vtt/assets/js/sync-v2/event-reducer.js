@@ -428,6 +428,27 @@ function reduceSceneActivated(state, event, changes) {
   changes.sceneRouting = true;
 }
 
+function reduceSceneDeleted(state, event, changes) {
+  const sceneId = typeof event.sceneId === 'string' ? event.sceneId.trim() : '';
+  if (!sceneId) {
+    throw new Error('scene.deleted requires sceneId');
+  }
+  for (const domain of ['placements', 'claims', 'combat', 'templates', 'drawings', 'sceneConfig']) {
+    if (state[domain] && typeof state[domain] === 'object') {
+      state[domain] = { ...state[domain] };
+      delete state[domain][sceneId];
+    }
+  }
+  if (state.pings && typeof state.pings === 'object') {
+    state.pings = Object.fromEntries(
+      Object.entries(state.pings).filter(([, ping]) => ping?.sceneId !== sceneId)
+    );
+  }
+  state.routing = clone(event.payload?.routing ?? state.routing ?? {});
+  changes.snapshot = true;
+  changes.sceneRouting = true;
+}
+
 const reducers = Object.freeze({
   'sync.redacted': () => {},
   'shadow.observed': reduceShadowObservation,
@@ -475,6 +496,7 @@ const reducers = Object.freeze({
     reduceSceneConfigField(state, event, changes, 'grid', 'grid', 'grid'),
   'ping.added': reducePingAdded,
   'scene.activated': reduceSceneActivated,
+  'scene.deleted': reduceSceneDeleted,
   'routing.changed': reduceRoutingChanged,
 });
 

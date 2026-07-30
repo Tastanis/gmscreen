@@ -464,3 +464,42 @@ test('Pusher adapter only forwards canonical event envelopes', () => {
   assert.equal(forwarded.event.revision, 1);
   assert.equal(transport.getSocketId(), '123.456');
 });
+
+test('scene.deleted removes every scene-owned canonical domain in one event', () => {
+  const initial = {
+    revision: 4,
+    state: {
+      placements: { 'scene-1': { token: { id: 'token' } } },
+      claims: { 'scene-1': { token: 'player-a' } },
+      combat: { 'scene-1': { active: true } },
+      templates: { 'scene-1': { template: { id: 'template' } } },
+      drawings: { 'scene-1': { drawing: { id: 'drawing' } } },
+      sceneConfig: { 'scene-1': { grid: { size: 64 } } },
+      pings: {
+        old: { id: 'old', sceneId: 'scene-1' },
+        keep: { id: 'keep', sceneId: 'scene-2' },
+      },
+      routing: { activeSceneId: 'scene-1' },
+    },
+  };
+  const result = reduceCanonicalEvent(initial, {
+    revision: 5,
+    operationId: 'scene-delete:scene-1:5',
+    type: 'scene.deleted',
+    actorId: 'GM',
+    sceneId: 'scene-1',
+    entityId: null,
+    entityRevision: 2,
+    payload: { routing: { activeSceneId: null, _revision: 2 } },
+    serverTime: 1234,
+  });
+
+  assert.equal(result.status, 'applied');
+  for (const domain of ['placements', 'claims', 'combat', 'templates', 'drawings', 'sceneConfig']) {
+    assert.equal(result.snapshot.state[domain]['scene-1'], undefined);
+  }
+  assert.equal(result.snapshot.state.pings.old, undefined);
+  assert.equal(result.snapshot.state.pings.keep.sceneId, 'scene-2');
+  assert.equal(result.snapshot.state.routing.activeSceneId, null);
+  assert.equal(result.changeSet.snapshot, true);
+});
