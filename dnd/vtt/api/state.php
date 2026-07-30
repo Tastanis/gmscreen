@@ -46,6 +46,17 @@ function vttSyncV2CombatOwnsState(): bool
     return is_array($config) && ($config['domains']['combat'] ?? false) === true;
 }
 
+function vttSyncV2OwnsDomain(string $domain): bool
+{
+    static $domains = null;
+    if ($domains === null) {
+        $configPath = __DIR__ . '/../config/sync-v2.php';
+        $config = is_file($configPath) ? require $configPath : [];
+        $domains = is_array($config['domains'] ?? null) ? $config['domains'] : [];
+    }
+    return ($domains[$domain] ?? false) === true;
+}
+
 /**
  * Resolve the on-disk path to the version file.
  */
@@ -1832,6 +1843,16 @@ function applyBoardStateOp(array $state, array $op, array $context = []): array
     $type = isset($op['type']) && is_string($op['type']) ? $op['type'] : '';
     $isGm = (bool) ($context['isGm'] ?? false);
     $syncV2OwnsMovement = vttSyncV2OwnsTokenMovement();
+    if (
+        (str_starts_with($type, 'template.') && vttSyncV2OwnsDomain('templates'))
+        || (str_starts_with($type, 'drawing.') && vttSyncV2OwnsDomain('drawings'))
+        || (
+            in_array($type, ['user-level.set', 'user-level.activate'], true)
+            && vttSyncV2OwnsDomain('levels')
+        )
+    ) {
+        return $state;
+    }
 
     if ($type === 'placement.move') {
         // Phase 3 ownership gate: token coordinates have one authority. Old
@@ -3128,6 +3149,37 @@ function sanitizeBoardStateUpdates(array $raw): array
         }
     }
 
+    if (vttSyncV2OwnsDomain('templates')) unset($updates['templates']);
+    if (vttSyncV2OwnsDomain('drawings')) unset($updates['drawings']);
+    if (vttSyncV2OwnsDomain('pings')) unset($updates['pings']);
+    if (vttSyncV2OwnsDomain('routing')) {
+        unset(
+            $updates['mapUrl'],
+            $updates['playerMapDisabled'],
+            $updates['playerActiveSceneId'],
+            $updates['playerMapUrl'],
+            $updates['playerThumbnailUrl']
+        );
+    }
+    if (vttSyncV2OwnsDomain('scenes')) unset($updates['activeSceneId']);
+    if (isset($updates['sceneState']) && is_array($updates['sceneState'])) {
+        foreach ($updates['sceneState'] as &$entry) {
+            if (!is_array($entry)) continue;
+            if (vttSyncV2CombatOwnsState()) unset($entry['combat']);
+            if (vttSyncV2PlacementsOwnState()) unset($entry['claimedTokens']);
+            if (vttSyncV2OwnsDomain('fog')) unset($entry['fogOfWar']);
+            if (vttSyncV2OwnsDomain('levels')) {
+                unset($entry['mapLevels'], $entry['userLevelState']);
+            }
+            if (vttSyncV2OwnsDomain('grid')) unset($entry['grid']);
+        }
+        unset($entry);
+        $updates['sceneState'] = array_filter(
+            $updates['sceneState'],
+            static fn($entry) => is_array($entry) && $entry !== []
+        );
+        if ($updates['sceneState'] === []) unset($updates['sceneState']);
+    }
     return $updates;
 }
 

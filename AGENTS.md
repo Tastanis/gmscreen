@@ -108,3 +108,14 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 - Version system tracks: version number, build number, last updated timestamp
 - Debug info should be removed before production
 - Import button requires GM login (user: 'GM', password: 'harms')
+
+## VTT Sync V2 Phase 6
+
+- Phase 6 is complete; canonical SQLite state now owns templates, drawings,
+  pings, fog, map levels/stairs, runtime grid state, active-scene selection,
+  and player viewer routing.
+- The implementation plan and current operating boundary are in
+  `/docs/vtt-sync-v2/README.md`; Phase 7 is next.
+- Do not add a generic board snapshot command or re-enable V1 writers for an
+  owned domain. Use the explicit Phase 6 command types in
+  `/dnd/vtt/api/v2/commands.php`.

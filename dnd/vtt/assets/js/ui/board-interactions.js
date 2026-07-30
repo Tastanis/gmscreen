@@ -756,6 +756,18 @@ export function mountBoardInteractions(store, routes = {}) {
     syncV2Config?.domains?.placements === true;
   const combatV2Enabled =
     syncV2Config?.domains?.combat === true;
+  const templatesV2Enabled = syncV2Config?.domains?.templates === true;
+  const drawingsV2Enabled = syncV2Config?.domains?.drawings === true;
+  const pingsV2Enabled = syncV2Config?.domains?.pings === true;
+  const fogV2Enabled = syncV2Config?.domains?.fog === true;
+  const levelsV2Enabled = syncV2Config?.domains?.levels === true;
+  const scenesV2Enabled = syncV2Config?.domains?.scenes === true;
+  const gridV2Enabled = syncV2Config?.domains?.grid === true;
+  const routingV2Enabled = syncV2Config?.domains?.routing === true;
+  const boardDomainsV2Enabled = [
+    templatesV2Enabled, drawingsV2Enabled, pingsV2Enabled, fogV2Enabled,
+    levelsV2Enabled, scenesV2Enabled, gridV2Enabled, routingV2Enabled,
+  ].some(Boolean);
   const combatTimerService = createCombatTimerService();
   let mapLevelCutoutEditorActive = false;
   const mapLevelCutoutTool = createMapLevelCutoutTool();
@@ -1147,10 +1159,51 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
+  function applyConfirmedBoardDomain(snapshot, changeSet, context = {}) {
+    boardApi.updateStateSilently?.((draft) => {
+      tokenMovementRuntime?.overlayBoardState(draft.boardState);
+    });
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    if (changeSet.sceneRouting) {
+      // A route change is one of the explicitly permitted full scene mounts.
+      applyStateToBoard(state);
+      return;
+    }
+    if (changeSet.grid) {
+      applyGridState(state.grid ?? state.boardState?.sceneState?.[activeSceneId]?.grid ?? {});
+    }
+    if (changeSet.levels) {
+      syncMapLevelsForState(state, activeSceneId);
+      renderStairs(state);
+      maybeFollowClaimedTokenView(state, activeSceneId);
+    }
+    if (changeSet.fog) {
+      renderFog(state);
+      renderFogSelection();
+    }
+    if (changeSet.templates) {
+      templateTool.notifyMapState();
+    }
+    if (changeSet.drawings) {
+      const drawings = state.boardState?.drawings?.[activeSceneId || DEFAULT_SCENE_ID] ?? [];
+      setDrawingToolDrawings(Array.isArray(drawings) ? drawings : []);
+    }
+    if (changeSet.pings) {
+      mapPings.processIncomingPings(state.boardState?.pings ?? [], activeSceneId);
+    }
+    recordSyncDiagnostic('syncV2BoardDomainPatches', {
+      event: context?.event?.type ?? null,
+      sceneId: context?.event?.sceneId ?? null,
+      revision: snapshot?.revision ?? 0,
+    });
+  }
+
   tokenMovementRuntime = createTokenMovementRuntime({
     enabled: tokenMovementV2Enabled,
     placementsEnabled: placementsV2Enabled,
     combatEnabled: combatV2Enabled,
+    boardDomainsEnabled: boardDomainsV2Enabled,
     commandsEndpoint: routes.syncV2Commands,
     eventsEndpoint: routes.syncV2Events,
     snapshotEndpoint: routes.syncV2Snapshot,
@@ -1162,6 +1215,7 @@ export function mountBoardInteractions(store, routes = {}) {
     applyConfirmedPlacement: applyConfirmedTokenMovement,
     applyConfirmedPlacementBatch,
     applyConfirmedCombat,
+    applyConfirmedBoardDomain,
     reconcileSnapshot: reconcileTokenMovementSnapshot,
     onError: (error) => reportSyncFailure(error, 'token movement'),
   });
@@ -5697,12 +5751,9 @@ export function mountBoardInteractions(store, routes = {}) {
   //     and `placement.update` on every mutator-driven placement edit
   //     (HP/stamina, conditions, hidden flag, triggered action, etc.)
   //
-  // Templates, drawings, pings, scene state, fog, and overlay saves
-  // still go through the snapshot path regardless of this flag. GM combat
-  // sync now uses `combat.set` ops so End Combat is not blocked by stale
-  // full-board snapshot versions. Call sites that detect
-  // non-placement dirty state also fall back to the snapshot path so
-  // the ops path never silently drops templates/drawings/etc.
+  // Sync V2 now intercepts every owned domain at this persistence choke
+  // point. This legacy switch remains only for domains that have not yet
+  // passed their deletion gate and is removed with the V1 shell in Phase 8.
   const USE_DELTA_SAVES = true;
 
   // Serialize full-snapshot saves so rapid scene/level mutations (e.g.
@@ -5772,6 +5823,231 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
+  const isSyncV2BoardDomainOp = (op) => {
+    const type = String(op?.type ?? '');
+    return (
+      (templatesV2Enabled && type.startsWith('template.'))
+      || (drawingsV2Enabled && type.startsWith('drawing.'))
+      || (levelsV2Enabled && (type === 'user-level.set' || type === 'user-level.activate'))
+    );
+  };
+
+  function deriveSyncV2BoardDomainCommands(boardState, ops = []) {
+    if (!boardDomainsV2Enabled) return [];
+    const snapshot = tokenMovementRuntime?.getConfirmedSnapshot?.()?.state ?? {};
+    const commands = new Map();
+    const put = (key, command) => commands.set(key, command);
+    for (const op of ops ?? []) {
+      const sceneId = String(op?.sceneId ?? '').trim();
+      if (templatesV2Enabled && op?.type === 'template.upsert' && sceneId && op.template?.id) {
+        put(`template:${sceneId}:${op.template.id}`, {
+          type: 'template.upsert',
+          sceneId,
+          entityId: op.template.id,
+          payload: { template: op.template },
+        });
+      } else if (templatesV2Enabled && op?.type === 'template.remove' && sceneId && op.templateId) {
+        put(`template:${sceneId}:${op.templateId}`, {
+          type: 'template.remove',
+          sceneId,
+          entityId: op.templateId,
+          payload: {},
+        });
+      } else if (drawingsV2Enabled && op?.type === 'drawing.add' && sceneId && op.drawing?.id) {
+        put(`drawing:${sceneId}:${op.drawing.id}`, {
+          type: 'drawing.upsert',
+          sceneId,
+          entityId: op.drawing.id,
+          payload: { drawing: op.drawing },
+        });
+      } else if (drawingsV2Enabled && op?.type === 'drawing.remove' && sceneId && op.drawingId) {
+        put(`drawing:${sceneId}:${op.drawingId}`, {
+          type: 'drawing.remove',
+          sceneId,
+          entityId: op.drawingId,
+          payload: {},
+        });
+      } else if (levelsV2Enabled && op?.type === 'user-level.set' && sceneId && op.userId) {
+        put(`user-level:${sceneId}:${op.userId}`, {
+          type: 'level.user.set',
+          sceneId,
+          payload: {
+            userId: op.userId,
+            entry: {
+              levelId: op.levelId,
+              source: op.source,
+              tokenId: op.tokenId,
+            },
+          },
+        });
+      } else if (levelsV2Enabled && op?.type === 'user-level.activate' && sceneId) {
+        put(`level-activate:${sceneId}`, {
+          type: 'level.activate',
+          sceneId,
+          payload: { levelId: op.levelId, userIds: op.userIds },
+        });
+      }
+    }
+
+    const deriveCollectionChanges = (enabled, domain, dirty, typePrefix) => {
+      if (!enabled) return;
+      dirty.forEach((ids, sceneId) => {
+        const local = new Map(
+          (Array.isArray(boardState?.[domain]?.[sceneId]) ? boardState[domain][sceneId] : [])
+            .filter((entry) => entry?.id)
+            .map((entry) => [entry.id, entry])
+        );
+        for (const id of ids) {
+          const next = local.get(id);
+          const current = snapshot?.[domain]?.[sceneId]?.[id];
+          put(`${typePrefix}:${sceneId}:${id}`, next ? {
+            type: `${typePrefix}.upsert`,
+            sceneId,
+            entityId: id,
+            payload: { [typePrefix]: next },
+          } : {
+            type: `${typePrefix}.remove`,
+            sceneId,
+            entityId: id,
+            payload: {},
+          });
+          if (!next && !current) commands.delete(`${typePrefix}:${sceneId}:${id}`);
+        }
+      });
+    };
+    deriveCollectionChanges(templatesV2Enabled, 'templates', dirtyTemplates, 'template');
+    deriveCollectionChanges(drawingsV2Enabled, 'drawings', dirtyDrawings, 'drawing');
+
+    if (drawingsV2Enabled) {
+      drawingFullReplaceScenes.forEach((sceneId) => {
+        const local = new Map(
+          (Array.isArray(boardState?.drawings?.[sceneId]) ? boardState.drawings[sceneId] : [])
+            .filter((entry) => entry?.id)
+            .map((entry) => [entry.id, entry])
+        );
+        const canonical = snapshot?.drawings?.[sceneId] ?? {};
+        for (const id of new Set([...Object.keys(canonical), ...local.keys()])) {
+          const drawing = local.get(id);
+          put(`drawing:${sceneId}:${id}`, drawing ? {
+            type: 'drawing.upsert',
+            sceneId,
+            entityId: id,
+            payload: { drawing },
+          } : {
+            type: 'drawing.remove',
+            sceneId,
+            entityId: id,
+            payload: {},
+          });
+        }
+      });
+    }
+
+    if (pingsV2Enabled && dirtyPings) {
+      const known = snapshot?.pings ?? {};
+      for (const ping of mapPings.sanitizePingsForPersistence(boardState?.pings)) {
+        if (ping?.id && !known[ping.id]) {
+          put(`ping:${ping.id}`, {
+            type: 'ping.add',
+            sceneId: ping.sceneId || boardState?.activeSceneId || DEFAULT_SCENE_ID,
+            entityId: ping.id,
+            payload: { ping },
+          });
+        }
+      }
+    }
+
+    dirtySceneState.forEach((fields, sceneId) => {
+      const entry = boardState?.sceneState?.[sceneId] ?? {};
+      const includes = (field) => fields.has('*') || fields.has(field);
+      if (fogV2Enabled && includes('fogOfWar') && entry.fogOfWar) {
+        put(`fog:${sceneId}`, {
+          type: 'fog.set', sceneId, payload: { fogOfWar: entry.fogOfWar },
+        });
+      }
+      if (
+        levelsV2Enabled
+        && (includes('mapLevels') || includes('stairs'))
+        && entry.mapLevels
+      ) {
+        put(`levels:${sceneId}`, {
+          type: 'levels.set', sceneId, payload: { mapLevels: entry.mapLevels },
+        });
+      }
+      if (gridV2Enabled && includes('grid') && entry.grid) {
+        put(`grid:${sceneId}`, {
+          type: 'grid.set', sceneId, payload: { grid: entry.grid },
+        });
+      }
+    });
+
+    if (scenesV2Enabled && dirtyTopLevel.has('activeSceneId') && boardState?.activeSceneId) {
+      put('scene:active', {
+        type: 'scene.activate',
+        sceneId: boardState.activeSceneId,
+        payload: {},
+      });
+    }
+    if (routingV2Enabled) {
+      const routing = {};
+      for (const field of [
+        'mapUrl', 'playerMapDisabled', 'playerActiveSceneId',
+        'playerMapUrl', 'playerThumbnailUrl',
+      ]) {
+        if (dirtyTopLevel.has(field)) routing[field] = boardState?.[field] ?? null;
+      }
+      if (dirtyTopLevel.has('activeSceneId') && !boardState?.activeSceneId) {
+        routing.activeSceneId = null;
+      }
+      if (Object.keys(routing).length) {
+        put('routing', { type: 'routing.set', sceneId: null, payload: { routing } });
+      }
+    }
+    return [...commands.values()];
+  }
+
+  function persistSyncV2BoardDomains(boardState, ops = []) {
+    const commands = deriveSyncV2BoardDomainCommands(boardState, ops);
+    if (!commands.length) return Promise.resolve({ success: true, mode: 'live' });
+    return tokenMovementRuntime.submitBoardDomainCommands(commands).then((results) => {
+      for (const command of commands) {
+        const sceneId = command.sceneId;
+        if (command.type.startsWith('template.')) {
+          clearDirtyEntity(dirtyTemplates, sceneId, command.entityId);
+        } else if (command.type.startsWith('drawing.')) {
+          clearDirtyEntity(dirtyDrawings, sceneId, command.entityId);
+          drawingFullReplaceScenes.delete(sceneId);
+        } else if (command.type === 'ping.add') {
+          dirtyPings = false;
+        } else if (command.type === 'fog.set') {
+          clearDirtySceneStateField(sceneId, 'fogOfWar');
+        } else if (command.type === 'levels.set') {
+          clearDirtySceneStateField(sceneId, 'mapLevels');
+          clearDirtySceneStateField(sceneId, 'stairs');
+        } else if (command.type === 'grid.set') {
+          clearDirtySceneStateField(sceneId, 'grid');
+        } else if (command.type === 'level.user.set' || command.type === 'level.activate') {
+          clearDirtySceneStateField(sceneId, 'userLevelState');
+        } else if (command.type === 'scene.activate') {
+          dirtyTopLevel.delete('activeSceneId');
+        } else if (command.type === 'routing.set') {
+          Object.keys(command.payload?.routing ?? {}).forEach((field) => dirtyTopLevel.delete(field));
+        }
+      }
+      for (const sceneId of new Set(commands.map((command) => command.sceneId).filter(Boolean))) {
+        if (dirtySceneState.get(sceneId)?.has('*')) {
+          dirtySceneState.delete(sceneId);
+        }
+      }
+      clearDirtyTrackingForOps(ops);
+      clearSyncFailure();
+      return { success: true, mode: 'live', events: results.map((result) => result?.event) };
+    }).catch((error) => {
+      reportSyncFailure(error, 'board domain');
+      return { success: false, error };
+    });
+  }
+
   const doPersistBoardStateSnapshot = (options = {}, opsOverride = null) => {
     if (!routes?.state || typeof boardApi.getState !== 'function') {
       console.warn('[VTT] Cannot persist board state: routes.state missing or boardApi.getState unavailable');
@@ -5786,6 +6062,56 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     const isGmUser = Boolean(latest?.user?.isGM);
+
+    if (options?.__syncV2Routed !== true) {
+      const suppliedOps = Array.isArray(opsOverride) ? opsOverride : [];
+      const placementOps = placementsV2Enabled
+        ? suppliedOps.filter(isSyncV2PlacementOp)
+        : [];
+      const domainOps = boardDomainsV2Enabled
+        ? suppliedOps.filter(isSyncV2BoardDomainOp)
+        : [];
+      const remainingOps = suppliedOps.filter(
+        (op) => !placementOps.includes(op) && !domainOps.includes(op)
+      );
+      const derivedPlacementOps =
+        placementsV2Enabled && !suppliedOps.length && dirtyPlacements.size > 0
+          ? deriveDirtyPlacementOps()
+          : [];
+      const boardCommands = boardDomainsV2Enabled
+        ? deriveSyncV2BoardDomainCommands(boardState, domainOps)
+        : [];
+      if (placementOps.length || derivedPlacementOps.length || boardCommands.length) {
+        const routedPlacementOps = placementOps.length ? placementOps : derivedPlacementOps;
+        let routed = Promise.resolve({ success: true, mode: 'live' });
+        if (routedPlacementOps.length) {
+          routed = routed.then(() => persistSyncV2PlacementOps(routedPlacementOps));
+        }
+        if (boardCommands.length) {
+          routed = routed.then((result) => (
+            result?.success === false
+              ? result
+              : persistSyncV2BoardDomains(boardState, domainOps)
+          ));
+        }
+        return routed.then((result) => {
+          if (result?.success === false) return result;
+          if (remainingOps.length) {
+            return doPersistBoardStateSnapshot(
+              { ...options, __syncV2Routed: true },
+              remainingOps
+            );
+          }
+          if (hasDirtyState()) {
+            return doPersistBoardStateSnapshot(
+              { ...options, __syncV2Routed: true },
+              null
+            );
+          }
+          return result;
+        });
+      }
+    }
 
     // Phase 3-B: if the caller passed a non-empty ops list AND the
     // feature flag is on, take the delta-op save path. Otherwise build
@@ -6141,32 +6467,6 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    if (placementsV2Enabled && Array.isArray(opsOverride) && opsOverride.some(isSyncV2PlacementOp)) {
-      const placementOps = opsOverride.filter(isSyncV2PlacementOp);
-      const remainingOps = opsOverride.filter((op) => !isSyncV2PlacementOp(op));
-      const placementPromise = persistSyncV2PlacementOps(placementOps);
-      if (!remainingOps.length) {
-        return placementPromise;
-      }
-      return placementPromise.then((placementResult) => {
-        if (!placementResult?.success) return placementResult;
-        return doPersistBoardStateSnapshot(options, remainingOps);
-      });
-    }
-
-    if (placementsV2Enabled && !Array.isArray(opsOverride) && dirtyPlacements.size > 0) {
-      const derivedOps = deriveDirtyPlacementOps();
-      if (derivedOps.length > 0) {
-        return persistSyncV2PlacementOps(derivedOps).then((placementResult) => {
-          if (!placementResult?.success || !hasNonPlacementDirtyState()) {
-            return placementResult;
-          }
-          return doPersistBoardStateSnapshot(options, null);
-        });
-      }
-      dirtyPlacements.clear();
-    }
-
     const placements = getActiveScenePlacements(state);
     if (Array.isArray(placements) && placements.length > 0) {
       return;
@@ -6218,12 +6518,12 @@ export function mountBoardInteractions(store, routes = {}) {
       }
 
       // Include only dirty templates (by ID)
-      if (dirtyTemplates.size > 0) {
+      if (!templatesV2Enabled && dirtyTemplates.size > 0) {
         snapshot.templates = buildDirtyTemplatesSnapshot(boardState.templates);
       }
 
       // Include only dirty drawings (by ID), or full scene replacement for erase/clear
-      if (dirtyDrawings.size > 0 || drawingFullReplaceScenes.size > 0) {
+      if (!drawingsV2Enabled && (dirtyDrawings.size > 0 || drawingFullReplaceScenes.size > 0)) {
         snapshot.drawings = buildDirtyDrawingsSnapshot(boardState.drawings);
 
         // For scenes that need full replacement (erasing/clearing removed drawings),
@@ -6241,7 +6541,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
 
       // Include pings only if they changed
-      if (dirtyPings) {
+      if (!pingsV2Enabled && dirtyPings) {
         snapshot.pings = mapPings.sanitizePingsForPersistence(boardState.pings);
       }
 
@@ -6252,9 +6552,14 @@ export function mountBoardInteractions(store, routes = {}) {
         dirtySceneState.forEach((_fields, sceneId) => {
           if (sceneStateClone[sceneId]) {
             filteredSceneState[sceneId] = sceneStateClone[sceneId];
-            if (combatV2Enabled) {
-              delete filteredSceneState[sceneId].combat;
+            if (combatV2Enabled) delete filteredSceneState[sceneId].combat;
+            if (placementsV2Enabled) delete filteredSceneState[sceneId].claimedTokens;
+            if (fogV2Enabled) delete filteredSceneState[sceneId].fogOfWar;
+            if (levelsV2Enabled) {
+              delete filteredSceneState[sceneId].mapLevels;
+              delete filteredSceneState[sceneId].userLevelState;
             }
+            if (gridV2Enabled) delete filteredSceneState[sceneId].grid;
           }
         });
         if (Object.keys(filteredSceneState).length > 0) {
@@ -6263,22 +6568,22 @@ export function mountBoardInteractions(store, routes = {}) {
       }
 
       // Include top-level fields only if dirty
-      if (dirtyTopLevel.has('activeSceneId')) {
+      if (!scenesV2Enabled && !routingV2Enabled && dirtyTopLevel.has('activeSceneId')) {
         snapshot.activeSceneId = boardState.activeSceneId ?? null;
       }
-      if (dirtyTopLevel.has('mapUrl') && isGm) {
+      if (!routingV2Enabled && dirtyTopLevel.has('mapUrl') && isGm) {
         snapshot.mapUrl = boardState.mapUrl ?? null;
       }
-      if (dirtyTopLevel.has('playerMapDisabled') && isGm) {
+      if (!routingV2Enabled && dirtyTopLevel.has('playerMapDisabled') && isGm) {
         snapshot.playerMapDisabled = Boolean(boardState.playerMapDisabled);
       }
-      if (dirtyTopLevel.has('playerActiveSceneId') && isGm) {
+      if (!routingV2Enabled && dirtyTopLevel.has('playerActiveSceneId') && isGm) {
         snapshot.playerActiveSceneId = boardState.playerActiveSceneId ?? null;
       }
-      if (dirtyTopLevel.has('playerMapUrl') && isGm) {
+      if (!routingV2Enabled && dirtyTopLevel.has('playerMapUrl') && isGm) {
         snapshot.playerMapUrl = boardState.playerMapUrl ?? null;
       }
-      if (dirtyTopLevel.has('playerThumbnailUrl') && isGm) {
+      if (!routingV2Enabled && dirtyTopLevel.has('playerThumbnailUrl') && isGm) {
         snapshot.playerThumbnailUrl = boardState.playerThumbnailUrl ?? null;
       }
 
@@ -6286,7 +6591,11 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     // Full state save (fallback when no dirty tracking or for initial load)
-    if (Object.prototype.hasOwnProperty.call(boardState, 'activeSceneId')) {
+    if (
+      !scenesV2Enabled
+      && !routingV2Enabled
+      && Object.prototype.hasOwnProperty.call(boardState, 'activeSceneId')
+    ) {
       snapshot.activeSceneId = boardState.activeSceneId ?? null;
     }
 
@@ -6296,21 +6605,36 @@ export function mountBoardInteractions(store, routes = {}) {
         { includeHidden: isGm }
       );
     }
-    snapshot.templates = sanitizeTemplatesForPersistence(boardState.templates);
-    snapshot.drawings = sanitizeDrawingsForPersistence(boardState.drawings);
-    snapshot.pings = mapPings.sanitizePingsForPersistence(boardState.pings);
+    if (!templatesV2Enabled) {
+      snapshot.templates = sanitizeTemplatesForPersistence(boardState.templates);
+    }
+    if (!drawingsV2Enabled) {
+      snapshot.drawings = sanitizeDrawingsForPersistence(boardState.drawings);
+    }
+    if (!pingsV2Enabled) {
+      snapshot.pings = mapPings.sanitizePingsForPersistence(boardState.pings);
+    }
 
     if (isGm) {
-      snapshot.mapUrl = boardState.mapUrl ?? null;
-      snapshot.playerMapDisabled = Boolean(boardState.playerMapDisabled);
-      snapshot.playerActiveSceneId = boardState.playerActiveSceneId ?? null;
-      snapshot.playerMapUrl = boardState.playerMapUrl ?? null;
-      snapshot.playerThumbnailUrl = boardState.playerThumbnailUrl ?? null;
+      if (!routingV2Enabled) {
+        snapshot.mapUrl = boardState.mapUrl ?? null;
+        snapshot.playerMapDisabled = Boolean(boardState.playerMapDisabled);
+        snapshot.playerActiveSceneId = boardState.playerActiveSceneId ?? null;
+        snapshot.playerMapUrl = boardState.playerMapUrl ?? null;
+        snapshot.playerThumbnailUrl = boardState.playerThumbnailUrl ?? null;
+      }
       snapshot.sceneState = cloneBoardSection(boardState.sceneState);
-      if (combatV2Enabled && snapshot.sceneState && typeof snapshot.sceneState === 'object') {
+      if (snapshot.sceneState && typeof snapshot.sceneState === 'object') {
         Object.values(snapshot.sceneState).forEach((sceneState) => {
           if (sceneState && typeof sceneState === 'object') {
-            delete sceneState.combat;
+            if (combatV2Enabled) delete sceneState.combat;
+            if (placementsV2Enabled) delete sceneState.claimedTokens;
+            if (fogV2Enabled) delete sceneState.fogOfWar;
+            if (levelsV2Enabled) {
+              delete sceneState.mapLevels;
+              delete sceneState.userLevelState;
+            }
+            if (gridV2Enabled) delete sceneState.grid;
           }
         });
       }

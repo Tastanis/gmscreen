@@ -1,6 +1,6 @@
 # VTT Sync V2 — Canonical Implementation Plan
 
-**Status:** Phase 5 complete; Phase 6 is the next implementation stage
+**Status:** Phase 6 complete; Phase 7 is the next implementation stage
 **Canonical handoff:** This file is the source of truth for the synchronization
 replacement. Read it before changing VTT persistence, Pusher delivery, board
 state, combat turns, or rendering subscriptions.
@@ -519,6 +519,58 @@ remote/local winner logic only after all combat transitions use V2.
 Migrate templates, drawings, pings, fog, levels/stairs, scenes, grid, and
 viewer-specific routing independently. Do not introduce a generic
 `board.updateAnything` command.
+
+- [x] Import templates, drawings, pings, scene configuration, and viewer
+      routing once into the canonical SQLite world.
+- [x] Add explicit commands for template upsert/remove, drawing upsert/remove,
+      ping add, fog replace, map-level replace, per-user level routing,
+      activate-level, grid replace, scene activation, and viewer routing.
+- [x] Use entity revisions for templates/drawings and scene/routing revisions
+      for configuration races; reject stale same-entity writes.
+- [x] Preserve player permissions for template/drawing/ping creation and
+      player-owned viewer levels while keeping destructive/configuration
+      commands GM-only.
+- [x] Route acknowledgement, Pusher delivery, replay, and conflict recovery
+      through the single canonical reducer.
+- [x] Overlay canonical Phase 6 state into bootstrap and compatibility state
+      so stale V1 JSON cannot flash or restore old board domains.
+- [x] Strip migrated collections, scene fields, routing fields, and cached V1
+      ops from `state.php` and ordinary snapshot saves.
+- [x] Render templates, drawings, pings, fog, grid, and level/stair changes
+      through focused callbacks; reserve a full scene/map mount for an actual
+      scene or viewer-route change.
+- [x] Correct the placement V2 interception block so placement commands execute
+      at the persistence choke point instead of falling through the heartbeat
+      helper.
+- [x] Verify idempotency, permissions, entity conflicts, focused reducer
+      change sets, PHP syntax, and the complete JavaScript suite.
+
+**Deletion gate:** Phase 6 domains no longer have a live V1 writer. Keep the
+remaining V1 transport/recovery shell until Phase 7 reconnect hardening and
+Phase 8 removal are complete.
+
+#### Phase 6 operating boundary
+
+- SQLite now owns templates, drawings, pings, fog, map levels/stairs, runtime
+  grid state, active-scene routing, and GM-configured player map routing.
+- Scene catalog CRUD and uploaded map asset management remain in the existing
+  `scenes.php`/upload APIs; Sync V2 owns the shared runtime state that selects
+  and renders those assets.
+- There is deliberately no whole-board mutation command. Shared configuration
+  commands patch only their named field under one SQLite write lock.
+- Same-template and same-drawing stale revisions are rejected rather than
+  silently replayed over the winner. Shared scene configuration retries only
+  after replacing its revision cursor from the authoritative conflict
+  snapshot, and each command changes only its named field.
+- Pings are append-only canonical events with bounded retention. They do not
+  rewrite placements, the map, or the full board.
+- Normal template, drawing, ping, fog, grid, and level events invoke only their
+  matching compatibility update and renderer. `scene.activated` and a viewer
+  route that changes the displayed map are the intentional full-scene mount
+  exceptions.
+- The existing shared Pusher board channel remains the low-latency delivery
+  path. Authenticated HTTP replay is still the authority and Phase 7 will add
+  private audience channels and complete reconnect/retention hardening.
 
 ### Phase 7 — Recovery and reconnect hardening
 

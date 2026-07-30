@@ -248,9 +248,9 @@ function withVttBoardStateLock(callable $callback)
 }
 
 /**
- * Overlay Phase 4 canonical placements and claims onto the legacy board
- * document in memory. The JSON file remains a compatibility projection for
- * domains that have not migrated; it is no longer placement authority.
+ * Overlay canonical Sync V2 domains onto the legacy-shaped bootstrap object.
+ * The JSON file remains only a compatibility projection for domains that
+ * have not migrated.
  */
 function overlaySyncV2Placements(array $boardState): array
 {
@@ -274,6 +274,19 @@ function overlaySyncV2Placements(array $boardState): array
         $store->migrateLegacyPlacements($boardState);
         if (($config['domains']['combat'] ?? false) === true) {
             $store->migrateLegacyCombat($boardState);
+        }
+        $boardDomainsEnabled = false;
+        foreach ([
+            'templates', 'drawings', 'pings', 'fog',
+            'levels', 'scenes', 'grid', 'routing',
+        ] as $domain) {
+            if (($config['domains'][$domain] ?? false) === true) {
+                $boardDomainsEnabled = true;
+                break;
+            }
+        }
+        if ($boardDomainsEnabled) {
+            $store->migrateLegacyBoardDomains($boardState);
         }
         $snapshot = $store->getSnapshot();
         $boardState['placements'] = [];
@@ -300,6 +313,49 @@ function overlaySyncV2Placements(array $boardState): array
                     ? $boardState['sceneState'][$sceneId]
                     : [];
                 $boardState['sceneState'][$sceneId]['combat'] = $combat;
+            }
+        }
+        if ($boardDomainsEnabled) {
+            foreach (['templates', 'drawings'] as $domain) {
+                if (($config['domains'][$domain] ?? false) !== true) continue;
+                $boardState[$domain] = [];
+                foreach (($snapshot['state'][$domain] ?? []) as $sceneId => $entries) {
+                    if (is_string($sceneId) && is_array($entries)) {
+                        $boardState[$domain][$sceneId] = array_values($entries);
+                    }
+                }
+            }
+            if (($config['domains']['pings'] ?? false) === true) {
+                $boardState['pings'] = array_values($snapshot['state']['pings'] ?? []);
+            }
+            foreach (($snapshot['state']['sceneConfig'] ?? []) as $sceneId => $sceneConfig) {
+                if (!is_string($sceneId) || !is_array($sceneConfig)) continue;
+                $boardState['sceneState'][$sceneId] = is_array($boardState['sceneState'][$sceneId] ?? null)
+                    ? $boardState['sceneState'][$sceneId]
+                    : [];
+                $fieldDomains = [
+                    'grid' => 'grid',
+                    'fogOfWar' => 'fog',
+                    'mapLevels' => 'levels',
+                    'userLevelState' => 'levels',
+                ];
+                foreach ($fieldDomains as $field => $domain) {
+                    if (
+                        ($config['domains'][$domain] ?? false) === true
+                        && array_key_exists($field, $sceneConfig)
+                    ) {
+                        $boardState['sceneState'][$sceneId][$field] = $sceneConfig[$field];
+                    }
+                }
+            }
+            foreach (($snapshot['state']['routing'] ?? []) as $field => $value) {
+                if (!is_string($field) || str_starts_with($field, '_')) continue;
+                if (
+                    ($field === 'activeSceneId' && ($config['domains']['scenes'] ?? false) === true)
+                    || ($field !== 'activeSceneId' && ($config['domains']['routing'] ?? false) === true)
+                ) {
+                    $boardState[$field] = $value;
+                }
             }
         }
     } catch (Throwable $error) {

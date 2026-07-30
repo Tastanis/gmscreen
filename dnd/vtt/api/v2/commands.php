@@ -19,7 +19,30 @@ try {
         'combat.uncomplete', 'round.advance', 'combat.end', 'combat.patch',
         'combat.automation.claim',
     ];
-    if (in_array($type, $combatTypes, true) && vttSyncV2DomainEnabled('combat')) {
+    $boardDomainFlags = [
+        'template.upsert' => 'templates',
+        'template.remove' => 'templates',
+        'drawing.upsert' => 'drawings',
+        'drawing.remove' => 'drawings',
+        'ping.add' => 'pings',
+        'fog.set' => 'fog',
+        'levels.set' => 'levels',
+        'level.user.set' => 'levels',
+        'level.activate' => 'levels',
+        'grid.set' => 'grid',
+        'scene.activate' => 'scenes',
+        'routing.set' => 'routing',
+    ];
+    $isBoardDomainCommand = isset($boardDomainFlags[$type])
+        && vttSyncV2DomainEnabled($boardDomainFlags[$type]);
+    if ($isBoardDomainCommand) {
+        $auth = vttSyncV2RequireAuthenticated();
+        $result = vttSyncV2Store()->acceptBoardDomainCommand(
+            $command,
+            (string) ($auth['user'] ?? ''),
+            (bool) ($auth['isGM'] ?? false)
+        );
+    } elseif (in_array($type, $combatTypes, true) && vttSyncV2DomainEnabled('combat')) {
         $auth = vttSyncV2RequireAuthenticated();
         $result = vttSyncV2Store()->acceptCombatCommand(
             $command,
@@ -56,7 +79,11 @@ try {
     if ($result['status'] === 'conflict') {
         $conflictSnapshot = $result['snapshot'] ?? null;
         if (
-            (in_array($type, ['token.move', 'placement.batch'], true) || in_array($type, $combatTypes, true))
+            (
+                $isBoardDomainCommand
+                || in_array($type, ['token.move', 'placement.batch'], true)
+                || in_array($type, $combatTypes, true)
+            )
             && is_array($conflictSnapshot)
         ) {
             $conflictSnapshot = vttSyncV2ProjectSnapshotForUser($conflictSnapshot, $auth);
@@ -74,7 +101,15 @@ try {
             ? trim($command['socketId'])
             : null;
         $socketId = $socketId === '' ? null : $socketId;
-        if (in_array($type, $combatTypes, true)) {
+        if ($isBoardDomainCommand) {
+            // Phase 6 payloads contain no hidden placement identity. They
+            // travel over the existing board event transport; HTTP replay
+            // remains authoritative if delivery is missed.
+            SyncV2PusherTransport::publishPublic(
+                vttSyncV2ProjectBoardEventForUser($event, ['isGM' => false]),
+                $socketId
+            );
+        } elseif (in_array($type, $combatTypes, true)) {
             if (vttSyncV2CombatEventIsPublicSafe($event)) {
                 SyncV2PusherTransport::publishPublic(
                     vttSyncV2ProjectCombatEventForUser($event, ['isGM' => false]),
@@ -109,12 +144,15 @@ try {
         && is_array($auth ?? null)
     ) {
         $responseEvent = vttSyncV2ProjectCombatEventForUser($event, $auth);
+    } elseif (is_array($event) && $isBoardDomainCommand && is_array($auth ?? null)) {
+        $responseEvent = vttSyncV2ProjectBoardEventForUser($event, $auth);
     }
 
     vttSyncV2Respond(200, [
         'success' => true,
         'mode' => (
-            in_array($type, ['token.move', 'placement.batch'], true)
+            $isBoardDomainCommand
+            || in_array($type, ['token.move', 'placement.batch'], true)
             || in_array($type, $combatTypes, true)
         ) ? 'live' : 'shadow',
         'idempotent' => (bool) ($result['idempotent'] ?? false),

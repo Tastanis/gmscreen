@@ -37,6 +37,7 @@ export function createTokenMovementRuntime({
   enabled = false,
   placementsEnabled = false,
   combatEnabled = false,
+  boardDomainsEnabled = false,
   commandsEndpoint,
   eventsEndpoint,
   snapshotEndpoint,
@@ -49,6 +50,7 @@ export function createTokenMovementRuntime({
   applyConfirmedPlacement = () => {},
   applyConfirmedPlacementBatch = () => {},
   applyConfirmedCombat = () => {},
+  applyConfirmedBoardDomain = () => {},
   reconcileSnapshot = () => {},
   onError = (error) => console.warn('[VTT Sync V2] Token movement failed', error),
 } = {}) {
@@ -60,6 +62,7 @@ export function createTokenMovementRuntime({
       submitMoves: async () => [],
       submitPlacementOps: async () => null,
       submitCombatCommand: async () => null,
+      submitBoardDomainCommands: async () => [],
       claimCombatAutomation: async () => null,
       overlayBoardState: (boardState) => boardState,
       getEffectivePlacement: () => null,
@@ -115,6 +118,21 @@ export function createTokenMovementRuntime({
           store.getConfirmedSnapshot(),
           context.event.payload?.combat ?? null,
           context.event.payload?.transition ?? null,
+          context
+        );
+      }
+      if (
+        changeSet?.templates
+        || changeSet?.drawings
+        || changeSet?.pings
+        || changeSet?.fog
+        || changeSet?.levels
+        || changeSet?.grid
+        || changeSet?.sceneRouting
+      ) {
+        applyConfirmedBoardDomain(
+          store.getConfirmedSnapshot(),
+          changeSet,
           context
         );
       }
@@ -342,6 +360,76 @@ export function createTokenMovementRuntime({
     }
   }
 
+  function boardDomainEntityRevision(type, sceneId, entityId) {
+    const state = store.getConfirmedSnapshot()?.state ?? {};
+    if (type.startsWith('template.')) {
+      return Number(state.templates?.[sceneId]?.[entityId]?._entityRevision) || 0;
+    }
+    if (type.startsWith('drawing.')) {
+      return Number(state.drawings?.[sceneId]?.[entityId]?._entityRevision) || 0;
+    }
+    if (
+      type === 'fog.set'
+      || type === 'levels.set'
+      || type === 'level.user.set'
+      || type === 'level.activate'
+      || type === 'grid.set'
+    ) {
+      return Number(state.sceneConfig?.[sceneId]?._revision) || 0;
+    }
+    if (type === 'scene.activate' || type === 'routing.set') {
+      return Number(state.routing?._revision) || 0;
+    }
+    return 0;
+  }
+
+  async function submitBoardDomainCommands(commands, retry = true) {
+    if (!boardDomainsEnabled || !Array.isArray(commands) || commands.length === 0) {
+      return [];
+    }
+    await start();
+    const results = [];
+    for (const descriptor of commands) {
+      const type = String(descriptor?.type ?? '');
+      const sceneId = descriptor?.sceneId ?? null;
+      const entityId = descriptor?.entityId ?? null;
+      try {
+        results.push(await commandClient.submit(
+          type,
+          descriptor?.payload ?? {},
+          {
+            sceneId,
+            entityId,
+            entityRevision: boardDomainEntityRevision(type, sceneId, entityId),
+          }
+        ));
+      } catch (error) {
+        const conflictSnapshot = error?.response?.snapshot;
+        const retryableSharedConfig = new Set([
+          'fog.set', 'levels.set', 'level.user.set', 'level.activate',
+          'grid.set', 'scene.activate', 'routing.set',
+        ]);
+        if (error?.status === 409 && conflictSnapshot) {
+          store.replaceSnapshot(conflictSnapshot, { authoritative: true, source: 'conflict' });
+          reconcileSnapshot(store.getConfirmedSnapshot(), { source: 'conflict' });
+        }
+        if (
+          retry
+          && error?.status === 409
+          && conflictSnapshot
+          && retryableSharedConfig.has(type)
+        ) {
+          return [
+            ...results,
+            ...await submitBoardDomainCommands(commands.slice(results.length), false),
+          ];
+        }
+        throw error;
+      }
+    }
+    return results;
+  }
+
   function automationClaimOperationId(transitionOperationId) {
     const direct = `combat-automation:${transitionOperationId}`;
     if (direct.length <= 128) return direct;
@@ -403,6 +491,35 @@ export function createTokenMovementRuntime({
           : {};
       boardState.sceneState[sceneId].combat = clone(combat);
     }
+    for (const [sceneId, templates] of Object.entries(snapshot?.state?.templates ?? {})) {
+      boardState.templates = boardState.templates && typeof boardState.templates === 'object'
+        ? boardState.templates
+        : {};
+      boardState.templates[sceneId] = Object.values(templates ?? {}).map((entry) => clone(entry));
+    }
+    for (const [sceneId, drawings] of Object.entries(snapshot?.state?.drawings ?? {})) {
+      boardState.drawings = boardState.drawings && typeof boardState.drawings === 'object'
+        ? boardState.drawings
+        : {};
+      boardState.drawings[sceneId] = Object.values(drawings ?? {}).map((entry) => clone(entry));
+    }
+    if (snapshot?.state?.pings && typeof snapshot.state.pings === 'object') {
+      boardState.pings = Object.values(snapshot.state.pings).map((entry) => clone(entry));
+    }
+    for (const [sceneId, config] of Object.entries(snapshot?.state?.sceneConfig ?? {})) {
+      boardState.sceneState[sceneId] =
+        boardState.sceneState[sceneId] && typeof boardState.sceneState[sceneId] === 'object'
+          ? boardState.sceneState[sceneId]
+          : {};
+      for (const field of ['grid', 'fogOfWar', 'mapLevels', 'userLevelState']) {
+        if (Object.prototype.hasOwnProperty.call(config ?? {}, field)) {
+          boardState.sceneState[sceneId][field] = clone(config[field]);
+        }
+      }
+    }
+    for (const [field, value] of Object.entries(snapshot?.state?.routing ?? {})) {
+      if (!field.startsWith('_')) boardState[field] = clone(value);
+    }
     return boardState;
   }
 
@@ -418,6 +535,7 @@ export function createTokenMovementRuntime({
     submitMoves,
     submitPlacementOps,
     submitCombatCommand,
+    submitBoardDomainCommands,
     claimCombatAutomation,
     overlayBoardState,
     getEffectivePlacement,

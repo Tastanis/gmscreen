@@ -184,6 +184,295 @@ final class SyncV2Store
     }
 
     /**
+     * One-time Phase 6 import of the remaining shared board domains.
+     * Collections are converted to id-keyed canonical maps while scene
+     * configuration and routing retain their established public shapes.
+     */
+    public function migrateLegacyBoardDomains(array $boardState): void
+    {
+        $this->pdo->exec('BEGIN IMMEDIATE');
+        try {
+            $snapshot = $this->getSnapshot();
+            $state = $snapshot['state'];
+            if (($state['boardDomainMigration']['version'] ?? 0) >= 1) {
+                $this->pdo->exec('COMMIT');
+                return;
+            }
+
+            foreach (['templates', 'drawings'] as $domain) {
+                $canonical = is_array($state[$domain] ?? null) ? $state[$domain] : [];
+                foreach (($boardState[$domain] ?? []) as $sceneId => $entries) {
+                    if (!is_string($sceneId) || !is_array($entries)) {
+                        continue;
+                    }
+                    $canonical[$sceneId] = is_array($canonical[$sceneId] ?? null)
+                        ? $canonical[$sceneId]
+                        : [];
+                    foreach ($entries as $entry) {
+                        if (!is_array($entry)) {
+                            continue;
+                        }
+                        $id = $this->normalizeOptionalId($entry['id'] ?? null);
+                        if ($id === null) {
+                            continue;
+                        }
+                        $existing = is_array($canonical[$sceneId][$id] ?? null)
+                            ? $canonical[$sceneId][$id]
+                            : [];
+                        $canonical[$sceneId][$id] = [
+                            ...$entry,
+                            ...$existing,
+                            'id' => $id,
+                            '_entityRevision' => max(0, (int) ($existing['_entityRevision'] ?? 0)),
+                        ];
+                    }
+                }
+                $state[$domain] = $canonical;
+            }
+
+            $pings = is_array($state['pings'] ?? null) ? $state['pings'] : [];
+            foreach (($boardState['pings'] ?? []) as $ping) {
+                if (!is_array($ping)) {
+                    continue;
+                }
+                $id = $this->normalizeOptionalId($ping['id'] ?? null);
+                if ($id !== null) {
+                    $pings[$id] = [...$ping, 'id' => $id];
+                }
+            }
+            $state['pings'] = $pings;
+
+            $sceneConfig = is_array($state['sceneConfig'] ?? null) ? $state['sceneConfig'] : [];
+            foreach (($boardState['sceneState'] ?? []) as $sceneId => $entry) {
+                if (!is_string($sceneId) || !is_array($entry)) {
+                    continue;
+                }
+                $existing = is_array($sceneConfig[$sceneId] ?? null)
+                    ? $sceneConfig[$sceneId]
+                    : [];
+                foreach (['grid', 'fogOfWar', 'mapLevels', 'userLevelState'] as $field) {
+                    if (array_key_exists($field, $entry)) {
+                        $existing[$field] = $entry[$field];
+                    }
+                }
+                $existing['_revision'] = max(0, (int) ($existing['_revision'] ?? 0));
+                $sceneConfig[$sceneId] = $existing;
+            }
+            $state['sceneConfig'] = $sceneConfig;
+
+            $routing = is_array($state['routing'] ?? null) ? $state['routing'] : [];
+            foreach ([
+                'activeSceneId', 'mapUrl', 'playerMapDisabled',
+                'playerActiveSceneId', 'playerMapUrl', 'playerThumbnailUrl',
+            ] as $field) {
+                if (array_key_exists($field, $boardState)) {
+                    $routing[$field] = $boardState[$field];
+                }
+            }
+            $routing['_revision'] = max(0, (int) ($routing['_revision'] ?? 0));
+            $state['routing'] = $routing;
+            $state['boardDomainMigration'] = [
+                'version' => 1,
+                'migratedAt' => $this->nowMilliseconds(),
+            ];
+            $this->updateWorldState($snapshot['revision'], $state, $this->nowMilliseconds());
+            $this->pdo->exec('COMMIT');
+        } catch (Throwable $error) {
+            $this->rollbackTransactionSilently();
+            throw $error;
+        }
+    }
+
+    /**
+     * Accept one explicit Phase 6 board-domain command. The public command
+     * catalog deliberately has no generic whole-board replacement command.
+     *
+     * @return array{status:string,event?:array,snapshot?:array,idempotent?:bool,error?:string}
+     */
+    public function acceptBoardDomainCommand(
+        array $command,
+        string $actorId,
+        bool $isGm
+    ): array {
+        $normalized = $this->normalizeBoardDomainCommand($command);
+        $actorId = trim($actorId);
+        if ($actorId === '') {
+            throw new InvalidArgumentException('An authenticated actor ID is required.');
+        }
+
+        $this->pdo->exec('BEGIN IMMEDIATE');
+        try {
+            $existing = $this->findEventByOperationId($normalized['operationId']);
+            if ($existing !== null) {
+                $this->pdo->exec('COMMIT');
+                return ['status' => 'accepted', 'event' => $existing, 'idempotent' => true];
+            }
+            $snapshot = $this->getSnapshot();
+            if ($normalized['baseRevision'] > $snapshot['revision']) {
+                return $this->rollbackConflict('base_revision_ahead', $snapshot);
+            }
+
+            $type = $normalized['type'];
+            $sceneId = $normalized['sceneId'];
+            $entityId = $normalized['entityId'];
+            $payload = $normalized['payload'];
+            $this->assertBoardDomainPermission($type, $payload, $actorId, $isGm);
+            $state = $snapshot['state'];
+            $eventType = '';
+            $eventPayload = [];
+            $entityRevision = null;
+
+            if (str_starts_with($type, 'template.') || str_starts_with($type, 'drawing.')) {
+                $domain = str_starts_with($type, 'template.') ? 'templates' : 'drawings';
+                $payloadKey = $domain === 'templates' ? 'template' : 'drawing';
+                $state[$domain] = is_array($state[$domain] ?? null) ? $state[$domain] : [];
+                $state[$domain][$sceneId] = is_array($state[$domain][$sceneId] ?? null)
+                    ? $state[$domain][$sceneId]
+                    : [];
+                $current = is_array($state[$domain][$sceneId][$entityId] ?? null)
+                    ? $state[$domain][$sceneId][$entityId]
+                    : null;
+                $currentRevision = max(0, (int) ($current['_entityRevision'] ?? 0));
+                if ($normalized['entityRevision'] !== $currentRevision) {
+                    return $this->rollbackConflict('entity_revision_mismatch', $snapshot);
+                }
+                $entityRevision = $currentRevision + 1;
+                if (str_ends_with($type, '.remove')) {
+                    if ($current === null) {
+                        return $this->rollbackConflict('entity_missing', $snapshot);
+                    }
+                    unset($state[$domain][$sceneId][$entityId]);
+                    $eventType = $domain === 'templates' ? 'template.removed' : 'drawing.removed';
+                } else {
+                    $entry = $payload[$payloadKey];
+                    $entry['id'] = $entityId;
+                    $entry['_entityRevision'] = $entityRevision;
+                    $state[$domain][$sceneId][$entityId] = $entry;
+                    $eventType = $domain === 'templates' ? 'template.updated' : 'drawing.updated';
+                    $eventPayload = [$payloadKey => $entry];
+                }
+            } elseif ($type === 'ping.add') {
+                $state['pings'] = is_array($state['pings'] ?? null) ? $state['pings'] : [];
+                if (isset($state['pings'][$entityId])) {
+                    return $this->rollbackConflict('ping_exists', $snapshot);
+                }
+                $ping = $payload['ping'];
+                $ping['id'] = $entityId;
+                $ping['sceneId'] = $sceneId;
+                $ping['authorId'] = $actorId;
+                $ping['createdAt'] = $this->nowMilliseconds();
+                $state['pings'][$entityId] = $ping;
+                $cutoff = $this->nowMilliseconds() - 30000;
+                foreach ($state['pings'] as $id => $entry) {
+                    if (!is_array($entry) || (int) ($entry['createdAt'] ?? 0) < $cutoff) {
+                        unset($state['pings'][$id]);
+                    }
+                }
+                $eventType = 'ping.added';
+                $eventPayload = ['ping' => $ping];
+            } elseif (in_array($type, [
+                'fog.set', 'levels.set', 'level.user.set',
+                'level.activate', 'grid.set',
+            ], true)) {
+                $state['sceneConfig'] = is_array($state['sceneConfig'] ?? null)
+                    ? $state['sceneConfig']
+                    : [];
+                $config = is_array($state['sceneConfig'][$sceneId] ?? null)
+                    ? $state['sceneConfig'][$sceneId]
+                    : [];
+                $currentRevision = max(0, (int) ($config['_revision'] ?? 0));
+                if ($normalized['entityRevision'] !== $currentRevision) {
+                    return $this->rollbackConflict('entity_revision_mismatch', $snapshot);
+                }
+                $config['_revision'] = $currentRevision + 1;
+                $entityRevision = $config['_revision'];
+                if ($type === 'fog.set') {
+                    $config['fogOfWar'] = $payload['fogOfWar'];
+                    $eventType = 'fog.replaced';
+                    $eventPayload = ['fogOfWar' => $config['fogOfWar']];
+                } elseif ($type === 'levels.set') {
+                    $config['mapLevels'] = $payload['mapLevels'];
+                    $eventType = 'levels.replaced';
+                    $eventPayload = ['mapLevels' => $config['mapLevels']];
+                } elseif ($type === 'grid.set') {
+                    $config['grid'] = $payload['grid'];
+                    $eventType = 'grid.changed';
+                    $eventPayload = ['grid' => $config['grid']];
+                } else {
+                    $config['userLevelState'] = is_array($config['userLevelState'] ?? null)
+                        ? $config['userLevelState']
+                        : [];
+                    if ($type === 'level.user.set') {
+                        $userId = strtolower(trim((string) $payload['userId']));
+                        $config['userLevelState'][$userId] = $payload['entry'];
+                        $eventType = 'level.userChanged';
+                        $eventPayload = ['userId' => $userId, 'entry' => $payload['entry']];
+                    } else {
+                        foreach ($payload['userIds'] as $userId) {
+                            $config['userLevelState'][$userId] = [
+                                'levelId' => $payload['levelId'],
+                                'source' => 'activate',
+                                'updatedAt' => $this->nowMilliseconds(),
+                            ];
+                        }
+                        $eventType = 'level.activated';
+                        $eventPayload = [
+                            'levelId' => $payload['levelId'],
+                            'userIds' => $payload['userIds'],
+                            'userLevelState' => $config['userLevelState'],
+                        ];
+                    }
+                }
+                $state['sceneConfig'][$sceneId] = $config;
+            } elseif ($type === 'scene.activate' || $type === 'routing.set') {
+                $state['routing'] = is_array($state['routing'] ?? null) ? $state['routing'] : [];
+                $currentRevision = max(0, (int) ($state['routing']['_revision'] ?? 0));
+                if ($normalized['entityRevision'] !== $currentRevision) {
+                    return $this->rollbackConflict('entity_revision_mismatch', $snapshot);
+                }
+                $state['routing']['_revision'] = $currentRevision + 1;
+                $entityRevision = $state['routing']['_revision'];
+                if ($type === 'scene.activate') {
+                    $state['routing']['activeSceneId'] = $sceneId;
+                    $eventType = 'scene.activated';
+                    $eventPayload = ['routing' => $state['routing']];
+                } else {
+                    foreach ($payload['routing'] as $field => $value) {
+                        $state['routing'][$field] = $value;
+                    }
+                    $eventType = 'routing.changed';
+                    $eventPayload = ['routing' => $state['routing']];
+                }
+            }
+
+            $revision = $snapshot['revision'] + 1;
+            $serverTime = $this->nowMilliseconds();
+            $event = [
+                'revision' => $revision,
+                'operationId' => $normalized['operationId'],
+                'type' => $eventType,
+                'actorId' => $actorId,
+                'sceneId' => $sceneId,
+                'entityId' => $entityId,
+                'entityRevision' => $entityRevision,
+                'payload' => $eventPayload,
+                'serverTime' => $serverTime,
+            ];
+            $this->insertEvent($event);
+            $this->updateWorldState($revision, $state, $serverTime);
+            if ($revision % $this->snapshotInterval === 0) {
+                $this->insertSnapshot($revision, $state, $serverTime);
+            }
+            $this->pruneEvents($revision);
+            $this->pdo->exec('COMMIT');
+            return ['status' => 'accepted', 'event' => $event, 'idempotent' => false];
+        } catch (Throwable $error) {
+            $this->rollbackTransactionSilently();
+            throw $error;
+        }
+    }
+
+    /**
      * Decide one combat transition from canonical state under the same SQLite
      * write lock used to append its event. Advisory browser locks, timestamps,
      * and submitted full-board snapshots have no authority here.
@@ -1119,6 +1408,170 @@ final class SyncV2Store
             'column' => $column,
             'row' => $row,
         ];
+    }
+
+    private function normalizeBoardDomainCommand(array $command): array
+    {
+        $operationId = trim((string) ($command['operationId'] ?? ''));
+        if (
+            strlen($operationId) < 8
+            || strlen($operationId) > 128
+            || preg_match('/^[A-Za-z0-9._:-]+$/', $operationId) !== 1
+        ) {
+            throw new InvalidArgumentException('operationId is invalid.');
+        }
+        $type = (string) ($command['type'] ?? '');
+        $allowed = [
+            'template.upsert', 'template.remove',
+            'drawing.upsert', 'drawing.remove',
+            'ping.add', 'fog.set', 'levels.set',
+            'level.user.set', 'level.activate', 'grid.set',
+            'scene.activate', 'routing.set',
+        ];
+        if (!in_array($type, $allowed, true)) {
+            throw new InvalidArgumentException('Unsupported board-domain command.');
+        }
+        $baseRevision = filter_var(
+            $command['baseRevision'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 0]]
+        );
+        $entityRevision = filter_var(
+            $command['entityRevision'] ?? 0,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 0]]
+        );
+        $payload = $command['payload'] ?? [];
+        if ($baseRevision === false || $entityRevision === false || !is_array($payload)) {
+            throw new InvalidArgumentException('Board-domain command revisions and payload are invalid.');
+        }
+        if (strlen($this->encodeJson($payload)) > 1048576) {
+            throw new InvalidArgumentException('Board-domain command payload is too large.');
+        }
+        $sceneId = $this->normalizeOptionalId($command['sceneId'] ?? null);
+        $entityId = $this->normalizeOptionalId($command['entityId'] ?? null);
+        if ($type !== 'routing.set' && $sceneId === null) {
+            throw new InvalidArgumentException('Board-domain command requires sceneId.');
+        }
+        if (in_array($type, [
+            'template.upsert', 'template.remove',
+            'drawing.upsert', 'drawing.remove', 'ping.add',
+        ], true) && $entityId === null) {
+            throw new InvalidArgumentException('Board-domain command requires entityId.');
+        }
+        if ($type === 'template.upsert' && !is_array($payload['template'] ?? null)) {
+            throw new InvalidArgumentException('template.upsert requires template.');
+        }
+        if ($type === 'drawing.upsert' && !is_array($payload['drawing'] ?? null)) {
+            throw new InvalidArgumentException('drawing.upsert requires drawing.');
+        }
+        if ($type === 'ping.add' && !is_array($payload['ping'] ?? null)) {
+            throw new InvalidArgumentException('ping.add requires ping.');
+        }
+        if ($type === 'ping.add') {
+            $x = $payload['ping']['x'] ?? null;
+            $y = $payload['ping']['y'] ?? null;
+            if (
+                !is_numeric($x) || !is_numeric($y)
+                || !is_finite((float) $x) || !is_finite((float) $y)
+                || (float) $x < 0 || (float) $x > 1
+                || (float) $y < 0 || (float) $y > 1
+            ) {
+                throw new InvalidArgumentException('ping.add coordinates must be between zero and one.');
+            }
+            $payload['ping'] = [
+                'id' => $entityId,
+                'sceneId' => $sceneId,
+                'x' => (float) $x,
+                'y' => (float) $y,
+                'type' => ($payload['ping']['type'] ?? '') === 'focus' ? 'focus' : 'ping',
+            ];
+        }
+        if ($type === 'fog.set' && !is_array($payload['fogOfWar'] ?? null)) {
+            throw new InvalidArgumentException('fog.set requires fogOfWar.');
+        }
+        if ($type === 'levels.set' && !is_array($payload['mapLevels'] ?? null)) {
+            throw new InvalidArgumentException('levels.set requires mapLevels.');
+        }
+        if ($type === 'grid.set' && !is_array($payload['grid'] ?? null)) {
+            throw new InvalidArgumentException('grid.set requires grid.');
+        }
+        if ($type === 'level.user.set') {
+            $userId = strtolower(trim((string) ($payload['userId'] ?? '')));
+            $levelId = trim((string) ($payload['entry']['levelId'] ?? ''));
+            if ($userId === '' || $levelId === '') {
+                throw new InvalidArgumentException('level.user.set requires userId and levelId.');
+            }
+            $payload['userId'] = $userId;
+            $payload['entry'] = [
+                'levelId' => $levelId,
+                'source' => trim((string) ($payload['entry']['source'] ?? 'manual')) ?: 'manual',
+                'updatedAt' => $this->nowMilliseconds(),
+            ];
+            $tokenId = $this->normalizeOptionalId($command['payload']['entry']['tokenId'] ?? null);
+            if ($tokenId !== null) {
+                $payload['entry']['tokenId'] = $tokenId;
+            }
+        }
+        if ($type === 'level.activate') {
+            $levelId = trim((string) ($payload['levelId'] ?? ''));
+            $userIds = [];
+            foreach (($payload['userIds'] ?? []) as $userId) {
+                $id = strtolower(trim((string) $userId));
+                if ($id !== '' && !in_array($id, $userIds, true)) {
+                    $userIds[] = $id;
+                }
+            }
+            if ($levelId === '' || $userIds === []) {
+                throw new InvalidArgumentException('level.activate requires levelId and userIds.');
+            }
+            $payload = compact('levelId', 'userIds');
+        }
+        if ($type === 'routing.set') {
+            $routing = is_array($payload['routing'] ?? null) ? $payload['routing'] : [];
+            $allowedRouting = [
+                'activeSceneId', 'mapUrl', 'playerMapDisabled', 'playerActiveSceneId',
+                'playerMapUrl', 'playerThumbnailUrl',
+            ];
+            $routing = array_intersect_key($routing, array_flip($allowedRouting));
+            if ($routing === []) {
+                throw new InvalidArgumentException('routing.set requires supported routing fields.');
+            }
+            $payload = ['routing' => $routing];
+        }
+        return [
+            'operationId' => $operationId,
+            'type' => $type,
+            'baseRevision' => (int) $baseRevision,
+            'entityRevision' => (int) $entityRevision,
+            'sceneId' => $sceneId,
+            'entityId' => $entityId,
+            'payload' => $payload,
+        ];
+    }
+
+    private function assertBoardDomainPermission(
+        string $type,
+        array $payload,
+        string $actorId,
+        bool $isGm
+    ): void {
+        if ($isGm) {
+            return;
+        }
+        if (in_array($type, [
+            'template.upsert', 'drawing.upsert', 'drawing.remove', 'ping.add',
+        ], true)) {
+            return;
+        }
+        if ($type === 'level.user.set') {
+            $target = strtolower(trim((string) ($payload['userId'] ?? '')));
+            if ($target !== strtolower(trim($actorId))) {
+                throw new InvalidArgumentException('Players may only change their own viewer level.');
+            }
+            return;
+        }
+        throw new InvalidArgumentException('This board-domain command is GM-only.');
     }
 
     private function normalizePlacementBatch(array $command): array

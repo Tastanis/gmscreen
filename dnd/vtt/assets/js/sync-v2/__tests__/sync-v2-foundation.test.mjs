@@ -59,6 +59,59 @@ test('entity store refuses revision decrease even for a recovery snapshot', () =
   );
 });
 
+test('remaining board domains reduce independently without a snapshot change set', () => {
+  let snapshot = {
+    revision: 0,
+    state: {
+      placements: { 'scene-1': { token: { id: 'token', column: 1, row: 1 } } },
+      templates: { 'scene-1': {} },
+      drawings: { 'scene-1': {} },
+      sceneConfig: { 'scene-1': { _revision: 0 } },
+      routing: { _revision: 0 },
+    },
+    appliedOperationIds: [],
+  };
+  const placementBranch = snapshot.state.placements;
+  const events = [
+    {
+      revision: 1, operationId: 'template-1', type: 'template.updated',
+      sceneId: 'scene-1', entityId: 'template-1', entityRevision: 1,
+      payload: { template: { id: 'template-1', shape: 'circle' } },
+    },
+    {
+      revision: 2, operationId: 'drawing-1', type: 'drawing.updated',
+      sceneId: 'scene-1', entityId: 'drawing-1', entityRevision: 1,
+      payload: { drawing: { id: 'drawing-1', points: [[0, 0], [1, 1]] } },
+    },
+    {
+      revision: 3, operationId: 'fog-1', type: 'fog.replaced',
+      sceneId: 'scene-1', entityRevision: 1,
+      payload: { fogOfWar: { byLevel: { 'level-0': { enabled: true } } } },
+    },
+    {
+      revision: 4, operationId: 'grid-1', type: 'grid.changed',
+      sceneId: 'scene-1', entityRevision: 2,
+      payload: { grid: { size: 72, visible: true } },
+    },
+    {
+      revision: 5, operationId: 'ping-1', type: 'ping.added',
+      sceneId: 'scene-1', entityId: 'ping-1',
+      payload: { ping: { id: 'ping-1', x: 0.5, y: 0.5 } },
+    },
+  ];
+  const expectedKeys = ['templates', 'drawings', 'fog', 'grid', 'pings'];
+  events.forEach((event, index) => {
+    const reduced = reduceCanonicalEvent(snapshot, event);
+    assert.equal(reduced.status, 'applied');
+    assert.equal(reduced.changeSet[expectedKeys[index]], true);
+    assert.equal(reduced.changeSet.snapshot, undefined);
+    assert.strictEqual(reduced.snapshot.state.placements, placementBranch);
+    snapshot = reduced.snapshot;
+  });
+  assert.equal(snapshot.state.sceneConfig['scene-1'].grid.size, 72);
+  assert.equal(snapshot.state.pings['ping-1'].x, 0.5);
+});
+
 test('token movement reducer returns a one-token change set without broad domains', () => {
   const initial = {
     revision: 4,

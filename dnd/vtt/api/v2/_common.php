@@ -182,6 +182,31 @@ function vttSyncV2ProjectSnapshotForUser(array $snapshot, array $auth): array
                 $placements
             );
         }
+        $routing = is_array($snapshot['state']['routing'] ?? null)
+            ? $snapshot['state']['routing']
+            : [];
+        if (!empty($routing['playerMapDisabled'])) {
+            $routing['activeSceneId'] = null;
+            $routing['mapUrl'] = null;
+            $routing['thumbnailUrl'] = null;
+        } else {
+            if (is_string($routing['playerActiveSceneId'] ?? null)) {
+                $routing['activeSceneId'] = $routing['playerActiveSceneId'];
+            }
+            if (is_string($routing['playerMapUrl'] ?? null)) {
+                $routing['mapUrl'] = $routing['playerMapUrl'];
+            }
+            if (is_string($routing['playerThumbnailUrl'] ?? null)) {
+                $routing['thumbnailUrl'] = $routing['playerThumbnailUrl'];
+            }
+        }
+        unset(
+            $routing['playerMapDisabled'],
+            $routing['playerActiveSceneId'],
+            $routing['playerMapUrl'],
+            $routing['playerThumbnailUrl']
+        );
+        $snapshot['state']['routing'] = $routing;
     }
     return $snapshot;
 }
@@ -207,6 +232,10 @@ function vttSyncV2ProjectRecoveryForUser(array $recovery, array $auth): array
             $recovery['events'][$index] = vttSyncV2ProjectCombatEventForUser($event, $auth);
             continue;
         }
+        if (in_array(($event['type'] ?? ''), ['scene.activated', 'routing.changed'], true)) {
+            $recovery['events'][$index] = vttSyncV2ProjectBoardEventForUser($event, $auth);
+            continue;
+        }
         if (($event['type'] ?? '') !== 'token.moved') {
             continue;
         }
@@ -227,6 +256,28 @@ function vttSyncV2ProjectRecoveryForUser(array $recovery, array $auth): array
         }
     }
     return $recovery;
+}
+
+function vttSyncV2ProjectBoardEventForUser(array $event, array $auth): array
+{
+    if (($auth['isGM'] ?? false) === true) {
+        return $event;
+    }
+    if (!in_array(($event['type'] ?? ''), ['scene.activated', 'routing.changed'], true)) {
+        $event['actorId'] = null;
+        return $event;
+    }
+    $snapshot = vttSyncV2ProjectSnapshotForUser(vttSyncV2Store()->getSnapshot(), $auth);
+    $routing = $snapshot['state']['routing'] ?? [];
+    $event['sceneId'] = is_string($routing['activeSceneId'] ?? null)
+        ? $routing['activeSceneId']
+        : null;
+    if (($event['type'] ?? '') === 'scene.activated' && $event['sceneId'] === null) {
+        $event['type'] = 'routing.changed';
+    }
+    $event['payload'] = ['routing' => $routing];
+    $event['actorId'] = null;
+    return $event;
 }
 
 function vttSyncV2ProjectCombatEventForUser(array $event, array $auth): array
@@ -354,6 +405,18 @@ function vttSyncV2Store(): SyncV2Store
     }
     if (vttSyncV2DomainEnabled('combat')) {
         $store->migrateLegacyCombat(loadVttJson('board-state.json'));
+    }
+    if (
+        vttSyncV2DomainEnabled('templates')
+        || vttSyncV2DomainEnabled('drawings')
+        || vttSyncV2DomainEnabled('pings')
+        || vttSyncV2DomainEnabled('fog')
+        || vttSyncV2DomainEnabled('levels')
+        || vttSyncV2DomainEnabled('scenes')
+        || vttSyncV2DomainEnabled('grid')
+        || vttSyncV2DomainEnabled('routing')
+    ) {
+        $store->migrateLegacyBoardDomains(loadVttJson('board-state.json'));
     }
     return $store;
 }

@@ -446,6 +446,97 @@ try {
     );
     expect($store->getSnapshot()['revision'] === 16, 'Duplicate automation claims must not advance revision.');
 
+    $store->migrateLegacyBoardDomains([
+        'activeSceneId' => 'scene-1',
+        'templates' => ['scene-1' => [['id' => 'template-1', 'shape' => 'circle']]],
+        'drawings' => ['scene-1' => [['id' => 'drawing-1', 'points' => [[0, 0], [1, 1]]]]],
+        'pings' => [],
+        'sceneState' => [
+            'scene-1' => [
+                'grid' => ['size' => 64, 'visible' => true],
+                'fogOfWar' => ['byLevel' => []],
+                'mapLevels' => ['levels' => []],
+                'userLevelState' => [],
+            ],
+        ],
+    ]);
+    $templateUpdate = $store->acceptBoardDomainCommand([
+        'operationId' => 'template-update-0001',
+        'type' => 'template.upsert',
+        'baseRevision' => 16,
+        'entityRevision' => 0,
+        'sceneId' => 'scene-1',
+        'entityId' => 'template-1',
+        'payload' => ['template' => ['id' => 'template-1', 'shape' => 'cone']],
+    ], 'player-a', false);
+    expect(
+        $templateUpdate['event']['type'] === 'template.updated'
+        && $templateUpdate['event']['entityRevision'] === 1,
+        'Template upsert must emit one entity-revisioned canonical event.'
+    );
+    $staleTemplate = $store->acceptBoardDomainCommand([
+        'operationId' => 'template-update-stale',
+        'type' => 'template.upsert',
+        'baseRevision' => 16,
+        'entityRevision' => 0,
+        'sceneId' => 'scene-1',
+        'entityId' => 'template-1',
+        'payload' => ['template' => ['id' => 'template-1', 'shape' => 'square']],
+    ], 'player-b', false);
+    expect($staleTemplate['status'] === 'conflict', 'A stale same-template write must conflict.');
+
+    $playerLevel = $store->acceptBoardDomainCommand([
+        'operationId' => 'level-user-player-a',
+        'type' => 'level.user.set',
+        'baseRevision' => 17,
+        'entityRevision' => 0,
+        'sceneId' => 'scene-1',
+        'payload' => [
+            'userId' => 'player-a',
+            'entry' => ['levelId' => 'level-0', 'source' => 'manual'],
+        ],
+    ], 'player-a', false);
+    expect($playerLevel['event']['type'] === 'level.userChanged', 'Players may route their own view.');
+    $levelPermissionRejected = false;
+    try {
+        $store->acceptBoardDomainCommand([
+            'operationId' => 'level-user-player-bad',
+            'type' => 'level.user.set',
+            'baseRevision' => 18,
+            'entityRevision' => 1,
+            'sceneId' => 'scene-1',
+            'payload' => [
+                'userId' => 'player-b',
+                'entry' => ['levelId' => 'level-0'],
+            ],
+        ], 'player-a', false);
+    } catch (InvalidArgumentException $error) {
+        $levelPermissionRejected = true;
+    }
+    expect($levelPermissionRejected, 'Players must not route another user.');
+
+    $gridUpdate = $store->acceptBoardDomainCommand([
+        'operationId' => 'grid-update-0001',
+        'type' => 'grid.set',
+        'baseRevision' => 18,
+        'entityRevision' => 1,
+        'sceneId' => 'scene-1',
+        'payload' => ['grid' => ['size' => 72, 'visible' => true]],
+    ], 'GM', true);
+    expect($gridUpdate['event']['type'] === 'grid.changed', 'Grid changes must be explicit events.');
+    $routeUpdate = $store->acceptBoardDomainCommand([
+        'operationId' => 'routing-update-0001',
+        'type' => 'routing.set',
+        'baseRevision' => 19,
+        'entityRevision' => 0,
+        'payload' => ['routing' => ['playerMapDisabled' => true]],
+    ], 'GM', true);
+    expect($routeUpdate['event']['type'] === 'routing.changed', 'Viewer routing must be canonical.');
+    expect(
+        $store->getSnapshot()['state']['sceneConfig']['scene-1']['grid']['size'] === 72,
+        'Canonical grid state must retain the accepted update.'
+    );
+
     echo json_encode([
         'success' => true,
         'revision' => $store->getSnapshot()['revision'],

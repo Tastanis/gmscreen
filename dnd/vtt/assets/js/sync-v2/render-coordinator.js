@@ -8,7 +8,9 @@ const METRIC_NAMES = Object.freeze([
   'fogPatches',
   'templatePatches',
   'drawingPatches',
+  'pingPatches',
   'levelPatches',
+  'gridPatches',
   'sceneMounts',
   'mapLoads',
   'fullBoardReconciliations',
@@ -25,6 +27,8 @@ export function createRenderCoordinator({
   fogRenderer,
   templateRenderer,
   drawingRenderer,
+  pingRenderer,
+  gridRenderer,
   sceneRenderer,
   snapshotRenderer = null,
 } = {}) {
@@ -87,12 +91,26 @@ export function createRenderCoordinator({
       );
       countPatched('drawingPatches', result);
     },
+    pings: (changeSet, context) => {
+      const result = withSnapshot(
+        context,
+        (snapshot) => pingRenderer?.patch?.(snapshot, context)
+      );
+      countPatched('pingPatches', result);
+    },
     levels: (changeSet, context) => {
       const result = withSnapshot(
         context,
         (snapshot) => sceneRenderer?.patchLevel?.(snapshot, context)
       );
       countPatched('levelPatches', result);
+    },
+    grid: (changeSet, context) => {
+      const result = withSnapshot(
+        context,
+        (snapshot) => gridRenderer?.patch?.(snapshot, context)
+      );
+      countPatched('gridPatches', result);
     },
     sceneRouting: (changeSet, context) => {
       const result = withSnapshot(

@@ -23,7 +23,9 @@ function emptyChangeSet(revision) {
     fog: false,
     templates: false,
     drawings: false,
+    pings: false,
     levels: false,
+    grid: false,
     sceneRouting: false,
     shadow: false,
   };
@@ -302,6 +304,102 @@ function reduceFogPatched(state, event, changes) {
   changes.fog = true;
 }
 
+function reduceFogReplaced(state, event, changes) {
+  const sceneId = typeof event.sceneId === 'string' ? event.sceneId.trim() : '';
+  const fogOfWar = event.payload?.fogOfWar;
+  if (!sceneId || !fogOfWar || typeof fogOfWar !== 'object') {
+    throw new Error('fog.replaced requires sceneId and fogOfWar');
+  }
+  const sceneConfig = state.sceneConfig && typeof state.sceneConfig === 'object'
+    ? { ...state.sceneConfig }
+    : {};
+  sceneConfig[sceneId] = {
+    ...(sceneConfig[sceneId] ?? {}),
+    fogOfWar: clone(fogOfWar),
+    _revision: Number(event.entityRevision) || event.revision,
+  };
+  state.sceneConfig = sceneConfig;
+  changes.fog = true;
+}
+
+function reduceSceneConfigField(state, event, changes, field, payloadKey, changeKey) {
+  const sceneId = typeof event.sceneId === 'string' ? event.sceneId.trim() : '';
+  const value = event.payload?.[payloadKey];
+  if (!sceneId || !value || typeof value !== 'object') {
+    throw new Error(`${event.type} requires sceneId and ${payloadKey}`);
+  }
+  const sceneConfig = state.sceneConfig && typeof state.sceneConfig === 'object'
+    ? { ...state.sceneConfig }
+    : {};
+  sceneConfig[sceneId] = {
+    ...(sceneConfig[sceneId] ?? {}),
+    [field]: clone(value),
+    _revision: Number(event.entityRevision) || event.revision,
+  };
+  state.sceneConfig = sceneConfig;
+  changes[changeKey] = true;
+}
+
+function reduceUserLevelChanged(state, event, changes) {
+  const sceneId = typeof event.sceneId === 'string' ? event.sceneId.trim() : '';
+  const userId = typeof event.payload?.userId === 'string' ? event.payload.userId.trim() : '';
+  const entry = event.payload?.entry;
+  if (!sceneId || !userId || !entry || typeof entry !== 'object') {
+    throw new Error('level.userChanged requires sceneId, userId, and entry');
+  }
+  const sceneConfig = state.sceneConfig && typeof state.sceneConfig === 'object'
+    ? { ...state.sceneConfig }
+    : {};
+  const current = sceneConfig[sceneId] ?? {};
+  sceneConfig[sceneId] = {
+    ...current,
+    userLevelState: {
+      ...(current.userLevelState ?? {}),
+      [userId]: clone(entry),
+    },
+    _revision: Number(event.entityRevision) || event.revision,
+  };
+  state.sceneConfig = sceneConfig;
+  changes.levels = true;
+}
+
+function reduceLevelActivated(state, event, changes) {
+  const sceneId = typeof event.sceneId === 'string' ? event.sceneId.trim() : '';
+  const userLevelState = event.payload?.userLevelState;
+  if (!sceneId || !userLevelState || typeof userLevelState !== 'object') {
+    throw new Error('level.activated requires sceneId and userLevelState');
+  }
+  const sceneConfig = state.sceneConfig && typeof state.sceneConfig === 'object'
+    ? { ...state.sceneConfig }
+    : {};
+  sceneConfig[sceneId] = {
+    ...(sceneConfig[sceneId] ?? {}),
+    userLevelState: clone(userLevelState),
+    _revision: Number(event.entityRevision) || event.revision,
+  };
+  state.sceneConfig = sceneConfig;
+  changes.levels = true;
+}
+
+function reducePingAdded(state, event, changes) {
+  const ping = event.payload?.ping;
+  const entityId = typeof event.entityId === 'string' ? event.entityId.trim() : '';
+  if (!entityId || !ping || typeof ping !== 'object') {
+    throw new Error('ping.added requires entityId and ping');
+  }
+  state.pings = { ...(state.pings ?? {}), [entityId]: clone(ping) };
+  changes.pings = true;
+}
+
+function reduceRoutingChanged(state, event, changes) {
+  const routing = event.payload?.routing;
+  if (!routing || typeof routing !== 'object') {
+    throw new Error('routing.changed requires routing');
+  }
+  state.routing = clone(routing);
+  changes.sceneRouting = true;
+}
+
 function reduceLevelChanged(state, event, changes) {
   const sceneId = typeof event.sceneId === 'string' ? event.sceneId.trim() : '';
   if (!sceneId) {
@@ -322,7 +420,11 @@ function reduceSceneActivated(state, event, changes) {
   if (!sceneId) {
     throw new Error('scene.activated requires sceneId');
   }
-  state.activeSceneId = sceneId;
+  state.routing = {
+    ...(state.routing ?? {}),
+    ...(event.payload?.routing ?? {}),
+    activeSceneId: sceneId,
+  };
   changes.sceneRouting = true;
 }
 
@@ -363,8 +465,17 @@ const reducers = Object.freeze({
   'drawing.removed': (state, event, changes) =>
     reduceSceneEntityRemove(state, event, changes, 'drawings', 'drawings'),
   'fog.patched': reduceFogPatched,
+  'fog.replaced': reduceFogReplaced,
   'level.changed': reduceLevelChanged,
+  'levels.replaced': (state, event, changes) =>
+    reduceSceneConfigField(state, event, changes, 'mapLevels', 'mapLevels', 'levels'),
+  'level.userChanged': reduceUserLevelChanged,
+  'level.activated': reduceLevelActivated,
+  'grid.changed': (state, event, changes) =>
+    reduceSceneConfigField(state, event, changes, 'grid', 'grid', 'grid'),
+  'ping.added': reducePingAdded,
   'scene.activated': reduceSceneActivated,
+  'routing.changed': reduceRoutingChanged,
 });
 
 /**
