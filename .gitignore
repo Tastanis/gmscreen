@@ -130,6 +130,10 @@ asl/config.test.local.php
 asl/backups/
 asl/tests/output/
 
+# My Tasks server-only runtime configuration/data must stay outside public_html.
+/tasks/config.local.php
+/tasks/data/
+
 # ASL Hub vendored chart library must be committed
 !asl/js/vendor/
 !asl/js/vendor/chart.umd.js

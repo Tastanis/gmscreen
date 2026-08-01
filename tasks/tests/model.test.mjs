@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addTask, createInitialData, deleteList, normalizeData, toggleTask } from '../assets/model.mjs';
+import { addTask, createInitialData, deleteList, mergeTaskData, normalizeData, toggleTask } from '../assets/model.mjs';
 
 test('adds and toggles a task', () => {
   const data = createInitialData();
@@ -32,4 +32,28 @@ test('normalization rejects tasks for unknown lists', () => {
 test('normalization rejects unsafe IDs before they reach HTML attributes', () => {
   const data = normalizeData({ lists: [{ id: 'bad\" onclick=\"x', name: 'Bad' }], tasks: [] });
   assert.equal(data.lists[0].id, 'inbox');
+});
+
+test('legacy merge adds unique items and keeps the newer matching task', () => {
+  const remote = createInitialData();
+  remote.tasks.push({ id: 'same', listId: 'inbox', title: 'Remote', notes: '', completed: false, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-02-01T00:00:00Z' });
+  const legacy = createInitialData();
+  legacy.lists.push({ id: 'work', name: 'Work', createdAt: '2026-01-01T00:00:00Z' });
+  legacy.tasks.push({ id: 'same', listId: 'inbox', title: 'Legacy old', notes: '', completed: false, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-15T00:00:00Z' });
+  legacy.tasks.push({ id: 'work-task', listId: 'work', title: 'Imported', notes: '', completed: false, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' });
+  const merged = mergeTaskData(remote, legacy);
+  assert.equal(merged.lists.some((list) => list.id === 'work'), true);
+  assert.equal(merged.tasks.find((task) => task.id === 'same').title, 'Remote');
+  assert.equal(merged.tasks.find((task) => task.id === 'work-task').title, 'Imported');
+});
+
+test('legacy merge preserves full list organization when the server is still empty', () => {
+  const remote = createInitialData();
+  const legacy = createInitialData();
+  legacy.lists[0].name = 'Personal';
+  legacy.lists.push({ id: 'work', name: 'Work', createdAt: '2026-01-01T00:00:00Z' });
+  legacy.activeListId = 'work';
+  const merged = mergeTaskData(remote, legacy);
+  assert.equal(merged.lists[0].name, 'Personal');
+  assert.equal(merged.activeListId, 'work');
 });

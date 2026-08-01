@@ -1,18 +1,23 @@
 # My Tasks
 
-A self-contained, local-first task PWA. It does not share code, sessions, or data with the GM Screen, D&D, or ASL applications.
+A self-contained personal task PWA synchronized through the same HTTPS/PHP host. It does not use Pusher, Azure, a database, or an external identity provider.
 
-## Local web test
+## Runtime design
 
-Serve the repository root so the app remains at `/tasks/`:
+- `index.php` provides the task-only password login and authenticated app shell.
+- `api/data.php` is the same-origin authenticated read/write API.
+- The authoritative JSON file and password hash live outside `public_html`.
+- Writes require a PHP session CSRF token, validated bounded data, a matching revision, an exclusive lock, and atomic file replacement.
+- Clients refresh at startup, on focus, and every 15 seconds. Pusher is unnecessary for this two-device use case.
+- Browser-local tasks from the earlier version are never silently discarded; the signed-in app offers an explicit import/merge.
+
+## Local test
+
+Set `TASKS_CONFIG_FILE` to a disposable private config path, then serve the repository root:
 
 ```text
 php -S localhost:8000 -t .
 http://localhost:8000/tasks/
 ```
 
-## iPhone installation
-
-After this folder is uploaded under HTTPS, open its URL in Safari, tap Share, then **Add to Home Screen**. Data remains on that iPhone until an authenticated sync backend is configured. Removing site data can remove locally saved tasks.
-
-See `SYNC-SETUP.md` for the deliberate sync boundary.
+See `CPANEL-SETUP.md` for the required one-time production setup. Do not create a config file inside this repository.

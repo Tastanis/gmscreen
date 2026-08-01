@@ -1,15 +1,15 @@
-# Storage and future sync
+# Shared sync boundary
 
-## What works now
+The deployed HTTPS task website is the single source of truth. Both iPhone and Windows use the same authenticated PHP session and JSON API.
 
-- The website/PWA build saves data in that browser's local storage. It works offline after its first load.
-- The Windows build uses the same interface but saves to `data/tasks.json` in its own folder.
-- No account, cloud service, database, upload, or cross-device sync is configured.
+## Authority and conflicts
 
-The JSON file is intentionally simple and easy to back up. A file on one PC cannot by itself synchronize an iPhone in another location.
+The private server document contains an integer revision plus the validated task data. Every save sends its base revision. If another device saved first, the API returns HTTP `409` with the latest shared document; the app asks the user to reload and repeat the last change rather than silently overwriting anything.
 
-## Adding private cross-device sync later
+No task data is broadcast through Pusher. Refresh on startup, focus, visibility change, and a 15-second interval is sufficient for one person using two devices.
 
-Keep the UI and data shape. Replace the storage adapter selected by `config.js` with a managed HTTPS API that implements authenticated `GET` and `PUT` operations for the current user's task document. The backend must provide real access control: unique user authentication, authorization on every request, TLS, server-side validation, and private per-user storage. A secret folder name or unlisted URL is not access control.
+## Local migration
 
-The existing `JsonApiStorage` seam in `assets/storage.mjs` shows the small request boundary. Before enabling it on the public website, add authenticated sessions or tokens, conflict/version handling, backups, and CSRF protection where applicable. Do not point the public app at the Windows-only local JSON server.
+The former browser-only data remains under the legacy `my-tasks-data-v1` key. When meaningful legacy data exists, the authenticated app shows an explicit import prompt. Import merges lists and tasks by stable ID and keeps the newer version of a matching task. The local key is removed only after the merged shared save succeeds.
+
+The former Windows `data/tasks.json` is not an ongoing sync source. The Windows launcher now opens the deployed HTTPS app directly.

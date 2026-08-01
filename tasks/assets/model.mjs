@@ -67,3 +67,32 @@ export function deleteList(data, listId) {
   if (data.activeListId === listId) data.activeListId = data.lists[0].id;
   return true;
 }
+
+export function mergeTaskData(remoteValue, legacyValue) {
+  const remote = normalizeData(remoteValue);
+  const legacy = normalizeData(legacyValue);
+  if (remote.tasks.length === 0 && remote.lists.length === 1 && remote.lists[0].id === DEFAULT_LIST_ID && remote.lists[0].name === 'Tasks') {
+    return legacy;
+  }
+  const lists = remote.lists.map((list) => ({ ...list }));
+  const listIds = new Set(lists.map((list) => list.id));
+  for (const list of legacy.lists) {
+    if (!listIds.has(list.id)) {
+      lists.push({ ...list });
+      listIds.add(list.id);
+    }
+  }
+  const tasksById = new Map(remote.tasks.map((task) => [task.id, { ...task }]));
+  for (const task of legacy.tasks) {
+    const existing = tasksById.get(task.id);
+    if (!existing || String(task.updatedAt).localeCompare(String(existing.updatedAt)) > 0) {
+      tasksById.set(task.id, { ...task });
+    }
+  }
+  return normalizeData({
+    schemaVersion: 1,
+    activeListId: remote.activeListId,
+    lists,
+    tasks: [...tasksById.values()]
+  });
+}
