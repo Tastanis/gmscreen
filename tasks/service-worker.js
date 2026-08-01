@@ -1,5 +1,5 @@
-const CACHE = 'my-tasks-v2';
-const ASSETS = ['./config.js', './manifest.webmanifest', './assets/app.css', './assets/app.mjs', './assets/model.mjs', './assets/storage.mjs', './assets/icon.svg', './assets/icon-180.png'];
+const CACHE = 'my-tasks-v3';
+const ASSETS = ['./config.js?v=3', './manifest.webmanifest', './assets/app.css', './assets/app.mjs?v=3', './assets/model.mjs', './assets/storage.mjs', './assets/icon.svg', './assets/icon-180.png'];
 self.addEventListener('install', (event) => event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting())));
 self.addEventListener('activate', (event) => event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)))).then(() => self.clients.claim())));
 self.addEventListener('fetch', (event) => {

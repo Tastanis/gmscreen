@@ -62,7 +62,7 @@ try {
   assert.equal(await pageA.locator('.task-text strong', { hasText: 'Legacy local task' }).count(), 1);
 
   const cacheKeys = await pageA.evaluate(() => caches.keys());
-  assert.equal(cacheKeys.includes('my-tasks-v2'), true);
+  assert.equal(cacheKeys.includes('my-tasks-v3'), true);
   const cachedApi = await pageA.evaluate(async () => Boolean(await caches.match('./api/data.php')));
   assert.equal(cachedApi, false);
   await pageA.screenshot({ path: 'tmp/my-tasks-shared-mobile.png', fullPage: true });
