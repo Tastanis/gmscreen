@@ -518,6 +518,11 @@ remote/local winner logic only after all combat transitions use V2.
 - Player-visible combat events may use the existing shared Pusher channel.
   Events whose combat or transition payload would reveal a hidden placement
   use authenticated HTTP replay until Phase 7 adds private audience channels.
+- Token stamina floats display immediately on the initiating client and retain
+  one stable effect ID through the combat patch and replay paths. The final
+  renderer keeps a bounded tab-local ID history, so an HTTP/Pusher/snapshot
+  echo of that same effect cannot display twice; distinct IDs still allow
+  legitimate repeated equal-damage hits.
 
 ### Phase 6 — Remaining board domains
 

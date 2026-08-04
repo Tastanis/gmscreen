@@ -271,7 +271,26 @@ const STAMINA_FLOAT_ANIMATION_MS = 1500;
 const STAMINA_FLOAT_QUEUE_GAP_MS = STAMINA_FLOAT_ANIMATION_MS;
 const STAMINA_FLOAT_RENDER_RETRY_DELAY_MS = 80;
 const STAMINA_FLOAT_RENDER_RETRY_ATTEMPTS = 4;
+const STAMINA_FLOAT_EVENT_HISTORY_LIMIT = 128;
 const MALICE_VICTORIES_ACTION = 'fetch-victories';
+const displayedStaminaFloatEventIds = new Set();
+
+export function claimRecentStaminaFloatEventId(history, eventId, limit = STAMINA_FLOAT_EVENT_HISTORY_LIMIT) {
+  const normalizedId = typeof eventId === 'string' ? eventId.trim() : '';
+  if (!normalizedId || !history || typeof history.has !== 'function' || typeof history.add !== 'function') {
+    return true;
+  }
+  if (history.has(normalizedId)) {
+    return false;
+  }
+  history.add(normalizedId);
+  const maxEntries = Number.isFinite(limit) ? Math.max(1, Math.trunc(limit)) : STAMINA_FLOAT_EVENT_HISTORY_LIMIT;
+  while (history.size > maxEntries) {
+    const oldestId = history.values().next().value;
+    history.delete(oldestId);
+  }
+  return true;
+}
 
 export function isPlacementStaminaSyncSource(source) {
   return source === 'sheet' || source === 'vtt';
@@ -12288,7 +12307,11 @@ export function mountBoardInteractions(store, routes = {}) {
         result.effect?.placementId || '',
         result.effect?.amount || 0,
         result.effect?.mode === 'heal' ? 'heal' : 'damage',
-        { sync: false, damageType: result.effect?.damageType || '' }
+        {
+          sync: false,
+          effectId: result.effect?.id || '',
+          damageType: result.effect?.damageType || '',
+        }
       );
     }
   }
@@ -18540,6 +18563,15 @@ export function mountBoardInteractions(store, routes = {}) {
     const numericAmount = Number.parseInt(amount, 10);
     if (!Number.isFinite(numericAmount) || numericAmount === 0) return;
     const key = String(placementId);
+    const shouldSync = options?.sync !== false;
+    const effectId = typeof options?.effectId === 'string' && options.effectId.trim()
+      ? options.effectId.trim()
+      : shouldSync
+        ? generateTurnEffectId('float')
+        : '';
+    if (!claimRecentStaminaFloatEventId(displayedStaminaFloatEventIds, effectId)) {
+      return;
+    }
     const damageType = mode === 'damage'
       ? normalizeAutomationDamageType(options.damageType || '')
       : '';
@@ -18560,13 +18592,13 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     });
 
-    if (options?.sync === false) {
+    if (!shouldSync) {
       return;
     }
 
     recordTurnEffect({
       type: TURN_EFFECT_TYPES.TOKEN_FLOAT,
-      id: generateTurnEffectId('float'),
+      id: effectId,
       placementId: key,
       amount: Math.abs(numericAmount),
       mode: mode === 'heal' ? 'heal' : 'damage',

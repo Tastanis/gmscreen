@@ -18,6 +18,8 @@ The canonical hook registry is `../../character_sheet/ability-automation/REGISTR
 
 Board damage and healing callbacks may return exact stamina values to the local runner, but player-facing status text must not display current/maximum stamina for placements whose canonical combat team is `enemy`. The GM and allied placements retain exact totals. This is presentation privacy, not an automation JSON field.
 
+Token stamina floats are transient synced combat effects. The initiating client displays the float immediately, then shares the same stable effect ID with other clients. The final renderer rejects a second delivery of that ID while allowing separate effects with the same amount, so multi-hit abilities are not collapsed.
+
 `setAura` can be visual-only or carry automation metadata from an `aura` effect. Automated token auras store `affects`, `triggers`, `effects`, and optional `expires` on the placement. Multiple automated auras can coexist on one token, keyed by source/ability and toggled separately from token right-click settings. They move with the owner token and check live occupants when timing triggers fire, when an occupant starts their turn, when a token enters the aura, or when an event-bus trigger such as `actionUsed` fires.
 
 Check `REGISTRY.md` before authoring against a hook. If it is not listed there, treat it as unsupported.
