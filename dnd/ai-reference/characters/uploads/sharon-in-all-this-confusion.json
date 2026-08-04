@@ -1,0 +1,125 @@
+{
+  "fields": {
+    "name": "In All This Confusion",
+    "actionLabel": "Triggered Action",
+    "keywords": "Magic",
+    "range": "Self",
+    "target": "Self",
+    "trigger": "You take damage.",
+    "description": "You vanish in a plume of black smoke to avoid danger.\n\nEffect: You take half the damage, then can teleport up to 4 squares after the triggering effect resolves.\nSpend 1+ Insight: You teleport 1 additional square for each Insight spent.\n\nToo Slow (5 Insight, built in): You ignore any effects associated with the triggering damage. Before you teleport, you can make a free strike against a creature who damaged you. After you teleport, you can spend a Recovery.\n\nBurning Ash: The first time on a turn you teleport away from or into a space adjacent to an enemy, that enemy takes fire damage equal to your Agility."
+  },
+  "automation": {
+    "schema": "ability-automation/v3",
+    "version": 3,
+    "keywords": [
+      "Magic"
+    ],
+    "cards": [
+      {
+        "type": "trigger",
+        "condition": "You take damage.",
+        "match": {
+          "event": "damage",
+          "filter": {
+            "whose": "self",
+            "minAmount": 1
+          }
+        }
+      },
+      {
+        "type": "effect",
+        "effects": [
+          {
+            "kind": "halveTriggeringDamage",
+            "rounding": "down"
+          }
+        ]
+      },
+      {
+        "type": "effect",
+        "effects": [
+          {
+            "kind": "spend",
+            "resource": "Insight",
+            "amount": 5,
+            "timing": "preRoll",
+            "effects": [
+              {
+                "kind": "freeStrike",
+                "asPowerRoll": true,
+                "against": "enemy",
+                "text": "Too Slow: free strike a creature that damaged you."
+              },
+              {
+                "kind": "ifPrompt",
+                "question": "Spend a Recovery?",
+                "yesLabel": "Yes",
+                "noLabel": "No",
+                "target": "self",
+                "then": [
+                  {
+                    "kind": "heal",
+                    "recoveries": 1,
+                    "target": "self"
+                  }
+                ],
+                "else": []
+              },
+              {
+                "kind": "note",
+                "text": "Too Slow: ignore any effects associated with the triggering damage."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "effect",
+        "effects": [
+          {
+            "kind": "teleport",
+            "target": "self",
+            "distance": 4,
+            "spend": {
+              "resource": "Insight",
+              "amount": 1,
+              "maxAmount": "available",
+              "perAmount": 1,
+              "prompt": "Spend Insight to teleport 1 extra square per Insight?"
+            }
+          }
+        ]
+      },
+      {
+        "type": "target",
+        "name": "burningAsh",
+        "mode": "token",
+        "predicate": "enemy",
+        "count": {
+          "value": 1,
+          "mode": "upTo"
+        },
+        "optional": true,
+        "promptTitle": "Burning Ash (optional)",
+        "promptText": "First time this turn: pick the enemy you teleported away from or adjacent to.",
+        "distance": {
+          "form": "ranged",
+          "value": 12
+        }
+      },
+      {
+        "type": "effect",
+        "target": "burningAsh",
+        "effects": [
+          {
+            "kind": "damage",
+            "amount": 0,
+            "attribute": "A",
+            "damageType": "fire",
+            "raw": true
+          }
+        ]
+      }
+    ]
+  }
+}

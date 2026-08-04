@@ -254,6 +254,8 @@ Ranged-only, per the book.
 
 ## In All This Confusion (with Too Slow + Burning Ash built in)
 
+Upload-ready combined JSON: [`uploads/sharon-in-all-this-confusion.json`](uploads/sharon-in-all-this-confusion.json)
+
 **Flow:** take damage → click the `!` → halve the damage → asks "Spend 5 Insight?" *only if affordable* (the Too Slow gate; if yes → free strike the attacker → asks about the Recovery → shows the Too Slow "ignore effects" reminder) → asks how much extra Insight to teleport, then teleports → asks who takes the Burning Ash fire damage.
 
 > Note: the "spend to teleport farther" question pops at the teleport step (free strike must happen first), and the ignore-effects reminder shows as the last part of the Too Slow step rather than dead last. All mechanics are in the correct order.
