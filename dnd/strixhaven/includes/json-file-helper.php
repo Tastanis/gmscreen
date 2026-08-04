@@ -167,7 +167,10 @@ if (!function_exists('modifyJsonFileWithLock')) {
             }
 
             if (isset($options['before_save']) && is_callable($options['before_save'])) {
-                call_user_func($options['before_save'], $currentData);
+                // Invoke through a callable variable so callbacks that intentionally
+                // mutate the data by reference work without a PHP 8 warning.
+                $beforeSave = $options['before_save'];
+                $beforeSave($currentData);
             }
 
             $jsonFlags = JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE;
