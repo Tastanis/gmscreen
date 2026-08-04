@@ -97,7 +97,9 @@ applying effects, and runs the rider only while that exact condition remains.
 Supported timings are `turnStart` and `turnEnd`; see `AUTHORING.md` for the
 bounded effect list and paste-ready JSON.
 
-VTT-only utility effects include `floatingText` for the giant centered combat banner and `startTurn` for Hesitation-style turn starts. `startTurn` is preflighted before action-cost spending so invalid timing can warn before heroic resource is spent.
+VTT-only utility effects include `floatingText` for the giant centered combat banner and `startTurn` for Hesitation-style turn starts. `startTurn` is preflighted before action-cost spending so invalid timing can warn before heroic resource is spent. After confirmation, an authenticated player can force-start an allied combatant even when another turn is active or that combatant was already marked complete; enemy turns remain GM-only.
+
+PC power-roll surge controls refresh the caster's live sheet value immediately before the modal opens. An available surge lights the control, hover/press feedback makes it visibly actionable, and the selected button remains highlighted as `Surge Armed` until the roll resolves or the selection is removed. VTT heroic-resource changes use the narrow authenticated resource-sync route so allied-character automation does not require full-sheet ownership.
 
 Token `aura` effects can be visual-only or automated. Automated auras store `affects`, `triggers`, `effects`, and optional `expires` on the VTT placement, move with the owning token, and resolve against the live occupants at timing boundaries or when a token enters the aura. Multiple automated auras can coexist on one token and are toggled separately from that token's right-click settings. Aura ticks support damage, healing, temporary stamina, surge gain, conditions, mark-gated branches, floating text, and notes.
 
@@ -120,8 +122,9 @@ protected.
 
 Canonical turn transitions route start-of-turn and end-of-turn questions to
 the user who initiated that transition, while resolving automation from the
-selected token's linked character sheet. Players may start allied turns only;
-enemy turns remain GM-only.
+selected token's linked character sheet. Players may start or explicitly
+override allied turns after confirmation, including restarting a completed
+combatant; enemy turns remain GM-only.
 
 ## Authoring flow
 

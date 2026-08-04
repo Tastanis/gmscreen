@@ -1022,6 +1022,29 @@
     return Math.max(0, asInt(state?.sourceTraits?.surges, 0));
   }
 
+  async function refreshPowerRollSurges(state) {
+    if (typeof state?.context?.getSurges !== "function") return getAvailableSurges(state);
+    try {
+      const result = await state.context.getSurges({
+        placementId: state.sourcePlacement?.id || "",
+        abilityName: state.action?.name || "Ability",
+      });
+      const current = Number.isFinite(result)
+        ? result
+        : Number.isFinite(result?.current)
+          ? result.current
+          : Number.isFinite(result?.surges)
+            ? result.surges
+            : null;
+      if (current !== null && state.hero && typeof state.hero === "object") {
+        state.hero.surges = Math.max(0, asInt(current, 0));
+      }
+    } catch (error) {
+      console.warn("[AbilityAutomationRunner] failed to refresh surges", error);
+    }
+    return getAvailableSurges(state);
+  }
+
   function canUsePowerRollSurges(block) {
     return block?.rollEvent !== "abilityTest";
   }
@@ -1040,17 +1063,21 @@
     if (!canUsePowerRollSurges(block)) return "";
     const available = getAvailableSurges(state);
     const count = clampPowerRollSurges(state, block);
+    const hasAvailableSurges = available > 0;
+    const hasArmedSurges = count > 0;
     const disabledMinus = count <= 0 ? "disabled" : "";
     const disabledPlus = count >= available ? "disabled" : "";
     const plusTitle = available <= 0
       ? ' title="No surges available on this character" aria-label="No surges available"'
-      : ' title="Spend one surge for +2 damage"';
+      : hasArmedSurges
+        ? ` title="${count} surge${count === 1 ? "" : "s"} armed for +${count * 2} damage" aria-label="${count} surge${count === 1 ? "" : "s"} armed for +${count * 2} damage"`
+        : ' title="Spend one surge for +2 damage" aria-label="Spend one surge for +2 damage"';
     return `
-      <div class="power-roll-runner__surges">
+      <div class="power-roll-runner__surges ${hasAvailableSurges ? "power-roll-runner__surges--available" : ""} ${hasArmedSurges ? "power-roll-runner__surges--armed" : ""}">
         <span>Surges: ${escapeHtml(available)}</span>
         <button class="power-roll-runner__mini-btn" type="button" data-power-roll-surge-adjust="-1" ${disabledMinus}>-</button>
-        <strong data-power-roll-surge-count>${escapeHtml(count)} (+${escapeHtml(count * 2)} damage)</strong>
-        <button class="power-roll-runner__mini-btn" type="button" data-power-roll-surge-adjust="1" ${disabledPlus}${plusTitle}>Surge +2</button>
+        <strong class="${hasArmedSurges ? "is-armed" : ""}" data-power-roll-surge-count>${escapeHtml(count)} (+${escapeHtml(count * 2)} damage)</strong>
+        <button class="power-roll-runner__mini-btn power-roll-runner__surge-btn ${hasAvailableSurges ? "is-available" : ""} ${hasArmedSurges ? "is-armed" : ""}" type="button" data-power-roll-surge-adjust="1" aria-pressed="${hasArmedSurges ? "true" : "false"}" ${disabledPlus}${plusTitle}>${hasArmedSurges ? "Surge Armed" : "Surge +2"}</button>
       </div>
     `;
   }
@@ -1302,6 +1329,7 @@
   }
 
   async function runPowerRollBlock(state, block) {
+    await refreshPowerRollSurges(state);
     state.edgeCount = 0;
     state.baneCount = 0;
     state.manualBonus = 0;
@@ -2743,6 +2771,14 @@
         abilityName: state.action.name || "Ability",
       });
       if (result?.applied !== undefined) {
+        if (
+          target.id === state.sourcePlacement?.id
+          && Number.isFinite(result.current)
+          && state.hero
+          && typeof state.hero === "object"
+        ) {
+          state.hero.surges = Math.max(0, asInt(result.current, 0));
+        }
         const sign = result.applied >= 0 ? "+" : "";
         lines.push(`${result.name || target.name || "Target"}: ${sign}${result.applied} surge${Math.abs(result.applied) === 1 ? "" : "s"} (now ${result.current}).`);
       } else {
@@ -3770,6 +3806,8 @@
       getEdgeState,
       getManualEdgeBaneCounts,
       getTotalEdgeBaneCounts,
+      refreshPowerRollSurges,
+      renderPowerRollSurgeControls,
       setManualEdgeBaneSelection,
     },
   };

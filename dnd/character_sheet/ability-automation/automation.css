@@ -291,6 +291,16 @@
   text-align: center;
 }
 
+.power-roll-runner__surges--available {
+  border-color: color-mix(in srgb, var(--dice-accent-strong) 72%, var(--border));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dice-accent) 20%, transparent);
+}
+
+.power-roll-runner__surges strong.is-armed {
+  color: #fff3b0;
+  text-shadow: 0 0 8px color-mix(in srgb, var(--dice-accent-strong) 70%, transparent);
+}
+
 .power-roll-runner__mini-btn {
   background: var(--dice-surface);
   border: 1px solid var(--border);
@@ -302,6 +312,43 @@
   font-weight: 800;
   padding: 4px 8px;
   text-transform: uppercase;
+}
+
+.power-roll-runner__surge-btn {
+  transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease, color 120ms ease, filter 120ms ease, transform 80ms ease;
+}
+
+.power-roll-runner__surge-btn.is-available {
+  background: color-mix(in srgb, var(--dice-accent) 28%, var(--dice-surface));
+  border-color: var(--dice-accent-strong);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--dice-accent-strong) 32%, transparent), 0 0 12px color-mix(in srgb, var(--dice-accent) 36%, transparent);
+  color: #fff7d6;
+  cursor: pointer;
+}
+
+.power-roll-runner__surge-btn.is-available:not(:disabled):hover,
+.power-roll-runner__surge-btn.is-available:not(:disabled):focus-visible {
+  background: color-mix(in srgb, var(--dice-accent) 50%, var(--dice-surface));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dice-accent-strong) 62%, transparent), 0 0 18px color-mix(in srgb, var(--dice-accent) 58%, transparent);
+  color: #fff;
+  filter: brightness(1.12);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.power-roll-runner__surge-btn.is-available:not(:disabled):active {
+  filter: brightness(1.25);
+  transform: translateY(1px) scale(0.98);
+}
+
+.power-roll-runner__surge-btn.is-armed,
+.power-roll-runner__surge-btn.is-armed:disabled {
+  background: var(--dice-accent-strong);
+  border-color: #fff0a8;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #fff0a8 55%, transparent), 0 0 20px color-mix(in srgb, var(--dice-accent-strong) 72%, transparent);
+  color: #1b1307;
+  opacity: 1;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .power-roll-runner__tiers {

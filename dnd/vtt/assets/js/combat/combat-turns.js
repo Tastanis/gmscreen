@@ -36,6 +36,12 @@ export function validateTurnStartState(
   }
 
   if (normalizedRepresentativeId && completed.has(normalizedRepresentativeId)) {
+    if (isOverride || isSharonOverride) {
+      result.valid = true;
+      return result;
+    }
+    result.requiresConfirmation = true;
+    result.confirmationType = 'repeat_completed_turn';
     return result;
   }
 

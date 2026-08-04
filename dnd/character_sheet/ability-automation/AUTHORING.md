@@ -835,7 +835,7 @@ still produce only one refund. Do not invent a `refundOnEdge` automation field.
 { "kind": "surgeGain", "amount": 1 }
 ```
 
-Adds or removes surges from each target's character sheet. Surges are separate from heroic resources such as Insight, Wrath, Focus, Drama, or Clarity. Negative `amount` removes surges and floors at 0.
+Adds or removes surges from each target's character sheet. Surges are separate from heroic resources such as Insight, Wrath, Focus, Drama, or Clarity. Negative `amount` removes surges and floors at 0. Before each PC power-roll modal opens, the VTT refreshes the caster's live sheet surge count. When at least one surge is available, the Surge button is illuminated; after selection, its pressed/armed state and pending damage bonus remain visibly highlighted. The first damage effect from the accepted roll consumes the armed surges.
 
 ### `freeStrike`
 
@@ -1151,7 +1151,7 @@ Requests a combat turn start for the resolved target, usually the caster. The ru
 | `confirmOnInvalid` | default `true`; when false, invalid state aborts without asking |
 | `invalidMessage` | optional override for the warning/confirm text |
 
-Use `enemyPickNoActive` for Hesitation Is Weakness-style timing: combat must be active, no one can currently be taking a turn, and the enemy team must be in pick phase. If the condition fails, the VTT warns before the resource spend and can let the player continue anyway.
+Use `enemyPickNoActive` for Hesitation Is Weakness-style timing: combat must be active, no one can currently be taking a turn, and the enemy team must be in pick phase. If the condition fails, the VTT warns before the resource spend and can let the player continue anyway. A confirmed allied override may replace the current active turn or restart a combatant already marked complete; the server removes that combatant from the completed list as it starts the new turn. Players still cannot start enemy turns; that remains GM-only.
 
 ### `aura`
 

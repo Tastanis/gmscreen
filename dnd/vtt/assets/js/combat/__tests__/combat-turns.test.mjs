@@ -22,7 +22,7 @@ describe('combat turn start validation', () => {
     assert.equal(result.requiresConfirmation, false);
   });
 
-  test('blocks completed representative combatants', () => {
+  test('requires confirmation before repeating a completed representative turn', () => {
     const result = validateTurnStartState({
       combatActive: true,
       combatantId: 'member-1',
@@ -34,6 +34,26 @@ describe('combat turn start validation', () => {
     });
 
     assert.equal(result.valid, false);
+    assert.equal(result.requiresConfirmation, true);
+    assert.equal(result.confirmationType, 'repeat_completed_turn');
+  });
+
+  test('allows an explicit override to repeat a completed representative turn', () => {
+    const result = validateTurnStartState(
+      {
+        combatActive: true,
+        combatantId: 'member-1',
+        team: 'ally',
+        representativeId: 'leader',
+        currentPhase: TURN_PHASE.PICK,
+        currentTurnTeam: 'enemy',
+        completedCombatantIds: new Set(['leader']),
+      },
+      { override: true }
+    );
+
+    assert.equal(result.valid, true);
+    assert.equal(result.requiresConfirmation, false);
   });
 
   test('requires confirmation when another combatant holds the lock', () => {

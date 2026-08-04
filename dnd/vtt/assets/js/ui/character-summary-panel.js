@@ -2630,6 +2630,21 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
     registerTrigger: requestAutomationRegisterTrigger,
     applyResourceGain: (payload) => applyAbilityResourceGain(sheet, payload, options),
     applySurgeGain: requestAutomationSurgeGain,
+    getSurges: async () => {
+      const fallback = Math.max(0, numberLike(sheet?.hero?.surges, 0));
+      if (!options?.characterId) return { current: fallback };
+      try {
+        const freshSheet = await fetchCharacterSummary(routes, options.characterId);
+        const current = Math.max(0, numberLike(freshSheet?.hero?.surges, fallback));
+        if (sheet?.hero && typeof sheet.hero === 'object') {
+          sheet.hero.surges = current;
+        }
+        return { current };
+      } catch (error) {
+        console.warn('[VTT] Failed to refresh power-roll surges', error);
+        return { current: fallback };
+      }
+    },
     applyTeleport: requestAutomationTeleport,
     applySwap: requestAutomationSwap,
     runFreeStrike: requestAutomationFreeStrike,
@@ -3232,7 +3247,11 @@ async function applyAbilityResourceGain(sheet, payload = {}, options = {}) {
   resource.value = next;
   hero.resource = resource;
   if (sheet) sheet.hero = hero;
-  await saveCharacterSummarySheet(sheet, { ...options, change: 'resource' });
+  const saved = await saveCharacterHeroicResource(sheet, options);
+  if (!saved) {
+    resource.value = current;
+    return { skipped: true, reason: 'save-failed', resource: title, current };
+  }
   // Signal that the sheet changed so visible panels and standalone sheet tabs
   // can refresh without a page reload.
   if (typeof document !== 'undefined' && options?.characterId) {
@@ -3282,7 +3301,11 @@ async function spendHeroicResource(sheet, payload = {}, options = {}) {
   resource.value = next;
   hero.resource = resource;
   if (sheet) sheet.hero = hero;
-  await saveCharacterSummarySheet(sheet, { ...options, change: 'resource' });
+  const saved = await saveCharacterHeroicResource(sheet, options);
+  if (!saved) {
+    resource.value = current;
+    return { canceled: true, reason: 'save-failed', resource: title, current };
+  }
   if (typeof document !== 'undefined' && options?.characterId) {
     document.dispatchEvent(new CustomEvent('vtt:character-sheet-updated', {
       detail: { characterId: options.characterId, change: 'resource' },
@@ -3322,7 +3345,11 @@ async function spendAbilityResource(sheet, ability, options = {}) {
   resource.value = Math.max(floor, current - cost.amount);
   hero.resource = resource;
   if (sheet) sheet.hero = hero;
-  await saveCharacterSummarySheet(sheet, { ...options, change: 'resource' });
+  const saved = await saveCharacterHeroicResource(sheet, options);
+  if (!saved) {
+    resource.value = current;
+    return { canceled: true, reason: 'save-failed', resource: title, current };
+  }
   // Mirror applyAbilityResourceGain: tell the board its sheet cache is stale
   // and notify any open standalone sheet tab.
   if (typeof document !== 'undefined' && options?.characterId) {
@@ -3403,6 +3430,47 @@ async function saveCharacterSummarySheet(sheet, options = {}) {
     channel.close();
   }
   return saved;
+}
+
+async function saveCharacterHeroicResource(sheet, options = {}) {
+  const characterId = typeof options.characterId === 'string' ? options.characterId : '';
+  const resource = sheet?.hero?.resource;
+  if (!characterId || !resource || typeof resource !== 'object') return false;
+  const routeConfig = options.routes && typeof options.routes === 'object' ? options.routes : {};
+  const endpoint = typeof routeConfig.sheet === 'string' && routeConfig.sheet
+    ? routeConfig.sheet
+    : '/dnd/character_sheet/handler.php';
+  const body = new URLSearchParams();
+  body.set('action', 'sync-resource');
+  body.set('character', characterId);
+  body.set('source', 'vtt');
+  body.set('value', String(Number.parseInt(resource.value ?? 0, 10) || 0));
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  const payload = await response.json().catch(() => null);
+  const saved = Boolean(response.ok && payload?.success === true);
+  if (!saved) {
+    console.warn('[VTT] Heroic resource sync failed', payload?.error || response.status);
+    return false;
+  }
+  if (Number.isFinite(payload?.resource)) {
+    resource.value = payload.resource;
+  }
+  if (options.broadcast !== false && typeof BroadcastChannel === 'function') {
+    const channel = new BroadcastChannel(CHARACTER_SHEET_SYNC_CHANNEL);
+    channel.postMessage({
+      type: 'character-sheet-sync',
+      source: 'vtt',
+      character: characterId,
+      change: 'resource',
+    });
+    channel.close();
+  }
+  return true;
 }
 
 function clonePlain(value) {
@@ -3544,6 +3612,7 @@ export const __testing = {
   renderResource,
   updateCharacterPanelCounter,
   resourceFloor,
+  saveCharacterHeroicResource,
   saveCharacterSummarySheet,
   spendHeroicResource,
 };

@@ -500,6 +500,11 @@ remote/local winner logic only after all combat transitions use V2.
   round, pick side, active/completed combatants, and the canonical turn lock.
 - Browser turn locks and optimistic tracker changes are advisory/ephemeral.
   They cannot win a race or overwrite the accepted server result.
+- Authenticated players may submit an explicitly confirmed `turn.start`
+  override for any allied combatant, including replacing the active turn or
+  restarting a combatant in `completedCombatants`. The canonical transition
+  removes a restarted combatant from that list. Enemy turn starts remain
+  GM-only, and the server enforces both boundaries.
 - Ordinary board, movement, visibility-change, and unload saves contain no
   combat record. Cached V1 combat operations are stripped server-side.
 - `combat.patch` is deliberately narrow: auxiliary malice, groups, effect

@@ -13550,11 +13550,12 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const representativeId = getRepresentativeIdFor(placementId) || placementId;
     const switchingActiveTurn = Boolean(activeCombatantId && activeCombatantId !== representativeId);
+    const restartingCompletedTurn = completedCombatants.has(representativeId);
     if (combatV2Enabled) {
       const result = await submitCanonicalCombatIntent('turn.start', {
         combatantId: representativeId,
         holderName: getCurrentUserName(),
-        override: switchingActiveTurn || !check.valid,
+        override: switchingActiveTurn || restartingCompletedTurn || !check.valid,
       });
       return {
         started: Boolean(result),

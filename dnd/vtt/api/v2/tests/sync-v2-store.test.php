@@ -15,6 +15,11 @@ $databasePath = sys_get_temp_dir()
     . 'vtt-sync-v2-'
     . bin2hex(random_bytes(8))
     . '.sqlite';
+$overrideDatabasePath = sys_get_temp_dir()
+    . DIRECTORY_SEPARATOR
+    . 'vtt-sync-v2-override-'
+    . bin2hex(random_bytes(8))
+    . '.sqlite';
 
 try {
     $store = new SyncV2Store($databasePath, 'test-world', 2, 2, 3);
@@ -823,14 +828,83 @@ try {
         'Deleting the active scene must clear canonical routing.'
     );
 
+    $overrideStore = new SyncV2Store($overrideDatabasePath, 'override-world', 10, 10, 10);
+    $overrideStore->migrateLegacyPlacements([
+        'placements' => [
+            'scene-override' => [[
+                'id' => 'sharon-token',
+                'name' => 'Sharon',
+                'combatTeam' => 'ally',
+            ]],
+        ],
+    ]);
+    $overrideStore->migrateLegacyCombat([
+        'sceneState' => [
+            'scene-override' => ['combat' => ['active' => false, 'groups' => []]],
+        ],
+    ]);
+    $overrideStore->acceptCombatCommand([
+        'operationId' => 'override-combat-start',
+        'type' => 'combat.start',
+        'baseRevision' => 0,
+        'sceneId' => 'scene-override',
+        'payload' => ['startingTeam' => 'ally'],
+    ], 'GM', true);
+    $overrideStore->acceptCombatCommand([
+        'operationId' => 'override-first-turn',
+        'type' => 'turn.start',
+        'baseRevision' => 1,
+        'sceneId' => 'scene-override',
+        'payload' => ['combatantId' => 'sharon-token'],
+    ], 'sharon', false);
+    $overrideStore->acceptCombatCommand([
+        'operationId' => 'override-first-turn-complete',
+        'type' => 'turn.complete',
+        'baseRevision' => 2,
+        'sceneId' => 'scene-override',
+        'payload' => ['combatantId' => 'sharon-token'],
+    ], 'sharon', false);
+    $blockedRepeat = $overrideStore->acceptCombatCommand([
+        'operationId' => 'override-repeat-blocked',
+        'type' => 'turn.start',
+        'baseRevision' => 3,
+        'sceneId' => 'scene-override',
+        'payload' => ['combatantId' => 'sharon-token'],
+    ], 'sharon', false);
+    expect(
+        $blockedRepeat['status'] === 'conflict'
+            && $blockedRepeat['error'] === 'combatant_already_completed',
+        'A completed allied turn still requires an explicit confirmed override.'
+    );
+    $acceptedRepeat = $overrideStore->acceptCombatCommand([
+        'operationId' => 'override-repeat-accepted',
+        'type' => 'turn.start',
+        'baseRevision' => 3,
+        'sceneId' => 'scene-override',
+        'payload' => ['combatantId' => 'sharon-token', 'override' => true],
+    ], 'sharon', false);
+    expect(
+        $acceptedRepeat['status'] === 'accepted'
+            && $acceptedRepeat['event']['payload']['combat']['activeCombatantId'] === 'sharon-token'
+            && $acceptedRepeat['event']['payload']['combat']['completedCombatantIds'] === [],
+        'A player-confirmed override may force-start a completed allied turn.'
+    );
+
     echo json_encode([
         'success' => true,
         'revision' => $store->getSnapshot()['revision'],
     ], JSON_UNESCAPED_SLASHES);
 } finally {
-    unset($store);
+    unset($store, $overrideStore);
     gc_collect_cycles();
-    foreach ([$databasePath, $databasePath . '-shm', $databasePath . '-wal'] as $path) {
+    foreach ([
+        $databasePath,
+        $databasePath . '-shm',
+        $databasePath . '-wal',
+        $overrideDatabasePath,
+        $overrideDatabasePath . '-shm',
+        $overrideDatabasePath . '-wal',
+    ] as $path) {
         if (is_file($path)) {
             @unlink($path);
         }

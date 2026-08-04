@@ -98,6 +98,33 @@ test('saveCharacterSummarySheet requires explicit success true before broadcasti
   }, fetchImpl);
 });
 
+test('saveCharacterHeroicResource uses the narrow authenticated VTT resource route', async () => {
+  await withFakeSaveEnvironment(async ({ broadcasts, requests }) => {
+    const saved = await __testing.saveCharacterHeroicResource(
+      { hero: { resource: { title: 'Insight', value: 4 } } },
+      { characterId: 'sharon' }
+    );
+
+    assert.equal(saved, true);
+    assert.equal(requests.length, 1);
+    const body = requests[0].options.body;
+    assert.equal(body.get('action'), 'sync-resource');
+    assert.equal(body.get('character'), 'sharon');
+    assert.equal(body.get('source'), 'vtt');
+    assert.equal(body.get('value'), '4');
+    assert.equal(body.has('data'), false);
+    assert.deepEqual(broadcasts, [{
+      channel: 'vtt-character-sheet-sync',
+      message: {
+        type: 'character-sheet-sync',
+        source: 'vtt',
+        character: 'sharon',
+        change: 'resource',
+      },
+    }]);
+  });
+});
+
 test('resourceFloor clamps only allowNegative resources', () => {
   assert.equal(__testing.resourceFloor({ stats: { reason: 2 } }, { allowNegative: true }), -3);
   assert.equal(__testing.resourceFloor({ stats: { reason: 2 } }, { allowNegative: false }), 0);

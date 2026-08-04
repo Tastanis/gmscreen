@@ -376,6 +376,7 @@ function createRecorder() {
     postChat: [],
     applyResourceGain: [],
     applySurgeGain: [],
+    getSurges: [],
     getRecoveryValueForTarget: [],
     spendRecoveryForTarget: [],
     checkPotency: [],
@@ -523,6 +524,7 @@ export async function createAbilityAutomationHarness(options = {}) {
       spendHeroicResourceResults: [...(runOptions.spendHeroicResourceResults || options.spendHeroicResourceResults || [])],
       spendResourceResults: [...(runOptions.spendResourceResults || options.spendResourceResults || [])],
       resourceGainResults: [...(runOptions.resourceGainResults || options.resourceGainResults || [])],
+      getSurgesResults: [...(runOptions.getSurgesResults || options.getSurgesResults || [])],
       recoveryValueResults: [...(runOptions.recoveryValueResults || options.recoveryValueResults || [])],
       spendRecoveryResults: [...(runOptions.spendRecoveryResults || options.spendRecoveryResults || [])],
       checkPotencyResults: [...(runOptions.checkPotencyResults || options.checkPotencyResults || [])],
@@ -649,6 +651,12 @@ export async function createAbilityAutomationHarness(options = {}) {
           current: nextSurges,
           name: payload.placementId === 'caster-1' ? 'Harness Hero' : payload.placementId,
         };
+      },
+      getSurges(payload) {
+        recorder.record('getSurges', payload);
+        return clone(script.getSurgesResults.shift() || {
+          current: Math.max(0, Number(context.hero?.surges) || 0),
+        });
       },
       getAttributeBonus(name) {
         return Number(attrs[normalizeAttributeKey(name)] || 0);

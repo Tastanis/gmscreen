@@ -903,6 +903,80 @@ test('power roll surges spend from the caster and add matching damage metadata',
   }
 });
 
+test('power roll refreshes live surges before enabling the surge control', async () => {
+  const harness = await createAbilityAutomationHarness({
+    attributes: { Might: 2 },
+    targets: [{ id: 'enemy-1', name: 'Iron Imp' }],
+  });
+  try {
+    const automation = {
+      schema: 'ability-automation/v3',
+      cards: [
+        {
+          type: 'target',
+          name: 'primary',
+          mode: 'token',
+          predicate: 'enemy',
+          count: { value: 1, mode: 'exact' },
+        },
+        {
+          type: 'powerRoll',
+          attribute: 'Might',
+          target: 'primary',
+          tiers: {
+            tier1: { effects: [{ kind: 'damage', amount: 3 }] },
+            tier2: { effects: [{ kind: 'damage', amount: 6 }] },
+            tier3: { effects: [{ kind: 'damage', amount: 9 }] },
+          },
+        },
+      ],
+    };
+
+    const result = await harness.runAutomation({
+      automation,
+      action: { id: 'live-surge-strike', name: 'Live Surge Strike', actionLabel: 'Main Action' },
+      hero: { name: 'Harness Hero', surges: 0, resource: { value: 0 } },
+      targetSelections: [{ id: 'enemy-1', name: 'Iron Imp' }],
+      getSurgesResults: [{ current: 2 }],
+      powerRollSurges: [1],
+      powerRollTiers: ['tier2'],
+    });
+
+    assert.equal(result.calls.getSurges.length, 1);
+    assert.equal(result.calls.applySurgeGain[0].amount, -1);
+    assert.equal(result.calls.applyDamage[0].amount, 8);
+    assert.equal(result.calls.applyDamage[0].surgeSpent, 1);
+  } finally {
+    harness.close();
+  }
+});
+
+test('power roll surge control exposes available and armed visual states', async () => {
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const render = harness.window.AbilityAutomationRunner.__testing.renderPowerRollSurgeControls;
+    const availableHtml = render(
+      { hero: { surges: 2 }, powerRollSurges: 0 },
+      { type: 'powerRoll', tiers: {} },
+    );
+    assert.match(availableHtml, /power-roll-runner__surges--available/);
+    assert.match(availableHtml, /power-roll-runner__surge-btn is-available/);
+    assert.match(availableHtml, /aria-pressed="false"/);
+    assert.match(availableHtml, />Surge \+2<\/button>/);
+
+    const armedHtml = render(
+      { hero: { surges: 2 }, powerRollSurges: 1 },
+      { type: 'powerRoll', tiers: {} },
+    );
+    assert.match(armedHtml, /power-roll-runner__surges--armed/);
+    assert.match(armedHtml, /is-available is-armed/);
+    assert.match(armedHtml, /aria-pressed="true"/);
+    assert.match(armedHtml, />Surge Armed<\/button>/);
+  } finally {
+    harness.close();
+  }
+});
+
 test('runner can arm a structured trigger and resolve it from a captured trigger payload', async () => {
   const harness = await createAbilityAutomationHarness();
   try {

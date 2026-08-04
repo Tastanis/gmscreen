@@ -688,7 +688,7 @@ final class SyncV2Store
                 }
                 $override = !empty($payload['override'])
                     && ($isGm || $team === 'ally');
-                if (in_array($combatantId, $combat['completedCombatantIds'], true)) {
+                if (in_array($combatantId, $combat['completedCombatantIds'], true) && !$override) {
                     return $this->rollbackConflict('combatant_already_completed', $snapshot);
                 }
                 $activeId = $combat['activeCombatantId'];
