@@ -20,6 +20,11 @@ $overrideDatabasePath = sys_get_temp_dir()
     . 'vtt-sync-v2-override-'
     . bin2hex(random_bytes(8))
     . '.sqlite';
+$gmOverrideDatabasePath = sys_get_temp_dir()
+    . DIRECTORY_SEPARATOR
+    . 'vtt-sync-v2-gm-override-'
+    . bin2hex(random_bytes(8))
+    . '.sqlite';
 
 try {
     $store = new SyncV2Store($databasePath, 'test-world', 2, 2, 3);
@@ -890,12 +895,47 @@ try {
         'A player-confirmed override may force-start a completed allied turn.'
     );
 
+    $gmOverrideStore = new SyncV2Store($gmOverrideDatabasePath, 'gm-override-world', 10, 10, 10);
+    $gmOverrideStore->migrateLegacyPlacements([
+        'placements' => [
+            'scene-gm-override' => [[
+                'id' => 'sharon-gm-token',
+                'name' => 'Sharon',
+                'combatTeam' => 'ally',
+            ]],
+        ],
+    ]);
+    $gmOverrideStore->migrateLegacyCombat([
+        'sceneState' => [
+            'scene-gm-override' => ['combat' => ['active' => false, 'groups' => []]],
+        ],
+    ]);
+    $gmOverrideStore->acceptCombatCommand([
+        'operationId' => 'gm-override-combat-start',
+        'type' => 'combat.start',
+        'baseRevision' => 0,
+        'sceneId' => 'scene-gm-override',
+        'payload' => ['startingTeam' => 'enemy'],
+    ], 'GM', true);
+    $gmWrongSideStart = $gmOverrideStore->acceptCombatCommand([
+        'operationId' => 'gm-wrong-side-start',
+        'type' => 'turn.start',
+        'baseRevision' => 1,
+        'sceneId' => 'scene-gm-override',
+        'payload' => ['combatantId' => 'sharon-gm-token', 'override' => true],
+    ], 'GM', true);
+    expect(
+        $gmWrongSideStart['status'] === 'accepted'
+            && $gmWrongSideStart['event']['payload']['combat']['activeCombatantId'] === 'sharon-gm-token',
+        'A GM may explicitly override the current pick side and start an allied turn.'
+    );
+
     echo json_encode([
         'success' => true,
         'revision' => $store->getSnapshot()['revision'],
     ], JSON_UNESCAPED_SLASHES);
 } finally {
-    unset($store, $overrideStore);
+    unset($store, $overrideStore, $gmOverrideStore);
     gc_collect_cycles();
     foreach ([
         $databasePath,
@@ -904,6 +944,9 @@ try {
         $overrideDatabasePath,
         $overrideDatabasePath . '-shm',
         $overrideDatabasePath . '-wal',
+        $gmOverrideDatabasePath,
+        $gmOverrideDatabasePath . '-shm',
+        $gmOverrideDatabasePath . '-wal',
     ] as $path) {
         if (is_file($path)) {
             @unlink($path);

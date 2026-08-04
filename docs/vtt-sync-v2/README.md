@@ -504,7 +504,11 @@ remote/local winner logic only after all combat transitions use V2.
   override for any allied combatant, including replacing the active turn or
   restarting a combatant in `completedCombatants`. The canonical transition
   removes a restarted combatant from that list. Enemy turn starts remain
-  GM-only, and the server enforces both boundaries.
+  GM-only, and the server enforces both boundaries. GM activation entry points
+  send an explicit override when bypassing the current pick side, while
+  accepted automation preflights carry their override into the final canonical
+  command. Requiring the explicit flag preserves simultaneous-start race
+  protection for ordinary commands.
 - Ordinary board, movement, visibility-change, and unload saves contain no
   combat record. Cached V1 combat operations are stripped server-side.
 - `combat.patch` is deliberately narrow: auxiliary malice, groups, effect

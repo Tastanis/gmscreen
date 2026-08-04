@@ -10373,7 +10373,9 @@ export function mountBoardInteractions(store, routes = {}) {
       await submitCanonicalCombatIntent('turn.start', {
         combatantId: representativeId,
         holderName: getCurrentUserName(),
-        override: switchingActiveTurn,
+        // A GM activation is authoritative even when the tracker is currently
+        // waiting for the other side to pick.
+        override: isGmUser() || switchingActiveTurn,
       });
       return;
     }
@@ -13595,7 +13597,15 @@ export function mountBoardInteractions(store, routes = {}) {
       const result = await submitCanonicalCombatIntent('turn.start', {
         combatantId: representativeId,
         holderName: getCurrentUserName(),
-        override: switchingActiveTurn || restartingCompletedTurn || !check.valid,
+        // Preserve an override accepted by the automation preflight. Without
+        // this, the second (execution) pass validates successfully and then
+        // accidentally sends override=false to the canonical server.
+        override: isGmUser()
+          || payload.preflightAccepted === true
+          || condition === 'any'
+          || switchingActiveTurn
+          || restartingCompletedTurn
+          || !check.valid,
       });
       return {
         started: Boolean(result),
