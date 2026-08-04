@@ -118,7 +118,10 @@ On the VTT, automated damage and forced movement resolve only after the
 canonical board save succeeds. Authenticated players may use ability effects
 against any visible placement, including enemies. This does not grant ordinary
 drag control of enemy tokens, and hidden or GM-only placement fields remain
-protected.
+protected. Damage and healing status messages show exact current/maximum
+stamina for allies and for the GM. Player views omit those totals when the
+affected placement is marked as an enemy, matching the enemy HP-bar and token
+settings privacy boundary.
 
 Canonical turn transitions route start-of-turn and end-of-turn questions to
 the user who initiated that transition, while resolving automation from the

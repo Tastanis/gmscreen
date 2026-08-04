@@ -185,6 +185,20 @@ let trackerOverflowResizeListenerAttached = false;
 // even when the user hasn't created or activated a scene.
 const DEFAULT_SCENE_ID = '_default';
 
+export function shouldRevealPlacementHitPointValues(placement, options = {}) {
+  if (options?.isGm === true) return true;
+  if (!placement || typeof placement !== 'object') return true;
+  const team = normalizeCombatTeam(
+    placement.combatTeam ??
+      placement.team ??
+      placement?.tags?.team ??
+      placement.faction ??
+      placement.alignment ??
+      null
+  );
+  return team !== 'enemy';
+}
+
 // Global flag to prevent recursive state updates during state application.
 // When true, any calls to syncCombatStateToStore() or boardApi.updateState()
 // that would trigger subscribers are blocked to prevent infinite recursion.
@@ -6381,11 +6395,16 @@ export function mountBoardInteractions(store, routes = {}) {
           const healMax = healResult.max;
           const healMaxDisplay = healMax !== null ? healMax : DEFAULT_HP_PLACEHOLDER;
           const healCurrent = healResult.current;
+          const showHitPointValues = !shouldHideEnemyHitPointValues(placement);
           if (allowTempHp && healMax !== null && healCurrent > healMax) {
             const tempAmount = healCurrent - healMax;
-            updateStatus(`${healName} healed to max + ${tempAmount} temp HP (${healCurrent}/${healMaxDisplay} HP).`);
+            updateStatus(showHitPointValues
+              ? `${healName} healed to max + ${tempAmount} temp HP (${healCurrent}/${healMaxDisplay} HP).`
+              : `${healName} recovers ${healResult.change} HP and gains temporary stamina.`);
           } else {
-            updateStatus(`${healName} recovers ${healResult.change} HP (${healCurrent}/${healMaxDisplay} HP).`);
+            updateStatus(showHitPointValues
+              ? `${healName} recovers ${healResult.change} HP (${healCurrent}/${healMaxDisplay} HP).`
+              : `${healName} recovers ${healResult.change} HP.`);
           }
         });
         return;
@@ -6410,9 +6429,12 @@ export function mountBoardInteractions(store, routes = {}) {
       const verb = action.mode === 'damage' ? 'takes' : 'recovers';
       const maxDisplay = max !== null ? max : DEFAULT_HP_PLACEHOLDER;
       const hpDisplay = max !== null ? `${current}/${maxDisplay}` : `${current}`;
-      const suffix = action.mode === 'damage'
-        ? ` (${hpDisplay} HP remaining).`
-        : ` (${hpDisplay} HP).`;
+      const showHitPointValues = !shouldHideEnemyHitPointValues(placement);
+      const suffix = !showHitPointValues
+        ? '.'
+        : action.mode === 'damage'
+          ? ` (${hpDisplay} HP remaining).`
+          : ` (${hpDisplay} HP).`;
       const adjustmentText = action.mode === 'damage'
         ? formatManualDamageAdjustment(result)
         : '';
@@ -13710,7 +13732,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function shouldHideEnemyHitPointValues(placement) {
-    return !isGmUser() && getPlacementCombatTeam(placement) === 'enemy';
+    return !shouldRevealPlacementHitPointValues(placement, { isGm: isGmUser() });
   }
 
   function getCurrentUserId() {
@@ -17006,7 +17028,10 @@ export function mountBoardInteractions(store, routes = {}) {
     const maxDisplay = result.max !== null ? result.max : DEFAULT_HP_PLACEHOLDER;
     const hpDisplay = result.max !== null ? `${result.current}/${maxDisplay}` : `${result.current}`;
     const damageTypeLabel = normalizeAutomationDamageType(payload.damageType || '');
-    updateStatus(`${result.name} takes ${adjustedAmount}${damageTypeLabel ? ` ${damageTypeLabel}` : ''} stamina damage (${hpDisplay} stamina remaining).`);
+    const hitPointSuffix = shouldHideEnemyHitPointValues(resultPlacement)
+      ? '.'
+      : ` (${hpDisplay} stamina remaining).`;
+    updateStatus(`${result.name} takes ${adjustedAmount}${damageTypeLabel ? ` ${damageTypeLabel}` : ''} stamina damage${hitPointSuffix}`);
     // Bus fan-out for authored triggers. `damage` covers "when this creature
     // takes damage" predicates; `staminaChange` covers the broader hook for
     // anything watching for stamina deltas.
@@ -17160,10 +17185,12 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     const maxDisplay = result.max !== null ? result.max : DEFAULT_HP_PLACEHOLDER;
     const hpDisplay = result.max !== null ? `${result.current}/${maxDisplay}` : `${result.current}`;
-    const overage = allowTempHp && Number.isFinite(result.max) && result.current > result.max
+    const showHitPointValues = !shouldHideEnemyHitPointValues(placement);
+    const overage = showHitPointValues && allowTempHp && Number.isFinite(result.max) && result.current > result.max
       ? ` (+${result.current - result.max} temp)`
       : '';
-    updateStatus(`${result.name} recovers ${result.change || amount} stamina${overage} (${hpDisplay}).`);
+    const hitPointSuffix = showHitPointValues ? ` (${hpDisplay}).` : '.';
+    updateStatus(`${result.name} recovers ${result.change || amount} stamina${overage}${hitPointSuffix}`);
     try {
       const afterStamina = Number.isFinite(result.current) ? result.current : null;
       const delta = beforeStamina !== null && afterStamina !== null

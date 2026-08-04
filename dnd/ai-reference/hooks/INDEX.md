@@ -16,6 +16,8 @@ The canonical hook registry is `../../character_sheet/ability-automation/REGISTR
 
 `showFloatingText` drives the giant centered VTT banner. `audience:"all"` syncs the banner through combat turn effects; `audience:"self"` stays in the current browser. `startTurn` requests a combat turn start and supports a preflight mode so abilities such as Hesitation Is Weakness can warn before action-cost spending when the current combat phase would waste the resource. A confirmed player override can force-start any allied combatant, including replacing an active turn or restarting a completed combatant; enemy starts remain GM-only. The PC runner's `getSurges` context hook refreshes the live sheet value before rendering a power-roll surge control.
 
+Board damage and healing callbacks may return exact stamina values to the local runner, but player-facing status text must not display current/maximum stamina for placements whose canonical combat team is `enemy`. The GM and allied placements retain exact totals. This is presentation privacy, not an automation JSON field.
+
 `setAura` can be visual-only or carry automation metadata from an `aura` effect. Automated token auras store `affects`, `triggers`, `effects`, and optional `expires` on the placement. Multiple automated auras can coexist on one token, keyed by source/ability and toggled separately from token right-click settings. They move with the owner token and check live occupants when timing triggers fire, when an occupant starts their turn, when a token enters the aura, or when an event-bus trigger such as `actionUsed` fires.
 
 Check `REGISTRY.md` before authoring against a hook. If it is not listed there, treat it as unsupported.
