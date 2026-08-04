@@ -1374,6 +1374,44 @@ test('runner dispatches floating text automation effects', async () => {
   }
 });
 
+test('self-targeted triggered teleport moves the caster instead of the triggering attacker', async () => {
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const result = await harness.runAutomation({
+      automation: {
+        schema: 'ability-automation/v3',
+        version: 3,
+        cards: [
+          {
+            type: 'target',
+            name: 'primary',
+            mode: 'token',
+            predicate: 'enemy',
+            count: { value: 1, mode: 'exact' },
+          },
+          {
+            type: 'effect',
+            effects: [{ kind: 'teleport', distance: 4 }],
+          },
+        ],
+      },
+      action: {
+        id: 'in-all-this-confusion',
+        name: 'In All This Confusion',
+        actionLabel: 'Triggered Action',
+        target: 'Self',
+      },
+      targetSelections: [{ id: 'attacker-1', name: 'Attacker' }],
+    });
+
+    assert.equal(result.calls.applyTeleport.length, 1);
+    assert.equal(result.calls.applyTeleport[0].placementId, 'caster-1');
+    assert.equal(result.calls.applyTeleport[0].distance, 4);
+  } finally {
+    harness.close();
+  }
+});
+
 test('runner preflights startTurn before spending ability resource', async () => {
   const harness = await createAbilityAutomationHarness();
   try {

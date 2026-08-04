@@ -767,13 +767,16 @@ The runtime opens the board movement picker for the caster using slide-style leg
 { "kind": "teleport", "distance": 5 }
 ```
 
-Opens a destination picker showing every cell within `distance` (Chebyshev). Click an empty cell to land there. No stability reduction, no size penalty. Clicking an occupied cell will route through the slide-style collision path (technically wrong for teleport — pick an empty cell).
+Opens a destination picker showing every cell within `distance` (Chebyshev). The picker displays the final computed range prominently and uses a distinct teleport-colored legal-cell highlight. Click an empty cell to land there. No stability reduction, no size penalty. Clicking an occupied cell will route through the slide-style collision path (technically wrong for teleport — pick an empty cell).
+
+Set `target: "self"` when the caster teleports. As a compatibility safeguard, an unscoped teleport on an action whose sheet target is `Self` also resolves to the caster instead of inheriting a triggering attacker.
 
 Optional heroic-resource spend can increase the picker distance before the picker opens:
 
 ```json
 {
   "kind": "teleport",
+  "target": "self",
   "distance": 4,
   "spend": {
     "resource": "Insight",

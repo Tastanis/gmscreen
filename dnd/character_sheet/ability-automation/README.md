@@ -19,6 +19,7 @@ For LLM-friendly authoring docs, read [`AUTHORING.md`](AUTHORING.md). For the re
 - `REGISTRY.md` — Flat reference of every supported value, hook, and feature with implementation status.
 - `../../vtt/assets/js/ui/automation-target-prompt.js` - Shared VTT target-picker prompt markup used by the board and smoke fixture.
 - `../../vtt/assets/js/ui/automation-trigger-ready.js` - Shared trigger-ready state helpers and blue `!` token indicator renderer used by the board and smoke fixture.
+- `../../vtt/assets/js/ui/automation-move-display.js` - Shared presentation helper for the final forced-movement or teleport range shown by the board picker.
 - `../../vtt/assets/js/ui/automation-trigger-lifetime.js` - Shared authored-trigger lifetime helpers for turn, round, and combat boundary expiry.
 
 ## Integration points

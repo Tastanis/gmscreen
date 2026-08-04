@@ -8,6 +8,7 @@ import {
   clearRulerSupplement,
 } from './drag-ruler.js';
 import { buildAutomationTargetPromptHtml } from './automation-target-prompt.js';
+import { getAutomationMoveRangePresentation } from './automation-move-display.js';
 import {
   applyTriggerReadyState,
   clearTriggerReadyState,
@@ -150,6 +151,7 @@ import {
   advanceCombatRoundState,
   completeCombatantTurnState,
   getWaitingCombatantsByTeam as buildWaitingCombatantsByTeam,
+  pickPlayerQuickStartCombatantId,
   pickNextCombatantId as selectNextCombatantId,
   validateTurnStartState,
 } from '../combat/combat-turns.js';
@@ -11670,22 +11672,15 @@ export function mountBoardInteractions(store, routes = {}) {
         .map((placement) => (typeof placement?.id === 'string' ? placement.id : ''))
         .filter(Boolean)
     );
-    const validCandidates = Array.from(candidateIds).filter((id) => {
-      const representativeId = getRepresentativeIdFor(id) || id;
-      const isActive =
-        activeIds.has(id) ||
-        activeIds.has(representativeId) ||
-        livePlacementIds.has(id) ||
-        livePlacementIds.has(representativeId);
-      const onCurrentSide = !currentTurnTeam || currentTurnTeam === 'ally';
-      return isActive && onCurrentSide && getCombatantTeam(representativeId) === 'ally';
+    return pickPlayerQuickStartCombatantId({
+      candidateIds,
+      activeCombatantIds: activeIds,
+      livePlacementIds,
+      completedCombatantIds: completedCombatants,
+      currentTurnTeam,
+      getRepresentativeIdFor,
+      getCombatantTeam,
     });
-    const waitingCandidate = validCandidates.find((id) => {
-      const representativeId = getRepresentativeIdFor(id) || id;
-      return !completedCombatants.has(representativeId);
-    });
-
-    return waitingCandidate ?? validCandidates[0] ?? null;
   }
 
   function findCombatTrackerToken(combatantId) {
@@ -18235,6 +18230,11 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     const overlay = document.createElement('div');
     overlay.className = 'vtt-automation-move';
+    const rangePresentation = getAutomationMoveRangePresentation({
+      verbLabel: request.verbLabel,
+      distance: request.effectiveDistance,
+    });
+    overlay.dataset.moveKind = rangePresentation.kind;
     overlay.innerHTML = `
       <svg class="vtt-automation-move__svg" aria-hidden="true">
         <line class="vtt-automation-move__arrow" data-automation-move-arrow x1="0" y1="0" x2="0" y2="0"></line>
@@ -18244,6 +18244,7 @@ export function mountBoardInteractions(store, routes = {}) {
         <span>${escapeHtml(request.verbLabel || 'Push')}</span>
       </div>
       <div class="vtt-automation-move__controls">
+        <div class="vtt-automation-move__range" role="status">${escapeHtml(rangePresentation.label)}</div>
         <button type="button" data-skip-automation-move>Skip</button>
       </div>
     `;

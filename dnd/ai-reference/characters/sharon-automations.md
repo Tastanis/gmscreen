@@ -298,7 +298,7 @@ Ranged-only, per the book.
       {
         "type": "effect",
         "effects": [
-          { "kind": "teleport", "distance": 4, "spend": { "resource": "Insight", "amount": 1, "maxAmount": "available", "perAmount": 1, "prompt": "Spend Insight to teleport 1 extra square per Insight?" } }
+          { "kind": "teleport", "target": "self", "distance": 4, "spend": { "resource": "Insight", "amount": 1, "maxAmount": "available", "perAmount": 1, "prompt": "Spend Insight to teleport 1 extra square per Insight?" } }
         ]
       },
       { "type": "target", "name": "burningAsh", "mode": "token", "predicate": "enemy", "count": { "value": 1, "mode": "upTo" }, "optional": true, "promptTitle": "Burning Ash (optional)", "promptText": "First time this turn: pick the enemy you teleported away from or adjacent to.", "distance": { "form": "ranged", "value": 12 } },
@@ -370,7 +370,7 @@ The trigger filter uses `excludeSelf` (don't arm off Sharon's own turn end — `
       {
         "type": "effect",
         "effects": [
-          { "kind": "teleport", "distance": 5, "spend": { "resource": "Insight", "amount": 1, "maxAmount": "available", "perAmount": 1, "prompt": "Spend Insight to teleport 1 extra square per Insight?" } }
+          { "kind": "teleport", "target": "self", "distance": 5, "spend": { "resource": "Insight", "amount": 1, "maxAmount": "available", "perAmount": 1, "prompt": "Spend Insight to teleport 1 extra square per Insight?" } }
         ]
       },
       {

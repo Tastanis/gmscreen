@@ -2884,6 +2884,14 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
   box-shadow: inset 0 0 0 1px rgba(41, 37, 36, 0.35);
 }
 
+.vtt-automation-move[data-move-kind="teleport"] .vtt-automation-move__cell {
+  border: 3px solid rgba(196, 181, 253, 0.98);
+  background: rgba(109, 40, 217, 0.3);
+  box-shadow:
+    inset 0 0 0 1px rgba(46, 16, 101, 0.8),
+    0 0 12px rgba(167, 139, 250, 0.65);
+}
+
 .vtt-automation-move__ghost {
   display: grid;
   place-items: center;
@@ -2903,6 +2911,24 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
   bottom: 86px;
   transform: translateX(-50%);
   pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.vtt-automation-move__range {
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  border-radius: 4px;
+  background: rgba(41, 37, 36, 0.94);
+  color: #fffaf0;
+  font-weight: 800;
+  padding: 0.55rem 0.8rem;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.35);
+}
+
+.vtt-automation-move[data-move-kind="teleport"] .vtt-automation-move__range {
+  border-color: rgba(196, 181, 253, 0.98);
+  background: rgba(46, 16, 101, 0.95);
 }
 
 .vtt-automation-move__controls button {

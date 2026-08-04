@@ -369,6 +369,7 @@ function createRecorder() {
     applyHeal: [],
     applyCondition: [],
     forceMove: [],
+    applyTeleport: [],
     spendHeroicResource: [],
     spendResource: [],
     registerTrigger: [],
@@ -603,6 +604,10 @@ export async function createAbilityAutomationHarness(options = {}) {
       forceMove(payload) {
         recorder.record('forceMove', payload);
         return { name: payload.target?.name || payload.targetId, movedDistance: payload.distance };
+      },
+      applyTeleport(payload) {
+        recorder.record('applyTeleport', payload);
+        return { name: payload.placementId, movedDistance: payload.distance };
       },
       spendHeroicResource(payload) {
         recorder.record('spendHeroicResource', payload);

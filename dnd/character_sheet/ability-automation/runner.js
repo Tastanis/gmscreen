@@ -2793,7 +2793,17 @@
   }
 
   async function applyTeleportEffect(state, effect, targets, _ctx) {
-    if (!targets.length) return;
+    const effectHasExplicitTarget = effect?.target !== undefined
+      && effect?.target !== null
+      && effect?.target !== "";
+    const actionTargetsSelf = String(state.action?.target || "").trim().toLowerCase() === "self";
+    // Trigger resolution commonly makes the triggering attacker the current
+    // target group. A self-targeted action must not inherit that attacker for
+    // an otherwise-unscoped teleport (for example, In All This Confusion).
+    const teleportTargets = !effectHasExplicitTarget && actionTargetsSelf && state.sourcePlacement?.id
+      ? [state.sourcePlacement]
+      : targets;
+    if (!teleportTargets.length) return;
     let distance = asInt(effect.distance, 0);
     if (effect.spend && typeof state.context.spendHeroicResource === "function") {
       const spendResult = await state.context.spendHeroicResource({
@@ -2821,7 +2831,7 @@
       return;
     }
     const lines = [];
-    for (const target of targets) {
+    for (const target of teleportTargets) {
       if (state.aborted) return;
       if (!target?.id) continue;
       const result = await state.context.applyTeleport({

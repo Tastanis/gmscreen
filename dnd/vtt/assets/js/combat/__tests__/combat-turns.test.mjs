@@ -6,6 +6,7 @@ import {
   advanceCombatRoundState,
   completeCombatantTurnState,
   getWaitingCombatantsByTeam,
+  pickPlayerQuickStartCombatantId,
   pickNextCombatantId,
   validateTurnStartState,
 } from '../combat-turns.js';
@@ -237,6 +238,32 @@ describe('combat turn state transitions', () => {
 });
 
 describe('combat turn picking', () => {
+  test('player quick start never falls back to a completed combatant', () => {
+    assert.equal(
+      pickPlayerQuickStartCombatantId({
+        candidateIds: ['indigo'],
+        livePlacementIds: ['indigo'],
+        completedCombatantIds: ['indigo'],
+        currentTurnTeam: 'ally',
+        getCombatantTeam: () => 'ally',
+      }),
+      null
+    );
+  });
+
+  test('player quick start still selects an allied combatant who is waiting', () => {
+    assert.equal(
+      pickPlayerQuickStartCombatantId({
+        candidateIds: ['indigo'],
+        livePlacementIds: ['indigo'],
+        completedCombatantIds: [],
+        currentTurnTeam: 'ally',
+        getCombatantTeam: () => 'ally',
+      }),
+      'indigo'
+    );
+  });
+
   test('groups waiting combatants by team using representatives and completed state', () => {
     const waiting = getWaitingCombatantsByTeam({
       entries: [{ id: 'ally-1' }, { id: 'enemy-member' }, { id: 'enemy-leader' }, { id: 'done' }],

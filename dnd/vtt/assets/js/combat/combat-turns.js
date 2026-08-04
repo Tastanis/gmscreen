@@ -133,6 +133,38 @@ export function getWaitingCombatantsByTeam({
   return waiting;
 }
 
+export function pickPlayerQuickStartCombatantId({
+  candidateIds = [],
+  activeCombatantIds = [],
+  livePlacementIds = [],
+  completedCombatantIds = [],
+  currentTurnTeam = null,
+  getRepresentativeIdFor = (id) => id,
+  getCombatantTeam = () => 'ally',
+} = {}) {
+  if (currentTurnTeam && normalizeCombatTeam(currentTurnTeam) !== 'ally') {
+    return null;
+  }
+
+  const active = toStringSet(activeCombatantIds);
+  const live = toStringSet(livePlacementIds);
+  const completed = toStringSet(completedCombatantIds);
+  const candidates = candidateIds instanceof Set ? Array.from(candidateIds) : iterableToArray(candidateIds);
+
+  return candidates.find((id) => {
+    const representativeId = normalizeId(getRepresentativeIdFor(id)) || normalizeId(id);
+    if (!representativeId || completed.has(representativeId)) {
+      return false;
+    }
+    const isPresent =
+      active.has(id) ||
+      active.has(representativeId) ||
+      live.has(id) ||
+      live.has(representativeId);
+    return isPresent && normalizeCombatTeam(getCombatantTeam(representativeId)) === 'ally';
+  }) ?? null;
+}
+
 export function pickNextCombatantId({ waiting = null, preferredTeams = [] } = {}) {
   const pools = waiting && typeof waiting === 'object' ? waiting : { ally: [], enemy: [] };
   const order = Array.isArray(preferredTeams) ? preferredTeams : [];
