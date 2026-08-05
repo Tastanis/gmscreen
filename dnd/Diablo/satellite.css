@@ -244,6 +244,94 @@ body.diablo-theme .rich-text-toolbar button:hover {
     border-color: rgba(200, 169, 94, 0.6);
 }
 
+/* Conflict Engine cards and their editors still use the light parchment
+   palette in the shared character-sheet CSS. Keep this override here so it
+   applies consistently to Student, Staff, and Other NPC profiles. */
+body.diablo-theme .conflict-engine-section .ce-block {
+    background: linear-gradient(180deg, #1d1912 0%, #100d09 100%);
+    border: 1px solid #000;
+    border-radius: 3px;
+    box-shadow:
+        inset 0 0 0 1px rgba(110, 90, 51, 0.42),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04),
+        0 5px 14px rgba(0, 0, 0, 0.55);
+}
+
+body.diablo-theme .conflict-engine-section .ce-block-header {
+    background: linear-gradient(180deg, #2b251b 0%, #17130e 100%);
+    border-bottom-color: rgba(110, 90, 51, 0.48);
+}
+
+body.diablo-theme .conflict-engine-section .ce-block-title {
+    font-family: 'Cinzel', serif;
+    color: #d8c17b;
+    letter-spacing: 0.04em;
+    text-shadow: 0 1px 2px #000;
+}
+
+body.diablo-theme .conflict-engine-section .ce-block-body {
+    background: linear-gradient(180deg, rgba(19, 16, 11, 0.95), rgba(11, 9, 6, 0.98));
+}
+
+body.diablo-theme .conflict-engine-section .rich-text-container {
+    background: #0e0c09;
+    border: 1px solid rgba(110, 90, 51, 0.38);
+    box-shadow: inset 0 2px 7px rgba(0, 0, 0, 0.75);
+}
+
+body.diablo-theme .conflict-engine-section .rich-text-toolbar {
+    background: linear-gradient(180deg, #242017 0%, #15110c 100%) !important;
+    border-bottom-color: rgba(110, 90, 51, 0.45) !important;
+}
+
+body.diablo-theme .conflict-engine-section .toolbar-btn {
+    background: linear-gradient(180deg, #302a20 0%, #19150f 100%) !important;
+    border-color: rgba(110, 90, 51, 0.58) !important;
+    color: #cfc6b4 !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+}
+
+body.diablo-theme .conflict-engine-section .toolbar-btn:hover,
+body.diablo-theme .conflict-engine-section .toolbar-btn:focus {
+    background: linear-gradient(180deg, #40382a 0%, #221c14 100%) !important;
+    border-color: #a8853e !important;
+    color: #f0d68a !important;
+}
+
+body.diablo-theme .conflict-engine-section .toolbar-btn.active {
+    background: linear-gradient(180deg, #5a4523 0%, #2b2112 100%) !important;
+    border-color: #c8a95e !important;
+    color: #fff0b5 !important;
+}
+
+body.diablo-theme .conflict-engine-section .toolbar-separator {
+    background: rgba(110, 90, 51, 0.55) !important;
+}
+
+body.diablo-theme .conflict-engine-section .rich-text-editor,
+body.diablo-theme .conflict-engine-section .rich-text-editor:focus {
+    background: #0e0c09 !important;
+    color: #d4ccbd !important;
+    box-shadow: none !important;
+}
+
+body.diablo-theme .conflict-engine-section .rich-text-editor:empty::before,
+body.diablo-theme .conflict-engine-section .rich-text-editor p:only-child:empty::before {
+    color: #776f61 !important;
+}
+
+body.diablo-theme .conflict-engine-section .ce-want-tag-select {
+    background: #0e0c09;
+    border-color: #6e5a33;
+    color: #d4ccbd;
+    box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.7);
+}
+
+body.diablo-theme .conflict-engine-section .ce-want-tag-select option {
+    background: #15110c;
+    color: #d4ccbd;
+}
+
 body.diablo-theme .tension-web-entry {
     background: rgba(20, 17, 12, 0.85);
     border-left: 3px solid #a8853e;

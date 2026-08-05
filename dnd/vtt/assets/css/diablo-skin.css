@@ -136,6 +136,121 @@ html.diablo-theme {
   color: #f0d68a;
 }
 
+/* Native VTT dropdowns should not fall back to the browser's pale menu
+   palette while the Diablo skin is active. */
+:root.diablo-theme body.vtt-body select {
+  background-color: #15110c;
+  border-color: rgba(110, 90, 51, 0.62);
+  color: #d4ccbd;
+}
+
+:root.diablo-theme body.vtt-body select option {
+  background: #15110c;
+  color: #d4ccbd;
+}
+
+/* Template tool popout — replace the legacy blue/slate styling with the same
+   engraved slab treatment as the rest of the VTT controls. */
+:root.diablo-theme .vtt-template-menu {
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(200, 169, 94, 0.08), transparent 58%),
+    linear-gradient(180deg, rgba(30, 25, 18, 0.99), rgba(12, 10, 7, 0.99));
+  border: 1px solid #000;
+  border-radius: 3px;
+  color: #d4ccbd;
+  box-shadow:
+    inset 0 0 0 1px rgba(110, 90, 51, 0.58),
+    inset 0 1px 0 1px rgba(255, 255, 255, 0.04),
+    0 18px 42px rgba(0, 0, 0, 0.78);
+}
+
+:root.diablo-theme .vtt-template-menu__title {
+  font-family: 'Cinzel', serif;
+  color: #c8a95e;
+  letter-spacing: 0.08em;
+  text-shadow: 0 1px 2px #000;
+}
+
+:root.diablo-theme .vtt-template-menu__choice {
+  background: linear-gradient(180deg, #2b261f 0%, #17130e 100%);
+  border-color: rgba(110, 90, 51, 0.58);
+  border-radius: 2px;
+  color: #bfb6a6;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+:root.diablo-theme .vtt-template-menu__choice:hover {
+  background: linear-gradient(180deg, #3a3226 0%, #211a12 100%);
+  border-color: #a8853e;
+  color: #f0d68a;
+}
+
+:root.diablo-theme .vtt-template-menu__choice.is-active {
+  background: linear-gradient(180deg, #514122 0%, #281f11 100%);
+  border-color: #c8a95e;
+  color: #fff0b5;
+  box-shadow: inset 0 0 10px rgba(200, 169, 94, 0.18);
+}
+
+:root.diablo-theme .vtt-template-menu__field label {
+  color: #a9a090;
+}
+
+:root.diablo-theme .vtt-template-menu__field input {
+  background: #0e0c09;
+  border-color: rgba(110, 90, 51, 0.58);
+  border-radius: 2px;
+  color: #ded6c7;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.75);
+}
+
+:root.diablo-theme .vtt-template-menu__field input:focus {
+  border-color: #a8853e;
+  outline: none;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.75), 0 0 0 2px rgba(200, 169, 94, 0.16);
+}
+
+:root.diablo-theme .vtt-template-menu__spinners {
+  border-left-color: rgba(110, 90, 51, 0.58);
+}
+
+:root.diablo-theme .vtt-template-menu__spinner {
+  background: #242017;
+  color: #c8a95e;
+}
+
+:root.diablo-theme .vtt-template-menu__spinner:hover {
+  background: #3a3226;
+  color: #f0d68a;
+}
+
+:root.diablo-theme .vtt-template-menu__color {
+  border-color: rgba(110, 90, 51, 0.7);
+}
+
+:root.diablo-theme .vtt-template-menu__color:hover,
+:root.diablo-theme .vtt-template-menu__color.is-selected {
+  border-color: #f0d68a;
+  box-shadow: 0 0 0 2px rgba(200, 169, 94, 0.72), 0 2px 8px rgba(0, 0, 0, 0.65);
+}
+
+:root.diablo-theme .vtt-template-menu__actions .vtt-template-menu__confirm,
+:root.diablo-theme .vtt-template-menu__actions .vtt-template-menu__cancel {
+  border: 1px solid #000;
+  border-radius: 2px;
+  color: #d4ccbd;
+  box-shadow: inset 0 0 0 1px rgba(110, 90, 51, 0.5);
+}
+
+:root.diablo-theme .vtt-template-menu__actions .vtt-template-menu__confirm {
+  background: linear-gradient(180deg, #514122 0%, #281f11 100%);
+  color: #fff0b5;
+}
+
+:root.diablo-theme .vtt-template-menu__actions .vtt-template-menu__cancel {
+  background: linear-gradient(180deg, #2b261f 0%, #17130e 100%);
+}
+
 /* Power-roll surges need to read as an available action, then as armed. */
 :root.diablo-theme .power-roll-runner__surges--available {
   background: linear-gradient(180deg, rgba(58, 39, 20, 0.96), rgba(25, 18, 11, 0.98));

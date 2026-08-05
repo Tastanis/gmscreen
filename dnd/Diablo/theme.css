@@ -929,6 +929,16 @@ body.diablo-theme .progress-text {
     text-shadow: 0 1px 2px #000;
 }
 
+/* Past classes are summary cards, so their secondary line must remain easy to
+   read against the dark slab instead of using the extra-muted global token. */
+body.diablo-theme .past-classes-section .past-class-item p {
+    color: #d0c7b7;
+}
+
+body.diablo-theme .past-classes-section .no-data {
+    color: #b8b0a2;
+}
+
 body.diablo-theme .relationships-section .relationship-points {
     background: rgba(12, 10, 7, 0.7);
     border: 1px solid rgba(110, 90, 51, 0.35);
