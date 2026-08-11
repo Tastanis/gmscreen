@@ -13,6 +13,10 @@ try {
     $auth = vttSyncV2DomainEnabled('token_movement')
         ? vttSyncV2RequireAuthenticated()
         : vttSyncV2RequireShadowGm();
+    vttSyncV2Store()->touchPresence(
+        (string) ($auth['user'] ?? ''),
+        (bool) ($auth['isGM'] ?? false)
+    );
 
     vttSyncV2Respond(200, [
         'success' => true,

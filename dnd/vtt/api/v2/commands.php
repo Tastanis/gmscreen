@@ -19,6 +19,11 @@ try {
         'combat.uncomplete', 'round.advance', 'combat.end', 'combat.patch',
         'combat.automation.claim',
     ];
+    $requestedTestTypes = [
+        'requestedTest.create', 'requestedTest.reassign',
+        'requestedTest.resolve', 'requestedTest.claim', 'requestedTest.cancel',
+        'requestedTest.complete',
+    ];
     $boardDomainFlags = [
         'template.upsert' => 'templates',
         'template.remove' => 'templates',
@@ -35,7 +40,14 @@ try {
     ];
     $isBoardDomainCommand = isset($boardDomainFlags[$type])
         && vttSyncV2DomainEnabled($boardDomainFlags[$type]);
-    if ($isBoardDomainCommand) {
+    if (in_array($type, $requestedTestTypes, true) && vttSyncV2DomainEnabled('requested_tests')) {
+        $auth = vttSyncV2RequireAuthenticated();
+        $result = vttSyncV2Store()->acceptRequestedTestCommand(
+            $command,
+            (string) ($auth['user'] ?? ''),
+            (bool) ($auth['isGM'] ?? false)
+        );
+    } elseif ($isBoardDomainCommand) {
         $auth = vttSyncV2RequireAuthenticated();
         $result = vttSyncV2Store()->acceptBoardDomainCommand(
             $command,
@@ -81,6 +93,7 @@ try {
         if (
             (
                 $isBoardDomainCommand
+                || in_array($type, $requestedTestTypes, true)
                 || in_array($type, ['token.move', 'placement.batch'], true)
                 || in_array($type, $combatTypes, true)
             )
@@ -103,6 +116,7 @@ try {
         $socketId = $socketId === '' ? null : $socketId;
         $isLiveCommand = (
             $isBoardDomainCommand
+            || in_array($type, $requestedTestTypes, true)
             || in_array($type, ['token.move', 'placement.batch'], true)
             || in_array($type, $combatTypes, true)
         );
@@ -126,6 +140,7 @@ try {
         'success' => true,
         'mode' => (
             $isBoardDomainCommand
+            || in_array($type, $requestedTestTypes, true)
             || in_array($type, ['token.move', 'placement.batch'], true)
             || in_array($type, $combatTypes, true)
         ) ? 'live' : 'shadow',

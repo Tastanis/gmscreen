@@ -621,6 +621,22 @@ export async function createAbilityAutomationHarness(options = {}) {
         recorder.record('spendResource', action);
         return clone(script.spendResourceResults.shift() || { spent: 0 });
       },
+      requestTest(payload) {
+        recorder.record('requestTest', payload);
+        if (typeof runOptions.requestTest === 'function') return runOptions.requestTest(payload);
+        return { canceled: true };
+      },
+      completeRequestedTests(requestIds) {
+        recorder.record('completeRequestedTests', requestIds);
+        return { completed: true };
+      },
+      refundAbility(payload) {
+        recorder.record('refundAbility', payload);
+        return { refunded: true };
+      },
+      getPlacementById(placementId) {
+        return baseTargets.find((item) => item.id === placementId) || { id: placementId, name: placementId };
+      },
       registerTrigger(payload) {
         recorder.record('registerTrigger', payload);
         return { registered: true, abilityId: payload.abilityId, eventType: payload.match?.event || '' };
@@ -715,6 +731,10 @@ export async function createAbilityAutomationHarness(options = {}) {
       setScopedFlag(payload) {
         recorder.record('setScopedFlag', payload);
         return { set: true };
+      },
+      clearScopedFlag(payload) {
+        recorder.record('clearScopedFlag', payload);
+        return { cleared: true };
       },
       setAura(payload) {
         recorder.record('setAura', payload);

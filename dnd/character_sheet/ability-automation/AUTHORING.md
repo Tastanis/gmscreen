@@ -24,6 +24,7 @@ The runtime is lenient: unknown fields are preserved but ignored, missing fields
   "cards": [
     { "type": "target",     "...": "..." },
     { "type": "powerRoll",  "...": "..." },
+    { "type": "requestedTest", "...": "..." },
     { "type": "effect",     "...": "..." },
     { "type": "trigger",    "...": "..." },
     { "type": "persistent", "...": "..." },
@@ -41,6 +42,37 @@ The runtime is lenient: unknown fields are preserved but ignored, missing fields
 The `name` and `description` of the ability live on the character sheet — do **not** copy them into the JSON.
 
 ---
+
+### Tests rolled by another creature
+
+Use `requestedTest` when selected creatures make a Might, Agility, Reason, Intuition, or Presence test and the accepted tier controls later effects. The VTT sends the standard roll window to the linked token owner; an unowned or offline token routes to an online GM, then falls back to the ability user.
+
+```json
+{
+  "type": "requestedTest",
+  "target": "affected",
+  "attribute": "Presence",
+  "rollMode": "individual",
+  "label": "Presence test",
+  "prompt": "Resist the infernal command.",
+  "bonus": 0,
+  "edge": 0,
+  "bane": 0,
+  "tiers": {
+    "tier1": { "effects": [{ "kind": "damage", "amount": 8, "damageType": "fire" }] },
+    "tier2": { "effects": [{ "kind": "damage", "amount": 4, "damageType": "fire" }] },
+    "tier3": { "effects": [] }
+  }
+}
+```
+
+`rollMode` values:
+
+- `individual`: one roll for every target.
+- `singleHighest`: one roll using the highest named attribute in the group; that tier applies to all targets.
+- `groupByAttribute`: one roll for targets with the same attribute bonus and owner. Different owners remain separate so one player is never silently made to roll for another.
+
+Put `requestedTest` before any card that changes board or character state. The ability pauses while waiting. Closing a requested roll cancels the whole batch; the tracked action cost, malice cost, and triggered-action use are refunded. The waiting user can cancel or choose **Make myself**, which recalls every outstanding roll while continuing to use each selected token's stats.
 
 ## Combined paste format (fields + automation)
 

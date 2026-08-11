@@ -27,8 +27,31 @@ function emptyChangeSet(revision) {
     levels: false,
     grid: false,
     sceneRouting: false,
+    requestedTests: false,
     shadow: false,
   };
+}
+
+function reduceRequestedTestChanged(state, event, changes) {
+  const requestId = String(event.payload?.requestId ?? event.entityId ?? '').trim();
+  if (!requestId) {
+    throw new Error('requestedTest.changed requires requestId');
+  }
+  const requests = state.requestedTests && typeof state.requestedTests === 'object'
+    ? { ...state.requestedTests }
+    : {};
+  if (event.payload?.requests && typeof event.payload.requests === 'object') {
+    for (const [id, request] of Object.entries(event.payload.requests)) {
+      if (request && typeof request === 'object') requests[id] = clone(request);
+    }
+  }
+  if (event.payload?.removed || !event.payload?.request) {
+    delete requests[requestId];
+  } else {
+    requests[requestId] = clone(event.payload.request);
+  }
+  state.requestedTests = requests;
+  changes.requestedTests = true;
 }
 
 function reduceShadowObservation(state, event, changes) {
@@ -432,6 +455,11 @@ function reduceSceneDeleted(state, event, changes) {
       Object.entries(state.pings).filter(([, ping]) => ping?.sceneId !== sceneId)
     );
   }
+  if (state.requestedTests && typeof state.requestedTests === 'object') {
+    state.requestedTests = Object.fromEntries(
+      Object.entries(state.requestedTests).filter(([, request]) => request?.sceneId !== sceneId)
+    );
+  }
   state.routing = clone(event.payload?.routing ?? state.routing ?? {});
   changes.snapshot = true;
   changes.sceneRouting = true;
@@ -461,6 +489,7 @@ const reducers = Object.freeze({
   'placement.batchApplied': reducePlacementBatch,
   'combat.transitioned': reduceCombatTransitioned,
   'combat.automationClaimed': () => {},
+  'requestedTest.changed': reduceRequestedTestChanged,
   'turn.started': reduceCombatEvent,
   'turn.completed': reduceCombatEvent,
   'template.updated': (state, event, changes) =>

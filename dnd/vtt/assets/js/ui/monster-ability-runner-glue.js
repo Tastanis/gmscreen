@@ -241,10 +241,13 @@
             fireTriggerEvent: board.fireTriggerEvent,
             checkScopedFlag: board.checkScopedFlag,
             setScopedFlag: board.setScopedFlag,
+            clearScopedFlag: board.clearScopedFlag,
             setAura: board.setAura,
             showFloatingText: board.showFloatingText,
             startTurn: board.startTurn,
             consumeTriggeredAction: board.consumeTriggeredAction,
+            requestTest: board.requestTest,
+            completeRequestedTests: board.completeRequestedTests,
             getPowerRollSuggestions: board.getPowerRollSuggestions,
             consumeRollRiders: board.consumeRollRiders,
             getPlacementById: board.getPlacementById,
@@ -309,14 +312,28 @@
             }
         }
 
+        var maliceResult = { proceed: true, cost: 0 };
         if (MALICE_CATEGORIES.indexOf(category) !== -1) {
-            var maliceResult = await ensureMalice(monster, ability);
+            maliceResult = await ensureMalice(monster, ability);
             if (!maliceResult.proceed) {
                 return { aborted: true, reason: 'malice-cancelled' };
             }
         }
 
         var context = buildMonsterContext(monster, ability, category, placement);
+        context.resourceReservation = {
+            maliceSpent: maliceResult.cost > 0 && !maliceResult.skippedSpend ? maliceResult.cost : 0
+        };
+        context.refundAbility = async function (payload) {
+            if (maliceResult.cost > 0 && !maliceResult.skippedSpend && window.MaliceTracker) {
+                window.MaliceTracker.add(maliceResult.cost);
+            }
+            if (payload && payload.triggeredActionSpend && payload.triggeredActionSpend.consumed && context.refundTriggeredAction) {
+                await context.refundTriggeredAction({ placementId: payload.sourcePlacementId });
+            }
+            return { refunded: true };
+        };
+        context.refundTriggeredAction = board.refundTriggeredAction;
         if (options && typeof options === 'object') {
             for (var key in options) {
                 if (Object.prototype.hasOwnProperty.call(options, key)) {

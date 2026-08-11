@@ -74,6 +74,7 @@ import {
 } from './map-level-renderer.js';
 import { createTokenInteractions } from './token-interactions.js';
 import { createTokenMovementRuntime } from '../sync-v2/token-movement-runtime.js';
+import { createRequestedTestCoordinator } from './requested-test-coordinator.js';
 import {
   applyCanonicalPrimaryTokenSelection,
   ensureTokenSettingsElementConnected,
@@ -741,6 +742,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const scenesV2Enabled = syncV2Config?.domains?.scenes === true;
   const gridV2Enabled = syncV2Config?.domains?.grid === true;
   const routingV2Enabled = syncV2Config?.domains?.routing === true;
+  const requestedTestsV2Enabled = syncV2Config?.domains?.requested_tests === true;
   const boardDomainsV2Enabled = [
     templatesV2Enabled, drawingsV2Enabled, pingsV2Enabled, fogV2Enabled,
     levelsV2Enabled, scenesV2Enabled, gridV2Enabled, routingV2Enabled,
@@ -796,6 +798,13 @@ export function mountBoardInteractions(store, routes = {}) {
   const DRAG_ACTIVATION_DISTANCE = 6;
   let tokenMovementController = null;
   let tokenMovementRuntime = null;
+  let requestedTestCoordinator = null;
+
+  function applyConfirmedRequestedTests(snapshot) {
+    requestedTestCoordinator?.processSnapshot(snapshot).catch((error) => {
+      console.warn('[VTT] Requested-test update failed', error);
+    });
+  }
 
   function patchTokenMovementNode(sceneId, placementId, placement) {
     const activeSceneId = boardApi.getState?.()?.boardState?.activeSceneId ?? null;
@@ -867,6 +876,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function reconcileTokenMovementSnapshot(snapshot, context = {}) {
+    applyConfirmedRequestedTests(snapshot);
     boardApi.updateStateSilently?.((draft) => {
       if (placementsV2Enabled) {
         tokenMovementRuntime?.overlayBoardState(draft.boardState);
@@ -1207,6 +1217,7 @@ export function mountBoardInteractions(store, routes = {}) {
     applyConfirmedPlacementBatch,
     applyConfirmedCombat,
     applyConfirmedBoardDomain,
+    applyConfirmedRequestedTests,
     reconcileSnapshot: reconcileTokenMovementSnapshot,
     onError: (error) => reportSyncFailure(error, 'token movement'),
     onDiagnostic: (name, details) => {
@@ -1218,6 +1229,51 @@ export function mountBoardInteractions(store, routes = {}) {
       recordSyncDiagnostic(`syncV2${String(name || 'Event')}`, details);
     },
   });
+
+  requestedTestCoordinator = createRequestedTestCoordinator({
+    enabled: requestedTestsV2Enabled,
+    getCurrentUserId,
+    getSceneId: () => boardApi.getState?.()?.boardState?.activeSceneId || null,
+    getProfile: async (placementId) => {
+      const placement = getPlacementFromStore(placementId);
+      const stats = await getAutomationStatsForPlacement(placement);
+      return { name: tokenLabel(placement), stats };
+    },
+    getOwnerId: (placementId) => getLinkedProfileUserIdForPlacement(placementId) || '__gm__',
+    getPlacement: getPlacementFromStore,
+    submitCommand: (type, sceneId, requestId, payload) => (
+      tokenMovementRuntime.submitRequestedTestCommand(type, sceneId, requestId, payload)
+    ),
+    rollRequestedTest: (options) => window.AbilityAutomationRunner.rollRequestedTest(options),
+    cancelRequestedTestRoll: () => window.AbilityAutomationRunner.cancelRequestedTestRoll(),
+    applyContinuation: (record, context) => window.AbilityAutomationRunner.applyRequestedTestContinuation(record, context),
+    refundContinuation: refundRequestedTestRecord,
+    getRollContext: () => window.VTTBoardCallbacks || {},
+    onError: (error) => reportSyncFailure(error, 'requested test'),
+  });
+
+  async function refundRequestedTestRecord(record) {
+    const reservation = record?.resourceReservation || {};
+    const external = reservation.external || {};
+    const maliceSpent = Math.max(0, Number.parseInt(external.maliceSpent ?? 0, 10) || 0);
+    if (maliceSpent > 0) window.MaliceTracker?.add?.(maliceSpent);
+    const spend = reservation.abilityResourceSpend || {};
+    const spent = Math.max(0, Number.parseInt(spend.spent ?? 0, 10) || 0);
+    const sourcePlacementId = record?.sourcePlacementId || '';
+    if (spent > 0 && sourcePlacementId) {
+      const profileId = getAutomationProfileIdForPlacement(sourcePlacementId);
+      const sheet = await getAutomationSheetForPlacement(sourcePlacementId);
+      const resource = sheet?.hero?.resource;
+      if (profileId && resource && typeof resource === 'object') {
+        resource.value = (Number.parseInt(resource.value ?? 0, 10) || 0) + spent;
+        await saveAutomationSheetForProfile(profileId, sheet, 'resource');
+      }
+    }
+    if (reservation.triggeredActionSpend?.consumed && sourcePlacementId) {
+      await refundAutomationTriggeredAction({ placementId: sourcePlacementId });
+    }
+    return { refunded: true };
+  }
 
   function commitCanonicalTokenMoves({ sceneId, moves, source, originalPositions = null }) {
     tokenMovementRuntime.submitMoves(sceneId, moves)
@@ -2467,6 +2523,7 @@ export function mountBoardInteractions(store, routes = {}) {
   document.addEventListener('vtt:automation-fire-trigger-event', handleAutomationFireTriggerEventRequest);
   document.addEventListener('vtt:automation-check-scoped-flag', handleAutomationCheckScopedFlagRequest);
   document.addEventListener('vtt:automation-set-scoped-flag', handleAutomationSetScopedFlagRequest);
+  document.addEventListener('vtt:automation-clear-scoped-flag', handleAutomationClearScopedFlagRequest);
   document.addEventListener('vtt:automation-set-aura', handleAutomationSetAuraRequest);
   document.addEventListener('vtt:automation-floating-text', handleAutomationFloatingTextRequest);
   document.addEventListener('vtt:automation-start-turn', handleAutomationStartTurnRequest);
@@ -2727,6 +2784,15 @@ export function mountBoardInteractions(store, routes = {}) {
     const key = scopedFlagKey(payload);
     if (key) automationScopedFlags.add(key);
     resolve?.({ set: Boolean(key) });
+  }
+
+  function handleAutomationClearScopedFlagRequest(event) {
+    const detail = event?.detail ?? {};
+    const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
+    const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
+    const flag = scopedFlagKey(payload);
+    const cleared = Boolean(flag && automationScopedFlags.delete(flag));
+    resolve?.({ cleared });
   }
 
   function resetAutomationScopedFlags(scope = 'round') {
@@ -13157,10 +13223,14 @@ export function mountBoardInteractions(store, routes = {}) {
     fireTriggerEvent: function (payload) { return dispatchBoardCustom('vtt:automation-fire-trigger-event', 'payload', payload); },
     checkScopedFlag: function (payload) { return dispatchBoardCustom('vtt:automation-check-scoped-flag', 'payload', payload); },
     setScopedFlag: function (payload) { return dispatchBoardCustom('vtt:automation-set-scoped-flag', 'payload', payload); },
+    clearScopedFlag: function (payload) { return dispatchBoardCustom('vtt:automation-clear-scoped-flag', 'payload', payload); },
     setAura: function (payload) { return dispatchBoardCustom('vtt:automation-set-aura', 'payload', payload); },
     showFloatingText: function (payload) { return dispatchBoardCustom('vtt:automation-floating-text', 'payload', payload); },
     startTurn: function (payload) { return dispatchBoardCustom('vtt:automation-start-turn', 'payload', payload); },
     consumeTriggeredAction: function (payload) { return dispatchBoardCustom('vtt:automation-consume-triggered-action', 'payload', payload); },
+    refundTriggeredAction: function (payload) { return refundAutomationTriggeredAction(payload); },
+    requestTest: function (payload) { return requestedTestCoordinator.requestTest(payload); },
+    completeRequestedTests: function (requestIds) { return requestedTestCoordinator.complete(requestIds); },
     getPowerRollSuggestions: function (payload) { return buildBoardPowerRollSuggestions(payload); },
     consumeRollRiders: function (payload) { return consumeBoardRollRiders(payload); },
     getPlacementById: function (placementId) {
@@ -15817,6 +15887,31 @@ export function mountBoardInteractions(store, routes = {}) {
     dispatchTriggerStateChanged(placementId);
     refreshTokenSettings();
     resolve?.({ consumed: true });
+  }
+
+  async function refundAutomationTriggeredAction(payload = {}) {
+    const placementId = String(payload.placementId || '').trim();
+    const activeSceneId = boardApi.getState?.()?.boardState?.activeSceneId ?? null;
+    if (!placementId || !activeSceneId) return { refunded: false };
+    let updated = false;
+    boardApi.updateState?.((draft) => {
+      const target = ensureScenePlacementDraft(draft, activeSceneId)
+        .find((item) => item && item.id === placementId);
+      if (!target) return;
+      target.triggeredActionReady = true;
+      target.triggeredActionUsedThisRound = false;
+      target._lastModified = Date.now();
+      updated = true;
+    });
+    if (!updated) return { refunded: false };
+    markPlacementDirty(activeSceneId, placementId);
+    persistBoardStateSnapshot({}, [{
+      type: 'placement.update', sceneId: activeSceneId, placementId,
+      patch: { triggeredActionReady: true, triggeredActionUsedThisRound: false },
+    }]);
+    dispatchTriggerStateChanged(placementId);
+    refreshTokenSettings();
+    return { refunded: true };
   }
 
   function toggleDamageHealWidget() {

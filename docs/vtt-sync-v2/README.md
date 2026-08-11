@@ -684,6 +684,11 @@ board broadcast, V1 poller, version/grace winner, or broad render subscriber.
 - SQLite, authenticated V2 commands, monotonically revised canonical events,
   private Pusher delivery, and ordered HTTP recovery are the complete
   multiplayer synchronization spine.
+- Requested ability tests are canonical `requestedTests` state. Create,
+  reassign, resolve, claim, cancel, and complete are explicit V2 commands.
+  HTTP recovery projects records only to the initiator, assigned roller, and
+  GM; the shared player Pusher event is redacted. Atomic `claim` prevents two
+  open tabs from applying the same returned tier effects.
 - Feature modules may still call `_persistBoardState` by its historical name,
   but it accepts only recognized placement or board-domain operations and
   derives explicit V2 commands from dirty domain markers. It never serializes

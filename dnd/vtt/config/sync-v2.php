@@ -27,5 +27,6 @@ return [
         'scenes' => true,
         'grid' => true,
         'routing' => true,
+        'requested_tests' => true,
     ],
 ];

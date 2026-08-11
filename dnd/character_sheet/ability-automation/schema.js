@@ -1431,6 +1431,43 @@
       .filter(Boolean);
   }
 
+  function normalizeRequestedTestBlock(input, warnings, path) {
+    const known = new Set([
+      "type", "id", "target", "attribute", "rollMode", "rollFormula",
+      "label", "prompt", "bonus", "edge", "bane", "tiers", "note",
+    ]);
+    const tiersInput = input.tiers && typeof input.tiers === "object" ? input.tiers : {};
+    const tiers = {};
+    for (const key of P.TIER_KEYS) {
+      const legacy = Object.entries(P.LEGACY_TIER_KEYS).find(([, mapped]) => mapped === key)?.[0];
+      tiers[key] = normalizeTier(tiersInput[key] || (legacy && tiersInput[legacy]) || {}, warnings, `${path}.tiers.${key}`);
+    }
+    const attribute = P.normalizeAttribute(input.attribute || "Might");
+    if (!P.ATTRIBUTES.includes(attribute) || attribute === "Strongest") {
+      warnings.push(`${path}: requestedTest attribute must be Might, Agility, Reason, Intuition, or Presence.`);
+    }
+    const rollMode = pickKnown(input.rollMode, ["individual", "singleHighest", "groupByAttribute"], "individual");
+    const block = {
+      type: "requestedTest",
+      id: input.id || createId("requested-test"),
+      target: normalizeTargetRef(input.target),
+      attribute,
+      rollMode,
+      rollFormula: asTrimmedString(input.rollFormula) || "2d10",
+      label: asTrimmedString(input.label) || `${attribute} test`,
+      prompt: asTrimmedString(input.prompt),
+      bonus: asInt(input.bonus, 0),
+      edge: Math.max(0, Math.min(2, asNonNegInt(input.edge, 0))),
+      bane: Math.max(0, Math.min(2, asNonNegInt(input.bane, 0))),
+      tiers,
+    };
+    if (!block.target) warnings.push(`${path}: requestedTest needs a target group.`);
+    if (input.note) block.note = asTrimmedString(input.note);
+    const extras = pickExtras(input, known);
+    if (extras) block._extra = extras;
+    return block;
+  }
+
   const AUTO_RESOLVE_EFFECT_KINDS = new Set([
     "damage",
     "heal",
@@ -1709,6 +1746,8 @@
         return normalizeTargetBlock(input, warnings, path);
       case "powerRoll":
         return normalizePowerRollBlock(input, warnings, path);
+      case "requestedTest":
+        return normalizeRequestedTestBlock(input, warnings, path);
       case "effect":
         return normalizeEffectBlock(input, warnings, path);
       case "trigger":
@@ -1835,6 +1874,15 @@
     const cards = rawCards
       .map((block, index) => normalizeBlock(block, warnings, index))
       .filter(Boolean);
+    let stateChangingCardSeen = false;
+    cards.forEach((block, index) => {
+      if (block?.type === "requestedTest" && stateChangingCardSeen) {
+        warnings.push(`cards[${index}]: requestedTest must appear before state-changing cards so cancellation can refund and restart the whole ability safely.`);
+      }
+      if (["powerRoll", "effect", "persistent", "trigger"].includes(block?.type)) {
+        stateChangingCardSeen = true;
+      }
+    });
 
     const rawModifiers = Array.isArray(input.modifiers) ? input.modifiers : [];
     const modifiers = rawModifiers

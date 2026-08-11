@@ -50,9 +50,10 @@ Selecting a monster token opens the monster ability tray (`monster-ability-tray.
 | Confirm-fire | category `triggered_action` | "Fire triggered action now?" dialog before the runner opens. |
 | Manual trigger resolution | category `triggered_action`, fired without a captured event | The glue sets `manualTriggerResolution`, so the runner **executes** the trigger card's effects (plus any later cards) instead of just arming a listener. |
 | Once-per-round gate | non-free triggered actions | `consumeTriggeredAction` marks the token's triggered action used for the round. A `resource_cost` containing "free" makes it a free triggered action (no consumption). |
+| Requested tests | a `requestedTest` card runs | Routes the standard test window to each selected token's linked owner, or GM/fallback user, and pauses the monster ability until accepted tiers return. Canceling refunds malice and triggered-action use. |
 | PC-only resource skip | `spend`/`resourceGain`/etc. | Chat note + continue; never throws. |
 
-Board callbacks passed through 1:1 to the runner: target/area selection, damage, heal, temporary stamina, conditions, potency, forced movement, teleport, swap, free strikes, persistent zones, marks, scoped flags, auras, floating text, turn starts, trigger events, distance queries. Same surface as PCs (`window.VTTBoardCallbacks`).
+Board callbacks passed through 1:1 to the runner: target/area selection, requested tests, damage, heal, temporary stamina, conditions, potency, forced movement, teleport, swap, free strikes, persistent zones, marks, scoped flags, auras, floating text, turn starts, trigger events, distance queries. Same surface as PCs (`window.VTTBoardCallbacks`).
 
 ## Triggered actions — how they actually fire
 

@@ -25,6 +25,11 @@ $gmOverrideDatabasePath = sys_get_temp_dir()
     . 'vtt-sync-v2-gm-override-'
     . bin2hex(random_bytes(8))
     . '.sqlite';
+$requestedTestDatabasePath = sys_get_temp_dir()
+    . DIRECTORY_SEPARATOR
+    . 'vtt-sync-v2-requested-test-'
+    . bin2hex(random_bytes(8))
+    . '.sqlite';
 
 try {
     $store = new SyncV2Store($databasePath, 'test-world', 2, 2, 3);
@@ -930,12 +935,79 @@ try {
         'A GM may explicitly override the current pick side and start an allied turn.'
     );
 
+    $requestedTestStore = new SyncV2Store($requestedTestDatabasePath, 'requested-test-world', 10, 10, 10);
+    $requestedTestStore->touchPresence('alice', false);
+    $createdTest = $requestedTestStore->acceptRequestedTestCommand([
+        'operationId' => 'requested-test-create-0001',
+        'type' => 'requestedTest.create',
+        'baseRevision' => 0,
+        'sceneId' => 'scene-requested-test',
+        'entityId' => 'request-1',
+        'payload' => ['request' => [
+            'recipientId' => 'alice',
+            'attribute' => 'Presence',
+            'rollMode' => 'individual',
+            'targetIds' => ['hero-token'],
+            'targetNames' => ['Hero'],
+            'test' => ['batchId' => 'batch-1'],
+        ]],
+    ], 'gm', true);
+    expect($createdTest['event']['payload']['request']['recipientId'] === 'alice', 'An online linked owner receives the requested test.');
+    $requestedTestStore->acceptRequestedTestCommand([
+        'operationId' => 'requested-test-create-0002',
+        'type' => 'requestedTest.create',
+        'baseRevision' => 1,
+        'sceneId' => 'scene-requested-test',
+        'entityId' => 'request-2',
+        'payload' => ['request' => [
+            'recipientId' => 'alice', 'attribute' => 'Presence', 'rollMode' => 'individual',
+            'targetIds' => ['second-token'], 'targetNames' => ['Second'],
+            'test' => ['batchId' => 'batch-1'],
+        ]],
+    ], 'gm', true);
+    $resolvedTest = $requestedTestStore->acceptRequestedTestCommand([
+        'operationId' => 'requested-test-resolve-0001',
+        'type' => 'requestedTest.resolve',
+        'baseRevision' => 2,
+        'sceneId' => 'scene-requested-test',
+        'entityId' => 'request-1',
+        'payload' => ['result' => ['tier' => 'tier2', 'total' => 14, 'dice' => [7, 5], 'targetIds' => ['hero-token']]],
+    ], 'alice', false);
+    expect($resolvedTest['event']['payload']['request']['status'] === 'resolved', 'The assigned owner can resolve the test.');
+    $requestedTestStore->acceptRequestedTestCommand([
+        'operationId' => 'requested-test-resolve-0002',
+        'type' => 'requestedTest.resolve',
+        'baseRevision' => 3,
+        'sceneId' => 'scene-requested-test',
+        'entityId' => 'request-2',
+        'payload' => ['result' => ['tier' => 'tier3', 'total' => 18, 'dice' => [9, 9], 'targetIds' => ['second-token']]],
+    ], 'alice', false);
+    $claimedTest = $requestedTestStore->acceptRequestedTestCommand([
+        'operationId' => 'requested-test-claim-0001',
+        'type' => 'requestedTest.claim',
+        'baseRevision' => 4,
+        'sceneId' => 'scene-requested-test',
+        'entityId' => 'request-1',
+        'payload' => [],
+    ], 'gm', true);
+    expect($claimedTest['event']['payload']['request']['status'] === 'applying', 'The ability user atomically claims returned effects.');
+    expect(count($claimedTest['event']['payload']['requests']) === 2, 'One claim atomically covers the complete requested-test batch.');
+    $duplicateClaim = $requestedTestStore->acceptRequestedTestCommand([
+        'operationId' => 'requested-test-claim-0002',
+        'type' => 'requestedTest.claim',
+        'baseRevision' => 5,
+        'sceneId' => 'scene-requested-test',
+        'entityId' => 'request-1',
+        'payload' => [],
+    ], 'gm', true);
+    expect($duplicateClaim['status'] === 'conflict', 'A second tab cannot claim the same returned effects.');
+
     echo json_encode([
         'success' => true,
         'revision' => $store->getSnapshot()['revision'],
     ], JSON_UNESCAPED_SLASHES);
 } finally {
-    unset($store, $overrideStore, $gmOverrideStore);
+    unset($store, $overrideStore, $gmOverrideStore, $requestedTestStore);
     gc_collect_cycles();
     foreach ([
         $databasePath,
@@ -947,6 +1019,9 @@ try {
         $gmOverrideDatabasePath,
         $gmOverrideDatabasePath . '-shm',
         $gmOverrideDatabasePath . '-wal',
+        $requestedTestDatabasePath,
+        $requestedTestDatabasePath . '-shm',
+        $requestedTestDatabasePath . '-wal',
     ] as $path) {
         if (is_file($path)) {
             @unlink($path);

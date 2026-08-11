@@ -274,6 +274,20 @@ function vttSyncV2ProjectSnapshotForUser(array $snapshot, array $auth): array
     }
     $snapshot['state']['placements'] = $projected;
     unset($snapshot['state']['claims']);
+    $requestedTests = is_array($snapshot['state']['requestedTests'] ?? null)
+        ? $snapshot['state']['requestedTests']
+        : [];
+    $projectedTests = [];
+    foreach ($requestedTests as $requestId => $request) {
+        if (!is_string($requestId) || !is_array($request)) {
+            continue;
+        }
+        $projectedRequest = vttSyncV2ProjectRequestedTestRecordForUser($request, $auth);
+        if ($projectedRequest !== null) {
+            $projectedTests[$requestId] = $projectedRequest;
+        }
+    }
+    $snapshot['state']['requestedTests'] = $projectedTests;
     if (!($auth['isGM'] ?? false)) {
         foreach ($sceneConfig as $sceneId => $config) {
             if (is_string($sceneId) && is_array($config)) {
@@ -359,6 +373,9 @@ function vttSyncV2ProjectEventForUser(array $event, array $auth): array
         return $event;
     }
     $type = (string) ($event['type'] ?? '');
+    if ($type === 'requestedTest.changed') {
+        return vttSyncV2ProjectRequestedTestEventForUser($event, $auth);
+    }
     if ($type === 'placement.batchApplied') {
         return vttSyncV2ProjectPlacementEventForUser($event, $auth);
     }
@@ -417,6 +434,69 @@ function vttSyncV2ProjectEventForUser(array $event, array $auth): array
         ) {
             return vttSyncV2RedactedEvent($event);
         }
+    }
+    $event['actorId'] = null;
+    return $event;
+}
+
+function vttSyncV2ProjectRequestedTestRecordForUser(array $request, array $auth): ?array
+{
+    if (($auth['isGM'] ?? false) === true) {
+        return $request;
+    }
+    $userId = strtolower(trim((string) ($auth['user'] ?? '')));
+    if ($userId === '') {
+        return null;
+    }
+    $initiatorId = strtolower(trim((string) ($request['initiatorId'] ?? '')));
+    $recipientId = strtolower(trim((string) ($request['recipientId'] ?? '')));
+    if ($userId !== $initiatorId && $userId !== $recipientId) {
+        return null;
+    }
+    if ($userId !== $initiatorId) {
+        unset($request['continuation'], $request['resourceReservation']);
+    }
+    return $request;
+}
+
+function vttSyncV2ProjectRequestedTestEventForUser(array $event, array $auth): array
+{
+    if (($auth['isGM'] ?? false) === true) {
+        return $event;
+    }
+    $userId = strtolower(trim((string) ($auth['user'] ?? '')));
+    $visibleTo = array_map(
+        static fn ($value): string => strtolower(trim((string) $value)),
+        is_array($event['payload']['visibleTo'] ?? null) ? $event['payload']['visibleTo'] : []
+    );
+    if ($userId === '' || !in_array($userId, $visibleTo, true)) {
+        return vttSyncV2RedactedEvent($event);
+    }
+    $request = is_array($event['payload']['request'] ?? null)
+        ? $event['payload']['request']
+        : null;
+    $projected = $request === null
+        ? null
+        : vttSyncV2ProjectRequestedTestRecordForUser($request, $auth);
+    $projectedRequests = [];
+    foreach (is_array($event['payload']['requests'] ?? null) ? $event['payload']['requests'] : [] as $id => $batchRequest) {
+        if (!is_array($batchRequest)) continue;
+        $visible = vttSyncV2ProjectRequestedTestRecordForUser($batchRequest, $auth);
+        if ($visible !== null) $projectedRequests[$id] = $visible;
+    }
+    if ($projected === null && $projectedRequests !== []) {
+        $projected = reset($projectedRequests);
+    }
+    if ($projected === null) {
+        $event['payload'] = [
+            'requestId' => $event['payload']['requestId'] ?? $event['entityId'] ?? null,
+            'request' => null,
+            'removed' => true,
+        ];
+    } else {
+        $event['payload']['request'] = $projected;
+        $event['payload']['requests'] = $projectedRequests;
+        unset($event['payload']['visibleTo']);
     }
     $event['actorId'] = null;
     return $event;

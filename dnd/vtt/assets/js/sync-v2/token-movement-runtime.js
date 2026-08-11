@@ -51,6 +51,7 @@ export function createTokenMovementRuntime({
   applyConfirmedPlacementBatch = () => {},
   applyConfirmedCombat = () => {},
   applyConfirmedBoardDomain = () => {},
+  applyConfirmedRequestedTests = () => {},
   reconcileSnapshot = () => {},
   onError = (error) => console.warn('[VTT Sync V2] Token movement failed', error),
   onDiagnostic = () => {},
@@ -64,6 +65,7 @@ export function createTokenMovementRuntime({
       submitPlacementOps: async () => null,
       submitCombatCommand: async () => null,
       submitBoardDomainCommands: async () => [],
+      submitRequestedTestCommand: async () => null,
       claimCombatAutomation: async () => null,
       recover: async () => null,
       overlayBoardState: (boardState) => boardState,
@@ -134,6 +136,13 @@ export function createTokenMovementRuntime({
         applyConfirmedBoardDomain(
           store.getConfirmedSnapshot(),
           changeSet,
+          context
+        );
+      }
+      if (changeSet?.requestedTests) {
+        applyConfirmedRequestedTests(
+          store.getConfirmedSnapshot(),
+          context.event?.payload ?? {},
           context
         );
       }
@@ -366,6 +375,26 @@ export function createTokenMovementRuntime({
     }
   }
 
+  async function submitRequestedTestCommand(type, sceneId, requestId, payload = {}) {
+    if (!sceneId || !requestId) {
+      throw new TypeError('A requested-test command requires sceneId and requestId');
+    }
+    await start();
+    try {
+      return await commandClient.submit(type, payload, {
+        sceneId,
+        entityId: requestId,
+      });
+    } catch (error) {
+      const conflictSnapshot = error?.response?.snapshot;
+      if (error?.status === 409 && conflictSnapshot) {
+        store.replaceSnapshot(conflictSnapshot, { authoritative: true, source: 'conflict' });
+        reconcileSnapshot(store.getConfirmedSnapshot(), { source: 'conflict' });
+      }
+      throw error;
+    }
+  }
+
   function boardDomainEntityRevision(type, sceneId, entityId) {
     const state = store.getConfirmedSnapshot()?.state ?? {};
     if (type.startsWith('template.')) {
@@ -536,6 +565,7 @@ export function createTokenMovementRuntime({
     submitPlacementOps,
     submitCombatCommand,
     submitBoardDomainCommands,
+    submitRequestedTestCommand,
     claimCombatAutomation,
     recover: () => eventStream.recover(),
     overlayBoardState,

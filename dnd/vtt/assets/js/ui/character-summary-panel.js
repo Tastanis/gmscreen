@@ -2657,6 +2657,7 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
     fireTriggerEvent: requestAutomationFireTriggerEvent,
     checkScopedFlag: requestAutomationCheckScopedFlag,
     setScopedFlag: requestAutomationSetScopedFlag,
+    clearScopedFlag: requestAutomationClearScopedFlag,
     setAura: requestAutomationSetAura,
     showFloatingText: requestAutomationFloatingText,
     startTurn: requestAutomationStartTurn,
@@ -2678,6 +2679,18 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
     spendHeroicResource: (payload) => spendHeroicResource(sheet, payload, options),
     spendResource: (ability) => spendAbilityResource(sheet, ability, options),
     consumeTriggeredAction: requestAutomationConsumeTriggeredAction,
+    requestTest: (payload) => window.VTTBoardCallbacks?.requestTest?.(payload),
+    completeRequestedTests: (requestIds) => window.VTTBoardCallbacks?.completeRequestedTests?.(requestIds),
+    refundAbility: async (payload = {}) => {
+      const spend = payload.resourceSpend || {};
+      if (Number(spend.spent) > 0) {
+        await applyAbilityResourceGain(sheet, { resource: spend.resource, amount: Number(spend.spent) }, options);
+      }
+      if (payload.triggeredActionSpend?.consumed) {
+        await window.VTTBoardCallbacks?.refundTriggeredAction?.({ placementId: payload.sourcePlacementId });
+      }
+      return { refunded: true };
+    },
     getDistanceBetween: (idA, idB) => (
       window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.getDistanceBetween === 'function'
         ? window.VTTBoardCallbacks.getDistanceBetween(idA, idB)
@@ -3430,6 +3443,14 @@ async function saveCharacterSummarySheet(sheet, options = {}) {
     channel.close();
   }
   return saved;
+}
+
+function requestAutomationClearScopedFlag(payload) {
+  return new Promise((resolve, reject) => {
+    document.dispatchEvent(new CustomEvent('vtt:automation-clear-scoped-flag', {
+      detail: { payload: clonePlain(payload || {}), resolve, reject },
+    }));
+  });
 }
 
 async function saveCharacterHeroicResource(sheet, options = {}) {

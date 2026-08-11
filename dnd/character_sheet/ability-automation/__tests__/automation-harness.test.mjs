@@ -687,6 +687,67 @@ test('validation normalizes top-level usage limits', async () => {
   }
 });
 
+test('requestedTest pauses for returned tiers and applies each result to its targets', async () => {
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const result = await harness.runAutomation({
+      automation: {
+        schema: 'ability-automation/v3',
+        cards: [
+          { type: 'target', name: 'affected', mode: 'token', count: { value: 2, mode: 'exact' } },
+          {
+            type: 'requestedTest', target: 'affected', attribute: 'Presence', rollMode: 'individual',
+            tiers: {
+              tier1: { effects: [{ kind: 'damage', amount: 8, damageType: 'fire' }] },
+              tier2: { effects: [{ kind: 'damage', amount: 4, damageType: 'fire' }] },
+              tier3: { effects: [] },
+            },
+          },
+        ],
+      },
+      targetSelections: [{ id: 'target-1', name: 'One' }, { id: 'target-2', name: 'Two' }],
+      requestTest: async (payload) => ({
+        canceled: false,
+        requestIds: ['r1', 'r2'],
+        results: [
+          { requestId: 'r1', tier: 'tier1', targetIds: [payload.targets[0].id] },
+          { requestId: 'r2', tier: 'tier2', targetIds: [payload.targets[1].id] },
+        ],
+      }),
+    });
+    assert.equal(result.calls.requestTest.length, 1);
+    assert.deepEqual(result.calls.applyDamage.map((call) => [call.placementId, call.amount]), [['target-1', 8], ['target-2', 4]]);
+    assert.deepEqual(result.calls.completeRequestedTests[0], ['r1', 'r2']);
+  } finally {
+    harness.close();
+  }
+});
+
+test('canceling a requestedTest clears usage and refunds the tracked spend', async () => {
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const result = await harness.runAutomation({
+      action: { id: 'costly', name: 'Costly Test', cost: '3 Wrath' },
+      spendResourceResults: [{ spent: 3, resource: 'Wrath' }],
+      automation: {
+        schema: 'ability-automation/v3',
+        usageLimit: { scope: 'encounter', key: 'costly-test', target: 'self' },
+        cards: [
+          { type: 'target', name: 'affected', mode: 'token', count: { value: 1, mode: 'exact' } },
+          { type: 'requestedTest', target: 'affected', attribute: 'Might', tiers: {} },
+        ],
+      },
+      targetSelections: [{ id: 'target-1', name: 'One' }],
+      requestTest: async () => ({ canceled: true, requestIds: ['request-1'] }),
+    });
+    assert.equal(result.calls.clearScopedFlag.length, 1);
+    assert.equal(result.calls.refundAbility[0].resourceSpend.spent, 3);
+    assert.deepEqual(result.calls.completeRequestedTests[0], ['request-1']);
+  } finally {
+    harness.close();
+  }
+});
+
 test('runner prompts for a target, accepts a power roll, and applies tier damage to that token', async () => {
   const harness = await createAbilityAutomationHarness({
     attributes: { Might: 2 },

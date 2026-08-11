@@ -469,6 +469,10 @@ test('scene.deleted removes every scene-owned canonical domain in one event', ()
         old: { id: 'old', sceneId: 'scene-1' },
         keep: { id: 'keep', sceneId: 'scene-2' },
       },
+      requestedTests: {
+        oldTest: { id: 'oldTest', sceneId: 'scene-1' },
+        keepTest: { id: 'keepTest', sceneId: 'scene-2' },
+      },
       routing: { activeSceneId: 'scene-1' },
     },
   };
@@ -490,6 +494,30 @@ test('scene.deleted removes every scene-owned canonical domain in one event', ()
   }
   assert.equal(result.snapshot.state.pings.old, undefined);
   assert.equal(result.snapshot.state.pings.keep.sceneId, 'scene-2');
+  assert.equal(result.snapshot.state.requestedTests.oldTest, undefined);
+  assert.equal(result.snapshot.state.requestedTests.keepTest.sceneId, 'scene-2');
   assert.equal(result.snapshot.state.routing.activeSceneId, null);
   assert.equal(result.changeSet.snapshot, true);
+});
+
+test('requestedTest.changed upserts and removes the canonical private request', () => {
+  const created = reduceCanonicalEvent({ revision: 0, state: {} }, {
+    revision: 1,
+    operationId: 'requested-test-create-1',
+    type: 'requestedTest.changed',
+    sceneId: 'scene-1',
+    entityId: 'request-1',
+    payload: { requestId: 'request-1', request: { id: 'request-1', status: 'pending' } },
+  });
+  assert.equal(created.snapshot.state.requestedTests['request-1'].status, 'pending');
+  assert.equal(created.changeSet.requestedTests, true);
+  const removed = reduceCanonicalEvent(created.snapshot, {
+    revision: 2,
+    operationId: 'requested-test-complete-1',
+    type: 'requestedTest.changed',
+    sceneId: 'scene-1',
+    entityId: 'request-1',
+    payload: { requestId: 'request-1', request: null, removed: true },
+  });
+  assert.equal(removed.snapshot.state.requestedTests['request-1'], undefined);
 });

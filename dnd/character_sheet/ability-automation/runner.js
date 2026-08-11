@@ -1223,14 +1223,22 @@
   }
 
   function wirePowerRoll(host, state, block, resolve) {
+    const finish = () => {
+      host.removeEventListener("click", onClick);
+      host.removeEventListener("automation-cancel", onCancel);
+      resolve();
+    };
+    const onCancel = () => {
+      state.aborted = true;
+      finish();
+    };
     const onClick = async (event) => {
       const target = event.target instanceof Element ? event.target : null;
       if (!target) return;
       if (target.closest("[data-cancel-automation]")) {
-        host.removeEventListener("click", onClick);
         state.aborted = true;
         closeRunner();
-        resolve();
+        finish();
         return;
       }
       if (target.closest("[data-power-roll-edge-adjust]")) {
@@ -1319,19 +1327,19 @@
         if (acceptedEdgeState.net > 0) {
           state.acceptedPowerRollWithEdge = true;
         }
-        host.removeEventListener("click", onClick);
         closeRunner();
-        resolve();
+        finish();
       }
     };
 
     host.addEventListener("click", onClick);
+    host.addEventListener("automation-cancel", onCancel);
   }
 
   async function runPowerRollBlock(state, block) {
     await refreshPowerRollSurges(state);
-    state.edgeCount = 0;
-    state.baneCount = 0;
+    state.edgeCount = Math.max(0, Math.min(2, asInt(block?.edge, 0)));
+    state.baneCount = Math.max(0, Math.min(2, asInt(block?.bane, 0)));
     state.manualBonus = 0;
     state.powerRollSurges = 0;
     state.roll = null;
@@ -1361,6 +1369,96 @@
         consumed: false,
       },
     });
+  }
+
+  function serializeRequestedTestContinuation(state, block, targets) {
+    return {
+      kind: "abilityAutomationRequestedTest",
+      action: state.action || {},
+      hero: state.hero || {},
+      heroName: state.heroName || "",
+      sourcePlacement: state.sourcePlacement || null,
+      sourceTraits: state.sourceTraits || {},
+      targetGroup: block.target || state.currentGroup || "primary",
+      targets: (targets || []).map((target) => ({
+        id: target?.id || "",
+        name: target?.name || target?.label || "",
+      })).filter((target) => target.id),
+      tiers: block.tiers || {},
+      note: block.note || "",
+    };
+  }
+
+  async function applyRequestedTestTier(state, block, result) {
+    const tierKey = String(result?.tier || "").trim();
+    const tier = block.tiers?.[tierKey];
+    if (!tier) return;
+    const resultTargets = (Array.isArray(result?.targetIds) ? result.targetIds : [])
+      .map((id) => state.context.getPlacementById?.(id) || { id, name: id })
+      .filter((target) => target?.id);
+    const groupName = `requested-test-${result?.requestId || tierKey}`;
+    setTargetGroup(state, groupName, resultTargets);
+    await applyEffects(state, tier.effects || [], groupName, {
+      sourceLabel: `${state.action.name || "Ability"} (${P.tierLabel(tierKey)})`,
+    });
+  }
+
+  async function runRequestedTestBlock(state, block) {
+    if (typeof state.context.requestTest !== "function") {
+      await postChat(state.context, {
+        message: `${state.action.name || "Ability"}: ${block.label || block.attribute || "requested test"} must be rolled manually.`,
+      });
+      return;
+    }
+    const targets = getTargetGroup(state, block.target);
+    if (!targets.length) return;
+    const response = await state.context.requestTest({
+      abilityName: state.action.name || "Ability",
+      sourcePlacementId: state.sourcePlacement?.id || "",
+      sourceName: state.heroName || state.action.name || "Ability",
+      target: block.target,
+      targets: targets.map((target) => ({
+        id: target?.id || "",
+        name: target?.name || target?.label || "",
+      })).filter((target) => target.id),
+      attribute: block.attribute,
+      rollMode: block.rollMode,
+      rollFormula: block.rollFormula,
+      label: block.label,
+      prompt: block.prompt,
+      bonus: block.bonus,
+      edge: block.edge,
+      bane: block.bane,
+      tiers: block.tiers,
+      continuation: serializeRequestedTestContinuation(state, block, targets),
+      resourceReservation: {
+        abilityResourceSpend: state.abilityResourceSpend || null,
+        triggeredActionSpend: state.triggeredActionSpend || null,
+        external: state.context.resourceReservation || null,
+      },
+    });
+    if (response?.canceled) {
+      state.aborted = true;
+      await clearUsageLimit(state);
+      if (typeof state.context.refundAbility === "function") {
+        await state.context.refundAbility({
+          resourceSpend: state.abilityResourceSpend,
+          triggeredActionSpend: state.triggeredActionSpend || null,
+          action: state.action,
+          sourcePlacementId: state.sourcePlacement?.id || "",
+        });
+      }
+      if (typeof state.context.completeRequestedTests === "function") {
+        await state.context.completeRequestedTests(response?.requestIds || []);
+      }
+      return;
+    }
+    for (const result of Array.isArray(response?.results) ? response.results : []) {
+      await applyRequestedTestTier(state, block, result);
+    }
+    if (typeof state.context.completeRequestedTests === "function") {
+      await state.context.completeRequestedTests(response?.requestIds || []);
+    }
   }
 
   async function consumeActiveRollRiders(state, block) {
@@ -3291,6 +3389,8 @@
         return runTargetBlock(state, effective);
       case "powerRoll":
         return runPowerRollBlock(state, effective);
+      case "requestedTest":
+        return runRequestedTestBlock(state, effective);
       case "effect":
         return runEffectBlock(state, effective);
       case "trigger":
@@ -3447,6 +3547,34 @@
   function walkAutomationEffects(automation, visit) {
     walkAutomationBlocks(automation, (block) => {
       walkBlockEffects(block, visit);
+    });
+  }
+
+  function fireActionUsedEvent(state) {
+    if (typeof state.context.fireTriggerEvent !== "function") return;
+    state.context.fireTriggerEvent({
+      eventType: "actionUsed",
+      payload: {
+        actorId: state.sourcePlacement?.id || "",
+        actionId: state.action?.id || "",
+        actionName: state.action?.name || "Ability",
+        actionKind: getActionKind(state),
+        cost: state.action?.cost || state.action?.resource_cost || state.action?.resourceCost || "",
+        keywords: getAbilityKeywords(state),
+      },
+    });
+  }
+
+  async function clearUsageLimit(state) {
+    const limit = state.automation?.usageLimit;
+    if (!limit || !limit.key || typeof state.context.clearScopedFlag !== "function") return;
+    const ids = resolveUsageLimitIds(state, limit);
+    if (!ids.sourceId || !ids.targetId) return;
+    await state.context.clearScopedFlag({
+      scope: limit.scope || "round",
+      key: limit.key,
+      sourceId: ids.sourceId,
+      targetId: ids.targetId,
     });
   }
 
@@ -3692,6 +3820,7 @@
       aborted: false,
       appliedModifiers: [],
       abilityResourceSpend: null,
+      triggeredActionSpend: null,
       acceptedPowerRollWithEdge: false,
       edgeCostDiscountHandled: false,
     };
@@ -3711,6 +3840,7 @@
       const actionType = String(state.context?.actionType || state.action?.actionType || state.action?.kind || state.action?.type || "").toLowerCase();
       const triggerOnlyAction = actionType.includes("trigger") || isNonFreeTriggeredAction(state.action);
       const isArmingOnly = triggerOnlyAction && structuredTriggerBlocks.length > 0 && !isResolvingReadyTrigger && !isManualTriggerResolution;
+      const defersActionUsed = blocks.some((block) => block?.type === "requestedTest");
 
       if (!isArmingOnly) {
         for (const block of blocks) {
@@ -3765,19 +3895,7 @@
         return;
       }
 
-      if (typeof state.context.fireTriggerEvent === "function") {
-        state.context.fireTriggerEvent({
-          eventType: "actionUsed",
-          payload: {
-            actorId: state.sourcePlacement?.id || "",
-            actionId: state.action?.id || "",
-            actionName: state.action?.name || "Ability",
-            actionKind: getActionKind(state),
-            cost: state.action?.cost || state.action?.resource_cost || state.action?.resourceCost || "",
-            keywords: getAbilityKeywords(state),
-          },
-        });
-      }
+      if (!defersActionUsed) fireActionUsedEvent(state);
       if ((isResolvingReadyTrigger || isManualTriggerResolution) && isNonFreeTriggeredAction(state.action) && typeof state.context.consumeTriggeredAction === "function") {
         const consumeResult = await state.context.consumeTriggeredAction({
           placementId: state.sourcePlacement?.id || "",
@@ -3789,6 +3907,7 @@
           });
           return;
         }
+        state.triggeredActionSpend = consumeResult || { consumed: true };
       }
       await markUsageLimit(state);
       if ((isResolvingReadyTrigger || isManualTriggerResolution) && structuredTriggerBlocks.length) {
@@ -3801,6 +3920,7 @@
         if (isResolvingReadyTrigger && block?.type === "trigger") continue;
         await runBlockAt(state, blocks, index);
       }
+      if (!state.aborted && defersActionUsed) fireActionUsedEvent(state);
       if (state.aborted) {
         await postChat(state.context, {
           message: `${state.heroName} - ${state.action.name || "Ability"} automation canceled.`,
@@ -3824,6 +3944,83 @@
   global.AbilityAutomationRunner = {
     open,
     close: closeRunner,
+    cancelRequestedTestRoll() {
+      const host = document.getElementById(RUNNER_ID);
+      host?.dispatchEvent(new CustomEvent("automation-cancel"));
+      closeRunner();
+    },
+    async rollRequestedTest(options = {}) {
+      const profile = options.profile && typeof options.profile === "object" ? options.profile : {};
+      const stats = profile.stats && typeof profile.stats === "object" ? profile.stats : {};
+      const attribute = String(options.attribute || "Might");
+      const target = options.target || { id: options.targetId || "", name: options.targetName || "Creature" };
+      const state = {
+        action: { name: options.label || `${attribute} test`, skill: "" },
+        automation: {},
+        context: {
+          ...(options.context || {}),
+          getAttributeBonus: (name) => asInt(stats[String(name || "").trim().toLowerCase()], 0),
+          getSkillBonus: () => 0,
+          getStrongestAttribute: () => ({ attribute, bonus: asInt(stats[attribute.toLowerCase()], 0) }),
+        },
+        hero: { name: profile.name || options.targetName || "Creature", stats, surges: 0 },
+        heroName: profile.name || options.targetName || "Creature",
+        sourcePlacement: target,
+        sourceTraits: {},
+        groups: { self: [target] },
+        currentGroup: "self",
+        choices: {}, executionKeywords: null, shiftPools: {}, areas: {}, currentArea: null,
+        selectedTier: null, baseTier: null, edgeCount: 0, baneCount: 0, manualBonus: 0,
+        roll: null, resultText: "", aborted: false, appliedModifiers: [], abilityResourceSpend: null,
+        acceptedPowerRollWithEdge: false, edgeCostDiscountHandled: true,
+      };
+      const block = {
+        type: "powerRoll",
+        target: "self",
+        attribute,
+        flatBonus: asInt(options.flatBonus, asInt(stats[attribute.toLowerCase()], 0)),
+        bonus: asInt(options.bonus, 0),
+        edge: asInt(options.edge, 0),
+        bane: asInt(options.bane, 0),
+        rollFormula: options.rollFormula || "2d10",
+        rollEvent: "abilityTest",
+        label: options.prompt || options.label || `${attribute} test`,
+        tiers: { tier1: { effects: [] }, tier2: { effects: [] }, tier3: { effects: [] } },
+      };
+      await runPowerRollBlock(state, block);
+      if (state.aborted || !state.selectedTier || !state.roll) return { canceled: true };
+      const total = getPowerRollTotal(state, block);
+      return {
+        canceled: false,
+        tier: state.selectedTier,
+        total: total.total,
+        dice: state.roll.rolls,
+        rollFormula: state.roll.notation,
+        attribute,
+        attributeBonus: total.attributeBonus,
+        bonus: total.bonus + total.manualBonus,
+        edge: total.edgeState.edge,
+        bane: total.edgeState.bane,
+      };
+    },
+    async applyRequestedTestContinuation(record, context = {}) {
+      const continuation = record?.continuation || {};
+      const state = {
+        action: continuation.action || { name: record?.abilityName || "Ability" },
+        automation: {},
+        context,
+        hero: continuation.hero || {},
+        heroName: continuation.heroName || "",
+        sourcePlacement: continuation.sourcePlacement || null,
+        sourceTraits: continuation.sourceTraits || {},
+        groups: {}, currentGroup: continuation.targetGroup || "primary", choices: {}, executionKeywords: null,
+        shiftPools: {}, areas: {}, currentArea: null, aborted: false,
+      };
+      await applyRequestedTestTier(state, { tiers: continuation.tiers || {} }, {
+        ...(record?.result || {}), requestId: record?.id, targetIds: record?.targetIds || [],
+      });
+      return { applied: true };
+    },
     __testing: {
       getActiveEdgeControl,
       getEdgeState,

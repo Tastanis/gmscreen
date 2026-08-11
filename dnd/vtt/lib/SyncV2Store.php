@@ -78,6 +78,208 @@ final class SyncV2Store
         ];
     }
 
+    public function touchPresence(string $actorId, bool $isGm): void
+    {
+        $actorId = strtolower(trim($actorId));
+        if ($actorId === '') {
+            return;
+        }
+        $statement = $this->pdo->prepare(
+            'INSERT INTO vtt_presence (world_id, user_id, is_gm, last_seen)
+             VALUES (:world_id, :user_id, :is_gm, :last_seen)
+             ON CONFLICT(world_id, user_id) DO UPDATE SET
+               is_gm = excluded.is_gm,
+               last_seen = excluded.last_seen'
+        );
+        $statement->execute([
+            'world_id' => $this->worldId,
+            'user_id' => $actorId,
+            'is_gm' => $isGm ? 1 : 0,
+            'last_seen' => $this->nowMilliseconds(),
+        ]);
+    }
+
+    /**
+     * Server-authoritative remote ability-test request lifecycle. Requests are
+     * stored in canonical world state so reload/replay can resume them, while
+     * audience projection exposes each request only to its initiator,
+     * recipient, and the GM.
+     */
+    public function acceptRequestedTestCommand(
+        array $command,
+        string $actorId,
+        bool $isGm
+    ): array {
+        $normalized = $this->normalizeRequestedTestCommand($command);
+        $actorId = strtolower(trim($actorId));
+        if ($actorId === '') {
+            throw new InvalidArgumentException('An authenticated actor ID is required.');
+        }
+        $this->touchPresence($actorId, $isGm);
+
+        $this->pdo->exec('BEGIN IMMEDIATE');
+        try {
+            $existing = $this->findEventByOperationId($normalized['operationId']);
+            if ($existing !== null) {
+                $this->pdo->exec('COMMIT');
+                return ['status' => 'accepted', 'event' => $existing, 'idempotent' => true];
+            }
+            $snapshot = $this->getSnapshot();
+            if ($normalized['baseRevision'] > $snapshot['revision']) {
+                return $this->rollbackConflict('base_revision_ahead', $snapshot);
+            }
+            $state = $snapshot['state'];
+            $state['requestedTests'] = is_array($state['requestedTests'] ?? null)
+                ? $state['requestedTests']
+                : [];
+            $type = $normalized['type'];
+            $payload = $normalized['payload'];
+            $requestId = $normalized['requestId'];
+            $before = is_array($state['requestedTests'][$requestId] ?? null)
+                ? $state['requestedTests'][$requestId]
+                : null;
+            $request = $before;
+            $removed = false;
+            $batchRequests = null;
+
+            if ($type === 'requestedTest.create') {
+                if ($before !== null) {
+                    return $this->rollbackConflict('requested_test_exists', $snapshot);
+                }
+                $requestInput = is_array($payload['request'] ?? null) ? $payload['request'] : [];
+                $recipient = $this->resolveRequestedTestRecipient(
+                    strtolower(trim((string) ($requestInput['recipientId'] ?? ''))),
+                    $actorId
+                );
+                $request = $this->normalizeRequestedTestRecord([
+                    ...$requestInput,
+                    'id' => $requestId,
+                    'sceneId' => $normalized['sceneId'],
+                    'initiatorId' => $actorId,
+                    'recipientId' => $recipient,
+                    'originalRecipientId' => $recipient,
+                    'status' => 'pending',
+                    'createdAt' => $this->nowMilliseconds(),
+                    'updatedAt' => $this->nowMilliseconds(),
+                ]);
+                $state['requestedTests'][$requestId] = $request;
+            } else {
+                if ($before === null) {
+                    return $this->rollbackConflict('requested_test_not_found', $snapshot);
+                }
+                $initiatorId = strtolower((string) ($before['initiatorId'] ?? ''));
+                $recipientId = strtolower((string) ($before['recipientId'] ?? ''));
+                if ($type === 'requestedTest.reassign') {
+                    if ($actorId !== $initiatorId) {
+                        throw new InvalidArgumentException('Only the ability user may recall requested tests.');
+                    }
+                    if (($before['status'] ?? '') !== 'pending') {
+                        return $this->rollbackConflict('requested_test_not_pending', $snapshot);
+                    }
+                    $request['recipientId'] = $actorId;
+                    $request['updatedAt'] = $this->nowMilliseconds();
+                    $state['requestedTests'][$requestId] = $request;
+                } elseif ($type === 'requestedTest.resolve') {
+                    if ($actorId !== $recipientId) {
+                        throw new InvalidArgumentException('Only the assigned roller may submit this test.');
+                    }
+                    if (($before['status'] ?? '') !== 'pending') {
+                        return $this->rollbackConflict('requested_test_already_finished', $snapshot);
+                    }
+                    $request['status'] = 'resolved';
+                    $request['result'] = $this->normalizeRequestedTestResult($payload['result'] ?? null);
+                    $request['resolvedBy'] = $actorId;
+                    $request['updatedAt'] = $this->nowMilliseconds();
+                    $state['requestedTests'][$requestId] = $request;
+                } elseif ($type === 'requestedTest.claim') {
+                    if ($actorId !== $initiatorId) {
+                        throw new InvalidArgumentException('Only the ability user may claim requested-test effects.');
+                    }
+                    $batchId = trim((string) ($before['test']['batchId'] ?? $requestId));
+                    $batchRequests = [];
+                    foreach ($state['requestedTests'] as $candidateId => $candidate) {
+                        if (!is_array($candidate)) continue;
+                        $candidateBatchId = trim((string) ($candidate['test']['batchId'] ?? $candidateId));
+                        if ($candidateBatchId !== $batchId || strtolower((string) ($candidate['initiatorId'] ?? '')) !== $actorId) continue;
+                        if (($candidate['status'] ?? '') !== 'resolved') {
+                            return $this->rollbackConflict('requested_test_batch_not_resolved', $snapshot);
+                        }
+                        $candidate['status'] = 'applying';
+                        $candidate['claimedBy'] = $actorId;
+                        $candidate['updatedAt'] = $this->nowMilliseconds();
+                        $state['requestedTests'][$candidateId] = $candidate;
+                        $batchRequests[$candidateId] = $candidate;
+                    }
+                    if ($batchRequests === []) {
+                        return $this->rollbackConflict('requested_test_batch_not_found', $snapshot);
+                    }
+                    $request = $batchRequests[$requestId] ?? reset($batchRequests);
+                } elseif ($type === 'requestedTest.cancel') {
+                    if ($actorId !== $initiatorId && $actorId !== $recipientId && !$isGm) {
+                        throw new InvalidArgumentException('Only a participant may cancel this requested test.');
+                    }
+                    if (($before['status'] ?? '') === 'completed') {
+                        return $this->rollbackConflict('requested_test_already_finished', $snapshot);
+                    }
+                    $request['status'] = 'canceled';
+                    $request['canceledBy'] = $actorId;
+                    $request['updatedAt'] = $this->nowMilliseconds();
+                    $state['requestedTests'][$requestId] = $request;
+                } elseif ($type === 'requestedTest.complete') {
+                    if ($actorId !== $initiatorId && !$isGm) {
+                        throw new InvalidArgumentException('Only the ability user may complete this requested test.');
+                    }
+                    unset($state['requestedTests'][$requestId]);
+                    $removed = true;
+                }
+            }
+
+            $revision = $snapshot['revision'] + 1;
+            $serverTime = $this->nowMilliseconds();
+            $visibleTo = array_values(array_unique(array_filter([
+                strtolower((string) ($before['initiatorId'] ?? '')),
+                strtolower((string) ($before['recipientId'] ?? '')),
+                strtolower((string) ($request['initiatorId'] ?? '')),
+                strtolower((string) ($request['recipientId'] ?? '')),
+            ])));
+            if (is_array($batchRequests)) {
+                foreach ($batchRequests as $batchRequest) {
+                    $visibleTo[] = strtolower((string) ($batchRequest['initiatorId'] ?? ''));
+                    $visibleTo[] = strtolower((string) ($batchRequest['recipientId'] ?? ''));
+                }
+                $visibleTo = array_values(array_unique(array_filter($visibleTo)));
+            }
+            $event = [
+                'revision' => $revision,
+                'operationId' => $normalized['operationId'],
+                'type' => 'requestedTest.changed',
+                'actorId' => $actorId,
+                'sceneId' => $normalized['sceneId'],
+                'entityId' => $requestId,
+                'entityRevision' => null,
+                'payload' => [
+                    'requestId' => $requestId,
+                    'request' => $removed ? null : $request,
+                    'requests' => $batchRequests,
+                    'removed' => $removed,
+                    'visibleTo' => $visibleTo,
+                ],
+                'serverTime' => $serverTime,
+            ];
+            $this->insertEvent($event);
+            $this->updateWorldState($revision, $state, $serverTime);
+            if ($revision % $this->snapshotInterval === 0) {
+                $this->insertSnapshot($revision, $state, $serverTime);
+            }
+            $this->pruneEvents($revision);
+            $this->pdo->exec('COMMIT');
+            return ['status' => 'accepted', 'event' => $event, 'idempotent' => false];
+        } catch (Throwable $error) {
+            $this->rollbackTransactionSilently();
+            throw $error;
+        }
+    }
+
     /**
      * Atomically remove every canonical record owned by a deleted scene.
      *
@@ -104,6 +306,13 @@ final class SyncV2Store
                 foreach ($state['pings'] as $pingId => $ping) {
                     if (is_array($ping) && trim((string) ($ping['sceneId'] ?? '')) === $sceneId) {
                         unset($state['pings'][$pingId]);
+                    }
+                }
+            }
+            if (is_array($state['requestedTests'] ?? null)) {
+                foreach ($state['requestedTests'] as $requestId => $request) {
+                    if (is_array($request) && trim((string) ($request['sceneId'] ?? '')) === $sceneId) {
+                        unset($state['requestedTests'][$requestId]);
                     }
                 }
             }
@@ -1345,6 +1554,19 @@ final class SyncV2Store
                 PRIMARY KEY (world_id, revision)
             )'
         );
+        $this->pdo->exec(
+            'CREATE TABLE IF NOT EXISTS vtt_presence (
+                world_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                is_gm INTEGER NOT NULL DEFAULT 0,
+                last_seen INTEGER NOT NULL,
+                PRIMARY KEY (world_id, user_id)
+            )'
+        );
+        $this->pdo->exec(
+            'CREATE INDEX IF NOT EXISTS idx_vtt_presence_world_seen
+             ON vtt_presence (world_id, last_seen)'
+        );
 
         $now = $this->nowMilliseconds();
         $initialState = $this->encodeJson([
@@ -1750,6 +1972,166 @@ final class SyncV2Store
             'baseRevision' => (int) $baseRevision,
             'payload' => $payload,
         ];
+    }
+
+    private function normalizeRequestedTestCommand(array $command): array
+    {
+        $operationId = trim((string) ($command['operationId'] ?? ''));
+        if (
+            strlen($operationId) < 8
+            || strlen($operationId) > 128
+            || preg_match('/^[A-Za-z0-9._:-]+$/', $operationId) !== 1
+        ) {
+            throw new InvalidArgumentException('operationId is invalid.');
+        }
+        $type = (string) ($command['type'] ?? '');
+        if (!in_array($type, [
+            'requestedTest.create', 'requestedTest.reassign',
+            'requestedTest.resolve', 'requestedTest.claim', 'requestedTest.cancel',
+            'requestedTest.complete',
+        ], true)) {
+            throw new InvalidArgumentException('Unsupported requested-test command.');
+        }
+        $sceneId = $this->normalizeOptionalId($command['sceneId'] ?? null);
+        $baseRevision = filter_var(
+            $command['baseRevision'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 0]]
+        );
+        $payload = is_array($command['payload'] ?? null) ? $command['payload'] : [];
+        $requestId = $this->normalizeOptionalId(
+            $command['entityId'] ?? $payload['requestId'] ?? $payload['request']['id'] ?? null
+        );
+        if ($sceneId === null || $baseRevision === false || $requestId === null) {
+            throw new InvalidArgumentException('Requested-test commands require sceneId, baseRevision, and requestId.');
+        }
+        if (strlen($this->encodeJson($payload)) > 524288) {
+            throw new InvalidArgumentException('Requested-test command payload is too large.');
+        }
+        return [
+            'operationId' => $operationId,
+            'type' => $type,
+            'sceneId' => $sceneId,
+            'baseRevision' => (int) $baseRevision,
+            'requestId' => $requestId,
+            'payload' => $payload,
+        ];
+    }
+
+    private function normalizeRequestedTestRecord(array $raw): array
+    {
+        $id = $this->normalizeOptionalId($raw['id'] ?? null);
+        $sceneId = $this->normalizeOptionalId($raw['sceneId'] ?? null);
+        $initiatorId = strtolower(trim((string) ($raw['initiatorId'] ?? '')));
+        $recipientId = strtolower(trim((string) ($raw['recipientId'] ?? '')));
+        if ($id === null || $sceneId === null || $initiatorId === '' || $recipientId === '') {
+            throw new InvalidArgumentException('Requested-test record is missing routing fields.');
+        }
+        $attribute = trim((string) ($raw['attribute'] ?? ''));
+        $validAttributes = ['Might', 'Agility', 'Reason', 'Intuition', 'Presence'];
+        $matchedAttribute = null;
+        foreach ($validAttributes as $candidate) {
+            if (strtolower($candidate) === strtolower($attribute)) {
+                $matchedAttribute = $candidate;
+                break;
+            }
+        }
+        if ($matchedAttribute === null) {
+            throw new InvalidArgumentException('Requested tests require a standard ability score.');
+        }
+        $rollMode = (string) ($raw['rollMode'] ?? 'individual');
+        if (!in_array($rollMode, ['individual', 'singleHighest', 'groupByAttribute'], true)) {
+            throw new InvalidArgumentException('Unknown requested-test roll mode.');
+        }
+        $targetIds = [];
+        foreach (($raw['targetIds'] ?? []) as $targetId) {
+            $normalized = $this->normalizeOptionalId($targetId);
+            if ($normalized !== null && !in_array($normalized, $targetIds, true)) {
+                $targetIds[] = $normalized;
+            }
+        }
+        if ($targetIds === [] || count($targetIds) > 100) {
+            throw new InvalidArgumentException('Requested tests require 1 to 100 targets.');
+        }
+        $record = [
+            'id' => $id,
+            'sceneId' => $sceneId,
+            'initiatorId' => $initiatorId,
+            'recipientId' => $recipientId,
+            'originalRecipientId' => strtolower(trim((string) ($raw['originalRecipientId'] ?? $recipientId))) ?: $recipientId,
+            'status' => 'pending',
+            'abilityName' => substr(trim((string) ($raw['abilityName'] ?? 'Ability')), 0, 160),
+            'sourcePlacementId' => $this->normalizeOptionalId($raw['sourcePlacementId'] ?? null),
+            'attribute' => $matchedAttribute,
+            'rollMode' => $rollMode,
+            'targetIds' => $targetIds,
+            'targetNames' => array_slice(array_values(array_map(
+                static fn ($value): string => substr(trim((string) $value), 0, 120),
+                is_array($raw['targetNames'] ?? null) ? $raw['targetNames'] : []
+            )), 0, count($targetIds)),
+            'test' => is_array($raw['test'] ?? null) ? $raw['test'] : [],
+            'continuation' => is_array($raw['continuation'] ?? null) ? $raw['continuation'] : [],
+            'resourceReservation' => is_array($raw['resourceReservation'] ?? null) ? $raw['resourceReservation'] : null,
+            'createdAt' => max(0, (int) ($raw['createdAt'] ?? $this->nowMilliseconds())),
+            'updatedAt' => max(0, (int) ($raw['updatedAt'] ?? $this->nowMilliseconds())),
+        ];
+        return $record;
+    }
+
+    private function normalizeRequestedTestResult($raw): array
+    {
+        if (!is_array($raw)) {
+            throw new InvalidArgumentException('Requested-test result must be an object.');
+        }
+        $tier = strtolower(trim((string) ($raw['tier'] ?? '')));
+        if (!in_array($tier, ['tier1', 'tier2', 'tier3'], true)) {
+            throw new InvalidArgumentException('Requested-test result requires tier1, tier2, or tier3.');
+        }
+        $result = [
+            'tier' => $tier,
+            'total' => (int) ($raw['total'] ?? 0),
+            'dice' => array_slice(array_values(array_map('intval', is_array($raw['dice'] ?? null) ? $raw['dice'] : [])), 0, 10),
+            'bonus' => (int) ($raw['bonus'] ?? 0),
+            'edgeCount' => max(0, min(2, (int) ($raw['edgeCount'] ?? 0))),
+            'baneCount' => max(0, min(2, (int) ($raw['baneCount'] ?? 0))),
+            'rollerTokenId' => $this->normalizeOptionalId($raw['rollerTokenId'] ?? null),
+            'rollerTokenName' => substr(trim((string) ($raw['rollerTokenName'] ?? '')), 0, 120),
+            'targetIds' => [],
+        ];
+        foreach (($raw['targetIds'] ?? []) as $targetId) {
+            $normalized = $this->normalizeOptionalId($targetId);
+            if ($normalized !== null && !in_array($normalized, $result['targetIds'], true)) {
+                $result['targetIds'][] = $normalized;
+            }
+        }
+        return $result;
+    }
+
+    private function resolveRequestedTestRecipient(string $desiredRecipient, string $actorId): string
+    {
+        $cutoff = $this->nowMilliseconds() - 5000;
+        if ($desiredRecipient !== '' && $desiredRecipient !== '__gm__') {
+            $statement = $this->pdo->prepare(
+                'SELECT 1 FROM vtt_presence
+                 WHERE world_id = :world_id AND user_id = :user_id AND last_seen >= :cutoff'
+            );
+            $statement->execute([
+                'world_id' => $this->worldId,
+                'user_id' => $desiredRecipient,
+                'cutoff' => $cutoff,
+            ]);
+            if ($statement->fetchColumn() !== false) {
+                return $desiredRecipient;
+            }
+        }
+        $gm = $this->pdo->prepare(
+            'SELECT user_id FROM vtt_presence
+             WHERE world_id = :world_id AND is_gm = 1 AND last_seen >= :cutoff
+             ORDER BY last_seen DESC LIMIT 1'
+        );
+        $gm->execute(['world_id' => $this->worldId, 'cutoff' => $cutoff]);
+        $gmId = $gm->fetchColumn();
+        return is_string($gmId) && trim($gmId) !== '' ? strtolower(trim($gmId)) : $actorId;
     }
 
     private function normalizeCombatState($raw): array
