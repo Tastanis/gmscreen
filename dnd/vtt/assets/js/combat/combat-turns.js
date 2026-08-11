@@ -1,5 +1,42 @@
 import { TURN_PHASE, normalizeCombatTeam } from './combat-state.js';
 
+export function validateAutomationTurnStartWindow(
+  {
+    combatActive = false,
+    activeCombatantId = null,
+    condition = 'enemyPickNoActive',
+    currentPhase = TURN_PHASE.IDLE,
+  } = {},
+  baseValidation = {}
+) {
+  let valid = Boolean(baseValidation?.valid);
+  let reason = '';
+
+  if (!combatActive) {
+    return { valid: false, reason: 'combat-inactive' };
+  }
+
+  if (condition === 'enemyPickNoActive') {
+    // Hesitation Is Weakness claims an allied turn during either team's pick
+    // window. The only unsafe time is while another combatant is actively
+    // taking a turn.
+    return activeCombatantId
+      ? { valid: false, reason: 'active-turn' }
+      : { valid: true, reason: '' };
+  }
+
+  if (condition === 'pickPhase' && (activeCombatantId || currentPhase !== TURN_PHASE.PICK)) {
+    valid = false;
+    reason = 'not-pick-phase';
+  }
+
+  if (!valid && !reason) {
+    reason = baseValidation?.requiresConfirmation ? 'requires-confirmation' : 'invalid';
+  }
+
+  return { valid, reason };
+}
+
 export function validateTurnStartState(
   {
     combatActive = false,

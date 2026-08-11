@@ -57,3 +57,18 @@ export function createChangeRouter(handlers = {}) {
 
   return { route };
 }
+
+export function placementMutationsAffectPersistentZones(mutations) {
+  return Array.isArray(mutations) && mutations.some((mutation) => {
+    if (!mutation || typeof mutation !== 'object') return false;
+    if (mutation.kind === 'remove') return true;
+    if (Array.isArray(mutation.changedFields)) {
+      return mutation.changedFields.includes('persistentZones');
+    }
+    return Boolean(
+      mutation.placement
+      && typeof mutation.placement === 'object'
+      && Object.prototype.hasOwnProperty.call(mutation.placement, 'persistentZones')
+    );
+  });
+}

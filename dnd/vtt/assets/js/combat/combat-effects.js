@@ -11,6 +11,11 @@ export const TURN_EFFECT_TYPES = Object.freeze({
 
 export const SHARON_PROFILE_ID = 'sharon';
 
+export function isHesitationIsWeaknessAbility(value) {
+  return typeof value === 'string'
+    && value.trim().toLowerCase() === 'hesitation is weakness';
+}
+
 export function getTurnEffectSignature(effect) {
   if (!effect || typeof effect !== 'object') {
     return '';

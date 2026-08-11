@@ -314,7 +314,7 @@ Upload-ready combined JSON: [`uploads/sharon-in-all-this-confusion.json`](upload
 
 ## Hesitation Is Weakness (1 Insight, Free Triggered)
 
-Using this fires a real `turnStart` for Sharon, so her Insight resource rule will prompt the +1d3 start-of-turn gain right after she claims the turn.
+Using this fires a real `turnStart` for Sharon, so her Insight resource rule will prompt the +1d3 start-of-turn gain right after she claims the turn. It can claim the turn during either team's open selection phase. If another combatant is actively taking a turn, the preflight stops before spending Insight and tells Sharon to wait. Once the canonical turn start succeeds, the VTT broadcasts the centered **HESITATION IS WEAKNESS!** banner to every connected user.
 
 The trigger filter uses `excludeSelf` (don't arm off Sharon's own turn end — `whose: "ally"` is a team check that includes self) and `casterHasNotActed` (stop arming once Sharon has taken her turn this round, however she took it). The round-scoped `usageLimit` also suppresses re-arming after the ability is used. **Re-paste this block onto the ability** — the fix lives in the filter fields below.
 

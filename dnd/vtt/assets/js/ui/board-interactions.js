@@ -153,16 +153,19 @@ import {
   getWaitingCombatantsByTeam as buildWaitingCombatantsByTeam,
   pickPlayerQuickStartCombatantId,
   pickNextCombatantId as selectNextCombatantId,
+  validateAutomationTurnStartWindow,
   validateTurnStartState,
 } from '../combat/combat-turns.js';
 import {
   TURN_EFFECT_MAX_AGE_MS,
   TURN_EFFECT_TYPES,
   getTurnEffectSignature as buildTurnEffectSignature,
+  isHesitationIsWeaknessAbility,
   partitionEndOfTurnConditions,
   prepareSyncedTurnEffect,
   recordLocalTurnEffect,
 } from '../combat/combat-effects.js';
+import { placementMutationsAffectPersistentZones } from '../sync-v2/change-router.js';
 import {
   applyCombatGroupsToState,
   buildCombatGroupDisplayRepresentatives,
@@ -877,6 +880,13 @@ export function mountBoardInteractions(store, routes = {}) {
       applyCombatStateFromBoardState(boardApi.getState?.() ?? {});
     }
     const activeSceneId = boardApi.getState?.()?.boardState?.activeSceneId ?? null;
+    if (placementsV2Enabled && activeSceneId) {
+      // Recovery replaces the canonical placement projection silently, so it
+      // needs the same explicit separate-layer refresh as a live placement
+      // event. This keeps zones visible after reload/reconnect as well as on
+      // the original casting client.
+      renderPersistentZoneOverlays();
+    }
     for (const [placementId, placement] of Object.entries(
       snapshot?.state?.placements?.[activeSceneId] ?? {}
     )) {
@@ -947,6 +957,13 @@ export function mountBoardInteractions(store, routes = {}) {
         // never reload the page, map, fog, drawings, templates, or stairs.
         renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
       }
+    }
+    if (activeSceneId && placementMutationsAffectPersistentZones(activeMutations)) {
+      // Persistent zones are placement fields, but their visuals live in a
+      // separate overlay layer. Focused Sync V2 placement patches must redraw
+      // that layer explicitly; the removed broad board subscriber no longer
+      // does it for remote casts or removals.
+      renderPersistentZoneOverlays();
     }
     if (context?.source === 'conflict' || context?.source === 'recovery') {
       recordSyncDiagnostic('recoverySnapshotsApplied', {
@@ -4294,10 +4311,9 @@ export function mountBoardInteractions(store, routes = {}) {
           tile.className = 'vtt-persistent-zone vtt-persistent-zone--wall-tile';
           tile.dataset.zoneId = zone.id;
           tile.dataset.casterId = zone.casterId;
-          tile.setAttribute('title', titleAttr);
           if (i === 0) {
             tile.innerHTML = `
-              <div class="vtt-persistent-zone__badge" aria-hidden="true">⚡</div>
+              <div class="vtt-persistent-zone__badge" title="${titleAttr}" aria-hidden="true">⚡</div>
               <div class="vtt-persistent-zone__body">
                 <div class="vtt-persistent-zone__label">${safeName}</div>
                 <div class="vtt-persistent-zone__meta">${safeOwner} • ${escapeZoneText(upkeepText)}</div>
@@ -4317,9 +4333,8 @@ export function mountBoardInteractions(store, routes = {}) {
       cell.className = 'vtt-persistent-zone';
       cell.dataset.zoneId = zone.id;
       cell.dataset.casterId = zone.casterId;
-      cell.setAttribute('title', titleAttr);
       cell.innerHTML = `
-        <div class="vtt-persistent-zone__badge" aria-hidden="true">⚡</div>
+        <div class="vtt-persistent-zone__badge" title="${titleAttr}" aria-hidden="true">⚡</div>
         <div class="vtt-persistent-zone__body">
           <div class="vtt-persistent-zone__label">${safeName}</div>
           <div class="vtt-persistent-zone__meta">${safeOwner} • ${escapeZoneText(upkeepText)}</div>
@@ -13506,16 +13521,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     if (activeCombatantId) {
       const label = getCombatantLabel(activeCombatantId) || 'Someone';
-      return `${label} is already taking a turn. Do you want to use this anyway? That would waste the heroic resource.`;
-    }
-    if (payload.condition === 'enemyPickNoActive') {
-      const team = currentTurnTeam === 'ally' || currentTurnTeam === 'enemy' ? currentTurnTeam : null;
-      if (team === 'ally') {
-        return "It's already allies' turn. Do you want to use this anyway? That would waste the heroic resource.";
-      }
-      if (team !== 'enemy') {
-        return "It isn't the enemy pick. Do you want to use this anyway? That would waste the heroic resource.";
-      }
+      return `${label} is currently taking their turn. Wait until their turn is finished before using this ability.`;
     }
     if (validation?.requiresConfirmation) {
       return "It is not this character's turn. Do you want to use this anyway? That would waste the heroic resource.";
@@ -13528,34 +13534,16 @@ export function mountBoardInteractions(store, routes = {}) {
     const validation = validateTurnStart(placementId, {
       override: condition === 'any' || payload.preflightAccepted === true,
     });
-    let valid = Boolean(validation.valid);
-    let reason = '';
-
-    if (!combatActive) {
-      valid = false;
-      reason = 'combat-inactive';
-    } else if (condition === 'enemyPickNoActive') {
-      if (activeCombatantId) {
-        valid = false;
-        reason = 'active-turn';
-      } else if (currentTurnTeam !== 'enemy') {
-        valid = false;
-        reason = currentTurnTeam === 'ally' ? 'ally-pick' : 'wrong-pick';
-      }
-    } else if (condition === 'pickPhase') {
-      if (activeCombatantId || getTurnPhase() !== TURN_PHASE.PICK) {
-        valid = false;
-        reason = 'not-pick-phase';
-      }
-    }
-
-    if (!valid && !reason) {
-      reason = validation.requiresConfirmation ? 'requires-confirmation' : 'invalid';
-    }
+    const windowValidation = validateAutomationTurnStartWindow({
+      combatActive,
+      activeCombatantId,
+      condition,
+      currentPhase: getTurnPhase(),
+    }, validation);
 
     return {
-      valid,
-      reason,
+      valid: windowValidation.valid,
+      reason: windowValidation.reason,
       validation,
       message: getAutomationStartTurnValidationMessage(validation, { ...payload, condition }),
     };
@@ -13578,6 +13566,15 @@ export function mountBoardInteractions(store, routes = {}) {
     const condition = payload.condition || 'enemyPickNoActive';
     const check = validateAutomationStartTurn(placementId, { ...payload, condition });
     if (!check.valid) {
+      if (check.reason === 'active-turn') {
+        return {
+          started: false,
+          valid: false,
+          accepted: false,
+          reason: check.reason,
+          message: check.message,
+        };
+      }
       if (payload.confirmOnInvalid === false && payload.preflightAccepted !== true) {
         return { started: false, valid: false, reason: check.reason, message: check.message };
       }
@@ -13603,10 +13600,20 @@ export function mountBoardInteractions(store, routes = {}) {
         override: isGmUser()
           || payload.preflightAccepted === true
           || condition === 'any'
+          || condition === 'enemyPickNoActive'
           || switchingActiveTurn
           || restartingCompletedTurn
           || !check.valid,
       });
+      if (result && isHesitationIsWeaknessAbility(payload.abilityName)) {
+        showHesitationPopup();
+        recordTurnEffect({
+          type: TURN_EFFECT_TYPES.SHARON_HESITATION,
+          combatantId: representativeId,
+          triggeredAt: Date.now(),
+        });
+        syncCombatStateToStore();
+      }
       return {
         started: Boolean(result),
         valid: check.valid,

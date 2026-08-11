@@ -1143,7 +1143,7 @@ Requests a combat turn start for the resolved target, usually the caster. The ru
   "target": "self",
   "condition": "enemyPickNoActive",
   "confirmOnInvalid": true,
-  "invalidMessage": "It's already allies' turn. Do you want to use this anyway? That would waste the heroic resource."
+  "invalidMessage": "Wait until the active turn is finished before using Hesitation Is Weakness."
 }
 ```
 
@@ -1154,7 +1154,7 @@ Requests a combat turn start for the resolved target, usually the caster. The ru
 | `confirmOnInvalid` | default `true`; when false, invalid state aborts without asking |
 | `invalidMessage` | optional override for the warning/confirm text |
 
-Use `enemyPickNoActive` for Hesitation Is Weakness-style timing: combat must be active, no one can currently be taking a turn, and the enemy team must be in pick phase. If the condition fails, the VTT warns before the resource spend and can let the player continue anyway. A confirmed allied override may replace the current active turn or restart a combatant already marked complete; the server removes that combatant from the completed list as it starts the new turn. Players still cannot start enemy turns; that remains GM-only.
+Use `enemyPickNoActive` for Hesitation Is Weakness-style timing: combat must be active and no one can currently be taking a turn. The ability may claim the character's turn during either team's pick phase, including the enemy selection phase. If another combatant is actively taking a turn, the VTT blocks the preflight before spending resource and tells the player to wait for that turn to finish. The accepted allied start is sent as an explicit server override; players still cannot start enemy turns.
 
 ### `aura`
 

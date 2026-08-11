@@ -10,6 +10,19 @@ import { createFogRenderer } from '../renderers/fog-renderer.js';
 import { createSceneRenderer } from '../renderers/scene-renderer.js';
 import { createTemplateRenderer } from '../renderers/template-renderer.js';
 import { createTokenRenderer } from '../renderers/token-renderer.js';
+import { placementMutationsAffectPersistentZones } from '../change-router.js';
+
+test('persistent-zone placement patches request a separate overlay refresh', () => {
+  assert.equal(placementMutationsAffectPersistentZones([
+    { kind: 'upsert', changedFields: ['stamina'] },
+  ]), false);
+  assert.equal(placementMutationsAffectPersistentZones([
+    { kind: 'upsert', changedFields: ['persistentZones'] },
+  ]), true);
+  assert.equal(placementMutationsAffectPersistentZones([
+    { kind: 'remove', placementId: 'caster-1' },
+  ]), true);
+});
 
 function canonicalEvent(revision, type, overrides = {}) {
   return {

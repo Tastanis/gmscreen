@@ -5,6 +5,7 @@ import {
   TURN_EFFECT_MAX_AGE_MS,
   TURN_EFFECT_TYPES,
   getTurnEffectSignature,
+  isHesitationIsWeaknessAbility,
   partitionEndOfTurnConditions,
   prepareSyncedTurnEffect,
   recordLocalTurnEffect,
@@ -165,6 +166,12 @@ describe('synced combat turn effects', () => {
 });
 
 describe('special combat turn effects', () => {
+  test('recognizes the Hesitation ability name without depending on casing', () => {
+    assert.equal(isHesitationIsWeaknessAbility('Hesitation Is Weakness'), true);
+    assert.equal(isHesitationIsWeaknessAbility('  hesitation is weakness  '), true);
+    assert.equal(isHesitationIsWeaknessAbility('Too Slow'), false);
+  });
+
   test('triggers Sharon hesitation only on enemy turns after an ally acted', () => {
     assert.equal(
       shouldTriggerSharonHesitation({

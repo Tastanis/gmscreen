@@ -8,10 +8,33 @@ import {
   getWaitingCombatantsByTeam,
   pickPlayerQuickStartCombatantId,
   pickNextCombatantId,
+  validateAutomationTurnStartWindow,
   validateTurnStartState,
 } from '../combat-turns.js';
 
 describe('combat turn start validation', () => {
+  test('Hesitation can claim either team pick but waits for an active turn to finish', () => {
+    assert.deepEqual(
+      validateAutomationTurnStartWindow({
+        combatActive: true,
+        activeCombatantId: null,
+        condition: 'enemyPickNoActive',
+        currentPhase: TURN_PHASE.PICK,
+      }, { valid: false, requiresConfirmation: true }),
+      { valid: true, reason: '' }
+    );
+
+    assert.deepEqual(
+      validateAutomationTurnStartWindow({
+        combatActive: true,
+        activeCombatantId: 'enemy-1',
+        condition: 'enemyPickNoActive',
+        currentPhase: TURN_PHASE.ACTIVE,
+      }, { valid: true }),
+      { valid: false, reason: 'active-turn' }
+    );
+  });
+
   test('blocks turn starts when combat is inactive', () => {
     const result = validateTurnStartState({
       combatActive: false,

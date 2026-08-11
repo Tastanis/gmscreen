@@ -694,6 +694,11 @@ board broadcast, V1 poller, version/grace winner, or broad render subscriber.
   board. An actual scene-routing change may mount a full scene. Token,
   placement, combat, fog, grid, level, template, drawing, and ping events use
   their focused render paths.
+- Placement fields that own separate visual layers must explicitly refresh
+  those layers from the focused placement event. In particular,
+  `persistentZones` remains canonical placement state, while remote zone
+  casts and removals redraw only the persistent-zone overlay instead of
+  relying on a broad board subscription.
 - Scene catalog and uploaded asset CRUD remain in their dedicated APIs.
   Runtime scene selection and every shared board domain remain V2-owned.
 - Before production sign-off, rotate the external Pusher credential into

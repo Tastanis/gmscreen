@@ -5589,7 +5589,7 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
 
 .vtt-persistent-zone {
   position: absolute;
-  pointer-events: auto;
+  pointer-events: none;
   border: 2px dashed rgba(255, 184, 76, 0.85);
   background: rgba(255, 138, 41, 0.18);
   border-radius: 4px;
@@ -5634,12 +5634,12 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
   align-items: center;
   justify-content: center;
   border: 1px solid rgba(255, 184, 76, 0.8);
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .vtt-persistent-zone__body {
   position: absolute;
-  top: 24px;
+  top: 22px;
   right: 2px;
   background: rgba(20, 14, 11, 0.95);
   color: #fdebcc;
@@ -5655,9 +5655,11 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
   z-index: 2;
   border: 1px solid rgba(255, 184, 76, 0.6);
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
 }
 
-.vtt-persistent-zone:hover .vtt-persistent-zone__body {
+.vtt-persistent-zone__badge:hover + .vtt-persistent-zone__body,
+.vtt-persistent-zone__body:hover {
   display: flex;
 }
 
