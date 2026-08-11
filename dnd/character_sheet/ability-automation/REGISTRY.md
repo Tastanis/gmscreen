@@ -86,6 +86,12 @@ The monster ability tray + `window.MonsterAbilityRunner.start()` add the followi
 | `note` | Full | Posts text to chat |
 | `other` | Chat reminder | Posts text to chat |
 
+### Resistance bypass and two-sided potency
+
+- `damage.ignoreImmunity` accepts `true` (or `"all"`) to ignore all matching damage immunity, or a non-negative integer to ignore up to that many immunity points. Weakness still applies, and the authored `damageType` is preserved for triggers, ongoing riders, and chat.
+- `forcedMovement.ignoreStability` accepts `true` (or `"all"`) to ignore all target Stability, or a non-negative integer to ignore that many Stability points. Size resistance remains separate and still applies.
+- `potency.onResist` is the optional opposite branch to `onFail`. Potency evaluates each target independently: `onFail` runs when the target's attribute is below the threshold; `onResist` runs when it equals or exceeds the threshold. This allows a single movement picker per target, such as slide 8 on `M<2` and slide 5 otherwise.
+
 ## Damage types — `damage.damageType`
 
 `untyped`, `acid`, `cold`, `corruption`, `fire`, `holy`, `lightning`, `poison`, `psychic`, `sonic`

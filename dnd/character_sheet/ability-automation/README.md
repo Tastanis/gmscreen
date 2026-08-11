@@ -20,6 +20,7 @@ For LLM-friendly authoring docs, read [`AUTHORING.md`](AUTHORING.md). For the re
 - `../../vtt/assets/js/ui/automation-target-prompt.js` - Shared VTT target-picker prompt markup used by the board and smoke fixture.
 - `../../vtt/assets/js/ui/automation-trigger-ready.js` - Shared trigger-ready state helpers and blue `!` token indicator renderer used by the board and smoke fixture.
 - `../../vtt/assets/js/ui/automation-move-display.js` - Shared presentation helper for the final forced-movement or teleport range shown by the board picker.
+- `../../vtt/assets/js/ui/automation-resistance.js` - Pure resistance math for partial/all immunity and Stability bypass; imported by the board and covered by focused tests.
 - `../../vtt/assets/js/ui/automation-trigger-lifetime.js` - Shared authored-trigger lifetime helpers for turn, round, and combat boundary expiry.
 
 ## Integration points
@@ -78,6 +79,8 @@ resolver choose among two or more types, authors use
 and unsupported values, and the runtime asks once per effect before applying
 that chosen type to all of the effect's targets. The scalar and options fields
 are alternatives; an options list never supplies a silent first-item default.
+
+Damage effects can set `ignoreImmunity: true` to bypass all matching immunity or a non-negative integer to bypass that many points. Forced movement uses the parallel `ignoreStability` field. Potency supports both `onFail` and `onResist`, evaluated per target, so conditional values can resolve through one correct effect rather than stacking two resistance calculations.
 
 `condition` effects can apply `hiddenEffect` riders. These are stored on the VTT placement like conditions, but they are hidden from token condition text and the normal condition picker. The sidebar still renders them under Auras, Conditions, & Effects with a remove button. Supported automatic hidden riders currently include `rollModifier` suggestions for edge/bane/double-edge/double-bane in the power-roll modal, with optional `nextMatchingRoll` consumption. Numeric condition riders such as `damageWeakness` and `damageImmunity` also stay removable in the sidebar and token settings, but render with player-facing labels such as `Fire weakness 5`.
 

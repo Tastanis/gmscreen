@@ -644,6 +644,17 @@ Notes:
 - The tier/inspector preview shows `+ half triggering damage` etc., but cannot show the final number — the runtime only knows the captured amount when the trigger actually resolves.
 - `halveTriggeringDamage` is still the right tool for "**you** take half" (it refunds stamina on the placement that was hit). Use `amountFrom` when the half (or any formula) becomes a **new** damage/heal on a chosen target.
 
+#### Ignoring damage immunity
+
+Add `ignoreImmunity` to a `damage` effect when the rules bypass some or all matching immunity:
+
+```json
+{ "kind": "damage", "amount": 10, "damageType": "fire", "ignoreImmunity": true }
+{ "kind": "damage", "amount": 10, "damageType": "fire", "ignoreImmunity": 3 }
+```
+
+`true` (or `"all"`) ignores all matching damage immunity. A non-negative integer ignores up to that many immunity points. Weakness still applies, and the damage keeps its authored type for triggers, ongoing condition riders, persistent zones, auras, and chat. Do not change the damage to untyped just to bypass immunity.
+
 ### `heal`
 
 ```json
@@ -743,6 +754,17 @@ Automated conditions store the caster/source token id and name. Source-aware con
 | `upTo` | bool — `true` if the player can move 0..N |
 
 **Total distance = `distance` + (attribute bonus × `multiplier`).** So "push up to twice your Reason score" is `{ "distance": 0, "attribute": "Reason", "multiplier": 2, "upTo": true }`. When the ability runs outside a character context (e.g. a preview with no hero bound) the attribute resolves to 0 and only the flat `distance` is used.
+
+#### Ignoring Stability
+
+Add `ignoreStability` to forced movement when the rule bypasses some or all of the target's Stability:
+
+```json
+{ "kind": "forcedMovement", "verb": "slide", "distance": 5, "ignoreStability": true }
+{ "kind": "forcedMovement", "verb": "push", "distance": 6, "ignoreStability": 2 }
+```
+
+`true` (or `"all"`) ignores all Stability. A non-negative integer ignores up to that many Stability points. Size resistance remains separate and still applies.
 
 ### `shift`
 
@@ -892,6 +914,26 @@ Wraps a list of effects gated by a potency check on the target.
 | `onFail` | list of effects that fire when the target's attribute is below the threshold |
 
 The runtime resolves `level` to a number using the caster's character data at run time. For a monster stat block that prints a literal potency value, use `"threshold": 2`. Legacy numeric `"target": 2` is accepted and normalized to `threshold`, but new JSON should use `threshold` so it cannot be confused with effect target-group routing.
+
+#### Two-sided potency branches
+
+Potency evaluates every target separately. `onFail` runs when the target's attribute is below the threshold; optional `onResist` runs when the target equals or exceeds it. Use both when every target receives an effect but the value changes based on the check:
+
+```json
+{
+  "kind": "potency",
+  "attribute": "M",
+  "threshold": 2,
+  "onFail": [
+    { "kind": "forcedMovement", "verb": "slide", "distance": 8 }
+  ],
+  "onResist": [
+    { "kind": "forcedMovement", "verb": "slide", "distance": 5 }
+  ]
+}
+```
+
+This opens one correct movement picker per target and applies Stability once.
 
 ### `spend` (rider)
 

@@ -68,6 +68,17 @@
     return Boolean(value);
   }
 
+  function normalizeIgnoredResistance(value, warnings, path) {
+    if (value === undefined || value === null || value === false || value === "") return undefined;
+    if (value === true || String(value).trim().toLowerCase() === "all") return true;
+    const numeric = Number(value);
+    if (Number.isInteger(numeric) && numeric >= 0) {
+      return numeric > 0 ? numeric : undefined;
+    }
+    warnings.push(`${path}: use true/"all" to ignore all, or a non-negative integer.`);
+    return undefined;
+  }
+
   function isExtraObject(value) {
     return Boolean(value && typeof value === "object" && !Array.isArray(value));
   }
@@ -300,7 +311,7 @@
     }
     switch (kind) {
       case "damage": {
-        const known = new Set(["kind", "amount", "amountDice", "markBonusDice", "markPredicate", "attribute", "multiplier", "damageType", "damageTypeOptions", "raw", "amountFrom"]);
+        const known = new Set(["kind", "amount", "amountDice", "markBonusDice", "markPredicate", "attribute", "multiplier", "damageType", "damageTypeOptions", "raw", "amountFrom", "ignoreImmunity"]);
         const attribute = input.attribute !== undefined && input.attribute !== null
           ? (P.normalizeAttributeOrList ? P.normalizeAttributeOrList(input.attribute) : P.normalizeAttribute(input.attribute))
           : "";
@@ -347,6 +358,8 @@
         // self-inflicted strained backlash should not be boosted by the same
         // augmentation that buffs the attack). Preserved only when truthy.
         if (input.raw) effect.raw = true;
+        const ignoreImmunity = normalizeIgnoredResistance(input.ignoreImmunity, warnings, `${path}.ignoreImmunity`);
+        if (ignoreImmunity !== undefined) effect.ignoreImmunity = ignoreImmunity;
         if (input.amountFrom !== undefined && input.amountFrom !== null) {
           const amountFrom = normalizeAmountFrom(input.amountFrom, warnings, `${path}.amountFrom`);
           if (amountFrom) effect.amountFrom = amountFrom;
@@ -509,7 +522,7 @@
         return effect;
       }
       case "forcedMovement": {
-        const known = new Set(["kind", "verb", "distance", "upTo", "attribute", "multiplier"]);
+        const known = new Set(["kind", "verb", "distance", "upTo", "attribute", "multiplier", "ignoreStability"]);
         const verb = P.normalizeForcedMovementVerb(input.verb || "push");
         const effect = {
           kind: "forcedMovement",
@@ -525,6 +538,8 @@
           const mult = asInt(input.multiplier, 1);
           if (mult !== 1) effect.multiplier = mult;
         }
+        const ignoreStability = normalizeIgnoredResistance(input.ignoreStability, warnings, `${path}.ignoreStability`);
+        if (ignoreStability !== undefined) effect.ignoreStability = ignoreStability;
         if (!effect.distance && !effect.attribute) warnings.push(`${path}: forced movement has 0 distance.`);
         const extras = pickExtras(input, known);
         if (extras) effect._extra = extras;
@@ -636,7 +651,7 @@
         return effect;
       }
       case "potency": {
-        const known = new Set(["kind", "attribute", "level", "threshold", "target", "onFail"]);
+        const known = new Set(["kind", "attribute", "level", "threshold", "target", "onFail", "onResist"]);
         const attribute = P.normalizeAttribute(input.attribute || "Might");
         if (!P.ATTRIBUTES.includes(attribute) || attribute === "Strongest") {
           warnings.push(`${path}: potency attribute should be M/A/R/I/P (got "${input.attribute}").`);
@@ -648,6 +663,8 @@
         const level = P.normalizePotencyLevel(input.level || "weak");
         const onFail = normalizeEffectList(input.onFail || input.effects || [], warnings, `${path}.onFail`);
         const effect = { kind: "potency", attribute, level, onFail };
+        const onResist = normalizeEffectList(input.onResist || [], warnings, `${path}.onResist`);
+        if (onResist.length) effect.onResist = onResist;
         if (Number.isFinite(numericThreshold)) effect.threshold = numericThreshold;
         const extras = pickExtras(input, known);
         if (extras) effect._extra = extras;

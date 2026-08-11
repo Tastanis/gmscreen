@@ -1109,6 +1109,102 @@ test('numeric potency target normalizes to a literal threshold and reaches the b
   }
 });
 
+test('damage and forced movement forward partial or total resistance bypass fields', async () => {
+  const harness = await createAbilityAutomationHarness({
+    targets: [{ id: 'enemy-1', name: 'Enemy' }],
+  });
+  try {
+    const automation = {
+      schema: 'ability-automation/v3',
+      cards: [
+        {
+          type: 'target',
+          name: 'primary',
+          mode: 'token',
+          predicate: 'enemy',
+          count: { value: 1, mode: 'exact' },
+        },
+        {
+          type: 'effect',
+          target: 'primary',
+          effects: [
+            { kind: 'damage', amount: 8, damageType: 'fire', ignoreImmunity: true },
+            { kind: 'forcedMovement', verb: 'slide', distance: 5, ignoreStability: 2 },
+          ],
+        },
+      ],
+    };
+    const normalized = harness.window.AbilityAutomationSchema.normalizeAutomation(automation);
+    assert.equal(normalized.cards[1].effects[0].ignoreImmunity, true);
+    assert.equal(normalized.cards[1].effects[1].ignoreStability, 2);
+
+    const result = await harness.runAutomation({
+      automation,
+      action: { id: 'resistance-bypass', name: 'Resistance Bypass', actionLabel: 'Main Action' },
+      targetSelections: [{ id: 'enemy-1', name: 'Enemy' }],
+    });
+    assert.equal(result.calls.applyDamage[0].ignoreImmunity, true);
+    assert.equal(result.calls.forceMove[0].ignoreStability, 2);
+  } finally {
+    harness.close();
+  }
+});
+
+test('potency onFail and onResist apply different movement to each target', async () => {
+  const harness = await createAbilityAutomationHarness({
+    targets: [
+      { id: 'low-might', name: 'Low Might' },
+      { id: 'high-might', name: 'High Might' },
+    ],
+  });
+  try {
+    const automation = {
+      schema: 'ability-automation/v3',
+      cards: [
+        {
+          type: 'target',
+          name: 'primary',
+          mode: 'token',
+          predicate: 'enemy',
+          count: { value: 2, mode: 'exact' },
+        },
+        {
+          type: 'effect',
+          target: 'primary',
+          effects: [{
+            kind: 'potency',
+            attribute: 'M',
+            threshold: 2,
+            onFail: [{ kind: 'forcedMovement', verb: 'slide', distance: 8 }],
+            onResist: [{ kind: 'forcedMovement', verb: 'slide', distance: 5 }],
+          }],
+        },
+      ],
+    };
+    const normalized = harness.window.AbilityAutomationSchema.normalizeAutomation(automation);
+    assert.equal(normalized.cards[1].effects[0].onResist[0].distance, 5);
+
+    const result = await harness.runAutomation({
+      automation,
+      action: { id: 'conditional-slide', name: 'Conditional Slide', actionLabel: 'Main Action' },
+      targetSelections: [
+        { id: 'low-might', name: 'Low Might' },
+        { id: 'high-might', name: 'High Might' },
+      ],
+      checkPotencyResults: [{ passes: true }, { passes: false }],
+    });
+    assert.deepEqual(
+      result.calls.forceMove.map(({ targetId, distance }) => ({ targetId, distance })),
+      [
+        { targetId: 'low-might', distance: 8 },
+        { targetId: 'high-might', distance: 5 },
+      ]
+    );
+  } finally {
+    harness.close();
+  }
+});
+
 test('runner can spend the caster recovery and heal a different target', async () => {
   const harness = await createAbilityAutomationHarness({
     targets: [

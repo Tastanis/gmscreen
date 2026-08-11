@@ -216,6 +216,10 @@ Every ability has **three channels**, and each owns a different job. The #1 mist
 
 ### Automation
 
+- Damage effects may use `"ignoreImmunity": true` (or `"all"`) to ignore all matching immunity, or a non-negative integer to ignore that many immunity points. The damage remains typed and weakness still applies.
+- Forced-movement effects may use `"ignoreStability": true` (or `"all"`) to ignore all target Stability, or a non-negative integer to ignore that many Stability points. Size resistance remains separate.
+- Potency effects may include both `onFail` and `onResist`. They are evaluated per target, allowing different single-step results such as a longer slide for `M<2` and a normal slide otherwise.
+
 - For monster automation, use static numbers and `flatBonus`. Do not write PC-style `7 + M` formulas for monsters.
 - A fixed automated damage type uses scalar `"damageType": "fire"`. If the
   monster's rules explicitly let the resolver choose among types, use

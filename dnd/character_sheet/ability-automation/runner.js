@@ -646,7 +646,7 @@
     for (const effect of effects) {
       if (!effect || typeof effect !== "object") continue;
       if (effect.kind === kind) return true;
-      if (effect.kind === "potency" && effectListContainsKind(effect.onFail, kind)) return true;
+      if (effect.kind === "potency" && (effectListContainsKind(effect.onFail, kind) || effectListContainsKind(effect.onResist, kind))) return true;
       if (effect.kind === "spend" && effectListContainsKind(effect.effects, kind)) return true;
       if (effect.kind === "ifKeyword" || effect.kind === "ifPrompt" || effect.kind === "ifMark" || effect.kind === "ifScopedFlag" || effect.kind === "ifDistance") {
         if (effectListContainsKind(effect.then, kind) || effectListContainsKind(effect.else, kind)) return true;
@@ -1760,7 +1760,7 @@
     for (const effect of effects || []) {
       if (!effect || typeof effect !== "object") continue;
       if (effect.kind === "startTurn") return effect;
-      for (const nested of ["then", "else", "effects", "onFail"]) {
+      for (const nested of ["then", "else", "effects", "onFail", "onResist"]) {
         if (Array.isArray(effect[nested])) {
           const found = findFirstStartTurnEffectInEffects(effect[nested]);
           if (found) return found;
@@ -1844,6 +1844,7 @@
         cost: state.action?.cost || state.action?.resource_cost || state.action?.resourceCost || "",
         keywords: getAbilityKeywords(state),
       };
+      if (effect.ignoreImmunity !== undefined) damagePayload.ignoreImmunity = effect.ignoreImmunity;
       if (surgeBonus.spent > 0) {
         damagePayload.includesSurge = true;
         damagePayload.surgeSpent = surgeBonus.spent;
@@ -1864,6 +1865,7 @@
       if (surgeBonus.damage > 0) adjustments.push(`+${surgeBonus.damage} surge`);
       if (Number.isFinite(result?.vulnerability) && result.vulnerability > 0) adjustments.push(`+${result.vulnerability} vulnerability`);
       if (Number.isFinite(result?.immunity) && result.immunity > 0) adjustments.push(`-${result.immunity} immunity`);
+      if (Number.isFinite(result?.ignoredImmunity) && result.ignoredImmunity > 0) adjustments.push(`${result.ignoredImmunity} immunity ignored`);
       const adjustmentText = adjustments.length
         ? ` (${amountBeforeSurge}${damageType ? ` ${damageType}` : ""} ${adjustments.join(" ")} = ${finalAmount})`
         : "";
@@ -2225,6 +2227,7 @@
         sourcePlacement: state.sourcePlacement || null,
         sourceTraits: state.sourceTraits || {},
         abilityName: state.action.name || "Ability",
+        ...(effect.ignoreStability !== undefined ? { ignoreStability: effect.ignoreStability } : {}),
       });
       if (!result || result.skipped) {
         lines.push(`${target.name || "Target"}: ${verb} ${distance} skipped.`);
@@ -2328,6 +2331,7 @@
       distance: baseDistance,
       upTo: true,
       ignoreStability: true,
+      ignoreSizePenalty: true,
       targetId: target.id,
       target,
       sourcePlacement: target,
@@ -2390,6 +2394,14 @@
         await postChat(state.context, {
           message: `${state.heroName} - ${state.action.name || "Ability"}: ${target.name || "Target"} resisted ${effect.attribute}<${Number.isFinite(Number(effect.threshold)) ? Number(effect.threshold) : effect.level}.`,
         });
+        if (Array.isArray(effect.onResist) && effect.onResist.length) {
+          await applyEffects(
+            { ...state, groups: { _potency: [target] } },
+            effect.onResist,
+            "_potency",
+            ctx
+          );
+        }
         continue;
       }
       const failedTargets = [target];
@@ -3446,7 +3458,7 @@
         if (!effect || typeof effect !== "object") return;
         const effectPath = `${path}.${index}`;
         collectEffect(effect, effectPath);
-        for (const nested of ["then", "else", "effects", "onFail"]) {
+        for (const nested of ["then", "else", "effects", "onFail", "onResist"]) {
           if (Array.isArray(effect[nested])) collectEffects(effect[nested], `${effectPath}.${nested}`);
         }
       });
@@ -3560,6 +3572,7 @@
       visit(effect);
       // Recurse into wrapper effects.
       if (effect.kind === "potency" && Array.isArray(effect.onFail)) walkEffectList(effect.onFail, visit);
+      if (effect.kind === "potency" && Array.isArray(effect.onResist)) walkEffectList(effect.onResist, visit);
       if (effect.kind === "spend" && Array.isArray(effect.effects)) walkEffectList(effect.effects, visit);
       if (effect.kind === "ifKeyword") {
         walkEffectList(effect.then || [], visit);

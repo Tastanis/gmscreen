@@ -162,6 +162,12 @@ Stat block: "Trigger: The first push, pull, slide, or area effect used against t
 
 When a PC's automated ability force-moves this monster, the `!` marker appears on the token, the tray's Triggered tab row glows, and the GM resolves it with one click. Firing marks the encounter-scoped usage flag; a second fire is blocked with the message.
 
+### Resistance bypass and conditional results
+
+- `damage.ignoreImmunity` accepts `true` (or `"all"`) for all matching immunity, or a non-negative integer for that many points. It preserves weakness and the authored damage type.
+- `forcedMovement.ignoreStability` accepts `true` (or `"all"`) for all Stability, or a non-negative integer for that many points. Size resistance remains separate.
+- `potency.onResist` runs when a target equals or exceeds the threshold, opposite `onFail`. Both branches evaluate per target, so one branch can slide 8 and the other slide 5 without applying Stability twice.
+
 ## Checklist before shipping monster automation JSON
 
 1. Category key is one of the six exact strings; ability sits in that array.

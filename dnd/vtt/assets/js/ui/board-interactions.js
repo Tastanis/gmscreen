@@ -87,6 +87,10 @@ import {
 } from './typed-damage-condition.js';
 import { resolveSelectionRangeGuide } from './selection-range-guide.js';
 import {
+  resolveAutomationDamageAmount,
+  resolveAutomationForcedMovementDistance,
+} from './automation-resistance.js';
+import {
   buildConditionIdentityKey,
   buildConditionRiderBoundaryKey,
   createConditionInstanceId,
@@ -4626,6 +4630,7 @@ export function mountBoardInteractions(store, routes = {}) {
                   sourceId: zone.casterId,
                   amount: totalAmount,
                   damageType: effect.damageType || '',
+                  ...(effect.ignoreImmunity !== undefined ? { ignoreImmunity: effect.ignoreImmunity } : {}),
                   abilityName: `${zone.abilityName} (${reason || 'zone'})`,
                 },
                 resolve: res,
@@ -4721,6 +4726,7 @@ export function mountBoardInteractions(store, routes = {}) {
             sourceId,
             amount,
             damageType: effect.damageType || '',
+            ...(effect.ignoreImmunity !== undefined ? { ignoreImmunity: effect.ignoreImmunity } : {}),
             abilityName: `${abilityName} (${reason})`,
             actionId: abilityId,
             actionKind: 'aura',
@@ -17073,7 +17079,13 @@ export function mountBoardInteractions(store, routes = {}) {
       payload.sourceId ? registerAuthoredTriggersForPlacement(payload.sourceId) : Promise.resolve({ registered: 0 }),
     ]);
     const adjustment = await getAutomationDamageAdjustment(payload.placementId, payload.damageType || '');
-    const adjustedAmount = Math.max(0, amount + adjustment.vulnerability - adjustment.immunity);
+    const damageResolution = resolveAutomationDamageAmount({
+      amount,
+      vulnerability: adjustment.vulnerability,
+      immunity: adjustment.immunity,
+      ignoreImmunity: payload.ignoreImmunity,
+    });
+    const adjustedAmount = damageResolution.amount;
     const result = adjustedAmount > 0
       ? applyDamageHealToPlacement(payload.placementId, 'damage', adjustedAmount, { fireStaminaTriggers: false })
       : getZeroDamageResult(payload.placementId);
@@ -17173,7 +17185,9 @@ export function mountBoardInteractions(store, routes = {}) {
       includesSurge: Boolean(payload.includesSurge || payload.surgeSpent || payload.surgeCount),
       surgeSpent: Number.parseInt(payload.surgeSpent ?? payload.surgeCount ?? 0, 10) || 0,
       surgeDamage: Number.parseInt(payload.surgeDamage ?? 0, 10) || 0,
-      immunity: adjustment.immunity,
+      immunity: damageResolution.immunity,
+      ignoredImmunity: damageResolution.ignoredImmunity,
+      totalImmunity: damageResolution.totalImmunity,
       vulnerability: adjustment.vulnerability,
       hidden: isAutomationPlacementHidden(resultPlacement),
     });
@@ -18012,10 +18026,14 @@ export function mountBoardInteractions(store, routes = {}) {
     const targetRank = getAutomationSizeRank(targetTraits.size, targetPlacement);
     const sizeDifference = targetRank - sourceRank;
 
-    const ignoreStability = Boolean(payload.ignoreStability);
-    const stability = ignoreStability ? 0 : Math.max(0, Number.parseInt(targetTraits.stability, 10) || 0);
-    const sizePenalty = ignoreStability ? 0 : Math.max(0, sizeDifference);
-    const effectiveDistance = Math.max(0, requestedDistance - stability - sizePenalty);
+    const movementResolution = resolveAutomationForcedMovementDistance({
+      distance: requestedDistance,
+      stability: targetTraits.stability,
+      sizePenalty: Math.max(0, sizeDifference),
+      ignoreStability: payload.ignoreStability,
+      ignoreSizePenalty: payload.ignoreSizePenalty,
+    });
+    const effectiveDistance = movementResolution.distance;
 
     closeDamageHealWidget();
     closeHealOverflowPopup();

@@ -417,7 +417,10 @@
         const type = Array.isArray(effect.damageTypeOptions) && effect.damageTypeOptions.length > 1
           ? ` [choose ${effect.damageTypeOptions.join(" / ")}]`
           : effect.damageType && effect.damageType !== "untyped" ? ` ${effect.damageType}` : "";
-        return `${amount}${attr}${type} damage${describeTriggerValue(effect.amountFrom)}`;
+        const immunity = effect.ignoreImmunity === true
+          ? " (ignores immunity)"
+          : Number(effect.ignoreImmunity) > 0 ? ` (ignores ${effect.ignoreImmunity} immunity)` : "";
+        return `${amount}${attr}${type} damage${describeTriggerValue(effect.amountFrom)}${immunity}`;
       }
       case "heal": {
         if (effect.recoveries) {
@@ -445,13 +448,16 @@
       case "forcedMovement": {
         const verb = effect.verb || "push";
         const upTo = effect.upTo ? "up to " : "";
+        const stability = effect.ignoreStability === true
+          ? " (ignores Stability)"
+          : Number(effect.ignoreStability) > 0 ? ` (ignores ${effect.ignoreStability} Stability)` : "";
         if (effect.attribute) {
           const mult = Number(effect.multiplier) || 1;
           const base = Number.parseInt(effect.distance, 10) || 0;
           const attrPart = `${mult !== 1 ? `${mult}× ` : ""}${effect.attribute}`;
-          return `${verb} ${upTo}${base ? `${base} + ` : ""}${attrPart}`;
+          return `${verb} ${upTo}${base ? `${base} + ` : ""}${attrPart}${stability}`;
         }
-        return `${verb} ${upTo}${effect.distance || 0}`;
+        return `${verb} ${upTo}${effect.distance || 0}${stability}`;
       }
       case "teleport":
         return `teleport ${effect.distance || 0}`;
@@ -480,7 +486,9 @@
       case "note":
         return effect.text || "(note)";
       case "potency": {
-        const inner = (effect.onFail || []).map(describeEffect).filter(Boolean).join(", ");
+        const failed = (effect.onFail || []).map(describeEffect).filter(Boolean).join(", ");
+        const resisted = (effect.onResist || []).map(describeEffect).filter(Boolean).join(", ");
+        const inner = [failed, resisted ? `resisted: ${resisted}` : ""].filter(Boolean).join("; ");
         return `${effect.attribute || "?"}<${effect.level || "?"} → ${inner || "(no effect)"}`;
       }
       case "spend": {
@@ -554,11 +562,16 @@
         const type = Array.isArray(effect.damageTypeOptions) && effect.damageTypeOptions.length > 1
           ? ` [choose ${effect.damageTypeOptions.join(" / ")}]`
           : effect.damageType && effect.damageType !== "untyped" ? ` ${effect.damageType}` : "";
-        return `${total}${type} damage${describeTriggerValue(effect.amountFrom)}`;
+        const immunity = effect.ignoreImmunity === true
+          ? " (ignores immunity)"
+          : Number(effect.ignoreImmunity) > 0 ? ` (ignores ${effect.ignoreImmunity} immunity)` : "";
+        return `${total}${type} damage${describeTriggerValue(effect.amountFrom)}${immunity}`;
       }
       case "potency": {
         const threshold = resolvePotencyThreshold(effect.level, ctx);
-        const inner = (effect.onFail || []).map((eff) => describeEffectResolved(eff, ctx)).filter(Boolean).join(", ");
+        const failed = (effect.onFail || []).map((eff) => describeEffectResolved(eff, ctx)).filter(Boolean).join(", ");
+        const resisted = (effect.onResist || []).map((eff) => describeEffectResolved(eff, ctx)).filter(Boolean).join(", ");
+        const inner = [failed, resisted ? `resisted: ${resisted}` : ""].filter(Boolean).join("; ");
         const tag = threshold !== null ? `${effect.attribute || "?"}<${threshold}` : `${effect.attribute || "?"}<${effect.level || "?"}`;
         return `${tag} → ${inner || "(no effect)"}`;
       }
