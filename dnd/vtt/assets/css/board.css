@@ -5682,6 +5682,13 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
   padding: 2px 6px;
   font-size: 10px;
   cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+.vtt-persistent-zone__end:disabled {
+  cursor: wait;
+  opacity: 0.7;
 }
 
 .vtt-persistent-zone__end:hover {

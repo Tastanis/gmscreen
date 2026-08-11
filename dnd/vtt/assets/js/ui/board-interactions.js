@@ -204,6 +204,12 @@ export function shouldRevealPlacementHitPointValues(placement, options = {}) {
   return team !== 'enemy';
 }
 
+export function isPersistentZoneControlTarget(target) {
+  return Boolean(target?.closest?.(
+    '.vtt-persistent-zone__badge, .vtt-persistent-zone__body, [data-zone-end]'
+  ));
+}
+
 // Global flag to prevent recursive state updates during state application.
 // When true, any calls to syncCombatStateToStore() or boardApi.updateState()
 // that would trigger subscribers are blocked to prevent infinite recursion.
@@ -4103,7 +4109,6 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!mapTransform) return null;
     const layer = document.createElement('div');
     layer.className = 'vtt-persistent-zones';
-    layer.setAttribute('aria-hidden', 'true');
     // Wire the End button click directly on the layer (capture phase) so
     // the map-surface's pan/pointer handlers can't swallow the click before
     // our document-level listener sees it.
@@ -4115,13 +4120,27 @@ export function mountBoardInteractions(store, routes = {}) {
       event.preventDefault();
       event.stopPropagation();
       const zoneId = endBtn.getAttribute('data-zone-end');
-      if (zoneId) removePersistentZone(zoneId, { reason: 'manually ended' });
+      if (!zoneId || endBtn.disabled) return;
+      endBtn.disabled = true;
+      endBtn.textContent = 'Ending…';
+      Promise.resolve(removePersistentZone(zoneId, { reason: 'manually ended' }))
+        .then((removed) => {
+          if (removed || !endBtn.isConnected) return;
+          endBtn.disabled = false;
+          endBtn.textContent = 'End';
+        })
+        .catch((error) => {
+          console.warn('[VTT] persistent zone removal failed', error);
+          if (!endBtn.isConnected) return;
+          endBtn.disabled = false;
+          endBtn.textContent = 'End';
+        });
     }, true);
     layer.addEventListener('pointerdown', (event) => {
       // Prevent the board pan handler from triggering when interacting with
       // the End button or the zone label area.
       const target = event.target instanceof Element ? event.target : null;
-      if (target?.closest('[data-zone-end]') || target?.closest('.vtt-persistent-zone__body')) {
+      if (isPersistentZoneControlTarget(target)) {
         event.stopPropagation();
       }
     }, true);
@@ -4355,7 +4374,7 @@ export function mountBoardInteractions(store, routes = {}) {
       .replace(/'/g, '&#39;');
   }
 
-  function removePersistentZone(zoneId, { reason = '' } = {}) {
+  async function removePersistentZone(zoneId, { reason = '' } = {}) {
     if (!zoneId) return false;
     const state = boardApi.getState?.() ?? {};
     const sceneId = state.boardState?.activeSceneId ?? null;
@@ -4365,7 +4384,7 @@ export function mountBoardInteractions(store, routes = {}) {
     );
     if (!owner) return false;
     let removed = null;
-    const updated = updatePlacementById(owner.id, (target) => {
+    const updateResult = updatePlacementById(owner.id, (target) => {
       const existing = Array.isArray(target.persistentZones) ? target.persistentZones : [];
       removed = existing.find((z) => z && z.id === zoneId) || null;
       const next = existing.filter((z) => z && z.id !== zoneId);
@@ -4374,10 +4393,21 @@ export function mountBoardInteractions(store, routes = {}) {
       } else {
         target.persistentZones = null;
       }
-    });
-    if (!updated || !removed) return false;
+    }, { returnSavePromise: true });
+    if (!updateResult?.updated || !removed) return false;
     persistentZoneRuntime.delete(zoneId);
     renderPersistentZoneOverlays();
+    const saveResult = updateResult.savePromise
+      ? await updateResult.savePromise
+      : { success: true };
+    if (saveResult?.success === false) {
+      const message = `Unable to end ${removed.abilityName || 'the persistent zone'}. The server rejected the update.`;
+      updateStatus(message);
+      if (typeof window !== 'undefined' && window.UIKit?.toast) {
+        window.UIKit.toast(message, 'warning');
+      }
+      return false;
+    }
     if (window.dashboardChat?.sendMessage) {
       const reasonText = reason ? ` (${reason})` : '';
       window.dashboardChat.sendMessage({
@@ -6309,6 +6339,9 @@ export function mountBoardInteractions(store, routes = {}) {
   );
 
   mapSurface.addEventListener('pointerdown', async (event) => {
+    if (isPersistentZoneControlTarget(event.target)) {
+      return;
+    }
     if (pendingAutomationArea) {
       if (handleAutomationAreaPointerDown(event)) {
         event.stopImmediatePropagation();
@@ -6371,6 +6404,9 @@ export function mountBoardInteractions(store, routes = {}) {
   }, true);
 
   mapSurface.addEventListener('pointerdown', async (event) => {
+    if (isPersistentZoneControlTarget(event.target)) {
+      return;
+    }
     if (isCustomConditionDialogOpen()) {
       return;
     }

@@ -699,6 +699,10 @@ board broadcast, V1 poller, version/grace winner, or broad render subscriber.
   `persistentZones` remains canonical placement state, while remote zone
   casts and removals redraw only the persistent-zone overlay instead of
   relying on a broad board subscription.
+- Interactive controls inside focused overlay layers must be excluded before
+  map capture-phase pointer handlers begin selection, targeting, or panning.
+  Persistent-zone End controls submit their placement patch once, wait for
+  the canonical result, and report a rejected save instead of failing silently.
 - Scene catalog and uploaded asset CRUD remain in their dedicated APIs.
   Runtime scene selection and every shared board domain remain V2-owned.
 - Before production sign-off, rotate the external Pusher credential into
