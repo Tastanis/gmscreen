@@ -1,0 +1,205 @@
+{
+  "id": "devil-clerk",
+  "name": "Devil Clerk",
+  "level": 5,
+  "role": "Minion Brute",
+  "types": "Devil, Infernal",
+  "ev": 7,
+  "size": "1M",
+  "speed": 6,
+  "movement": "—",
+  "stamina": 10,
+  "stability": 0,
+  "free_strike": 3,
+  "immunities": [
+    { "type": "fire", "value": 5 }
+  ],
+  "weaknesses": [],
+  "attributes": {
+    "might": 3,
+    "agility": 0,
+    "reason": 1,
+    "intuition": 1,
+    "presence": 2
+  },
+  "traits": [],
+  "abilities": {
+    "passive": [
+      {
+        "name": "With Captain",
+        "effect": "+2 damage bonus to strikes."
+      },
+      {
+        "name": "True Name",
+        "effect": "If a creature within 10 squares speaks the clerk’s true name, the clerk loses their fire immunity and any nondamaging effects of their signature ability.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "effects": [
+                {
+                  "kind": "note",
+                  "text": "TRUE NAME: If a creature within 10 squares speaks the clerk’s true name, the clerk loses their fire immunity and any nondamaging effects of their signature ability. Remove these effects manually."
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "maneuver": [],
+    "action": [
+      {
+        "name": "Quill Pushing",
+        "keywords": "Melee, Strike, Weapon",
+        "range": "Melee 1",
+        "targets": "One creature or object per minion",
+        "roll_bonus": 3,
+        "effect": "",
+        "has_test": true,
+        "test": {
+          "tier1": {
+            "damage_amount": "3",
+            "damage_type": "",
+            "tier_effect": "push 1"
+          },
+          "tier2": {
+            "damage_amount": "6",
+            "damage_type": "",
+            "tier_effect": "push 2"
+          },
+          "tier3": {
+            "damage_amount": "7",
+            "damage_type": "",
+            "tier_effect": "push 3"
+          }
+        },
+        "additional_effect": "Any target adjacent to two or more clerks is taunted until the end of their next turn.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "quillTargets",
+              "mode": "token",
+              "predicate": "creatureOrObject",
+              "count": "all",
+              "distance": { "form": "melee", "value": 1 },
+              "promptTitle": "Quill Pushing Targets",
+              "promptText": "Select one target for each Clerk being run in this batch. Choose Done after the final target."
+            },
+            {
+              "type": "powerRoll",
+              "target": "quillTargets",
+              "flatBonus": 3,
+              "tiers": {
+                "tier1": {
+                  "effects": [
+                    { "kind": "damage", "amount": 3 },
+                    { "kind": "forcedMovement", "verb": "push", "distance": 1 }
+                  ]
+                },
+                "tier2": {
+                  "effects": [
+                    { "kind": "damage", "amount": 6 },
+                    { "kind": "forcedMovement", "verb": "push", "distance": 2 }
+                  ]
+                },
+                "tier3": {
+                  "effects": [
+                    { "kind": "damage", "amount": 7 },
+                    { "kind": "forcedMovement", "verb": "push", "distance": 3 }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "target",
+              "name": "tauntedTargets",
+              "mode": "token",
+              "predicate": "creature",
+              "count": "all",
+              "optional": true,
+              "distance": { "form": "melee", "value": 1 },
+              "promptTitle": "Targets Adjacent to Two or More Clerks",
+              "promptText": "Select each Quill Pushing target adjacent to two or more Clerks. Choose Done when finished. The currently selected Clerk is recorded as the source of the taunt."
+            },
+            {
+              "type": "effect",
+              "target": "tauntedTargets",
+              "effects": [
+                {
+                  "kind": "condition",
+                  "name": "taunted",
+                  "duration": "endOfTurn"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "triggered_action": [],
+    "villain_action": [],
+    "malice": [
+      {
+        "name": "Bureaucratic Tape",
+        "resource_cost": "3 Malice",
+        "effect": "One devil acting this turn uses a signature ability against an adjacent creature. On a tier 3 outcome, the target of the ability has a double bane on strikes (save ends).",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "effects": [
+                {
+                  "kind": "note",
+                  "text": "BUREAUCRATIC TAPE: One devil acting this turn uses a signature ability against an adjacent creature. On a tier 3 outcome, the target has a double bane on strikes (save ends). Resolve the signature ability and tier 3 rider manually."
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "Underhanded Tactics",
+        "resource_cost": "5+ Malice",
+        "effect": "One or two devils can teleport to a space adjacent to one or more creatures who aren’t hidden and make a free strike. For each 2 additional Malice spent on this feature, one additional devil can teleport.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "effects": [
+                {
+                  "kind": "note",
+                  "text": "UNDERHANDED TACTICS: One or two devils teleport adjacent to one or more creatures who aren’t hidden and make a free strike. Spend 2 additional Malice manually for each additional devil. Resolve the teleports and free strikes manually."
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "Read the Small Print",
+        "resource_cost": "7 Malice",
+        "effect": "Each enemy in the encounter is subject to a bad deal proposed by the devils. An enemy must choose between having damage weakness 5 or taking a bane on power rolls. The bad deal lasts until the end of the encounter.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "effects": [
+                {
+                  "kind": "note",
+                  "text": "READ THE SMALL PRINT: Each enemy chooses damage weakness 5 or a bane on power rolls until the end of the encounter. Record each enemy’s choice manually."
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

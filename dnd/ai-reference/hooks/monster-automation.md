@@ -46,7 +46,7 @@ Selecting a monster token opens the monster ability tray (`monster-ability-tray.
 
 | Behavior | When | Effect |
 |---|---|---|
-| Malice auto-spend | category `villain_action` or `malice` | Parses cost from `resource_cost` (first integer), calls `window.MaliceTracker.spend(cost)`. Confirm dialog if the pool is short. |
+| Malice auto-spend | category `villain_action`, `malice`, or a Malice-costed `triggered_action` | Parses cost from `resource_cost` (first integer), calls `window.MaliceTracker.spend(cost)`. Confirm dialog if the pool is short. Triggered actions without a numeric Malice cost spend nothing. |
 | Confirm-fire | category `triggered_action` | "Fire triggered action now?" dialog before the runner opens. |
 | Manual trigger resolution | category `triggered_action`, fired without a captured event | The glue sets `manualTriggerResolution`, so the runner **executes** the trigger card's effects (plus any later cards) instead of just arming a listener. |
 | Once-per-round gate | non-free triggered actions | `consumeTriggeredAction` marks the token's triggered action used for the round. A `resource_cost` containing "free" makes it a free triggered action (no consumption). |

@@ -1,0 +1,457 @@
+{
+  "id": "devil-jurist",
+  "name": "Devil Jurist",
+  "level": 5,
+  "role": "Elite Artillery",
+  "types": "Devil, Infernal",
+  "ev": 28,
+  "size": "1M",
+  "speed": 6,
+  "movement": "Fly",
+  "stamina": 120,
+  "stability": 0,
+  "free_strike": 7,
+  "immunities": [
+    { "type": "fire", "value": 5 }
+  ],
+  "weaknesses": [],
+  "attributes": {
+    "might": 0,
+    "agility": 2,
+    "reason": 1,
+    "intuition": 1,
+    "presence": 3
+  },
+  "traits": [],
+  "abilities": {
+    "passive": [
+      {
+        "name": "Hellfire",
+        "effect": "Fire damage dealt by the jurist ignores damage immunity."
+      },
+      {
+        "name": "True Name",
+        "effect": "If a creature within 10 squares speaks the jurist’s true name, the jurist loses their fire immunity, any nondamaging effects of their signature ability, and their Devilish Charm ability.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "effects": [
+                {
+                  "kind": "note",
+                  "text": "TRUE NAME: If a creature within 10 squares speaks the jurist’s true name, the jurist loses their fire immunity, any nondamaging effects of Fire and Brimstone, and Devilish Charm. Remove these effects manually."
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "maneuver": [
+      {
+        "name": "Ashes to Ashes",
+        "keywords": "Magic, Ranged",
+        "range": "Ranged 12",
+        "targets": "One creature",
+        "effect": "If the target is burning (see Fire and Brimstone), they take 6 fire damage.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "ashesTarget",
+              "mode": "token",
+              "predicate": "creature",
+              "count": { "value": 1, "mode": "exact" },
+              "distance": { "form": "ranged", "value": 12 }
+            },
+            {
+              "type": "effect",
+              "target": "ashesTarget",
+              "effects": [
+                {
+                  "kind": "ifPrompt",
+                  "question": "Is {target} burning from Fire and Brimstone?",
+                  "yesLabel": "Burning",
+                  "noLabel": "Not Burning",
+                  "then": [
+                    {
+                      "kind": "damage",
+                      "amount": 6,
+                      "damageType": "fire",
+                      "ignoreImmunity": true
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "action": [
+      {
+        "name": "Fire and Brimstone",
+        "keywords": "Magic, Ranged, Strike",
+        "range": "Ranged 12",
+        "targets": "Two creatures or objects",
+        "roll_bonus": 3,
+        "effect": "",
+        "has_test": true,
+        "test": {
+          "tier1": {
+            "damage_amount": "10",
+            "damage_type": "fire",
+            "tier_effect": ""
+          },
+          "tier2": {
+            "damage_amount": "15",
+            "damage_type": "fire",
+            "tier_effect": "",
+            "has_attribute_check": true,
+            "attribute": "agility",
+            "attribute_threshold": 2,
+            "attribute_effect": "burning (save ends)"
+          },
+          "tier3": {
+            "damage_amount": "18",
+            "damage_type": "fire",
+            "tier_effect": "",
+            "has_attribute_check": true,
+            "attribute": "agility",
+            "attribute_threshold": 3,
+            "attribute_effect": "burning (save ends)"
+          }
+        },
+        "additional_effect": "A burning creature takes 1d6 fire damage at the start of each of their turns. A burning object takes 1d6 fire damage at the end of each round.\n\n1+ Malice: The jurist can target one additional creature or object for each Malice spent.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "brimstoneTargets",
+              "mode": "token",
+              "predicate": "creatureOrObject",
+              "count": "all",
+              "distance": { "form": "ranged", "value": 12 },
+              "promptTitle": "Fire and Brimstone Targets",
+              "promptText": "Select one or two normal targets. You may manually spend 1 Malice for each additional target, then continue selecting. Choose Done after the final target."
+            },
+            {
+              "type": "powerRoll",
+              "target": "brimstoneTargets",
+              "flatBonus": 3,
+              "tiers": {
+                "tier1": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 10,
+                      "damageType": "fire",
+                      "ignoreImmunity": true
+                    }
+                  ]
+                },
+                "tier2": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 15,
+                      "damageType": "fire",
+                      "ignoreImmunity": true
+                    },
+                    {
+                      "kind": "potency",
+                      "attribute": "A",
+                      "threshold": 2,
+                      "onFail": [
+                        {
+                          "kind": "condition",
+                          "name": "other",
+                          "text": "burning",
+                          "duration": "saveEnds",
+                          "riders": [
+                            {
+                              "id": "fire-and-brimstone-burning",
+                              "when": "turnStart",
+                              "target": "bearer",
+                              "effects": [
+                                {
+                                  "kind": "damage",
+                                  "amountDice": "1d6",
+                                  "damageType": "fire",
+                                  "ignoreImmunity": true
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "tier3": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 18,
+                      "damageType": "fire",
+                      "ignoreImmunity": true
+                    },
+                    {
+                      "kind": "potency",
+                      "attribute": "A",
+                      "threshold": 3,
+                      "onFail": [
+                        {
+                          "kind": "condition",
+                          "name": "other",
+                          "text": "burning",
+                          "duration": "saveEnds",
+                          "riders": [
+                            {
+                              "id": "fire-and-brimstone-burning",
+                              "when": "turnStart",
+                              "target": "bearer",
+                              "effects": [
+                                {
+                                  "kind": "damage",
+                                  "amountDice": "1d6",
+                                  "damageType": "fire",
+                                  "ignoreImmunity": true
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "effect",
+              "target": "brimstoneTargets",
+              "effects": [
+                {
+                  "kind": "note",
+                  "text": "A burning object takes 1d6 fire damage at the end of each round. Apply this manually. Fire and Brimstone’s fire damage ignores damage immunity."
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "Dismissal with Prejudice",
+        "keywords": "Area, Magic",
+        "range": "2 burst",
+        "targets": "Each enemy in the area",
+        "roll_bonus": 3,
+        "effect": "",
+        "has_test": true,
+        "test": {
+          "tier1": {
+            "damage_amount": "6",
+            "damage_type": "",
+            "tier_effect": "slide 1"
+          },
+          "tier2": {
+            "damage_amount": "10",
+            "damage_type": "",
+            "tier_effect": "slide 3"
+          },
+          "tier3": {
+            "damage_amount": "12",
+            "damage_type": "",
+            "tier_effect": "slide 5"
+          }
+        },
+        "additional_effect": "If the target has M<2, the forced distance movement gains a +3 bonus.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "dismissalTargets",
+              "mode": "area",
+              "predicate": "enemy",
+              "shape": "burst",
+              "size": 2,
+              "distance": { "form": "burst", "value": 2 }
+            },
+            {
+              "type": "powerRoll",
+              "target": "dismissalTargets",
+              "flatBonus": 3,
+              "tiers": {
+                "tier1": {
+                  "effects": [
+                    { "kind": "damage", "amount": 6 },
+                    {
+                      "kind": "potency",
+                      "attribute": "M",
+                      "threshold": 2,
+                      "onFail": [
+                        { "kind": "forcedMovement", "verb": "slide", "distance": 4, "upTo": true }
+                      ],
+                      "onResist": [
+                        { "kind": "forcedMovement", "verb": "slide", "distance": 1, "upTo": true }
+                      ]
+                    }
+                  ]
+                },
+                "tier2": {
+                  "effects": [
+                    { "kind": "damage", "amount": 10 },
+                    {
+                      "kind": "potency",
+                      "attribute": "M",
+                      "threshold": 2,
+                      "onFail": [
+                        { "kind": "forcedMovement", "verb": "slide", "distance": 6, "upTo": true }
+                      ],
+                      "onResist": [
+                        { "kind": "forcedMovement", "verb": "slide", "distance": 3, "upTo": true }
+                      ]
+                    }
+                  ]
+                },
+                "tier3": {
+                  "effects": [
+                    { "kind": "damage", "amount": 12 },
+                    {
+                      "kind": "potency",
+                      "attribute": "M",
+                      "threshold": 2,
+                      "onFail": [
+                        { "kind": "forcedMovement", "verb": "slide", "distance": 8, "upTo": true }
+                      ],
+                      "onResist": [
+                        { "kind": "forcedMovement", "verb": "slide", "distance": 5, "upTo": true }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "triggered_action": [
+      {
+        "name": "Devilish Charm",
+        "resource_cost": "2 Malice",
+        "keywords": "Magic, Ranged",
+        "range": "Ranged 5",
+        "targets": "The triggering creature",
+        "trigger": "A creature targets the jurist with a strike.",
+        "effect": "The target makes a Presence test.\n\nTier 1: The jurist chooses a new target for the strike.\nTier 2: The jurist halves the triggering damage.\nTier 3: The target takes a bane on the strike.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "trigger",
+              "condition": "A creature targets the jurist with a strike.",
+              "match": {
+                "event": "damage",
+                "filter": {
+                  "whose": "self",
+                  "withinSquares": 5
+                }
+              }
+            },
+            {
+              "type": "requestedTest",
+              "target": "eventActor",
+              "attribute": "Presence",
+              "rollMode": "individual",
+              "label": "Devilish Charm Presence test",
+              "prompt": "A creature targets the jurist with a strike.",
+              "tiers": {
+                "tier1": {
+                  "effects": [
+                    {
+                      "kind": "note",
+                      "text": "TIER 1: The jurist chooses a new target for the strike. Manually undo the original damage, choose the new target, and resolve the strike against that target."
+                    }
+                  ]
+                },
+                "tier2": {
+                  "effects": [
+                    {
+                      "kind": "halveTriggeringDamage",
+                      "rounding": "down"
+                    }
+                  ]
+                },
+                "tier3": {
+                  "effects": [
+                    {
+                      "kind": "note",
+                      "text": "TIER 3: The target takes a bane on the strike. Correct or reroll the triggering strike manually if it was already resolved."
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "villain_action": [],
+    "malice": [
+      {
+        "name": "Bureaucratic Tape",
+        "resource_cost": "3 Malice",
+        "effect": "One devil acting this turn uses a signature ability against an adjacent creature. On a tier 3 outcome, the target of the ability has a double bane on strikes (save ends).",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "effects": [
+                { "kind": "note", "text": "BUREAUCRATIC TAPE: Resolve the chosen devil’s signature ability against an adjacent creature. On tier 3, manually apply a double bane on strikes (save ends)." }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "Underhanded Tactics",
+        "resource_cost": "5+ Malice",
+        "effect": "One or two devils can teleport to a space adjacent to one or more creatures who aren’t hidden and make a free strike. For each 2 additional Malice spent on this feature, one additional devil can teleport.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "effects": [
+                { "kind": "note", "text": "UNDERHANDED TACTICS: Resolve the teleports and free strikes manually. Spend 2 additional Malice manually for each additional devil beyond the first two." }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "Read the Small Print",
+        "resource_cost": "7 Malice",
+        "effect": "Each enemy in the encounter is subject to a bad deal proposed by the devils. An enemy must choose between having damage weakness 5 or taking a bane on power rolls. The bad deal lasts until the end of the encounter.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "effects": [
+                { "kind": "note", "text": "READ THE SMALL PRINT: Each enemy chooses damage weakness 5 or a bane on power rolls until the end of the encounter. Record each choice manually." }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

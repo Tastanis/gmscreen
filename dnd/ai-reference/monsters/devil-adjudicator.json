@@ -1,0 +1,397 @@
+{
+  "id": "devil-adjudicator",
+  "name": "Devil Adjudicator",
+  "level": 6,
+  "role": "Elite Controller",
+  "types": "Devil, Infernal",
+  "ev": 32,
+  "size": "1M",
+  "speed": 6,
+  "movement": "Fly",
+  "stamina": 140,
+  "stability": 1,
+  "free_strike": 7,
+  "immunities": [
+    { "type": "fire", "value": 5 }
+  ],
+  "weaknesses": [],
+  "attributes": {
+    "might": 0,
+    "agility": 1,
+    "reason": 2,
+    "intuition": 1,
+    "presence": 3
+  },
+  "traits": [],
+  "abilities": {
+    "passive": [
+      {
+        "name": "Vexatious Litigation",
+        "effect": "Any creature within 10 squares of the adjudicator who has P<3 takes a −2 penalty to saving throws.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "trigger",
+              "condition": "Combat starts.",
+              "match": {
+                "event": "combatStart"
+              }
+            },
+            {
+              "type": "effect",
+              "target": "self",
+              "effects": [
+                {
+                  "kind": "aura",
+                  "enabled": true,
+                  "radius": 10,
+                  "color": "#7c3aed",
+                  "target": "self"
+                },
+                {
+                  "kind": "note",
+                  "text": "VEXATIOUS LITIGATION: Any creature within 10 squares of the adjudicator who has P<3 takes a −2 penalty to saving throws. The aura is a visual reminder; apply the penalty manually."
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "True Name",
+        "effect": "If a creature within 10 squares speaks the adjudicator’s true name, the adjudicator loses their damage immunities, any nondamaging effects of their signature ability, and their Devilish Charm ability.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "effects": [
+                {
+                  "kind": "note",
+                  "text": "TRUE NAME: If a creature within 10 squares speaks the adjudicator’s true name, the adjudicator loses their damage immunities, the frightened and slide effects of Infernal Injunction, and Devilish Charm. Remove these effects manually."
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "maneuver": [
+      {
+        "name": "Quid Pro Quo",
+        "keywords": "Magic, Ranged",
+        "range": "Ranged 10",
+        "targets": "One ally or frightened creature",
+        "effect": "The adjudicator and the target teleport to switch places.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "quidProQuoTarget",
+              "mode": "token",
+              "predicate": "creature",
+              "count": { "value": 1, "mode": "exact" },
+              "distance": { "form": "ranged", "value": 10 },
+              "promptTitle": "Quid Pro Quo",
+              "promptText": "Select one ally or frightened creature. Target eligibility is adjudicated manually."
+            },
+            {
+              "type": "effect",
+              "target": "quidProQuoTarget",
+              "effects": [
+                { "kind": "swap" }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "action": [
+      {
+        "name": "Infernal Injunction",
+        "keywords": "Magic, Ranged, Strike",
+        "range": "Ranged 10",
+        "targets": "Two creatures or objects",
+        "roll_bonus": 3,
+        "effect": "",
+        "has_test": true,
+        "test": {
+          "tier1": {
+            "damage_amount": "10",
+            "damage_type": "fire",
+            "tier_effect": "",
+            "has_attribute_check": true,
+            "attribute": "intuition",
+            "attribute_threshold": 1,
+            "attribute_effect": "frightened (save ends)"
+          },
+          "tier2": {
+            "damage_amount": "15",
+            "damage_type": "fire",
+            "tier_effect": "",
+            "has_attribute_check": true,
+            "attribute": "intuition",
+            "attribute_threshold": 1,
+            "attribute_effect": "frightened (save ends)"
+          },
+          "tier3": {
+            "damage_amount": "18",
+            "damage_type": "fire",
+            "tier_effect": "",
+            "has_attribute_check": true,
+            "attribute": "intuition",
+            "attribute_threshold": 1,
+            "attribute_effect": "frightened (save ends)"
+          }
+        },
+        "additional_effect": "The adjudicator can slide a target frightened by this ability up to 2 squares.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "injunctionTargets",
+              "mode": "token",
+              "predicate": "creatureOrObject",
+              "count": { "value": 2, "mode": "exact" },
+              "distance": { "form": "ranged", "value": 10 },
+              "promptTitle": "Infernal Injunction Targets",
+              "promptText": "Select one or two creatures or objects. Choose Done after the first target if there is no second target."
+            },
+            {
+              "type": "powerRoll",
+              "target": "injunctionTargets",
+              "flatBonus": 3,
+              "tiers": {
+                "tier1": {
+                  "effects": [
+                    { "kind": "damage", "amount": 10, "damageType": "fire" },
+                    {
+                      "kind": "potency",
+                      "attribute": "I",
+                      "threshold": 1,
+                      "onFail": [
+                        { "kind": "condition", "name": "frightened", "duration": "saveEnds" },
+                        { "kind": "forcedMovement", "verb": "slide", "distance": 2, "upTo": true }
+                      ]
+                    }
+                  ]
+                },
+                "tier2": {
+                  "effects": [
+                    { "kind": "damage", "amount": 15, "damageType": "fire" },
+                    {
+                      "kind": "potency",
+                      "attribute": "I",
+                      "threshold": 1,
+                      "onFail": [
+                        { "kind": "condition", "name": "frightened", "duration": "saveEnds" },
+                        { "kind": "forcedMovement", "verb": "slide", "distance": 2, "upTo": true }
+                      ]
+                    }
+                  ]
+                },
+                "tier3": {
+                  "effects": [
+                    { "kind": "damage", "amount": 18, "damageType": "fire" },
+                    {
+                      "kind": "potency",
+                      "attribute": "I",
+                      "threshold": 1,
+                      "onFail": [
+                        { "kind": "condition", "name": "frightened", "duration": "saveEnds" },
+                        { "kind": "forcedMovement", "verb": "slide", "distance": 2, "upTo": true }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Adjudicator’s Interdiction",
+        "keywords": "Magic, Ranged",
+        "range": "Ranged 10",
+        "targets": "One creature",
+        "effect": "The target makes a Presence test.\n\nTier 1: The target is slowed, takes a bane on power rolls, and can’t regain Stamina (save ends).\nTier 2: The target is slowed and takes a bane on power rolls (save ends).\nTier 3: Slowed (save ends).",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "interdictionTarget",
+              "mode": "token",
+              "predicate": "creature",
+              "count": { "value": 1, "mode": "exact" },
+              "distance": { "form": "ranged", "value": 10 }
+            },
+            {
+              "type": "requestedTest",
+              "target": "interdictionTarget",
+              "attribute": "Presence",
+              "rollMode": "individual",
+              "label": "Adjudicator’s Interdiction Presence test",
+              "prompt": "The target makes a Presence test.",
+              "tiers": {
+                "tier1": {
+                  "effects": [
+                    {
+                      "kind": "condition",
+                      "name": "hiddenEffect",
+                      "label": "Adjudicator’s Interdiction: slowed, bane on power rolls, and can’t regain Stamina",
+                      "duration": "saveEnds",
+                      "rider": {
+                        "type": "rollModifier",
+                        "modifier": "bane",
+                        "appliesTo": { "rollEvent": "powerRoll" },
+                        "consume": "manual"
+                      }
+                    },
+                    {
+                      "kind": "note",
+                      "text": "ADJUDICATOR’S INTERDICTION — TIER 1: The target is slowed, takes a bane on power rolls, and can’t regain Stamina (save ends). The target can’t regain Stamina while this effect remains."
+                    }
+                  ]
+                },
+                "tier2": {
+                  "effects": [
+                    {
+                      "kind": "condition",
+                      "name": "hiddenEffect",
+                      "label": "Adjudicator’s Interdiction: slowed and bane on power rolls",
+                      "duration": "saveEnds",
+                      "rider": {
+                        "type": "rollModifier",
+                        "modifier": "bane",
+                        "appliesTo": { "rollEvent": "powerRoll" },
+                        "consume": "manual"
+                      }
+                    }
+                  ]
+                },
+                "tier3": {
+                  "effects": [
+                    { "kind": "condition", "name": "slowed", "duration": "saveEnds" }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "triggered_action": [
+      {
+        "name": "Devilish Charm",
+        "resource_cost": "2 Malice",
+        "keywords": "Magic, Ranged",
+        "range": "Ranged 5",
+        "targets": "The triggering creature",
+        "trigger": "A creature targets the adjudicator with a strike.",
+        "effect": "The target makes a Presence test.\n\nTier 1: The adjudicator chooses a new target for the strike.\nTier 2: The adjudicator halves the triggering damage.\nTier 3: The target takes a bane on the strike.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "trigger",
+              "condition": "A creature targets the adjudicator with a strike.",
+              "match": {
+                "event": "damage",
+                "filter": {
+                  "whose": "self",
+                  "withinSquares": 5
+                }
+              }
+            },
+            {
+              "type": "requestedTest",
+              "target": "eventActor",
+              "attribute": "Presence",
+              "rollMode": "individual",
+              "label": "Devilish Charm Presence test",
+              "prompt": "A creature targets the adjudicator with a strike.",
+              "tiers": {
+                "tier1": {
+                  "effects": [
+                    {
+                      "kind": "note",
+                      "text": "TIER 1: The adjudicator chooses a new target for the strike. Manually undo the original damage, choose the new target, and resolve the strike against that target."
+                    }
+                  ]
+                },
+                "tier2": {
+                  "effects": [
+                    { "kind": "halveTriggeringDamage", "rounding": "down" }
+                  ]
+                },
+                "tier3": {
+                  "effects": [
+                    {
+                      "kind": "note",
+                      "text": "TIER 3: The target takes a bane on the strike. Correct or reroll the triggering strike manually if it was already resolved."
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "villain_action": [],
+    "malice": [
+      {
+        "name": "Bureaucratic Tape",
+        "resource_cost": "3 Malice",
+        "effect": "One devil acting this turn uses a signature ability against an adjacent creature. On a tier 3 outcome, the target of the ability has a double bane on strikes (save ends).",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "effects": [
+                { "kind": "note", "text": "BUREAUCRATIC TAPE: Resolve the chosen devil’s signature ability against an adjacent creature. On tier 3, manually apply a double bane on strikes (save ends)." }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "Underhanded Tactics",
+        "resource_cost": "5+ Malice",
+        "effect": "One or two devils can teleport to a space adjacent to one or more creatures who aren’t hidden and make a free strike. For each 2 additional Malice spent on this feature, one additional devil can teleport.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "effects": [
+                { "kind": "note", "text": "UNDERHANDED TACTICS: Resolve the teleports and free strikes manually. Spend 2 additional Malice manually for each additional devil beyond the first two." }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "Read the Small Print",
+        "resource_cost": "7 Malice",
+        "effect": "Each enemy in the encounter is subject to a bad deal proposed by the devils. An enemy must choose between having damage weakness 5 or taking a bane on power rolls. The bad deal lasts until the end of the encounter.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "effects": [
+                { "kind": "note", "text": "READ THE SMALL PRINT: Each enemy chooses damage weakness 5 or a bane on power rolls until the end of the encounter. Record each choice manually." }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

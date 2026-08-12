@@ -1,0 +1,31 @@
+{
+  "id": "angel",
+  "name": "Angel",
+  "level": 5,
+  "role": "Elite Defender",
+  "types": "Angel, Celestial",
+  "ev": 28,
+  "size": "1M",
+  "speed": 7,
+  "movement": "Fly",
+  "stamina": 140,
+  "stability": 3,
+  "free_strike": 7,
+  "immunities": [],
+  "weaknesses": [],
+  "attributes": {
+    "might": 3,
+    "agility": 2,
+    "reason": 1,
+    "intuition": 3,
+    "presence": 2
+  },
+  "abilities": {
+    "passive": [],
+    "maneuver": [],
+    "action": [],
+    "triggered_action": [],
+    "villain_action": [],
+    "malice": []
+  }
+}

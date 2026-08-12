@@ -28,7 +28,7 @@
     'use strict';
 
     var TRIGGERED_CATEGORY = 'triggered_action';
-    var MALICE_CATEGORIES = ['villain_action', 'malice'];
+    var MALICE_CATEGORIES = ['villain_action', 'malice', 'triggered_action'];
 
     function canRun(ability) {
         if (!ability || typeof ability !== 'object') return false;
@@ -246,6 +246,7 @@
             showFloatingText: board.showFloatingText,
             startTurn: board.startTurn,
             consumeTriggeredAction: board.consumeTriggeredAction,
+            refundTriggeredAction: board.refundTriggeredAction,
             requestTest: board.requestTest,
             completeRequestedTests: board.completeRequestedTests,
             getPowerRollSuggestions: board.getPowerRollSuggestions,
@@ -333,7 +334,6 @@
             }
             return { refunded: true };
         };
-        context.refundTriggeredAction = board.refundTriggeredAction;
         if (options && typeof options === 'object') {
             for (var key in options) {
                 if (Object.prototype.hasOwnProperty.call(options, key)) {

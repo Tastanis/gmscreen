@@ -1,0 +1,212 @@
+{
+  "id": "inkling-swarm",
+  "name": "Inkling Swarm",
+  "level": 5,
+  "role": "Platoon Controller",
+  "types": "Inkling, Swarm",
+  "ev": 14,
+  "size": "2",
+  "speed": 5,
+  "movement": "Climb",
+  "stamina": 60,
+  "stability": 1,
+  "free_strike": 6,
+  "immunities": [],
+  "weaknesses": [],
+  "attributes": {
+    "might": 2,
+    "agility": 2,
+    "reason": -2,
+    "intuition": 1,
+    "presence": 2
+  },
+  "traits": [],
+  "abilities": {
+    "passive": [
+      {
+        "name": "Formless Mass",
+        "effect": "The swarm can move through other creatures’ spaces and can occupy the same space as another creature. The swarm can’t be knocked prone, grabbed, or restrained."
+      },
+      {
+        "name": "Blotting Cloud",
+        "keywords": "Area, Magic",
+        "range": "2 aura",
+        "targets": "Self and each creature in the area",
+        "effect": "The area is filled with a cloud of floating black ink. Everything in the area has concealment. The swarm ignores concealment created by this ability. The aura moves with the swarm.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "target": "self",
+              "effects": [
+                {
+                  "kind": "aura",
+                  "enabled": true,
+                  "radius": 2,
+                  "color": "#171717",
+                  "target": "self"
+                },
+                {
+                  "kind": "note",
+                  "text": "BLOTTING CLOUD: Everything in the 2 aura has concealment. The swarm ignores concealment created by this ability. The aura moves with the swarm. The GM can place fog of war over the aura as needed."
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "maneuver": [],
+    "action": [
+      {
+        "name": "Drowning Ink",
+        "keywords": "Magic, Melee, Strike",
+        "range": "Melee 1",
+        "targets": "One creature",
+        "roll_bonus": 3,
+        "effect": "The swarm surges over the target, forcing living ink into every gap in their defenses.",
+        "has_test": true,
+        "test": {
+          "tier1": {
+            "damage_amount": "6",
+            "damage_type": "",
+            "tier_effect": "pull 1"
+          },
+          "tier2": {
+            "damage_amount": "9",
+            "damage_type": "",
+            "tier_effect": "grabbed"
+          },
+          "tier3": {
+            "damage_amount": "12",
+            "damage_type": "",
+            "tier_effect": "submerged and restrained (save ends)"
+          }
+        },
+        "additional_effect": "When the swarm moves, it can move a creature grabbed or restrained by this ability with it. A grabbed creature moves adjacent to the swarm. A submerged creature occupies the swarm’s space.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "drowningTarget",
+              "mode": "token",
+              "predicate": "creature",
+              "count": { "value": 1, "mode": "exact" },
+              "distance": { "form": "melee", "value": 1 }
+            },
+            {
+              "type": "powerRoll",
+              "target": "drowningTarget",
+              "flatBonus": 3,
+              "tiers": {
+                "tier1": {
+                  "effects": [
+                    { "kind": "damage", "amount": 6 },
+                    { "kind": "forcedMovement", "verb": "pull", "distance": 1 }
+                  ]
+                },
+                "tier2": {
+                  "effects": [
+                    { "kind": "damage", "amount": 9 },
+                    { "kind": "condition", "name": "grabbed" }
+                  ]
+                },
+                "tier3": {
+                  "effects": [
+                    { "kind": "damage", "amount": 12 },
+                    { "kind": "condition", "name": "restrained", "duration": "saveEnds" },
+                    { "kind": "note", "text": "The target is submerged in the Inkling Swarm and occupies the swarm’s space while restrained." }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "effect",
+              "target": "drowningTarget",
+              "effects": [
+                {
+                  "kind": "note",
+                  "text": "DROWNING INK: When the swarm moves, it can move a creature grabbed or restrained by this ability with it. Keep a grabbed creature adjacent to the swarm and a submerged creature in the swarm’s space. Move the target manually with the swarm."
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "Smothered Words",
+        "keywords": "Magic, Ranged",
+        "range": "Ranged 8",
+        "targets": "One creature",
+        "effect": "Living ink pours from the target’s mouth as they make a Presence test.\n\nTier 1: 8 psychic damage, and the target has a double bane on power rolls until the end of their next turn.\nTier 2: 5 psychic damage, and the target has a bane on power rolls until the end of their next turn.\nTier 3: 2 psychic damage.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "smotheredTarget",
+              "mode": "token",
+              "predicate": "creature",
+              "count": { "value": 1, "mode": "exact" },
+              "distance": { "form": "ranged", "value": 8 }
+            },
+            {
+              "type": "requestedTest",
+              "target": "smotheredTarget",
+              "attribute": "Presence",
+              "rollMode": "individual",
+              "label": "Smothered Words Presence test",
+              "prompt": "Living ink pours from your mouth, choking off your words.",
+              "tiers": {
+                "tier1": {
+                  "effects": [
+                    { "kind": "damage", "amount": 8, "damageType": "psychic" },
+                    {
+                      "kind": "condition",
+                      "name": "hiddenEffect",
+                      "label": "Smothered Words: double bane on power rolls",
+                      "duration": "endOfTurn",
+                      "rider": {
+                        "type": "rollModifier",
+                        "modifier": "doubleBane",
+                        "appliesTo": { "rollEvent": "powerRoll" },
+                        "consume": "manual"
+                      }
+                    }
+                  ]
+                },
+                "tier2": {
+                  "effects": [
+                    { "kind": "damage", "amount": 5, "damageType": "psychic" },
+                    {
+                      "kind": "condition",
+                      "name": "hiddenEffect",
+                      "label": "Smothered Words: bane on power rolls",
+                      "duration": "endOfTurn",
+                      "rider": {
+                        "type": "rollModifier",
+                        "modifier": "bane",
+                        "appliesTo": { "rollEvent": "powerRoll" },
+                        "consume": "manual"
+                      }
+                    }
+                  ]
+                },
+                "tier3": {
+                  "effects": [
+                    { "kind": "damage", "amount": 2, "damageType": "psychic" }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "triggered_action": [],
+    "villain_action": [],
+    "malice": []
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "id": "shaile-dean-of-radiance",
+  "name": "Shaile, Dean of Radiance",
+  "level": 10,
+  "role": "Solo Support",
+  "types": "Owlin, Humanoid, Mage, Radiance",
+  "ev": 144,
+  "size": "1M",
+  "speed": 8,
+  "movement": "Fly",
+  "stamina": 600,
+  "stability": 2,
+  "free_strike": 10,
+  "immunities": [],
+  "weaknesses": [],
+  "attributes": {
+    "might": 1,
+    "agility": 3,
+    "reason": 4,
+    "intuition": 5,
+    "presence": 5
+  },
+  "abilities": {
+    "passive": [],
+    "maneuver": [],
+    "action": [],
+    "triggered_action": [],
+    "villain_action": [],
+    "malice": []
+  }
+}

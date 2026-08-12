@@ -1066,8 +1066,8 @@ function renderCompactAbility(ability, category) {
     if (ability.keywords) details.push(`Keywords: ${ability.keywords}`);
     if (ability.range) details.push(`Range: ${ability.range}`);
     if (ability.targets) details.push(`Targets: ${ability.targets}`);
-    // Only show cost for villain_action and malice
-    if ((category === 'villain_action' || category === 'malice') && ability.resource_cost) {
+    // Triggered actions can also carry a Malice cost.
+    if ((category === 'triggered_action' || category === 'villain_action' || category === 'malice') && ability.resource_cost) {
         details.push(`Cost: ${ability.resource_cost}`);
     }
     
@@ -1493,7 +1493,7 @@ function renderSingleAbility(ability, index, category, monsterId = '') {
 
                 <span class="action-type">${ability.action_type || getCategoryDisplayName(category)}</span>
 
-                ${(category === 'villain_action' || category === 'malice') ? `
+                ${(category === 'triggered_action' || category === 'villain_action' || category === 'malice') ? `
                     <input type="text" class="resource-cost-input" placeholder="3 points"
                            data-field-path="abilities.${category}.${index}.resource_cost"
                            value="${ability.resource_cost || ''}">
@@ -3306,8 +3306,8 @@ function updateAbilityBrowser(abilities) {
         if (ability.data.action_type && ability.data.action_type !== ability.category) {
             metaInfo.push(ability.data.action_type);
         }
-        // Only show cost for villain_action and malice
-        if ((ability.categoryKey === 'villain_action' || ability.categoryKey === 'malice') && ability.data.resource_cost) {
+        // Triggered actions can also carry a Malice cost.
+        if ((ability.categoryKey === 'triggered_action' || ability.categoryKey === 'villain_action' || ability.categoryKey === 'malice') && ability.data.resource_cost) {
             metaInfo.push(`Cost: ${ability.data.resource_cost}`);
         }
         
@@ -4937,7 +4937,7 @@ function renderAbilityForPrint(ability, category) {
     if (ability.keywords) metaItems.push({ label: 'Keywords', symbol: '🏷️', value: ability.keywords });
     if (ability.range) metaItems.push({ label: 'Range', symbol: '🏹', value: ability.range });
     if (ability.targets) metaItems.push({ label: 'Targets', symbol: '🎯', value: ability.targets });
-    if ((category === 'villain_action' || category === 'malice') && ability.resource_cost) {
+    if ((category === 'triggered_action' || category === 'villain_action' || category === 'malice') && ability.resource_cost) {
         metaItems.push({ label: 'Cost', symbol: '✨', value: ability.resource_cost });
     }
     

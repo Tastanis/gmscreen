@@ -1,0 +1,338 @@
+{
+  "id": "dean-embrose",
+  "name": "Dean Embrose",
+  "level": 10,
+  "role": "Solo Controller",
+  "types": "Humanoid, Mage, Shadow",
+  "ev": 144,
+  "size": "1M",
+  "speed": 8,
+  "movement": "—",
+  "stamina": 650,
+  "stability": 2,
+  "free_strike": 10,
+  "immunities": [
+    { "type": "corruption", "value": 10 }
+  ],
+  "weaknesses": [],
+  "attributes": {
+    "might": 1,
+    "agility": 3,
+    "reason": 5,
+    "intuition": 4,
+    "presence": 5
+  },
+  "abilities": {
+    "passive": [
+      {
+        "name": "Solo Monster",
+        "effect": "End Effect: At the end of each of his turns, Embrose can take 20 damage to end one effect on him that can be ended by a saving throw. This damage can’t be reduced in any way.\n\nSolo Turns: Embrose can take two turns each round. He can’t take turns consecutively."
+      },
+      {
+        "name": "Master of Inklings",
+        "effect": "Embrose and each inkling ignore concealment and negative effects created by Embrose’s abilities and inkling abilities."
+      }
+    ],
+    "maneuver": [],
+    "action": [
+      {
+        "name": "A Word in Your Ear",
+        "keywords": "Magic, Ranged, Strike",
+        "range": "Ranged 15",
+        "targets": "Two creatures",
+        "roll_bonus": 5,
+        "effect": "Embrose whispers a different poisoned confidence to each target, then living ink hurls them into one another.",
+        "has_test": true,
+        "test": {
+          "tier1": { "damage_amount": "12", "damage_type": "psychic", "tier_effect": "slide 5 toward the other target" },
+          "tier2": { "damage_amount": "18", "damage_type": "psychic", "tier_effect": "slide 7 toward the other target" },
+          "tier3": { "damage_amount": "22", "damage_type": "psychic", "tier_effect": "slide 10 toward the other target" }
+        },
+        "additional_effect": "Resolve the targets in the order selected. Slide the first target toward the second, then slide the second target toward the first target’s new space. Stability reduces each slide as normal. If the targets collide, resolve normal collision effects in addition to the listed damage. If only one target was selected, slide that target toward Embrose.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "whisperTargets",
+              "mode": "token",
+              "predicate": "creature",
+              "count": { "value": 2, "mode": "exact" },
+              "distance": { "form": "ranged", "value": 15 },
+              "promptTitle": "A Word in Your Ear",
+              "promptText": "Select the first creature, then the second. You may choose Done after one target. Move the first toward the second, then the second toward the first’s new space."
+            },
+            {
+              "type": "powerRoll",
+              "target": "whisperTargets",
+              "flatBonus": 5,
+              "tiers": {
+                "tier1": { "effects": [{ "kind": "damage", "amount": 12, "damageType": "psychic" }, { "kind": "forcedMovement", "verb": "slide", "distance": 5, "upTo": true }] },
+                "tier2": { "effects": [{ "kind": "damage", "amount": 18, "damageType": "psychic" }, { "kind": "forcedMovement", "verb": "slide", "distance": 7, "upTo": true }] },
+                "tier3": { "effects": [{ "kind": "damage", "amount": 22, "damageType": "psychic" }, { "kind": "forcedMovement", "verb": "slide", "distance": 10, "upTo": true }] }
+              }
+            },
+            {
+              "type": "effect",
+              "target": "whisperTargets",
+              "effects": [
+                { "kind": "note", "text": "A WORD IN YOUR EAR: Resolve targets in selection order. Slide the first toward the second, then the second toward the first’s new space. Stability applies. Resolve normal collision effects in addition to the listed psychic damage. With only one target, slide it toward Embrose." }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "The Dean’s Red Pen",
+        "keywords": "Magic, Ranged, Strike",
+        "range": "Ranged 15",
+        "targets": "One creature",
+        "roll_bonus": 5,
+        "effect": "A slash of crimson ink edits the target into Embrose’s preferred victim.",
+        "has_test": true,
+        "test": {
+          "tier1": { "damage_amount": "15", "damage_type": "corruption", "tier_effect": "" },
+          "tier2": { "damage_amount": "21", "damage_type": "corruption", "tier_effect": "" },
+          "tier3": { "damage_amount": "25", "damage_type": "corruption", "tier_effect": "" }
+        },
+        "additional_effect": "The target has corruption weakness 5 (save ends). While the target has this weakness, they are marked by the Dean’s Red Pen, and Embrose and each inkling have an edge on power rolls made against them.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "redPenTarget",
+              "mode": "token",
+              "predicate": "creature",
+              "count": { "value": 1, "mode": "exact" },
+              "distance": { "form": "ranged", "value": 15 }
+            },
+            {
+              "type": "powerRoll",
+              "target": "redPenTarget",
+              "flatBonus": 5,
+              "tiers": {
+                "tier1": { "effects": [{ "kind": "damage", "amount": 15, "damageType": "corruption" }] },
+                "tier2": { "effects": [{ "kind": "damage", "amount": 21, "damageType": "corruption" }] },
+                "tier3": { "effects": [{ "kind": "damage", "amount": 25, "damageType": "corruption" }] }
+              }
+            },
+            {
+              "type": "effect",
+              "target": "redPenTarget",
+              "effects": [
+                { "kind": "condition", "name": "damageWeakness", "amount": 5, "damageType": "corruption", "duration": "saveEnds" },
+                { "kind": "note", "text": "THE DEAN’S RED PEN: While the corruption weakness remains, Embrose and each inkling have an edge on power rolls against the marked target. Apply the edge manually." }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "Drowning Dissertation",
+        "keywords": "Area, Magic, Persistent",
+        "range": "5 cube within 15",
+        "targets": "Each enemy in the area",
+        "effect": "Embrose creates a 5 cube of living ink that remains until the end of the encounter. Each enemy in the area when it appears makes a Presence test.\n\nTier 1: slide up to 10 squares toward the center of the area.\nTier 2: slide up to 7 squares toward the center of the area.\nTier 3: slide up to 5 squares toward the center of the area.\n\nStability reduces this forced movement as normal. A creature who touches the center space becomes Submerged (save ends). While Submerged, a creature is restrained and blinded. Each enemy who enters the persistent area or starts their turn there is slowed until the end of their turn. Embrose and inklings ignore all effects of the area.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "drowningArea",
+              "mode": "area",
+              "predicate": "enemy",
+              "shape": "cube",
+              "size": 5,
+              "distance": { "form": "cube", "value": 5, "within": 15 },
+              "promptTitle": "Drowning Dissertation",
+              "promptText": "Place the 5-cube ink area and identify its center space."
+            },
+            {
+              "type": "requestedTest",
+              "target": "drowningArea",
+              "attribute": "Presence",
+              "rollMode": "individual",
+              "label": "Drowning Dissertation Presence test",
+              "prompt": "Living ink drags you toward the center of Embrose’s dissertation.",
+              "tiers": {
+                "tier1": { "effects": [{ "kind": "forcedMovement", "verb": "slide", "distance": 10, "upTo": true }, { "kind": "ifPrompt", "question": "Did {target} touch the center space?", "yesLabel": "Submerged", "noLabel": "Not Submerged", "then": [{ "kind": "condition", "name": "other", "text": "Submerged: restrained and blinded", "duration": "saveEnds" }] }] },
+                "tier2": { "effects": [{ "kind": "forcedMovement", "verb": "slide", "distance": 7, "upTo": true }, { "kind": "ifPrompt", "question": "Did {target} touch the center space?", "yesLabel": "Submerged", "noLabel": "Not Submerged", "then": [{ "kind": "condition", "name": "other", "text": "Submerged: restrained and blinded", "duration": "saveEnds" }] }] },
+                "tier3": { "effects": [{ "kind": "forcedMovement", "verb": "slide", "distance": 5, "upTo": true }, { "kind": "ifPrompt", "question": "Did {target} touch the center space?", "yesLabel": "Submerged", "noLabel": "Not Submerged", "then": [{ "kind": "condition", "name": "other", "text": "Submerged: restrained and blinded", "duration": "saveEnds" }] }] }
+              }
+            },
+            {
+              "type": "persistent",
+              "target": "drowningArea",
+              "cost": 0,
+              "tickAt": "never",
+              "expiresAt": "never",
+              "triggers": ["onEnter", "onOccupantTurnStart"],
+              "effects": [{ "kind": "condition", "name": "slowed", "duration": "endOfTurn" }],
+              "note": "Each enemy who enters the area or starts their turn there is slowed until the end of their turn. Embrose and inklings ignore the area."
+            }
+          ]
+        }
+      }
+    ],
+    "triggered_action": [
+      {
+        "name": "You Will Speak When Called Upon",
+        "trigger": "A hero starts their turn while Embrose has a triggered action available.",
+        "keywords": "Magic",
+        "range": "Encounter",
+        "targets": "The triggering hero",
+        "effect": "The triggering hero cancels their turn. Choose a creature on Embrose’s team to take the next turn, allowing the Director’s side to take two turns consecutively. The canceled hero remains available to take a later hero turn as normal. Resolve the turn order manually.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "trigger",
+              "condition": "A hero starts their turn while Embrose has a triggered action available.",
+              "match": { "event": "turnStart", "filter": { "whose": "enemy" } },
+              "effects": [
+                { "kind": "floatingText", "text": "YOU WILL SPEAK WHEN CALLED UPON", "tone": "danger", "audience": "all" },
+                { "kind": "note", "text": "YOU WILL SPEAK WHEN CALLED UPON: The triggering hero cancels this turn. Choose a creature on Embrose’s team to take the next turn. The canceled hero remains available for a later hero turn. Resolve the turn order manually." }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "You Must Have Confused Me with Someone Else",
+        "resource_cost": "2 Malice",
+        "trigger": "Embrose takes damage.",
+        "keywords": "Magic",
+        "range": "Self",
+        "targets": "Self",
+        "effect": "Embrose takes half the triggering damage. After the triggering effect resolves, he collapses into a mass of writhing inklings, teleports up to 8 squares, and reforms in an unoccupied space. He can then use A Word in Your Ear as a free triggered action.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            { "type": "trigger", "condition": "Embrose takes damage.", "match": { "event": "damage", "filter": { "whose": "self", "minAmount": 1 } }, "effects": [] },
+            {
+              "type": "effect",
+              "target": "self",
+              "effects": [
+                { "kind": "halveTriggeringDamage", "rounding": "down" },
+                { "kind": "floatingText", "text": "YOU MUST HAVE CONFUSED ME WITH SOMEONE ELSE", "tone": "danger", "audience": "all" },
+                { "kind": "teleport", "target": "self", "distance": 8 }
+              ]
+            },
+            {
+              "type": "choice",
+              "name": "retaliate",
+              "prompt": "Use A Word in Your Ear as a free triggered action after Embrose reforms?",
+              "options": [
+                {
+                  "id": "use-word",
+                  "label": "Use A Word in Your Ear",
+                  "cards": [
+                    {
+                      "type": "target",
+                      "name": "retaliationTargets",
+                      "mode": "token",
+                      "predicate": "creature",
+                      "count": { "value": 2, "mode": "exact" },
+                      "distance": { "form": "ranged", "value": 15 },
+                      "promptTitle": "A Word in Your Ear",
+                      "promptText": "Select the first creature, then the second. Move the first toward the second, then the second toward the first’s new space."
+                    },
+                    {
+                      "type": "powerRoll",
+                      "target": "retaliationTargets",
+                      "flatBonus": 5,
+                      "tiers": {
+                        "tier1": { "effects": [{ "kind": "damage", "amount": 12, "damageType": "psychic" }, { "kind": "forcedMovement", "verb": "slide", "distance": 5, "upTo": true }] },
+                        "tier2": { "effects": [{ "kind": "damage", "amount": 18, "damageType": "psychic" }, { "kind": "forcedMovement", "verb": "slide", "distance": 7, "upTo": true }] },
+                        "tier3": { "effects": [{ "kind": "damage", "amount": 22, "damageType": "psychic" }, { "kind": "forcedMovement", "verb": "slide", "distance": 10, "upTo": true }] }
+                      }
+                    },
+                    { "type": "effect", "target": "retaliationTargets", "effects": [{ "kind": "note", "text": "FREE A WORD IN YOUR EAR: Resolve targets in selection order. Stability applies. Resolve normal collision effects in addition to the listed psychic damage." }] }
+                  ]
+                },
+                { "id": "decline-word", "label": "Decline", "cards": [] }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "villain_action": [
+      {
+        "name": "The Ink Takes Attendance",
+        "keywords": "Magic, Ranged",
+        "range": "Encounter",
+        "targets": "Special",
+        "effect": "At the start of round 1, two Inkling Swarms appear in unoccupied spaces of Embrose’s choice anywhere in the encounter. Each swarm can immediately move up to its speed without provoking free strikes, and its Blotting Cloud aura activates immediately. The summoned swarms don’t attack as part of this villain action and remain until reduced to 0 Stamina or the encounter ends. Place and move the swarms manually. This villain action costs no Malice.",
+        "automation": { "schema": "ability-automation/v3", "cards": [{ "type": "effect", "effects": [{ "kind": "floatingText", "text": "THE INK TAKES ATTENDANCE", "tone": "danger", "audience": "all" }, { "kind": "note", "text": "THE INK TAKES ATTENDANCE: Place two Inkling Swarms in unoccupied spaces anywhere in the encounter. Each immediately moves up to its speed without provoking free strikes and activates Blotting Cloud. They don’t attack during this villain action." }] }] }
+      },
+      {
+        "name": "Consider Your Next Words Carefully",
+        "keywords": "Area, Magic",
+        "range": "Encounter",
+        "targets": "Each enemy in the encounter",
+        "effect": "At the start of round 2, each target individually chooses one consequence: take 30 corruption damage; allow one enemy chosen by Embrose to regain 30 Stamina, with any excess becoming temporary Stamina; or take a bane on every power roll until the end of the encounter. Record and resolve each choice manually. This villain action costs no Malice.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            { "type": "target", "name": "carefulWordsTargets", "mode": "token", "predicate": "enemy", "count": { "value": 99, "mode": "all" }, "promptTitle": "Consider Your Next Words Carefully", "promptText": "Select every enemy in the encounter, then resolve each target’s choice manually." },
+            { "type": "effect", "effects": [{ "kind": "floatingText", "text": "CONSIDER YOUR NEXT WORDS CAREFULLY", "tone": "danger", "audience": "all" }, { "kind": "note", "text": "CONSIDER YOUR NEXT WORDS CAREFULLY: Each target chooses one: (1) take 30 corruption damage; (2) one enemy chosen by Embrose regains 30 Stamina and excess becomes temporary Stamina; or (3) take a bane on every power roll until the end of the encounter. Resolve and record each choice manually." }] }
+          ]
+        }
+      },
+      {
+        "name": "Defend Your Thesis",
+        "keywords": "Area, Magic",
+        "range": "Encounter",
+        "targets": "Each enemy in the encounter",
+        "effect": "At the start of round 3, an ink duplicate tears itself from each target’s shadow. Each target makes one melee free-strike power roll using their own statistics. That roll targets the creature who made it and each of their adjacent allies, applying the rolled free-strike damage to every target. Use only the creature’s standard melee free strike; additional effects from other abilities don’t apply. The duplicates collapse into ink after the strikes resolve. This villain action costs no Malice.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            { "type": "target", "name": "thesisTargets", "mode": "token", "predicate": "enemy", "count": { "value": 99, "mode": "all" }, "promptTitle": "Defend Your Thesis", "promptText": "Select every enemy, including allied angels. Each makes one melee free-strike roll against themselves and every adjacent ally." },
+            { "type": "effect", "effects": [{ "kind": "floatingText", "text": "DEFEND YOUR THESIS", "tone": "danger", "audience": "all" }, { "kind": "note", "text": "DEFEND YOUR THESIS: Each target makes one standard melee free-strike power roll using their own statistics. Apply that result to the creature and every adjacent ally. Ignore additional effects from other abilities. Resolve the rolls manually, then the ink duplicates disappear." }] }
+          ]
+        }
+      }
+    ],
+    "malice": [
+      {
+        "name": "You Are Hereby Stricken from the List",
+        "resource_cost": "5 Malice",
+        "keywords": "Magic, Ranged",
+        "range": "Encounter",
+        "targets": "One angel",
+        "effect": "Embrose chooses one angel in the encounter. The target is immediately destroyed and removed from the encounter. No power roll or test is made. Select and remove the angel manually.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            { "type": "target", "name": "strickenAngel", "mode": "token", "predicate": "enemy", "count": { "value": 1, "mode": "exact" }, "promptTitle": "You Are Hereby Stricken from the List", "promptText": "Select the angel Embrose destroys." },
+            { "type": "effect", "target": "strickenAngel", "effects": [{ "kind": "floatingText", "text": "YOU ARE HEREBY STRICKEN FROM THE LIST", "tone": "danger", "audience": "all" }, { "kind": "note", "text": "YOU ARE HEREBY STRICKEN FROM THE LIST: The selected angel is immediately destroyed and removed from the encounter. No roll or test. Remove the token manually." }] }
+          ]
+        }
+      },
+      {
+        "name": "You Have Misunderstood the Assignment",
+        "resource_cost": "10 Malice",
+        "keywords": "Magic, Ranged",
+        "range": "Encounter",
+        "targets": "Embrose and each ally in the encounter",
+        "effect": "Embrose and every creature on his team can each teleport up to 10 squares to an unoccupied space. After teleporting, each target can make a free strike. Resolve all teleports and free strikes manually in the order Embrose chooses.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            { "type": "target", "name": "assignmentAllies", "mode": "token", "predicate": "selfAndAlly", "count": { "value": 99, "mode": "all" }, "promptTitle": "You Have Misunderstood the Assignment", "promptText": "Select Embrose and every creature on his team. Teleport each up to 10 squares, then resolve one free strike from each." },
+            { "type": "effect", "effects": [{ "kind": "floatingText", "text": "YOU HAVE MISUNDERSTOOD THE ASSIGNMENT", "tone": "danger", "audience": "all" }, { "kind": "note", "text": "YOU HAVE MISUNDERSTOOD THE ASSIGNMENT: Embrose and every creature on his team teleports up to 10 squares to an unoccupied space, then each can make a free strike. Resolve the teleports and strikes manually in Embrose’s chosen order." }] }
+          ]
+        }
+      },
+      {
+        "name": "Solo Action",
+        "resource_cost": "5 Malice",
+        "effect": "Embrose takes an additional main action on his turn. He can use this feature even if he is dazed.",
+        "automation": { "schema": "ability-automation/v3", "cards": [{ "type": "effect", "effects": [{ "kind": "note", "text": "SOLO ACTION: Embrose takes an additional main action on this turn, even if he is dazed. Resolve the action normally." }] }] }
+      }
+    ]
+  }
+}
