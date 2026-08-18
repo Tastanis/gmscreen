@@ -9,6 +9,8 @@ declare(strict_types=1);
  */
 final class SyncV2Store
 {
+    private const PLAYER_CHARACTER_USER_IDS = ['cal', 'sharon', 'indigo', 'zepha'];
+
     private PDO $pdo;
     private string $worldId;
     private int $eventRetention;
@@ -1114,6 +1116,7 @@ final class SyncV2Store
                 ? $state['placements']
                 : [];
             $mutations = [];
+            $levelChangedPlacements = [];
 
             foreach ($normalized['actions'] as $action) {
                 $sceneId = $action['sceneId'];
@@ -1182,6 +1185,15 @@ final class SyncV2Store
                 $next['id'] = $placementId;
                 $next['_entityRevision'] = $nextRevision;
                 $state['placements'][$sceneId][$placementId] = $next;
+                if (
+                    $this->placementLevelId($current)
+                    !== $this->placementLevelId($next)
+                ) {
+                    $levelChangedPlacements[$sceneId . "\0" . $placementId] = [
+                        'sceneId' => $sceneId,
+                        'placementId' => $placementId,
+                    ];
+                }
                 $mutations[] = [
                     'kind' => 'upsert',
                     'sceneId' => $sceneId,
@@ -1193,8 +1205,55 @@ final class SyncV2Store
                 ];
             }
 
-            $revision = $snapshot['revision'] + 1;
             $serverTime = $this->nowMilliseconds();
+            $userLevelMutations = [];
+            $linkedUpdatesByScene = [];
+            foreach ($levelChangedPlacements as $candidate) {
+                $sceneId = $candidate['sceneId'];
+                $placementId = $candidate['placementId'];
+                $placements = $state['placements'][$sceneId] ?? [];
+                if (!is_array($placements) || !is_array($placements[$placementId] ?? null)) {
+                    continue;
+                }
+                $userId = $this->uniqueLinkedPlayerForPlacement($placements, $placementId);
+                if ($userId === null) {
+                    continue;
+                }
+                $linkedUpdatesByScene[$sceneId][$userId] = [
+                    'placementId' => $placementId,
+                    'levelId' => $this->placementLevelId($placements[$placementId]),
+                ];
+            }
+            $state['sceneConfig'] = is_array($state['sceneConfig'] ?? null)
+                ? $state['sceneConfig']
+                : [];
+            foreach ($linkedUpdatesByScene as $sceneId => $updatesByUser) {
+                $config = is_array($state['sceneConfig'][$sceneId] ?? null)
+                    ? $state['sceneConfig'][$sceneId]
+                    : [];
+                $config['userLevelState'] = is_array($config['userLevelState'] ?? null)
+                    ? $config['userLevelState']
+                    : [];
+                $config['_revision'] = max(0, (int) ($config['_revision'] ?? 0)) + 1;
+                foreach ($updatesByUser as $userId => $update) {
+                    $entry = [
+                        'levelId' => $update['levelId'],
+                        'source' => 'token',
+                        'tokenId' => $update['placementId'],
+                        'updatedAt' => $serverTime,
+                    ];
+                    $config['userLevelState'][$userId] = $entry;
+                    $userLevelMutations[] = [
+                        'sceneId' => $sceneId,
+                        'userId' => $userId,
+                        'entry' => $entry,
+                        'sceneConfigRevision' => $config['_revision'],
+                    ];
+                }
+                $state['sceneConfig'][$sceneId] = $config;
+            }
+
+            $revision = $snapshot['revision'] + 1;
             $event = [
                 'revision' => $revision,
                 'operationId' => $normalized['operationId'],
@@ -1203,7 +1262,10 @@ final class SyncV2Store
                 'sceneId' => null,
                 'entityId' => null,
                 'entityRevision' => null,
-                'payload' => ['mutations' => $mutations],
+                'payload' => [
+                    'mutations' => $mutations,
+                    'userLevelMutations' => $userLevelMutations,
+                ],
                 'serverTime' => $serverTime,
             ];
             $this->insertEvent($event);
@@ -2326,6 +2388,76 @@ final class SyncV2Store
         } catch (Throwable $ignored) {
             // Preserve the original validation or persistence failure.
         }
+    }
+
+    private function placementLevelId(array $placement): string
+    {
+        $levelId = trim((string) ($placement['levelId'] ?? ''));
+        return $levelId !== '' ? $levelId : 'level-0';
+    }
+
+    private function linkedPlayerProfileForPlacement(array $placement): ?string
+    {
+        $metadata = is_array($placement['metadata'] ?? null)
+            ? $placement['metadata']
+            : (is_array($placement['meta'] ?? null) ? $placement['meta'] : []);
+        $keys = ['profileId', 'profile', 'playerId', 'player', 'owner', 'controller'];
+        foreach ([$placement, $metadata] as $source) {
+            foreach ($keys as $key) {
+                if (!is_string($source[$key] ?? null) || trim($source[$key]) === '') {
+                    continue;
+                }
+                $profileId = strtolower(trim($source[$key]));
+                return in_array($profileId, self::PLAYER_CHARACTER_USER_IDS, true)
+                    ? $profileId
+                    : null;
+            }
+        }
+
+        $name = strtolower(trim((string) ($placement['name'] ?? '')));
+        $normalizedName = trim((string) preg_replace('/[^a-z0-9]+/', ' ', $name));
+        if ($normalizedName === '') {
+            return null;
+        }
+        $matches = [];
+        foreach (self::PLAYER_CHARACTER_USER_IDS as $profileId) {
+            if (preg_match('/(^|\s)' . preg_quote($profileId, '/') . '(\s|$)/', $normalizedName) === 1) {
+                $matches[] = $profileId;
+            }
+        }
+        return count($matches) === 1 ? $matches[0] : null;
+    }
+
+    /**
+     * A profile follows only when exactly one placement in this scene links
+     * to it. This avoids making an arbitrary choice when duplicate PC tokens
+     * exist.
+     *
+     * @param array<string,array> $placements
+     */
+    private function uniqueLinkedPlayerForPlacement(array $placements, string $placementId): ?string
+    {
+        $target = $placements[$placementId] ?? null;
+        if (!is_array($target)) {
+            return null;
+        }
+        $profileId = $this->linkedPlayerProfileForPlacement($target);
+        if ($profileId === null) {
+            return null;
+        }
+        $matchCount = 0;
+        foreach ($placements as $placement) {
+            if (
+                is_array($placement)
+                && $this->linkedPlayerProfileForPlacement($placement) === $profileId
+            ) {
+                $matchCount += 1;
+                if ($matchCount > 1) {
+                    return null;
+                }
+            }
+        }
+        return $matchCount === 1 ? $profileId : null;
     }
 
     private function placementIsHidden(array $placement): bool

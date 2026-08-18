@@ -693,6 +693,12 @@ board broadcast, V1 poller, version/grace winner, or broad render subscriber.
   but it accepts only recognized placement or board-domain operations and
   derives explicit V2 commands from dirty domain markers. It never serializes
   or transmits the board.
+- A placement batch that changes `levelId` also resolves any unique PC
+  profile/name association and writes that player's viewer level in the same
+  SQLite transaction and canonical event. Unlinked or duplicate matches do
+  not pull a viewer. Player bootstrap repairs stale pre-existing viewer state
+  from the unique linked PC token; ordinary GM browsing and Activate remain
+  separate viewer-routing commands and never move tokens.
 - `api/state.php` intentionally returns 410 for every request. Do not restore
   it as a compatibility fallback; cached clients must refresh.
 - Initial load and an authoritative recovery snapshot may reconcile the full

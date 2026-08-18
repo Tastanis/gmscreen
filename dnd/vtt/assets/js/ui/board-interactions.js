@@ -51,6 +51,7 @@ import {
   buildLevelViewModel,
   normalizeMapLevelsState,
   resolveActiveLevelIdForUser,
+  resolvePcTokenForUser,
   resolvePlacementLevelId,
 } from '../state/normalize/map-levels.js';
 import { recordSyncDiagnostic } from '../services/sync-diagnostics.js';
@@ -906,6 +907,9 @@ export function mountBoardInteractions(store, routes = {}) {
       // event. This keeps zones visible after reload/reconnect as well as on
       // the original casting client.
       renderPersistentZoneOverlays();
+    }
+    if (activeSceneId) {
+      syncMapLevelsForState(boardApi.getState?.() ?? {}, activeSceneId);
     }
     for (const [placementId, placement] of Object.entries(
       snapshot?.state?.placements?.[activeSceneId] ?? {}
@@ -7348,9 +7352,13 @@ export function mountBoardInteractions(store, routes = {}) {
   applyStateToBoard(boardApi.getState?.() ?? {});
 
   // Sync V2 starts its authenticated private transport and ordered recovery.
-  tokenMovementRuntime.start().catch(() => {
-    // reportSyncFailure is invoked by the runtime.
-  });
+  tokenMovementRuntime.start()
+    .then(() => reconcileCurrentPlayerViewToPcToken().catch((error) => {
+      reportSyncFailure(error, 'player token level');
+    }))
+    .catch(() => {
+      // reportSyncFailure is invoked by the runtime.
+    });
 
   startListeningForSheetSync();
 
@@ -8571,6 +8579,51 @@ export function mountBoardInteractions(store, routes = {}) {
       placements,
       validLevelIds,
     });
+  }
+
+  async function reconcileCurrentPlayerViewToPcToken() {
+    if (isGmUser() || !levelsV2Enabled || !boardDomainsV2Enabled) {
+      return false;
+    }
+    const state = boardApi.getState?.() ?? {};
+    const boardState = state.boardState && typeof state.boardState === 'object'
+      ? state.boardState
+      : {};
+    const sceneId = boardState.activeSceneId ?? null;
+    const userId = getCurrentUserId();
+    if (!sceneId || !userId) {
+      return false;
+    }
+    const sceneEntry = boardState.sceneState?.[sceneId] ?? null;
+    const placements = Array.isArray(boardState.placements?.[sceneId])
+      ? boardState.placements[sceneId]
+      : [];
+    const mapLevels = normalizeMapLevelsState(sceneEntry?.mapLevels ?? null, {
+      sceneGrid: sceneEntry?.grid ?? null,
+    });
+    const validLevelIds = [
+      BASE_MAP_LEVEL_ID,
+      ...mapLevels.levels
+        .map((level) => level?.id)
+        .filter((levelId) => typeof levelId === 'string' && levelId),
+    ];
+    const linkedToken = resolvePcTokenForUser({ userId, placements, validLevelIds });
+    if (!linkedToken || getViewerLevelIdForCurrentUser(state, sceneId) === linkedToken.levelId) {
+      return false;
+    }
+    await tokenMovementRuntime.submitBoardDomainCommands([{
+      type: 'level.user.set',
+      sceneId,
+      payload: {
+        userId,
+        entry: {
+          levelId: linkedToken.levelId,
+          source: 'token',
+          tokenId: linkedToken.placementId,
+        },
+      },
+    }]);
+    return true;
   }
 
   function getViewerLevelDisplayName(state = {}, sceneId = null, viewerLevelId = null) {

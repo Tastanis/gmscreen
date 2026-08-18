@@ -122,6 +122,9 @@ test('token movement reducer returns a one-token change set without broad domain
           'token-2': { column: 9, row: 9, _entityRevision: 2 },
         },
       },
+      sceneConfig: {
+        'scene-1': { _revision: 2, userLevelState: {} },
+      },
     },
   };
   const result = reduceCanonicalEvent(initial, {
@@ -178,12 +181,34 @@ test('placement batch reducer applies add and patch as one revision', () => {
           placement: { id: 'token-2', stamina: 8 },
         },
       ],
+      userLevelMutations: [{
+        sceneId: 'scene-1',
+        userId: 'zepha',
+        entry: {
+          levelId: 'upper',
+          source: 'token',
+          tokenId: 'token-1',
+          updatedAt: 1234,
+        },
+        sceneConfigRevision: 3,
+      }],
     },
   });
   assert.equal(result.status, 'applied');
   assert.deepEqual(result.changeSet.placements.updated, ['token-1']);
   assert.deepEqual(result.changeSet.placements.added, ['token-2']);
   assert.equal(result.snapshot.state.placements['scene-1']['token-1'].stamina, 12);
+  assert.deepEqual(
+    result.snapshot.state.sceneConfig['scene-1'].userLevelState.zepha,
+    {
+      levelId: 'upper',
+      source: 'token',
+      tokenId: 'token-1',
+      updatedAt: 1234,
+    },
+  );
+  assert.equal(result.snapshot.state.sceneConfig['scene-1']._revision, 3);
+  assert.equal(result.changeSet.levels, true);
   assert.equal(result.changeSet.combat, false);
   assert.equal(result.changeSet.fog, false);
 });

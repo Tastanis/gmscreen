@@ -1,6 +1,6 @@
 # VTT Canonical Sync and Map-Level Architecture
 
-Last updated: 2026-07-30
+Last updated: 2026-08-18
 
 This is the current handoff document for future VTT work. It replaces the
 historical Levels v2 plan and its token-claim design.
@@ -53,12 +53,22 @@ remain GM-run and globally deduplicated.
 ## Map levels
 
 - Level 0 is the virtual base map; stored map levels represent Level 1+.
-- `userLevelState` supports `manual` and `activate` sources only.
+- `userLevelState` supports `manual`, `activate`, and token-driven sources.
 - The GM's Activate action updates each known user's view level.
-- Stair transitions update the view level of the user who moved the token.
-- Token level changes do not automatically move another user's camera.
+- Whenever a placement's `levelId` changes, the canonical placement batch
+  resolves its uniquely linked PC profile and updates that player's view level
+  atomically in the same transaction and event. This covers GM token controls,
+  falls, stairs, and future placement-level command paths.
+- Stair transitions continue to update the view level of the user who moved
+  the token; a uniquely linked PC also pulls its corresponding profile.
+- On player entry, the client reconciles a stale saved view to the level of the
+  player's unique linked PC token. Recovery snapshots already contain the
+  atomic server result for level moves missed while disconnected.
 - Character-token login matching remains name/profile based and does not imply
   ownership or movement permissions.
+- Unlinked tokens, explicit links to unknown profiles, and duplicate PC-token
+  matches never select or pull a player arbitrarily. Hidden map levels remain
+  excluded from player projections.
 
 ## Required verification
 

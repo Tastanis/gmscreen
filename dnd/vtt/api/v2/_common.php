@@ -583,6 +583,7 @@ function vttSyncV2ProjectPlacementEventForUser(array $event, array $auth): array
     if (($auth['isGM'] ?? false) === true) {
         return $event;
     }
+    $snapshot = vttSyncV2Store()->getSnapshot();
     $projected = [];
     foreach (($event['payload']['mutations'] ?? []) as $mutation) {
         if (!is_array($mutation)) {
@@ -593,7 +594,6 @@ function vttSyncV2ProjectPlacementEventForUser(array $event, array $auth): array
             $sceneId = is_string($mutation['sceneId'] ?? null)
                 ? $mutation['sceneId']
                 : '';
-            $snapshot = vttSyncV2Store()->getSnapshot();
             $sceneConfig = $snapshot['state']['sceneConfig'][$sceneId] ?? [];
             if (
                 !is_array($placement)
@@ -623,6 +623,30 @@ function vttSyncV2ProjectPlacementEventForUser(array $event, array $auth): array
         $projected[] = $mutation;
     }
     $event['payload']['mutations'] = $projected;
+    $projectedUserLevels = [];
+    foreach (($event['payload']['userLevelMutations'] ?? []) as $mutation) {
+        if (!is_array($mutation)) {
+            continue;
+        }
+        $sceneId = is_string($mutation['sceneId'] ?? null)
+            ? trim($mutation['sceneId'])
+            : '';
+        $levelId = is_string($mutation['entry']['levelId'] ?? null)
+            ? trim($mutation['entry']['levelId'])
+            : '';
+        $sceneConfig = $snapshot['state']['sceneConfig'][$sceneId] ?? [];
+        if (
+            $sceneId === ''
+            || $levelId === ''
+            || isset(vttSyncV2HiddenMapLevelIds(
+                is_array($sceneConfig) ? $sceneConfig : []
+            )[$levelId])
+        ) {
+            continue;
+        }
+        $projectedUserLevels[] = $mutation;
+    }
+    $event['payload']['userLevelMutations'] = $projectedUserLevels;
     $event['actorId'] = null;
     return $event;
 }
@@ -641,6 +665,9 @@ function vttSyncV2PlacementEventIsPublicSafe(array $event): bool
         ) {
             return false;
         }
+    }
+    if (($event['payload']['userLevelMutations'] ?? []) !== []) {
+        return false;
     }
     return true;
 }

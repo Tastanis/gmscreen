@@ -331,7 +331,7 @@ export function levelIdExistsInViewModel(levelId, viewModel = []) {
   return viewModel.some((entry) => entry && entry.id === trimmed);
 }
 
-const USER_LEVEL_STATE_SOURCES = new Set(['manual', 'activate']);
+const USER_LEVEL_STATE_SOURCES = new Set(['manual', 'activate', 'token']);
 
 /**
  * Levels v2: normalize a single user's active-level entry. Returns null
@@ -356,6 +356,9 @@ export function normalizeUserLevelStateEntry(raw) {
     source,
     updatedAt,
   };
+  if (source === 'token' && typeof raw.tokenId === 'string' && raw.tokenId.trim()) {
+    entry.tokenId = raw.tokenId.trim();
+  }
   return entry;
 }
 
@@ -439,20 +442,54 @@ export function resolveActiveLevelIdForUser({
   return BASE_MAP_LEVEL_ID;
 }
 
+const LINKED_PROFILE_KEYS = Object.freeze([
+  'profileId',
+  'profile',
+  'playerId',
+  'player',
+  'owner',
+  'controller',
+]);
+
+function normalizeLinkedProfileId(value) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function resolvePlacementLinkedProfileId(placement) {
+  if (!placement || typeof placement !== 'object') {
+    return null;
+  }
+  const metadata = placement.metadata && typeof placement.metadata === 'object'
+    ? placement.metadata
+    : placement.meta && typeof placement.meta === 'object'
+      ? placement.meta
+      : {};
+  const explicitProfile = [placement, metadata]
+    .flatMap((source) => LINKED_PROFILE_KEYS.map((key) => source[key]))
+    .find((value) => typeof value === 'string' && value.trim());
+  if (typeof explicitProfile === 'string') {
+    const explicitProfileId = normalizeLinkedProfileId(explicitProfile);
+    return PLAYER_CHARACTER_USER_IDS.includes(explicitProfileId)
+      ? explicitProfileId
+      : null;
+  }
+
+  const rawName = typeof placement.name === 'string' ? placement.name : '';
+  const normalizedName = rawName.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  if (!normalizedName) {
+    return null;
+  }
+  const matches = PLAYER_CHARACTER_USER_IDS.filter((profileId) => (
+    new RegExp(`(^|\\s)${profileId}(\\s|$)`).test(normalizedName)
+  ));
+  return matches.length === 1 ? matches[0] : null;
+}
+
 /**
- * Login-time helper: resolve the level id of the user's PC token for a scene,
- * matching board-interactions' name-based character-sheet association. A
- * placement is treated as the user's PC when its normalized name contains
- * `userId` as a whole word (the same rule as `matchProfileByName`).
- *
- * Returns the matching placement's level id only when exactly one PC
- * token exists for the user. With zero or two-plus PC matches we return
- * `null` so the caller can fall back to the existing
- * `resolveActiveLevelIdForUser` chain. This is intended to be called
- * once on session start (see bootstrap.js) to overwrite a stale
- * `userLevelState[userId]` entry — it is not a per-render resolver.
+ * Login-time helper returning the user's unique linked PC placement and level.
+ * It runs once on entry/recovery; it is not a per-render camera override.
  */
-export function resolvePcTokenLevelIdForUser({
+export function resolvePcTokenForUser({
   userId = null,
   placements = null,
   validLevelIds = null,
@@ -476,48 +513,25 @@ export function resolvePcTokenLevelIdForUser({
     }
     return validSet.has(levelId);
   };
-  const namePattern = new RegExp(`(^|\\s)${userKey}(\\s|$)`);
-
-  let matchedLevelId = null;
-  let matchCount = 0;
-  for (const placement of placements) {
-    if (!placement || typeof placement !== 'object') continue;
-    const metadata = placement.metadata && typeof placement.metadata === 'object'
-      ? placement.metadata
-      : placement.meta && typeof placement.meta === 'object'
-        ? placement.meta
-        : {};
-    const explicitProfile = [
-      placement.profileId,
-      placement.profile,
-      placement.playerId,
-      placement.player,
-      metadata.profileId,
-      metadata.profile,
-      metadata.playerId,
-      metadata.player,
-    ].find((value) => typeof value === 'string' && value.trim());
-    const explicitProfileId = typeof explicitProfile === 'string'
-      ? explicitProfile.trim().toLowerCase()
-      : '';
-    const rawName = typeof placement.name === 'string' ? placement.name : '';
-    const normalizedName = rawName.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-    if (
-      explicitProfileId
-        ? explicitProfileId !== userKey
-        : !normalizedName || !namePattern.test(normalizedName)
-    ) {
-      continue;
-    }
-    const placementLevelId = resolvePlacementLevelId(placement);
-    if (!isValidLevelId(placementLevelId)) continue;
-    matchCount += 1;
-    if (matchCount > 1) {
-      return null;
-    }
-    matchedLevelId = placementLevelId;
+  const matches = placements.filter(
+    (placement) => resolvePlacementLinkedProfileId(placement) === userKey
+  );
+  if (matches.length !== 1) {
+    return null;
   }
-  return matchCount === 1 ? matchedLevelId : null;
+  const placement = matches[0];
+  const placementLevelId = resolvePlacementLevelId(placement);
+  if (!isValidLevelId(placementLevelId)) {
+    return null;
+  }
+  return {
+    placementId: typeof placement.id === 'string' ? placement.id : '',
+    levelId: placementLevelId,
+  };
+}
+
+export function resolvePcTokenLevelIdForUser(options = {}) {
+  return resolvePcTokenForUser(options)?.levelId ?? null;
 }
 
 function resolveActiveLevelId(preferredId, levels = []) {

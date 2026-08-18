@@ -30,6 +30,11 @@ $requestedTestDatabasePath = sys_get_temp_dir()
     . 'vtt-sync-v2-requested-test-'
     . bin2hex(random_bytes(8))
     . '.sqlite';
+$linkedLevelDatabasePath = sys_get_temp_dir()
+    . DIRECTORY_SEPARATOR
+    . 'vtt-sync-v2-linked-level-'
+    . bin2hex(random_bytes(8))
+    . '.sqlite';
 
 try {
     $store = new SyncV2Store($databasePath, 'test-world', 2, 2, 3);
@@ -641,6 +646,12 @@ try {
                 'placement' => ['id' => 'hidden-token', 'hidden' => true],
                 'wasPlayerVisible' => false,
             ]],
+            'userLevelMutations' => [[
+                'sceneId' => 'scene-1',
+                'userId' => 'zepha',
+                'entry' => ['levelId' => 'level-0', 'source' => 'token'],
+                'sceneConfigRevision' => 1,
+            ]],
         ],
         'serverTime' => 1234,
     ];
@@ -651,6 +662,10 @@ try {
     expect(
         $playerAudienceEvent['payload']['mutations'] === [],
         'Player audience events must not contain hidden placement payloads.'
+    );
+    expect(
+        ($playerAudienceEvent['payload']['userLevelMutations'][0]['userId'] ?? null) === 'zepha',
+        'Player audience events must retain visible linked-PC viewer changes.'
     );
     expect(
         vttSyncV2ProjectEventForUser($hiddenAudienceEvent, ['isGM' => true])
@@ -935,6 +950,82 @@ try {
         'A GM may explicitly override the current pick side and start an allied turn.'
     );
 
+    $linkedLevelStore = new SyncV2Store($linkedLevelDatabasePath, 'linked-level-world', 10, 10, 10);
+    $linkedLevelStore->migrateLegacyPlacements([
+        'placements' => [
+            'scene-levels' => [
+                [
+                    'id' => 'zepha-token',
+                    'name' => 'Wind Speaker',
+                    'metadata' => ['profileId' => 'Zepha'],
+                    'levelId' => 'level-0',
+                ],
+                ['id' => 'crate', 'name' => 'Crate', 'levelId' => 'level-0'],
+                ['id' => 'sharon-one', 'name' => 'Sharon', 'levelId' => 'level-0'],
+                ['id' => 'sharon-two', 'name' => 'Sharon Illusion', 'levelId' => 'level-0'],
+            ],
+        ],
+    ]);
+    $linkedMove = $linkedLevelStore->acceptPlacementBatch([
+        'operationId' => 'linked-level-zepha-up',
+        'type' => 'placement.batch',
+        'baseRevision' => 0,
+        'payload' => ['actions' => [[
+            'kind' => 'patch',
+            'sceneId' => 'scene-levels',
+            'placementId' => 'zepha-token',
+            'entityRevision' => 0,
+            'patch' => ['levelId' => 'upper'],
+        ]]],
+    ], 'GM', true);
+    expect(
+        ($linkedMove['event']['payload']['userLevelMutations'][0]['userId'] ?? null) === 'zepha',
+        'A uniquely linked PC level move must include its player view in the same event.'
+    );
+    $linkedSnapshot = $linkedLevelStore->getSnapshot();
+    expect(
+        ($linkedSnapshot['state']['sceneConfig']['scene-levels']['userLevelState']['zepha']['levelId'] ?? null)
+            === 'upper',
+        'A uniquely linked PC level move must persist the player on the token level.'
+    );
+    expect(
+        ($linkedSnapshot['state']['sceneConfig']['scene-levels']['userLevelState']['zepha']['source'] ?? null)
+            === 'token',
+        'Token-driven player routing must retain its source.'
+    );
+    $unlinkedMove = $linkedLevelStore->acceptPlacementBatch([
+        'operationId' => 'linked-level-crate-up',
+        'type' => 'placement.batch',
+        'baseRevision' => 1,
+        'payload' => ['actions' => [[
+            'kind' => 'patch',
+            'sceneId' => 'scene-levels',
+            'placementId' => 'crate',
+            'entityRevision' => 0,
+            'patch' => ['levelId' => 'upper'],
+        ]]],
+    ], 'GM', true);
+    expect(
+        $unlinkedMove['event']['payload']['userLevelMutations'] === [],
+        'An unlinked token must not move any player view.'
+    );
+    $ambiguousMove = $linkedLevelStore->acceptPlacementBatch([
+        'operationId' => 'linked-level-duplicate-up',
+        'type' => 'placement.batch',
+        'baseRevision' => 2,
+        'payload' => ['actions' => [[
+            'kind' => 'patch',
+            'sceneId' => 'scene-levels',
+            'placementId' => 'sharon-one',
+            'entityRevision' => 0,
+            'patch' => ['levelId' => 'upper'],
+        ]]],
+    ], 'GM', true);
+    expect(
+        $ambiguousMove['event']['payload']['userLevelMutations'] === [],
+        'Duplicate PC token links must not choose a player view arbitrarily.'
+    );
+
     $requestedTestStore = new SyncV2Store($requestedTestDatabasePath, 'requested-test-world', 10, 10, 10);
     $requestedTestStore->touchPresence('alice', false);
     $createdTest = $requestedTestStore->acceptRequestedTestCommand([
@@ -1007,7 +1098,7 @@ try {
         'revision' => $store->getSnapshot()['revision'],
     ], JSON_UNESCAPED_SLASHES);
 } finally {
-    unset($store, $overrideStore, $gmOverrideStore, $requestedTestStore);
+    unset($store, $overrideStore, $gmOverrideStore, $linkedLevelStore, $requestedTestStore);
     gc_collect_cycles();
     foreach ([
         $databasePath,
@@ -1022,6 +1113,9 @@ try {
         $requestedTestDatabasePath,
         $requestedTestDatabasePath . '-shm',
         $requestedTestDatabasePath . '-wal',
+        $linkedLevelDatabasePath,
+        $linkedLevelDatabasePath . '-shm',
+        $linkedLevelDatabasePath . '-wal',
     ] as $path) {
         if (is_file($path)) {
             @unlink($path);

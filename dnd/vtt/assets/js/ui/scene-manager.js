@@ -132,7 +132,7 @@ export function renderSceneList(routes, store) {
   render(stateApi.getState?.());
   stateApi.subscribe?.((nextState) => render(nextState));
 
-  const persistBoardStateSnapshot = (dirtySceneId = null, options = {}) => {
+  const persistBoardStateSnapshot = (dirtySceneId = null, options = {}, opsOverride = null) => {
     if (typeof stateApi.getState !== 'function') {
       return;
     }
@@ -142,7 +142,7 @@ export function renderSceneList(routes, store) {
     }
 
     if (typeof stateApi._persistBoardState === 'function') {
-      return stateApi._persistBoardState(options);
+      return stateApi._persistBoardState(options, opsOverride);
     }
     console.error('[VTT] Sync V2 command adapter is unavailable.');
     return null;
@@ -345,7 +345,37 @@ export function renderSceneList(routes, store) {
 
       const result = deleteSceneMapLevelCascade(stateApi, sceneId, levelId);
       if (result) {
-        persistBoardStateSnapshot(sceneId, { forceFullSnapshot: true });
+        const state = stateApi.getState?.() ?? {};
+        const placements = Array.isArray(state.boardState?.placements?.[sceneId])
+          ? state.boardState.placements[sceneId]
+          : [];
+        const userLevelState = state.boardState?.sceneState?.[sceneId]?.userLevelState ?? {};
+        const ops = [
+          ...result.remappedPlacementIds.flatMap((placementId) => {
+            const placement = placements.find((entry) => entry?.id === placementId);
+            return placement ? [{
+              type: 'placement.update',
+              sceneId,
+              placementId,
+              patch: {
+                levelId: result.fallbackLevelId,
+                _lastModified: placement._lastModified,
+              },
+            }] : [];
+          }),
+          ...result.remappedUserIds.flatMap((userId) => {
+            const entry = userLevelState?.[userId];
+            return entry ? [{
+              type: 'user-level.set',
+              sceneId,
+              userId,
+              levelId: result.fallbackLevelId,
+              source: entry.source ?? 'manual',
+              tokenId: entry.tokenId,
+            }] : [];
+          }),
+        ];
+        persistBoardStateSnapshot(sceneId, { forceFullSnapshot: true }, ops);
         showFeedback(feedback, 'Map level deleted.', 'info');
       } else {
         showFeedback(feedback, 'Unable to delete map level.', 'error');

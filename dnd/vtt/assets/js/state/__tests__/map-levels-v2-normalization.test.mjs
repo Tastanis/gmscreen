@@ -10,6 +10,7 @@ import {
   normalizeUserLevelStateEntry,
   normalizeUserLevelStateMap,
   resolveActiveLevelIdForUser,
+  resolvePcTokenForUser,
   resolvePcTokenLevelIdForUser,
   resolvePlacementLevelId,
   resolveTopmostLevelId,
@@ -54,9 +55,13 @@ describe('map-level normalization', () => {
     assert.deepEqual(
       normalizeUserLevelStateMap({
         Indigo: { levelId: 'upper', source: 'activate', updatedAt: 4 },
+        Zepha: { levelId: 'upper', source: 'token', tokenId: 'hero', updatedAt: 5 },
         '': { levelId: 'ignored' },
       }),
-      { indigo: { levelId: 'upper', source: 'activate', updatedAt: 4 } },
+      {
+        indigo: { levelId: 'upper', source: 'activate', updatedAt: 4 },
+        zepha: { levelId: 'upper', source: 'token', tokenId: 'hero', updatedAt: 5 },
+      },
     );
   });
 
@@ -105,7 +110,7 @@ describe('map-level normalization', () => {
   });
 });
 
-describe('character profile association remains name-based', () => {
+describe('character profile association', () => {
   test('keeps the configured character profile roster', () => {
     assert.deepEqual(PLAYER_CHARACTER_USER_IDS, ['cal', 'sharon', 'indigo', 'zepha']);
     PLAYER_CHARACTER_USER_IDS.forEach((id) => assert.ok(KNOWN_LEVEL_USER_IDS.includes(id)));
@@ -126,15 +131,24 @@ describe('character profile association remains name-based', () => {
   });
 
   test('prefers explicit profile metadata when a token name differs', () => {
+    const placements = [
+      { id: 'hero', name: 'The Living Shadow', profileId: 'Indigo', levelId: 'upper' },
+    ];
     assert.equal(
       resolvePcTokenLevelIdForUser({
         userId: 'indigo',
-        placements: [
-          { id: 'hero', name: 'The Living Shadow', profileId: 'Indigo', levelId: 'upper' },
-        ],
+        placements,
         validLevelIds: ['level-0', 'upper'],
       }),
       'upper',
+    );
+    assert.deepEqual(
+      resolvePcTokenForUser({
+        userId: 'indigo',
+        placements,
+        validLevelIds: ['level-0', 'upper'],
+      }),
+      { placementId: 'hero', levelId: 'upper' },
     );
   });
 
@@ -152,6 +166,18 @@ describe('character profile association remains name-based', () => {
         placements: [
           { id: 'one', name: 'Sharon', levelId: 'level-0' },
           { id: 'two', name: 'Sharon Illusion', levelId: 'upper' },
+        ],
+      }),
+      null,
+    );
+  });
+
+  test('does not fall back to a token name when explicit linkage names another profile', () => {
+    assert.equal(
+      resolvePcTokenLevelIdForUser({
+        userId: 'zepha',
+        placements: [
+          { id: 'hero', name: 'Zepha', profileId: 'guest', levelId: 'upper' },
         ],
       }),
       null,

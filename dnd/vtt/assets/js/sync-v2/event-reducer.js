@@ -175,6 +175,60 @@ function reducePlacementBatch(state, event, changes) {
       placementId
     );
   }
+
+  const userLevelMutations = event.payload?.userLevelMutations ?? [];
+  if (!Array.isArray(userLevelMutations)) {
+    throw new Error('placement.batchApplied userLevelMutations must be an array');
+  }
+  const byScene = new Map();
+  for (const mutation of userLevelMutations) {
+    const sceneId = typeof mutation?.sceneId === 'string' ? mutation.sceneId.trim() : '';
+    const userId = typeof mutation?.userId === 'string'
+      ? mutation.userId.trim().toLowerCase()
+      : '';
+    const entry = mutation?.entry;
+    const levelId = typeof entry?.levelId === 'string' ? entry.levelId.trim() : '';
+    const sceneConfigRevision = Number(mutation?.sceneConfigRevision);
+    if (
+      !sceneId
+      || !userId
+      || !entry
+      || typeof entry !== 'object'
+      || !levelId
+      || !Number.isSafeInteger(sceneConfigRevision)
+      || sceneConfigRevision < 1
+    ) {
+      throw new Error('Placement user-level mutation is invalid');
+    }
+    const bucket = byScene.get(sceneId) ?? {
+      sceneConfigRevision,
+      entries: {},
+    };
+    if (bucket.sceneConfigRevision !== sceneConfigRevision) {
+      throw new Error('Placement user-level mutations disagree on scene revision');
+    }
+    bucket.entries[userId] = { ...clone(entry), levelId };
+    byScene.set(sceneId, bucket);
+  }
+  for (const [sceneId, bucket] of byScene.entries()) {
+    const sceneConfig = state.sceneConfig && typeof state.sceneConfig === 'object'
+      ? { ...state.sceneConfig }
+      : {};
+    const current = sceneConfig[sceneId] && typeof sceneConfig[sceneId] === 'object'
+      ? { ...sceneConfig[sceneId] }
+      : {};
+    const userLevelState = current.userLevelState && typeof current.userLevelState === 'object'
+      ? { ...current.userLevelState }
+      : {};
+    Object.assign(userLevelState, bucket.entries);
+    sceneConfig[sceneId] = {
+      ...current,
+      userLevelState,
+      _revision: bucket.sceneConfigRevision,
+    };
+    state.sceneConfig = sceneConfig;
+    changes.levels = true;
+  }
 }
 
 function reduceTokenAdded(state, event, changes) {
