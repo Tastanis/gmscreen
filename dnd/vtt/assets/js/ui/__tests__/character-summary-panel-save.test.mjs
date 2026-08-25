@@ -125,6 +125,43 @@ test('saveCharacterHeroicResource uses the narrow authenticated VTT resource rou
   });
 });
 
+test('summary resource controls use narrow mutations instead of stale whole-sheet saves', async () => {
+  const cases = [
+    ['stamina', 'sync-vitals', { currentStamina: '17' }],
+    ['recovery', 'sync-vitals', { currentStamina: '17', currentRecoveries: '3' }],
+    ['surges', 'sync-surges', { value: '2' }],
+    ['resource', 'sync-resource', { value: '4' }],
+    ['victories', 'sync-victories', { value: '5' }],
+  ];
+  const sheet = {
+    hero: {
+      vitals: { currentStamina: 17, currentRecoveries: 3 },
+      surges: 2,
+      resource: { value: 4 },
+      victories: 5,
+    },
+  };
+
+  for (const [change, action, expectedFields] of cases) {
+    await withFakeSaveEnvironment(async ({ requests }) => {
+      const saved = await __testing.saveCharacterSummaryResources(sheet, {
+        characterId: 'sharon',
+        change,
+        broadcast: false,
+      });
+
+      assert.equal(saved, true);
+      assert.equal(requests.length, 1);
+      const body = requests[0].options.body;
+      assert.equal(body.get('action'), action);
+      assert.equal(body.get('character'), 'sharon');
+      assert.equal(body.get('source'), 'vtt');
+      assert.equal(body.has('data'), false);
+      Object.entries(expectedFields).forEach(([key, value]) => assert.equal(body.get(key), value));
+    });
+  }
+});
+
 test('resourceFloor clamps only allowNegative resources', () => {
   assert.equal(__testing.resourceFloor({ stats: { reason: 2 } }, { allowNegative: true }), -3);
   assert.equal(__testing.resourceFloor({ stats: { reason: 2 } }, { allowNegative: false }), 0);

@@ -1174,6 +1174,9 @@ export function mountBoardInteractions(store, routes = {}) {
     if (changeSet.sceneRouting) {
       // A route change is one of the explicitly permitted full scene mounts.
       applyStateToBoard(state);
+      startActiveScenePcStaminaHydration(activeSceneId).catch((error) => {
+        console.warn('[VTT] Failed to refresh PC stamina after scene activation', error);
+      });
       return;
     }
     if (changeSet.grid) {
@@ -2153,6 +2156,8 @@ export function mountBoardInteractions(store, routes = {}) {
   let lastProcessedTurnEffectSignature = null;
   let lastProcessedTurnEffectSignatures = new Set();
   const sheetSyncQueue = new Map();
+  let staminaHydrationSceneId = null;
+  let staminaHydrationPromise = Promise.resolve();
   const maliceVictoriesCache = new Map();
   // Sand timer artwork is resolved via CSS data-stage attributes using
   // assets/images/turn-timer/sand-timer-{stage}.png.
@@ -7353,9 +7358,14 @@ export function mountBoardInteractions(store, routes = {}) {
 
   // Sync V2 starts its authenticated private transport and ordered recovery.
   tokenMovementRuntime.start()
-    .then(() => reconcileCurrentPlayerViewToPcToken().catch((error) => {
-      reportSyncFailure(error, 'player token level');
-    }))
+    .then(() => Promise.all([
+      reconcileCurrentPlayerViewToPcToken().catch((error) => {
+        reportSyncFailure(error, 'player token level');
+      }),
+      startActiveScenePcStaminaHydration().catch((error) => {
+        console.warn('[VTT] Failed to refresh PC stamina during board startup', error);
+      }),
+    ]))
     .catch(() => {
       // reportSyncFailure is invoked by the runtime.
     });
@@ -14201,6 +14211,15 @@ export function mountBoardInteractions(store, routes = {}) {
     return null;
   }
 
+  function getCharacterSheetProfileIdForPlacement(placement) {
+    const explicitProfile = normalizeProfileId(extractProfileIdFromPlacement(placement));
+    if (explicitProfile && PLAYER_CHARACTER_USER_IDS.includes(explicitProfile)) {
+      return explicitProfile;
+    }
+    const aliasProfile = normalizeProfileId(matchProfileByName(placement?.name ?? ''));
+    return aliasProfile && PLAYER_CHARACTER_USER_IDS.includes(aliasProfile) ? aliasProfile : '';
+  }
+
   function normalizeCombatantName(name) {
     if (typeof name !== 'string') {
       return '';
@@ -18964,6 +18983,9 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function applyDamageHealToPlacement(placementId, mode, amount, { allowTempHp = false, fireStaminaTriggers = true } = {}) {
+    if (staminaHydrationSceneId && staminaHydrationSceneId === getActiveSceneId()) {
+      return null;
+    }
     if (!placementId || (mode !== 'damage' && mode !== 'heal')) {
       return null;
     }
@@ -19475,6 +19497,10 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!activeTokenSettingsId) {
       return false;
     }
+    if (staminaHydrationSceneId && staminaHydrationSceneId === getActiveSceneId()) {
+      updateStatus('Refreshing PC Stamina from character sheets. Try that change again in a moment.');
+      return false;
+    }
 
     const placement = getPlacementFromStore(activeTokenSettingsId);
     if (!placement) {
@@ -19760,16 +19786,15 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    const name = typeof placement.name === 'string' ? placement.name.trim() : '';
-    if (!name) {
-      return;
-    }
-
     // Only sync stamina for PC folder tokens (player characters)
     const metadata = extractPlacementMetadata(placement);
     const inPlayerFolder = isPlacementInPlayerFolder(placement, metadata);
     const isPlayerOwned = isPlacementPlayerOwned(placement, metadata);
     if (!inPlayerFolder && !isPlayerOwned) {
+      return;
+    }
+    const profileId = getCharacterSheetProfileIdForPlacement(placement);
+    if (!profileId) {
       return;
     }
 
@@ -19778,7 +19803,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     scheduleSheetHitPointSync(
       {
-        character: name,
+        character: profileId,
         currentStamina: snapshot.current,
         staminaMax: snapshot.max,
       },
@@ -19800,13 +19825,9 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    const placement = getPlacementFromStore(placementId);
+    const state = boardApi.getState?.() ?? {};
+    const placement = resolvePlacementById(state, sceneId, placementId);
     if (!placement) {
-      return;
-    }
-
-    const name = typeof placement.name === 'string' ? placement.name.trim() : '';
-    if (!name) {
       return;
     }
 
@@ -19815,6 +19836,10 @@ export function mountBoardInteractions(store, routes = {}) {
     const inPlayerFolder = isPlacementInPlayerFolder(placement, metadata);
     const isPlayerOwned = isPlacementPlayerOwned(placement, metadata);
     if (!inPlayerFolder && !isPlayerOwned) {
+      return;
+    }
+    const profileId = getCharacterSheetProfileIdForPlacement(placement);
+    if (!profileId) {
       return;
     }
 
@@ -19827,7 +19852,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
 
       url.searchParams.set('action', 'sync-stamina');
-      url.searchParams.set('character', name);
+      url.searchParams.set('character', profileId);
 
       const response = await fetch(url.toString(), { method: 'GET' });
       if (!response?.ok) {
@@ -19857,6 +19882,13 @@ export function mountBoardInteractions(store, routes = {}) {
         }
       }
 
+      // Scene hydration is intentionally active-scene-only. If routing
+      // changed while the sheet request was in flight, leave the now-dormant
+      // placement alone and let its next activation refresh it.
+      if (getActiveSceneId() !== sceneId) {
+        return;
+      }
+
       // Update the placement with character sheet stamina
       updatePlacementById(placementId, (target) => {
         const currentHp = target.hp && typeof target.hp === 'object' ? target.hp : { current: '', max: '' };
@@ -19877,6 +19909,45 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  async function refreshActiveScenePcStaminaFromSheets(sceneId = getActiveSceneId()) {
+    if (!isGmUser() || !sceneId) {
+      return;
+    }
+    const state = boardApi.getState?.() ?? {};
+    const placements = state.boardState?.placements?.[sceneId];
+    if (!Array.isArray(placements)) {
+      return;
+    }
+
+    const pcPlacements = placements.filter((placement) => {
+      if (!placement?.id) return false;
+      const metadata = extractPlacementMetadata(placement);
+      if (!isPlacementInPlayerFolder(placement, metadata) && !isPlacementPlayerOwned(placement, metadata)) {
+        return false;
+      }
+      return Boolean(getCharacterSheetProfileIdForPlacement(placement));
+    });
+
+    await Promise.all(
+      pcPlacements.map((placement) => fetchAndApplyCharacterStamina(placement.id, sceneId))
+    );
+  }
+
+  function startActiveScenePcStaminaHydration(sceneId = getActiveSceneId()) {
+    if (!isGmUser() || !sceneId) {
+      return Promise.resolve();
+    }
+    staminaHydrationSceneId = sceneId;
+    const hydration = refreshActiveScenePcStaminaFromSheets(sceneId);
+    const trackedHydration = hydration.finally(() => {
+      if (staminaHydrationPromise === trackedHydration) {
+        staminaHydrationSceneId = null;
+      }
+    });
+    staminaHydrationPromise = trackedHydration;
+    return trackedHydration;
+  }
+
   /**
    * Handles stamina-sync broadcasts originating from the character sheet or
    * the VTT character summary panel.
@@ -19889,8 +19960,8 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    const characterName = typeof payload.character === 'string' ? payload.character.trim() : '';
-    if (!characterName) {
+    const characterId = normalizeProfileId(payload.character);
+    if (!characterId) {
       return;
     }
 
@@ -19904,8 +19975,8 @@ export function mountBoardInteractions(store, routes = {}) {
     let anyUpdated = false;
 
     for (const placement of placements) {
-      const name = typeof placement.name === 'string' ? placement.name.trim() : '';
-      if (!name || name.toLowerCase() !== characterName.toLowerCase()) {
+      const placementProfileId = getCharacterSheetProfileIdForPlacement(placement);
+      if (!placementProfileId || placementProfileId !== characterId) {
         continue;
       }
 

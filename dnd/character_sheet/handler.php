@@ -449,6 +449,23 @@ function saveCharacterSheetData($dataDir, $dataFile, $data) {
     return file_put_contents($dataFile, $jsonData, LOCK_EX) !== false;
 }
 
+function acquireCharacterSheetWriteLock($dataDir) {
+    if (!is_dir($dataDir)) {
+        mkdir($dataDir, 0755, true);
+    }
+
+    $lockFile = $dataDir . '/character_sheets.lock';
+    $handle = fopen($lockFile, 'c');
+    if ($handle === false || !flock($handle, LOCK_EX)) {
+        if (is_resource($handle)) {
+            fclose($handle);
+        }
+        throw new RuntimeException('Unable to lock character sheet storage.');
+    }
+
+    return $handle;
+}
+
 function sendJsonResponse($payload) {
     header('Content-Type: application/json');
     echo json_encode($payload);
@@ -498,8 +515,8 @@ $allowVttSurgeSync =
 // claim) applies its resource gains, which may not be the character's own
 // account. Like sync-stamina/sync-surges, this is a narrow, single-field
 // write open to any authenticated VTT user.
-$allowVttResourceSync =
-    $action === 'sync-resource'
+$allowVttFieldSync =
+    in_array($action, array('sync-resource', 'sync-vitals', 'sync-victories'), true)
     && $requestMethod === 'POST'
     && isset($requestData['source'])
     && $requestData['source'] === 'vtt'
@@ -514,11 +531,22 @@ $allowPublicSummaryRead =
     && $requestMethod === 'GET'
     && $currentUser !== '';
 
-if (!$is_gm && $requestedCharacter !== strtolower($currentUser) && !$allowVttStaminaSync && !$allowVttSurgeSync && !$allowVttResourceSync && !$allowVttTraitRead && !$allowPublicSummaryRead) {
+if (!$is_gm && $requestedCharacter !== strtolower($currentUser) && !$allowVttStaminaSync && !$allowVttSurgeSync && !$allowVttFieldSync && !$allowVttTraitRead && !$allowPublicSummaryRead) {
     sendJsonResponse(array('success' => false, 'error' => 'Permission denied'));
 }
 
 try {
+$characterSheetWriteLock = null;
+if (
+    $requestMethod === 'POST'
+    && in_array($action, array('save', 'sync-stamina', 'sync-surges', 'sync-resource', 'sync-vitals', 'sync-victories', 'sync-hero-tokens'), true)
+) {
+    // Every mutation below is a read-modify-write of shared JSON. Hold one
+    // request-wide lock so simultaneous player autosaves and VTT resource
+    // updates cannot overwrite a different character's newer data.
+    $characterSheetWriteLock = acquireCharacterSheetWriteLock($dataDir);
+}
+
 switch ($action) {
     case 'summary':
         $allSheets = loadCharacterSheetData($dataDir, $dataFile, $characters);
@@ -689,6 +717,54 @@ switch ($action) {
             'success' => true,
             'name' => isset($sheet['hero']['name']) && $sheet['hero']['name'] !== '' ? $sheet['hero']['name'] : $requestedCharacter,
             'resource' => isset($sheet['hero']['resource']['value']) ? (int)$sheet['hero']['resource']['value'] : 0,
+        ));
+        break;
+
+    case 'sync-vitals':
+        $allSheets = loadCharacterSheetData($dataDir, $dataFile, $characters);
+        $sheet = $allSheets[$requestedCharacter];
+
+        if (!isset($sheet['hero']['vitals']) || !is_array($sheet['hero']['vitals'])) {
+            $sheet['hero']['vitals'] = array();
+        }
+        $hasStamina = isset($requestData['currentStamina']) && $requestData['currentStamina'] !== '';
+        $hasRecoveries = isset($requestData['currentRecoveries']) && $requestData['currentRecoveries'] !== '';
+        if (!$hasStamina && !$hasRecoveries) {
+            sendJsonResponse(array('success' => false, 'error' => 'Missing vital values'));
+        }
+        if ($hasStamina) {
+            $sheet['hero']['vitals']['currentStamina'] = (int)$requestData['currentStamina'];
+        }
+        if ($hasRecoveries) {
+            $sheet['hero']['vitals']['currentRecoveries'] = max(0, (int)$requestData['currentRecoveries']);
+        }
+        $allSheets[$requestedCharacter] = $sheet;
+
+        if (!saveCharacterSheetData($dataDir, $dataFile, $allSheets)) {
+            sendJsonResponse(array('success' => false, 'error' => 'Failed to save vital values'));
+        }
+        sendJsonResponse(array(
+            'success' => true,
+            'currentStamina' => isset($sheet['hero']['vitals']['currentStamina']) ? (int)$sheet['hero']['vitals']['currentStamina'] : 0,
+            'currentRecoveries' => isset($sheet['hero']['vitals']['currentRecoveries']) ? (int)$sheet['hero']['vitals']['currentRecoveries'] : 0,
+        ));
+        break;
+
+    case 'sync-victories':
+        $allSheets = loadCharacterSheetData($dataDir, $dataFile, $characters);
+        $sheet = $allSheets[$requestedCharacter];
+        if (!isset($requestData['value']) || $requestData['value'] === '') {
+            sendJsonResponse(array('success' => false, 'error' => 'Missing victory value'));
+        }
+        $sheet['hero']['victories'] = max(0, (int)$requestData['value']);
+        $allSheets[$requestedCharacter] = $sheet;
+
+        if (!saveCharacterSheetData($dataDir, $dataFile, $allSheets)) {
+            sendJsonResponse(array('success' => false, 'error' => 'Failed to save victories'));
+        }
+        sendJsonResponse(array(
+            'success' => true,
+            'victories' => (int)$sheet['hero']['victories'],
         ));
         break;
 

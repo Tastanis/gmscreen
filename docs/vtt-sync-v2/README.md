@@ -710,6 +710,13 @@ board broadcast, V1 poller, version/grace winner, or broad render subscriber.
   `persistentZones` remains canonical placement state, while remote zone
   casts and removals redraw only the persistent-zone overlay instead of
   relying on a broad board subscription.
+- A PC character sheet is the cross-scene authority for current and maximum
+  Stamina. Each scene placement keeps a V2-owned projection for combat and
+  rendering. The GM refreshes linked PC placements from their sheets after
+  startup and scene activation; subsequent token changes write the linked
+  sheet through the narrow stamina endpoint. Dormant placements never push
+  merely because they exist, and explicit profile metadata takes precedence
+  over normalized token-name aliases.
 - Interactive controls inside focused overlay layers must be excluded before
   map capture-phase pointer handlers begin selection, targeting, or panning.
   Persistent-zone End controls submit their placement patch once, wait for

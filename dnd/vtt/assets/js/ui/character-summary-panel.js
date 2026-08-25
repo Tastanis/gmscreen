@@ -326,7 +326,12 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     if (!activeCharacterId || !activeSheet) {
       return false;
     }
-    const saved = await saveCharacterSummarySheet(activeSheet, { characterId: activeCharacterId, routes, broadcast: false });
+    const saved = await saveCharacterSummaryResources(activeSheet, {
+      characterId: activeCharacterId,
+      routes,
+      change,
+      broadcast: false,
+    });
     if (saved) {
       broadcastSheetChange(change);
       if (change === 'stamina' || change === 'recovery') {
@@ -3445,6 +3450,64 @@ async function saveCharacterSummarySheet(sheet, options = {}) {
   return saved;
 }
 
+async function saveCharacterSummaryResources(sheet, options = {}) {
+  const characterId = typeof options.characterId === 'string' ? options.characterId : '';
+  const change = typeof options.change === 'string' ? options.change : '';
+  if (!characterId || !sheet || !['stamina', 'recovery', 'surges', 'resource', 'victories'].includes(change)) {
+    return saveCharacterSummarySheet(sheet, options);
+  }
+
+  const routeConfig = options.routes && typeof options.routes === 'object' ? options.routes : {};
+  const endpoint = typeof routeConfig.sheet === 'string' && routeConfig.sheet
+    ? routeConfig.sheet
+    : '/dnd/character_sheet/handler.php';
+  const body = new URLSearchParams();
+  body.set('character', characterId);
+  body.set('source', 'vtt');
+
+  if (change === 'stamina' || change === 'recovery') {
+    const vitals = sheet?.hero?.vitals || {};
+    body.set('action', 'sync-vitals');
+    body.set('currentStamina', String(Number.parseInt(vitals.currentStamina ?? 0, 10) || 0));
+    if (change === 'recovery') {
+      body.set('currentRecoveries', String(Math.max(0, Number.parseInt(vitals.currentRecoveries ?? 0, 10) || 0)));
+    }
+  } else if (change === 'surges') {
+    body.set('action', 'sync-surges');
+    body.set('value', String(Math.max(0, Number.parseInt(sheet?.hero?.surges ?? 0, 10) || 0)));
+  } else if (change === 'resource') {
+    body.set('action', 'sync-resource');
+    body.set('value', String(Number.parseInt(sheet?.hero?.resource?.value ?? 0, 10) || 0));
+  } else {
+    body.set('action', 'sync-victories');
+    body.set('value', String(Math.max(0, Number.parseInt(sheet?.hero?.victories ?? 0, 10) || 0)));
+  }
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  const payload = await response.json().catch(() => null);
+  const saved = Boolean(response.ok && payload?.success === true);
+  if (!saved) {
+    console.warn('[VTT] Character summary resource save failed', payload?.error || response.status);
+    return false;
+  }
+  if (options.broadcast !== false && typeof BroadcastChannel === 'function') {
+    const channel = new BroadcastChannel(CHARACTER_SHEET_SYNC_CHANNEL);
+    channel.postMessage({
+      type: 'character-sheet-sync',
+      source: 'vtt',
+      character: characterId,
+      change,
+    });
+    channel.close();
+  }
+  return true;
+}
+
 function requestAutomationClearScopedFlag(payload) {
   return new Promise((resolve, reject) => {
     document.dispatchEvent(new CustomEvent('vtt:automation-clear-scoped-flag', {
@@ -3634,6 +3697,7 @@ export const __testing = {
   updateCharacterPanelCounter,
   resourceFloor,
   saveCharacterHeroicResource,
+  saveCharacterSummaryResources,
   saveCharacterSummarySheet,
   spendHeroicResource,
 };

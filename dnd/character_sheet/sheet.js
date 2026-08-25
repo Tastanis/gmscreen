@@ -2355,6 +2355,7 @@ function openSkillPickerModal(availableSkills) {
       sheetState.sidebar.skills[skill] = { level: "Trained", bonus: "" };
       closeSkillPickerModal();
       renderSkills();
+      queueAutoSave();
     });
   });
 }
@@ -2433,6 +2434,7 @@ function renderSkills() {
         if (!skill) return;
         delete sheetState.sidebar.skills[skill];
         renderSkills();
+        queueAutoSave();
       });
     });
 
@@ -3180,7 +3182,7 @@ function bindRespiteButton() {
       const confirm = document.createElement("div");
       confirm.className = "respite-confirmation";
       confirm.innerHTML = `
-        <div class="respite-confirmation__text">Take a respite? Victories will convert to XP and recoveries will be restored.</div>
+        <div class="respite-confirmation__text">Take a respite? Victories will convert to XP, recoveries will be restored, and Stamina will return to full.</div>
         <div class="respite-confirmation__actions">
           <button class="text-btn" data-confirm-respite>Yes</button>
           <button class="text-btn" data-cancel-respite>Cancel</button>
@@ -3192,7 +3194,7 @@ function bindRespiteButton() {
         confirm.remove();
       });
 
-      confirm.querySelector("[data-confirm-respite]")?.addEventListener("click", () => {
+      confirm.querySelector("[data-confirm-respite]")?.addEventListener("click", async () => {
         confirm.remove();
 
         const currentXp = Number(sheetState.hero.xp) || 0;
@@ -3203,6 +3205,9 @@ function bindRespiteButton() {
         const vitals = sheetState.hero.vitals;
         const recoveriesMax = Number(vitals.recoveriesMax) || 0;
         vitals.currentRecoveries = recoveriesMax;
+        const staminaMax = Number(vitals.staminaMax) || 0;
+        vitals.currentStamina = staminaMax;
+        updateStaminaHistory(staminaMax);
 
         renderHeroPane();
         renderBars();
@@ -3211,7 +3216,10 @@ function bindRespiteButton() {
         bindRespiteButton();
         bindTokenButtons();
         bindResourceControls();
-        saveSheet();
+        const saved = await saveSheet();
+        if (saved) {
+          broadcastStaminaToVtt();
+        }
       });
     });
   });
@@ -3717,6 +3725,7 @@ function captureAllSections() {
 
 const AUTOSAVE_DELAY_MS = 500;
 let autoSaveTimeout;
+let sheetSaveQueue = Promise.resolve(true);
 
 function queueAutoSave() {
   if (!document.body.classList.contains("edit-mode")) return;
@@ -3725,6 +3734,14 @@ function queueAutoSave() {
     captureAllSections();
     saveSheet();
   }, AUTOSAVE_DELAY_MS);
+}
+
+function flushPendingSheetSave({ keepalive = false } = {}) {
+  if (sheetLoadBlocked || !document.body.classList.contains("edit-mode")) return;
+  clearTimeout(autoSaveTimeout);
+  autoSaveTimeout = null;
+  captureAllSections();
+  saveSheet({ keepalive });
 }
 
 function bindAutoSave() {
@@ -3856,8 +3873,8 @@ async function loadSheet() {
   toggleEditMode(false);
 }
 
-async function saveSheet() {
-  if (sheetLoadBlocked) return;
+function saveSheet({ keepalive = false } = {}) {
+  if (sheetLoadBlocked) return Promise.resolve(false);
 
   const payload = new URLSearchParams();
   payload.append("action", "save");
@@ -3866,22 +3883,36 @@ async function saveSheet() {
   }
   payload.append("data", JSON.stringify(sheetState));
 
-  try {
-    const response = await fetch("handler.php", {
-      method: "POST",
-      body: payload,
-      credentials: "same-origin",
-    });
+  const send = async () => {
+    try {
+      const response = await fetch("handler.php", {
+        method: "POST",
+        body: payload,
+        credentials: "same-origin",
+        keepalive,
+      });
 
-    const result = await response.json();
-    if (!result.success) {
-      console.warn("Failed to save sheet", result.error);
-    } else {
+      const result = await response.json();
+      if (!result.success) {
+        console.warn("Failed to save sheet", result.error);
+        return false;
+      }
       broadcastSheetSync("sheet");
+      return true;
+    } catch (error) {
+      console.error("Error saving sheet", error);
+      return false;
     }
-  } catch (error) {
-    console.error("Error saving sheet", error);
+  };
+
+  if (keepalive) {
+    return send();
   }
+
+  // Preserve edit order. Previously overlapping whole-sheet requests could
+  // finish out of order and let an older snapshot reset a newer skill edit.
+  sheetSaveQueue = sheetSaveQueue.catch(() => false).then(send);
+  return sheetSaveQueue;
 }
 
 /* ─── Post-to-Chat System ─── */
@@ -5008,9 +5039,17 @@ async function ready() {
   startStaminaSync();
   startHeroTokenSync();
   startSheetSync();
-  window.addEventListener("pagehide", stopStaminaSync);
-  window.addEventListener("pagehide", stopHeroTokenSync);
-  window.addEventListener("pagehide", stopSheetSync);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      flushPendingSheetSave();
+    }
+  });
+  window.addEventListener("pagehide", () => {
+    flushPendingSheetSave({ keepalive: true });
+    stopStaminaSync();
+    stopHeroTokenSync();
+    stopSheetSync();
+  });
 }
 
 document.addEventListener("DOMContentLoaded", ready);
