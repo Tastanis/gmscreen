@@ -87,6 +87,19 @@ function saveChatMessages($dataFile, array $messages) {
     return file_put_contents($dataFile, $json, LOCK_EX) !== false;
 }
 
+function acquireChatRollDecisionLock($dataFile)
+{
+    $lockHandle = fopen($dataFile . '.roll.lock', 'c');
+    if ($lockHandle === false || !flock($lockHandle, LOCK_EX)) {
+        if (is_resource($lockHandle)) {
+            fclose($lockHandle);
+        }
+        return null;
+    }
+
+    return $lockHandle;
+}
+
 function sanitizeMessage($message) {
     $clean = trim($message);
     $clean = strip_tags($clean);
@@ -115,6 +128,59 @@ function sanitizeMessageType($type)
     $clean = strtolower(trim($type));
     $allowed = ['text', 'dice_roll', 'project_roll', 'whisper'];
     return in_array($clean, $allowed, true) ? $clean : 'text';
+}
+
+function parseKnownProjectRollStatuses($value)
+{
+    if (!is_string($value) || trim($value) === '') {
+        return [];
+    }
+
+    $decoded = json_decode($value, true);
+    if (!is_array($decoded)) {
+        return [];
+    }
+
+    $allowed = ['pending', 'accepted', 'denied'];
+    $normalized = [];
+    foreach ($decoded as $messageId => $status) {
+        if (count($normalized) >= 100) {
+            break;
+        }
+        if (!is_string($messageId) || !is_string($status)) {
+            continue;
+        }
+        $messageId = trim($messageId);
+        $status = strtolower(trim($status));
+        if ($messageId !== '' && in_array($status, $allowed, true)) {
+            $normalized[$messageId] = $status;
+        }
+    }
+
+    return $normalized;
+}
+
+function hasProjectRollStatusChanged(array $message, array $knownStatuses)
+{
+    $messageId = isset($message['id']) && is_string($message['id']) ? $message['id'] : '';
+    if ($messageId === '' || !array_key_exists($messageId, $knownStatuses)) {
+        return false;
+    }
+
+    if (sanitizeMessageType($message['type'] ?? 'text') !== 'project_roll') {
+        return false;
+    }
+
+    $payload = isset($message['payload']) && is_array($message['payload']) ? $message['payload'] : [];
+    $currentStatus = sanitizeRollPayload('project_roll', $payload)['status'] ?? 'pending';
+    return $knownStatuses[$messageId] !== $currentStatus;
+}
+
+function resolveProjectRollStatusTransition($previousStatus, $requestedStatus)
+{
+    $previousStatus = is_string($previousStatus) ? strtolower(trim($previousStatus)) : 'pending';
+    $requestedStatus = is_string($requestedStatus) ? strtolower(trim($requestedStatus)) : 'pending';
+    return $previousStatus === 'pending' ? $requestedStatus : $previousStatus;
 }
 
 function sanitizeChatTarget($value, array $validParticipants)
@@ -555,6 +621,7 @@ function handleChatFetch($dataFile, array $validParticipants) {
     $since = $_POST['since'] ?? '';
     $sinceTime = $since !== '' ? strtotime($since) : false;
     $currentUser = $_SESSION['user'];
+    $knownRollStatuses = parseKnownProjectRollStatuses($_POST['knownRollStatuses'] ?? '');
     $filtered = [];
 
     foreach ($messages as $message) {
@@ -566,7 +633,7 @@ function handleChatFetch($dataFile, array $validParticipants) {
             continue;
         }
 
-        if ($sinceTime !== false) {
+        if ($sinceTime !== false && !hasProjectRollStatusChanged($message, $knownRollStatuses)) {
             if (!isset($message['timestamp'])) {
                 continue;
             }
@@ -627,11 +694,20 @@ function handleRollStatusUpdate($dataFile)
         exit;
     }
 
+    // Serialize project-roll decisions across GM tabs. This makes the
+    // pending-to-terminal transition atomic and prevents duplicate awards.
+    $decisionLock = acquireChatRollDecisionLock($dataFile);
+    if ($decisionLock === null) {
+        echo json_encode(['success' => false, 'error' => 'Unable to lock project roll decision']);
+        exit;
+    }
+
     $messages = loadChatMessages($dataFile);
     $updatedMessage = null;
     $awardResult = null;
     $awardError = null;
     $messageFound = false;
+    $statusChanged = false;
 
     foreach ($messages as &$message) {
         if (!isset($message['id']) || $message['id'] !== $messageId) {
@@ -651,7 +727,19 @@ function handleRollStatusUpdate($dataFile)
 
         $sanitizedPayload = sanitizeRollPayload('project_roll', $message['payload']);
         $previousStatus = $sanitizedPayload['status'] ?? 'pending';
-        $sanitizedPayload['status'] = $status;
+        $resolvedStatus = resolveProjectRollStatusTransition($previousStatus, $status);
+
+        // Accept/deny is a one-time decision. A stale second GM tab must not
+        // reverse a completed decision or award the same project roll twice.
+        if ($previousStatus !== 'pending') {
+            $sanitizedPayload['status'] = $resolvedStatus;
+            $message['payload'] = $sanitizedPayload;
+            $updatedMessage = $message;
+            break;
+        }
+
+        $sanitizedPayload['status'] = $resolvedStatus;
+        $statusChanged = $resolvedStatus !== $previousStatus;
 
         if ($status === 'accepted' && $previousStatus !== 'accepted') {
             $awardResult = applyProjectRollAward($sanitizedPayload);
@@ -694,7 +782,8 @@ function handleRollStatusUpdate($dataFile)
     echo json_encode([
         'success' => true,
         'message' => $updatedMessage,
-        'award' => $awardResult
+        'award' => $awardResult,
+        'changed' => $statusChanged
     ]);
     exit;
 }

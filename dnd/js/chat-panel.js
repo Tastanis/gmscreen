@@ -142,6 +142,7 @@
         let chatPusherWasConnected = false;
         let latestServerTimestamp = '';
         let messages = [];
+        let chatSyncChannel = null;
         let lightboxElements = null;
         let lastFocusedBeforeLightbox = null;
         const participants = Array.isArray(window.chatParticipants) ? window.chatParticipants.filter(Boolean) : [];
@@ -1477,6 +1478,16 @@
             renderMessages();
         }
 
+        function broadcastChatMessageUpdate(serverMessage) {
+            if (!chatSyncChannel || !serverMessage || !serverMessage.id) {
+                return;
+            }
+            chatSyncChannel.postMessage({
+                type: 'chat-message-updated',
+                message: serverMessage
+            });
+        }
+
         async function handleProjectRollDecision(message, status, buttons) {
             if (!message || !message.id) {
                 return;
@@ -1552,8 +1563,14 @@
                 }
 
                 updateMessageFromServer(data.message);
+                broadcastChatMessageUpdate(data.message);
 
-                if (status === 'accepted' && typeof window.handleAcceptedProjectRoll === 'function') {
+                const resolvedStatus = data.message && data.message.payload && data.message.payload.status
+                    ? String(data.message.payload.status).toLowerCase()
+                    : status;
+                if (resolvedStatus === 'accepted'
+                    && data.changed !== false
+                    && typeof window.handleAcceptedProjectRoll === 'function') {
                     let awardPayload = null;
                     if (data.award && typeof data.award === 'object') {
                         awardPayload = data.award;
@@ -1566,7 +1583,7 @@
                     }
                 }
 
-                const toastMessage = status === 'accepted' ? 'Project roll accepted' : status === 'denied' ? 'Project roll denied' : 'Project roll updated';
+                const toastMessage = resolvedStatus === 'accepted' ? 'Project roll accepted' : resolvedStatus === 'denied' ? 'Project roll denied' : 'Project roll updated';
                 showChatToast(toastMessage, 'success');
             } catch (error) {
                 controls.forEach((btn) => {
@@ -1838,6 +1855,17 @@
                 if (latestServerTimestamp) {
                     params.append('since', latestServerTimestamp);
                 }
+                const knownRollStatuses = {};
+                messages.forEach((message) => {
+                    if (normalizeMessageType(message && message.type) !== 'project_roll' || !message.id) {
+                        return;
+                    }
+                    const status = message.payload && message.payload.status
+                        ? String(message.payload.status).toLowerCase()
+                        : 'pending';
+                    knownRollStatuses[message.id] = status;
+                });
+                params.append('knownRollStatuses', JSON.stringify(knownRollStatuses));
 
                 const response = await fetch(CHAT_ENDPOINT, {
                     method: 'POST',
@@ -2484,6 +2512,25 @@
 
         setOpen(false);
         renderMessages();
+        if (typeof window.BroadcastChannel === 'function') {
+            try {
+                chatSyncChannel = new window.BroadcastChannel('dnd-chat-sync-v1');
+                chatSyncChannel.addEventListener('message', (event) => {
+                    const payload = event && event.data;
+                    if (payload && payload.type === 'chat-message-updated' && payload.message) {
+                        updateMessageFromServer(payload.message);
+                    }
+                });
+                window.addEventListener('pagehide', () => {
+                    if (chatSyncChannel) {
+                        chatSyncChannel.close();
+                        chatSyncChannel = null;
+                    }
+                }, { once: true });
+            } catch (error) {
+                chatSyncChannel = null;
+            }
+        }
         initChatPusher();
         ensureInterval();
         fetchMessages();
