@@ -4,6 +4,7 @@ import {createMapLevelRenderer} from './map-level-renderer.js';
 import {renderFogSurface} from './fog-of-war.js';
 import {renderPlayerPreviewTokens} from './player-preview-tokens.js';
 import {renderDrawings} from './drawing-tool.js';
+import {renderPlayerPreviewTemplates} from './player-preview-templates.js';
 
 export function buildPlayerPreviewState(preview, tokens) {
   const canonical=preview.snapshot.state,sceneId=canonical.routing?.activeSceneId;
@@ -63,5 +64,6 @@ export async function createPlayerPreviewMap(preview, {levelId, tokens} = {}) {
   }
   stage.append(drawings);
   renderPlayerPreviewTokens(stage,state,view,levelId);
+  renderPlayerPreviewTemplates(stage,preview,view,levelId);
   return {stage,width,height};
 }

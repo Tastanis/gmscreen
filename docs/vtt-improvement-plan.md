@@ -41,7 +41,7 @@ User authorized implementing the September 7 product audit, updating/running the
 ## Recovery and preparation
 
 - [ ] Specific-player preview and useful connection status.
-  - Server-check-based connection status and manual reconciliation are implemented. GM Scenes exposes player diagnostics and an independent map/grid/floor/cutout/fog/token/drawing preview with local zoom/Fit. Token status overlays and template preview layers remain pending.
+  - Server-check-based connection status and manual reconciliation are implemented. GM Scenes exposes player diagnostics and an independent map/grid/floor/cutout/fog/token/drawing/circle/rectangle preview with local zoom/Fit. Token status overlays and wall template previews remain pending.
 - [x] Named encounter checkpoints, scoped restore, scene duplication/export.
   - GM-only checkpoints expose reviewed atomic position or layout restoration. Layout restores floors, grid, fog, drawings/templates and existing-token positions while preserving current resources and newer tokens. Scene JSON export/import and duplication preserve board geometry and links, survive retries, and open without reload. Character sheets and base-map/catalog metadata are outside checkpoint restore scope.
 - [ ] Encounter presets, favorites and recent assets.
@@ -976,3 +976,22 @@ anchors, default outside controls and unchanged shape data. The GM/player browse
 journey checks circle floor clipping plus a 90-degree rectangle's size, label and
 rotation, including after player reload, with unchanged canonical state.
 Full regression suite: 714 tests across 88 files passed.
+
+### Hydrated circle and rectangle previews
+
+Template normalization and geometry now run in independent createTemplateGeometry
+contexts with explicit view getters. The live editor and passive preview share
+snapping, bounds, rotation and anchor adjustment without sharing editing state.
+Circle and rectangle previews use the existing area painter and floor masks.
+Preview DOM uses separate template identifiers inside the inert surface.
+
+Templates without explicit colors previously inherited changing palette offsets
+across hydration. Palette order now resets on hydration, producing stable fallback
+colors in the live board and preview. Explicit colors are preserved.
+
+Tests cover independent map bounds, immutable source data, rectangle snapping and
+anchor shifts. Browser QA compares all circle/rectangle bounds, rotation, labels,
+colors and masks directly with the player board, then verifies reload parity and
+zero preview commands or canonical changes. The preview was visually inspected.
+Wall template painting and token status overlays remain outstanding.
+Full regression suite: 716 tests across 89 files passed.

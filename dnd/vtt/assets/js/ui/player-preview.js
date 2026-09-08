@@ -37,7 +37,7 @@ export function mountPlayerPreview(root, store) {
   zoomIn.textContent='+';zoomIn.setAttribute('aria-label','Zoom in preview');fit.textContent='Fit preview';
   const zoomLabel=document.createElement('span');zoomLabel.setAttribute('aria-live','polite');
   controls.append(zoomOut,zoomLabel,zoomIn,fit);
-  note.textContent='Read-only map, floors, fog, tokens and drawings. Token status overlays and templates are not included yet.';
+  note.textContent='Read-only board preview. Wall templates and token status overlays are not included yet.';
   dialog.append(close,heading,note,controls,surface);document.body.append(dialog);
   let mapSequence=0;
   let camera=null;

@@ -20,10 +20,12 @@ token status overlays and templates remain pending. Drawing paths reuse the norm
 renderer with an explicit private SVG layer and selected floor. Local preview zoom
 and Fit never write canonical camera, scene or floor state.
 Template floor visibility and cutout masking are extracted into the shared
-template-presentation module and used by the normal board. Passive template shape
-painting/hydration is still pending; this extraction does not mount template tools.
-Circle/rectangle geometry and labels now use a shared passive area painter in the
-normal board. Preview shape hydration and the wall painter remain to be connected.
+template-presentation module and used by the normal board and passive areas.
+The passive path does not mount template editing tools.
+Circle/rectangle geometry and labels use a shared passive area painter in the
+normal board and preview. Saved-template normalization, snapping and clamping use
+independent template-geometry contexts. Preview areas match player bounds, labels,
+rotation, colors and cutout masks. Wall preview painting remains pending.
 
 A GM-only `checkpoint.restoreLayout` authority now plans and atomically restores
 one scene's floors, canonical grid, fog, drawings/templates and existing token

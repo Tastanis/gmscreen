@@ -29,7 +29,7 @@ const origin='http://127.0.0.1:8129';
     }
     await command('level.user.set',{userId:'sharon',entry:{levelId:'test-upper',source:'manual',followToken:false}});
     await command('template.upsert',{template:{id:'upper-rectangle',type:'rectangle',levelId:'test-upper',
-      start:{column:9,row:3},length:4,width:2,rotation:90,anchor:{column:9,row:3},color:'#aa22ff'}},'upper-rectangle');
+      start:{column:9,row:3},length:4,width:2,rotation:90,anchor:{column:9,row:3}}},'upper-rectangle');
     const lower='#vtt-template-layer [data-template-id="lower-circle"]';
     const upper='#vtt-template-layer [data-template-id="upper-circle"]';
     await gm.locator(lower).waitFor();await pc.locator(upper).waitFor();await pc.locator(lower).waitFor();
@@ -43,10 +43,27 @@ const origin='http://127.0.0.1:8129';
     assert.ok(Math.abs(rectangleStyles.width-128)<1e-8);assert.equal(rectangleStyles.height,256);
     assert.equal(rectangleStyles.rotation,'90deg');assert.equal(rectangleStyles.label,'4.0 × 2.0');
     const before=await snapshot();
+    const describe=nodes=>nodes.map(node=>({id:node.dataset.previewTemplateId||node.dataset.templateId,
+      left:node.style.left,top:node.style.top,width:node.style.width,height:node.style.height,mask:node.style.maskImage,
+      color:node.style.getPropertyValue('--vtt-template-color'),rotation:node.style.getPropertyValue('--vtt-rect-rotation'),
+      label:node.querySelector('.vtt-template__label')?.textContent})).sort((a,b)=>a.id.localeCompare(b.id));
+    const actual=await pc.locator('#vtt-template-layer > [data-template-id]').evaluateAll(describe);
+    const writes=[];gm.on('request',r=>{if(r.method()!=='GET'&&r.url().includes('/api/v2/commands.php'))writes.push(r.url());});
+    await gm.locator('[data-settings-launch="scenes"]').click();
+    const panel=gm.locator('[data-player-preview]');await panel.locator('summary').click();
+    await panel.locator('[data-preview-status]').filter({hasText:'captured'}).waitFor();
+    await panel.locator('select').selectOption('sharon');await panel.locator('[data-preview-details]').filter({hasText:'Test balcony'}).waitFor();
+    await panel.getByRole('button',{name:'View map and fog'}).click();
+    const dialog=gm.locator('.vtt-player-preview-dialog');await dialog.locator('[data-preview-template-id="upper-rectangle"]').waitFor();
+    assert.deepEqual(await dialog.locator('[data-preview-template-id]').evaluateAll(describe),actual);
+    assert.equal(await dialog.locator('[data-template-id]').count(),0);
+    await dialog.screenshot({path:'.playwright-mcp/player-area-template-preview.png'});
+    await dialog.getByRole('button',{name:'Close preview'}).click();assert.deepEqual(writes,[]);
     await pc.reload();await pc.waitForFunction(()=>document.querySelector('[data-connection-status]')?.textContent.includes('Connected'));
     await pc.locator(lower).waitFor();
     assert.match(await pc.locator(lower).evaluate(node=>node.style.maskImage),/data:image\/svg\+xml/);
     await rectangle.waitFor();assert.equal(await rectangle.evaluate(node=>node.style.getPropertyValue('--vtt-rect-rotation')),'90deg');
+    assert.deepEqual(await pc.locator('#vtt-template-layer > [data-template-id]').evaluateAll(describe),actual,'Fallback colors and geometry survive reload');
     assert.deepEqual(await snapshot(),before);assert.deepEqual(errors,[]);
     console.log('PASS: actual GM/player templates retain same-floor, above-floor and cutout-clipped behavior across reload.');
   } finally {await browser.close();}
