@@ -8155,6 +8155,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       updateSceneMeta(activeSceneFromState());
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+      renderPersistentZoneOverlays();
       templateTool.notifyMapState();
     };
     const handleMapImageError = () => {

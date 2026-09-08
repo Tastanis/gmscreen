@@ -789,6 +789,7 @@ final class SyncV2Store
                     );
                     $config['mapLevels'] = $payload['mapLevels'];
                     foreach ($mutations as $mutation) {
+                        if (!in_array('levelId', $mutation['changedFields'], true)) continue;
                         $userId = $this->uniqueLinkedPlayerForPlacement($state['placements'][$sceneId], $mutation['placementId']);
                         if ($userId !== null && ($config['userLevelState'][$userId]['followToken'] ?? true) !== false) $config['userLevelState'][$userId] = $this->preserveFloorFollowPreference(['levelId'=>$mutation['placement']['levelId'],
                             'source'=>'token', 'tokenId'=>$mutation['placementId'], 'updatedAt'=>$this->nowMilliseconds()], $config['userLevelState'][$userId] ?? []);
@@ -2064,23 +2065,42 @@ final class SyncV2Store
         $old = FloorGeometry::orderedLevels($before);
         $remaining = array_column(FloorGeometry::orderedLevels($after), null, 'id');
         $oldIds = array_column($old, 'id');
+        $removed = array_fill_keys(array_values(array_diff($oldIds, array_keys($remaining))), true);
         $mutations = [];
         foreach (($state['placements'][$sceneId] ?? []) as $id => $placement) {
-            $levelId = $placement['levelId'] ?? FloorGeometry::BASE;
-            $index = array_search($levelId, $oldIds, true);
-            if ($index === false || isset($remaining[$levelId])) continue;
-            $destination = FloorGeometry::BASE;
-            for ($i = $index - 1; $i > 0; $i--) {
-                $candidate = $remaining[$old[$i]['id']] ?? null;
-                if ($candidate && ($candidate['hidden'] ?? false) !== true && !FloorGeometry::fullyUnsupported($placement, $candidate)) {
-                    $destination = $candidate['id']; break;
+            $next = $placement;
+            $changedFields = [];
+            if (is_array($placement['persistentZones'] ?? null)) {
+                $zones = array_values(array_filter($placement['persistentZones'], static function ($zone) use ($removed): bool {
+                    if (!is_array($zone)) return true;
+                    $zoneLevel = $zone['levelId'] ?? $zone['template']['levelId'] ?? FloorGeometry::BASE;
+                    return !is_string($zoneLevel) || !isset($removed[trim($zoneLevel)]);
+                }));
+                if (count($zones) !== count($placement['persistentZones'])) {
+                    $next['persistentZones'] = $zones === [] ? null : $zones;
+                    $changedFields[] = 'persistentZones';
                 }
             }
-            $next = [...$placement, 'levelId'=>$destination, '_floorTraversal'=>null, '_movementUndo'=>[],
-                '_entityRevision'=>max(0, (int) ($placement['_entityRevision'] ?? 0)) + 1];
+            $levelId = $placement['levelId'] ?? FloorGeometry::BASE;
+            $index = array_search($levelId, $oldIds, true);
+            if ($index !== false && !isset($remaining[$levelId])) {
+                $destination = FloorGeometry::BASE;
+                for ($i = $index - 1; $i > 0; $i--) {
+                    $candidate = $remaining[$old[$i]['id']] ?? null;
+                    if ($candidate && ($candidate['hidden'] ?? false) !== true && !FloorGeometry::fullyUnsupported($placement, $candidate)) {
+                        $destination = $candidate['id']; break;
+                    }
+                }
+                $next['levelId'] = $destination;
+                $next['_floorTraversal'] = null;
+                $next['_movementUndo'] = [];
+                array_push($changedFields, 'levelId', '_floorTraversal', '_movementUndo');
+            }
+            if ($changedFields === []) continue;
+            $next['_entityRevision'] = max(0, (int) ($placement['_entityRevision'] ?? 0)) + 1;
             $state['placements'][$sceneId][$id] = $next;
             $mutations[] = ['kind'=>'upsert', 'sceneId'=>$sceneId, 'placementId'=>(string) $id, 'placement'=>$next,
-                'entityRevision'=>$next['_entityRevision'], 'changedFields'=>['levelId','_floorTraversal','_movementUndo'],
+                'entityRevision'=>$next['_entityRevision'], 'changedFields'=>$changedFields,
                 'wasPlayerVisible'=>!$this->placementIsHidden($placement)];
         }
         return $mutations;

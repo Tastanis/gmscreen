@@ -572,5 +572,6 @@ Legacy zones with no stored floor resolve to `level-0`, independently of caster
 movement. Wall zones use footprint rectangle intersections, so partial fractional
 overlap counts while edge-only contact does not. Display and preview filter player
 zones by floor and clip lower-floor footprints through cutouts. GM overview stays
-unmasked. The preview has no zone-ending controls. Deleted-floor lifecycle remains
-pending.
+unmasked. The preview has no zone-ending controls. Deleting a floor ends its zones
+atomically, including zones owned by casters on another floor, and preserves zones
+on surviving floors. Cleanup does not execute zone ticks or walking triggers.

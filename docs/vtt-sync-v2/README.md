@@ -1091,5 +1091,7 @@ result supplies levelId, registration preserves it, and occupancy/entry compare
 floors through persistent-zone-geometry.js. No whole-board writer or new sync
 command is introduced; zone records remain inside their owning placement's V2
 update. Legacy missing floor data resolves to level-0. Rendering and preview use
-that saved floor. Deleted-floor cleanup remains outstanding and must not infer
-zone floor from a moving caster.
+that saved floor. Floor deletion removes deleted-floor zones from all owning
+placements atomically with relocations. Each affected placement advances once;
+zone-only mutations do not trigger linked-view changes. Retained zones repaint
+after map-image load on recovery. Never infer zone floor from a moving caster.

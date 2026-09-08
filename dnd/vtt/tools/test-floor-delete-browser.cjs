@@ -63,6 +63,22 @@ if (!['localhost', '127.0.0.1', '[::1]'].includes(new URL(origin).hostname)) thr
     }
     await seed('fog.set', null, { fogOfWar: { byLevel: { 'test-upper': { enabled: false }, 'level-0': { enabled: false } } } });
     await pc.page.locator('[data-template-id="delete-template-upper"]').waitFor();
+    const zoneIds=await gm.page.evaluate(async()=>{
+      const ids=[];
+      for(const levelId of ['test-upper','level-0']) {
+        const result=await new Promise(resolve=>document.dispatchEvent(new CustomEvent('vtt:automation-register-persistent-zone',{detail:{resolve,payload:{
+          casterId:'floor-cal',abilityName:'Delete floor zone '+levelId,effects:[],
+          area:{template:{column:2,row:5,width:2,height:2,levelId}},
+        }}})));
+        ids.push(result.zoneId);
+        await new Promise(resolve=>setTimeout(resolve,150));
+      }
+      return ids;
+    });
+    await gm.page.waitForFunction(async({sceneId,ids})=>{
+      const s=(await(await fetch('/dnd/vtt/api/v2/snapshot.php')).json()).snapshot;
+      return ids.every(id=>s.state.placements[sceneId]['floor-cal'].persistentZones?.some(z=>z.id===id));
+    },{sceneId:manifest.test_scene_id,ids:zoneIds});
     await other.context.setOffline(true);
     await gm.page.locator('[data-settings-launch="scenes"]').click();
     const remove = gm.page.locator('[data-action="delete-map-level"][data-map-level-id="test-upper"]');
@@ -78,6 +94,8 @@ if (!['localhost', '127.0.0.1', '[::1]'].includes(new URL(origin).hostname)) thr
     for (const { page } of [gm, pc]) await page.waitForFunction(selector => document.querySelector(selector)?.dataset.mapLevelId === 'level-0', selector);
     const after = await snapshot();
     assert.equal(after.revision, beforeDelete.revision + 1);
+    assert.deepEqual(after.state.placements[manifest.test_scene_id]['floor-cal'].persistentZones.map(z=>z.id),[zoneIds[1]],'Floor deletion removes its zone and retains the base-floor zone atomically');
+    await pc.page.waitForFunction(id=>!document.querySelector(`[data-zone-id="${id}"]`),zoneIds[0]);
     assert.equal(after.state.placements[manifest.test_scene_id]['floor-cal'].row, 5);
     assert.deepEqual(after.state.placements[manifest.test_scene_id]['floor-cal']._movementUndo, []);
     assert.equal(after.state.sceneConfig[manifest.test_scene_id].userLevelState.cal.levelId, 'level-0');
@@ -94,6 +112,8 @@ if (!['localhost', '127.0.0.1', '[::1]'].includes(new URL(origin).hostname)) thr
     await remove.waitFor({ state: 'detached' });
     await other.context.setOffline(false); await other.page.reload();
     await other.page.waitForFunction(selector => document.querySelector(selector)?.dataset.mapLevelId === 'level-0', selector);
+    await other.page.locator(`[data-zone-id="${zoneIds[1]}"]`).waitFor();
+    assert.equal(await other.page.locator(`[data-zone-id="${zoneIds[0]}"]`).count(),0,'Offline recovery retains the base zone and removes the deleted-floor zone');
     assert.deepEqual(deleteCalls, ['level.delete'], 'Deletion must not send separate token or viewer saves.');
     assert.equal(await pc.page.evaluate(() => window.testMovementEvents.length), 1, 'Deletion cannot emit another walking hook.');
     assert.deepEqual(errors, []);

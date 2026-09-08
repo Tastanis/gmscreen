@@ -359,11 +359,11 @@ export function renderSceneList(routes, store) {
       const confirmed = window.UIKit
         ? await window.UIKit.confirm({
           title: 'Delete Map Level',
-          message: 'Delete this map level? Its tokens move to supported visible floors below, or Level 0. Its drawings, templates, and fog are removed; stairs pointing here are disconnected. This cannot be undone.',
+          message: 'Delete this map level? Its tokens move to supported visible floors below, or Level 0. Its drawings, templates, and fog are removed; persistent zones on this floor end, and stairs pointing here are disconnected. This cannot be undone.',
           confirmText: 'Delete',
           danger: true,
         })
-        : window.confirm('Delete this map level? Its tokens move to supported visible floors below, or Level 0. Its drawings, templates, and fog are removed; stairs pointing here are disconnected. This cannot be undone.');
+        : window.confirm('Delete this map level? Its tokens move to supported visible floors below, or Level 0. Its drawings, templates, and fog are removed; persistent zones on this floor end, and stairs pointing here are disconnected. This cannot be undone.');
       if (!confirmed) {
         return;
       }

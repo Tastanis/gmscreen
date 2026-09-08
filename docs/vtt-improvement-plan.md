@@ -1124,3 +1124,21 @@ parity. Persistent-zone controls/parity were separately exercised in the prior
 milestone; its test uses the renamed button. Full suite: 722 tests/92 files passed.
 The broader roadmap remains active, including zone deletion/trigger recovery,
 preparation tools, terrain and physical-height rules.
+
+### Atomic zone cleanup when deleting floors
+
+Floor deletion and levels.set removal now end zones on deleted floors regardless
+of their caster's current floor. Zone cleanup merges with token relocation into
+one placement mutation and one revision increment per affected owner, inside the
+existing floor transaction. Surviving-floor and legacy base-floor zones remain.
+Zone-only mutations do not manufacture or change linked player views. The delete
+confirmation explicitly explains that floor zones end.
+
+Server tests cover remote casters, legacy zones, combined relocation/cleanup,
+unchanged linked views and idempotent retries. The GM/two-player browser journey
+covers stairs, confirmed deletion, one command/revision, zone removal, retained
+base-zone visibility, disconnected-player recovery and no new walking hooks.
+A stronger recovery assertion exposed zones staying hidden when their first render
+preceded image loading; the map-load callback now repaints them. Browser QA passed
+after that fix. Full suite before the focused map-load fix: 722 tests/92 files
+passed; the final browser journey verifies the added map-load path.

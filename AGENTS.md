@@ -37,8 +37,11 @@ caster's current floor. Occupancy/entry checks use persistent-zone-geometry.js,
 including fractional wall-square overlap. Movement snapshots must retain levelId.
 Zone rendering uses persistent-zone-renderer.js with explicit floors and view
 metrics. Players get floor filtering/cutout masks; GM overview remains unmasked.
-Preview has private zone/caster IDs and no End controls. Deleted-floor lifecycle
-and full zone trigger browser journeys still need completion.
+Preview has private zone/caster IDs and no End controls. Floor deletion removes
+zones on deleted floors from every owning placement in the same transaction,
+advancing each owner once. Zone-only mutations must not change linked player views.
+Repaint zones after map-image loading so recovery cannot leave retained zones hidden.
+Full zone trigger browser journeys still need completion.
 Passive drawings call renderDrawings with an explicit drawingLayer and floor;
 never mount or replace the active drawing tool's shared state for preview.
 Template floor visibility and SVG cutout masks live in template-presentation.js.

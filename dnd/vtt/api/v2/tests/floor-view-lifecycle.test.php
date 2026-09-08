@@ -38,8 +38,11 @@ try {
     verifyView($after['state']['placements']['scene']['hero']['levelId'] === 'level-0', 'Deleting all floors relocates remaining tokens atomically.');
     $store = new SyncV2Store($database, 'support-world');
     $board = ['placements'=>['scene'=>[
-        ['id'=>'hero','profileId'=>'cal','team'=>'ally','column'=>2,'row'=>2,'width'=>1,'height'=>1,'levelId'=>'top','stamina'=>7],
+        ['id'=>'hero','profileId'=>'cal','team'=>'ally','column'=>2,'row'=>2,'width'=>1,'height'=>1,'levelId'=>'top','stamina'=>7,
+            'persistentZones'=>[['id'=>'top-zone','levelId'=>'top'],['id'=>'legacy-zone']]],
         ['id'=>'large','column'=>2,'row'=>2,'width'=>2,'height'=>2,'levelId'=>'top'],
+        ['id'=>'remote-caster','profileId'=>'sharon','team'=>'ally','column'=>9,'row'=>9,'levelId'=>'level-0',
+            'persistentZones'=>[['id'=>'remote-top-zone','template'=>['levelId'=>'top']],['id'=>'lower-zone','levelId'=>'lower']]],
     ]], 'sceneState'=>['scene'=>['mapLevels'=>['levels'=>[
         ['id'=>'lower','zIndex'=>0,'cutouts'=>[['column'=>2,'row'=>2,'width'=>1,'height'=>1]]],
         ['id'=>'secret','zIndex'=>1,'hidden'=>true], ['id'=>'top','zIndex'=>2],
@@ -57,7 +60,13 @@ try {
         'baseRevision'=>$before['revision'],'entityRevision'=>$before['state']['sceneConfig']['scene']['_revision'],
         'payload'=>['levelId'=>'top']];
     $result = $store->acceptBoardDomainCommand($delete, 'GM', true); $after = $store->getSnapshot();
-    verifyView($after['revision'] === $before['revision'] + 1 && count($result['event']['payload']['mutations']) === 2, 'Deletion and all token moves share one event.');
+    verifyView($after['revision'] === $before['revision'] + 1 && count($result['event']['payload']['mutations']) === 3, 'Deletion, token moves and remote zone cleanup share one event.');
+    verifyView(array_column($after['state']['placements']['scene']['hero']['persistentZones'],'id') === ['legacy-zone'], 'Relocated caster loses only zones on the deleted floor.');
+    verifyView(array_column($after['state']['placements']['scene']['remote-caster']['persistentZones'],'id') === ['lower-zone'], 'Caster on another floor loses deleted-floor zones too.');
+    verifyView(!isset($after['state']['sceneConfig']['scene']['userLevelState']['sharon']), 'Zone-only cleanup does not manufacture a linked player view.');
+    foreach (['hero','remote-caster'] as $id) verifyView($after['state']['placements']['scene'][$id]['_entityRevision'] === $before['state']['placements']['scene'][$id]['_entityRevision'] + 1, 'Each affected placement advances once.');
+    $remoteMutation = array_values(array_filter($result['event']['payload']['mutations'], static fn($m) => $m['placementId'] === 'remote-caster'))[0];
+    verifyView($remoteMutation['changedFields'] === ['persistentZones'], 'Remote caster publishes a zone-only mutation.');
     verifyView($after['state']['placements']['scene']['hero']['levelId'] === 'level-0', 'Small token falls through the lower hole and skips hidden floors.');
     verifyView($after['state']['placements']['scene']['large']['levelId'] === 'lower', 'Partial support catches a large token.');
     verifyView($after['state']['placements']['scene']['hero']['stamina'] === 7, 'Relocation preserves current resources.');
