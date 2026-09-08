@@ -819,3 +819,17 @@ injected event-write failure, and accepted retries after checkpoint deletion. Th
 actual JS reducer reproduces the committed state. The HTTP/UI preview/apply workflow
 and canonical grid persistence on scene reopening remain to be completed.
 All 703 tests across 83 files pass after this change.
+
+### Canonical grid display and reopening
+
+Scene activation previously copied the catalog grid over the canonical scene grid;
+remote grid updates also left the active rendering grid stale. Existing scenes now
+use their Sync V2 grid, with catalog metadata only as a fallback. Snapshot recovery
+and grid/routing events refresh the active grid before rendering floor content.
+
+The browser regression deliberately leaves the catalog grid stale, changes the
+canonical grid, checks the displayed size in GM/Cal/Sharon, reloads all three,
+switches the GM to another scene and back, and verifies the size and original token
+coordinates. This closes the grid persistence gate for checkpoint layout restore.
+The checkpoint layout HTTP/UI workflow remains pending.
+All 703 tests across 83 files pass after the grid correction.

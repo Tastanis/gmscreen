@@ -15,7 +15,9 @@ linked following and saved viewer-floor repair preserve Browse preferences.
 `scene.layoutRestored` replaces only those four owned domains with advancing
 revisions, is player-projected like snapshots, and uses focused renderer flags.
 Strict reviewed world revisions reject stale previews; accepted retries survive
-checkpoint archive deletion. HTTP/UI wiring and reopened-grid QA remain pending.
+checkpoint archive deletion. HTTP/UI wiring remains pending. Reopened-grid QA now
+passes: existing canonical scene grids win over catalog metadata on activation,
+and recovery/live grid or routing events update the active rendering grid.
 
 Scene import authority now has an internal `installScenePackage` transaction:
 one `scene.installed` event adds the four new scene domains without touching routing

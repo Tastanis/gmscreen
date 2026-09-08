@@ -27,8 +27,11 @@ variables and verify settled GM/player panels at 1280×720 in light/dark/Diablo.
 Checkpoint layout restore has an internal reviewed-revision transaction and pure
 plan in `SceneCheckpointRestore::planLayout`. It preserves current token resources,
 conditions and newer tokens, with explicit unsupported/missing-floor relocations.
-HTTP/UI apply is not wired yet; verify canonical grid behavior on scene reopening
-before exposing it. This is scene layout recovery, not a character-sheet backup.
+HTTP/UI apply is not wired yet. Canonical grid behavior on scene reopening is now
+browser-verified. This is scene layout recovery, not a character-sheet backup.
+Existing scene grids come from Sync V2 sceneConfig; catalog grid is only a fallback
+for scenes without canonical configuration. Recovery and grid/routing events must
+synchronize the active grid used by rendering, including other clients.
 
 ## Version System
 

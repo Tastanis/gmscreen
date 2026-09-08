@@ -61,7 +61,9 @@ export function renderSceneList(routes, store) {
       if (!draft.grid || typeof draft.grid !== 'object') {
         draft.grid = normalizeGridConfig({});
       }
-      const sceneGrid = normalizeGridConfig(scene.grid ?? {});
+      // Sync V2 owns an existing scene's grid. Catalog grid is the fallback
+      // for scenes which have never acquired canonical board configuration.
+      const sceneGrid = normalizeGridConfig(boardDraft.sceneState?.[scene.id]?.grid ?? scene.grid ?? {});
       draft.grid = { ...draft.grid, ...sceneGrid };
       if (boardDraft.sceneState && boardDraft.sceneState[scene.id]) {
         boardDraft.sceneState[scene.id].grid = sceneGrid;

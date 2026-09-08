@@ -874,11 +874,18 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  function syncConfirmedSceneGrid(draft, snapshot) {
+    const sceneId = draft.boardState?.activeSceneId;
+    const config = snapshot?.state?.sceneConfig?.[sceneId];
+    if (config && Object.hasOwn(config, 'grid')) draft.grid = normalizeGridState(config.grid ?? {});
+  }
+
   function reconcileTokenMovementSnapshot(snapshot, context = {}) {
     applyConfirmedRequestedTests(snapshot);
     boardApi.updateStateSilently?.((draft) => {
       if (placementsV2Enabled) {
         tokenMovementRuntime?.overlayBoardState(draft.boardState);
+        syncConfirmedSceneGrid(draft, snapshot);
         return;
       }
       for (const [sceneId, canonicalPlacements] of Object.entries(
@@ -907,6 +914,7 @@ export function mountBoardInteractions(store, routes = {}) {
       renderPersistentZoneOverlays();
     }
     if (activeSceneId) {
+      if (gridV2Enabled) applyGridState(boardApi.getState?.()?.grid ?? {});
       syncMapLevelsForState(boardApi.getState?.() ?? {}, activeSceneId);
     }
     if (drawingsV2Enabled) {
@@ -1176,6 +1184,7 @@ export function mountBoardInteractions(store, routes = {}) {
   function applyConfirmedBoardDomain(snapshot, changeSet, context = {}) {
     boardApi.updateStateSilently?.((draft) => {
       tokenMovementRuntime?.overlayBoardState(draft.boardState);
+      if (changeSet.grid || changeSet.sceneRouting) syncConfirmedSceneGrid(draft, snapshot);
     });
     const state = boardApi.getState?.() ?? {};
     const activeSceneId = state.boardState?.activeSceneId ?? null;
