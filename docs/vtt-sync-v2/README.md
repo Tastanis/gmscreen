@@ -782,6 +782,13 @@ An ingestion failure after server acceptance is unconfirmed locally and requires
 reconciliation; it must not be described as a server rejection. This display does
 not persist or retry new commands and is not a second shared-state writer.
 
+Recovery/bootstrap failures emit dedicated diagnostics and carry `syncRecovery`
+on their error objects. The board routes these to connection status instead of
+token-save notices. Connected status requires a recent successful server check;
+the manual check uses the existing recovery stream and never replays a rejected
+command as a new write. External transport readiness alone is not synchronization
+proof.
+
 ### Authoritative floor movement (September 7 follow-up)
 
 `FloorGeometry.php` resolves stair traversal and destination support within the

@@ -79,6 +79,7 @@ import { createTokenMovementRuntime } from '../sync-v2/token-movement-runtime.js
 import { mountMapNavigation } from './map-navigation.js';
 import { floorRelation } from './floor-geometry.js';
 import { mountSaveFeedback, describeSaveFailure } from './save-feedback.js';
+import { mountConnectionStatus } from './connection-status.js';
 import { createRequestedTestCoordinator } from './requested-test-coordinator.js';
 import {
   applyCanonicalPrimaryTokenSelection,
@@ -764,6 +765,9 @@ export function mountBoardInteractions(store, routes = {}) {
   let tokenDropDepth = 0;
   const selectedTokenIds = new Set();
   const saveFeedback = mountSaveFeedback(document.querySelector('[data-save-feedback]'));
+  const connectionStatus = mountConnectionStatus(document.querySelector('[data-connection-status]'), {
+    recover: async () => { await tokenMovementRuntime.start(); await tokenMovementRuntime.recover(); },
+  });
   mountMapNavigation({
     root: document.querySelector('[data-map-navigation-root]'), board, view: viewState,
     applyTransform: () => applyTransform(), report: message => updateStatus(message),
@@ -1242,8 +1246,9 @@ export function mountBoardInteractions(store, routes = {}) {
     applyConfirmedBoardDomain,
     applyConfirmedRequestedTests,
     reconcileSnapshot: reconcileTokenMovementSnapshot,
-    onError: (error) => reportSyncFailure(error, 'token movement'),
+    onError: (error) => { if (!error?.syncRecovery) reportSyncFailure(error, 'token movement'); },
     onDiagnostic: (name, details) => {
+      connectionStatus.update(name, details);
       if (name === 'commandState') saveFeedback.update(details);
       if (name === 'revisionGap') {
         recordSyncDiagnostic('revisionGaps', details);

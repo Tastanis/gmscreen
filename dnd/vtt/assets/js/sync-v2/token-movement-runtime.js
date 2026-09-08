@@ -201,6 +201,8 @@ export function createTokenMovementRuntime({
       return true;
     })().catch((error) => {
       startPromise = null;
+      error.syncRecovery = true;
+      onDiagnostic('bootstrapFailed', { status: error?.status ?? null, reason: error?.message });
       onError(error);
       throw error;
     });

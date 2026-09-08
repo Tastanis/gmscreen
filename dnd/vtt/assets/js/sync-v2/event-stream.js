@@ -125,6 +125,8 @@ export function createEventStream({
       return recovery;
     })()
       .catch((error) => {
+        error.syncRecovery = true;
+        onDiagnostic('recoveryFailed', { status: error?.status ?? null, reason: error?.message });
         onError(error);
         throw error;
       })

@@ -37,6 +37,7 @@ User authorized implementing the September 7 product audit, updating/running the
 ## Recovery and preparation
 
 - [ ] Specific-player preview and useful connection status.
+  - Server-check-based connection status and manual reconciliation are implemented; specific-player preview remains pending.
 - [ ] Named encounter checkpoints, scoped restore, scene duplication/export.
 - [ ] Encounter presets, favorites and recent assets.
 - [ ] Handouts, show-image, and map pins linking existing campaign records.
@@ -194,6 +195,21 @@ The player browser test holds a move pending, rejects it with a synthetic 403,
 verifies the exact reason, accepts a later move, and checks that the original issue
 remains until dismissal. All 681 tests passed across 79 VTT/automation files. The
 shortcut and save-status popovers close one another to avoid obscuring each other.
+
+## Connection status
+
+The map toolbar reports connection state from successful bootstrap/recovery checks,
+browser offline events, and recovery errors. It distinguishes connecting, connected,
+offline, reconnecting, a check older than 15 seconds, expired authentication (401),
+and denied access (403). Its tooltip reports the age of the last successful check.
+Clicking checks/reconciles again without resubmitting rejected changes. Recovery
+errors no longer masquerade as failed token movements in save notices. Repeated
+successful checks do not rewrite the live-region label unless its state changes.
+
+The localhost browser journey verifies real browser offline/online transitions,
+synthetic session rejection, separate save feedback, and manual recovery. All 682
+tests passed across 80 VTT/automation files. This is tab-to-server status, not proof
+that every remote player is connected or that external Pusher delivery was tested.
 
 Validation: 678 tests passed across 77 files. Expanded PHP checks then passed for
 forged/cloned receipts and changed floor geometry. Three-browser floor QA includes
