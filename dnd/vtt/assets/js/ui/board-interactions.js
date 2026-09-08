@@ -20594,6 +20594,7 @@ export function mountBoardInteractions(store, routes = {}) {
           <ul class="vtt-token-settings__automation-aura-list" data-token-settings-automation-aura-list></ul>
         </div>
         ${levelControlsMarkup}
+        ${gmUser ? `<label class="vtt-token-settings__section"><input type="checkbox" data-token-primary-pc /> Primary token for this player<span data-token-primary-profile></span></label>` : ''}
         <div class="vtt-token-settings__section">
           <label class="vtt-token-settings__row">Movement
             <select data-token-movement-mode aria-label="Token movement mode">
@@ -20635,6 +20636,8 @@ export function mountBoardInteractions(store, routes = {}) {
       levelDownButton: element.querySelector('[data-token-settings-level="down"]'),
       levelUpButton: element.querySelector('[data-token-settings-level="up"]'),
       movementMode: element.querySelector('[data-token-movement-mode]'),
+      primaryPc: element.querySelector('[data-token-primary-pc]'),
+      primaryProfile: element.querySelector('[data-token-primary-profile]'),
       auraToggle: element.querySelector('[data-token-settings-toggle="aura"]'),
       auraField: element.querySelector('[data-token-settings-field="aura"]'),
       auraRadiusInput: element.querySelector('[data-token-settings-input="auraRadius"]'),
@@ -20678,6 +20681,28 @@ export function mountBoardInteractions(store, routes = {}) {
 
     menu.levelUpButton?.addEventListener('click', () => {
       handleTokenLevelMoveClick('up');
+    });
+    menu.primaryPc?.addEventListener('change', async () => {
+      const placementId = activeTokenSettingsId;
+      const state = boardApi.getState?.();
+      const sceneId = state?.boardState?.activeSceneId;
+      const placement = getPlacementFromStore(placementId);
+      const profile = getCharacterSheetProfileIdForPlacement(placement);
+      if (!sceneId || !profile) return;
+      const enabled = menu.primaryPc.checked;
+      const ops = [];
+      if (enabled) for (const other of state.boardState.placements?.[sceneId] ?? []) {
+        if (other.id !== placementId && other.primaryPc && getCharacterSheetProfileIdForPlacement(other) === profile) {
+          ops.push({ type: 'placement.update', sceneId, placementId: other.id, patch: { primaryPc: false } });
+        }
+      }
+      ops.push({ type: 'placement.update', sceneId, placementId, patch: { primaryPc: enabled } });
+      menu.primaryPc.disabled = true;
+      try {
+        await tokenMovementRuntime.submitPlacementOps(ops);
+        updateStatus(enabled ? `Primary token selected for ${profile}.` : `Primary token cleared for ${profile}.`);
+      } catch (error) { updateStatus(error?.message || 'Primary token was not saved.'); }
+      finally { syncTokenLevelControls(getPlacementFromStore(activeTokenSettingsId)); }
     });
     menu.movementMode?.addEventListener('change', async () => {
       const placementId = activeTokenSettingsId;
@@ -21499,6 +21524,12 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function syncTokenLevelControls(placement = null) {
+    if (tokenSettingsMenu?.primaryPc) {
+      const profile = getCharacterSheetProfileIdForPlacement(placement);
+      tokenSettingsMenu.primaryPc.checked = placement?.primaryPc === true;
+      tokenSettingsMenu.primaryPc.disabled = !profile;
+      tokenSettingsMenu.primaryProfile.textContent = profile ? ` (${profile})` : ' (link a player profile first)';
+    }
     if (tokenSettingsMenu?.movementMode) tokenSettingsMenu.movementMode.value = placement?.movementMode || 'ground';
     if (!tokenSettingsMenu?.levelSection) {
       return;

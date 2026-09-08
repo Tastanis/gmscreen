@@ -1190,6 +1190,8 @@ final class SyncV2Store
                         return $this->rollbackConflict('placement_exists', $snapshot);
                     }
                     $placement = $action['placement'];
+                    if (isset($placement['primaryPc']) && !is_bool($placement['primaryPc'])) throw new InvalidArgumentException('Primary token flag must be boolean.');
+                    if (!$isGm && !empty($placement['primaryPc'])) throw new InvalidArgumentException('Only the GM may select a primary token.');
                     if (isset($placement['movementMode']) && !in_array($placement['movementMode'], ['ground','fly','hover'], true)) throw new InvalidArgumentException('Unknown movement mode.');
                     if (($placement['movementMode'] ?? '') === 'fly' && FloorGeometry::flightInterrupted($placement)) throw new InvalidArgumentException('Prone or speed-zero conditions prevent ordinary flight.');
                     unset($placement['_movementUndo'], $placement['_floorTraversal']);
@@ -1251,6 +1253,7 @@ final class SyncV2Store
                 }
                 unset($patch['id'], $patch['_entityRevision'], $patch['_movementUndo'], $patch['_floorTraversal']);
                 $next = [...$current, ...$patch];
+                if (isset($next['primaryPc']) && !is_bool($next['primaryPc'])) throw new InvalidArgumentException('Primary token flag must be boolean.');
                 if (($next['movementMode'] ?? 'ground') === 'fly' && FloorGeometry::flightInterrupted($next)) {
                     if (($patch['movementMode'] ?? '') === 'fly') throw new InvalidArgumentException('Prone or speed-zero conditions prevent ordinary flight. Use Hover only when an effect grants it.');
                     $patch['movementMode'] = 'ground'; $next['movementMode'] = 'ground';
@@ -1297,6 +1300,16 @@ final class SyncV2Store
                 ];
             }
 
+            foreach (array_unique(array_column($mutations, 'sceneId')) as $changedSceneId) {
+                $primaryProfiles = [];
+                foreach ($state['placements'][$changedSceneId] ?? [] as $placement) {
+                    if (($placement['primaryPc'] ?? false) !== true) continue;
+                    $profile = $this->linkedPlayerProfileForPlacement($placement);
+                    if ($profile === null) throw new InvalidArgumentException('A primary token must link to a configured player profile.');
+                    if (isset($primaryProfiles[$profile])) throw new InvalidArgumentException('Select only one primary token per player in a scene.');
+                    $primaryProfiles[$profile] = true;
+                }
+            }
             $serverTime = $this->nowMilliseconds();
             $userLevelMutations = [];
             $linkedUpdatesByScene = [];
@@ -2748,6 +2761,11 @@ final class SyncV2Store
         if ($profileId === null) {
             return null;
         }
+        $primaryIds = [];
+        foreach ($placements as $id => $placement) {
+            if (($placement['primaryPc'] ?? false) === true && $this->linkedPlayerProfileForPlacement($placement) === $profileId) $primaryIds[] = $id;
+        }
+        if ($primaryIds !== []) return count($primaryIds) === 1 && $primaryIds[0] === $placementId ? $profileId : null;
         $matchCount = 0;
         foreach ($placements as $placement) {
             if (
@@ -2773,6 +2791,7 @@ final class SyncV2Store
     private function assertPlayerPatchAllowed(array $patch): void
     {
         $gmOnly = [
+            'primaryPc', 'profileId', 'profile', 'playerId', 'player', 'owner', 'controller', 'meta',
             'id', 'hidden', 'isHidden', 'flags', 'levelId', '_floorTraversal', '_movementUndo', 'width', 'height',
             'size', 'stackOrder', 'monster', 'monsterId', 'monsterRef',
             'team', 'name', 'label', 'image', 'imageUrl', 'tokenId',

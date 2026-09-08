@@ -30,6 +30,8 @@ describe('map-level normalization', () => {
       assert.equal(resolvePcTokenForUser({ userId: 'steel-hero', placements: [{id:'s',name:'Steel Hero companion'}] }).placementId, 's');
       assert.equal(resolvePcTokenForUser({ userId: 'cal', placements: [{id:'old',name:'Cal'}] }), null);
       assert.equal(resolvePcTokenForUser({ userId: 'rowan', placements: [...placements, {...placements[0],id:'duplicate'}] }), null);
+      assert.equal(resolvePcTokenForUser({ userId: 'rowan', placements: [...placements, {...placements[0],id:'duplicate',primaryPc:true}] }).placementId, 'duplicate');
+      assert.equal(resolvePcTokenForUser({ userId: 'rowan', placements: [{...placements[0],primaryPc:true}, {...placements[0],id:'duplicate',primaryPc:true}] }), null);
       assert.throws(() => configurePlayerRoster(['gm']));
       assert.throws(() => configurePlayerRoster(['../secret']));
       assert.deepEqual(PLAYER_CHARACTER_USER_IDS, ['rowan', 'steel-hero']);

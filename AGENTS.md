@@ -145,6 +145,9 @@ console.log('Button element:', document.getElementById('import-character-btn'));
   server-only `VTT_PLAYER_ROSTER_PATH` override). Bootstrap configures the client
   before mounting. Roster membership is association, not authentication or token
   ownership; preserve shared allied movement permissions.
+  `primaryPc` selects a GM-managed primary placement per linked profile and scene.
+  Switch old/new flags in one placement batch; server uniqueness validation and
+  profile-field permissions must remain atomic. Player movement remains shared.
 - Character-card temporary stamina currently reflects the saved stamina above
   maximum convention. Capped healing and recovery must preserve existing overflow.
 - Ground/Fly/Hover is explicit token runtime state, not ability-authoring JSON.

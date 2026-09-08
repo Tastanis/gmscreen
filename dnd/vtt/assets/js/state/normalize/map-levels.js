@@ -522,10 +522,12 @@ export function resolvePcTokenForUser({
   const matches = placements.filter(
     (placement) => resolvePlacementLinkedProfileId(placement) === userKey
   );
-  if (matches.length !== 1) {
+  const primary = matches.filter(placement => placement.primaryPc === true);
+  const candidates = primary.length ? primary : matches;
+  if (candidates.length !== 1) {
     return null;
   }
-  const placement = matches[0];
+  const placement = candidates[0];
   const placementLevelId = resolvePlacementLevelId(placement);
   if (!isValidLevelId(placementLevelId)) {
     return null;

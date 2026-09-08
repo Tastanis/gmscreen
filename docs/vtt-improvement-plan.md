@@ -26,7 +26,7 @@ User authorized implementing the September 7 product audit, updating/running the
 - [ ] Explicit view-versus-token controls and follow/browse/center policy.
   - Viewing labels, Show players this floor, reload-preserved explicit views, and My token's floor are implemented. Camera-follow preferences and configurable primary token association remain pending.
 - [ ] Configurable roster and primary token association, preserving shared allied control.
-  - Server-configured profile roster now drives floor following, client profile eligibility, and Show players, including offline profiles. A GM editor and primary-token selection remain pending.
+  - Server-configured profile roster drives floor following, client profile eligibility, and Show players, including offline profiles. GM token settings now select an explicit primary among duplicate PCs. A roster editor, hidden-primary policy, and remaining camera preferences are pending.
 
 ## Faster live play
 
@@ -579,3 +579,19 @@ duplicate ambiguity, validation, and viewer lists. A disposable custom roster
 (`cal`, `sharon`, `rowan`) passed the three-client floor-view browser journey,
 including persisted Show players state for offline Rowan, reload, own-token
 return, and hidden-floor cleanup. No live configuration or campaign data changed.
+
+### Explicit primary PC among duplicates
+
+GM token settings now include a primary-PC checkbox for linked profiles. Switching
+the primary clears the old flag and sets the new one in one canonical transaction.
+The selected copy controls future floor following and My token's floor resolution;
+ordinary allied movement permissions remain shared. Profile/owner/controller fields
+and primary assignment are now GM-only. Ambiguous duplicates still have no implicit
+primary, and server uniqueness validation rejects competing selections atomically.
+
+Validation: the 695-test suite passed after implementation, followed by expanded
+PHP/JS checks for duplicate resolution, switching, permissions, and database reload.
+A three-client browser journey selects and switches actual GM checkboxes, reloads,
+confirms the player cannot see that control, moves the selected duplicate through
+stairs across a reload, and checks the linked player's floor and observer rendering.
+Hidden-primary projection and broader camera policy remain pending.

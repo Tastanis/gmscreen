@@ -897,8 +897,19 @@ the same public IDs and initializes client bindings before any board state or UI
 mounts. Show players includes offline roster members. Character profile eligibility
 and name fallback use the configured client list; duplicate-token ambiguity still
 returns no implicit primary token. Shared allied movement permissions are unchanged.
-Reload clients after changing server configuration. A GM roster editor and explicit
-primary-token selection remain separate pending work.
+Reload clients after changing server configuration. A GM roster editor remains
+pending.
+
+The GM token menu can select `primaryPc` for a linked PC placement. It is runtime
+association metadata, not an ability JSON field or ownership grant. Switching
+copies clears the previous flag and sets the new flag in one placement batch.
+The server rejects duplicate primary flags, invalid types, and unlinked profiles.
+Players cannot change the flag or profile/owner/controller metadata. The resolver
+prefers the single explicit primary, falls back to a unique linked placement, and
+does not choose between ambiguous duplicates. The choice affects subsequent floor
+following and My token's floor; selecting it does not move a token or camera.
+Hidden-primary/view-projection policy still needs explicit coverage before the
+broader association and camera-policy roadmap can be marked complete.
 
 ### Named scene checkpoint archive
 
