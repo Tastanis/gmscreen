@@ -62,7 +62,7 @@ final class SceneDeletionIntegrationTest extends TestCase
         }
     }
 
-    public function testSceneDeletionCleansAllOwnedBoardDataUnderOneServerOperation(): void
+    public function testSceneDeletionUpdatesCatalogAndCanonicalPlacementsWithoutWritingLegacyState(): void
     {
         $this->assertTrue(saveVttJson('scenes.json', [
             'folders' => [],
@@ -105,24 +105,23 @@ final class SceneDeletionIntegrationTest extends TestCase
             'futureServerField' => ['preserve' => true],
         ]));
 
+        $legacyBefore = file_get_contents($this->boardStatePath);
+        $store = vttSyncV2Store();
+        $store->acceptPlacementBatch([
+            'type'=>'placement.batch', 'operationId'=>'scene-delete-seed-' . bin2hex(random_bytes(8)),
+            'baseRevision'=>$store->getSnapshot()['revision'], 'payload'=>['actions'=>[
+                ['kind'=>'add','sceneId'=>'delete-me','placementId'=>'old-token','placement'=>['id'=>'old-token','column'=>0,'row'=>0]],
+                ['kind'=>'add','sceneId'=>'keep-me','placementId'=>'current-token','placement'=>['id'=>'current-token','column'=>0,'row'=>0]],
+            ]],
+        ], 'GM', true);
+        $beforeRevision = $store->getSnapshot()['revision'];
         $version = deleteScene('delete-me', false);
-
-        $this->assertSame(42, $version);
+        $this->assertSame($beforeRevision + 1, $version);
         $scenes = loadVttJson('scenes.json');
         $this->assertSame(['keep-me'], array_column($scenes['scenes'], 'id'));
-
-        $board = loadVttJson('board-state.json');
-        $this->assertSame(42, $board['_version']);
-        foreach (['placements', 'templates', 'drawings', 'sceneState'] as $field) {
-            $this->assertArrayNotHasKey('delete-me', $board[$field]);
-            $this->assertArrayHasKey('keep-me', $board[$field]);
-        }
-        $this->assertSame(['current-ping'], array_column($board['pings'], 'id'));
-        $this->assertNull($board['activeSceneId']);
-        $this->assertNull($board['mapUrl']);
-        $this->assertNull($board['playerActiveSceneId']);
-        $this->assertNull($board['playerMapUrl']);
-        $this->assertNull($board['playerThumbnailUrl']);
-        $this->assertSame(['preserve' => true], $board['futureServerField']);
+        $placements = $store->getSnapshot()['state']['placements'];
+        $this->assertArrayNotHasKey('delete-me', $placements);
+        $this->assertArrayHasKey('current-token', $placements['keep-me']);
+        $this->assertSame($legacyBefore, file_get_contents($this->boardStatePath));
     }
 }

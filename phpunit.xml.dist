@@ -3,6 +3,15 @@
     <testsuites>
         <testsuite name="GM Screen Test Suite">
             <directory>tests</directory>
+            <!-- Retired V1 whole-board tests; canonical behavior is covered by npm test. -->
+            <exclude>tests/FogOfWarNormalizationTest.php</exclude>
+            <exclude>tests/OverlayNormalizationTest.php</exclude>
+            <exclude>tests/PlayerPermissionTest.php</exclude>
+            <exclude>tests/StatePostIntegrationTest.php</exclude>
+            <exclude>tests/GmMarkerPreservationTest.php</exclude>
+            <exclude>tests/GmTokenUnhideTest.php</exclude>
+            <exclude>tests/StateHelpersTest.php</exclude>
+            <exclude>tests/TimestampMergeTest.php</exclude>
         </testsuite>
     </testsuites>
 </phpunit>

@@ -2,6 +2,13 @@
 
 User authorized implementing the September 7 product audit, updating/running the diagnostic pull, and authenticated website access. Preserve live campaign data. All gameplay QA uses disposable localhost copies. The scope is tracked by the active goal; unfinished boxes are not claims of completed work.
 
+## Stopping checkpoint
+
+At the user's request, feature work stops at version 1.19.113 for release review.
+See [the release summary and continuation handoff](vtt-release-handoff-2026-09-08.md)
+for all delivered changes, deployment limits, verification and the resume order.
+The full roadmap below remains open; do not mark the broad goal complete.
+
 ## Safety and testing foundation
 
 - [x] Refresh diagnostic assets using the existing read-only exporter (1,587 files; September 7).
@@ -41,7 +48,7 @@ User authorized implementing the September 7 product audit, updating/running the
 ## Recovery and preparation
 
 - [x] Specific-player preview and useful connection status.
-  - Server-check-based connection status and manual reconciliation are implemented. GM Scenes exposes player diagnostics and an independent map/grid/floor/cutout/fog/token/drawing/circle/rectangle preview with local zoom/Fit. Token status overlays and wall template previews remain pending.
+  - Server-check-based connection status and manual reconciliation are implemented. GM Scenes exposes player diagnostics and an independent map/grid/floor/cutout/fog/token/drawing/circle/rectangle preview with local zoom/Fit. Token status overlays, combat groups, auras, zones and wall template previews are implemented.
 - [x] Named encounter checkpoints, scoped restore, scene duplication/export.
   - GM-only checkpoints expose reviewed atomic position or layout restoration. Layout restores floors, grid, fog, drawings/templates and existing-token positions while preserving current resources and newer tokens. Scene JSON export/import and duplication preserve board geometry and links, survive retries, and open without reload. Character sheets and base-map/catalog metadata are outside checkpoint restore scope.
 - [ ] Encounter presets, favorites and recent assets.

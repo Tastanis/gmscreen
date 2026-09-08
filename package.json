@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "test": "node --test dnd/vtt/assets/js/**/*.test.mjs dnd/character_sheet/ability-automation/**/*.test.mjs",
+    "test": "node dnd/vtt/tools/run-regression-suite.cjs",
     "test:automation-smoke": "node --test dnd/character_sheet/ability-automation/__tests__/automation-smoke.spec.mjs"
   },
   "dependencies": {

@@ -374,3 +374,8 @@ console.log('Button element:', document.getElementById('import-character-btn'));
   never turn that lookup into replay or storage initialization. Missing receipts
   are uncertain. Local reminders are per actor/operation and do not prove later
   ability steps completed. Mark reviewed only removes the browser reminder.
+
+- Release checkpoint 1.19.113: feature development is paused at the user request.
+  Resume from docs/vtt-release-handoff-2026-09-08.md and retain the full roadmap.
+  npm test now runs the checked-in complete VTT/automation suite, including PHP
+  authority checks; do not replace it with shell globs that omit nested tests.
