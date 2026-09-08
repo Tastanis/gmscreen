@@ -23,6 +23,7 @@ User authorized implementing the September 7 product audit, updating/running the
   - Shared floor participation now guards flanking, aura membership, Stand Firm, and opportunity-attack adjacency. High Ground requires confirmation. Physical elevation, openings, and range integration remain pending.
 - [ ] Hidden/deleted floors, partial support, flight, forced movement, stairs interrupted by reload, and undo tests.
 - [ ] Explicit view-versus-token controls and follow/browse/center policy.
+  - Viewing labels, Show players this floor, reload-preserved explicit views, and My token's floor are implemented. Camera-follow preferences and configurable primary token association remain pending.
 - [ ] Configurable roster and primary token association, preserving shared allied control.
 
 ## Faster live play
@@ -349,3 +350,16 @@ the saved stamina/recovery counts while it remains open, confirms, and verifies
 the current saved values receive the heal and deduction. It restores the fixture
 values afterward. These are client refresh guards; server-wide concurrent sheet
 resource updates still use the existing sheet endpoint's authority.
+
+## Explicit floor views
+
+The indicator now says Viewing, the Director's Activate button says Show players
+this floor, and the navigation targets are larger. Players have a My token's floor
+button. Browsing and showing floors change viewer state without moving tokens.
+An explicit manual/Director-shown view is preserved on reload; startup no longer
+overrides it with the linked token's floor. Players can return explicitly, and the
+existing automatic following on token floor transitions remains in effect.
+
+Three-browser QA verifies private Director browsing, showing a floor to both
+players, player reload on that floor, individual return, and byte-equivalent token
+state throughout those actions. The 1280×720 Director layout was inspected.

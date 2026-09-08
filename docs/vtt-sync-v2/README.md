@@ -817,6 +817,11 @@ Floor-changing `token.move` results retain `movementKind` when represented as
 walking only; undo, forced/teleport movement, unrelated patches, and remote replay
 are excluded. The DOM footprints retain source and destination floor IDs.
 
+Startup player-view reconciliation preserves explicit `manual` and `activate`
+viewer entries. My token's floor explicitly submits the existing `level.user.set`
+command for the caller's linked token floor; it does not submit a placement edit.
+Automatic linked-view changes on canonical token floor transitions are unchanged.
+
 The legacy paths being replaced are primarily:
 
 - `dnd/vtt/assets/js/ui/board-interactions.js`

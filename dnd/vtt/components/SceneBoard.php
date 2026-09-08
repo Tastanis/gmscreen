@@ -16,7 +16,7 @@ function renderVttSceneBoard(bool $isGm = false): string
                     aria-hidden="true"
                     aria-live="polite"
                 >
-                    <span class="vtt-board__level-indicator-label">Level:</span>
+                    <span class="vtt-board__level-indicator-label">Viewing:</span>
                     <span class="vtt-board__level-indicator-value" data-map-level-indicator-value>&mdash;</span>
                 </p>
                 <?php if ($isGm): ?>
@@ -51,10 +51,13 @@ function renderVttSceneBoard(bool $isGm = false): string
                         class="vtt-board__level-activate"
                         type="button"
                         data-action="activate-map-level"
-                        aria-label="Pull all players to this level"
-                        title="Pull all players to this level"
-                    >Activate</button>
+                        aria-label="Show players this floor"
+                        title="Show this floor to players without moving their tokens"
+                    >Show players this floor</button>
                 </div>
+                <?php else: ?>
+                <button type="button" class="vtt-board__level-return" data-action="return-token-floor"
+                    title="Return your view to your linked token's floor. This does not move the token.">My token's floor</button>
                 <?php endif; ?>
                 <div class="vtt-board__round-tracker" data-round-tracker hidden>
                     <span class="vtt-board__round-label">Round</span>

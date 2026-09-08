@@ -2338,6 +2338,18 @@ export function mountBoardInteractions(store, routes = {}) {
     event.preventDefault();
     handleMapLevelActivateClick();
   });
+  document.querySelector('[data-action="return-token-floor"]')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const changed = await reconcileCurrentPlayerViewToPcToken({ force: true });
+      updateStatus(changed ? 'Viewing your token’s floor.' : 'Already on your token’s floor, or no unique linked token is available in this scene.');
+    } catch (error) {
+      reportSyncFailure(error, 'return to token floor');
+    } finally {
+      button.disabled = false;
+    }
+  });
 
   if (sceneListContainer) {
     sceneListContainer.addEventListener('click', (event) => {
@@ -8445,7 +8457,7 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
-  async function reconcileCurrentPlayerViewToPcToken() {
+  async function reconcileCurrentPlayerViewToPcToken({ force = false } = {}) {
     if (isGmUser() || !levelsV2Enabled || !boardDomainsV2Enabled) {
       return false;
     }
@@ -8459,6 +8471,8 @@ export function mountBoardInteractions(store, routes = {}) {
       return false;
     }
     const sceneEntry = boardState.sceneState?.[sceneId] ?? null;
+    const viewSource = sceneEntry?.userLevelState?.[userId]?.source;
+    if (!force && (viewSource === 'manual' || viewSource === 'activate')) return false;
     const placements = Array.isArray(boardState.placements?.[sceneId])
       ? boardState.placements[sceneId]
       : [];
