@@ -1440,9 +1440,9 @@ checks reload retains only accepted zones. Full suite: 742 tests/95 files passed
 All zones for one caster expiring at the same boundary are removed with one
 combined placement patch, preserving nonmatching zones. Manual single-zone End
 uses the same helper. Local zone bookkeeping is cleared only after accepted
-persistence. The browser currently observes a second identical transport update
-during turn-start processing; eliminating that duplicate remains outstanding.
-Tick/expiration ordering and interrupted boundary recovery are also separate work.
+persistence. The observed second transport request is a confirmed-conflict retry,
+as established by the follow-up investigation below. Tick/expiration ordering
+and interrupted boundary recovery remain separate work.
 
 The isolated browser test starts an ally turn with two start-of-turn expiration
 zones and one indefinite zone. Every expiration patch removes both matching IDs
@@ -1451,3 +1451,19 @@ transport requests, so this does not establish exactly-once boundary delivery.
 Full suite: 742 tests/95 files passed. A speculative no-op update change did not
 remove the duplicate and was reverted; investigate queued dirty-state derivation
 and boundary delivery next rather than treating the duplicate as resolved.
+
+### Expiration transport investigation: one accepted write
+
+Runtime-only call-stack instrumentation showed exactly one expiration-helper
+invocation and no dirty-state fallback invocation. HTTP capture then established
+that the two requests return 409 and 200: the first is rejected for a revision
+conflict and the existing bounded retry succeeds. This supersedes the earlier
+suggestion that a duplicate accepted expiration or no-op fallback was occurring.
+No production runtime change was needed for that observation.
+
+The browser regression now asserts one accepted expiration, at most one conflict,
+no other response statuses, removal of both matching zones in every attempted
+patch, preservation of the indefinite zone and correct state after reload. It
+passes against a fresh uninstrumented fixture. This proves this controlled
+expiration workflow, not general exactly-once turn automation or safe rebasing of
+every placement field after concurrent edits; those broader requirements remain.

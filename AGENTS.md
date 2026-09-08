@@ -318,3 +318,6 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 
 - Expire all matching zones on one caster with a combined placement patch;
   independent whole-zone-list saves can restore another just-expired zone.
+
+- Count accepted HTTP outcomes when investigating duplicate writes. The expiration
+  regression can show one rejected 409 followed by one successful 200 retry.

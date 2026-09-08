@@ -28,7 +28,15 @@ const origin='http://127.0.0.1:8129';
         area:{template:{column:5,row:0,width:1,height:1,levelId:'level-0'}},
       }}}))),expiresAt);ids.push(result.zoneId);
     }
-    const removals=[];
+    const removals=[],responses=[];
+    page.on('response',response=>{
+      const request=response.request();
+      if(!request.url().endsWith('/commands.php')||request.method()!=='POST')return;
+      const data=request.postDataJSON();
+      if(data.payload?.actions?.some(action=>Object.hasOwn(action.patch || {},'persistentZones'))) {
+        responses.push({operationId:data.operationId,status:response.status()});
+      }
+    });
     page.on('request',request=>{
       if(!request.url().endsWith('/commands.php')||request.method()!=='POST')return;
       const data=request.postDataJSON();
@@ -43,7 +51,11 @@ const origin='http://127.0.0.1:8129';
       assert.equal(actions.length,1);
       assert.deepEqual(actions[0].patch.persistentZones.map(zone=>zone.id),[ids[2]],'Each expiration update removes both matching zones together');
     }
-    console.log('Expiration transport requests:',removals.length);
+    await until(async()=>responses.length===removals.length);
+    assert.equal(responses.filter(response=>response.status===200).length,1,'Only one expiration command is accepted');
+    assert.ok(responses.every(response=>[200,409].includes(response.status)));
+    assert.ok(responses.filter(response=>response.status===409).length<=1,'Only one confirmed conflict retry is allowed');
+    console.log('Expiration HTTP outcomes:',responses.map(response=>response.status).join(', '));
     await page.reload();await page.waitForFunction(()=>document.querySelector('[data-connection-status]')?.textContent.includes('Connected'));
     assert.deepEqual((await tokenState()).persistentZones.map(zone=>zone.id),[ids[2]]);
     assert.deepEqual(errors,[]);
