@@ -204,3 +204,7 @@ never initializes missing storage. A recorded payment does not prove later
 healing or zone steps completed; the panel explicitly preserves that boundary.
 Confirmed writes leave the journal, so multi-step interruption after confirmation
 still needs a separate action lifecycle. No ability JSON fields changed.
+
+A late acknowledgement after the confirmation deadline does not remove its
+interrupted-action reminder; the caller already failed and later ability steps
+may not have run. Use read-only receipt review to reconcile that outcome.

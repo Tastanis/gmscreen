@@ -3,7 +3,7 @@
 ## Current decision
 
 Stop feature development at this checkpoint at the user's request. Version
-1.19.113, build 357. This is a tested code checkpoint suitable for a controlled
+1.19.114, build 358. This is a tested code checkpoint suitable for a controlled
 upload to the existing site; it is not a claim that every roadmap item or live
 production integration is complete. The user authorized committing and pushing.
 No production gameplay data was changed during testing.
@@ -94,7 +94,7 @@ active goal continuation after this requested stopping point.
   an empty site. New files must be uploaded as well as modified files. Keep any
   existing server-edited player-roster.json; the supplied file is the default roster.
 - Deploy PHP and JS together, with all VTT tabs closed; then hard-refresh/reopen.
-  Mixed old/new assets are not a supported test state. Confirm version 1.19.113.
+  Mixed old/new assets are not a supported test state. Confirm version 1.19.114.
 - PHP 8.1+ with pdo_sqlite is required; production PHP/version/extensions were not
   queried here. The server account needs write/rename permissions for character
   data and VTT storage; atomic JSON files are created in the destination directory.
@@ -113,7 +113,7 @@ active goal continuation after this requested stopping point.
 
 ## Verification at the checkpoint
 
-- npm test: 758 passed across 100 files, including PHP/SQLite authority scenarios.
+- npm test: 759 passed across 100 files, including PHP/SQLite authority scenarios.
 - PHPUnit in a disposable application: 62 tests, 182 assertions passed.
 - Syntax checks: all 50 PHP files changed since baseline passed.
 - Diagnostic Python tooling: 3 tests passed.
@@ -269,3 +269,7 @@ release-checkpoint cleanup (104 commits):
 - `0bf576e` Save character changes atomically with surge receipts
 - `850b899` Persist resource and recovery spend outcomes
 - `3b57116` Add read-only review for interrupted character writes
+
+Final release hardening: a response arriving after the character-write timeout
+can no longer clear the interrupted-action reminder. A dedicated late-body
+regression verifies the reminder remains unconfirmed for manual review.

@@ -38,3 +38,16 @@ test('surge writes require their exact durable receipt and expose uncertain oper
   }}),error=>error.operationId===operationId && /timed out/.test(error.message));
   assert.equal(calls,1);
 });
+
+
+test('late acknowledgement after timeout retains the interrupted-action reminder',async()=>{
+ const {confirmCharacterWrite}=await import('../character-write.js');
+ const events=[];let release;
+ const operationId='late-response-0001';
+ await assert.rejects(confirmCharacterWrite('/sheet','sync-surges',{character:'cal',delta:1},{operationId,timeoutMs:10,
+  journalOverride:{begin:()=>events.push('pending'),fail:()=>events.push('unconfirmed'),complete:()=>events.push('removed')},
+  fetchImpl:async()=>({ok:true,json:()=>new Promise(resolve=>{release=resolve;})}),
+ }),/timed out/);
+ release({success:true,operationId,surges:1});await new Promise(resolve=>setTimeout(resolve,0));
+ assert.deepEqual(events,['pending','unconfirmed']);
+});

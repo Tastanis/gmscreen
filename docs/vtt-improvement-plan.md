@@ -4,7 +4,7 @@ User authorized implementing the September 7 product audit, updating/running the
 
 ## Stopping checkpoint
 
-At the user's request, feature work stops at version 1.19.113 for release review.
+At the user's request, feature work stops at version 1.19.114 for release review.
 See [the release summary and continuation handoff](vtt-release-handoff-2026-09-08.md)
 for all delivered changes, deployment limits, verification and the resume order.
 The full roadmap below remains open; do not mark the broad goal complete.
@@ -1752,3 +1752,9 @@ The disposable PHP server was stopped. No live writes or deployment.
 Remaining action recovery includes multi-step effects after a confirmed character
 write, broader legacy writers, cross-device oversight and board/sheet reconciliation.
 This panel does not claim an entire ability finished merely because its payment did.
+
+Final release hardening: a response arriving after the character-write timeout
+can no longer clear the interrupted-action reminder. A dedicated late-body
+regression verifies the reminder remains unconfirmed for manual review.
+
+Final checkpoint validation: npm test passed 759 tests across 100 files.
