@@ -16,7 +16,7 @@ association. Its map/fog dialog renders grid, floor maps/cutouts and player fog 
 an independent passive surface. Tokens now use shared floor/fog visibility,
 stacking, transforms and direction badges. Fractional render positions survive
 recovery/reload; backdrop padding remains part of the coordinate origin. Preview
-token status overlays and templates remain pending. Drawing paths reuse the normal
+token status overlays remain pending. Drawing paths reuse the normal
 renderer with an explicit private SVG layer and selected floor. Local preview zoom
 and Fit never write canonical camera, scene or floor state.
 Template floor visibility and cutout masking are extracted into the shared
@@ -25,7 +25,8 @@ The passive path does not mount template editing tools.
 Circle/rectangle geometry and labels use a shared passive area painter in the
 normal board and preview. Saved-template normalization, snapping and clamping use
 independent template-geometry contexts. Preview areas match player bounds, labels,
-rotation, colors and cutout masks. Wall preview painting remains pending.
+rotation, colors and cutout masks. Walls use the shared passive wall painter for
+tiles, diagonal joins and labels, with the same floor masks as the player board.
 
 A GM-only `checkpoint.restoreLayout` authority now plans and atomically restores
 one scene's floors, canonical grid, fog, drawings/templates and existing token

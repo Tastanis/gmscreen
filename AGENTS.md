@@ -4,7 +4,7 @@ Player preview uses the GM-only read-only `api/v2/player-preview.php?user=...`
 endpoint and the same snapshot projection as the actual player. Never impersonate
 the player session or touch their presence. GM Scenes has read-only Player view
 details and a map/grid/floor/cutout/fog/token/drawing dialog with local zoom/Fit.
-Token status overlays and wall templates remain pending. Never label server-visible
+Token status overlays remain pending. Never label server-visible
 token data as on-screen visibility without applying the client geometry and fog.
 `renderFogSurface` paints an independent canvas with explicit scene/floor/viewer
 inputs. Use it for passive preview rather than remounting the singleton fog tool,
@@ -25,7 +25,8 @@ passive rendering. Selection cleanup remains in the interactive template tool.
 Circle/rectangle CSS geometry and anchor placement use paintTemplateArea in
 template-area-renderer.js. Normalization, snapping and bounds use independent
 createTemplateGeometry contexts with explicit view getters. Preview areas use
-these same functions; wall painting and editing still belong to the template tool.
+these same functions. Wall tiles, diagonal joins and labels use paintWallTemplate
+in template-wall-renderer.js; editing remains in the interactive template tool.
 Hydration resets fallback palette order so templates without explicit colors
 remain deterministic across canonical refreshes and player preview.
 

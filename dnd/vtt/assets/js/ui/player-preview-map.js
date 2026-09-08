@@ -34,7 +34,7 @@ export async function createPlayerPreviewMap(preview, {levelId, tokens} = {}) {
   const width=image.naturalWidth+insets.left+insets.right,height=image.naturalHeight+insets.top+insets.bottom;
   const config=canonical.sceneConfig?.[sceneId] ?? {};
   const grid=normalizeGridState(config.grid);
-  const view={mapPixelSize:{width,height},gridSize:grid.size,
+  const view={mapLoaded:true,mapPixelSize:{width,height},gridSize:grid.size,
     gridOrigin:{x:grid.offsetX,y:grid.offsetY},
     mapInsets:insets,
     gridOffsets:{top:insets.top+grid.offsetY,left:insets.left+grid.offsetX,right:insets.right,bottom:insets.bottom}};

@@ -995,3 +995,16 @@ colors and masks directly with the player board, then verifies reload parity and
 zero preview commands or canonical changes. The preview was visually inspected.
 Wall template painting and token status overlays remain outstanding.
 Full regression suite: 716 tests across 89 files passed.
+
+### Wall template previews
+
+The normal board and passive preview now share wall tile, diagonal connector and
+label painting. Diagonal connector rules have their own module while retaining
+the existing board module exports. Preview walls use private identifiers and the
+same floor visibility and cutout masks; no editing handlers are mounted.
+
+Browser QA compares circle, rectangle and wall bounds, colors, labels, masks and
+every wall tile/connector style against the actual player board. Both diagonal
+directions and a lower-floor wall are covered, with reload parity, no preview
+commands and unchanged canonical state. The preview screenshot was inspected.
+Token status overlays remain outstanding. Full suite: 716 tests in 89 files passed.

@@ -30,6 +30,11 @@ const origin='http://127.0.0.1:8129';
     await command('level.user.set',{userId:'sharon',entry:{levelId:'test-upper',source:'manual',followToken:false}});
     await command('template.upsert',{template:{id:'upper-rectangle',type:'rectangle',levelId:'test-upper',
       start:{column:9,row:3},length:4,width:2,rotation:90,anchor:{column:9,row:3}}},'upper-rectangle');
+    for(const [id,levelId,squares] of [
+      ['upper-wall','test-upper',[{column:9,row:5},{column:10,row:6},{column:11,row:5}]],
+      ['lower-wall','level-0',[{column:6,row:5},{column:7,row:6},{column:8,row:6}]],
+    ]) await command('template.upsert',{template:{id,type:'wall',levelId,squares,wallColor:'ice',color:'#33bbdd'}},id);
+    await pc.locator('#vtt-template-layer [data-template-id="upper-wall"] .vtt-wall__connector--ne').waitFor();
     const lower='#vtt-template-layer [data-template-id="lower-circle"]';
     const upper='#vtt-template-layer [data-template-id="upper-circle"]';
     await gm.locator(lower).waitFor();await pc.locator(upper).waitFor();await pc.locator(lower).waitFor();
@@ -46,6 +51,8 @@ const origin='http://127.0.0.1:8129';
     const describe=nodes=>nodes.map(node=>({id:node.dataset.previewTemplateId||node.dataset.templateId,
       left:node.style.left,top:node.style.top,width:node.style.width,height:node.style.height,mask:node.style.maskImage,
       color:node.style.getPropertyValue('--vtt-template-color'),rotation:node.style.getPropertyValue('--vtt-rect-rotation'),
+      wallColor:node.dataset.wallColor,wallGrid:node.style.getPropertyValue('--vtt-wall-grid'),
+      tiles:[...node.querySelectorAll('.vtt-wall__tile,.vtt-wall__connector')].map(tile=>({className:tile.className,style:tile.getAttribute('style')})),
       label:node.querySelector('.vtt-template__label')?.textContent})).sort((a,b)=>a.id.localeCompare(b.id));
     const actual=await pc.locator('#vtt-template-layer > [data-template-id]').evaluateAll(describe);
     const writes=[];gm.on('request',r=>{if(r.method()!=='GET'&&r.url().includes('/api/v2/commands.php'))writes.push(r.url());});
@@ -65,6 +72,6 @@ const origin='http://127.0.0.1:8129';
     await rectangle.waitFor();assert.equal(await rectangle.evaluate(node=>node.style.getPropertyValue('--vtt-rect-rotation')),'90deg');
     assert.deepEqual(await pc.locator('#vtt-template-layer > [data-template-id]').evaluateAll(describe),actual,'Fallback colors and geometry survive reload');
     assert.deepEqual(await snapshot(),before);assert.deepEqual(errors,[]);
-    console.log('PASS: actual GM/player templates retain same-floor, above-floor and cutout-clipped behavior across reload.');
+    console.log('PASS: player preview matches circle, rectangle and diagonal wall geometry, colors and floor masks; reload preserves state and preview sends no commands.');
   } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
