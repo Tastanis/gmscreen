@@ -163,6 +163,9 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 - GM scene JSON export uses `ScenePackage` and one V2 snapshot plus the separately
   read scene catalog. Packages contain image references, not downloaded media or
   character sheets. Preserve the read-only scope and explicit format version.
+  Scene/folder creation, scene metadata edits, and deletion share the existing
+  board-state lock around the entire catalog read/modify/write sequence. Future
+  import/duplication must respect that boundary, not lock only the final save.
 - Character-card temporary stamina currently reflects the saved stamina above
   maximum convention. Capped healing and recovery must preserve existing overflow.
 - Ground/Fly/Hover is explicit token runtime state, not ability-authoring JSON.

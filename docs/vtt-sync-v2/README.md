@@ -955,6 +955,15 @@ image bytes, character-sheet stores, chat, and global combat are not bundled.
 Export does not create checkpoints or mutate board state. Import/duplication and
 full scene geometry restoration remain pending.
 
+Scene catalog creation (including folders), grid/visibility updates, and deletion
+serialize their full read/modify/write sequence with `withVttBoardStateLock`.
+This is catalog-file coordination, not a return to legacy board-state persistence.
+Previously only deletion held that lock, allowing concurrent creates/edits to lose
+catalog entries or resurrect deleted records. Import/duplication must use the same
+coordination boundary. The disposable concurrency regression launches 18 PHP
+writers while holding the deletion lock, then verifies all creations and unrelated
+field updates survive after release.
+
 `SceneCheckpointArchive.php` stores immutable scene captures in
 `vtt_scene_checkpoints`, partitioned by world ID. Capture/read/list/delete are
 exposed only through the GM-authenticated `api/v2/checkpoints.php`. A capture

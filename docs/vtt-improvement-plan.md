@@ -667,3 +667,17 @@ geometry, references, excluded data, unused scenes, and source immutability. The
 browser journey downloads the real file, parses it, compares it to the canonical
 snapshot, checks anonymous/player denial and missing scenes, and confirms identical
 board state before and after export.
+
+### Scene catalog concurrency prerequisite
+
+While tracing import/duplication, found that scene/folder creation and grid/visibility
+edits could race deletion or each other: only deletion held the catalog's existing
+lock. All mutations now hold that lock across read, modification, and atomic file
+replacement. No V1 board writer was added.
+
+The disposable concurrency test launches 18 actual PHP processes (eight scene
+creates, eight folder creates, grid edit, and visibility edit). It proves every
+writer waits behind the deletion lock, the file remains unchanged while blocked,
+and every new entry and both independent edits survive release. Import/duplication
+implementation remains pending; this closes a necessary lost-update hazard first.
+The full regression suite also passes: 699 tests across 82 files.

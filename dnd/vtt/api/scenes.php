@@ -147,6 +147,7 @@ function loadScenesPayload(): array
 
 function createFolder(array $payload): array
 {
+    return withVttBoardStateLock(static function () use ($payload): array {
     $name = trim((string) ($payload['name'] ?? ''));
     if ($name === '') {
         respondSceneJson(422, [
@@ -167,10 +168,12 @@ function createFolder(array $payload): array
     persistScenes($storage);
 
     return $folder;
+    });
 }
 
 function createScene(array $payload): array
 {
+    return withVttBoardStateLock(static function () use ($payload): array {
     $mapUrl = trim((string) ($payload['mapUrl'] ?? ''));
     if ($mapUrl === '') {
         respondSceneJson(422, [
@@ -221,6 +224,7 @@ function createScene(array $payload): array
     }
 
     return $scene;
+    });
 }
 
 function deleteScene(string $sceneId, bool $broadcast = true): int
@@ -255,6 +259,7 @@ function deleteScene(string $sceneId, bool $broadcast = true): int
 
 function updateSceneVisibility(array $payload): array
 {
+    return withVttBoardStateLock(static function () use ($payload): array {
     $sceneId = trim((string) ($payload['sceneId'] ?? $payload['id'] ?? ''));
     if ($sceneId === '') {
         respondSceneJson(400, [
@@ -282,10 +287,12 @@ function updateSceneVisibility(array $payload): array
         'success' => false,
         'error' => 'Scene not found.',
     ]);
+    });
 }
 
 function updateSceneGrid(array $payload): array
 {
+    return withVttBoardStateLock(static function () use ($payload): array {
     $sceneId = trim((string) ($payload['sceneId'] ?? $payload['id'] ?? ''));
     if ($sceneId === '') {
         respondSceneJson(400, [
@@ -313,6 +320,7 @@ function updateSceneGrid(array $payload): array
         'success' => false,
         'error' => 'Scene not found.',
     ]);
+    });
 }
 
 function sanitizeGrid($grid): array
