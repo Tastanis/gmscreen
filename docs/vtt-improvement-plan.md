@@ -40,6 +40,7 @@ User authorized implementing the September 7 product audit, updating/running the
 - [ ] Specific-player preview and useful connection status.
   - Server-check-based connection status and manual reconciliation are implemented; specific-player preview remains pending.
 - [ ] Named encounter checkpoints, scoped restore, scene duplication/export.
+  - A GM-only immutable scene checkpoint archive and capture/list/read/delete API are implemented and tested. UI, explicit restore scopes, and restore journeys remain pending.
 - [ ] Encounter presets, favorites and recent assets.
   - Token favorites and the 20 most recently added board tokens are implemented with search and browser-local persistence. Encounter presets and other asset collections remain pending.
 - [ ] Handouts, show-image, and map pins linking existing campaign records.
@@ -371,3 +372,19 @@ GM-only inspection of a hidden floor remains allowed. PHP regression cases verif
 all rejection paths preserve world revision and GM inspection succeeds; all 685
 tests passed across 82 files. Automatic cleanup when floors are deleted or hidden
 still belongs to the remaining floor lifecycle work.
+
+## Checkpoint archive foundation
+
+Scene checkpoints now have immutable named storage independent of event/snapshot
+retention. Captures preserve a coherent revision and scene placements, configuration,
+drawings, and templates. They are scoped by world and scene, bounded to 100 entries
+per world and 16 MB each, and never auto-overwrite or auto-prune earlier captures.
+The GM-only API supports capture, listing metadata, reading a full capture, and
+explicit archive deletion. No restore path or user-facing UI is exposed yet.
+
+PHP tests cover immutable retries, scene/world isolation, reopening SQLite, and
+deletion that preserves canonical state. The disposable HTTP journey verifies
+anonymous 401, player 403 for read/write/delete, GM operations and retry behavior,
+and identical canonical snapshots before/after archive operations. Checkpoints do
+not include character-sheet files, chat, combat, other campaign stores, or embedded
+media backups. Scoped restore must remain explicit about those boundaries.

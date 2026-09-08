@@ -827,6 +827,23 @@ the current scene configuration inside the write transaction. Level 0 remains
 valid. Missing destinations are rejected; hidden destinations are allowed only for
 the authenticated GM's own view, never for a player view or group activation.
 
+### Named scene checkpoint archive
+
+`SceneCheckpointArchive.php` stores immutable scene captures in
+`vtt_scene_checkpoints`, partitioned by world ID. Capture/read/list/delete are
+exposed only through the GM-authenticated `api/v2/checkpoints.php`. A capture
+records one coherent canonical snapshot revision and the scene's placements,
+sceneConfig, drawings, and templates. It does not capture character-sheet files,
+chat, global combat, routing, media bytes, or other campaign stores. Asset paths
+remain references. The archive is limited to 100 entries per world and 16 MB per
+capture; old checkpoints are never silently pruned.
+
+Archive operations do not mutate canonical state or advance its revision. Reusing
+an ID with the same name/scene returns the original immutable capture, including
+after scene removal; changing its identity is rejected. Restore must be implemented
+as new canonical commands/events with explicit scopes, never by replacing the
+world row with an archived snapshot. The UI and restore flow remain pending.
+
 The legacy paths being replaced are primarily:
 
 - `dnd/vtt/assets/js/ui/board-interactions.js`

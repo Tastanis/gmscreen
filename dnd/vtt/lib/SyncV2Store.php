@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/FloorGeometry.php';
 require_once __DIR__ . '/MovementUndo.php';
+require_once __DIR__ . '/SceneCheckpointArchive.php';
 
 /**
  * SQLite authority for Sync V2.
@@ -1857,6 +1858,11 @@ final class SyncV2Store
             'path' => $this->normalizeMovementPath($command['payload']['path'] ?? []),
             'undoRevision' => isset($command['payload']['undoRevision']) ? (int) $command['payload']['undoRevision'] : null,
         ];
+    }
+
+    public function sceneCheckpoints(): SceneCheckpointArchive
+    {
+        return new SceneCheckpointArchive($this->pdo, $this->worldId);
     }
 
     private function normalizeMovementKind($kind): string
