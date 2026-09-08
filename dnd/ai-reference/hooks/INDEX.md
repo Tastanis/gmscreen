@@ -63,3 +63,6 @@ local path pending trusted receipt integration. No authored JSON fields changed.
 Walking claims bypass the legacy local round cache; server boundaries decide.
 Granted effects on the same creature execute sequentially per client, preventing
 overlapping zones from racing their own placement saves.
+Claimed zone effects validate the latest received zone record before dispatch.
+Ended or materially changed zones leave review status instead of executing stale
+queued effects. Already dispatched callbacks cannot be cancelled by this check.

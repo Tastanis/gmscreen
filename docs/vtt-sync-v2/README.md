@@ -1130,3 +1130,7 @@ decide. Within one client, granted effects for a scene/creature are queued in or
 to avoid overlapping zone effects racing their placement saves. Failed executions
 release the queue but keep their own review claim. The isolated browser regression
 covers overlapping zones across rounds and competing GM/player walking drags.
+Before every queued claimed effect dispatch, compare the captured zone with the
+latest projected record. Ended zones or changed owner/floor/effects/geometry stop
+undispatched work and retain needs_review. Never infer that this check cancels an
+already dispatched save or provides atomicity with a remote zone removal.

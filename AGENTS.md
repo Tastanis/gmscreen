@@ -222,6 +222,8 @@ console.log('Button element:', document.getElementById('import-character-btn'));
   Unsupported, partial or uncertain zone effects require review, never replay.
   Walking claims must bypass enteredThisRound because its round reset is GM-only.
   Keep granted effects queued per scene/creature to avoid overlapping save races.
+  Validate queued effects against the latest received zone before dispatch;
+  ended/changed zones require review. Do not claim this cancels in-flight saves.
 
 ### Diagnostic and drawing regression workflow (September 2026)
 

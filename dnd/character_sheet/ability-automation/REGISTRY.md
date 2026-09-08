@@ -607,3 +607,8 @@ on players whose legacy local entry sets do not reset at GM round boundaries.
 Overlapping granted zone effects on one creature execute sequentially per client.
 The round regression covers two zones across three rounds, including competing
 GM/player drags; other interruption and forced-movement cases remain separate.
+Before dispatching each claimed effect, the runtime checks that the zone still
+exists with the same owner, floor, effects, geometry and target filter in the latest
+received board state. Ended or changed zones stop queued work and retain review
+evidence. This does not cancel effects already sent or make remote removal atomic
+with damage application.

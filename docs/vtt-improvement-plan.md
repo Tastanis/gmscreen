@@ -1275,3 +1275,20 @@ failure permutations. Forced movement, queued-zone cancellation and additional
 interruption cases remain pending.
 Full regression suite: 731 tests/93 files passed, including the execution-order
 and failed-queue recovery test.
+
+### Queued effects respect ended or changed zones
+
+Before each claimed effect dispatch, the runtime checks the latest projected zone
+record. An ended zone, changed owner/floor, or changed effects/geometry/target filter
+stops undispatched effects and leaves the claim for review. Fresh wrappers, local
+entry caches and cosmetic label changes do not invalidate it.
+
+The isolated browser test pauses the first of two overlapping zone effects, ends
+the other zone through the GM's End control, waits for its removal on the player,
+and releases the first effect. Only the surviving zone damages the creature; the
+ended-zone claim remains visible after reload. Unit checks also cover changed
+floors, owners, effects and geometry. This is a pre-dispatch check against received
+state, not a transaction that cancels an already dispatched effect or eliminates
+the network interval before another client's update arrives.
+Full regression suite: 733 tests/94 files passed; the queued-zone cancellation
+browser journey passed against the disposable fixture.

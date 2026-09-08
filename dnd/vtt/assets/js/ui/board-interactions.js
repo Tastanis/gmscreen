@@ -1,5 +1,6 @@
 import {renderPersistentZones} from './persistent-zone-renderer.js';
 import {executeClaimedZoneEntry} from '../services/zone-entry-claims.js';
+import {assertPersistentZoneStillActive} from './persistent-zone-lifecycle.js';
 import {resolvePersistentZoneLevelId,doesPersistentZoneOverlapPlacement,doesPersistentZoneMovementEnter} from './persistent-zone-geometry.js';
 import {renderTokenAuras} from './token-aura-renderer.js';
 import {normalizeAutomationAuraId,createAutomationAuraId,cloneAutomationAuraRecord,getAutomationAuraRecords,getRenderableAurasForPlacement} from './token-aura-records.js';
@@ -4454,6 +4455,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     const dispatchEffect=(eventName,payload)=>{
       if (strict && getActiveSceneId()!==sceneId) return Promise.reject(new Error('Scene changed during zone execution.'));
+      if (strict) assertPersistentZoneStillActive(zone,getActivePersistentZones());
       return new Promise((resolve,reject)=>{
         const timer=strict?setTimeout(()=>reject(new Error('Zone effect acknowledgement timed out.')),30000):null;
         const done=result=>{clearTimeout(timer);if(strict && (!result || result.applied===false))reject(new Error('Zone effect was not confirmed.'));else resolve(result);};
