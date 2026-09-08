@@ -66,3 +66,9 @@ overlapping zones from racing their own placement saves.
 Claimed zone effects validate the latest received zone record before dispatch.
 Ended or materially changed zones leave review status instead of executing stale
 queued effects. Already dispatched callbacks cannot be cancelled by this check.
+
+`vtt:automation-apply-swap` exchanges both tokens' columns, rows and floors in one
+forced placement batch. It requires actual scene placements and awaits acceptance
+before reporting success or checking zone entry. Save failure rejects the callback
+(or resolves skipped/save-failed when no reject callback exists). Normal walking
+hooks do not fire. Durable forced/swap zone claims remain pending.

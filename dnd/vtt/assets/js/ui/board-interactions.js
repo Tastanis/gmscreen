@@ -17213,7 +17213,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const detail = event?.detail ?? {};
     const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
     const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
-    const sourcePlacement = resolveAutomationSourcePlacement(payload.sourcePlacement);
+    const sourcePlacement = getPlacementFromStore(payload.sourcePlacement?.id);
     const targetPlacement = getPlacementFromStore(payload.targetId);
     if (!sourcePlacement || !targetPlacement) {
       resolve?.({ skipped: true, reason: 'missing-placement' });
@@ -17226,18 +17226,22 @@ export function mountBoardInteractions(store, routes = {}) {
     // Atomic transpose: swap (column, row) on both placements. Footprint
     // checks are best-effort — if either token has a different size, allow
     // the swap anyway (GM can manually correct).
-    const sourceTo = { column: targetPlacement.column, row: targetPlacement.row };
-    const targetTo = { column: sourcePlacement.column, row: sourcePlacement.row };
-    const sourceUpdate = updatePlacementById(sourcePlacement.id, (p) => {
-      p.column = sourceTo.column;
-      p.row = sourceTo.row;
-    });
-    const targetUpdate = updatePlacementById(targetPlacement.id, (p) => {
-      p.column = targetTo.column;
-      p.row = targetTo.row;
-    });
-    if (!sourceUpdate?.updated || !targetUpdate?.updated) {
+    const sourceTo = { column: targetPlacement.column, row: targetPlacement.row, levelId: targetPlacement.levelId || BASE_MAP_LEVEL_ID };
+    const targetTo = { column: sourcePlacement.column, row: sourcePlacement.row, levelId: sourcePlacement.levelId || BASE_MAP_LEVEL_ID };
+    const result = updatePlacementsByIds([sourcePlacement.id,targetPlacement.id],p=>{
+      Object.assign(p,p.id===sourcePlacement.id?sourceTo:targetTo);
+    },{returnSavePromise:true});
+    if (!result?.updated || result.updatedIds.length!==2) {
       resolve?.({ skipped: true, reason: 'update-failed' });
+      return;
+    }
+    try {
+      await awaitSuccessfulPlacementSave(result);
+    } catch(error) {
+      renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState, { skipTracker: true });
+      refreshTokenSettings();
+      if (typeof detail.reject==='function') detail.reject(error);
+      else resolve?.({skipped:true,reason:'save-failed'});
       return;
     }
     try {

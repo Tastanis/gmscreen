@@ -1292,3 +1292,19 @@ state, not a transaction that cancels an already dispatched effect or eliminates
 the network interval before another client's update arrives.
 Full regression suite: 733 tests/94 files passed; the queued-zone cancellation
 browser journey passed against the disposable fixture.
+
+### Atomic, confirmed cross-floor swaps
+
+The swap hook previously issued two independent saves and then read `.updated`
+from boolean results, reporting failure after mutating tokens. It now requires
+actual scene placements and submits one batch exchanging both columns/rows and
+floor IDs. It awaits canonical acceptance before success and zone callbacks;
+rejection refreshes the board and rejects the callback. Token sizes are preserved.
+
+The isolated browser test holds the batch and verifies neither canonical token
+has moved while the callback is pending. Acceptance produces exactly one revision
+with both floors exchanged; a rejected reverse swap moves neither token. Reload
+preserves the accepted result, and no normal walking hooks fire. Durable zone-entry
+receipts for forced movement and swaps remain the next integration task.
+Full regression suite: 733 tests/94 files passed, plus the held/rejected swap
+browser journey.

@@ -1134,3 +1134,7 @@ Before every queued claimed effect dispatch, compare the captured zone with the
 latest projected record. Ended zones or changed owner/floor/effects/geometry stop
 undispatched work and retain needs_review. Never infer that this check cancels an
 already dispatched save or provides atomicity with a remote zone removal.
+Automation swaps use updatePlacementsByIds to submit both destination positions
+and floors as one forced placement batch. Await its save before success callbacks;
+do not split the transpose into separate per-token saves or treat boolean helper
+returns as persistence receipts. Existing batch validation/projection applies.

@@ -224,6 +224,8 @@ console.log('Button element:', document.getElementById('import-character-btn'));
   Keep granted effects queued per scene/creature to avoid overlapping save races.
   Validate queued effects against the latest received zone before dispatch;
   ended/changed zones require review. Do not claim this cancels in-flight saves.
+  Automation swaps must exchange positions and floors in one confirmed batch;
+  never use two independent per-token saves or fire walking hooks for the swap.
 
 ### Diagnostic and drawing regression workflow (September 2026)
 
