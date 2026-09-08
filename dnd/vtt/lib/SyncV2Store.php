@@ -664,6 +664,21 @@ final class SyncV2Store
                     ? $state['sceneConfig'][$sceneId]
                     : [];
                 $currentRevision = max(0, (int) ($config['_revision'] ?? 0));
+                if ($type === 'level.user.set' || $type === 'level.activate') {
+                    $targetLevelId = $type === 'level.user.set' ? $payload['entry']['levelId'] : $payload['levelId'];
+                    if ($targetLevelId !== 'level-0') {
+                        $targetLevel = null;
+                        foreach (($config['mapLevels']['levels'] ?? []) as $level) {
+                            if (is_array($level) && ($level['id'] ?? null) === $targetLevelId) { $targetLevel = $level; break; }
+                        }
+                        if ($targetLevel === null) throw new InvalidArgumentException('That floor no longer exists.');
+                        $gmOwnView = $isGm && $type === 'level.user.set'
+                            && strtolower($payload['userId']) === strtolower(trim($actorId));
+                        if (($targetLevel['hidden'] ?? false) === true && !$gmOwnView) {
+                            throw new InvalidArgumentException('Hidden floors cannot be shown to players.');
+                        }
+                    }
+                }
                 if ($normalized['entityRevision'] !== $currentRevision) {
                     return $this->rollbackConflict('entity_revision_mismatch', $snapshot);
                 }

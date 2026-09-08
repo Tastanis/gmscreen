@@ -822,6 +822,11 @@ viewer entries. My token's floor explicitly submits the existing `level.user.set
 command for the caller's linked token floor; it does not submit a placement edit.
 Automatic linked-view changes on canonical token floor transitions are unchanged.
 
+Explicit `level.user.set` and `level.activate` validate their destination against
+the current scene configuration inside the write transaction. Level 0 remains
+valid. Missing destinations are rejected; hidden destinations are allowed only for
+the authenticated GM's own view, never for a player view or group activation.
+
 The legacy paths being replaced are primarily:
 
 - `dnd/vtt/assets/js/ui/board-interactions.js`

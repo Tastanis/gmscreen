@@ -119,6 +119,26 @@ try {
         'baseRevision'=>$snapshot['revision'], 'entityRevision'=>$snapshot['state']['placements']['scene']['ally']['_entityRevision']], 'cal', false); }
     catch (InvalidArgumentException $error) { $rejected = str_contains($error->getMessage(), 'hidden floor'); }
     verifyFloor($rejected && $store->getSnapshot()['revision'] === $snapshot['revision'], 'Current hidden-floor permission is checked inside the movement transaction.');
+    foreach ([
+        ['cal', false, 'level.user.set', ['userId'=>'cal', 'entry'=>['levelId'=>'hidden-mid']], 'Hidden floors'],
+        ['GM', true, 'level.activate', ['userIds'=>['cal'], 'levelId'=>'hidden-mid'], 'Hidden floors'],
+        ['GM', true, 'level.user.set', ['userId'=>'cal', 'entry'=>['levelId'=>'hidden-mid']], 'Hidden floors'],
+        ['GM', true, 'level.user.set', ['userId'=>'gm', 'entry'=>['levelId'=>'deleted-floor']], 'no longer exists'],
+    ] as $index => [$actor, $isGm, $type, $payload, $reason]) {
+        $snapshot = $store->getSnapshot();
+        $rejected = false;
+        try { $store->acceptBoardDomainCommand(['type'=>$type, 'operationId'=>'floor-view-reject-' . $index,
+            'sceneId'=>'scene', 'baseRevision'=>$snapshot['revision'],
+            'entityRevision'=>$snapshot['state']['sceneConfig']['scene']['_revision'], 'payload'=>$payload], $actor, $isGm); }
+        catch (InvalidArgumentException $error) { $rejected = str_contains($error->getMessage(), $reason); }
+        verifyFloor($rejected && $store->getSnapshot()['revision'] === $snapshot['revision'], 'Invalid floor view cannot change canonical state.');
+    }
+    $snapshot = $store->getSnapshot();
+    $gmView = $store->acceptBoardDomainCommand(['type'=>'level.user.set', 'operationId'=>'floor-view-gm-hidden',
+        'sceneId'=>'scene', 'baseRevision'=>$snapshot['revision'],
+        'entityRevision'=>$snapshot['state']['sceneConfig']['scene']['_revision'],
+        'payload'=>['userId'=>'gm', 'entry'=>['levelId'=>'hidden-mid']]], 'GM', true);
+    verifyFloor($gmView['status'] === 'accepted', 'GM can inspect a hidden floor in their own view.');
     echo "Floor movement: player traversal, DB reopening, atomic viewer, duplicate, permission, group and forced-fall checks passed.\n";
 } finally {
     unset($store);

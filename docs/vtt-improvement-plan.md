@@ -363,3 +363,11 @@ existing automatic following on token floor transitions remains in effect.
 Three-browser QA verifies private Director browsing, showing a floor to both
 players, player reload on that floor, individual return, and byte-equivalent token
 state throughout those actions. The 1280×720 Director layout was inspected.
+
+Explicit floor-view commands now validate current destination existence and
+visibility on the server. A removed floor cannot be selected through stale input,
+and hidden floors cannot be assigned to player views, including by group show.
+GM-only inspection of a hidden floor remains allowed. PHP regression cases verify
+all rejection paths preserve world revision and GM inspection succeeds; all 685
+tests passed across 82 files. Automatic cleanup when floors are deleted or hidden
+still belongs to the remaining floor lifecycle work.
