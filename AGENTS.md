@@ -19,6 +19,9 @@ active board's data-placement-id interaction hooks. Map padding must match the
 normal backdrop so maps, fog and token coordinates share the same origin.
 Passive drawings call renderDrawings with an explicit drawingLayer and floor;
 never mount or replace the active drawing tool's shared state for preview.
+Template floor visibility and SVG cutout masks live in template-presentation.js.
+They take explicit shape bounds, view metrics and floor context; reuse them for
+passive rendering. Selection cleanup remains in the interactive template tool.
 
 Scene package copying uses `ScenePackage::prepareForNewScene` for explicit board
 ID remapping. Never recursively rewrite all IDs: token-library, sheet and embedded

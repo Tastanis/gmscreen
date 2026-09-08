@@ -19,6 +19,9 @@ recovery/reload; backdrop padding remains part of the coordinate origin. Preview
 token status overlays and templates remain pending. Drawing paths reuse the normal
 renderer with an explicit private SVG layer and selected floor. Local preview zoom
 and Fit never write canonical camera, scene or floor state.
+Template floor visibility and cutout masking are extracted into the shared
+template-presentation module and used by the normal board. Passive template shape
+painting/hydration is still pending; this extraction does not mount template tools.
 
 A GM-only `checkpoint.restoreLayout` authority now plans and atomically restores
 one scene's floors, canonical grid, fog, drawings/templates and existing token

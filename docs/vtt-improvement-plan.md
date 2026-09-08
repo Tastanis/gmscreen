@@ -947,3 +947,18 @@ width, verifies that a drawing on the other floor is absent, exercises zoom in/o
 and Fit, and rechecks unchanged canonical state and zero preview commands. Token
 parity and player reload checks pass in the same journey. The resulting dialog was
 visually inspected. Templates and token status overlays remain required work.
+
+### Shared template floor clipping
+
+Template floor presentation and independent SVG cutout-mask application now live
+in template-presentation.js. The ordinary interactive renderer imports the same
+functions that passive preview will use. Interactive selection cleanup remains
+inside the existing tool; the shared functions do not mount handlers or write state.
+Template shape painting/hydration into the preview remains pending.
+
+Unit tests cover same-floor, above-floor and hidden templates, stacked cutout
+intersection, shifted grid origins, nonblocking floors, unchanged shape inputs
+and mask clearing. The isolated GM/player browser journey verifies unmasked
+same-floor shapes, hidden above-floor shapes, clipped lower-floor shapes, and
+preserved rendering/canonical state after player reload.
+Full regression suite: 711 tests across 87 files passed.
