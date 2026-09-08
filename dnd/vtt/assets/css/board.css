@@ -2884,6 +2884,34 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
   box-shadow: inset 0 0 0 1px rgba(41, 37, 36, 0.35);
 }
 
+.vtt-board__header.is-combat-idle {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "actions actions" "tracker meta";
+  min-height: 0;
+}
+.vtt-board__header.is-combat-idle .vtt-board__scene-meta {
+  flex-direction: row;
+  align-items: center;
+  max-width: none;
+  gap: 8px;
+}
+.vtt-board__header.is-combat-idle .vtt-board__title { flex: 0 0 auto; max-width: 20ch; }
+.vtt-board__header.is-combat-idle .vtt-board__actions {
+  display: flex;
+  flex-wrap: wrap;
+  width: auto;
+  gap: 4px;
+}
+.vtt-idle-tracker-summary {
+  min-height: 36px;
+  padding: 8px 12px;
+  cursor: pointer;
+  color: var(--vtt-text-primary);
+}
+.vtt-idle-tracker-summary:focus-visible { outline: 2px solid currentColor; }
+[data-combat-tracker][data-combat-active="false"]:not([open]) > .vtt-combat-tracker { display: none; }
+[data-combat-tracker][data-combat-active="true"] > .vtt-idle-tracker-summary { display: none; }
+
 body.vtt-body .vtt-map-navigation {
   position: absolute;
   top: 12px;

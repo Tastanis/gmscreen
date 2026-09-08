@@ -74,7 +74,8 @@ function renderVttSceneBoard(bool $isGm = false): string
                     Select or create a scene to begin.
                 </p>
             </div>
-            <div class="vtt-board__tracker" data-combat-tracker>
+            <details class="vtt-board__tracker" data-combat-tracker data-combat-active="false">
+                <summary class="vtt-idle-tracker-summary">No active encounter · Show tokens</summary>
                 <div class="vtt-combat-tracker" role="group" aria-label="Scene combat tracker">
                     <div class="vtt-combat-tracker__segment">
                         <p id="vtt-combat-tracker-waiting-label" class="vtt-combat-tracker__heading">
@@ -104,7 +105,7 @@ function renderVttSceneBoard(bool $isGm = false): string
                         ></div>
                     </div>
                 </div>
-            </div>
+            </details>
             <div class="vtt-board__actions">
                 <div class="vtt-board__quick-launch">
                     <button

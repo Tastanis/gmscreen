@@ -29,6 +29,7 @@ User authorized implementing the September 7 product audit, updating/running the
 
 - [x] Token library and saved scenes first; creation forms collapsed.
 - [ ] Compact inactive tracker and combat character card.
+  - Inactive tracker is a collapsed roster disclosure with a compact horizontal toolbar; full tracker opens automatically during combat. Combat character-card work remains pending.
 - [ ] Zoom/fit/center/shortcuts and persistent tool labels.
   - Visible zoom, Fit Map, Center Selected, and a shortcut guide are implemented and browser-tested. Persistent active-tool labels remain pending.
 - [ ] Opaque readable panels, practical targets, diagnostics-only memory counter.
@@ -167,6 +168,16 @@ existing same-floor/condition behavior. This does not complete elevation/range
 or cross-floor opening support, and those requirements remain unchecked above.
 Validation: 680 tests passed across 78 VTT/automation files. These are code-level
 checks; cross-floor ability browser journeys remain part of the pending geometry work.
+
+## Inactive tracker
+
+Outside combat, the tracker is a native “No active encounter · Show tokens”
+disclosure. Tokens remain available on demand. Starting combat opens the full
+tracker automatically; ending combat closes it again. Idle action controls run
+horizontally, with scene/floor information on the next row. The existing active
+combat layout remains intact. `test-tracker-browser.cjs` verifies reveal/hide and
+actual GM Start Combat/confirmed End Combat transitions in the disposable fixture.
+The 1280×720 idle view was visually inspected. No production combat was changed.
 
 Validation: 678 tests passed across 77 files. Expanded PHP checks then passed for
 forged/cloned receipts and changed floor geometry. Three-browser floor QA includes

@@ -12934,6 +12934,12 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function updateCombatModeIndicators() {
     if (combatTrackerRoot) {
+      const wasActive = combatTrackerRoot.dataset.combatActive === 'true';
+      if (combatActive) combatTrackerRoot.open = true;
+      else if (wasActive) combatTrackerRoot.open = false;
+      const summary = combatTrackerRoot.querySelector('.vtt-idle-tracker-summary');
+      if (summary) summary.hidden = combatActive;
+      combatTrackerRoot.closest('.vtt-board__header')?.classList.toggle('is-combat-idle', !combatActive);
       combatTrackerRoot.dataset.combatActive = combatActive ? 'true' : 'false';
       combatTrackerRoot.dataset.completedCount = String(completedCombatants.size);
       combatTrackerRoot.dataset.currentTeam = currentTurnTeam ?? '';
