@@ -301,3 +301,8 @@ Token menu uses a stable border-box width and scrollable height above action tab
 recheck after opening and observe menu/action-tab size changes. Internal menu scrolling
 no longer triggers the outside-scroll dismissal listener. Browser QA passed at
 1280x720 and 1280x500, including lower-menu scrolling, plus five popup unit tests.
+
+
+## Additional deferred requirement: inventory effect tables
+
+Recorded in [the roadmap](vtt-improvement-plan.md#deferred-requirement-inventory-effect-tables): editable/pasteable inventory-effect matrices for Cal's Eternal Spire (Fungal Minions and Resurrection, 20 levels each). Planning only; no implementation authorized by this follow-up. The roadmap records the read-only campaign source, compatibility requirements, and the unapproved current-row/expandable-table display suggestion.
