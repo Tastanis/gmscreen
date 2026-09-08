@@ -263,3 +263,17 @@ The browser journey covers both directions of Draw/stairs handoff, Draw to
 template to Measure, cutout activation/Escape, and cutout to Draw, verifying the
 old panels and pressed states actually clear. All 682 regression tests passed.
 Targeting and other specialized interaction modes still need a separate review.
+
+## Movement hook intent
+
+Floor changes previously replaced the movement payload and lost the distinction
+between walking and undo. The confirmed-movement adapter also mislabeled forced
+movement as normal. Structural floor events now retain movement intent, and the
+adapter emits normal-movement hooks only for acknowledged walking commands.
+Source/destination footprints preserve floor IDs. Generic placement edits and
+remote replay do not run those hooks.
+
+Validation: 683 tests passed across 81 files. The expanded three-browser floor
+journey asserts one walking hook for stairs, no normal hooks for floor undo after
+reload, and no duplicate hooks in either observing browser. Physical elevation
+and cross-floor ability geometry remain pending.

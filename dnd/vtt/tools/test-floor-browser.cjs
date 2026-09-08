@@ -10,6 +10,10 @@ if (!['localhost', '127.0.0.1', '[::1]'].includes(new URL(origin).hostname)) thr
   try {
     async function client(user) {
       const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+      await context.addInitScript(() => {
+        window.testMovementEvents = [];
+        document.addEventListener('vtt:token-moved', event => window.testMovementEvents.push(event.detail));
+      });
       await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
       const page = await context.newPage(); page.setDefaultTimeout(15000);
       page.on('pageerror', error => errors.push(error.message));
@@ -36,6 +40,10 @@ if (!['localhost', '127.0.0.1', '[::1]'].includes(new URL(origin).hostname)) thr
     assert.equal((await placement())._floorTraversal.entry, 'red');
     await pc.page.reload(); await pc.page.locator(selector).waitFor();
     await drag(0, 2, 5, 'test-upper');
+    const stairEvents = await pc.page.evaluate(() => window.testMovementEvents);
+    assert.equal(stairEvents.length, 1, 'Stair completion emits one normal movement event.');
+    assert.equal(stairEvents[0].from.levelId, 'level-0');
+    assert.equal(stairEvents[0].to.levelId, 'test-upper');
     let state = (await snapshot()).state;
     assert.equal(state.sceneConfig[manifest.test_scene_id].userLevelState.cal.levelId, 'test-upper');
     assert.equal(state.sceneConfig[manifest.test_scene_id].userLevelState.sharon.levelId, 'level-0');
@@ -62,6 +70,8 @@ if (!['localhost', '127.0.0.1', '[::1]'].includes(new URL(origin).hostname)) thr
     assert.equal((await placement()).row, 3);
     assert.equal((await placement())._floorTraversal.entry, 'red');
     assert.equal(calls.filter(call => call.command.payload?.undoRevision !== undefined).length, 2);
+    assert.equal(await pc.page.evaluate(() => window.testMovementEvents.length), 0, 'Undo must not trigger normal movement automation.');
+    for (const { page } of [gm, other]) assert.equal(await page.evaluate(() => window.testMovementEvents.length), 0, 'Remote replay must not duplicate movement hooks.');
     assert.deepEqual(errors, []);
     console.log('PASS: player stairs across reload, atomic linked view, fall, and three-client recovery.');
   } finally { await browser.close(); }

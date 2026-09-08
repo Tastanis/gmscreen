@@ -347,6 +347,14 @@ Lightweight event-driven registry for triggered abilities. JSON-authored `trigge
 | `combatEnd` | `{ round }` | Fires immediately before combat state is cleared. |
 | `vtt:token-moved` (DOM event) | Underlying DOM event the `move` fan-out subscribes to. Still also used by the hard-coded opportunity-attack auto-detect. |
 
+Canonical V2 movement emits this DOM event only for locally acknowledged walking
+commands, including stair/fall transitions produced by those commands. Its `from`
+and `to` footprints include `levelId`. Forced movement, teleport, movement undo,
+generic placement patches, remote replay, and snapshot recovery do not emit a
+normal-movement event. Floor-changing undo retains its `undo` intent in the
+structural placement event. The authored `move` fan-out still reports planar
+distance; physical elevation and cross-floor adjacency require manual adjudication.
+
 Additional accepted events:
 
 | eventType | Payload / status |

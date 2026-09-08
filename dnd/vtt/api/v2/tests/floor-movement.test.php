@@ -26,6 +26,7 @@ try {
     $snapshot = $store->getSnapshot();
     $finish = [...$half,'operationId'=>'floor-finish-001','baseRevision'=>$snapshot['revision'],'entityRevision'=>1,'payload'=>['column'=>2,'row'=>4]];
     $result = $store->acceptTokenMove($finish, 'cal', false);
+    verifyFloor($result['event']['payload']['movementKind'] === 'walk', 'Stairs retain walking intent for movement hooks.');
     $snapshot = $store->getSnapshot();
     verifyFloor($result['event']['type'] === 'placement.batchApplied', 'Transition uses structural entity event.');
     verifyFloor($snapshot['state']['placements']['scene']['pc']['levelId'] === 'upper', 'Player reaches upstairs.');
@@ -59,6 +60,7 @@ try {
     catch (InvalidArgumentException $error) { $wrongActorRejected = true; }
     verifyFloor($wrongActorRejected, 'Another actor cannot use this movement receipt.');
     $restored = $store->acceptTokenMove($undo, 'cal', false);
+    verifyFloor($restored['event']['payload']['movementKind'] === 'undo', 'Floor-changing undo cannot masquerade as normal movement.');
     $pc = $store->getSnapshot()['state']['placements']['scene']['pc'];
     verifyFloor($pc['levelId'] === 'upper' && (float) $pc['column'] === 2.0, 'Undo restores server-owned position and floor, ignoring supplied coordinates.');
     verifyFloor($store->getSnapshot()['state']['sceneConfig']['scene']['userLevelState']['cal']['levelId'] === 'upper', 'Undo restores linked view atomically.');

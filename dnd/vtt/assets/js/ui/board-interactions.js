@@ -81,6 +81,7 @@ import { floorRelation } from './floor-geometry.js';
 import { mountSaveFeedback, describeSaveFailure } from './save-feedback.js';
 import { mountConnectionStatus } from './connection-status.js';
 import { claimActiveTool, publishActiveTool } from './active-tool.js';
+import { normalMovementDetail } from '../sync-v2/confirmed-movement.js';
 import { createRequestedTestCoordinator } from './requested-test-coordinator.js';
 import {
   applyCanonicalPrimaryTokenSelection,
@@ -865,30 +866,10 @@ export function mountBoardInteractions(store, routes = {}) {
     });
     patchTokenMovementNode(sceneId, placementId, placement);
 
-    if (
-      context?.source === 'acknowledgement'
-      && context?.event?.payload?.movementKind !== 'undo'
-      && previous
-      && (previous.column !== placement.column || previous.row !== placement.row)
-    ) {
+    const movementDetail = normalMovementDetail(sceneId, placementId, previous, placement, context);
+    if (movementDetail) {
       document.dispatchEvent(new CustomEvent('vtt:token-moved', {
-        detail: {
-          placementId,
-          sceneId,
-          from: {
-            column: previous.column ?? 0,
-            row: previous.row ?? 0,
-            width: previous.width ?? 1,
-            height: previous.height ?? 1,
-          },
-          to: {
-            column: placement.column,
-            row: placement.row,
-            width: previous.width ?? 1,
-            height: previous.height ?? 1,
-          },
-          kind: 'normal',
-        },
+        detail: movementDetail,
       }));
     }
   }

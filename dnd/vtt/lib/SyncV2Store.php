@@ -1528,6 +1528,7 @@ final class SyncV2Store
                         'changedFields'=>['column','row','levelId','_floorTraversal'],
                         'wasPlayerVisible'=>!$this->placementIsHidden($current)]],
                     'userLevelMutations'=>$userLevelMutations,
+                    'movementKind'=>$restore !== null ? 'undo' : $normalized['movementKind'],
                     'movementTransition'=>['kind'=>$floor['cause'],'fromLevelId'=>$this->placementLevelId($current),'toLevelId'=>$floor['levelId']],
                 ];
             }

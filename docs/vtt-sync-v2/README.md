@@ -812,6 +812,11 @@ missing token from an earlier API read. Player token/team and hidden-floor
 permissions are checked again inside the same SQLite transaction as movement,
 so concurrent deletion or permission changes cannot be bypassed by stale input.
 
+Floor-changing `token.move` results retain `movementKind` when represented as
+`placement.batchApplied`. Normal-movement DOM hooks are emitted for acknowledged
+walking only; undo, forced/teleport movement, unrelated patches, and remote replay
+are excluded. The DOM footprints retain source and destination floor IDs.
+
 The legacy paths being replaced are primarily:
 
 - `dnd/vtt/assets/js/ui/board-interactions.js`
