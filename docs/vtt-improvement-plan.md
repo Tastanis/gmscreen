@@ -1485,3 +1485,19 @@ and the other GM zone survives reload. The expiration browser still passes its
 409-then-200 unrelated-change workflow. Full suite: 743 tests/95 files passed.
 General semantic merging, interrupted action recovery and board/sheet authority
 remain outstanding; this guard favors an explicit conflict over lost data.
+
+### Order canonical zone turn stages
+
+Canonical turn zone processing is ordered: at start, await owner expiration,
+then owner ticks, then occupant triggers; at end, await owner ticks before
+expiration. Failed expiration or a scene change stops subsequent zone stages and
+reports that review is needed. This ordering does not serialize all other turn
+automation, add durable boundary-effect outcomes, or change legacy tick handlers
+that currently tolerate individual effect failures. Those remain limitations.
+
+Unit tests hold each first stage to verify order and cover failed expiration and
+scene changes. The browser holds the expiration command for two zones while a
+third remains: no tick damage occurs while held, and after acknowledgment only
+the retained zone damages its occupant. Full suite: 745 tests/96 files passed.
+Durable tick/upkeep claims, whole-turn interruption recovery and legacy effect
+failure propagation remain outstanding.

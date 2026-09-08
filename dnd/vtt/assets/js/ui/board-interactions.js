@@ -1,3 +1,4 @@
+import {runZoneBoundary} from '../services/zone-boundary.js';
 import {renderPersistentZones} from './persistent-zone-renderer.js';
 import {executeClaimedZoneEntry,assertZoneEntryOutcomesConfirmed} from '../services/zone-entry-claims.js';
 import {assertPersistentZoneStillActive} from './persistent-zone-lifecycle.js';
@@ -994,10 +995,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }).catch((error) => {
         console.warn('[VTT] canonical condition end-of-turn rider failed', error);
       });
-      tickPersistentZonesForOwner(finishedId, 'endOfTurn').catch((error) => {
-        console.warn('[VTT] canonical persistent zone end-of-turn tick failed', error);
-      });
-      expirePersistentZonesForOwner(finishedId, 'endOfTurn');
+      runPersistentZoneBoundary(finishedId, 'endOfTurn');
       expireReadyTriggersAtTurnEnd(finishedId);
       const finishingConditions = ensurePlacementConditions(
         finishingPlacement?.conditions ?? finishingPlacement?.condition ?? null
@@ -1038,13 +1036,7 @@ export function mountBoardInteractions(store, routes = {}) {
         placementId: combatantId,
         team: getCombatantTeam(combatantId),
       });
-      expirePersistentZonesForOwner(combatantId, 'startOfTurn');
-      tickPersistentZonesForOwner(combatantId, 'startOfTurn').catch((error) => {
-        console.warn('[VTT] canonical persistent zone start-of-turn tick failed', error);
-      });
-      fireOccupantTurnStartZones(combatantId).catch((error) => {
-        console.warn('[VTT] canonical occupant-turn-start zone failed', error);
-      });
+      runPersistentZoneBoundary(combatantId, 'startOfTurn');
       notifyConditionTurnStart(combatantId);
       runConditionRidersAtBoundary(combatantId, 'turnStart', {
         turnLockId: `sync-v2:${combat?.sequence ?? 0}`,
@@ -4399,6 +4391,21 @@ export function mountBoardInteractions(store, routes = {}) {
   // Damage/condition effects go through the existing automation handlers so
   // vulnerability/immunity/duration logic stays consistent with normal abilities.
 
+  function runPersistentZoneBoundary(ownerId, when) {
+    const sceneId = getActiveSceneId();
+    return runZoneBoundary(when, {
+      expire: () => expirePersistentZonesForOwner(ownerId, when),
+      tick: () => tickPersistentZonesForOwner(ownerId, when),
+      occupants: () => fireOccupantTurnStartZones(ownerId),
+      assertCurrent: () => {
+        if (getActiveSceneId() !== sceneId) throw new Error('Scene changed during zone turn processing.');
+      },
+    }).catch(error => {
+      console.warn('[VTT] Zone turn processing stopped', error);
+      updateStatus(`Zone turn processing needs review: ${error.message}`);
+    });
+  }
+
   async function tickPersistentZonesForOwner(ownerId, when) {
     if (!ownerId) return;
     const zones = getActivePersistentZones();
@@ -5221,6 +5228,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const zones = getActivePersistentZones();
     if (!zones.length) return;
     const matching = zones.filter((z) => z && z.casterId === ownerId && z.expiresAt === when);
+    if (!matching.length) return;
     return removePersistentZones(matching.map(zone => zone.id), { reason: `owner ${when}` });
   }
 

@@ -324,3 +324,6 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 
 - Do not blindly rebase placement patches after 409. Preserve concurrent edits
   to patched fields, especially whole zone/condition lists and stamina records.
+
+- Canonical zone turn stages use runZoneBoundary. Await start expiration before
+  ticks/occupants and await end ticks before expiration; stop on scene changes.

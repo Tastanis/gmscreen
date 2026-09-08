@@ -117,3 +117,10 @@ after applying the authoritative snapshot, preserving the other edit. Adds retry
 only when the ID remains absent; removals require an unchanged entity revision.
 The existing one-retry limit remains. This guard covers placement batches; walking
 movement and other domain command policies remain separate.
+
+Canonical turn zone processing is ordered: at start, await owner expiration,
+then owner ticks, then occupant triggers; at end, await owner ticks before
+expiration. Failed expiration or a scene change stops subsequent zone stages and
+reports that review is needed. This ordering does not serialize all other turn
+automation, add durable boundary-effect outcomes, or change legacy tick handlers
+that currently tolerate individual effect failures. Those remain limitations.
