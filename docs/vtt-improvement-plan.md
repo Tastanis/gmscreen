@@ -962,3 +962,17 @@ and mask clearing. The isolated GM/player browser journey verifies unmasked
 same-floor shapes, hidden above-floor shapes, clipped lower-floor shapes, and
 preserved rendering/canonical state after player reload.
 Full regression suite: 711 tests across 87 files passed.
+
+### Shared circle and rectangle painting
+
+The ordinary template tool now delegates normalized circle/rectangle CSS geometry,
+labels and anchor-node placement to paintTemplateArea. It preserves the existing
+rotation math and grid offsets without mounting handlers or changing shape data.
+The interactive wrapper retains map visibility, wall rendering and selection logic.
+Preview hydration and wall painting remain outstanding.
+
+Tests verify circle bounds, shifted origins, rotated rectangle bounds, explicit
+anchors, default outside controls and unchanged shape data. The GM/player browser
+journey checks circle floor clipping plus a 90-degree rectangle's size, label and
+rotation, including after player reload, with unchanged canonical state.
+Full regression suite: 714 tests across 88 files passed.

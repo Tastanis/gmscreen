@@ -22,6 +22,9 @@ never mount or replace the active drawing tool's shared state for preview.
 Template floor visibility and SVG cutout masks live in template-presentation.js.
 They take explicit shape bounds, view metrics and floor context; reuse them for
 passive rendering. Selection cleanup remains in the interactive template tool.
+Circle/rectangle CSS geometry and anchor placement use paintTemplateArea in
+template-area-renderer.js. It accepts normalized shapes and explicit view metrics;
+shape hydration, wall painting and editing still belong to the template tool.
 
 Scene package copying uses `ScenePackage::prepareForNewScene` for explicit board
 ID remapping. Never recursively rewrite all IDs: token-library, sheet and embedded

@@ -28,6 +28,8 @@ const origin='http://127.0.0.1:8129';
       await command('template.upsert',{template:{id,type:'circle',levelId,center:{column:7,row:6},radius:2,color:'#22aaff'}},id);
     }
     await command('level.user.set',{userId:'sharon',entry:{levelId:'test-upper',source:'manual',followToken:false}});
+    await command('template.upsert',{template:{id:'upper-rectangle',type:'rectangle',levelId:'test-upper',
+      start:{column:9,row:3},length:4,width:2,rotation:90,anchor:{column:9,row:3},color:'#aa22ff'}},'upper-rectangle');
     const lower='#vtt-template-layer [data-template-id="lower-circle"]';
     const upper='#vtt-template-layer [data-template-id="upper-circle"]';
     await gm.locator(lower).waitFor();await pc.locator(upper).waitFor();await pc.locator(lower).waitFor();
@@ -35,10 +37,16 @@ const origin='http://127.0.0.1:8129';
     assert.equal(await gm.locator(lower).evaluate(node=>node.style.maskImage),'','Same-floor template is unmasked');
     assert.match(await pc.locator(lower).evaluate(node=>node.style.maskImage),/data:image\/svg\+xml/,'Lower template is clipped through upper cutout');
     assert.equal(await pc.locator(upper).evaluate(node=>node.style.maskImage),'');
+    const rectangle=pc.locator('#vtt-template-layer [data-template-id="upper-rectangle"]');await rectangle.waitFor();
+    const rectangleStyles=await rectangle.evaluate(node=>({width:parseFloat(node.style.width),height:parseFloat(node.style.height),
+      rotation:node.style.getPropertyValue('--vtt-rect-rotation'),label:node.querySelector('.vtt-template__label').textContent}));
+    assert.ok(Math.abs(rectangleStyles.width-128)<1e-8);assert.equal(rectangleStyles.height,256);
+    assert.equal(rectangleStyles.rotation,'90deg');assert.equal(rectangleStyles.label,'4.0 × 2.0');
     const before=await snapshot();
     await pc.reload();await pc.waitForFunction(()=>document.querySelector('[data-connection-status]')?.textContent.includes('Connected'));
     await pc.locator(lower).waitFor();
     assert.match(await pc.locator(lower).evaluate(node=>node.style.maskImage),/data:image\/svg\+xml/);
+    await rectangle.waitFor();assert.equal(await rectangle.evaluate(node=>node.style.getPropertyValue('--vtt-rect-rotation')),'90deg');
     assert.deepEqual(await snapshot(),before);assert.deepEqual(errors,[]);
     console.log('PASS: actual GM/player templates retain same-floor, above-floor and cutout-clipped behavior across reload.');
   } finally {await browser.close();}

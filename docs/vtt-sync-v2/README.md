@@ -22,6 +22,8 @@ and Fit never write canonical camera, scene or floor state.
 Template floor visibility and cutout masking are extracted into the shared
 template-presentation module and used by the normal board. Passive template shape
 painting/hydration is still pending; this extraction does not mount template tools.
+Circle/rectangle geometry and labels now use a shared passive area painter in the
+normal board. Preview shape hydration and the wall painter remain to be connected.
 
 A GM-only `checkpoint.restoreLayout` authority now plans and atomically restores
 one scene's floors, canonical grid, fog, drawings/templates and existing token
