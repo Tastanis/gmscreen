@@ -53,4 +53,5 @@ The full monster authoring reference is `monster-automation.md` (this folder). M
 Zone-entry correlation: locally acknowledged normal `vtt:token-moved` hooks include
 movementOperationId and movementRevision. Server walking receipts are built by
 `../../vtt/lib/ZoneEntryReceipt.php` and stripped from player event projection.
-Canonical entry claims and interrupted-effect recovery remain pending.
+Canonical entry reservations are available through api/v2/zone-entries.php.
+Client integration, completion receipts and interrupted-effect recovery remain pending.

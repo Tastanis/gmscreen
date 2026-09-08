@@ -48,7 +48,11 @@ covered; reload-safe canonical per-round deduplication remains unfinished.
 ZoneEntryReceipt captures server-owned walking footprints and combat boundaries
 inside accepted movement events, including per-action batch receipts. Never trust
 a client receipt. Player projection strips full receipts; normal movement hooks
-carry movementOperationId/movementRevision for the pending claim authority.
+carry movementOperationId/movementRevision for claim authority. POST zone-entries.php
+reserves a pending entry using trusted movement, current geometry and round state.
+The SQLite vtt_zone_entry_claims ledger is world-scoped; a repeated claim never
+grants execution again. Claims do not execute effects or increment board revisions.
+Client integration, completion receipts and interrupted-effect recovery remain pending.
 Passive drawings call renderDrawings with an explicit drawingLayer and floor;
 never mount or replace the active drawing tool's shared state for preview.
 Template floor visibility and SVG cutout masks live in template-presentation.js.

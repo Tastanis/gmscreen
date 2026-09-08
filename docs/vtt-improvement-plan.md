@@ -1174,3 +1174,21 @@ retry/reopen, mixed batches exclude forced moves, and player responses omit rece
 metadata. Full suite: 724 tests/92 files passed. This is a prerequisite for the
 claim authority, not a completed deduplication fix: server claims, effect receipts,
 interrupted-effect recovery and client integration remain pending.
+
+### Durable zone-entry claim authority
+
+POST api/v2/zone-entries.php validates the accepted movement actor and trusted
+receipt, current combat boundary, current token footprint and permissions, existing
+visible floors, current zone and swept entry geometry. It never trusts a supplied
+round or source footprint. A world-scoped SQLite ledger reserves one pending claim
+per scene/zone/creature/boundary and retains the zone/receipt evidence. Retry or a
+new client crossing in the same round cannot receive a second execution grant.
+Reservations do not execute effects, modify token resources or advance board state.
+
+Server tests cover database reopening, cross-client duplicate claims, new combat
+boundaries, stale movement/round rejection, forced movement, missing zones, actor
+validation and unchanged board state. The HTTP browser journey uses a real player
+drag and checks wrong-actor rejection, pending status, repeat identity and no claim
+side effects. Full suite: 725 tests/92 files passed. Client integration, completion
+receipts and interrupted-effect recovery remain; gameplay still uses the previous
+local entry path until that lifecycle is wired and verified.

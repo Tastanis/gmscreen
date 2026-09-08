@@ -588,3 +588,10 @@ Normal `vtt:token-moved` events now include `movementOperationId` and
 correlation fields, not authored ability fields. Server events retain trusted
 walking receipts for future zone-entry claim validation; full receipts are not
 sent to players. This foundation does not yet make entry effects reload-safe.
+
+A server zone-entry reservation endpoint now exists at `vtt/api/v2/zone-entries.php`.
+It validates trusted accepted walking evidence and reserves a world-scoped pending
+claim unique to scene, zone, creature and combat boundary. A repeat reservation
+never authorizes execution again. Claims retain evidence but do not execute effects.
+Client integration, completion receipts and interrupted-effect recovery are still
+pending, so this backend milestone alone does not make gameplay reload-safe.

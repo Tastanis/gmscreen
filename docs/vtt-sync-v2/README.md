@@ -1100,7 +1100,12 @@ Zone-entry deduplication work now has trusted movement evidence. ZoneEntryReceip
 is generated inside movement authority from accepted footprints and canonical
 combat encounter/round state. Only walking actions produce it. Full receipts stay
 in server/GM event records and are stripped from player projection; client hooks
-carry only the accepted operation ID and revision. Future zone-entry claims must
+carry only the accepted operation ID and revision. Zone-entry claims must
 resolve that stored event rather than trusting client coordinates or round keys.
-Claim authority and effect recovery are not implemented yet; client-local entry
-bookkeeping remains the current execution path.
+POST api/v2/zone-entries.php now validates the movement actor, canonical boundary,
+current token position/permissions, existing visible floors and zone entry geometry.
+It reserves a pending claim in the world-scoped vtt_zone_entry_claims SQLite ledger,
+unique by scene/zone/creature/boundary. Stored evidence includes the zone and receipt.
+Reservations never execute effects or change board revisions; repeats do not grant
+execution again. Client integration, completion and recovery are not implemented
+yet; client-local entry bookkeeping remains the current gameplay execution path.

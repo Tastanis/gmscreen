@@ -15,6 +15,7 @@ require_once __DIR__ . '/SceneImportValidation.php';
  * or writes the legacy board-state JSON, so no live VTT domain is dual-owned.
  */
 require_once __DIR__ . '/ZoneEntryReceipt.php';
+require_once __DIR__ . '/ZoneEntryClaims.php';
 
 final class SyncV2Store
 {
@@ -1733,6 +1734,56 @@ final class SyncV2Store
         } catch (Throwable $error) {
             $this->rollbackTransactionSilently();
             throw $error;
+        }
+    }
+
+    /** Reserve one entry from trusted accepted movement; no gameplay effects run here. */
+    public function claimZoneEntry(array $request, string $actorId, bool $isGm): array
+    {
+        $ids=[];
+        foreach (['sceneId','placementId','zoneId','movementOperationId'] as $key) {
+            $value=$request[$key] ?? null;
+            if (!is_string($value) || trim($value)==='' || strlen($value)>200) throw new InvalidArgumentException('Invalid zone entry request.');
+            $ids[$key]=trim($value);
+        }
+        if (trim($actorId)==='') throw new InvalidArgumentException('Authentication required.');
+        $ledger=new ZoneEntryClaims($this->pdo,$this->worldId);
+        $this->pdo->exec('BEGIN IMMEDIATE');
+        try {
+            $event=$this->findEventByOperationId($ids['movementOperationId']);
+            if (!$event || strtolower((string)($event['actorId'] ?? ''))!==strtolower(trim($actorId))) throw new InvalidArgumentException('Entry must reference your accepted movement.');
+            $receipts=$event['payload']['zoneEntryReceipts'] ?? [];
+            if (isset($event['payload']['zoneEntryReceipt'])) $receipts[]=$event['payload']['zoneEntryReceipt'];
+            $receipt=null;
+            foreach ($receipts as $candidate) if (($candidate['sceneId'] ?? null)===$ids['sceneId'] && ($candidate['placementId'] ?? null)===$ids['placementId']) {$receipt=$candidate;break;}
+            if (!$receipt) throw new InvalidArgumentException('Accepted walking evidence is unavailable.');
+            $snapshot=$this->getSnapshot();$state=$snapshot['state'];$sceneId=$ids['sceneId'];
+            $placements=$state['placements'][$sceneId] ?? [];
+            $mover=$placements[$ids['placementId']] ?? null;
+            if (!is_array($mover) || (!$isGm && !$this->playerMayMovePlacement($mover))) throw new InvalidArgumentException('Token is unavailable for entry claims.');
+            $combat=$state['combat'][$sceneId] ?? [];
+            if (($receipt['boundary'] ?? null)!==ZoneEntryReceipt::boundary($combat)) throw new InvalidArgumentException('That movement belongs to an earlier combat round.');
+            $current=ZoneEntryReceipt::create($sceneId,$ids['placementId'],$mover,$mover,$combat);
+            if ($current['to'] != $receipt['to']) throw new InvalidArgumentException('Token moved again before the entry was claimed.');
+            $zone=null;$owner=null;
+            foreach ($placements as $placement) foreach ((is_array($placement['persistentZones'] ?? null) ? $placement['persistentZones'] : []) as $candidate) {
+                if (is_array($candidate) && ($candidate['id'] ?? null)===$ids['zoneId']) {$zone=$candidate;$owner=$placement;break 2;}
+            }
+            if (!$zone || !is_array($zone['triggers'] ?? null) || !in_array('onEnter',$zone['triggers'],true)) throw new InvalidArgumentException('Zone is unavailable for entry claims.');
+            $levels=array_column(FloorGeometry::orderedLevels($state['sceneConfig'][$sceneId]['mapLevels'] ?? []),null,'id');
+            foreach ([$mover,$owner,$zone] as $item) {
+                $floor=ZoneEntryClaims::level($item);
+                if (!isset($levels[$floor]) || (!$isGm && (($levels[$floor]['hidden'] ?? false)===true || $this->placementIsHidden($item)))) throw new InvalidArgumentException('Zone or token floor is unavailable.');
+            }
+            if (($zone['createdAt'] ?? 0)>($event['serverTime'] ?? 0)) throw new InvalidArgumentException('Zone was created after that movement.');
+            $filter=strtolower(trim((string)($zone['affects'] ?? 'creature')));$team=$this->combatantTeam($mover);
+            if (($filter==='enemy' && $team!=='enemy') || (in_array($filter,['ally','selforally','self or ally','selfandally','self and ally'],true) && $team!=='ally')) throw new InvalidArgumentException('Zone does not affect this creature.');
+            if (!ZoneEntryClaims::enters($zone,$receipt['from'],$receipt['to'])) throw new InvalidArgumentException('Movement does not enter this zone.');
+            $result=$ledger->reserve($receipt,$zone,$ids['movementOperationId'],trim($actorId));
+            $this->pdo->exec('COMMIT');
+            return $result;
+        } catch (Throwable $error) {
+            $this->rollbackTransactionSilently();throw $error;
         }
     }
 

@@ -22,6 +22,9 @@ const origin='http://127.0.0.1:8129';
     }}}))));
     assert.equal(zone.registered,true);await pc.locator(`[data-zone-id="${zone.zoneId}"]`).waitFor();
     const before=Number((await snapshot()).state.placements[sceneId]['floor-cal'].hp.current);
+    const movementIds=[];pc.on('request',r=>{if(r.url().endsWith('/commands.php')&&r.method()==='POST'){
+      const body=r.postDataJSON();if(body.type==='token.move')movementIds.push(body.operationId);
+    }});
     const token=pc.locator('#vtt-token-layer [data-placement-id="floor-cal"]');
     async function drag(dx,column) {
       await token.hover();const box=await token.boundingBox();assert.ok(box);
@@ -37,6 +40,16 @@ const origin='http://127.0.0.1:8129';
       const s=(await(await fetch('/dnd/vtt/api/v2/snapshot.php')).json()).snapshot;
       return Number(s.state.placements[sceneId]['floor-cal'].hp.current)===current;
     },{sceneId,current:before-3});
+    const claimUrl=origin+'/dnd/vtt/api/v2/zone-entries.php';
+    const claimData={sceneId,placementId:'floor-cal',zoneId:zone.zoneId,movementOperationId:movementIds.at(-1)};
+    const claimBefore=await snapshot();
+    assert.equal((await pc.request.get(claimUrl)).status(),405);
+    assert.equal((await gm.request.post(claimUrl,{data:claimData})).status(),422,'Another actor cannot claim the player movement');
+    const reserved=await pc.request.post(claimUrl,{data:claimData});assert.equal(reserved.status(),200);
+    const claim=await reserved.json();assert.equal(claim.claimed,true);assert.equal(claim.status,'pending');
+    const duplicate=await(await pc.request.post(claimUrl,{data:claimData})).json();
+    assert.equal(duplicate.claimed,false);assert.equal(duplicate.claimId,claim.claimId);
+    assert.deepEqual(await snapshot(),claimBefore,'Claim reservations do not apply effects or change board state');
     await drag(-6,2);await pc.waitForTimeout(500);
     assert.equal(Number((await snapshot()).state.placements[sceneId]['floor-cal'].hp.current),before-3,'A second crossing in the same client/round does not tick again');
     assert.deepEqual(errors,[]);
