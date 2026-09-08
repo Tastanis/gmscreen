@@ -109,3 +109,10 @@ test('group movement undo restores all original members or none', () => {
   const result = spawnSync('php', [...phpArgsForSqlite(), script], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
+
+
+test('character writes persist their mutation and operation receipt atomically', () => {
+  const script = fileURLToPath(new URL('../../../../api/v2/tests/character-write-receipts.test.php', import.meta.url));
+  const result = spawnSync('php', [script], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});

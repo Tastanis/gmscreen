@@ -360,3 +360,8 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 - Group movement receipts carry groupMove for the Undo control. Selecting one
   member still undoes the original whole group. Never semantically retry a stale
   group undo; identical operation-ID transport retry remains safe.
+
+- Character JSON writes use AtomicJsonFile under the existing request-wide lock.
+  Keep surge operation receipts and mutations in the same replacement. Never prune
+  receipt IDs without a policy that prevents old retries becoming new mutations.
+  Surge receipt replay returns the original result, not necessarily current state.

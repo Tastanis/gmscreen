@@ -19,3 +19,22 @@ test('stalled resource bodies time out without replay or late confirmation',asyn
   assert.equal(calls,1);assert.equal(signal.aborted,true);
   release({success:true});await new Promise(resolve=>setTimeout(resolve,0));
 });
+
+
+test('surge writes require their exact durable receipt and expose uncertain operation IDs',async()=>{
+  const {confirmCharacterWrite}=await import('../character-write.js');
+  let calls=0;
+  const operationId='surge-unit-0001';
+  const result=await confirmCharacterWrite('/sheet','sync-surges',{character:'cal',delta:1},{operationId,fetchImpl:async(url,options)=>{
+    assert.equal(options.body.get('operationId'),operationId);
+    return {ok:true,json:async()=>({success:true,operationId,surges:4,replayed:true})};
+  }});
+  assert.equal(result.replayed,true);
+  for (const response of [{success:true,surges:4},{success:true,operationId:'wrong-id',surges:4}]) {
+    await assert.rejects(confirmCharacterWrite('/sheet','sync-surges',{},{operationId,fetchImpl:async()=>({ok:true,json:async()=>response})}),error=>error.operationId===operationId);
+  }
+  await assert.rejects(confirmCharacterWrite('/sheet','sync-surges',{},{operationId,timeoutMs:10,fetchImpl:()=>{
+    calls++;return new Promise(()=>{});
+  }}),error=>error.operationId===operationId && /timed out/.test(error.message));
+  assert.equal(calls,1);
+});

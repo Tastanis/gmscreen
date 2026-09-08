@@ -1670,3 +1670,28 @@ reload, Undo restored both positions/floors and Cal's linked floor view. A secon
 group move followed by a GM edit to one member rejected the whole undo, left both
 placements unchanged, and remained unchanged after reload. Focused runtime/server
 coverage passed, followed by the full suite: 754 tests across 99 files. The isolated PHP server was stopped; no live writes or deployment.
+
+### Atomic character saves and surge operation receipts
+
+Character-sheet saves now serialize to a temporary file in the destination
+folder, flush it and atomically replace the destination while retaining the
+existing request-wide mutation lock and backups. Serialization failure preserves
+the prior file. A surge POST may include operationId; its actor/character/action
+and normalized input identify the request. The new count and receipt are saved in
+one replacement under the private root _vttOperations metadata. Matching replays
+return the original outcome without changing current character state; mismatched
+actor, character or input is rejected as JSON. Receipt history is retained without
+pruning so old retries cannot become fresh gains; archival/retention policy remains
+future work. Existing callers without IDs retain their previous behavior.
+
+The surge-gain adapter generates an ID, requires that ID in the acknowledgement,
+and attaches it to errors. It still does not automatically retry. Resource and
+recovery writes do not yet have these receipts; a durable browser pending-action
+queue, review UI and coordinated board/sheet recovery remain required.
+
+Browser tests dropped a real committed surge response, replayed it after reload,
+then verified later-write preservation and actor/payload collision rejection.
+Existing surge malformed/rejected/stalled tests also passed. No live writes.
+
+Full regression suite: 756 tests across 99 files passed. The disposable PHP server
+was stopped after browser verification.

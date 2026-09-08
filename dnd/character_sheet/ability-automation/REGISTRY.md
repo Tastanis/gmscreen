@@ -721,4 +721,12 @@ count. Rejected, malformed or timed-out responses call reject (or return an
 unconfirmed skipped result for resolve-only callers), never grant success or
 automatically repeat a delta. Surge, recovery-spend and resource-write adapters
 share confirmCharacterWrite for a 15-second HTTP/body deadline and no retry.
-An aborted request may have committed; durable outcome records remain pending.
+An aborted request may have committed. Surge gains now persist operation receipts; other character write receipts and recovery UI remain pending.
+
+Surge-gain writes carry a transport operationId (not an ability JSON field).
+The handler stores the surge result and receipt in one atomic character-file save.
+Reusing that ID with the same actor, character and normalized input returns the
+original saved result with replayed=true; the result is historical, not a claim
+about the current count after later edits. A different request using the same ID
+is rejected. confirmCharacterWrite verifies the returned ID and includes it on
+errors, without automatic replay. No ability authoring fields or hooks changed.

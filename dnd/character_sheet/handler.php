@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . "/AtomicJsonFile.php";
+require_once __DIR__ . "/CharacterWriteReceipts.php";
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -445,8 +447,7 @@ function saveCharacterSheetData($dataDir, $dataFile, $data) {
 
     backupCharacterSheetData($dataDir, $dataFile);
 
-    $jsonData = json_encode($data, JSON_PRETTY_PRINT);
-    return file_put_contents($dataFile, $jsonData, LOCK_EX) !== false;
+    return AtomicJsonFile::write($dataFile, $data);
 }
 
 function acquireCharacterSheetWriteLock($dataDir) {
@@ -661,7 +662,14 @@ switch ($action) {
         $allSheets = loadCharacterSheetData($dataDir, $dataFile, $characters);
         $sheet = $allSheets[$requestedCharacter];
 
+        $surgeOperationId = null;
         if ($requestMethod === 'POST') {
+            $surgeOperationId = CharacterWriteReceipts::operationId($requestData['operationId'] ?? null);
+            $surgeInput = isset($requestData['value']) && $requestData['value'] !== ''
+                ? ['value'=>max(0, (int)$requestData['value'])]
+                : ['delta'=>(int)($requestData['delta'] ?? 0)];
+            $replayed = CharacterWriteReceipts::lookup($allSheets, $surgeOperationId, $currentUser, $requestedCharacter, $action, $surgeInput);
+            if ($replayed !== null) sendJsonResponse($replayed);
             if (!isset($sheet['hero']) || !is_array($sheet['hero'])) {
                 $sheet['hero'] = array();
             }
@@ -678,11 +686,17 @@ switch ($action) {
             $sheet['hero']['surgesUsed'] = 0;
             $allSheets[$requestedCharacter] = $sheet;
 
+            $surgeResponse = CharacterWriteReceipts::record($allSheets, $surgeOperationId, $currentUser, $requestedCharacter, $action, $surgeInput, [
+                'success'=>true,
+                'name'=>$sheet['hero']['name'] !== '' ? $sheet['hero']['name'] : $requestedCharacter,
+                'surges'=>(int)$sheet['hero']['surges'],
+            ]);
             if (!saveCharacterSheetData($dataDir, $dataFile, $allSheets)) {
                 sendJsonResponse(array('success' => false, 'error' => 'Failed to save surges'));
             }
         }
 
+        if ($requestMethod === 'POST') sendJsonResponse($surgeResponse);
         sendJsonResponse(array(
             'success' => true,
             'name' => isset($sheet['hero']['name']) && $sheet['hero']['name'] !== '' ? $sheet['hero']['name'] : $requestedCharacter,
@@ -837,7 +851,9 @@ switch ($action) {
     default:
         sendJsonResponse(array('success' => false, 'error' => 'Unknown action'));
 }
-} catch (RuntimeException $error) {
+} catch (InvalidArgumentException $error) {
+    sendJsonResponse(['success'=>false, 'error'=>$error->getMessage()]);
+} catch (RuntimeException | JsonException $error) {
     sendJsonResponse(array(
         'success' => false,
         'error' => 'Character sheet storage error: ' . $error->getMessage()
