@@ -1256,3 +1256,10 @@ precedence over the token display name; the existing name-alias fallback remains
 for older unlinked tokens. Renaming a linked token cannot redirect these paths to
 another character with the same display name. This does not change roster
 permissions or infer a new owner from the name.
+
+Surge-gain automation now requires explicit success and an integer saved surge
+count. Rejected, malformed or timed-out responses call reject (or return an
+unconfirmed skipped result for resolve-only callers), never grant success or
+automatically repeat a delta. Surge, recovery-spend and resource-write adapters
+share confirmCharacterWrite for a 15-second HTTP/body deadline and no retry.
+An aborted request may have committed; durable outcome records remain pending.

@@ -1,3 +1,4 @@
+import {confirmCharacterWrite} from '../services/character-write.js';
 import {spendCharacterRecoveries} from '../services/recovery-spend.js';
 import {confirmResourceWrite} from '../services/resource-write.js';
 import {spendZoneUpkeep} from '../services/zone-upkeep.js';
@@ -16572,23 +16573,9 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
     const endpoint = typeof routes?.sheet === 'string' && routes.sheet ? routes.sheet : '/dnd/character_sheet/handler.php';
-    const body = new URLSearchParams();
-    body.set('action', 'sync-surges');
-    body.set('character', profileId);
-    body.set('source', 'vtt');
-    body.set('delta', String(amount));
     try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body,
-      });
-      const result = await response.json().catch(() => null);
-      if (!response.ok || result?.success === false) {
-        resolve?.({ skipped: true, reason: result?.error || 'save-failed' });
-        return;
-      }
+      const result=await confirmCharacterWrite(endpoint,'sync-surges',{character:profileId,delta:String(amount)});
+      if (!Number.isInteger(result.surges)) throw new Error('Saved surge count was not confirmed.');
       if (characterSummaryCache instanceof Map) characterSummaryCache.delete(profileId);
       document.dispatchEvent(new CustomEvent('vtt:character-sheet-updated', {
         detail: { characterId: profileId, change: 'surges' },
@@ -16600,7 +16587,8 @@ export function mountBoardInteractions(store, routes = {}) {
       });
     } catch (error) {
       console.warn('[VTT] Failed to apply surge gain', error);
-      resolve?.({ skipped: true, reason: 'request-failed' });
+      if (typeof detail.reject === 'function') detail.reject(error);
+      else resolve?.({ skipped: true, reason: 'save-unconfirmed' });
     }
   }
 

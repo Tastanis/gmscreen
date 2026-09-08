@@ -345,3 +345,6 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 
 - Resolve sheet-backed token behavior through the saved character profile before
   using display-name aliases; renames must not redirect recovery or surge writes.
+
+- Surge gains require explicit saved-count confirmation. Narrow character writes
+  share confirmCharacterWrite; never replay an uncertain delta.

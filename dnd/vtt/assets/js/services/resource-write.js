@@ -1,19 +1,5 @@
-/** Confirm a narrow resource write; an uncertain outcome must never be retried here. */
-export async function confirmResourceWrite(endpoint, fields, {fetchImpl=globalThis.fetch,timeoutMs=15000}={}) {
-  const controller=new AbortController();let timer;
-  const deadline=new Promise((resolve,reject)=>{timer=setTimeout(()=>{
-    reject(new Error('Character resource save timed out; its outcome needs review.'));
-    controller.abort();
-  },timeoutMs);});
-  try {
-    return await Promise.race([deadline,(async()=>{
-      const response=await fetchImpl(endpoint,{method:'POST',credentials:'same-origin',signal:controller.signal,
-        headers:{'Content-Type':'application/x-www-form-urlencoded'},
-        body:new URLSearchParams({...fields,action:'sync-resource',source:'vtt'}),
-      });
-      const result=await response.json();
-      if(!response.ok || result?.success!==true)throw new Error(result?.error || 'Character resource save was not confirmed.');
-      return result;
-    })()]);
-  } finally {clearTimeout(timer);}
+import {confirmCharacterWrite} from './character-write.js';
+
+export function confirmResourceWrite(endpoint, fields, options={}) {
+  return confirmCharacterWrite(endpoint, 'sync-resource', fields, options);
 }

@@ -1608,3 +1608,18 @@ spending and surge gain. Both affect Cal while Sharon remains unchanged; recover
 requests carry character=cal. Full suite: 752 tests/99 files passed. This addresses
 the four traced name-only paths, not a complete audit of every legacy character
 lookup or unlinked-token ambiguity.
+
+### Confirm surge grants and share character-write deadlines
+
+Surge-gain automation now requires explicit success and an integer saved surge
+count. Rejected, malformed or timed-out responses call reject (or return an
+unconfirmed skipped result for resolve-only callers), never grant success or
+automatically repeat a delta. Surge, recovery-spend and resource-write adapters
+share confirmCharacterWrite for a 15-second HTTP/body deadline and no retry.
+An aborted request may have committed; durable outcome records remain pending.
+
+The isolated browser grants one surge through the real hook, then injects an
+application failure, malformed JSON result and stalled response. Each rejects
+with one request and leaves the confirmed surge count unchanged. Full suite:
+752 tests/99 files passed. Existing resource/recovery tests exercise their shared
+transport after extraction; durable character-operation recovery remains pending.
