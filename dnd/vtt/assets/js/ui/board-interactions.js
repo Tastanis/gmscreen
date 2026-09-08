@@ -80,7 +80,7 @@ import { mountMapNavigation } from './map-navigation.js';
 import { floorRelation } from './floor-geometry.js';
 import { mountSaveFeedback, describeSaveFailure } from './save-feedback.js';
 import { mountConnectionStatus } from './connection-status.js';
-import { publishActiveTool } from './active-tool.js';
+import { claimActiveTool, publishActiveTool } from './active-tool.js';
 import { createRequestedTestCoordinator } from './requested-test-coordinator.js';
 import {
   applyCanonicalPrimaryTokenSelection,
@@ -23018,6 +23018,7 @@ function createMapLevelCutoutTool() {
       return false;
     }
 
+    claimActiveTool('cutouts', () => deactivate());
     activeSceneId = context.sceneId;
     activeLevelId = context.level.id;
     savedCutouts = cloneCutouts(context.level.cutouts);
@@ -23797,6 +23798,12 @@ function createMapLevelCutoutTool() {
     event.stopPropagation();
     deactivate();
   });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && isActive) {
+      deactivate();
+      event.preventDefault();
+    }
+  });
   removeButton.addEventListener('click', (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -24289,6 +24296,8 @@ function createTemplateTool() {
   // through a callback instead of writing a permanent template shape.
   function startWallPlacementForAutomation(squareCount, { wallColor, persistStructure } = {}) {
     return new Promise((resolve) => {
+      claimActiveTool('template', cancelPlacement);
+      board.focus({ preventScroll: true });
       const total = Math.max(1, Number.parseInt(squareCount, 10) || 1);
       cancelPlacement();
       placementState = {
@@ -25995,6 +26004,7 @@ function createTemplateTool() {
   }
 
   function beginPlacement(type, values) {
+    claimActiveTool('template', cancelPlacement);
     cancelPlacement();
     clearSelection();
     board.focus({ preventScroll: true });

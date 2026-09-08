@@ -63,7 +63,8 @@ export function mountStairsTool(options = {}) {
   window.addEventListener('pointerup', handleWindowPointerUp, true);
 
   // Cancel pending placement when mode/panel resets.
-  subscribeStairsMode(({ mode }) => {
+  subscribeStairsMode(({ mode, isPanelOpen }) => {
+    if (!isPanelOpen) handleWindowPointerUp();
     if (mode !== 'place-up' && mode !== 'place-down') {
       placementCellA = null;
     }

@@ -30,8 +30,8 @@ User authorized implementing the September 7 product audit, updating/running the
 - [x] Token library and saved scenes first; creation forms collapsed.
 - [ ] Compact inactive tracker and combat character card.
   - Inactive tracker is a collapsed roster disclosure with a compact horizontal toolbar; full tracker opens automatically during combat. Combat character-card work remains pending.
-- [ ] Zoom/fit/center/shortcuts and persistent tool labels.
-  - Visible zoom, Fit Map, Center Selected, shortcut guide, and active-tool labels are implemented. Browser checks cover Draw, Measure, stairs, and template activation/cancellation; cutout-label browser coverage remains pending.
+- [x] Zoom/fit/center/shortcuts and persistent tool labels.
+  - Visible zoom, Fit Map, Center Selected, shortcut guide, and active-tool labels are implemented. Browser checks cover Draw, Measure, stairs, templates, cutout editing, and mode handoffs.
 - [ ] Opaque readable panels, practical targets, diagnostics-only memory counter.
 
 ## Recovery and preparation
@@ -248,3 +248,18 @@ hidden floor without advancing the world revision on rejection.
 Validation: all 682 tests passed across 80 files. A fresh disposable fixture also
 passed the three-browser stairs, fall, reload, linked-view, and movement-undo
 journey. Live campaign state was not changed.
+
+## Tool ownership and cancellation
+
+Draw, Measure, stairs, cutout editing, and template placement now hand control to
+one another through a shared cancellation registry. Label refreshes do not acquire
+control. Switching modes closes the prior editor or cancels its pending placement;
+cutout drafts follow the existing Close behavior (only Apply saves them). Closing
+stairs ends a live corner drag and persists its existing edits before releasing
+control. Escape now exits Measure, stairs, and cutout editing. Automation wall
+placement uses the same handoff and focuses the board for keyboard cancellation.
+
+The browser journey covers both directions of Draw/stairs handoff, Draw to
+template to Measure, cutout activation/Escape, and cutout to Draw, verifying the
+old panels and pressed states actually clear. All 682 regression tests passed.
+Targeting and other specialized interaction modes still need a separate review.

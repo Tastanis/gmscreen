@@ -1,4 +1,4 @@
-import { publishActiveTool } from './active-tool.js';
+import { claimActiveTool, publishActiveTool } from './active-tool.js';
 /**
  * Stairs side panel — compact GM-only floating panel that owns:
  *   - placement buttons (↑ / ↓)
@@ -51,6 +51,12 @@ export function mountStairsPanel(options = {}) {
 
   bindLauncher();
   bindPanelControls();
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && isPanelOpen()) {
+      setPanelOpen(false);
+      event.preventDefault();
+    }
+  });
 
   // Subscribe to board-state changes so the stair list stays in sync
   // when the viewer level or stairs collection changes.
@@ -174,6 +180,7 @@ function bindPanelControls() {
 
 function setPanelOpen(open) {
   if (!panelEl) return;
+  if (open) claimActiveTool('stairs', () => setPanelOpen(false));
   panelEl.hidden = !open;
   if (launcherEl) {
     launcherEl.classList.toggle('is-active', open);
