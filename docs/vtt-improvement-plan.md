@@ -1575,3 +1575,21 @@ JSON body with late success. The browser holds actual combat-start resource
 automation and verifies its review status, single request and unchanged server
 balance. Full suite: 750 tests/98 files passed. Durable resource outcome records
 and interrupted action recovery remain outstanding.
+
+### Narrow authoritative recovery spending
+
+The automation recovery-spend hook uses sync-vitals with spendRecoveries. Under
+the existing sheet write lock, the server validates a positive integer cost up
+to 1000, checks the current count and subtracts only recoveries. It returns spent: 0
+for confirmed insufficiency, preserving stamina and resources. The client waits
+for a bounded acknowledgment, invalidates its cached sheet and rejects uncertain
+saves without retrying. Recovery-value calculation remains the existing client
+logic; spending and the subsequent healing action are not one transaction.
+
+The browser holds actual recovery spending, changes heroic resource concurrently,
+and verifies the spend preserves both that value and stamina. A second hook call
+reports insufficient recoveries; competing requests against one remaining recovery
+produce spends of 0 and 1, with zero remaining after reload. Service tests cover
+explicit acknowledgment, failure, timeout and no replay. Full suite: 752 tests/99
+files passed. Durable spend receipts, combined recovery/healing authority and
+other character-card reconciliation remain outstanding.

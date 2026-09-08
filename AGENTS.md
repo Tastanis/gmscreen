@@ -339,3 +339,6 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 
 - Narrow resource writes use confirmResourceWrite; do not broadcast success or
   replay an uncertain request after its confirmation deadline.
+
+- The recovery-spend hook deducts through locked sync-vitals spendRecoveries.
+  Never persist a cached whole character sheet to spend recoveries.

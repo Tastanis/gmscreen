@@ -1241,3 +1241,11 @@ without retry; only explicit successful acknowledgments allow cache/broadcast
 updates. Resource rules report an unconfirmed save and do not mark applied limits
 after timeout. Abort does not establish whether a server write committed, so
 manual review remains necessary; durable operation receipts are still pending.
+
+The automation recovery-spend hook uses sync-vitals with spendRecoveries. Under
+the existing sheet write lock, the server validates a positive integer cost up
+to 1000, checks the current count and subtracts only recoveries. It returns spent: 0
+for confirmed insufficiency, preserving stamina and resources. The client waits
+for a bounded acknowledgment, invalidates its cached sheet and rejects uncertain
+saves without retrying. Recovery-value calculation remains the existing client
+logic; spending and the subsequent healing action are not one transaction.

@@ -1,3 +1,4 @@
+import {spendCharacterRecoveries} from '../services/recovery-spend.js';
 import {confirmResourceWrite} from '../services/resource-write.js';
 import {spendZoneUpkeep} from '../services/zone-upkeep.js';
 import {runZoneBoundary} from '../services/zone-boundary.js';
@@ -17140,25 +17141,30 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
     const current = Number.parseInt(vitals.currentRecoveries ?? 0, 10) || 0;
-    if (current < recoveries) {
-      resolve?.({ skipped: true, reason: 'insufficient', currentRecoveries: current, required: recoveries });
-      return;
-    }
     const recoveryValue = resolveAutomationRecoveryValue(vitals);
     if (!Number.isFinite(recoveryValue) || recoveryValue <= 0) {
       resolve?.({ skipped: true, reason: 'missing-recovery-value', currentRecoveries: current });
       return;
     }
-    vitals.currentRecoveries = Math.max(0, current - recoveries);
-    const saved = await saveAutomationSheetForProfile(profileId, sheet);
-    if (!saved) {
-      resolve?.({ skipped: true, reason: 'save-failed', currentRecoveries: current });
+    let result;
+    try {
+      result=await spendCharacterRecoveries(routes?.sheet || '/dnd/character_sheet/handler.php',profileId,recoveries);
+    } catch (error) {
+      characterSummaryCache.delete(profileId);
+      if (typeof detail.reject === 'function') detail.reject(error);
+      else resolve?.({skipped:true,reason:'save-unconfirmed'});
       return;
     }
+    characterSummaryCache.delete(profileId);
+    if (!result.spent) {
+      resolve?.({skipped:true,reason:'insufficient',currentRecoveries:result.currentRecoveries,required:recoveries});
+      return;
+    }
+    document.dispatchEvent(new CustomEvent('vtt:character-sheet-updated',{detail:{characterId:profileId,change:'recovery'}}));
     resolve?.({
       spent: recoveries,
       recoveryValue,
-      currentRecoveries: vitals.currentRecoveries,
+      currentRecoveries: result.currentRecoveries,
       name: tokenLabel(getPlacementFromStore(placementId)),
     });
   }

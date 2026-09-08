@@ -746,6 +746,16 @@ switch ($action) {
         if (!isset($sheet['hero']['vitals']) || !is_array($sheet['hero']['vitals'])) {
             $sheet['hero']['vitals'] = array();
         }
+        if (isset($requestData['spendRecoveries'])) {
+            $cost=filter_var($requestData['spendRecoveries'],FILTER_VALIDATE_INT);
+            if ($cost===false || $cost<1 || $cost>1000) sendJsonResponse(['success'=>false,'error'=>'Invalid recovery cost']);
+            $current=max(0,(int)($sheet['hero']['vitals']['currentRecoveries'] ?? 0));
+            if ($current<$cost) sendJsonResponse(['success'=>true,'spent'=>0,'reason'=>'insufficient','currentRecoveries'=>$current]);
+            $sheet['hero']['vitals']['currentRecoveries']=$current-$cost;
+            $allSheets[$requestedCharacter]=$sheet;
+            if (!saveCharacterSheetData($dataDir,$dataFile,$allSheets)) sendJsonResponse(['success'=>false,'error'=>'Failed to spend recoveries']);
+            sendJsonResponse(['success'=>true,'spent'=>$cost,'currentRecoveries'=>$current-$cost]);
+        }
         $hasStamina = isset($requestData['currentStamina']) && $requestData['currentStamina'] !== '';
         $hasRecoveries = isset($requestData['currentRecoveries']) && $requestData['currentRecoveries'] !== '';
         if (!$hasStamina && !$hasRecoveries) {
