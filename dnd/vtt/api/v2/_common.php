@@ -239,12 +239,41 @@ function vttSyncV2CanMovePlacement(
     return vttSyncV2Store()->playerMayMovePlacement($placement);
 }
 
+/** Shared player projection. Null means unavailable; never disclose a hidden ID. */
+function vttSyncV2ViewerPcAssociations(array $snapshot, array $auth, ?array $sceneIds = null): array
+{
+    $state = $snapshot['state'] ?? [];
+    $sceneIds ??= array_unique([...array_keys($state['sceneConfig'] ?? []), ...array_keys($state['placements'] ?? [])]);
+    $result = [];
+    foreach ($sceneIds as $sceneId) {
+        $placements = $state['placements'][$sceneId] ?? [];
+        $result[$sceneId] = [];
+        foreach (PlayerRoster::playerIds() as $userId) {
+            $id = vttSyncV2Store()->resolvePcPlacementIdForUser($placements, $userId);
+            if ($id !== null && vttSyncV2PlacementHiddenForPlayer($placements[$id], $state['sceneConfig'][$sceneId] ?? [])) $id = null;
+            $result[$sceneId][$userId] = $id;
+        }
+    }
+    return $result;
+}
+
 function vttSyncV2ProjectSnapshotForUser(array $snapshot, array $auth): array
 {
     if (!isset($snapshot['state']) || !is_array($snapshot['state'])) {
         $snapshot['state'] = [];
     }
     $canonical = $snapshot['state']['placements'] ?? [];
+    if (!($auth['isGM'] ?? false)) {
+        foreach (vttSyncV2ViewerPcAssociations($snapshot, $auth) as $sceneId => $id) {
+            $snapshot['state']['sceneConfig'][$sceneId]['pcTokenAssociations'] = $id;
+            foreach ($snapshot['state']['sceneConfig'][$sceneId]['userLevelState'] ?? [] as $userId => $entry) {
+                $tokenId = $entry['tokenId'] ?? null;
+                if ($tokenId !== null && (!isset($canonical[$sceneId][$tokenId]) || vttSyncV2PlacementHiddenForPlayer($canonical[$sceneId][$tokenId], $snapshot['state']['sceneConfig'][$sceneId]))) {
+                    unset($snapshot['state']['sceneConfig'][$sceneId]['userLevelState'][$userId]['tokenId']);
+                }
+            }
+        }
+    }
     $sceneConfig = is_array($snapshot['state']['sceneConfig'] ?? null)
         ? $snapshot['state']['sceneConfig']
         : [];
@@ -383,6 +412,12 @@ function vttSyncV2ProjectEventForUser(array $event, array $auth): array
         return $event;
     }
     $type = (string) ($event['type'] ?? '');
+    if (in_array($type, ['placement.batchApplied', 'levels.replaced'], true)) {
+        $sceneIds = array_values(array_unique(array_filter([
+            $event['sceneId'] ?? null, ...array_column($event['payload']['mutations'] ?? [], 'sceneId'),
+        ], 'is_string')));
+        $event['payload']['viewerPcAssociations'] = vttSyncV2ViewerPcAssociations(vttSyncV2Store()->getSnapshot(), $auth, $sceneIds);
+    }
     if ($type === 'requestedTest.changed') {
         return vttSyncV2ProjectRequestedTestEventForUser($event, $auth);
     }

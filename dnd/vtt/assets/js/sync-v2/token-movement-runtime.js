@@ -557,7 +557,7 @@ export function createTokenMovementRuntime({
         boardState.sceneState[sceneId] && typeof boardState.sceneState[sceneId] === 'object'
           ? boardState.sceneState[sceneId]
           : {};
-      for (const field of ['grid', 'fogOfWar', 'mapLevels', 'userLevelState']) {
+      for (const field of ['grid', 'fogOfWar', 'mapLevels', 'userLevelState', 'pcTokenAssociations']) {
         if (Object.prototype.hasOwnProperty.call(config ?? {}, field)) {
           boardState.sceneState[sceneId][field] = clone(config[field]);
         }

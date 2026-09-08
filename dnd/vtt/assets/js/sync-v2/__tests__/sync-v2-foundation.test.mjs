@@ -8,6 +8,19 @@ import { reduceCanonicalEvent } from '../event-reducer.js';
 import { createEventStream, createPusherEventTransport } from '../event-stream.js';
 import { createMultiplayerFaultHarness } from '../testing/multiplayer-fault-harness.js';
 
+test('player association projection replaces unavailable primary without rewriting canonical revisions', () => {
+  const initial = { revision: 0, state: { sceneConfig: { scene: { _revision: 4, pcTokenAssociations: {cal:'visible-copy'} } } } };
+  const event = { type:'placement.batchApplied', revision:1, operationId:'association-hide', payload:{mutations:[],viewerPcAssociations:{scene:{cal:null}}} };
+  const result = reduceCanonicalEvent(initial, event);
+  assert.equal(result.status, 'applied');
+  assert.equal(result.snapshot.state.sceneConfig.scene.pcTokenAssociations.cal, null);
+  assert.equal(result.snapshot.state.sceneConfig.scene._revision, 4);
+  assert.equal(result.changeSet.levels, true);
+  assert.equal(initial.state.sceneConfig.scene.pcTokenAssociations.cal, 'visible-copy');
+  const unchanged = reduceCanonicalEvent(result.snapshot, {...event, revision:2, operationId:'association-repeat'});
+  assert.equal(unchanged.changeSet.levels, false);
+});
+
 function shadowEvent(revision, operationId, payload = {}) {
   return {
     revision,

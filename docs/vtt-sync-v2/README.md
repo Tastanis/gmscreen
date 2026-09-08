@@ -908,8 +908,17 @@ Players cannot change the flag or profile/owner/controller metadata. The resolve
 prefers the single explicit primary, falls back to a unique linked placement, and
 does not choose between ambiguous duplicates. The choice affects subsequent floor
 following and My token's floor; selecting it does not move a token or camera.
-Hidden-primary/view-projection policy still needs explicit coverage before the
-broader association and camera-policy roadmap can be marked complete.
+Player snapshot/bootstrap projection includes a derived `pcTokenAssociations` map
+per scene. Each configured profile maps to its visible selected token ID, or null
+when hidden, on a hidden floor, missing, or ambiguous. This is audience metadata,
+not a canonical writer domain. The shared player event stream carries the same
+map in `viewerPcAssociations` on placement batches and floor configuration events.
+The reducer updates association state without changing scene entity revisions and
+refreshes floor controls only when the map changes. An explicit null prevents
+fallback to a visible duplicate. Hidden token IDs are also removed from saved
+viewer references in player snapshots, and hidden-token movement cannot pull a
+linked viewer. Revealing the token restores the association through normal events.
+Broader camera policy remains pending.
 
 Roster removal leaves historical primary flags inert. They cannot block unrelated
 placement changes; newly selecting or relinking a primary still requires a valid

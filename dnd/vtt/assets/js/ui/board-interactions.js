@@ -2345,7 +2345,9 @@ export function mountBoardInteractions(store, routes = {}) {
     button.disabled = true;
     try {
       const changed = await reconcileCurrentPlayerViewToPcToken({ force: true });
-      updateStatus(changed ? 'Viewing your token’s floor.' : 'Already on your token’s floor, or no unique linked token is available in this scene.');
+      const board = boardApi.getState?.()?.boardState;
+      const unavailable = board?.sceneState?.[board?.activeSceneId]?.pcTokenAssociations?.[getCurrentUserId()] === null;
+      updateStatus(changed ? 'Viewing your token’s floor.' : unavailable ? 'No available primary token in this scene. Ask the GM to check your token association.' : 'Already on your token’s floor, or no unique linked token is available in this scene.');
     } catch (error) {
       reportSyncFailure(error, 'return to token floor');
     } finally {
@@ -8500,7 +8502,7 @@ export function mountBoardInteractions(store, routes = {}) {
         .map((level) => level?.id)
         .filter((levelId) => typeof levelId === 'string' && levelId),
     ];
-    const linkedToken = resolvePcTokenForUser({ userId, placements, validLevelIds });
+    const linkedToken = resolvePcTokenForUser({ userId, placements, validLevelIds, viewerAssociation: sceneEntry?.pcTokenAssociations?.[userId] });
     if (!linkedToken || getViewerLevelIdForCurrentUser(state, sceneId) === linkedToken.levelId) {
       return false;
     }

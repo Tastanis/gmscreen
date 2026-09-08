@@ -150,6 +150,9 @@ console.log('Button element:', document.getElementById('import-character-btn'));
   profile-field permissions must remain atomic. Player movement remains shared.
   Removing a roster profile must not strand unrelated placement commands because
   of its historical primary flag. Validate new/relinked assignments explicitly.
+  Player projection supplies `pcTokenAssociations` (visible IDs or null). Preserve
+  it through bootstrap, recovery, and placement/floor events; never infer a new
+  primary from a filtered token list when the association is explicitly unavailable.
 - Character-card temporary stamina currently reflects the saved stamina above
   maximum convention. Capped healing and recovery must preserve existing overflow.
 - Ground/Fly/Hover is explicit token runtime state, not ability-authoring JSON.

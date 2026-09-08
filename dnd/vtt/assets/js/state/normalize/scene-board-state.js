@@ -29,6 +29,7 @@ export function normalizeSceneBoardState(raw = {}) {
     const fogOfWar = normalizeFogOfWarEntry(value.fogOfWar ?? null);
     const userLevelState = normalizeUserLevelStateMap(value.userLevelState ?? null);
     const entry = { grid, mapLevels, userLevelState };
+    if (value.pcTokenAssociations && typeof value.pcTokenAssociations === 'object') entry.pcTokenAssociations = Object.fromEntries(Object.entries(value.pcTokenAssociations).map(([id, tokenId]) => [id, typeof tokenId === 'string' ? tokenId : null]));
 
     if (combat) {
       entry.combat = combat;

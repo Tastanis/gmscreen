@@ -26,7 +26,7 @@ User authorized implementing the September 7 product audit, updating/running the
 - [ ] Explicit view-versus-token controls and follow/browse/center policy.
   - Viewing labels, Show players this floor, reload-preserved explicit views, and My token's floor are implemented. Camera-follow preferences and configurable primary token association remain pending.
 - [ ] Configurable roster and primary token association, preserving shared allied control.
-  - Server-configured profile roster drives floor following, client profile eligibility, and Show players, including offline profiles. GM token settings now select an explicit primary among duplicate PCs. A roster editor, hidden-primary policy, and remaining camera preferences are pending.
+  - Server-configured profile roster drives floor following, client profile eligibility, and Show players, including offline profiles. GM token settings select an explicit primary among duplicate PCs. Hidden/unavailable primary projection is implemented. A roster editor and remaining camera preferences are pending.
 
 ## Faster live play
 
@@ -606,3 +606,19 @@ changes conditions and position, rejects invalid reassignment without mutation,
 and clears/relinks/reassigns the obsolete token. All nine PHP integration groups
 pass. This fixes a server validation edge case; hidden-primary projection remains
 the next association gap.
+
+### Hidden primary projection
+
+Player snapshots/bootstrap and shared placement/floor events now carry a derived
+association map containing visible IDs or explicit null. Clients do not choose a
+visible duplicate when the true primary is unavailable. Hidden primary IDs are
+removed from saved viewer references, and hidden-token movement does not pull its
+player's view. Revealing the primary restores My token's floor through live events.
+The unavailable control reports that the GM should check the association.
+
+Validation: 697 tests across 82 files pass, followed by the expanded PHP hidden-move
+guard. Projection tests cover hidden tokens, hidden floors, saved viewer references,
+and user-independent shared stream delivery. Reducer tests verify no canonical
+revision rewrite or repeated layer refresh for unchanged associations. The extended
+three-browser primary journey checks hide, no duplicate fallback, reload HTML
+privacy, live reveal, and restored token-floor return.

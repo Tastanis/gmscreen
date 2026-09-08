@@ -78,7 +78,37 @@ const origin = 'http://127.0.0.1:8129';
     await gm.waitForFunction(() => document.querySelector('[data-map-level-indicator-value]')?.textContent === 'Test balcony');
     await gm.getByRole('button', { name: 'Show players this floor', exact: true }).click();
     await other.waitForFunction(selector => document.querySelector(selector)?.dataset.mapLevelId === 'test-upper', token('primary-copy'));
+    async function hidden(value) {
+      const current = await snapshot();
+      const response = await gm.request.post(origin + '/dnd/vtt/api/v2/commands.php', {data:{
+        type:'placement.batch',operationId:`primary-browser-hidden-${value}`,baseRevision:current.revision,
+        payload:{actions:[{kind:'patch',sceneId,placementId:'primary-copy',entityRevision:current.state.placements[sceneId]['primary-copy']._entityRevision,patch:{hidden:value}}]}
+      }});
+      assert.equal(response.status(), 200);
+    }
+    await hidden(true);
+    await pc.waitForFunction(async sceneId => {
+      const {getState} = await import('/dnd/vtt/assets/js/state/store.js');
+      return getState().boardState.sceneState[sceneId]?.pcTokenAssociations?.cal === null;
+    }, sceneId);
+    await pc.getByRole('button', {name:"My token's floor",exact:true}).click();
+    assert.equal(await pc.locator('[data-map-level-indicator-value]').textContent(), 'Test balcony', 'Hidden primary does not fall back to base-floor duplicate.');
+    const reload = await pc.reload();
+    assert.equal((await reload.text()).includes('primary-copy'), false, 'Initial HTML does not reveal the hidden primary ID.');
+    await pc.getByRole('button', {name:"My token's floor",exact:true}).click();
+    assert.equal(await pc.locator('[data-map-level-indicator-value]').textContent(), 'Test balcony');
+    await hidden(false);
+    await pc.waitForFunction(async sceneId => {
+      const {getState} = await import('/dnd/vtt/assets/js/state/store.js');
+      return getState().boardState.sceneState[sceneId]?.pcTokenAssociations?.cal === 'primary-copy';
+    }, sceneId);
+    await gm.locator('[data-action="view-map-level-down"]').click();
+    await gm.waitForFunction(() => document.querySelector('[data-map-level-indicator-value]')?.textContent === 'Level 0');
+    await gm.getByRole('button', {name:'Show players this floor',exact:true}).click();
+    await pc.waitForFunction(() => document.querySelector('[data-map-level-indicator-value]')?.textContent === 'Level 0');
+    await pc.getByRole('button', {name:"My token's floor",exact:true}).click();
+    await pc.waitForFunction(() => document.querySelector('[data-map-level-indicator-value]')?.textContent === 'Test balcony');
     assert.deepEqual(errors, []);
-    console.log('PASS: GM primary switch in one revision, reload, player permission boundary, duplicate-PC stair following and observer convergence.');
+    console.log('PASS: primary switching, stairs/reload, hidden-primary privacy and no fallback, live reveal and restored floor return.');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

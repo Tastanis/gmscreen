@@ -2762,7 +2762,7 @@ final class SyncV2Store
     private function uniqueLinkedPlayerForPlacement(array $placements, string $placementId): ?string
     {
         $target = $placements[$placementId] ?? null;
-        if (!is_array($target)) {
+        if (!is_array($target) || $this->placementIsHidden($target)) {
             return null;
         }
         $profileId = $this->linkedPlayerProfileForPlacement($target);
@@ -2787,6 +2787,19 @@ final class SyncV2Store
             }
         }
         return $matchCount === 1 ? $profileId : null;
+    }
+
+    public function resolvePcPlacementIdForUser(array $placements, string $userId): ?string
+    {
+        $userId = strtolower(trim($userId));
+        $matches = []; $primary = [];
+        foreach ($placements as $id => $placement) {
+            if (!is_array($placement) || $this->linkedPlayerProfileForPlacement($placement) !== $userId) continue;
+            $matches[] = (string) $id;
+            if (($placement['primaryPc'] ?? false) === true) $primary[] = (string) $id;
+        }
+        $candidates = $primary !== [] ? $primary : $matches;
+        return count($candidates) === 1 && !$this->placementIsHidden($placements[$candidates[0]]) ? $candidates[0] : null;
     }
 
     private function placementIsHidden(array $placement): bool

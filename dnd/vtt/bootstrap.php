@@ -326,6 +326,7 @@ function overlaySyncV2Placements(array $boardState, ?array $authContext = null):
                     'fogOfWar' => 'fog',
                     'mapLevels' => 'levels',
                     'userLevelState' => 'levels',
+                    'pcTokenAssociations' => 'levels',
                 ];
                 foreach ($fieldDomains as $field => $domain) {
                     if (

@@ -641,6 +641,13 @@ export function reduceCanonicalEvent(currentSnapshot, event) {
   const changeSet = emptyChangeSet(revision);
   try {
     reducer(state, event, changeSet);
+    for (const [sceneId, associations] of Object.entries(event.payload?.viewerPcAssociations ?? {})) {
+      if (!associations || typeof associations !== 'object' || Object.values(associations).some(id => id !== null && typeof id !== 'string')) throw new Error('Invalid viewer PC association');
+      const previous = state.sceneConfig?.[sceneId] ?? {};
+      if (JSON.stringify(previous.pcTokenAssociations) === JSON.stringify(associations)) continue;
+      state.sceneConfig = { ...state.sceneConfig, [sceneId]: { ...previous, pcTokenAssociations: clone(associations) } };
+      changeSet.levels = true;
+    }
   } catch (error) {
     return {
       status: 'invalid',

@@ -499,6 +499,7 @@ export function resolvePcTokenForUser({
   userId = null,
   placements = null,
   validLevelIds = null,
+  viewerAssociation = undefined,
 } = {}) {
   const userKey = typeof userId === 'string' ? userId.trim().toLowerCase() : '';
   if (!userKey) {
@@ -522,8 +523,11 @@ export function resolvePcTokenForUser({
   const matches = placements.filter(
     (placement) => resolvePlacementLinkedProfileId(placement) === userKey
   );
+  if (viewerAssociation === null) return null;
   const primary = matches.filter(placement => placement.primaryPc === true);
-  const candidates = primary.length ? primary : matches;
+  const candidates = typeof viewerAssociation === 'string'
+    ? matches.filter(placement => placement.id === viewerAssociation)
+    : primary.length ? primary : matches;
   if (candidates.length !== 1) {
     return null;
   }

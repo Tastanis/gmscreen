@@ -31,6 +31,8 @@ describe('map-level normalization', () => {
       assert.equal(resolvePcTokenForUser({ userId: 'cal', placements: [{id:'old',name:'Cal'}] }), null);
       assert.equal(resolvePcTokenForUser({ userId: 'rowan', placements: [...placements, {...placements[0],id:'duplicate'}] }), null);
       assert.equal(resolvePcTokenForUser({ userId: 'rowan', placements: [...placements, {...placements[0],id:'duplicate',primaryPc:true}] }).placementId, 'duplicate');
+      assert.equal(resolvePcTokenForUser({ userId: 'rowan', placements, viewerAssociation: null }), null, 'Projected unavailability must not fall back to a visible duplicate.');
+      assert.equal(resolvePcTokenForUser({ userId: 'rowan', placements, viewerAssociation: 'hidden-primary' }), null, 'Missing explicit primary must not pick another token.');
       assert.equal(resolvePcTokenForUser({ userId: 'rowan', placements: [{...placements[0],primaryPc:true}, {...placements[0],id:'duplicate',primaryPc:true}] }), null);
       assert.throws(() => configurePlayerRoster(['gm']));
       assert.throws(() => configurePlayerRoster(['../secret']));
