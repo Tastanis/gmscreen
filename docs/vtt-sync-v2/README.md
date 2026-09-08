@@ -1143,3 +1143,9 @@ entry; forced claims check the path. Claimed damage awaits queued character-stam
 synchronization before completion. Failed sheet writes remain needs_review; the
 board and sheet are not one transaction. Old queue completions must not delete
 newer entries for the same scene/profile.
+
+Movement automation must await its zone entry promises before reporting success.
+Only completed/dismissed outcomes permit continuation; unresolved results reject
+without undoing accepted movement. Swaps await both participants. The picker stays
+busy through the commit and effect phase, rejecting replacement pickers and ignoring
+repeat destination clicks. Cancellation cannot cancel an already accepted save.

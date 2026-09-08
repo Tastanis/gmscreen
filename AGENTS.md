@@ -294,3 +294,7 @@ console.log('Button element:', document.getElementById('import-character-btn'));
   Pusher dashboard. Put the replacement in the server-only
   `VTT_PUSHER_SECRET` environment variable, then perform the documented GM plus
   two-player production soak test.
+
+- Movement automation callbacks must await zone entry outcomes. Unresolved effects
+  reject continuation while preserving accepted movement. Keep the picker busy
+  until those outcomes settle; repeated clicks must not submit another move.

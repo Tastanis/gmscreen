@@ -1,6 +1,12 @@
 const endpoint='/dnd/vtt/api/v2/zone-entries.php';
 const executionQueues=new Map();
 
+export function assertZoneEntryOutcomesConfirmed(outcomes=[]) {
+  if(outcomes.flat().some(result=>result && !['completed','dismissed'].includes(result.status))) {
+    throw new Error('Movement was saved, but a zone entry needs GM review before continuing the ability.');
+  }
+}
+
 async function executeInOrder(request,execute) {
   if (!request.sceneId || !request.placementId) return execute();
   const key=JSON.stringify([request.sceneId,request.placementId]);

@@ -1,5 +1,5 @@
 import {renderPersistentZones} from './persistent-zone-renderer.js';
-import {executeClaimedZoneEntry} from '../services/zone-entry-claims.js';
+import {executeClaimedZoneEntry,assertZoneEntryOutcomesConfirmed} from '../services/zone-entry-claims.js';
 import {assertPersistentZoneStillActive} from './persistent-zone-lifecycle.js';
 import {resolvePersistentZoneLevelId,doesPersistentZoneOverlapPlacement,doesPersistentZoneMovementEnter} from './persistent-zone-geometry.js';
 import {renderTokenAuras} from './token-aura-renderer.js';
@@ -2577,6 +2577,7 @@ export function mountBoardInteractions(store, routes = {}) {
   });
 
   function checkPersistentZoneEntries(movingId, from, to, movement = {}) {
+    if(movement.sceneId && movement.sceneId!==getActiveSceneId()) return Promise.resolve([{status:'needs_review'}]);
     if (!movingId || !from || !to) return;
     const zones = getActivePersistentZones();
     if (!zones.length) return;
@@ -2602,6 +2603,7 @@ export function mountBoardInteractions(store, routes = {}) {
       team: moverNow.team,
       combatTeam: moverNow.combatTeam,
     };
+    const pendingEntries=[];
     for (const zone of zones) {
       if (!zone || !Array.isArray(zone.triggers) || !zone.triggers.includes('onEnter')) continue;
       if (!doesAutomationTargetFilterMatch(moverNow,zone.affects || 'creature')
@@ -2611,23 +2613,26 @@ export function mountBoardInteractions(store, routes = {}) {
         // by GM-only round hooks and must never suppress a new walking claim.
         zone.enteredThisRound.add(movingId);
         const sceneId=movement.sceneId || getActiveSceneId();
-        executeClaimedZoneEntry({sceneId,placementId:movingId,zoneId:zone.id,movementOperationId:movement.movementOperationId},
+        pendingEntries.push(executeClaimedZoneEntry({sceneId,placementId:movingId,zoneId:zone.id,movementOperationId:movement.movementOperationId},
           ()=>applyPersistentZoneEffectsToPlacements(zone,[moverNow],'enter',{strict:true,sceneId}))
           .then(result=>{
             if (result.status==='pending' || result.status==='needs_review') {
               updateStatus(`${zone.abilityName || 'Zone'} entry is unconfirmed. Ask the GM to review Zone entry recovery in Scenes before applying effects again.`);
               document.dispatchEvent(new CustomEvent('vtt:zone-entry-review-needed'));
             }
-          });
+            return result;
+          }));
         continue;
       }
       if (zone.enteredThisRound.has(movingId)) continue;
       zone.enteredThisRound.add(movingId);
       // Fire effects asynchronously to the mover only.
-      applyPersistentZoneEffectsToPlacements(zone, [moverNow], 'enter').catch((err) => {
+      pendingEntries.push(applyPersistentZoneEffectsToPlacements(zone, [moverNow], 'enter').then(()=>({status:'completed'})).catch((err) => {
         console.warn('[VTT] persistent-zone onEnter effects failed', err);
-      });
+        return {status:'needs_review',error:err};
+      }));
     }
+    return Promise.all(pendingEntries);
   }
 
   // Returns true if at any step along the Chebyshev walk from `from` to `to`
@@ -17250,10 +17255,16 @@ export function mountBoardInteractions(store, routes = {}) {
     try {
       const saved=await result.savePromise;
       const movement={sceneId,kind:'teleport',movementOperationId:saved?.event?.operationId};
-      checkPersistentZoneEntries(sourcePlacement.id, sourcePlacement, { ...sourcePlacement, ...sourceTo },movement);
-      checkPersistentZoneEntries(targetPlacement.id, targetPlacement, { ...targetPlacement, ...targetTo },movement);
+      const outcomes=await Promise.all([
+        checkPersistentZoneEntries(sourcePlacement.id, sourcePlacement, { ...sourcePlacement, ...sourceTo },movement),
+        checkPersistentZoneEntries(targetPlacement.id, targetPlacement, { ...targetPlacement, ...targetTo },movement),
+      ]);
+      assertZoneEntryOutcomesConfirmed(outcomes);
     } catch (err) {
       console.warn('[VTT] persistent-zone swap enter check failed', err);
+      if(typeof detail.reject==='function')detail.reject(err);
+      else resolve?.({skipped:true,reason:'zone-review-required'});
+      return;
     }
     flashAutomationTargetToken(sourcePlacement.id);
     flashAutomationTargetToken(targetPlacement.id);
@@ -17597,6 +17608,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function startAutomationMoveSelection(request) {
+    if(pendingAutomationMove?.committing) {request.reject?.(new Error('Another movement is still resolving its effects.'));return;}
     cancelPendingAutomationMove();
     const targetSnapshot = getAutomationPlacementSnapshot(request.targetPlacement);
     const sourceSnapshot = getAutomationPlacementSnapshot(request.sourcePlacement);
@@ -17742,6 +17754,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!pendingAutomationMove) {
       return false;
     }
+    if(pendingAutomationMove.committing) {event.preventDefault();return true;}
     const target = event.target instanceof Element ? event.target : null;
     if (target?.closest('[data-skip-automation-move]')) {
       event.preventDefault();
@@ -17791,6 +17804,7 @@ export function mountBoardInteractions(store, routes = {}) {
       request.targetSnapshot.height
     );
     const movedDistance = automationChebyshevDistance(request.targetSnapshot, clamped);
+    request.committing=true;
     const moveResult = updatePlacementById(request.targetSnapshot.id, (placement) => {
       placement.column = clamped.column;
       placement.row = clamped.row;
@@ -17810,11 +17824,13 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     try {
       const saved=await moveResult.savePromise;
-      checkPersistentZoneEntries(request.targetSnapshot.id, request.targetSnapshot, getPlacementFromStore(request.targetSnapshot.id),{
+      const outcomes=await checkPersistentZoneEntries(request.targetSnapshot.id, request.targetSnapshot, getPlacementFromStore(request.targetSnapshot.id),{
         sceneId:request.sceneId,kind:request.movementKind || 'forced',movementOperationId:saved?.event?.operationId,
       });
+      assertZoneEntryOutcomesConfirmed(outcomes);
     } catch (err) {
       console.warn('[VTT] persistent-zone forced-move enter check failed', err);
+      clearAutomationMoveOverlay();request.reject?.(err);return true;
     }
 
     let collision = null;
@@ -17939,6 +17955,10 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
     const request = pendingAutomationMove;
+    if(request.committing) {
+      if(message) {updateStatus('Movement was saved; its effects are still resolving.');request.reject?.(new Error(message));}
+      return;
+    }
     clearAutomationMoveOverlay();
     if (message) {
       updateStatus(message);

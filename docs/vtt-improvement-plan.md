@@ -1328,3 +1328,22 @@ rejected sheet updates, atomic swaps, and character recovery/temporary stamina.
 Board and sheet writes remain separate stores: interruption while pending, broader
 sheet-authority reconciliation, enemy-movement permissions and multi-step automation
 sequencing still need work.
+
+### Movement callbacks wait for zone resolution
+
+Forced movement, teleport and swap callbacks now await all their entry checks.
+Completed/dismissed claims allow continuation; pending, uncertain or failed outcomes
+reject with a message that the movement was saved and needs GM review. This prevents
+a subsequent ability step from overtaking entry damage/condition/resource saves.
+Accepted movement is preserved rather than rolled back when its effects need review.
+
+The movement picker ignores repeat clicks during commit/effect resolution and
+refuses a replacement picker until the active request settles. Canceling an already
+committed request rejects its caller but retains the in-flight request until it
+finishes, preventing a late completion from clearing a newer picker.
+
+The browser test holds a zone effect, verifies the move is already canonical while
+its callback stays pending, checks a second click submits nothing, then releases
+it. Rejected stamina synchronization now rejects the movement callback. Atomic swap
+regressions also pass. Full suite: 735 tests/94 files passed. Broader ability-level
+resume/cancel behavior and authoritative board/sheet reconciliation remain pending.

@@ -22,7 +22,7 @@ const origin='http://127.0.0.1:8129';
     }
     const initial=Number((await tokenState()).hp.current),writes=[];
     page.on('request',request=>{if(request.url().endsWith('/commands.php')&&request.method()==='POST')writes.push(request.postDataJSON());});
-    async function move(kind,column) {
+    async function move(kind,column,expected='resolved') {
       const token=page.locator('#vtt-token-layer [data-placement-id="floor-cal"]');await token.hover();const box=await token.boundingBox(),from=(await tokenState()).column;
       await page.evaluate(kind=>{
         window.moveAck={status:'pending'};
@@ -34,11 +34,26 @@ const origin='http://127.0.0.1:8129';
       await page.locator('[data-automation-move-ghost]').waitFor();
       await page.mouse.click(box.x+box.width/2+(column-from)*box.width,box.y+box.height/2);
       await page.waitForFunction(()=>window.moveAck.status!=='pending');
-      assert.equal(await page.evaluate(()=>window.moveAck.status),'resolved');await until(async()=>(await tokenState()).column===column);
+      assert.equal(await page.evaluate(()=>window.moveAck.status),expected);await until(async()=>(await tokenState()).column===column);
     }
     await move('teleport',8);await new Promise(resolve=>setTimeout(resolve,500));
     assert.equal(Number((await tokenState()).hp.current),initial,'Teleporting across zones must not apply path damage');
-    await move('teleport',5);await until(async()=>Number((await tokenState()).hp.current)===initial-3);
+    await page.evaluate(()=>{
+      const hold=event=>{event.stopImmediatePropagation();document.removeEventListener('vtt:automation-apply-damage',hold,true);
+        window.releaseZone=()=>document.dispatchEvent(new CustomEvent('vtt:automation-apply-damage',{detail:event.detail}));};
+      document.addEventListener('vtt:automation-apply-damage',hold,true);
+    });
+    const arrival=move('teleport',5);
+    arrival.catch(()=>{});
+    await page.waitForFunction(()=>Boolean(window.releaseZone));
+    assert.equal(await page.evaluate(()=>window.moveAck.status),'pending','Movement callback waits for its zone effects');
+    assert.equal((await tokenState()).column,5,'Movement itself is already accepted');
+    const countBefore=writes.length;
+    const ghost=await page.locator('[data-automation-move-ghost]').boundingBox();
+    await page.mouse.click(ghost.x+ghost.width/2,ghost.y+ghost.height/2);
+    assert.equal(writes.length,countBefore,'A second click cannot submit another movement while resolving');
+    await page.evaluate(()=>window.releaseZone());await arrival;
+    assert.equal(Number((await tokenState()).hp.current),initial-3);
     await move('forced',2);await until(async()=>Number((await tokenState()).hp.current)===initial-7);
     await until(async()=>!(await(await page.request.get(origin+'/dnd/vtt/api/v2/zone-entries.php')).json()).claims.length);
     assert.ok(writes.some(w=>w.payload?.actions?.some(a=>a.movementKind==='teleport')));
@@ -53,7 +68,7 @@ const origin='http://127.0.0.1:8129';
     const sheetUrl=origin+'/dnd/character_sheet/handler.php';
     await page.route(sheetUrl,route=>route.request().method()==='POST'&&route.request().postData()?.includes('action=sync-stamina')
       ?route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({success:false,error:'Injected sheet sync rejection'})}):route.continue());
-    await move('forced',5);
+    await move('forced',5,'rejected');
     await until(async()=>(await(await page.request.get(origin+'/dnd/vtt/api/v2/zone-entries.php')).json()).claims.some(c=>c.status==='needs_review'));
     assert.equal(Number((await tokenState()).hp.current),initial-9,'Board damage remains accepted when sheet sync fails');
     const sheet=await(await page.request.get(sheetUrl+'?action=sync-stamina&character=cal')).json();

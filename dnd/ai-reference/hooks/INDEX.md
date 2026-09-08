@@ -75,3 +75,7 @@ hooks do not fire. Forced/swap zone claims use the same durable authority.
 Teleport/swap check zone entry at the destination; forced movement checks its path.
 Claimed zone damage waits for queued character stamina synchronization. Rejected
 sheet updates leave needs_review even if board damage was accepted.
+
+Forced-move, teleport and swap callbacks now wait for their zone-entry outcomes.
+Unresolved entries reject instead of reporting success to a later ability step;
+the movement itself remains accepted. Swaps wait for both tokens' entry checks.

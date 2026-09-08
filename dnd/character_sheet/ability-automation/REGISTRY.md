@@ -616,3 +616,8 @@ Teleport/swap use destination-only entry; forced movement uses swept geometry.
 These actions share durable zone/creature/combat-boundary claims with walking.
 Claimed damage waits for queued PC stamina synchronization before completion;
 rejected sheet updates remain for review. Board/sheet writes are not one transaction.
+
+Movement/teleport/swap effects wait for zone-entry completion before resolving their
+callbacks. Pending/needs_review outcomes reject so subsequent automation does not
+silently continue; accepted movement is retained. This is not yet general ability
+resume support or transactional rollback of a multi-step ability.

@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {executeClaimedZoneEntry,zoneEntryRequest} from '../../services/zone-entry-claims.js';
+import {executeClaimedZoneEntry,zoneEntryRequest,assertZoneEntryOutcomesConfirmed} from '../../services/zone-entry-claims.js';
+
+test('movement automation continues only after resolved entry outcomes',()=>{
+  assert.doesNotThrow(()=>assertZoneEntryOutcomesConfirmed([undefined,[],[{status:'completed'},{status:'dismissed'}]]));
+  for(const status of ['pending','needs_review','unknown']) {
+    assert.throws(()=>assertZoneEntryOutcomesConfirmed([[{status:'completed'},{status}]]),/Movement was saved.*review/);
+  }
+});
 
 test('zone execution requires a fresh grant and acknowledges success once',async()=>{
   const calls=[];let executions=0;
