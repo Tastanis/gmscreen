@@ -925,6 +925,16 @@ viewer references in player snapshots, and hidden-token movement cannot pull a
 linked viewer. Revealing the token restores the association through normal events.
 Broader camera policy remains pending.
 
+Players can choose Follow my token's floor or Browse floors per scene. The
+canonical `level.user.set` entry optionally includes boolean `followToken`, with
+the absent value retaining legacy follow behavior. The preference survives later
+manual/token view entries and GM activation. Placement batches, token movement,
+undo, and deletion relocation skip automatic token-follow updates when false;
+deleted/hidden viewing-floor cleanup still chooses a valid floor. My token's floor
+is a one-time return and does not enable following. Selecting Follow returns to
+the available primary in the same view command and enables later floor following.
+This controls floor selection only; it does not move tokens or grant ownership.
+
 Roster removal leaves historical primary flags inert. They cannot block unrelated
 placement changes; newly selecting or relinking a primary still requires a valid
 configured profile. The GM can clear an obsolete primary and relink it in one

@@ -53,23 +53,38 @@ const origin = 'http://127.0.0.1:8129';
     await pc.locator(token('primary-copy')).click({button:'right'});
     assert.equal(await pc.locator('[data-token-primary-pc]').count(), 0);
     await pc.keyboard.press('Escape');
-    async function drag(dy, expectedRow) {
+    async function drag(dy, expectedRow, dx = 0) {
       await pc.locator(token('primary-copy')).hover();
       const box = await pc.locator(token('primary-copy')).boundingBox();
       await pc.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
       await pc.mouse.down();
-      await pc.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + dy * box.height, {steps:25});
+      await pc.mouse.move(box.x + box.width / 2 + dx * box.width, box.y + box.height / 2 + dy * box.height, {steps:25});
       await pc.mouse.up();
       for (let i=0;i<60;i++) {
-        if ((await snapshot()).state.placements[sceneId]['primary-copy'].row === expectedRow) return;
+        const moved = (await snapshot()).state.placements[sceneId]['primary-copy'];
+        if (moved.row === expectedRow && (dx === 0 || moved.column === 6)) return;
         await new Promise(resolve => setTimeout(resolve,100));
       }
       throw Error('Primary token drag did not save');
     }
+    await pc.getByRole('combobox',{name:'Floor following',exact:true}).selectOption('browse');
+    await pc.waitForFunction(async sceneId => {
+      const {getState} = await import('/dnd/vtt/assets/js/state/store.js');
+      return getState().boardState.sceneState[sceneId]?.userLevelState?.cal?.followToken === false;
+    }, sceneId);
     await drag(3,3);
     await pc.reload();
+    await pc.waitForFunction(()=>document.querySelector('[data-floor-follow-mode]')?.value==='browse');
     await drag(2,5);
+    assert.equal(await pc.locator('[data-map-level-indicator-value]').textContent(), 'Level 0', 'Browse mode does not follow the primary upstairs.');
+    await pc.getByRole('button',{name:"My token's floor",exact:true}).click();
     await pc.waitForFunction(() => document.querySelector('[data-map-level-indicator-value]')?.textContent === 'Test balcony');
+    assert.equal(await pc.getByRole('combobox',{name:'Floor following',exact:true}).inputValue(), 'browse', 'One-time floor return preserves browse mode.');
+    await pc.getByRole('combobox',{name:'Floor following',exact:true}).selectOption('follow');
+    await pc.waitForFunction(async sceneId => {
+      const {getState} = await import('/dnd/vtt/assets/js/state/store.js');
+      return getState().boardState.sceneState[sceneId]?.userLevelState?.cal?.followToken === true;
+    }, sceneId);
     const final = await snapshot();
     assert.equal(final.state.sceneConfig[sceneId].userLevelState.cal.tokenId, 'primary-copy');
     assert.equal(final.state.placements[sceneId]['floor-cal'].levelId, 'level-0');
@@ -109,6 +124,12 @@ const origin = 'http://127.0.0.1:8129';
     await pc.getByRole('button', {name:"My token's floor",exact:true}).click();
     await pc.waitForFunction(() => document.querySelector('[data-map-level-indicator-value]')?.textContent === 'Test balcony');
     assert.deepEqual(errors, []);
-    console.log('PASS: primary switching, stairs/reload, hidden-primary privacy and no fallback, live reveal and restored floor return.');
+    await drag(0,5,4);
+    await pc.waitForFunction(() => document.querySelector('[data-map-level-indicator-value]')?.textContent === 'Level 0');
+    assert.equal((await snapshot()).state.sceneConfig[sceneId].userLevelState.cal.followToken, true, 'Resumed following persists through a fall.');
+    await pc.setViewportSize({width:1280,height:720});
+    await pc.screenshot({path:'.playwright-mcp/player-floor-follow.png'});
+    assert.deepEqual(errors, []);
+    console.log('PASS: primary switching, browse/reload/stairs, one-time return, resumed follow/fall, hidden privacy and live reveal.');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

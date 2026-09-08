@@ -2340,6 +2340,24 @@ export function mountBoardInteractions(store, routes = {}) {
     event.preventDefault();
     handleMapLevelActivateClick();
   });
+  document.querySelector('[data-floor-follow-mode]')?.addEventListener('change', async event => {
+    const control = event.currentTarget;
+    const state = boardApi.getState?.();
+    const sceneId = state?.boardState?.activeSceneId;
+    const userId = getCurrentUserId();
+    if (!sceneId || !userId) return;
+    const followToken = control.value === 'follow';
+    const scene = state.boardState.sceneState?.[sceneId];
+    const linked = followToken ? resolvePcTokenForUser({userId,placements:state.boardState.placements?.[sceneId],viewerAssociation:scene?.pcTokenAssociations?.[userId]}) : null;
+    const entry = {levelId:linked?.levelId || getViewerLevelIdForCurrentUser(state,sceneId), source:linked?'token':'manual',followToken};
+    if (linked) entry.tokenId = linked.placementId;
+    control.disabled = true;
+    try {
+      await tokenMovementRuntime.submitBoardDomainCommands([{type:'level.user.set',sceneId,payload:{userId,entry}}]);
+      updateStatus(followToken ? 'Following your primary token’s floor.' : 'Browsing: token movement will not change your floor.');
+    } catch (error) { reportSyncFailure(error, 'change floor following'); }
+    finally {control.disabled = false; syncMapLevelsForState(boardApi.getState?.(),sceneId);}
+  });
   document.querySelector('[data-action="return-token-floor"]')?.addEventListener('click', async (event) => {
     const button = event.currentTarget;
     button.disabled = true;
@@ -8489,6 +8507,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     const sceneEntry = boardState.sceneState?.[sceneId] ?? null;
     const viewSource = sceneEntry?.userLevelState?.[userId]?.source;
+    if (!force && sceneEntry?.userLevelState?.[userId]?.followToken === false) return false;
     if (!force && (viewSource === 'manual' || viewSource === 'activate')) return false;
     const placements = Array.isArray(boardState.placements?.[sceneId])
       ? boardState.placements[sceneId]
@@ -8551,6 +8570,8 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function syncMapLevelsForState(state = {}, sceneId = null) {
+    const following = document.querySelector('[data-floor-follow-mode]');
+    if (following && !following.disabled) following.value = state.boardState?.sceneState?.[sceneId]?.userLevelState?.[getCurrentUserId()]?.followToken === false ? 'browse' : 'follow';
     const mapLevels = resolveSceneMapLevelsState(state.boardState ?? {}, sceneId);
     const viewerLevelId = getViewerLevelIdForCurrentUser(state, sceneId);
     setDrawingContext({ sceneId: sceneId || DEFAULT_SCENE_ID, levelId: viewerLevelId || BASE_MAP_LEVEL_ID });

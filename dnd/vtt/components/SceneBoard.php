@@ -56,6 +56,10 @@ function renderVttSceneBoard(bool $isGm = false): string
                     >Show players this floor</button>
                 </div>
                 <?php else: ?>
+                <select aria-label="Floor following" data-floor-follow-mode title="For this scene: Browse keeps your floor when your token moves. The GM can still show everyone a floor.">
+                    <option value="follow">Follow my token's floor</option>
+                    <option value="browse">Browse floors</option>
+                </select>
                 <button type="button" class="vtt-board__level-return" data-action="return-token-floor"
                     title="Return your view to your linked token's floor. This does not move the token.">My token's floor</button>
                 <?php endif; ?>

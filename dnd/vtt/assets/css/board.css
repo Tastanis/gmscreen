@@ -2884,7 +2884,8 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
   box-shadow: inset 0 0 0 1px rgba(41, 37, 36, 0.35);
 }
 
-.vtt-board__level-return {
+.vtt-board__level-return,
+[data-floor-follow-mode] {
   min-height: 32px;
   padding: 4px 8px;
   border: 1px solid rgba(194, 173, 144, 0.65);

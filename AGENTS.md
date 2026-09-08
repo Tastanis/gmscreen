@@ -156,6 +156,10 @@ console.log('Button element:', document.getElementById('import-character-btn'));
   Player projection supplies `pcTokenAssociations` (visible IDs or null). Preserve
   it through bootstrap, recovery, and placement/floor events; never infer a new
   primary from a filtered token list when the association is explicitly unavailable.
+  Per-scene `userLevelState[userId].followToken=false` means Browse. Preserve it
+  through one-time floor returns, GM Show players, reload, and floor cleanup.
+  Automatic token/view mutations must skip browsing users; explicit GM Show still
+  changes their floor without changing the preference.
 - Character-card temporary stamina currently reflects the saved stamina above
   maximum convention. Capped healing and recovery must preserve existing overflow.
 - Ground/Fly/Hover is explicit token runtime state, not ability-authoring JSON.

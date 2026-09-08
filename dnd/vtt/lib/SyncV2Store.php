@@ -710,8 +710,8 @@ final class SyncV2Store
                     $config['mapLevels'] = $payload['mapLevels'];
                     foreach ($mutations as $mutation) {
                         $userId = $this->uniqueLinkedPlayerForPlacement($state['placements'][$sceneId], $mutation['placementId']);
-                        if ($userId !== null) $config['userLevelState'][$userId] = ['levelId'=>$mutation['placement']['levelId'],
-                            'source'=>'token', 'tokenId'=>$mutation['placementId'], 'updatedAt'=>$this->nowMilliseconds()];
+                        if ($userId !== null && ($config['userLevelState'][$userId]['followToken'] ?? true) !== false) $config['userLevelState'][$userId] = $this->preserveFloorFollowPreference(['levelId'=>$mutation['placement']['levelId'],
+                            'source'=>'token', 'tokenId'=>$mutation['placementId'], 'updatedAt'=>$this->nowMilliseconds()], $config['userLevelState'][$userId] ?? []);
                     }
                     $eventType = 'levels.replaced';
                     $eventPayload = ['mapLevels' => $config['mapLevels'], 'userLevelState' => $config['userLevelState'], 'mutations'=>$mutations];
@@ -730,16 +730,17 @@ final class SyncV2Store
                         : [];
                     if ($type === 'level.user.set') {
                         $userId = strtolower(trim((string) $payload['userId']));
+                        $payload['entry'] = $this->preserveFloorFollowPreference($payload['entry'], $config['userLevelState'][$userId] ?? []);
                         $config['userLevelState'][$userId] = $payload['entry'];
                         $eventType = 'level.userChanged';
                         $eventPayload = ['userId' => $userId, 'entry' => $payload['entry']];
                     } else {
                         foreach ($payload['userIds'] as $userId) {
-                            $config['userLevelState'][$userId] = [
+                            $config['userLevelState'][$userId] = $this->preserveFloorFollowPreference([
                                 'levelId' => $payload['levelId'],
                                 'source' => 'activate',
                                 'updatedAt' => $this->nowMilliseconds(),
-                            ];
+                            ], $config['userLevelState'][$userId] ?? []);
                         }
                         $eventType = 'level.activated';
                         $eventPayload = [
@@ -1329,7 +1330,7 @@ final class SyncV2Store
                     continue;
                 }
                 $userId = $this->uniqueLinkedPlayerForPlacement($placements, $placementId);
-                if ($userId === null) {
+                if ($userId === null || ($state['sceneConfig'][$sceneId]['userLevelState'][$userId]['followToken'] ?? true) === false) {
                     continue;
                 }
                 $linkedUpdatesByScene[$sceneId][$userId] = [
@@ -1355,6 +1356,7 @@ final class SyncV2Store
                         'tokenId' => $update['placementId'],
                         'updatedAt' => $serverTime,
                     ];
+                    $entry = $this->preserveFloorFollowPreference($entry, $config['userLevelState'][$userId] ?? []);
                     $config['userLevelState'][$userId] = $entry;
                     $userLevelMutations[] = [
                         'sceneId' => $sceneId,
@@ -1598,10 +1600,11 @@ final class SyncV2Store
             if ($this->placementLevelId($current) !== $floor['levelId']) {
                 $userLevelMutations = [];
                 $userId = $this->uniqueLinkedPlayerForPlacement($state['placements'][$sceneId], $placementId);
-                if ($userId !== null) {
+                if ($userId !== null && ($state['sceneConfig'][$sceneId]['userLevelState'][$userId]['followToken'] ?? true) !== false) {
                     $config = $state['sceneConfig'][$sceneId] ?? [];
                     $config['_revision'] = max(0, (int) ($config['_revision'] ?? 0)) + 1;
                     $entry = ['levelId'=>$floor['levelId'], 'source'=>'token', 'tokenId'=>$placementId, 'updatedAt'=>$serverTime];
+                    $entry = $this->preserveFloorFollowPreference($entry, $config['userLevelState'][$userId] ?? []);
                     $config['userLevelState'][$userId] = $entry;
                     $state['sceneConfig'][$sceneId] = $config;
                     $userLevelMutations[] = ['sceneId'=>$sceneId, 'userId'=>$userId, 'entry'=>$entry, 'sceneConfigRevision'=>$config['_revision']];
@@ -1965,6 +1968,12 @@ final class SyncV2Store
         return $views;
     }
 
+    private function preserveFloorFollowPreference(array $entry, array $previous): array
+    {
+        if (!array_key_exists('followToken', $entry) && isset($previous['followToken']) && is_bool($previous['followToken'])) $entry['followToken'] = $previous['followToken'];
+        return $entry;
+    }
+
     private function relocateDeletedFloorPlacements(array &$state, string $sceneId, array $before, array $after): array
     {
         $old = FloorGeometry::orderedLevels($before);
@@ -2189,6 +2198,11 @@ final class SyncV2Store
                 'updatedAt' => $this->nowMilliseconds(),
             ];
             $tokenId = $this->normalizeOptionalId($command['payload']['entry']['tokenId'] ?? null);
+            if (array_key_exists('followToken', $command['payload']['entry'] ?? [])) {
+                $follow = $command['payload']['entry']['followToken'];
+                if (!is_bool($follow)) throw new InvalidArgumentException('Floor following preference must be boolean.');
+                $payload['entry']['followToken'] = $follow;
+            }
             if ($tokenId !== null) {
                 $payload['entry']['tokenId'] = $tokenId;
             }

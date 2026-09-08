@@ -24,7 +24,7 @@ User authorized implementing the September 7 product audit, updating/running the
 - [ ] Hidden/deleted floors, partial support, flight, forced movement, stairs interrupted by reload, and undo tests.
   - Floor edits repair saved viewer floors. Deletion atomically relocates occupants, updates linked views, removes bound drawings/templates/fog, and disconnects incoming stairs. Flight and remaining movement edge cases are still pending.
 - [ ] Explicit view-versus-token controls and follow/browse/center policy.
-  - Viewing labels, Show players this floor, reload-preserved explicit views, and My token's floor are implemented. Camera-follow preferences and configurable primary token association remain pending.
+  - Viewing labels, Show players this floor, primary-token association, and My token's floor are implemented. Players now choose persistent per-scene Follow or Browse; one-time returns preserve Browse. Camera pan/zoom policy remains pending.
 - [x] Configurable roster and primary token association, preserving shared allied control.
   - GM Tokens panel edits the shared roster of existing profile IDs; reload open VTT tabs after saving. GM token settings select an explicit primary among duplicate PCs, including hidden/unavailable projection. Camera preferences remain in their separate item above.
 
@@ -636,3 +636,19 @@ Validation: 697 tests across 82 files pass. PHP checks atomic save, unchanged sa
 and stale revision rejection. The browser journey covers anonymous/player denial,
 two GM drafts, preserved stale/invalid drafts, persisted reload, and identical board
 snapshots before/after. The expanded editor was visually checked at 1280×720.
+
+### Player Follow and Browse modes
+
+The floor header now lets players choose Follow my token's floor or Browse floors
+per scene. The canonical preference survives reload, one-time returns, GM Show
+players, and floor deletion/visibility cleanup. Automatic token floor changes leave
+browsing users where they are; selecting Follow returns to an available primary
+and resumes following. The GM's explicit Show players remains effective without
+resetting the player's preference.
+
+Validation: 698 tests across 82 files pass. PHP covers shared movement/falls,
+database reopening, one-time return, GM show, deletion cleanup, invalid values,
+and another-player permission rejection. The three-browser primary journey now
+covers Browse across reload/stairs, one-time return retaining Browse, resumed
+Follow tracking the next fall, and existing hidden-primary privacy checks. The
+player control was visually checked at 1280×720. Camera pan/zoom remains separate.

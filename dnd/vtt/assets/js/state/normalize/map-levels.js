@@ -365,6 +365,7 @@ export function normalizeUserLevelStateEntry(raw) {
   if (source === 'token' && typeof raw.tokenId === 'string' && raw.tokenId.trim()) {
     entry.tokenId = raw.tokenId.trim();
   }
+  if (typeof raw.followToken === 'boolean') entry.followToken = raw.followToken;
   return entry;
 }
 
