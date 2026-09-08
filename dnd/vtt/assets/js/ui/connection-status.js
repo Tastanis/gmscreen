@@ -16,6 +16,7 @@ export function mountConnectionStatus(button, { recover, windowRef = window, now
     if (button.textContent !== label) button.textContent = label;
     const age = state.lastContact === null ? null : Math.max(0, Math.round((now() - state.lastContact) / 1000));
     button.title = `${age === null ? 'No successful server check yet.' : `Last successful server check: ${age} seconds ago.`} Click to check again. This does not retry rejected changes.`;
+    button.hidden = label === 'Connected' || label === 'Connecting';
     button.dataset.connection = button.textContent === 'Connected' ? 'connected' : 'attention';
   }
   function browserConnection() { state.online = windowRef.navigator.onLine !== false; render(); }

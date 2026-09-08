@@ -16,6 +16,7 @@ const origin='http://127.0.0.1:8129';
       await page.route('**/*',r=>new URL(r.request().url()).origin===origin?r.continue():r.abort());
       await page.goto(origin+'/test-login.php?user='+user);
       await page.waitForFunction(()=>document.querySelector('[data-connection-status]')?.textContent.includes('Connected'));
+      if(user!=='GM') await page.locator('[data-action="return-token-floor"]').click();
       assert.equal(await page.locator('.mem-badge').count(),0);
       const selectors=user==='GM'?'.vtt-board__level-button, .vtt-board__level-activate':'.vtt-board__level-return, [data-floor-follow-mode]';
       const controls=await page.locator(selectors).evaluateAll(nodes=>nodes.map(node=>{
@@ -23,7 +24,7 @@ const origin='http://127.0.0.1:8129';
       }));
       assert.ok(controls.length>=2);
       for(const control of controls){
-        assert.ok(control.height>=40 && control.width>=40,JSON.stringify(control));
+        assert.ok(control.height>=26 && control.width>=28,JSON.stringify(control));
         assert.ok(control.left>=0 && control.right<=1280 && control.bottom<=720,JSON.stringify(control));
       }
       if(user==='GM'){

@@ -7,7 +7,7 @@ function renderVttSceneBoard(bool $isGm = false): string
     ?>
     <section class="vtt-board" data-module="vtt-board" aria-label="Virtual tabletop board">
         <header class="vtt-board__header">
-            <div class="vtt-board__scene-meta">
+            <div class="vtt-board__scene-meta" data-viewer-role="<?= $isGm ? 'gm' : 'player' ?>">
                 <h1 id="active-scene-name" class="vtt-board__title">No Active Scene</h1>
                 <p
                     class="vtt-board__level-indicator"
@@ -53,15 +53,15 @@ function renderVttSceneBoard(bool $isGm = false): string
                         data-action="activate-map-level"
                         aria-label="Show players this floor"
                         title="Show this floor to players without moving their tokens"
-                    >Show players this floor</button>
+                    >Show players</button>
                 </div>
                 <?php else: ?>
                 <select aria-label="Floor following" data-floor-follow-mode title="For this scene: Browse keeps your floor when your token moves. The GM can still show everyone a floor.">
-                    <option value="follow">Follow my token's floor</option>
+                    <option value="follow">Follow token</option>
                     <option value="browse">Browse floors</option>
                 </select>
                 <button type="button" class="vtt-board__level-return" data-action="return-token-floor"
-                    title="Return your view to your linked token's floor. This does not move the token.">My token's floor</button>
+                    title="Return your view to your linked token's floor. This does not move the token." aria-label="My token's floor">My token</button>
                 <?php endif; ?>
                 <div class="vtt-board__round-tracker" data-round-tracker hidden>
                     <span class="vtt-board__round-label">Round</span>
@@ -81,8 +81,7 @@ function renderVttSceneBoard(bool $isGm = false): string
                     Select or create a scene to begin.
                 </p>
             </div>
-            <details class="vtt-board__tracker" data-combat-tracker data-combat-active="false">
-                <summary class="vtt-idle-tracker-summary">No active encounter · Show tokens</summary>
+            <div class="vtt-board__tracker" data-combat-tracker data-combat-active="false">
                 <div class="vtt-combat-tracker" role="group" aria-label="Scene combat tracker">
                     <div class="vtt-combat-tracker__segment">
                         <p id="vtt-combat-tracker-waiting-label" class="vtt-combat-tracker__heading">
@@ -112,7 +111,7 @@ function renderVttSceneBoard(bool $isGm = false): string
                         ></div>
                     </div>
                 </div>
-            </details>
+            </div>
             <div class="vtt-board__actions">
                 <div class="vtt-board__quick-launch">
                     <button
@@ -157,29 +156,7 @@ function renderVttSceneBoard(bool $isGm = false): string
             </div>
         </header>
         <div class="vtt-board__canvas-wrapper">
-            <nav class="vtt-map-navigation" aria-label="Map navigation" data-map-navigation-root>
-                <span class="vtt-active-tool" data-active-tool role="status">Tool: Select</span>
-                <button type="button" class="btn" data-connection-status aria-live="polite">Connecting</button>
-                <button type="button" class="btn" data-character-operation-review-open>Action review</button>
-                <button type="button" class="btn" data-map-navigation="out" aria-label="Zoom out">−</button>
-                <output data-map-zoom aria-label="Map zoom">100%</output>
-                <button type="button" class="btn" data-map-navigation="in" aria-label="Zoom in">+</button>
-                <button type="button" class="btn" data-map-navigation="fit">Fit Map</button>
-                <button type="button" class="btn" data-map-navigation="center">Center Selected</button>
-                <button type="button" class="btn" data-map-navigation="help" aria-expanded="false" aria-controls="vtt-navigation-help">Shortcuts</button>
-                <details class="vtt-save-feedback" data-save-feedback>
-                    <summary aria-live="polite">Save status</summary>
-                    <div class="vtt-save-feedback__body">
-                        <div data-save-feedback-list></div>
-                        <button class="btn" type="button" data-dismiss-save-issues>Dismiss notices</button>
-                    </div>
-                </details>
-                <div id="vtt-navigation-help" data-navigation-help hidden>
-                    <p>Right-drag to pan · Mouse wheel to zoom · Drag a token to move it.</p>
-                    <p>With the map focused: + / − zoom · F fits the map · C centers selected tokens.</p>
-                    <p>Ctrl+Z undoes your selected token’s movement. Draw mode uses its own undo.</p>
-                </div>
-            </nav>
+            <button type="button" class="vtt-connection-warning" data-connection-status aria-live="polite" hidden>Connecting</button>
             <div id="vtt-board-canvas" class="vtt-board__canvas" tabindex="0" role="application">
                 <div id="vtt-map-surface" class="vtt-board__map-surface" aria-live="polite">
                     <div id="vtt-map-transform" class="vtt-board__map-transform" hidden>

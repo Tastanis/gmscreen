@@ -1,5 +1,4 @@
 import {configureCharacterOperationJournal} from '../services/character-operation-journal.js';
-import {mountCharacterOperationReview} from './character-operation-review.js';
 import {confirmCharacterWrite} from '../services/character-write.js';
 import {spendCharacterRecoveries} from '../services/recovery-spend.js';
 import {confirmResourceWrite} from '../services/resource-write.js';
@@ -99,7 +98,6 @@ import {
 } from './map-level-renderer.js';
 import { createTokenInteractions } from './token-interactions.js';
 import { createTokenMovementRuntime } from '../sync-v2/token-movement-runtime.js';
-import { mountMapNavigation } from './map-navigation.js';
 import { floorRelation } from './floor-geometry.js';
 import { mountSaveFeedback, describeSaveFailure } from './save-feedback.js';
 import { mountConnectionStatus } from './connection-status.js';
@@ -685,8 +683,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   const boardApi = store ?? {};
-  const characterOperationJournal = configureCharacterOperationJournal(getCurrentUserId());
-  mountCharacterOperationReview(document.querySelector('[data-character-operation-review-open]'), characterOperationJournal, routes?.sheet || '/dnd/character_sheet/handler.php');
+  configureCharacterOperationJournal(getCurrentUserId());
   const syncV2Config =
     typeof window !== 'undefined' && window.vttConfig?.syncV2
       ? window.vttConfig.syncV2
@@ -735,20 +732,6 @@ export function mountBoardInteractions(store, routes = {}) {
   const saveFeedback = mountSaveFeedback(document.querySelector('[data-save-feedback]'));
   const connectionStatus = mountConnectionStatus(document.querySelector('[data-connection-status]'), {
     recover: async () => { await tokenMovementRuntime.start(); await tokenMovementRuntime.recover(); },
-  });
-  mountMapNavigation({
-    root: document.querySelector('[data-map-navigation-root]'), board, view: viewState,
-    applyTransform: () => applyTransform(), report: message => updateStatus(message),
-    selectedBounds: () => {
-      const nodes = Array.from(tokenLayer?.children ?? []).filter(node => selectedTokenIds.has(node.dataset.placementId)
-        && node.getBoundingClientRect().width > 0 && getComputedStyle(node).visibility !== 'hidden');
-      if (!nodes.length) return null;
-      const rects = nodes.map(node => node.getBoundingClientRect());
-      const boardRect = board.getBoundingClientRect();
-      const x = (Math.min(...rects.map(rect => rect.left)) + Math.max(...rects.map(rect => rect.right))) / 2 - boardRect.left;
-      const y = (Math.min(...rects.map(rect => rect.top)) + Math.max(...rects.map(rect => rect.bottom))) / 2 - boardRect.top;
-      return { x: (x - viewState.translation.x) / viewState.scale, y: (y - viewState.translation.y) / viewState.scale };
-    },
   });
   const boardHoverTokenIds = new Set();
   const trackerHoverTokenIds = new Set();
@@ -8770,8 +8753,6 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function applyTransform() {
     if (!mapTransform) return;
-    const zoomOutput = document.querySelector('[data-map-zoom]');
-    if (zoomOutput) zoomOutput.textContent = `${Math.round(viewState.scale * 100)}%`;
     mapTransform.style.transform = `translate3d(${viewState.translation.x}px, ${viewState.translation.y}px, 0) scale(${viewState.scale})`;
     mapTransform.style.setProperty('--vtt-map-scale', String(viewState.scale));
     const overlayScale = viewState.scale ? 1 / viewState.scale : 1;
@@ -12584,12 +12565,6 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function updateCombatModeIndicators() {
     if (combatTrackerRoot) {
-      const wasActive = combatTrackerRoot.dataset.combatActive === 'true';
-      if (combatActive) combatTrackerRoot.open = true;
-      else if (wasActive) combatTrackerRoot.open = false;
-      const summary = combatTrackerRoot.querySelector('.vtt-idle-tracker-summary');
-      if (summary) summary.hidden = combatActive;
-      combatTrackerRoot.closest('.vtt-board__header')?.classList.toggle('is-combat-idle', !combatActive);
       combatTrackerRoot.dataset.combatActive = combatActive ? 'true' : 'false';
       combatTrackerRoot.dataset.completedCount = String(completedCombatants.size);
       combatTrackerRoot.dataset.currentTeam = currentTurnTeam ?? '';

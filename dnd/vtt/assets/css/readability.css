@@ -19,50 +19,62 @@ body.vtt-body .vtt-settings-panel select {
 }
 body.vtt-body .vtt-settings-panel__header button { min-width: 40px; min-height: 40px; }
 
-body.vtt-body .vtt-board__level-button {
-  width: 40px;
-  height: 40px;
-  font-size: 0.875rem;
+/* Compact scene controls share the same layout before and during combat. */
+body.vtt-body .vtt-board__scene-meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 4px;
+  width: 100%;
+  min-width: 0;
+  max-width: 12rem;
+  padding: 6px;
+  box-sizing: border-box;
+  align-items: center;
 }
+body.vtt-body .vtt-board__scene-meta .vtt-board__title {
+  grid-column: 1 / -1;
+  line-height: 1.2;
+  padding: 0;
+}
+body.vtt-body .vtt-board__scene-meta[data-viewer-role="gm"] .vtt-board__level-indicator { display: none; }
 body.vtt-body .vtt-board__level-nav {
-  grid-template-columns: 40px minmax(5rem, 1fr) 40px;
-  gap: 4px;
+  grid-column: 1 / -1;
+  grid-template-columns: 28px minmax(0, 1fr) 28px;
+  gap: 3px;
   padding: 0;
   border: 0;
   background: transparent;
+  max-width: none;
 }
-body.vtt-body .vtt-board__level-name,
-body.vtt-body .vtt-board__level-indicator { font-size: 0.8125rem; line-height: 1.35; }
+body.vtt-body .vtt-board__level-button { width: 28px; height: 28px; font-size: 0.8rem; }
+body.vtt-body .vtt-board__level-name { font-size: 0.8rem; line-height: 1.2; overflow-wrap: anywhere; }
 body.vtt-body .vtt-board__level-activate {
-  min-height: 40px;
-  font-size: 0.8125rem;
-  line-height: 1.3;
+  min-height: 26px;
+  padding: 3px 6px;
+  font-size: 0.75rem;
+  line-height: 1.2;
   text-transform: none;
-  padding: 6px 10px;
 }
+body.vtt-body .vtt-board__scene-meta .vtt-board__round-tracker { margin: 0; padding: 2px 4px; }
+body.vtt-body .vtt-board__scene-meta .vtt-board__turn-indicator {
+  margin: 0;
+  padding: 2px 4px;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  justify-self: end;
+}
+body.vtt-body .vtt-board__level-indicator,
 body.vtt-body .vtt-board__level-return,
 body.vtt-body [data-floor-follow-mode] {
-  min-height: 40px;
-  font-size: 0.8125rem;
-  line-height: 1.3;
-  white-space: nowrap;
-  flex: 0 0 auto;
-}
-body.vtt-body .vtt-board__header.is-combat-idle .vtt-board__scene-meta {
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  grid-column: 1 / -1;
+  min-height: 26px;
+  width: 100%;
   min-width: 0;
-  width: max-content;
-  max-width: min(100%, 44rem);
-}
-body.vtt-body .vtt-board__header.is-combat-idle .vtt-board__level-indicator {
-  width: auto;
-  min-width: 8rem;
-  flex: 0 1 auto;
-}
-body.vtt-body .vtt-board__header.is-combat-idle .vtt-board__level-nav {
-  width: 16rem;
-  flex: 0 0 auto;
+  margin: 0;
+  padding: 3px 5px;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  box-sizing: border-box;
 }
 body.vtt-body .vtt-board__scene-meta :is(button, select):focus-visible,
 body.vtt-body .vtt-settings-panel :is(button, input, select, summary):focus-visible {
@@ -80,13 +92,17 @@ body.vtt-body .vtt-settings-panel :is(button, input, select, summary):focus-visi
 .vtt-player-preview-map > img { width: 100%; height: 100%; display: block; }
 .vtt-player-preview-map__fog { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
 
-.vtt-character-operation-review {
-  position: fixed; inset: 0; margin: auto; height: fit-content; box-sizing: border-box;
-  width: min(680px, calc(100vw - 32px)); max-height: 80vh; overflow: auto;
-  background: #202735; color: #f3f5f8; border: 1px solid #79879b; border-radius: 12px; padding: 24px;
-}
-.vtt-character-operation-review::backdrop { background: rgba(0,0,0,.6); }
-.vtt-character-operation-review li { margin: 20px 0; overflow-wrap: anywhere; }
-.vtt-character-operation-review .btn { min-height: 40px; margin: 4px; }
 
-.vtt-character-operation-review ul { padding-inline-start: 24px; }
+body.vtt-body .vtt-connection-warning {
+  position: absolute; top: 8px; right: 8px; z-index: 40;
+  border: 1px solid #b88948; border-radius: 4px; padding: 5px 8px;
+  color: var(--vtt-text-primary); background: var(--vtt-panel-bg); cursor: pointer;
+}
+body.vtt-body .vtt-connection-warning[hidden] { display: none; }
+
+body.vtt-body .vtt-board__level-return { height: 28px; }
+
+body.vtt-body .vtt-board__scene-meta[data-viewer-role="player"] { grid-template-columns: minmax(0, 1fr) auto; }
+body.vtt-body [data-floor-follow-mode] { grid-column: 1; }
+body.vtt-body .vtt-board__level-return { grid-column: 2; }
+body.vtt-body .vtt-board__scene-meta .visually-hidden { position: absolute; }

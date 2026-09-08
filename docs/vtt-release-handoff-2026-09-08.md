@@ -273,3 +273,20 @@ release-checkpoint cleanup (104 commits):
 Final release hardening: a response arriving after the character-write timeout
 can no longer clear the interrupted-action reminder. A dedicated late-body
 regression verifies the reminder remains unconfirmed for manual review.
+
+
+## User-requested header cleanup — 1.19.115
+
+Restored the compact left action cluster in both idle and active combat. The combat
+tracker stays visible. Removed the map tool strip, Action review dialog, Fit/Center
+camera commands and their extra keyboard shortcuts; normal mouse pan/zoom and
+actual Measure/Templates/Draw/Undo controls remain. Retained server receipts,
+character save protection and tool exclusivity. Connection status is now a small
+warning only when attention is needed, as requested by the user.
+
+Compacted scene/floor controls, removed the duplicate GM floor label, shortened
+Show players text (full accessible description retained), and placed round/turn on
+one row. Local browser validation covers GM/player at 1280 and 1920 widths,
+combat/floor controls, connection warning visibility and absence of the tool strip.
+The old active-tool-label browser script is historical: its visible label was
+intentionally removed; tool coordination remains implemented.
