@@ -1,5 +1,6 @@
 import { renderSceneList } from './scene-manager.js';
 import { mountSceneCheckpoints } from './scene-checkpoints.js';
+import { mountPlayerRosterEditor } from './player-roster-editor.js';
 import { renderTokenLibrary } from './token-library.js';
 import { updateSceneGrid } from '../services/scene-service.js';
 import { normalizeGridState } from '../state/normalize/grid.js';
@@ -326,6 +327,7 @@ export function mountSettingsPanel(routes, store, user = {}) {
   });
 
   if (isGM) {
+    mountPlayerRosterEditor(panel.querySelector('[data-player-roster-editor]'));
     renderSceneList(routes, storeApi);
     mountSceneCheckpoints(panel.querySelector('[data-scene-checkpoints]'), storeApi);
   }

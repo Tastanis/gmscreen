@@ -9,6 +9,14 @@ try {
     file_put_contents($rosterPath, json_encode([' Rowan ', 'rowan', 'steel-hero']));
     putenv('VTT_PLAYER_ROSTER_PATH=' . $rosterPath);
     verifyRoster(PlayerRoster::playerIds() === ['rowan','steel-hero'], 'Roster normalizes and deduplicates.');
+    $roster = PlayerRoster::read();
+    $saved = PlayerRoster::replace(['rowan','steel-hero','guest'], $roster['revision']);
+    verifyRoster($saved['players'] === ['rowan','steel-hero','guest'] && $saved['revision'] !== $roster['revision'], 'Roster save is readable and changes revision.');
+    $conflict = false;
+    try { PlayerRoster::replace(['clobber'], $roster['revision']); } catch (PlayerRosterConflict $error) { $conflict = true; }
+    verifyRoster($conflict && PlayerRoster::read() === $saved, 'Stale roster edit cannot overwrite another save.');
+    verifyRoster(PlayerRoster::replace($saved['players'], $saved['revision']) === $saved, 'Unchanged save is stable.');
+    PlayerRoster::replace($roster['players'], $saved['revision']);
     foreach ([['gm'], ['../secret'], [12], ['bad id']] as $invalid) {
         $rejected = false;
         try { PlayerRoster::normalize($invalid); } catch (InvalidArgumentException $error) { $rejected = true; }
@@ -81,5 +89,5 @@ try {
 } finally {
     unset($patchCurrent, $store);
     putenv($previous === false ? 'VTT_PLAYER_ROSTER_PATH' : 'VTT_PLAYER_ROSTER_PATH=' . $previous);
-    foreach (['','-wal','-shm','.json'] as $suffix) if (is_file($database.$suffix)) unlink($database.$suffix);
+    foreach (['','-wal','-shm','.json','.json.lock'] as $suffix) if (is_file($database.$suffix)) unlink($database.$suffix);
 }

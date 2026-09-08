@@ -145,6 +145,9 @@ console.log('Button element:', document.getElementById('import-character-btn'));
   server-only `VTT_PLAYER_ROSTER_PATH` override). Bootstrap configures the client
   before mounting. Roster membership is association, not authentication or token
   ownership; preserve shared allied movement permissions.
+  The GM editor writes that file through `api/v2/player-roster.php`, using a
+  separate lock, atomic replacement, and a reviewed content revision. Never
+  overwrite a stale draft automatically. Roster changes require open VTT reloads.
   `primaryPc` selects a GM-managed primary placement per linked profile and scene.
   Switch old/new flags in one placement batch; server uniqueness validation and
   profile-field permissions must remain atomic. Player movement remains shared.

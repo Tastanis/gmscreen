@@ -866,6 +866,10 @@
 #token-library-filter { width: 100%; min-height: 36px; margin-top: 6px; }
 #token-search { width: 100%; min-height: 36px; }
 
+.vtt-roster-editor { margin: 12px; padding: 12px; border: 1px solid var(--border-color, #777); border-radius: 8px; }
+.vtt-roster-editor summary { cursor: pointer; min-height: 36px; font-weight: 600; }
+.vtt-roster-editor p { font-size: 0.85rem; line-height: 1.45; }
+.vtt-roster-editor textarea { display: block; box-sizing: border-box; width: 100%; margin: 8px 0; padding: 8px; color: inherit; background: var(--panel-background, #202630); font: inherit; }
 .vtt-checkpoints { margin-top: 16px; }
 .vtt-checkpoints p { font-size: 0.85rem; line-height: 1.45; }
 .vtt-checkpoints input { width: 100%; min-height: 36px; margin: 6px 0; }

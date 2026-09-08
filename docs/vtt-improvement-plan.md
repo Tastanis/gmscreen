@@ -25,8 +25,8 @@ User authorized implementing the September 7 product audit, updating/running the
   - Floor edits repair saved viewer floors. Deletion atomically relocates occupants, updates linked views, removes bound drawings/templates/fog, and disconnects incoming stairs. Flight and remaining movement edge cases are still pending.
 - [ ] Explicit view-versus-token controls and follow/browse/center policy.
   - Viewing labels, Show players this floor, reload-preserved explicit views, and My token's floor are implemented. Camera-follow preferences and configurable primary token association remain pending.
-- [ ] Configurable roster and primary token association, preserving shared allied control.
-  - Server-configured profile roster drives floor following, client profile eligibility, and Show players, including offline profiles. GM token settings select an explicit primary among duplicate PCs. Hidden/unavailable primary projection is implemented. A roster editor and remaining camera preferences are pending.
+- [x] Configurable roster and primary token association, preserving shared allied control.
+  - GM Tokens panel edits the shared roster of existing profile IDs; reload open VTT tabs after saving. GM token settings select an explicit primary among duplicate PCs, including hidden/unavailable projection. Camera preferences remain in their separate item above.
 
 ## Faster live play
 
@@ -622,3 +622,17 @@ and user-independent shared stream delivery. Reducer tests verify no canonical
 revision rewrite or repeated layer refresh for unchanged associations. The extended
 three-browser primary journey checks hide, no duplicate fallback, reload HTML
 privacy, live reveal, and restored token-floor return.
+
+### GM roster editor
+
+Tokens now includes a collapsed Player roster editor with existing profile IDs,
+Save roster, Load current roster, and a reload action after saving. The GM-only API
+validates IDs and saves with a file lock, atomic replacement, and a content-revision
+guard. Conflicts and validation errors retain the draft. The editor explicitly
+distinguishes association from creating accounts/sheets and instructs open VTT tabs
+to reload after changes. Canonical board state is untouched.
+
+Validation: 697 tests across 82 files pass. PHP checks atomic save, unchanged save,
+and stale revision rejection. The browser journey covers anonymous/player denial,
+two GM drafts, preserved stale/invalid drafts, persisted reload, and identical board
+snapshots before/after. The expanded editor was visually checked at 1280×720.

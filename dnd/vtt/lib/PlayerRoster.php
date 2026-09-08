@@ -27,4 +27,36 @@ final class PlayerRoster
         if ($json === false) throw new RuntimeException('Unable to read the player roster.');
         return self::normalize(json_decode($json, true, 512, JSON_THROW_ON_ERROR));
     }
+
+    public static function read(): array
+    {
+        $players = self::playerIds();
+        return ['players'=>$players, 'revision'=>hash('sha256', json_encode($players))];
+    }
+
+    public static function replace($raw, string $expectedRevision): array
+    {
+        $players = self::normalize($raw);
+        $path = getenv('VTT_PLAYER_ROSTER_PATH') ?: __DIR__ . '/../config/player-roster.json';
+        $lock = fopen($path . '.lock', 'c');
+        if ($lock === false) throw new RuntimeException('Unable to lock the player roster.');
+        $temporary = null;
+        try {
+            if (!flock($lock, LOCK_EX)) throw new RuntimeException('Unable to lock the player roster.');
+            $current = self::read();
+            if (!hash_equals($current['revision'], $expectedRevision)) throw new PlayerRosterConflict('The roster changed in another session. Load the current roster before saving again.');
+            if ($players === $current['players']) return $current;
+            $temporary = tempnam(dirname($path), '.roster-');
+            if ($temporary === false || file_put_contents($temporary, json_encode($players, JSON_PRETTY_PRINT) . "\n") === false || !rename($temporary, $path)) {
+                throw new RuntimeException('Unable to save the player roster.');
+            }
+            $temporary = null;
+            return self::read();
+        } finally {
+            if (is_string($temporary) && is_file($temporary)) unlink($temporary);
+            flock($lock, LOCK_UN); fclose($lock);
+        }
+    }
 }
+
+final class PlayerRosterConflict extends RuntimeException {}

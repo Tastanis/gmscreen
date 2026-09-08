@@ -139,3 +139,6 @@ asl/tests/output/
 # ASL Hub vendored chart library must be committed
 !asl/js/vendor/
 !asl/js/vendor/chart.umd.js
+
+# Runtime lock for the GM-managed VTT roster.
+/dnd/vtt/config/player-roster.json.lock

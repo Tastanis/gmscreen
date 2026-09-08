@@ -897,8 +897,13 @@ the same public IDs and initializes client bindings before any board state or UI
 mounts. Show players includes offline roster members. Character profile eligibility
 and name fallback use the configured client list; duplicate-token ambiguity still
 returns no implicit primary token. Shared allied movement permissions are unchanged.
-Reload clients after changing server configuration. A GM roster editor remains
-pending.
+Reload clients after changing server configuration. The GM Tokens panel includes
+a collapsed Player roster editor. Its GM-only `api/v2/player-roster.php` endpoint
+reads the public IDs and a content hash, then saves under a separate file lock
+with atomic replacement. A stale hash returns 409; the editor retains the draft
+and offers Load current roster. Validation failures also retain the draft. Saves
+do not mutate canonical board state or its revision. The UI explains that accounts
+and sheets must already exist and asks users to reload open VTT tabs after saving.
 
 The GM token menu can select `primaryPc` for a linked PC placement. It is runtime
 association metadata, not an ability JSON field or ownership grant. Switching
