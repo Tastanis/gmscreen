@@ -79,12 +79,14 @@ const origin='http://127.0.0.1:8129';
     const upper=await dialog.evaluate(async node=>{
       const {buildMapLevelCutoutMask}=await import('/dnd/vtt/assets/js/ui/map-level-renderer.js');
       const canvas=node.querySelector('canvas'),level=node.querySelector('[data-map-level-id="test-upper"]');
+      const style=getComputedStyle(node.querySelector('.vtt-board__map-backdrop'));
+      const insets=Object.fromEntries(['top','right','bottom','left'].map(side=>[side,parseFloat(style.getPropertyValue('padding-'+side))||0]));
       const expected=buildMapLevelCutoutMask([{column:6,row:5,width:2,height:2}],{
-        mapPixelSize:{width:canvas.width,height:canvas.height},mapInsets:{},gridSize:64,gridOrigin:{x:5,y:7},
+        mapPixelSize:{width:canvas.width,height:canvas.height},mapInsets:insets,gridSize:64,gridOrigin:{x:5,y:7},
       });
       const probe=document.createElement('div');probe.style.maskImage=expected;
       return {maskMatches:level.style.maskImage===probe.style.maskImage,
-        clear:canvas.getContext('2d').getImageData(10,10,1,1).data[3],
+        clear:canvas.getContext('2d').getImageData(insets.left+10,insets.top+10,1,1).data[3],
         fogged:canvas.getContext('2d').getImageData(canvas.width-1,canvas.height-1,1,1).data[3]};
     });
     assert.deepEqual(upper,{maskMatches:true,clear:0,fogged:255});

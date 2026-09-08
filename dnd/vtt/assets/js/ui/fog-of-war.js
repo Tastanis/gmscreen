@@ -28,6 +28,7 @@ import {
   resolvePlacementLevelId,
   buildLevelViewModel,
 } from '../state/normalize/map-levels.js';
+import {normalizeCombatTeam} from '../state/normalize/placements.js';
 
 // ── Constants ────────────────────────────────────────────────────
 
@@ -425,7 +426,8 @@ function buildPcRevealedCells(state, activeSceneId, levelId) {
     if (resolvePlacementLevelId(placement) !== levelId) return;
 
     const tokenId = typeof placement.tokenId === 'string' ? placement.tokenId : '';
-    const isPc = pcTokenIds.has(tokenId) || placement.combatTeam === 'ally';
+    const team=normalizeCombatTeam(placement.combatTeam ?? placement.team ?? placement?.tags?.team ?? placement.faction);
+    const isPc = pcTokenIds.has(tokenId) || team === 'ally';
     if (!isPc) return;
 
     const col = Math.floor(Number(placement.column ?? 0));

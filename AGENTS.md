@@ -3,14 +3,20 @@
 Player preview uses the GM-only read-only `api/v2/player-preview.php?user=...`
 endpoint and the same snapshot projection as the actual player. Never impersonate
 the player session or touch their presence. GM Scenes has read-only Player view
-details and a map/grid/floor/cutout/fog dialog. Token/drawing/template preview layers
-remain pending. Never label server-visible
+details and a map/grid/floor/cutout/fog/token dialog. Token status overlays,
+drawings and templates remain pending. Never label server-visible
 token data as on-screen visibility without applying the client geometry and fog.
 `renderFogSurface` paints an independent canvas with explicit scene/floor/viewer
 inputs. Use it for passive preview rather than remounting the singleton fog tool,
 which owns GM interaction state. The ordinary board uses the same painter.
 Map preview uses `createMapLevelRenderer({rootId:null})` for an independent root;
 never let it move the main board's globally identified map stack into the dialog.
+Token floor/fog visibility, transforms, stacking and direction badges are shared in
+`token-presentation.js`. Render geometry preserves fractional canonical positions;
+do not use the legacy integer placement normalizer for passive preview coordinates.
+Preview tokens use data-preview-placement-id inside an inert surface, never the
+active board's data-placement-id interaction hooks. Map padding must match the
+normal backdrop so maps, fog and token coordinates share the same origin.
 
 Scene package copying uses `ScenePackage::prepareForNewScene` for explicit board
 ID remapping. Never recursively rewrite all IDs: token-library, sheet and embedded

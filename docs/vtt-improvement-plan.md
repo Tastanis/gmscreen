@@ -41,7 +41,7 @@ User authorized implementing the September 7 product audit, updating/running the
 ## Recovery and preparation
 
 - [ ] Specific-player preview and useful connection status.
-  - Server-check-based connection status and manual reconciliation are implemented. GM Scenes exposes player diagnostics and an independent map/grid/floor/cutout/fog preview. Token/drawing/template preview layers remain pending.
+  - Server-check-based connection status and manual reconciliation are implemented. GM Scenes exposes player diagnostics and an independent map/grid/floor/cutout/fog/token preview. Token status overlays, drawing and template preview layers remain pending.
 - [x] Named encounter checkpoints, scoped restore, scene duplication/export.
   - GM-only checkpoints expose reviewed atomic position or layout restoration. Layout restores floors, grid, fog, drawings/templates and existing-token positions while preserving current resources and newer tokens. Scene JSON export/import and duplication preserve board geometry and links, survive retries, and open without reload. Character sheets and base-map/catalog metadata are outside checkpoint restore scope.
 - [ ] Encounter presets, favorites and recent assets.
@@ -912,3 +912,24 @@ The 706-test regression suite passed before the final PC-team normalization fix;
 the two focused player-preview tests passed afterward, including alias-based PC
 fog reveals and unchanged snapshot inputs. Tokens, drawings and templates are
 explicitly omitted in the dialog and remain required preview work.
+
+### Token preview and canonical render geometry
+
+Preview tokens and the actual board share floor/fog visibility, stack order,
+transforms and direction badges through token-presentation.js. The passive surface
+is inert and uses separate preview placement identifiers. It does not mount drag,
+selection, combat or automation handlers. Status overlays, drawings and templates
+are still explicit preview omissions.
+
+Browser comparison exposed missing preview backdrop padding and integer truncation
+in the live token render normalizer. Preview now measures the same backdrop CSS;
+render geometry preserves canonical fractional coordinates in both surfaces.
+The fog painter recognizes canonical ally/team aliases directly, so preview no
+longer needs the integer legacy placement normalizer for PC reveal membership.
+
+The browser journey seeds visible-through-cutout, blocked-by-floor, hidden,
+fully-fogged and partially-revealed large tokens. Preview and real player token
+IDs, dimensions, fractional transforms, images, stacking and direction badges match.
+The same geometry survives player reload. No preview board commands or canonical
+changes occur; the screenshot was inspected. A fresh three-client stairs/fall/
+reload/undo regression also passes. All 708 tests across 86 files pass.

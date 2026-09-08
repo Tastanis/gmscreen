@@ -30,7 +30,7 @@ export function mountPlayerPreview(root, store) {
   const close=document.createElement('button');close.type='button';close.className='btn';close.textContent='Close preview';
   const heading=document.createElement('h2'),note=document.createElement('p'),surface=document.createElement('div');
   surface.className='vtt-player-preview-viewport';
-  note.textContent='Read-only map, floors and fog. Tokens, drawings and templates are not included yet.';
+  note.textContent='Read-only map, floors, fog and tokens. Token status overlays, drawings and templates are not included yet.';
   dialog.append(close,heading,note,surface);document.body.append(dialog);
   let mapSequence=0;
   close.addEventListener('click',()=>dialog.close());

@@ -12,6 +12,8 @@ test('preview PC fog reveals use the same normalized team aliases as the player 
   const fog=createFogChecker(state,'level-0',{gmViewing:false});
   assert.equal(fog(2,3),false);assert.equal(fog(1,3),true);
   assert.deepEqual(preview,before);
+  preview.snapshot.state.placements.scene.hero.column=2.5;
+  assert.equal(buildPlayerPreviewState(preview).boardState.placements.scene[0].column,2.5,'Canonical fractional positions survive preview');
 });
 test('player details use their saved floor and canonical primary association',()=>{
   const preview={userId:'cal',snapshot:{revision:8,state:{routing:{activeSceneId:'player-scene'},sceneConfig:{'player-scene':{

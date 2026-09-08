@@ -1,3 +1,4 @@
+import {getTokenRenderStackOrder, buildTokenLevelTransform, applyTokenLevelPresentation, resolveVisibleTokenPresentation, normalizeTokenRenderGeometry} from './token-presentation.js';
 import {
   beginExternalMeasurement,
   cancelExternalMeasurement,
@@ -195,7 +196,6 @@ import {
   renderCombatTracker,
 } from '../combat/combat-renderer.js';
 
-const TOKEN_LEVEL_STACK_STRIDE = 10000;
 let trackerOverflowResizeListenerAttached = false;
 
 // Default scene ID used when no scene is explicitly selected.
@@ -9172,31 +9172,15 @@ export function mountBoardInteractions(store, routes = {}) {
       }
 
       const levelPlacement = { ...placement, column, row, width, height };
-      const presentation = getTokenLevelPresentation(levelPlacement, tokenLevelState, {
+      const presentation = resolveVisibleTokenPresentation(levelPlacement, tokenLevelState, {
         viewerLevelId,
         gmViewing,
-        mode: 'vision',
+        isCellFogged,
       });
-      if (!presentation.visible) {
+      if (!presentation) {
         return;
       }
       const levelId = presentation.levelId ?? resolveTokenLevelId(levelPlacement, tokenLevelState);
-
-      // Hide tokens that are wholly under fog of war for non-GM users.
-      // Check every cell the token occupies; if ALL are fogged, skip rendering.
-      if (isCellFogged) {
-        let allFogged = true;
-        for (let dc = 0; dc < width && allFogged; dc++) {
-          for (let dr = 0; dr < height && allFogged; dr++) {
-            if (!isCellFogged(column + dc, row + dr)) {
-              allFogged = false;
-            }
-          }
-        }
-        if (allFogged) {
-          return;
-        }
-      }
 
       trackerEntries.push(normalized);
       renderedIds.add(normalized.id);
@@ -9524,86 +9508,6 @@ export function mountBoardInteractions(store, routes = {}) {
     });
 
     layer.hidden = auraCount === 0;
-  }
-
-  function getTokenRenderStackOrder(stackOrder, levelId, mapLevelsState = null) {
-    const normalizedStackOrder = Number.isFinite(stackOrder) ? Math.max(0, Math.trunc(stackOrder)) : 0;
-    const levels = getOrderedTokenMapLevels(mapLevelsState?.levels ?? []);
-    if (!levels.length || !levelId) {
-      return normalizedStackOrder;
-    }
-
-    const levelIndex = levels.findIndex((level) => level?.id === levelId);
-    if (levelIndex < 0) {
-      return normalizedStackOrder;
-    }
-
-    return levelIndex * TOKEN_LEVEL_STACK_STRIDE + normalizedStackOrder;
-  }
-
-  // Levels v2 §5.5: build the token transform string with the per-level
-  // scale baked in. Drag math reads scale from `dragElements` so the
-  // translate3d update preserves the cross-level shrink while the user
-  // drags. `transform-origin: 50% 50%` keeps the scaled token centered on
-  // its grid cell so hit testing matches.
-  function buildTokenLevelTransform(left, top, scale) {
-    const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
-    if (safeScale === 1) {
-      return `translate3d(${left}px, ${top}px, 0)`;
-    }
-    return `translate3d(${left}px, ${top}px, 0) scale(${safeScale})`;
-  }
-
-  // Levels v2 §5.5.2/§5.5.3: paint the level direction badge — green
-  // down-arrow + distance for tokens below the viewer, red up-arrow +
-  // distance for tokens above. Same-level tokens carry no badge. The badge
-  // sits inside the token element so it inherits the parent transform
-  // (including scale), but `vector-effect`-style sizing is handled in CSS
-  // via the `--vtt-token-level-distance` custom property.
-  function applyTokenLevelPresentation(token, presentation) {
-    if (!token) {
-      return;
-    }
-    const direction = presentation?.direction ?? 'same';
-    if (direction === 'same' || !presentation?.indicator) {
-      delete token.dataset.mapLevelDirection;
-      delete token.dataset.mapLevelDistance;
-      const existing = token.querySelector('.vtt-token__level-indicator');
-      if (existing) {
-        existing.remove();
-      }
-      return;
-    }
-
-    const distance = Math.max(
-      1,
-      Math.trunc(Number.isFinite(presentation.distance) ? presentation.distance : 1),
-    );
-    token.dataset.mapLevelDirection = direction;
-    token.dataset.mapLevelDistance = String(distance);
-
-    let indicator = token.querySelector('.vtt-token__level-indicator');
-    if (!indicator) {
-      indicator = document.createElement('div');
-      indicator.className = 'vtt-token__level-indicator';
-      const arrow = document.createElement('span');
-      arrow.className = 'vtt-token__level-indicator-arrow';
-      arrow.setAttribute('aria-hidden', 'true');
-      indicator.appendChild(arrow);
-      const distanceLabel = document.createElement('span');
-      distanceLabel.className = 'vtt-token__level-indicator-distance';
-      indicator.appendChild(distanceLabel);
-      token.appendChild(indicator);
-    }
-    indicator.dataset.direction = direction;
-    const distanceLabel = indicator.querySelector('.vtt-token__level-indicator-distance');
-    if (distanceLabel) {
-      distanceLabel.textContent = String(distance);
-    }
-    const arrow = indicator.querySelector('.vtt-token__level-indicator-arrow');
-    if (arrow) {
-      arrow.textContent = direction === 'above' ? '\u25B2' : '\u25BC';
-    }
   }
 
   function applyTokenMapLevelVisibilityMask(token, visibility, { column, row, width, height, gridSize } = {}) {
@@ -15165,10 +15069,7 @@ export function mountBoardInteractions(store, routes = {}) {
       return null;
     }
 
-    const column = toNonNegativeNumber(placement.column ?? placement.col ?? 0);
-    const row = toNonNegativeNumber(placement.row ?? placement.y ?? 0);
-    const width = Math.max(1, toNonNegativeNumber(placement.width ?? placement.columns ?? 1));
-    const height = Math.max(1, toNonNegativeNumber(placement.height ?? placement.rows ?? 1));
+    const {column,row,width,height} = normalizeTokenRenderGeometry(placement);
     const name = typeof placement.name === 'string' ? placement.name : '';
     const imageUrl = typeof placement.imageUrl === 'string' ? placement.imageUrl : '';
     const levelId = typeof placement.levelId === 'string' && placement.levelId.trim()
