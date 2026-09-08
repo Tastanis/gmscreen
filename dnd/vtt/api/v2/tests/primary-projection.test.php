@@ -32,8 +32,10 @@ try {
     $withReceipts = $result['event'];
     $withReceipts['payload']['zoneEntryReceipt'] = ['placementId'=>'secret-primary'];
     $withReceipts['payload']['zoneEntryReceipts'] = [['placementId'=>'secret-primary']];
+    $withReceipts['payload']['groupUndoAnchor'] = 'scene::secret-primary';
     $withoutReceipts = vttSyncV2ProjectEventForUser($withReceipts, $auth);
     verifyPrimaryProjection(!isset($withoutReceipts['payload']['zoneEntryReceipt']) && !isset($withoutReceipts['payload']['zoneEntryReceipts']), 'Server movement receipts never leak through player projection.');
+    verifyPrimaryProjection(!isset($withoutReceipts['payload']['groupUndoAnchor']), 'Undo anchors never disclose hidden tokens.');
     verifyPrimaryProjection(vttSyncV2ProjectEventForUser($withReceipts, ['isGM'=>true]) === $withReceipts, 'GM/server evidence remains intact.');
     verifyPrimaryProjection($playerEvent['payload']['viewerPcAssociations']['scene']['cal'] === null, 'Hidden floor also disables primary association in live events.');
     verifyPrimaryProjection(!str_contains(json_encode($playerEvent['payload']['viewerPcAssociations']), 'secret-primary'), 'Association never discloses a hidden-floor token ID.');

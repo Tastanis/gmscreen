@@ -67,6 +67,9 @@ try {
             (string) ($auth['user'] ?? ''),
             (bool) ($auth['isGM'] ?? false)
         );
+    } elseif ($type === 'movement.undoGroup' && vttSyncV2DomainEnabled('placements') && vttSyncV2DomainEnabled('token_movement')) {
+        $auth = vttSyncV2RequireAuthenticated();
+        $result = vttSyncV2Store()->undoMovementGroup($command,(string)($auth['user'] ?? ''),(bool)($auth['isGM'] ?? false));
     } elseif ($type === 'placement.batch' && vttSyncV2DomainEnabled('placements')) {
         $auth = vttSyncV2RequireAuthenticated();
         $result = vttSyncV2Store()->acceptPlacementBatch(
@@ -100,7 +103,7 @@ try {
             (
                 $isBoardDomainCommand
                 || in_array($type, $requestedTestTypes, true)
-                || in_array($type, ['token.move', 'placement.batch', 'checkpoint.restorePositions', 'checkpoint.restoreLayout'], true)
+                || in_array($type, ['token.move', 'movement.undoGroup', 'placement.batch', 'checkpoint.restorePositions', 'checkpoint.restoreLayout'], true)
                 || in_array($type, $combatTypes, true)
             )
             && is_array($conflictSnapshot)
@@ -123,7 +126,7 @@ try {
         $isLiveCommand = (
             $isBoardDomainCommand
             || in_array($type, $requestedTestTypes, true)
-            || in_array($type, ['token.move', 'placement.batch', 'checkpoint.restorePositions', 'checkpoint.restoreLayout'], true)
+            || in_array($type, ['token.move', 'movement.undoGroup', 'placement.batch', 'checkpoint.restorePositions', 'checkpoint.restoreLayout'], true)
             || in_array($type, $combatTypes, true)
         );
         if ($isLiveCommand) {
@@ -147,7 +150,7 @@ try {
         'mode' => (
             $isBoardDomainCommand
             || in_array($type, $requestedTestTypes, true)
-            || in_array($type, ['token.move', 'placement.batch', 'checkpoint.restorePositions', 'checkpoint.restoreLayout'], true)
+            || in_array($type, ['token.move', 'movement.undoGroup', 'placement.batch', 'checkpoint.restorePositions', 'checkpoint.restoreLayout'], true)
             || in_array($type, $combatTypes, true)
         ) ? 'live' : 'shadow',
         'idempotent' => (bool) ($result['idempotent'] ?? false),

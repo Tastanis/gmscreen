@@ -351,3 +351,8 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 
 - New movement undo receipts include the accepted operation ID. Future group undo
   must derive membership server-side, validate all members and commit atomically.
+
+- movement.undoGroup derives members from the anchor's accepted operation, validates
+  every current receipt and commits through a world-revision-guarded placement batch.
+  No fresh movement/zone-entry receipt is issued for an undo. Keep command responses
+  and delivery on the live, player-projected V2 path. Browser integration is pending.

@@ -426,7 +426,7 @@ function vttSyncV2ProjectEventForUser(array $event, array $auth): array
         return $event;
     }
     // Full movement evidence stays server-side; a batch may include hidden tokens.
-    unset($event['payload']['zoneEntryReceipt'], $event['payload']['zoneEntryReceipts']);
+    unset($event['payload']['zoneEntryReceipt'], $event['payload']['zoneEntryReceipts'], $event['payload']['groupUndoAnchor']);
     $type = (string) ($event['type'] ?? '');
     if (in_array($type, ['scene.installed','scene.layoutRestored'], true)) {
         $sceneId = $event['sceneId'];

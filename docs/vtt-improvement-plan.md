@@ -1637,3 +1637,19 @@ PHP regression coverage verifies matching operation IDs for batch members and
 receipt persistence after reopening the database. Full suite: 752 tests/99 files
 passed. Atomic group restoration, stale-member rejection and browser controls are
 not implemented by this foundation and remain required before checking this item.
+
+### Whole-group undo: atomic server restoration
+
+Implemented the authenticated movement.undoGroup command. Membership and restored
+coordinates come from server receipts; supplied action lists are ignored. All
+members restore in one revision, including floors, stair progress and linked
+player floor views. Changes to a member, permissions or floor geometry reject the
+whole operation. Repeated delivery survives database reopening without undoing
+another move. Undo produces no new zone-entry claims.
+
+Validation: 753 tests across 99 files passed; all 17 server wrapper tests passed
+again after final privacy/routing changes. New regression scenarios cover normal
+restoration, fallen-token floor following, edit/move/delete/permission/geometry
+rejection, wrong actor, forged actions, later-move undo and database reopening.
+The browser adapter, group-aware undo control and browser interaction QA are still
+pending; the whole-group roadmap item remains open. No live site changes.

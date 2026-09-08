@@ -103,3 +103,9 @@ for (const file of ['zone-entry-claims.test.php', 'scene-package.test.php', 'flo
     assert.equal(result.status, 0, result.stderr || result.stdout);
   });
 }
+
+test('group movement undo restores all original members or none', () => {
+  const script = fileURLToPath(new URL('../../../../api/v2/tests/group-movement-undo.test.php', import.meta.url));
+  const result = spawnSync('php', [...phpArgsForSqlite(), script], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});

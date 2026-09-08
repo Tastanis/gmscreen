@@ -1270,3 +1270,16 @@ receipts remain valid for single-token undo; absence of an operation ID must not
 be guessed into group membership. This is the receipt foundation for group undo,
 not its command or UI. Group membership must be derived from the accepted server
 operation and every member validated before any restoration is committed.
+
+### Atomic group movement undo command
+
+`movement.undoGroup` accepts an anchor scene/entity and its entity revision. The
+server resolves original group members from the accepted operation journal, checks
+actor, current permissions, latest receipt and floor geometry for every member,
+then restores all positions, floors, stair progress and linked floor views in one
+world-revision-guarded placement batch. A stale member rejects the entire group.
+Later moves that have themselves been undone do not invalidate an earlier group
+receipt merely because the entity revision advanced. Repeated operation IDs replay
+the accepted result after database reopening. Events retain the normal structural
+reducer shape, carry movementKind undo and issue no zone-entry evidence. The
+internal anchor is removed from player projection. Browser adapter/UI work remains.

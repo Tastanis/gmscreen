@@ -1216,6 +1216,49 @@ final class SyncV2Store
         }
     }
 
+    /** Restore every member of the accepted move identified by an anchor receipt. */
+    public function undoMovementGroup(array $command,string $actorId,bool $isGm): array
+    {
+        $actorId=trim($actorId);
+        $sceneId=trim((string)($command['sceneId'] ?? ''));
+        $anchorId=trim((string)($command['entityId'] ?? ''));
+        $operationId=trim((string)($command['operationId'] ?? ''));
+        if ($actorId==='' || $sceneId==='' || $anchorId==='') throw new InvalidArgumentException('A group undo requires an authenticated actor and anchor token.');
+        if (strlen($operationId)<8 || strlen($operationId)>128 || preg_match('/^[A-Za-z0-9._:-]+$/',$operationId)!==1) throw new InvalidArgumentException('operationId is invalid.');
+        $existing=$this->findEventByOperationId($operationId);
+        if ($existing!==null) {
+            if (($existing['actorId'] ?? '')!==$actorId || ($existing['payload']['groupUndoAnchor'] ?? '')!==$sceneId.'::'.$anchorId) throw new InvalidArgumentException('Operation ID is already in use.');
+            return ['status'=>'accepted','event'=>$existing,'idempotent'=>true];
+        }
+        $snapshot=$this->getSnapshot();
+        $anchor=$snapshot['state']['placements'][$sceneId][$anchorId] ?? null;
+        if (!$anchor || (!$isGm && ($this->placementIsHidden($anchor) || !$this->playerMayMovePlacement($anchor)))) throw new InvalidArgumentException('The group move is unavailable.');
+        $revision=$this->normalizeEntityRevision($command);
+        if ($revision!==($anchor['_entityRevision'] ?? 0)) return ['status'=>'conflict','error'=>'entity_revision_mismatch','snapshot'=>$snapshot];
+        $history=$anchor['_movementUndo']['history'] ?? [];
+        $sourceId=end($history)['operationId'] ?? null;
+        $source=is_string($sourceId)?$this->findEventByOperationId($sourceId):null;
+        if (!$source || ($source['actorId'] ?? '')!==$actorId) throw new InvalidArgumentException('This group move has no usable receipt for the current user.');
+        $actions=[];$restores=[];
+        foreach ($source['payload']['mutations'] ?? [] as $mutation) {
+            $record=$mutation['placement'] ?? [];
+            $entries=$record['_movementUndo']['history'] ?? [];
+            if ((end($entries)['operationId'] ?? null)!==$sourceId) continue;
+            $memberScene=$mutation['sceneId'];$id=$mutation['placementId'];
+            $current=$snapshot['state']['placements'][$memberScene][$id] ?? null;
+            if (!$current || (!$isGm && ($this->placementIsHidden($current) || !$this->playerMayMovePlacement($current)))) throw new InvalidArgumentException('A member of this group move is no longer available.');
+            $latest=$current['_movementUndo']['history'] ?? [];
+            if ((end($latest)['operationId'] ?? null)!==$sourceId) throw new InvalidArgumentException('A member moved again after this group move.');
+            $restore=MovementUndo::restore($current,$actorId,(int)$current['_entityRevision'],$snapshot['state']['sceneConfig'][$memberScene]['mapLevels'] ?? []);
+            $restores[$memberScene.'::'.$id]=$restore;
+            $actions[]=['kind'=>'patch','sceneId'=>$memberScene,'placementId'=>$id,'entityRevision'=>$current['_entityRevision'],
+                'patch'=>['column'=>$restore['column'],'row'=>$restore['row']]];
+        }
+        if (count($actions)<2 || !isset($restores[$sceneId.'::'.$anchorId])) throw new InvalidArgumentException('This receipt does not identify a group movement.');
+        return $this->acceptPlacementBatch([...$command,'type'=>'placement.batch','baseRevision'=>$snapshot['revision'],'payload'=>['actions'=>$actions]],
+            $actorId,$isGm,$snapshot['revision'],$restores,$sceneId.'::'.$anchorId);
+    }
+
     /**
      * Apply all placement and ownership mutations under one SQLite write
      * lock. Validation is performed against a working copy and no state or
@@ -1227,7 +1270,9 @@ final class SyncV2Store
         array $command,
         string $actorId,
         bool $isGm,
-        ?int $expectedWorldRevision = null
+        ?int $expectedWorldRevision = null,
+        ?array $movementRestores = null,
+        ?string $groupUndoAnchor = null
     ): array {
         $normalized = $this->normalizePlacementBatch($command, $expectedWorldRevision === null ? 100 : 5000);
         $actorId = trim($actorId);
@@ -1239,12 +1284,13 @@ final class SyncV2Store
         try {
             $existing = $this->findEventByOperationId($normalized['operationId']);
             if ($existing !== null) {
+                if ($groupUndoAnchor !== null && (($existing['actorId'] ?? '') !== $actorId || ($existing['payload']['groupUndoAnchor'] ?? '') !== $groupUndoAnchor)) throw new InvalidArgumentException('Operation ID is already in use.');
                 $this->pdo->exec('COMMIT');
                 return ['status' => 'accepted', 'event' => $existing, 'idempotent' => true];
             }
             $snapshot = $this->getSnapshot();
             if ($expectedWorldRevision !== null && $snapshot['revision'] !== $expectedWorldRevision) {
-                return $this->rollbackConflict('checkpoint_preview_stale', $snapshot);
+                return $this->rollbackConflict($groupUndoAnchor !== null ? 'group_undo_stale' : 'checkpoint_preview_stale', $snapshot);
             }
             if ($normalized['baseRevision'] > $snapshot['revision']) {
                 $this->pdo->exec('ROLLBACK');
@@ -1327,7 +1373,8 @@ final class SyncV2Store
                     continue;
                 }
 
-                $patch = $action['patch'];
+                $restore = $movementRestores[$sceneId.'::'.$placementId] ?? null;
+                $patch = $restore ?? $action['patch'];
                 if (array_key_exists('movementMode', $patch)) {
                     if (!in_array($patch['movementMode'], ['ground', 'fly', 'hover'], true)) throw new InvalidArgumentException('Unknown movement mode.');
                     if (!$isGm && !$this->playerMayMovePlacement($current)) throw new InvalidArgumentException('You cannot change this token movement mode.');
@@ -1335,7 +1382,7 @@ final class SyncV2Store
                         if (($level['id'] ?? '') === ($current['levelId'] ?? 'level-0') && ($level['hidden'] ?? false) === true) throw new InvalidArgumentException('You cannot change a token on a hidden floor.');
                     }
                 }
-                if (!$isGm) {
+                if (!$isGm && $restore === null) {
                     $this->assertPlayerPatchAllowed($patch);
                 }
                 unset($patch['id'], $patch['_entityRevision'], $patch['_movementUndo'], $patch['_floorTraversal']);
@@ -1367,11 +1414,12 @@ final class SyncV2Store
                 }
                 $next['id'] = $placementId;
                 $next['_entityRevision'] = $nextRevision;
-                if (array_key_exists('column', $patch) || array_key_exists('row', $patch)) {
+                if ($restore !== null) { $next = [...$next, ...$restore]; $patch = [...$patch, ...$restore]; }
+                if ($restore === null && (array_key_exists('column', $patch) || array_key_exists('row', $patch))) {
                     $next['_movementUndo'] = MovementUndo::record($current, $next, $actorId, $state['sceneConfig'][$sceneId]['mapLevels'] ?? [], $normalized['operationId']);
                     $patch['_movementUndo'] = $next['_movementUndo'];
                 }
-                if (array_key_exists('column', $patch) || array_key_exists('row', $patch) || array_key_exists('levelId', $patch)) {
+                if ($restore === null && (array_key_exists('column', $patch) || array_key_exists('row', $patch) || array_key_exists('levelId', $patch))) {
                     $zoneEntryReceipts[] = ZoneEntryReceipt::create($sceneId, $placementId, $current, $next, $state['combat'][$sceneId] ?? [], $action['movementKind']);
                 }
                 $state['placements'][$sceneId][$placementId] = $next;
@@ -1471,6 +1519,10 @@ final class SyncV2Store
                 ],
                 'serverTime' => $serverTime,
             ];
+            if ($groupUndoAnchor !== null) {
+                $event['payload']['groupUndoAnchor'] = $groupUndoAnchor;
+                $event['payload']['movementKind'] = 'undo';
+            }
             if ($zoneEntryReceipts !== []) $event['payload']['zoneEntryReceipts'] = $zoneEntryReceipts;
             $this->insertEvent($event);
             $this->updateWorldState($revision, $state, $serverTime);
