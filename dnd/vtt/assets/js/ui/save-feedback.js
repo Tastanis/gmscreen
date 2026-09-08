@@ -1,6 +1,8 @@
 export function describeSaveFailure(error, source = 'change') {
   const status = Number(error?.status) || 0;
-  const reason = String(error?.message || error?.reason || '').trim();
+  const rawReason = String(error?.message || error?.reason || '').trim();
+  const reason = rawReason === 'checkpoint_preview_stale'
+    ? 'The board changed after the preview. Preview positions again before restoring.' : rawReason;
   if (status === 401) return `${source}: sign in again. ${reason}`.trim();
   if (status >= 400 && status < 500 && ![408, 429].includes(status)) {
     return `${source} rejected: ${reason || `HTTP ${status}`}`;
@@ -9,7 +11,7 @@ export function describeSaveFailure(error, source = 'change') {
 }
 
 function actionLabel(type = 'Change') {
-  return ({ 'token.move': 'Token movement', 'placement.batch': 'Token changes',
+  return ({ 'token.move': 'Token movement', 'placement.batch': 'Token changes', 'checkpoint.restorePositions': 'Checkpoint restore',
     'drawing.upsert': 'Drawing', 'drawing.remove': 'Drawing removal',
     'template.upsert': 'Template', 'template.remove': 'Template removal',
     'level.user.set': 'Viewed floor', 'level.config.set': 'Floor configuration',

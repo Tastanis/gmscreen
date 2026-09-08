@@ -40,7 +40,7 @@ User authorized implementing the September 7 product audit, updating/running the
 - [ ] Specific-player preview and useful connection status.
   - Server-check-based connection status and manual reconciliation are implemented; specific-player preview remains pending.
 - [ ] Named encounter checkpoints, scoped restore, scene duplication/export.
-  - A GM-only immutable scene checkpoint archive, API, and capture/download/delete controls are implemented and tested. Explicit restore scopes and restore journeys remain pending.
+  - GM-only checkpoint capture/download/delete and reviewed atomic position/floor restoration are implemented. Full scene geometry restore, duplication, and export remain pending.
 - [ ] Encounter presets, favorites and recent assets.
   - Token favorites and the 20 most recently added board tokens are implemented with search and browser-local persistence. Encounter presets and other asset collections remain pending.
 - [ ] Handouts, show-image, and map pins linking existing campaign records.
@@ -409,3 +409,26 @@ Applying the preview is still pending; no restoration is claimed complete.
 Validation: all 686 tests passed. PHP tests cover scope restrictions and missing
 entities/floors; authenticated API and GM browser journeys exercise previewing
 without altering canonical state, alongside capture/download/delete regression.
+
+
+### Atomic checkpoint position restoration
+
+The reviewed position/floor scope can now be applied through one GM-only canonical
+command. The server recomputes the plan and checks the reviewed world revision
+inside its write transaction. Stale previews require fresh review; they never
+automatically overwrite newer play. Current stamina, conditions, turns, geometry,
+and newer tokens are preserved. Missing tokens/floors remain explicit skips.
+The accepted event also updates linked player floor views. Network retries use
+the original operation ID; no walking automation fires for restoration.
+
+Validation: 687 tests passed. SQLite coverage includes a 101-token atomic restore,
+current resource preservation, GM authority, stale preview rejection, idempotency
+after checkpoint deletion, and database reopening. The disposable browser journey
+uses GM plus Cal and Sharon, actual stair drags with a player reload midway, stale
+preview rejection, confirmed restore, rendered position convergence, player floor
+return, and zero walking hooks. Capture/download/reload/delete still pass.
+
+Follow-up: a rapid second stair drag without the midway reload stalled in this
+new browser journey; the same move works after reload. Investigate the selected
+token/gesture state separately rather than treating that journey as covered. Full
+scene geometry restoration and duplication/export remain pending.

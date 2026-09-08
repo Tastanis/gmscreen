@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/FloorGeometry.php';
 require_once __DIR__ . '/MovementUndo.php';
 require_once __DIR__ . '/SceneCheckpointArchive.php';
+require_once __DIR__ . '/SceneCheckpointRestore.php';
 
 /**
  * SQLite authority for Sync V2.
@@ -1114,9 +1115,10 @@ final class SyncV2Store
     public function acceptPlacementBatch(
         array $command,
         string $actorId,
-        bool $isGm
+        bool $isGm,
+        ?int $expectedWorldRevision = null
     ): array {
-        $normalized = $this->normalizePlacementBatch($command);
+        $normalized = $this->normalizePlacementBatch($command, $expectedWorldRevision === null ? 100 : 5000);
         $actorId = trim($actorId);
         if ($actorId === '') {
             throw new InvalidArgumentException('An authenticated actor ID is required.');
@@ -1130,6 +1132,9 @@ final class SyncV2Store
                 return ['status' => 'accepted', 'event' => $existing, 'idempotent' => true];
             }
             $snapshot = $this->getSnapshot();
+            if ($expectedWorldRevision !== null && $snapshot['revision'] !== $expectedWorldRevision) {
+                return $this->rollbackConflict('checkpoint_preview_stale', $snapshot);
+            }
             if ($normalized['baseRevision'] > $snapshot['revision']) {
                 $this->pdo->exec('ROLLBACK');
                 return [
@@ -1865,6 +1870,39 @@ final class SyncV2Store
         return new SceneCheckpointArchive($this->pdo, $this->worldId);
     }
 
+    public function restoreCheckpointPositions(array $command, string $actorId, bool $isGm): array
+    {
+        if (!$isGm) throw new InvalidArgumentException('Checkpoint restore is GM-only.');
+        if (trim($actorId) === '') throw new InvalidArgumentException('An authenticated actor ID is required.');
+        $operationId = $command['operationId'] ?? '';
+        if (!is_string($operationId) || preg_match('/^[A-Za-z0-9._:-]{8,128}$/', $operationId) !== 1) {
+            throw new InvalidArgumentException('operationId is invalid.');
+        }
+        if (($command['type'] ?? '') !== 'checkpoint.restorePositions') throw new InvalidArgumentException('Expected checkpoint.restorePositions.');
+        $reviewedRevision = $command['payload']['reviewedRevision'] ?? null;
+        if (!is_int($reviewedRevision) || $reviewedRevision < 0) throw new InvalidArgumentException('A reviewed revision is required.');
+        // Retrying an accepted command returns its original event, even if the
+        // checkpoint was subsequently deleted or the board has moved on.
+        $existing = $this->findEventByOperationId($operationId);
+        if ($existing !== null) return ['status'=>'accepted', 'event'=>$existing, 'idempotent'=>true];
+        $checkpoint = $this->sceneCheckpoints()->get((string) ($command['payload']['checkpointId'] ?? ''));
+        if ($checkpoint === null) throw new InvalidArgumentException('Checkpoint no longer exists.');
+        $snapshot = $this->getSnapshot();
+        if ($snapshot['revision'] !== $reviewedRevision) {
+            return ['status'=>'conflict', 'error'=>'checkpoint_preview_stale', 'snapshot'=>$snapshot];
+        }
+        $preview = SceneCheckpointRestore::previewPositions($checkpoint, $snapshot);
+        $actions = [];
+        foreach ($preview['changes'] as $change) {
+            $actions[] = ['kind'=>'patch', 'sceneId'=>$preview['sceneId'], 'placementId'=>$change['id'],
+                'entityRevision'=>$change['entityRevision'], 'patch'=>$change['to']];
+        }
+        if ($actions === []) throw new InvalidArgumentException('No positions differ. Refresh the preview.');
+        // The reviewed revision is checked again inside the write transaction.
+        return $this->acceptPlacementBatch(['type'=>'placement.batch', 'operationId'=>$operationId,
+            'baseRevision'=>$reviewedRevision, 'payload'=>['actions'=>$actions]], $actorId, true, $reviewedRevision);
+    }
+
     private function normalizeMovementKind($kind): string
     {
         if (!in_array($kind, ['walk','forced','teleport'], true)) throw new InvalidArgumentException('Unknown movement kind.');
@@ -2042,7 +2080,7 @@ final class SyncV2Store
         throw new InvalidArgumentException('This board-domain command is GM-only.');
     }
 
-    private function normalizePlacementBatch(array $command): array
+    private function normalizePlacementBatch(array $command, int $maxActions = 100): array
     {
         $operationId = trim((string) ($command['operationId'] ?? ''));
         if (
@@ -2061,8 +2099,8 @@ final class SyncV2Store
             ['options' => ['min_range' => 0]]
         );
         $actions = $command['payload']['actions'] ?? null;
-        if ($baseRevision === false || !is_array($actions) || $actions === [] || count($actions) > 100) {
-            throw new InvalidArgumentException('placement.batch requires 1 to 100 actions.');
+        if ($baseRevision === false || !is_array($actions) || $actions === [] || count($actions) > $maxActions) {
+            throw new InvalidArgumentException("placement.batch requires 1 to {$maxActions} actions.");
         }
         if (strlen($this->encodeJson(['actions' => $actions])) > 1048576) {
             throw new InvalidArgumentException('placement.batch payload is too large.');

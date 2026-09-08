@@ -7,6 +7,25 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+test('checkpoint restore preserves the reviewed revision and never retries a stale preview', async () => {
+  const commands = [];
+  const runtime = createTokenMovementRuntime({
+    enabled: true, boardDomainsEnabled: true, commandsEndpoint: '/commands', snapshotEndpoint: '/snapshot',
+    eventsEndpoint: '/sync', windowRef: {},
+    fetchImpl: async (url, options) => {
+      if (String(url).includes('snapshot')) return response(200, { success: true, snapshot: { revision: 3, state: {} } });
+      commands.push(JSON.parse(options.body));
+      return response(409, { success: false, error: 'checkpoint_preview_stale', snapshot: { revision: 4, state: {} } });
+    },
+  });
+  await assert.rejects(runtime.submitBoardDomainCommands([{
+    type: 'checkpoint.restorePositions', sceneId: 'scene', payload: { checkpointId: 'checkpoint', reviewedRevision: 2 },
+  }]), /checkpoint_preview_stale/);
+  assert.equal(commands.length, 1);
+  assert.equal(commands[0].payload.reviewedRevision, 2);
+  assert.equal(runtime.getRevision(), 4);
+});
+
 test('merged placement edits preserve the latest movement intent through non-movement patches', async () => {
   const commands = [];
   const runtime = createTokenMovementRuntime({

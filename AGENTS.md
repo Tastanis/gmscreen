@@ -129,6 +129,10 @@ console.log('Button element:', document.getElementById('import-character-btn'));
   broad `applyStateToBoard` store subscriber.
 - The historical `_persistBoardState` feature-module name is a V2 command
   adapter. It must never serialize or send a whole board.
+- Checkpoint position restores use a GM-only canonical command and an atomic
+  reviewed-world-revision guard. Never retry a stale preview against newer state
+  or replace the world row with an archived snapshot. See the checkpoint scope
+  in `docs/vtt-sync-v2/README.md` and its disposable browser regression.
 - The legacy checked-in Pusher secret still requires rotation in the external
   Pusher dashboard. Put the replacement in the server-only
   `VTT_PUSHER_SECRET` environment variable, then perform the documented GM plus

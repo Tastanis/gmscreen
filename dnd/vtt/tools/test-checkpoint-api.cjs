@@ -15,6 +15,10 @@ const origin = 'http://127.0.0.1:8129';
     await player.get('/test-login.php?user=cal');
     const before = (await (await gm.get('/dnd/vtt/api/v2/snapshot.php')).json()).snapshot;
     const data = { id: randomUUID(), name: 'API regression checkpoint', sceneId: manifest.test_scene_id };
+    const restore = { type: 'checkpoint.restorePositions', operationId: randomUUID(),
+      payload: { checkpointId: data.id, reviewedRevision: before.revision } };
+    assert.equal((await anonymous.post('/dnd/vtt/api/v2/commands.php', { data: restore })).status(), 401);
+    assert.equal((await player.post('/dnd/vtt/api/v2/commands.php', { data: restore })).status(), 403);
     for (const method of ['get', 'post', 'delete']) {
       assert.equal((await player[method](endpoint, { data })).status(), 403);
     }

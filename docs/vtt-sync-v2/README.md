@@ -843,13 +843,24 @@ an ID with the same name/scene returns the original immutable capture, including
 after scene removal; changing its identity is rejected. Restore must be implemented
 as new canonical commands/events with explicit scopes, never by replacing the
 world row with an archived snapshot. The scene preparation UI supports capture,
-listing, download, and confirmed deletion. The scoped restore flow remains pending.
+listing, download, confirmed deletion, and reviewed position restoration.
 
 `GET checkpoints.php?id=...&preview=positions` produces a read-only plan against
 the current world revision. It lists only column/row/floor changes on still-existing
 captured placements, counts newer placements preserved, lists skipped missing
-tokens/floors, and flags changed grid/floor configuration. No restore write is
-available yet; applying this plan must revalidate its observed revision.
+tokens/floors, and flags changed grid/floor configuration.
+
+`checkpoint.restorePositions` is GM-only. It accepts the checkpoint ID and the
+reviewed world revision, recomputes the position plan on the server, and checks
+that revision again inside the placement-batch transaction. A stale preview is
+rejected without retrying against newer state. The result is one ordinary
+`placement.batchApplied` event, including linked player floor changes, with no
+walking automation. Restore preserves current stamina, conditions, other fields,
+and newer tokens; missing tokens/floors are skipped exactly as shown in the preview.
+The internal restore batch supports up to 5,000 position changes within the normal
+1 MB action payload limit; ordinary public placement batches retain their 100-action
+limit. Accepted operation IDs return their original event on retry, even after
+archive deletion. Full scene geometry restoration remains pending.
 
 The legacy paths being replaced are primarily:
 

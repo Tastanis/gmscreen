@@ -8,7 +8,7 @@ export function mountSceneCheckpoints(root, store) {
   const create = root.querySelector('[data-checkpoint-create]');
   let sceneId = null, busy = false, loadSequence = 0, pendingCapture = null;
   function controls() {
-    root.querySelectorAll('button').forEach(button => { button.disabled = busy || !sceneId; });
+    root.querySelectorAll('button').forEach(button => { button.disabled = busy || !sceneId || button.dataset.unavailable === 'true'; });
     name.disabled = busy || !sceneId;
   }
   function message(text) { status.textContent = text; }
@@ -77,7 +77,28 @@ export function mountSceneCheckpoints(root, store) {
         details.append(item);
       }
       for (const skipped of preview.skipped) { const item = document.createElement('li'); item.textContent = `${skipped.name}: ${skipped.reason}.`; details.append(item); }
-      panel.append(details); row.append(panel);
+      const apply = document.createElement('button'); apply.type = 'button'; apply.className = 'btn';
+      apply.textContent = 'Restore these positions'; apply.dataset.unavailable = String(!preview.changes.length);
+      apply.addEventListener('click', () => perform(async () => {
+        const text = `Move ${preview.changes.length} tokens to their checkpoint positions and floors? ${preview.skipped.length} skipped tokens and ${preview.newerTokensPreserved} newer tokens stay in place. Stamina, conditions, turns, and scene geometry are not restored.${preview.geometryChanged ? ' The grid or floor layout has changed; verify the destinations in the preview.' : ''}`;
+        const confirmed = window.UIKit
+          ? await window.UIKit.confirm({ title: 'Restore checkpoint positions', message: text, confirmText: 'Restore positions' })
+          : window.confirm(text);
+        if (!confirmed) return;
+        message('Restoring positions…');
+        try {
+          await store.restoreCheckpointPositions(checkpoint.id, preview.baseRevision, preview.sceneId);
+          apply.dataset.unavailable = 'true';
+          message(`Restored ${preview.changes.length} token positions. Preview again to review the current board.`);
+        } catch (error) {
+          if (error?.status === 409) {
+            apply.dataset.unavailable = 'true';
+            throw Error('The board changed after this preview. Preview positions again before restoring.');
+          }
+          throw error;
+        }
+      }));
+      panel.append(details, apply); row.append(panel);
       message(`Preview from revision ${preview.baseRevision}. No changes applied.`);
     });
   }

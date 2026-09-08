@@ -7280,6 +7280,14 @@ export function mountBoardInteractions(store, routes = {}) {
     const sceneId = state.boardState?.activeSceneId || DEFAULT_SCENE_ID;
     return { sceneId, levelId: getViewerLevelIdForCurrentUser(state, sceneId) || BASE_MAP_LEVEL_ID };
   };
+  boardApi.restoreCheckpointPositions = async (checkpointId, reviewedRevision, sceneId) => {
+    const results = await tokenMovementRuntime.submitBoardDomainCommands([{
+      type: 'checkpoint.restorePositions', sceneId,
+      payload: { checkpointId, reviewedRevision },
+    }], false);
+    if (!results.length) throw Error('Checkpoint restore is unavailable until board synchronization is enabled.');
+    return results;
+  };
   boardApi.commitDrawingChanges = async (sceneId, edits) => {
     updateStatus('Saving drawing changes…');
     try {
