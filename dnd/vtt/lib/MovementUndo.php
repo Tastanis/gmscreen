@@ -11,7 +11,7 @@ final class MovementUndo
             '_floorTraversal'=>$placement['_floorTraversal'] ?? null];
     }
 
-    public static function record(array $current, array $next, string $actorId, array $mapLevels, ?string $operationId = null): array
+    public static function record(array $current, array $next, string $actorId, array $mapLevels, ?string $operationId = null, bool $groupMove = false): array
     {
         $old = $current['_movementUndo'] ?? [];
         $history = ($old['actorId'] ?? null) === $actorId
@@ -19,7 +19,8 @@ final class MovementUndo
             ? ($old['history'] ?? []) : [];
         $history[] = ['from'=>self::position($current), 'to'=>self::position($next),
             'geometry'=>hash('sha256', json_encode($mapLevels)),
-            ...($operationId !== null ? ['operationId'=>$operationId] : [])];
+            ...($operationId !== null ? ['operationId'=>$operationId] : []),
+            ...($groupMove ? ['groupMove'=>true] : [])];
         return ['actorId'=>$actorId, 'revision'=>$next['_entityRevision'], 'history'=>array_slice($history, -20)];
     }
 

@@ -152,7 +152,7 @@ function renderVttSceneBoard(bool $isGm = false): string
                         Templates
                     </button>
                     <button class="btn" type="button" data-action="toggle-draw" aria-pressed="false">Draw</button>
-                    <button class="btn" type="button" data-action="undo-token-move" title="Undo your selected token's last movement (Ctrl+Z)">Undo move</button>
+                    <button class="btn" type="button" data-action="undo-token-move" title="Undo your selected token or group's last movement (Ctrl+Z)">Undo move</button>
                 </div>
             </div>
         </header>

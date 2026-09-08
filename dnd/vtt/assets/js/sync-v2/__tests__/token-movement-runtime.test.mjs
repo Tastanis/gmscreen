@@ -419,3 +419,25 @@ test('placement conflict retries preserve concurrent edits to the same fields', 
     }
   }
 });
+
+
+test('group undo sends only its anchor and refreshes a conflict without semantic retry', async () => {
+  const commands = [], reconciled = [];
+  const runtime = createTokenMovementRuntime({
+    enabled: true, placementsEnabled: true, commandsEndpoint: '/commands', snapshotEndpoint: '/snapshot',
+    eventsEndpoint: '/sync', windowRef: {}, reconcileSnapshot: snapshot => reconciled.push(snapshot),
+    fetchImpl: async (url, options) => {
+      if (String(url).includes('snapshot')) return response(200, { success: true, snapshot: { revision: 3, state: {} } });
+      commands.push(JSON.parse(options.body));
+      return response(409, { success: false, error: 'group_undo_stale', snapshot: { revision: 4, state: {} } });
+    },
+  });
+  await assert.rejects(runtime.undoMovementGroup('scene', 'anchor', 2), /group_undo_stale/);
+  assert.equal(commands.length, 1);
+  assert.equal(commands[0].type, 'movement.undoGroup');
+  assert.equal(commands[0].entityId, 'anchor');
+  assert.equal(commands[0].entityRevision, 2);
+  assert.deepEqual(commands[0].payload, {});
+  assert.equal(runtime.getRevision(), 4);
+  assert.equal(reconciled.at(-1).revision, 4);
+});

@@ -1586,7 +1586,7 @@ export function mountBoardInteractions(store, routes = {}) {
     clearRulerSupplement: () => clearRulerSupplement(),
     restoreMove: (move) => restoreTokenMovement(move),
     getUndoMove: () => {
-      if (!tokenMovementV2Enabled || selectedTokenIds.size !== 1) return null;
+      if (!tokenMovementV2Enabled || selectedTokenIds.size === 0) return null;
       const tokenId = [...selectedTokenIds][0];
       const sceneId = boardApi.getState?.()?.boardState?.activeSceneId;
       const current = tokenMovementRuntime.getConfirmedSnapshot()?.state?.placements?.[sceneId]?.[tokenId];
@@ -1594,6 +1594,10 @@ export function mountBoardInteractions(store, routes = {}) {
       const last = receipt?.history?.at(-1);
       if (!last || receipt.revision !== current._entityRevision
         || String(receipt.actorId).toLowerCase() !== String(getCurrentUserId()).toLowerCase()) return null;
+      if (selectedTokenIds.size > 1 && (!last.groupMove || [...selectedTokenIds].some(id => {
+        const member = tokenMovementRuntime.getConfirmedSnapshot()?.state?.placements?.[sceneId]?.[id];
+        return member?._movementUndo?.history?.at(-1)?.operationId !== last.operationId;
+      }))) return null;
       return { tokenId, sceneId, from: last.from, to: last.to };
     },
     cancelActiveDrag: () => endTokenDrag({ commit: false }),
@@ -1609,7 +1613,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const button = event.currentTarget;
     button.disabled = true;
     try {
-      updateStatus('Select one token with an unchanged movement of yours to undo.');
+      updateStatus('Select a token or group with an unchanged movement of yours to undo.');
       await tokenMovementController.undoSelectedMove();
     } finally { button.disabled = false; }
   });
@@ -7918,9 +7922,13 @@ export function mountBoardInteractions(store, routes = {}) {
         return false;
       }
       try {
-        await tokenMovementRuntime.submitMoves(sceneId, [{ placementId,
-          column: last.from.column, row: last.from.row, undoRevision: receipt.revision }]);
-        updateStatus('Movement undone, including its floor change.');
+        if (last.groupMove) {
+          await tokenMovementRuntime.undoMovementGroup(sceneId, placementId, receipt.revision);
+        } else {
+          await tokenMovementRuntime.submitMoves(sceneId, [{ placementId,
+            column: last.from.column, row: last.from.row, undoRevision: receipt.revision }]);
+        }
+        updateStatus(last.groupMove ? 'Group movement undone, including all floor changes.' : 'Movement undone, including its floor change.');
         return true;
       } catch (error) {
         reportSyncFailure(error, 'movement undo');

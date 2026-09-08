@@ -1309,6 +1309,9 @@ final class SyncV2Store
             $zoneEntryReceipts = [];
             $levelChangedPlacements = [];
 
+            $groupMove = count(array_filter($normalized['actions'], static fn(array $action): bool =>
+                $action['kind'] === 'patch' && (array_key_exists('column', $action['patch']) || array_key_exists('row', $action['patch']))
+            )) > 1;
             foreach ($normalized['actions'] as $action) {
                 $sceneId = $action['sceneId'];
                 $placementId = $action['placementId'];
@@ -1416,7 +1419,7 @@ final class SyncV2Store
                 $next['_entityRevision'] = $nextRevision;
                 if ($restore !== null) { $next = [...$next, ...$restore]; $patch = [...$patch, ...$restore]; }
                 if ($restore === null && (array_key_exists('column', $patch) || array_key_exists('row', $patch))) {
-                    $next['_movementUndo'] = MovementUndo::record($current, $next, $actorId, $state['sceneConfig'][$sceneId]['mapLevels'] ?? [], $normalized['operationId']);
+                    $next['_movementUndo'] = MovementUndo::record($current, $next, $actorId, $state['sceneConfig'][$sceneId]['mapLevels'] ?? [], $normalized['operationId'], $groupMove);
                     $patch['_movementUndo'] = $next['_movementUndo'];
                 }
                 if ($restore === null && (array_key_exists('column', $patch) || array_key_exists('row', $patch) || array_key_exists('levelId', $patch))) {

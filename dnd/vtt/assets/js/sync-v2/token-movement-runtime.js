@@ -62,6 +62,7 @@ export function createTokenMovementRuntime({
       start: async () => false,
       stop: () => {},
       submitMoves: async () => [],
+      undoMovementGroup: async () => null,
       submitPlacementOps: async () => null,
       submitCombatCommand: async () => null,
       submitBoardDomainCommands: async () => [],
@@ -390,6 +391,25 @@ export function createTokenMovementRuntime({
     }
   }
 
+  async function undoMovementGroup(sceneId, placementId, receiptRevision) {
+    if (!placementsEnabled) throw new Error('Group movement undo is unavailable.');
+    await start();
+    try {
+      return await commandClient.submit('movement.undoGroup', {}, {
+        sceneId, entityId: placementId, entityRevision: receiptRevision,
+      });
+    } catch (error) {
+      const snapshot = error?.response?.snapshot;
+      if (error?.status === 409 && snapshot) {
+        store.replaceSnapshot(snapshot, { authoritative: true, source: 'conflict' });
+      }
+      reconcileSnapshot(store.getConfirmedSnapshot(), { source: 'rejected' });
+      // A fresh command could target a different group. Only the command client's
+      // identical-operation network retry is safe for this action.
+      throw error;
+    }
+  }
+
   async function submitCombatCommand(type, sceneId, payload = {}) {
     if (!combatEnabled) return null;
     if (!sceneId) {
@@ -596,6 +616,7 @@ export function createTokenMovementRuntime({
     start,
     stop,
     submitMoves,
+    undoMovementGroup,
     submitPlacementOps,
     submitCombatCommand,
     submitBoardDomainCommands,

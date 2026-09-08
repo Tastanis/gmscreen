@@ -355,4 +355,8 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 - movement.undoGroup derives members from the anchor's accepted operation, validates
   every current receipt and commits through a world-revision-guarded placement batch.
   No fresh movement/zone-entry receipt is issued for an undo. Keep command responses
-  and delivery on the live, player-projected V2 path. Browser integration is pending.
+  and delivery on the live, player-projected V2 path. Browser integration is verified.
+
+- Group movement receipts carry groupMove for the Undo control. Selecting one
+  member still undoes the original whole group. Never semantically retry a stale
+  group undo; identical operation-ID transport retry remains safe.

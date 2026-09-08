@@ -21,6 +21,7 @@ foreach (['success','edit','move','delete','geometry','permission','later-undone
             ['kind'=>'patch','sceneId'=>'scene','placementId'=>'pc','entityRevision'=>0,'patch'=>['column'=>3,'row'=>2]],
             ['kind'=>'patch','sceneId'=>'scene','placementId'=>'ally','entityRevision'=>0,'patch'=>['column'=>4,'row'=>2]],
         ], 'group-original');
+        checkGroup($store->getSnapshot()['state']['placements']['scene']['pc']['_movementUndo']['history'][0]['groupMove']===true,'Group receipts remain recognizable after selection changes or reload.');
         if (in_array($scenario,['edit','move','permission','later-undone'],true)) {
             $patch=match($scenario) { 'edit'=>['name'=>'Changed'], 'permission'=>['team'=>'enemy'], default=>['column'=>6] };
             $batch([['kind'=>'patch','sceneId'=>'scene','placementId'=>'ally','entityRevision'=>1,'patch'=>$patch]],'group-intervene', in_array($scenario,['permission','edit'],true)?'GM':'cal',in_array($scenario,['permission','edit'],true));

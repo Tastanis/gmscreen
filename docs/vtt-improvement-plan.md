@@ -12,7 +12,7 @@ User authorized implementing the September 7 product audit, updating/running the
 ## Broken player workflows
 
 - [ ] Server-validated atomic stairs/falls, including player and alternate movement paths.
-  - Core single/group movement resolves stairs/support on the server. Manual Fly/Hover modes, standard condition interruption, and landing are implemented. Flight eligibility/height/other speed-zero automation, whole-group undo, and remaining automation entry-point coverage are pending.
+  - Core single/group movement resolves stairs/support on the server. Manual Fly/Hover modes, standard condition interruption, and landing are implemented. Whole-group undo is implemented for newly recorded group moves. Flight eligibility/height/other speed-zero automation and remaining automation entry-point coverage are pending.
 - [x] Drawing creation/erase/clear/undo persist explicitly through V2, with author/floor scope and hidden-floor projection.
 - [x] Owned temporary template edit/remove permissions; persistent structures retain GM authority.
 - [x] Exact rejection feedback and pending/accepted state for canonical board commands; other multi-step action recovery remains below.
@@ -126,7 +126,7 @@ overwriting newer work. Receipts survive reload; cloning cannot copy them.
 The Undo move button and Ctrl+Z work outside combat, with movement-cost refunds
 limited to a matching locally tracked combat move. Undo does not re-fire normal
 movement triggers. This reverses movement only, not damage or ability side effects.
-Whole-group undo is still pending; the control explicitly acts on one selected token.
+Whole-group undo now works through the same control for newly recorded group moves; selecting a member restores the original group atomically. Older receipts without the group marker retain single-token behavior.
 
 ## Library-first panels
 
@@ -1653,3 +1653,20 @@ restoration, fallen-token floor following, edit/move/delete/permission/geometry
 rejection, wrong actor, forged actions, later-move undo and database reopening.
 The browser adapter, group-aware undo control and browser interaction QA are still
 pending; the whole-group roadmap item remains open. No live site changes.
+
+### Whole-group undo: browser integration verified
+
+New batch movement receipts carry a server-owned group marker. Undo move and
+Ctrl+Z route these receipts to movement.undoGroup; a selected group must share the
+original operation, and selecting one member still restores the complete group.
+A conflict refreshes canonical state without submitting a new undo operation.
+The existing command client may retry the identical operation after transport
+failure, preserving server idempotency. Legacy unmarked receipts retain their
+existing single-token behavior.
+
+Browser verification used a fresh local fixture and an actual player two-token
+drag through the complete staircase. Both tokens reached the upper floor; after
+reload, Undo restored both positions/floors and Cal's linked floor view. A second
+group move followed by a GM edit to one member rejected the whole undo, left both
+placements unchanged, and remained unchanged after reload. Focused runtime/server
+coverage passed, followed by the full suite: 754 tests across 99 files. The isolated PHP server was stopped; no live writes or deployment.

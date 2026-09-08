@@ -1283,3 +1283,11 @@ receipt merely because the entity revision advanced. Repeated operation IDs repl
 the accepted result after database reopening. Events retain the normal structural
 reducer shape, carry movementKind undo and issue no zone-entry evidence. The
 internal anchor is removed from player projection. Browser adapter/UI work remains.
+
+New group movement history entries carry groupMove. The browser Undo control uses
+that marker to call movement.undoGroup with only anchor and receipt revision,
+including after reload. Selected groups must share the accepted operation. A
+conflict refreshes the projected snapshot but never issues a new undo command.
+Legacy unmarked histories retain single-token undo behavior. Browser verification
+covers a real player group stair drag, floor/view restoration after reload and
+whole-group rejection after a member edit.
