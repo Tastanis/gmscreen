@@ -32,6 +32,23 @@ const origin='http://127.0.0.1:8129';
     assert.deepEqual(await snapshot(gm),before);
     // GM credentials still authorize another GM-only read after previewing players.
     assert.equal((await gm.request.get(endpoint+'?user=cal')).status(),200);
+    const page=await gm.newPage();const errors=[];
+    page.on('pageerror',error=>errors.push(error.message));
+    await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+    await page.goto(origin+'/dnd/vtt/');
+    await page.waitForFunction(()=>document.querySelector('[data-connection-status]')?.textContent.includes('Connected'));
+    const uiBefore=await snapshot(gm);const writes=[];
+    page.on('request',request=>{if(request.method()!=='GET' && request.url().includes('/api/v2/commands.php'))writes.push(request.url());});
+    await page.locator('[data-settings-launch="scenes"]').click();
+    const panel=page.locator('[data-player-preview]');await panel.locator('summary').click();
+    await panel.locator('[data-preview-status]').filter({hasText:'captured'}).waitFor();
+    await panel.locator('select').selectOption('sharon');
+    await panel.locator('[data-preview-status]').filter({hasText:'sharon · revision'}).waitFor();
+    await panel.getByRole('button',{name:'Refresh player view'}).click();
+    await panel.locator('[data-preview-status]').filter({hasText:'captured'}).waitFor();
+    assert.match(await panel.locator('[data-preview-details]').innerText(),/Viewing: Level 0/);
+    await panel.screenshot({path:'.playwright-mcp/player-view-details.png'});
+    assert.deepEqual(await snapshot(gm),uiBefore);assert.deepEqual(writes,[]);assert.deepEqual(errors,[]);
     console.log('PASS: player preview HTTP authentication, methods, identity validation, exact player projection and unchanged canonical state.');
   } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

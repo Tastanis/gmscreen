@@ -119,6 +119,15 @@ function renderVttSettingsPanel(string $tokenLibraryMarkup = '', bool $isGm = fa
                         </form>
                         </details>
                         <div class="scene-manager" id="scene-manager"></div>
+                        <details class="vtt-prep-disclosure" data-player-preview>
+                            <summary>Player view details</summary>
+                            <p>Read-only scene and floor information. This does not move the player or change their preferences. Graphical fog and cutout visibility are not shown here.</p>
+                            <label for="preview-player">Player</label>
+                            <select id="preview-player" aria-label="Preview player"></select>
+                            <button class="btn" type="button">Refresh player view</button>
+                            <p role="status" data-preview-status></p>
+                            <div data-preview-details></div>
+                        </details>
                         <details class="vtt-prep-disclosure vtt-checkpoints" data-scene-checkpoints>
                             <summary>Scene checkpoints</summary>
                             <p data-checkpoint-scene></p>

@@ -41,7 +41,7 @@ User authorized implementing the September 7 product audit, updating/running the
 ## Recovery and preparation
 
 - [ ] Specific-player preview and useful connection status.
-  - Server-check-based connection status and manual reconciliation are implemented. A GM-only read-only specific-player snapshot endpoint is tested; the visual preview interface remains pending.
+  - Server-check-based connection status and manual reconciliation are implemented. GM Scenes exposes read-only player selection and scene/floor/follow/primary-token diagnostics. A graphical preview with the actual fog/cutout rendering remains pending.
 - [x] Named encounter checkpoints, scoped restore, scene duplication/export.
   - GM-only checkpoints expose reviewed atomic position or layout restoration. Layout restores floors, grid, fog, drawings/templates and existing-token positions while preserving current resources and newer tokens. Scene JSON export/import and duplication preserve board geometry and links, survive retries, and open without reload. Character sheets and base-map/catalog metadata are outside checkpoint restore scope.
 - [ ] Encounter presets, favorites and recent assets.
@@ -862,3 +862,19 @@ session/canonical state. The disposable HTTP regression checks anonymous/player
 denial, non-GET denial, malformed/unknown player IDs, exact Cal/Sharon snapshot
 parity and retained GM identity. All 15 server regressions pass.
 Full regression suite: 704 tests across 83 files passed.
+
+### Player view details controls
+
+GM Scenes now includes a player selector and refreshable scene, saved floor,
+Follow/Browse and primary-token diagnostics. Requests use the read-only projected
+snapshot endpoint and current roster. A monotonically increasing request sequence
+prevents late responses from replacing a newer selection or a closed disclosure.
+Unavailable canonical primary associations never fall back to another token copy.
+This panel explicitly does not claim to show graphical fog or cutout visibility;
+that renderer integration remains outstanding.
+
+The browser journey selects Sharon and refreshes, checks the displayed floor,
+asserts no V2 commands, unchanged canonical state and no page errors. The settled
+panel screenshot was inspected. Model tests cover Browse, unavailable primary,
+deleted-floor fallback and a closed player map.
+Full regression suite: 705 tests across 84 files passed.
