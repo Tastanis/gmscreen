@@ -505,10 +505,11 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   async function handleStaminaAction(action) {
     if (pendingResourceSave) return;
     const actionCharacterId = activeCharacterId;
-    const vitals = activeSheet?.hero?.vitals;
-    if (!vitals) return;
+    if (!activeSheet?.hero?.vitals) return;
     const amount = await promptForPositiveInt(action === 'damage' ? 'How much damage?' : 'How much healing?');
     if (!amount || pendingResourceSave || activeCharacterId !== actionCharacterId) return;
+    let vitals = activeSheet?.hero?.vitals;
+    if (!vitals) return;
     const current = numberLike(vitals.currentStamina, 0);
     const max = numberLike(vitals.staminaMax, 0);
     if (action === 'damage') {
@@ -522,7 +523,11 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
           { title: 'Healing Overflow', confirmText: 'Use as temp', cancelText: 'Heal to max' }
         );
         if (pendingResourceSave || activeCharacterId !== actionCharacterId) return;
-        vitals.currentStamina = useTemp ? healed : max;
+        vitals = activeSheet?.hero?.vitals;
+        if (!vitals) return;
+        const latestHealed = numberLike(vitals.currentStamina, 0) + amount;
+        const latestMax = numberLike(vitals.staminaMax, 0);
+        vitals.currentStamina = useTemp || latestMax <= 0 ? latestHealed : Math.min(latestMax, latestHealed);
       } else {
         vitals.currentStamina = healed;
       }
@@ -535,10 +540,10 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   async function handleRecoveryClick() {
     if (pendingResourceSave) return;
     const actionCharacterId = activeCharacterId;
-    const vitals = activeSheet?.hero?.vitals;
+    let vitals = activeSheet?.hero?.vitals;
     if (!vitals) return;
-    const currentRecoveries = numberLike(vitals.currentRecoveries, 0);
-    const recoveryValue = numberLike(vitals.recoveryValue || computeRecoveryValue(vitals), 0);
+    let currentRecoveries = numberLike(vitals.currentRecoveries, 0);
+    let recoveryValue = numberLike(vitals.recoveryValue || computeRecoveryValue(vitals), 0);
     if (currentRecoveries <= 0 || recoveryValue <= 0) {
       return;
     }
@@ -549,6 +554,11 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     if (!spendRecovery || pendingResourceSave || activeCharacterId !== actionCharacterId) {
       return;
     }
+    vitals = activeSheet?.hero?.vitals;
+    if (!vitals) return;
+    currentRecoveries = numberLike(vitals.currentRecoveries, 0);
+    recoveryValue = numberLike(vitals.recoveryValue || computeRecoveryValue(vitals), 0);
+    if (currentRecoveries <= 0 || recoveryValue <= 0) return;
     const current = numberLike(vitals.currentStamina, 0);
     const max = numberLike(vitals.staminaMax, 0);
     vitals.currentRecoveries = Math.max(0, currentRecoveries - 1);
@@ -613,8 +623,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   async function handleVictoryClick() {
     if (pendingResourceSave) return;
     const actionCharacterId = activeCharacterId;
-    const hero = activeSheet?.hero;
-    if (!hero) return;
+    if (!activeSheet?.hero) return;
     const addVictory = await confirmSummaryAction('Do you want to add a victory point?', {
       title: 'Victory Point',
       confirmText: 'Add',
@@ -622,6 +631,8 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     if (!addVictory || pendingResourceSave || activeCharacterId !== actionCharacterId) {
       return;
     }
+    const hero = activeSheet?.hero;
+    if (!hero) return;
     hero.victories = (Number.parseInt(hero.victories ?? 0, 10) || 0) + 1;
     renderActiveSheet();
     await saveActiveSheet('victories');

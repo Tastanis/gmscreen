@@ -335,3 +335,17 @@ Validation: 685 regression tests passed across 82 files. Browser QA verified
 favorite persistence, collection search, a real drag onto the isolated board,
 recent history after reload, and unchanged folder metadata. The laptop layout was
 visually inspected. No live tokens were added or changed.
+
+## Confirmation refresh safety
+
+Damage/healing, recovery, and victory handlers now reacquire the active sheet
+after their dialogs resolve. A polling or selection refresh during confirmation
+previously left the handler mutating a detached sheet object while saving a
+different one. Overflow healing also recomputes from the current stamina/max after
+its second dialog. Recovery rechecks that a recovery remains before spending it.
+
+The disposable browser test opens a recovery confirmation, changes and reloads
+the saved stamina/recovery counts while it remains open, confirms, and verifies
+the current saved values receive the heal and deduction. It restores the fixture
+values afterward. These are client refresh guards; server-wide concurrent sheet
+resource updates still use the existing sheet endpoint's authority.
