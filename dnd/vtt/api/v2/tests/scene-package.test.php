@@ -25,5 +25,21 @@ verifyPackage($package['domains']['drawings']['line']['points']===[[1,2],[3,4]] 
 verifyPackage(count($package['assetReferences'])===3 && in_array('/maps/base.jpg',$package['assetReferences'],true), 'Image references include the base map, upper map, and token.');
 verifyPackage(!str_contains(json_encode($package),'private-other') && !isset($package['domains']['combat']), 'Other scenes and global combat are excluded.');
 verifyPackage($snapshot===$before, 'Export never mutates its source snapshot.');
+$preview = ScenePackage::preview($package);
+verifyPackage($preview['counts']===['placements'=>1,'drawings'=>1,'templates'=>1,'floors'=>2], 'Import preview describes the exported domains.');
+verifyPackage($preview['assetReferences']===$package['assetReferences'], 'Preview derives actual image references rather than trusting the manifest.');
+$invalidCases = [];
+$bad=$package; $bad['format']='unsupported'; $invalidCases[]=$bad;
+$bad=$package; $bad['domains']['placements']['hero']['levelId']='missing'; $invalidCases[]=$bad;
+$bad=$package; $bad['domains']['placements']['hero']['id']='wrong'; $invalidCases[]=$bad;
+$bad=$package; $bad['domains']['sceneConfig']['mapLevels']['baseStairs']=[['id'=>'stairs','linkedLevelId'=>'missing']]; $invalidCases[]=$bad;
+$bad=$package; $bad['domains']['sceneConfig']['fogOfWar']['byLevel']['missing']=[]; $invalidCases[]=$bad;
+$bad=$package; $bad['scene']['mapUrl']='javascript:alert(1)'; $invalidCases[]=$bad;
+$bad=$package; $bad['domains']['combat']=[]; $invalidCases[]=$bad;
+foreach ($invalidCases as $bad) {
+    $rejected=false;
+    try { ScenePackage::preview($bad); } catch (InvalidArgumentException $error) { $rejected=true; }
+    verifyPackage($rejected,'Malformed import preview is rejected.');
+}
 verifyPackage(ScenePackage::build($scene,['revision'=>0,'state'=>[]])['domains']['placements']===[], 'Unused catalog scenes can be exported.');
 echo "Scene package: catalog, geometry, fog, placements, drawings/templates, references, scope and immutability passed.\n";

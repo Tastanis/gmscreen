@@ -681,3 +681,18 @@ writer waits behind the deletion lock, the file remains unchanged while blocked,
 and every new entry and both independent edits survive release. Import/duplication
 implementation remains pending; this closes a necessary lost-update hazard first.
 The full regression suite also passes: 699 tests across 82 files.
+
+### Read-only scene import preview
+
+Scenes now includes Preview scene JSON. A GM can choose an exported package and
+review its name, token/floor/drawing/template counts, image references, and scope.
+Malformed domains, mismatched IDs, missing floor/stair/fog references, excessive
+counts/size, and unsupported image URL schemes are rejected. File text is rendered
+as text, never as HTML. Previewing does not change any scene.
+
+The browser journey exports a real fixture, uploads it through the preview control,
+checks player denial, verifies malformed-floor feedback and safe text rendering,
+and compares unchanged canonical snapshots. PHP tests cover valid export previews
+and malformed package cases. Scene installation and ID/reference remapping remain
+pending; preview validation is not a substitute for canonical write validation.
+All 699 tests across 82 files pass after this change.

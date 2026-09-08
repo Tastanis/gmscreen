@@ -955,6 +955,17 @@ image bytes, character-sheet stores, chat, and global combat are not bundled.
 Export does not create checkpoints or mutate board state. Import/duplication and
 full scene geometry restoration remain pending.
 
+The GM Scenes panel supports Preview scene JSON through
+`api/v2/scene-import-preview.php`. It accepts only `gmscreen-scene/v1` packages,
+checks domain structure, unique/matching entity IDs, floor/stair/fog references,
+floor/entity count limits, and HTTP(S)/site-relative image references. The request
+limit is 32 MB to allow formatted JSON; compact package data remains limited to
+16 MB. Counts and image references are derived from contents, not trusted from
+the package manifest. The preview renders file text through textContent and never
+writes catalog or board state. It is a review step, not a completed installer:
+canonical field validation, ID remapping, installation, and retry recovery remain
+pending.
+
 Scene catalog creation (including folders), grid/visibility updates, and deletion
 serialize their full read/modify/write sequence with `withVttBoardStateLock`.
 This is catalog-file coordination, not a return to legacy board-state persistence.

@@ -871,6 +871,9 @@
 .vtt-roster-editor p { font-size: 0.85rem; line-height: 1.45; }
 .vtt-roster-editor textarea { display: block; box-sizing: border-box; width: 100%; margin: 8px 0; padding: 8px; color: inherit; background: var(--panel-background, #202630); font: inherit; }
 .vtt-checkpoints { margin-top: 16px; }
+[data-scene-import-preview] p { font-size: 0.85rem; line-height: 1.45; }
+[data-scene-import-preview] li { overflow-wrap: anywhere; }
+[data-scene-import-preview] input { max-width: 100%; margin: 8px 0; }
 .vtt-checkpoints p { font-size: 0.85rem; line-height: 1.45; }
 .vtt-checkpoints input { width: 100%; min-height: 36px; margin: 6px 0; }
 .vtt-checkpoints__actions { display: flex; flex-wrap: wrap; gap: 8px; }

@@ -32,6 +32,13 @@ function renderVttSettingsPanel(string $tokenLibraryMarkup = '', bool $isGm = fa
                         <button class="btn" type="button" data-action="create-folder">New Folder</button>
                     </header>
                     <div class="settings-view__content">
+                        <details class="vtt-prep-disclosure" data-scene-import-preview>
+                            <summary>Preview scene JSON</summary>
+                            <label for="vtt-scene-import-file">Choose an exported scene package</label>
+                            <input id="vtt-scene-import-file" type="file" accept="application/json,.json" />
+                            <p role="status" aria-live="polite" data-scene-import-status></p>
+                            <div data-scene-import-result></div>
+                        </details>
                         <details class="vtt-prep-disclosure" data-scene-creation>
                             <summary>Map setup and save scene</summary>
                         <section class="scene-controls" aria-label="Scene map and grid controls">
