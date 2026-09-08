@@ -845,6 +845,12 @@ as new canonical commands/events with explicit scopes, never by replacing the
 world row with an archived snapshot. The scene preparation UI supports capture,
 listing, download, and confirmed deletion. The scoped restore flow remains pending.
 
+`GET checkpoints.php?id=...&preview=positions` produces a read-only plan against
+the current world revision. It lists only column/row/floor changes on still-existing
+captured placements, counts newer placements preserved, lists skipped missing
+tokens/floors, and flags changed grid/floor configuration. No restore write is
+available yet; applying this plan must revalidate its observed revision.
+
 The legacy paths being replaced are primarily:
 
 - `dnd/vtt/assets/js/ui/board-interactions.js`

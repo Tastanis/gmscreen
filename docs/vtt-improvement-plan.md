@@ -399,3 +399,13 @@ up to 80 characters consistently in the UI and server.
 The disposable GM browser journey created a checkpoint, inspected its downloaded
 JSON, reloaded the page, and deleted the archive entry through confirmation. The
 laptop layout was inspected. Scoped restore is not yet exposed or marked complete.
+
+Checkpoint rows now offer a read-only position/floor restore preview. It lists
+proposed destinations, unchanged tokens, explicit skips for deleted tokens or
+missing floors, and newer tokens preserved. A warning identifies changed grid or
+floor layout. This scope excludes stamina, conditions, turns, and scene geometry.
+Applying the preview is still pending; no restoration is claimed complete.
+
+Validation: all 686 tests passed. PHP tests cover scope restrictions and missing
+entities/floors; authenticated API and GM browser journeys exercise previewing
+without altering canonical state, alongside capture/download/delete regression.

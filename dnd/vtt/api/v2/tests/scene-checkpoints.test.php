@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/../../../lib/SyncV2Store.php';
+require_once __DIR__ . '/../../../lib/SceneCheckpointRestore.php';
 $database = sys_get_temp_dir() . '/vtt-checkpoint-' . bin2hex(random_bytes(8)) . '.sqlite';
 function verifyCheckpoint(bool $ok, string $message): void { if (!$ok) throw new RuntimeException($message); }
 try {
@@ -13,6 +14,20 @@ try {
     verifyCheckpoint($store->getSnapshot() === $snapshot, 'Capturing a checkpoint must not mutate canonical state or revision.');
     $changed = $snapshot;
     $changed['state']['placements']['scene']['hero']['column'] = 99;
+    $changed['state']['placements']['scene']['new-token'] = ['id'=>'new-token','column'=>4,'row'=>5];
+    $preview = SceneCheckpointRestore::previewPositions($first, $changed);
+    verifyCheckpoint(count($preview['changes']) === 1 && $preview['newerTokensPreserved'] === 1, 'Preview moves existing captured tokens and preserves newer tokens.');
+    verifyCheckpoint(array_keys($preview['changes'][0]['to']) === ['column','row','levelId'], 'Position scope contains no stamina, conditions or other fields.');
+    verifyCheckpoint($preview['changes'][0]['to']['column'] === 2.0, 'Preview restores captured coordinates.');
+    $missingFloor = $first;
+    $missingFloor['data']['domains']['placements']['hero']['levelId'] = 'deleted-level';
+    $preview = SceneCheckpointRestore::previewPositions($missingFloor, $changed);
+    verifyCheckpoint($preview['changes'] === [] && count($preview['skipped']) === 1, 'Unavailable floors are explicit skips.');
+    $removed = $changed; unset($removed['state']['placements']['scene']['hero']);
+    $preview = SceneCheckpointRestore::previewPositions($first, $removed);
+    verifyCheckpoint($preview['changes'] === [] && count($preview['skipped']) === 1, 'Position scope never recreates deleted tokens.');
+    $changed['state']['sceneConfig']['scene']['grid'] = ['size'=>99];
+    verifyCheckpoint(SceneCheckpointRestore::previewPositions($first, $changed)['geometryChanged'], 'Changed geometry is flagged for review.');
     verifyCheckpoint($archive->capture('checkpoint-001', 'Before the ambush', 'scene', $changed, 'GM') === $first, 'Retries never overwrite a checkpoint.');
     verifyCheckpoint($archive->capture('checkpoint-001', 'Before the ambush', 'scene', ['state'=>[]], 'GM') === $first, 'Retry survives later scene removal.');
     $rejected = false;

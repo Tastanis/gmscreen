@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/_common.php';
+require_once __DIR__ . '/../../lib/SceneCheckpointRestore.php';
 try {
     $auth = vttSyncV2RequireGm('Scene checkpoints are GM-only.');
     $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
@@ -20,6 +21,10 @@ try {
     if (isset($_GET['id'])) {
         $checkpoint = $archive->get((string) $_GET['id']);
         if ($checkpoint === null) vttSyncV2Respond(404, ['success'=>false, 'error'=>'Checkpoint not found.']);
+        if (isset($_GET['preview'])) {
+            if ($_GET['preview'] !== 'positions') throw new InvalidArgumentException('Unsupported restore scope.');
+            vttSyncV2Respond(200, ['success'=>true, 'preview'=>SceneCheckpointRestore::previewPositions($checkpoint, $store->getSnapshot())]);
+        }
         vttSyncV2Respond(200, ['success'=>true, 'checkpoint'=>$checkpoint]);
     }
     $sceneId = trim((string) ($_GET['sceneId'] ?? ''));

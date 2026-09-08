@@ -35,7 +35,7 @@ export function mountSceneCheckpoints(root, store) {
         const meta = document.createElement('small');
         meta.textContent = `${new Date(checkpoint.createdAt).toLocaleString()} · revision ${checkpoint.revision}`;
         const actions = document.createElement('div'); actions.className = 'vtt-checkpoints__actions';
-        for (const [text, action] of [['Download', () => download(checkpoint)], ['Delete', () => remove(checkpoint)]]) {
+        for (const [text, action] of [['Preview positions', () => preview(checkpoint, row)], ['Download', () => download(checkpoint)], ['Delete', () => remove(checkpoint)]]) {
           const button = document.createElement('button'); button.type = 'button'; button.className = 'btn'; button.textContent = text;
           button.addEventListener('click', action); actions.append(button);
         }
@@ -57,6 +57,28 @@ export function mountSceneCheckpoints(root, store) {
       const link = document.createElement('a'); link.href = url; link.download = `scene-checkpoint-${checkpoint.id}.json`;
       document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
       message(`Downloaded ${checkpoint.name}.`);
+    });
+  }
+  async function preview(checkpoint, row) {
+    await perform(async () => {
+      const { preview } = await api('?id=' + encodeURIComponent(checkpoint.id) + '&preview=positions');
+      row.querySelector('[data-checkpoint-preview]')?.remove();
+      const panel = document.createElement('div'); panel.dataset.checkpointPreview = '';
+      const scope = document.createElement('p');
+      scope.textContent = `Positions and floors only: ${preview.changes.length} tokens would move, ${preview.unchanged} unchanged, ${preview.skipped.length} skipped. ${preview.newerTokensPreserved} newer tokens stay in place. Stamina, conditions, turns, and scene geometry stay as they are.`;
+      panel.append(scope);
+      if (preview.geometryChanged) {
+        const warning = document.createElement('p'); warning.textContent = 'The grid or floor layout has changed since this checkpoint. Review destinations against the current map.'; panel.append(warning);
+      }
+      const details = document.createElement('ul'); details.className = 'vtt-checkpoints__preview';
+      for (const change of preview.changes) {
+        const item = document.createElement('li');
+        item.textContent = `${change.name}: (${change.from?.column ?? '?'}, ${change.from?.row ?? '?'}) ${change.from?.levelId ?? '?'} → (${change.to.column}, ${change.to.row}) ${change.to.levelId}`;
+        details.append(item);
+      }
+      for (const skipped of preview.skipped) { const item = document.createElement('li'); item.textContent = `${skipped.name}: ${skipped.reason}.`; details.append(item); }
+      panel.append(details); row.append(panel);
+      message(`Preview from revision ${preview.baseRevision}. No changes applied.`);
     });
   }
   async function remove(checkpoint) {

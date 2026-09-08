@@ -874,6 +874,7 @@
 .vtt-checkpoints ul { list-style: none; padding: 0; }
 .vtt-checkpoints li { padding: 12px 0; border-top: 1px solid rgba(194, 173, 144, 0.4); overflow-wrap: anywhere; }
 .vtt-checkpoints small { display: block; margin: 5px 0 8px; }
+.vtt-checkpoints__preview { max-height: 240px; overflow-y: auto; }
 
 .token-item__delete:hover:not(:disabled),
 .token-item__delete:focus-visible {
