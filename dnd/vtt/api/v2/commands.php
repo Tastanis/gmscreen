@@ -41,9 +41,11 @@ try {
     ];
     $isBoardDomainCommand = isset($boardDomainFlags[$type])
         && vttSyncV2DomainEnabled($boardDomainFlags[$type]);
-    if ($type === 'checkpoint.restorePositions' && vttSyncV2DomainEnabled('placements')) {
+    if (in_array($type, ['checkpoint.restorePositions','checkpoint.restoreLayout'], true) && vttSyncV2DomainEnabled('placements')) {
         $auth = vttSyncV2RequireGm('Checkpoint restore is GM-only.');
-        $result = vttSyncV2Store()->restoreCheckpointPositions($command, (string) ($auth['user'] ?? ''), true);
+        $result = $type === 'checkpoint.restoreLayout'
+            ? vttSyncV2Store()->restoreCheckpointLayout($command, (string) ($auth['user'] ?? ''), true)
+            : vttSyncV2Store()->restoreCheckpointPositions($command, (string) ($auth['user'] ?? ''), true);
     } elseif (in_array($type, $requestedTestTypes, true) && vttSyncV2DomainEnabled('requested_tests')) {
         $auth = vttSyncV2RequireAuthenticated();
         $result = vttSyncV2Store()->acceptRequestedTestCommand(
@@ -98,7 +100,7 @@ try {
             (
                 $isBoardDomainCommand
                 || in_array($type, $requestedTestTypes, true)
-                || in_array($type, ['token.move', 'placement.batch', 'checkpoint.restorePositions'], true)
+                || in_array($type, ['token.move', 'placement.batch', 'checkpoint.restorePositions', 'checkpoint.restoreLayout'], true)
                 || in_array($type, $combatTypes, true)
             )
             && is_array($conflictSnapshot)
@@ -121,7 +123,7 @@ try {
         $isLiveCommand = (
             $isBoardDomainCommand
             || in_array($type, $requestedTestTypes, true)
-            || in_array($type, ['token.move', 'placement.batch', 'checkpoint.restorePositions'], true)
+            || in_array($type, ['token.move', 'placement.batch', 'checkpoint.restorePositions', 'checkpoint.restoreLayout'], true)
             || in_array($type, $combatTypes, true)
         );
         if ($isLiveCommand) {
@@ -145,7 +147,7 @@ try {
         'mode' => (
             $isBoardDomainCommand
             || in_array($type, $requestedTestTypes, true)
-            || in_array($type, ['token.move', 'placement.batch', 'checkpoint.restorePositions'], true)
+            || in_array($type, ['token.move', 'placement.batch', 'checkpoint.restorePositions', 'checkpoint.restoreLayout'], true)
             || in_array($type, $combatTypes, true)
         ) ? 'live' : 'shadow',
         'idempotent' => (bool) ($result['idempotent'] ?? false),

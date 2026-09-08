@@ -7328,6 +7328,13 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!results.length) throw Error('Checkpoint restore is unavailable until board synchronization is enabled.');
     return results;
   };
+  boardApi.restoreCheckpointLayout = async (checkpointId, reviewedRevision, sceneId) => {
+    const results = await tokenMovementRuntime.submitBoardDomainCommands([{
+      type: 'checkpoint.restoreLayout', sceneId, payload: { checkpointId, reviewedRevision },
+    }], false);
+    if (!results.length) throw Error('Checkpoint restore is unavailable until board synchronization is enabled.');
+    return results;
+  };
   boardApi.deleteMapLevel = async (sceneId, levelId) => {
     const results = await tokenMovementRuntime.submitBoardDomainCommands([{ type: 'level.delete', sceneId, payload: { levelId } }], false);
     if (!results.length) throw Error('Floor deletion is unavailable until board synchronization is enabled.');

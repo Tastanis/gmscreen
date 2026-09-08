@@ -42,8 +42,8 @@ User authorized implementing the September 7 product audit, updating/running the
 
 - [ ] Specific-player preview and useful connection status.
   - Server-check-based connection status and manual reconciliation are implemented; specific-player preview remains pending.
-- [ ] Named encounter checkpoints, scoped restore, scene duplication/export.
-  - GM-only checkpoints and reviewed atomic position/floor restoration are implemented. Scene JSON export/import and duplication preserve board geometry and links, survive retries, and open without reload. Full checkpoint geometry restore remains pending.
+- [x] Named encounter checkpoints, scoped restore, scene duplication/export.
+  - GM-only checkpoints expose reviewed atomic position or layout restoration. Layout restores floors, grid, fog, drawings/templates and existing-token positions while preserving current resources and newer tokens. Scene JSON export/import and duplication preserve board geometry and links, survive retries, and open without reload. Character sheets and base-map/catalog metadata are outside checkpoint restore scope.
 - [ ] Encounter presets, favorites and recent assets.
   - Token favorites and the 20 most recently added board tokens are implemented with search and browser-local persistence. Encounter presets and other asset collections remain pending.
 - [ ] Handouts, show-image, and map pins linking existing campaign records.
@@ -833,3 +833,18 @@ switches the GM to another scene and back, and verifies the size and original to
 coordinates. This closes the grid persistence gate for checkpoint layout restore.
 The checkpoint layout HTTP/UI workflow remains pending.
 All 703 tests across 83 files pass after the grid correction.
+
+### Checkpoint layout restore in the GM interface
+
+Checkpoint rows now offer Preview layout beside Preview positions. The layout
+preview lists geometry/content changes, token destinations, newer-token relocations
+and affected saved views. Confirmation states the restore scope and possible
+removal of newer drawings/templates. Both preview and apply are GM-only; stale
+world revisions require a fresh preview. The normal V2 runtime delivers the one
+atomic layout event to clients without synthesizing walking triggers.
+
+`test-checkpoint-layout-browser.cjs` exercises real capture/preview/confirmation,
+player denial, a stale preview, deleted/restored floors and content, a newer token
+on a removed floor, current conditions/stamina preservation, GM plus two-player
+convergence and reload. The 1280×720 preview was visually inspected. All 703 tests
+across 83 files passed for the HTTP/UI integration. Live campaign data was untouched.

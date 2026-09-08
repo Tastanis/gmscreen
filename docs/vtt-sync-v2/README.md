@@ -7,7 +7,7 @@ state, combat turns, or rendering subscriptions.
 
 ## Decision
 
-An internal `checkpoint.restoreLayout` authority now plans and atomically restores
+A GM-only `checkpoint.restoreLayout` authority now plans and atomically restores
 one scene's floors, canonical grid, fog, drawings/templates and existing token
 positions. Current token fields/resources, newer tokens, turns, routing and other
 scenes are preserved. Missing/unsupported floors produce previewed relocations;
@@ -15,7 +15,11 @@ linked following and saved viewer-floor repair preserve Browse preferences.
 `scene.layoutRestored` replaces only those four owned domains with advancing
 revisions, is player-projected like snapshots, and uses focused renderer flags.
 Strict reviewed world revisions reject stale previews; accepted retries survive
-checkpoint archive deletion. HTTP/UI wiring remains pending. Reopened-grid QA now
+checkpoint archive deletion. Checkpoint rows expose Preview layout through
+`GET checkpoints.php?id=...&preview=layout` and an explicit scoped confirmation
+through the normal V2 command endpoint. Browser QA covers stale rejection, newer
+token/resource preservation, GM/two-player convergence and reload without walking
+hooks. Reopened-grid QA now
 passes: existing canonical scene grids win over catalog metadata on activation,
 and recovery/live grid or routing events update the active rendering grid.
 

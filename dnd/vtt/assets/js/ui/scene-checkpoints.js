@@ -35,7 +35,7 @@ export function mountSceneCheckpoints(root, store) {
         const meta = document.createElement('small');
         meta.textContent = `${new Date(checkpoint.createdAt).toLocaleString()} · revision ${checkpoint.revision}`;
         const actions = document.createElement('div'); actions.className = 'vtt-checkpoints__actions';
-        for (const [text, action] of [['Preview positions', () => preview(checkpoint, row)], ['Download', () => download(checkpoint)], ['Delete', () => remove(checkpoint)]]) {
+        for (const [text, action] of [['Preview positions', () => preview(checkpoint, row)], ['Preview layout', () => preview(checkpoint, row, 'layout')], ['Download', () => download(checkpoint)], ['Delete', () => remove(checkpoint)]]) {
           const button = document.createElement('button'); button.type = 'button'; button.className = 'btn'; button.textContent = text;
           button.addEventListener('click', action); actions.append(button);
         }
@@ -59,14 +59,25 @@ export function mountSceneCheckpoints(root, store) {
       message(`Downloaded ${checkpoint.name}.`);
     });
   }
-  async function preview(checkpoint, row) {
+  async function preview(checkpoint, row, restoreScope = 'positions') {
     await perform(async () => {
-      const { preview } = await api('?id=' + encodeURIComponent(checkpoint.id) + '&preview=positions');
+      const layout = restoreScope === 'layout';
+      const { preview } = await api('?id=' + encodeURIComponent(checkpoint.id) + '&preview=' + restoreScope);
       row.querySelector('[data-checkpoint-preview]')?.remove();
       const panel = document.createElement('div'); panel.dataset.checkpointPreview = '';
       const scope = document.createElement('p');
-      scope.textContent = `Positions and floors only: ${preview.changes.length} tokens would move, ${preview.unchanged} unchanged, ${preview.skipped.length} skipped. ${preview.newerTokensPreserved} newer tokens stay in place. Stamina, conditions, turns, and scene geometry stay as they are.`;
+      scope.textContent = layout
+        ? `Scene layout: ${preview.savedFloorCount} floors, ${preview.changes.length} token moves. ${preview.newerTokensPreserved} newer tokens are retained; any necessary relocations are listed below. Current stamina, conditions and turns are preserved. Deleted tokens, character sheets and base-map/catalog metadata are not restored.`
+        : `Positions and floors only: ${preview.changes.length} tokens would move, ${preview.unchanged} unchanged, ${preview.skipped.length} skipped. ${preview.newerTokensPreserved} newer tokens stay in place. Stamina, conditions, turns, and scene geometry stay as they are.`;
       panel.append(scope);
+      if (layout) {
+        const geometry=document.createElement('p'); geometry.textContent=`Geometry changes: ${preview.geometryFields.join(', ') || 'none'}.`; panel.append(geometry);
+        for(const domain of ['drawings','templates']) {
+          const counts=preview.content[domain]; const summary=document.createElement('p');
+          summary.textContent=`${domain}: ${counts.added} restored, ${counts.removed} newer entries removed, ${counts.updated} changed.`; panel.append(summary);
+        }
+        for(const view of preview.viewerChanges) {const text=document.createElement('p');text.textContent=`${view.userId}'s view: ${view.from ?? 'default'} → ${view.to}`;panel.append(text);}
+      }
       if (preview.geometryChanged) {
         const warning = document.createElement('p'); warning.textContent = 'The grid or floor layout has changed since this checkpoint. Review destinations against the current map.'; panel.append(warning);
       }
@@ -74,26 +85,29 @@ export function mountSceneCheckpoints(root, store) {
       for (const change of preview.changes) {
         const item = document.createElement('li');
         item.textContent = `${change.name}: (${change.from?.column ?? '?'}, ${change.from?.row ?? '?'}) ${change.from?.levelId ?? '?'} → (${change.to.column}, ${change.to.row}) ${change.to.levelId}`;
+        if(layout)item.textContent+=` — ${change.reason}${change.newer ? ' (newer token)' : ''}`;
         details.append(item);
       }
       for (const skipped of preview.skipped) { const item = document.createElement('li'); item.textContent = `${skipped.name}: ${skipped.reason}.`; details.append(item); }
       const apply = document.createElement('button'); apply.type = 'button'; apply.className = 'btn';
-      apply.textContent = 'Restore these positions'; apply.dataset.unavailable = String(!preview.changes.length);
+      apply.textContent = layout ? 'Restore this layout' : 'Restore these positions'; apply.dataset.unavailable = String(layout ? !preview.hasChanges : !preview.changes.length);
       apply.addEventListener('click', () => perform(async () => {
-        const text = `Move ${preview.changes.length} tokens to their checkpoint positions and floors? ${preview.skipped.length} skipped tokens and ${preview.newerTokensPreserved} newer tokens stay in place. Stamina, conditions, turns, and scene geometry are not restored.${preview.geometryChanged ? ' The grid or floor layout has changed; verify the destinations in the preview.' : ''}`;
+        const text = layout
+          ? `Restore the previewed floors, grid, fog, drawings, templates and ${preview.changes.length} token positions? Newer drawings/templates may be removed. Newer tokens remain, with the listed relocations. Current stamina, conditions and turns are preserved. Base-map/catalog metadata and character sheets are not restored.`
+          : `Move ${preview.changes.length} tokens to their checkpoint positions and floors? ${preview.skipped.length} skipped tokens and ${preview.newerTokensPreserved} newer tokens stay in place. Stamina, conditions, turns, and scene geometry are not restored.${preview.geometryChanged ? ' The grid or floor layout has changed; verify the destinations in the preview.' : ''}`;
         const confirmed = window.UIKit
-          ? await window.UIKit.confirm({ title: 'Restore checkpoint positions', message: text, confirmText: 'Restore positions' })
+          ? await window.UIKit.confirm({ title: layout ? 'Restore checkpoint layout' : 'Restore checkpoint positions', message: text, confirmText: layout ? 'Restore layout' : 'Restore positions' })
           : window.confirm(text);
         if (!confirmed) return;
-        message('Restoring positions…');
+        message(layout ? 'Restoring layout…' : 'Restoring positions…');
         try {
-          await store.restoreCheckpointPositions(checkpoint.id, preview.baseRevision, preview.sceneId);
+          await (layout ? store.restoreCheckpointLayout : store.restoreCheckpointPositions)(checkpoint.id, preview.baseRevision, preview.sceneId);
           apply.dataset.unavailable = 'true';
-          message(`Restored ${preview.changes.length} token positions. Preview again to review the current board.`);
+          message(layout ? 'Restored scene layout. Preview again to review the current board.' : `Restored ${preview.changes.length} token positions. Preview again to review the current board.`);
         } catch (error) {
           if (error?.status === 409) {
             apply.dataset.unavailable = 'true';
-            throw Error('The board changed after this preview. Preview positions again before restoring.');
+            throw Error(`The board changed after this preview. Preview ${restoreScope} again before restoring.`);
           }
           throw error;
         }

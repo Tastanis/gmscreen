@@ -22,6 +22,7 @@ try {
         $checkpoint = $archive->get((string) $_GET['id']);
         if ($checkpoint === null) vttSyncV2Respond(404, ['success'=>false, 'error'=>'Checkpoint not found.']);
         if (isset($_GET['preview'])) {
+            if ($_GET['preview'] === 'layout') vttSyncV2Respond(200, ['success'=>true, 'preview'=>$store->previewCheckpointLayout($checkpoint)]);
             if ($_GET['preview'] !== 'positions') throw new InvalidArgumentException('Unsupported restore scope.');
             vttSyncV2Respond(200, ['success'=>true, 'preview'=>SceneCheckpointRestore::previewPositions($checkpoint, $store->getSnapshot())]);
         }
