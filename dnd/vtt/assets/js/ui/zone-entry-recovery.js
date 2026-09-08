@@ -24,7 +24,12 @@ export function mountZoneEntryRecovery(root,store,{api=zoneEntryRequest}={}) {
         const evidence=document.createElement('details'),summary=document.createElement('summary'),text=document.createElement('pre');
         summary.textContent='Recorded effects and movement';text.textContent=JSON.stringify({effects:claim.zone?.effects,movement:claim.movement},null,2);
         text.style.whiteSpace='pre-wrap';text.style.overflowWrap='anywhere';evidence.append(summary,text);
-        row.append(heading,meta,evidence);
+        row.append(heading,meta);
+        const reason=document.createElement('p');reason.dataset.zoneReviewReason='';
+        reason.textContent=claim.outcome?.reason
+          ? `Reported by ${claim.outcome.actorId}: ${claim.outcome.reason}`
+          : 'No failure details were confirmed. Check the recorded effects against current stamina and conditions.';
+        row.append(reason,evidence);
         for (const [outcome,label] of [['completed','Mark resolved'],['dismissed','Dismiss without replay']]) {
           const button=document.createElement('button');button.type='button';button.className='btn';button.textContent=label;
           button.addEventListener('click',async()=>{

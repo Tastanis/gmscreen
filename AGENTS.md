@@ -309,3 +309,6 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 
 - Sheet stamina writes use writeSheetStamina with a bounded acknowledgment. Never
   automatically replay a timed-out write; it may already have committed.
+
+- Zone recovery reasons are bounded client reports rendered with textContent.
+  Preserve the first report on acknowledgment retries and retain actor privacy.

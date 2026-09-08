@@ -36,6 +36,7 @@ test('lost claim responses never execute and partial effects remain for review',
   }});
   assert.equal(executions,1);assert.equal(partial.status,'needs_review');
   assert.equal(requests.at(-1).status,'needs_review');
+  assert.equal(requests.at(-1).reason,'condition failed after damage');
 });
 
 test('lost completion and review responses never retry gameplay',async()=>{

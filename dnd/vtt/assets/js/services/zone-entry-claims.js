@@ -40,7 +40,7 @@ export async function executeClaimedZoneEntry(request,execute,{api=zoneEntryRequ
     await api({action:'finish',claimId:claim.claimId,status:'completed'});
     return {status:'completed',claimId:claim.claimId,executed:true};
   } catch(error) {
-    try {await api({action:'finish',claimId:claim.claimId,status:'needs_review'});} catch {}
+    try {await api({action:'finish',claimId:claim.claimId,status:'needs_review',reason:String(error?.message || 'Effect outcome was not confirmed.').slice(0,500)});} catch {}
     return {status:'needs_review',claimId:claim.claimId,error};
   }
 }

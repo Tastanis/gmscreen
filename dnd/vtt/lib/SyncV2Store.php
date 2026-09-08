@@ -1746,10 +1746,12 @@ final class SyncV2Store
     public function finishZoneEntry(array $request,string $actorId,bool $isGm): array
     {
         if (trim($actorId)==='' || !is_string($request['claimId'] ?? null) || !is_string($request['status'] ?? null)) throw new InvalidArgumentException('Invalid claim outcome.');
+        $reason=$request['reason'] ?? '';
+        if (!is_string($reason)) throw new InvalidArgumentException('Invalid claim review reason.');
         $ledger=new ZoneEntryClaims($this->pdo,$this->worldId);
         $this->pdo->exec('BEGIN IMMEDIATE');
         try {
-            $result=$ledger->finish($request['claimId'],$request['status'],$actorId,$isGm);
+            $result=$ledger->finish($request['claimId'],$request['status'],$actorId,$isGm,$reason);
             $this->pdo->exec('COMMIT');return $result;
         } catch (Throwable $error) {$this->rollbackTransactionSilently();throw $error;}
     }

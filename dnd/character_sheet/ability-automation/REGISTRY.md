@@ -628,3 +628,11 @@ request and rejects confirmation without retrying an uncertain write. Claimed zo
 effects therefore enter GM review instead of holding movement callbacks forever.
 This does not make board/sheet writes atomic or prove that an aborted server write
 did not commit; inspect both values before resolving an uncertain outcome.
+
+Zone claim outcome acknowledgments now retain reporting actor, server timestamp
+and a bounded reason in private ledger evidence. The client sends up to 500
+characters; the server validates string type and a 2000-byte maximum. The first
+acknowledgment survives idempotent retries; original movement/effect evidence and
+terminal-outcome restrictions remain intact. Recovery renders the report as text
+and identifies its author, with a missing-details fallback for older/pending rows.
+These are client reports, not server proof of which effects committed.

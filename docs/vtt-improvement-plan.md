@@ -1395,3 +1395,23 @@ can hold its sheet request with VTT_TEST_STALL_SHEET=1 and verifies accepted boa
 damage, rejected movement continuation, needs_review and exactly one sheet write.
 Full suite: 742 tests/95 files passed. Authoritative reconciliation after reload
 and ordinary failed-save recovery remain broader outstanding work.
+
+### Actionable zone recovery reports
+
+Zone claim outcome acknowledgments now retain reporting actor, server timestamp
+and a bounded reason in private ledger evidence. The client sends up to 500
+characters; the server validates string type and a 2000-byte maximum. The first
+acknowledgment survives idempotent retries; original movement/effect evidence and
+terminal-outcome restrictions remain intact. Recovery renders the report as text
+and identifies its author, with a missing-details fallback for older/pending rows.
+These are client reports, not server proof of which effects committed.
+
+Server regressions verify reason validation and persistence across retry/reopen;
+client tests verify the effect failure message reaches the acknowledgment. The
+GM/player zone-entry browser test checks the original condition-failure report
+after retry and GM reload, then resolves it through the recovery controls. Full
+suite: 742 tests/95 files passed. The forced-zone script also gained report checks,
+but its earlier held-effect setup intermittently timed out during this milestone;
+that separate reproducibility issue remains to investigate.
+General resource reconciliation and recovery of entire interrupted abilities remain
+outstanding.

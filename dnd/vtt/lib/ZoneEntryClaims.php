@@ -46,16 +46,17 @@ final class ZoneEntryClaims
             $evidence=json_decode($row['evidence_json'],true,512,JSON_THROW_ON_ERROR);
             $results[]=['claimId'=>$row['claim_id'],'sceneId'=>$row['scene_id'],'zoneId'=>$row['zone_id'],
                 'placementId'=>$row['placement_id'],'actorId'=>$row['actor_id'],'status'=>$row['status'],
-                'createdAt'=>(int)$row['created_at'],'zone'=>$evidence['zone'],'movement'=>$evidence['receipt']];
+                'outcome'=>$evidence['outcome'] ?? null,'createdAt'=>(int)$row['created_at'],'zone'=>$evidence['zone'],'movement'=>$evidence['receipt']];
         }
         return $results;
     }
 
     /** Acknowledges a client outcome or explicit GM review; never replays effects. */
-    public function finish(string $claimId,string $status,string $actorId,bool $isGm): array
+    public function finish(string $claimId,string $status,string $actorId,bool $isGm,string $reason = ''): array
     {
+        if (strlen($reason)>2000) throw new InvalidArgumentException('Claim review reason is too long.');
         if (!preg_match('/^[a-f0-9]{64}$/',$claimId) || !in_array($status,['completed','needs_review','dismissed'],true)) throw new InvalidArgumentException('Invalid claim outcome.');
-        $query=$this->pdo->prepare('SELECT actor_id,status FROM vtt_zone_entry_claims WHERE world_id=? AND claim_id=?');
+        $query=$this->pdo->prepare('SELECT actor_id,status,evidence_json FROM vtt_zone_entry_claims WHERE world_id=? AND claim_id=?');
         $query->execute([$this->worldId,$claimId]);$row=$query->fetch(PDO::FETCH_ASSOC);
         if (!$row || (!$isGm && strtolower($row['actor_id'])!==strtolower(trim($actorId)))) throw new InvalidArgumentException('Claim is unavailable.');
         if ($status==='dismissed' && !$isGm) throw new InvalidArgumentException('Only the GM may dismiss an unresolved entry.');
@@ -63,8 +64,11 @@ final class ZoneEntryClaims
             return ['claimId'=>$claimId,'status'=>$status,'idempotent'=>true];
         }
         if (in_array($row['status'],['completed','dismissed'],true)) throw new InvalidArgumentException('Claim already has a final outcome.');
-        $update=$this->pdo->prepare('UPDATE vtt_zone_entry_claims SET status=? WHERE world_id=? AND claim_id=? AND status=?');
-        $update->execute([$status,$this->worldId,$claimId,$row['status']]);
+        $evidence=json_decode($row['evidence_json'],true,512,JSON_THROW_ON_ERROR);
+        $evidence['outcome']=['status'=>$status,'actorId'=>trim($actorId),'updatedAt'=>(int)floor(microtime(true)*1000),
+            'reason'=>$status==='needs_review'?trim($reason):''];
+        $update=$this->pdo->prepare('UPDATE vtt_zone_entry_claims SET status=?,evidence_json=? WHERE world_id=? AND claim_id=? AND status=?');
+        $update->execute([$status,json_encode($evidence,JSON_THROW_ON_ERROR),$this->worldId,$claimId,$row['status']]);
         if ($update->rowCount()!==1) throw new RuntimeException('Claim changed during acknowledgement.');
         return ['claimId'=>$claimId,'status'=>$status,'idempotent'=>false];
     }

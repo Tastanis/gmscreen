@@ -52,11 +52,15 @@ try {
     deniedClaim(fn()=>$store->finishZoneEntry([...$finish,'status'=>'pending'],'cal',false));
     deniedClaim(fn()=>$store->finishZoneEntry([...$finish,'claimId'=>str_repeat('0',64)],'GM',true));
     deniedClaim(fn()=>$store->unresolvedZoneEntries('',true));
-    $review=$store->finishZoneEntry([...$finish,'status'=>'needs_review'],'cal',false);
+    deniedClaim(fn()=>$store->finishZoneEntry([...$finish,'status'=>'needs_review','reason'=>[]],'cal',false));
+    deniedClaim(fn()=>$store->finishZoneEntry([...$finish,'status'=>'needs_review','reason'=>str_repeat('x',2001)],'cal',false));
+    $review=$store->finishZoneEntry([...$finish,'status'=>'needs_review','reason'=>'Sheet save timed out'],'cal',false);
     checkClaim($review['status']==='needs_review','An uncertain result remains recoverable without replay.');
     checkClaim($store->finishZoneEntry([...$finish,'status'=>'needs_review'],'cal',false)['idempotent'],'Uncertain outcome acknowledgement can be retried safely.');
     unset($store);$store=new SyncV2Store($path);
     checkClaim($store->unresolvedZoneEntries('cal',false)[0]['status']==='needs_review','Review state survives reload.');
+    $outcome=$store->unresolvedZoneEntries('cal',false)[0]['outcome'];
+    checkClaim($outcome['reason']==='Sheet save timed out' && $outcome['actorId']==='cal' && $outcome['updatedAt']>0,'First report survives retry and reopening with actor and timestamp.');
     $completed=$store->finishZoneEntry($finish,'CAL',false);
     checkClaim(!$completed['idempotent'] && $completed['status']==='completed','Claimant may acknowledge completion.');
     checkClaim($store->finishZoneEntry($finish,'cal',false)['idempotent'],'Lost completion response is safe to retry.');
