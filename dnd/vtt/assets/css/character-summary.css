@@ -24,7 +24,7 @@ body.vtt-character-summary-is-open .vtt-settings-launchers {
 .vtt-character-summary {
   position: fixed;
   top: var(--vtt-character-panel-top);
-  bottom: var(--vtt-character-panel-offset);
+  max-height: calc(100dvh - var(--vtt-character-panel-top) - var(--vtt-character-panel-offset));
   left: 0;
   width: var(--vtt-character-panel-effective-width);
   background: var(--vtt-sheet-bg);
@@ -149,10 +149,34 @@ body.vtt-character-summary-is-open .vtt-settings-launchers {
 }
 
 .vtt-character-card {
-  min-height: 100%;
+  min-height: 0;
   background:
     linear-gradient(180deg, rgba(61, 42, 30, 0.9), rgba(45, 27, 18, 0.97)),
     radial-gradient(circle at 18% 0%, rgba(194, 173, 144, 0.14), transparent 28%);
+}
+
+.vtt-character-reference {
+  border-top: 1px solid var(--vtt-sheet-border);
+}
+
+.vtt-character-reference > summary {
+  padding: 12px 10px;
+  min-height: 44px;
+  cursor: pointer;
+  font: 700 0.95rem/1.35 "Inter", "Segoe UI", sans-serif;
+}
+
+.vtt-character-reference > summary span {
+  display: block;
+  margin-top: 3px;
+  color: var(--vtt-sheet-muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.vtt-character-reference > summary:focus-visible {
+  outline: 2px solid var(--vtt-sheet-gold);
+  outline-offset: -3px;
 }
 
 .vtt-character-card__hero {

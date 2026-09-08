@@ -171,6 +171,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     panel.classList.toggle('vtt-character-summary--open', isOpen);
     panel.classList.toggle('vtt-character-summary--closed', !isOpen);
     panel.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+    panel.inert = !isOpen;
     document.body?.classList.toggle('vtt-character-summary-is-open', isOpen);
     if (isOpen && activeSheet) {
       renderCurrentAbilityTray();
@@ -224,11 +225,16 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     }
     activeDisplayName = activeSheet?.hero?.name || activeToken?.name || formatCharacterName(activeCharacterId);
     const standFirm = resolveCharacterStandFirmState(activeSheet, activeToken);
+    const sameCharacter = panel.querySelector('[data-character-id]')?.dataset.characterId === String(activeCharacterId);
+    const referenceOpen = sameCharacter && Boolean(panel.querySelector('[data-character-reference]')?.open);
+    const previousScroll = sameCharacter ? panel.scrollTop : 0;
     panel.innerHTML = renderCharacterCard(activeSheet, {
       characterId: activeCharacterId,
       token: activeToken,
       standFirm,
     });
+    panel.querySelector('[data-character-reference]').open = referenceOpen;
+    panel.scrollTop = previousScroll;
     bindCharacterSummaryControls(panel, {
       onTuck: tuckPanel,
       onHeroToken: handleHeroTokenClick,
@@ -385,7 +391,9 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     const requestId = ++activeRequestId;
     const token = detail.token && typeof detail.token === 'object' ? detail.token : {};
     activeToken = clonePlain(token);
-    setLoading(token.name || characterId);
+    // Selection summaries also refresh the already selected token. Keep its
+    // usable card and disclosure state while the same sheet is revalidated.
+    if (isNewCharacter || !activeSheet) setLoading(token.name || characterId);
 
     try {
       const sheet = await fetchCharacterSummary(routes, characterId);
@@ -1903,6 +1911,26 @@ function renderCharacterCard(sheet, { characterId, token, standFirm = null } = {
         recoveryValue,
       }))}
 
+      ${renderSection('Heroic Resources', `
+        <div class="vtt-character-resources">
+          <div class="vtt-character-resource-totals">
+            ${renderResource('Victories', victories)}
+            ${renderResource(resourceTitle, resourceValue, { resource })}
+          </div>
+
+        </div>
+      `)}
+
+      ${renderSection('Auras, Conditions, & Effects', `
+        <div class="vtt-character-condition-list">
+          ${conditions.length
+            ? conditions.map((condition) => renderCondition(condition, token?.id)).join('')
+            : renderConditionPicker(token?.id)}
+        </div>
+      `)}
+
+      <details class="vtt-character-reference" data-character-reference>
+        <summary>Character details <span>Statistics, resource rules, skills &amp; feats</span></summary>
       ${renderSection('Statistics', `
         <div class="vtt-character-stats">
           ${renderStat('Might', stats.might)}
@@ -1918,28 +1946,13 @@ function renderCharacterCard(sheet, { characterId, token, standFirm = null } = {
         </div>
       `)}
 
-      ${renderSection('Heroic Resources', `
-        <div class="vtt-character-resources">
-          <div class="vtt-character-resource-totals">
-            ${renderResource('Victories', victories)}
-            ${renderResource(resourceTitle, resourceValue, { resource })}
-          </div>
+      ${renderSection('Resource Rules', `
           <div class="vtt-character-resource-notes">
             ${resourceNotes.length
               ? resourceNotes.map(renderResourceNote).join('')
               : renderResourceNote('No resource notes listed.')}
           </div>
-        </div>
       `)}
-
-      ${renderSection('Auras, Conditions, & Effects', `
-        <div class="vtt-character-condition-list">
-          ${conditions.length
-            ? conditions.map((condition) => renderCondition(condition, token?.id)).join('')
-            : renderConditionPicker(token?.id)}
-        </div>
-      `)}
-
       ${renderSection('Skills & Languages', `
         <div class="vtt-character-text-list">
           ${renderSkillGroups(skills)}
@@ -1952,6 +1965,7 @@ function renderCharacterCard(sheet, { characterId, token, standFirm = null } = {
           ? featureList.map(renderFeature).join('')
           : '<p class="vtt-character-feature">No feats listed.</p>'}
       `)}
+      </details>
     </article>
   `;
 }

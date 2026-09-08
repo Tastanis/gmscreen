@@ -1,0 +1,44 @@
+const { chromium } = require('playwright');
+const assert = require('node:assert/strict');
+const origin = 'http://127.0.0.1:8129';
+(async () => {
+  const manifest = await fetch(origin + '/diagnostic-manifest.json').then(r => r.json());
+  assert.equal(manifest.test_fixture, 'floor-regression');
+  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+    page.setDefaultTimeout(12000);
+    const errors = []; page.on('pageerror', error => errors.push(error.message));
+    await page.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
+    await page.goto(origin + '/test-login.php?user=cal');
+    await page.locator('#vtt-token-layer [data-placement-id="floor-cal"]').click();
+    const panel = page.locator('#vtt-character-summary-panel');
+    const reference = panel.locator('[data-character-reference]');
+    await reference.waitFor({ state: 'attached' });
+    if (await panel.evaluate(el => el.inert)) await page.locator('#vtt-character-summary-reveal').click();
+    await page.waitForFunction(() => document.querySelector('#vtt-character-summary-panel').getBoundingClientRect().x >= -0.1);
+    assert.equal(await reference.getAttribute('open'), null);
+    const summaryBox = await reference.locator('summary').boundingBox();
+    assert.ok(summaryBox.y + summaryBox.height < 700, `Core controls extend below laptop viewport: ${JSON.stringify(summaryBox)}`);
+    assert.equal(await panel.locator('.vtt-character-stats').isVisible(), false);
+    await page.screenshot({ path: '.playwright-mcp/compact-character-card.png' });
+    await reference.locator('summary').click();
+    assert.equal(await panel.locator('.vtt-character-stats').isVisible(), true);
+    const surges = panel.locator('[data-character-counter="surges"]');
+    const before = Number(await surges.textContent());
+    await panel.getByRole('button', { name: 'Add a surge', exact: true }).click();
+    await page.waitForFunction(expected => Number(document.querySelector('[data-character-counter="surges"]').textContent) === expected, before + 1);
+    assert.notEqual(await reference.getAttribute('open'), null, 'Sheet rerender preserves open reference details.');
+    await panel.getByRole('button', { name: 'Spend a surge', exact: true }).click();
+    await page.waitForFunction(expected => Number(document.querySelector('[data-character-counter="surges"]').textContent) === expected, before);
+    await reference.locator('summary').click();
+    assert.equal(await reference.getAttribute('open'), null, 'Details close before tucking.');
+    await panel.locator('[data-character-summary-tuck]').click();
+    assert.equal(await panel.evaluate(el => el.inert), true);
+    await page.locator('#vtt-character-summary-reveal').click();
+    assert.equal(await panel.evaluate(el => el.inert), false);
+    assert.equal(await reference.getAttribute('open'), null);
+    assert.deepEqual(errors, []);
+    console.log('PASS: compact character card, preserved details through counter updates, and tucked-panel keyboard exclusion.');
+  } finally { await browser.close(); }
+})().catch(error => { console.error(error); process.exitCode = 1; });

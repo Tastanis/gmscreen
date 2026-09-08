@@ -9,6 +9,7 @@ function renderVttCharacterSummaryPanel(): string
         id="vtt-character-summary-panel"
         class="vtt-character-summary vtt-character-summary--closed"
         aria-hidden="true"
+        inert
         data-module="vtt-character-summary"
     >
         <div class="vtt-character-summary__empty">

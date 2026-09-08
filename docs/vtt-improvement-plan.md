@@ -28,8 +28,8 @@ User authorized implementing the September 7 product audit, updating/running the
 ## Faster live play
 
 - [x] Token library and saved scenes first; creation forms collapsed.
-- [ ] Compact inactive tracker and combat character card.
-  - Inactive tracker is a collapsed roster disclosure with a compact horizontal toolbar; full tracker opens automatically during combat. Combat character-card work remains pending.
+- [x] Compact inactive tracker and combat character card.
+  - Inactive tracker is a collapsed roster disclosure; the full tracker opens automatically during combat. The character card prioritizes stamina, recoveries, resources, surges, and conditions, with reference material in a disclosure and existing action controls in the ability tray.
 - [x] Zoom/fit/center/shortcuts and persistent tool labels.
   - Visible zoom, Fit Map, Center Selected, shortcut guide, and active-tool labels are implemented. Browser checks cover Draw, Measure, stairs, templates, cutout editing, and mode handoffs.
 - [ ] Opaque readable panels, practical targets, diagnostics-only memory counter.
@@ -277,3 +277,21 @@ Validation: 683 tests passed across 81 files. The expanded three-browser floor
 journey asserts one walking hook for stairs, no normal hooks for floor undo after
 reload, and no duplicate hooks in either observing browser. Physical elevation
 and cross-floor ability geometry remain pending.
+
+## Compact character card
+
+The character panel now shows stamina/recoveries, heroic resources, surges, and
+conditions first. Statistics, resource rules, skills, languages, and feats remain
+available in a native Character details disclosure. Existing action controls stay
+in the ability tray. The panel fits its content up to the available viewport height
+instead of covering the map down to the bottom edge. Expanded content scrolls.
+
+Same-character selection refreshes retain the current card while revalidating the
+sheet, preserving disclosure and scroll state. Previously these refreshes replaced
+the card with a loading screen, losing local UI state. Tucked panels are inert so
+hidden controls cannot receive keyboard focus.
+
+Validation: 683 regression tests passed. The disposable player-browser journey
+verifies the 1280×720 core controls fit, details expand, surge add/spend controls
+still update, open details survive refreshes, and tuck/reveal sets keyboard access
+correctly. The compact view was visually inspected. No live sheet was changed.
