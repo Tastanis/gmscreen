@@ -651,3 +651,11 @@ persistence. Turn-start processing can produce one confirmed revision conflict
 (HTTP 409), followed by the existing one-time retry (HTTP 200). The expiration
 browser test verifies exactly one accepted write, not merely request count.
 Tick/expiration ordering and interrupted boundary recovery remain separate work.
+
+Placement-batch conflict retries compare each edited field with its pre-submit
+confirmed value. Retry is allowed only if the conflict snapshot retains that
+value or already contains the desired value. Same-field concurrent changes reject
+after applying the authoritative snapshot, preserving the other edit. Adds retry
+only when the ID remains absent; removals require an unchanged entity revision.
+The existing one-retry limit remains. This guard covers placement batches; walking
+movement and other domain command policies remain separate.

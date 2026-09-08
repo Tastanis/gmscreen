@@ -359,6 +359,7 @@ export function createTokenMovementRuntime({
     await start();
     const actions = legacyOpsToActions(ops);
     if (!actions.length) return null;
+    const before = clone(store.getConfirmedSnapshot());
     try {
       return await commandClient.submit('placement.batch', { actions });
     } catch (error) {
@@ -366,6 +367,22 @@ export function createTokenMovementRuntime({
       if (retry && error?.status === 409 && conflictSnapshot) {
         store.replaceSnapshot(conflictSnapshot, { authoritative: true, source: 'conflict' });
         reconcileSnapshot(store.getConfirmedSnapshot(), { source: 'conflict' });
+        const safe = actions.every(action => {
+          const previous = placementFromSnapshot(before, action.sceneId, action.placementId);
+          const current = placementFromSnapshot(conflictSnapshot, action.sceneId, action.placementId);
+          if (action.kind === 'add') return !previous && !current;
+          if (!previous || !current) return false;
+          if (action.kind === 'remove') return previous._entityRevision === current._entityRevision;
+          return Object.entries(action.patch || {}).every(([field, desired]) =>
+            JSON.stringify(current[field]) === JSON.stringify(previous[field])
+            || JSON.stringify(current[field]) === JSON.stringify(desired)
+          );
+        });
+        if (!safe) {
+          const changed = new Error('This token changed in the same fields. Review its current state before trying again.');
+          changed.cause = error;
+          throw changed;
+        }
         return submitPlacementOps(ops, false);
       }
       reconcileSnapshot(store.getConfirmedSnapshot(), { source: 'rejected' });

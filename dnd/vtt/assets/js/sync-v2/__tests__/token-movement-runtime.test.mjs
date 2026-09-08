@@ -390,3 +390,32 @@ function shadowEventForRuntime(revision, operationId) {
     serverTime: revision,
   };
 }
+
+
+test('placement conflict retries preserve concurrent edits to the same fields', async () => {
+  for (const sameField of [true,false]) {
+    const original={id:'token',persistentZones:[{id:'old'}],hp:{current:10,max:10},_entityRevision:1};
+    const concurrent={...original,_entityRevision:2,...(sameField
+      ?{persistentZones:[{id:'old'},{id:'other-gm'}]}
+      :{hp:{current:9,max:10}})};
+    const commands=[];
+    const runtime=createTokenMovementRuntime({
+      enabled:true,placementsEnabled:true,commandsEndpoint:'/commands',snapshotEndpoint:'/snapshot',eventsEndpoint:'/sync',windowRef:{},
+      fetchImpl:async(url,options)=>{
+        if(String(url).includes('snapshot'))return response(200,{success:true,snapshot:{revision:1,state:{placements:{scene:{token:original}}}}});
+        commands.push(JSON.parse(options.body));
+        if(commands.length===1)return response(409,{success:false,error:'entity_revision_mismatch',snapshot:{revision:2,state:{placements:{scene:{token:concurrent}}}}});
+        return response(200,{success:true,event:{revision:3,operationId:commands[1].operationId,type:'placement.batchApplied',payload:{mutations:[]},serverTime:1}});
+      },
+    });
+    const save=runtime.submitPlacementOps([{type:'placement.update',sceneId:'scene',placementId:'token',patch:{persistentZones:[]}}]);
+    if(sameField) {
+      await assert.rejects(save,/same fields/);
+      assert.equal(commands.length,1,'Do not overwrite a concurrent zone addition');
+      assert.deepEqual(runtime.getConfirmedSnapshot().state.placements.scene.token.persistentZones,concurrent.persistentZones);
+    } else {
+      await save;assert.equal(commands.length,2,'An unrelated stamina change allows a bounded retry');
+      assert.equal(commands[1].payload.actions[0].entityRevision,2);
+    }
+  }
+});

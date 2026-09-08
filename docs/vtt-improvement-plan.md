@@ -1467,3 +1467,21 @@ patch, preservation of the indefinite zone and correct state after reload. It
 passes against a fresh uninstrumented fixture. This proves this controlled
 expiration workflow, not general exactly-once turn automation or safe rebasing of
 every placement field after concurrent edits; those broader requirements remain.
+
+### Preserve same-field concurrent placement edits
+
+Placement-batch conflict retries compare each edited field with its pre-submit
+confirmed value. Retry is allowed only if the conflict snapshot retains that
+value or already contains the desired value. Same-field concurrent changes reject
+after applying the authoritative snapshot, preserving the other edit. Adds retry
+only when the ID remains absent; removals require an unchanged entity revision.
+The existing one-retry limit remains. This guard covers placement batches; walking
+movement and other domain command policies remain separate.
+
+The runtime regression contrasts a concurrent zone addition with an unrelated HP
+change. A browser holds a new zone registration, accepts another zone-list edit,
+then releases the stale request: registration rejects, no blind retry is sent,
+and the other GM zone survives reload. The expiration browser still passes its
+409-then-200 unrelated-change workflow. Full suite: 743 tests/95 files passed.
+General semantic merging, interrupted action recovery and board/sheet authority
+remain outstanding; this guard favors an explicit conflict over lost data.

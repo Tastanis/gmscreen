@@ -321,3 +321,6 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 
 - Count accepted HTTP outcomes when investigating duplicate writes. The expiration
   regression can show one rejected 409 followed by one successful 200 retry.
+
+- Do not blindly rebase placement patches after 409. Preserve concurrent edits
+  to patched fields, especially whole zone/condition lists and stamina records.
