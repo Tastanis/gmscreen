@@ -4,7 +4,7 @@ import {spendZoneUpkeep} from '../zone-upkeep.js';
 test('upkeep distinguishes confirmed insufficient funds from rejected payment',async()=>{
   let body;
   const result=await spendZoneUpkeep('/sheet',{character:'cal',cost:2,resourceName:'Wrath'},{fetchImpl:async(url,options)=>{
-    body=options.body;return {ok:true,json:async()=>({success:true,paid:false,reason:'insufficient resource'})};
+    body=options.body;return {ok:true,json:async()=>({success:true,operationId:body.get('operationId'),paid:false,reason:'insufficient resource'})};
   }});
   assert.equal(result.paid,false);assert.equal(body.get('character'),'cal');assert.equal(body.get('spend'),'2');assert.equal(body.has('data'),false);
   await assert.rejects(spendZoneUpkeep('/sheet',{character:'cal',cost:2},{fetchImpl:async()=>({ok:true,json:async()=>({success:false,error:'rejected'})})}),/rejected/);

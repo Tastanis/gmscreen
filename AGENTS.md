@@ -365,3 +365,7 @@ console.log('Button element:', document.getElementById('import-character-btn'));
   Keep surge operation receipts and mutations in the same replacement. Never prune
   receipt IDs without a policy that prevents old retries becoming new mutations.
   Surge receipt replay returns the original result, not necessarily current state.
+
+- Resource and recovery-spend operation receipts include insufficient and stale
+  outcomes. Preserve these terminal results when balances later change; replay
+  must not reevaluate an old attempt as a new spend or conditional assignment.

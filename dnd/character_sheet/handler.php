@@ -707,50 +707,49 @@ switch ($action) {
     case 'sync-resource':
         $allSheets = loadCharacterSheetData($dataDir, $dataFile, $characters);
         $sheet = $allSheets[$requestedCharacter];
-
-        if ($requestMethod === 'POST') {
-            if (!isset($requestData['spend']) && (!isset($requestData['value']) || $requestData['value'] === '')) {
-                sendJsonResponse(array('success' => false, 'error' => 'Missing resource value'));
-            }
-            if (!isset($sheet['hero']) || !is_array($sheet['hero'])) {
-                $sheet['hero'] = array();
-            }
-            if (!isset($sheet['hero']['resource']) || !is_array($sheet['hero']['resource'])) {
-                $sheet['hero']['resource'] = array();
-            }
-            // Heroic resources may legitimately go negative (allowNegative
-            // resources floor at -(1 + Reason)), so no max(0, ...) here.
-            if (isset($requestData['spend'])) {
-                $cost=filter_var($requestData['spend'], FILTER_VALIDATE_INT);
-                if ($cost===false || $cost<1 || $cost>1000000) sendJsonResponse(['success'=>false,'error'=>'Invalid upkeep cost']);
-                $title=trim((string)($sheet['hero']['resource']['title'] ?? $sheet['sidebar']['resource']['title'] ?? ''));
-                $asked=trim((string)($requestData['resourceName'] ?? ''));
-                if ($asked!=='' && strcasecmp($asked,$title)!==0) sendJsonResponse(['success'=>false,'error'=>'Upkeep resource does not match the character resource.']);
-                $current=(int)($sheet['hero']['resource']['value'] ?? 0);
-                if ($current<$cost) sendJsonResponse(['success'=>true,'paid'=>false,'reason'=>'insufficient resource','resource'=>$current]);
-                $sheet['hero']['resource']['value']=$current-$cost;
-            } else {
-                if (isset($requestData['expectedValue'])) {
-                    $expected=filter_var($requestData['expectedValue'],FILTER_VALIDATE_INT);
-                    if ($expected===false || $expected!==(int)($sheet['hero']['resource']['value'] ?? 0)) {
-                        sendJsonResponse(['success'=>false,'error'=>'Resource changed; review its current value before applying this change.']);
-                    }
-                }
-                $sheet['hero']['resource']['value'] = (int)$requestData['value'];
-            }
-            $allSheets[$requestedCharacter] = $sheet;
-
-            if (!saveCharacterSheetData($dataDir, $dataFile, $allSheets)) {
-                sendJsonResponse(array('success' => false, 'error' => 'Failed to save resource'));
+        $resourceOperationId = CharacterWriteReceipts::operationId($requestData['operationId'] ?? null);
+        if (isset($requestData['spend'])) {
+            $cost = filter_var($requestData['spend'], FILTER_VALIDATE_INT);
+            if ($cost === false || $cost < 1 || $cost > 1000000) throw new InvalidArgumentException('Invalid upkeep cost');
+            $asked = trim((string)($requestData['resourceName'] ?? ''));
+            $resourceInput = ['spend'=>$cost, 'resourceName'=>strtolower($asked)];
+        } else {
+            if (!isset($requestData['value']) || $requestData['value'] === '') throw new InvalidArgumentException('Missing resource value');
+            $resourceInput = ['value'=>(int)$requestData['value']];
+            if (isset($requestData['expectedValue'])) {
+                $expected = filter_var($requestData['expectedValue'], FILTER_VALIDATE_INT);
+                if ($expected === false) throw new InvalidArgumentException('Invalid expected resource value');
+                $resourceInput['expectedValue'] = $expected;
             }
         }
-
-        sendJsonResponse(array(
-            'success' => true,
-            'paid' => isset($requestData['spend']) ? true : null,
-            'name' => isset($sheet['hero']['name']) && $sheet['hero']['name'] !== '' ? $sheet['hero']['name'] : $requestedCharacter,
-            'resource' => isset($sheet['hero']['resource']['value']) ? (int)$sheet['hero']['resource']['value'] : 0,
-        ));
+        $replayed = CharacterWriteReceipts::lookup($allSheets, $resourceOperationId, $currentUser, $requestedCharacter, $action, $resourceInput);
+        if ($replayed !== null) sendJsonResponse($replayed);
+        $finishResource = function(array $response, bool $changed = false) use (&$allSheets, $resourceOperationId, $currentUser, $requestedCharacter, $action, $resourceInput, $dataDir, $dataFile): void {
+            $response = CharacterWriteReceipts::record($allSheets, $resourceOperationId, $currentUser, $requestedCharacter, $action, $resourceInput, $response);
+            if ($changed || $resourceOperationId !== null) saveCharacterSheetData($dataDir, $dataFile, $allSheets);
+            sendJsonResponse($response);
+        };
+        if (!isset($sheet['hero']) || !is_array($sheet['hero'])) $sheet['hero'] = [];
+        if (!isset($sheet['hero']['resource']) || !is_array($sheet['hero']['resource'])) $sheet['hero']['resource'] = [];
+        $current = (int)($sheet['hero']['resource']['value'] ?? 0);
+        if (isset($resourceInput['spend'])) {
+            $title = trim((string)($sheet['hero']['resource']['title'] ?? $sheet['sidebar']['resource']['title'] ?? ''));
+            if ($asked !== '' && strcasecmp($asked, $title) !== 0) $finishResource(['success'=>false, 'error'=>'Upkeep resource does not match the character resource.']);
+            if ($current < $cost) $finishResource(['success'=>true, 'paid'=>false, 'reason'=>'insufficient resource', 'resource'=>$current]);
+            $sheet['hero']['resource']['value'] = $current - $cost;
+        } else {
+            if (isset($resourceInput['expectedValue']) && $resourceInput['expectedValue'] !== $current) {
+                $finishResource(['success'=>false, 'error'=>'Resource changed; review its current value before applying this change.']);
+            }
+            // Some heroic resources legitimately allow negative balances.
+            $sheet['hero']['resource']['value'] = $resourceInput['value'];
+        }
+        $allSheets[$requestedCharacter] = $sheet;
+        $finishResource([
+            'success'=>true, 'paid'=>isset($resourceInput['spend']) ? true : null,
+            'name'=>!empty($sheet['hero']['name']) ? $sheet['hero']['name'] : $requestedCharacter,
+            'resource'=>(int)$sheet['hero']['resource']['value'],
+        ], true);
         break;
 
     case 'sync-vitals':
@@ -761,14 +760,22 @@ switch ($action) {
             $sheet['hero']['vitals'] = array();
         }
         if (isset($requestData['spendRecoveries'])) {
-            $cost=filter_var($requestData['spendRecoveries'],FILTER_VALIDATE_INT);
-            if ($cost===false || $cost<1 || $cost>1000) sendJsonResponse(['success'=>false,'error'=>'Invalid recovery cost']);
-            $current=max(0,(int)($sheet['hero']['vitals']['currentRecoveries'] ?? 0));
-            if ($current<$cost) sendJsonResponse(['success'=>true,'spent'=>0,'reason'=>'insufficient','currentRecoveries'=>$current]);
-            $sheet['hero']['vitals']['currentRecoveries']=$current-$cost;
-            $allSheets[$requestedCharacter]=$sheet;
-            if (!saveCharacterSheetData($dataDir,$dataFile,$allSheets)) sendJsonResponse(['success'=>false,'error'=>'Failed to spend recoveries']);
-            sendJsonResponse(['success'=>true,'spent'=>$cost,'currentRecoveries'=>$current-$cost]);
+            $cost = filter_var($requestData['spendRecoveries'], FILTER_VALIDATE_INT);
+            if ($cost === false || $cost < 1 || $cost > 1000) throw new InvalidArgumentException('Invalid recovery cost');
+            $recoveryOperationId = CharacterWriteReceipts::operationId($requestData['operationId'] ?? null);
+            $recoveryInput = ['spendRecoveries'=>$cost];
+            $replayed = CharacterWriteReceipts::lookup($allSheets, $recoveryOperationId, $currentUser, $requestedCharacter, $action, $recoveryInput);
+            if ($replayed !== null) sendJsonResponse($replayed);
+            $current = max(0, (int)($sheet['hero']['vitals']['currentRecoveries'] ?? 0));
+            $spent = $current >= $cost ? $cost : 0;
+            $sheet['hero']['vitals']['currentRecoveries'] = $current - $spent;
+            if ($spent > 0) $allSheets[$requestedCharacter] = $sheet;
+            $response = CharacterWriteReceipts::record($allSheets, $recoveryOperationId, $currentUser, $requestedCharacter, $action, $recoveryInput, [
+                'success'=>true, 'spent'=>$spent, 'currentRecoveries'=>$current-$spent,
+                ...($spent === 0 ? ['reason'=>'insufficient'] : []),
+            ]);
+            if ($spent > 0 || $recoveryOperationId !== null) saveCharacterSheetData($dataDir, $dataFile, $allSheets);
+            sendJsonResponse($response);
         }
         $hasStamina = isset($requestData['currentStamina']) && $requestData['currentStamina'] !== '';
         $hasRecoveries = isset($requestData['currentRecoveries']) && $requestData['currentRecoveries'] !== '';

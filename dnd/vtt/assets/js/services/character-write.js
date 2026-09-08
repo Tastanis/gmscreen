@@ -1,6 +1,7 @@
 /** Confirm a narrow character write; an uncertain outcome must never be retried here. */
 export async function confirmCharacterWrite(endpoint, action, fields, {fetchImpl=globalThis.fetch,timeoutMs=15000,operationId}={}) {
-  const receiptId = action === 'sync-surges' ? (operationId ?? globalThis.crypto.randomUUID()) : null;
+  const usesReceipt = action === 'sync-surges' || action === 'sync-resource' || (action === 'sync-vitals' && fields.spendRecoveries !== undefined);
+  const receiptId = usesReceipt ? (operationId ?? globalThis.crypto.randomUUID()) : null;
   const controller=new AbortController();let timer;
   const deadline=new Promise((resolve,reject)=>{timer=setTimeout(()=>{
     reject(new Error('Character save timed out; its outcome needs review.'));

@@ -1695,3 +1695,26 @@ Existing surge malformed/rejected/stalled tests also passed. No live writes.
 
 Full regression suite: 756 tests across 99 files passed. The disposable PHP server
 was stopped after browser verification.
+
+### Recovery and heroic-resource operation receipts
+
+Extended the same atomic character-file receipt mechanism to sync-resource
+(spending and absolute/conditional writes) and sync-vitals spendRecoveries.
+The VTT adapters create and verify IDs for these operations without automatic
+retry. Successful spends, insufficient balances, mismatched resource names and
+stale expected-value outcomes are terminal receipts when an ID is provided.
+An old insufficient attempt therefore cannot become a spend after replenishment;
+an old conditional edit cannot overwrite a later balance when its expected value
+happens to match again. Validation of malformed input still rejects before saving.
+Existing callers without IDs retain previous behavior.
+
+Browser verification dropped real handler responses for recovery spending,
+resource spending, conditional writes, insufficient recoveries/resources and
+stale values. Every operation replayed its original outcome after reload and
+preserved a later balance of 9. The existing recovery hook browser journey also
+passed, including concurrent resource changes and competing final-recovery spends.
+Full suite: 756 tests across 99 files passed. The isolated PHP server was stopped.
+
+Still open: durable browser pending-action storage and review UI, outcome lookup
+without replay, coordinated recovery spending/healing and board/sheet reconciliation,
+plus receipt coverage for other legacy character-write entry points. No live writes.

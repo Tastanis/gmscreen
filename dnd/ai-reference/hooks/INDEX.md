@@ -188,3 +188,11 @@ original saved result with replayed=true; the result is historical, not a claim
 about the current count after later edits. A different request using the same ID
 is rejected. confirmCharacterWrite verifies the returned ID and includes it on
 errors, without automatic replay. No ability authoring fields or hooks changed.
+
+Recovery-spend and heroic-resource adapters now carry operation IDs too. The
+handler records successful and insufficient spends, as well as state-dependent
+resource rejections, atomically with any changed character data. Replaying an ID
+returns its original outcome without applying it against a later balance. This
+is transport behavior, not a new ability JSON field. The adapters still require
+explicit acknowledgement and do not automatically replay interrupted actions;
+healing and subsequent zone effects are not part of the character transaction.
