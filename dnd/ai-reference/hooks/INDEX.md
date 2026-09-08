@@ -101,3 +101,10 @@ registered: false with save-unconfirmed for resolve-only callers. Sequential
 registrations therefore read the previously accepted zone list instead of racing
 optimistic arrays. Concurrent callers still use normal revision conflict handling;
 there is no blind retry or alternate shared-state writer.
+
+All zones for one caster expiring at the same boundary are removed with one
+combined placement patch, preserving nonmatching zones. Manual single-zone End
+uses the same helper. Local zone bookkeeping is cleared only after accepted
+persistence. The browser currently observes a second identical transport update
+during turn-start processing; eliminating that duplicate remains outstanding.
+Tick/expiration ordering and interrupted boundary recovery are also separate work.

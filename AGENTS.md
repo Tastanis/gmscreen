@@ -315,3 +315,6 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 
 - Persistent-zone registration callbacks must await their placement save. Never
   report a zone as registered from the optimistic update alone.
+
+- Expire all matching zones on one caster with a combined placement patch;
+  independent whole-zone-list saves can restore another just-expired zone.

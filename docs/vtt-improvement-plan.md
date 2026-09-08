@@ -1434,3 +1434,20 @@ The forced-zone browser workflow now asserts both registrations are canonical
 before movement and passes. A dedicated registration browser test holds a write,
 verifies the callback remains pending, releases it, rejects a second write and
 checks reload retains only accepted zones. Full suite: 742 tests/95 files passed.
+
+### Batch matching zone expirations
+
+All zones for one caster expiring at the same boundary are removed with one
+combined placement patch, preserving nonmatching zones. Manual single-zone End
+uses the same helper. Local zone bookkeeping is cleared only after accepted
+persistence. The browser currently observes a second identical transport update
+during turn-start processing; eliminating that duplicate remains outstanding.
+Tick/expiration ordering and interrupted boundary recovery are also separate work.
+
+The isolated browser test starts an ally turn with two start-of-turn expiration
+zones and one indefinite zone. Every expiration patch removes both matching IDs
+together; the indefinite zone remains after reload. It records two identical
+transport requests, so this does not establish exactly-once boundary delivery.
+Full suite: 742 tests/95 files passed. A speculative no-op update change did not
+remove the duplicate and was reverted; investigate queued dirty-state derivation
+and boundary delivery next rather than treating the duplicate as resolved.

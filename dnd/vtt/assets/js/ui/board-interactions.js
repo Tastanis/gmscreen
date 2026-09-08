@@ -4265,44 +4265,50 @@ export function mountBoardInteractions(store, routes = {}) {
       .replace(/'/g, '&#39;');
   }
 
-  async function removePersistentZone(zoneId, { reason = '' } = {}) {
-    if (!zoneId) return false;
+  function removePersistentZone(zoneId, options = {}) {
+    return removePersistentZones([zoneId], options);
+  }
+
+  async function removePersistentZones(zoneIds, { reason = '' } = {}) {
+    const ids = new Set(zoneIds.filter(Boolean));
+    if (!ids.size) return false;
     const state = boardApi.getState?.() ?? {};
     const sceneId = state.boardState?.activeSceneId ?? null;
     if (!sceneId) return false;
     const owner = getScenePlacementsFromStore(sceneId).find((p) =>
-      Array.isArray(p?.persistentZones) && p.persistentZones.some((z) => z && z.id === zoneId)
+      Array.isArray(p?.persistentZones) && p.persistentZones.some((z) => z && ids.has(z.id))
     );
     if (!owner) return false;
-    let removed = null;
+    let removed = [];
     const updateResult = updatePlacementById(owner.id, (target) => {
       const existing = Array.isArray(target.persistentZones) ? target.persistentZones : [];
-      removed = existing.find((z) => z && z.id === zoneId) || null;
-      const next = existing.filter((z) => z && z.id !== zoneId);
+      removed = existing.filter((z) => z && ids.has(z.id));
+      const next = existing.filter((z) => z && !ids.has(z.id));
       if (next.length) {
         target.persistentZones = next;
       } else {
         target.persistentZones = null;
       }
     }, { returnSavePromise: true });
-    if (!updateResult?.updated || !removed) return false;
-    persistentZoneRuntime.delete(zoneId);
+    if (!updateResult?.updated || !removed.length) return false;
+
     renderPersistentZoneOverlays();
     const saveResult = updateResult.savePromise
       ? await updateResult.savePromise
       : { success: true };
     if (saveResult?.success === false) {
-      const message = `Unable to end ${removed.abilityName || 'the persistent zone'}. The server rejected the update.`;
+      const message = `Unable to end ${removed.map(zone => zone.abilityName || 'the persistent zone').join(', ')}. The server rejected the update.`;
       updateStatus(message);
       if (typeof window !== 'undefined' && window.UIKit?.toast) {
         window.UIKit.toast(message, 'warning');
       }
       return false;
     }
+    removed.forEach(zone => persistentZoneRuntime.delete(zone.id));
     if (window.dashboardChat?.sendMessage) {
       const reasonText = reason ? ` (${reason})` : '';
       window.dashboardChat.sendMessage({
-        message: `Persistent zone ended: ${removed.abilityName}${reasonText}.`,
+        message: `Persistent zone ended: ${removed.map(zone => zone.abilityName).join(', ')}${reasonText}.`,
         type: 'text',
       }).catch(() => {});
     }
@@ -5215,9 +5221,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const zones = getActivePersistentZones();
     if (!zones.length) return;
     const matching = zones.filter((z) => z && z.casterId === ownerId && z.expiresAt === when);
-    for (const zone of [...matching]) {
-      removePersistentZone(zone.id, { reason: `owner ${when}` });
-    }
+    return removePersistentZones(matching.map(zone => zone.id), { reason: `owner ${when}` });
   }
 
   function normalizeAuthoredAutomation(automation) {
