@@ -1718,3 +1718,30 @@ Full suite: 756 tests across 99 files passed. The isolated PHP server was stoppe
 Still open: durable browser pending-action storage and review UI, outcome lookup
 without replay, coordinated recovery spending/healing and board/sheet reconciliation,
 plus receipt coverage for other legacy character-write entry points. No live writes.
+
+### Interrupted character-write review
+
+The board now exposes Action review. Receipt-backed surge, resource and recovery
+writes record a pending reminder before sending; confirmed responses remove it,
+while unconfirmed outcomes remain across reload. Keys are per actor and operation,
+so simultaneous tabs cannot overwrite each other's attempts. Storage failure
+prevents sending an unrecorded write. Reminders are local to this browser/account;
+clearing browser storage removes them, and they do not form a cross-device queue.
+
+The dialog's Check saved result calls GET operation-status, which reads an existing
+receipt without replay or character-storage initialization. Only the original
+actor or GM may inspect a receipt, scoped to its character. Missing receipts remain
+explicitly uncertain. Mark reviewed only removes the local reminder. Historical
+saved values are distinguished from current state and later ability steps.
+
+Browser verification: dropped a committed surge acknowledgement; reloaded; checked
+its saved result twice without another gain; dismissed/reloaded; switched account;
+then interrupted an unsent request and verified the missing-receipt wording. The
+centered dialog was visually inspected. An initial-connection timeout on one rerun
+was followed by a successful completed rerun. Full suite: 758 tests/100 files;
+additional focused coverage verifies lookup cannot create missing character data.
+The disposable PHP server was stopped. No live writes or deployment.
+
+Remaining action recovery includes multi-step effects after a confirmed character
+write, broader legacy writers, cross-device oversight and board/sheet reconciliation.
+This panel does not claim an entire ability finished merely because its payment did.

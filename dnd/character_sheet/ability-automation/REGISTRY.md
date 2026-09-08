@@ -738,3 +738,11 @@ returns its original outcome without applying it against a later balance. This
 is transport behavior, not a new ability JSON field. The adapters still require
 explicit acknowledgement and do not automatically replay interrupted actions;
 healing and subsequent zone effects are not part of the character transaction.
+
+Receipt-backed character writes now retain unconfirmed attempts in a per-user,
+per-operation browser journal. Action review checks GET operation-status without
+replay and can remove a local reminder. Receipt lookup is actor/GM scoped and
+never initializes missing storage. A recorded payment does not prove later
+healing or zone steps completed; the panel explicitly preserves that boundary.
+Confirmed writes leave the journal, so multi-step interruption after confirmation
+still needs a separate action lifecycle. No ability JSON fields changed.

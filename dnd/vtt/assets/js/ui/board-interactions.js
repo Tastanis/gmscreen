@@ -1,3 +1,5 @@
+import {configureCharacterOperationJournal} from '../services/character-operation-journal.js';
+import {mountCharacterOperationReview} from './character-operation-review.js';
 import {confirmCharacterWrite} from '../services/character-write.js';
 import {spendCharacterRecoveries} from '../services/recovery-spend.js';
 import {confirmResourceWrite} from '../services/resource-write.js';
@@ -683,6 +685,8 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   const boardApi = store ?? {};
+  const characterOperationJournal = configureCharacterOperationJournal(getCurrentUserId());
+  mountCharacterOperationReview(document.querySelector('[data-character-operation-review-open]'), characterOperationJournal, routes?.sheet || '/dnd/character_sheet/handler.php');
   const syncV2Config =
     typeof window !== 'undefined' && window.vttConfig?.syncV2
       ? window.vttConfig.syncV2

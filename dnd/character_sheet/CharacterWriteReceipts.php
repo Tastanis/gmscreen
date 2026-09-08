@@ -31,6 +31,15 @@ final class CharacterWriteReceipts
         return [...$entry['response'], 'replayed'=>true];
     }
 
+    public static function inspect(array $data, string $id, string $actor, string $character, bool $isGm): ?array
+    {
+        $entry = $data['_vttOperations'][$id] ?? null;
+        if (!is_array($entry) || ($entry['character'] ?? '') !== $character
+            || (!$isGm && ($entry['actor'] ?? '') !== $actor)) return null;
+        return ['operationId'=>$id, 'actor'=>$entry['actor'], 'character'=>$entry['character'],
+            'action'=>$entry['action'], 'createdAt'=>$entry['createdAt'], 'response'=>$entry['response']];
+    }
+
     public static function record(array &$data, ?string $id, string $actor, string $character, string $action, array $input, array $response): array
     {
         if ($id === null) return $response;

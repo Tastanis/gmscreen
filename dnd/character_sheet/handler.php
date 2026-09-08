@@ -380,8 +380,9 @@ function find_character_sheet_entry($data, $character) {
     return $fallback;
 }
 
-function loadCharacterSheetData($dataDir, $dataFile, $characters) {
-    ensureCharacterSheetStorage($dataDir, $dataFile, $characters);
+function loadCharacterSheetData($dataDir, $dataFile, $characters, $initialize = true) {
+    if ($initialize) ensureCharacterSheetStorage($dataDir, $dataFile, $characters);
+    if (!is_readable($dataFile)) throw new RuntimeException('Character sheet storage is unavailable.');
 
     $content = file_get_contents($dataFile);
     if ($content === false) {
@@ -486,7 +487,7 @@ if ($requestMethod !== 'POST' && $requestMethod !== 'GET') {
 $requestData = $requestMethod === 'POST' ? $_POST : $_GET;
 $action = isset($requestData['action']) ? $requestData['action'] : '';
 
-if (!in_array($action, array('summary', 'load', 'sync-stamina', 'sync-surges', 'sync-token-traits', 'sync-hero-tokens', 'fetch-victories'), true) && $requestMethod !== 'POST') {
+if (!in_array($action, array('operation-status', 'summary', 'load', 'sync-stamina', 'sync-surges', 'sync-token-traits', 'sync-hero-tokens', 'fetch-victories'), true) && $requestMethod !== 'POST') {
     sendJsonResponse(array('success' => false, 'error' => 'Invalid request method'));
 }
 
@@ -532,7 +533,9 @@ $allowPublicSummaryRead =
     && $requestMethod === 'GET'
     && $currentUser !== '';
 
-if (!$is_gm && $requestedCharacter !== strtolower($currentUser) && !$allowVttStaminaSync && !$allowVttSurgeSync && !$allowVttFieldSync && !$allowVttTraitRead && !$allowPublicSummaryRead) {
+$allowOperationRead = $action === 'operation-status' && $requestMethod === 'GET' && $currentUser !== '';
+
+if (!$is_gm && $requestedCharacter !== strtolower($currentUser) && !$allowVttStaminaSync && !$allowVttSurgeSync && !$allowVttFieldSync && !$allowVttTraitRead && !$allowPublicSummaryRead && !$allowOperationRead) {
     sendJsonResponse(array('success' => false, 'error' => 'Permission denied'));
 }
 
@@ -549,6 +552,16 @@ if (
 }
 
 switch ($action) {
+    case 'operation-status':
+        if ($requestMethod !== 'GET') throw new InvalidArgumentException('Operation status requires GET.');
+        $operationId = CharacterWriteReceipts::operationId($requestData['operationId'] ?? null);
+        if ($operationId === null) throw new InvalidArgumentException('Missing character operation ID.');
+        $allSheets = loadCharacterSheetData($dataDir, $dataFile, $characters, false);
+        header('Cache-Control: no-store');
+        $receipt = CharacterWriteReceipts::inspect($allSheets, $operationId, $currentUser, $requestedCharacter, $is_gm);
+        sendJsonResponse(['success'=>true, 'operationId'=>$operationId, 'recorded'=>$receipt !== null, 'receipt'=>$receipt]);
+        break;
+
     case 'summary':
         $allSheets = loadCharacterSheetData($dataDir, $dataFile, $characters);
         $heroTokens = loadHeroTokens($dataDir, $heroTokenFile);

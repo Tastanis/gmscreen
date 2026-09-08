@@ -369,3 +369,8 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 - Resource and recovery-spend operation receipts include insufficient and stale
   outcomes. Preserve these terminal results when balances later change; replay
   must not reevaluate an old attempt as a new spend or conditional assignment.
+
+- Action review checks character receipts through read-only operation-status;
+  never turn that lookup into replay or storage initialization. Missing receipts
+  are uncertain. Local reminders are per actor/operation and do not prove later
+  ability steps completed. Mark reviewed only removes the browser reminder.

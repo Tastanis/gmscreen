@@ -79,3 +79,14 @@ body.vtt-body .vtt-settings-panel :is(button, input, select, summary):focus-visi
 .vtt-player-preview-map { position: relative; transform-origin: top left; pointer-events: none; }
 .vtt-player-preview-map > img { width: 100%; height: 100%; display: block; }
 .vtt-player-preview-map__fog { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+
+.vtt-character-operation-review {
+  position: fixed; inset: 0; margin: auto; height: fit-content; box-sizing: border-box;
+  width: min(680px, calc(100vw - 32px)); max-height: 80vh; overflow: auto;
+  background: #202735; color: #f3f5f8; border: 1px solid #79879b; border-radius: 12px; padding: 24px;
+}
+.vtt-character-operation-review::backdrop { background: rgba(0,0,0,.6); }
+.vtt-character-operation-review li { margin: 20px 0; overflow-wrap: anywhere; }
+.vtt-character-operation-review .btn { min-height: 40px; margin: 4px; }
+
+.vtt-character-operation-review ul { padding-inline-start: 24px; }
