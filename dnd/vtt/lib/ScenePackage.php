@@ -4,6 +4,83 @@ declare(strict_types=1);
 /** Read-only scene package. No imports, asset fetches, or board writes. */
 final class ScenePackage
 {
+    /** Pure preparation only. The installer must still validate fields and reserve the target ID. */
+    public static function prepareForNewScene(array $package, string $targetSceneId): array
+    {
+        self::preview($package);
+        if (!preg_match('/^scn-[a-zA-Z0-9_-]{8,120}$/', $targetSceneId) || $targetSceneId === $package['scene']['id']) {
+            throw new InvalidArgumentException('A distinct reserved scene ID is required.');
+        }
+        $copy = self::build($package['scene'], ['state'=>array_map(static fn($data)=>[$package['scene']['id']=>$data], $package['domains'])]);
+        $fresh = static fn(string $domain, string $id): string => 'copy-' . substr(hash('sha256', $targetSceneId . "\0" . $domain . "\0" . $id), 0, 40);
+        $maps = ['levels'=>['level-0'=>'level-0']];
+        foreach ($copy['domains']['sceneConfig']['mapLevels']['levels'] ?? [] as $floor) $maps['levels'][$floor['id']] = $fresh('levels', $floor['id']);
+        foreach (['placements','drawings','templates'] as $domain) {
+            $maps[$domain] = [];
+            foreach ($copy['domains'][$domain] as $id=>$entry) $maps[$domain][$id] = $fresh($domain, (string) $id);
+        }
+        $placementRef = static function ($id) use ($maps): string {
+            if (!is_string($id) || !isset($maps['placements'][$id])) throw new InvalidArgumentException('A copied effect references a token outside this scene.');
+            return $maps['placements'][$id];
+        };
+        foreach (['placements','drawings','templates'] as $domain) {
+            $entries = [];
+            foreach ($copy['domains'][$domain] as $oldId=>$entry) {
+                $entry['id'] = $maps[$domain][$oldId];
+                $entry['levelId'] = $maps['levels'][$entry['levelId'] ?? 'level-0'];
+                if (isset($entry['sceneId'])) $entry['sceneId'] = $targetSceneId;
+                if ($domain === 'placements') {
+                    foreach ($entry['conditions'] ?? [] as $index=>$condition) {
+                        if (!is_array($condition)) continue;
+                        if (!empty($condition['sourceId'])) $condition['sourceId'] = $placementRef($condition['sourceId']);
+                        foreach (['targetTokenId','tokenId'] as $field) if (!empty($condition['duration'][$field])) $condition['duration'][$field] = $placementRef($condition['duration'][$field]);
+                        if (!empty($condition['targetTokenId'])) $condition['targetTokenId'] = $placementRef($condition['targetTokenId']);
+                        unset($condition['instanceId'], $condition['riderExecutions']);
+                        $entry['conditions'][$index] = $condition;
+                    }
+                    foreach (['marks','activeMarks'] as $field) foreach ($entry[$field] ?? [] as $type=>$mark) {
+                        if (!is_array($mark)) throw new InvalidArgumentException('Invalid copied mark.');
+                        foreach (['sourceId','targetId'] as $ref) if (isset($mark[$ref])) $mark[$ref] = $placementRef($mark[$ref]);
+                        $entry[$field][$type] = $mark;
+                    }
+                }
+                $entries[$entry['id']] = $entry;
+            }
+            $copy['domains'][$domain] = $entries;
+        }
+        $geometry = static function (array $items, string $scope, bool $stairs) use ($fresh, $maps): array {
+            foreach ($items as $index=>&$item) {
+                $item['id'] = $fresh($scope, (string) $index);
+                if ($stairs && isset($item['linkedLevelId'])) $item['linkedLevelId'] = $maps['levels'][$item['linkedLevelId']];
+            }
+            return $items;
+        };
+        $config = &$copy['domains']['sceneConfig'];
+        foreach (['activeLevelId','activeLevel','selectedLevelId'] as $field) if (isset($config['mapLevels'][$field])) {
+            $id = $config['mapLevels'][$field];
+            if (!is_string($id) || !isset($maps['levels'][$id])) throw new InvalidArgumentException('The selected floor is missing.');
+            $config['mapLevels'][$field] = $maps['levels'][$id];
+        }
+        if (isset($config['mapLevels']['baseStairs'])) $config['mapLevels']['baseStairs'] = $geometry($config['mapLevels']['baseStairs'], 'base-stairs', true);
+        foreach ($config['mapLevels']['levels'] ?? [] as $index=>$floor) {
+            $oldId = $floor['id']; $floor['id'] = $maps['levels'][$oldId];
+            foreach (['stairs','cutouts'] as $field) if (isset($floor[$field])) $floor[$field] = $geometry($floor[$field], $oldId . '-' . $field, $field === 'stairs');
+            $config['mapLevels']['levels'][$index] = $floor;
+        }
+        if (isset($config['fogOfWar']['byLevel'])) {
+            $fog = [];
+            foreach ($config['fogOfWar']['byLevel'] as $id=>$value) $fog[$maps['levels'][$id]] = $value;
+            $config['fogOfWar']['byLevel'] = $fog;
+        }
+        unset($config);
+        $copy['scene']['id'] = $targetSceneId;
+        $copy['scene']['folderId'] = null;
+        $copy['folder'] = null;
+        $copy['sourceRevision'] = 0;
+        self::preview($copy);
+        return ['package'=>$copy, 'idMap'=>$maps];
+    }
+
     public static function preview(array $package): array
     {
         if (($package['format'] ?? null) !== 'gmscreen-scene/v1') throw new InvalidArgumentException('Unsupported scene package format.');

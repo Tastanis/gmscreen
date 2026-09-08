@@ -696,3 +696,15 @@ and compares unchanged canonical snapshots. PHP tests cover valid export preview
 and malformed package cases. Scene installation and ID/reference remapping remain
 pending; preview validation is not a substitute for canonical write validation.
 All 699 tests across 82 files pass after this change.
+
+### Scene copy ID preparation
+
+`ScenePackage::prepareForNewScene` prepares a separate scene without writes.
+It derives repeatable new board IDs from a reserved destination scene ID, remaps
+floors, stairs, cutouts, fog, occupants, drawings and templates, and preserves
+library/profile/embedded ability identities. Conditions and marks follow copied
+placements; references outside the package reject preparation. Execution receipts
+and viewer preferences are omitted. Tests cover linked geometry, duplicate stair
+names on different floors, stable retries, separate copies and source immutability.
+This is not an installer or complete write validator: canonical field validation,
+catalog/world recovery and player visibility still gate the import action.

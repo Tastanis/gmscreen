@@ -1,5 +1,11 @@
 # Ability Automation — Field & Hook Registry
 
+Scene copy preparation remaps stored condition source/duration placement references
+and mark source/target references, preserving ability IDs and rider definitions.
+It drops condition instance/execution receipts so a future installed copy cannot
+reuse the original encounter's turn receipts. External placement references reject
+preparation. This pure helper does not yet install scenes or execute effects.
+
 A flat reference of every value the JSON schema accepts, every runtime hook, and every feature with its current implementation status. Update this when you add anything new — the LLM author reads this list to know what exists without having to grep the code.
 
 For *how* to write JSON, see `AUTHORING.md`. This file is `what is supported`.

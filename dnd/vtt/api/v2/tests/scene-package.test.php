@@ -43,3 +43,29 @@ foreach ($invalidCases as $bad) {
 }
 verifyPackage(ScenePackage::build($scene,['revision'=>0,'state'=>[]])['domains']['placements']===[], 'Unused catalog scenes can be exported.');
 echo "Scene package: catalog, geometry, fog, placements, drawings/templates, references, scope and immutability passed.\n";
+$reusable = $package;
+$reusable['domains']['sceneConfig']['mapLevels']['baseStairs'] = [['id'=>'stairs','linkedLevelId'=>'upper']];
+$reusable['domains']['sceneConfig']['mapLevels']['levels'][0]['stairs'] = [['id'=>'stairs','linkedLevelId'=>'level-0']];
+$reusable['domains']['placements']['hero']['tokenId'] = 'hero';
+$reusable['domains']['placements']['hero']['metadata'] = ['monsterId'=>'hero','abilities'=>[['id'=>'hero','text'=>'hero']]];
+$reusable['domains']['placements']['hero']['conditions'] = [['name'=>'Marked','sourceId'=>'hero','duration'=>['targetTokenId'=>'hero'], 'instanceId'=>'old','riderExecutions'=>['rider'=>'turn-old']]];
+$reusable['domains']['placements']['hero']['marks'] = ['test'=>['sourceId'=>'hero','targetId'=>'hero','abilityId'=>'hero']];
+$source = $reusable;
+$prepared = ScenePackage::prepareForNewScene($reusable,'scn-new-scene-123');
+$copy = $prepared['package']; $ids = $prepared['idMap'];
+$hero = $copy['domains']['placements'][$ids['placements']['hero']];
+verifyPackage($hero['id']!=='hero' && $hero['tokenId']==='hero' && $hero['metadata']===$source['domains']['placements']['hero']['metadata'], 'Board IDs change without rewriting library or embedded ability IDs.');
+verifyPackage($hero['conditions'][0]['sourceId']===$hero['id'] && $hero['conditions'][0]['duration']['targetTokenId']===$hero['id'] && !isset($hero['conditions'][0]['riderExecutions']), 'Condition references follow the copy and old execution receipts are removed.');
+verifyPackage($hero['marks']['test']['targetId']===$hero['id'] && $hero['marks']['test']['abilityId']==='hero', 'Marks remap placement links, preserving ability IDs.');
+$floors = $copy['domains']['sceneConfig']['mapLevels'];
+verifyPackage($floors['baseStairs'][0]['linkedLevelId']===$ids['levels']['upper'] && $floors['levels'][0]['stairs'][0]['linkedLevelId']==='level-0', 'Stairs connect copied floors in both directions.');
+verifyPackage($floors['baseStairs'][0]['id']!==$floors['levels'][0]['stairs'][0]['id'], 'Identically named stairs on different floors remain distinct.');
+verifyPackage(isset($copy['domains']['sceneConfig']['fogOfWar']['byLevel'][$ids['levels']['upper']]) && $hero['levelId']===$ids['levels']['upper'], 'Fog and occupants remain on the copied floor.');
+verifyPackage($reusable===$source && $copy['scene']['folderId']===null, 'Preparation is immutable and does not inherit an external folder ID.');
+verifyPackage(ScenePackage::prepareForNewScene($source,'scn-new-scene-123')['idMap']===$ids, 'Retry preparation has stable IDs.');
+verifyPackage(ScenePackage::prepareForNewScene($source,'scn-another-scene-123')['idMap']['placements']!==$ids['placements'], 'Separate copies receive different IDs.');
+$source['domains']['placements']['hero']['conditions'][0]['sourceId']='outside';
+$rejected=false;
+try { ScenePackage::prepareForNewScene($source,'scn-new-scene-123'); } catch (InvalidArgumentException $error) { $rejected=true; }
+verifyPackage($rejected, 'Cross-scene effect references cannot silently point back to the original encounter.');
+echo "Scene copy preparation: fresh IDs, linked geometry, combat references, stable retries and source preservation passed.\n";

@@ -1,5 +1,10 @@
 # Codex Development Notes
 
+Scene package copying uses `ScenePackage::prepareForNewScene` for explicit board
+ID remapping. Never recursively rewrite all IDs: token-library, sheet and embedded
+ability identities must be preserved. Preparation is pure and does not authorize
+installing unvalidated package fields or bypassing Sync V2 command authority.
+
 ## Version System
 
 ### Overview
