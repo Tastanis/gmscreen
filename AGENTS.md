@@ -141,6 +141,10 @@ console.log('Button element:', document.getElementById('import-character-btn'));
   the same transaction, with scene scope and hidden-content projection preserved.
 - Initial player HTML and V2 recovery use the same audience projection. Preserve
   that boundary and the focused layer refresh when changing floor visibility.
+- VTT player profile IDs come from `dnd/vtt/config/player-roster.json` (or the
+  server-only `VTT_PLAYER_ROSTER_PATH` override). Bootstrap configures the client
+  before mounting. Roster membership is association, not authentication or token
+  ownership; preserve shared allied movement permissions.
 - Character-card temporary stamina currently reflects the saved stamina above
   maximum convention. Capped healing and recovery must preserve existing overflow.
 - Ground/Fly/Hover is explicit token runtime state, not ability-authoring JSON.

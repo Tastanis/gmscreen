@@ -357,6 +357,7 @@ function overlaySyncV2Placements(array $boardState, ?array $authContext = null):
  */
 function getVttBootstrapConfig(?array $authContext = null): array
 {
+    require_once __DIR__ . '/lib/PlayerRoster.php';
     global $routes;
 
     $context = $authContext ?? getVttUserContext();
@@ -462,6 +463,7 @@ function getVttBootstrapConfig(?array $authContext = null): array
 
     return [
         'routes' => $routes,
+        'playerRoster' => PlayerRoster::playerIds(),
         'scenes' => $scenes,
         'tokens' => $tokens,
         'boardState' => $boardState,

@@ -2083,12 +2083,7 @@ export function mountBoardInteractions(store, routes = {}) {
     ],
   };
 
-  const PLAYER_PROFILE_ALIASES = {
-    cal: ['cal'],
-    sharon: ['sharon'],
-    indigo: ['indigo'],
-    zepha: ['zepha'],
-  };
+  const PLAYER_PROFILE_ALIASES = Object.fromEntries(PLAYER_CHARACTER_USER_IDS.map(id => [id, [id]]));
 
   function formatProfileDisplayName(profileId) {
     if (typeof profileId !== 'string' || !profileId.trim()) {
@@ -14128,7 +14123,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!normalizedName || typeof alias !== 'string') {
       return false;
     }
-    const normalizedAlias = alias.trim().toLowerCase();
+    const normalizedAlias = normalizeCombatantName(alias);
     if (!normalizedAlias) {
       return false;
     }

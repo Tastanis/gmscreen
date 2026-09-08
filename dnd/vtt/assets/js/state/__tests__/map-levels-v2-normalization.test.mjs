@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   BASE_MAP_LEVEL_ID,
+  configurePlayerRoster,
   KNOWN_LEVEL_USER_IDS,
   PLAYER_CHARACTER_USER_IDS,
   buildLevelViewModel,
@@ -18,6 +19,22 @@ import {
 import { normalizeSceneBoardState } from '../normalize/scene-board-state.js';
 
 describe('map-level normalization', () => {
+  test('configured roster drives viewer lists and custom profile association', () => {
+    const original = [...PLAYER_CHARACTER_USER_IDS];
+    try {
+      configurePlayerRoster([' Rowan ', 'rowan', 'steel-hero']);
+      assert.deepEqual(PLAYER_CHARACTER_USER_IDS, ['rowan', 'steel-hero']);
+      assert.deepEqual(KNOWN_LEVEL_USER_IDS, ['gm', 'rowan', 'steel-hero']);
+      const placements = [{ id: 'r', profileId: 'rowan', levelId: 'upper' }];
+      assert.equal(resolvePcTokenForUser({ userId: 'ROWAN', placements }).placementId, 'r');
+      assert.equal(resolvePcTokenForUser({ userId: 'steel-hero', placements: [{id:'s',name:'Steel Hero companion'}] }).placementId, 's');
+      assert.equal(resolvePcTokenForUser({ userId: 'cal', placements: [{id:'old',name:'Cal'}] }), null);
+      assert.equal(resolvePcTokenForUser({ userId: 'rowan', placements: [...placements, {...placements[0],id:'duplicate'}] }), null);
+      assert.throws(() => configurePlayerRoster(['gm']));
+      assert.throws(() => configurePlayerRoster(['../secret']));
+      assert.deepEqual(PLAYER_CHARACTER_USER_IDS, ['rowan', 'steel-hero']);
+    } finally { configurePlayerRoster(original); }
+  });
   test('uses the virtual base level for placements without an explicit level', () => {
     assert.equal(BASE_MAP_LEVEL_ID, 'level-0');
     assert.equal(resolvePlacementLevelId({}), BASE_MAP_LEVEL_ID);

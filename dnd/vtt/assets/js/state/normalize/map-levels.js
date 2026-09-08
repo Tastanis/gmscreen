@@ -23,10 +23,9 @@ export const MAP_LEVEL_DEFAULT_DISPLAY_MODE = 'auto';
 export const BASE_MAP_LEVEL_ID = 'level-0';
 
 // Levels v2 (§5.3): the GM's Activate button pulls every known user to the
-// GM's current viewing level. The roster is the configured chat/player set
-// (see dnd/index.php password map) normalized to lowercase profile ids — not
-// only currently connected websocket clients — so reloads stay consistent.
-export const KNOWN_LEVEL_USER_IDS = Object.freeze([
+// GM's current viewing level, including offline configured profiles. These
+// standalone defaults are replaced by the server roster before app state mounts.
+export let KNOWN_LEVEL_USER_IDS = Object.freeze([
   'gm',
   'cal',
   'sharon',
@@ -36,7 +35,7 @@ export const KNOWN_LEVEL_USER_IDS = Object.freeze([
 
 // The player-character profile ids used by name/profile-based character-sheet
 // association. Token permissions are team-based and do not use ownership.
-export const PLAYER_CHARACTER_USER_IDS = Object.freeze([
+export let PLAYER_CHARACTER_USER_IDS = Object.freeze([
   'cal',
   'sharon',
   'indigo',
@@ -44,6 +43,13 @@ export const PLAYER_CHARACTER_USER_IDS = Object.freeze([
 ]);
 
 const mapLevelSeed = Date.now();
+export function configurePlayerRoster(raw) {
+  if (!Array.isArray(raw) || raw.length > 100) throw new Error('Invalid player roster.');
+  const ids = raw.map(value => typeof value === 'string' ? value.trim().toLowerCase() : '');
+  if (ids.some(id => !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id) || id === 'gm')) throw new Error('Invalid player roster profile ID.');
+  PLAYER_CHARACTER_USER_IDS = Object.freeze([...new Set(ids)]);
+  KNOWN_LEVEL_USER_IDS = Object.freeze(['gm', ...PLAYER_CHARACTER_USER_IDS]);
+}
 let mapLevelSequence = 0;
 
 export function createEmptyMapLevelsState() {
@@ -480,7 +486,7 @@ function resolvePlacementLinkedProfileId(placement) {
     return null;
   }
   const matches = PLAYER_CHARACTER_USER_IDS.filter((profileId) => (
-    new RegExp(`(^|\\s)${profileId}(\\s|$)`).test(normalizedName)
+    new RegExp(`(^|\\s)${profileId.replace(/[^a-z0-9]+/g, ' ')}(\\s|$)`).test(normalizedName)
   ));
   return matches.length === 1 ? matches[0] : null;
 }

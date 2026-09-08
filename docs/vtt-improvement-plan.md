@@ -26,6 +26,7 @@ User authorized implementing the September 7 product audit, updating/running the
 - [ ] Explicit view-versus-token controls and follow/browse/center policy.
   - Viewing labels, Show players this floor, reload-preserved explicit views, and My token's floor are implemented. Camera-follow preferences and configurable primary token association remain pending.
 - [ ] Configurable roster and primary token association, preserving shared allied control.
+  - Server-configured profile roster now drives floor following, client profile eligibility, and Show players, including offline profiles. A GM editor and primary-token selection remain pending.
 
 ## Faster live play
 
@@ -563,3 +564,18 @@ maximum. This does not introduce a separate temporary-stamina resource model.
 The disposable player browser test covers healing overflow, reload, capped healing,
 recovery, and damage both within and beyond the temporary amount. It also retains
 the concurrent-sheet-refresh recovery test. All 693 tests across 82 files pass.
+
+### Shared configured player roster
+
+Server and client now use `config/player-roster.json` for profile eligibility,
+floor following, and Show players. A server environment path can override the
+file. The list contains public existing profile IDs only; authentication and team
+permissions are independent. New account/sheet creation is not part of this change.
+Primary-token selection and a GM roster editor remain pending.
+
+Validation: 695 tests across 82 files pass. PHP verifies custom-profile following
+when another player moves the token; JS verifies custom profile/name resolution,
+duplicate ambiguity, validation, and viewer lists. A disposable custom roster
+(`cal`, `sharon`, `rowan`) passed the three-client floor-view browser journey,
+including persisted Show players state for offline Rowan, reload, own-token
+return, and hidden-floor cleanup. No live configuration or campaign data changed.

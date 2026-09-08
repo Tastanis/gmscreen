@@ -882,6 +882,24 @@ revisions and linked floor following remain authoritative. This adds no ability
 effect kind: flight eligibility, height, other speed-zero effects, fall damage, and
 vertical targeting remain manual, as shown beside the control.
 
+### Configured player roster
+
+The VTT roster is configured in `dnd/vtt/config/player-roster.json`, with an
+optional server-only `VTT_PLAYER_ROSTER_PATH` override. It is a JSON array of up
+to 100 existing player profile IDs: lowercase letters, digits, hyphens, and
+underscores (1–64 characters, starting with a letter or digit). `gm` is implicit
+and must not appear. IDs are normalized and deduplicated; invalid configuration
+fails visibly. The default preserves the current four players. This does not
+create login accounts or character sheets; IDs must match those existing records.
+
+The store loads this roster for token/profile floor following. Bootstrap includes
+the same public IDs and initializes client bindings before any board state or UI
+mounts. Show players includes offline roster members. Character profile eligibility
+and name fallback use the configured client list; duplicate-token ambiguity still
+returns no implicit primary token. Shared allied movement permissions are unchanged.
+Reload clients after changing server configuration. A GM roster editor and explicit
+primary-token selection remain separate pending work.
+
 ### Named scene checkpoint archive
 
 `SceneCheckpointArchive.php` stores immutable scene captures in

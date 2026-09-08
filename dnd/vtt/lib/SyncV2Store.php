@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/FloorGeometry.php';
 require_once __DIR__ . '/MovementUndo.php';
+require_once __DIR__ . '/PlayerRoster.php';
 require_once __DIR__ . '/SceneCheckpointArchive.php';
 require_once __DIR__ . '/SceneCheckpointRestore.php';
 
@@ -13,7 +14,7 @@ require_once __DIR__ . '/SceneCheckpointRestore.php';
  */
 final class SyncV2Store
 {
-    private const PLAYER_CHARACTER_USER_IDS = ['cal', 'sharon', 'indigo', 'zepha'];
+    private array $playerCharacterUserIds;
 
     private PDO $pdo;
     private string $worldId;
@@ -28,6 +29,7 @@ final class SyncV2Store
         int $snapshotInterval = 100,
         int $snapshotRetention = 20
     ) {
+        $this->playerCharacterUserIds = PlayerRoster::playerIds();
         if (!extension_loaded('pdo_sqlite')) {
             throw new RuntimeException('Sync V2 requires the PDO SQLite extension.');
         }
@@ -2708,7 +2710,7 @@ final class SyncV2Store
                     continue;
                 }
                 $profileId = strtolower(trim($source[$key]));
-                return in_array($profileId, self::PLAYER_CHARACTER_USER_IDS, true)
+                return in_array($profileId, $this->playerCharacterUserIds, true)
                     ? $profileId
                     : null;
             }
@@ -2720,8 +2722,9 @@ final class SyncV2Store
             return null;
         }
         $matches = [];
-        foreach (self::PLAYER_CHARACTER_USER_IDS as $profileId) {
-            if (preg_match('/(^|\s)' . preg_quote($profileId, '/') . '(\s|$)/', $normalizedName) === 1) {
+        foreach ($this->playerCharacterUserIds as $profileId) {
+            $alias = preg_replace('/[^a-z0-9]+/', ' ', $profileId);
+            if (preg_match('/(^|\s)' . preg_quote($alias, '/') . '(\s|$)/', $normalizedName) === 1) {
                 $matches[] = $profileId;
             }
         }
