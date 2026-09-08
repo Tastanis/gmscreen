@@ -1,5 +1,6 @@
 const SVG_NS = 'http://www.w3.org/2000/svg';
 import { publishActiveTool } from './active-tool.js';
+import { setDrawModeActive } from './drawing-tool.js';
 const MAX_MEASUREMENT_POINTS = 21; // 20 segments
 
 // Arrow visual constants
@@ -163,6 +164,7 @@ function toggleMeasureMode(state, nextActive) {
     return;
   }
 
+  if (nextActive) setDrawModeActive(false);
   state.active = nextActive;
   publishActiveTool('measure', state.active ? 'Measure' : null);
   state.measureButton?.classList.toggle('is-active', state.active);
@@ -807,6 +809,10 @@ function clonePoint(point) {
 
 export function isMeasureModeActive() {
   return Boolean(sharedState?.active);
+}
+
+export function setMeasureModeActive(active) {
+  if (sharedState) toggleMeasureMode(sharedState, Boolean(active));
 }
 
 export function beginExternalMeasurement(point, options = {}) {

@@ -1,5 +1,6 @@
 import { diffDrawings, applyDrawingEdits, invertDrawingEdits, canEditDrawing } from './drawing-edits.js';
 import { publishActiveTool } from './active-tool.js';
+import { setMeasureModeActive } from './drag-ruler.js';
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 let sharedState = null;
@@ -261,6 +262,7 @@ function toggleDrawMode(state, nextActive) {
     return;
   }
 
+  if (nextActive) setMeasureModeActive(false);
   state.active = nextActive;
   publishActiveTool('draw', state.active ? 'Draw' : null);
   state.drawButton?.classList.toggle('is-active', state.active);
@@ -364,6 +366,7 @@ function cancelDrawing(state) {
 
 function setEraseMode(state, eraseMode) {
   state.eraseMode = eraseMode;
+  publishActiveTool('draw', state.active ? (eraseMode ? 'Erase drawing' : 'Draw') : null);
 
   if (state.drawModeBtn) {
     state.drawModeBtn.classList.toggle('is-active', !eraseMode);

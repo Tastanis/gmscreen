@@ -223,6 +223,15 @@ outside the board, preventing its Escape handler from running. Placement now
 focuses the board without scrolling. Cutout mode is wired but its browser label
 journey remains pending; broader tool exclusivity is not claimed complete here.
 
+Draw and Measure now explicitly deactivate one another so one pointer gesture
+cannot be consumed by both. Eraser mode has its own active-tool label. The drawing
+journey now waits for a connected, visible map before testing gestures, and covers
+switching modes before its three-client save/erase/clear/undo/floor/reload/rejection
+checks. An initial replay timeout was not reproducible in a fresh fixture; the
+readiness condition and subsequent full journey passed. Template creation, drag,
+ownership and deletion also passed with the combined current UI. Other mode pairs
+(stairs, cutouts, targeting) still need exclusivity review.
+
 Validation: 678 tests passed across 77 files. Expanded PHP checks then passed for
 forged/cloned receipts and changed floor geometry. Three-browser floor QA includes
 Undo move after reload (restoring a fall) and Ctrl+Z (restoring the previous stair

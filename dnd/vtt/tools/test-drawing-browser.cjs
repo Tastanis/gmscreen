@@ -24,6 +24,8 @@ if (!['127.0.0.1', 'localhost', '[::1]'].includes(new URL(origin).hostname)) {
       page.on('pageerror', (error) => errors.push(error.message));
       await page.goto(origin + '/test-login.php?user=' + user);
       await page.waitForFunction(() => document.querySelector('#vtt-map-image')?.naturalWidth > 0);
+      await page.waitForFunction(() => document.querySelector('[data-connection-status]')?.textContent === 'Connected'
+        && document.querySelector('#vtt-map-transform')?.hidden === false);
       return { context, page };
     }
     const gm = await client('GM');
@@ -58,6 +60,13 @@ if (!['127.0.0.1', 'localhost', '[::1]'].includes(new URL(origin).hostname)) {
       await saved(page);
     }
     await pc.page.locator('[data-action="toggle-draw"]').click();
+    await pc.page.locator('[data-action="measure-distance"]').click();
+    assert.equal(await pc.page.locator('[data-action="toggle-draw"]').getAttribute('aria-pressed'), 'false');
+    await pc.page.locator('[data-action="toggle-draw"]').click();
+    assert.equal(await pc.page.locator('[data-action="measure-distance"]').getAttribute('aria-pressed'), 'false');
+    await pc.page.locator('[data-action="draw-mode-erase"]').click();
+    assert.equal(await pc.page.locator('[data-active-tool]').textContent(), 'Tool: Erase drawing');
+    await pc.page.locator('[data-action="draw-mode-draw"]').click();
     await stroke(pc.page);
     await count(gm.page, 1); await count(other.page, 1);
     await pc.page.locator('[data-action="clear-drawings"]').click();
