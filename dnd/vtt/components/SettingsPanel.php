@@ -11,6 +11,7 @@ function renderVttSettingsPanel(string $tokenLibraryMarkup = '', bool $isGm = fa
         class="vtt-settings-panel vtt-settings-panel--closed"
         data-module="vtt-settings"
         aria-hidden="true"
+        inert
     >
         <header class="vtt-settings-panel__header">
             <h2 class="vtt-settings-panel__title" data-settings-title>
@@ -27,10 +28,12 @@ function renderVttSettingsPanel(string $tokenLibraryMarkup = '', bool $isGm = fa
             <?php if ($isGm): ?>
                 <section class="settings-view settings-view--scenes" data-settings-view="scenes" <?= $defaultTab === 'scenes' ? '' : 'hidden' ?>>
                     <header class="settings-view__header">
-                        <h3>Scene Manager</h3>
+                        <h3>Saved scenes</h3>
                         <button class="btn" type="button" data-action="create-folder">New Folder</button>
                     </header>
                     <div class="settings-view__content">
+                        <details class="vtt-prep-disclosure" data-scene-creation>
+                            <summary>Map setup and save scene</summary>
                         <section class="scene-controls" aria-label="Scene map and grid controls">
                             <input
                                 id="vtt-map-upload-input"
@@ -107,15 +110,13 @@ function renderVttSettingsPanel(string $tokenLibraryMarkup = '', bool $isGm = fa
                                 <p class="scene-creator__feedback" data-scene-feedback hidden></p>
                             </div>
                         </form>
+                        </details>
                         <div class="scene-manager" id="scene-manager"></div>
                     </div>
                 </section>
             <?php endif; ?>
             <section class="settings-view settings-view--tokens" data-settings-view="tokens" <?= $defaultTab === 'tokens' ? '' : 'hidden' ?>
             >
-                <header class="settings-view__header">
-                    <h3>Token Maker</h3>
-                </header>
                 <div class="settings-view__content" id="token-library">
                     <?= $tokenLibraryMarkup ?>
                 </div>

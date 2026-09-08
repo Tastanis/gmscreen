@@ -37,6 +37,7 @@ export function mountSettingsPanel(routes, store, user = {}) {
     panel.classList.toggle('vtt-settings-panel--open', open);
     panel.classList.toggle('vtt-settings-panel--closed', !open);
     panel.setAttribute('aria-hidden', open ? 'false' : 'true');
+    panel.inert = !open;
     updateLauncherState(activeViewId, open);
   };
 

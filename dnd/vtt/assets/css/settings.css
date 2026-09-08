@@ -825,9 +825,9 @@
 }
 
 .token-item__delete {
-  position: absolute;
-  top: 0.35rem;
-  right: 0.35rem;
+  order: 1;
+  align-self: flex-end;
+  min-height: 32px;
   appearance: none;
   border: 1px solid rgba(248, 113, 113, 0.55);
   border-radius: 999px;
@@ -890,6 +890,7 @@
 .token-item__meta h4 {
   margin: 0;
   font-size: 0.95rem;
+  overflow-wrap: anywhere;
 }
 
 .token-item__meta p {
@@ -1426,6 +1427,8 @@ body.vtt-body {
 }
 
 .vtt-settings-panel__close {
+  min-width: 40px;
+  min-height: 40px;
   background: transparent;
   border: none;
   color: inherit;
@@ -1442,6 +1445,29 @@ body.vtt-body {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.vtt-prep-disclosure {
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--vtt-panel-border);
+}
+
+.vtt-prep-disclosure > summary {
+  cursor: pointer;
+  min-height: 40px;
+  padding: 0.65rem 0.35rem;
+  font-weight: 600;
+}
+
+.vtt-prep-disclosure > summary:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.token-library-hint {
+  color: var(--vtt-text-primary);
+  font-size: 0.85rem;
+  margin: 0 0 0.65rem;
 }
 
 @media (max-width: 768px) {

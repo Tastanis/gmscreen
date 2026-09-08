@@ -1,7 +1,7 @@
 :root {
   --vtt-bg-gradient-start: #f7eedf;
   --vtt-bg-gradient-end: #e4d0b3;
-  --vtt-panel-bg: rgba(250, 243, 224, 0.96);
+  --vtt-panel-bg: #faf3e0;
   --vtt-panel-border: rgba(139, 111, 78, 0.34);
   --vtt-text-primary: #2f2417;
   --vtt-text-muted: #6b5638;
@@ -34,7 +34,7 @@
 :root[data-vtt-theme='dark'] {
   --vtt-bg-gradient-start: #2b1a16;
   --vtt-bg-gradient-end: #4a3524;
-  --vtt-panel-bg: rgba(47, 36, 23, 0.9);
+  --vtt-panel-bg: #2f2417;
   --vtt-panel-border: rgba(194, 173, 144, 0.36);
   --vtt-text-primary: #f4eadc;
   --vtt-text-muted: #c2ad90;

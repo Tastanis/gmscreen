@@ -26,7 +26,7 @@ User authorized implementing the September 7 product audit, updating/running the
 
 ## Faster live play
 
-- [ ] Token library and saved scenes first; creation forms collapsed.
+- [x] Token library and saved scenes first; creation forms collapsed.
 - [ ] Compact inactive tracker and combat character card.
 - [ ] Zoom/fit/center/shortcuts and persistent tool labels.
 - [ ] Opaque readable panels, practical targets, diagnostics-only memory counter.
@@ -117,6 +117,22 @@ The Undo move button and Ctrl+Z work outside combat, with movement-cost refunds
 limited to a matching locally tracked combat move. Undo does not re-fire normal
 movement triggers. This reverses movement only, not damage or ability side effects.
 Whole-group undo is still pending; the control explicitly acts on one selected token.
+
+## Library-first panels
+
+Token and scene creation use collapsed native disclosures. Monster import remains
+directly available and opens the token builder after selection. Saved folders and
+token search appear first; search now filters token/folder names, opens matching
+groups, and preserves normal folder collapse state when cleared. Player tokens no
+longer sit below a large GM-only creation notice. Closed settings panels are inert
+to keyboard focus. Shared panel backgrounds are opaque, the close control is larger,
+and token Delete buttons no longer overlap long names. Import feedback remains
+visible with creation collapsed. Memory diagnostics require `?diagnostics=1`.
+
+The repeatable `test-library-layout-browser.cjs` journey verifies search, no-match
+feedback, restored browsing, expandable forms, and library/scene placement at
+1280×720. Screenshots are in `.playwright-mcp/library-layout-*.png`. Broader panel,
+tracker, navigation, and character-card work remains on the checklist.
 
 Validation: 678 tests passed across 77 files. Expanded PHP checks then passed for
 forged/cloned receipts and changed floor geometry. Three-browser floor QA includes

@@ -15,6 +15,10 @@ function renderVttTokenLibrary(bool $isGm = false): string
         </header>
         <div class="vtt-token-library__content">
             <?php if ($isGm): ?>
+                <button class="btn" type="button" data-action="import-monster">Import Monster</button>
+                <p class="token-maker__feedback" data-token-feedback hidden></p>
+                <details class="vtt-prep-disclosure" data-token-creation>
+                    <summary>Create a token</summary>
                 <section class="token-maker" data-module="vtt-token-maker" aria-label="Token image builder">
                     <div class="token-maker__preview" data-token-preview>
                         <span class="token-maker__preview-hint" data-token-placeholder>Drop an image or browse to begin.</span>
@@ -76,17 +80,12 @@ function renderVttTokenLibrary(bool $isGm = false): string
                         </div>
                         <div class="token-maker__actions">
                             <button class="btn btn--primary" type="button" data-action="create-token">Create Token</button>
-                            <button class="btn" type="button" data-action="import-monster">Import Monster</button>
-                            <p class="token-maker__feedback" data-token-feedback hidden></p>
                         </div>
                     </div>
                 </section>
+                </details>
             <?php else: ?>
-                <section class="token-maker token-maker--readonly" aria-label="Token access notice">
-                    <div class="token-maker__preview token-maker__preview--readonly">
-                        <p class="token-maker__readonly-message">Token creation is limited to the GM. Player tokens from the PC's folder are available below.</p>
-                    </div>
-                </section>
+                <p class="token-library-hint">Drag a token onto the map. Your available player tokens are shown below.</p>
             <?php endif; ?>
             <ul id="token-template-list" class="token-template-list" aria-live="polite">
                 <li class="token-template-list__empty">No tokens saved yet.</li>

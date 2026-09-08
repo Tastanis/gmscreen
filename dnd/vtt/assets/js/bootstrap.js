@@ -72,7 +72,9 @@ async function bootstrap() {
     },
   });
   mountDiceRoller();
-  mountMemoryMonitor({ getState }); // [REMOVABLE] Memory monitor widget
+  if (new URLSearchParams(window.location.search).get('diagnostics') === '1') {
+    mountMemoryMonitor({ getState });
+  }
 
   await hydrateFromServer(routes, userContext);
 }

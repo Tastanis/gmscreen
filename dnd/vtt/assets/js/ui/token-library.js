@@ -17,6 +17,7 @@ export function renderTokenLibrary(routes, store, options = {}) {
   if (!moduleRoot) return;
 
   const listContainer = moduleRoot.querySelector('#token-template-list');
+  const searchInput = moduleRoot.querySelector('#token-search');
   const nameInput = moduleRoot.querySelector('[data-token-name-input]');
   const folderSelect = moduleRoot.querySelector('[data-token-folder-select]');
   const teamToggle = moduleRoot.querySelector('[data-token-team-toggle]');
@@ -239,6 +240,8 @@ export function renderTokenLibrary(routes, store, options = {}) {
         credentials: 'include',
         onStatusChange: handleImporterStatus,
         onSelect: async (monster) => {
+          const creation = moduleRoot.querySelector('[data-token-creation]');
+          if (creation) creation.open = true;
           if (!maker || typeof maker.loadImageFromUrl !== 'function') {
             throw new Error('Token maker is unavailable.');
           }
@@ -485,19 +488,25 @@ export function renderTokenLibrary(routes, store, options = {}) {
       return;
     }
 
-    const groups = groupTokens(tokensState);
-    pruneCollapseState(collapseState, groups);
+    const allGroups = groupTokens(tokensState);
+    pruneCollapseState(collapseState, allGroups);
+    const query = (searchInput?.value || '').trim().toLocaleLowerCase();
+    const groups = query ? allGroups.map((group) => ({ ...group,
+      items: group.items.filter((token) => `${token.name || ''} ${group.title}`.toLocaleLowerCase().includes(query)),
+    })).filter((group) => group.items.length) : allGroups;
 
     const markup = buildTokenMarkup(groups, {
-      isCollapsed: (folderId) => isGroupCollapsed(collapseState, folderId),
+      isCollapsed: (folderId) => !query && isGroupCollapsed(collapseState, folderId),
       canEdit: isGM,
     });
 
-    listContainer.innerHTML = markup;
+    listContainer.innerHTML = query && !groups.length
+      ? '<li class="token-template-list__empty">No matching tokens. Try another name or folder.</li>' : markup;
     updateStaminaPrefetchNames();
   };
 
   render(stateApi.getState?.() ?? {});
+  searchInput?.addEventListener('input', () => render(stateApi.getState?.() ?? {}));
   stateApi.subscribe?.((nextState) => render(nextState));
 
   moduleRoot.addEventListener('click', async (event) => {
