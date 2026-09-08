@@ -40,6 +40,7 @@ User authorized implementing the September 7 product audit, updating/running the
   - Server-check-based connection status and manual reconciliation are implemented; specific-player preview remains pending.
 - [ ] Named encounter checkpoints, scoped restore, scene duplication/export.
 - [ ] Encounter presets, favorites and recent assets.
+  - Token favorites and the 20 most recently added board tokens are implemented with search and browser-local persistence. Encounter presets and other asset collections remain pending.
 - [ ] Handouts, show-image, and map pins linking existing campaign records.
 - [ ] Visible automatic/confirmation/manual action boundaries and interrupted-action recovery.
 
@@ -314,3 +315,23 @@ Validation: 683 regression tests passed. The disposable player browser holds a
 surge save pending, checks disabled controls, rejects it with a specific 403,
 verifies the reason and reconciled value, then completes normal add/spend saves
 while preserving the open details section. No live sheet was changed.
+
+## Token favorites and recent additions
+
+Each library card has a favorite toggle. The collection selector switches between
+All tokens, Favorites, and Recently added to board; search narrows the current
+collection. Favorites and the latest 20 distinct additions are stored per username
+in this browser, with graceful fallback when storage is unavailable. Tokens remain
+subject to the normal player-visible library filter. Deleted/unavailable IDs do not
+produce phantom cards.
+
+Recent entries come from explicit canonical placement additions observed by the
+tab, including other users' additions, not canceled drags or ordinary token edits.
+Recent ordering preserves the source folder metadata used by character tokens.
+An empty collection explains how to populate it. Favorite actions have accessible
+names, pressed state, keyboard focus, and a separate target from deletion.
+
+Validation: 685 regression tests passed across 82 files. Browser QA verified
+favorite persistence, collection search, a real drag onto the isolated board,
+recent history after reload, and unchanged folder metadata. The laptop layout was
+visually inspected. No live tokens were added or changed.

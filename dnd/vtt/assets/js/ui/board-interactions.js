@@ -927,6 +927,12 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function applyConfirmedPlacementBatch(snapshot, mutations, context = {}) {
+    for (const mutation of mutations) {
+      if (mutation.kind === 'upsert' && mutation.entityRevision === 1
+        && mutation.changedFields?.includes('*') && mutation.placement?.tokenId) {
+        document.dispatchEvent(new CustomEvent('vtt:token-library-used', { detail: { tokenId: mutation.placement.tokenId } }));
+      }
+    }
     boardApi.updateStateSilently?.((draft) => {
       tokenMovementRuntime?.overlayBoardState(draft.boardState);
     });

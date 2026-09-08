@@ -11,6 +11,12 @@ function renderVttTokenLibrary(bool $isGm = false): string
             <div class="vtt-token-library__actions">
                 <label class="visually-hidden" for="token-search">Search tokens</label>
                 <input id="token-search" type="search" placeholder="Search tokens" />
+                <label class="visually-hidden" for="token-library-filter">Token collection</label>
+                <select id="token-library-filter" title="Favorites and recent tokens are remembered for this user in this browser.">
+                    <option value="all">All tokens</option>
+                    <option value="favorites">Favorites</option>
+                    <option value="recent">Recently added to board</option>
+                </select>
             </div>
         </header>
         <div class="vtt-token-library__content">

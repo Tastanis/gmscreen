@@ -1,0 +1,46 @@
+const { chromium } = require('playwright');
+const assert = require('node:assert/strict');
+const origin = 'http://127.0.0.1:8129';
+(async () => {
+  assert.equal((await fetch(origin + '/diagnostic-manifest.json').then(r => r.json())).test_fixture, 'floor-regression');
+  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+    page.setDefaultTimeout(12000);
+    const errors = []; page.on('pageerror', error => errors.push(error.message));
+    await page.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
+    await page.goto(origin + '/test-login.php?user=GM');
+    await page.locator('[data-settings-launch="tokens"]').click();
+    await page.locator('#token-search').fill('Cal');
+    const token = page.locator('.token-item').filter({ has: page.getByRole('heading', { name: 'Cal', exact: true }) });
+    const tokenId = await token.getAttribute('data-token-id');
+    const originalFolder = await token.getAttribute('data-folder-name');
+    await token.getByRole('button', { name: 'Favorite Cal', exact: true }).click();
+    await page.locator('#token-library-filter').selectOption('favorites');
+    assert.equal(await page.locator('.token-item').count(), 1);
+    await page.screenshot({ path: '.playwright-mcp/token-favorites.png' });
+    await page.reload();
+    await page.locator('[data-settings-launch="tokens"]').click();
+    await page.locator('#token-library-filter').selectOption('favorites');
+    assert.equal(await page.locator('.token-item').count(), 1);
+    assert.equal(await token.getByRole('button', { name: 'Unfavorite Cal', exact: true }).getAttribute('aria-pressed'), 'true');
+    await page.locator('#token-search').fill('missing-token-name');
+    assert.equal(await page.locator('.token-item').count(), 0);
+    await page.locator('#token-search').fill('');
+    await page.locator('#token-library-filter').selectOption('recent');
+    assert.equal(await page.locator('.token-item').count(), 0);
+    await page.locator('#token-library-filter').selectOption('favorites');
+    const before = await page.locator('#vtt-token-layer [data-placement-id]').count();
+    await token.dragTo(page.locator('#vtt-board-canvas'), { targetPosition: { x: 800, y: 350 } });
+    await page.waitForFunction(before => document.querySelectorAll('#vtt-token-layer [data-placement-id]').length > before, before);
+    await page.locator('#token-library-filter').selectOption('recent');
+    await page.waitForFunction(tokenId => document.querySelector('#token-template-list .token-item')?.dataset.tokenId === tokenId, tokenId);
+    assert.equal(await token.getAttribute('data-folder-name'), originalFolder);
+    await page.reload();
+    await page.locator('[data-settings-launch="tokens"]').click();
+    await page.locator('#token-library-filter').selectOption('recent');
+    assert.equal(await token.getAttribute('data-token-id'), tokenId);
+    assert.deepEqual(errors, []);
+    console.log('PASS: favorite persistence, search within collections, confirmed board additions, recent reload, and original folder metadata.');
+  } finally { await browser.close(); }
+})().catch(error => { console.error(error); process.exitCode = 1; });

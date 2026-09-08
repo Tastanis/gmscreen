@@ -841,6 +841,31 @@
   transition: background var(--vtt-transition), border-color var(--vtt-transition), color var(--vtt-transition);
 }
 
+.token-item__actions {
+  order: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.token-item__favorite {
+  min-width: 36px;
+  min-height: 36px;
+  border: 1px solid currentColor;
+  border-radius: 5px;
+  background: #352619;
+  color: #f4eadc;
+  font-size: 1.3rem;
+  cursor: pointer;
+}
+
+.token-item__favorite[aria-pressed='true'] { color: #f9d574; }
+.token-item__favorite:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+#token-library-filter { width: 100%; min-height: 36px; margin-top: 6px; }
+#token-search { width: 100%; min-height: 36px; }
+
 .token-item__delete:hover:not(:disabled),
 .token-item__delete:focus-visible {
   background: rgba(185, 28, 28, 0.72);

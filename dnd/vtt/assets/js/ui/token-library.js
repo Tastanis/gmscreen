@@ -1,4 +1,5 @@
 import { initializeTokenMaker } from './token-maker.js';
+import { createTokenLibraryPreferences } from './token-library-preferences.js';
 import { createMonsterImporter } from './monster-import.js';
 import {
   createToken,
@@ -18,6 +19,7 @@ export function renderTokenLibrary(routes, store, options = {}) {
 
   const listContainer = moduleRoot.querySelector('#token-template-list');
   const searchInput = moduleRoot.querySelector('#token-search');
+  const collectionFilter = moduleRoot.querySelector('#token-library-filter');
   const nameInput = moduleRoot.querySelector('[data-token-name-input]');
   const folderSelect = moduleRoot.querySelector('[data-token-folder-select]');
   const teamToggle = moduleRoot.querySelector('[data-token-team-toggle]');
@@ -33,6 +35,9 @@ export function renderTokenLibrary(routes, store, options = {}) {
   const endpoints = routes ?? {};
   const initialState = typeof stateApi.getState === 'function' ? stateApi.getState() : {};
   const isGM = Boolean(options?.isGM ?? initialState?.user?.isGM);
+  let preferenceStorage = null;
+  try { preferenceStorage = window.localStorage; } catch {}
+  const preferences = createTokenLibraryPreferences(preferenceStorage, initialState?.user?.name);
 
   const maker = isGM ? initializeTokenMaker(moduleRoot) : null;
   const tokenMetadata = new Map();
@@ -491,22 +496,43 @@ export function renderTokenLibrary(routes, store, options = {}) {
     const allGroups = groupTokens(tokensState);
     pruneCollapseState(collapseState, allGroups);
     const query = (searchInput?.value || '').trim().toLocaleLowerCase();
-    const groups = query ? allGroups.map((group) => ({ ...group,
+    const collection = collectionFilter?.value || 'all';
+    const recentIds = preferences.recentIds();
+    const filteredGroups = allGroups.map(group => ({ ...group,
+      items: group.items.filter(token => collection === 'favorites' ? preferences.isFavorite(token.id)
+        : collection === 'recent' ? recentIds.includes(token.id) : true),
+    })).filter(group => group.items.length);
+    const groups = query ? filteredGroups.map((group) => ({ ...group,
       items: group.items.filter((token) => `${token.name || ''} ${group.title}`.toLocaleLowerCase().includes(query)),
-    })).filter((group) => group.items.length) : allGroups;
+    })).filter((group) => group.items.length) : filteredGroups;
+    if (collection === 'recent') {
+      const items = groups.flatMap(group => group.items.map(token => ({ ...token, _libraryFolderName: group.title })))
+        .sort((a, b) => recentIds.indexOf(a.id) - recentIds.indexOf(b.id));
+      groups.splice(0, groups.length, ...(items.length ? [{ id: '__recent', title: 'Recently added to board', items }] : []));
+    }
 
     const markup = buildTokenMarkup(groups, {
-      isCollapsed: (folderId) => !query && isGroupCollapsed(collapseState, folderId),
+      isCollapsed: (folderId) => collection === 'all' && !query && isGroupCollapsed(collapseState, folderId),
       canEdit: isGM,
+      isFavorite: preferences.isFavorite,
     });
 
-    listContainer.innerHTML = query && !groups.length
-      ? '<li class="token-template-list__empty">No matching tokens. Try another name or folder.</li>' : markup;
+    listContainer.innerHTML = !groups.length
+      ? `<li class="token-template-list__empty">${query ? 'No matching tokens. Try another name or folder.'
+        : collection === 'favorites' ? 'No favorites yet. Star a token in All tokens.'
+        : 'Tokens appear here after they are added to the board.'}</li>` : markup;
     updateStaminaPrefetchNames();
   };
 
   render(stateApi.getState?.() ?? {});
   searchInput?.addEventListener('input', () => render(stateApi.getState?.() ?? {}));
+  collectionFilter?.addEventListener('change', () => render(stateApi.getState?.() ?? {}));
+  documentRef?.addEventListener('vtt:token-library-used', event => {
+    const id = event.detail?.tokenId;
+    if (!tokenIndex.has(id)) return;
+    preferences.recordUsed(id);
+    render(stateApi.getState?.() ?? {});
+  });
   stateApi.subscribe?.((nextState) => render(nextState));
 
   moduleRoot.addEventListener('click', async (event) => {
@@ -514,6 +540,16 @@ export function renderTokenLibrary(routes, store, options = {}) {
     if (!target) return;
 
     const action = target.getAttribute('data-action');
+    if (action === 'favorite-token') {
+      event.preventDefault();
+      event.stopPropagation();
+      const id = target.closest('[data-token-id]')?.dataset.tokenId;
+      if (!tokenIndex.has(id)) return;
+      preferences.toggleFavorite(id);
+      render(stateApi.getState?.() ?? {});
+      listContainer.querySelector(`[data-action="favorite-token"][data-favorite-id="${CSS.escape(id)}"]`)?.focus();
+      return;
+    }
 
     if (action === 'toggle-token-group') {
       const folderId = target.getAttribute('data-folder-id') || null;
@@ -701,7 +737,7 @@ export function renderTokenLibrary(routes, store, options = {}) {
   });
 
   moduleRoot.addEventListener('dragstart', (event) => {
-    if (event.target.closest('[data-action="delete-token"]')) {
+    if (event.target.closest('button')) {
       event.preventDefault();
       return;
     }
@@ -1204,8 +1240,9 @@ function buildTokenMarkup(groups, options = {}) {
           </div>
           <ul class="token-group__list" id="${listId}">
             ${group.items.map((token) => renderTokenItem(token, {
-              folderName: group.title,
+              folderName: token._libraryFolderName || group.title,
               canEdit: options.canEdit,
+              favorite: options.isFavorite?.(token.id),
             })).join('')}
           </ul>
         </li>
@@ -1248,7 +1285,12 @@ function renderTokenItem(token, options = {}) {
   return `
     <li>
       <article class="token-item" draggable="true" data-token-id="${escapeHtml(token.id)}"${sizeAttr}${hpAttr}${teamAttr}${folderAttr}>
+        <div class="token-item__actions">
         ${deleteButton}
+        <button type="button" class="token-item__favorite" data-action="favorite-token" data-favorite-id="${escapeHtml(token.id)}"
+          aria-label="${options.favorite ? 'Unfavorite' : 'Favorite'} ${name}" aria-pressed="${Boolean(options.favorite)}"
+          title="${options.favorite ? 'Remove from favorites' : 'Add to favorites'}">${options.favorite ? '★' : '☆'}</button>
+        </div>
         <div class="token-item__meta">
           <h4>${name}</h4>
         </div>
