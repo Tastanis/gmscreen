@@ -42,7 +42,7 @@ User authorized implementing the September 7 product audit, updating/running the
 - [ ] Specific-player preview and useful connection status.
   - Server-check-based connection status and manual reconciliation are implemented; specific-player preview remains pending.
 - [ ] Named encounter checkpoints, scoped restore, scene duplication/export.
-  - GM-only checkpoint capture/download/delete and reviewed atomic position/floor restoration are implemented. Full scene geometry restore, duplication, and export remain pending.
+  - GM-only checkpoints and reviewed atomic position/floor restoration are implemented. Scene JSON export includes catalog metadata, board geometry, placements, and image references. Full geometry restore, import, and duplication remain pending.
 - [ ] Encounter presets, favorites and recent assets.
   - Token favorites and the 20 most recently added board tokens are implemented with search and browser-local persistence. Encounter presets and other asset collections remain pending.
 - [ ] Handouts, show-image, and map pins linking existing campaign records.
@@ -652,3 +652,18 @@ and another-player permission rejection. The three-browser primary journey now
 covers Browse across reload/stairs, one-time return retaining Browse, resumed
 Follow tracking the next fall, and existing hidden-primary privacy checks. The
 player control was visually checked at 1280×720. Camera pan/zoom remains separate.
+
+### GM scene JSON export
+
+Each scene now offers Export scene JSON. The versioned package includes catalog
+and folder metadata, base-map reference, placements, floors/stairs/cutouts, fog,
+drawings, templates, and image references. It preserves placed token values while
+omitting viewer preferences, projected associations, entity revisions, undo, and
+interrupted stair receipts. The UI and file state that image files and character
+sheets are not bundled. Import and duplication remain pending.
+
+Validation: 699 tests across 82 files pass. Package checks cover metadata, domains,
+geometry, references, excluded data, unused scenes, and source immutability. The
+browser journey downloads the real file, parses it, compares it to the canonical
+snapshot, checks anonymous/player denial and missing scenes, and confirms identical
+board state before and after export.

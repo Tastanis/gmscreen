@@ -943,6 +943,18 @@ invalid associations.
 
 ### Named scene checkpoint archive
 
+The GM scene list also offers Export scene JSON through the read-only
+`api/v2/scene-export.php`. `ScenePackage` emits `gmscreen-scene/v1`, combining the
+selected catalog scene and folder metadata with placements, sceneConfig, drawings,
+and templates from one canonical snapshot. It includes image URL references and
+the source board revision. User floor preferences, projected association metadata,
+entity revisions, undo receipts, and interrupted stair receipts are excluded.
+Fog/floor geometry and placed token resource/condition values are retained.
+The package is limited to 16 MB. Metadata is read separately from canonical state;
+image bytes, character-sheet stores, chat, and global combat are not bundled.
+Export does not create checkpoints or mutate board state. Import/duplication and
+full scene geometry restoration remain pending.
+
 `SceneCheckpointArchive.php` stores immutable scene captures in
 `vtt_scene_checkpoints`, partitioned by world ID. Capture/read/list/delete are
 exposed only through the GM-authenticated `api/v2/checkpoints.php`. A capture

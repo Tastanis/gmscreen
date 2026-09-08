@@ -156,6 +156,23 @@ export function renderSceneList(routes, store) {
     const action = target.getAttribute('data-action');
     const sceneId = target.getAttribute('data-scene-id');
 
+    if (action === 'export-scene' && sceneId) {
+      target.disabled = true;
+      try {
+        const response = await fetch('/dnd/vtt/api/v2/scene-export.php?sceneId=' + encodeURIComponent(sceneId), {credentials:'same-origin',cache:'no-store'});
+        const data = await response.json();
+        if (!response.ok || !data.success) throw Error(data.error || `Scene export failed (${response.status}).`);
+        const url = URL.createObjectURL(new Blob([JSON.stringify(data.package, null, 2)], {type:'application/json'}));
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `scene-${String(data.package.scene.name || sceneId).replace(/[^a-z0-9_-]+/gi,'-').slice(0,80)}.json`;
+        document.body.append(link); link.click(); link.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+        showFeedback(feedback, 'Scene JSON downloaded. Images are linked; image files and character sheets are not bundled.', 'success');
+      } catch (error) { showFeedback(feedback, error?.message || 'Unable to export scene.', 'error'); }
+      finally {target.disabled = false;}
+      return;
+    }
+
     if (action === 'toggle-folder') {
       const folderId = target.getAttribute('data-folder-id');
       if (!folderId) return;
@@ -1345,6 +1362,7 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
             ? `<button type="button" class="btn" data-action="hide-player-map" data-scene-id="${scene.id}">Hide Players</button>`
             : ''}
           <button type="button" class="btn btn--danger" data-action="delete-scene" data-scene-id="${scene.id}">Delete</button>
+          <button type="button" class="btn" data-action="export-scene" data-scene-id="${scene.id}" title="Download scene setup as JSON. Images are links; image files and character sheets are not bundled.">Export scene JSON</button>
         </footer>
       </div>
     </article>

@@ -160,6 +160,9 @@ console.log('Button element:', document.getElementById('import-character-btn'));
   through one-time floor returns, GM Show players, reload, and floor cleanup.
   Automatic token/view mutations must skip browsing users; explicit GM Show still
   changes their floor without changing the preference.
+- GM scene JSON export uses `ScenePackage` and one V2 snapshot plus the separately
+  read scene catalog. Packages contain image references, not downloaded media or
+  character sheets. Preserve the read-only scope and explicit format version.
 - Character-card temporary stamina currently reflects the saved stamina above
   maximum convention. Capped healing and recovery must preserve existing overflow.
 - Ground/Fly/Hover is explicit token runtime state, not ability-authoring JSON.
