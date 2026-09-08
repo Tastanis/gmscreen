@@ -32,6 +32,12 @@ function phpArgsForSqlite() {
   ];
 }
 
+test('specific-player preview matches player projection without changing state or session', () => {
+  const script = fileURLToPath(new URL('../../../../api/v2/tests/player-preview.test.php', import.meta.url));
+  const result = spawnSync('php', [...phpArgsForSqlite(), script], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});
+
 test('checkpoint layout restore is atomic, scoped, preview-bound and replayable', () => {
   const script = fileURLToPath(new URL('../../../../api/v2/tests/checkpoint-layout.test.php', import.meta.url));
   const result = spawnSync('php', [...phpArgsForSqlite(), script], { encoding: 'utf8' });

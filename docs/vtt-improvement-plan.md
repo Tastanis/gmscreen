@@ -41,7 +41,7 @@ User authorized implementing the September 7 product audit, updating/running the
 ## Recovery and preparation
 
 - [ ] Specific-player preview and useful connection status.
-  - Server-check-based connection status and manual reconciliation are implemented; specific-player preview remains pending.
+  - Server-check-based connection status and manual reconciliation are implemented. A GM-only read-only specific-player snapshot endpoint is tested; the visual preview interface remains pending.
 - [x] Named encounter checkpoints, scoped restore, scene duplication/export.
   - GM-only checkpoints expose reviewed atomic position or layout restoration. Layout restores floors, grid, fog, drawings/templates and existing-token positions while preserving current resources and newer tokens. Scene JSON export/import and duplication preserve board geometry and links, survive retries, and open without reload. Character sheets and base-map/catalog metadata are outside checkpoint restore scope.
 - [ ] Encounter presets, favorites and recent assets.
@@ -848,3 +848,17 @@ player denial, a stale preview, deleted/restored floors and content, a newer tok
 on a removed floor, current conditions/stamina preservation, GM plus two-player
 convergence and reload. The 1280×720 preview was visually inspected. All 703 tests
 across 83 files passed for the HTTP/UI integration. Live campaign data was untouched.
+
+### Specific-player preview server foundation
+
+The GM-only GET player-preview endpoint accepts a configured roster ID and returns
+the same projected snapshot that player's real session receives. No impersonation,
+presence update or canonical write occurs. Hidden floors/tokens and primary-token
+associations use the existing projection rather than a separate preview sanitizer.
+The visual preview interface is still pending.
+
+PHP tests cover exact projection, hidden content, invalid identities and unchanged
+session/canonical state. The disposable HTTP regression checks anonymous/player
+denial, non-GET denial, malformed/unknown player IDs, exact Cal/Sharon snapshot
+parity and retained GM identity. All 15 server regressions pass.
+Full regression suite: 704 tests across 83 files passed.

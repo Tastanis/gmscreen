@@ -1,5 +1,9 @@
 # Codex Development Notes
 
+Player preview uses the GM-only read-only `api/v2/player-preview.php?user=...`
+endpoint and the same snapshot projection as the actual player. Never impersonate
+the player session or touch their presence. The visual preview UI remains pending.
+
 Scene package copying uses `ScenePackage::prepareForNewScene` for explicit board
 ID remapping. Never recursively rewrite all IDs: token-library, sheet and embedded
 ability identities must be preserved. Preparation is pure and does not authorize

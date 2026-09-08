@@ -257,6 +257,20 @@ function vttSyncV2ViewerPcAssociations(array $snapshot, array $auth, ?array $sce
     return $result;
 }
 
+/** A read-only projection, never a session impersonation or presence update. */
+function vttSyncV2BuildPlayerPreview(array $snapshot, string $userId): array
+{
+    $userId = strtolower(trim($userId));
+    if (!in_array($userId, PlayerRoster::playerIds(), true)) {
+        throw new InvalidArgumentException('Choose a configured player.');
+    }
+    return [
+        'userId' => $userId,
+        'readOnly' => true,
+        'snapshot' => vttSyncV2ProjectSnapshotForUser($snapshot, ['user'=>$userId, 'isGM'=>false]),
+    ];
+}
+
 function vttSyncV2ProjectSnapshotForUser(array $snapshot, array $auth): array
 {
     if (!isset($snapshot['state']) || !is_array($snapshot['state'])) {

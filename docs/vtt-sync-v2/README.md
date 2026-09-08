@@ -7,6 +7,11 @@ state, combat turns, or rendering subscriptions.
 
 ## Decision
 
+Specific-player preview has a GM-only GET endpoint `api/v2/player-preview.php`.
+It validates a configured roster ID and projects a canonical snapshot with the
+normal player sanitizer, without touching presence, session identity or board
+state. It does not provide a write capability. The visual preview UI is pending.
+
 A GM-only `checkpoint.restoreLayout` authority now plans and atomically restores
 one scene's floors, canonical grid, fog, drawings/templates and existing token
 positions. Current token fields/resources, newer tokens, turns, routing and other
