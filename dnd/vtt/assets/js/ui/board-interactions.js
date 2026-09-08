@@ -1,5 +1,5 @@
 import {renderPersistentZones} from './persistent-zone-renderer.js';
-import {resolvePersistentZoneLevelId,doesPersistentZoneOverlapPlacement} from './persistent-zone-geometry.js';
+import {resolvePersistentZoneLevelId,doesPersistentZoneOverlapPlacement,doesPersistentZoneMovementEnter} from './persistent-zone-geometry.js';
 import {renderTokenAuras} from './token-aura-renderer.js';
 import {normalizeAutomationAuraId,createAutomationAuraId,cloneAutomationAuraRecord,getAutomationAuraRecords,getRenderableAurasForPlacement} from './token-aura-records.js';
 import {normalizePlacementForRender,toBoolean} from './token-render-normalize.js';
@@ -2602,15 +2602,8 @@ export function mountBoardInteractions(store, routes = {}) {
     };
     for (const zone of zones) {
       if (!zone || !Array.isArray(zone.triggers) || !zone.triggers.includes('onEnter')) continue;
-      const wasInside = isPlacementInsideZone(zone, fromFootprint);
-      const isInside = isPlacementInsideZone(zone, toFootprint);
-      if (!isInside) {
-        // Stepping fully out resets dedupe so re-entering later in the same
-        // round still won't refire — book rule is "first time per round".
-        // (Keep the entry recorded.)
-        continue;
-      }
-      if (wasInside) continue; // moved within the zone, not a new entry
+      if (!doesAutomationTargetFilterMatch(moverNow,zone.affects || 'creature')
+        || !doesPersistentZoneMovementEnter(zone,fromFootprint,toFootprint)) continue;
       if (zone.enteredThisRound.has(movingId)) continue; // already triggered this round
       zone.enteredThisRound.add(movingId);
       // Fire effects asynchronously to the mover only.

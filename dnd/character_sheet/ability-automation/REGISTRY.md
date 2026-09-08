@@ -575,3 +575,10 @@ zones by floor and clip lower-floor footprints through cutouts. GM overview stay
 unmasked. The preview has no zone-ending controls. Deleting a floor ends its zones
 atomically, including zones owned by casters on another floor, and preserves zones
 on surviving floors. Cleanup does not execute zone ticks or walking triggers.
+
+Persistent-zone onEnter now detects positive footprint overlap along a confirmed
+straight movement segment, including a long drag ending beyond the zone. Tangent
+contact and movement beginning inside do not count as entry. For a floor-changing
+move, destination entry is checked without assuming the intermediate floor path.
+Per-round entered-token bookkeeping remains client-local and is not yet safe
+across reload/client changes; canonical claim/recovery work is still pending.

@@ -1142,3 +1142,20 @@ A stronger recovery assertion exposed zones staying hidden when their first rend
 preceded image loading; the map-load callback now repaints them. Browser QA passed
 after that fix. Full suite before the focused map-load fix: 722 tests/92 files
 passed; the final browser journey verifies the added map-load path.
+
+### Zone entry when a drag passes through the footprint
+
+Zone onEnter previously checked only the movement endpoints, missing a long drag
+that crossed the zone and ended outside. The geometry helper now tests the moving
+footprint against each zone rectangle along the confirmed straight segment.
+Positive overlap counts; tangent/corner-only contact, an already-inside start and
+unrelated floors do not. Different-floor moves check destination entry without
+inventing an intermediate floor path.
+
+A real player drag through an isolated damaging zone now applies one canonical
+stamina reduction and stops beyond the zone. The reverse crossing in the same
+client/round does not repeat it. Unit tests cover crossings, direction reversal,
+edge/corner contact, floor boundaries and existing occupants. Full suite: 724
+tests/92 files passed. Per-round entry bookkeeping is still client-local: this
+milestone does not establish reload-safe or multi-client deduplication. Canonical
+entry claims/recovery remain the next reliability task.

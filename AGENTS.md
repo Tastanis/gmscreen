@@ -41,7 +41,10 @@ Preview has private zone/caster IDs and no End controls. Floor deletion removes
 zones on deleted floors from every owning placement in the same transaction,
 advancing each owner once. Zone-only mutations must not change linked player views.
 Repaint zones after map-image loading so recovery cannot leave retained zones hidden.
-Full zone trigger browser journeys still need completion.
+Zone onEnter uses swept footprint intersections for confirmed straight movement,
+so a long drag ending beyond a zone still enters it. Do not infer an intermediate
+floor path across a stairs/fall transition. A real player drag/damage journey is
+covered; reload-safe canonical per-round deduplication remains unfinished.
 Passive drawings call renderDrawings with an explicit drawingLayer and floor;
 never mount or replace the active drawing tool's shared state for preview.
 Template floor visibility and SVG cutout masks live in template-presentation.js.
