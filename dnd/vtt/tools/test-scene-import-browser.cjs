@@ -19,6 +19,7 @@ const duplicateMode=process.argv.includes('--duplicate');
       return page;
     }
     const gm=await client('GM'),pc=await client('cal');
+    await gm.evaluate(()=>{window.sceneImportNavigationMarker='same-page';});
     const snapshot=async()=>(await(await gm.request.get(origin+'/dnd/vtt/api/v2/snapshot.php')).json()).snapshot;
     const before=await snapshot();
     const packageData=(await(await gm.request.get(origin+'/dnd/vtt/api/v2/scene-export.php?sceneId='+manifest.test_scene_id)).json()).package;
@@ -55,11 +56,20 @@ const duplicateMode=process.argv.includes('--duplicate');
       if(requests===1){const response=await route.fetch(); accepted=await response.json(); assert.equal(response.status(),200,JSON.stringify(accepted)); await route.abort();}
       else await route.continue();
     });
+    let catalogFailure=true;
+    await gm.route(origin+'/dnd/vtt/api/scenes.php',async route=>{
+      if(requests===2 && catalogFailure && route.request().method()==='GET'){
+        catalogFailure=false; await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({success:false,error:'Test refresh failure'})});
+      }else await route.continue();
+    });
     await install.click();
     await gm.waitForFunction(()=>document.querySelector('[data-scene-import-status]')?.textContent.includes('Retry here'));
     assert.equal(await copyName.isDisabled(),true,'Retry cannot change an already accepted request.');
     await panel.getByRole('button',{name:'Retry import',exact:true}).click();
-    await gm.waitForFunction(()=>document.querySelector('[data-scene-import-status]')?.textContent.includes('Created “'));
+    await gm.waitForFunction(()=>document.querySelector('[data-scene-import-status]')?.textContent.includes('scene list could not be refreshed'));
+    assert.equal(await panel.getByRole('button',{name:'Open copy for GM',exact:true}).count(),0);
+    await panel.getByRole('button',{name:'Retry import',exact:true}).click();
+    await gm.waitForFunction(()=>document.querySelector('[data-scene-import-status]')?.textContent.includes('Ready to open.'));
     const id=accepted.scene.id; const after=await snapshot();
     assert.equal(accepted.scene.name,'Renamed reusable encounter');
     assert.equal(after.revision,before.revision+1,'Lost response and retry create only one event.');
@@ -73,14 +83,12 @@ const duplicateMode=process.argv.includes('--duplicate');
     const catalog=(await(await gm.request.get(origin+'/dnd/vtt/api/scenes.php')).json()).data;
     assert.equal(catalog.items.filter(s=>s.id===id).length,1);
     await gm.screenshot({path:'.playwright-mcp/scene-import-result.png'});
-    await panel.getByRole('button',{name:'Reload VTT',exact:true}).click();
-    await gm.waitForFunction(()=>document.querySelector('[data-connection-status]')?.textContent.includes('Connected'));
-    await gm.locator('[data-settings-launch="scenes"]').click();
-    const open=gm.locator(`[data-action="activate-scene"][data-scene-id="${id}"]`);
-    const group=gm.locator('.scene-group').filter({has:open});
-    if ((await group.getAttribute('class')).includes('is-collapsed')) await group.locator('[data-action="toggle-folder"]').click();
-    await open.click();
+    assert.equal(await gm.evaluate(()=>window.sceneImportNavigationMarker),'same-page','Import must not reload the browser.');
+    await panel.getByRole('button',{name:'Open copy for GM',exact:true}).click();
     await gm.waitForFunction(async sceneId=>(await(await fetch('/dnd/vtt/api/v2/snapshot.php')).json()).snapshot.state.routing.activeSceneId===sceneId,id);
+    const firstToken=Object.keys(after.state.placements[id])[0];
+    await gm.locator(`[data-placement-id="${firstToken}"]`).first().waitFor({state:'visible'});
+    assert.equal(await gm.evaluate(()=>window.sceneImportNavigationMarker),'same-page','Opening the copy must not reload the browser.');
     await gm.reload();
     await gm.waitForFunction(()=>document.querySelector('[data-connection-status]')?.textContent.includes('Connected'));
     const opened=await snapshot();
@@ -88,6 +96,6 @@ const duplicateMode=process.argv.includes('--duplicate');
     assert.deepEqual(opened.state.placements[id],after.state.placements[id],'Opening and reloading preserve copied tokens.');
     assert.deepEqual(opened.state.placements[manifest.test_scene_id],before.state.placements[manifest.test_scene_id]);
     assert.deepEqual(errors,[]);
-    console.log(`PASS: isolated scene ${duplicateMode?'duplication':'import'}, naming, validation and permissions, response-loss retry, one copy, fresh IDs, unchanged original/routing, catalog recovery, open and reload.`);
+    console.log(`PASS: isolated scene ${duplicateMode?'duplication':'import'}, naming, validation and permissions, lost-response/catalog-refresh retries, one copy, fresh IDs, unchanged original/routing, opening without reload, and later reload.`);
   }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

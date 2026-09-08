@@ -328,7 +328,7 @@ export function mountSettingsPanel(routes, store, user = {}) {
   });
 
   if (isGM) {
-    mountSceneImportPreview(panel.querySelector('[data-scene-import-preview]'));
+    mountSceneImportPreview(panel.querySelector('[data-scene-import-preview]'), storeApi);
     mountPlayerRosterEditor(panel.querySelector('[data-player-roster-editor]'));
     renderSceneList(routes, storeApi);
     mountSceneCheckpoints(panel.querySelector('[data-scene-checkpoints]'), storeApi);

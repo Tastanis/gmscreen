@@ -1254,6 +1254,15 @@ export function mountBoardInteractions(store, routes = {}) {
     },
   });
 
+  boardApi.confirmImportedScene = async (sceneId) => {
+    await tokenMovementRuntime.start();
+    await tokenMovementRuntime.recover();
+    const confirmed = tokenMovementRuntime.getConfirmedSnapshot()?.state ?? {};
+    if (!['placements', 'sceneConfig', 'drawings', 'templates'].every(domain => Object.hasOwn(confirmed[domain] ?? {}, sceneId))) {
+      throw Error('Scene saved, but its board data has not finished synchronizing.');
+    }
+  };
+
   requestedTestCoordinator = createRequestedTestCoordinator({
     enabled: requestedTestsV2Enabled,
     getCurrentUserId,

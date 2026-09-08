@@ -5,7 +5,7 @@ export async function previewSceneCopy(packageData) {
   await copyPreview(packageData);
 }
 
-export function mountSceneImportPreview(root) {
+export function mountSceneImportPreview(root, store) {
   if (!root) return;
   const input = root.querySelector('input[type="file"]');
   const status = root.querySelector('[data-scene-import-status]');
@@ -57,10 +57,21 @@ export function mountSceneImportPreview(root) {
             body:requestBody});
           const data = await response.json();
           if (!response.ok || !data.success) throw Error(data.error || `Import failed (${response.status}).`);
-          status.textContent=`Created “${data.scene.name}”. Reload the VTT to open the new scene.`;
+          status.textContent=`Created “${data.scene.name}”. Loading its board data…`;
+          if (typeof store?.confirmImportedScene !== 'function') throw Error('Scene saved, but the board connection is not ready.');
+          await store.confirmImportedScene(data.scene.id);
+          const catalogResponse = await fetch('/dnd/vtt/api/scenes.php',{credentials:'same-origin',cache:'no-store'});
+          const catalog = await catalogResponse.json();
+          if (!catalogResponse.ok || !catalog.success || !catalog.data?.items?.some(scene=>scene.id===data.scene.id)) throw Error('Scene saved, but the scene list could not be refreshed.');
+          store.updateState(draft=>{draft.scenes=catalog.data;});
+          status.textContent=`Created “${data.scene.name}”. Ready to open. Everyone remains on their current scene.`;
           title.textContent=data.scene.name;
           result.replaceChildren(title,counts);
-          const reload = document.createElement('button'); reload.type='button'; reload.className='btn'; reload.textContent='Reload VTT'; reload.addEventListener('click',()=>location.reload()); result.append(reload);
+          const open = document.createElement('button'); open.type='button'; open.className='btn'; open.textContent='Open copy for GM';
+          open.addEventListener('click',()=>{
+            const target=Array.from(document.querySelectorAll('[data-action="activate-scene"]')).find(button=>button.dataset.sceneId===data.scene.id);
+            if(target) target.click(); else status.textContent='The saved scene is no longer in the scene list.';
+          }); result.append(open);
           status.scrollIntoView({block:'center'});
         } catch(error) {
           status.textContent=`${error.message || 'Import response was interrupted.'} Retry here to finish the same import without creating a duplicate.`;

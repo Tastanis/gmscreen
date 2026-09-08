@@ -771,3 +771,18 @@ the copy, loses the first accepted response, retries, verifies one catalog entry
 fresh IDs, checks unchanged source/routing, then opens and reloads the copy. Both
 journeys and export/preview pass. All 13 focused scene-manager/copied-stair tests pass.
 Private encounter preparation and reload-free catalog integration remain pending.
+
+### Open imported scenes without reloading
+
+Import/duplication now waits for the existing Sync V2 runtime to confirm all four
+new scene domains, refreshes catalog metadata, and offers Open copy for GM directly.
+This reuses the scene manager's existing activation action. It does not switch the
+scene during import or introduce a board snapshot writer/subscriber. Failed recovery
+or catalog refresh retains the same submitted request for safe retry.
+
+Browser tests in both duplication and file-import modes lose the accepted response,
+fail the first catalog refresh, retry to one copy, open the copied token without
+navigating/reloading, then verify a later reload. They preserve original scene data
+and initial routing. The success UI is visually checked at 1280×720. Private encounter
+preparation remains pending.
+All 702 tests across 83 files pass after this integration.

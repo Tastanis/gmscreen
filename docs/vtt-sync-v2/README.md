@@ -17,9 +17,11 @@ Player event delivery applies the same hidden-token/floor projection as snapshot
 The reducer installs only a new scene and emits focused domain change flags.
 The GM HTTP/UI importer is now exposed via `api/v2/scene-import.php` after store-level
 file validation and explicit player-browsing acknowledgment. It creates a browsable
-scene without activation; the UI retains operation IDs on retries and offers a reload
-after success. Browser QA covers a lost accepted response, retry, open and reload.
-Private encounter drafts and reload-free catalog integration remain future work.
+scene without activation; the UI retains operation IDs on retries. The runtime's
+recovery path must confirm all four imported domains before local catalog refresh
+and Open copy for GM become available. Failure retains the same request for retry.
+Browser QA also covers failed catalog refresh and opening tokens without navigation.
+Private encounter drafts remain future work.
 
 Keep the VTT's game features, assets, token library, automation, character
 sheets, and visual design. Replace the multiplayer synchronization spine in

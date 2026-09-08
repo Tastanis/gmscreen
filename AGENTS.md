@@ -18,6 +18,9 @@ this operation as a private encounter draft. Retain the same operation ID on ret
 The Duplicate scene control exports directly into the same import preview. Keep
 the submitted request body immutable through retries; renaming is allowed before
 the first request, not after an uncertain accepted response.
+Import completion calls the existing Sync V2 recovery path and checks all four
+new scene domains before refreshing local catalog metadata or offering Open copy
+for GM. Do not expose an empty local scene before canonical recovery finishes.
 
 ## Version System
 
