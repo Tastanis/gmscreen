@@ -18,9 +18,9 @@ const origin='http://127.0.0.1:8129';
     const [gm,pc]=pages,sceneId=manifest.test_scene_id;
     const snapshot=async()=>(await(await gm.request.get(origin+'/dnd/vtt/api/v2/snapshot.php')).json()).snapshot;
     let seq=0;
-    async function command(type,payload) {
+    async function command(type,payload,entityId=null) {
       const s=await snapshot();const response=await gm.request.post(origin+'/dnd/vtt/api/v2/commands.php',{data:{
-        type,payload,sceneId,baseRevision:s.revision,entityRevision:s.state.sceneConfig[sceneId]._revision,
+        type,payload,sceneId,entityId,baseRevision:s.revision,entityRevision:entityId ? (s.state.drawings?.[sceneId]?.[entityId]?._entityRevision ?? 0) : s.state.sceneConfig[sceneId]._revision,
         operationId:'preview-token-'+Date.now()+'-'+ ++seq,
       }});assert.equal(response.status(),200,await response.text());
     }
@@ -37,6 +37,10 @@ const origin='http://127.0.0.1:8129';
     }}))});
     await command('fog.set',{fogOfWar:{byLevel:{'test-upper':{enabled:true,revealedCells:{'6,5':true,'8,5':true}}}}});
     await command('level.user.set',{userId:'sharon',entry:{levelId:'test-upper',source:'manual',followToken:false}});
+    for(const [id,levelId] of [['preview-upper-line','test-upper'],['preview-base-line','level-0']]) {
+      await command('drawing.upsert',{drawing:{id,levelId,color:'#4466ff',strokeWidth:4,
+        points:[{x:650.5,y:600},{x:710,y:625.25},{x:780,y:610}]}},id);
+    }
     await pc.waitForFunction(()=>document.querySelector('[data-map-level-indicator-value]')?.textContent==='Test balcony');
     await pc.locator('#vtt-token-layer [data-placement-id="preview-open"]').waitFor();
     const before=await snapshot(),writes=[];
@@ -60,12 +64,28 @@ const origin='http://127.0.0.1:8129';
     assert.match(preview.find(t=>t.id==='preview-upper').transform,/832px/,'8.5 cells plus 288px padding must remain fractional');
     assert.equal(await dialog.locator('[data-placement-id]').count(),0);
     assert.equal(await dialog.locator('.vtt-player-preview-map').evaluate(node=>node.inert),true);
+    await pc.locator('#vtt-drawing-layer [data-drawing-id="preview-upper-line"]').waitFor();
+    const paths=nodes=>nodes.map(node=>({id:node.dataset.previewDrawingId||node.dataset.drawingId,
+      d:node.getAttribute('d'),stroke:node.getAttribute('stroke'),width:node.getAttribute('stroke-width')}));
+    const actualPaths=await pc.locator('#vtt-drawing-layer path[data-drawing-id]').evaluateAll(paths);
+    assert.deepEqual(await dialog.locator('path[data-preview-drawing-id]').evaluateAll(paths),actualPaths);
+    assert.deepEqual(actualPaths.map(path=>path.id),['preview-upper-line']);
+    assert.equal(await dialog.locator('[data-drawing-id]').count(),0);
+    const zoom=()=>dialog.locator('.vtt-player-preview-map').evaluate(node=>Number(node.style.transform.match(/scale\(([^)]+)\)/)[1]));
+    const fitted=await zoom();
+    await dialog.getByRole('button',{name:'Zoom in preview'}).click();
+    assert.ok(Math.abs(await zoom()-fitted*1.5)<0.00001);
+    await dialog.getByRole('button',{name:'Zoom out preview'}).click();
+    assert.ok(Math.abs(await zoom()-fitted)<0.00001);
+    await dialog.getByRole('button',{name:'Zoom in preview'}).click();
+    await dialog.getByRole('button',{name:'Fit preview'}).click();
+    assert.ok(Math.abs(await zoom()-fitted)<0.00001);
     await dialog.screenshot({path:'.playwright-mcp/player-token-preview.png'});
     await dialog.getByRole('button',{name:'Close preview'}).click();
     await pc.reload();
     await pc.waitForFunction(()=>document.querySelector('[data-connection-status]')?.textContent.includes('Connected'));
     assert.deepEqual(await pc.locator('#vtt-token-layer > .vtt-token').evaluateAll(describe),real,'Reload keeps the same canonical geometry');
     assert.deepEqual(await snapshot(),before);assert.deepEqual(writes,[]);assert.deepEqual(errors,[]);
-    console.log('PASS: player preview matches live token IDs, fractional geometry, images, stack order and floor badges; hidden/fogged/blocked tokens absent; no writes.');
+    console.log('PASS: preview token geometry/visibility and drawing paths match the player board; local zoom/Fit and reload preserve canonical state; no preview writes.');
   } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

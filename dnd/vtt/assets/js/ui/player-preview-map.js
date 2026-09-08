@@ -3,6 +3,7 @@ import {restrictTokensToPlayerView} from '../state/store.js';
 import {createMapLevelRenderer} from './map-level-renderer.js';
 import {renderFogSurface} from './fog-of-war.js';
 import {renderPlayerPreviewTokens} from './player-preview-tokens.js';
+import {renderDrawings} from './drawing-tool.js';
 
 export function buildPlayerPreviewState(preview, tokens) {
   const canonical=preview.snapshot.state,sceneId=canonical.routing?.activeSceneId;
@@ -52,6 +53,15 @@ export async function createPlayerPreviewMap(preview, {levelId, tokens} = {}) {
   const fog=document.createElement('canvas');fog.className='vtt-player-preview-map__fog';stage.append(fog);
   const state=buildPlayerPreviewState(preview,tokens);
   renderFogSurface({state,canvas:fog,view,sceneId,levelId,gmViewing:false});
+  const drawings=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  drawings.classList.add('vtt-board__drawings');drawings.setAttribute('aria-hidden','true');
+  drawings.setAttribute('width',String(width));drawings.setAttribute('height',String(height));
+  drawings.setAttribute('viewBox',`0 0 ${width} ${height}`);
+  renderDrawings({drawingLayer:drawings,drawings:Object.values(canonical.drawings?.[sceneId] ?? {}),levelId});
+  for(const path of drawings.querySelectorAll('[data-drawing-id]')) {
+    path.dataset.previewDrawingId=path.dataset.drawingId;delete path.dataset.drawingId;
+  }
+  stage.append(drawings);
   renderPlayerPreviewTokens(stage,state,view,levelId);
   return {stage,width,height};
 }

@@ -41,7 +41,7 @@ User authorized implementing the September 7 product audit, updating/running the
 ## Recovery and preparation
 
 - [ ] Specific-player preview and useful connection status.
-  - Server-check-based connection status and manual reconciliation are implemented. GM Scenes exposes player diagnostics and an independent map/grid/floor/cutout/fog/token preview. Token status overlays, drawing and template preview layers remain pending.
+  - Server-check-based connection status and manual reconciliation are implemented. GM Scenes exposes player diagnostics and an independent map/grid/floor/cutout/fog/token/drawing preview with local zoom/Fit. Token status overlays and template preview layers remain pending.
 - [x] Named encounter checkpoints, scoped restore, scene duplication/export.
   - GM-only checkpoints expose reviewed atomic position or layout restoration. Layout restores floors, grid, fog, drawings/templates and existing-token positions while preserving current resources and newer tokens. Scene JSON export/import and duplication preserve board geometry and links, survive retries, and open without reload. Character sheets and base-map/catalog metadata are outside checkpoint restore scope.
 - [ ] Encounter presets, favorites and recent assets.
@@ -933,3 +933,17 @@ IDs, dimensions, fractional transforms, images, stacking and direction badges ma
 The same geometry survives player reload. No preview board commands or canonical
 changes occur; the screenshot was inspected. A fresh three-client stairs/fall/
 reload/undo regression also passes. All 708 tests across 86 files pass.
+
+### Drawing preview and local inspection zoom
+
+The passive SVG layer calls the existing drawing renderer with explicit layer,
+selected floor and captured drawings. It preserves the exact path/color/width
+rules without mounting drawing tools or touching their shared state. Preview paths
+use separate identifiers. Native scrolling, zoom in/out and Fit make small tokens
+inspectable; zoom retains the viewport center and is local to the modal.
+
+The browser journey compares real player and preview path data, color and stroke
+width, verifies that a drawing on the other floor is absent, exercises zoom in/out
+and Fit, and rechecks unchanged canonical state and zero preview commands. Token
+parity and player reload checks pass in the same journey. The resulting dialog was
+visually inspected. Templates and token status overlays remain required work.

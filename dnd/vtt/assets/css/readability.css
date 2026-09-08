@@ -72,6 +72,9 @@ body.vtt-body .vtt-settings-panel :is(button, input, select, summary):focus-visi
 .vtt-player-preview-dialog { padding: 16px; max-width: calc(100vw - 32px); max-height: calc(100vh - 32px); background: var(--vtt-panel-bg, #242424); color: inherit; overflow: auto; }
 .vtt-player-preview-dialog h2 { margin: 12px 0 8px; }
 .vtt-player-preview-dialog p { margin-bottom: 12px; }
+.vtt-player-preview-controls { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.vtt-player-preview-controls button { min-width: 40px; min-height: 40px; }
+.vtt-player-preview-viewport { max-width: calc(100vw - 80px); max-height: calc(100vh - 290px); overflow: auto; }
 .vtt-player-preview-dialog::backdrop { background: #000b; }
 .vtt-player-preview-map { position: relative; transform-origin: top left; pointer-events: none; }
 .vtt-player-preview-map > img { width: 100%; height: 100%; display: block; }

@@ -16,7 +16,9 @@ association. Its map/fog dialog renders grid, floor maps/cutouts and player fog 
 an independent passive surface. Tokens now use shared floor/fog visibility,
 stacking, transforms and direction badges. Fractional render positions survive
 recovery/reload; backdrop padding remains part of the coordinate origin. Preview
-token status overlays, drawings and templates remain pending.
+token status overlays and templates remain pending. Drawing paths reuse the normal
+renderer with an explicit private SVG layer and selected floor. Local preview zoom
+and Fit never write canonical camera, scene or floor state.
 
 A GM-only `checkpoint.restoreLayout` authority now plans and atomically restores
 one scene's floors, canonical grid, fog, drawings/templates and existing token

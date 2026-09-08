@@ -30,22 +30,46 @@ export function mountPlayerPreview(root, store) {
   const close=document.createElement('button');close.type='button';close.className='btn';close.textContent='Close preview';
   const heading=document.createElement('h2'),note=document.createElement('p'),surface=document.createElement('div');
   surface.className='vtt-player-preview-viewport';
-  note.textContent='Read-only map, floors, fog and tokens. Token status overlays, drawings and templates are not included yet.';
-  dialog.append(close,heading,note,surface);document.body.append(dialog);
+  const controls=document.createElement('div');controls.className='vtt-player-preview-controls';
+  const zoomOut=document.createElement('button'),zoomIn=document.createElement('button'),fit=document.createElement('button');
+  for(const button of [zoomOut,zoomIn,fit]){button.type='button';button.className='btn';}
+  zoomOut.textContent='−';zoomOut.setAttribute('aria-label','Zoom out preview');
+  zoomIn.textContent='+';zoomIn.setAttribute('aria-label','Zoom in preview');fit.textContent='Fit preview';
+  const zoomLabel=document.createElement('span');zoomLabel.setAttribute('aria-live','polite');
+  controls.append(zoomOut,zoomLabel,zoomIn,fit);
+  note.textContent='Read-only map, floors, fog, tokens and drawings. Token status overlays and templates are not included yet.';
+  dialog.append(close,heading,note,controls,surface);document.body.append(dialog);
   let mapSequence=0;
+  let camera=null;
+  function updateZoomButtons(){for(const button of [zoomOut,zoomIn,fit])button.disabled=!camera;zoomLabel.textContent=camera?`${Math.round(camera.scale*100)}%`:'';}
+  function setScale(scale,center=true) {
+    if(!camera)return;
+    const x=(surface.scrollLeft+surface.clientWidth/2)/camera.scale;
+    const y=(surface.scrollTop+surface.clientHeight/2)/camera.scale;
+    camera.scale=Math.max(0.01,Math.min(4,scale));
+    camera.stage.style.transform=`scale(${camera.scale})`;
+    camera.frame.style.width=camera.width*camera.scale+'px';camera.frame.style.height=camera.height*camera.scale+'px';
+    if(center){surface.scrollLeft=x*camera.scale-surface.clientWidth/2;surface.scrollTop=y*camera.scale-surface.clientHeight/2;}
+    else{surface.scrollLeft=0;surface.scrollTop=0;}
+    updateZoomButtons();
+  }
+  const fitScale=()=>camera?Math.min(1,Math.max(100,window.innerWidth-80)/camera.width,Math.max(100,window.innerHeight-290)/camera.height):1;
+  zoomOut.addEventListener('click',()=>camera&&setScale(camera.scale/1.5));
+  zoomIn.addEventListener('click',()=>camera&&setScale(camera.scale*1.5));
+  fit.addEventListener('click',()=>setScale(fitScale(),false));
+  updateZoomButtons();
   close.addEventListener('click',()=>dialog.close());
-  dialog.addEventListener('close',()=>{mapSequence++;surface.replaceChildren();});
+  dialog.addEventListener('close',()=>{mapSequence++;camera=null;updateZoomButtons();surface.replaceChildren();});
   openMap.addEventListener('click',async()=>{
     if(!captured)return;
     const current=++mapSequence,preview=captured,view=describePlayerPreview(preview);
     heading.textContent=`${preview.userId}: ${view.floorName} · revision ${view.revision}`;
-    surface.textContent='Loading map…';dialog.showModal();
+    camera=null;updateZoomButtons();surface.textContent='Loading map…';dialog.showModal();
     try {
       const {stage,width,height}=await createPlayerPreviewMap(preview,{levelId:view.levelId,tokens:store.getState?.().tokens});
       if(current!==mapSequence || !dialog.open)return;
-      const scale=Math.min(1,(window.innerWidth-80)/width,(window.innerHeight-210)/height);
-      const frame=document.createElement('div');frame.style.width=width*scale+'px';frame.style.height=height*scale+'px';
-      stage.style.transform=`scale(${scale})`;frame.append(stage);surface.replaceChildren(frame);
+      const frame=document.createElement('div');frame.style.overflow='hidden';frame.append(stage);surface.replaceChildren(frame);
+      camera={stage,frame,width,height,scale:1};setScale(fitScale(),false);
     } catch(error){if(current===mapSequence)surface.textContent=error.message;}
   });
   async function request(url) {
