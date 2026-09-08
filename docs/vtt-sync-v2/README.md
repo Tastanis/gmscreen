@@ -1249,3 +1249,10 @@ for confirmed insufficiency, preserving stamina and resources. The client waits
 for a bounded acknowledgment, invalidates its cached sheet and rejects uncertain
 saves without retrying. Recovery-value calculation remains the existing client
 logic; spending and the subsequent healing action are not one transaction.
+
+Automation sheet lookup, PC classification, character-card context and surge gain
+now use getCharacterSheetProfileIdForPlacement. A valid saved profile takes
+precedence over the token display name; the existing name-alias fallback remains
+for older unlinked tokens. Renaming a linked token cannot redirect these paths to
+another character with the same display name. This does not change roster
+permissions or infer a new owner from the name.

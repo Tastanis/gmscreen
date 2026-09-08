@@ -5224,7 +5224,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function isPlayerCharacterPlacement(placement) {
-    const profileId = placement ? matchProfileByName(tokenLabel(placement)) : '';
+    const profileId = placement ? getCharacterSheetProfileIdForPlacement(placement) : '';
     return Boolean(profileId && PLAYER_CHARACTER_USER_IDS.includes(profileId));
   }
 
@@ -7273,7 +7273,7 @@ export function mountBoardInteractions(store, routes = {}) {
       return { characterId: null, token: null };
     }
 
-    const characterId = matchProfileByName(tokenLabel(placement));
+    const characterId = getCharacterSheetProfileIdForPlacement(placement);
     if (!characterId || !PLAYER_CHARACTER_USER_IDS.includes(characterId)) {
       return { characterId: null, token: null };
     }
@@ -16566,7 +16566,7 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
     const placement = getPlacementFromStore(placementId);
-    const profileId = placement ? matchProfileByName(tokenLabel(placement)) : '';
+    const profileId = placement ? getCharacterSheetProfileIdForPlacement(placement) : '';
     if (!profileId || !PLAYER_CHARACTER_USER_IDS.includes(profileId)) {
       resolve?.({ skipped: true, reason: 'not-pc' });
       return;
@@ -16887,7 +16887,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!placement) {
       return null;
     }
-    const profileId = matchProfileByName(tokenLabel(placement));
+    const profileId = getCharacterSheetProfileIdForPlacement(placement);
     if (!profileId || !PLAYER_CHARACTER_USER_IDS.includes(profileId)) {
       return null;
     }

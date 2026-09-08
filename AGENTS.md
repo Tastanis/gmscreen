@@ -342,3 +342,6 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 
 - The recovery-spend hook deducts through locked sync-vitals spendRecoveries.
   Never persist a cached whole character sheet to spend recoveries.
+
+- Resolve sheet-backed token behavior through the saved character profile before
+  using display-name aliases; renames must not redirect recovery or surge writes.

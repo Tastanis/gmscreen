@@ -1593,3 +1593,18 @@ produce spends of 0 and 1, with zero remaining after reload. Service tests cover
 explicit acknowledgment, failure, timeout and no replay. Full suite: 752 tests/99
 files passed. Durable spend receipts, combined recovery/healing authority and
 other character-card reconciliation remain outstanding.
+
+### Preserve character links across token renames
+
+Automation sheet lookup, PC classification, character-card context and surge gain
+now use getCharacterSheetProfileIdForPlacement. A valid saved profile takes
+precedence over the token display name; the existing name-alias fallback remains
+for older unlinked tokens. Renaming a linked token cannot redirect these paths to
+another character with the same display name. This does not change roster
+permissions or infer a new owner from the name.
+
+The browser renames the Cal-linked token to Sharon, reloads and exercises recovery
+spending and surge gain. Both affect Cal while Sharon remains unchanged; recovery
+requests carry character=cal. Full suite: 752 tests/99 files passed. This addresses
+the four traced name-only paths, not a complete audit of every legacy character
+lookup or unlinked-token ambiguity.
