@@ -1,3 +1,6 @@
+import {renderTokenAuras} from './token-aura-renderer.js';
+import {normalizeAutomationAuraId,createAutomationAuraId,cloneAutomationAuraRecord,getAutomationAuraRecords,getRenderableAurasForPlacement} from './token-aura-records.js';
+import {normalizePlacementForRender,toBoolean} from './token-render-normalize.js';
 import {normalizePlacementCondition,ensurePlacementCondition,normalizePlacementConditions,ensurePlacementConditions,buildConditionKey,normalizeConditionDurationValue} from './token-conditions.js';
 import {syncTokenTeamAffiliation,paintTokenMarkIndicator,paintTokenConditionLabel} from './token-status-presentation.js';
 import {normalizeHitPointsValue,normalizePlacementHitPoints,parseHitPointsNumber,calculateHitPointsFillPercentage,formatHitPointsDisplayParts,syncTokenHitPoints,shouldRevealPlacementHitPointValues} from './token-hit-points.js';
@@ -3604,84 +3607,15 @@ export function mountBoardInteractions(store, routes = {}) {
 
   // ---------- Token-attached automation auras ----------
 
-  function normalizeAutomationAuraId(value) {
-    return String(value || '').trim();
-  }
 
-  function createAutomationAuraId(automation = {}, payload = {}) {
-    const explicit = normalizeAutomationAuraId(payload.auraId || payload.id || automation.id);
-    if (explicit) return explicit;
-    const abilityId = normalizeAutomationAuraId(automation.abilityId);
-    const sourceId = normalizeAutomationAuraId(automation.sourceId || payload.placementId);
-    const abilityName = normalizeAutomationAuraId(automation.abilityName || 'Aura')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-    return [sourceId, abilityId || abilityName || 'aura'].filter(Boolean).join(':');
-  }
 
-  function cloneAutomationAuraRecord(record) {
-    if (!record || typeof record !== 'object') return null;
-    const automation = record.automation && typeof record.automation === 'object'
-      ? record.automation
-      : null;
-    if (!automation) return null;
-    const id = normalizeAutomationAuraId(record.id) || createAutomationAuraId(automation);
-    return {
-      id,
-      enabled: record.enabled !== false,
-      radius: Math.max(1, Math.min(20, Number.parseInt(record.radius, 10) || 1)),
-      color: typeof record.color === 'string' && record.color ? record.color : '#3b82f6',
-      automation,
-      legacy: Boolean(record.legacy),
-    };
-  }
 
-  function getAutomationAuraRecords(placement, { includeDisabled = false } = {}) {
-    if (!placement || typeof placement !== 'object') return [];
-    const records = [];
-    const manualAura = placement.aura && typeof placement.aura === 'object' ? placement.aura : null;
-    if (manualAura?.automation && (includeDisabled || manualAura.enabled !== false)) {
-      const legacyRecord = cloneAutomationAuraRecord({
-        id: '__legacy__',
-        enabled: manualAura.enabled !== false,
-        radius: manualAura.radius,
-        color: manualAura.color,
-        automation: manualAura.automation,
-        legacy: true,
-      });
-      if (legacyRecord) records.push(legacyRecord);
-    }
-    const stored = Array.isArray(placement.automationAuras) ? placement.automationAuras : [];
-    stored.forEach((record) => {
-      if (!includeDisabled && record?.enabled === false) return;
-      const normalized = cloneAutomationAuraRecord(record);
-      if (normalized) records.push(normalized);
-    });
-    return records;
-  }
 
-  function getRenderableAurasForPlacement(placement) {
-    if (!placement || typeof placement !== 'object') return [];
-    const result = [];
-    const manualAura = placement.aura && typeof placement.aura === 'object' ? placement.aura : null;
-    if (manualAura?.enabled) {
-      result.push({
-        id: 'manual',
-        radius: manualAura.radius,
-        color: manualAura.color || '#3b82f6',
-      });
-    }
-    getAutomationAuraRecords(placement).forEach((record) => {
-      if (record.legacy && manualAura?.enabled) return;
-      result.push({
-        id: `automation:${record.id}`,
-        radius: record.radius,
-        color: record.color,
-      });
-    });
-    return result;
-  }
+
+
+
+
+
 
   function renderAutomationAuraSettingsList(menu, placement) {
     const list = menu?.automationAuraList;
@@ -9000,6 +8934,15 @@ export function mountBoardInteractions(store, routes = {}) {
     return Math.min(Math.max(value, min), max);
   }
 
+  function renderAuras(state = {}, layer, view) {
+    const gmViewing = isGmUser();
+    const sceneId = state?.boardState?.activeSceneId ?? null;
+    const levelId = sceneId ? getViewerLevelIdForCurrentUser(state, sceneId) : null;
+    renderTokenAuras({placements:getActiveScenePlacements(state),layer,view,gmViewing,
+      tokenLevelState:getActiveSceneTokenLevelState(state),auraViewerLevelId:levelId,
+      isCellFogged:gmViewing ? null : createFogChecker(state,levelId)});
+  }
+
   function renderTokens(state = {}, layer, view, options = {}) {
     recordSyncDiagnostic('tokenLayerReconciliations', {
       sceneId: state?.boardState?.activeSceneId ?? null,
@@ -9308,155 +9251,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
-  function renderAuras(state = {}, layer, view) {
-    if (!layer) {
-      return;
-    }
 
-    const gridSize = Math.max(8, Number.isFinite(view?.gridSize) ? view.gridSize : 64);
-    const offsets = view?.gridOffsets ?? {};
-    const leftOffset = Number.isFinite(offsets.left) ? offsets.left : 0;
-    const topOffset = Number.isFinite(offsets.top) ? offsets.top : 0;
-    const placements = view?.mapLoaded ? getActiveScenePlacements(state) : [];
-
-    // Build set of existing aura elements by placement ID + aura ID.
-    const existingAuras = new Map();
-    Array.from(layer.children).forEach((child) => {
-      if (!(child instanceof HTMLElement)) {
-        layer.removeChild(child);
-        return;
-      }
-      const id = child.dataset?.placementId;
-      const auraId = child.dataset?.auraId || 'manual';
-      if (id) {
-        existingAuras.set(`${id}:${auraId}`, child);
-      } else {
-        layer.removeChild(child);
-      }
-    });
-
-    let auraCount = 0;
-
-    const gmViewing = isGmUser();
-    const tokenLevelState = getActiveSceneTokenLevelState(state);
-    const auraSceneKey = state?.boardState?.activeSceneId ?? null;
-    const auraViewerLevelId = auraSceneKey ? getViewerLevelIdForCurrentUser(state, auraSceneKey) : null;
-    const isCellFogged = gmViewing ? null : createFogChecker(state, auraViewerLevelId);
-
-    placements.forEach((placement) => {
-      const normalized = normalizePlacementForRender(placement);
-      if (!normalized) {
-        return;
-      }
-
-      // Skip hidden tokens for non-GM
-      if (!gmViewing && normalized.hidden) {
-        return;
-      }
-
-      if (
-        !gmViewing &&
-        !getTokenLevelPresentation(
-          {
-            ...placement,
-            column: normalized.column,
-            row: normalized.row,
-            width: normalized.width,
-            height: normalized.height,
-          },
-          tokenLevelState,
-          {
-            viewerLevelId: auraViewerLevelId,
-            gmViewing: false,
-            mode: 'vision',
-          },
-        ).visible
-      ) {
-        return;
-      }
-
-      // Check fog: if the token is fully fogged, skip its aura too
-      if (isCellFogged) {
-        let allFogged = true;
-        for (let dc = 0; dc < normalized.width && allFogged; dc++) {
-          for (let dr = 0; dr < normalized.height && allFogged; dr++) {
-            if (!isCellFogged(normalized.column + dc, normalized.row + dr)) {
-              allFogged = false;
-            }
-          }
-        }
-        if (allFogged) {
-          return;
-        }
-      }
-
-      const auras = getRenderableAurasForPlacement(placement);
-      if (!auras.length) {
-        return;
-      }
-
-      auras.forEach((aura) => {
-        const auraRadius = Math.max(1, Math.min(20, parseInt(aura.radius, 10) || 1));
-        const auraColor = typeof aura.color === 'string' ? aura.color : '#3b82f6';
-        const auraKey = `${normalized.id}:${aura.id || 'manual'}`;
-
-        // Calculate aura dimensions.
-        // Draw Steel uses square (Chebyshev) distance — diagonals count as 1 — so
-        // an aura of radius N extends N squares beyond EVERY edge of the token,
-        // including diagonally. For a WxH token that is a (W+2N) x (H+2N) square
-        // block, computed per-axis (not a circle).
-        const tokenW = normalized.width;
-        const tokenH = normalized.height;
-        const auraWidth = (tokenW + auraRadius * 2) * gridSize;
-        const auraHeight = (tokenH + auraRadius * 2) * gridSize;
-
-        let auraEl = existingAuras.get(auraKey);
-        let isNew = false;
-        if (auraEl) {
-          existingAuras.delete(auraKey);
-        } else {
-          auraEl = document.createElement('div');
-          auraEl.className = 'vtt-token-aura';
-          auraEl.dataset.placementId = normalized.id;
-          auraEl.dataset.auraId = aura.id || 'manual';
-          isNew = true;
-        }
-
-        auraEl.style.width = `${auraWidth}px`;
-        auraEl.style.height = `${auraHeight}px`;
-
-        // Memoize fill: only recompute if color changed. Flat fill + inset border
-        // so the square reads as a discrete grid block rather than a soft circle.
-        const gradientKey = auraColor;
-        if (auraEl._lastGradientKey !== gradientKey) {
-          const r = parseInt(auraColor.slice(1, 3), 16) || 0;
-          const g = parseInt(auraColor.slice(3, 5), 16) || 0;
-          const b = parseInt(auraColor.slice(5, 7), 16) || 0;
-          auraEl.style.background = `rgba(${r},${g},${b},0.18)`;
-          auraEl.style.boxShadow = `inset 0 0 0 2px rgba(${r},${g},${b},0.45)`;
-          auraEl._lastGradientKey = gradientKey;
-        }
-
-        // Position from the token's top-left, pulled back auraRadius squares on
-        // both axes so the square is centered on the token's footprint.
-        const auraLeft = leftOffset + (normalized.column - auraRadius) * gridSize;
-        const auraTop = topOffset + (normalized.row - auraRadius) * gridSize;
-        auraEl.style.transform = `translate3d(${auraLeft}px, ${auraTop}px, 0)`;
-
-        if (isNew) {
-          layer.appendChild(auraEl);
-        }
-        auraCount += 1;
-      });
-    });
-
-    // Remove orphaned aura elements no longer in state
-    existingAuras.forEach((node) => {
-      node.remove();
-    });
-
-    layer.hidden = auraCount === 0;
-  }
 
   function applyTokenMapLevelVisibilityMask(token, visibility, { column, row, width, height, gridSize } = {}) {
     clearTokenMapLevelVisibilityMask(token);
@@ -14816,95 +14611,7 @@ export function mountBoardInteractions(store, routes = {}) {
     return Array.isArray(scenePlacements) ? scenePlacements : [];
   }
 
-  function normalizePlacementForRender(placement) {
-    if (!placement || typeof placement !== 'object') {
-      return null;
-    }
 
-    const id = typeof placement.id === 'string' ? placement.id : null;
-    if (!id) {
-      return null;
-    }
-
-    const {column,row,width,height} = normalizeTokenRenderGeometry(placement);
-    const name = typeof placement.name === 'string' ? placement.name : '';
-    const imageUrl = typeof placement.imageUrl === 'string' ? placement.imageUrl : '';
-    const levelId = typeof placement.levelId === 'string' && placement.levelId.trim()
-      ? placement.levelId.trim()
-      : null;
-    const hp = normalizePlacementHitPoints(
-      placement.hp ??
-        placement.hitPoints ??
-        placement?.overlays?.hitPoints ??
-        placement?.overlays?.hitPoints?.value ??
-        placement?.stats?.hp ??
-        null
-    );
-    const showHp = Boolean(placement.showHp ?? placement.showHitPoints ?? placement?.overlays?.hitPoints?.visible ?? false);
-    const showTriggeredAction = Boolean(
-      placement.showTriggeredAction ?? placement?.overlays?.triggeredAction?.visible ?? false
-    );
-    const triggeredActionReady =
-      placement.triggeredActionReady ?? placement?.overlays?.triggeredAction?.ready ?? true;
-    const mainActionUsedThisTurn = Boolean(placement.mainActionUsedThisTurn);
-    const maneuverUsedThisTurn = Boolean(placement.maneuverUsedThisTurn);
-    const readyTriggerAbilities = Array.isArray(placement.readyTriggerAbilities)
-      ? placement.readyTriggerAbilities.filter((id) => typeof id === 'string' && id.length)
-      : [];
-    const hasReadyTrigger = Boolean(placement.hasReadyTrigger || readyTriggerAbilities.length);
-    const conditions = ensurePlacementConditions(
-      placement?.conditions ??
-        placement.condition ??
-        placement?.status ??
-        placement?.overlays?.condition ??
-        placement?.overlays?.conditions ??
-        null
-    );
-    const condition = conditions[0] ?? null;
-    const team = normalizeCombatTeam(
-      placement.combatTeam ??
-        placement.team ??
-        placement?.tags?.team ??
-        placement?.faction ??
-        placement?.alignment ??
-        null
-    );
-    const hidden = toBoolean(
-      placement.hidden ?? placement.isHidden ?? placement?.flags?.hidden ?? false,
-      false
-    );
-    const marks = placement.marks && typeof placement.marks === 'object' && !Array.isArray(placement.marks)
-      ? JSON.parse(JSON.stringify(placement.marks))
-      : {};
-    const activeMarks = placement.activeMarks && typeof placement.activeMarks === 'object' && !Array.isArray(placement.activeMarks)
-      ? JSON.parse(JSON.stringify(placement.activeMarks))
-      : {};
-
-    return {
-      id,
-      column,
-      row,
-      width,
-      height,
-      name,
-      imageUrl,
-      levelId,
-      hp,
-      showHp,
-      showTriggeredAction,
-      triggeredActionReady: triggeredActionReady !== false,
-      mainActionUsedThisTurn,
-      maneuverUsedThisTurn,
-      hasReadyTrigger,
-      readyTriggerAbilities,
-      conditions,
-      condition,
-      team,
-      hidden,
-      marks,
-      activeMarks,
-    };
-  }
 
   function toNonNegativeNumber(value, fallback = 0) {
     if (typeof value === 'number' && Number.isFinite(value)) {
@@ -14919,38 +14626,7 @@ export function mountBoardInteractions(store, routes = {}) {
     return Math.max(0, Math.trunc(fallback));
   }
 
-  function toBoolean(value, fallback = false) {
-    if (typeof value === 'boolean') {
-      return value;
-    }
 
-    if (typeof value === 'number') {
-      if (!Number.isFinite(value)) {
-        return fallback;
-      }
-      return value !== 0;
-    }
-
-    if (typeof value === 'string') {
-      const normalized = value.trim().toLowerCase();
-      if (!normalized) {
-        return fallback;
-      }
-      if (normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on') {
-        return true;
-      }
-      if (normalized === 'false' || normalized === '0' || normalized === 'no' || normalized === 'off') {
-        return false;
-      }
-      return fallback;
-    }
-
-    if (typeof value === 'object' && value !== null) {
-      return toBoolean(value.valueOf(), fallback);
-    }
-
-    return fallback;
-  }
 
   function measurementPointFromToken(position) {
     if (!position || !viewState.mapLoaded) {

@@ -34,7 +34,9 @@ const origin='http://127.0.0.1:8129';
       {id:'preview-fogged',column:9,row:8,levelId:'test-upper'},
     ];
     await command('placement.batch',{actions:seeds.map(seed=>({kind:'add',sceneId,placementId:seed.id,placement:{
-      imageUrl,name:seed.id,team:'enemy',width:1,height:1,...seed,
+      imageUrl,name:seed.id,team:'enemy',width:1,height:1,aura:{enabled:true,radius:2,color:'#11aa33'},...seed,
+      automationAuras:[{id:'test-aura',radius:1,color:'#bb3377',automation:{abilityName:'Test aura'}},
+        {id:'disabled-aura',enabled:false,radius:4,automation:{abilityName:'Disabled'}}],
     }}))});
     await command('fog.set',{fogOfWar:{byLevel:{'test-upper':{enabled:true,revealedCells:{'6,5':true,'8,5':true}}}}});
     await command('level.user.set',{userId:'sharon',entry:{levelId:'test-upper',source:'manual',followToken:false}});
@@ -72,6 +74,13 @@ const origin='http://127.0.0.1:8129';
     assert.equal(await dialog.locator('[data-preview-placement-id="preview-open"] .vtt-token__condition').textContent(),'Prone');
     assert.equal(await dialog.locator('[data-preview-placement-id="preview-open"] .vtt-token__judgment-mark').getAttribute('aria-label'),'Judged by Cal.');
     assert.equal(await dialog.locator('[data-token-judgment-mark],[data-token-hidden-effect]').count(),0,'Preview effects have no removal hooks');
+    const describeAuras=nodes=>nodes.map(n=>({id:n.dataset.previewAuraPlacementId||n.dataset.placementId,
+      aura:n.dataset.auraId,width:n.style.width,height:n.style.height,transform:n.style.transform,
+      background:n.style.background,shadow:n.style.boxShadow})).sort((a,b)=>(a.id+a.aura).localeCompare(b.id+b.aura));
+    const actualAuras=await pc.locator('#vtt-aura-layer .vtt-token-aura').evaluateAll(describeAuras);
+    assert.deepEqual(await dialog.locator('.vtt-token-aura').evaluateAll(describeAuras),actualAuras);
+    assert.equal(actualAuras.length,4,'Only visible unfogged owners have manual and enabled automation auras');
+    assert.deepEqual([...new Set(actualAuras.map(a=>a.id))],['preview-open','preview-upper']);
     const repaint=await gm.evaluate(async()=>{
       const {syncTokenHitPoints}=await import('/dnd/vtt/assets/js/ui/token-hit-points.js');
       const token=document.createElement('div'),placement={team:'enemy',showHp:true,hp:{current:25,max:20}};
@@ -108,6 +117,7 @@ const origin='http://127.0.0.1:8129';
     await pc.reload();
     await pc.waitForFunction(()=>document.querySelector('[data-connection-status]')?.textContent.includes('Connected'));
     assert.deepEqual(await pc.locator('#vtt-token-layer > .vtt-token').evaluateAll(describe),real,'Reload keeps the same canonical geometry');
+    assert.deepEqual(await pc.locator('#vtt-aura-layer .vtt-token-aura').evaluateAll(describeAuras),actualAuras);
     assert.deepEqual(await snapshot(),before);assert.deepEqual(writes,[]);assert.deepEqual(errors,[]);
     console.log('PASS: preview token geometry/visibility and drawing paths match the player board; local zoom/Fit and reload preserve canonical state; no preview writes.');
   } finally {await browser.close();}

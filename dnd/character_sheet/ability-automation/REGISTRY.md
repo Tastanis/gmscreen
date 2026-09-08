@@ -555,3 +555,9 @@ preview in `vtt/assets/js/ui/token-conditions.js`. It preserves duration targets
 numeric riders, hidden-effect metadata, instance IDs and handled rider boundaries.
 This extraction adds no effect kinds, trigger events or execution hooks. Preview
 condition/mark painters are passive and cannot consume or remove effects.
+
+Aura records and display now share `token-aura-records.js` and
+`token-aura-renderer.js` between the board and passive player preview. Legacy aura
+IDs, enabled flags, radii, colors and manual/automation deduplication retain their
+existing behavior. This extraction adds no automation hooks or effects. Visibility
+currently follows the owner; aura footprint cutout clipping remains incomplete.

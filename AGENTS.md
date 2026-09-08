@@ -4,7 +4,7 @@ Player preview uses the GM-only read-only `api/v2/player-preview.php?user=...`
 endpoint and the same snapshot projection as the actual player. Never impersonate
 the player session or touch their presence. GM Scenes has read-only Player view
 details and a map/grid/floor/cutout/fog/token/drawing dialog with local zoom/Fit.
-Auras, persistent zones and combat group colors remain pending. Never label server-visible
+Persistent zones and combat group colors remain pending. Never label server-visible
 token data as on-screen visibility without applying the client geometry and fog.
 `renderFogSurface` paints an independent canvas with explicit scene/floor/viewer
 inputs. Use it for passive preview rather than remounting the singleton fog tool,
@@ -24,6 +24,11 @@ Condition normalization lives in token-conditions.js; preserve durations, distin
 sources, numeric riders and execution identities through display hydration.
 token-status-presentation.js paints team/squad, conditions and judgment marks.
 Only the interactive board enables removal hooks and condition tooltip callbacks.
+Token render hydration lives in token-render-normalize.js; use it for legacy
+overlay aliases, readiness and hidden flags as well as fractional coordinates.
+token-aura-renderer.js takes explicit placements, floor context and fog checker.
+Preview uses private aura placement IDs. Aura owner visibility is shared; clipping
+the aura footprint through cutouts remains a separate outstanding geometry task.
 Passive drawings call renderDrawings with an explicit drawingLayer and floor;
 never mount or replace the active drawing tool's shared state for preview.
 Template floor visibility and SVG cutout masks live in template-presentation.js.

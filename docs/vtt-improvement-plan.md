@@ -1038,3 +1038,22 @@ marks have no removal hooks or misleading click instructions. The full existing
 suite passed (716 tests/89 files), plus two new normalization tests preserve
 source distinctions, typed weaknesses, immutability and rider execution markers.
 Auras, persistent zones and combat group colors remain before preview completion.
+
+### Auras and shared legacy token hydration
+
+Manual and automation aura record handling and painting are shared with player
+preview. Explicit placement, viewer-floor and fog inputs avoid GM authority leaks;
+preview aura DOM uses private placement identifiers. Token render normalization is
+also shared so older stamina/condition overlay aliases, ready ability lists and
+hidden flags behave consistently while preserving fractional positions.
+
+Browser QA compares manual and automated aura dimensions, colors, transforms and
+visibility against the actual player board, including disabled auras, hidden/fogged
+owners, a lower-floor owner and reload. Canonical state remains unchanged during
+preview. Regression suite: 718 tests/90 files passed, plus a new legacy hydration
+check. Persistent zones and combat group colors remain before preview completion.
+
+Remaining geometry defect found during this work: aura rendering filters owner
+visibility but does not clip the aura footprint through floor cutouts. Persistent
+zone overlays also need a floor-visibility review. Preview parity does not establish
+correctness of those existing board behaviors; keep both in the floor roadmap.

@@ -1,4 +1,6 @@
 import {normalizeMapLevelsState} from '../state/normalize/map-levels.js';
+import {normalizePlacementForRender} from './token-render-normalize.js';
+import {renderTokenAuras} from './token-aura-renderer.js';
 import {syncTokenHitPoints} from './token-hit-points.js';
 import {ensurePlacementConditions} from './token-conditions.js';
 import {syncTokenTeamAffiliation,paintTokenMarkIndicator,paintTokenConditionLabel} from './token-status-presentation.js';
@@ -16,7 +18,9 @@ export function renderPlayerPreviewTokens(stage,state,view,levelId) {
   const stack=getDefaultTokenStackOrderMap(placements);
   const layer=document.createElement('div');layer.className='vtt-board__tokens';
   for(const [index,raw] of placements.entries()) {
-    const placement={...raw,...normalizeTokenRenderGeometry(raw)};
+    const normalized=normalizePlacementForRender(raw);
+    if(!normalized)continue;
+    const placement={...raw,...normalized};
     const presentation=resolveVisibleTokenPresentation(placement,levels,{viewerLevelId:levelId,isCellFogged});
     if(!presentation)continue;
     const token=document.createElement('div');token.className='vtt-token';
@@ -43,5 +47,8 @@ export function renderPlayerPreviewTokens(stage,state,view,levelId) {
     layer.append(token);
   }
   stage.append(layer);
+  const auraLayer=document.createElement('div');auraLayer.className='vtt-board__auras';
+  renderTokenAuras({placements,layer:auraLayer,view,tokenLevelState:levels,auraViewerLevelId:levelId,isCellFogged,passive:true});
+  stage.append(auraLayer);
   return layer;
 }
