@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { existsSync, unlinkSync } from 'node:fs';
 
 const phpTestPath = fileURLToPath(
   new URL('../../../../api/v2/tests/sync-v2-store.test.php', import.meta.url)
@@ -35,4 +38,15 @@ test('PHP Sync V2 store enforces atomic revisions, idempotency, replay, and snap
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const payload = JSON.parse(result.stdout);
   assert.deepEqual(payload, { success: true, revision: 26 });
+});
+
+test('PHP drawing authority enforces ownership and hidden-floor projection', () => {
+  const drawingTestPath = fileURLToPath(new URL('../../../../api/v2/tests/drawing-authority.test.php', import.meta.url));
+  const database = path.join(tmpdir(), `vtt-drawing-test-${randomUUID()}.sqlite`);
+  try {
+    const result = spawnSync('php', [...phpArgsForSqlite(), drawingTestPath, database], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  } finally {
+    for (const suffix of ['', '-wal', '-shm']) if (existsSync(database + suffix)) unlinkSync(database + suffix);
+  }
 });

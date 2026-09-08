@@ -111,6 +111,16 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 
 ## VTT Sync V2 Final Boundary
 
+### Diagnostic and drawing regression workflow (September 2026)
+
+- The updated diagnostic pull is `dnd/vtt/tools/sync-diagnostic.py`; it reads the
+  authenticated V2 snapshot and creates a fresh loopback-only app. Credentials
+  are prompted/ephemeral; never put them in exports. See
+  `docs/vtt-improvement-plan.md` for the separate test repository launchers.
+- Drawing gestures now send explicit V2 entity commands. Keep author/floor
+  scope and focused startup/recovery rendering. Run the drawing browser fixture
+  and PHP ownership/projection tests when changing this lifecycle.
+
 - Phase 8 is complete. Sync V2 is the only shared-board writer, delivery, and
   recovery system. The final operating boundary is in
   `/docs/vtt-sync-v2/README.md`.

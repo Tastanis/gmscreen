@@ -1,8 +1,10 @@
+import { diffDrawings, applyDrawingEdits, invertDrawingEdits, canEditDrawing } from './drawing-edits.js';
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 let sharedState = null;
 let onDrawingChange = null;
 let getCurrentUserId = null;
+let getIsGM = () => false;
 
 export function mountDrawingTool(options = {}) {
   const drawButton = document.querySelector('[data-action="toggle-draw"]');
@@ -21,6 +23,11 @@ export function mountDrawingTool(options = {}) {
 
   onDrawingChange = options.onDrawingChange || null;
   getCurrentUserId = options.getCurrentUserId || null;
+  getIsGM = options.getIsGM || (() => false);
+  if (clearButton) {
+    clearButton.textContent = getIsGM() ? 'Clear this floor' : 'Clear my drawings';
+    clearButton.title = getIsGM() ? 'Remove drawings on the floor you are viewing.' : 'Remove your drawings on the floor you are viewing.';
+  }
 
   const drawModeBtn = document.querySelector('[data-action="draw-mode-draw"]');
   const eraseModeBtn = document.querySelector('[data-action="draw-mode-erase"]');
@@ -56,6 +63,11 @@ export function mountDrawingTool(options = {}) {
     layerSize: { width: 0, height: 0 },
     pendingSync: false,
     syncTimeout: null,
+    sceneId: options.getContext?.()?.sceneId || '_default',
+    levelId: options.getContext?.()?.levelId || 'level-0',
+    confirmedDrawings: [],
+    pendingEdits: null,
+    editBefore: null,
   };
 
   sharedState = state;
@@ -117,7 +129,7 @@ export function mountDrawingTool(options = {}) {
   mapSurface.addEventListener(
     'pointerdown',
     (event) => {
-      if (!state.active || event.button !== 0) {
+      if (!state.active || state.pendingSync || event.button !== 0) {
         return;
       }
 
@@ -319,6 +331,7 @@ function endDrawing(state, event) {
       points: state.currentPoints.map((p) => ({ x: round(p.x, 2), y: round(p.y, 2) })),
       color: state.color,
       strokeWidth: state.strokeWidth,
+      levelId: state.levelId,
     };
     if (authorId) {
       drawing.authorId = authorId;
@@ -393,7 +406,7 @@ function continueErasing(state, event) {
 function endErasing(state) {
   if (!state.eraseDidChange) {
     // Nothing was erased, remove the undo snapshot we saved
-    state.undoStack.pop();
+    state.editBefore = null;
   } else {
     // Erasing removes drawings — needs a full replace on the server, not a delta merge
     state.needsFullSync = true;
@@ -411,7 +424,7 @@ function eraseAtPoint(state, point) {
   let changed = false;
 
   for (const drawing of state.drawings) {
-    if (!drawing.points || drawing.points.length < 2) {
+    if (!isEditable(state, drawing) || !drawing.points || drawing.points.length < 2) {
       result.push(drawing);
       continue;
     }
@@ -457,6 +470,7 @@ function eraseAtPoint(state, point) {
               points: fragPoints,
               color: drawing.color,
               strokeWidth: drawing.strokeWidth,
+              levelId: drawing.levelId || 'level-0',
             };
             if (drawing.authorId) {
               frag.authorId = drawing.authorId;
@@ -477,6 +491,7 @@ function eraseAtPoint(state, point) {
           points: fragPoints,
           color: drawing.color,
           strokeWidth: drawing.strokeWidth,
+          levelId: drawing.levelId || 'level-0',
         };
         if (drawing.authorId) {
           frag.authorId = drawing.authorId;
@@ -538,112 +553,33 @@ function adjustStrokeSize(state, delta) {
   updateCursorIndicatorSize(state);
 }
 
+function isEditable(state, drawing) {
+  return canEditDrawing(drawing, {
+    userId: getCurrentUserId?.(), isGM: getIsGM(), levelId: state.levelId,
+  });
+}
+
 function clearAllDrawings(state) {
-  const currentUserId = typeof getCurrentUserId === 'function' ? getCurrentUserId() : null;
-
-  // Find drawings that belong to the current user
-  const userDrawings = currentUserId
-    ? state.drawings.filter((d) => d.authorId === currentUserId)
-    : state.drawings;
-
-  // If user has no drawings to clear, do nothing
-  if (userDrawings.length === 0) {
-    return;
-  }
-
-  // Save current state to undo stack before clearing
+  if (state.pendingSync || !state.drawings.some((drawing) => isEditable(state, drawing))) return;
   pushToUndoStack(state);
-
-  if (currentUserId) {
-    // Only remove drawings belonging to the current user
-    const userDrawingIds = new Set(userDrawings.map((d) => d.id));
-    state.drawings = state.drawings.filter((d) => !userDrawingIds.has(d.id));
-  } else {
-    // No user ID - clear all drawings (fallback behavior)
-    state.drawings = [];
-  }
-
-  // Re-render remaining drawings
+  state.drawings = state.drawings.filter((drawing) => !isEditable(state, drawing));
   renderDrawings(state);
-  // Clearing removes drawings — needs a full replace on the server, not a delta merge
-  state.needsFullSync = true;
   scheduleSyncDrawings(state);
 }
 
 const MAX_UNDO_STACK_SIZE = 10;
 
 function pushToUndoStack(state) {
-  // Clone the current drawings array
-  const snapshot = state.drawings.map((d) => {
-    const clone = {
-      id: d.id,
-      points: d.points.map((p) => ({ x: p.x, y: p.y })),
-      color: d.color,
-      strokeWidth: d.strokeWidth,
-    };
-    if (d.authorId) {
-      clone.authorId = d.authorId;
-    }
-    return clone;
-  });
-
-  state.undoStack.push(snapshot);
-
-  // Keep only the last 10 states
-  if (state.undoStack.length > MAX_UNDO_STACK_SIZE) {
-    state.undoStack.shift();
-  }
+  state.editBefore = state.drawings.slice();
 }
 
 function undoLastDrawing(state) {
-  const currentUserId = typeof getCurrentUserId === 'function' ? getCurrentUserId() : null;
-
-  if (currentUserId) {
-    // Find the last drawing by the current user
-    let lastUserDrawingIndex = -1;
-    for (let i = state.drawings.length - 1; i >= 0; i--) {
-      if (state.drawings[i].authorId === currentUserId) {
-        lastUserDrawingIndex = i;
-        break;
-      }
-    }
-
-    if (lastUserDrawingIndex === -1) {
-      // No drawings by this user to undo
-      return;
-    }
-
-    // Save current state to undo stack before removing
-    pushToUndoStack(state);
-
-    // Remove the last drawing by this user
-    state.drawings.splice(lastUserDrawingIndex, 1);
-
-    // Re-render all drawings
-    renderDrawings(state);
-
-    // Undo removes a drawing — needs a full replace on the server
-    state.needsFullSync = true;
-    // Sync to server
-    scheduleSyncDrawings(state);
-  } else {
-    // Fallback to original behavior when no user ID
-    if (state.undoStack.length === 0) {
-      return;
-    }
-
-    // Pop the last saved state
-    const previousDrawings = state.undoStack.pop();
-
-    // Restore the drawings
-    state.drawings = previousDrawings;
-
-    // Re-render all drawings
-    renderDrawings(state);
-
-    // Sync to server
-    scheduleSyncDrawings(state);
-  }
+  if (state.pendingSync || !state.undoStack.length) return;
+  const edits = state.undoStack.pop();
+  state.editBefore = state.drawings.slice();
+  state.drawings = applyDrawingEdits(state.drawings, invertDrawingEdits(edits));
+  renderDrawings(state);
+  scheduleSyncDrawings(state, false);
 }
 
 function updatePathFromPoints(pathElement, points) {
@@ -752,22 +688,34 @@ function syncLayerSize(state) {
   state.layerSize = { width, height };
 }
 
-function scheduleSyncDrawings(state) {
-  if (state.syncTimeout) {
-    clearTimeout(state.syncTimeout);
+function scheduleSyncDrawings(state, remember = true) {
+  const edits = diffDrawings(state.editBefore || [], state.drawings);
+  state.editBefore = null;
+  if (!edits.length) return;
+  if (remember) {
+    state.undoStack.push(edits);
+    if (state.undoStack.length > MAX_UNDO_STACK_SIZE) state.undoStack.shift();
   }
-
+  const pending = { sceneId: state.sceneId, edits };
+  state.pendingEdits = pending;
   state.pendingSync = true;
-  state.syncTimeout = setTimeout(() => {
-    state.syncTimeout = null;
-    if (onDrawingChange) {
-      onDrawingChange(state.drawings.slice());
-    }
-    // Set pendingSync to false AFTER the callback completes
-    // This ensures syncDrawingsFromState sees the sync is still pending
-    // and doesn't overwrite the drawing tool state (which would clear undo)
+  state.drawingLayer.setAttribute('aria-busy', 'true');
+  Promise.resolve().then(() => {
+    if (!onDrawingChange) throw new Error('Drawing command connection is unavailable.');
+    return onDrawingChange(edits, { sceneId: pending.sceneId });
+  }).catch((error) => {
+    // The command adapter reports the precise server reason. Keep only the
+    // accepted canonical portion if a multi-entity edit failed partway.
+    console.warn('[VTT] Drawing edit was not fully accepted', error);
+    if (state.pendingEdits === pending) state.undoStack = [];
+  }).finally(() => {
+    if (state.pendingEdits !== pending) return;
+    state.pendingEdits = null;
     state.pendingSync = false;
-  }, 100);
+    state.drawings = state.confirmedDrawings.slice();
+    state.drawingLayer.setAttribute('aria-busy', 'false');
+    renderDrawings(state);
+  });
 }
 
 function generateDrawingId() {
@@ -867,15 +815,39 @@ export function getDrawings() {
   return sharedState?.drawings.slice() || [];
 }
 
-export function setDrawings(drawings) {
-  if (!sharedState) {
-    return;
+export function setDrawingContext({ sceneId = '_default', levelId = 'level-0' } = {}) {
+  if (!sharedState) return;
+  const state = sharedState;
+  if (sceneId !== state.sceneId || levelId !== state.levelId) {
+    cancelDrawing(state);
+    state.erasing = false;
+    state.editBefore = null;
+    state.drawings = applyDrawingEdits(state.confirmedDrawings, state.pendingEdits?.edits || []);
+    state.undoStack = [];
+    if (sceneId !== state.sceneId) {
+      state.pendingEdits = null;
+      state.pendingSync = false;
+      state.drawingLayer.setAttribute('aria-busy', 'false');
+      state.drawings = [];
+      state.confirmedDrawings = [];
+    }
+    state.sceneId = sceneId;
+    state.levelId = levelId;
+    renderDrawings(state);
   }
+}
 
-  sharedState.drawings = Array.isArray(drawings) ? drawings.slice() : [];
-  // Clear undo stack when drawings are loaded from external source
-  sharedState.undoStack = [];
-  renderDrawings(sharedState);
+export function setDrawings(drawings) {
+  if (!sharedState) return;
+  const state = sharedState;
+  state.confirmedDrawings = Array.isArray(drawings) ? drawings.slice() : [];
+  let edits = state.pendingEdits?.edits || [];
+  if (state.editBefore) {
+    edits = diffDrawings(state.editBefore, state.drawings);
+    state.editBefore = state.confirmedDrawings.slice();
+  }
+  state.drawings = applyDrawingEdits(state.confirmedDrawings, edits);
+  if (!state.drawing) renderDrawings(state);
 }
 
 export function renderDrawings(state) {
@@ -893,7 +865,7 @@ export function renderDrawings(state) {
   }
 
   for (const drawing of targetState.drawings) {
-    if (!drawing.points || drawing.points.length < 2) {
+    if ((drawing.levelId || 'level-0') !== targetState.levelId || !drawing.points || drawing.points.length < 2) {
       continue;
     }
 

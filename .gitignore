@@ -3,6 +3,7 @@
 
 # Node.js dependencies and files
 node_modules/
+__pycache__/
 vendor/
 !dnd/vtt/assets/js/vendor/
 dnd/vtt/assets/js/vendor/*

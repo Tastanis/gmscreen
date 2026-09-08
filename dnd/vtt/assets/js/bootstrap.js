@@ -10,10 +10,6 @@ import {
   restrictPlacementsToPlayerView,
 } from './state/store.js';
 
-// Default scene ID used when no scene is explicitly selected.
-// This allows drawings, templates, and other per-scene data to persist
-// even when the user hasn't created or activated a scene.
-const DEFAULT_SCENE_ID = '_default';
 import { mountSettingsPanel } from './ui/settings-panel.js';
 import { mountCharacterSummaryPanel } from './ui/character-summary-panel.js';
 import { mountChatPanel } from './ui/chat-panel.js';
@@ -65,26 +61,9 @@ async function bootstrap() {
   mountBoardInteractions(storeApi, routes);
   mountDragRuler();
   mountDrawingTool({
-    onDrawingChange: (drawings) => {
-      const currentState = getState();
-      // Use the active scene ID or fall back to the default scene ID.
-      // This allows drawings to persist even when no scene is selected.
-      const sceneId = currentState?.boardState?.activeSceneId || DEFAULT_SCENE_ID;
-
-      // Add timestamps to drawings for conflict resolution
-      const timestamp = Date.now();
-      const drawingsWithTimestamps = drawings.map((drawing) => ({
-        ...drawing,
-        _lastModified: drawing._lastModified || timestamp,
-      }));
-
-      updateState((draft) => {
-        if (!draft.boardState.drawings) {
-          draft.boardState.drawings = {};
-        }
-        draft.boardState.drawings[sceneId] = drawingsWithTimestamps;
-      });
-    },
+    onDrawingChange: (edits, context) => storeApi.commitDrawingChanges(context.sceneId, edits),
+    getContext: () => storeApi.getDrawingContext(),
+    getIsGM: getIsGm,
     getCurrentUserId: () => {
       const currentState = getState();
       const rawName = typeof currentState?.user?.name === 'string' ? currentState.user.name : '';

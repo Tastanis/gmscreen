@@ -289,6 +289,14 @@ function vttSyncV2ProjectSnapshotForUser(array $snapshot, array $auth): array
     }
     $snapshot['state']['requestedTests'] = $projectedTests;
     if (!($auth['isGM'] ?? false)) {
+        foreach (($snapshot['state']['drawings'] ?? []) as $sceneId => $drawings) {
+            $hiddenLevels = vttSyncV2HiddenMapLevelIds($sceneConfig[$sceneId] ?? []);
+            foreach ($drawings as $id => $drawing) {
+                if (isset($hiddenLevels[$drawing['levelId'] ?? 'level-0'])) {
+                    unset($snapshot['state']['drawings'][$sceneId][$id]);
+                }
+            }
+        }
         foreach ($sceneConfig as $sceneId => $config) {
             if (is_string($sceneId) && is_array($config)) {
                 $snapshot['state']['sceneConfig'][$sceneId] =
@@ -384,6 +392,14 @@ function vttSyncV2ProjectEventForUser(array $event, array $auth): array
     }
     if (in_array($type, ['scene.activated', 'routing.changed'], true)) {
         return vttSyncV2ProjectBoardEventForUser($event, $auth);
+    }
+    if ($type === 'drawing.updated') {
+        $snapshot = vttSyncV2Store()->getSnapshot();
+        $config = $snapshot['state']['sceneConfig'][$event['sceneId']] ?? [];
+        $hiddenLevels = vttSyncV2HiddenMapLevelIds(is_array($config) ? $config : []);
+        if (isset($hiddenLevels[$event['payload']['drawing']['levelId'] ?? 'level-0'])) {
+            return vttSyncV2RedactedEvent($event);
+        }
     }
     if ($type === 'levels.replaced' && is_array($event['payload']['mapLevels'] ?? null)) {
         $event['payload']['mapLevels'] = vttSyncV2ProjectSceneConfigForPlayer([

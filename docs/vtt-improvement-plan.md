@@ -1,0 +1,69 @@
+# VTT improvement implementation
+
+User authorized implementing the September 7 product audit, updating/running the diagnostic pull, and authenticated website access. Preserve live campaign data. All gameplay QA uses disposable localhost copies. The scope is tracked by the active goal; unfinished boxes are not claims of completed work.
+
+## Safety and testing foundation
+
+- [x] Refresh diagnostic assets using the existing read-only exporter (1,587 files; September 7).
+- [x] Add authenticated logical V2 export and restore into a new SQLite world; captured live revision 3594.
+- [x] Update double-click launchers and verify a restored current-source GM/player app.
+- [x] Add a repeatable synthetic drawing browser fixture and verify logical snapshot restore. Broader journey coverage remains below.
+
+## Broken player workflows
+
+- [ ] Server-validated atomic stairs/falls, including player and alternate movement paths.
+- [x] Drawing creation/erase/clear/undo persist explicitly through V2, with author/floor scope and hidden-floor projection.
+- [ ] Owned temporary template edit/remove permissions; persistent effects retain explicit authority.
+- [ ] Exact rejection feedback and pending/accepted state.
+
+## Coherent geometry and player association
+
+- [ ] Shared floor/elevation/adjacency model used by suggestions, range, auras, and movement.
+- [ ] Hidden/deleted floors, partial support, flight, forced movement, stairs interrupted by reload, and undo tests.
+- [ ] Explicit view-versus-token controls and follow/browse/center policy.
+- [ ] Configurable roster and primary token association, preserving shared allied control.
+
+## Faster live play
+
+- [ ] Token library and saved scenes first; creation forms collapsed.
+- [ ] Compact inactive tracker and combat character card.
+- [ ] Zoom/fit/center/shortcuts and persistent tool labels.
+- [ ] Opaque readable panels, practical targets, diagnostics-only memory counter.
+
+## Recovery and preparation
+
+- [ ] Specific-player preview and useful connection status.
+- [ ] Named encounter checkpoints, scoped restore, scene duplication/export.
+- [ ] Encounter presets, favorites and recent assets.
+- [ ] Handouts, show-image, and map pins linking existing campaign records.
+- [ ] Visible automatic/confirmation/manual action boundaries and interrupted-action recovery.
+
+## Physical terrain
+
+- [ ] Separate movement/sight/line-of-effect barriers; doors and interaction permissions.
+- [ ] Difficult/damaging terrain using shared geometry; manual-rule boundaries remain visible.
+- [ ] Regressions and documentation across related entry points.
+
+Dynamic lighting, voice/video, marketplaces, and generic compendiums remain deferred as recommended in the audit. External credential rotation and a production GM-plus-two-player soak are external sign-off tasks; no live campaign mutation is authorized for testing.
+
+## Diagnostic operation
+
+`dnd/vtt/tools/sync-diagnostic.py --diagnostic-root "C:/Users/tasta/Desktop/gm screen test repository"` first runs the existing asset downloader, then prompts for the GM password (not saved), reads the authenticated V2 snapshot, records deployed JS hash and local commit/dirty state, and creates a timestamped app under diagnostic `runtime`. No board commands are sent to production. Login and snapshot presence tracking still occur normally.
+
+`--skip-assets` reuses downloaded assets; `--offline-export PATH` restores a prior `vtt-diagnostic.json` without contacting production. Each restore creates a new directory and database. Pusher is disabled, PHP binds to loopback, local sessions are separate, and uploaded media is served read-only from downloaded assets. The old inspector remains available separately.
+
+Canonical V2 state is an atomic world-row read. Separately exported sheets/assets are not a whole-site transactional backup. Deployed source is identified by a file hash; the website's version JSON is private. The app uses the local checkout, including working changes, with that distinction recorded in its manifest.
+
+## Completed drawing slice
+
+Drawings now submit gesture-sized explicit upsert/remove commands directly. Canonical events and startup/recovery refresh the drawing layer; no broad board subscriber is restored. Edits are scoped to author and current floor (GM can manage all on that floor). Undo reverses the last gesture, including erase/clear, while retaining unrelated remote drawings. Saving blocks another drawing gesture until acknowledgment and rejected edits return to canonical state with the server reason. Fragment creation precedes original removal; multi-entity edits remain a sequence of commands, so partial acceptance is displayed honestly rather than described as atomic.
+
+Regression evidence: 671 existing/new JS tests passed before adding the additional drawing PHP authority test; that authority test and the main PHP suite then passed together. Three isolated browsers passed creation, erase, clear, undo, ownership, separate floors, refresh, and simulated rejection rollback. The fresh live-data restore loaded as GM/Cal/Sharon with zero page errors or failed local requests. Pusher/external browser requests were disabled during these tests.
+
+Repeatable drawing QA:
+
+1. `python dnd/vtt/tools/create-drawing-fixture.py --diagnostic-root "C:/Users/tasta/Desktop/gm screen test repository"`
+2. `powershell -File dnd/vtt/tools/start-diagnostic.ps1 -DiagnosticRoot .playwright-mcp/drawing-regression -Port 8128`
+3. `node dnd/vtt/tools/test-drawing-browser.cjs`
+
+The browser test refuses a non-loopback address or an app without the drawing fixture manifest. `VTT_TEST_ORIGIN` and `VTT_TEST_BROWSER` can override the localhost origin and installed browser executable. These fixtures do not change the user's live-data diagnostic app pointer.

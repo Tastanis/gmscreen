@@ -729,6 +729,19 @@ board broadcast, V1 poller, version/grace winner, or broad render subscriber.
 
 ## Required verification
 
+### September 2026 product reliability work
+
+- [x] Drawing gestures use explicit V2 upsert/remove commands and focused
+  startup/recovery rendering. Erase/clear/undo use entity deltas, not a whole-scene
+  replacement. Players manage their own drawings; GM can manage any drawing.
+  Author IDs are assigned by server authentication. Hidden-floor drawing payloads
+  are excluded from player snapshots/events. See `docs/vtt-improvement-plan.md`
+  for behavior, test commands, and the remaining product roadmap.
+- [x] Diagnostic capture uses the authenticated GM logical snapshot endpoint;
+  restores initialize a new isolated SQLite world with current local source,
+  Pusher disabled, and separate local sessions. No raw live WAL copy or production
+  state command is used. Separate file assets are not a transactional site backup.
+
 Use at least GM, Player A, and Player B clients. Inject latency, jitter,
 duplication, reordering, dropped broadcasts, disconnects, reconnects, and
 duplicate operation IDs.

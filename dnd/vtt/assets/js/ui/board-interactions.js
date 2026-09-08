@@ -32,10 +32,9 @@ import {
   setDrawings as setDrawingToolDrawings,
   isDrawModeActive,
   isDrawingInProgress,
-  isDrawingSyncPending,
-  isDrawingToolMounted,
-  consumeFullSyncNeeded,
+  setDrawingContext,
 } from './drawing-tool.js';
+import { drawingCommands } from './drawing-edits.js';
 import { updateSceneGrid } from '../services/scene-service.js';
 import {
   GRID_SIZE_DEFAULT,
@@ -569,17 +568,6 @@ export function mountBoardInteractions(store, routes = {}) {
     trackerOverflowResizeListenerAttached = true;
   }
 
-  // Drawing sync state - must be declared before applyStateToBoard is called
-  let lastSyncedDrawingsHash = null;
-  // Phase 3-B (commit 5): parallel snapshot of the most recent synced
-  // drawings list so `syncDrawingsFromState` can diff prior vs next
-  // and emit `drawing.add` / `drawing.remove` ops. The scene id is
-  // tracked alongside so we only diff within the same scene — a
-  // scene switch invalidates the prior snapshot and falls back to
-  // the snapshot save path.
-  let lastSyncedDrawingsSceneId = null;
-  let lastSyncedDrawingsList = null;
-
   const defaultStatusText = status?.textContent ?? '';
   function updateStatus(message) {
     if (!status) {
@@ -910,6 +898,9 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     if (activeSceneId) {
       syncMapLevelsForState(boardApi.getState?.() ?? {}, activeSceneId);
+    }
+    if (drawingsV2Enabled) {
+      syncDrawingsFromState(boardApi.getState?.()?.boardState, activeSceneId);
     }
     for (const [placementId, placement] of Object.entries(
       snapshot?.state?.placements?.[activeSceneId] ?? {}
@@ -1979,67 +1970,6 @@ export function mountBoardInteractions(store, routes = {}) {
           type: 'template.remove',
           sceneId,
           templateId: id,
-        });
-      }
-    });
-
-    return ops;
-  }
-
-  // Phase 3-B (commit 5): compute the delta between the prior
-  // drawings-for-scene list and the freshly synced next list,
-  // returning an array of `drawing.add`/`drawing.remove` ops.
-  // Drawings are never modified in place so there is no upsert — the
-  // diff only looks at ids. Returns an empty array when the two lists
-  // contain the same set of ids. Must NOT be called for the
-  // erase/clear full-replace path (that one still needs the snapshot
-  // `_replaceDrawings` mechanism); callers are responsible for
-  // short-circuiting when `consumeFullSyncNeeded()` returned true.
-  function buildDrawingOpsFromDiff(sceneId, priorList, nextList) {
-    if (!sceneId) {
-      return [];
-    }
-    const ops = [];
-    const priorIds = new Set();
-    const prior = Array.isArray(priorList) ? priorList : [];
-    const next = Array.isArray(nextList) ? nextList : [];
-
-    prior.forEach((entry) => {
-      if (!entry || typeof entry !== 'object') {
-        return;
-      }
-      const id = typeof entry.id === 'string' ? entry.id : '';
-      if (!id) {
-        return;
-      }
-      priorIds.add(id);
-    });
-
-    const nextIds = new Set();
-    next.forEach((entry) => {
-      if (!entry || typeof entry !== 'object') {
-        return;
-      }
-      const id = typeof entry.id === 'string' ? entry.id : '';
-      if (!id) {
-        return;
-      }
-      nextIds.add(id);
-      if (!priorIds.has(id)) {
-        ops.push({
-          type: 'drawing.add',
-          sceneId,
-          drawing: entry,
-        });
-      }
-    });
-
-    priorIds.forEach((id) => {
-      if (!nextIds.has(id)) {
-        ops.push({
-          type: 'drawing.remove',
-          sceneId,
-          drawingId: id,
         });
       }
     });
@@ -7354,6 +7284,23 @@ export function mountBoardInteractions(store, routes = {}) {
     return persistBoardStateSnapshot(options, opsOverride);
   };
 
+  boardApi.getDrawingContext = () => {
+    const state = boardApi.getState?.() ?? {};
+    const sceneId = state.boardState?.activeSceneId || DEFAULT_SCENE_ID;
+    return { sceneId, levelId: getViewerLevelIdForCurrentUser(state, sceneId) || BASE_MAP_LEVEL_ID };
+  };
+  boardApi.commitDrawingChanges = async (sceneId, edits) => {
+    updateStatus('Saving drawing changes…');
+    try {
+      const result = await tokenMovementRuntime.submitBoardDomainCommands(drawingCommands(sceneId, edits));
+      updateStatus('Drawing changes saved.');
+      return result;
+    } catch (error) {
+      updateStatus(`Drawing changes were not fully saved: ${error?.response?.error || error?.message || 'Connection failed'}. Accepted changes remain visible.`);
+      throw error;
+    }
+  };
+
   applyStateToBoard(boardApi.getState?.() ?? {});
 
   // Sync V2 starts its authenticated private transport and ordered recovery.
@@ -7833,101 +7780,9 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function syncDrawingsFromState(boardState, sceneId) {
-    // Use the provided scene ID or fall back to the default.
-    // This ensures drawings can be synced even when no scene is selected.
-    const activeSceneId = sceneId || DEFAULT_SCENE_ID;
-
-    // Don't interrupt active drawing
-    if (isDrawModeActive() && isDrawingInProgress()) {
-      return;
-    }
-
-    // Don't update hash if drawing tool isn't mounted yet
-    // This prevents a race condition where the hash gets set before
-    // the drawing tool can receive the initial drawings
-    if (!isDrawingToolMounted()) {
-      return;
-    }
-
-    const drawingsByScene = boardState?.drawings ?? {};
-    const sceneDrawings = drawingsByScene[activeSceneId] ?? [];
-    const drawings = Array.isArray(sceneDrawings) ? sceneDrawings : [];
-
-    const hash = JSON.stringify(drawings);
-    if (hash === lastSyncedDrawingsHash) {
-      return;
-    }
-
-    // Phase 3-B (commit 5): capture the prior drawings list BEFORE we
-    // overwrite `lastSyncedDrawingsList`, so the op-routing branch
-    // below can diff it against the fresh list. Only usable when the
-    // prior snapshot is for the same scene — a scene switch resets
-    // the diff window and falls back to the snapshot path.
-    const priorDrawings =
-      lastSyncedDrawingsSceneId === activeSceneId && Array.isArray(lastSyncedDrawingsList)
-        ? lastSyncedDrawingsList
-        : null;
-
-    lastSyncedDrawingsHash = hash;
-    lastSyncedDrawingsSceneId = activeSceneId;
-    lastSyncedDrawingsList = drawings.slice();
-
-    // If sync is pending, the change came from the local drawing tool
-    // Mark drawings as dirty for delta save
-    let fullSyncNeeded = false;
-    if (isDrawingSyncPending()) {
-      // Check if a full replace is needed (erasing/clearing removes drawings)
-      if (consumeFullSyncNeeded()) {
-        drawingFullReplaceScenes.add(activeSceneId);
-        fullSyncNeeded = true;
-      }
-      drawings.forEach((drawing) => {
-        if (drawing && drawing.id) {
-          markDrawingDirty(activeSceneId, drawing.id);
-        }
-      });
-    }
-
-    // Phase 3-B (commit 5): route through `drawing.add`/`drawing.remove`
-    // ops when the delta-saves feature flag is on, the change came
-    // from the local drawing tool (sync pending), this is NOT an
-    // erase/clear full-replace (those still need the snapshot path's
-    // `_replaceDrawings` mechanism to reach the server), we have a
-    // usable prior snapshot to diff against, and no non-ops-capable
-    // dirty state is also waiting to flush.
-    //
-    // Drawings are add-only or removed — never modified in place
-    // (verified by reading drawing-tool.js: endDrawing always creates
-    // new ids, erase splits into new fragments with new ids, undo
-    // restores an older whole snapshot). So the diff only ever emits
-    // `drawing.add` for newly-appeared ids and `drawing.remove` for
-    // ids that vanished.
-    let drawingOps = null;
-    if (
-      USE_DELTA_SAVES &&
-      isDrawingSyncPending() &&
-      !fullSyncNeeded &&
-      priorDrawings !== null &&
-      !hasNonPlacementDirtyState()
-    ) {
-      drawingOps = buildDrawingOpsFromDiff(activeSceneId, priorDrawings, drawings);
-      if (drawingOps.length === 0) {
-        drawingOps = null;
-      }
-    }
-
-    // Only persist when the change came from the local drawing tool.
-    // When isDrawingSyncPending() is false, the change came from an incoming
-    // Pusher broadcast — the server already has the correct state, so saving
-    // back would create a feedback loop (each client re-saves what it just
-    // received, bumping the version and triggering more broadcasts).
-    if (isDrawingSyncPending()) {
-      persistBoardStateSnapshot({}, drawingOps);
-      return;
-    }
-
-    // Change came from external source, update the drawing tool
-    setDrawingToolDrawings(drawings);
+    setDrawingContext(boardApi.getDrawingContext());
+    const drawings = boardState?.drawings?.[sceneId || DEFAULT_SCENE_ID] ?? [];
+    setDrawingToolDrawings(Array.isArray(drawings) ? drawings : []);
   }
 
   function clampPlacementToBounds(column, row, width, height) {
@@ -8668,6 +8523,7 @@ export function mountBoardInteractions(store, routes = {}) {
   function syncMapLevelsForState(state = {}, sceneId = null) {
     const mapLevels = resolveSceneMapLevelsState(state.boardState ?? {}, sceneId);
     const viewerLevelId = getViewerLevelIdForCurrentUser(state, sceneId);
+    setDrawingContext({ sceneId: sceneId || DEFAULT_SCENE_ID, levelId: viewerLevelId || BASE_MAP_LEVEL_ID });
     mapLevelRenderer.sync(mapLevels, {
       sceneGrid: state.grid ?? null,
       view: viewState,
