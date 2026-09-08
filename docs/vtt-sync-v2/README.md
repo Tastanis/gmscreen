@@ -1215,3 +1215,13 @@ failed final tick prevents expiration and leaves the zone for review; failed
 removal after unpaid upkeep also stops subsequent work. Already committed effects
 are retained. Review is currently a status message: durable boundary-effect
 recovery records and transactional upkeep still remain to implement.
+
+Zone upkeep now calls sync-resource with spend and optional resourceName using
+the linked character profile. Under the existing character-sheet write lock, the
+server validates a positive integer cost (maximum 1000000), checks the current
+resource name/balance and deducts only that field. Confirmed insufficient funds
+return paid: false without writing; malformed/mismatched requests or failed saves
+reject. The client requires an explicit paid result, bounds HTTP/body waiting to
+15 seconds and never retries uncertain payment. Missing linked resources require
+manual review; they no longer grant free upkeep. Failed payment preserves the
+zone and stops its effects; only confirmed insufficient funds trigger removal.

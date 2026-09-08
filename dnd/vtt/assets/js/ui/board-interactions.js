@@ -1,3 +1,4 @@
+import {spendZoneUpkeep} from '../services/zone-upkeep.js';
 import {runZoneBoundary} from '../services/zone-boundary.js';
 import {renderPersistentZones} from './persistent-zone-renderer.js';
 import {executeClaimedZoneEntry,assertZoneEntryOutcomesConfirmed} from '../services/zone-entry-claims.js';
@@ -4768,54 +4769,16 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   async function deductPersistentZoneUpkeep(zone) {
-    const sheet = await getAutomationSheetForPlacement(zone.casterId);
-    if (!sheet) {
-      // No PC sheet on the caster (likely a monster). For Pass 1 we just let
-      // the zone persist without deducting — GM can end manually if needed.
-      return { paid: true, skipped: true, reason: 'no-sheet' };
-    }
-    const hero = sheet.hero || {};
-    const resource = hero.resource && typeof hero.resource === 'object' ? hero.resource : {};
-    const title = (resource.title || sheet?.sidebar?.resource?.title || '').toString();
-    const askedResource = String(zone.upkeep.resource || '').trim();
-    if (askedResource && title.toLowerCase() !== askedResource.toLowerCase()) {
-      // Wrong resource named — Pass 1 keeps the zone alive but warns in chat.
-      window.dashboardChat?.sendMessage({
-        message: `${zone.abilityName}: upkeep is "${askedResource}" but ${zone.ownerName}'s bar is "${title}". GM adjust manually.`,
-        type: 'text',
-      }).catch(() => {});
-      return { paid: true, skipped: true, reason: 'resource-mismatch' };
-    }
-    const current = Number.parseInt(resource.value ?? 0, 10) || 0;
-    if (current < zone.upkeep.cost) {
-      return { paid: false, reason: 'insufficient resource' };
-    }
-    resource.value = current - zone.upkeep.cost;
-    hero.resource = resource;
-    sheet.hero = hero;
-    // Persist back via handler.php using the same path the panel uses.
-    try {
-      const endpoint = typeof routes?.sheet === 'string' && routes.sheet ? routes.sheet : '/dnd/character_sheet/handler.php';
-      const body = new URLSearchParams();
-      body.set('action', 'save');
-      body.set('character', zone.casterId);
-      body.set('data', JSON.stringify(sheet));
-      await fetch(endpoint, {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body,
-      });
-    } catch (err) {
-      console.warn('[VTT] Failed to persist zone upkeep deduction', err);
-    }
-    if (characterSummaryCache instanceof Map) {
-      characterSummaryCache.delete(zone.casterId);
-    }
-    document.dispatchEvent(new CustomEvent('vtt:character-sheet-updated', {
-      detail: { characterId: zone.casterId, change: 'resource' },
+    const placement=getPlacementFromStore(zone.casterId);
+    const profileId=placement ? getCharacterSheetProfileIdForPlacement(placement) : null;
+    if (!profileId) throw new Error('Zone upkeep needs manual review: no linked character resource.');
+    const endpoint=routes?.sheet || '/dnd/character_sheet/handler.php';
+    const result=await spendZoneUpkeep(endpoint,{character:profileId,cost:zone.upkeep.cost,resourceName:zone.upkeep.resource});
+    characterSummaryCache?.delete(profileId);
+    document.dispatchEvent(new CustomEvent('vtt:character-sheet-updated',{
+      detail:{characterId:profileId,change:'resource'},
     }));
-    return { paid: true, remaining: resource.value };
+    return result;
   }
 
   function announceZoneTick(zone, affected, detail) {

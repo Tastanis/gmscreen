@@ -1518,3 +1518,26 @@ stamina, and reload without replaying damage. The boundary unit test verifies
 failed ticks never call expiration. Full suite: 746 tests/96 files passed.
 This does not provide a durable GM recovery item for turn ticks or automatically
 undo their partial effects; those remain part of the broader recovery roadmap.
+
+### Confirmed narrow upkeep spending
+
+The previous upkeep code saved a cached whole sheet using caster placement ID and
+reported paid even when persistence failed. It now uses a server-side narrow spend.
+
+Zone upkeep now calls sync-resource with spend and optional resourceName using
+the linked character profile. Under the existing character-sheet write lock, the
+server validates a positive integer cost (maximum 1000000), checks the current
+resource name/balance and deducts only that field. Confirmed insufficient funds
+return paid: false without writing; malformed/mismatched requests or failed saves
+reject. The client requires an explicit paid result, bounds HTTP/body waiting to
+15 seconds and never retries uncertain payment. Missing linked resources require
+manual review; they no longer grant free upkeep. Failed payment preserves the
+zone and stops its effects; only confirmed insufficient funds trigger removal.
+
+Browser tests verify two cost-2 zones sharing a balance of 3: only one pays/ticks,
+the unaffordable zone ends, and the balance becomes 1. Injected save rejection
+leaves both zones, resource 3 and unchanged stamina, with no repeated write. Tests
+also verify profile routing, absence of full-sheet payloads and reload outcomes.
+Full suite: 748 tests/97 files passed. The fixture waits for its combat-start
+resource automation before setting the balance. Other full-sheet automation writes,
+durable payment receipts and interrupted-boundary recovery remain outstanding.

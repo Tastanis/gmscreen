@@ -695,7 +695,7 @@ switch ($action) {
         $sheet = $allSheets[$requestedCharacter];
 
         if ($requestMethod === 'POST') {
-            if (!isset($requestData['value']) || $requestData['value'] === '') {
+            if (!isset($requestData['spend']) && (!isset($requestData['value']) || $requestData['value'] === '')) {
                 sendJsonResponse(array('success' => false, 'error' => 'Missing resource value'));
             }
             if (!isset($sheet['hero']) || !is_array($sheet['hero'])) {
@@ -706,7 +706,18 @@ switch ($action) {
             }
             // Heroic resources may legitimately go negative (allowNegative
             // resources floor at -(1 + Reason)), so no max(0, ...) here.
-            $sheet['hero']['resource']['value'] = (int)$requestData['value'];
+            if (isset($requestData['spend'])) {
+                $cost=filter_var($requestData['spend'], FILTER_VALIDATE_INT);
+                if ($cost===false || $cost<1 || $cost>1000000) sendJsonResponse(['success'=>false,'error'=>'Invalid upkeep cost']);
+                $title=trim((string)($sheet['hero']['resource']['title'] ?? $sheet['sidebar']['resource']['title'] ?? ''));
+                $asked=trim((string)($requestData['resourceName'] ?? ''));
+                if ($asked!=='' && strcasecmp($asked,$title)!==0) sendJsonResponse(['success'=>false,'error'=>'Upkeep resource does not match the character resource.']);
+                $current=(int)($sheet['hero']['resource']['value'] ?? 0);
+                if ($current<$cost) sendJsonResponse(['success'=>true,'paid'=>false,'reason'=>'insufficient resource','resource'=>$current]);
+                $sheet['hero']['resource']['value']=$current-$cost;
+            } else {
+                $sheet['hero']['resource']['value'] = (int)$requestData['value'];
+            }
             $allSheets[$requestedCharacter] = $sheet;
 
             if (!saveCharacterSheetData($dataDir, $dataFile, $allSheets)) {
@@ -716,6 +727,7 @@ switch ($action) {
 
         sendJsonResponse(array(
             'success' => true,
+            'paid' => isset($requestData['spend']) ? true : null,
             'name' => isset($sheet['hero']['name']) && $sheet['hero']['name'] !== '' ? $sheet['hero']['name'] : $requestedCharacter,
             'resource' => isset($sheet['hero']['resource']['value']) ? (int)$sheet['hero']['resource']['value'] : 0,
         ));

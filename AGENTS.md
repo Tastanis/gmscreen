@@ -330,3 +330,6 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 
 - Canonical zone ticks propagate strict save failures. Do not expire a zone
   after a failed final tick or silently continue later boundary stages.
+
+- Zone upkeep spends through the locked narrow resource endpoint using a profile
+  ID. Do not save a cached whole sheet or equate network failure with no funds.
