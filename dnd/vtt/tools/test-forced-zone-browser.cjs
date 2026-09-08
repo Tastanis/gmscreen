@@ -66,15 +66,23 @@ const origin='http://127.0.0.1:8129';
       area:{template:{column:6,row:0,width:1,height:1,levelId:'level-0'}},
     }}}))));
     const sheetUrl=origin+'/dnd/character_sheet/handler.php';
-    await page.route(sheetUrl,route=>route.request().method()==='POST'&&route.request().postData()?.includes('action=sync-stamina')
-      ?route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({success:false,error:'Injected sheet sync rejection'})}):route.continue());
+    const stallSheet=process.env.VTT_TEST_STALL_SHEET==='1';
+    let heldWrite=null,sheetWrites=0;
+    await page.route(sheetUrl,route=>{
+      if(route.request().method()!=='POST'||!route.request().postData()?.includes('action=sync-stamina'))return route.continue();
+      sheetWrites++;
+      if(stallSheet){heldWrite=route;return;}
+      return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({success:false,error:'Injected sheet sync rejection'})});
+    });
     await move('forced',5,'rejected');
     await until(async()=>(await(await page.request.get(origin+'/dnd/vtt/api/v2/zone-entries.php')).json()).claims.some(c=>c.status==='needs_review'));
     assert.equal(Number((await tokenState()).hp.current),initial-9,'Board damage remains accepted when sheet sync fails');
     const sheet=await(await page.request.get(sheetUrl+'?action=sync-stamina&character=cal')).json();
     assert.equal(Number(sheet.currentStamina),initial-7,'Rejected sheet update must leave its previous value');
+    assert.equal(sheetWrites,1,'An uncertain sheet write must not be retried');
+    if(heldWrite)await heldWrite.abort().catch(()=>{});
     await page.unroute(sheetUrl);
     assert.deepEqual(errors,[]);
-    console.log('PASS: teleport/forced entry semantics, reload-safe completed damage and review on rejected character stamina synchronization.');
+    console.log(`PASS: teleport/forced entry semantics, reload-safe completed damage and review on ${stallSheet?'stalled':'rejected'} character stamina synchronization.`);
   } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

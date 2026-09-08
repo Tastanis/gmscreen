@@ -306,3 +306,6 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 - Token floor visibility preserves fractional placement bounds. Strict cross-floor
   interaction requires common open area within the occupied footprint across all
   blocking floors; keep the separate look-down border presentation policy.
+
+- Sheet stamina writes use writeSheetStamina with a bounded acknowledgment. Never
+  automatically replay a timed-out write; it may already have committed.

@@ -1378,3 +1378,20 @@ disjoint openings and holes outside the occupied part of a cell. Full suite: 739
 tests/95 files passed; actual player and GM-preview browser parity/reload passed
 on an isolated fixture. Physical height/range and broader resource reconciliation
 remain pending. The legacy client fall processor is bypassed in current Sync V2.
+
+### Bounded character-stamina confirmation
+
+Character-stamina writes require an explicit success acknowledgment and have a
+15-second deadline covering HTTP and JSON-body completion. Timeout aborts the
+request and rejects confirmation without retrying an uncertain write. Claimed zone
+effects therefore enter GM review instead of holding movement callbacks forever.
+This does not make board/sheet writes atomic or prove that an aborted server write
+did not commit; inspect both values before resolving an uncertain outcome.
+
+The stamina endpoint now returns success: true alongside saved values. Tests cover
+explicit failure, malformed acknowledgments, stalled requests and stalled JSON
+bodies, including abort and no retry. The isolated forced-zone browser journey
+can hold its sheet request with VTT_TEST_STALL_SHEET=1 and verifies accepted board
+damage, rejected movement continuation, needs_review and exactly one sheet write.
+Full suite: 742 tests/95 files passed. Authoritative reconciliation after reload
+and ordinary failed-save recovery remain broader outstanding work.

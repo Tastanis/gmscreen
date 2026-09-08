@@ -79,3 +79,10 @@ sheet updates leave needs_review even if board damage was accepted.
 Forced-move, teleport and swap callbacks now wait for their zone-entry outcomes.
 Unresolved entries reject instead of reporting success to a later ability step;
 the movement itself remains accepted. Swaps wait for both tokens' entry checks.
+
+Character-stamina writes require an explicit success acknowledgment and have a
+15-second deadline covering HTTP and JSON-body completion. Timeout aborts the
+request and rejects confirmation without retrying an uncertain write. Claimed zone
+effects therefore enter GM review instead of holding movement callbacks forever.
+This does not make board/sheet writes atomic or prove that an aborted server write
+did not commit; inspect both values before resolving an uncertain outcome.

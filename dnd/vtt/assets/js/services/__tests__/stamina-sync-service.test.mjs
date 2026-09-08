@@ -120,3 +120,57 @@ describe('stamina-sync-service — sheet cache', () => {
     assert.equal(service.getCachedSheetStamina('never-fetched'), null);
   });
 });
+
+
+describe('stamina write confirmation', () => {
+  test('requires explicit success and preserves zero and negative stamina', async () => {
+    const {writeSheetStamina} = await import(SERVICE_PATH);
+    let posted;
+    const response = await writeSheetStamina('/sheet', {character:'Cal',currentStamina:-2,staminaMax:0}, {
+      fetchImpl: async (url, options) => {
+        posted = new URLSearchParams(options.body);
+        return new Response(JSON.stringify({success:true}));
+      },
+    });
+    assert.equal(response.ok,true);
+    assert.equal(posted.get('currentStamina'),'-2');
+    assert.equal(posted.get('staminaMax'),'0');
+    for (const value of [{success:false,error:'Rejected'}, {}, null]) {
+      await assert.rejects(writeSheetStamina('/sheet', {}, {
+        fetchImpl:async()=>new Response(JSON.stringify(value)),
+      }));
+    }
+    await assert.rejects(writeSheetStamina('/sheet', {}, {
+      fetchImpl:async()=>new Response('bad', {status:503}),
+    }), /503/);
+  });
+
+  test('bounds a stalled request without retrying an uncertain write', async () => {
+    const {writeSheetStamina} = await import(SERVICE_PATH);
+    let calls=0,signal;
+    await assert.rejects(writeSheetStamina('/sheet', {}, {
+      timeoutMs:10,
+      fetchImpl:async(url,options)=>{
+        calls++;signal=options.signal;
+        return new Promise(()=>{});
+      },
+    }), /timed out/);
+    assert.equal(calls,1);
+    assert.equal(signal.aborted,true);
+  });
+
+  test('bounds body parsing too and does not turn late success into confirmation', async () => {
+    const {writeSheetStamina} = await import(SERVICE_PATH);
+    let release,signal;
+    await assert.rejects(writeSheetStamina('/sheet', {}, {
+      timeoutMs:10,
+      fetchImpl:async(url,options)=>{
+        signal=options.signal;
+        return {ok:true,clone:()=>({json:()=>new Promise(resolve=>{release=resolve;})})};
+      },
+    }), /timed out/);
+    assert.equal(signal.aborted,true);
+    release({success:true});
+    await new Promise(resolve=>setTimeout(resolve,0));
+  });
+});

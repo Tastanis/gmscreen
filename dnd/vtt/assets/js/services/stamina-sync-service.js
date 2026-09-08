@@ -128,3 +128,40 @@ export function fetchSheetStamina(routes, tokenName) {
   sheetStaminaRequests.set(key, request);
   return request;
 }
+
+/** Confirm one write, including its JSON body. An uncertain write must not be replayed. */
+export async function writeSheetStamina(endpoint, payload = {}, {
+  fetchImpl = globalThis.fetch,
+  timeoutMs = 15000,
+} = {}) {
+  const body = new URLSearchParams({ action: 'sync-stamina', source: 'vtt' });
+  for (const field of ['character', 'currentStamina', 'staminaMax']) {
+    if (payload[field] !== undefined && payload[field] !== null) body.set(field, payload[field]);
+  }
+  const controller = new AbortController();
+  let timer;
+  const deadline = new Promise((resolve, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error('Character stamina save timed out; its outcome needs review.'));
+      controller.abort();
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([deadline, (async () => {
+      const response = await fetchImpl(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+        signal: controller.signal,
+      });
+      if (!response?.ok) throw new Error(`Sheet sync failed with status ${response?.status ?? 'unknown'}`);
+      const saved = await response.clone().json();
+      if (saved?.success !== true) {
+        throw new Error(saved?.error || 'Character stamina save was not confirmed.');
+      }
+      return response;
+    })()]);
+  } finally {
+    clearTimeout(timer);
+  }
+}

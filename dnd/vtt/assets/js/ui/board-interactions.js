@@ -147,6 +147,7 @@ import {
 import { playTokenFallAnimation } from './token-fall-animation.js';
 import {
   broadcastStaminaSync,
+  writeSheetStamina,
   subscribeToStaminaSync,
 } from '../services/stamina-sync-service.js';
 import {
@@ -18867,31 +18868,8 @@ export function mountBoardInteractions(store, routes = {}) {
       return null;
     }
 
-    const bodyParams = new URLSearchParams();
-    bodyParams.set('action', 'sync-stamina');
-    bodyParams.set('source', 'vtt');
-    if (payload?.character) {
-      bodyParams.set('character', payload.character);
-    }
-    if (payload?.currentStamina !== undefined && payload?.currentStamina !== null) {
-      bodyParams.set('currentStamina', payload.currentStamina);
-    }
-    if (payload?.staminaMax !== undefined && payload?.staminaMax !== null) {
-      bodyParams.set('staminaMax', payload.staminaMax);
-    }
-
     try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: bodyParams.toString(),
-      });
-
-      if (!response?.ok) {
-        throw new Error(`Sheet sync failed with status ${response?.status ?? 'unknown'}`);
-      }
-      const saved=await response.clone().json();
-      if(saved?.success===false)throw new Error(saved.error || 'Character stamina sync was rejected.');
+      const response = await writeSheetStamina(endpoint, payload);
 
       broadcastStaminaSync({
         character: payload?.character,

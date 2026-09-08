@@ -648,6 +648,7 @@ switch ($action) {
         }
 
         $response = array(
+            'success' => true,
             'name' => isset($sheet['hero']['name']) && $sheet['hero']['name'] !== '' ? $sheet['hero']['name'] : $requestedCharacter,
             'staminaMax' => isset($sheet['hero']['vitals']['staminaMax']) ? $sheet['hero']['vitals']['staminaMax'] : 0,
             'currentStamina' => isset($sheet['hero']['vitals']['currentStamina']) ? $sheet['hero']['vitals']['currentStamina'] : 0,

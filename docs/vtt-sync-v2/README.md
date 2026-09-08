@@ -1162,3 +1162,10 @@ rectangles across blocking floors within the occupied part of each token cell.
 Disjoint holes in one cell must not create an interaction path. Existing look-down
 border presentation remains separate. Canonical server movement/fall authority is
 unchanged; the old client fall processor is bypassed during V2 movement.
+
+Character-stamina writes require an explicit success acknowledgment and have a
+15-second deadline covering HTTP and JSON-body completion. Timeout aborts the
+request and rejects confirmation without retrying an uncertain write. Claimed zone
+effects therefore enter GM review instead of holding movement callbacks forever.
+This does not make board/sheet writes atomic or prove that an aborted server write
+did not commit; inspect both values before resolving an uncertain outcome.

@@ -621,3 +621,10 @@ Movement/teleport/swap effects wait for zone-entry completion before resolving t
 callbacks. Pending/needs_review outcomes reject so subsequent automation does not
 silently continue; accepted movement is retained. This is not yet general ability
 resume support or transactional rollback of a multi-step ability.
+
+Character-stamina writes require an explicit success acknowledgment and have a
+15-second deadline covering HTTP and JSON-body completion. Timeout aborts the
+request and rejects confirmation without retrying an uncertain write. Claimed zone
+effects therefore enter GM review instead of holding movement callbacks forever.
+This does not make board/sheet writes atomic or prove that an aborted server write
+did not commit; inspect both values before resolving an uncertain outcome.
