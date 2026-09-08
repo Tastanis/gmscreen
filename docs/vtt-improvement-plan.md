@@ -1501,3 +1501,20 @@ third remains: no tick damage occurs while held, and after acknowledgment only
 the retained zone damages its occupant. Full suite: 745 tests/96 files passed.
 Durable tick/upkeep claims, whole-turn interruption recovery and legacy effect
 failure propagation remain outstanding.
+
+### Stop canonical zone stages after failed tick effects
+
+Canonical owner ticks and occupant-turn-start effects now use strict effect
+acknowledgments, active-zone checks and confirmed character-stamina synchronization.
+Failures propagate to the ordered boundary stages instead of being swallowed. A
+failed final tick prevents expiration and leaves the zone for review; failed
+removal after unpaid upkeep also stops subsequent work. Already committed effects
+are retained. Review is currently a status message: durable boundary-effect
+recovery records and transactional upkeep still remain to implement.
+
+A browser test applies final-tick damage then rejects the following condition
+save. It verifies the review status, retained zone, matching saved character
+stamina, and reload without replaying damage. The boundary unit test verifies
+failed ticks never call expiration. Full suite: 746 tests/96 files passed.
+This does not provide a durable GM recovery item for turn ticks or automatically
+undo their partial effects; those remain part of the broader recovery roadmap.

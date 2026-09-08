@@ -327,3 +327,6 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 
 - Canonical zone turn stages use runZoneBoundary. Await start expiration before
   ticks/occupants and await end ticks before expiration; stop on scene changes.
+
+- Canonical zone ticks propagate strict save failures. Do not expire a zone
+  after a failed final tick or silently continue later boundary stages.

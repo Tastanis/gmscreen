@@ -28,3 +28,13 @@ test('failed expiration and scene changes stop later zone effects',async()=>{
   }),/scene changed/);
   assert.equal(ticks,0);
 });
+
+
+test('a failed final tick preserves the zone instead of expiring it',async()=>{
+  let expired=false;
+  await assert.rejects(runZoneBoundary('endOfTurn',{
+    tick:async()=>{throw Error('condition rejected after damage');},
+    expire:async()=>{expired=true;},occupants:async()=>{},
+  }),/condition rejected/);
+  assert.equal(expired,false);
+});

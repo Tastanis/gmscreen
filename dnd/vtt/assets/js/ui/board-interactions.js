@@ -4395,8 +4395,8 @@ export function mountBoardInteractions(store, routes = {}) {
     const sceneId = getActiveSceneId();
     return runZoneBoundary(when, {
       expire: () => expirePersistentZonesForOwner(ownerId, when),
-      tick: () => tickPersistentZonesForOwner(ownerId, when),
-      occupants: () => fireOccupantTurnStartZones(ownerId),
+      tick: () => tickPersistentZonesForOwner(ownerId, when, {strict:true,sceneId}),
+      occupants: () => fireOccupantTurnStartZones(ownerId, {strict:true,sceneId}),
       assertCurrent: () => {
         if (getActiveSceneId() !== sceneId) throw new Error('Scene changed during zone turn processing.');
       },
@@ -4406,7 +4406,7 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
-  async function tickPersistentZonesForOwner(ownerId, when) {
+  async function tickPersistentZonesForOwner(ownerId, when, options = {}) {
     if (!ownerId) return;
     const zones = getActivePersistentZones();
     if (!zones.length) return;
@@ -4414,14 +4414,15 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!matching.length) return;
     for (const zone of [...matching]) {
       try {
-        await tickSinglePersistentZone(zone);
+        await tickSinglePersistentZone(zone, options);
       } catch (err) {
+        if (options.strict) throw err;
         console.warn('[VTT] Zone tick failed', zone?.abilityName, err);
       }
     }
   }
 
-  async function fireOccupantTurnStartZones(combatantId) {
+  async function fireOccupantTurnStartZones(combatantId, options = {}) {
     if (!combatantId) return;
     const zones = getActivePersistentZones();
     if (!zones.length) return;
@@ -4442,19 +4443,25 @@ export function mountBoardInteractions(store, routes = {}) {
       const inside = placements.filter((p) => isPlacementInsideZone(zone, p));
       if (!inside.length) continue;
       try {
-        await applyPersistentZoneEffectsToPlacements(zone, inside, 'turn-start');
+        await applyPersistentZoneEffectsToPlacements(zone, inside, 'turn-start', options);
       } catch (err) {
+        if (options.strict) throw err;
         console.warn('[VTT] Zone occupant-turn-start failed', zone?.abilityName, err);
       }
     }
   }
 
-  async function tickSinglePersistentZone(zone) {
+  async function tickSinglePersistentZone(zone, options = {}) {
+    if (options.strict) {
+      if (getActiveSceneId() !== options.sceneId) throw new Error('Scene changed during zone tick.');
+      assertPersistentZoneStillActive(zone, getActivePersistentZones());
+    }
     // Step 1: deduct upkeep.
     if (zone.upkeep?.cost > 0) {
       const upkeepResult = await deductPersistentZoneUpkeep(zone);
       if (!upkeepResult.paid) {
-        removePersistentZone(zone.id, { reason: upkeepResult.reason || "couldn't pay upkeep" });
+        const ended = await removePersistentZone(zone.id, { reason: upkeepResult.reason || "couldn't pay upkeep" });
+        if (options.strict && !ended) throw new Error('Zone removal after unpaid upkeep was not confirmed.');
         return;
       }
     }
@@ -4464,7 +4471,7 @@ export function mountBoardInteractions(store, routes = {}) {
       announceZoneTick(zone, [], 'no creatures inside');
       return;
     }
-    await applyPersistentZoneEffectsToPlacements(zone, affected, 'tick');
+    await applyPersistentZoneEffectsToPlacements(zone, affected, 'tick', options);
   }
 
   function getCreaturesInsideZone(zone) {

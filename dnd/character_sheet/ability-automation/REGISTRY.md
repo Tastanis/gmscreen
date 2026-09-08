@@ -666,3 +666,11 @@ expiration. Failed expiration or a scene change stops subsequent zone stages and
 reports that review is needed. This ordering does not serialize all other turn
 automation, add durable boundary-effect outcomes, or change legacy tick handlers
 that currently tolerate individual effect failures. Those remain limitations.
+
+Canonical owner ticks and occupant-turn-start effects now use strict effect
+acknowledgments, active-zone checks and confirmed character-stamina synchronization.
+Failures propagate to the ordered boundary stages instead of being swallowed. A
+failed final tick prevents expiration and leaves the zone for review; failed
+removal after unpaid upkeep also stops subsequent work. Already committed effects
+are retained. Review is currently a status message: durable boundary-effect
+recovery records and transactional upkeep still remain to implement.
