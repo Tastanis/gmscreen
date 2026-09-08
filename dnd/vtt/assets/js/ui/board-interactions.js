@@ -19493,14 +19493,13 @@ export function mountBoardInteractions(store, routes = {}) {
           <ul class="vtt-token-settings__automation-aura-list" data-token-settings-automation-aura-list></ul>
         </div>
         ${levelControlsMarkup}
-        ${gmUser ? `<label class="vtt-token-settings__section"><input type="checkbox" data-token-primary-pc /> Primary token for this player<span data-token-primary-profile></span></label>` : ''}
+        ${gmUser ? `<label class="vtt-token-settings__section vtt-token-settings__primary" hidden><input type="checkbox" data-token-primary-pc /> <span>Primary token</span><span data-token-primary-profile hidden></span></label>` : ''}
         <div class="vtt-token-settings__section">
           <label class="vtt-token-settings__row">Movement
             <select data-token-movement-mode aria-label="Token movement mode">
               <option value="ground">Ground</option><option value="fly">Fly</option><option value="hover">Hover</option>
             </select>
           </label>
-          <small>Use only when an effect allows it. Prone, Grabbed, Restrained, and Unconscious end Fly; Hover persists. Height, other speed effects, and fall damage are manual.</small>
         </div>
         ${hiddenToggleMarkup}
       </form>
@@ -19942,12 +19941,17 @@ export function mountBoardInteractions(store, routes = {}) {
     tokenSettingsMenu.element.dataset.placementId = placementId;
     tokenSettingsMenu.element.style.visibility = 'hidden';
     positionTokenSettings(tokenSettingsMenu.element, clientX, clientY);
+    requestAnimationFrame(() => {
+      if (activeTokenSettingsId === placementId && !tokenSettingsMenu.element.hidden) {
+        positionTokenSettings(tokenSettingsMenu.element, clientX, clientY);
+      }
+    });
     tokenSettingsMenu.element.style.visibility = '';
 
     if (typeof removeTokenSettingsListeners === 'function') {
       removeTokenSettingsListeners();
     }
-    removeTokenSettingsListeners = attachTokenSettingsListeners();
+    removeTokenSettingsListeners = attachTokenSettingsListeners(clientX, clientY);
 
     focusTokenSettings();
     return tokenSettingsMenu.element.isConnected === true;
@@ -20015,7 +20019,19 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
-  function attachTokenSettingsListeners() {
+  function attachTokenSettingsListeners(clientX, clientY) {
+    let layoutFrame = null;
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(() => {
+      if (layoutFrame !== null) return;
+      layoutFrame = requestAnimationFrame(() => {
+        layoutFrame = null;
+        if (!tokenSettingsMenu?.element?.hidden) positionTokenSettings(tokenSettingsMenu.element, clientX, clientY);
+      });
+    }) : null;
+    if (observer) {
+      observer.observe(tokenSettingsMenu.element);
+      document.querySelectorAll('.vtt-character-ability-tab').forEach(tab => observer.observe(tab));
+    }
     const handlePointerDown = (event) => {
       const target = event?.target ?? null;
       const customConditionOverlay = getCustomConditionOverlayElement();
@@ -20056,7 +20072,8 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     };
 
-    const handleResize = () => {
+    const handleResize = (event) => {
+      if (event?.type === 'scroll' && tokenSettingsMenu?.element?.contains(event.target)) return;
       closeTokenSettings({ preserveMonsterStatBlock: true });
     };
 
@@ -20066,6 +20083,8 @@ export function mountBoardInteractions(store, routes = {}) {
     window.addEventListener('scroll', handleResize, true);
 
     return () => {
+      observer?.disconnect();
+      if (layoutFrame !== null) cancelAnimationFrame(layoutFrame);
       document.removeEventListener('pointerdown', handlePointerDown, true);
       document.removeEventListener('keydown', handleKeydown);
       window.removeEventListener('resize', handleResize);
@@ -20099,7 +20118,7 @@ export function mountBoardInteractions(store, routes = {}) {
     });
 
     element.style.maxHeight = `${layout.maxHeight}px`;
-    element.style.overflowY = rect.height > layout.maxHeight ? 'auto' : '';
+    element.style.overflowY = 'auto';
     element.style.left = `${layout.left}px`;
     element.style.top = `${layout.top}px`;
   }
@@ -20425,7 +20444,10 @@ export function mountBoardInteractions(store, routes = {}) {
   function syncTokenLevelControls(placement = null) {
     if (tokenSettingsMenu?.primaryPc) {
       const profile = getCharacterSheetProfileIdForPlacement(placement);
-      tokenSettingsMenu.primaryPc.checked = placement?.primaryPc === true;
+      const matches = getActiveScenePlacements(boardApi.getState?.() ?? {})
+        .filter(other => profile && getCharacterSheetProfileIdForPlacement(other) === profile);
+      tokenSettingsMenu.primaryPc.closest('label').hidden = matches.length <= 1;
+      tokenSettingsMenu.primaryPc.checked = placement?.primaryPc === true || matches.length === 1;
       tokenSettingsMenu.primaryPc.disabled = !profile;
       tokenSettingsMenu.primaryProfile.textContent = profile ? ` (${profile})` : ' (link a player profile first)';
     }

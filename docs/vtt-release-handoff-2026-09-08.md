@@ -290,3 +290,14 @@ one row. Local browser validation covers GM/player at 1280 and 1920 widths,
 combat/floor controls, connection warning visibility and absence of the tool strip.
 The old active-tool-label browser script is historical: its visible label was
 intentionally removed; tool coordination remains implemented.
+
+
+## Token settings cleanup — 1.19.116
+
+A single linked PC already resolves automatically on the server. Hide the explicit
+Primary token override unless multiple placements link to the same profile; use a
+compact aligned checkbox for that duplicate-token case. Remove movement help prose.
+Token menu uses a stable border-box width and scrollable height above action tabs;
+recheck after opening and observe menu/action-tab size changes. Internal menu scrolling
+no longer triggers the outside-scroll dismissal listener. Browser QA passed at
+1280x720 and 1280x500, including lower-menu scrolling, plus five popup unit tests.

@@ -106,3 +106,16 @@ body.vtt-body .vtt-board__scene-meta[data-viewer-role="player"] { grid-template-
 body.vtt-body [data-floor-follow-mode] { grid-column: 1; }
 body.vtt-body .vtt-board__level-return { grid-column: 2; }
 body.vtt-body .vtt-board__scene-meta .visually-hidden { position: absolute; }
+
+/* Keep the entire token menu, including its border/padding, inside its bounds. */
+body.vtt-body .vtt-token-settings {
+  box-sizing: border-box;
+  width: 260px;
+  min-width: 0;
+  max-width: calc(100vw - 24px);
+}
+body.vtt-body .vtt-token-settings__primary {
+  display: flex; align-items: center; gap: 6px;
+}
+body.vtt-body .vtt-token-settings__primary[hidden] { display: none; }
+body.vtt-body .vtt-token-settings__primary input { width: auto; margin: 0; flex: 0 0 auto; }
