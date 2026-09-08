@@ -30,6 +30,11 @@ token-aura-renderer.js takes explicit placements, floor context and fog checker.
 Preview uses private aura placement IDs. Player aura footprints also use the shared
 floor-cutout mask with explicit pixel bounds, independent of CSS transforms.
 Clear old masks on same-floor or GM repaint. GM aura overview remains unmasked.
+Persistent zones store the selected area's levelId at registration. Legacy records
+without floor data resolve to level-0; never attach an existing zone to a moving
+caster's current floor. Occupancy/entry checks use persistent-zone-geometry.js,
+including fractional wall-square overlap. Movement snapshots must retain levelId.
+Zone rendering/preview and deleted-floor lifecycle still need completion.
 Passive drawings call renderDrawings with an explicit drawingLayer and floor;
 never mount or replace the active drawing tool's shared state for preview.
 Template floor visibility and SVG cutout masks live in template-presentation.js.

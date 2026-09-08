@@ -563,3 +563,12 @@ existing behavior. This extraction adds no automation hooks or effects. Visibili
 follows the owner, then clips player aura footprints through intervening floor
 cutouts. This affects display only; it does not change aura targeting, distance or
 effect execution. GM overview remains unmasked.
+
+Persistent-zone runtime records now include `levelId`, captured from the selected
+area template at registration; this is runtime metadata, not an authored effect
+field. Board area-selection results and automation placement snapshots carry the
+floor. Occupancy and entry require the zone's floor to match the creature's floor.
+Legacy zones with no stored floor resolve to `level-0`, independently of caster
+movement. Wall zones use footprint rectangle intersections, so partial fractional
+overlap counts while edge-only contact does not. Display/preview floor filtering
+and deleted-floor lifecycle are still pending.

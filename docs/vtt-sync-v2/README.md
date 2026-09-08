@@ -1082,3 +1082,10 @@ The legacy paths being replaced are primarily:
 
 Do not delete them wholesale. Route one domain to V2, verify its gate, then
 remove only that domain's obsolete V1 branches.
+
+Persistent-zone floor ownership is placement runtime state: the selected area
+result supplies levelId, registration preserves it, and occupancy/entry compare
+floors through persistent-zone-geometry.js. No whole-board writer or new sync
+command is introduced; zone records remain inside their owning placement's V2
+update. Legacy missing floor data resolves to level-0. Rendering and deleted-floor
+cleanup remain outstanding and must not infer zone floor from a moving caster.

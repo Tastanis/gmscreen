@@ -1071,3 +1071,20 @@ reload, and mask cleanup on reused nodes after floor/GM changes. A unit case cov
 translated bounds, stacked openings and a closed intervening floor. Full suite:
 720 tests across 91 files passed. This is display geometry only; range/effect
 semantics and fractional cutout normalization remain separate roadmap concerns.
+
+### Persistent-zone floor ownership and overlap
+
+Persistent zones previously stored only coordinates, allowing overlap checks to
+match creatures on unrelated floors. Registration now captures the selected area
+floor in zone.levelId; both rectangular and wall area results supply that floor.
+Legacy records without floor data resolve to level-0 rather than following a
+caster who may have moved. Automation movement snapshots and zone-entry footprints
+retain levelId. Occupancy and entry share one floor-aware geometry helper.
+
+Wall-square overlap now tests rectangle intersection, including partial overlaps
+from fractional token coordinates; merely touching edges does not count. Browser
+QA exercises the registration hook, canonical save, player projection and GM
+reload with an upper-floor zone owned by a base-floor caster. Unit tests cover
+cross-floor exclusion and fractional wall overlap. Full suite: 722 tests/92 files
+passed. The browser check did not exercise a damage tick or drag-triggered entry.
+Zone rendering/preview, deleted-floor lifecycle and full trigger journeys remain.

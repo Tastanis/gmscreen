@@ -1,3 +1,4 @@
+import {resolvePersistentZoneLevelId,doesPersistentZoneOverlapPlacement} from './persistent-zone-geometry.js';
 import {renderTokenAuras} from './token-aura-renderer.js';
 import {normalizeAutomationAuraId,createAutomationAuraId,cloneAutomationAuraRecord,getAutomationAuraRecords,getRenderableAurasForPlacement} from './token-aura-records.js';
 import {normalizePlacementForRender,toBoolean} from './token-render-normalize.js';
@@ -2580,6 +2581,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!moverNow) return;
     const fromFootprint = {
       id: movingId,
+      levelId: from.levelId ?? moverNow.levelId ?? BASE_MAP_LEVEL_ID,
       column: from.column ?? 0,
       row: from.row ?? 0,
       width: from.width ?? moverNow.width ?? 1,
@@ -2589,6 +2591,7 @@ export function mountBoardInteractions(store, routes = {}) {
     };
     const toFootprint = {
       id: movingId,
+      levelId: to.levelId ?? moverNow.levelId ?? BASE_MAP_LEVEL_ID,
       column: to.column ?? 0,
       row: to.row ?? 0,
       width: to.width ?? moverNow.width ?? 1,
@@ -4146,6 +4149,7 @@ export function mountBoardInteractions(store, routes = {}) {
       id: zoneId,
       sceneId,
       casterId: payload.casterId,
+      levelId: resolvePersistentZoneLevelId({levelId:template.levelId ?? area.levelId ?? getViewerLevelIdForCurrentUser(state,sceneId)}),
       ownerName: ownerPlacement ? tokenLabel(ownerPlacement) : payload.casterName || '',
       abilityId: payload.abilityId || '',
       abilityName: payload.abilityName || 'Persistent Zone',
@@ -4486,36 +4490,12 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function getCreaturesInsideZone(zone) {
-    // Walls use a per-square footprint; other shapes use the bounding rectangle.
-    if (Array.isArray(zone.squares) && zone.squares.length) {
-      return getPlacementsForActiveScene().filter((p) =>
-        doesAutomationSquaresAffectPlacement(zone.squares, p)
-        && doesAutomationTargetFilterMatch(p, zone.affects || 'creature')
-      );
-    }
-    return getPlacementsForActiveScene().filter((p) =>
-      doesAutomationAreaAffectPlacement({
-        left: zone.template.column,
-        top: zone.template.row,
-        right: zone.template.column + zone.template.width,
-        bottom: zone.template.row + zone.template.height,
-      }, p)
-      && doesAutomationTargetFilterMatch(p, zone.affects || 'creature')
-    );
+    return getPlacementsForActiveScene().filter((placement) => isPlacementInsideZone(zone,placement));
   }
 
   function isPlacementInsideZone(zone, placement) {
-    if (!zone || !placement) return false;
-    if (!doesAutomationTargetFilterMatch(placement, zone.affects || 'creature')) return false;
-    if (Array.isArray(zone.squares) && zone.squares.length) {
-      return doesAutomationSquaresAffectPlacement(zone.squares, placement);
-    }
-    return doesAutomationAreaAffectPlacement({
-      left: zone.template.column,
-      top: zone.template.row,
-      right: zone.template.column + zone.template.width,
-      bottom: zone.template.row + zone.template.height,
-    }, placement);
+    return doesPersistentZoneOverlapPlacement(zone,placement)
+      && doesAutomationTargetFilterMatch(placement,zone.affects || 'creature');
   }
 
   async function applyPersistentZoneEffectsToPlacements(zone, placements, reason) {
@@ -16240,6 +16220,7 @@ export function mountBoardInteractions(store, routes = {}) {
           height: maxRow - minRow + 1,
           squares: squares.map((s) => ({ column: s.column, row: s.row })),
           shape: 'wall',
+          levelId: getActiveTokenPlacementLevelId(boardApi.getState?.() ?? {}) || BASE_MAP_LEVEL_ID,
         };
         // Find creatures whose footprint overlaps any of the wall squares.
         const affected = getPlacementsForActiveScene().filter((p) =>
@@ -16398,7 +16379,7 @@ export function mountBoardInteractions(store, routes = {}) {
     clearAutomationAreaOverlay();
     request.resolve?.({
       skipped: false,
-      template: { column: cell.column, row: cell.row, width, height },
+      template: { column: cell.column, row: cell.row, width, height, levelId:getActiveTokenPlacementLevelId(boardApi.getState?.() ?? {}) || BASE_MAP_LEVEL_ID },
       targets: affected.map((placement) => ({
         id: placement.id,
         name: tokenLabel(placement),
@@ -16870,6 +16851,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     return {
       id: placement.id || '',
+      levelId: resolvePlacementLevelId(placement),
       name: tokenLabel(placement),
       column: Number.isFinite(placement.column) ? placement.column : 0,
       row: Number.isFinite(placement.row) ? placement.row : 0,
