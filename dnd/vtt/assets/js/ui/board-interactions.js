@@ -20599,6 +20599,14 @@ export function mountBoardInteractions(store, routes = {}) {
           <ul class="vtt-token-settings__automation-aura-list" data-token-settings-automation-aura-list></ul>
         </div>
         ${levelControlsMarkup}
+        <div class="vtt-token-settings__section">
+          <label class="vtt-token-settings__row">Movement
+            <select data-token-movement-mode aria-label="Token movement mode">
+              <option value="ground">Ground</option><option value="fly">Fly</option><option value="hover">Hover</option>
+            </select>
+          </label>
+          <small>Use only when an effect allows it. Height, speed-0 effects, and fall damage are manual.</small>
+        </div>
         ${hiddenToggleMarkup}
       </form>
     `;
@@ -20631,6 +20639,7 @@ export function mountBoardInteractions(store, routes = {}) {
       levelName: element.querySelector('[data-token-settings-level-name]'),
       levelDownButton: element.querySelector('[data-token-settings-level="down"]'),
       levelUpButton: element.querySelector('[data-token-settings-level="up"]'),
+      movementMode: element.querySelector('[data-token-movement-mode]'),
       auraToggle: element.querySelector('[data-token-settings-toggle="aura"]'),
       auraField: element.querySelector('[data-token-settings-field="aura"]'),
       auraRadiusInput: element.querySelector('[data-token-settings-input="auraRadius"]'),
@@ -20674,6 +20683,22 @@ export function mountBoardInteractions(store, routes = {}) {
 
     menu.levelUpButton?.addEventListener('click', () => {
       handleTokenLevelMoveClick('up');
+    });
+    menu.movementMode?.addEventListener('change', async () => {
+      const placementId = activeTokenSettingsId;
+      const sceneId = boardApi.getState?.()?.boardState?.activeSceneId;
+      if (!placementId || !sceneId) return;
+      const mode = menu.movementMode.value;
+      menu.movementMode.disabled = true;
+      updateStatus('Saving movement mode…');
+      try {
+        await tokenMovementRuntime.submitPlacementOps([{ type: 'placement.update', sceneId, placementId, patch: { movementMode: mode } }]);
+        updateStatus(`Movement mode: ${mode}.`);
+      } catch (error) { updateStatus(error?.message || 'Movement mode was not saved.'); }
+      finally {
+        menu.movementMode.disabled = false;
+        menu.movementMode.value = getPlacementFromStore(activeTokenSettingsId)?.movementMode || 'ground';
+      }
     });
 
     if (menu.conditionSelect) {
@@ -21479,6 +21504,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function syncTokenLevelControls(placement = null) {
+    if (tokenSettingsMenu?.movementMode) tokenSettingsMenu.movementMode.value = placement?.movementMode || 'ground';
     if (!tokenSettingsMenu?.levelSection) {
       return;
     }

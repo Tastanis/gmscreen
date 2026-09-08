@@ -7,6 +7,21 @@ final class FloorGeometry
     public const BASE = 'level-0';
     private const EPSILON = 0.000001;
 
+    public static function isProne(array $placement): bool
+    {
+        foreach (is_array($placement['conditions'] ?? null) ? $placement['conditions'] : [] as $condition) {
+            $name = is_array($condition) ? ($condition['name'] ?? $condition['id'] ?? '') : $condition;
+            if (is_string($name) && strtolower(trim($name)) === 'prone') return true;
+        }
+        return false;
+    }
+
+    public static function isAirborne(array $placement): bool
+    {
+        return ($placement['movementMode'] ?? 'ground') === 'hover'
+            || (($placement['movementMode'] ?? 'ground') === 'fly' && !self::isProne($placement));
+    }
+
     public static function orderedLevels(array $mapLevels): array
     {
         $levels = [];
@@ -173,6 +188,7 @@ final class FloorGeometry
             $path[] = ['x'=>$x+$width/2, 'y'=>$y+$height/2];
         }
         if (count($path) > 258) throw new InvalidArgumentException('Movement path has too many waypoints.');
+        if (self::isAirborne($current)) return $result;
         if ($kind === 'walk' && ($byId[$levelId]['hidden'] ?? false) !== true) {
             $stairs = $levelId === self::BASE ? ($mapLevels['baseStairs'] ?? []) : ($byId[$levelId]['stairs'] ?? []);
             foreach ($stairs as $stair) {

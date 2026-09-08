@@ -1188,6 +1188,7 @@ final class SyncV2Store
                         return $this->rollbackConflict('placement_exists', $snapshot);
                     }
                     $placement = $action['placement'];
+                    if (isset($placement['movementMode']) && !in_array($placement['movementMode'], ['ground','fly','hover'], true)) throw new InvalidArgumentException('Unknown movement mode.');
                     unset($placement['_movementUndo'], $placement['_floorTraversal']);
                     if (!$isGm && $this->placementIsHidden($placement)) {
                         throw new InvalidArgumentException('Players cannot add hidden placements.');
@@ -1235,11 +1236,28 @@ final class SyncV2Store
                 }
 
                 $patch = $action['patch'];
+                if (array_key_exists('movementMode', $patch)) {
+                    if (!in_array($patch['movementMode'], ['ground', 'fly', 'hover'], true)) throw new InvalidArgumentException('Unknown movement mode.');
+                    if (!$isGm && !$this->playerMayMovePlacement($current)) throw new InvalidArgumentException('You cannot change this token movement mode.');
+                    if (!$isGm) foreach (($state['sceneConfig'][$sceneId]['mapLevels']['levels'] ?? []) as $level) {
+                        if (($level['id'] ?? '') === ($current['levelId'] ?? 'level-0') && ($level['hidden'] ?? false) === true) throw new InvalidArgumentException('You cannot change a token on a hidden floor.');
+                    }
+                }
                 if (!$isGm) {
                     $this->assertPlayerPatchAllowed($patch);
                 }
                 unset($patch['id'], $patch['_entityRevision'], $patch['_movementUndo'], $patch['_floorTraversal']);
                 $next = [...$current, ...$patch];
+                if (($next['movementMode'] ?? 'ground') === 'fly' && FloorGeometry::isProne($next)) {
+                    if (($patch['movementMode'] ?? '') === 'fly') throw new InvalidArgumentException('A prone token cannot begin ordinary flight. Use Hover only when an effect grants it.');
+                    $patch['movementMode'] = 'ground'; $next['movementMode'] = 'ground';
+                }
+                if (array_key_exists('movementMode', $patch)) {
+                    $floor = FloorGeometry::move($next, $next, $state['sceneConfig'][$sceneId]['mapLevels'] ?? [], 'forced');
+                    $patch['levelId'] = $floor['levelId']; $patch['_floorTraversal'] = null;
+                    $patch['_movementUndo'] = [];
+                    $next = [...$next, ...$patch];
+                }
                 if (!array_key_exists('levelId', $patch)
                     && (array_key_exists('column', $patch) || array_key_exists('row', $patch))) {
                     $floor = FloorGeometry::move($current, $next, $state['sceneConfig'][$sceneId]['mapLevels'] ?? [], $action['movementKind'], $action['path']);

@@ -169,6 +169,7 @@ export function normalizePlacementEntry(entry) {
 
   const normalized = {
     id,
+    movementMode: ['fly', 'hover'].includes(entry.movementMode) ? entry.movementMode : 'ground',
     tokenId,
     name,
     imageUrl,

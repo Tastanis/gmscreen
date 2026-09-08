@@ -12,7 +12,7 @@ User authorized implementing the September 7 product audit, updating/running the
 ## Broken player workflows
 
 - [ ] Server-validated atomic stairs/falls, including player and alternate movement paths.
-  - Core single/group movement now resolves stairs and support on the server; player reload, fall, and selected-token undo browser journeys pass. Flight, whole-group undo, and remaining automation entry-point coverage are still pending.
+  - Core single/group movement resolves stairs/support on the server. Manual Fly/Hover modes, prone interruption, and landing are implemented. Flight eligibility/height/speed-zero automation, whole-group undo, and remaining automation entry-point coverage are pending.
 - [x] Drawing creation/erase/clear/undo persist explicitly through V2, with author/floor scope and hidden-floor projection.
 - [x] Owned temporary template edit/remove permissions; persistent structures retain GM authority.
 - [x] Exact rejection feedback and pending/accepted state for canonical board commands; other multi-step action recovery remains below.
@@ -515,3 +515,26 @@ checks initial HTML excludes hidden token/template/drawing IDs, then performs
 reveal/show/hide/reveal without player reloads and verifies rendered tokens and
 templates plus unchanged canonical token data. The existing stairs/fall/reload/undo
 three-client journey also passes after the layer refresh.
+
+
+### Manual airborne movement modes
+
+Token settings now offer Ground, Fly, and Hover with visible manual-rule limits.
+Fly/Hover bypass stair traversal and holes during horizontal movement, including
+forced movement and teleport destination support. Ground resolves landing through
+canonical support geometry. Applying prone ends ordinary flight and resolves the
+fall atomically, while hover remains airborne. Mode changes clear stale traversal
+and undo receipts, persist across reload, and use existing shared allied control
+permissions; players cannot change enemy or hidden-floor token modes.
+
+Validation: 693 tests passed, followed by expanded permission checks. PHP coverage
+includes hole crossing, reload, prone/hover differences, landing, linked views,
+alternate movement, invalid modes, and permissions. A three-browser journey uses
+the player's actual mode control, flies across the upper-floor hole, reloads,
+selects Hover and Ground, and verifies synchronized landing. The source rules were
+checked in chapter-10-combat.md (Fly and Hover).
+
+This is the explicit airborne geometry state, not complete flight automation.
+Flight eligibility, height, speed-zero effects, fall damage, vertical movement and
+targeting, jumping, and automatic ability grants still need their later roadmap
+work. The control and automation registry state these limits.

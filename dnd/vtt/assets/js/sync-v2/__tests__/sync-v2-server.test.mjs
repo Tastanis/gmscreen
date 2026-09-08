@@ -57,7 +57,7 @@ test('PHP template authority allows own temporary removal and protects other aut
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 
-for (const file of ['floor-geometry.test.php', 'floor-movement.test.php', 'floor-view-lifecycle.test.php', 'scene-checkpoints.test.php']) {
+for (const file of ['floor-geometry.test.php', 'floor-movement.test.php', 'airborne-movement.test.php', 'floor-view-lifecycle.test.php', 'scene-checkpoints.test.php']) {
   test(`PHP ${file} validates canonical board behavior`, () => {
     const script = fileURLToPath(new URL(`../../../../api/v2/tests/${file}`, import.meta.url));
     const result = spawnSync('php', [...phpArgsForSqlite(), script], { encoding: 'utf8' });

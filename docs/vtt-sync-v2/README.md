@@ -872,6 +872,16 @@ data. Viewer-floor changes refresh the focused token, template, fog and persiste
 zone layers as well as map layers and the floor indicator; they do not remount
 the whole board or write shared state.
 
+Token `movementMode` is `ground` (default), `fly`, or `hover`, selected manually
+through token settings. Fly/Hover bypass stair crossings and unsupported-floor
+falls for ordinary and alternate movement. Landing runs support resolution inside
+the placement batch; applying prone converts Fly to Ground and resolves any fall,
+while Hover persists. Mode changes clear traversal and stale movement receipts.
+Players may change modes only on movable, non-hidden-floor tokens. Canonical
+revisions and linked floor following remain authoritative. This adds no ability
+effect kind: flight eligibility, height, speed-zero effects, fall damage, and
+vertical targeting remain manual, as shown beside the control.
+
 ### Named scene checkpoint archive
 
 `SceneCheckpointArchive.php` stores immutable scene captures in
