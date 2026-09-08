@@ -1737,6 +1737,23 @@ final class SyncV2Store
         }
     }
 
+    public function unresolvedZoneEntries(string $actorId,bool $isGm): array
+    {
+        if (trim($actorId)==='') throw new InvalidArgumentException('Authentication required.');
+        return (new ZoneEntryClaims($this->pdo,$this->worldId))->unresolved($actorId,$isGm);
+    }
+
+    public function finishZoneEntry(array $request,string $actorId,bool $isGm): array
+    {
+        if (trim($actorId)==='' || !is_string($request['claimId'] ?? null) || !is_string($request['status'] ?? null)) throw new InvalidArgumentException('Invalid claim outcome.');
+        $ledger=new ZoneEntryClaims($this->pdo,$this->worldId);
+        $this->pdo->exec('BEGIN IMMEDIATE');
+        try {
+            $result=$ledger->finish($request['claimId'],$request['status'],$actorId,$isGm);
+            $this->pdo->exec('COMMIT');return $result;
+        } catch (Throwable $error) {$this->rollbackTransactionSilently();throw $error;}
+    }
+
     /** Reserve one entry from trusted accepted movement; no gameplay effects run here. */
     public function claimZoneEntry(array $request, string $actorId, bool $isGm): array
     {

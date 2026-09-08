@@ -1107,5 +1107,10 @@ current token position/permissions, existing visible floors and zone entry geome
 It reserves a pending claim in the world-scoped vtt_zone_entry_claims SQLite ledger,
 unique by scene/zone/creature/boundary. Stored evidence includes the zone and receipt.
 Reservations never execute effects or change board revisions; repeats do not grant
-execution again. Client integration, completion and recovery are not implemented
-yet; client-local entry bookkeeping remains the current gameplay execution path.
+execution again. GET lists up to 200 oldest unresolved entries, restricted to the
+claimant except for the GM. POST action=finish acknowledges completed or
+needs_review outcomes; only the GM can dismiss. Final completed/dismissed outcomes
+are immutable, and repeated acknowledgements are idempotent. These are client
+outcome acknowledgements, not server proof that effects executed. They never replay
+effects or release a reservation. Client integration and recovery UI remain pending;
+client-local entry bookkeeping is still the current gameplay execution path.

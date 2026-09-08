@@ -212,6 +212,12 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 
 ## VTT Sync V2 Final Boundary
 
+- Zone entry claim acknowledgements never execute or replay effects. Uncertain
+  entries remain pending/needs_review for inspection; completed/dismissed claims
+  cannot be reopened. Recovery lists are claimant-only except for the GM. The
+  ledger is separate from canonical board revisions and is not yet wired into
+  gameplay execution; preserve that distinction in testing and status reports.
+
 ### Diagnostic and drawing regression workflow (September 2026)
 
 - The updated diagnostic pull is `dnd/vtt/tools/sync-diagnostic.py`; it reads the

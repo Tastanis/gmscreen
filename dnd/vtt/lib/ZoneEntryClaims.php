@@ -35,6 +35,40 @@ final class ZoneEntryClaims
         return ['claimed'=>true,'claimId'=>$claimId,'status'=>'pending','createdAt'=>$now];
     }
 
+    public function unresolved(string $actorId, bool $isGm): array
+    {
+        $sql="SELECT claim_id,scene_id,zone_id,placement_id,actor_id,status,evidence_json,created_at FROM vtt_zone_entry_claims WHERE world_id=? AND status IN ('pending','needs_review')";
+        $args=[$this->worldId];
+        if (!$isGm) {$sql.=' AND lower(actor_id)=?';$args[]=strtolower(trim($actorId));}
+        $query=$this->pdo->prepare($sql.' ORDER BY created_at ASC,claim_id ASC LIMIT 200');$query->execute($args);
+        $results=[];
+        foreach ($query->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $evidence=json_decode($row['evidence_json'],true,512,JSON_THROW_ON_ERROR);
+            $results[]=['claimId'=>$row['claim_id'],'sceneId'=>$row['scene_id'],'zoneId'=>$row['zone_id'],
+                'placementId'=>$row['placement_id'],'actorId'=>$row['actor_id'],'status'=>$row['status'],
+                'createdAt'=>(int)$row['created_at'],'zone'=>$evidence['zone'],'movement'=>$evidence['receipt']];
+        }
+        return $results;
+    }
+
+    /** Acknowledges a client outcome or explicit GM review; never replays effects. */
+    public function finish(string $claimId,string $status,string $actorId,bool $isGm): array
+    {
+        if (!preg_match('/^[a-f0-9]{64}$/',$claimId) || !in_array($status,['completed','needs_review','dismissed'],true)) throw new InvalidArgumentException('Invalid claim outcome.');
+        $query=$this->pdo->prepare('SELECT actor_id,status FROM vtt_zone_entry_claims WHERE world_id=? AND claim_id=?');
+        $query->execute([$this->worldId,$claimId]);$row=$query->fetch(PDO::FETCH_ASSOC);
+        if (!$row || (!$isGm && strtolower($row['actor_id'])!==strtolower(trim($actorId)))) throw new InvalidArgumentException('Claim is unavailable.');
+        if ($status==='dismissed' && !$isGm) throw new InvalidArgumentException('Only the GM may dismiss an unresolved entry.');
+        if ($row['status']===$status) {
+            return ['claimId'=>$claimId,'status'=>$status,'idempotent'=>true];
+        }
+        if (in_array($row['status'],['completed','dismissed'],true)) throw new InvalidArgumentException('Claim already has a final outcome.');
+        $update=$this->pdo->prepare('UPDATE vtt_zone_entry_claims SET status=? WHERE world_id=? AND claim_id=? AND status=?');
+        $update->execute([$status,$this->worldId,$claimId,$row['status']]);
+        if ($update->rowCount()!==1) throw new RuntimeException('Claim changed during acknowledgement.');
+        return ['claimId'=>$claimId,'status'=>$status,'idempotent'=>false];
+    }
+
     public static function enters(array $zone,array $from,array $to): bool
     {
         $floor=self::level($zone);

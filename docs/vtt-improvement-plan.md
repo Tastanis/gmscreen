@@ -1192,3 +1192,21 @@ drag and checks wrong-actor rejection, pending status, repeat identity and no cl
 side effects. Full suite: 725 tests/92 files passed. Client integration, completion
 receipts and interrupted-effect recovery remain; gameplay still uses the previous
 local entry path until that lifecycle is wired and verified.
+
+### Zone-entry outcomes and recovery API
+
+The claim endpoint now lists up to 200 oldest unresolved entries. Players receive
+only their own claims; the GM can inspect all. Stored zone effects and accepted
+movement evidence survive reload for review. Claimants or the GM can acknowledge
+completed/needs_review outcomes; only the GM may dismiss. Repeated acknowledgements
+are idempotent, and final outcomes cannot be reopened or grant execution again.
+These acknowledgements do not prove effect execution, replay effects, change token
+resources, or advance the board revision.
+
+Server checks cover actor isolation, reload, uncertain outcomes, invalid requests,
+GM dismissal, terminal-state protection and unchanged gameplay state. The isolated
+GM/player HTTP browser journey verifies listing, review, completion and retries
+after a real zone crossing. Full suite: 725 tests/92 files passed; the focused
+16-test server suite also passed after the final acknowledgement adjustment.
+Gameplay integration and the visible recovery panel remain pending. Until they
+are wired, this is recovery infrastructure, not a reload-safe gameplay claim.
