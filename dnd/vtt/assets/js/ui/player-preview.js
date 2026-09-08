@@ -25,7 +25,7 @@ export function mountPlayerPreview(root, store) {
   let sequence=0;
   let captured=null;
   const openMap=document.createElement('button');openMap.type='button';openMap.className='btn';
-  openMap.textContent='View map and fog';openMap.disabled=true;root.append(openMap);
+  openMap.textContent='Open player preview';openMap.disabled=true;root.append(openMap);
   const dialog=document.createElement('dialog');dialog.className='vtt-player-preview-dialog';
   const close=document.createElement('button');close.type='button';close.className='btn';close.textContent='Close preview';
   const heading=document.createElement('h2'),note=document.createElement('p'),surface=document.createElement('div');
@@ -37,7 +37,7 @@ export function mountPlayerPreview(root, store) {
   zoomIn.textContent='+';zoomIn.setAttribute('aria-label','Zoom in preview');fit.textContent='Fit preview';
   const zoomLabel=document.createElement('span');zoomLabel.setAttribute('aria-live','polite');
   controls.append(zoomOut,zoomLabel,zoomIn,fit);
-  note.textContent='Read-only board preview. Combat group colors are not included yet.';
+  note.textContent='Captured player board. Use Refresh player view to load newer changes.';
   dialog.append(close,heading,note,controls,surface);document.body.append(dialog);
   let mapSequence=0;
   let camera=null;

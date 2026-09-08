@@ -40,7 +40,7 @@ User authorized implementing the September 7 product audit, updating/running the
 
 ## Recovery and preparation
 
-- [ ] Specific-player preview and useful connection status.
+- [x] Specific-player preview and useful connection status.
   - Server-check-based connection status and manual reconciliation are implemented. GM Scenes exposes player diagnostics and an independent map/grid/floor/cutout/fog/token/drawing/circle/rectangle preview with local zoom/Fit. Token status overlays and wall template previews remain pending.
 - [x] Named encounter checkpoints, scoped restore, scene duplication/export.
   - GM-only checkpoints expose reviewed atomic position or layout restoration. Layout restores floors, grid, fog, drawings/templates and existing-token positions while preserving current resources and newer tokens. Scene JSON export/import and duplication preserve board geometry and links, survive retries, and open without reload. Character sheets and base-map/catalog metadata are outside checkpoint restore scope.
@@ -1103,3 +1103,24 @@ reload and unchanged canonical state during preview. The actual player's End
 control was clicked and canonical removal verified. The preview screenshot was
 inspected. Full suite: 722 tests/92 files passed. Combat group colors remain before
 preview completion; zone deleted-floor lifecycle and full trigger journeys remain.
+
+### Captured player-board preview complete
+
+Preview state now includes projected combat data. Group colors reuse the normal
+combat-group normalization and palette functions with independent maps, preserving
+player projection when a representative is hidden. The UI now says Open player
+preview and clearly describes the captured snapshot and explicit refresh.
+
+The completed passive surface includes map/grid/floors/cutouts/fog, token geometry,
+status overlays, group colors, drawings, circle/rectangle/wall templates, auras and
+persistent zones. Its camera is local; it has no gameplay handlers or End controls.
+Transient player selections, hover UI and in-progress gestures are not remote
+streamed state. Connection diagnostics were completed in earlier milestones.
+
+Fresh browser checks pass for endpoint authorization/identity, exact player
+projection, refresh, map/fog isolation, group colors with a hidden representative,
+all token/template layers, local camera, no preview commands and canonical reload
+parity. Persistent-zone controls/parity were separately exercised in the prior
+milestone; its test uses the renamed button. Full suite: 722 tests/92 files passed.
+The broader roadmap remains active, including zone deletion/trigger recovery,
+preparation tools, terrain and physical-height rules.

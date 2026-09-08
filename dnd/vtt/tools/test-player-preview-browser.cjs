@@ -49,7 +49,7 @@ const origin='http://127.0.0.1:8129';
     assert.match(await panel.locator('[data-preview-details]').innerText(),/Viewing: Level 0/);
     await panel.screenshot({path:'.playwright-mcp/player-view-details.png'});
     const liveParent=await page.locator('#vtt-map-levels').evaluate(node=>node.parentElement.id);
-    await panel.getByRole('button',{name:'View map and fog'}).click();
+    await panel.getByRole('button',{name:'Open player preview'}).click();
     const dialog=page.locator('.vtt-player-preview-dialog');
     await dialog.locator('.vtt-player-preview-map canvas').waitFor();
     assert.equal(await page.locator('#vtt-map-levels').count(),1);
@@ -74,7 +74,7 @@ const origin='http://127.0.0.1:8129';
     const upperBefore=await snapshot(gm);
     await panel.getByRole('button',{name:'Refresh player view'}).click();
     await panel.locator('[data-preview-details]').filter({hasText:'Test balcony'}).waitFor();
-    await panel.getByRole('button',{name:'View map and fog'}).click();
+    await panel.getByRole('button',{name:'Open player preview'}).click();
     await dialog.locator('[data-map-level-id="test-upper"]').waitFor();
     const upper=await dialog.evaluate(async node=>{
       const {buildMapLevelCutoutMask}=await import('/dnd/vtt/assets/js/ui/map-level-renderer.js');

@@ -4,7 +4,8 @@ Player preview uses the GM-only read-only `api/v2/player-preview.php?user=...`
 endpoint and the same snapshot projection as the actual player. Never impersonate
 the player session or touch their presence. GM Scenes has read-only Player view
 details and a map/grid/floor/cutout/fog/token/drawing dialog with local zoom/Fit.
-Combat group colors remain pending. Never label server-visible
+Combat group colors use independent group maps built from projected combat state.
+Never borrow the GM tracker's mutable group maps. Never label server-visible
 token data as on-screen visibility without applying the client geometry and fog.
 `renderFogSurface` paints an independent canvas with explicit scene/floor/viewer
 inputs. Use it for passive preview rather than remounting the singleton fog tool,

@@ -38,6 +38,9 @@ const origin='http://127.0.0.1:8129';
       automationAuras:[{id:'test-aura',radius:1,color:'#bb3377',automation:{abilityName:'Test aura'}},
         {id:'disabled-aura',enabled:false,radius:4,automation:{abilityName:'Disabled'}}],
     }}))});
+    await command('combat.patch',{patch:{groups:[
+      {representativeId:'preview-secret',memberIds:['preview-secret','preview-open','preview-upper']},
+    ]}});
     await command('fog.set',{fogOfWar:{byLevel:{'test-upper':{enabled:true,revealedCells:{'6,5':true,'8,5':true}}}}});
     await command('level.user.set',{userId:'sharon',entry:{levelId:'test-upper',source:'manual',followToken:false}});
     for(const [id,levelId] of [['preview-upper-line','test-upper'],['preview-base-line','level-0']]) {
@@ -53,12 +56,13 @@ const origin='http://127.0.0.1:8129';
     await panel.locator('[data-preview-status]').filter({hasText:'captured'}).waitFor();
     await panel.locator('select').selectOption('sharon');
     await panel.locator('[data-preview-details]').filter({hasText:'Test balcony'}).waitFor();
-    await panel.getByRole('button',{name:'View map and fog'}).click();
+    await panel.getByRole('button',{name:'Open player preview'}).click();
     const dialog=gm.locator('.vtt-player-preview-dialog');
     await dialog.locator('[data-preview-placement-id="preview-open"]').waitFor();
     const describe=nodes=>nodes.map(n=>({id:n.dataset.previewPlacementId||n.dataset.placementId,
       width:n.style.width,height:n.style.height,transform:n.style.transform,zIndex:n.style.zIndex,
       level:n.dataset.mapLevelId,direction:n.dataset.mapLevelDirection||null,distance:n.dataset.mapLevelDistance||null,
+      groupColor:n.dataset.groupColor||null,
       hp:n.querySelector('.vtt-token__hp-bar')?.outerHTML||null,ready:n.querySelector('.vtt-token__trigger-ready')?.textContent||null,
       condition:n.querySelector('.vtt-token__condition')?.textContent||null,mark:n.querySelector('.vtt-token__judgment-mark')?.textContent||null,
       hiddenEffect:n.querySelector('.vtt-token__hidden-effect')?.textContent||null,
@@ -67,6 +71,7 @@ const origin='http://127.0.0.1:8129';
     const preview=await dialog.locator('.vtt-token').evaluateAll(describe);
     assert.deepEqual(preview,real);
     assert.deepEqual(preview.map(t=>t.id),['preview-open','preview-upper']);
+    assert.deepEqual(preview.map(t=>t.groupColor),['1','1'],'Visible members share their projected group color even with a hidden representative');
     assert.equal(await dialog.locator('[data-preview-placement-id="preview-open"] .vtt-token__hp-value').count(),0,'Enemy numbers stay hidden in a GM preview');
     assert.equal(await dialog.locator('[data-preview-placement-id="preview-upper"] .vtt-token__hp-temp-value').textContent(),'(+5)');
     assert.equal(await dialog.locator('[data-preview-placement-id="preview-upper"] .vtt-token__trigger-ready').textContent(),'!');

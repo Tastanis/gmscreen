@@ -11,7 +11,7 @@ import {collectPersistentZones,renderPersistentZones} from './persistent-zone-re
 export function buildPlayerPreviewState(preview, tokens) {
   const canonical=preview.snapshot.state,sceneId=canonical.routing?.activeSceneId;
   return {tokens:restrictTokensToPlayerView(tokens ?? {items:[],folders:[]}),boardState:{
-    activeSceneId:sceneId,sceneState:{[sceneId]:canonical.sceneConfig?.[sceneId] ?? {}},
+    activeSceneId:sceneId,sceneState:{[sceneId]:{...canonical.sceneConfig?.[sceneId],combat:canonical.combat?.[sceneId] ?? {}}},
     placements:{[sceneId]:Object.values(canonical.placements?.[sceneId] ?? {})},
   }};
 }

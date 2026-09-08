@@ -7,6 +7,7 @@ import {syncTokenTeamAffiliation,paintTokenMarkIndicator,paintTokenConditionLabe
 import {syncTriggeredActionIndicator} from './automation-trigger-ready.js';
 import {createFogChecker} from './fog-of-war.js';
 import {getDefaultTokenStackOrderMap,getPlacementStackOrder} from './token-stack-order.js';
+import {applyCombatGroupsToState,getCombatGroupColorAssignments,getRepresentativeIdForCombatant} from '../combat/combat-groups.js';
 import {resolveVisibleTokenPresentation,getTokenRenderStackOrder,buildTokenLevelTransform,applyTokenLevelPresentation,normalizeTokenRenderGeometry} from './token-presentation.js';
 
 export function renderPlayerPreviewTokens(stage,state,view,levelId) {
@@ -16,6 +17,10 @@ export function renderPlayerPreviewTokens(stage,state,view,levelId) {
   const levels=normalizeMapLevelsState(config.mapLevels,{sceneGrid:config.grid});
   const isCellFogged=createFogChecker(state,levelId,{gmViewing:false});
   const stack=getDefaultTokenStackOrderMap(placements);
+  const groupState={groups:new Map(),representatives:new Map(),missingCounts:new Map()};
+  const combat=config.combat ?? {};
+  applyCombatGroupsToState(groupState,combat.groups ?? combat.groupings ?? combat.combatGroups ?? combat.combatantGroups);
+  const groupColors=getCombatGroupColorAssignments(groupState.groups);
   const layer=document.createElement('div');layer.className='vtt-board__tokens';
   for(const [index,raw] of placements.entries()) {
     const normalized=normalizePlacementForRender(raw);
@@ -25,6 +30,8 @@ export function renderPlayerPreviewTokens(stage,state,view,levelId) {
     if(!presentation)continue;
     const token=document.createElement('div');token.className='vtt-token';
     token.dataset.previewPlacementId=placement.id;token.dataset.mapLevelId=presentation.levelId;
+    const groupColor=groupColors.get(getRepresentativeIdForCombatant(placement.id,groupState.representatives));
+    if(groupColor)token.dataset.groupColor=String(groupColor);
     token.title=placement.name || 'Token';
     token.style.width=placement.width*view.gridSize+'px';token.style.height=placement.height*view.gridSize+'px';
     token.style.transform=buildTokenLevelTransform(view.gridOffsets.left+placement.column*view.gridSize,

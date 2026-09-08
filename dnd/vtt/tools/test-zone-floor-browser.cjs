@@ -68,7 +68,7 @@ const origin='http://127.0.0.1:8129';
     const panel=gm.locator('[data-player-preview]');await panel.locator('summary').click();
     await panel.locator('[data-preview-status]').filter({hasText:'captured'}).waitFor();
     await panel.locator('select').selectOption('sharon');await panel.locator('[data-preview-details]').filter({hasText:'Test balcony'}).waitFor();
-    await panel.getByRole('button',{name:'View map and fog'}).click();
+    await panel.getByRole('button',{name:'Open player preview'}).click();
     const dialog=gm.locator('.vtt-player-preview-dialog');await dialog.locator('[data-preview-zone-id]').first().waitFor();
     assert.deepEqual(await dialog.locator('[data-preview-zone-id]').evaluateAll(describe),actual);
     assert.equal(await dialog.locator('[data-zone-end],[data-zone-id],[data-caster-id]').count(),0);

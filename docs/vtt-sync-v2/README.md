@@ -23,7 +23,9 @@ hooks or tooltip handlers. Auras use explicit shared record normalization and
 painting, including owner floor/fog visibility. Token hydration shares legacy
 overlay aliases and readiness handling. Persistent zones share a passive painter
 with floor filtering/cutout masks and no preview End controls. Combat group colors
-remain pending. Player aura footprints now intersect intervening floor cutouts
+use the projected combat snapshot and existing group normalization in private maps.
+The dialog is a captured board with explicit refresh, not a live remote viewport.
+Player aura footprints now intersect intervening floor cutouts
 using explicit pixel bounds in the shared template presentation helper. Same-floor
 and GM repaints clear prior masks; GM overview remains unmasked. Drawing paths reuse the normal
 renderer with an explicit private SVG layer and selected floor. Local preview zoom
