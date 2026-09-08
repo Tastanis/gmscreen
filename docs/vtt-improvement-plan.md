@@ -1088,3 +1088,18 @@ reload with an upper-floor zone owned by a base-floor caster. Unit tests cover
 cross-floor exclusion and fractional wall overlap. Full suite: 722 tests/92 files
 passed. The browser check did not exercise a damage tick or drag-triggered entry.
 Zone rendering/preview, deleted-floor lifecycle and full trigger journeys remain.
+
+### Persistent-zone display and player preview
+
+The normal board and preview share persistent-zone-renderer.js. Player zones above
+the viewer floor are omitted; lower-floor rectangles/wall tiles clip through each
+blocking floor's cutouts. Wall labels anchor on the first visible tile. GM overview
+remains unmasked. Passive preview uses private zone/caster identifiers and never
+creates End controls. Text labels use textContent rather than interpolated HTML.
+
+Isolated browser QA covers zone floor registration, upper-zone exclusion, floor
+switch, lower wall clipping, first visible label, actual player/preview parity,
+reload and unchanged canonical state during preview. The actual player's End
+control was clicked and canonical removal verified. The preview screenshot was
+inspected. Full suite: 722 tests/92 files passed. Combat group colors remain before
+preview completion; zone deleted-floor lifecycle and full trigger journeys remain.

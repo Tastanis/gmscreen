@@ -4,7 +4,7 @@ Player preview uses the GM-only read-only `api/v2/player-preview.php?user=...`
 endpoint and the same snapshot projection as the actual player. Never impersonate
 the player session or touch their presence. GM Scenes has read-only Player view
 details and a map/grid/floor/cutout/fog/token/drawing dialog with local zoom/Fit.
-Persistent zones and combat group colors remain pending. Never label server-visible
+Combat group colors remain pending. Never label server-visible
 token data as on-screen visibility without applying the client geometry and fog.
 `renderFogSurface` paints an independent canvas with explicit scene/floor/viewer
 inputs. Use it for passive preview rather than remounting the singleton fog tool,
@@ -34,7 +34,10 @@ Persistent zones store the selected area's levelId at registration. Legacy recor
 without floor data resolve to level-0; never attach an existing zone to a moving
 caster's current floor. Occupancy/entry checks use persistent-zone-geometry.js,
 including fractional wall-square overlap. Movement snapshots must retain levelId.
-Zone rendering/preview and deleted-floor lifecycle still need completion.
+Zone rendering uses persistent-zone-renderer.js with explicit floors and view
+metrics. Players get floor filtering/cutout masks; GM overview remains unmasked.
+Preview has private zone/caster IDs and no End controls. Deleted-floor lifecycle
+and full zone trigger browser journeys still need completion.
 Passive drawings call renderDrawings with an explicit drawingLayer and floor;
 never mount or replace the active drawing tool's shared state for preview.
 Template floor visibility and SVG cutout masks live in template-presentation.js.

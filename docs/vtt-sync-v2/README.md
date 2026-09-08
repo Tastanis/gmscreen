@@ -21,7 +21,8 @@ visibility; enemy numeric stamina remains hidden even in a GM preview. Condition
 labels and judgment marks now use shared normalization/painters without removal
 hooks or tooltip handlers. Auras use explicit shared record normalization and
 painting, including owner floor/fog visibility. Token hydration shares legacy
-overlay aliases and readiness handling. Persistent zones and combat group colors
+overlay aliases and readiness handling. Persistent zones share a passive painter
+with floor filtering/cutout masks and no preview End controls. Combat group colors
 remain pending. Player aura footprints now intersect intervening floor cutouts
 using explicit pixel bounds in the shared template presentation helper. Same-floor
 and GM repaints clear prior masks; GM overview remains unmasked. Drawing paths reuse the normal
@@ -1087,5 +1088,6 @@ Persistent-zone floor ownership is placement runtime state: the selected area
 result supplies levelId, registration preserves it, and occupancy/entry compare
 floors through persistent-zone-geometry.js. No whole-board writer or new sync
 command is introduced; zone records remain inside their owning placement's V2
-update. Legacy missing floor data resolves to level-0. Rendering and deleted-floor
-cleanup remain outstanding and must not infer zone floor from a moving caster.
+update. Legacy missing floor data resolves to level-0. Rendering and preview use
+that saved floor. Deleted-floor cleanup remains outstanding and must not infer
+zone floor from a moving caster.

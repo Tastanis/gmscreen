@@ -570,5 +570,7 @@ field. Board area-selection results and automation placement snapshots carry the
 floor. Occupancy and entry require the zone's floor to match the creature's floor.
 Legacy zones with no stored floor resolve to `level-0`, independently of caster
 movement. Wall zones use footprint rectangle intersections, so partial fractional
-overlap counts while edge-only contact does not. Display/preview floor filtering
-and deleted-floor lifecycle are still pending.
+overlap counts while edge-only contact does not. Display and preview filter player
+zones by floor and clip lower-floor footprints through cutouts. GM overview stays
+unmasked. The preview has no zone-ending controls. Deleted-floor lifecycle remains
+pending.

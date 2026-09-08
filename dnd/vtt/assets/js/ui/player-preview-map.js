@@ -5,6 +5,8 @@ import {renderFogSurface} from './fog-of-war.js';
 import {renderPlayerPreviewTokens} from './player-preview-tokens.js';
 import {renderDrawings} from './drawing-tool.js';
 import {renderPlayerPreviewTemplates} from './player-preview-templates.js';
+import {buildLevelViewModel} from '../state/normalize/map-levels.js';
+import {collectPersistentZones,renderPersistentZones} from './persistent-zone-renderer.js';
 
 export function buildPlayerPreviewState(preview, tokens) {
   const canonical=preview.snapshot.state,sceneId=canonical.routing?.activeSceneId;
@@ -65,5 +67,8 @@ export async function createPlayerPreviewMap(preview, {levelId, tokens} = {}) {
   stage.append(drawings);
   renderPlayerPreviewTokens(stage,state,view,levelId);
   renderPlayerPreviewTemplates(stage,preview,view,levelId);
+  const zones=document.createElement('div');zones.className='vtt-persistent-zones';stage.append(zones);
+  renderPersistentZones({layer:zones,zones:collectPersistentZones(state.boardState.placements[sceneId]),view,passive:true,
+    levelContext:{viewerLevelId:levelId,levels:buildLevelViewModel({mapLevels:config.mapLevels,sceneGrid:grid})}});
   return {stage,width,height};
 }

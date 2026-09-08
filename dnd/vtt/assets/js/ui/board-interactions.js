@@ -1,3 +1,4 @@
+import {renderPersistentZones} from './persistent-zone-renderer.js';
 import {resolvePersistentZoneLevelId,doesPersistentZoneOverlapPlacement} from './persistent-zone-geometry.js';
 import {renderTokenAuras} from './token-aura-renderer.js';
 import {normalizeAutomationAuraId,createAutomationAuraId,cloneAutomationAuraRecord,getAutomationAuraRecords,getRenderableAurasForPlacement} from './token-aura-records.js';
@@ -4222,73 +4223,12 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function renderPersistentZoneOverlays() {
-    const layer = ensurePersistentZoneOverlayLayer();
-    if (!layer) return;
-    const state = boardApi.getState?.() ?? {};
-    const sceneId = state.boardState?.activeSceneId ?? null;
-    const zones = getPersistentZonesForScene(sceneId);
-    layer.innerHTML = '';
-    if (!zones.length) {
-      layer.hidden = true;
-      return;
-    }
-    layer.hidden = false;
-    for (const zone of zones) {
-      const safeName = escapeZoneText(zone.abilityName);
-      const safeOwner = escapeZoneText(zone.ownerName || 'Owner');
-      const upkeepText = zone.upkeep?.cost
-        ? `${zone.upkeep.cost} ${zone.upkeep.resource || 'Resource'}/turn`
-        : 'no upkeep';
-      const titleAttr = `${safeName} — ${safeOwner} • ${escapeZoneText(upkeepText)}`;
-      // Zones render on every client now; only the GM or the caster's owner
-      // gets the End control.
-      const endButtonHtml = canEndPersistentZone(zone)
-        ? `<button type="button" class="vtt-persistent-zone__end" data-zone-end="${escapeZoneText(zone.id)}" title="End this zone">End</button>`
-        : '';
-
-      if (Array.isArray(zone.squares) && zone.squares.length) {
-        // Wall-shaped zone: render each square as its own tile so the
-        // footprint can include diagonals / branches, then anchor the badge
-        // + hover panel on the FIRST square.
-        for (let i = 0; i < zone.squares.length; i += 1) {
-          const sq = zone.squares[i];
-          const tile = document.createElement('div');
-          tile.className = 'vtt-persistent-zone vtt-persistent-zone--wall-tile';
-          tile.dataset.zoneId = zone.id;
-          tile.dataset.casterId = zone.casterId;
-          if (i === 0) {
-            tile.innerHTML = `
-              <div class="vtt-persistent-zone__badge" title="${titleAttr}" aria-hidden="true">⚡</div>
-              <div class="vtt-persistent-zone__body">
-                <div class="vtt-persistent-zone__label">${safeName}</div>
-                <div class="vtt-persistent-zone__meta">${safeOwner} • ${escapeZoneText(upkeepText)}</div>
-                ${endButtonHtml}
-              </div>
-            `;
-          }
-          positionAutomationCell(tile, sq.column, sq.row, 1, 1);
-          layer.appendChild(tile);
-        }
-        continue;
-      }
-
-      // Rectangular zone (cube / burst / aura / line / rectangle): one tile
-      // spanning the whole footprint.
-      const cell = document.createElement('div');
-      cell.className = 'vtt-persistent-zone';
-      cell.dataset.zoneId = zone.id;
-      cell.dataset.casterId = zone.casterId;
-      cell.innerHTML = `
-        <div class="vtt-persistent-zone__badge" title="${titleAttr}" aria-hidden="true">⚡</div>
-        <div class="vtt-persistent-zone__body">
-          <div class="vtt-persistent-zone__label">${safeName}</div>
-          <div class="vtt-persistent-zone__meta">${safeOwner} • ${escapeZoneText(upkeepText)}</div>
-          ${endButtonHtml}
-        </div>
-      `;
-      positionAutomationCell(cell, zone.template.column, zone.template.row, zone.template.width, zone.template.height);
-      layer.appendChild(cell);
-    }
+    const state=boardApi.getState?.() ?? {};
+    const sceneId=state.boardState?.activeSceneId ?? null;
+    renderPersistentZones({layer:ensurePersistentZoneOverlayLayer(),zones:getPersistentZonesForScene(sceneId),
+      view:viewState,gmViewing:isGmUser(),canEndZone:canEndPersistentZone,
+      levelContext:{viewerLevelId:getViewerLevelIdForCurrentUser(state,sceneId),
+        levels:buildLevelViewModel({mapLevels:getActiveSceneTokenLevelState(state)})}});
   }
 
   function escapeZoneText(value) {
