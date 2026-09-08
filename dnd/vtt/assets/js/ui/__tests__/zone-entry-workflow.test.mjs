@@ -46,3 +46,18 @@ test('claim transport rejects HTTP/application failures and aborts an unresponsi
     signal.addEventListener('abort',()=>reject(Error('aborted')));
   })}),/aborted/);
 });
+
+test('overlapping zones reserve independently but serialize effects on one creature',async()=>{
+  const order=[];let release;
+  const gate=new Promise(resolve=>{release=resolve;});
+  const api=async request=>request.action?{}:{claimed:true,claimId:request.zoneId};
+  const request={sceneId:'scene',placementId:'mover'};
+  const first=executeClaimedZoneEntry({...request,zoneId:'first'},async()=>{order.push('first-start');await gate;order.push('first-end');},{api});
+  const second=executeClaimedZoneEntry({...request,zoneId:'second'},async()=>{order.push('second');},{api});
+  await new Promise(resolve=>setTimeout(resolve,0));
+  assert.deepEqual(order,['first-start']);release();await Promise.all([first,second]);
+  assert.deepEqual(order,['first-start','first-end','second']);
+  const failed=executeClaimedZoneEntry({...request,zoneId:'failed'},async()=>{throw Error('failed');},{api});
+  const later=executeClaimedZoneEntry({...request,zoneId:'later'},async()=>{order.push('later');},{api});
+  await Promise.all([failed,later]);assert.equal(order.at(-1),'later','A failed effect must not poison later independent claims');
+});

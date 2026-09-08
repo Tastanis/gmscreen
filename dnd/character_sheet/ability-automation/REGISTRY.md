@@ -601,3 +601,9 @@ The GM Scenes recovery panel never replays effects. Completed/reviewed walking
 entries remain reserved across reload. Forced/swap paths and broader concurrent
 client/round-transition validation remain pending. A timeout cannot cancel an
 already dispatched effect; inspect actual stamina/conditions before resolving.
+
+Walking entry eligibility is checked against server claims each time, including
+on players whose legacy local entry sets do not reset at GM round boundaries.
+Overlapping granted zone effects on one creature execute sequentially per client.
+The round regression covers two zones across three rounds, including competing
+GM/player drags; other interruption and forced-movement cases remain separate.

@@ -1254,3 +1254,24 @@ matches normalized condition names case-insensitively and outcome polling reads 
 HTTP API directly. Forced/swap receipt integration, simultaneous clients, new-round
 behavior and other interruption variants remain on the roadmap.
 Full regression suite: 730 tests/93 files passed with the integrated runtime.
+
+### Player round boundaries and overlapping zone effects
+
+Walking entry claims no longer consult the legacy enteredThisRound gate. That set
+is reset by GM-only timing hooks and could suppress player entries in later rounds.
+The server claim boundary now determines walking eligibility on every client;
+the set remains only for the pending forced/swap path.
+
+Granted effects for the same scene/creature execute sequentially within a client.
+Reservations remain independent, failed effects do not poison the queue, and queue
+entries are removed when finished. A competing GM/player drag test initially left
+one overlapping zone in review after a save conflict; sequential execution passed
+the same scenario with both effects applied exactly once.
+
+The browser journey verifies two overlapping damaging zones, same-round reentry,
+round two in the same player client without reload, and competing GM/player drags
+in round three. This is a controlled concurrency case, not a proof of all network
+failure permutations. Forced movement, queued-zone cancellation and additional
+interruption cases remain pending.
+Full regression suite: 731 tests/93 files passed, including the execution-order
+and failed-queue recovery test.

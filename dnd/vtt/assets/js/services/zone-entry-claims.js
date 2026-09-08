@@ -1,4 +1,15 @@
 const endpoint='/dnd/vtt/api/v2/zone-entries.php';
+const executionQueues=new Map();
+
+async function executeInOrder(request,execute) {
+  if (!request.sceneId || !request.placementId) return execute();
+  const key=JSON.stringify([request.sceneId,request.placementId]);
+  const previous=executionQueues.get(key) || Promise.resolve();
+  const current=previous.catch(()=>{}).then(execute);
+  executionQueues.set(key,current);
+  try {return await current;}
+  finally {if(executionQueues.get(key)===current)executionQueues.delete(key);}
+}
 
 export async function zoneEntryRequest(request=null,{fetchImpl=globalThis.fetch,timeoutMs=15000}={}) {
   const controller=new AbortController();
@@ -19,7 +30,7 @@ export async function executeClaimedZoneEntry(request,execute,{api=zoneEntryRequ
   catch(error) {return {status:'needs_review',error,claimId:null};}
   if (!claim.claimed) return {status:claim.status,claimId:claim.claimId,executed:false};
   try {
-    await execute();
+    await executeInOrder(request,execute);
     await api({action:'finish',claimId:claim.claimId,status:'completed'});
     return {status:'completed',claimId:claim.claimId,executed:true};
   } catch(error) {

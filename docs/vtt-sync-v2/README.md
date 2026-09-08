@@ -1123,3 +1123,10 @@ await persistence; unsupported effects, rejected callbacks, scene changes or a
 rolled back or replayed automatically. Forced movement/swap entry paths still use
 local bookkeeping and require their own receipt integration. Multi-client races,
 round transitions and interruption variants remain broader validation tasks.
+
+Walking eligibility must not consult enteredThisRound: GM-only timing resets do
+not update that local cache on players. Always let the canonical claim boundary
+decide. Within one client, granted effects for a scene/creature are queued in order
+to avoid overlapping zone effects racing their placement saves. Failed executions
+release the queue but keep their own review claim. The isolated browser regression
+covers overlapping zones across rounds and competing GM/player walking drags.

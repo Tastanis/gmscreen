@@ -220,6 +220,8 @@ console.log('Button element:', document.getElementById('import-character-btn'));
   The GM Scenes recovery panel supports inspection and manual final outcomes.
   Condition callbacks now await accepted persistence; preserve this boundary.
   Unsupported, partial or uncertain zone effects require review, never replay.
+  Walking claims must bypass enteredThisRound because its round reset is GM-only.
+  Keep granted effects queued per scene/creature to avoid overlapping save races.
 
 ### Diagnostic and drawing regression workflow (September 2026)
 

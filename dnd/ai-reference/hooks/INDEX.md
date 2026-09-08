@@ -60,3 +60,6 @@ as damage callbacks do. Failed or uncertain effects leave a GM recovery record;
 completed or reviewed entries cannot receive a second execution grant after reload.
 Unsupported zone effects require manual review. Forced/swap entries remain on the
 local path pending trusted receipt integration. No authored JSON fields changed.
+Walking claims bypass the legacy local round cache; server boundaries decide.
+Granted effects on the same creature execute sequentially per client, preventing
+overlapping zones from racing their own placement saves.

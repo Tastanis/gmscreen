@@ -2605,9 +2605,10 @@ export function mountBoardInteractions(store, routes = {}) {
       if (!zone || !Array.isArray(zone.triggers) || !zone.triggers.includes('onEnter')) continue;
       if (!doesAutomationTargetFilterMatch(moverNow,zone.affects || 'creature')
         || !doesPersistentZoneMovementEnter(zone,fromFootprint,toFootprint)) continue;
-      if (zone.enteredThisRound.has(movingId)) continue; // already triggered this round
-      zone.enteredThisRound.add(movingId);
       if (movement.movementOperationId) {
+        // The server owns the combat boundary. Player-local sets are not reset
+        // by GM-only round hooks and must never suppress a new walking claim.
+        zone.enteredThisRound.add(movingId);
         const sceneId=movement.sceneId || getActiveSceneId();
         executeClaimedZoneEntry({sceneId,placementId:movingId,zoneId:zone.id,movementOperationId:movement.movementOperationId},
           ()=>applyPersistentZoneEffectsToPlacements(zone,[moverNow],'enter',{strict:true,sceneId}))
@@ -2619,6 +2620,8 @@ export function mountBoardInteractions(store, routes = {}) {
           });
         continue;
       }
+      if (zone.enteredThisRound.has(movingId)) continue;
+      zone.enteredThisRound.add(movingId);
       // Fire effects asynchronously to the mover only.
       applyPersistentZoneEffectsToPlacements(zone, [moverNow], 'enter').catch((err) => {
         console.warn('[VTT] persistent-zone onEnter effects failed', err);
