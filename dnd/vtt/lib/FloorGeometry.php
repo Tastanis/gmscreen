@@ -7,19 +7,19 @@ final class FloorGeometry
     public const BASE = 'level-0';
     private const EPSILON = 0.000001;
 
-    public static function isProne(array $placement): bool
-    {
-        foreach (is_array($placement['conditions'] ?? null) ? $placement['conditions'] : [] as $condition) {
-            $name = is_array($condition) ? ($condition['name'] ?? $condition['id'] ?? '') : $condition;
-            if (is_string($name) && strtolower(trim($name)) === 'prone') return true;
-        }
-        return false;
-    }
-
     public static function isAirborne(array $placement): bool
     {
         return ($placement['movementMode'] ?? 'ground') === 'hover'
-            || (($placement['movementMode'] ?? 'ground') === 'fly' && !self::isProne($placement));
+            || (($placement['movementMode'] ?? 'ground') === 'fly' && !self::flightInterrupted($placement));
+    }
+
+    public static function flightInterrupted(array $placement): bool
+    {
+        foreach (is_array($placement['conditions'] ?? null) ? $placement['conditions'] : [] as $condition) {
+            $name = is_array($condition) ? ($condition['name'] ?? $condition['id'] ?? '') : $condition;
+            if (is_string($name) && in_array(strtolower(trim($name)), ['prone','grabbed','restrained','unconscious'], true)) return true;
+        }
+        return false;
     }
 
     public static function orderedLevels(array $mapLevels): array

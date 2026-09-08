@@ -9,11 +9,11 @@ try {
         'sceneState'=>['scene'=>['mapLevels'=>['levels'=>[['id'=>'upper','cutouts'=>[['column'=>6,'row'=>5,'width'=>2,'height'=>2]]]]]]]];
     $store->migrateLegacyPlacements($board); $store->migrateLegacyBoardDomains($board);
     $sequence = 0;
-    $patch = function (array $patch) use (&$store, &$sequence) {
+    $patch = function (array $patch, bool $isGm = false) use (&$store, &$sequence) {
         $snapshot = $store->getSnapshot();
         return $store->acceptPlacementBatch(['type'=>'placement.batch','operationId'=>'air-patch-'.++$sequence,'baseRevision'=>$snapshot['revision'],
             'payload'=>['actions'=>[['kind'=>'patch','sceneId'=>'scene','placementId'=>'hero',
-                'entityRevision'=>$snapshot['state']['placements']['scene']['hero']['_entityRevision'],'patch'=>$patch]]]], 'cal', false);
+                'entityRevision'=>$snapshot['state']['placements']['scene']['hero']['_entityRevision'],'patch'=>$patch]]]], $isGm ? 'GM' : 'cal', $isGm);
     };
     $patch(['movementMode'=>'fly']);
     $snapshot = $store->getSnapshot();
@@ -33,6 +33,26 @@ try {
     $landed = $store->getSnapshot()['state']['placements']['scene']['hero'];
     verifyAir($landed['movementMode'] === 'ground' && $landed['levelId'] === 'level-0', 'Prone ends ordinary flight and resolves support atomically.');
     verifyAir($store->getSnapshot()['state']['sceneConfig']['scene']['userLevelState']['cal']['levelId'] === 'level-0', 'Linked view follows landing.');
+    foreach (['Grabbed', ['name'=>'RESTRAINED'], ['id'=>' unconscious ']] as $condition) {
+        $patch(['conditions'=>[], 'movementMode'=>'fly', 'levelId'=>'upper'], true);
+        $beforeRevision = $store->getSnapshot()['revision'];
+        $patch(['conditions'=>[$condition]]);
+        $snapshot = $store->getSnapshot();
+        $token = $snapshot['state']['placements']['scene']['hero'];
+        verifyAir($snapshot['revision'] === $beforeRevision + 1 && $token['movementMode'] === 'ground' && $token['levelId'] === 'level-0', 'Speed-zero condition lands ordinary flight in one revision.');
+        verifyAir($snapshot['state']['sceneConfig']['scene']['userLevelState']['cal']['levelId'] === 'level-0', 'Speed-zero landing includes the linked view.');
+        $rejected = false;
+        try { $patch(['movementMode'=>'fly']); } catch (InvalidArgumentException $error) { $rejected = true; }
+        verifyAir($rejected && $store->getSnapshot() === $snapshot, 'Speed-zero condition prevents takeoff without mutation.');
+        $patch(['conditions'=>[]]);
+        verifyAir($store->getSnapshot()['state']['placements']['scene']['hero']['movementMode'] === 'ground', 'Removing a condition does not restart flight.');
+        $patch(['movementMode'=>'hover', 'levelId'=>'upper'], true);
+        $patch(['conditions'=>[$condition]]);
+        $token = $store->getSnapshot()['state']['placements']['scene']['hero'];
+        verifyAir($token['movementMode'] === 'hover' && $token['levelId'] === 'upper', 'Hover persists with speed-zero conditions.');
+    }
+    $patch(['conditions'=>['Slowed'], 'movementMode'=>'fly']);
+    verifyAir($store->getSnapshot()['state']['placements']['scene']['hero']['levelId'] === 'upper', 'Slowed alone does not interrupt flight.');
     foreach (['forced','teleport'] as $kind) {
         $air = [...$landed, 'movementMode'=>'hover', 'levelId'=>'upper'];
         verifyAir(FloorGeometry::move($air, $air, $board['sceneState']['scene']['mapLevels'], $kind)['levelId'] === 'upper', 'Airborne forced/teleport movement preserves support mode.');

@@ -142,7 +142,7 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 - Initial player HTML and V2 recovery use the same audience projection. Preserve
   that boundary and the focused layer refresh when changing floor visibility.
 - Ground/Fly/Hover is explicit token runtime state, not ability-authoring JSON.
-  Mode changes and prone interruption resolve support through canonical placement
+  Mode changes and Prone/Grabbed/Restrained/Unconscious interruption resolve support through canonical placement
   commands. Preserve the manual limits documented in the automation registry.
 - The legacy checked-in Pusher secret still requires rotation in the external
   Pusher dashboard. Put the replacement in the server-only

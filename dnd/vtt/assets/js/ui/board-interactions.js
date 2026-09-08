@@ -20605,7 +20605,7 @@ export function mountBoardInteractions(store, routes = {}) {
               <option value="ground">Ground</option><option value="fly">Fly</option><option value="hover">Hover</option>
             </select>
           </label>
-          <small>Use only when an effect allows it. Height, speed-0 effects, and fall damage are manual.</small>
+          <small>Use only when an effect allows it. Prone, Grabbed, Restrained, and Unconscious end Fly; Hover persists. Height, other speed effects, and fall damage are manual.</small>
         </div>
         ${hiddenToggleMarkup}
       </form>

@@ -1189,6 +1189,7 @@ final class SyncV2Store
                     }
                     $placement = $action['placement'];
                     if (isset($placement['movementMode']) && !in_array($placement['movementMode'], ['ground','fly','hover'], true)) throw new InvalidArgumentException('Unknown movement mode.');
+                    if (($placement['movementMode'] ?? '') === 'fly' && FloorGeometry::flightInterrupted($placement)) throw new InvalidArgumentException('Prone or speed-zero conditions prevent ordinary flight.');
                     unset($placement['_movementUndo'], $placement['_floorTraversal']);
                     if (!$isGm && $this->placementIsHidden($placement)) {
                         throw new InvalidArgumentException('Players cannot add hidden placements.');
@@ -1248,8 +1249,8 @@ final class SyncV2Store
                 }
                 unset($patch['id'], $patch['_entityRevision'], $patch['_movementUndo'], $patch['_floorTraversal']);
                 $next = [...$current, ...$patch];
-                if (($next['movementMode'] ?? 'ground') === 'fly' && FloorGeometry::isProne($next)) {
-                    if (($patch['movementMode'] ?? '') === 'fly') throw new InvalidArgumentException('A prone token cannot begin ordinary flight. Use Hover only when an effect grants it.');
+                if (($next['movementMode'] ?? 'ground') === 'fly' && FloorGeometry::flightInterrupted($next)) {
+                    if (($patch['movementMode'] ?? '') === 'fly') throw new InvalidArgumentException('Prone or speed-zero conditions prevent ordinary flight. Use Hover only when an effect grants it.');
                     $patch['movementMode'] = 'ground'; $next['movementMode'] = 'ground';
                 }
                 if (array_key_exists('movementMode', $patch)) {

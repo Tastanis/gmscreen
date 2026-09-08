@@ -12,7 +12,7 @@ User authorized implementing the September 7 product audit, updating/running the
 ## Broken player workflows
 
 - [ ] Server-validated atomic stairs/falls, including player and alternate movement paths.
-  - Core single/group movement resolves stairs/support on the server. Manual Fly/Hover modes, prone interruption, and landing are implemented. Flight eligibility/height/speed-zero automation, whole-group undo, and remaining automation entry-point coverage are pending.
+  - Core single/group movement resolves stairs/support on the server. Manual Fly/Hover modes, standard condition interruption, and landing are implemented. Flight eligibility/height/other speed-zero automation, whole-group undo, and remaining automation entry-point coverage are pending.
 - [x] Drawing creation/erase/clear/undo persist explicitly through V2, with author/floor scope and hidden-floor projection.
 - [x] Owned temporary template edit/remove permissions; persistent structures retain GM authority.
 - [x] Exact rejection feedback and pending/accepted state for canonical board commands; other multi-step action recovery remains below.
@@ -535,6 +535,20 @@ selects Hover and Ground, and verifies synchronized landing. The source rules we
 checked in chapter-10-combat.md (Fly and Hover).
 
 This is the explicit airborne geometry state, not complete flight automation.
-Flight eligibility, height, speed-zero effects, fall damage, vertical movement and
+Flight eligibility, height, other speed-zero effects, fall damage, vertical movement and
 targeting, jumping, and automatic ability grants still need their later roadmap
 work. The control and automation registry state these limits.
+
+### Standard conditions interrupt ordinary flight
+
+Prone, Grabbed, Restrained, and Unconscious now end Fly and resolve support and
+linked viewer floors in the same canonical transaction. Hover persists. Takeoff
+with an interrupting condition is rejected; removing the condition does not
+automatically restart flight. Slowed alone preserves flight. Custom effective-speed
+modifiers remain manual. Rules checked in local source chapters 5 and 10.
+
+Validation: all 693 tests across 82 files pass. The PHP integration checks all
+three speed-zero conditions, string/object forms, case normalization, one-revision
+landing, linked views, takeoff rejection, condition removal, hover, and Slowed.
+A three-client browser test applies Grabbed through the player's actual condition
+menu after flying across a hole and reloading, then verifies synchronized landing.

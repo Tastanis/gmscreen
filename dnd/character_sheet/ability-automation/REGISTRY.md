@@ -151,10 +151,11 @@ server for position patches. Generic position patches bypass walking stair
 triggers. The internal movement command's `movementKind`, path, and
 `_floorTraversal` fields are runtime metadata, not authored ability JSON fields.
 Tokens now have a manual Ground/Fly/Hover movement mode. Fly and Hover bypass
-automatic stair/support changes; landing resolves support, and applying prone
+automatic stair/support changes; landing resolves support, and applying Prone,
+Grabbed, Restrained, or Unconscious
 ends ordinary flight but preserves hover. This is token runtime state, not an
 authored ability JSON field or a new effect kind. Use `note`/`other` for grants or
-loss of flight. Flight eligibility, speed-zero effects, height, fall damage, and
+loss of flight. Flight eligibility, other speed-zero effects, height, fall damage, and
 vertical-distance automation remain manual.
 
 Selected-token movement undo restores only position/floor/stair progress from a

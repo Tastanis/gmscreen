@@ -64,11 +64,16 @@ if (!['localhost', '127.0.0.1', '[::1]'].includes(new URL(origin).hostname)) thr
     await pc.page.reload();
     await pc.page.locator(selector).waitFor();
     assert.equal((await placement()).movementMode, 'fly');
-    await mode('hover');
-    await mode('ground');
+    await pc.page.locator(selector).click({ button: 'right' });
+    await pc.page.locator('[data-token-settings-condition-select]').selectOption({ label: 'Grabbed' });
+    const conditionResponse = pc.page.waitForResponse(r => r.url().endsWith('/commands.php'));
+    await pc.page.getByRole('button', { name: 'Apply condition', exact: true }).click();
+    assert.equal((await conditionResponse).status(), 200);
+    await pc.page.keyboard.press('Escape');
+    assert.equal((await placement()).movementMode, 'ground');
     for (const { page } of [gm, pc, other]) await page.waitForFunction(selector => document.querySelector(selector)?.dataset.mapLevelId === 'level-0', selector);
     assert.equal((await snapshot()).state.sceneConfig[manifest.test_scene_id].userLevelState.cal.levelId, 'level-0');
     assert.deepEqual(errors, []);
-    console.log('PASS: player flight control, drag across hole, reload persistence, hover selection and atomic landing across three clients.');
+    console.log('PASS: player flight control, drag across hole, reload persistence, Grabbed menu application and atomic landing across three clients.');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
