@@ -54,4 +54,9 @@ Zone-entry correlation: locally acknowledged normal `vtt:token-moved` hooks incl
 movementOperationId and movementRevision. Server walking receipts are built by
 `../../vtt/lib/ZoneEntryReceipt.php` and stripped from player event projection.
 Canonical entry reservations are available through api/v2/zone-entries.php.
-Client integration, completion receipts and interrupted-effect recovery remain pending.
+Normal walking entries now reserve before applying supported damage/condition effects,
+then acknowledge completion. Condition callbacks await canonical persistence, just
+as damage callbacks do. Failed or uncertain effects leave a GM recovery record;
+completed or reviewed entries cannot receive a second execution grant after reload.
+Unsupported zone effects require manual review. Forced/swap entries remain on the
+local path pending trusted receipt integration. No authored JSON fields changed.

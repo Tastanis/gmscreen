@@ -1116,7 +1116,10 @@ effects or release a reservation. The GM Scenes panel now exposes unresolved ent
 review, recorded evidence, Mark resolved and Dismiss without replay. It loads on
 opening and refreshes explicitly, with no gameplay writes. The tested client claim
 coordinator requires a fresh grant, acknowledges success, and leaves uncertain
-responses for review without retrying effects. Gameplay integration remains pending:
-client-local entry bookkeeping is still the current execution path. Before wiring
-it, the condition hook must await canonical persistence instead of reporting success
-immediately after its optimistic placement mutation.
+responses for review without retrying effects. Normal walking entry hooks now use
+that coordinator with their accepted operation ID. Damage and condition effects
+await persistence; unsupported effects, rejected callbacks, scene changes or a
+30-second acknowledgement timeout leave review status. Partial effects are never
+rolled back or replayed automatically. Forced movement/swap entry paths still use
+local bookkeeping and require their own receipt integration. Multi-client races,
+round transitions and interruption variants remain broader validation tasks.

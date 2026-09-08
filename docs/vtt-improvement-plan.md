@@ -1231,3 +1231,26 @@ currently resolves its callback before canonical persistence completes. Fix and
 verify that acknowledgement first, then wire claimed walking entries with strict
 effect failure handling and test reload/concurrent-client deduplication. Forced
 movement remains a separate receipt/integration requirement.
+
+### Confirmed conditions and claimed walking entries
+
+Condition automation now waits for its placement save before returning success;
+rejected saves reject the callback and refresh the token display. The isolated
+browser test holds a condition command to prove the callback stays pending,
+releases it to prove acceptance, then rejects a second condition and verifies only
+the accepted condition survives reload.
+
+Normal walking entries now reserve by accepted movement operation before executing
+damage/conditions. Unsupported effects are rejected before execution. Scene changes,
+failed callbacks and 30-second acknowledgement timeouts leave the entry for review.
+The coordinator never retries effects; accepted partial effects remain for the GM
+to inspect. A dispatched effect may finish after a timeout, so review must check
+actual resources and conditions.
+
+The real player-drag test verifies completed-entry deduplication after reload,
+damage followed by a rejected condition, the durable review record, GM resolution
+without board mutation, and no replay after another player reload. Failure injection
+matches normalized condition names case-insensitively and outcome polling reads the
+HTTP API directly. Forced/swap receipt integration, simultaneous clients, new-round
+behavior and other interruption variants remain on the roadmap.
+Full regression suite: 730 tests/93 files passed with the integrated runtime.

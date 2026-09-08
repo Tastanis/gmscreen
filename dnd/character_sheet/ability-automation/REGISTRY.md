@@ -580,8 +580,8 @@ Persistent-zone onEnter now detects positive footprint overlap along a confirmed
 straight movement segment, including a long drag ending beyond the zone. Tangent
 contact and movement beginning inside do not count as entry. For a floor-changing
 move, destination entry is checked without assuming the intermediate floor path.
-Per-round entered-token bookkeeping remains client-local and is not yet safe
-across reload/client changes; canonical claim/recovery work is still pending.
+Normal walking entries now reserve a durable claim before effects execute.
+Forced/swap entry bookkeeping remains client-local pending receipt integration.
 
 Normal `vtt:token-moved` events now include `movementOperationId` and
 `movementRevision` from the locally acknowledged V2 event. These are runtime
@@ -593,5 +593,11 @@ A server zone-entry reservation endpoint now exists at `vtt/api/v2/zone-entries.
 It validates trusted accepted walking evidence and reserves a world-scoped pending
 claim unique to scene, zone, creature and combat boundary. A repeat reservation
 never authorizes execution again. Claims retain evidence but do not execute effects.
-Client integration, completion receipts and interrupted-effect recovery are still
-pending, so this backend milestone alone does not make gameplay reload-safe.
+Normal walking hooks use this reservation and acknowledge completion only after
+supported damage/condition callbacks complete. Condition callbacks now await their
+canonical save. Unsupported effects are sent to manual review before any effects
+run; rejected/uncertain callbacks leave a review record, including partial execution.
+The GM Scenes recovery panel never replays effects. Completed/reviewed walking
+entries remain reserved across reload. Forced/swap paths and broader concurrent
+client/round-transition validation remain pending. A timeout cannot cancel an
+already dispatched effect; inspect actual stamina/conditions before resolving.

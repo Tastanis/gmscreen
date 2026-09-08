@@ -1,4 +1,5 @@
 import {renderPersistentZones} from './persistent-zone-renderer.js';
+import {executeClaimedZoneEntry} from '../services/zone-entry-claims.js';
 import {resolvePersistentZoneLevelId,doesPersistentZoneOverlapPlacement,doesPersistentZoneMovementEnter} from './persistent-zone-geometry.js';
 import {renderTokenAuras} from './token-aura-renderer.js';
 import {normalizeAutomationAuraId,createAutomationAuraId,cloneAutomationAuraRecord,getAutomationAuraRecords,getRenderableAurasForPlacement} from './token-aura-records.js';
@@ -2563,7 +2564,7 @@ export function mountBoardInteractions(store, routes = {}) {
     // its footprint. Movement within a zone (already inside, just shifting)
     // doesn't refire — we compare before/after.
     try {
-      checkPersistentZoneEntries(movingId, from, to);
+      checkPersistentZoneEntries(movingId, from, to, detail);
     } catch (err) {
       console.warn('[VTT] persistent-zone enter check failed', err);
     }
@@ -2574,7 +2575,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   });
 
-  function checkPersistentZoneEntries(movingId, from, to) {
+  function checkPersistentZoneEntries(movingId, from, to, movement = {}) {
     if (!movingId || !from || !to) return;
     const zones = getActivePersistentZones();
     if (!zones.length) return;
@@ -2606,6 +2607,18 @@ export function mountBoardInteractions(store, routes = {}) {
         || !doesPersistentZoneMovementEnter(zone,fromFootprint,toFootprint)) continue;
       if (zone.enteredThisRound.has(movingId)) continue; // already triggered this round
       zone.enteredThisRound.add(movingId);
+      if (movement.movementOperationId) {
+        const sceneId=movement.sceneId || getActiveSceneId();
+        executeClaimedZoneEntry({sceneId,placementId:movingId,zoneId:zone.id,movementOperationId:movement.movementOperationId},
+          ()=>applyPersistentZoneEffectsToPlacements(zone,[moverNow],'enter',{strict:true,sceneId}))
+          .then(result=>{
+            if (result.status==='pending' || result.status==='needs_review') {
+              updateStatus(`${zone.abilityName || 'Zone'} entry is unconfirmed. Ask the GM to review Zone entry recovery in Scenes before applying effects again.`);
+              document.dispatchEvent(new CustomEvent('vtt:zone-entry-review-needed'));
+            }
+          });
+        continue;
+      }
       // Fire effects asynchronously to the mover only.
       applyPersistentZoneEffectsToPlacements(zone, [moverNow], 'enter').catch((err) => {
         console.warn('[VTT] persistent-zone onEnter effects failed', err);
@@ -4431,8 +4444,21 @@ export function mountBoardInteractions(store, routes = {}) {
       && doesAutomationTargetFilterMatch(placement,zone.affects || 'creature');
   }
 
-  async function applyPersistentZoneEffectsToPlacements(zone, placements, reason) {
+  async function applyPersistentZoneEffectsToPlacements(zone, placements, reason, {strict=false,sceneId=null} = {}) {
     if (!Array.isArray(placements) || !placements.length) return;
+    if (strict && (!Array.isArray(zone.effects) || zone.effects.some(effect=>!effect || !['damage','condition'].includes(effect.kind)))) {
+      throw new Error('This zone includes effects that require manual review.');
+    }
+    const dispatchEffect=(eventName,payload)=>{
+      if (strict && getActiveSceneId()!==sceneId) return Promise.reject(new Error('Scene changed during zone execution.'));
+      return new Promise((resolve,reject)=>{
+        const timer=strict?setTimeout(()=>reject(new Error('Zone effect acknowledgement timed out.')),30000):null;
+        const done=result=>{clearTimeout(timer);if(strict && (!result || result.applied===false))reject(new Error('Zone effect was not confirmed.'));else resolve(result);};
+        document.dispatchEvent(new CustomEvent(eventName,{detail:{payload,resolve:done,reject:error=>{
+          clearTimeout(timer);if(strict)reject(error || new Error('Zone effect failed.'));else resolve(null);
+        }}}));
+      });
+    };
     const damageLines = [];
     for (const effect of zone.effects) {
       if (!effect || typeof effect !== 'object') continue;
@@ -4453,21 +4479,13 @@ export function mountBoardInteractions(store, routes = {}) {
             : 0;
           const totalAmount = Math.max(0, baseAmount + attrBonus + diceAmount + markBonus);
           if (totalAmount <= 0) continue;
-          const result = await new Promise((res) => {
-            document.dispatchEvent(new CustomEvent('vtt:automation-apply-damage', {
-              detail: {
-                payload: {
+          const result = await dispatchEffect('vtt:automation-apply-damage', {
                   placementId: target.id,
                   sourceId: zone.casterId,
                   amount: totalAmount,
                   damageType: effect.damageType || '',
                   ...(effect.ignoreImmunity !== undefined ? { ignoreImmunity: effect.ignoreImmunity } : {}),
                   abilityName: `${zone.abilityName} (${reason || 'zone'})`,
-                },
-                resolve: res,
-                reject: () => res(null),
-              },
-            }));
           });
           if (result?.name) {
             damageLines.push(`${result.name} takes ${result.amount}${effect.damageType ? ` ${effect.damageType}` : ''}`);
@@ -4483,18 +4501,10 @@ export function mountBoardInteractions(store, routes = {}) {
         const duration = durationMap[effect.duration] || 'instantaneous';
         for (const target of placements) {
           if (!target?.id) continue;
-          await new Promise((res) => {
-            document.dispatchEvent(new CustomEvent('vtt:automation-apply-condition', {
-              detail: {
-                payload: {
+          await dispatchEffect('vtt:automation-apply-condition', {
                   placementId: target.id,
                   condition: { name: effect.name, duration, description: effect.text || '' },
                   sourceId: zone.casterId,
-                },
-                resolve: res,
-                reject: () => res(null),
-              },
-            }));
           });
         }
       }
@@ -16718,8 +16728,16 @@ export function mountBoardInteractions(store, routes = {}) {
     if (duration === 'end-of-turn' && payload.sourceId) {
       condition.endsOn = { tokenId: payload.sourceId };
     }
-    const updated = applyConditionToPlacement(placementId, condition);
-    if (!updated) {
+    const result = applyConditionToPlacement(placementId, condition, { returnSavePromise: true });
+    try {
+      await awaitSuccessfulPlacementSave(result);
+    } catch (error) {
+      renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState, { skipTracker: true });
+      refreshTokenSettings();
+      reject?.(error);
+      return;
+    }
+    if (!result?.updated) {
       resolve?.({ applied: false, name });
       return;
     }
@@ -21377,14 +21395,14 @@ export function mountBoardInteractions(store, routes = {}) {
     resetConditionControls();
   }
 
-  function applyConditionToPlacement(placementId, condition) {
+  function applyConditionToPlacement(placementId, condition, { returnSavePromise = false } = {}) {
     if (!placementId) {
       return false;
     }
 
     const normalized = ensurePlacementCondition(condition);
     let didChange = false;
-    const updated = updatePlacementById(placementId, (target) => {
+    const result = updatePlacementById(placementId, (target) => {
       const conditions = ensurePlacementConditions(target?.conditions ?? target?.condition ?? null);
       const hadConditions = conditions.length > 0;
 
@@ -21413,9 +21431,10 @@ export function mountBoardInteractions(store, routes = {}) {
           delete target.condition;
         }
       }
-    });
+    }, { returnSavePromise: true });
+    const updated = Boolean(result?.updated && didChange);
 
-    if (updated && didChange) {
+    if (updated) {
       refreshTokenSettings();
       if (placementId === activeTokenSettingsId) {
         resetConditionControls();
@@ -21425,7 +21444,7 @@ export function mountBoardInteractions(store, routes = {}) {
       dispatchTokenSelectionSummary();
     }
 
-    return updated && didChange;
+    return returnSavePromise ? { updated, savePromise: result?.savePromise ?? null } : updated;
   }
 
   function applyConditionToPlacements(placementIds, condition) {

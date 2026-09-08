@@ -15,6 +15,10 @@ const origin='http://127.0.0.1:8129';
       pages.push(page);
     }
     const [gm,pc]=pages,sceneId=manifest.test_scene_id;
+    async function waitUntil(predicate) {
+      const deadline=Date.now()+12000;
+      while(!await predicate()) {if(Date.now()>deadline)throw Error('Timed out waiting for canonical zone outcome');await new Promise(resolve=>setTimeout(resolve,100));}
+    }
     const snapshot=async()=>(await(await gm.request.get(origin+'/dnd/vtt/api/v2/snapshot.php')).json()).snapshot;
     const zone=await gm.evaluate(()=>new Promise(resolve=>document.dispatchEvent(new CustomEvent('vtt:automation-register-persistent-zone',{detail:{resolve,payload:{
       casterId:'floor-cal',abilityName:'Entry regression',triggers:['onEnter'],tickAt:'never',effects:[{kind:'damage',amount:3}],
@@ -42,20 +46,40 @@ const origin='http://127.0.0.1:8129';
     },{sceneId,current:before-3});
     const claimUrl=origin+'/dnd/vtt/api/v2/zone-entries.php';
     const claimData={sceneId,placementId:'floor-cal',zoneId:zone.zoneId,movementOperationId:movementIds.at(-1)};
-    const claimBefore=await snapshot();
     assert.equal((await pc.request.delete(claimUrl)).status(),405);
-    assert.deepEqual((await(await pc.request.get(claimUrl)).json()).claims,[]);
+    await waitUntil(async()=>!(await(await pc.request.get(claimUrl)).json()).claims.length);
     assert.equal((await gm.request.post(claimUrl,{data:claimData})).status(),422,'Another actor cannot claim the player movement');
     const reserved=await pc.request.post(claimUrl,{data:claimData});assert.equal(reserved.status(),200);
-    const claim=await reserved.json();assert.equal(claim.claimed,true);assert.equal(claim.status,'pending');
+    const firstClaim=await reserved.json();assert.equal(firstClaim.claimed,false);assert.equal(firstClaim.status,'completed');
     const duplicate=await(await pc.request.post(claimUrl,{data:claimData})).json();
-    assert.equal(duplicate.claimed,false);assert.equal(duplicate.claimId,claim.claimId);
+    assert.equal(duplicate.claimed,false);assert.equal(duplicate.claimId,firstClaim.claimId);
+    await pc.reload();
+    await pc.waitForFunction(()=>document.querySelector('[data-connection-status]')?.textContent.includes('Connected'));
+    await drag(-6,2);await pc.waitForTimeout(700);
+    assert.equal(Number((await snapshot()).state.placements[sceneId]['floor-cal'].hp.current),before-3,'Reload must not allow the completed entry to execute again');
+    const partial=await gm.evaluate(()=>new Promise(resolve=>document.dispatchEvent(new CustomEvent('vtt:automation-register-persistent-zone',{detail:{resolve,payload:{
+      casterId:'floor-cal',abilityName:'Partial entry regression',triggers:['onEnter'],tickAt:'never',
+      effects:[{kind:'damage',amount:2},{kind:'condition',name:'Dazed',duration:'saveEnds'}],
+      area:{template:{column:5,row:0,width:1,height:1,levelId:'level-0'}},
+    }}}))));
+    await pc.locator(`[data-zone-id="${partial.zoneId}"]`).waitFor();
+    const commandUrl=origin+'/dnd/vtt/api/v2/commands.php';
+    await pc.route(commandUrl,route=>route.request().postData()?.toLowerCase().includes('dazed')
+      ?route.fulfill({status:422,contentType:'application/json',body:JSON.stringify({success:false,error:'Injected condition rejection'})}):route.continue());
+    await drag(6,8);
+    await waitUntil(async()=> (await(await pc.request.get(claimUrl)).json()).claims.some(c=>c.status==='needs_review'));
+    await pc.unroute(commandUrl);
+    const claimBefore=await snapshot();
+    assert.equal(Number(claimBefore.state.placements[sceneId]['floor-cal'].hp.current),before-5);
+    assert.equal((claimBefore.state.placements[sceneId]['floor-cal'].conditions ?? []).some(c=>c.name==='Dazed'),false);
     const pending=(await(await pc.request.get(claimUrl)).json()).claims;
+    const claim=pending[0];
     assert.equal(pending.length,1);assert.equal(pending[0].claimId,claim.claimId);
     assert.equal((await(await gm.request.get(claimUrl)).json()).claims.length,1);
     const finish={action:'finish',claimId:claim.claimId,status:'needs_review'};
     assert.equal((await pc.request.post(claimUrl,{data:{...finish,status:'dismissed'}})).status(),422);
-    assert.equal((await(await pc.request.post(claimUrl,{data:finish})).json()).status,'needs_review');
+    const reviewed=await(await pc.request.post(claimUrl,{data:finish})).json();
+    assert.equal(reviewed.status,'needs_review',JSON.stringify(reviewed));
     assert.equal((await(await pc.request.get(claimUrl)).json()).claims[0].status,'needs_review');
     await gm.reload();
     await gm.waitForFunction(()=>document.querySelector('[data-connection-status]')?.textContent.includes('Connected'));
@@ -64,7 +88,7 @@ const origin='http://127.0.0.1:8129';
     await recovery.locator('summary').first().click();
     const row=recovery.locator(`[data-zone-claim-id="${claim.claimId}"]`);
     await row.waitFor();
-    assert.match(await row.innerText(),/Entry regression/);
+    assert.match(await row.innerText(),/Partial entry regression/);
     assert.match(await row.innerText(),/Needs review/);
     await row.locator('summary').click();
     assert.match(await row.locator('pre').innerText(),/"kind": "damage"/);
@@ -77,8 +101,10 @@ const origin='http://127.0.0.1:8129';
     assert.equal((await gm.request.post(claimUrl,{data:finish})).status(),422);
     assert.deepEqual((await(await gm.request.get(claimUrl)).json()).claims,[]);
     assert.deepEqual(await snapshot(),claimBefore,'Claim reservations do not apply effects or change board state');
-    await drag(-6,2);await pc.waitForTimeout(500);
-    assert.equal(Number((await snapshot()).state.placements[sceneId]['floor-cal'].hp.current),before-3,'A second crossing in the same client/round does not tick again');
+    await pc.reload();
+    await pc.waitForFunction(()=>document.querySelector('[data-connection-status]')?.textContent.includes('Connected'));
+    await drag(-6,2);await pc.waitForTimeout(700);
+    assert.equal(Number((await snapshot()).state.placements[sceneId]['floor-cal'].hp.current),before-5,'Reviewed partial effects must not replay after reload');
     assert.deepEqual(errors,[]);
     console.log('PASS: real zone crossing applies one damage tick; claim recovery, review, completion, retry and immutable final outcomes preserve board state.');
   } finally {await browser.close();}
