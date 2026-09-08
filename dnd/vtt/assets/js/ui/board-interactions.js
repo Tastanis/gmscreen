@@ -1,3 +1,5 @@
+import {normalizePlacementCondition,ensurePlacementCondition,normalizePlacementConditions,ensurePlacementConditions,buildConditionKey,normalizeConditionDurationValue} from './token-conditions.js';
+import {syncTokenTeamAffiliation,paintTokenMarkIndicator,paintTokenConditionLabel} from './token-status-presentation.js';
 import {normalizeHitPointsValue,normalizePlacementHitPoints,parseHitPointsNumber,calculateHitPointsFillPercentage,formatHitPointsDisplayParts,syncTokenHitPoints,shouldRevealPlacementHitPointValues} from './token-hit-points.js';
 import {paintWallTemplate} from './template-wall-renderer.js';
 import {createTemplateGeometry, TEMPLATE_COLORS} from './template-geometry.js';
@@ -14565,110 +14567,17 @@ export function mountBoardInteractions(store, routes = {}) {
     syncTokenTeamAffiliation(tokenElement, placement);
     syncTokenHitPoints(tokenElement, placement, {isGm:isGmUser()});
     syncTriggeredActionIndicator(tokenElement, placement);
-    syncTokenMarkIndicator(tokenElement, placement);
-    syncTokenConditionLabel(tokenElement, placement);
-  }
-
-  function syncTokenTeamAffiliation(tokenElement, placement) {
-    const team = normalizeCombatTeam(placement.team ?? placement.combatTeam ?? null);
-    if (team) {
-      tokenElement.dataset.combatTeam = team;
-    } else {
-      delete tokenElement.dataset.combatTeam;
-    }
-
-    // Mark tokens that are part of a minion squad so CSS / display logic can react.
-    if (placement?.squad?.id) {
-      tokenElement.dataset.squad = 'true';
-    } else {
-      delete tokenElement.dataset.squad;
-    }
+    paintTokenMarkIndicator(tokenElement, getPlacementMark(placement, 'judgment'), {interactive:true});
+    paintTokenConditionLabel(tokenElement, ensurePlacementConditions(placement?.conditions ?? placement?.condition ?? null), {interactive:true, configureConditionTooltip, detachConditionTooltip});
   }
 
 
 
-  function syncTokenMarkIndicator(tokenElement, placement) {
-    let markEl = tokenElement.querySelector('.vtt-token__judgment-mark');
-    const mark = getPlacementMark(placement, 'judgment');
-    if (!mark) {
-      if (markEl) markEl.remove();
-      return;
-    }
-    if (!markEl) {
-      markEl = document.createElement('button');
-      markEl.type = 'button';
-      markEl.className = 'vtt-token__judgment-mark';
-      markEl.setAttribute('data-token-judgment-mark', 'true');
-      markEl.textContent = 'J';
-      tokenElement.appendChild(markEl);
-    }
-    const sourceName = mark.sourceName || 'censor';
-    markEl.title = `Judged by ${sourceName}. Click to end.`;
-    markEl.setAttribute('aria-label', `Judged by ${sourceName}. Click to end.`);
-  }
 
-  function syncTokenConditionLabel(tokenElement, placement) {
-    let label = tokenElement.querySelector('.vtt-token__condition');
-    let hiddenBadge = tokenElement.querySelector('.vtt-token__hidden-effect');
-    const conditions = ensurePlacementConditions(placement?.conditions ?? placement?.condition ?? null);
-    const hiddenConditions = conditions.filter((condition) => condition?.hidden || String(condition?.name || '').trim().toLowerCase() === 'hiddeneffect');
-    const visibleConditions = conditions.filter((condition) => !(condition?.hidden || String(condition?.name || '').trim().toLowerCase() === 'hiddeneffect'));
-    tokenElement.classList.toggle('vtt-token--has-hidden-effects', hiddenConditions.length > 0);
 
-    if (!visibleConditions.length) {
-      if (label) {
-        detachConditionTooltip(label);
-        label.remove();
-      }
-    }
 
-    const text = visibleConditions
-      .map((condition) => (condition && typeof condition.name === 'string' ? condition.name.trim() : ''))
-      .filter(Boolean)
-      .join(' • ');
 
-    if (!text) {
-      if (label) {
-        detachConditionTooltip(label);
-        label.remove();
-      }
-    } else if (!label) {
-      label = document.createElement('div');
-      label.className = 'vtt-token__condition';
-      tokenElement.appendChild(label);
-    }
 
-    if (label && text && label.textContent !== text) {
-      label.textContent = text;
-    }
-    if (label && text) {
-      label.setAttribute('aria-label', text);
-      label.removeAttribute('title');
-      configureConditionTooltip(label, visibleConditions, { delay: 500 });
-    }
-
-    if (!hiddenConditions.length) {
-      if (hiddenBadge) hiddenBadge.remove();
-      return;
-    }
-
-    const hiddenText = hiddenConditions
-      .map((condition) => condition.label || condition.sourceAbility || condition.name || 'Effect')
-      .filter(Boolean)
-      .join(', ');
-    if (!hiddenBadge) {
-      hiddenBadge = document.createElement('div');
-      hiddenBadge.className = 'vtt-token__hidden-effect';
-      hiddenBadge.setAttribute('data-token-hidden-effect', '');
-      hiddenBadge.setAttribute('role', 'button');
-      hiddenBadge.setAttribute('tabindex', '0');
-      hiddenBadge.style.cursor = 'pointer';
-      tokenElement.appendChild(hiddenBadge);
-    }
-    hiddenBadge.textContent = 'FX';
-    hiddenBadge.setAttribute('aria-label', `Hidden effects: ${hiddenText} (click to remove)`);
-    hiddenBadge.title = `Hidden effects: ${hiddenText}\n(click to remove)`;
-  }
 
   function handleTriggerIndicatorPointerDown(event) {
     const indicator = event.target.closest('.vtt-token__trigger-indicator');
@@ -19667,238 +19576,13 @@ export function mountBoardInteractions(store, routes = {}) {
     subscribeToStaminaSync(handleSheetStaminaBroadcast);
   }
 
-  function normalizePlacementCondition(value) {
-    if (!value) {
-      return null;
-    }
 
-    if (typeof value === 'string') {
-      const name = value.trim();
-      if (!name) {
-        return null;
-      }
-      return { name, description: '', duration: { type: 'save-ends' } };
-    }
 
-    if (typeof value !== 'object') {
-      return null;
-    }
 
-    const name = typeof value.name === 'string' ? value.name.trim() : '';
-    if (!name) {
-      return null;
-    }
 
-    const durationSource =
-      typeof value.duration === 'string' || (value.duration && typeof value.duration === 'object')
-        ? value.duration
-        : value.mode ?? value.type ?? value.persist ?? null;
 
-    const durationType = normalizeConditionDurationValue(
-      typeof durationSource === 'string'
-        ? durationSource
-        : typeof durationSource?.type === 'string'
-        ? durationSource.type
-        : typeof durationSource?.value === 'string'
-        ? durationSource.value
-        : typeof durationSource?.mode === 'string'
-        ? durationSource.mode
-        : ''
-    );
 
-    const duration = { type: durationType };
 
-    const description =
-      typeof value.description === 'string'
-        ? value.description.trim()
-        : typeof value.text === 'string'
-        ? value.text.trim()
-        : '';
-
-    const targetTokenId =
-      typeof durationSource?.targetTokenId === 'string'
-        ? durationSource.targetTokenId.trim()
-        : typeof durationSource?.tokenId === 'string'
-        ? durationSource.tokenId.trim()
-        : typeof durationSource?.id === 'string'
-        ? durationSource.id.trim()
-        : typeof value.targetTokenId === 'string'
-        ? value.targetTokenId.trim()
-        : null;
-
-    const targetTokenName =
-      typeof durationSource?.targetTokenName === 'string'
-        ? durationSource.targetTokenName.trim()
-        : typeof durationSource?.tokenName === 'string'
-        ? durationSource.tokenName.trim()
-        : typeof value.targetTokenName === 'string'
-        ? value.targetTokenName.trim()
-        : typeof value.tokenName === 'string'
-        ? value.tokenName.trim()
-        : '';
-
-    if (duration.type === 'end-of-turn') {
-      if (targetTokenId) {
-        duration.targetTokenId = targetTokenId;
-      }
-      if (targetTokenName) {
-        duration.targetTokenName = targetTokenName;
-      }
-    }
-
-    // Numeric riders for damageWeakness / damageImmunity. Preserve through
-    // every normalize pass so they survive reload, save-sync, and dedup.
-    const numericRider = name === 'damageWeakness' || name === 'damageImmunity';
-    let amount = null;
-    let damageType = '';
-    if (numericRider) {
-      const parsedAmount = Number.parseInt(value.amount, 10);
-      if (Number.isFinite(parsedAmount) && parsedAmount > 0) {
-        amount = parsedAmount;
-      }
-      if (typeof value.damageType === 'string') {
-        const dt = value.damageType.trim().toLowerCase();
-        if (dt && dt !== 'untyped') damageType = dt;
-      }
-    }
-
-    const result = { name, description, duration };
-    if (amount !== null) result.amount = amount;
-    if (damageType) result.damageType = damageType;
-    if (value.hidden || name.toLowerCase() === 'hiddeneffect') result.hidden = true;
-    if (typeof value.label === 'string' && value.label.trim()) {
-      result.label = value.label.trim();
-    }
-    if (value.rider && typeof value.rider === 'object') {
-      result.rider = JSON.parse(JSON.stringify(value.rider));
-    }
-    if (typeof value.consume === 'string' && value.consume.trim()) {
-      result.consume = value.consume.trim();
-    }
-    if (typeof value.sourceId === 'string' && value.sourceId.trim()) {
-      result.sourceId = value.sourceId.trim();
-    }
-    if (typeof value.sourceName === 'string' && value.sourceName.trim()) {
-      result.sourceName = value.sourceName.trim();
-    }
-    if (typeof value.sourceAbility === 'string' && value.sourceAbility.trim()) {
-      result.sourceAbility = value.sourceAbility.trim();
-    }
-    const riders = normalizeStoredConditionRiders(value.riders);
-    if (riders.length) {
-      result.riders = riders;
-      const instanceId = typeof value.instanceId === 'string' ? value.instanceId.trim() : '';
-      if (instanceId) result.instanceId = instanceId;
-      const executions = normalizeRiderExecutions(value.riderExecutions, riders.map((rider) => rider.id));
-      if (Object.keys(executions).length) result.riderExecutions = executions;
-    }
-    return result;
-  }
-
-  function ensurePlacementCondition(value) {
-    const normalized = normalizePlacementCondition(value);
-    if (!normalized) {
-      return null;
-    }
-
-    const condition = { name: normalized.name };
-    if (typeof normalized.description === 'string' && normalized.description.trim()) {
-      condition.description = normalized.description.trim();
-    }
-    if (normalized.duration && typeof normalized.duration === 'object') {
-      condition.duration = { type: normalized.duration.type };
-      if (normalized.duration.targetTokenId) {
-        condition.duration.targetTokenId = normalized.duration.targetTokenId;
-      }
-      if (normalized.duration.targetTokenName) {
-        condition.duration.targetTokenName = normalized.duration.targetTokenName;
-      }
-    } else {
-      condition.duration = { type: 'save-ends' };
-    }
-
-    if (Number.isFinite(normalized.amount) && normalized.amount > 0) {
-      condition.amount = normalized.amount;
-    }
-    if (typeof normalized.damageType === 'string' && normalized.damageType) {
-      condition.damageType = normalized.damageType;
-    }
-    if (normalized.hidden || normalized.name.toLowerCase() === 'hiddeneffect') {
-      condition.hidden = true;
-    }
-    if (typeof normalized.label === 'string' && normalized.label) {
-      condition.label = normalized.label;
-    }
-    if (normalized.rider && typeof normalized.rider === 'object') {
-      condition.rider = JSON.parse(JSON.stringify(normalized.rider));
-    }
-    if (typeof normalized.consume === 'string' && normalized.consume) {
-      condition.consume = normalized.consume;
-    }
-    if (typeof normalized.sourceId === 'string' && normalized.sourceId) {
-      condition.sourceId = normalized.sourceId;
-    }
-    if (typeof normalized.sourceName === 'string' && normalized.sourceName) {
-      condition.sourceName = normalized.sourceName;
-    }
-    if (typeof normalized.sourceAbility === 'string' && normalized.sourceAbility) {
-      condition.sourceAbility = normalized.sourceAbility;
-    }
-    if (Array.isArray(normalized.riders) && normalized.riders.length) {
-      condition.riders = JSON.parse(JSON.stringify(normalized.riders));
-      condition.instanceId = normalized.instanceId || createConditionInstanceId(normalized);
-      if (normalized.riderExecutions && typeof normalized.riderExecutions === 'object') {
-        condition.riderExecutions = { ...normalized.riderExecutions };
-      }
-    }
-
-    return condition;
-  }
-
-  function normalizePlacementConditions(value) {
-    if (value === null || value === undefined) {
-      return [];
-    }
-
-    const queue = Array.isArray(value) ? [...value] : [value];
-    const normalized = [];
-    const seen = new Set();
-
-    while (queue.length) {
-      const current = queue.shift();
-      if (current === null || current === undefined) {
-        continue;
-      }
-      if (Array.isArray(current)) {
-        queue.push(...current);
-        continue;
-      }
-
-      const condition = normalizePlacementCondition(current);
-      if (!condition) {
-        continue;
-      }
-      if (condition.riders?.length && !condition.instanceId) {
-        condition.instanceId = createConditionInstanceId(condition, normalized.length);
-      }
-
-      const key = buildConditionKey(condition);
-      if (seen.has(key)) {
-        continue;
-      }
-
-      seen.add(key);
-      normalized.push(condition);
-    }
-
-    return normalized;
-  }
-
-  function ensurePlacementConditions(value) {
-    return normalizePlacementConditions(value)
-      .map((condition) => ensurePlacementCondition(condition))
-      .filter(Boolean);
-  }
 
   function findExistingConditionDescription(name, options = {}) {
     const normalizedName =
@@ -19962,48 +19646,7 @@ export function mountBoardInteractions(store, routes = {}) {
     return '';
   }
 
-  function buildConditionKey(condition) {
-    if (!condition || typeof condition !== 'object' || typeof condition.name !== 'string') {
-      return '';
-    }
 
-    const name = condition.name.trim().toLowerCase();
-    const type = normalizeConditionDurationValue(condition?.duration?.type ?? '');
-    if (condition.instanceId || condition.riders?.length) {
-      return buildConditionIdentityKey(condition);
-    }
-    // damageWeakness / damageImmunity carry numeric riders (amount + damageType)
-    // that differentiate "weakness 5 fire" from "weakness 5 cold". Factor them
-    // into the dedup key so applying both produces two distinct condition
-    // entries rather than collapsing into one.
-    if (name === 'damageweakness' || name === 'damageimmunity') {
-      const amount = Number.isFinite(condition.amount) ? `${condition.amount}` : '0';
-      const dt = typeof condition.damageType === 'string' ? condition.damageType.trim().toLowerCase() : '';
-      return `${name}|${type}|${amount}|${dt}`;
-    }
-    if (name === 'hiddeneffect') {
-      const label = typeof condition.label === 'string' ? condition.label.trim().toLowerCase() : '';
-      const sourceId = typeof condition.sourceId === 'string' ? condition.sourceId.trim().toLowerCase() : '';
-      const sourceAbility = typeof condition.sourceAbility === 'string' ? condition.sourceAbility.trim().toLowerCase() : '';
-      const rider = condition.rider && typeof condition.rider === 'object'
-        ? JSON.stringify(condition.rider)
-        : '';
-      return `${name}|${type}|${label}|${sourceId}|${sourceAbility}|${rider}`;
-    }
-    if (type === 'end-of-turn') {
-      const targetId =
-        typeof condition?.duration?.targetTokenId === 'string'
-          ? condition.duration.targetTokenId.trim().toLowerCase()
-          : '';
-      const targetName =
-        typeof condition?.duration?.targetTokenName === 'string'
-          ? condition.duration.targetTokenName.trim().toLowerCase()
-          : '';
-      return `${name}|${type}|${targetId}|${targetName}`;
-    }
-
-    return `${name}|${type}`;
-  }
 
   function areConditionsEqual(first, second) {
     const left = ensurePlacementCondition(first);
@@ -21668,19 +21311,7 @@ export function mountBoardInteractions(store, routes = {}) {
     return `${typeLabel}${rider}${Number.isFinite(amount) && amount > 0 ? ` ${amount}` : ''}`.trim();
   }
 
-  function normalizeConditionDurationValue(value) {
-    const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
-    if (!normalized) {
-      return 'save-ends';
-    }
-    if (normalized.includes('save') || normalized === 'se') {
-      return 'save-ends';
-    }
-    if (normalized.includes('eot') || normalized.includes('end')) {
-      return 'end-of-turn';
-    }
-    return 'save-ends';
-  }
+
 
   function getConditionDurationType(condition) {
     if (!condition || typeof condition !== 'object') {

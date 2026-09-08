@@ -18,7 +18,9 @@ stacking, transforms and direction badges. Fractional render positions survive
 recovery/reload; backdrop padding remains part of the coordinate origin. Preview
 stamina bars and trigger readiness use shared painters with explicit player
 visibility; enemy numeric stamina remains hidden even in a GM preview. Condition
-labels and judgment marks remain pending. Drawing paths reuse the normal
+labels and judgment marks now use shared normalization/painters without removal
+hooks or tooltip handlers. Auras, persistent zones and combat group colors remain
+pending. Drawing paths reuse the normal
 renderer with an explicit private SVG layer and selected floor. Local preview zoom
 and Fit never write canonical camera, scene or floor state.
 Template floor visibility and cutout masking are extracted into the shared

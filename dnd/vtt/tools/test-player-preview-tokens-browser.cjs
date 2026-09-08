@@ -26,9 +26,10 @@ const origin='http://127.0.0.1:8129';
     }
     const imageUrl=(await snapshot()).state.placements[sceneId]['floor-cal'].imageUrl;
     const seeds=[
-      {id:'preview-open',column:6,row:5,levelId:'level-0',showHp:true,hp:{current:-5,max:20}},
+      {id:'preview-open',column:6,row:5,levelId:'level-0',showHp:true,hp:{current:-5,max:20},marks:{judgment:{sourceId:'floor-cal',sourceName:'Cal'}},conditions:['Prone','Prone']},
       {id:'preview-blocked',column:0,row:5,levelId:'level-0'},
-      {id:'preview-upper',column:8.5,row:5,width:2,levelId:'test-upper',team:'ally',showHp:true,hp:{current:25,max:20},hasReadyTrigger:true},
+      {id:'preview-upper',column:8.5,row:5,width:2,levelId:'test-upper',team:'ally',showHp:true,hp:{current:25,max:20},hasReadyTrigger:true,
+        conditions:[{name:'Slowed',duration:'eot'},{name:'HiddenEffect',label:'Test effect',hidden:true}]},
       {id:'preview-secret',column:8,row:5,levelId:'test-upper',hidden:true},
       {id:'preview-fogged',column:9,row:8,levelId:'test-upper'},
     ];
@@ -57,6 +58,8 @@ const origin='http://127.0.0.1:8129';
       width:n.style.width,height:n.style.height,transform:n.style.transform,zIndex:n.style.zIndex,
       level:n.dataset.mapLevelId,direction:n.dataset.mapLevelDirection||null,distance:n.dataset.mapLevelDistance||null,
       hp:n.querySelector('.vtt-token__hp-bar')?.outerHTML||null,ready:n.querySelector('.vtt-token__trigger-ready')?.textContent||null,
+      condition:n.querySelector('.vtt-token__condition')?.textContent||null,mark:n.querySelector('.vtt-token__judgment-mark')?.textContent||null,
+      hiddenEffect:n.querySelector('.vtt-token__hidden-effect')?.textContent||null,
       image:n.querySelector('img')?.src||null})).sort((a,b)=>a.id.localeCompare(b.id));
     const real=await pc.locator('#vtt-token-layer > .vtt-token').evaluateAll(describe);
     const preview=await dialog.locator('.vtt-token').evaluateAll(describe);
@@ -66,6 +69,9 @@ const origin='http://127.0.0.1:8129';
     assert.equal(await dialog.locator('[data-preview-placement-id="preview-upper"] .vtt-token__hp-temp-value').textContent(),'(+5)');
     assert.equal(await dialog.locator('[data-preview-placement-id="preview-upper"] .vtt-token__trigger-ready').textContent(),'!');
     assert.equal(await dialog.locator('[data-token-trigger-ready]').count(),0,'Preview readiness has no clear-action hook');
+    assert.equal(await dialog.locator('[data-preview-placement-id="preview-open"] .vtt-token__condition').textContent(),'Prone');
+    assert.equal(await dialog.locator('[data-preview-placement-id="preview-open"] .vtt-token__judgment-mark').getAttribute('aria-label'),'Judged by Cal.');
+    assert.equal(await dialog.locator('[data-token-judgment-mark],[data-token-hidden-effect]').count(),0,'Preview effects have no removal hooks');
     const repaint=await gm.evaluate(async()=>{
       const {syncTokenHitPoints}=await import('/dnd/vtt/assets/js/ui/token-hit-points.js');
       const token=document.createElement('div'),placement={team:'enemy',showHp:true,hp:{current:25,max:20}};

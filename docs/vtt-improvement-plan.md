@@ -1023,3 +1023,18 @@ node from GM to player removes stale numeric labels, and disabling showHp remove
 the bar. Reload, local zoom/Fit and canonical no-write checks pass. Full regression
 suite: 716 tests across 89 files passed. Condition labels and judgment marks remain
 pending; this is not yet the complete player preview.
+
+### Condition labels and judgment marks in player preview
+
+Shared token-conditions normalization preserves the existing duration, deduplication,
+numeric rider and persistent execution-identity behavior. The normal board and
+preview use token-status-presentation for condition labels, hidden-effect badges,
+judgment marks and team/squad affiliation. Passive rendering enables no removal
+hooks or condition tooltip handlers; the preview surface remains inert.
+
+Browser QA compares these overlays against an actual player, including duplicate
+condition hydration, after reload and with unchanged canonical state. Preview
+marks have no removal hooks or misleading click instructions. The full existing
+suite passed (716 tests/89 files), plus two new normalization tests preserve
+source distinctions, typed weaknesses, immutability and rider execution markers.
+Auras, persistent zones and combat group colors remain before preview completion.

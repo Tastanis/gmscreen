@@ -549,3 +549,9 @@ Top-level `automation.passives[]` on a feature, trait, or monster passive abilit
 - Trigger auto-resolution. Authored triggers passively listen and light the blue `!`; the player/GM still clicks to resolve.
 - Manual/non-automation damage events do not currently fire `damage`, `damageDealt`, or `staminaZero` trigger events.
 - Monster-side PC-only state: the monster context omits `spendHeroicResource`, `applyResourceGain`, and `applySurgeGain`. So heroic `spend` falls through to a native `confirm()` dialog, while `resourceGain` and `surgeGain` post a manual chat reminder. Recovery spends are NOT monster-blocked — `spendRecoveryForTarget` is wired and acts on the target's sheet, so monsters can heal/drain a PC target's recoveries. Mark hooks are shared board state; use them intentionally.
+
+Condition display hydration is shared by the interactive VTT and passive player
+preview in `vtt/assets/js/ui/token-conditions.js`. It preserves duration targets,
+numeric riders, hidden-effect metadata, instance IDs and handled rider boundaries.
+This extraction adds no effect kinds, trigger events or execution hooks. Preview
+condition/mark painters are passive and cannot consume or remove effects.
