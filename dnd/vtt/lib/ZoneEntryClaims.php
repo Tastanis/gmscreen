@@ -69,7 +69,7 @@ final class ZoneEntryClaims
         return ['claimId'=>$claimId,'status'=>$status,'idempotent'=>false];
     }
 
-    public static function enters(array $zone,array $from,array $to): bool
+    public static function enters(array $zone,array $from,array $to,string $movementKind='walk'): bool
     {
         $floor=self::level($zone);
         $rects=is_array($zone['squares'] ?? null)&&$zone['squares']!==[]
@@ -84,6 +84,7 @@ final class ZoneEntryClaims
         };
         if(!self::validRect($from)||!self::validRect($to)||$overlaps($from))return false;
         if($overlaps($to))return true;
+        if($movementKind==='teleport')return false;
         if(self::level($from)!==$floor||self::level($to)!==$floor)return false;
         foreach($rects as $r) {
             $enter=0.0;$exit=1.0;

@@ -1308,3 +1308,23 @@ preserves the accepted result, and no normal walking hooks fire. Durable zone-en
 receipts for forced movement and swaps remain the next integration task.
 Full regression suite: 733 tests/94 files passed, plus the held/rejected swap
 browser journey.
+
+### Forced movement, teleport and swap claims
+
+Server-owned receipts now retain movementKind for walking, forced and teleport
+commands/batches (never undo). Forced entry uses swept geometry; teleport/swap
+checks destination only. The pickers and swap hook pass accepted operation IDs
+into the same durable claim workflow. The picker also rejects scene changes.
+
+Immediate reload testing exposed a pending sheet-stamina write restoring old HP.
+Claimed zone damage now flushes and awaits that queued write before completion.
+Dispatch is idempotent, ordered after existing in-flight writes, and old completions
+cannot delete newer entries. Rejected writes, including HTTP-200 application errors,
+leave needs_review rather than false completion.
+
+Validation: 734 tests/94 files passed. Browser tests cover teleport crossing versus
+arrival, forced crossing, immediate reload without replay or lost completed damage,
+rejected sheet updates, atomic swaps, and character recovery/temporary stamina.
+Board and sheet writes remain separate stores: interruption while pending, broader
+sheet-authority reconciliation, enemy-movement permissions and multi-step automation
+sequencing still need work.

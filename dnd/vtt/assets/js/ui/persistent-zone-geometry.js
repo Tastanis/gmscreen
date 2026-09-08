@@ -21,9 +21,10 @@ export function doesPersistentZoneOverlapPlacement(zone,placement) {
 }
 
 /** Detect entry along a confirmed straight movement segment, including pass-through. */
-export function doesPersistentZoneMovementEnter(zone,from,to) {
+export function doesPersistentZoneMovementEnter(zone,from,to,movementKind='walk') {
   if(!zone||!from||!to||doesPersistentZoneOverlapPlacement(zone,from))return false;
   if(doesPersistentZoneOverlapPlacement(zone,to))return true;
+  if(movementKind==='teleport')return false;
   const floor=resolvePersistentZoneLevelId(zone);
   // Do not invent an intermediate floor path for a stairs/fall transition.
   if(resolvePlacementLevelId(from)!==floor||resolvePlacementLevelId(to)!==floor)return false;

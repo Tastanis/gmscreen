@@ -1098,7 +1098,7 @@ after map-image load on recovery. Never infer zone floor from a moving caster.
 
 Zone-entry deduplication work now has trusted movement evidence. ZoneEntryReceipt
 is generated inside movement authority from accepted footprints and canonical
-combat encounter/round state. Only walking actions produce it. Full receipts stay
+combat encounter/round state. Walking, forced and teleport actions produce it; undo does not. Full receipts stay
 in server/GM event records and are stripped from player projection; client hooks
 carry only the accepted operation ID and revision. Zone-entry claims must
 resolve that stored event rather than trusting client coordinates or round keys.
@@ -1120,8 +1120,7 @@ responses for review without retrying effects. Normal walking entry hooks now us
 that coordinator with their accepted operation ID. Damage and condition effects
 await persistence; unsupported effects, rejected callbacks, scene changes or a
 30-second acknowledgement timeout leave review status. Partial effects are never
-rolled back or replayed automatically. Forced movement/swap entry paths still use
-local bookkeeping and require their own receipt integration. Multi-client races,
+rolled back or replayed automatically. Forced movement, teleport and swap entry paths now use accepted operation IDs and the same durable claim authority. Multi-client races,
 round transitions and interruption variants remain broader validation tasks.
 
 Walking eligibility must not consult enteredThisRound: GM-only timing resets do
@@ -1138,3 +1137,9 @@ Automation swaps use updatePlacementsByIds to submit both destination positions
 and floors as one forced placement batch. Await its save before success callbacks;
 do not split the transpose into separate per-token saves or treat boolean helper
 returns as persistence receipts. Existing batch validation/projection applies.
+
+Receipts preserve normalized movementKind. Teleport/swap claims check destination
+entry; forced claims check the path. Claimed damage awaits queued character-stamina
+synchronization before completion. Failed sheet writes remain needs_review; the
+board and sheet are not one transaction. Old queue completions must not delete
+newer entries for the same scene/profile.

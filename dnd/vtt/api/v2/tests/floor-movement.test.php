@@ -54,7 +54,9 @@ try {
     verifyFloor($state['placements']['scene']['ally']['levelId'] === 'upper', 'Group move uses same stair authority.');
     verifyFloor($state['sceneConfig']['scene']['userLevelState']['cal']['levelId'] === 'level-0', 'Fall follows linked player.');
     verifyFloor(count($batch['event']['payload']['mutations']) === 2, 'Group changes share one accepted event.');
-    verifyFloor(count($batch['event']['payload']['zoneEntryReceipts']) === 1 && $batch['event']['payload']['zoneEntryReceipts'][0]['placementId'] === 'ally', 'Batch movement captures only walking evidence, excluding forced moves.');
+    $receipts=$batch['event']['payload']['zoneEntryReceipts'];
+    verifyFloor(count($receipts) === 2 && $receipts[0]['placementId'] === 'pc' && $receipts[1]['placementId']==='ally', 'Batch captures both walking and forced movement evidence.');
+    verifyFloor($receipts[0]['movementKind']==='forced' && $receipts[1]['movementKind']==='walk','Each receipt preserves its trusted movement kind.');
     $beforeUndo = $store->getSnapshot();
     $pc = $beforeUndo['state']['placements']['scene']['pc'];
     $undo = ['type'=>'token.move','operationId'=>'floor-undo-001','baseRevision'=>$beforeUndo['revision'],

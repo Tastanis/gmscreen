@@ -2605,7 +2605,7 @@ export function mountBoardInteractions(store, routes = {}) {
     for (const zone of zones) {
       if (!zone || !Array.isArray(zone.triggers) || !zone.triggers.includes('onEnter')) continue;
       if (!doesAutomationTargetFilterMatch(moverNow,zone.affects || 'creature')
-        || !doesPersistentZoneMovementEnter(zone,fromFootprint,toFootprint)) continue;
+        || !doesPersistentZoneMovementEnter(zone,fromFootprint,toFootprint,movement.kind)) continue;
       if (movement.movementOperationId) {
         // The server owns the combat boundary. Player-local sets are not reset
         // by GM-only round hooks and must never suppress a new walking claim.
@@ -4492,6 +4492,7 @@ export function mountBoardInteractions(store, routes = {}) {
                   ...(effect.ignoreImmunity !== undefined ? { ignoreImmunity: effect.ignoreImmunity } : {}),
                   abilityName: `${zone.abilityName} (${reason || 'zone'})`,
           });
+          if (strict) await flushPendingPlacementSheetSync(target.id,sceneId);
           if (result?.name) {
             damageLines.push(`${result.name} takes ${result.amount}${effect.damageType ? ` ${effect.damageType}` : ''}`);
           }
@@ -17205,11 +17206,13 @@ export function mountBoardInteractions(store, routes = {}) {
       effectiveDistance: distance,
       verb: 'slide',
       verbLabel: 'Teleport',
+      movementKind: 'teleport',
       collisionDamageType: '',
     });
   }
 
   async function handleAutomationSwapRequest(event) {
+    const sceneId=getActiveSceneId();
     const detail = event?.detail ?? {};
     const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
     const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
@@ -17230,7 +17233,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const targetTo = { column: sourcePlacement.column, row: sourcePlacement.row, levelId: sourcePlacement.levelId || BASE_MAP_LEVEL_ID };
     const result = updatePlacementsByIds([sourcePlacement.id,targetPlacement.id],p=>{
       Object.assign(p,p.id===sourcePlacement.id?sourceTo:targetTo);
-    },{returnSavePromise:true});
+    },{returnSavePromise:true,movementKind:'teleport'});
     if (!result?.updated || result.updatedIds.length!==2) {
       resolve?.({ skipped: true, reason: 'update-failed' });
       return;
@@ -17245,8 +17248,10 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
     try {
-      checkPersistentZoneEntries(sourcePlacement.id, sourcePlacement, { ...sourcePlacement, ...sourceTo });
-      checkPersistentZoneEntries(targetPlacement.id, targetPlacement, { ...targetPlacement, ...targetTo });
+      const saved=await result.savePromise;
+      const movement={sceneId,kind:'teleport',movementOperationId:saved?.event?.operationId};
+      checkPersistentZoneEntries(sourcePlacement.id, sourcePlacement, { ...sourcePlacement, ...sourceTo },movement);
+      checkPersistentZoneEntries(targetPlacement.id, targetPlacement, { ...targetPlacement, ...targetTo },movement);
     } catch (err) {
       console.warn('[VTT] persistent-zone swap enter check failed', err);
     }
@@ -17600,6 +17605,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const baseVerb = getAutomationMoveBaseVerb(verb);
     pendingAutomationMove = {
       ...request,
+      sceneId:getActiveSceneId(),
       verb,
       verbLabel,
       baseVerb,
@@ -17767,6 +17773,9 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     event.preventDefault();
     const request = pendingAutomationMove;
+    if(request.sceneId!==getActiveSceneId()) {
+      clearAutomationMoveOverlay();request.reject?.(new Error('Scene changed before movement was confirmed.'));return true;
+    }
     const clickedPlacement = findRenderedPlacementAtPoint(event);
     const cell = getAutomationGridCellFromEvent(event) || request.previewCell;
     const collisionPlacement = clickedPlacement && clickedPlacement.id !== request.targetSnapshot.id
@@ -17785,7 +17794,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const moveResult = updatePlacementById(request.targetSnapshot.id, (placement) => {
       placement.column = clamped.column;
       placement.row = clamped.row;
-    }, { returnSavePromise: true });
+    }, { returnSavePromise: true, movementKind: request.movementKind || 'forced' });
     if (!moveResult?.updated) {
       clearAutomationMoveOverlay();
       request.reject?.(new Error('Unable to move that token.'));
@@ -17800,10 +17809,9 @@ export function mountBoardInteractions(store, routes = {}) {
       return true;
     }
     try {
-      checkPersistentZoneEntries(request.targetSnapshot.id, request.targetSnapshot, {
-        ...request.targetSnapshot,
-        column: clamped.column,
-        row: clamped.row,
+      const saved=await moveResult.savePromise;
+      checkPersistentZoneEntries(request.targetSnapshot.id, request.targetSnapshot, getPlacementFromStore(request.targetSnapshot.id),{
+        sceneId:request.sceneId,kind:request.movementKind || 'forced',movementOperationId:saved?.event?.operationId,
       });
     } catch (err) {
       console.warn('[VTT] persistent-zone forced-move enter check failed', err);
@@ -18407,7 +18415,7 @@ export function mountBoardInteractions(store, routes = {}) {
   function updatePlacementById(
     placementId,
     mutator,
-    { syncBoard = true, returnSavePromise = false } = {}
+    { syncBoard = true, returnSavePromise = false, movementKind = 'forced' } = {}
   ) {
     if (!placementId || typeof mutator !== 'function' || typeof boardApi.updateState !== 'function') {
       return false;
@@ -18461,6 +18469,7 @@ export function mountBoardInteractions(store, routes = {}) {
               type: 'placement.update',
               sceneId: activeSceneId,
               placementId,
+              movementKind,
               patch,
             },
           ];
@@ -18479,7 +18488,7 @@ export function mountBoardInteractions(store, routes = {}) {
   function updatePlacementsByIds(
     placementIds,
     mutator,
-    { syncBoard = true, returnSavePromise = false } = {}
+    { syncBoard = true, returnSavePromise = false, movementKind = 'forced' } = {}
   ) {
     if (!Array.isArray(placementIds) || placementIds.length === 0 || typeof mutator !== 'function') {
       return false;
@@ -18557,6 +18566,7 @@ export function mountBoardInteractions(store, routes = {}) {
               type: 'placement.update',
               sceneId: activeSceneId,
               placementId: id,
+              movementKind,
               patch,
             });
           }
@@ -18859,6 +18869,8 @@ export function mountBoardInteractions(store, routes = {}) {
       if (!response?.ok) {
         throw new Error(`Sheet sync failed with status ${response?.status ?? 'unknown'}`);
       }
+      const saved=await response.clone().json();
+      if(saved?.success===false)throw new Error(saved.error || 'Character stamina sync was rejected.');
 
       broadcastStaminaSync({
         character: payload?.character,
@@ -18876,68 +18888,42 @@ export function mountBoardInteractions(store, routes = {}) {
   function scheduleSheetHitPointSync(payload = {}, { savePromise = null, sceneId = null } = {}) {
     const endpoint = typeof routes?.sheet === 'string' ? routes.sheet : null;
     const name = typeof payload.character === 'string' ? payload.character.trim() : '';
-    if (!endpoint || !name) {
-      return;
-    }
-
-    const currentValue = normalizeHitPointsValue(payload.currentStamina);
-    const maxValue = normalizeHitPointsValue(payload.staminaMax);
-    const sceneKey = typeof sceneId === 'string' && sceneId ? sceneId : '';
-    const key = `${sceneKey}::${name.toLowerCase()}`;
+    if (!endpoint || !name) return;
+    const key = `${sceneId || ''}::${name.toLowerCase()}`;
     const existing = sheetSyncQueue.get(key);
-    const pendingSavePromise = savePromise ?? existing?.savePromise ?? null;
-    const setTimeoutFn = typeof window?.setTimeout === 'function' ? window.setTimeout : setTimeout;
-
-    if (existing?.timerId && typeof clearTimeout === 'function') {
-      clearTimeout(existing.timerId);
-    }
-
-    const dispatchUpdate = () => {
-      const sendUpdate = () =>
-        postHitPointsToSheet({
-          character: name,
-          currentStamina: currentValue,
-          staminaMax: maxValue,
+    if (existing?.timerId) clearTimeout(existing.timerId);
+    const entry = {
+      payload: {character:name,currentStamina:normalizeHitPointsValue(payload.currentStamina),staminaMax:normalizeHitPointsValue(payload.staminaMax)},
+      promise:null,timerId:null,
+      dispatch:()=>{
+        if (entry.promise) return entry.promise;
+        clearTimeout(entry.timerId);
+        entry.promise=Promise.resolve(existing?.promise).catch(()=>null).then(async()=>{
+          const saved=await (savePromise ?? existing?.savePromise);
+          if(saved?.success===false) return null;
+          return postHitPointsToSheet(entry.payload);
+        }).then(response=>{
+          if(response?.ok && sheetSyncQueue.get(key)===entry)sheetSyncQueue.delete(key);
+          return response;
         });
-
-      if (pendingSavePromise && typeof pendingSavePromise.then === 'function') {
-        pendingSavePromise
-          .then((result) => {
-            if (result?.success === false) {
-              sheetSyncQueue.delete(key);
-              return null;
-            }
-            return sendUpdate();
-          })
-          .catch(() => {
-            sheetSyncQueue.delete(key);
-          })
-          .finally(() => {
-            sheetSyncQueue.delete(key);
-          });
-        return;
-      }
-
-      Promise.resolve(sendUpdate())
-        .catch(() => {})
-        .finally(() => {
-          sheetSyncQueue.delete(key);
-        });
+        return entry.promise;
+      },
+      savePromise:savePromise ?? existing?.savePromise,
     };
+    sheetSyncQueue.set(key,entry);
+    entry.timerId=setTimeout(()=>{entry.dispatch().catch(()=>{});},SHEET_SYNC_DEBOUNCE_MS);
+  }
 
-    if (typeof setTimeoutFn === 'function') {
-      const timerId = setTimeoutFn(dispatchUpdate, SHEET_SYNC_DEBOUNCE_MS);
-      sheetSyncQueue.set(key, {
-        timerId,
-        payload: {
-          character: name,
-          currentStamina: currentValue,
-          staminaMax: maxValue,
-        },
-        savePromise: pendingSavePromise,
-      });
-    } else {
-      dispatchUpdate();
+  async function flushPendingPlacementSheetSync(placementId,sceneId) {
+    if(getActiveSceneId()!==sceneId)throw new Error('Scene changed during zone resource synchronization.');
+    const placement=getPlacementFromStore(placementId);
+    const profile=placement?getCharacterSheetProfileIdForPlacement(placement):null;
+    if(!profile)return;
+    const key=`${sceneId}::${profile.toLowerCase()}`;
+    let entry;
+    while((entry=sheetSyncQueue.get(key))) {
+      const response=await entry.dispatch();
+      if(!response?.ok)throw new Error('Zone damage reached the board but character stamina synchronization was not confirmed.');
     }
   }
 

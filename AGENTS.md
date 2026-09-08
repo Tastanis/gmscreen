@@ -216,7 +216,7 @@ console.log('Button element:', document.getElementById('import-character-btn'));
   entries remain pending/needs_review for inspection; completed/dismissed claims
   cannot be reopened. Recovery lists are claimant-only except for the GM. The
   ledger is separate from canonical board revisions. Normal walking entries use
-  durable claims; forced/swap entries still require receipt integration.
+  durable claims; forced movement, teleports and swaps now pass accepted operation IDs too.
   The GM Scenes recovery panel supports inspection and manual final outcomes.
   Condition callbacks now await accepted persistence; preserve this boundary.
   Unsupported, partial or uncertain zone effects require review, never replay.

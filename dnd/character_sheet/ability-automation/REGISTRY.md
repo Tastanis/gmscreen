@@ -581,12 +581,12 @@ straight movement segment, including a long drag ending beyond the zone. Tangent
 contact and movement beginning inside do not count as entry. For a floor-changing
 move, destination entry is checked without assuming the intermediate floor path.
 Normal walking entries now reserve a durable claim before effects execute.
-Forced/swap entry bookkeeping remains client-local pending receipt integration.
+Forced movement, teleport and swap entries now use durable claims too.
 
 Normal `vtt:token-moved` events now include `movementOperationId` and
 `movementRevision` from the locally acknowledged V2 event. These are runtime
 correlation fields, not authored ability fields. Server events retain trusted
-walking receipts for future zone-entry claim validation; full receipts are not
+movement receipts for zone-entry claim validation; full receipts are not
 sent to players. This foundation does not yet make entry effects reload-safe.
 
 A server zone-entry reservation endpoint now exists at `vtt/api/v2/zone-entries.php`.
@@ -598,8 +598,7 @@ supported damage/condition callbacks complete. Condition callbacks now await the
 canonical save. Unsupported effects are sent to manual review before any effects
 run; rejected/uncertain callbacks leave a review record, including partial execution.
 The GM Scenes recovery panel never replays effects. Completed/reviewed walking
-entries remain reserved across reload. Forced/swap paths and broader concurrent
-client/round-transition validation remain pending. A timeout cannot cancel an
+entries remain reserved across reload. Broader interruption and concurrent-client validation remain ongoing. A timeout cannot cancel an
 already dispatched effect; inspect actual stamina/conditions before resolving.
 
 Walking entry eligibility is checked against server claims each time, including
@@ -612,3 +611,8 @@ exists with the same owner, floor, effects, geometry and target filter in the la
 received board state. Ended or changed zones stop queued work and retain review
 evidence. This does not cancel effects already sent or make remote removal atomic
 with damage application.
+
+Teleport/swap use destination-only entry; forced movement uses swept geometry.
+These actions share durable zone/creature/combat-boundary claims with walking.
+Claimed damage waits for queued PC stamina synchronization before completion;
+rejected sheet updates remain for review. Board/sheet writes are not one transaction.

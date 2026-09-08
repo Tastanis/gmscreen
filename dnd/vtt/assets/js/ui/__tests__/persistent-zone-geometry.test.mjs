@@ -2,6 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {doesPersistentZoneOverlapPlacement,resolvePersistentZoneLevelId,doesPersistentZoneMovementEnter} from '../persistent-zone-geometry.js';
 
+test('teleports check destination entry while forced movement checks the traversed segment',()=>{
+  const zone={template:{column:3,row:0,width:1,height:1},levelId:'level-0'};
+  const from={column:0,row:0,width:1,height:1,levelId:'level-0'};
+  assert.equal(doesPersistentZoneMovementEnter(zone,from,{...from,column:7},'forced'),true);
+  assert.equal(doesPersistentZoneMovementEnter(zone,from,{...from,column:7},'teleport'),false);
+  assert.equal(doesPersistentZoneMovementEnter(zone,from,{...from,column:3},'teleport'),true);
+  assert.equal(doesPersistentZoneMovementEnter(zone,{...from,column:3},{...from,column:3.5},'teleport'),false);
+});
+
 test('persistent zones retain their floor independently of caster movement',()=>{
   const zone={levelId:'balcony',template:{column:2,row:3,width:2,height:2},casterId:'caster'};
   const token={column:2,row:3,width:1,height:1,levelId:'level-0'};

@@ -51,15 +51,14 @@ The full monster authoring reference is `monster-automation.md` (this folder). M
 - Winded state is based on token HP at or below half max HP.
 
 Zone-entry correlation: locally acknowledged normal `vtt:token-moved` hooks include
-movementOperationId and movementRevision. Server walking receipts are built by
+movementOperationId and movementRevision. Server movement receipts are built by
 `../../vtt/lib/ZoneEntryReceipt.php` and stripped from player event projection.
 Canonical entry reservations are available through api/v2/zone-entries.php.
 Normal walking entries now reserve before applying supported damage/condition effects,
 then acknowledge completion. Condition callbacks await canonical persistence, just
 as damage callbacks do. Failed or uncertain effects leave a GM recovery record;
 completed or reviewed entries cannot receive a second execution grant after reload.
-Unsupported zone effects require manual review. Forced/swap entries remain on the
-local path pending trusted receipt integration. No authored JSON fields changed.
+Unsupported zone effects require manual review. Forced movement, teleport and swap entries use accepted operation IDs and durable claims. No authored JSON fields changed.
 Walking claims bypass the legacy local round cache; server boundaries decide.
 Granted effects on the same creature execute sequentially per client, preventing
 overlapping zones from racing their own placement saves.
@@ -71,4 +70,8 @@ queued effects. Already dispatched callbacks cannot be cancelled by this check.
 forced placement batch. It requires actual scene placements and awaits acceptance
 before reporting success or checking zone entry. Save failure rejects the callback
 (or resolves skipped/save-failed when no reject callback exists). Normal walking
-hooks do not fire. Durable forced/swap zone claims remain pending.
+hooks do not fire. Forced/swap zone claims use the same durable authority.
+
+Teleport/swap check zone entry at the destination; forced movement checks its path.
+Claimed zone damage waits for queued character stamina synchronization. Rejected
+sheet updates leave needs_review even if board damage was accepted.

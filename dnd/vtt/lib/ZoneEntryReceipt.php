@@ -10,10 +10,10 @@ final class ZoneEntryReceipt
         return json_encode([$encounter, !empty($combat['active']) ? max(1, (int) ($combat['round'] ?? 1)) : 0], JSON_THROW_ON_ERROR);
     }
 
-    public static function create(string $sceneId, string $placementId, array $from, array $to, array $combat): array
+    public static function create(string $sceneId, string $placementId, array $from, array $to, array $combat, string $movementKind='walk'): array
     {
         return ['sceneId'=>$sceneId, 'placementId'=>$placementId,
-            'boundary'=>self::boundary($combat), 'from'=>self::footprint($from), 'to'=>self::footprint($to)];
+            'movementKind'=>$movementKind, 'boundary'=>self::boundary($combat), 'from'=>self::footprint($from), 'to'=>self::footprint($to)];
     }
 
     private static function footprint(array $placement): array

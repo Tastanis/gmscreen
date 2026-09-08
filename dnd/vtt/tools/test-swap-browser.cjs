@@ -36,7 +36,7 @@ const origin='http://127.0.0.1:8129';
     assert.equal(await gm.evaluate(()=>window.swapResult.status),'pending');
     assert.deepEqual((await snapshot()).state.placements,before.state.placements,'Held batch has not moved either token');
     assert.equal(writes.length,1);assert.equal(writes[0].type,'placement.batch');assert.equal(writes[0].payload.actions.length,2);
-    assert.ok(writes[0].payload.actions.every(action=>action.movementKind==='forced'));
+    assert.ok(writes[0].payload.actions.every(action=>action.movementKind==='teleport'));
     release();await gm.waitForFunction(()=>window.swapResult.status!=='pending');
     assert.equal(await gm.evaluate(()=>window.swapResult.status),'resolved');
     assert.equal(await gm.evaluate(()=>window.swapResult.result.skipped),undefined);

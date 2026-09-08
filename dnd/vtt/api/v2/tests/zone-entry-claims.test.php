@@ -70,7 +70,16 @@ try {
     checkClaim(!$store->claimZoneEntry([...$request,'movementOperationId'=>'claim-round-one'],'cal',false)['claimed'],'Dismissal does not release the reservation for another execution.');
     checkClaim($store->getSnapshot()===$outcomeBefore,'Review and outcome acknowledgements never mutate gameplay state.');
     $move('claim-forced-move',0,'GM','forced');
-    deniedClaim(fn()=>$store->claimZoneEntry([...$request,'movementOperationId'=>'claim-forced-move'],'GM',true));
+    checkClaim(!$store->claimZoneEntry([...$request,'movementOperationId'=>'claim-forced-move'],'GM',true)['claimed'],'Forced crossing shares the existing walking claim boundary.');
+    $s=$store->getSnapshot();$store->acceptCombatCommand(['type'=>'round.advance','sceneId'=>'scene','operationId'=>'claim-next-round',
+        'baseRevision'=>$s['revision'],'payload'=>[]],'GM',true);
+    $move('claim-teleport-across',7,'GM','teleport');
+    deniedClaim(fn()=>$store->claimZoneEntry([...$request,'movementOperationId'=>'claim-teleport-across'],'GM',true));
+    $move('claim-teleport-arrive',3,'GM','teleport');
+    $arrival=$store->claimZoneEntry([...$request,'movementOperationId'=>'claim-teleport-arrive'],'GM',true);
+    checkClaim($arrival['claimed'],'Teleport arrival enters the destination zone without tracing intervening cells.');
+    $entry=$store->unresolvedZoneEntries('GM',true)[0];
+    checkClaim($entry['movement']['movementKind']==='teleport','Recovery retains the trusted teleport kind.');
     $from=['column'=>0,'row'=>0,'width'=>1,'height'=>1,'levelId'=>'level-0'];
     checkClaim(!ZoneEntryClaims::enters(['squares'=>[['column'=>3,'row'=>3]]],[...$from,'row'=>4],[...$from,'column'=>4]),'Tangent corner does not enter.');
     echo "Zone claims: trusted actor/movement, durable round uniqueness, cross-client dedupe, stale/forced rejection and no effects passed.\n";

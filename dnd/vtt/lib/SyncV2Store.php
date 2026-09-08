@@ -1371,8 +1371,8 @@ final class SyncV2Store
                     $next['_movementUndo'] = MovementUndo::record($current, $next, $actorId, $state['sceneConfig'][$sceneId]['mapLevels'] ?? []);
                     $patch['_movementUndo'] = $next['_movementUndo'];
                 }
-                if ($action['movementKind'] === 'walk' && (array_key_exists('column', $patch) || array_key_exists('row', $patch))) {
-                    $zoneEntryReceipts[] = ZoneEntryReceipt::create($sceneId, $placementId, $current, $next, $state['combat'][$sceneId] ?? []);
+                if (array_key_exists('column', $patch) || array_key_exists('row', $patch) || array_key_exists('levelId', $patch)) {
+                    $zoneEntryReceipts[] = ZoneEntryReceipt::create($sceneId, $placementId, $current, $next, $state['combat'][$sceneId] ?? [], $action['movementKind']);
                 }
                 $state['placements'][$sceneId][$placementId] = $next;
                 if (
@@ -1712,9 +1712,9 @@ final class SyncV2Store
                 ];
             }
 
-            if ($restore === null && $normalized['movementKind'] === 'walk') {
+            if ($restore === null) {
                 $event['payload']['zoneEntryReceipt'] = ZoneEntryReceipt::create(
-                    $sceneId, $placementId, $current, $next, $state['combat'][$sceneId] ?? []
+                    $sceneId, $placementId, $current, $next, $state['combat'][$sceneId] ?? [], $normalized['movementKind']
                 );
             }
 
@@ -1773,7 +1773,7 @@ final class SyncV2Store
             if (isset($event['payload']['zoneEntryReceipt'])) $receipts[]=$event['payload']['zoneEntryReceipt'];
             $receipt=null;
             foreach ($receipts as $candidate) if (($candidate['sceneId'] ?? null)===$ids['sceneId'] && ($candidate['placementId'] ?? null)===$ids['placementId']) {$receipt=$candidate;break;}
-            if (!$receipt) throw new InvalidArgumentException('Accepted walking evidence is unavailable.');
+            if (!$receipt) throw new InvalidArgumentException('Accepted movement evidence is unavailable.');
             $snapshot=$this->getSnapshot();$state=$snapshot['state'];$sceneId=$ids['sceneId'];
             $placements=$state['placements'][$sceneId] ?? [];
             $mover=$placements[$ids['placementId']] ?? null;
@@ -1795,7 +1795,7 @@ final class SyncV2Store
             if (($zone['createdAt'] ?? 0)>($event['serverTime'] ?? 0)) throw new InvalidArgumentException('Zone was created after that movement.');
             $filter=strtolower(trim((string)($zone['affects'] ?? 'creature')));$team=$this->combatantTeam($mover);
             if (($filter==='enemy' && $team!=='enemy') || (in_array($filter,['ally','selforally','self or ally','selfandally','self and ally'],true) && $team!=='ally')) throw new InvalidArgumentException('Zone does not affect this creature.');
-            if (!ZoneEntryClaims::enters($zone,$receipt['from'],$receipt['to'])) throw new InvalidArgumentException('Movement does not enter this zone.');
+            if (!ZoneEntryClaims::enters($zone,$receipt['from'],$receipt['to'],$receipt['movementKind'] ?? 'walk')) throw new InvalidArgumentException('Movement does not enter this zone.');
             $result=$ledger->reserve($receipt,$zone,$ids['movementOperationId'],trim($actorId));
             $this->pdo->exec('COMMIT');
             return $result;
