@@ -847,8 +847,16 @@ when it removes floors, so alternate configuration paths cannot strand occupants
 The event carries placement mutations through normal audience projection, reducer,
 and focused token rendering without walking hooks. The scene list refreshes from
 the canonical floor event. The deletion button no longer sends separate placement
-and viewer saves. Cleanup of floor-bound drawings/templates/fog and stair links
-remains pending.
+and viewer saves.
+
+Floor removal also deletes drawings/templates bound to removed floors and their
+`fogOfWar.byLevel` entries in the same transaction. `removedContent` carries
+idempotent, scene-scoped entity removals; hidden-floor entity identifiers are
+omitted from player events. The cleaned fog projection travels in the same floor
+event. Incoming stair `linkedLevelId` references are cleared on base and surviving
+floors, preserving stair shapes and unrelated links. Other floors/scenes and media
+files are untouched. Both `level.delete` and floor removal through `levels.set`
+use this cleanup. The confirmation explains these effects before deletion.
 
 ### Named scene checkpoint archive
 

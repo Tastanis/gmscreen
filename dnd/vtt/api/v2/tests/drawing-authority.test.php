@@ -44,6 +44,14 @@ try {
     $projection = vttSyncV2ProjectSnapshotForUser($store->getSnapshot(), $player);
     if (isset($projection['state']['templates']['test']['secret-template'])) throw new RuntimeException('Hidden template leaked in snapshot.');
     if (vttSyncV2ProjectEventForUser($secretTemplate['event'], $player)['type'] !== 'sync.redacted') throw new RuntimeException('Hidden template leaked in event.');
+    $snapshot = $store->getSnapshot();
+    $deleted = $store->acceptBoardDomainCommand(['type'=>'level.delete','operationId'=>'delete-secret-floor',
+        'sceneId'=>'test','baseRevision'=>$snapshot['revision'],'entityRevision'=>$snapshot['state']['sceneConfig']['test']['_revision'],
+        'payload'=>['levelId'=>'secret']], 'GM', true);
+    if (count($deleted['event']['payload']['removedContent']) !== 2) throw new RuntimeException('Hidden floor content was not deleted.');
+    $publicDelete = vttSyncV2ProjectEventForUser($deleted['event'], $player);
+    if ($publicDelete['payload']['removedContent'] !== []) throw new RuntimeException('Hidden entity identifiers leaked in deletion event.');
+    if (isset($store->getSnapshot()['state']['drawings']['test']['secret-drawing'])) throw new RuntimeException('Deleted hidden drawing remained canonical.');
     echo "Drawing authority: ownership, rejection, restore and GM removal passed.\n";
 } finally {
     unset($store);

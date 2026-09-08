@@ -44,6 +44,13 @@ try {
         ['id'=>'lower','zIndex'=>0,'cutouts'=>[['column'=>2,'row'=>2,'width'=>1,'height'=>1]]],
         ['id'=>'secret','zIndex'=>1,'hidden'=>true], ['id'=>'top','zIndex'=>2],
     ]], 'userLevelState'=>['cal'=>['levelId'=>'top','source'=>'token','tokenId'=>'hero']]]]];
+    foreach (['drawings', 'templates'] as $domain) $board[$domain] = [
+        'scene'=>[['id'=>$domain.'-top','levelId'=>'top'], ['id'=>$domain.'-lower','levelId'=>'lower']],
+        'other'=>[['id'=>$domain.'-other','levelId'=>'top']],
+    ];
+    $board['sceneState']['scene']['fogOfWar'] = ['byLevel'=>['top'=>['enabled'=>true], 'lower'=>['enabled'=>false]]];
+    $board['sceneState']['scene']['mapLevels']['baseStairs'] = [['id'=>'base-link','linkedLevelId'=>'top']];
+    $board['sceneState']['scene']['mapLevels']['levels'][0]['stairs'] = [['id'=>'lower-link','linkedLevelId'=>'top'], ['id'=>'retained-link','linkedLevelId'=>'secret']];
     $store->migrateLegacyPlacements($board); $store->migrateLegacyBoardDomains($board);
     $before = $store->getSnapshot();
     $delete = ['type'=>'level.delete','operationId'=>'delete-supported-top','sceneId'=>'scene',
@@ -55,6 +62,16 @@ try {
     verifyView($after['state']['placements']['scene']['large']['levelId'] === 'lower', 'Partial support catches a large token.');
     verifyView($after['state']['placements']['scene']['hero']['stamina'] === 7, 'Relocation preserves current resources.');
     verifyView($after['state']['sceneConfig']['scene']['userLevelState']['cal']['levelId'] === 'level-0', 'Linked viewer follows the actual supported landing.');
+    foreach (['drawings', 'templates'] as $domain) {
+        verifyView(!isset($after['state'][$domain]['scene'][$domain.'-top']), 'Deleted floor content removed atomically.');
+        verifyView(isset($after['state'][$domain]['scene'][$domain.'-lower']) && isset($after['state'][$domain]['other'][$domain.'-other']), 'Other floor and scene content preserved.');
+    }
+    verifyView(count($result['event']['payload']['removedContent']) === 2, 'Event carries exact entity removals.');
+    $config = $after['state']['sceneConfig']['scene'];
+    verifyView(!isset($config['fogOfWar']['byLevel']['top']) && isset($config['fogOfWar']['byLevel']['lower']), 'Only deleted-floor fog is removed.');
+    verifyView($config['mapLevels']['baseStairs'][0]['linkedLevelId'] === null, 'Base stairs disconnect deleted destination.');
+    verifyView($config['mapLevels']['levels'][0]['stairs'][0]['linkedLevelId'] === null, 'Surviving floor stairs disconnect deleted destination.');
+    verifyView($config['mapLevels']['levels'][0]['stairs'][1]['linkedLevelId'] === 'secret', 'Unrelated stair links remain intact.');
     verifyView($store->acceptBoardDomainCommand($delete, 'GM', true)['idempotent'], 'Duplicate delete returns the original accepted event.');
     $delete['operationId'] = 'player-delete-denied'; $delete['payload']['levelId'] = 'lower';
     $rejected = false;

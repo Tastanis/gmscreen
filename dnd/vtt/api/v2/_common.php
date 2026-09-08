@@ -407,6 +407,12 @@ function vttSyncV2ProjectEventForUser(array $event, array $auth): array
     if ($type === 'levels.replaced' && is_array($event['payload']['mapLevels'] ?? null)) {
         if (isset($event['payload']['mutations'])) $event = vttSyncV2ProjectPlacementEventForUser($event, $auth);
         $projected = vttSyncV2ProjectSceneConfigForPlayer($event['payload']);
+        if (isset($event['payload']['removedContent'])) {
+            $event['payload']['removedContent'] = array_values(array_map(static function ($entry) {
+                unset($entry['playerVisible']); return $entry;
+            }, array_filter($event['payload']['removedContent'], static fn($entry) => ($entry['playerVisible'] ?? false) === true)));
+        }
+        if (isset($event['payload']['fogOfWar'])) $event['payload']['fogOfWar'] = $projected['fogOfWar'] ?? [];
         $event['payload']['mapLevels'] = $projected['mapLevels'];
         if (isset($event['payload']['userLevelState'])) {
             $event['payload']['userLevelState'] = $projected['userLevelState'] ?? [];

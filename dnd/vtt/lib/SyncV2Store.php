@@ -699,6 +699,7 @@ final class SyncV2Store
                         if (count($oldLevels) === count($payload['mapLevels']['levels'])) throw new InvalidArgumentException('That floor no longer exists.');
                         if (($payload['mapLevels']['activeLevelId'] ?? null) === $payload['levelId']) $payload['mapLevels']['activeLevelId'] = null;
                     }
+                    $removedContent = $this->cleanDeletedFloorContent($state, $sceneId, $config, $payload['mapLevels']);
                     $mutations = $this->relocateDeletedFloorPlacements($state, $sceneId, $config['mapLevels'] ?? [], $payload['mapLevels']);
                     $config['userLevelState'] = $this->reconcileFloorViews(
                         $config['userLevelState'] ?? [], $config['mapLevels'] ?? [], $payload['mapLevels']
@@ -711,6 +712,10 @@ final class SyncV2Store
                     }
                     $eventType = 'levels.replaced';
                     $eventPayload = ['mapLevels' => $config['mapLevels'], 'userLevelState' => $config['userLevelState'], 'mutations'=>$mutations];
+                    if ($removedContent !== null) {
+                        $eventPayload['removedContent'] = $removedContent;
+                        $eventPayload['fogOfWar'] = $config['fogOfWar'] ?? [];
+                    }
                 } elseif ($type === 'grid.set') {
                     $config['grid'] = $payload['grid'];
                     $eventType = 'grid.changed';
@@ -1941,6 +1946,37 @@ final class SyncV2Store
                 'wasPlayerVisible'=>!$this->placementIsHidden($placement)];
         }
         return $mutations;
+    }
+
+    private function cleanDeletedFloorContent(array &$state, string $sceneId, array &$config, array &$after): ?array
+    {
+        $before = array_column(FloorGeometry::orderedLevels($config['mapLevels'] ?? []), null, 'id');
+        $remaining = array_column(FloorGeometry::orderedLevels($after), null, 'id');
+        $removed = array_diff_key($before, $remaining);
+        if ($removed === []) return null;
+        $content = [];
+        foreach (['drawings', 'templates'] as $domain) {
+            foreach (($state[$domain][$sceneId] ?? []) as $id => $entry) {
+                $levelId = $entry['levelId'] ?? FloorGeometry::BASE;
+                if (!isset($removed[$levelId])) continue;
+                unset($state[$domain][$sceneId][$id]);
+                $content[] = ['domain'=>$domain, 'id'=>(string) $id, 'playerVisible'=>($removed[$levelId]['hidden'] ?? false) !== true];
+            }
+        }
+        foreach ($removed as $levelId => $level) unset($config['fogOfWar']['byLevel'][$levelId]);
+        $disconnect = static function (array $stairs) use ($removed): array {
+            foreach ($stairs as &$stair) {
+                if (is_array($stair) && isset($removed[$stair['linkedLevelId'] ?? ''])) $stair['linkedLevelId'] = null;
+            }
+            unset($stair);
+            return $stairs;
+        };
+        if (is_array($after['baseStairs'] ?? null)) $after['baseStairs'] = $disconnect($after['baseStairs']);
+        foreach ($after['levels'] ?? [] as $index => $level) {
+            if (is_array($level['stairs'] ?? null)) $after['levels'][$index]['stairs'] = $disconnect($level['stairs']);
+        }
+        if (isset($removed[$after['activeLevelId'] ?? ''])) $after['activeLevelId'] = null;
+        return $content;
     }
 
     public function restoreCheckpointPositions(array $command, string $actorId, bool $isGm): array

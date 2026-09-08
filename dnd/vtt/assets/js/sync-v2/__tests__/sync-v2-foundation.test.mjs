@@ -66,6 +66,22 @@ test('floor deletion reduces token relocation and viewer cleanup atomically', ()
   assert.equal(result.changeSet.levels, true);
 });
 
+test('floor deletion removes scoped content even when a projected client never received an entity', () => {
+  const initial = { revision: 0, state: { drawings: { scene: { removed: { id: 'removed' }, kept: { id: 'kept' } } },
+    templates: { other: { kept: { id: 'kept' } } }, sceneConfig: { scene: { fogOfWar: { byLevel: { upper: {} } } } } } };
+  const result = reduceCanonicalEvent(initial, { ...shadowEvent(1, 'delete-floor-content'), type: 'levels.replaced', sceneId: 'scene', entityRevision: 1,
+    payload: { mapLevels: { levels: [] }, fogOfWar: { byLevel: {} },
+      removedContent: [{ domain: 'drawings', id: 'removed' }, { domain: 'templates', id: 'unseen' }] },
+  });
+  assert.deepEqual(Object.keys(result.snapshot.state.drawings.scene), ['kept']);
+  assert.ok(result.snapshot.state.templates.other.kept);
+  assert.deepEqual(result.snapshot.state.sceneConfig.scene.fogOfWar.byLevel, {});
+  assert.equal(result.changeSet.drawings, true);
+  assert.equal(result.changeSet.templates, true);
+  assert.equal(result.changeSet.fog, true);
+  assert.ok(initial.state.drawings.scene.removed);
+});
+
 test('entity store refuses revision decrease even for a recovery snapshot', () => {
   const store = createEntityStore({
     revision: 5,

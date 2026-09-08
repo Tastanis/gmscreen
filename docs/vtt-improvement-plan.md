@@ -22,7 +22,7 @@ User authorized implementing the September 7 product audit, updating/running the
 - [ ] Shared floor/elevation/adjacency model used by suggestions, range, auras, and movement.
   - Shared floor participation now guards flanking, aura membership, Stand Firm, and opportunity-attack adjacency. High Ground requires confirmation. Physical elevation, openings, and range integration remain pending.
 - [ ] Hidden/deleted floors, partial support, flight, forced movement, stairs interrupted by reload, and undo tests.
-  - Floor edits atomically repair saved viewer floors. Deletion relocates occupants using supported visible lower floors and updates linked views in the same event. Floor-bound content and stair-link cleanup remain pending.
+  - Floor edits repair saved viewer floors. Deletion atomically relocates occupants, updates linked views, removes bound drawings/templates/fog, and disconnects incoming stairs. Flight and remaining movement edge cases are still pending.
 - [ ] Explicit view-versus-token controls and follow/browse/center policy.
   - Viewing labels, Show players this floor, reload-preserved explicit views, and My token's floor are implemented. Camera-follow preferences and configurable primary token association remain pending.
 - [ ] Configurable roster and primary token association, preserving shared allied control.
@@ -475,3 +475,23 @@ journey climbs stairs, deletes the occupied balcony through confirmation, verifi
 exactly one command and world revision, checks token/view convergence and scene
 list removal, then reloads an offline observer. Floor-bound drawings/templates/fog
 and links to deleted stairs still need explicit cleanup.
+
+
+### Deleted-floor content and stair cleanup
+
+Floor deletion now removes its drawings, templates, and by-level fog in the same
+transaction as occupant relocation. Surviving stairs keep their geometry but
+disconnect destinations that no longer exist. The event carries explicit content
+removals and cleaned fog through focused rendering; other floors and scenes stay
+intact. Hidden-floor content IDs are omitted from player deletion events. The
+confirmation explains content removal and stair disconnection.
+
+Validation: 691 tests passed, followed by the expanded PHP audience checks. Tests
+cover scene/floor scope, surviving links, private deletion events, idempotent
+client removal of unseen entities, and fog replay. The three-browser deletion
+journey seeds upper/base drawings and templates plus fog, deletes the occupied
+balcony through the UI, checks that its rendered template disappears, verifies
+base content survives and stairs disconnect, and reloads the offline observer.
+
+Remaining floor work includes flight/hover/jumping, physical elevation and range,
+whole-group undo, and live hide/unhide content reconciliation without a reload.

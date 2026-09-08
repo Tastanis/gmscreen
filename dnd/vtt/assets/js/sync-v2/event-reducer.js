@@ -566,6 +566,12 @@ const reducers = Object.freeze({
     reduceSceneConfigField(state, event, changes, 'mapLevels', 'mapLevels', 'levels');
     if (event.payload?.userLevelState) reduceLevelActivated(state, event, changes);
     if (event.payload?.mutations) reducePlacementBatch(state, event, changes);
+    for (const entry of event.payload?.removedContent ?? []) {
+      if (!['drawings', 'templates'].includes(entry.domain) || typeof entry.id !== 'string') throw Error('Invalid floor content removal');
+      delete getSceneCollection(state, entry.domain, event.sceneId)[entry.id];
+      changes[entry.domain] = true;
+    }
+    if (event.payload?.fogOfWar) reduceFogReplaced(state, event, changes);
   },
   'level.userChanged': reduceUserLevelChanged,
   'level.activated': reduceLevelActivated,

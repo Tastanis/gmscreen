@@ -48,6 +48,21 @@ if (!['localhost', '127.0.0.1', '[::1]'].includes(new URL(origin).hostname)) thr
     assert.equal(state.sceneConfig[manifest.test_scene_id].userLevelState.cal.levelId, 'test-upper');
     assert.equal(state.sceneConfig[manifest.test_scene_id].userLevelState.sharon.levelId, 'level-0');
     assert.match(await pc.page.locator('[data-map-level-indicator-value]').textContent(), /Test balcony/);
+    async function seed(type, entityId, payload) {
+      const current = await snapshot();
+      const response = await gm.context.request.post(origin + '/dnd/vtt/api/v2/commands.php', { data: {
+        type, operationId: require('node:crypto').randomUUID(), sceneId: manifest.test_scene_id, entityId,
+        baseRevision: current.revision, entityRevision: type === 'fog.set' ? current.state.sceneConfig[manifest.test_scene_id]._revision : 0,
+        payload,
+      } });
+      assert.equal(response.status(), 200);
+    }
+    for (const [suffix, levelId] of [['upper', 'test-upper'], ['base', 'level-0']]) {
+      await seed('template.upsert', 'delete-template-' + suffix, { template: { type: 'circle', center: { column: 4, row: 3 }, radius: 1, levelId } });
+      await seed('drawing.upsert', 'delete-drawing-' + suffix, { drawing: { points: [{ x: 100, y: 100 }, { x: 150, y: 150 }], levelId } });
+    }
+    await seed('fog.set', null, { fogOfWar: { byLevel: { 'test-upper': { enabled: false }, 'level-0': { enabled: false } } } });
+    await pc.page.locator('[data-template-id="delete-template-upper"]').waitFor();
     await other.context.setOffline(true);
     await gm.page.locator('[data-settings-launch="scenes"]').click();
     const remove = gm.page.locator('[data-action="delete-map-level"][data-map-level-id="test-upper"]');
@@ -67,6 +82,15 @@ if (!['localhost', '127.0.0.1', '[::1]'].includes(new URL(origin).hostname)) thr
     assert.deepEqual(after.state.placements[manifest.test_scene_id]['floor-cal']._movementUndo, []);
     assert.equal(after.state.sceneConfig[manifest.test_scene_id].userLevelState.cal.levelId, 'level-0');
     assert.ok(!after.state.sceneConfig[manifest.test_scene_id].mapLevels.levels.some(x => x.id === 'test-upper'));
+    for (const domain of ['templates', 'drawings']) {
+      const prefix = domain === 'templates' ? 'delete-template-' : 'delete-drawing-';
+      assert.equal(after.state[domain][manifest.test_scene_id][prefix + 'upper'], undefined);
+      assert.ok(after.state[domain][manifest.test_scene_id][prefix + 'base']);
+    }
+    assert.equal(after.state.sceneConfig[manifest.test_scene_id].fogOfWar.byLevel['test-upper'], undefined);
+    assert.ok(after.state.sceneConfig[manifest.test_scene_id].fogOfWar.byLevel['level-0']);
+    assert.equal(after.state.sceneConfig[manifest.test_scene_id].mapLevels.baseStairs[0].linkedLevelId, null);
+    await pc.page.locator('[data-template-id="delete-template-upper"]').waitFor({ state: 'detached' });
     await remove.waitFor({ state: 'detached' });
     await other.context.setOffline(false); await other.page.reload();
     await other.page.waitForFunction(selector => document.querySelector(selector)?.dataset.mapLevelId === 'level-0', selector);
