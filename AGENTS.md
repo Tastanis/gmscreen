@@ -4,7 +4,7 @@ Player preview uses the GM-only read-only `api/v2/player-preview.php?user=...`
 endpoint and the same snapshot projection as the actual player. Never impersonate
 the player session or touch their presence. GM Scenes has read-only Player view
 details and a map/grid/floor/cutout/fog/token/drawing dialog with local zoom/Fit.
-Token status overlays remain pending. Never label server-visible
+Condition labels and judgment marks remain pending. Never label server-visible
 token data as on-screen visibility without applying the client geometry and fog.
 `renderFogSurface` paints an independent canvas with explicit scene/floor/viewer
 inputs. Use it for passive preview rather than remounting the singleton fog tool,
@@ -17,6 +17,9 @@ do not use the legacy integer placement normalizer for passive preview coordinat
 Preview tokens use data-preview-placement-id inside an inert surface, never the
 active board's data-placement-id interaction hooks. Map padding must match the
 normal backdrop so maps, fog and token coordinates share the same origin.
+Stamina bars use token-hit-points.js with explicit isGm; passive player previews
+must pass false even in a GM session. Enemy numeric values remain hidden. Trigger
+readiness uses the shared indicator with its clear-action hook removed in preview.
 Passive drawings call renderDrawings with an explicit drawingLayer and floor;
 never mount or replace the active drawing tool's shared state for preview.
 Template floor visibility and SVG cutout masks live in template-presentation.js.

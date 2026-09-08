@@ -26,9 +26,9 @@ const origin='http://127.0.0.1:8129';
     }
     const imageUrl=(await snapshot()).state.placements[sceneId]['floor-cal'].imageUrl;
     const seeds=[
-      {id:'preview-open',column:6,row:5,levelId:'level-0'},
+      {id:'preview-open',column:6,row:5,levelId:'level-0',showHp:true,hp:{current:-5,max:20}},
       {id:'preview-blocked',column:0,row:5,levelId:'level-0'},
-      {id:'preview-upper',column:8.5,row:5,width:2,levelId:'test-upper'},
+      {id:'preview-upper',column:8.5,row:5,width:2,levelId:'test-upper',team:'ally',showHp:true,hp:{current:25,max:20},hasReadyTrigger:true},
       {id:'preview-secret',column:8,row:5,levelId:'test-upper',hidden:true},
       {id:'preview-fogged',column:9,row:8,levelId:'test-upper'},
     ];
@@ -56,11 +56,28 @@ const origin='http://127.0.0.1:8129';
     const describe=nodes=>nodes.map(n=>({id:n.dataset.previewPlacementId||n.dataset.placementId,
       width:n.style.width,height:n.style.height,transform:n.style.transform,zIndex:n.style.zIndex,
       level:n.dataset.mapLevelId,direction:n.dataset.mapLevelDirection||null,distance:n.dataset.mapLevelDistance||null,
+      hp:n.querySelector('.vtt-token__hp-bar')?.outerHTML||null,ready:n.querySelector('.vtt-token__trigger-ready')?.textContent||null,
       image:n.querySelector('img')?.src||null})).sort((a,b)=>a.id.localeCompare(b.id));
     const real=await pc.locator('#vtt-token-layer > .vtt-token').evaluateAll(describe);
     const preview=await dialog.locator('.vtt-token').evaluateAll(describe);
     assert.deepEqual(preview,real);
     assert.deepEqual(preview.map(t=>t.id),['preview-open','preview-upper']);
+    assert.equal(await dialog.locator('[data-preview-placement-id="preview-open"] .vtt-token__hp-value').count(),0,'Enemy numbers stay hidden in a GM preview');
+    assert.equal(await dialog.locator('[data-preview-placement-id="preview-upper"] .vtt-token__hp-temp-value').textContent(),'(+5)');
+    assert.equal(await dialog.locator('[data-preview-placement-id="preview-upper"] .vtt-token__trigger-ready').textContent(),'!');
+    assert.equal(await dialog.locator('[data-token-trigger-ready]').count(),0,'Preview readiness has no clear-action hook');
+    const repaint=await gm.evaluate(async()=>{
+      const {syncTokenHitPoints}=await import('/dnd/vtt/assets/js/ui/token-hit-points.js');
+      const token=document.createElement('div'),placement={team:'enemy',showHp:true,hp:{current:25,max:20}};
+      syncTokenHitPoints(token,placement,{isGm:true});
+      const gmNumbers=token.querySelectorAll('.vtt-token__hp-value,.vtt-token__hp-temp-value').length;
+      syncTokenHitPoints(token,placement);
+      const playerNumbers=token.querySelectorAll('.vtt-token__hp-value,.vtt-token__hp-temp-value').length;
+      const fill=token.querySelector('.vtt-token__hp-temp-fill').style.width;
+      syncTokenHitPoints(token,{...placement,showHp:false});
+      return {gmNumbers,playerNumbers,fill,remaining:token.children.length};
+    });
+    assert.deepEqual(repaint,{gmNumbers:2,playerNumbers:0,fill:'25%',remaining:0},'Repainting removes stale GM numbers and disabled bars');
     assert.match(preview.find(t=>t.id==='preview-upper').transform,/832px/,'8.5 cells plus 288px padding must remain fractional');
     assert.equal(await dialog.locator('[data-placement-id]').count(),0);
     assert.equal(await dialog.locator('.vtt-player-preview-map').evaluate(node=>node.inert),true);

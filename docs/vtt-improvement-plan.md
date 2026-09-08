@@ -1008,3 +1008,18 @@ every wall tile/connector style against the actual player board. Both diagonal
 directions and a lower-floor wall are covered, with reload parity, no preview
 commands and unchanged canonical state. The preview screenshot was inspected.
 Token status overlays remain outstanding. Full suite: 716 tests in 89 files passed.
+
+### Stamina and trigger readiness in player preview
+
+The board and preview share token-hit-points.js for normalization, bar geometry,
+temporary stamina and numeric display. Viewer authority is explicit: the preview
+passes isGm:false, so enemy numbers remain hidden inside a GM session. The existing
+trigger-readiness painter supplies its badge; preview removes the clear-action
+hook and misleading click instruction while retaining the inert surface.
+
+Isolated browser QA compares actual player and preview stamina DOM and readiness,
+covering negative enemy stamina and allied overflow. Repainting a temporary DOM
+node from GM to player removes stale numeric labels, and disabling showHp removes
+the bar. Reload, local zoom/Fit and canonical no-write checks pass. Full regression
+suite: 716 tests across 89 files passed. Condition labels and judgment marks remain
+pending; this is not yet the complete player preview.

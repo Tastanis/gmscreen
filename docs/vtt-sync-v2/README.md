@@ -16,7 +16,9 @@ association. Its map/fog dialog renders grid, floor maps/cutouts and player fog 
 an independent passive surface. Tokens now use shared floor/fog visibility,
 stacking, transforms and direction badges. Fractional render positions survive
 recovery/reload; backdrop padding remains part of the coordinate origin. Preview
-token status overlays remain pending. Drawing paths reuse the normal
+stamina bars and trigger readiness use shared painters with explicit player
+visibility; enemy numeric stamina remains hidden even in a GM preview. Condition
+labels and judgment marks remain pending. Drawing paths reuse the normal
 renderer with an explicit private SVG layer and selected floor. Local preview zoom
 and Fit never write canonical camera, scene or floor state.
 Template floor visibility and cutout masking are extracted into the shared

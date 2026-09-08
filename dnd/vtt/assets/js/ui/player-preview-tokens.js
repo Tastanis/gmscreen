@@ -1,4 +1,6 @@
 import {normalizeMapLevelsState} from '../state/normalize/map-levels.js';
+import {syncTokenHitPoints} from './token-hit-points.js';
+import {syncTriggeredActionIndicator} from './automation-trigger-ready.js';
 import {normalizeCombatTeam} from '../state/normalize/placements.js';
 import {createFogChecker} from './fog-of-war.js';
 import {getDefaultTokenStackOrderMap,getPlacementStackOrder} from './token-stack-order.js';
@@ -30,6 +32,10 @@ export function renderPlayerPreviewTokens(stage,state,view,levelId) {
       const image=document.createElement('img');image.className='vtt-token__image';image.alt=placement.name || 'Token';
       image.draggable=false;image.src=placement.imageUrl;token.append(image);
     } else token.classList.add('vtt-token--placeholder');
+    syncTokenHitPoints(token,placement,{isGm:false});
+    syncTriggeredActionIndicator(token,placement);
+    const ready=token.querySelector('.vtt-token__trigger-ready');
+    if(ready){ready.removeAttribute('data-token-trigger-ready');ready.title='Trigger condition met.';ready.setAttribute('aria-label',ready.title);}
     layer.append(token);
   }
   stage.append(layer);
