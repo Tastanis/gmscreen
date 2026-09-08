@@ -595,3 +595,14 @@ A three-client browser journey selects and switches actual GM checkboxes, reload
 confirms the player cannot see that control, moves the selected duplicate through
 stairs across a reload, and checks the linked player's floor and observer rendering.
 Hidden-primary projection and broader camera policy remain pending.
+
+### Roster removal preserves usable scenes
+
+Removed roster profiles no longer cause their historical primary flags to reject
+unrelated placement batches. Fresh primary choices and association edits still
+require a configured profile; clear-and-relink is supported atomically. Expanded
+PHP integration coverage reopens the database after replacing the test roster,
+changes conditions and position, rejects invalid reassignment without mutation,
+and clears/relinks/reassigns the obsolete token. All nine PHP integration groups
+pass. This fixes a server validation edge case; hidden-primary projection remains
+the next association gap.

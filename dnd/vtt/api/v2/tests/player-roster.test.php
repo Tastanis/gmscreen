@@ -56,9 +56,30 @@ try {
     verifyRoster($store->getSnapshot()['state']['sceneConfig']['scene']['userLevelState']['rowan']['tokenId'] === 'copy', 'New primary controls subsequent floor following.');
     unset($batch, $store); $store = new SyncV2Store($database);
     verifyRoster($store->getSnapshot()['state']['placements']['scene']['copy']['primaryPc'] === true, 'Primary survives database reopening.');
+    file_put_contents($rosterPath, json_encode(['steel-hero']));
+    unset($store); $store = new SyncV2Store($database);
+    $patchCurrent = function (array $patch) use ($store, &$sequence) {
+        $snapshot = $store->getSnapshot();
+        return $store->acceptPlacementBatch(['type'=>'placement.batch','operationId'=>'roster-change-'.++$sequence,
+            'baseRevision'=>$snapshot['revision'],'payload'=>['actions'=>[['kind'=>'patch','sceneId'=>'scene','placementId'=>'copy',
+                'entityRevision'=>$snapshot['state']['placements']['scene']['copy']['_entityRevision'],'patch'=>$patch]]]], 'GM', true);
+    };
+    $patchCurrent(['conditions'=>['Slowed']]);
+    $before = $store->getSnapshot();
+    $patchCurrent(['column'=>3]);
+    verifyRoster($store->getSnapshot()['revision'] === $before['revision'] + 1, 'Removed roster profile does not lock ordinary placement updates.');
+    $before = $store->getSnapshot(); $rejected = false;
+    try { $patchCurrent(['primaryPc'=>true]); } catch (InvalidArgumentException $error) { $rejected = true; }
+    verifyRoster($rejected && $before === $store->getSnapshot(), 'A fresh primary assignment still requires a configured profile.');
+    $patchCurrent(['primaryPc'=>false, 'profileId'=>'steel-hero']);
+    $patchCurrent(['primaryPc'=>true]);
+    verifyRoster($store->getSnapshot()['state']['placements']['scene']['copy']['primaryPc'] === true, 'GM can clear, relink, and reassign a stale primary.');
+    $before = $store->getSnapshot(); $rejected = false;
+    try { $patchCurrent(['profileId'=>'not-configured']); } catch (InvalidArgumentException $error) { $rejected = true; }
+    verifyRoster($rejected && $before === $store->getSnapshot(), 'An active primary cannot be unlinked without clearing the flag.');
     echo "Player roster and primary association: configured profiles, duplicates, atomic switch, permissions and reload passed.\n";
 } finally {
-    unset($store);
+    unset($patchCurrent, $store);
     putenv($previous === false ? 'VTT_PLAYER_ROSTER_PATH' : 'VTT_PLAYER_ROSTER_PATH=' . $previous);
     foreach (['','-wal','-shm','.json'] as $suffix) if (is_file($database.$suffix)) unlink($database.$suffix);
 }

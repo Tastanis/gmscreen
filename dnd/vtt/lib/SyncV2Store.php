@@ -1192,6 +1192,7 @@ final class SyncV2Store
                     $placement = $action['placement'];
                     if (isset($placement['primaryPc']) && !is_bool($placement['primaryPc'])) throw new InvalidArgumentException('Primary token flag must be boolean.');
                     if (!$isGm && !empty($placement['primaryPc'])) throw new InvalidArgumentException('Only the GM may select a primary token.');
+                    if (($placement['primaryPc'] ?? false) === true && $this->linkedPlayerProfileForPlacement($placement) === null) throw new InvalidArgumentException('A primary token must link to a configured player profile.');
                     if (isset($placement['movementMode']) && !in_array($placement['movementMode'], ['ground','fly','hover'], true)) throw new InvalidArgumentException('Unknown movement mode.');
                     if (($placement['movementMode'] ?? '') === 'fly' && FloorGeometry::flightInterrupted($placement)) throw new InvalidArgumentException('Prone or speed-zero conditions prevent ordinary flight.');
                     unset($placement['_movementUndo'], $placement['_floorTraversal']);
@@ -1254,6 +1255,11 @@ final class SyncV2Store
                 unset($patch['id'], $patch['_entityRevision'], $patch['_movementUndo'], $patch['_floorTraversal']);
                 $next = [...$current, ...$patch];
                 if (isset($next['primaryPc']) && !is_bool($next['primaryPc'])) throw new InvalidArgumentException('Primary token flag must be boolean.');
+                if (($next['primaryPc'] ?? false) === true
+                    && array_intersect(array_keys($patch), ['primaryPc','profileId','profile','playerId','player','owner','controller','metadata','meta','name'])
+                    && $this->linkedPlayerProfileForPlacement($next) === null) {
+                    throw new InvalidArgumentException('A primary token must link to a configured player profile. Clear its primary choice before unlinking it.');
+                }
                 if (($next['movementMode'] ?? 'ground') === 'fly' && FloorGeometry::flightInterrupted($next)) {
                     if (($patch['movementMode'] ?? '') === 'fly') throw new InvalidArgumentException('Prone or speed-zero conditions prevent ordinary flight. Use Hover only when an effect grants it.');
                     $patch['movementMode'] = 'ground'; $next['movementMode'] = 'ground';
@@ -1305,7 +1311,9 @@ final class SyncV2Store
                 foreach ($state['placements'][$changedSceneId] ?? [] as $placement) {
                     if (($placement['primaryPc'] ?? false) !== true) continue;
                     $profile = $this->linkedPlayerProfileForPlacement($placement);
-                    if ($profile === null) throw new InvalidArgumentException('A primary token must link to a configured player profile.');
+                    // A removed roster member can leave historical flags. They
+                    // do not participate in following or block unrelated edits.
+                    if ($profile === null) continue;
                     if (isset($primaryProfiles[$profile])) throw new InvalidArgumentException('Select only one primary token per player in a scene.');
                     $primaryProfiles[$profile] = true;
                 }

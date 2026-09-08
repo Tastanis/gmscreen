@@ -911,6 +911,12 @@ following and My token's floor; selecting it does not move a token or camera.
 Hidden-primary/view-projection policy still needs explicit coverage before the
 broader association and camera-policy roadmap can be marked complete.
 
+Roster removal leaves historical primary flags inert. They cannot block unrelated
+placement changes; newly selecting or relinking a primary still requires a valid
+configured profile. The GM can clear an obsolete primary and relink it in one
+batch. This avoids stranding a scene after a roster edit without allowing fresh
+invalid associations.
+
 ### Named scene checkpoint archive
 
 `SceneCheckpointArchive.php` stores immutable scene captures in
