@@ -1560,3 +1560,18 @@ accept a matching one. Full suite: 748 tests/97 files passed. This closes the
 whole-sheet overwrite path for resource rules; generalized resource operation
 receipts, bounded confirmation for all rule writes, refunds and full recovery
 authority remain outstanding.
+
+### Bound all narrow resource confirmations
+
+Ordinary heroic-resource rule writes and zone upkeep share confirmResourceWrite.
+Its 15-second deadline includes body parsing, aborts stalled requests and rejects
+without retry; only explicit successful acknowledgments allow cache/broadcast
+updates. Resource rules report an unconfirmed save and do not mark applied limits
+after timeout. Abort does not establish whether a server write committed, so
+manual review remains necessary; durable operation receipts are still pending.
+
+Tests cover missing/failed acknowledgments, conditional zero values and a stalled
+JSON body with late success. The browser holds actual combat-start resource
+automation and verifies its review status, single request and unchanged server
+balance. Full suite: 750 tests/98 files passed. Durable resource outcome records
+and interrupted action recovery remain outstanding.

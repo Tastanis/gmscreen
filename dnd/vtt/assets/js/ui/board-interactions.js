@@ -1,3 +1,4 @@
+import {confirmResourceWrite} from '../services/resource-write.js';
 import {spendZoneUpkeep} from '../services/zone-upkeep.js';
 import {runZoneBoundary} from '../services/zone-boundary.js';
 import {renderPersistentZones} from './persistent-zone-renderer.js';
@@ -3457,21 +3458,13 @@ export function mountBoardInteractions(store, routes = {}) {
   async function syncHeroResourceValueForProfile(profileId, value, sheetForCache = null, expectedValue = null) {
     if (!profileId) return false;
     const endpoint = typeof routes?.sheet === 'string' && routes.sheet ? routes.sheet : '/dnd/character_sheet/handler.php';
-    const body = new URLSearchParams();
-    body.set('action', 'sync-resource');
-    body.set('character', profileId);
-    body.set('source', 'vtt');
-    body.set('value', String(Math.trunc(Number(value) || 0)));
-    if (expectedValue !== null) body.set('expectedValue', String(expectedValue));
     try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body,
+      await confirmResourceWrite(endpoint, {
+        character: profileId,
+        value: String(Math.trunc(Number(value) || 0)),
+        ...(expectedValue !== null ? {expectedValue:String(expectedValue)} : {}),
       });
-      const payload = await response.json().catch(() => null);
-      const saved = Boolean(response.ok && payload?.success === true);
+      const saved = true;
       if (saved) {
         if (sheetForCache && characterSummaryCache instanceof Map) {
           characterSummaryCache.set(profileId, sheetForCache);

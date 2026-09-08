@@ -336,3 +336,6 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 
 - Heroic-resource rules use narrow conditional writes, never cached whole-sheet
   saves. Mark applied resource-rule limits only after confirmed persistence.
+
+- Narrow resource writes use confirmResourceWrite; do not broadcast success or
+  replay an uncertain request after its confirmation deadline.

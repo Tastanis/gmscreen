@@ -25,15 +25,25 @@ const origin='http://127.0.0.1:8129';
     const summary=async()=>(await(await page.request.get(sheetUrl+'?action=summary&character=cal')).json()).data;
     const initial=await summary();
     await page.request.post(sheetUrl,{form:{action:'sync-resource',source:'vtt',character:'cal',value:'5'}});
-    let held=null,body=null;
+    let held=null,body=null,resourceWrites=0;
     await page.route(sheetUrl,route=>{
       const form=new URLSearchParams(route.request().postData() || '');
-      if(form.get('action')==='sync-resource' && form.has('expectedValue')){held=route;body=form;return;}
+      if(form.get('action')==='sync-resource' && form.has('expectedValue')){held=route;body=form;resourceWrites++;return;}
       return route.continue();
     });
     await command('combat.start',{encounterId:'resource-narrow',startingTeam:'ally'});
     await until(async()=>Boolean(held));
     assert.equal(body.get('expectedValue'),'5');assert.equal(body.has('data'),false);
+    if(process.env.VTT_TEST_STALL_RESOURCE==='1') {
+      await page.waitForFunction(()=>document.body.textContent.includes('Resource save was not confirmed. Review the current character resource'));
+      assert.equal(resourceWrites,1,'An uncertain resource write is not retried');
+      assert.equal(Number((await summary()).hero.resource.value),5);
+      await held.abort().catch(()=>{});await page.unroute(sheetUrl);
+      assert.deepEqual(errors,[]);
+      console.log('PASS: stalled resource automation returns an unconfirmed status without retry or success.');
+      return;
+    }
+
     const hp=Number(initial.hero.vitals.currentStamina)-2;
     await page.request.post(sheetUrl,{form:{action:'sync-stamina',source:'vtt',character:'cal',currentStamina:String(hp)}});
     await held.continue();

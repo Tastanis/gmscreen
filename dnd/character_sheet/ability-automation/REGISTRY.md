@@ -693,3 +693,10 @@ invalidate the cached sheet and ask for review. Resource-only refund routing als
 uses the narrow endpoint, though its separate read/modify/refund lifecycle still
 needs stronger concurrency and interruption guarantees. Recovery full-sheet saves
 and damage-rule limit behavior are unchanged by this milestone.
+
+Ordinary heroic-resource rule writes and zone upkeep share confirmResourceWrite.
+Its 15-second deadline includes body parsing, aborts stalled requests and rejects
+without retry; only explicit successful acknowledgments allow cache/broadcast
+updates. Resource rules report an unconfirmed save and do not mark applied limits
+after timeout. Abort does not establish whether a server write committed, so
+manual review remains necessary; durable operation receipts are still pending.
