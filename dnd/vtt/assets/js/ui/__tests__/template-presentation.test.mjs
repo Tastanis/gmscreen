@@ -43,3 +43,15 @@ test('nonblocking floors and independent mask surfaces preserve scope',()=>{
   root.style.width='0px';applyTemplateVisibilityMask(root,[{x:0,y:0,width:64,height:64}]);
   assert.equal(root.style.maskImage,'');
 });
+
+test('translated aura bounds clip stacked openings without borrowing template DOM coordinates',()=>{
+  const {context}=fixture();
+  context.levels.push({id:'roof',mapUrl:'/roof.jpg',cutouts:[{column:2,row:1,width:1,height:1}]});
+  context.viewerLevelId='roof';
+  const bounds={left:325,top:327,width:320,height:320};
+  assert.deepEqual(resolveTemplateLevelPresentation({levelId:'level-0'},view,context,{pixelBounds:bounds}),{
+    visible:true,maskRects:[{x:96,y:32,width:64,height:64}],
+  });
+  context.levels[2].cutouts=[];
+  assert.equal(resolveTemplateLevelPresentation({levelId:'level-0'},view,context,{pixelBounds:bounds}).visible,false);
+});

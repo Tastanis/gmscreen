@@ -1,6 +1,8 @@
 import {normalizePlacementForRender} from './token-render-normalize.js';
 import {getRenderableAurasForPlacement} from './token-aura-records.js';
 import {getTokenLevelPresentation} from './token-levels.js';
+import {buildLevelViewModel} from '../state/normalize/map-levels.js';
+import {resolveTemplateLevelPresentation,applyTemplateVisibilityMask,clearTemplateVisibilityMask} from './template-presentation.js';
 
 export function renderTokenAuras({placements = [], layer, view, gmViewing = false, tokenLevelState, auraViewerLevelId, isCellFogged = null, passive = false}) {
   if (!layer) {
@@ -30,6 +32,7 @@ export function renderTokenAuras({placements = [], layer, view, gmViewing = fals
   });
 
   let auraCount = 0;
+  const levelContext={viewerLevelId:auraViewerLevelId,levels:buildLevelViewModel({mapLevels:tokenLevelState})};
 
   placements.forEach((placement) => {
     const normalized = normalizePlacementForRender(placement);
@@ -131,11 +134,17 @@ export function renderTokenAuras({placements = [], layer, view, gmViewing = fals
       const auraLeft = leftOffset + (normalized.column - auraRadius) * gridSize;
       const auraTop = topOffset + (normalized.row - auraRadius) * gridSize;
       auraEl.style.transform = `translate3d(${auraLeft}px, ${auraTop}px, 0)`;
+      const presentation=gmViewing ? {visible:true} : resolveTemplateLevelPresentation(
+        {levelId:normalized.levelId},view,levelContext,
+        {pixelBounds:{left:auraLeft,top:auraTop,width:auraWidth,height:auraHeight}});
+      auraEl.hidden=!presentation.visible;
+      if(presentation.maskRects?.length)applyTemplateVisibilityMask(auraEl,presentation.maskRects);
+      else clearTemplateVisibilityMask(auraEl);
 
       if (isNew) {
         layer.appendChild(auraEl);
       }
-      auraCount += 1;
+      if(presentation.visible)auraCount += 1;
     });
   });
 

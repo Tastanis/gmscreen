@@ -22,8 +22,9 @@ labels and judgment marks now use shared normalization/painters without removal
 hooks or tooltip handlers. Auras use explicit shared record normalization and
 painting, including owner floor/fog visibility. Token hydration shares legacy
 overlay aliases and readiness handling. Persistent zones and combat group colors
-remain pending. Aura footprint clipping through cutouts also remains incomplete
-in the actual board, separately from preview parity. Drawing paths reuse the normal
+remain pending. Player aura footprints now intersect intervening floor cutouts
+using explicit pixel bounds in the shared template presentation helper. Same-floor
+and GM repaints clear prior masks; GM overview remains unmasked. Drawing paths reuse the normal
 renderer with an explicit private SVG layer and selected floor. Local preview zoom
 and Fit never write canonical camera, scene or floor state.
 Template floor visibility and cutout masking are extracted into the shared

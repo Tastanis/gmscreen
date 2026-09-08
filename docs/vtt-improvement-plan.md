@@ -1057,3 +1057,17 @@ Remaining geometry defect found during this work: aura rendering filters owner
 visibility but does not clip the aura footprint through floor cutouts. Persistent
 zone overlays also need a floor-visibility review. Preview parity does not establish
 correctness of those existing board behaviors; keep both in the floor roadmap.
+
+### Aura footprint clipping through floors
+
+Player auras previously became fully visible whenever their owner could be seen
+through a floor opening. Their footprint now intersects the cutouts of every
+intervening blocking floor, using the same visibility helper as templates and
+explicit pixel bounds for transformed aura nodes. Owner visibility/fog filtering
+still applies. Same-floor and GM overview rendering clear stale masks.
+
+Browser QA verifies the exact 2 by 2 balcony opening, live-player/preview parity,
+reload, and mask cleanup on reused nodes after floor/GM changes. A unit case covers
+translated bounds, stacked openings and a closed intervening floor. Full suite:
+720 tests across 91 files passed. This is display geometry only; range/effect
+semantics and fractional cutout normalization remain separate roadmap concerns.

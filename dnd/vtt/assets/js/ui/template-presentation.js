@@ -1,6 +1,6 @@
 import {BASE_MAP_LEVEL_ID, resolvePlacementLevelId} from '../state/normalize/map-levels.js';
 
-export function resolveTemplateLevelPresentation(shape, view, levelContext) {
+export function resolveTemplateLevelPresentation(shape, view, levelContext, {pixelBounds = null} = {}) {
   const levels = Array.isArray(levelContext?.levels) ? levelContext.levels : [];
   const viewerLevelId = typeof levelContext?.viewerLevelId === 'string' && levelContext.viewerLevelId
     ? levelContext.viewerLevelId
@@ -29,7 +29,7 @@ export function resolveTemplateLevelPresentation(shape, view, levelContext) {
     return { visible: true, maskRects: null };
   }
 
-  const maskRects = buildTemplateCutoutMaskRects(shape, view, blockingLevels);
+  const maskRects = buildTemplateCutoutMaskRects(shape, view, blockingLevels, pixelBounds);
   return { visible: maskRects.length > 0, maskRects };
 }
 
@@ -46,12 +46,12 @@ function doesTemplateLevelBlockLowerVision(level) {
   return typeof level.mapUrl === 'string' && level.mapUrl.trim().length > 0;
 }
 
-function buildTemplateCutoutMaskRects(shape, view, blockingLevels = []) {
+function buildTemplateCutoutMaskRects(shape, view, blockingLevels = [], pixelBounds = null) {
   const root = shape?.elements?.root;
-  const rootWidth = parseCssPixelValue(root?.style?.width);
-  const rootHeight = parseCssPixelValue(root?.style?.height);
-  const rootLeft = parseCssPixelValue(root?.style?.left);
-  const rootTop = parseCssPixelValue(root?.style?.top);
+  const rootWidth = parseCssPixelValue(pixelBounds?.width ?? root?.style?.width);
+  const rootHeight = parseCssPixelValue(pixelBounds?.height ?? root?.style?.height);
+  const rootLeft = parseCssPixelValue(pixelBounds?.left ?? root?.style?.left);
+  const rootTop = parseCssPixelValue(pixelBounds?.top ?? root?.style?.top);
   if (rootWidth <= 0 || rootHeight <= 0) {
     return [];
   }

@@ -560,4 +560,6 @@ Aura records and display now share `token-aura-records.js` and
 `token-aura-renderer.js` between the board and passive player preview. Legacy aura
 IDs, enabled flags, radii, colors and manual/automation deduplication retain their
 existing behavior. This extraction adds no automation hooks or effects. Visibility
-currently follows the owner; aura footprint cutout clipping remains incomplete.
+follows the owner, then clips player aura footprints through intervening floor
+cutouts. This affects display only; it does not change aura targeting, distance or
+effect execution. GM overview remains unmasked.

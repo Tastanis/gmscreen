@@ -76,11 +76,31 @@ const origin='http://127.0.0.1:8129';
     assert.equal(await dialog.locator('[data-token-judgment-mark],[data-token-hidden-effect]').count(),0,'Preview effects have no removal hooks');
     const describeAuras=nodes=>nodes.map(n=>({id:n.dataset.previewAuraPlacementId||n.dataset.placementId,
       aura:n.dataset.auraId,width:n.style.width,height:n.style.height,transform:n.style.transform,
-      background:n.style.background,shadow:n.style.boxShadow})).sort((a,b)=>(a.id+a.aura).localeCompare(b.id+b.aura));
+      background:n.style.background,shadow:n.style.boxShadow,mask:n.style.maskImage})).sort((a,b)=>(a.id+a.aura).localeCompare(b.id+b.aura));
     const actualAuras=await pc.locator('#vtt-aura-layer .vtt-token-aura').evaluateAll(describeAuras);
     assert.deepEqual(await dialog.locator('.vtt-token-aura').evaluateAll(describeAuras),actualAuras);
     assert.equal(actualAuras.length,4,'Only visible unfogged owners have manual and enabled automation auras');
     assert.deepEqual([...new Set(actualAuras.map(a=>a.id))],['preview-open','preview-upper']);
+    const lowerAura=actualAuras.find(a=>a.id==='preview-open'&&a.aura==='manual');
+    assert.match(decodeURIComponent(lowerAura.mask),/<rect x="128" y="128" width="128" height="128" fill="white"\/>/,'Lower aura clips exactly to the 2 by 2 balcony opening');
+    assert.equal(actualAuras.find(a=>a.id==='preview-upper'&&a.aura==='manual').mask,'','Same-floor aura stays unmasked');
+    const auraRepaint=await gm.evaluate(async({sceneId})=>{
+      const {renderTokenAuras}=await import('/dnd/vtt/assets/js/ui/token-aura-renderer.js');
+      const {normalizeMapLevelsState}=await import('/dnd/vtt/assets/js/state/normalize/map-levels.js');
+      const snapshot=(await(await fetch('/dnd/vtt/api/v2/snapshot.php')).json()).snapshot;
+      const config=snapshot.state.sceneConfig[sceneId],layer=document.createElement('div');
+      const inputs={placements:[snapshot.state.placements[sceneId]['preview-open']],layer,
+        view:{mapLoaded:true,gridSize:64,gridOffsets:{left:288,top:288}},
+        tokenLevelState:normalizeMapLevelsState(config.mapLevels,{sceneGrid:config.grid}),passive:true};
+      renderTokenAuras({...inputs,auraViewerLevelId:'test-upper'});
+      const node=layer.firstElementChild,masked=Boolean(node.style.maskImage);
+      renderTokenAuras({...inputs,auraViewerLevelId:'level-0'});
+      const cleared=node.style.maskImage===''&&node.style.webkitMaskImage==='';
+      renderTokenAuras({...inputs,auraViewerLevelId:'test-upper'});
+      renderTokenAuras({...inputs,auraViewerLevelId:'test-upper',gmViewing:true});
+      return {masked,cleared,gmCleared:node.style.maskImage==='',reused:node===layer.firstElementChild};
+    },{sceneId});
+    assert.deepEqual(auraRepaint,{masked:true,cleared:true,gmCleared:true,reused:true});
     const repaint=await gm.evaluate(async()=>{
       const {syncTokenHitPoints}=await import('/dnd/vtt/assets/js/ui/token-hit-points.js');
       const token=document.createElement('div'),placement={team:'enemy',showHp:true,hp:{current:25,max:20}};

@@ -27,8 +27,9 @@ Only the interactive board enables removal hooks and condition tooltip callbacks
 Token render hydration lives in token-render-normalize.js; use it for legacy
 overlay aliases, readiness and hidden flags as well as fractional coordinates.
 token-aura-renderer.js takes explicit placements, floor context and fog checker.
-Preview uses private aura placement IDs. Aura owner visibility is shared; clipping
-the aura footprint through cutouts remains a separate outstanding geometry task.
+Preview uses private aura placement IDs. Player aura footprints also use the shared
+floor-cutout mask with explicit pixel bounds, independent of CSS transforms.
+Clear old masks on same-floor or GM repaint. GM aura overview remains unmasked.
 Passive drawings call renderDrawings with an explicit drawingLayer and floor;
 never mount or replace the active drawing tool's shared state for preview.
 Template floor visibility and SVG cutout masks live in template-presentation.js.
