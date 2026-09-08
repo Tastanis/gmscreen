@@ -1363,3 +1363,18 @@ browser journey saves an additional fractional hole and verifies its exact pixel
 path on both surfaces, alongside existing token/aura/fog/drawing/reload parity and
 no preview writes. Full suite: 737 tests/95 files passed. Broader physical height,
 range and legacy cell-based fall-preview helpers remain separate geometry work.
+
+### Fractional token footprints and stacked openings
+
+Active client visibility no longer truncates token positions or dimensions. Partial
+edge cells participate in look-down visibility and supplied-cell filtering. Strict
+cross-floor visibility/interaction carries rectangle intersections through every
+blocking floor, restricted to the actual occupied footprint. Openings elsewhere in
+the same cell, or disjoint openings across floors, no longer admit interaction.
+The existing expanded-cell look-down border remains a presentation policy.
+
+Focused regressions cover fractional edge cells, overlapping stacked openings,
+disjoint openings and holes outside the occupied part of a cell. Full suite: 739
+tests/95 files passed; actual player and GM-preview browser parity/reload passed
+on an isolated fixture. Physical height/range and broader resource reconciliation
+remain pending. The legacy client fall processor is bypassed in current Sync V2.

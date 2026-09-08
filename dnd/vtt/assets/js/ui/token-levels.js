@@ -201,7 +201,7 @@ export function getPlayerTokenMapLevelVisibility(placement = {}, mapLevelsState 
 
   const mode = options.mode === 'interaction' ? 'interaction' : 'vision';
   const visibleCells = cells.filter((cell) =>
-    isCellOpenThroughHigherMapLevels(levels, placementLevelIndex + 1, activeLevelIndex, cell, mode)
+    isCellOpenThroughHigherMapLevels(levels, placementLevelIndex + 1, activeLevelIndex, cell, mode, placementBounds)
   );
 
   return createTokenMapLevelVisibilityResult({
@@ -352,24 +352,22 @@ function createTokenMapLevelVisibilityResult({
 }
 
 function normalizePlacementBounds(placement = {}) {
+  const number = (value, fallback) => Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : fallback;
   return {
-    column: normalizeNonNegativeInt(placement?.column ?? placement?.col ?? placement?.x, 0),
-    row: normalizeNonNegativeInt(placement?.row ?? placement?.y, 0),
-    width: Math.max(1, normalizeNonNegativeInt(placement?.width ?? placement?.columns ?? placement?.w, 1)),
-    height: Math.max(1, normalizeNonNegativeInt(placement?.height ?? placement?.rows ?? placement?.h, 1)),
+    column: number(placement?.column ?? placement?.col ?? placement?.x, 0),
+    row: number(placement?.row ?? placement?.y, 0),
+    width: Math.max(1, number(placement?.width ?? placement?.columns ?? placement?.w, 1)),
+    height: Math.max(1, number(placement?.height ?? placement?.rows ?? placement?.h, 1)),
   };
 }
 
 function getPlacementCells(bounds = {}) {
-  const column = normalizeNonNegativeInt(bounds.column, 0);
-  const row = normalizeNonNegativeInt(bounds.row, 0);
-  const width = Math.max(1, normalizeNonNegativeInt(bounds.width, 1));
-  const height = Math.max(1, normalizeNonNegativeInt(bounds.height, 1));
+  const { column, row, width, height } = normalizePlacementBounds(bounds);
   const cells = [];
 
-  for (let dx = 0; dx < width; dx += 1) {
-    for (let dy = 0; dy < height; dy += 1) {
-      cells.push({ column: column + dx, row: row + dy });
+  for (let x = Math.floor(column); x < Math.ceil(column + width); x += 1) {
+    for (let y = Math.floor(row); y < Math.ceil(row + height); y += 1) {
+      cells.push({ column: x, row: y });
     }
   }
 
@@ -388,9 +386,9 @@ function normalizePlacementCells(cells = [], placementBounds = null) {
     }
 
     const insidePlacement =
-      normalizedCell.column >= bounds.column &&
+      normalizedCell.column + 1 > bounds.column &&
       normalizedCell.column < bounds.column + bounds.width &&
-      normalizedCell.row >= bounds.row &&
+      normalizedCell.row + 1 > bounds.row &&
       normalizedCell.row < bounds.row + bounds.height;
     if (!insidePlacement) {
       return;
@@ -422,16 +420,28 @@ function normalizeMapCell(cell = {}) {
   return { column, row };
 }
 
-function isCellOpenThroughHigherMapLevels(levels, startIndex, endIndex, cell, mode) {
+function intersectCutoutRect(a, b) {
+  const column = Math.max(a.column, b.column);
+  const row = Math.max(a.row, b.row);
+  const width = Math.min(a.column + a.width, b.column + b.width) - column;
+  const height = Math.min(a.row + a.height, b.row + b.height) - row;
+  return width > 0 && height > 0 ? { column, row, width, height } : null;
+}
+
+function isCellOpenThroughHigherMapLevels(levels, startIndex, endIndex, cell, mode, bounds) {
+  const occupied = intersectCutoutRect({ ...cell, width: 1, height: 1 }, bounds);
+  if (!occupied) return false;
+  let open = [occupied];
   for (let index = startIndex; index <= endIndex; index += 1) {
     const level = levels[index];
     if (!doesMapLevelBlockLowerLevels(level, mode)) {
       continue;
     }
 
-    if (!isMapLevelCutOutAtCell(level, cell)) {
-      return false;
-    }
+    const cuts = (level.cutouts || []).map(normalizeMapLevelCutout).filter(Boolean);
+    // Keep common open area across floors, within the token's occupied part of this cell.
+    open = open.flatMap(rect => cuts.map(cut => intersectCutoutRect(rect, cut)).filter(Boolean));
+    if (!open.length) return false;
   }
 
   return true;

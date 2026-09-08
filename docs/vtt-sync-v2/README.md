@@ -1155,3 +1155,10 @@ coordinates and dimensions instead of truncating canonical geometry. Map masks,
 template/aura/zone masks and editor copies use the same normalization. Look-down
 edge visibility expands all positively overlapped cells. This does not change
 canonical movement authority or introduce a new persistence path.
+
+Token visibility preserves fractional positions and dimensions, enumerating every
+positively overlapped grid cell. Cross-floor interaction intersects actual cutout
+rectangles across blocking floors within the occupied part of each token cell.
+Disjoint holes in one cell must not create an interaction path. Existing look-down
+border presentation remains separate. Canonical server movement/fall authority is
+unchanged; the old client fall processor is bypassed during V2 movement.

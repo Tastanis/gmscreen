@@ -302,3 +302,7 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 - Preserve fractional floor cutouts through normalizeMapLevelCutout. Map/effect
   masks and editor copies must share that helper; do not truncate saved geometry.
   Look-down edge visibility includes every positively overlapped grid cell.
+
+- Token floor visibility preserves fractional placement bounds. Strict cross-floor
+  interaction requires common open area within the occupied footprint across all
+  blocking floors; keep the separate look-down border presentation policy.
