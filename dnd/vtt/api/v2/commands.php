@@ -32,6 +32,7 @@ try {
         'ping.add' => 'pings',
         'fog.set' => 'fog',
         'levels.set' => 'levels',
+        'level.delete' => 'levels',
         'level.user.set' => 'levels',
         'level.activate' => 'levels',
         'grid.set' => 'grid',

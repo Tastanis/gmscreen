@@ -1193,6 +1193,9 @@ export function mountBoardInteractions(store, routes = {}) {
     if (changeSet.levels) {
       syncMapLevelsForState(state, activeSceneId);
       renderStairs(state);
+      if (context?.event?.type === 'levels.replaced') {
+        window.dispatchEvent(new CustomEvent('vtt:scene-levels-updated', { detail: { sceneId: context.event.sceneId } }));
+      }
     }
     if (changeSet.fog) {
       renderFog(state);
@@ -7286,6 +7289,11 @@ export function mountBoardInteractions(store, routes = {}) {
       payload: { checkpointId, reviewedRevision },
     }], false);
     if (!results.length) throw Error('Checkpoint restore is unavailable until board synchronization is enabled.');
+    return results;
+  };
+  boardApi.deleteMapLevel = async (sceneId, levelId) => {
+    const results = await tokenMovementRuntime.submitBoardDomainCommands([{ type: 'level.delete', sceneId, payload: { levelId } }], false);
+    if (!results.length) throw Error('Floor deletion is unavailable until board synchronization is enabled.');
     return results;
   };
   boardApi.commitDrawingChanges = async (sceneId, edits) => {

@@ -131,6 +131,7 @@ export function renderSceneList(routes, store) {
 
   render(stateApi.getState?.());
   stateApi.subscribe?.((nextState) => render(nextState));
+  window.addEventListener('vtt:scene-levels-updated', () => render(stateApi.getState?.() ?? {}));
 
   const persistBoardStateSnapshot = (dirtySceneId = null, options = {}, opsOverride = null) => {
     if (typeof stateApi.getState !== 'function') {
@@ -334,51 +335,22 @@ export function renderSceneList(routes, store) {
       const confirmed = window.UIKit
         ? await window.UIKit.confirm({
           title: 'Delete Map Level',
-          message: 'Delete this map level? This cannot be undone.',
+          message: 'Delete this map level? Its tokens move to supported visible floors below, or Level 0. This cannot be undone.',
           confirmText: 'Delete',
           danger: true,
         })
-        : window.confirm('Delete this map level? This cannot be undone.');
+        : window.confirm('Delete this map level? Its tokens move to supported visible floors below, or Level 0. This cannot be undone.');
       if (!confirmed) {
         return;
       }
 
-      const result = deleteSceneMapLevelCascade(stateApi, sceneId, levelId);
-      if (result) {
-        const state = stateApi.getState?.() ?? {};
-        const placements = Array.isArray(state.boardState?.placements?.[sceneId])
-          ? state.boardState.placements[sceneId]
-          : [];
-        const userLevelState = state.boardState?.sceneState?.[sceneId]?.userLevelState ?? {};
-        const ops = [
-          ...result.remappedPlacementIds.flatMap((placementId) => {
-            const placement = placements.find((entry) => entry?.id === placementId);
-            return placement ? [{
-              type: 'placement.update',
-              sceneId,
-              placementId,
-              patch: {
-                levelId: result.fallbackLevelId,
-                _lastModified: placement._lastModified,
-              },
-            }] : [];
-          }),
-          ...result.remappedUserIds.flatMap((userId) => {
-            const entry = userLevelState?.[userId];
-            return entry ? [{
-              type: 'user-level.set',
-              sceneId,
-              userId,
-              levelId: result.fallbackLevelId,
-              source: entry.source ?? 'manual',
-              tokenId: entry.tokenId,
-            }] : [];
-          }),
-        ];
-        persistBoardStateSnapshot(sceneId, { forceFullSnapshot: true }, ops);
-        showFeedback(feedback, 'Map level deleted.', 'info');
-      } else {
-        showFeedback(feedback, 'Unable to delete map level.', 'error');
+      try {
+        await stateApi.deleteMapLevel(sceneId, levelId);
+        showFeedback(feedback, 'Map level deleted. Tokens moved to supported lower floors.', 'success');
+      } catch (error) {
+        showFeedback(feedback, error?.status === 409
+          ? 'The floor changed while you were reviewing it. Review the scene and try again.'
+          : (error?.message || 'Unable to delete map level.'), 'error');
       }
       return;
     }

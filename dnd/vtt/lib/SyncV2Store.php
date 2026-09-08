@@ -656,7 +656,7 @@ final class SyncV2Store
                 $eventType = 'ping.added';
                 $eventPayload = ['ping' => $ping];
             } elseif (in_array($type, [
-                'fog.set', 'levels.set', 'level.user.set',
+                'fog.set', 'levels.set', 'level.delete', 'level.user.set',
                 'level.activate', 'grid.set',
             ], true)) {
                 $state['sceneConfig'] = is_array($state['sceneConfig'] ?? null)
@@ -690,13 +690,27 @@ final class SyncV2Store
                     $config['fogOfWar'] = $payload['fogOfWar'];
                     $eventType = 'fog.replaced';
                     $eventPayload = ['fogOfWar' => $config['fogOfWar']];
-                } elseif ($type === 'levels.set') {
+                } elseif ($type === 'levels.set' || $type === 'level.delete') {
+                    if ($type === 'level.delete') {
+                        $payload['mapLevels'] = $config['mapLevels'] ?? [];
+                        $oldLevels = $payload['mapLevels']['levels'] ?? [];
+                        $payload['mapLevels']['levels'] = array_values(array_filter($oldLevels,
+                            static fn($level) => ($level['id'] ?? null) !== $payload['levelId']));
+                        if (count($oldLevels) === count($payload['mapLevels']['levels'])) throw new InvalidArgumentException('That floor no longer exists.');
+                        if (($payload['mapLevels']['activeLevelId'] ?? null) === $payload['levelId']) $payload['mapLevels']['activeLevelId'] = null;
+                    }
+                    $mutations = $this->relocateDeletedFloorPlacements($state, $sceneId, $config['mapLevels'] ?? [], $payload['mapLevels']);
                     $config['userLevelState'] = $this->reconcileFloorViews(
                         $config['userLevelState'] ?? [], $config['mapLevels'] ?? [], $payload['mapLevels']
                     );
                     $config['mapLevels'] = $payload['mapLevels'];
+                    foreach ($mutations as $mutation) {
+                        $userId = $this->uniqueLinkedPlayerForPlacement($state['placements'][$sceneId], $mutation['placementId']);
+                        if ($userId !== null) $config['userLevelState'][$userId] = ['levelId'=>$mutation['placement']['levelId'],
+                            'source'=>'token', 'tokenId'=>$mutation['placementId'], 'updatedAt'=>$this->nowMilliseconds()];
+                    }
                     $eventType = 'levels.replaced';
-                    $eventPayload = ['mapLevels' => $config['mapLevels'], 'userLevelState' => $config['userLevelState']];
+                    $eventPayload = ['mapLevels' => $config['mapLevels'], 'userLevelState' => $config['userLevelState'], 'mutations'=>$mutations];
                 } elseif ($type === 'grid.set') {
                     $config['grid'] = $payload['grid'];
                     $eventType = 'grid.changed';
@@ -1902,6 +1916,33 @@ final class SyncV2Store
         return $views;
     }
 
+    private function relocateDeletedFloorPlacements(array &$state, string $sceneId, array $before, array $after): array
+    {
+        $old = FloorGeometry::orderedLevels($before);
+        $remaining = array_column(FloorGeometry::orderedLevels($after), null, 'id');
+        $oldIds = array_column($old, 'id');
+        $mutations = [];
+        foreach (($state['placements'][$sceneId] ?? []) as $id => $placement) {
+            $levelId = $placement['levelId'] ?? FloorGeometry::BASE;
+            $index = array_search($levelId, $oldIds, true);
+            if ($index === false || isset($remaining[$levelId])) continue;
+            $destination = FloorGeometry::BASE;
+            for ($i = $index - 1; $i > 0; $i--) {
+                $candidate = $remaining[$old[$i]['id']] ?? null;
+                if ($candidate && ($candidate['hidden'] ?? false) !== true && !FloorGeometry::fullyUnsupported($placement, $candidate)) {
+                    $destination = $candidate['id']; break;
+                }
+            }
+            $next = [...$placement, 'levelId'=>$destination, '_floorTraversal'=>null, '_movementUndo'=>[],
+                '_entityRevision'=>max(0, (int) ($placement['_entityRevision'] ?? 0)) + 1];
+            $state['placements'][$sceneId][$id] = $next;
+            $mutations[] = ['kind'=>'upsert', 'sceneId'=>$sceneId, 'placementId'=>(string) $id, 'placement'=>$next,
+                'entityRevision'=>$next['_entityRevision'], 'changedFields'=>['levelId','_floorTraversal','_movementUndo'],
+                'wasPlayerVisible'=>!$this->placementIsHidden($placement)];
+        }
+        return $mutations;
+    }
+
     public function restoreCheckpointPositions(array $command, string $actorId, bool $isGm): array
     {
         if (!$isGm) throw new InvalidArgumentException('Checkpoint restore is GM-only.');
@@ -1962,7 +2003,7 @@ final class SyncV2Store
         $allowed = [
             'template.upsert', 'template.remove',
             'drawing.upsert', 'drawing.remove',
-            'ping.add', 'fog.set', 'levels.set',
+            'ping.add', 'fog.set', 'levels.set', 'level.delete',
             'level.user.set', 'level.activate', 'grid.set',
             'scene.activate', 'routing.set',
         ];
@@ -2030,6 +2071,9 @@ final class SyncV2Store
         }
         if ($type === 'levels.set' && !is_array($payload['mapLevels'] ?? null)) {
             throw new InvalidArgumentException('levels.set requires mapLevels.');
+        }
+        if ($type === 'level.delete' && (!is_string($payload['levelId'] ?? null) || trim($payload['levelId']) === '' || $payload['levelId'] === 'level-0')) {
+            throw new InvalidArgumentException('Only a stored floor can be deleted.');
         }
         if ($type === 'grid.set' && !is_array($payload['grid'] ?? null)) {
             throw new InvalidArgumentException('grid.set requires grid.');

@@ -35,6 +35,31 @@ try {
     foreach ($after['state']['sceneConfig']['scene']['userLevelState'] as $view) verifyView($view['levelId'] === 'level-0', 'Deleted stack returns every viewer, including GM, to base.');
     unset($store); $store = new SyncV2Store($database);
     verifyView($store->getSnapshot() === $after, 'Offline reload sees the cleaned canonical view.');
+    verifyView($after['state']['placements']['scene']['hero']['levelId'] === 'level-0', 'Deleting all floors relocates remaining tokens atomically.');
+    $store = new SyncV2Store($database, 'support-world');
+    $board = ['placements'=>['scene'=>[
+        ['id'=>'hero','profileId'=>'cal','team'=>'ally','column'=>2,'row'=>2,'width'=>1,'height'=>1,'levelId'=>'top','stamina'=>7],
+        ['id'=>'large','column'=>2,'row'=>2,'width'=>2,'height'=>2,'levelId'=>'top'],
+    ]], 'sceneState'=>['scene'=>['mapLevels'=>['levels'=>[
+        ['id'=>'lower','zIndex'=>0,'cutouts'=>[['column'=>2,'row'=>2,'width'=>1,'height'=>1]]],
+        ['id'=>'secret','zIndex'=>1,'hidden'=>true], ['id'=>'top','zIndex'=>2],
+    ]], 'userLevelState'=>['cal'=>['levelId'=>'top','source'=>'token','tokenId'=>'hero']]]]];
+    $store->migrateLegacyPlacements($board); $store->migrateLegacyBoardDomains($board);
+    $before = $store->getSnapshot();
+    $delete = ['type'=>'level.delete','operationId'=>'delete-supported-top','sceneId'=>'scene',
+        'baseRevision'=>$before['revision'],'entityRevision'=>$before['state']['sceneConfig']['scene']['_revision'],
+        'payload'=>['levelId'=>'top']];
+    $result = $store->acceptBoardDomainCommand($delete, 'GM', true); $after = $store->getSnapshot();
+    verifyView($after['revision'] === $before['revision'] + 1 && count($result['event']['payload']['mutations']) === 2, 'Deletion and all token moves share one event.');
+    verifyView($after['state']['placements']['scene']['hero']['levelId'] === 'level-0', 'Small token falls through the lower hole and skips hidden floors.');
+    verifyView($after['state']['placements']['scene']['large']['levelId'] === 'lower', 'Partial support catches a large token.');
+    verifyView($after['state']['placements']['scene']['hero']['stamina'] === 7, 'Relocation preserves current resources.');
+    verifyView($after['state']['sceneConfig']['scene']['userLevelState']['cal']['levelId'] === 'level-0', 'Linked viewer follows the actual supported landing.');
+    verifyView($store->acceptBoardDomainCommand($delete, 'GM', true)['idempotent'], 'Duplicate delete returns the original accepted event.');
+    $delete['operationId'] = 'player-delete-denied'; $delete['payload']['levelId'] = 'lower';
+    $rejected = false;
+    try { $store->acceptBoardDomainCommand($delete, 'cal', false); } catch (InvalidArgumentException $error) { $rejected = true; }
+    verifyView($rejected && $store->getSnapshot() === $after, 'Player cannot delete floors or relocate their occupants.');
     echo "Floor view lifecycle: atomic hide/delete cleanup, GM visibility, offline users, unchanged tokens and retry passed.\n";
 } finally {
     unset($store);

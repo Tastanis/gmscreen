@@ -834,7 +834,21 @@ are invalid for everyone. Cleanup uses a manual view without a stale token link;
 valid views and token positions are untouched. `levels.replaced` carries the
 resulting viewer state, with hidden GM entries removed from the player projection.
 The reducer replaces that viewer state alongside floor configuration, so replay
-and offline reload agree. Atomic token relocation on floor deletion remains pending.
+and offline reload agree.
+
+`level.delete` is a GM-only, scene-revision-checked command. It removes the named
+floor and relocates its current occupants in one transaction and `levels.replaced`
+event. Token destinations use the old floor ordering and current surviving support:
+skip hidden floors and fully unsupported footprints, preserve partial support,
+and stop at Level 0. Position/resource fields stay intact; traversal and movement
+undo receipts referencing the removed geometry are cleared. Linked player views
+follow each token's actual landing. `levels.set` uses the same relocation logic
+when it removes floors, so alternate configuration paths cannot strand occupants.
+The event carries placement mutations through normal audience projection, reducer,
+and focused token rendering without walking hooks. The scene list refreshes from
+the canonical floor event. The deletion button no longer sends separate placement
+and viewer saves. Cleanup of floor-bound drawings/templates/fog and stair links
+remains pending.
 
 ### Named scene checkpoint archive
 

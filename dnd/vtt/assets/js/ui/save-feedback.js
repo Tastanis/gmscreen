@@ -14,7 +14,7 @@ function actionLabel(type = 'Change') {
   return ({ 'token.move': 'Token movement', 'placement.batch': 'Token changes', 'checkpoint.restorePositions': 'Checkpoint restore',
     'drawing.upsert': 'Drawing', 'drawing.remove': 'Drawing removal',
     'template.upsert': 'Template', 'template.remove': 'Template removal',
-    'level.user.set': 'Viewed floor', 'level.config.set': 'Floor configuration',
+    'level.user.set': 'Viewed floor', 'level.config.set': 'Floor configuration', 'level.delete': 'Floor deletion',
     'combat.transition': 'Combat action' })[type] || String(type).replaceAll('.', ' ');
 }
 

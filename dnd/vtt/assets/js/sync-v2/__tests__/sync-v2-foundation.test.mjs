@@ -51,6 +51,21 @@ test('canonical reducer applies an acknowledgement/broadcast operation only once
   assert.deepEqual(duplicate.snapshot, first.snapshot);
 });
 
+test('floor deletion reduces token relocation and viewer cleanup atomically', () => {
+  const result = reduceCanonicalEvent({ revision: 0, state: { placements: { scene: {
+    hero: { id: 'hero', levelId: 'upper', _entityRevision: 0 },
+  } } } }, { ...shadowEvent(1, 'delete-occupied-floor'), type: 'levels.replaced', sceneId: 'scene', entityRevision: 1,
+    payload: { mapLevels: { levels: [] }, userLevelState: { cal: { levelId: 'level-0' } }, mutations: [{
+      kind: 'upsert', sceneId: 'scene', placementId: 'hero', entityRevision: 1,
+      placement: { id: 'hero', levelId: 'level-0', _movementUndo: [] },
+    }] },
+  });
+  assert.equal(result.snapshot.state.placements.scene.hero.levelId, 'level-0');
+  assert.equal(result.snapshot.state.sceneConfig.scene.userLevelState.cal.levelId, 'level-0');
+  assert.deepEqual(result.changeSet.placements.updated, ['hero']);
+  assert.equal(result.changeSet.levels, true);
+});
+
 test('entity store refuses revision decrease even for a recovery snapshot', () => {
   const store = createEntityStore({
     revision: 5,

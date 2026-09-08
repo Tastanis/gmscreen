@@ -22,7 +22,7 @@ User authorized implementing the September 7 product audit, updating/running the
 - [ ] Shared floor/elevation/adjacency model used by suggestions, range, auras, and movement.
   - Shared floor participation now guards flanking, aura membership, Stand Firm, and opportunity-attack adjacency. High Ground requires confirmation. Physical elevation, openings, and range integration remain pending.
 - [ ] Hidden/deleted floors, partial support, flight, forced movement, stairs interrupted by reload, and undo tests.
-  - Floor edits now atomically repair invalid saved viewer floors for online/offline users. Hiding preserves tokens and allows GM inspection. Atomic token relocation on deletion remains pending.
+  - Floor edits atomically repair saved viewer floors. Deletion relocates occupants using supported visible lower floors and updates linked views in the same event. Floor-bound content and stair-link cleanup remain pending.
 - [ ] Explicit view-versus-token controls and follow/browse/center policy.
   - Viewing labels, Show players this floor, reload-preserved explicit views, and My token's floor are implemented. Camera-follow preferences and configurable primary token association remain pending.
 - [ ] Configurable roster and primary token association, preserving shared allied control.
@@ -455,3 +455,23 @@ hidden GM view. A GM/Cal/Sharon browser journey hides a floor while Cal is onlin
 and Sharon is offline, verifies Cal's event-driven return and Sharon's reload,
 and confirms token state is unchanged. Atomic token relocation and related
 floor-bound content cleanup during deletion remain pending.
+
+
+### Atomic occupant relocation when deleting floors
+
+The GM Delete control now submits a single level.delete command. The server
+removes the current floor, relocates its occupants to supported visible lower
+floors, and updates linked player views within one transaction. Levels.set uses
+the same relocation logic for removed floors. Hidden floors and fully unsupported
+footprints are skipped; partial support catches large tokens. Resources and
+coordinates remain current, while traversal and movement undo receipts are
+cleared. The canonical event projects and renders token changes and refreshes
+the scene list. It does not trigger walking automation.
+
+Validation: all 690 regression tests passed. Authority tests cover full-stack
+deletion, hidden intermediate floors, one-square holes, large-token partial
+support, linked landing views, permissions, and retries. The three-browser
+journey climbs stairs, deletes the occupied balcony through confirmation, verifies
+exactly one command and world revision, checks token/view convergence and scene
+list removal, then reloads an offline observer. Floor-bound drawings/templates/fog
+and links to deleted stairs still need explicit cleanup.

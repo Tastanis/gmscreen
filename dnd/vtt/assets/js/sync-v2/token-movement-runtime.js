@@ -103,7 +103,7 @@ export function createTokenMovementRuntime({
         applyConfirmedPlacement(sceneId, placementId, placement, context);
       }
       if (
-        context?.event?.type === 'placement.batchApplied'
+        ['placement.batchApplied', 'levels.replaced'].includes(context?.event?.type)
         && (
           changeSet?.placements?.added?.length
           || changeSet?.placements?.updated?.length
@@ -422,6 +422,7 @@ export function createTokenMovementRuntime({
     if (
       type === 'fog.set'
       || type === 'levels.set'
+      || type === 'level.delete'
       || type === 'level.user.set'
       || type === 'level.activate'
       || type === 'grid.set'

@@ -135,6 +135,8 @@ console.log('Button element:', document.getElementById('import-character-btn'));
   in `docs/vtt-sync-v2/README.md` and its disposable browser regression.
 - Floor configuration events also carry canonical viewer cleanup. Preserve the
   player projection and atomic reducer handling when changing `levels.replaced`.
+  Floor deletion also carries occupant relocation in that event; use `level.delete`
+  for the UI and never restore separate placement/view saves for deletion.
 - The legacy checked-in Pusher secret still requires rotation in the external
   Pusher dashboard. Put the replacement in the server-only
   `VTT_PUSHER_SECRET` environment variable, then perform the documented GM plus

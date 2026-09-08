@@ -405,6 +405,7 @@ function vttSyncV2ProjectEventForUser(array $event, array $auth): array
         }
     }
     if ($type === 'levels.replaced' && is_array($event['payload']['mapLevels'] ?? null)) {
+        if (isset($event['payload']['mutations'])) $event = vttSyncV2ProjectPlacementEventForUser($event, $auth);
         $projected = vttSyncV2ProjectSceneConfigForPlayer($event['payload']);
         $event['payload']['mapLevels'] = $projected['mapLevels'];
         if (isset($event['payload']['userLevelState'])) {
