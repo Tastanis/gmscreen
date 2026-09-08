@@ -159,6 +159,19 @@ body.vtt-character-summary-is-open .vtt-settings-launchers {
   border-top: 1px solid var(--vtt-sheet-border);
 }
 
+.vtt-character-save-status {
+  margin: 0;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--vtt-sheet-border);
+  color: var(--vtt-sheet-text);
+  font: 0.8rem/1.4 "Inter", "Segoe UI", sans-serif;
+}
+
+.vtt-character-card button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
 .vtt-character-reference > summary {
   padding: 12px 10px;
   min-height: 44px;

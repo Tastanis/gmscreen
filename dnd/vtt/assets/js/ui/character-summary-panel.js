@@ -120,6 +120,17 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   let heroTokenSyncChannel = null;
   let staminaSyncChannel = null;
   let sheetSyncInFlight = false;
+  let pendingResourceSave = null;
+  const resourceSaveNotices = new Map();
+  const resourceControlSelector = '[data-character-stamina-action], [data-character-recovery], [data-character-surge-delta], [data-character-resource-delta], [data-character-resource-roll], [data-character-add-victory]';
+  function syncResourceSaveStatus() {
+    const notice = panel.querySelector('[data-character-save-status]');
+    if (notice) {
+      notice.textContent = resourceSaveNotices.get(activeCharacterId) || '';
+      notice.hidden = !notice.textContent;
+    }
+    panel.querySelectorAll(resourceControlSelector).forEach(control => { control.disabled = Boolean(pendingResourceSave); });
+  }
   const boardHeader = document.querySelector('.vtt-board__header');
   const abilityTray = ensureAbilityTray();
   const abilityPreview = ensureAbilityPreview();
@@ -246,13 +257,14 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
       onVictory: handleVictoryClick,
       onConditionAdd: handleConditionAdd,
     });
+    syncResourceSaveStatus();
     renderCurrentAbilityTray();
     autoRegisterActiveTriggerAbilities();
     syncRevealButton();
   };
 
   const refreshActiveSheet = async ({ force = false } = {}) => {
-    if (!activeCharacterId || sheetSyncInFlight) {
+    if (!activeCharacterId || sheetSyncInFlight || pendingResourceSave) {
       return;
     }
     if (!force && document.visibilityState === 'hidden') {
@@ -260,7 +272,10 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     }
     sheetSyncInFlight = true;
     try {
-      activeSheet = await fetchCharacterSummary(routes, activeCharacterId);
+      const characterId = activeCharacterId;
+      const sheet = await fetchCharacterSummary(routes, characterId);
+      if (activeCharacterId !== characterId || pendingResourceSave) return;
+      activeSheet = sheet;
       renderActiveSheet();
     } catch (error) {
       console.warn('[VTT] Failed to refresh character summary', error);
@@ -299,52 +314,74 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     return staminaSyncChannel;
   };
 
-  const broadcastStaminaChange = () => {
-    const vitals = activeSheet?.hero?.vitals;
-    if (!activeCharacterId || !vitals) return;
+  const broadcastStaminaChange = (characterId = activeCharacterId, sheet = activeSheet) => {
+    const vitals = sheet?.hero?.vitals;
+    if (!characterId || !vitals) return;
     const channel = getStaminaSyncChannel();
     if (!channel) return;
     channel.postMessage({
       type: 'stamina-sync',
       source: 'vtt',
-      character: activeCharacterId,
+      character: characterId,
       currentStamina: Number.isFinite(Number(vitals.currentStamina)) ? Number(vitals.currentStamina) : 0,
       staminaMax: Number.isFinite(Number(vitals.staminaMax)) ? Number(vitals.staminaMax) : 0,
     });
   };
 
-  const broadcastSheetChange = (change) => {
+  const broadcastSheetChange = (change, characterId = activeCharacterId) => {
     const channel = getSheetSyncChannel();
-    if (channel && activeCharacterId) {
+    if (channel && characterId) {
       channel.postMessage({
         type: 'character-sheet-sync',
         source: 'vtt',
-        character: activeCharacterId,
+        character: characterId,
         change,
       });
     }
     document.dispatchEvent(new CustomEvent('vtt:character-sheet-updated', {
-      detail: { characterId: activeCharacterId, change },
+      detail: { characterId, change },
     }));
   };
 
   const saveActiveSheet = async (change) => {
-    if (!activeCharacterId || !activeSheet) {
+    if (!activeCharacterId || !activeSheet || pendingResourceSave) {
       return false;
     }
-    const saved = await saveCharacterSummaryResources(activeSheet, {
-      characterId: activeCharacterId,
-      routes,
-      change,
-      broadcast: false,
-    });
-    if (saved) {
-      broadcastSheetChange(change);
-      if (change === 'stamina' || change === 'recovery') {
-        broadcastStaminaChange();
+    const characterId = activeCharacterId;
+    const sheet = clonePlain(activeSheet);
+    pendingResourceSave = characterId;
+    resourceSaveNotices.set(characterId, 'Saving character resources…');
+    syncResourceSaveStatus();
+    try {
+      let rejection = 'The server did not accept this change.';
+      const saved = await saveCharacterSummaryResources(sheet, {
+        characterId, routes, change, broadcast: false,
+        onError: message => { rejection = message; },
+      });
+      if (!saved) throw new Error(rejection);
+      resourceSaveNotices.set(characterId, 'Character resources saved.');
+      broadcastSheetChange(change, characterId);
+      if (change === 'stamina' || change === 'recovery') broadcastStaminaChange(characterId, sheet);
+      return true;
+    } catch (error) {
+      const reason = error?.message || 'Connection interrupted.';
+      resourceSaveNotices.set(characterId, `Save not confirmed: ${reason}`);
+      try {
+        const confirmed = await fetchCharacterSummary(routes, characterId);
+        if (activeCharacterId === characterId) {
+          activeSheet = confirmed;
+          renderActiveSheet();
+        }
+        resourceSaveNotices.set(characterId, `Save not confirmed: ${reason} Showing the current saved values.`);
+      } catch {
+        resourceSaveNotices.set(characterId, `Save not confirmed: ${reason} Could not reload saved values.`);
       }
+      return false;
+    } finally {
+      pendingResourceSave = null;
+      syncResourceSaveStatus();
+      if (activeCharacterId === characterId) refreshActiveSheet({ force: true });
     }
-    return saved;
   };
 
   function autoRegisterActiveTriggerAbilities() {
@@ -391,6 +428,10 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     const requestId = ++activeRequestId;
     const token = detail.token && typeof detail.token === 'object' ? detail.token : {};
     activeToken = clonePlain(token);
+    if (!isNewCharacter && pendingResourceSave === characterId) {
+      renderActiveSheet();
+      return;
+    }
     // Selection summaries also refresh the already selected token. Keep its
     // usable card and disclosure state while the same sheet is revalidated.
     if (isNewCharacter || !activeSheet) setLoading(token.name || characterId);
@@ -400,6 +441,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
       if (requestId !== activeRequestId || activeCharacterId !== characterId) {
         return;
       }
+      if (!isNewCharacter && pendingResourceSave === characterId) return;
       activeSheet = sheet;
       renderActiveSheet();
       if (panelPreferredOpen) {
@@ -461,10 +503,12 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   }
 
   async function handleStaminaAction(action) {
+    if (pendingResourceSave) return;
+    const actionCharacterId = activeCharacterId;
     const vitals = activeSheet?.hero?.vitals;
     if (!vitals) return;
     const amount = await promptForPositiveInt(action === 'damage' ? 'How much damage?' : 'How much healing?');
-    if (!amount) return;
+    if (!amount || pendingResourceSave || activeCharacterId !== actionCharacterId) return;
     const current = numberLike(vitals.currentStamina, 0);
     const max = numberLike(vitals.staminaMax, 0);
     if (action === 'damage') {
@@ -477,6 +521,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
           `Healing would go ${overflow} over max. Use the extra as temporary Stamina?`,
           { title: 'Healing Overflow', confirmText: 'Use as temp', cancelText: 'Heal to max' }
         );
+        if (pendingResourceSave || activeCharacterId !== actionCharacterId) return;
         vitals.currentStamina = useTemp ? healed : max;
       } else {
         vitals.currentStamina = healed;
@@ -488,6 +533,8 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   }
 
   async function handleRecoveryClick() {
+    if (pendingResourceSave) return;
+    const actionCharacterId = activeCharacterId;
     const vitals = activeSheet?.hero?.vitals;
     if (!vitals) return;
     const currentRecoveries = numberLike(vitals.currentRecoveries, 0);
@@ -499,7 +546,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
       title: 'Spend Recovery',
       confirmText: 'Spend',
     });
-    if (!spendRecovery) {
+    if (!spendRecovery || pendingResourceSave || activeCharacterId !== actionCharacterId) {
       return;
     }
     const current = numberLike(vitals.currentStamina, 0);
@@ -512,6 +559,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   }
 
   async function handleSurgeDelta(delta) {
+    if (pendingResourceSave) return;
     const hero = activeSheet?.hero;
     if (!hero) return;
     const current = Math.max(0, numberLike(hero.surges, 0));
@@ -524,6 +572,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   }
 
   async function handleResourceDelta(delta) {
+    if (pendingResourceSave) return;
     const resource = activeSheet?.hero?.resource;
     if (!resource) return;
     const current = Number.parseInt(resource.value ?? 0, 10) || 0;
@@ -535,6 +584,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   }
 
   async function handleResourceRoll() {
+    if (pendingResourceSave) return;
     const resource = activeSheet?.hero?.resource;
     if (!resource) return;
     const autoGain = resolveAutoResourceGain(resource.autoDice || '');
@@ -551,7 +601,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     if (!updateCharacterPanelCounter(panel, 'resource', resource.value)) {
       renderActiveSheet();
     }
-    await saveActiveSheet('resource');
+    if (!await saveActiveSheet('resource')) return;
     const gainSummary = `${resource.title || 'Resource'} ${autoGain.label}: +${autoGain.amount} (${current} -> ${resource.value}).`;
     if (window.UIKit) {
       window.UIKit.toast(gainSummary, 'success');
@@ -561,13 +611,15 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   }
 
   async function handleVictoryClick() {
+    if (pendingResourceSave) return;
+    const actionCharacterId = activeCharacterId;
     const hero = activeSheet?.hero;
     if (!hero) return;
     const addVictory = await confirmSummaryAction('Do you want to add a victory point?', {
       title: 'Victory Point',
       confirmText: 'Add',
     });
-    if (!addVictory) {
+    if (!addVictory || pendingResourceSave || activeCharacterId !== actionCharacterId) {
       return;
     }
     hero.victories = (Number.parseInt(hero.victories ?? 0, 10) || 0) + 1;
@@ -1334,6 +1386,7 @@ function renderAbilityPreview(preview, action, categoryKey, sheet = null) {
         <h2>${escapeHtml(title)}</h2>
         ${action.cost ? `<span class="vtt-character-ability-card__cost">${escapeHtml(action.cost)}</span>` : ''}
       </header>
+
       <div class="vtt-character-ability-card__type">
         <strong>${escapeHtml(actionLabel)}</strong>
         ${tags.length ? `<span>${escapeHtml(tags.join(', '))}</span>` : ''}
@@ -1902,6 +1955,7 @@ function renderCharacterCard(sheet, { characterId, token, standFirm = null } = {
         </div>
       </header>
 
+      <p class="vtt-character-save-status" data-character-save-status role="status" hidden></p>
       ${renderSection('Stamina', renderStaminaSection({
         staminaCurrent,
         staminaMax,
@@ -3507,6 +3561,7 @@ async function saveCharacterSummaryResources(sheet, options = {}) {
   const saved = Boolean(response.ok && payload?.success === true);
   if (!saved) {
     console.warn('[VTT] Character summary resource save failed', payload?.error || response.status);
+    options.onError?.(String(payload?.error || `Server rejected the save (${response.status}).`));
     return false;
   }
   if (options.broadcast !== false && typeof BroadcastChannel === 'function') {

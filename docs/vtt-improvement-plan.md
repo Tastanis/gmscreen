@@ -295,3 +295,22 @@ Validation: 683 regression tests passed. The disposable player-browser journey
 verifies the 1280×720 core controls fit, details expand, surge add/spend controls
 still update, open details survive refreshes, and tuck/reveal sets keyboard access
 correctly. The compact view was visually inspected. No live sheet was changed.
+
+## Character resource save feedback
+
+Stamina, recovery, surge, heroic-resource, and victory saves now show pending,
+saved, and unconfirmed outcomes in the character card. Resource controls are
+disabled during a save, with handler guards preventing overlapping submissions.
+Same-character refreshes cannot overwrite a pending resource edit. Save broadcasts
+retain the originating character even if selection changes during the request.
+Dialog actions stop if selection changes before confirmation.
+
+Rejected or interrupted saves retain the error reason and reload current saved
+values; a failed reload is reported separately. Resource rolls no longer show a
+success message after a failed save. This covers the card's resource controls;
+hero-token, condition, and multi-step ability recovery remain separate work.
+
+Validation: 683 regression tests passed. The disposable player browser holds a
+surge save pending, checks disabled controls, rejects it with a specific 403,
+verifies the reason and reconciled value, then completes normal add/spend saves
+while preserving the open details section. No live sheet was changed.
