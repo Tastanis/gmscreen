@@ -128,6 +128,13 @@ function renderVttSettingsPanel(string $tokenLibraryMarkup = '', bool $isGm = fa
                             <p role="status" data-preview-status></p>
                             <div data-preview-details></div>
                         </details>
+                        <details class="vtt-prep-disclosure" data-zone-entry-recovery>
+                            <summary>Zone entry recovery</summary>
+                            <p>Review interrupted or unconfirmed zone effects. Check the creature's stamina and conditions before marking an entry resolved. These controls never replay effects.</p>
+                            <button class="btn" type="button" data-zone-recovery-refresh>Refresh unresolved entries</button>
+                            <p role="status" data-zone-recovery-status></p>
+                            <ul data-zone-recovery-list></ul>
+                        </details>
                         <details class="vtt-prep-disclosure vtt-checkpoints" data-scene-checkpoints>
                             <summary>Scene checkpoints</summary>
                             <p data-checkpoint-scene></p>

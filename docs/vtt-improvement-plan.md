@@ -1210,3 +1210,24 @@ after a real zone crossing. Full suite: 725 tests/92 files passed; the focused
 16-test server suite also passed after the final acknowledgement adjustment.
 Gameplay integration and the visible recovery panel remain pending. Until they
 are wired, this is recovery infrastructure, not a reload-safe gameplay claim.
+
+### Visible zone recovery and client execution coordinator
+
+Scenes now includes a GM-only Zone entry recovery disclosure. It loads the oldest
+unresolved records, shows saved effects/movement, and offers Mark resolved or
+Dismiss without replay. Outcome failures keep the row available and ask the GM to
+refresh before retrying. Text rendering treats stored names/evidence as text.
+
+The client coordinator executes only after a fresh grant. Duplicate claims never
+execute, and lost claim/completion/review responses never cause an automatic effect
+retry. Five focused tests cover success, all duplicate statuses, partial execution,
+lost responses and transport timeout. Full suite: 730 tests/93 files passed. The
+isolated browser test reloads the GM, opens recovery, inspects recorded damage,
+marks it resolved and verifies the queue clears without changing the board; players
+have no recovery controls.
+
+The gameplay hook is not yet connected. Inspection found that condition application
+currently resolves its callback before canonical persistence completes. Fix and
+verify that acknowledgement first, then wire claimed walking entries with strict
+effect failure handling and test reload/concurrent-client deduplication. Forced
+movement remains a separate receipt/integration requirement.

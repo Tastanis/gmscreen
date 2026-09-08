@@ -1,5 +1,6 @@
 import { renderSceneList } from './scene-manager.js';
 import { mountSceneCheckpoints } from './scene-checkpoints.js';
+import { mountZoneEntryRecovery } from './zone-entry-recovery.js';
 import { mountPlayerPreview } from './player-preview.js';
 import { mountPlayerRosterEditor } from './player-roster-editor.js';
 import { mountSceneImportPreview } from './scene-import-preview.js';
@@ -329,6 +330,7 @@ export function mountSettingsPanel(routes, store, user = {}) {
   });
 
   if (isGM) {
+    mountZoneEntryRecovery(panel.querySelector('[data-zone-entry-recovery]'),storeApi);
     mountSceneImportPreview(panel.querySelector('[data-scene-import-preview]'), storeApi);
     mountPlayerRosterEditor(panel.querySelector('[data-player-roster-editor]'));
     renderSceneList(routes, storeApi);

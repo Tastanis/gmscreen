@@ -1112,5 +1112,11 @@ claimant except for the GM. POST action=finish acknowledges completed or
 needs_review outcomes; only the GM can dismiss. Final completed/dismissed outcomes
 are immutable, and repeated acknowledgements are idempotent. These are client
 outcome acknowledgements, not server proof that effects executed. They never replay
-effects or release a reservation. Client integration and recovery UI remain pending;
-client-local entry bookkeeping is still the current gameplay execution path.
+effects or release a reservation. The GM Scenes panel now exposes unresolved entry
+review, recorded evidence, Mark resolved and Dismiss without replay. It loads on
+opening and refreshes explicitly, with no gameplay writes. The tested client claim
+coordinator requires a fresh grant, acknowledges success, and leaves uncertain
+responses for review without retrying effects. Gameplay integration remains pending:
+client-local entry bookkeeping is still the current execution path. Before wiring
+it, the condition hook must await canonical persistence instead of reporting success
+immediately after its optimistic placement mutation.

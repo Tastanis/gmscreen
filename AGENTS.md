@@ -217,6 +217,9 @@ console.log('Button element:', document.getElementById('import-character-btn'));
   cannot be reopened. Recovery lists are claimant-only except for the GM. The
   ledger is separate from canonical board revisions and is not yet wired into
   gameplay execution; preserve that distinction in testing and status reports.
+  The GM Scenes recovery panel supports inspection and manual final outcomes.
+  Before wiring the client coordinator, ensure condition callbacks await accepted
+  persistence; optimistic mutation alone must not mark a claim completed.
 
 ### Diagnostic and drawing regression workflow (September 2026)
 
