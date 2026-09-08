@@ -44,6 +44,21 @@ try {
     $projection = vttSyncV2ProjectSnapshotForUser($store->getSnapshot(), $player);
     if (isset($projection['state']['templates']['test']['secret-template'])) throw new RuntimeException('Hidden template leaked in snapshot.');
     if (vttSyncV2ProjectEventForUser($secretTemplate['event'], $player)['type'] !== 'sync.redacted') throw new RuntimeException('Hidden template leaked in event.');
+    $store->migrateLegacyPlacements(['placements'=>['test'=>[['id'=>'hidden-floor-token','name'=>'Public when revealed','levelId'=>'secret','column'=>2,'row'=>3]]]]);
+    foreach ([false, true] as $hidden) {
+        $snapshot = $store->getSnapshot();
+        $levels = $snapshot['state']['sceneConfig']['test']['mapLevels']; $levels['levels'][0]['hidden'] = $hidden;
+        $changed = $store->acceptBoardDomainCommand(['type'=>'levels.set', 'operationId'=>$hidden ? 'hide-floor-content' : 'reveal-floor-content',
+            'sceneId'=>'test','baseRevision'=>$snapshot['revision'],'entityRevision'=>$snapshot['state']['sceneConfig']['test']['_revision'],
+            'payload'=>['mapLevels'=>$levels]], 'GM', true);
+        $public = vttSyncV2ProjectEventForUser($changed['event'], $player);
+        if (isset($public['payload']['visibilityChanges'])) throw new RuntimeException('Raw floor visibility payload leaked.');
+        if ($public['payload']['mutations'][0]['kind'] !== ($hidden ? 'remove' : 'upsert')) throw new RuntimeException('Token visibility did not reconcile.');
+        if ($public['payload']['mutations'][0]['entityRevision'] !== 0) throw new RuntimeException('Visibility changed token revision.');
+        if (count($public['payload'][$hidden ? 'removedContent' : 'revealedContent']) !== 2) throw new RuntimeException('Floor drawings/templates did not reconcile.');
+        if ($hidden && isset($public['payload']['mutations'][0]['placement'])) throw new RuntimeException('Hide event retained token contents.');
+        if ($store->getSnapshot()['state']['placements'] !== $snapshot['state']['placements']) throw new RuntimeException('Visibility mutated canonical tokens.');
+    }
     $snapshot = $store->getSnapshot();
     $deleted = $store->acceptBoardDomainCommand(['type'=>'level.delete','operationId'=>'delete-secret-floor',
         'sceneId'=>'test','baseRevision'=>$snapshot['revision'],'entityRevision'=>$snapshot['state']['sceneConfig']['test']['_revision'],

@@ -495,3 +495,23 @@ base content survives and stairs disconnect, and reloads the offline observer.
 
 Remaining floor work includes flight/hover/jumping, physical elevation and range,
 whole-group undo, and live hide/unhide content reconciliation without a reload.
+
+
+### Live floor visibility and startup projection
+
+Hiding/unhiding a floor now reconciles its tokens, drawings, templates, and fog
+through the canonical event without changing entity revisions. Revealed tokens
+are not treated as new library usage or movement. Player events omit the raw
+visibility payload and sanitize revealed tokens. Initial player HTML now uses
+the same audience projection as V2 snapshot recovery, fixing a transient leak
+of hidden-floor entities before the first client recovery.
+
+The live browser test also exposed that changing the viewed floor updated the map
+and label without refreshing token/template/fog layers. Those focused layers now
+refresh on canonical floor-view changes. No whole-board subscriber was restored.
+
+Validation: 692 regression tests passed. The new GM/Cal/Sharon browser journey
+checks initial HTML excludes hidden token/template/drawing IDs, then performs
+reveal/show/hide/reveal without player reloads and verifies rendered tokens and
+templates plus unchanged canonical token data. The existing stairs/fall/reload/undo
+three-client journey also passes after the layer refresh.

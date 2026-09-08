@@ -162,10 +162,11 @@ function reducePlacementBatch(state, event, changes) {
       throw new Error('Unsupported placement mutation');
     }
     const entityRevision = Number(mutation.entityRevision);
-    if (!Number.isSafeInteger(entityRevision) || entityRevision < 1) {
+    const projectionOnly = event.type === 'levels.replaced' && mutation.projectionOnly === true;
+    if (!Number.isSafeInteger(entityRevision) || entityRevision < (projectionOnly ? 0 : 1)) {
       throw new Error('Placement upsert requires a positive entity revision');
     }
-    if (current && entityRevision <= (Number(current._entityRevision) || 0)) {
+    if (current && !projectionOnly && entityRevision <= (Number(current._entityRevision) || 0)) {
       throw new Error('Placement upsert entity revision must increase');
     }
     placements[placementId] = {
@@ -569,6 +570,11 @@ const reducers = Object.freeze({
     for (const entry of event.payload?.removedContent ?? []) {
       if (!['drawings', 'templates'].includes(entry.domain) || typeof entry.id !== 'string') throw Error('Invalid floor content removal');
       delete getSceneCollection(state, entry.domain, event.sceneId)[entry.id];
+      changes[entry.domain] = true;
+    }
+    for (const entry of event.payload?.revealedContent ?? []) {
+      if (!['drawings', 'templates'].includes(entry.domain) || typeof entry.id !== 'string' || !entry.entry || typeof entry.entry !== 'object') throw Error('Invalid floor content reveal');
+      getSceneCollection(state, entry.domain, event.sceneId)[entry.id] = clone(entry.entry);
       changes[entry.domain] = true;
     }
     if (event.payload?.fogOfWar) reduceFogReplaced(state, event, changes);

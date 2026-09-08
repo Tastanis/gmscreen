@@ -251,7 +251,7 @@ function withVttBoardStateLock(callable $callback)
  * Build the browser's compatibility-shaped board projection exclusively from
  * canonical Sync V2 state.
  */
-function overlaySyncV2Placements(array $boardState): array
+function overlaySyncV2Placements(array $boardState, ?array $authContext = null): array
 {
     $configPath = __DIR__ . '/config/sync-v2.php';
     $config = is_file($configPath) ? require $configPath : [];
@@ -282,6 +282,10 @@ function overlaySyncV2Placements(array $boardState): array
             }
         }
         $snapshot = $store->getSnapshot();
+        if ($authContext !== null && !($authContext['isGM'] ?? false)) {
+            require_once __DIR__ . '/api/v2/_common.php';
+            $snapshot = vttSyncV2ProjectSnapshotForUser($snapshot, $authContext);
+        }
         $boardState['placements'] = [];
         foreach (($snapshot['state']['placements'] ?? []) as $sceneId => $placements) {
             if (is_string($sceneId) && is_array($placements)) {
@@ -360,7 +364,7 @@ function getVttBootstrapConfig(?array $authContext = null): array
 
     $scenes = loadVttScenes();
     $tokens = loadVttTokens();
-    $boardState = overlaySyncV2Placements([]);
+    $boardState = overlaySyncV2Placements([], $context);
 
     // Normalize fogOfWar revealedCells to ensure they're always JSON objects, not arrays.
     // PHP's json_encode() turns empty PHP arrays into [] (JSON array) instead of {} (JSON object).

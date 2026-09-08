@@ -139,6 +139,8 @@ console.log('Button element:', document.getElementById('import-character-btn'));
   for the UI and never restore separate placement/view saves for deletion.
   Bound drawing/template/fog removal and incoming stair disconnection belong in
   the same transaction, with scene scope and hidden-content projection preserved.
+- Initial player HTML and V2 recovery use the same audience projection. Preserve
+  that boundary and the focused layer refresh when changing floor visibility.
 - The legacy checked-in Pusher secret still requires rotation in the external
   Pusher dashboard. Put the replacement in the server-only
   `VTT_PUSHER_SECRET` environment variable, then perform the documented GM plus

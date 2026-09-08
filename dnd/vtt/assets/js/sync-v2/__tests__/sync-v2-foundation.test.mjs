@@ -82,6 +82,21 @@ test('floor deletion removes scoped content even when a projected client never r
   assert.ok(initial.state.drawings.scene.removed);
 });
 
+test('floor reveal restores projected entities at their original revisions', () => {
+  const result = reduceCanonicalEvent({ revision: 0, state: {} }, {
+    ...shadowEvent(1, 'reveal-floor'), type: 'levels.replaced', sceneId: 'scene', entityRevision: 1,
+    payload: { mapLevels: { levels: [{ id: 'upper' }] },
+      mutations: [{ kind: 'upsert', sceneId: 'scene', placementId: 'hero', entityRevision: 0,
+        projectionOnly: true, placement: { id: 'hero', levelId: 'upper' } }],
+      revealedContent: [{ domain: 'templates', id: 'circle', entry: { id: 'circle', _entityRevision: 4 } }],
+    },
+  });
+  assert.equal(result.snapshot.state.placements.scene.hero._entityRevision, 0);
+  assert.equal(result.snapshot.state.templates.scene.circle._entityRevision, 4);
+  assert.deepEqual(result.changeSet.placements.added, ['hero']);
+  assert.equal(result.changeSet.templates, true);
+});
+
 test('entity store refuses revision decrease even for a recovery snapshot', () => {
   const store = createEntityStore({
     revision: 5,

@@ -928,7 +928,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function applyConfirmedPlacementBatch(snapshot, mutations, context = {}) {
     for (const mutation of mutations) {
-      if (mutation.kind === 'upsert' && mutation.entityRevision === 1
+      if (mutation.kind === 'upsert' && !mutation.projectionOnly && mutation.entityRevision === 1
         && mutation.changedFields?.includes('*') && mutation.placement?.tokenId) {
         document.dispatchEvent(new CustomEvent('vtt:token-library-used', { detail: { tokenId: mutation.placement.tokenId } }));
       }
@@ -1193,15 +1193,19 @@ export function mountBoardInteractions(store, routes = {}) {
     if (changeSet.levels) {
       syncMapLevelsForState(state, activeSceneId);
       renderStairs(state);
+      // A viewer-floor change alters the visible token/content set even when
+      // no placement coordinates or template records changed.
+      renderTokens(state, tokenLayer, viewState);
+      renderPersistentZoneOverlays();
       if (context?.event?.type === 'levels.replaced') {
         window.dispatchEvent(new CustomEvent('vtt:scene-levels-updated', { detail: { sceneId: context.event.sceneId } }));
       }
     }
-    if (changeSet.fog) {
+    if (changeSet.fog || changeSet.levels) {
       renderFog(state);
       renderFogSelection();
     }
-    if (changeSet.templates) {
+    if (changeSet.templates || changeSet.levels) {
       templateTool.notifyMapState();
     }
     if (changeSet.drawings) {

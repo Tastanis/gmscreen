@@ -405,6 +405,23 @@ function vttSyncV2ProjectEventForUser(array $event, array $auth): array
         }
     }
     if ($type === 'levels.replaced' && is_array($event['payload']['mapLevels'] ?? null)) {
+        foreach (($event['payload']['visibilityChanges'] ?? []) as $visibility) {
+            foreach (($visibility['placements'] ?? []) as $id => $placement) {
+                if (vttSyncV2PlacementHidden($placement)) continue;
+                $mutation = ['kind'=>$visibility['hidden'] ? 'remove' : 'upsert', 'sceneId'=>$event['sceneId'],
+                    'placementId'=>(string) $id, 'entityRevision'=>(int) ($placement['_entityRevision'] ?? 0),
+                    'projectionOnly'=>true, 'playerVisible'=>true, 'changedFields'=>['*']];
+                if (!$visibility['hidden']) $mutation['placement'] = $placement;
+                $event['payload']['mutations'][] = $mutation;
+            }
+            foreach (['drawings', 'templates'] as $domain) {
+                foreach (($visibility[$domain] ?? []) as $id => $entry) {
+                    if ($visibility['hidden']) $event['payload']['removedContent'][] = ['domain'=>$domain, 'id'=>(string) $id, 'playerVisible'=>true];
+                    else $event['payload']['revealedContent'][] = ['domain'=>$domain, 'id'=>(string) $id, 'entry'=>$entry];
+                }
+            }
+        }
+        unset($event['payload']['visibilityChanges']);
         if (isset($event['payload']['mutations'])) $event = vttSyncV2ProjectPlacementEventForUser($event, $auth);
         $projected = vttSyncV2ProjectSceneConfigForPlayer($event['payload']);
         if (isset($event['payload']['removedContent'])) {

@@ -858,6 +858,20 @@ floors, preserving stair shapes and unrelated links. Other floors/scenes and med
 files are untouched. Both `level.delete` and floor removal through `levels.set`
 use this cleanup. The confirmation explains these effects before deletion.
 
+Floor hide/unhide events capture affected-floor entities in their transaction.
+The player audience turns these into removals or sanitized reveals, removing the
+raw visibility payload. Projection-only placement mutations preserve entity
+revisions (including migrated revision zero); they do not represent movement or
+new library usage. Drawing/template reveals preserve revisions as well. GM
+canonical entities remain unchanged. Fog visibility uses the same floor event.
+
+The initial player HTML now projects its canonical snapshot through the same
+V2 audience filter as snapshot recovery, before converting to compatibility
+board state. Hidden floors and their entities must not appear briefly in bootstrap
+data. Viewer-floor changes refresh the focused token, template, fog and persistent
+zone layers as well as map layers and the floor indicator; they do not remount
+the whole board or write shared state.
+
 ### Named scene checkpoint archive
 
 `SceneCheckpointArchive.php` stores immutable scene captures in
