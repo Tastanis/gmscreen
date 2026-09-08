@@ -1758,3 +1758,14 @@ can no longer clear the interrupted-action reminder. A dedicated late-body
 regression verifies the reminder remains unconfirmed for manual review.
 
 Final checkpoint validation: npm test passed 759 tests across 100 files.
+
+
+## Deferred requirement: inventory effect tables
+
+- [ ] Support displaying and practically editing/pasting tables or matrices inside character-sheet inventory item effects. Recording/planning only; do not implement until Brandon resumes this work.
+  - Use case: Cal's Eternal Spire contains two 20-level progression matrices, **Fungal Minions** and **Resurrection**, both currently level 1 (as reported when this requirement was recorded).
+  - Campaign source of truth: `C:\Users\tasta\Desktop\Claude Work\Claude DND\Obsidian DND\Claude dnd\Reference\Eternal-Spire.md`. Read it when implementing; it is read-only for this task. Do not rewrite campaign content or invent progression values.
+  - Reported current limitation: `dnd/character_sheet/inventory-tab.js` renders descriptions and effects as escaped plain text, so pasted Markdown tables do not render as tables. Recheck the current implementation before editing.
+  - Suggested display, **not an approved design decision**: show each effect's current-level row with an expandable full progression table.
+  - Preserve existing ordinary text effects and safe text rendering. Provide a practical way to edit or paste tabular data; determine the format and editing controls when work resumes.
+  - Acceptance targets: both 20-level matrices can be entered, saved, reopened, and displayed on the item; existing text-only items still work. Level selection and compact/expanded presentation require design confirmation before implementation.
