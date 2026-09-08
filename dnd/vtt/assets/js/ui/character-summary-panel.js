@@ -527,7 +527,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
         if (!vitals) return;
         const latestHealed = numberLike(vitals.currentStamina, 0) + amount;
         const latestMax = numberLike(vitals.staminaMax, 0);
-        vitals.currentStamina = useTemp || latestMax <= 0 ? latestHealed : Math.min(latestMax, latestHealed);
+        vitals.currentStamina = useTemp || latestMax <= 0 ? latestHealed : Math.max(numberLike(vitals.currentStamina, 0), Math.min(latestMax, latestHealed));
       } else {
         vitals.currentStamina = healed;
       }
@@ -562,7 +562,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     const current = numberLike(vitals.currentStamina, 0);
     const max = numberLike(vitals.staminaMax, 0);
     vitals.currentRecoveries = Math.max(0, currentRecoveries - 1);
-    vitals.currentStamina = max > 0 ? Math.min(max, current + recoveryValue) : current + recoveryValue;
+    vitals.currentStamina = max > 0 ? Math.max(current, Math.min(max, current + recoveryValue)) : current + recoveryValue;
     appendStaminaHistory(vitals, vitals.currentStamina);
     renderActiveSheet();
     await saveActiveSheet('recovery');
@@ -2057,9 +2057,9 @@ function renderStaminaSection({ staminaCurrent, staminaMax, healthPercent, recov
         </span>
         ${renderRecoveryTicks(recoveriesCurrent, recoveriesMax)}
       </button>
-      <div class="vtt-character-pill vtt-character-pill--temp">
+      <div class="vtt-character-pill vtt-character-pill--temp" title="Temporary stamina is currently tracked as stamina above your maximum.">
         <span class="vtt-character-pill__label">Temp</span>
-        <span class="vtt-character-pill__value">0</span>
+        <span class="vtt-character-pill__value" data-character-temporary-stamina>${escapeHtml(Math.max(0, staminaCurrent - staminaMax))}</span>
       </div>
     </div>
     <div class="vtt-character-healthbar">

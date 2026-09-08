@@ -552,3 +552,14 @@ three speed-zero conditions, string/object forms, case normalization, one-revisi
 landing, linked views, takeoff rejection, condition removal, hover, and Slowed.
 A three-client browser test applies Grabbed through the player's actual condition
 menu after flying across a hole and reloading, then verifies synchronized landing.
+
+### Character-card temporary stamina
+
+The compact card now displays saved stamina above maximum instead of a hardcoded
+zero, with a tooltip explaining the current storage convention. Capped healing
+and recovery preserve existing temporary stamina instead of reducing the total to
+maximum. This does not introduce a separate temporary-stamina resource model.
+
+The disposable player browser test covers healing overflow, reload, capped healing,
+recovery, and damage both within and beyond the temporary amount. It also retains
+the concurrent-sheet-refresh recovery test. All 693 tests across 82 files pass.
