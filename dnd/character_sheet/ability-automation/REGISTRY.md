@@ -582,3 +582,9 @@ contact and movement beginning inside do not count as entry. For a floor-changin
 move, destination entry is checked without assuming the intermediate floor path.
 Per-round entered-token bookkeeping remains client-local and is not yet safe
 across reload/client changes; canonical claim/recovery work is still pending.
+
+Normal `vtt:token-moved` events now include `movementOperationId` and
+`movementRevision` from the locally acknowledged V2 event. These are runtime
+correlation fields, not authored ability fields. Server events retain trusted
+walking receipts for future zone-entry claim validation; full receipts are not
+sent to players. This foundation does not yet make entry effects reload-safe.

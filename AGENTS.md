@@ -45,6 +45,10 @@ Zone onEnter uses swept footprint intersections for confirmed straight movement,
 so a long drag ending beyond a zone still enters it. Do not infer an intermediate
 floor path across a stairs/fall transition. A real player drag/damage journey is
 covered; reload-safe canonical per-round deduplication remains unfinished.
+ZoneEntryReceipt captures server-owned walking footprints and combat boundaries
+inside accepted movement events, including per-action batch receipts. Never trust
+a client receipt. Player projection strips full receipts; normal movement hooks
+carry movementOperationId/movementRevision for the pending claim authority.
 Passive drawings call renderDrawings with an explicit drawingLayer and floor;
 never mount or replace the active drawing tool's shared state for preview.
 Template floor visibility and SVG cutout masks live in template-presentation.js.

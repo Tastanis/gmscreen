@@ -18,11 +18,15 @@ try {
     $store->migrateLegacyPlacements($board); $store->migrateLegacyBoardDomains($board);
     $snapshot = $store->getSnapshot();
     $half = ['type'=>'token.move','operationId'=>'floor-half-001','sceneId'=>'scene','entityId'=>'pc',
-        'baseRevision'=>$snapshot['revision'],'entityRevision'=>0,'payload'=>['column'=>2,'row'=>2]];
-    $store->acceptTokenMove($half, 'cal', false);
+        'baseRevision'=>$snapshot['revision'],'entityRevision'=>0,'payload'=>['column'=>2,'row'=>2,'zoneEntryReceipt'=>['from'=>['column'=>999]]]];
+    $halfResult = $store->acceptTokenMove($half, 'cal', false);
+    $receipt = $halfResult['event']['payload']['zoneEntryReceipt'];
+    verifyFloor($receipt['from']['column'] === 2.0 && $receipt['from']['row'] === 0.0 && $receipt['to']['row'] === 2.0, 'Movement receipt uses server state, not forged client evidence.');
+    verifyFloor($receipt['boundary'] === ZoneEntryReceipt::boundary([]), 'Movement captures its canonical combat boundary.');
     $mid = $store->getSnapshot()['state']['placements']['scene']['pc'];
     verifyFloor($mid['levelId'] === 'level-0' && $mid['_floorTraversal']['entry'] === 'red', 'Server must retain halfway traversal.');
     unset($store); $store = new SyncV2Store($database); // Actual DB reopening, not just a JS object copy.
+    verifyFloor($store->acceptTokenMove($half, 'cal', false)['event']['payload']['zoneEntryReceipt'] == $receipt, 'Accepted movement evidence survives retry and database reopening.');
     $snapshot = $store->getSnapshot();
     $finish = [...$half,'operationId'=>'floor-finish-001','baseRevision'=>$snapshot['revision'],'entityRevision'=>1,'payload'=>['column'=>2,'row'=>4]];
     $result = $store->acceptTokenMove($finish, 'cal', false);
@@ -50,6 +54,7 @@ try {
     verifyFloor($state['placements']['scene']['ally']['levelId'] === 'upper', 'Group move uses same stair authority.');
     verifyFloor($state['sceneConfig']['scene']['userLevelState']['cal']['levelId'] === 'level-0', 'Fall follows linked player.');
     verifyFloor(count($batch['event']['payload']['mutations']) === 2, 'Group changes share one accepted event.');
+    verifyFloor(count($batch['event']['payload']['zoneEntryReceipts']) === 1 && $batch['event']['payload']['zoneEntryReceipts'][0]['placementId'] === 'ally', 'Batch movement captures only walking evidence, excluding forced moves.');
     $beforeUndo = $store->getSnapshot();
     $pc = $beforeUndo['state']['placements']['scene']['pc'];
     $undo = ['type'=>'token.move','operationId'=>'floor-undo-001','baseRevision'=>$beforeUndo['revision'],

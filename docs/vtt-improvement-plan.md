@@ -1159,3 +1159,18 @@ edge/corner contact, floor boundaries and existing occupants. Full suite: 724
 tests/92 files passed. Per-round entry bookkeeping is still client-local: this
 milestone does not establish reload-safe or multi-client deduplication. Canonical
 entry claims/recovery remain the next reliability task.
+
+### Trusted movement evidence for pending zone-entry claims
+
+Accepted token.move walking events now capture server-owned source/destination
+footprints and the canonical encounter/round boundary in zoneEntryReceipt. Walking
+placement-batch actions capture zoneEntryReceipts; forced actions do not. The
+stored operation retains this evidence through retries and database reopening.
+Player event projection strips full receipts to avoid exposing hidden batch tokens.
+Normal movement hooks carry the accepted movementOperationId and movementRevision.
+
+Tests verify forged client evidence is ignored, floor/footprint evidence survives
+retry/reopen, mixed batches exclude forced moves, and player responses omit receipt
+metadata. Full suite: 724 tests/92 files passed. This is a prerequisite for the
+claim authority, not a completed deduplication fix: server claims, effect receipts,
+interrupted-effect recovery and client integration remain pending.

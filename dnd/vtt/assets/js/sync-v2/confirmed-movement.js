@@ -12,5 +12,6 @@ export function normalMovementDetail(sceneId, placementId, previous, placement, 
   });
   const from = footprint(previous), to = footprint(placement);
   if (from.column === to.column && from.row === to.row && from.levelId === to.levelId) return null;
-  return { placementId, sceneId, from, to, kind: 'normal' };
+  return { placementId, sceneId, from, to, kind: 'normal',
+    movementOperationId:event.operationId ?? null,movementRevision:event.revision ?? null };
 }

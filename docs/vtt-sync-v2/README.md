@@ -1095,3 +1095,12 @@ that saved floor. Floor deletion removes deleted-floor zones from all owning
 placements atomically with relocations. Each affected placement advances once;
 zone-only mutations do not trigger linked-view changes. Retained zones repaint
 after map-image load on recovery. Never infer zone floor from a moving caster.
+
+Zone-entry deduplication work now has trusted movement evidence. ZoneEntryReceipt
+is generated inside movement authority from accepted footprints and canonical
+combat encounter/round state. Only walking actions produce it. Full receipts stay
+in server/GM event records and are stripped from player projection; client hooks
+carry only the accepted operation ID and revision. Future zone-entry claims must
+resolve that stored event rather than trusting client coordinates or round keys.
+Claim authority and effect recovery are not implemented yet; client-local entry
+bookkeeping remains the current execution path.

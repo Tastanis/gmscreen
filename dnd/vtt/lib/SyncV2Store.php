@@ -14,6 +14,8 @@ require_once __DIR__ . '/SceneImportValidation.php';
  * Phase 1 only accepts shadow.observe commands. Nothing in this class reads
  * or writes the legacy board-state JSON, so no live VTT domain is dual-owned.
  */
+require_once __DIR__ . '/ZoneEntryReceipt.php';
+
 final class SyncV2Store
 {
     private array $playerCharacterUserIds;
@@ -1257,6 +1259,7 @@ final class SyncV2Store
                 ? $state['placements']
                 : [];
             $mutations = [];
+            $zoneEntryReceipts = [];
             $levelChangedPlacements = [];
 
             foreach ($normalized['actions'] as $action) {
@@ -1367,6 +1370,9 @@ final class SyncV2Store
                     $next['_movementUndo'] = MovementUndo::record($current, $next, $actorId, $state['sceneConfig'][$sceneId]['mapLevels'] ?? []);
                     $patch['_movementUndo'] = $next['_movementUndo'];
                 }
+                if ($action['movementKind'] === 'walk' && (array_key_exists('column', $patch) || array_key_exists('row', $patch))) {
+                    $zoneEntryReceipts[] = ZoneEntryReceipt::create($sceneId, $placementId, $current, $next, $state['combat'][$sceneId] ?? []);
+                }
                 $state['placements'][$sceneId][$placementId] = $next;
                 if (
                     $this->placementLevelId($current)
@@ -1464,6 +1470,7 @@ final class SyncV2Store
                 ],
                 'serverTime' => $serverTime,
             ];
+            if ($zoneEntryReceipts !== []) $event['payload']['zoneEntryReceipts'] = $zoneEntryReceipts;
             $this->insertEvent($event);
             $this->updateWorldState($revision, $state, $serverTime);
             if ($revision % $this->snapshotInterval === 0) {
@@ -1702,6 +1709,12 @@ final class SyncV2Store
                     'movementKind'=>$restore !== null ? 'undo' : $normalized['movementKind'],
                     'movementTransition'=>['kind'=>$floor['cause'],'fromLevelId'=>$this->placementLevelId($current),'toLevelId'=>$floor['levelId']],
                 ];
+            }
+
+            if ($restore === null && $normalized['movementKind'] === 'walk') {
+                $event['payload']['zoneEntryReceipt'] = ZoneEntryReceipt::create(
+                    $sceneId, $placementId, $current, $next, $state['combat'][$sceneId] ?? []
+                );
             }
 
             $this->insertEvent($event);

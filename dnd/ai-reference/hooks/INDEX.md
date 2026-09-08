@@ -49,3 +49,8 @@ The full monster authoring reference is `monster-automation.md` (this folder). M
 - Monster heroic `spend` falls back to a native `confirm()` dialog (the monster context omits `spendHeroicResource`); `resourceGain` and `surgeGain` post manual chat reminders (`applyResourceGain` / `applySurgeGain` are not passed). Recovery heals are NOT monster-blocked — `spendRecoveryForTarget` is wired and acts on the target's sheet.
 - `showFloatingText` and `startTurn` are passed through to monsters like PCs.
 - Winded state is based on token HP at or below half max HP.
+
+Zone-entry correlation: locally acknowledged normal `vtt:token-moved` hooks include
+movementOperationId and movementRevision. Server walking receipts are built by
+`../../vtt/lib/ZoneEntryReceipt.php` and stripped from player event projection.
+Canonical entry claims and interrupted-effect recovery remain pending.
