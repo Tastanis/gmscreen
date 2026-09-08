@@ -731,6 +731,11 @@ board broadcast, V1 poller, version/grace winner, or broad render subscriber.
 
 ### September 2026 product reliability work
 
+- [x] Template edits use explicit entity commands for the changed shapes only.
+  Authentication assigns ownership; players can edit/remove their own temporary
+  templates, while persistent/ownerless structures remain GM-managed. Templates
+  refresh on startup/recovery and hidden-floor payloads are omitted for players.
+
 - [x] Drawing gestures use explicit V2 upsert/remove commands and focused
   startup/recovery rendering. Erase/clear/undo use entity deltas, not a whole-scene
   replacement. Players manage their own drawings; GM can manage any drawing.

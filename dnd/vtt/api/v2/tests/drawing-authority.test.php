@@ -9,11 +9,12 @@ $sequence = 0;
 function sendDrawing(string $type, string $id, string $actor, array $drawing = []): array {
     global $store, $sequence;
     $snapshot = $store->getSnapshot();
+    $key = str_starts_with($type, 'template.') ? 'template' : 'drawing';
     return $store->acceptBoardDomainCommand([
         'type' => $type, 'operationId' => 'drawing-test-' . ++$sequence,
         'baseRevision' => $snapshot['revision'], 'sceneId' => 'test', 'entityId' => $id,
-        'entityRevision' => $snapshot['state']['drawings']['test'][$id]['_entityRevision'] ?? 0,
-        'payload' => $type === 'drawing.upsert' ? ['drawing' => $drawing] : [],
+        'entityRevision' => $snapshot['state'][$key . 's']['test'][$id]['_entityRevision'] ?? 0,
+        'payload' => str_ends_with($type, '.upsert') ? [$key => $drawing] : [],
     ], $actor, $actor === 'GM');
 }
 try {
@@ -39,6 +40,10 @@ try {
     if (isset($projection['state']['drawings']['test']['secret-drawing'])) throw new RuntimeException('Hidden drawing leaked in snapshot.');
     $event = vttSyncV2ProjectEventForUser($secret['event'], $player);
     if ($event['type'] !== 'sync.redacted') throw new RuntimeException('Hidden drawing leaked in event.');
+    $secretTemplate = sendDrawing('template.upsert', 'secret-template', 'GM', ['type'=>'circle', 'levelId'=>'secret']);
+    $projection = vttSyncV2ProjectSnapshotForUser($store->getSnapshot(), $player);
+    if (isset($projection['state']['templates']['test']['secret-template'])) throw new RuntimeException('Hidden template leaked in snapshot.');
+    if (vttSyncV2ProjectEventForUser($secretTemplate['event'], $player)['type'] !== 'sync.redacted') throw new RuntimeException('Hidden template leaked in event.');
     echo "Drawing authority: ownership, rejection, restore and GM removal passed.\n";
 } finally {
     unset($store);

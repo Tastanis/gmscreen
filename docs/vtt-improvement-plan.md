@@ -13,7 +13,7 @@ User authorized implementing the September 7 product audit, updating/running the
 
 - [ ] Server-validated atomic stairs/falls, including player and alternate movement paths.
 - [x] Drawing creation/erase/clear/undo persist explicitly through V2, with author/floor scope and hidden-floor projection.
-- [ ] Owned temporary template edit/remove permissions; persistent effects retain explicit authority.
+- [x] Owned temporary template edit/remove permissions; persistent structures retain GM authority.
 - [ ] Exact rejection feedback and pending/accepted state.
 
 ## Coherent geometry and player association
@@ -67,3 +67,21 @@ Repeatable drawing QA:
 3. `node dnd/vtt/tools/test-drawing-browser.cjs`
 
 The browser test refuses a non-loopback address or an app without the drawing fixture manifest. `VTT_TEST_ORIGIN` and `VTT_TEST_BROWSER` can override the localhost origin and installed browser executable. These fixtures do not change the user's live-data diagnostic app pointer.
+
+## Completed template slice
+
+Player-owned temporary templates can be moved and removed. Server authentication
+assigns the author; other authors' shapes and ownerless legacy shapes remain
+GM-managed. Permanent-wall callbacks mark board structures as persistent, keeping
+later edit/remove GM-only. Placement-owned persistent-zone controls are separate.
+Template edits diff the displayed baseline and submit only changed entity commands;
+they no longer dirty every template or overwrite whole scene arrays. Rejected
+edits restore canonical shapes and report the server reason. Startup/recovery
+explicitly refreshes templates, and hidden-floor payloads are projected out.
+
+Validation: 675 tests passed across 77 VTT/automation files. The template browser
+journey created and dragged a template as Cal, reloaded, rejected Delete on a GM
+template, and removed Cal's own template, with GM and Sharon observing accepted
+results. It asserted that exactly three template commands were submitted, all for
+Cal's shape. Run `node dnd/vtt/tools/test-template-browser.cjs` against the same
+synthetic drawing fixture. Template number-field labels now identify their inputs.

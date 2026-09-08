@@ -533,7 +533,7 @@ try {
 
     $store->migrateLegacyBoardDomains([
         'activeSceneId' => 'scene-1',
-        'templates' => ['scene-1' => [['id' => 'template-1', 'shape' => 'circle']]],
+        'templates' => ['scene-1' => [['id' => 'template-1', 'shape' => 'circle', 'authorId' => 'player-a']]],
         'drawings' => ['scene-1' => [['id' => 'drawing-1', 'points' => [[0, 0], [1, 1]]]]],
         'pings' => [],
         'sceneState' => [

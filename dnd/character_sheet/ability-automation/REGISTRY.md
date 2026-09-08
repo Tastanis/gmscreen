@@ -6,6 +6,16 @@ For *how* to write JSON, see `AUTHORING.md`. This file is `what is supported`.
 
 ## Normalization metadata
 
+### VTT template ownership
+
+Temporary measurement templates record the authenticated author. Players can edit
+and remove their own temporary templates; older ownerless templates remain
+GM-managed. Board structures created by the permanent-wall callback carry VTT
+runtime metadata `persistent: true`: after creation only the GM can edit/remove
+them. This is board storage metadata, not a new authored ability JSON field.
+Placement-owned persistent zones and their existing explicit End controls remain
+separate from the measurement-template lifecycle.
+
 Unknown properties are ignored by the runtime but preserved in a single `_extra` object on the corresponding automation, card, effect, choice option, modifier, passive, or usage-limit node. `_extra` is reserved and is never itself collected as an unknown property. Legacy nested `_extra._extra...` chains are flattened during normalization; distinct fields survive, and the value closest to the real schema node wins if malformed layers repeat the same key. Repeated normalization is idempotent.
 
 ---

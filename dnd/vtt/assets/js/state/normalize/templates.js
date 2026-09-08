@@ -1,5 +1,6 @@
 import { clampToFinite } from './helpers.js';
 import { BASE_MAP_LEVEL_ID } from './map-levels.js';
+import { templateAuthority } from '../../ui/template-edits.js';
 
 export function normalizeTemplates(raw = {}) {
   if (!raw || typeof raw !== 'object') {
@@ -47,6 +48,7 @@ export function normalizeTemplateEntry(entry) {
       center: { column, row },
       radius,
       levelId,
+      ...templateAuthority(entry),
     };
     if (color) {
       normalized.color = color;
@@ -71,6 +73,7 @@ export function normalizeTemplateEntry(entry) {
       width,
       rotation,
       levelId,
+      ...templateAuthority(entry),
     };
     if (color) {
       normalized.color = color;
@@ -110,6 +113,7 @@ export function normalizeTemplateEntry(entry) {
       type: 'wall',
       squares,
       levelId,
+      ...templateAuthority(entry),
     };
     if (color) {
       normalized.color = color;

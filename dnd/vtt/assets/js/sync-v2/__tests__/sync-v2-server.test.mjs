@@ -50,3 +50,9 @@ test('PHP drawing authority enforces ownership and hidden-floor projection', () 
     for (const suffix of ['', '-wal', '-shm']) if (existsSync(database + suffix)) unlinkSync(database + suffix);
   }
 });
+
+test('PHP template authority allows own temporary removal and protects other authors and structures', () => {
+  const script = fileURLToPath(new URL('../../../../api/v2/tests/template-authority.test.php', import.meta.url));
+  const result = spawnSync('php', [...phpArgsForSqlite(), script], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});

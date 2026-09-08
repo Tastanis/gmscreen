@@ -35,6 +35,7 @@ import {
   setDrawingContext,
 } from './drawing-tool.js';
 import { drawingCommands } from './drawing-edits.js';
+import { canEditTemplate, templateAuthority, templateCommands } from './template-edits.js';
 import { updateSceneGrid } from '../services/scene-service.js';
 import {
   GRID_SIZE_DEFAULT,
@@ -902,6 +903,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (drawingsV2Enabled) {
       syncDrawingsFromState(boardApi.getState?.()?.boardState, activeSceneId);
     }
+    if (templatesV2Enabled) templateTool.notifyMapState();
     for (const [placementId, placement] of Object.entries(
       snapshot?.state?.placements?.[activeSceneId] ?? {}
     )) {
@@ -1898,83 +1900,6 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }
     return Object.keys(patch).length > 0 ? patch : null;
-  }
-
-  // Phase 3-B (commit 4): compute the delta between the prior
-  // templates-for-scene list and the freshly serialized next list,
-  // returning an array of `template.upsert`/`template.remove` ops.
-  // Upsert covers both creation and modification. Removals are emitted
-  // for any id in prior but not in next. `_lastModified` is excluded
-  // from the comparison so a server-side re-stamp doesn't look like a
-  // change. Returns an empty array if the two lists are functionally
-  // identical, allowing callers to skip an unnecessary save.
-  function templateDiffKey(entry) {
-    if (!entry || typeof entry !== 'object') {
-      return null;
-    }
-    const clone = { ...entry };
-    delete clone._lastModified;
-    try {
-      return JSON.stringify(clone);
-    } catch (error) {
-      return null;
-    }
-  }
-
-  function buildTemplateOpsFromDiff(sceneId, priorList, nextList) {
-    if (!sceneId) {
-      return [];
-    }
-    const ops = [];
-    const priorById = new Map();
-    const priorKeysById = new Map();
-    const prior = Array.isArray(priorList) ? priorList : [];
-    const next = Array.isArray(nextList) ? nextList : [];
-
-    prior.forEach((entry) => {
-      if (!entry || typeof entry !== 'object') {
-        return;
-      }
-      const id = typeof entry.id === 'string' ? entry.id : '';
-      if (!id) {
-        return;
-      }
-      priorById.set(id, entry);
-      priorKeysById.set(id, templateDiffKey(entry));
-    });
-
-    const nextIds = new Set();
-    next.forEach((entry) => {
-      if (!entry || typeof entry !== 'object') {
-        return;
-      }
-      const id = typeof entry.id === 'string' ? entry.id : '';
-      if (!id) {
-        return;
-      }
-      nextIds.add(id);
-      const nextKey = templateDiffKey(entry);
-      const priorKey = priorKeysById.has(id) ? priorKeysById.get(id) : null;
-      if (!priorById.has(id) || priorKey !== nextKey) {
-        ops.push({
-          type: 'template.upsert',
-          sceneId,
-          template: entry,
-        });
-      }
-    });
-
-    priorById.forEach((_unused, id) => {
-      if (!nextIds.has(id)) {
-        ops.push({
-          type: 'template.remove',
-          sceneId,
-          templateId: id,
-        });
-      }
-    });
-
-    return ops;
   }
 
   // Track dirty combat state fields to prevent remote state from overwriting local changes
@@ -23810,6 +23735,10 @@ function createTemplateTool() {
   const layer = templateLayer;
   const shapes = [];
   let selectedId = null;
+  let pendingTemplateSave = 0;
+  let templateSaveQueue = Promise.resolve();
+  const pendingTemplateScenes = new Map();
+  let templateBaseline = [];
   let previewShape = null;
   let placementState = null;
   let activeDrag = null;
@@ -23937,7 +23866,7 @@ function createTemplateTool() {
     }
 
     const sanitizedColor = sanitizeColorValue(shape.color);
-    const base = { id, type };
+    const base = { id, type, ...templateAuthority(shape) };
     if (sanitizedColor) {
       base.color = sanitizedColor;
     }
@@ -24032,6 +23961,7 @@ function createTemplateTool() {
         center: { column, row },
         radius,
         levelId,
+        ...templateAuthority(entry),
       };
     }
 
@@ -24067,6 +23997,7 @@ function createTemplateTool() {
         width,
         rotation,
         levelId,
+        ...templateAuthority(entry),
       };
 
       if (anchorColumn !== null && anchorRow !== null) {
@@ -24102,6 +24033,7 @@ function createTemplateTool() {
         color,
         squares,
         levelId,
+        ...templateAuthority(entry),
       };
       // Preserve wall color if set
       if (typeof entry.wallColor === 'string' && entry.wallColor.trim()) {
@@ -24133,75 +24065,48 @@ function createTemplateTool() {
     });
 
     colorIndex = shapes.length;
+    templateBaseline = serializeShapesList();
     selectedId = null;
     updateLayerVisibility();
   }
 
-  function commitShapes() {
-    const serialized = serializeShapesList();
+  function canManageShape(shape) {
+    return !pendingTemplateSave && canEditTemplate(shape, { userId: getCurrentUserId(), isGM: isGmUser() });
+  }
 
-    if (typeof boardApi.updateState !== 'function') {
-      lastSyncedSnapshot = snapshotKey(serialized);
-      return;
-    }
-
+  async function commitShapes() {
     const state = boardApi.getState?.() ?? {};
-    const activeSceneId = state.boardState?.activeSceneId ?? null;
-    if (!activeSceneId) {
-      lastSyncedSnapshot = snapshotKey(serialized);
-      return;
-    }
+    const sceneId = state.boardState?.activeSceneId;
+    if (!sceneId || pendingTemplateSave) return;
+    const before = templateBaseline;
+    const commands = templateCommands(sceneId, before, serializeShapesList(), normalizeSerializedTemplate);
+    if (!commands.length) return;
+    return commitTemplateCommands(commands);
+  }
 
-    // Phase 3-B (commit 4): capture the prior templates list BEFORE
-    // updateState mutates it. The op path needs this to diff against
-    // the freshly serialized list and emit `template.upsert` only for
-    // entries that actually changed and `template.remove` for ids
-    // that vanished. Serialized prior entries may carry a stale
-    // `_lastModified` stamp — that field is excluded from the diff
-    // below so a mere re-stamp is not counted as a change.
-    const priorTemplates = Array.isArray(state.boardState?.templates?.[activeSceneId])
-      ? state.boardState.templates[activeSceneId].slice()
-      : [];
-
-    const commitTimestamp = Date.now();
-    boardApi.updateState?.((draft) => {
-      const templatesDraft = ensureSceneTemplateDraft(draft, activeSceneId);
-      templatesDraft.length = 0;
-      serialized.forEach((entry) => {
-        // Add timestamp for conflict resolution
-        entry._lastModified = commitTimestamp;
-        templatesDraft.push(entry);
-      });
+  function commitTemplateCommands(commands) {
+    if (!commands.length) return Promise.resolve();
+    const sceneId = commands[0].sceneId;
+    pendingTemplateSave += 1;
+    pendingTemplateScenes.set(sceneId, (pendingTemplateScenes.get(sceneId) || 0) + 1);
+    layer.setAttribute('aria-busy', 'true');
+    if (templatesButton) templatesButton.disabled = true;
+    updateStatus('Saving template changes...');
+    const request = templateSaveQueue.then(() => tokenMovementRuntime.submitBoardDomainCommands(commands));
+    const handled = request.then(() => {
+      updateStatus('Template changes saved.');
+    }).catch((error) => {
+      updateStatus(`Template changes were not fully saved: ${error?.response?.error || error?.message || 'Connection failed'}. Accepted changes remain visible.`);
+    }).finally(() => {
+      pendingTemplateSave -= 1;
+      pendingTemplateScenes.set(sceneId, Math.max(0, (pendingTemplateScenes.get(sceneId) || 1) - 1));
+      layer.setAttribute('aria-busy', pendingTemplateSave ? 'true' : 'false');
+      if (templatesButton) templatesButton.disabled = Boolean(pendingTemplateSave);
+      lastSyncedSnapshot = null;
+      notifyMapState();
     });
-
-    // Mark all templates as dirty for delta save
-    serialized.forEach((entry) => {
-      if (entry.id) {
-        markTemplateDirty(activeSceneId, entry.id);
-      }
-    });
-
-    lastSyncedSnapshot = snapshotKey(serialized);
-
-    // Phase 3-B (commit 4): build `template.upsert`/`template.remove`
-    // ops from a diff of prior vs next. Upsert covers both add and
-    // modify. The comparison ignores `_lastModified` so a
-    // no-functional-change re-commit does not produce a wire op.
-    // Falls back to the snapshot path when USE_DELTA_SAVES is off or
-    // when any non-ops-capable dirty state is also waiting to flush
-    // (drawings, pings, sceneState, overlay, drawing full-replace).
-    let templateOps = null;
-    if (USE_DELTA_SAVES && !hasNonPlacementDirtyState()) {
-      templateOps = buildTemplateOpsFromDiff(activeSceneId, priorTemplates, serialized);
-      if (templateOps && templateOps.length === 0) {
-        // Nothing actually changed in the serialized templates list.
-        // Skip the network round-trip entirely and drain dirty tracking
-        // so subsequent saves are not starved by this no-op.
-        clearDirtyTracking();
-        return;
-      }
-    }
-    persistBoardStateSnapshot({}, templateOps);
+    templateSaveQueue = handled;
+    return handled;
   }
 
   if (templatesButton) {
@@ -24260,6 +24165,7 @@ function createTemplateTool() {
 
     const state = boardApi.getState?.() ?? {};
     const activeSceneId = state.boardState?.activeSceneId ?? null;
+    if (pendingTemplateScenes.get(activeSceneId)) { render(viewState); return; }
     const templatesByScene = state.boardState?.templates ?? {};
     const rawTemplates = activeSceneId && templatesByScene && typeof templatesByScene === 'object'
       ? templatesByScene[activeSceneId]
@@ -24771,6 +24677,7 @@ function createTemplateTool() {
   }
 
   function addShape(shape) {
+    if (pendingTemplateSave) { updateStatus('Wait for the pending template change to finish.'); return; }
     shapes.push(shape);
     layer.appendChild(shape.elements.root);
     selectShape(shape.id);
@@ -24790,11 +24697,12 @@ function createTemplateTool() {
     const clamped = clampWallSquares(squares, viewState);
     if (!clamped.length) return null;
     const levelId = getActiveTokenPlacementLevelId() ?? BASE_MAP_LEVEL_ID;
-    const shape = createShape('wall', { squares: clamped, wallColor, levelId });
+    const shape = createShape('wall', { squares: clamped, wallColor, levelId, persistent: true });
     shapes.push(shape);
     layer.appendChild(shape.elements.root);
     render(viewState);
-    commitShapes();
+    const sceneId = boardApi.getState?.()?.boardState?.activeSceneId;
+    if (sceneId) commitTemplateCommands([{ type: 'template.upsert', sceneId, entityId: shape.id, payload: { template: serializeShape(shape) } }]);
     return shape;
   }
 
@@ -24886,6 +24794,7 @@ function createTemplateTool() {
         connectors: new Map(),
       },
       isPreview,
+      ...templateAuthority({ ...data, authorId: providedId ? data.authorId : getCurrentUserId() }),
       levelId: typeof data.levelId === 'string' && data.levelId.trim()
         ? data.levelId.trim()
         : BASE_MAP_LEVEL_ID,
@@ -24947,6 +24856,7 @@ function createTemplateTool() {
     }
 
     if (!isPreview) {
+      node.title = canEditTemplate(shape, { userId: getCurrentUserId(), isGM: isGmUser() }) ? 'Drag to move. Delete removes this template.' : 'Read-only: another author or a persistent structure. Ask the GM to edit.';
       node.addEventListener('keydown', (event) => handleNodeKeydown(event, shape));
       node.addEventListener('pointerdown', (event) => handleNodePointerDown(event, shape));
       node.addEventListener('pointermove', (event) => handleNodePointerMove(event, shape));
@@ -25007,6 +24917,7 @@ function createTemplateTool() {
     if (index === -1) {
       return;
     }
+    if (!canManageShape(shapes[index])) { updateStatus('You can remove your own temporary templates; the GM manages other templates and persistent structures.'); return; }
     clearShrinkTimer(id);
     const [removed] = shapes.splice(index, 1);
     removed.elements.root.remove();
@@ -25021,7 +24932,7 @@ function createTemplateTool() {
 
   function rotateRectangle(id, deltaDegrees) {
     const shape = shapes.find((item) => item.id === id && item.type === 'rectangle');
-    if (!shape) {
+    if (!shape || !canManageShape(shape)) {
       return;
     }
     const nextRotation = normalizeAngle((shape.rotation ?? 0) + deltaDegrees);
@@ -25068,7 +24979,7 @@ function createTemplateTool() {
   }
 
   function startRectangleRotation(event, shape) {
-    if (event.button !== 0 || shape.type !== 'rectangle') {
+    if (event.button !== 0 || shape.type !== 'rectangle' || !canManageShape(shape)) {
       return;
     }
     event.preventDefault();
@@ -25209,7 +25120,7 @@ function createTemplateTool() {
   }
 
   function handleNodePointerDown(event, shape) {
-    if (event.button !== 0 || activeRotation) {
+    if (event.button !== 0 || activeRotation || !canManageShape(shape)) {
       return;
     }
     event.preventDefault();
@@ -26076,6 +25987,8 @@ function createTemplateTool() {
     const input = document.createElement('input');
     input.type = 'number';
     input.name = name;
+    input.id = `vtt-template-field-${name}`;
+    labelEl.htmlFor = input.id;
     input.min = typeof options.min === 'string' ? options.min : String(options.min ?? '0');
     input.step = typeof options.step === 'string' ? options.step : String(options.step ?? '0.5');
     if (typeof options.placeholder === 'string') {

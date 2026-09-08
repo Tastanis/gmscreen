@@ -607,9 +607,12 @@ final class SyncV2Store
                 if ($normalized['entityRevision'] !== $currentRevision) {
                     return $this->rollbackConflict('entity_revision_mismatch', $snapshot);
                 }
-                if ($domain === 'drawings' && !$isGm && $current !== null
+                if (!$isGm && $current !== null
                     && strtolower(trim((string) ($current['authorId'] ?? ''))) !== strtolower($actorId)) {
-                    throw new InvalidArgumentException('You may only edit or remove your own drawings.');
+                    throw new InvalidArgumentException('You may only edit or remove your own ' . $domain . '.');
+                }
+                if ($domain === 'templates' && !$isGm && ($current['persistent'] ?? false) === true) {
+                    throw new InvalidArgumentException('Only the GM may edit or remove persistent structures.');
                 }
                 $entityRevision = $currentRevision + 1;
                 if (str_ends_with($type, '.remove')) {
@@ -620,11 +623,9 @@ final class SyncV2Store
                     $eventType = $domain === 'templates' ? 'template.removed' : 'drawing.removed';
                 } else {
                     $entry = $payload[$payloadKey];
-                    if ($domain === 'drawings') {
-                        // Authenticated ownership cannot be supplied or reassigned by a player.
-                        $entry['authorId'] = $current['authorId']
-                            ?? ($isGm ? ($entry['authorId'] ?? strtolower($actorId)) : strtolower($actorId));
-                    }
+                    // Authenticated ownership cannot be supplied or reassigned by a player.
+                    $entry['authorId'] = $current['authorId']
+                        ?? ($isGm ? ($entry['authorId'] ?? strtolower($actorId)) : strtolower($actorId));
                     $entry['id'] = $entityId;
                     $entry['_entityRevision'] = $entityRevision;
                     $state[$domain][$sceneId][$entityId] = $entry;
@@ -1928,7 +1929,7 @@ final class SyncV2Store
             return;
         }
         if (in_array($type, [
-            'template.upsert', 'drawing.upsert', 'drawing.remove', 'ping.add',
+            'template.upsert', 'template.remove', 'drawing.upsert', 'drawing.remove', 'ping.add',
         ], true)) {
             return;
         }
