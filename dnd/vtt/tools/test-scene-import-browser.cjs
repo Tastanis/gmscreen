@@ -1,6 +1,7 @@
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
 const origin='http://127.0.0.1:8129';
+const duplicateMode=process.argv.includes('--duplicate');
 (async()=>{
   const manifest=await fetch(origin+'/diagnostic-manifest.json').then(r=>r.json());
   assert.equal(manifest.test_fixture,'floor-regression');
@@ -21,6 +22,7 @@ const origin='http://127.0.0.1:8129';
     const snapshot=async()=>(await(await gm.request.get(origin+'/dnd/vtt/api/v2/snapshot.php')).json()).snapshot;
     const before=await snapshot();
     const packageData=(await(await gm.request.get(origin+'/dnd/vtt/api/v2/scene-export.php?sceneId='+manifest.test_scene_id)).json()).package;
+    const originalName=packageData.scene.name;
     packageData.scene.name='Import regression copy';
     assert.equal((await pc.request.post(endpoint,{data:{package:packageData,operationId:'denied-import-001',allowPlayerBrowsing:true}})).status(),403);
     assert.equal((await gm.request.get(endpoint)).status(),405);
@@ -29,10 +31,20 @@ const origin='http://127.0.0.1:8129';
     assert.equal((await gm.request.post(endpoint,{data:{package:bad,operationId:'bad-image-001',allowPlayerBrowsing:true}})).status(),422);
     assert.deepEqual(await snapshot(),before);
     await gm.locator('[data-settings-launch="scenes"]').click();
-    await gm.locator('[data-scene-import-preview] > summary').click();
-    await gm.locator('#vtt-scene-import-file').setInputFiles({name:'copy.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(packageData))});
+    if(duplicateMode){
+      const duplicate=gm.locator(`[data-action="duplicate-scene"][data-scene-id="${manifest.test_scene_id}"]`);
+      const group=gm.locator('.scene-group').filter({has:duplicate});
+      if((await group.getAttribute('class')).includes('is-collapsed')) await group.locator('[data-action="toggle-folder"]').click();
+      await duplicate.click();
+    }else{
+      await gm.locator('[data-scene-import-preview] > summary').click();
+      await gm.locator('#vtt-scene-import-file').setInputFiles({name:'copy.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(packageData))});
+    }
     await gm.waitForFunction(()=>document.querySelector('[data-scene-import-status]')?.textContent==='Scene package preview ready.');
     const panel=gm.locator('[data-scene-import-result]');
+    const copyName=panel.getByRole('textbox',{name:'New scene name',exact:true});
+    assert.equal(await copyName.inputValue(),duplicateMode?'Copy of '+originalName:'Import regression copy');
+    await copyName.fill('Renamed reusable encounter');
     const install=panel.getByRole('button',{name:'Import as new scene',exact:true});
     assert.equal(await install.count(),1,await panel.textContent());
     assert.equal(await install.isDisabled(),true);
@@ -45,9 +57,11 @@ const origin='http://127.0.0.1:8129';
     });
     await install.click();
     await gm.waitForFunction(()=>document.querySelector('[data-scene-import-status]')?.textContent.includes('Retry here'));
+    assert.equal(await copyName.isDisabled(),true,'Retry cannot change an already accepted request.');
     await panel.getByRole('button',{name:'Retry import',exact:true}).click();
     await gm.waitForFunction(()=>document.querySelector('[data-scene-import-status]')?.textContent.includes('Created “'));
     const id=accepted.scene.id; const after=await snapshot();
+    assert.equal(accepted.scene.name,'Renamed reusable encounter');
     assert.equal(after.revision,before.revision+1,'Lost response and retry create only one event.');
     assert.deepEqual(after.state.routing,before.state.routing);
     for(const domain of ['placements','sceneConfig','drawings','templates']){
@@ -74,6 +88,6 @@ const origin='http://127.0.0.1:8129';
     assert.deepEqual(opened.state.placements[id],after.state.placements[id],'Opening and reloading preserve copied tokens.');
     assert.deepEqual(opened.state.placements[manifest.test_scene_id],before.state.placements[manifest.test_scene_id]);
     assert.deepEqual(errors,[]);
-    console.log('PASS: isolated scene import, validation and permissions, response-loss retry, one copy, fresh IDs, unchanged original/routing, catalog recovery, open and reload.');
+    console.log(`PASS: isolated scene ${duplicateMode?'duplication':'import'}, naming, validation and permissions, response-loss retry, one copy, fresh IDs, unchanged original/routing, catalog recovery, open and reload.`);
   }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

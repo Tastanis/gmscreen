@@ -15,6 +15,9 @@ Deletion cancels pending catalog recovery. `api/v2/scene-import.php` is GM-only,
 validates packages at the store boundary and requires explicit player-browsing
 acknowledgment. Imported scenes are browsable without activating them. Do not label
 this operation as a private encounter draft. Retain the same operation ID on retries.
+The Duplicate scene control exports directly into the same import preview. Keep
+the submitted request body immutable through retries; renaming is allowed before
+the first request, not after an uncertain accepted response.
 
 ## Version System
 

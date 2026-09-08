@@ -756,3 +756,18 @@ acknowledgment, simulated loss after server acceptance, one-copy retry, fresh ID
 unchanged source/routing, catalog entry, opening and reload. Existing export/preview
 browser tests still pass. All 702 regression tests pass. Scene duplication shortcuts,
 private encounter preparation and reload-free catalog integration remain follow-ups.
+
+### Duplicate scene and name copies
+
+Each saved scene now has Duplicate scene. It obtains the canonical export directly
+and opens the existing import preview with a `Copy of …` name, avoiding file download
+and upload. Both paths expose New scene name before installation. Once submitted,
+the request body and name are frozen for retries so a lost accepted response cannot
+produce a second differently named copy. A busy preview/import cannot be replaced
+by another duplicate request.
+
+The browser regression runs in both file-import and Duplicate scene modes, renames
+the copy, loses the first accepted response, retries, verifies one catalog entry and
+fresh IDs, checks unchanged source/routing, then opens and reloads the copy. Both
+journeys and export/preview pass. All 13 focused scene-manager/copied-stair tests pass.
+Private encounter preparation and reload-free catalog integration remain pending.

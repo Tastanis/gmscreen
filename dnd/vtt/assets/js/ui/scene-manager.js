@@ -5,6 +5,7 @@ import {
   updateSceneVisibility,
 } from '../services/scene-service.js';
 import { normalizeGridState } from '../state/normalize/grid.js';
+import { previewSceneCopy } from './scene-import-preview.js';
 import {
   BASE_MAP_LEVEL_ID,
   MAP_LEVEL_ID_PREFIX,
@@ -156,12 +157,16 @@ export function renderSceneList(routes, store) {
     const action = target.getAttribute('data-action');
     const sceneId = target.getAttribute('data-scene-id');
 
-    if (action === 'export-scene' && sceneId) {
+    if ((action === 'export-scene' || action === 'duplicate-scene') && sceneId) {
       target.disabled = true;
       try {
         const response = await fetch('/dnd/vtt/api/v2/scene-export.php?sceneId=' + encodeURIComponent(sceneId), {credentials:'same-origin',cache:'no-store'});
         const data = await response.json();
         if (!response.ok || !data.success) throw Error(data.error || `Scene export failed (${response.status}).`);
+        if (action === 'duplicate-scene') {
+          await previewSceneCopy(data.package);
+          return;
+        }
         const url = URL.createObjectURL(new Blob([JSON.stringify(data.package, null, 2)], {type:'application/json'}));
         const link = document.createElement('a');
         link.href = url;
@@ -1363,6 +1368,7 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
             : ''}
           <button type="button" class="btn btn--danger" data-action="delete-scene" data-scene-id="${scene.id}">Delete</button>
           <button type="button" class="btn" data-action="export-scene" data-scene-id="${scene.id}" title="Download scene setup as JSON. Images are links; image files and character sheets are not bundled.">Export scene JSON</button>
+          <button type="button" class="btn" data-action="duplicate-scene" data-scene-id="${scene.id}" title="Review a new copy of this scene, including tokens and floor geometry.">Duplicate scene</button>
         </footer>
       </div>
     </article>
