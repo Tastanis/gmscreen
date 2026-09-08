@@ -41,7 +41,7 @@ User authorized implementing the September 7 product audit, updating/running the
 ## Recovery and preparation
 
 - [ ] Specific-player preview and useful connection status.
-  - Server-check-based connection status and manual reconciliation are implemented. GM Scenes exposes read-only player selection and scene/floor/follow/primary-token diagnostics. A graphical preview with the actual fog/cutout rendering remains pending.
+  - Server-check-based connection status and manual reconciliation are implemented. GM Scenes exposes player diagnostics and an independent map/grid/floor/cutout/fog preview. Token/drawing/template preview layers remain pending.
 - [x] Named encounter checkpoints, scoped restore, scene duplication/export.
   - GM-only checkpoints expose reviewed atomic position or layout restoration. Layout restores floors, grid, fog, drawings/templates and existing-token positions while preserving current resources and newer tokens. Scene JSON export/import and duplication preserve board geometry and links, survive retries, and open without reload. Character sheets and base-map/catalog metadata are outside checkpoint restore scope.
 - [ ] Encounter presets, favorites and recent assets.
@@ -894,3 +894,21 @@ output byte-for-byte with the mounted GM/player canvases. Both match; drawing th
 opposite viewer opacity leaves the mounted canvas unchanged. Graphical preview
 assembly with map/cutout/token/content layers remains outstanding.
 Full regression suite: 706 tests across 85 files passed.
+
+### Independent map and fog dialog
+
+Player view details now opens a modal map/grid/floor/cutout/fog snapshot at the
+selected player's saved floor. The shared map renderer accepts rootId:null to
+create a private stack instead of relocating the active board's global stack.
+The shared fog surface receives normalized player placements, filtered library
+metadata and explicit player opacity. Cutout and grid origins remain aligned.
+Closing invalidates late image loads and discards the surface. No gameplay tool,
+store subscription or board command is mounted by this preview.
+
+Browser QA covers opening/closing the base preview, retained GM map stack identity,
+no board writes, then an upper floor with shifted grid origins, exact cutout-mask
+comparison, a revealed cell and opaque unrevealed cells. Screenshots were inspected.
+The 706-test regression suite passed before the final PC-team normalization fix;
+the two focused player-preview tests passed afterward, including alias-based PC
+fog reveals and unchanged snapshot inputs. Tokens, drawings and templates are
+explicitly omitted in the dialog and remain required preview work.

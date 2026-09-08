@@ -12,7 +12,8 @@ It validates a configured roster ID and projects a canonical snapshot with the
 normal player sanitizer, without touching presence, session identity or board
 state. It does not provide a write capability. GM Scenes now exposes Player view
 details with roster selection, scene/floor, Follow/Browse and canonical primary
-association. Graphical fog/cutout preview remains pending.
+association. Its map/fog dialog renders grid, floor maps/cutouts and player fog on
+an independent passive surface. Tokens, drawings and templates remain pending.
 
 A GM-only `checkpoint.restoreLayout` authority now plans and atomically restores
 one scene's floors, canonical grid, fog, drawings/templates and existing token

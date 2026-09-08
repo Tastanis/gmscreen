@@ -9,12 +9,13 @@ export function createMapLevelRenderer({
   mapTransform = null,
   insertBefore = null,
   documentRef = typeof document !== 'undefined' ? document : null,
+  rootId = MAP_LEVEL_STACK_ID,
 } = {}) {
   if (!mapTransform || !documentRef) {
     return createNoopMapLevelRenderer();
   }
 
-  const root = ensureMapLevelRoot({ mapTransform, insertBefore, documentRef });
+  const root = ensureMapLevelRoot({ mapTransform, insertBefore, documentRef, rootId });
   const stack = ensureMapLevelStack(root, documentRef);
   const levelElements = new Map();
   let lastSignature = null;
@@ -280,12 +281,12 @@ export function buildCssUrl(value) {
   return `url("${sanitized}")`;
 }
 
-function ensureMapLevelRoot({ mapTransform, insertBefore, documentRef }) {
-  let root = documentRef.getElementById(MAP_LEVEL_STACK_ID);
+function ensureMapLevelRoot({ mapTransform, insertBefore, documentRef, rootId }) {
+  let root = rootId ? documentRef.getElementById(rootId) : null;
 
   if (!root) {
     root = documentRef.createElement('div');
-    root.id = MAP_LEVEL_STACK_ID;
+    if (rootId) root.id = rootId;
   }
 
   root.className = MAP_LEVEL_STACK_CLASS;
