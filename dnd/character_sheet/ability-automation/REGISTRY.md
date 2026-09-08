@@ -141,6 +141,13 @@ Board-hosted power roll modals can show clickable suggested edges/banes from cur
 
 ## Forced-movement verbs — `forcedMovement.verb`
 
+Board persistence now resolves destination support (including holes) on the
+server for position patches. Generic position patches bypass walking stair
+triggers. The internal movement command's `movementKind`, path, and
+`_floorTraversal` fields are runtime metadata, not authored ability JSON fields.
+This does not add flight, fall damage, or vertical-distance automation; those
+mechanics still require manual adjudication where unsupported.
+
 `push`, `pull`, `slide`, `verticalPush`, `verticalPull`, `verticalSlide`
 
 Forced-movement highlights account for target stability and size across PCs and monsters. The highlight is advisory only: the GM can still click any destination, including cells outside the legal highlight.

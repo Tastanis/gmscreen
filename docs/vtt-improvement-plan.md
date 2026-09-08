@@ -12,6 +12,7 @@ User authorized implementing the September 7 product audit, updating/running the
 ## Broken player workflows
 
 - [ ] Server-validated atomic stairs/falls, including player and alternate movement paths.
+  - Core single/group movement now resolves stairs and support on the server; player reload and fall browser journey passes. Flight, undo, and remaining automation entry-point coverage are still pending.
 - [x] Drawing creation/erase/clear/undo persist explicitly through V2, with author/floor scope and hidden-floor projection.
 - [x] Owned temporary template edit/remove permissions; persistent structures retain GM authority.
 - [ ] Exact rejection feedback and pending/accepted state.
@@ -85,3 +86,22 @@ template, and removed Cal's own template, with GM and Sharon observing accepted
 results. It asserted that exactly three template commands were submitted, all for
 Cal's shape. Run `node dnd/vtt/tools/test-template-browser.cjs` against the same
 synthetic drawing fixture. Template number-field labels now identify their inputs.
+
+## Floor movement foundation
+
+Single moves and placement batches resolve floor changes in the same transaction
+as position changes. Linked-player view changes share that event; players do not
+need permission to submit a separate floor patch. Stair entry progress survives
+reload and is invalidated when its stair geometry changes. Forced/teleport command
+intent skips stair traversal while still checking destination support. Hidden
+floors are disabled geometry. Cutout union coverage supports fractional positions,
+adjacent holes, and large tokens with partial support.
+
+The browser fixture (`create-drawing-fixture.py --floors`, localhost port 8129,
+then `test-floor-browser.cjs`) exercises three clients, a player stair crossing
+interrupted by reload, automatic view following, a hole fall, and refresh. It
+asserts three accepted token moves and no separate player view command. The full
+suite passed 677 tests; the subsequent movement-intent merge regression and the
+three existing runtime tests also passed. This is a foundation, not completion
+of the floor/elevation roadmap: flight, undo, feedback, and automation journeys
+remain unfinished.

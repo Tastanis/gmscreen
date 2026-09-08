@@ -6,6 +6,7 @@ import {
   setRulerSupplement,
   updateExternalMeasurement,
   clearRulerSupplement,
+  getCurrentMeasurementPoints,
 } from './drag-ruler.js';
 import { buildAutomationTargetPromptHtml } from './automation-target-prompt.js';
 import { getAutomationMoveRangePresentation } from './automation-move-display.js';
@@ -834,6 +835,8 @@ export function mountBoardInteractions(store, routes = {}) {
       if (!target) return;
       target.column = Number(placement.column);
       target.row = Number(placement.row);
+      target.levelId = placement.levelId || BASE_MAP_LEVEL_ID;
+      target._floorTraversal = placement._floorTraversal ?? null;
       target._syncV2EntityRevision = Number(placement._entityRevision) || 0;
     });
     patchTokenMovementNode(sceneId, placementId, placement);
@@ -1276,7 +1279,21 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function commitCanonicalTokenMoves({ sceneId, moves, source, originalPositions = null }) {
-    tokenMovementRuntime.submitMoves(sceneId, moves)
+    const ruler = source === 'drag' ? getCurrentMeasurementPoints() : [];
+    const canonical = tokenMovementRuntime.getConfirmedSnapshot()?.state?.placements?.[sceneId] ?? {};
+    const hasMatchingOrigin = Array.isArray(ruler) && ruler.length > 1 && moves.some((move) => {
+      const origin = canonical[move.placementId];
+      return origin && Math.abs(origin.column - ruler[0].column) < 0.01 && Math.abs(origin.row - ruler[0].row) < 0.01;
+    });
+    const intendedMoves = moves.map((move) => {
+      const origin = canonical[move.placementId];
+      const path = hasMatchingOrigin && origin ? ruler.map((point) => clampPlacementToBounds(
+        point.column + origin.column - ruler[0].column,
+        point.row + origin.row - ruler[0].row, origin.width || 1, origin.height || 1
+      )) : [];
+      return { ...move, movementKind: 'walk', path };
+    });
+    tokenMovementRuntime.submitMoves(sceneId, intendedMoves)
       .then(() => {
         clearSyncFailure();
         const movedIds = moves.map((move) => move.placementId);
@@ -7185,7 +7202,7 @@ export function mountBoardInteractions(store, routes = {}) {
     isGm: Boolean(userState.isGM),
     getViewerLevelId: (state, sceneId) => getViewerLevelIdForCurrentUser(state, sceneId),
   });
-  mountStairsTrigger({
+  if (!tokenMovementV2Enabled) mountStairsTrigger({
     boardApi,
     getCurrentUserId,
   });
@@ -21229,6 +21246,8 @@ export function mountBoardInteractions(store, routes = {}) {
   // list of placement ids that fell so callers can trigger the animation
   // after their re-render.
   function processPlacementFalls(sceneId, placementIds) {
+    // Canonical movement already resolves stairs/falls in the accepted command.
+    if (tokenMovementV2Enabled) return [];
     if (
       typeof sceneId !== 'string' || !sceneId
       || !Array.isArray(placementIds) || !placementIds.length

@@ -110,6 +110,9 @@ export function createTokenMovementRuntime({
           || changeSet?.placements?.removed?.length
         )
       ) {
+        for (const mutation of context.event.payload?.mutations ?? []) {
+          pendingPreview.delete(`${mutation.sceneId}:${mutation.placementId}`);
+        }
         applyConfirmedPlacementBatch(
           store.getConfirmedSnapshot(),
           context.event.payload?.mutations ?? [],
@@ -241,6 +244,8 @@ export function createTokenMovementRuntime({
           placementId,
           column: preview.column,
           row: preview.row,
+          movementKind: move.movementKind || 'walk',
+          path: move.path || [],
         },
         {
           sceneId,
@@ -282,6 +287,8 @@ export function createTokenMovementRuntime({
           placementId: String(move?.placementId ?? move?.id ?? '').trim(),
           column: Number(move?.column),
           row: Number(move?.row),
+          movementKind: move.movementKind || 'walk',
+          path: move.path || [],
         }))
       );
       return [result];
@@ -323,6 +330,10 @@ export function createTokenMovementRuntime({
         const existingIndex = patchIndex.get(key);
         if (Number.isInteger(existingIndex) && actions[existingIndex]?.kind === 'patch') {
           actions[existingIndex].patch = { ...actions[existingIndex].patch, ...patch };
+          if (Object.hasOwn(patch, 'column') || Object.hasOwn(patch, 'row')) {
+            actions[existingIndex].movementKind = op.movementKind || (op.type === 'placement.move' ? 'walk' : 'forced');
+            actions[existingIndex].path = op.path || [];
+          }
         } else {
           patchIndex.set(key, actions.length);
           actions.push({
@@ -330,6 +341,8 @@ export function createTokenMovementRuntime({
             sceneId,
             placementId,
             patch,
+            movementKind: op.movementKind || (op.type === 'placement.move' ? 'walk' : 'forced'),
+            path: op.path || [],
             entityRevision: Number(current?._entityRevision) || 0,
           });
         }

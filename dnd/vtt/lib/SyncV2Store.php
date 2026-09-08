@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/FloorGeometry.php';
 
 /**
  * SQLite authority for Sync V2.
@@ -1192,6 +1193,15 @@ final class SyncV2Store
                 }
                 unset($patch['id'], $patch['_entityRevision']);
                 $next = [...$current, ...$patch];
+                if (!array_key_exists('levelId', $patch)
+                    && (array_key_exists('column', $patch) || array_key_exists('row', $patch))) {
+                    $floor = FloorGeometry::move($current, $next, $state['sceneConfig'][$sceneId]['mapLevels'] ?? [], $action['movementKind'], $action['path']);
+                    $patch['levelId'] = $floor['levelId'];
+                    $patch['_floorTraversal'] = $floor['traversal'];
+                    $next = [...$next, ...$patch];
+                } elseif (array_key_exists('levelId', $patch)) {
+                    $next['_floorTraversal'] = null;
+                }
                 $next['id'] = $placementId;
                 $next['_entityRevision'] = $nextRevision;
                 $state['placements'][$sceneId][$placementId] = $next;
@@ -1470,6 +1480,38 @@ final class SyncV2Store
                 'row' => $normalized['row'],
                 '_entityRevision' => $entityRevision,
             ];
+            $sceneId = $normalized['sceneId'];
+            $placementId = $normalized['entityId'];
+            $next = $state['placements'][$sceneId][$placementId];
+            $floor = FloorGeometry::move($current, $next, $state['sceneConfig'][$sceneId]['mapLevels'] ?? [], $normalized['movementKind'], $normalized['path']);
+            $next['levelId'] = $floor['levelId'];
+            $next['_floorTraversal'] = $floor['traversal'];
+            $state['placements'][$sceneId][$placementId] = $next;
+            $event['payload']['_floorTraversal'] = $floor['traversal'];
+            $event['payload']['levelId'] = $floor['levelId'];
+            if ($this->placementLevelId($current) !== $floor['levelId']) {
+                $userLevelMutations = [];
+                $userId = $this->uniqueLinkedPlayerForPlacement($state['placements'][$sceneId], $placementId);
+                if ($userId !== null) {
+                    $config = $state['sceneConfig'][$sceneId] ?? [];
+                    $config['_revision'] = max(0, (int) ($config['_revision'] ?? 0)) + 1;
+                    $entry = ['levelId'=>$floor['levelId'], 'source'=>'token', 'tokenId'=>$placementId, 'updatedAt'=>$serverTime];
+                    $config['userLevelState'][$userId] = $entry;
+                    $state['sceneConfig'][$sceneId] = $config;
+                    $userLevelMutations[] = ['sceneId'=>$sceneId, 'userId'=>$userId, 'entry'=>$entry, 'sceneConfigRevision'=>$config['_revision']];
+                }
+                // Reuse the existing atomic placement + linked-view reducer and
+                // player projection for structural floor transitions.
+                $event['type'] = 'placement.batchApplied';
+                $event['payload'] = [
+                    'mutations'=>[['kind'=>'upsert','sceneId'=>$sceneId,'placementId'=>$placementId,
+                        'placement'=>$next,'entityRevision'=>$entityRevision,
+                        'changedFields'=>['column','row','levelId','_floorTraversal'],
+                        'wasPlayerVisible'=>!$this->placementIsHidden($current)]],
+                    'userLevelMutations'=>$userLevelMutations,
+                    'movementTransition'=>['kind'=>$floor['cause'],'fromLevelId'=>$this->placementLevelId($current),'toLevelId'=>$floor['levelId']],
+                ];
+            }
 
             $this->insertEvent($event);
             $this->updateWorldState($revision, $state, $serverTime);
@@ -1776,7 +1818,22 @@ final class SyncV2Store
             'entityId' => $entityId,
             'column' => $column,
             'row' => $row,
+            'movementKind' => $this->normalizeMovementKind($command['payload']['movementKind'] ?? 'walk'),
+            'path' => $this->normalizeMovementPath($command['payload']['path'] ?? []),
         ];
+    }
+
+    private function normalizeMovementKind($kind): string
+    {
+        if (!in_array($kind, ['walk','forced','teleport'], true)) throw new InvalidArgumentException('Unknown movement kind.');
+        return $kind;
+    }
+
+    private function normalizeMovementPath($path): array
+    {
+        if (!is_array($path) || count($path) > 256) throw new InvalidArgumentException('Movement path requires at most 256 waypoints.');
+        foreach ($path as $point) if (!is_array($point)) throw new InvalidArgumentException('Movement waypoints must be objects.');
+        return array_values($path);
     }
 
     private function normalizeBoardDomainCommand(array $command): array
@@ -1993,6 +2050,8 @@ final class SyncV2Store
                     throw new InvalidArgumentException('patch requires a patch object.');
                 }
                 $entry['patch'] = $action['patch'];
+                $entry['movementKind'] = $this->normalizeMovementKind($action['movementKind'] ?? 'forced');
+                $entry['path'] = $this->normalizeMovementPath($action['path'] ?? []);
                 $entry['entityRevision'] = $this->normalizeEntityRevision($action);
             } elseif ($kind === 'remove') {
                 $entry['entityRevision'] = $this->normalizeEntityRevision($action);
@@ -2480,7 +2539,7 @@ final class SyncV2Store
     private function assertPlayerPatchAllowed(array $patch): void
     {
         $gmOnly = [
-            'id', 'hidden', 'isHidden', 'flags', 'levelId', 'width', 'height',
+            'id', 'hidden', 'isHidden', 'flags', 'levelId', '_floorTraversal', 'width', 'height',
             'size', 'stackOrder', 'monster', 'monsterId', 'monsterRef',
             'team', 'name', 'label', 'image', 'imageUrl', 'tokenId',
             'metadata', 'authorId', 'authorRole', 'authorIsGm',

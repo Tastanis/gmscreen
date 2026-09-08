@@ -123,6 +123,8 @@ function reduceTokenMoved(state, event, changes) {
     ...current,
     column,
     row,
+    ...(Object.hasOwn(event.payload || {}, 'levelId') ? { levelId: event.payload.levelId } : {}),
+    ...(Object.hasOwn(event.payload || {}, '_floorTraversal') ? { _floorTraversal: event.payload._floorTraversal } : {}),
     _entityRevision: nextEntityRevision,
   };
   changes.placements.updated.push(entityId);

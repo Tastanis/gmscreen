@@ -56,3 +56,11 @@ test('PHP template authority allows own temporary removal and protects other aut
   const result = spawnSync('php', [...phpArgsForSqlite(), script], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
+
+for (const file of ['floor-geometry.test.php', 'floor-movement.test.php']) {
+  test(`PHP ${file} validates stairs, support and atomic movement`, () => {
+    const script = fileURLToPath(new URL(`../../../../api/v2/tests/${file}`, import.meta.url));
+    const result = spawnSync('php', [...phpArgsForSqlite(), script], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  });
+}

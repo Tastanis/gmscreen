@@ -775,6 +775,19 @@ Stop and investigate instead of layering on another guard when:
 
 ## Current-code orientation
 
+### Authoritative floor movement (September 7 follow-up)
+
+`FloorGeometry.php` resolves stair traversal and destination support within the
+token-move or placement-batch transaction. A floor-changing token move emits a
+`placement.batchApplied` event with its complete placement and linked-user level
+mutations. Ordinary moves retain `token.moved`, including canonical floor and
+resumable `_floorTraversal` metadata. Players cannot patch that metadata or choose
+an arbitrary floor. Client stair/fall listeners do not submit additional V2 writes.
+Movement commands accept bounded waypoint paths and `walk`, `forced`, or `teleport`
+intent; generic position patches default to forced movement. Both forced and
+teleport movement bypass stairs but check destination support. Flight and undo
+are still separate pending work, documented in `../vtt-improvement-plan.md`.
+
 The legacy paths being replaced are primarily:
 
 - `dnd/vtt/assets/js/ui/board-interactions.js`

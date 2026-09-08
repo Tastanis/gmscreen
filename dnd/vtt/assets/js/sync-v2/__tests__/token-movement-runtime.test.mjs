@@ -7,6 +7,32 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+test('merged placement edits preserve the latest movement intent through non-movement patches', async () => {
+  const commands = [];
+  const runtime = createTokenMovementRuntime({
+    enabled: true, placementsEnabled: true, commandsEndpoint: '/commands', snapshotEndpoint: '/snapshot',
+    eventsEndpoint: '/sync', windowRef: {},
+    fetchImpl: async (url, options) => {
+      if (String(url).includes('snapshot')) return response(200, { success: true, snapshot: {
+        revision: 0, state: { placements: { scene: { token: { id: 'token', column: 0, row: 0, _entityRevision: 0 } } } },
+      } });
+      commands.push(JSON.parse(options.body));
+      return response(200, { success: true, event: {
+        revision: 1, operationId: commands[0].operationId, type: 'placement.batchApplied',
+        payload: { mutations: [] }, serverTime: 1,
+      } });
+    },
+  });
+  await runtime.submitPlacementOps([
+    { type: 'placement.update', sceneId: 'scene', placementId: 'token', patch: { name: 'Hero' } },
+    { type: 'placement.move', sceneId: 'scene', placementId: 'token', column: 3, row: 4, movementKind: 'teleport', path: [] },
+    { type: 'placement.update', sceneId: 'scene', placementId: 'token', patch: { stamina: 10 } },
+  ]);
+  assert.equal(commands[0].payload.actions.length, 1);
+  assert.equal(commands[0].payload.actions[0].movementKind, 'teleport');
+  assert.equal(commands[0].payload.actions[0].patch.column, 3);
+});
+
 function response(status, body) {
   return {
     ok: status >= 200 && status < 300,
