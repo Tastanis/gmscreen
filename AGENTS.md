@@ -4,6 +4,10 @@ Scene package copying uses `ScenePackage::prepareForNewScene` for explicit board
 ID remapping. Never recursively rewrite all IDs: token-library, sheet and embedded
 ability identities must be preserved. Preparation is pure and does not authorize
 installing unvalidated package fields or bypassing Sync V2 command authority.
+Mirrored stairs share one ID across their two linked floors. Copy preparation must
+preserve that relationship: stair editor corner/color updates and deletion find
+the mirror by ID. Verify prepared packages through `stairs-mutations.js`, not just
+by checking that every generated ID is different.
 
 ## Version System
 

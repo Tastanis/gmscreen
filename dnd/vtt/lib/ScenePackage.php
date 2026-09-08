@@ -48,9 +48,19 @@ final class ScenePackage
             }
             $copy['domains'][$domain] = $entries;
         }
-        $geometry = static function (array $items, string $scope, bool $stairs) use ($fresh, $maps): array {
+        $geometry = static function (array $items, string $scope, bool $stairs, string $levelId) use ($fresh, $maps): array {
+            $seen = [];
             foreach ($items as $index=>&$item) {
-                $item['id'] = $fresh($scope, (string) $index);
+                if ($stairs) {
+                    $oldId = $item['id'] ?? null;
+                    if (!is_string($oldId) || trim($oldId) === '' || isset($seen[$oldId])) throw new InvalidArgumentException('Stairs need unique IDs within each floor.');
+                    $seen[$oldId] = true;
+                    // The editor finds the mirror by ID on the linked floor. Preserve
+                    // that shared identity while separating unrelated floor pairs.
+                    $pair = [$levelId, $item['linkedLevelId'] ?? $levelId];
+                    sort($pair, SORT_STRING);
+                    $item['id'] = $fresh('stairs', json_encode([$pair, $oldId], JSON_THROW_ON_ERROR));
+                } else $item['id'] = $fresh($scope, (string) $index);
                 if ($stairs && isset($item['linkedLevelId'])) $item['linkedLevelId'] = $maps['levels'][$item['linkedLevelId']];
             }
             return $items;
@@ -61,10 +71,10 @@ final class ScenePackage
             if (!is_string($id) || !isset($maps['levels'][$id])) throw new InvalidArgumentException('The selected floor is missing.');
             $config['mapLevels'][$field] = $maps['levels'][$id];
         }
-        if (isset($config['mapLevels']['baseStairs'])) $config['mapLevels']['baseStairs'] = $geometry($config['mapLevels']['baseStairs'], 'base-stairs', true);
+        if (isset($config['mapLevels']['baseStairs'])) $config['mapLevels']['baseStairs'] = $geometry($config['mapLevels']['baseStairs'], 'base-stairs', true, 'level-0');
         foreach ($config['mapLevels']['levels'] ?? [] as $index=>$floor) {
             $oldId = $floor['id']; $floor['id'] = $maps['levels'][$oldId];
-            foreach (['stairs','cutouts'] as $field) if (isset($floor[$field])) $floor[$field] = $geometry($floor[$field], $oldId . '-' . $field, $field === 'stairs');
+            foreach (['stairs','cutouts'] as $field) if (isset($floor[$field])) $floor[$field] = $geometry($floor[$field], $oldId . '-' . $field, $field === 'stairs', $oldId);
             $config['mapLevels']['levels'][$index] = $floor;
         }
         if (isset($config['fogOfWar']['byLevel'])) {

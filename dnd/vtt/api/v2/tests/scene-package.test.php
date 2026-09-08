@@ -59,7 +59,7 @@ verifyPackage($hero['conditions'][0]['sourceId']===$hero['id'] && $hero['conditi
 verifyPackage($hero['marks']['test']['targetId']===$hero['id'] && $hero['marks']['test']['abilityId']==='hero', 'Marks remap placement links, preserving ability IDs.');
 $floors = $copy['domains']['sceneConfig']['mapLevels'];
 verifyPackage($floors['baseStairs'][0]['linkedLevelId']===$ids['levels']['upper'] && $floors['levels'][0]['stairs'][0]['linkedLevelId']==='level-0', 'Stairs connect copied floors in both directions.');
-verifyPackage($floors['baseStairs'][0]['id']!==$floors['levels'][0]['stairs'][0]['id'], 'Identically named stairs on different floors remain distinct.');
+verifyPackage($floors['baseStairs'][0]['id']===$floors['levels'][0]['stairs'][0]['id'] && $floors['baseStairs'][0]['id']!=='stairs', 'A copied stair and its mirror retain a shared fresh ID.');
 verifyPackage(isset($copy['domains']['sceneConfig']['fogOfWar']['byLevel'][$ids['levels']['upper']]) && $hero['levelId']===$ids['levels']['upper'], 'Fog and occupants remain on the copied floor.');
 verifyPackage($reusable===$source && $copy['scene']['folderId']===null, 'Preparation is immutable and does not inherit an external folder ID.');
 verifyPackage(ScenePackage::prepareForNewScene($source,'scn-new-scene-123')['idMap']===$ids, 'Retry preparation has stable IDs.');

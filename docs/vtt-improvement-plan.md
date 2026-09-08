@@ -708,3 +708,11 @@ and viewer preferences are omitted. Tests cover linked geometry, duplicate stair
 names on different floors, stable retries, separate copies and source immutability.
 This is not an installer or complete write validator: canonical field validation,
 catalog/world recovery and player visibility still gate the import action.
+
+The initial copy preparation incorrectly separated mirrored stair IDs. It now
+derives one new ID from the original ID and the unordered linked floor pair.
+That preserves mirror editing while separating unrelated pairs that reuse an ID.
+Duplicate IDs within a floor reject preparation. A PHP-to-JavaScript regression
+prepares a package and exercises the actual stair editor's corner, edge-color and
+mirror deletion functions, checking unrelated stairs and source data remain intact.
+All 701 tests across 83 files pass after the correction.
