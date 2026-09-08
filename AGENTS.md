@@ -8,6 +8,12 @@ Mirrored stairs share one ID across their two linked floors. Copy preparation mu
 preserve that relationship: stair editor corner/color updates and deletion find
 the mirror by ID. Verify prepared packages through `stairs-mutations.js`, not just
 by checking that every generated ID is different.
+Scene imports use a Sync V2 transaction plus `vtt_scene_imports` catalog outbox.
+Hold the shared catalog lock before installation/recovery; acknowledge only after
+the catalog save. Never replay the source package to recover catalog metadata.
+Deletion cancels pending catalog recovery. The internal installer currently creates
+browsable scenes without activating them; no file-install HTTP/UI action is exposed
+until complete input validation and explicit visibility wording are implemented.
 
 ## Version System
 

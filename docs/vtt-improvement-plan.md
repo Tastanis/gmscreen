@@ -716,3 +716,22 @@ Duplicate IDs within a floor reject preparation. A PHP-to-JavaScript regression
 prepares a package and exercises the actual stair editor's corner, edge-color and
 mirror deletion functions, checking unrelated stairs and source data remain intact.
 All 701 tests across 83 files pass after the correction.
+
+### Atomic scene installation and catalog recovery
+
+The internal GM installer saves placements, floors/fog, drawings and templates in
+one Sync V2 revision with a durable catalog outbox receipt. Source scene, other
+scenes and routing remain unchanged. Accepted retries return the original event;
+changed requests cannot reuse the operation ID. Scene deletion cancels pending
+catalog recovery and an old retry cannot resurrect it.
+
+Opening the GM scene list now recovers pending catalog entries under the existing
+shared lock. It acknowledges only after saving and preserves a saved import's later
+metadata edits. Fault-injection tests cover SQLite event failure, process reopening,
+catalog save failure and interruption after saving but before acknowledgment.
+The server event is replayed through the actual browser reducer and checked against
+the canonical snapshot; player delivery omits hidden tokens, floors and content.
+File-install HTTP/UI controls remain pending, along with complete write validation
+and explicit visibility wording. This internal operation creates a browsable scene
+and never activates it; it must not be presented as a private encounter draft.
+All 702 tests across 83 files pass after this change.

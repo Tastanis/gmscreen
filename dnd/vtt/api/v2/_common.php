@@ -412,6 +412,16 @@ function vttSyncV2ProjectEventForUser(array $event, array $auth): array
         return $event;
     }
     $type = (string) ($event['type'] ?? '');
+    if ($type === 'scene.installed') {
+        $sceneId = $event['sceneId'];
+        $state = [];
+        foreach ($event['payload']['domains'] ?? [] as $domain=>$entries) $state[$domain][$sceneId] = $entries;
+        $projected = vttSyncV2ProjectSnapshotForUser(['revision'=>$event['revision'],'state'=>$state], $auth);
+        $domains = [];
+        foreach (['placements','sceneConfig','drawings','templates'] as $domain) $domains[$domain] = $projected['state'][$domain][$sceneId] ?? [];
+        $event['payload'] = ['domains'=>$domains];
+        return $event;
+    }
     if (in_array($type, ['placement.batchApplied', 'levels.replaced'], true)) {
         $sceneIds = array_values(array_unique(array_filter([
             $event['sceneId'] ?? null, ...array_column($event['payload']['mutations'] ?? [], 'sceneId'),

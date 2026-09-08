@@ -235,6 +235,19 @@ function reducePlacementBatch(state, event, changes) {
   }
 }
 
+function reduceSceneInstalled(state, event, changes) {
+  const sceneId = event.sceneId;
+  if (typeof sceneId !== 'string' || !sceneId) throw new Error('scene.installed requires sceneId');
+  for (const domain of ['placements', 'sceneConfig', 'drawings', 'templates']) {
+    const entries = event.payload?.domains?.[domain];
+    if (!entries || typeof entries !== 'object') throw new Error(`scene.installed requires ${domain}`);
+    if (Object.hasOwn(state[domain] ?? {}, sceneId)) throw new Error('scene.installed cannot replace an existing scene');
+    state[domain] = { ...(state[domain] ?? {}), [sceneId]: clone(entries) };
+  }
+  changes.placements.added.push(...Object.keys(state.placements[sceneId]));
+  changes.levels = changes.grid = changes.fog = changes.drawings = changes.templates = true;
+}
+
 function reduceTokenAdded(state, event, changes) {
   const { sceneId, entityId } = requireSceneAndEntity(event);
   const placements = getSceneCollection(state, 'placements', sceneId);
@@ -586,6 +599,7 @@ const reducers = Object.freeze({
   'ping.added': reducePingAdded,
   'scene.activated': reduceSceneActivated,
   'scene.deleted': reduceSceneDeleted,
+  'scene.installed': reduceSceneInstalled,
   'routing.changed': reduceRoutingChanged,
 });
 

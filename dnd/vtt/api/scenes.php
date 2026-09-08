@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/v2/_common.php';
 require_once __DIR__ . '/../lib/SyncV2PusherTransport.php';
+require_once __DIR__ . '/../lib/SceneImportCatalog.php';
 
 // This helper must be declared before the request router. Because the
 // declaration is guarded for include-based tests, PHP does not register it
@@ -39,9 +40,10 @@ try {
     $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
     if ($method === 'GET') {
+        $catalog = withVttBoardStateLock(static fn(): array => SceneImportCatalog::recover(vttSyncV2Store(), loadScenesPayload(), 'persistScenes'));
         respondSceneJson(200, [
             'success' => true,
-            'data' => loadScenesPayload(),
+            'data' => $catalog,
         ]);
     }
 

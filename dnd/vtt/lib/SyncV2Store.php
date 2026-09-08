@@ -5,6 +5,7 @@ require_once __DIR__ . '/MovementUndo.php';
 require_once __DIR__ . '/PlayerRoster.php';
 require_once __DIR__ . '/SceneCheckpointArchive.php';
 require_once __DIR__ . '/SceneCheckpointRestore.php';
+require_once __DIR__ . '/ScenePackage.php';
 
 /**
  * SQLite authority for Sync V2.
@@ -293,6 +294,75 @@ final class SyncV2Store
      *
      * @return array{status:string,event:array}
      */
+    /** Internal import authority. The HTTP installer must hold the catalog lock and
+     * validate file fields before calling; no catalog or asset files are written here. */
+    public function installScenePackage(array $package, string $operationId, string $actorId, bool $isGm): array
+    {
+        if (!$isGm || trim($actorId) === '') throw new InvalidArgumentException('Scene import is GM-only.');
+        if (!preg_match('/^[A-Za-z0-9._:-]{8,128}$/', $operationId)) throw new InvalidArgumentException('Invalid import operation ID.');
+        $requestHash = hash('sha256', $this->encodeJson($package));
+        $this->pdo->exec('BEGIN IMMEDIATE');
+        try {
+            $query = $this->pdo->prepare('SELECT * FROM vtt_scene_imports WHERE world_id = ? AND operation_id = ?');
+            $query->execute([$this->worldId, $operationId]);
+            $receipt = $query->fetch();
+            if ($receipt) {
+                if ($receipt['actor_id'] !== $actorId || !hash_equals($receipt['request_hash'], $requestHash)) throw new InvalidArgumentException('Import operation ID already belongs to a different request.');
+                $event = $this->findEventByOperationId($operationId);
+                if ($event === null) throw new RuntimeException('Import receipt is missing its accepted event.');
+                $this->pdo->exec('COMMIT');
+                return ['status'=>'accepted','event'=>$event,'scene'=>json_decode($receipt['catalog_json'],true,128,JSON_THROW_ON_ERROR),'idempotent'=>true];
+            }
+            if ($this->findEventByOperationId($operationId) !== null) throw new InvalidArgumentException('Operation ID is already in use.');
+            $sceneId = 'scn-' . substr(hash('sha256', $this->worldId . "\0" . $actorId . "\0" . $operationId), 0, 40);
+            $prepared = ScenePackage::prepareForNewScene($package, $sceneId)['package'];
+            $snapshot = $this->getSnapshot(); $state = $snapshot['state'];
+            foreach (['placements','sceneConfig','drawings','templates','combat'] as $domain) {
+                if (array_key_exists($sceneId, $state[$domain] ?? [])) throw new InvalidArgumentException('The reserved scene already exists.');
+            }
+            $domains = $prepared['domains'];
+            $domains['sceneConfig']['_revision'] = 1;
+            foreach (['placements','drawings','templates'] as $domain) foreach ($domains[$domain] as &$entry) $entry['_entityRevision'] = 1;
+            unset($entry);
+            foreach ($domains as $domain=>$entries) $state[$domain][$sceneId] = $entries;
+            $scene = array_intersect_key($prepared['scene'], array_flip(['id','name','mapUrl','thumbnailUrl','grid']));
+            $scene['folderId'] = null;
+            $scene['_importOperationId'] = $operationId;
+            // Import visibility must be explicit in the eventual UI. This operation
+            // creates a browsable scene; it never activates it for anyone.
+            $scene['playerVisible'] = true;
+            $scene['createdAt'] = gmdate('c');
+            $revision = $snapshot['revision'] + 1; $serverTime = $this->nowMilliseconds();
+            $event = ['revision'=>$revision,'operationId'=>$operationId,'type'=>'scene.installed','actorId'=>$actorId,
+                'sceneId'=>$sceneId,'entityId'=>null,'entityRevision'=>1,'payload'=>['domains'=>$domains],'serverTime'=>$serverTime];
+            $insert = $this->pdo->prepare('INSERT INTO vtt_scene_imports (world_id,operation_id,actor_id,scene_id,request_hash,catalog_json,pending_catalog) VALUES (?,?,?,?,?,?,1)');
+            $insert->execute([$this->worldId,$operationId,$actorId,$sceneId,$requestHash,$this->encodeJson($scene)]);
+            $this->insertEvent($event);
+            $this->updateWorldState($revision,$state,$serverTime);
+            if ($revision % $this->snapshotInterval === 0) $this->insertSnapshot($revision,$state,$serverTime);
+            $this->pruneEvents($revision);
+            $this->pdo->exec('COMMIT');
+            return ['status'=>'accepted','event'=>$event,'scene'=>$scene,'idempotent'=>false];
+        } catch (Throwable $error) {
+            $this->rollbackTransactionSilently();
+            throw $error;
+        }
+    }
+
+    /** Durable catalog outbox. Only acknowledge after the locked atomic catalog save. */
+    public function pendingSceneImports(): array
+    {
+        $query = $this->pdo->prepare('SELECT operation_id,catalog_json FROM vtt_scene_imports WHERE world_id = ? AND pending_catalog = 1 ORDER BY operation_id');
+        $query->execute([$this->worldId]);
+        return array_map(static fn($row)=>['operationId'=>$row['operation_id'],'scene'=>json_decode($row['catalog_json'],true,128,JSON_THROW_ON_ERROR)],$query->fetchAll());
+    }
+
+    public function acknowledgeSceneImportCatalog(string $operationId): void
+    {
+        $query = $this->pdo->prepare('UPDATE vtt_scene_imports SET pending_catalog = 0 WHERE world_id = ? AND operation_id = ?');
+        $query->execute([$this->worldId,$operationId]);
+    }
+
     public function deleteScene(string $sceneId, string $actorId): array
     {
         $sceneId = trim($sceneId);
@@ -305,6 +375,8 @@ final class SyncV2Store
         try {
             $snapshot = $this->getSnapshot();
             $state = $snapshot['state'];
+            $cancelImport = $this->pdo->prepare('UPDATE vtt_scene_imports SET pending_catalog = 0 WHERE world_id = ? AND scene_id = ?');
+            $cancelImport->execute([$this->worldId, $sceneId]);
             foreach (['placements', 'combat', 'templates', 'drawings', 'sceneConfig'] as $domain) {
                 if (is_array($state[$domain] ?? null)) {
                     unset($state[$domain][$sceneId]);
@@ -1732,6 +1804,11 @@ final class SyncV2Store
 
     private function initializeSchema(): void
     {
+        $this->pdo->exec('CREATE TABLE IF NOT EXISTS vtt_scene_imports (
+            world_id TEXT NOT NULL, operation_id TEXT NOT NULL, actor_id TEXT NOT NULL,
+            scene_id TEXT NOT NULL, request_hash TEXT NOT NULL, catalog_json TEXT NOT NULL,
+            pending_catalog INTEGER NOT NULL DEFAULT 1,
+            PRIMARY KEY (world_id, operation_id), UNIQUE (world_id, scene_id))');
         $this->pdo->exec(
             'CREATE TABLE IF NOT EXISTS vtt_world_state (
                 world_id TEXT PRIMARY KEY,

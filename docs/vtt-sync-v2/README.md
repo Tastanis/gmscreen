@@ -7,6 +7,17 @@ state, combat turns, or rendering subscriptions.
 
 ## Decision
 
+Scene import authority now has an internal `installScenePackage` transaction:
+one `scene.installed` event adds the four new scene domains without touching routing
+or existing scenes. The same transaction writes a world-scoped `vtt_scene_imports`
+catalog receipt. Retries are bound to actor and request hash, including after restart
+and scene deletion. GM scene-list GET recovers pending catalog entries under the
+shared catalog lock, preserving already-saved entries with the receipt marker.
+Player event delivery applies the same hidden-token/floor projection as snapshots.
+The reducer installs only a new scene and emits focused domain change flags.
+This remains an internal authority API: file-install validation, visibility wording,
+HTTP/UI wiring and browser installation QA remain pending.
+
 Keep the VTT's game features, assets, token library, automation, character
 sheets, and visual design. Replace the multiplayer synchronization spine in
 bounded vertical slices.

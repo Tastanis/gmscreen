@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { existsSync, unlinkSync } from 'node:fs';
+import { reduceCanonicalEvent } from '../event-reducer.js';
 
 const phpTestPath = fileURLToPath(
   new URL('../../../../api/v2/tests/sync-v2-store.test.php', import.meta.url)
@@ -30,6 +31,24 @@ function phpArgsForSqlite() {
     process.platform === 'win32' ? 'extension=php_pdo_sqlite.dll' : 'extension=pdo_sqlite',
   ];
 }
+
+test('scene import commits once, survives catalog interruption, and replays in the browser reducer', () => {
+  const script = fileURLToPath(new URL('../../../../api/v2/tests/scene-install.test.php', import.meta.url));
+  const result = spawnSync('php', [...phpArgsForSqlite(), script], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const { before, after, event, playerEvent } = JSON.parse(result.stdout);
+  const reduced = reduceCanonicalEvent(before, event);
+  assert.equal(reduced.status, 'applied');
+  assert.deepEqual(reduced.snapshot.state, after.state);
+  assert.equal(reduced.snapshot.revision, after.revision);
+  assert.equal(reduced.changeSet.sceneRouting, false);
+  assert.equal(reduced.changeSet.placements.added.length, 2);
+  assert.equal(reduceCanonicalEvent(reduced.snapshot, event).status, 'duplicate');
+  const player = reduceCanonicalEvent(before, playerEvent);
+  assert.equal(player.status, 'applied');
+  assert.equal(Object.keys(player.snapshot.state.placements[event.sceneId]).length, 1);
+  assert.equal(JSON.stringify(player.snapshot).includes('/secret-token.png'), false);
+});
 
 test('PHP Sync V2 store enforces atomic revisions, idempotency, replay, and snapshot recovery', () => {
   const result = spawnSync('php', [...phpArgsForSqlite(), phpTestPath], {
