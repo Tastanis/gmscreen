@@ -424,11 +424,14 @@ the original operation ID; no walking automation fires for restoration.
 Validation: 687 tests passed. SQLite coverage includes a 101-token atomic restore,
 current resource preservation, GM authority, stale preview rejection, idempotency
 after checkpoint deletion, and database reopening. The disposable browser journey
-uses GM plus Cal and Sharon, actual stair drags with a player reload midway, stale
+uses GM plus Cal and Sharon, consecutive actual stair drags without a midway reload, stale
 preview rejection, confirmed restore, rendered position convergence, player floor
 return, and zero walking hooks. Capture/download/reload/delete still pass.
 
-Follow-up: a rapid second stair drag without the midway reload stalled in this
-new browser journey; the same move works after reload. Investigate the selected
-token/gesture state separately rather than treating that journey as covered. Full
-scene geometry restoration and duplication/export remain pending.
+The apparent second-drag failure was a browser harness timing issue: after
+switching tabs, it measured an animating token and subsequently sent pointerdown
+to the map backdrop. A locator hover now waits for a stable token before the raw
+mouse drag. The previously failing GM/player tab-switching journey passed three
+consecutive runs without a midway reload; a separate single-player consecutive
+drag trace also passed. No gesture-state workaround was added to the application.
+Full scene geometry restoration and duplication/export remain pending.

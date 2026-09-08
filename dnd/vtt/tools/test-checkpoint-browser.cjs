@@ -48,6 +48,9 @@ const origin = 'http://127.0.0.1:8129';
     assert.ok(checkpoint.data.domains.placements['floor-cal']);
     const snapshot = async () => (await (await page.request.get(origin + '/dnd/vtt/api/v2/snapshot.php')).json()).snapshot;
     async function movePlayer(dy) {
+      // Background tabs can still be interpolating the preceding token move.
+      // Locator hover waits for a stable hit target before measuring a raw drag.
+      await players[0].locator(selector).hover();
       const box = await players[0].locator(selector).boundingBox(); assert.ok(box);
       const response = players[0].waitForResponse(r => r.url().endsWith('/commands.php'));
       await players[0].mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -63,8 +66,6 @@ const origin = 'http://127.0.0.1:8129';
     await movePlayer(3);
     await row.getByRole('button', { name: 'Preview positions', exact: true }).click();
     await row.getByRole('button', { name: 'Restore these positions', exact: true }).waitFor();
-    await players[0].reload();
-    await players[0].waitForFunction(() => document.querySelector('#vtt-map-image')?.naturalWidth > 0);
     await movePlayer(2);
     assert.equal((await snapshot()).state.placements[manifest.test_scene_id]['floor-cal'].levelId, 'test-upper');
     await restore();
