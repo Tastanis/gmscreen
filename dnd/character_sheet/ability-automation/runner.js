@@ -545,6 +545,7 @@
       id,
       kind,
       label,
+      reason: typeof input.reason === 'string' ? input.reason : '',
       active: input.active !== false,
       count: Math.max(1, Math.min(2, asInt(input.count, 1))),
       conditionRef: input.conditionRef && typeof input.conditionRef === "object"
@@ -980,6 +981,7 @@
           data-power-roll-suggestion-toggle="${escapeHtml(suggestion.id)}"
           data-suggestion-kind="${escapeHtml(suggestion.kind)}"
           aria-pressed="${pressed}"
+          title="${escapeHtml(suggestion.reason || suggestion.label)}"
         >${escapeHtml(icon)} ${escapeHtml(suggestion.label)}</button>
       `;
     }).join("");

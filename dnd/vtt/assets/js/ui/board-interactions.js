@@ -77,6 +77,7 @@ import {
 import { createTokenInteractions } from './token-interactions.js';
 import { createTokenMovementRuntime } from '../sync-v2/token-movement-runtime.js';
 import { mountMapNavigation } from './map-navigation.js';
+import { floorRelation } from './floor-geometry.js';
 import { createRequestedTestCoordinator } from './requested-test-coordinator.js';
 import {
   applyCanonicalPrimaryTokenSelection,
@@ -2518,6 +2519,10 @@ export function mountBoardInteractions(store, routes = {}) {
 
     for (const watcher of scenePlacements) {
       if (!watcher || !watcher.id || watcher.id === movingId) continue;
+      if (floorRelation(watcher, movingPlacement, getActiveSceneTokenLevelState(state)) !== 'same') {
+        perWatcherMoveStates.set(watcher.id, { leaves: false, enters: false });
+        continue;
+      }
       const leaves = movePathLeavesAdjacency(from, to, watcher);
       const fromGap = footprintGap(watcher, { column: from.column, row: from.row, width: from.width, height: from.height });
       const toGap = footprintGap(watcher, { column: to.column, row: to.row, width: to.width, height: to.height });
@@ -3819,6 +3824,8 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function isPlacementInsideAutomationAura(owner, aura, placement, ownerOverride = null) {
     if (!owner?.id || !aura || !placement?.id) return false;
+    if (floorRelation(ownerOverride ? { ...owner, ...ownerOverride } : owner, placement,
+      getActiveSceneTokenLevelState()) !== 'same') return false;
     const automation = aura.automation && typeof aura.automation === 'object' ? aura.automation : {};
     if (!doesAutomationTargetFilterMatch(placement, automation.affects || 'creature', owner)) return false;
     return doesAutomationAreaAffectPlacement(getAuraAreaForPlacement(owner, aura.radius, ownerOverride), placement);
@@ -18123,7 +18130,8 @@ export function mountBoardInteractions(store, routes = {}) {
     const monster = options.monster || placement.monster || null;
     return helper.resolveStandFirmState({
       placement,
-      placements: getPlacementsForActiveScene(),
+      placements: getPlacementsForActiveScene().filter(candidate =>
+        floorRelation(placement, candidate, getActiveSceneTokenLevelState()) === 'same'),
       sheet,
       monster,
       getTeam: (item) => getCombatantTeam(item?.id) || normalizeCombatTeam(item?.team),

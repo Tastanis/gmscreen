@@ -20,6 +20,7 @@ User authorized implementing the September 7 product audit, updating/running the
 ## Coherent geometry and player association
 
 - [ ] Shared floor/elevation/adjacency model used by suggestions, range, auras, and movement.
+  - Shared floor participation now guards flanking, aura membership, Stand Firm, and opportunity-attack adjacency. High Ground requires confirmation. Physical elevation, openings, and range integration remain pending.
 - [ ] Hidden/deleted floors, partial support, flight, forced movement, stairs interrupted by reload, and undo tests.
 - [ ] Explicit view-versus-token controls and follow/browse/center policy.
 - [ ] Configurable roster and primary token association, preserving shared allied control.
@@ -148,6 +149,24 @@ The library-layout browser journey also verifies zoom changes, selected-token
 centering, keyboard fit parity, and guide visibility. Visual QA at 1280×720 included
 the expanded character sidebar and ability tray. Camera controls do not write
 shared board state. `.playwright-mcp/map-navigation.png` records this layout.
+
+## Floor-aware suggestions
+
+`ui/floor-geometry.js` uses the existing ordered level view model, explicitly
+placing virtual ground below the first zero-ranked upper floor. Hidden floors
+are disabled and deleted floor references remain unknown rather than becoming
+ground. Same-floor checks are shared by flanking, aura membership, Stand Firm,
+and opportunity-attack adjacency. Cross-floor geometry is still unimplemented;
+these checks avoid claiming adjacency through an unmodeled solid floor.
+
+High Ground now defaults off with an explicit confirmation label and explanatory
+tooltip. Per the local Draw Steel combat reference, standing/climbing eligibility
+and occupied vertical space are required; artwork order is insufficient. Tests
+cover the first upper floor, hidden/deleted levels, cross-floor flankers, and
+existing same-floor/condition behavior. This does not complete elevation/range
+or cross-floor opening support, and those requirements remain unchecked above.
+Validation: 680 tests passed across 78 VTT/automation files. These are code-level
+checks; cross-floor ability browser journeys remain part of the pending geometry work.
 
 Validation: 678 tests passed across 77 files. Expanded PHP checks then passed for
 forged/cloned receipts and changed floor geometry. Three-browser floor QA includes

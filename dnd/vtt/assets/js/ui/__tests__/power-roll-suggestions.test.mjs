@@ -34,7 +34,7 @@ function activeIds(suggestions) {
   return suggestions.filter((entry) => entry.active).map((entry) => entry.id).sort();
 }
 
-test('suggests high ground when actor level ranks above target level', () => {
+test('higher floor requires High Ground confirmation rather than an automatic edge', () => {
   const actor = ally('actor', 1, 1, { levelId: 'upper' });
   const target = enemy('target', 1, 2, { levelId: 'ground' });
   const suggestions = getPowerRollSuggestions({
@@ -47,10 +47,11 @@ test('suggests high ground when actor level ranks above target level', () => {
     ],
     context: { keywords: ['Ranged', 'Strike'] },
   });
-  assert.ok(activeIds(suggestions).includes('edge-high-ground'));
+  assert.equal(activeIds(suggestions).includes('edge-high-ground'), false);
+  assert.match(suggestions.find(entry => entry.id === 'edge-high-ground').reason, /higher floor/);
 });
 
-test('suggests high ground when map levels are passed as board state', () => {
+test('first stored upper floor at zIndex zero is above virtual ground but still needs confirmation', () => {
   const actor = ally('actor', 1, 1, { levelId: 'upper' });
   const target = enemy('target', 1, 2, { levelId: 'level-0' });
   const suggestions = getPowerRollSuggestions({
@@ -60,12 +61,24 @@ test('suggests high ground when map levels are passed as board state', () => {
     mapLevels: {
       levels: [
         { id: 'level-0', zIndex: 0 },
-        { id: 'upper', zIndex: 2 },
+        { id: 'upper', zIndex: 0 },
       ],
     },
     context: { keywords: ['Ranged', 'Strike'] },
   });
-  assert.ok(activeIds(suggestions).includes('edge-high-ground'));
+  assert.equal(activeIds(suggestions).includes('edge-high-ground'), false);
+  assert.match(suggestions.find(entry => entry.id === 'edge-high-ground').reason, /higher floor/);
+});
+
+test('cross-floor and hidden allies cannot supply automatic flanking', () => {
+  const actor = ally('actor', 4, 5);
+  const target = enemy('target', 5, 5, { width: 2, height: 2 });
+  for (const extra of [{ levelId: 'upper' }, { hidden: true }, { levelId: 'deleted' }]) {
+    const helper = ally('helper', 7, 6, extra);
+    const suggestions = getPowerRollSuggestions({ actor, targets: [target], placements: [actor, target, helper],
+      mapLevels: { levels: [{ id: 'upper', zIndex: 0 }] }, context: { keywords: ['Melee', 'Strike'] } });
+    assert.equal(activeIds(suggestions).includes('edge-flanking'), false);
+  }
 });
 
 test('suggests flanking for opposite allied tokens around a large target', () => {

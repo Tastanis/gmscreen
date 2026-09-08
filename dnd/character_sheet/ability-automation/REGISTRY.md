@@ -131,7 +131,7 @@ Ordinary conditions may carry persistent `riders: [{ id, when, target, effects }
 
 `hiddenEffect` carries hidden ability-applied rider effects. It is not selectable in the normal condition picker and does not render as token condition text. It remains visible in the VTT character/monster sidebar with an `x` remove button and marks the token with a compact `FX` badge. Supported automatic rider type: `{ "type": "rollModifier", "modifier": "edge" | "bane" | "doubleEdge" | "doubleBane", "appliesTo": { ... }, "consume": "manual" | "nextMatchingRoll" }`.
 
-Board-hosted power roll modals can show clickable suggested edges/banes from current VTT state through `getPowerRollSuggestions`. These are runtime hints; normal board hints are not automation JSON fields. High Ground, Flanking, and Cover are always visible as suggestion toggles; High Ground and Flanking default on when board state proves them, while Cover is currently manual because line-of-effect obstruction is not modeled as a reliable roll predicate. Additional board-derived suggestions include prone/restrained/unconscious targets, hidden attackers, weakened/restrained/prone attackers, and source-linked frightened/grabbed/taunted attackers when those facts are present in board state. Ability-applied `hiddenEffect` rollModifier riders also appear as default-on suggestions when their `appliesTo` filters match, and `consume: "nextMatchingRoll"` riders are removed after the accepted matching roll.
+Board-hosted power roll modals can show clickable suggested edges/banes from current VTT state through `getPowerRollSuggestions`. These are runtime hints; normal board hints are not automation JSON fields. High Ground, Flanking, and Cover are always visible as suggestion toggles; High Ground is explicitly labeled for confirmation and defaults off: floor order alone does not establish occupied vertical space or eligible standing/climbing. Flanking defaults on only for visible adjacent creatures on the same participating floor. Cover remains manual because line-of-effect obstruction is not modeled as a reliable roll predicate. Suggestion tooltips explain these boundaries. Additional board-derived suggestions include prone/restrained/unconscious targets, hidden attackers, weakened/restrained/prone attackers, and source-linked frightened/grabbed/taunted attackers when those facts are present in board state. Ability-applied `hiddenEffect` rollModifier riders also appear as default-on suggestions when their `appliesTo` filters match, and `consume: "nextMatchingRoll"` riders are removed after the accepted matching roll.
 
 ## Durations — `condition.duration`
 
@@ -140,6 +140,11 @@ Board-hosted power roll modals can show clickable suggested edges/banes from cur
 (The token tracker handles save-ends and end-of-turn natively.)
 
 ## Forced-movement verbs — `forcedMovement.verb`
+
+Floor participation is shared by automatic flanking, aura membership, Stand Firm
+adjacency, and opportunity-attack adjacency. Disabled/deleted floors do not prove
+adjacency. Cross-floor reach through openings remains manual until physical
+elevation and line-of-effect geometry are available. No new ability JSON is needed.
 
 Board persistence now resolves destination support (including holes) on the
 server for position patches. Generic position patches bypass walking stair

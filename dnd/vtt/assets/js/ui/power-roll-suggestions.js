@@ -1,4 +1,5 @@
 const EDGE = 'edge';
+import { floorRelation, canConfirmPlanarAdjacency } from './floor-geometry.js';
 const BANE = 'bane';
 
 function normalizeText(value) {
@@ -70,8 +71,9 @@ function rectDistance(a, b) {
   return Math.max(dx, dy);
 }
 
-function isAdjacentTo(a, b) {
+function isAdjacentTo(a, b, mapLevels = []) {
   if (!a || !b || a.id === b.id) return false;
+  if (!canConfirmPlanarAdjacency(a, b, mapLevels)) return false;
   return rectDistance(tokenRect(a), tokenRect(b)) <= 1;
 }
 
@@ -95,27 +97,6 @@ function areOppositeAroundTarget(a, b, target) {
   const av = sideVectorAroundTarget(a, target);
   const bv = sideVectorAroundTarget(b, target);
   return (av.x !== 0 && av.x * bv.x < 0) || (av.y !== 0 && av.y * bv.y < 0);
-}
-
-function normalizeLevelList(mapLevels = []) {
-  if (Array.isArray(mapLevels)) return mapLevels;
-  if (Array.isArray(mapLevels?.levels)) return mapLevels.levels;
-  if (Array.isArray(mapLevels?.mapLevels?.levels)) return mapLevels.mapLevels.levels;
-  return [];
-}
-
-function levelRank(placement, mapLevels = []) {
-  const levelId = placement?.levelId || '';
-  const levels = normalizeLevelList(mapLevels);
-  const index = levels.findIndex((level) => level && level.id === levelId);
-  if (index < 0) return 0;
-  const z = Number(levels[index]?.zIndex);
-  return Number.isFinite(z) ? z : index;
-}
-
-function hasHighGround(actor, target, mapLevels = []) {
-  if (!actor || !target) return false;
-  return levelRank(actor, mapLevels) > levelRank(target, mapLevels);
 }
 
 function keywordsFromContext(context = {}) {
@@ -192,8 +173,8 @@ function placementTeam(placement, getTeam) {
   return normalizeTeam(placement?.combatTeam ?? placement?.team ?? placement?.tags?.team ?? placement?.faction);
 }
 
-function isFlanking(actor, target, placements = [], getTeam = null) {
-  if (!actor || !target || !isAdjacentTo(actor, target)) return false;
+function isFlanking(actor, target, placements = [], getTeam = null, mapLevels = []) {
+  if (!actor || !target || !isAdjacentTo(actor, target, mapLevels)) return false;
   const actorTeam = placementTeam(actor, getTeam);
   const targetTeam = placementTeam(target, getTeam);
   if (actorTeam === targetTeam) return false;
@@ -202,7 +183,7 @@ function isFlanking(actor, target, placements = [], getTeam = null) {
     if (placementTeam(candidate, getTeam) !== actorTeam) return false;
     if (placementTeam(candidate, getTeam) === targetTeam) return false;
     if (hasCondition(candidate, 'dazed')) return false;
-    if (!isAdjacentTo(candidate, target)) return false;
+    if (!isAdjacentTo(candidate, target, mapLevels)) return false;
     return areOppositeAroundTarget(actor, candidate, target);
   });
 }
@@ -307,8 +288,13 @@ export function getPowerRollSuggestions({
   const abilityRoll = isAbilityRollContext(context);
   const targetIds = targetIdSetFromContext(targetList, context);
 
-  suggestions.push(makeSuggestion('edge-high-ground', EDGE, 'High Ground', hasHighGround(actor, primaryTarget, mapLevels)));
-  suggestions.push(makeSuggestion('edge-flanking', EDGE, 'Flanking', melee && strike && isFlanking(actor, primaryTarget, placements, getTeam)));
+  const relation = floorRelation(actor, primaryTarget, mapLevels);
+  suggestions.push(makeSuggestion('edge-high-ground', EDGE, 'High Ground (confirm)', false, {
+    reason: `${relation === 'above' ? 'Your token is on a higher floor. ' : ''}Confirm your occupied space is fully above the target and you are standing or eligible to climb. Floor order alone cannot establish this edge.`,
+  }));
+  suggestions.push(makeSuggestion('edge-flanking', EDGE, 'Flanking', melee && strike && isFlanking(actor, primaryTarget, placements, getTeam, mapLevels), {
+    reason: 'Automatic flanking checks use visible, adjacent creatures on the same floor. Cross-floor openings and vertical reach require manual confirmation.',
+  }));
   suggestions.push(makeSuggestion('bane-cover', BANE, 'Cover', false));
   if (strike && hasCondition(actor, 'prone')) {
     suggestions.push(makeSuggestion('bane-prone', BANE, 'Prone'));
@@ -355,11 +341,8 @@ export const __testing = {
   areOppositeAroundTarget,
   hiddenEffectSuggestions,
   hasCondition,
-  hasHighGround,
   hasSourceLinkedCondition,
   isAdjacentTo,
   isFlanking,
-  levelRank,
-  normalizeLevelList,
   tokenRect,
 };
