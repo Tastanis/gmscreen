@@ -41,6 +41,9 @@ const origin='http://127.0.0.1:8129';
     await command('combat.patch',{patch:{groups:[
       {representativeId:'preview-secret',memberIds:['preview-secret','preview-open','preview-upper']},
     ]}});
+    const floorState=(await snapshot()).state.sceneConfig[sceneId].mapLevels;
+    floorState.levels.find(level=>level.id==='test-upper').cutouts.push({column:1.25,row:2.5,width:1.5,height:1.25});
+    await command('levels.set',{mapLevels:floorState});
     await command('fog.set',{fogOfWar:{byLevel:{'test-upper':{enabled:true,revealedCells:{'6,5':true,'8,5':true}}}}});
     await command('level.user.set',{userId:'sharon',entry:{levelId:'test-upper',source:'manual',followToken:false}});
     for(const [id,levelId] of [['preview-upper-line','test-upper'],['preview-base-line','level-0']]) {
@@ -59,6 +62,10 @@ const origin='http://127.0.0.1:8129';
     await panel.getByRole('button',{name:'Open player preview'}).click();
     const dialog=gm.locator('.vtt-player-preview-dialog');
     await dialog.locator('[data-preview-placement-id="preview-open"]').waitFor();
+    for(const surface of [pc,dialog]) {
+      const masks=await surface.locator('.vtt-board__map-level').evaluateAll(nodes=>nodes.map(n=>decodeURIComponent(n.style.maskImage||n.style.webkitMaskImage||'')));
+      assert.ok(masks.some(mask=>mask.includes('M 80 160 H 176 V 240 H 80 Z')),'Actual player and preview preserve the fractional map hole');
+    }
     const describe=nodes=>nodes.map(n=>({id:n.dataset.previewPlacementId||n.dataset.placementId,
       width:n.style.width,height:n.style.height,transform:n.style.transform,zIndex:n.style.zIndex,
       level:n.dataset.mapLevelId,direction:n.dataset.mapLevelDirection||null,distance:n.dataset.mapLevelDistance||null,

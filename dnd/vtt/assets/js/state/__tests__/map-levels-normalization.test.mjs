@@ -55,7 +55,7 @@ describe('map level normalization', () => {
       opacity: 1,
       zIndex: 2,
       grid: { size: 80, locked: true, visible: false, offsetX: 12, offsetY: 16 },
-      cutouts: [{ column: 2, row: 0, width: 1, height: 3, id: 'hole' }],
+      cutouts: [{ column: 2.9, row: 0, width: 1, height: 3, id: 'hole' }],
       stairs: [],
       blocksLowerLevelInteraction: false,
       blocksLowerLevelVision: false,

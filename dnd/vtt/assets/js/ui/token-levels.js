@@ -1,6 +1,7 @@
 import {
   BASE_MAP_LEVEL_ID,
   normalizeMapLevelsState,
+  normalizeMapLevelCutout,
   resolvePlacementLevelId,
 } from '../state/normalize/map-levels.js';
 
@@ -463,18 +464,12 @@ function buildExpandedCutoutCellSet(level) {
   const result = new Set();
   const cutouts = Array.isArray(level?.cutouts) ? level.cutouts : [];
   cutouts.forEach((cutout) => {
-    const column = normalizeNonNegativeInt(cutout?.column ?? cutout?.col ?? cutout?.x, null);
-    const row = normalizeNonNegativeInt(cutout?.row ?? cutout?.y, null);
-    if (column === null || row === null) {
-      return;
-    }
-    const width = Math.max(1, normalizeNonNegativeInt(cutout?.width ?? cutout?.columns ?? cutout?.w, 1));
-    const height = Math.max(1, normalizeNonNegativeInt(cutout?.height ?? cutout?.rows ?? cutout?.h, 1));
-
-    for (let dx = -1; dx < width + 1; dx += 1) {
-      for (let dy = -1; dy < height + 1; dy += 1) {
-        const cellColumn = column + dx;
-        const cellRow = row + dy;
+    const normalized=normalizeMapLevelCutout(cutout);
+    if(!normalized)return;
+    const {column,row,width,height}=normalized;
+    // Expand every integer cell with positive overlap, not truncated geometry.
+    for (let cellColumn=Math.floor(column)-1;cellColumn<Math.ceil(column+width)+1;cellColumn++) {
+      for (let cellRow=Math.floor(row)-1;cellRow<Math.ceil(row+height)+1;cellRow++) {
         if (cellColumn < 0 || cellRow < 0) {
           continue;
         }

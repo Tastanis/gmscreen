@@ -173,7 +173,7 @@ function normalizeMapLevelCutouts(rawCutouts) {
   return rawCutouts.map((entry) => normalizeMapLevelCutout(entry)).filter(Boolean);
 }
 
-function normalizeMapLevelCutout(raw = {}) {
+export function normalizeMapLevelCutout(raw = {}) {
   if (!raw || typeof raw !== 'object') {
     return null;
   }
@@ -187,8 +187,8 @@ function normalizeMapLevelCutout(raw = {}) {
   const cutout = {
     column,
     row,
-    width: Math.max(1, toNonNegativeInt(raw.width ?? raw.columns ?? raw.w, 1)),
-    height: Math.max(1, toNonNegativeInt(raw.height ?? raw.rows ?? raw.h, 1)),
+    width: normalizeCutoutSize(raw.width ?? raw.columns ?? raw.w),
+    height: normalizeCutoutSize(raw.height ?? raw.rows ?? raw.h),
   };
 
   if (typeof raw.id === 'string') {
@@ -207,7 +207,12 @@ function normalizeRequiredCellCoordinate(value) {
     return null;
   }
 
-  return Math.max(0, Math.trunc(numeric));
+  return Math.max(0, numeric);
+}
+
+function normalizeCutoutSize(value) {
+  const numeric=Number(value);
+  return Number.isFinite(numeric)?Math.max(1,numeric):1;
 }
 
 function normalizeDefaultPlayerLevel(levels) {

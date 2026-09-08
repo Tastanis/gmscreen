@@ -1347,3 +1347,19 @@ its callback stays pending, checks a second click submits nothing, then releases
 it. Rejected stamina synchronization now rejects the movement callback. Atomic swap
 regressions also pass. Full suite: 735 tests/94 files passed. Broader ability-level
 resume/cancel behavior and authoritative board/sheet reconciliation remain pending.
+
+### Shared fractional cutout normalization
+
+Fractional cutout positions/dimensions were preserved by server geometry but truncated
+by client normalization, map holes, effect clipping and editor copies. They now share
+normalizeMapLevelCutout. It preserves finite fractions, legacy aliases and IDs while
+retaining nonnegative coordinates and the existing one-square minimum dimensions.
+Token look-down edge visibility expands every positively overlapped cell using
+floor/ceil bounds, rather than dropping partial cells through integer truncation.
+
+Tests compare a fractional opening through state normalization, map SVG and effect
+mask geometry, and verify edge-cell token visibility. The actual player/GM-preview
+browser journey saves an additional fractional hole and verifies its exact pixel
+path on both surfaces, alongside existing token/aura/fog/drawing/reload parity and
+no preview writes. Full suite: 737 tests/95 files passed. Broader physical height,
+range and legacy cell-based fall-preview helpers remain separate geometry work.

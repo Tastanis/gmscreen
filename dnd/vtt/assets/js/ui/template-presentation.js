@@ -1,4 +1,4 @@
-import {BASE_MAP_LEVEL_ID, resolvePlacementLevelId} from '../state/normalize/map-levels.js';
+import {BASE_MAP_LEVEL_ID, resolvePlacementLevelId, normalizeMapLevelCutout} from '../state/normalize/map-levels.js';
 
 export function resolveTemplateLevelPresentation(shape, view, levelContext, {pixelBounds = null} = {}) {
   const levels = Array.isArray(levelContext?.levels) ? levelContext.levels : [];
@@ -99,13 +99,9 @@ function getLevelCutoutPixelRects(level, view) {
 
   return cutouts
     .map((cutout) => {
-      const column = Math.max(0, Math.trunc(Number(cutout?.column ?? cutout?.col ?? cutout?.x)));
-      const row = Math.max(0, Math.trunc(Number(cutout?.row ?? cutout?.y)));
-      if (!Number.isFinite(column) || !Number.isFinite(row)) {
-        return null;
-      }
-      const width = Math.max(1, Math.trunc(Number(cutout?.width ?? cutout?.columns ?? cutout?.w ?? 1)));
-      const height = Math.max(1, Math.trunc(Number(cutout?.height ?? cutout?.rows ?? cutout?.h ?? 1)));
+      const normalized=normalizeMapLevelCutout(cutout);
+      if(!normalized)return null;
+      const {column,row,width,height}=normalized;
       return {
         x: offsetLeft + column * gridSize,
         y: offsetTop + row * gridSize,

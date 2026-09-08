@@ -1149,3 +1149,9 @@ Only completed/dismissed outcomes permit continuation; unresolved results reject
 without undoing accepted movement. Swaps await both participants. The picker stays
 busy through the commit and effect phase, rejecting replacement pickers and ignoring
 repeat destination clicks. Cancellation cannot cancel an already accepted save.
+
+Client cutout consumers share normalizeMapLevelCutout: preserve finite fractional
+coordinates and dimensions instead of truncating canonical geometry. Map masks,
+template/aura/zone masks and editor copies use the same normalization. Look-down
+edge visibility expands all positively overlapped cells. This does not change
+canonical movement authority or introduce a new persistence path.

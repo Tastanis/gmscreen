@@ -66,6 +66,7 @@ import {
   PLAYER_CHARACTER_USER_IDS,
   buildLevelViewModel,
   normalizeMapLevelsState,
+  normalizeMapLevelCutout,
   resolveActiveLevelIdForUser,
   resolvePcTokenForUser,
   resolvePlacementLevelId,
@@ -22766,28 +22767,7 @@ function createMapLevelCutoutTool() {
   }
 
   function normalizeCutout(cutout = {}) {
-    if (!cutout || typeof cutout !== 'object') {
-      return null;
-    }
-
-    const column = Number(cutout.column ?? cutout.col ?? cutout.x);
-    const row = Number(cutout.row ?? cutout.y);
-    if (!Number.isFinite(column) || !Number.isFinite(row)) {
-      return null;
-    }
-
-    const normalized = {
-      column: Math.max(0, Math.trunc(column)),
-      row: Math.max(0, Math.trunc(row)),
-      width: Math.max(1, Math.trunc(Number(cutout.width ?? cutout.columns ?? cutout.w) || 1)),
-      height: Math.max(1, Math.trunc(Number(cutout.height ?? cutout.rows ?? cutout.h) || 1)),
-    };
-
-    if (typeof cutout.id === 'string' && cutout.id.trim()) {
-      normalized.id = cutout.id.trim();
-    }
-
-    return normalized;
+    return normalizeMapLevelCutout(cutout);
   }
 
   function cutoutSignature(cutouts = []) {

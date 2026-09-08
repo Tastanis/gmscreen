@@ -298,3 +298,7 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 - Movement automation callbacks must await zone entry outcomes. Unresolved effects
   reject continuation while preserving accepted movement. Keep the picker busy
   until those outcomes settle; repeated clicks must not submit another move.
+
+- Preserve fractional floor cutouts through normalizeMapLevelCutout. Map/effect
+  masks and editor copies must share that helper; do not truncate saved geometry.
+  Look-down edge visibility includes every positively overlapped grid cell.

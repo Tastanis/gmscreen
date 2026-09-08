@@ -1,4 +1,4 @@
-import { normalizeMapLevelsState } from '../state/normalize/map-levels.js';
+import { normalizeMapLevelsState, normalizeMapLevelCutout } from '../state/normalize/map-levels.js';
 
 export const MAP_LEVEL_STACK_ID = 'vtt-map-levels';
 export const MAP_LEVEL_STACK_CLASS = 'vtt-board__map-levels';
@@ -434,14 +434,9 @@ function buildMapLevelCutoutRectangle(cutout = {}, metrics) {
     return null;
   }
 
-  const column = Math.max(0, Math.trunc(toFiniteNumber(cutout.column ?? cutout.col ?? cutout.x, NaN)));
-  const row = Math.max(0, Math.trunc(toFiniteNumber(cutout.row ?? cutout.y, NaN)));
-  if (!Number.isFinite(column) || !Number.isFinite(row)) {
-    return null;
-  }
-
-  const width = Math.max(1, Math.trunc(toFiniteNumber(cutout.width ?? cutout.columns ?? cutout.w, 1)));
-  const height = Math.max(1, Math.trunc(toFiniteNumber(cutout.height ?? cutout.rows ?? cutout.h, 1)));
+  const normalized=normalizeMapLevelCutout(cutout);
+  if(!normalized)return null;
+  const {column,row,width,height}=normalized;
   const x1 = clamp(metrics.originX + column * metrics.gridSize, 0, metrics.innerWidth);
   const y1 = clamp(metrics.originY + row * metrics.gridSize, 0, metrics.innerHeight);
   const x2 = clamp(metrics.originX + (column + width) * metrics.gridSize, 0, metrics.innerWidth);
