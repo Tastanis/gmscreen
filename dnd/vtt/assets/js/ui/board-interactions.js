@@ -76,6 +76,7 @@ import {
 } from './map-level-renderer.js';
 import { createTokenInteractions } from './token-interactions.js';
 import { createTokenMovementRuntime } from '../sync-v2/token-movement-runtime.js';
+import { mountMapNavigation } from './map-navigation.js';
 import { createRequestedTestCoordinator } from './requested-test-coordinator.js';
 import {
   applyCanonicalPrimaryTokenSelection,
@@ -760,6 +761,20 @@ export function mountBoardInteractions(store, routes = {}) {
   const MAP_LOAD_WATCHDOG_DELAY_MS = 5000;
   let tokenDropDepth = 0;
   const selectedTokenIds = new Set();
+  mountMapNavigation({
+    root: document.querySelector('[data-map-navigation-root]'), board, view: viewState,
+    applyTransform: () => applyTransform(), report: message => updateStatus(message),
+    selectedBounds: () => {
+      const nodes = Array.from(tokenLayer?.children ?? []).filter(node => selectedTokenIds.has(node.dataset.placementId)
+        && node.getBoundingClientRect().width > 0 && getComputedStyle(node).visibility !== 'hidden');
+      if (!nodes.length) return null;
+      const rects = nodes.map(node => node.getBoundingClientRect());
+      const boardRect = board.getBoundingClientRect();
+      const x = (Math.min(...rects.map(rect => rect.left)) + Math.max(...rects.map(rect => rect.right))) / 2 - boardRect.left;
+      const y = (Math.min(...rects.map(rect => rect.top)) + Math.max(...rects.map(rect => rect.bottom))) / 2 - boardRect.top;
+      return { x: (x - viewState.translation.x) / viewState.scale, y: (y - viewState.translation.y) / viewState.scale };
+    },
+  });
   const boardHoverTokenIds = new Set();
   const trackerHoverTokenIds = new Set();
   let hoveredTokenId = null;
@@ -8863,6 +8878,8 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function applyTransform() {
     if (!mapTransform) return;
+    const zoomOutput = document.querySelector('[data-map-zoom]');
+    if (zoomOutput) zoomOutput.textContent = `${Math.round(viewState.scale * 100)}%`;
     mapTransform.style.transform = `translate3d(${viewState.translation.x}px, ${viewState.translation.y}px, 0) scale(${viewState.scale})`;
     mapTransform.style.setProperty('--vtt-map-scale', String(viewState.scale));
     const overlayScale = viewState.scale ? 1 / viewState.scale : 1;

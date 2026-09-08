@@ -29,6 +29,7 @@ User authorized implementing the September 7 product audit, updating/running the
 - [x] Token library and saved scenes first; creation forms collapsed.
 - [ ] Compact inactive tracker and combat character card.
 - [ ] Zoom/fit/center/shortcuts and persistent tool labels.
+  - Visible zoom, Fit Map, Center Selected, and a shortcut guide are implemented and browser-tested. Persistent active-tool labels remain pending.
 - [ ] Opaque readable panels, practical targets, diagnostics-only memory counter.
 
 ## Recovery and preparation
@@ -133,6 +134,20 @@ The repeatable `test-library-layout-browser.cjs` journey verifies search, no-mat
 feedback, restored browsing, expandable forms, and library/scene placement at
 1280×720. Screenshots are in `.playwright-mcp/library-layout-*.png`. Broader panel,
 tracker, navigation, and character-card work remains on the checklist.
+
+## Map navigation
+
+Visible camera controls show the current zoom percentage, zoom around the viewport
+center, fit the map, and center the visible selection. The same percentage follows
+wheel zoom and initial map fitting. The controls stay above the map at the right,
+clear of the character sidebar and bottom ability tray. A shortcut popover documents
+pan, zoom, movement undo, and board-focused +/−, F, and C shortcuts. These shortcuts
+only run when the board itself has focus, preserving text input elsewhere.
+
+The library-layout browser journey also verifies zoom changes, selected-token
+centering, keyboard fit parity, and guide visibility. Visual QA at 1280×720 included
+the expanded character sidebar and ability tray. Camera controls do not write
+shared board state. `.playwright-mcp/map-navigation.png` records this layout.
 
 Validation: 678 tests passed across 77 files. Expanded PHP checks then passed for
 forged/cloned receipts and changed floor geometry. Three-browser floor QA includes

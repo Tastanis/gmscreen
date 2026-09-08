@@ -149,6 +149,19 @@ function renderVttSceneBoard(bool $isGm = false): string
             </div>
         </header>
         <div class="vtt-board__canvas-wrapper">
+            <nav class="vtt-map-navigation" aria-label="Map navigation" data-map-navigation-root>
+                <button type="button" class="btn" data-map-navigation="out" aria-label="Zoom out">−</button>
+                <output data-map-zoom aria-label="Map zoom">100%</output>
+                <button type="button" class="btn" data-map-navigation="in" aria-label="Zoom in">+</button>
+                <button type="button" class="btn" data-map-navigation="fit">Fit Map</button>
+                <button type="button" class="btn" data-map-navigation="center">Center Selected</button>
+                <button type="button" class="btn" data-map-navigation="help" aria-expanded="false" aria-controls="vtt-navigation-help">Shortcuts</button>
+                <div id="vtt-navigation-help" data-navigation-help hidden>
+                    <p>Right-drag to pan · Mouse wheel to zoom · Drag a token to move it.</p>
+                    <p>With the map focused: + / − zoom · F fits the map · C centers selected tokens.</p>
+                    <p>Ctrl+Z undoes your selected token’s movement. Draw mode uses its own undo.</p>
+                </div>
+            </nav>
             <div id="vtt-board-canvas" class="vtt-board__canvas" tabindex="0" role="application">
                 <div id="vtt-map-surface" class="vtt-board__map-surface" aria-live="polite">
                     <div id="vtt-map-transform" class="vtt-board__map-transform" hidden>
