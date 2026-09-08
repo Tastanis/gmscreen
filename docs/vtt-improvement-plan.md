@@ -1415,3 +1415,22 @@ but its earlier held-effect setup intermittently timed out during this milestone
 that separate reproducibility issue remains to investigate.
 General resource reconciliation and recovery of entire interrupted abilities remain
 outstanding.
+
+### Confirmed persistent-zone registration
+
+The intermittent forced-zone failure was reproduced with diagnostics: teleport
+reached the intended square but only the first of two registered zones survived
+in canonical placement state. Registration returned success before persistence,
+letting consecutive registrations race and lose one zone.
+
+Persistent-zone registration reports registered: true only after its placement
+save is acknowledged. Rejection calls the supplied reject callback, or returns
+registered: false with save-unconfirmed for resolve-only callers. Sequential
+registrations therefore read the previously accepted zone list instead of racing
+optimistic arrays. Concurrent callers still use normal revision conflict handling;
+there is no blind retry or alternate shared-state writer.
+
+The forced-zone browser workflow now asserts both registrations are canonical
+before movement and passes. A dedicated registration browser test holds a write,
+verifies the callback remains pending, releases it, rejects a second write and
+checks reload retains only accepted zones. Full suite: 742 tests/95 files passed.

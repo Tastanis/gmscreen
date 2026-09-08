@@ -312,3 +312,6 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 
 - Zone recovery reasons are bounded client reports rendered with textContent.
   Preserve the first report on acknowledgment retries and retain actor privacy.
+
+- Persistent-zone registration callbacks must await their placement save. Never
+  report a zone as registered from the optimistic update alone.

@@ -4141,7 +4141,7 @@ export function mountBoardInteractions(store, routes = {}) {
   // has direct access to placementState / createShape / layer / etc. It's
   // exposed on the templateTool API for the area picker to call.)
 
-  function handleAutomationRegisterZoneRequest(event) {
+  async function handleAutomationRegisterZoneRequest(event) {
     const detail = event?.detail ?? {};
     const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
     const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
@@ -4219,12 +4219,20 @@ export function mountBoardInteractions(store, routes = {}) {
       resolve?.({ registered: false, reason: 'unserializable-zone' });
       return;
     }
-    const updated = updatePlacementById(payload.casterId, (target) => {
+    const update = updatePlacementById(payload.casterId, (target) => {
       const existing = Array.isArray(target.persistentZones) ? target.persistentZones : [];
       target.persistentZones = [...existing, record];
-    });
-    if (!updated) {
+    }, {returnSavePromise:true});
+    if (!update.updated) {
       resolve?.({ registered: false, reason: 'caster-not-found' });
+      return;
+    }
+    try {
+      await awaitSuccessfulPlacementSave(update);
+    } catch (error) {
+      renderPersistentZoneOverlays();
+      if (typeof detail.reject === 'function') detail.reject(error);
+      else resolve?.({registered:false,reason:'save-unconfirmed'});
       return;
     }
     // Seed enteredThisRound with anyone already inside at registration time so

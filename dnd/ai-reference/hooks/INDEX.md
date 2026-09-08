@@ -94,3 +94,10 @@ acknowledgment survives idempotent retries; original movement/effect evidence an
 terminal-outcome restrictions remain intact. Recovery renders the report as text
 and identifies its author, with a missing-details fallback for older/pending rows.
 These are client reports, not server proof of which effects committed.
+
+Persistent-zone registration reports registered: true only after its placement
+save is acknowledged. Rejection calls the supplied reject callback, or returns
+registered: false with save-unconfirmed for resolve-only callers. Sequential
+registrations therefore read the previously accepted zone list instead of racing
+optimistic arrays. Concurrent callers still use normal revision conflict handling;
+there is no blind retry or alternate shared-state writer.

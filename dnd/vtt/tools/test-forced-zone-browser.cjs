@@ -20,6 +20,7 @@ const origin='http://127.0.0.1:8129';
         area:{template:{column,row:0,width:1,height:1,levelId:'level-0'}},
       }}}))),{column,amount});assert.equal(zone.registered,true);
     }
+    assert.equal((await tokenState()).persistentZones.length,2,'Registration callbacks confirm both zones are canonical before movement');
     const initial=Number((await tokenState()).hp.current),writes=[];
     page.on('request',request=>{if(request.url().endsWith('/commands.php')&&request.method()==='POST')writes.push(request.postDataJSON());});
     async function move(kind,column,expected='resolved') {
@@ -45,7 +46,11 @@ const origin='http://127.0.0.1:8129';
     });
     const arrival=move('teleport',5);
     arrival.catch(()=>{});
-    await page.waitForFunction(()=>Boolean(window.releaseZone));
+    try {await page.waitForFunction(()=>Boolean(window.releaseZone));}
+    catch(error) {
+      console.error('Held-effect setup:',JSON.stringify({move:await page.evaluate(()=>window.moveAck),token:await tokenState(),claims:await(await page.request.get(origin+'/dnd/vtt/api/v2/zone-entries.php')).json(),writes}));
+      throw error;
+    }
     assert.equal(await page.evaluate(()=>window.moveAck.status),'pending','Movement callback waits for its zone effects');
     assert.equal((await tokenState()).column,5,'Movement itself is already accepted');
     const countBefore=writes.length;
