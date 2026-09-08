@@ -1263,3 +1263,10 @@ unconfirmed skipped result for resolve-only callers), never grant success or
 automatically repeat a delta. Surge, recovery-spend and resource-write adapters
 share confirmCharacterWrite for a 15-second HTTP/body deadline and no retry.
 An aborted request may have committed; durable outcome records remain pending.
+
+Movement undo history entries now include the server-accepted operationId for
+new single and batch moves. Every moved member of a batch shares that ID. Older
+receipts remain valid for single-token undo; absence of an operation ID must not
+be guessed into group membership. This is the receipt foundation for group undo,
+not its command or UI. Group membership must be derived from the accepted server
+operation and every member validated before any restoration is committed.

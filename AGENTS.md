@@ -348,3 +348,6 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 
 - Surge gains require explicit saved-count confirmation. Narrow character writes
   share confirmCharacterWrite; never replay an uncertain delta.
+
+- New movement undo receipts include the accepted operation ID. Future group undo
+  must derive membership server-side, validate all members and commit atomically.

@@ -24,6 +24,7 @@ try {
     verifyFloor($receipt['from']['column'] === 2.0 && $receipt['from']['row'] === 0.0 && $receipt['to']['row'] === 2.0, 'Movement receipt uses server state, not forged client evidence.');
     verifyFloor($receipt['boundary'] === ZoneEntryReceipt::boundary([]), 'Movement captures its canonical combat boundary.');
     $mid = $store->getSnapshot()['state']['placements']['scene']['pc'];
+    verifyFloor(end($mid['_movementUndo']['history'])['operationId']==='floor-half-001','Single-token receipts identify their server-accepted operation too.');
     verifyFloor($mid['levelId'] === 'level-0' && $mid['_floorTraversal']['entry'] === 'red', 'Server must retain halfway traversal.');
     unset($store); $store = new SyncV2Store($database); // Actual DB reopening, not just a JS object copy.
     verifyFloor($store->acceptTokenMove($half, 'cal', false)['event']['payload']['zoneEntryReceipt'] == $receipt, 'Accepted movement evidence survives retry and database reopening.');
@@ -54,6 +55,16 @@ try {
     verifyFloor($state['placements']['scene']['ally']['levelId'] === 'upper', 'Group move uses same stair authority.');
     verifyFloor($state['sceneConfig']['scene']['userLevelState']['cal']['levelId'] === 'level-0', 'Fall follows linked player.');
     verifyFloor(count($batch['event']['payload']['mutations']) === 2, 'Group changes share one accepted event.');
+    foreach ($batch['event']['payload']['mutations'] as $mutation) {
+        $history=$mutation['placement']['_movementUndo']['history'];
+        verifyFloor(end($history)['operationId']==='floor-batch-001','Every group receipt identifies its accepted operation.');
+    }
+    $persisted=$store->getSnapshot()['state']['placements']['scene'];
+    unset($store);$store=new SyncV2Store($database);
+    foreach (['pc','ally'] as $id) {
+        verifyFloor($store->getSnapshot()['state']['placements']['scene'][$id]['_movementUndo']===$persisted[$id]['_movementUndo'],'Operation-linked history survives reopening.');
+    }
+
     $receipts=$batch['event']['payload']['zoneEntryReceipts'];
     verifyFloor(count($receipts) === 2 && $receipts[0]['placementId'] === 'pc' && $receipts[1]['placementId']==='ally', 'Batch captures both walking and forced movement evidence.');
     verifyFloor($receipts[0]['movementKind']==='forced' && $receipts[1]['movementKind']==='walk','Each receipt preserves its trusted movement kind.');

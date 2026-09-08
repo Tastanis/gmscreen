@@ -1623,3 +1623,17 @@ application failure, malformed JSON result and stalled response. Each rejects
 with one request and leaves the confirmed surge count unchanged. Full suite:
 752 tests/99 files passed. Existing resource/recovery tests exercise their shared
 transport after extraction; durable character-operation recovery remains pending.
+
+### Whole-group undo: accepted-operation receipt foundation
+
+Rechecked the roadmap: whole-group undo, physical elevation/range, camera policy,
+encounter presets, handouts/pins, physical barriers/terrain and durable action
+recovery remain open. The next movement work is whole-group undo. New server-owned
+undo entries identify the accepted movement operation; group members therefore
+share a durable identifier without publishing a client-controlled member list.
+Existing single-token undo remains compatible with old receipts.
+
+PHP regression coverage verifies matching operation IDs for batch members and
+receipt persistence after reopening the database. Full suite: 752 tests/99 files
+passed. Atomic group restoration, stale-member rejection and browser controls are
+not implemented by this foundation and remain required before checking this item.

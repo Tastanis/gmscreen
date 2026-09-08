@@ -1368,7 +1368,7 @@ final class SyncV2Store
                 $next['id'] = $placementId;
                 $next['_entityRevision'] = $nextRevision;
                 if (array_key_exists('column', $patch) || array_key_exists('row', $patch)) {
-                    $next['_movementUndo'] = MovementUndo::record($current, $next, $actorId, $state['sceneConfig'][$sceneId]['mapLevels'] ?? []);
+                    $next['_movementUndo'] = MovementUndo::record($current, $next, $actorId, $state['sceneConfig'][$sceneId]['mapLevels'] ?? [], $normalized['operationId']);
                     $patch['_movementUndo'] = $next['_movementUndo'];
                 }
                 if (array_key_exists('column', $patch) || array_key_exists('row', $patch) || array_key_exists('levelId', $patch)) {
@@ -1678,7 +1678,7 @@ final class SyncV2Store
             if ($restore !== null) $next = [...$next, ...$restore];
             $next['levelId'] = $floor['levelId'];
             $next['_floorTraversal'] = $floor['traversal'];
-            if ($restore === null) $next['_movementUndo'] = MovementUndo::record($current, $next, $actorId, $mapLevels);
+            if ($restore === null) $next['_movementUndo'] = MovementUndo::record($current, $next, $actorId, $mapLevels, $normalized['operationId']);
             $state['placements'][$sceneId][$placementId] = $next;
             $event['payload']['column'] = $next['column'];
             $event['payload']['row'] = $next['row'];

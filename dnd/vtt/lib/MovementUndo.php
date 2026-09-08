@@ -11,14 +11,15 @@ final class MovementUndo
             '_floorTraversal'=>$placement['_floorTraversal'] ?? null];
     }
 
-    public static function record(array $current, array $next, string $actorId, array $mapLevels): array
+    public static function record(array $current, array $next, string $actorId, array $mapLevels, ?string $operationId = null): array
     {
         $old = $current['_movementUndo'] ?? [];
         $history = ($old['actorId'] ?? null) === $actorId
             && ($old['revision'] ?? -1) === ($current['_entityRevision'] ?? 0)
             ? ($old['history'] ?? []) : [];
         $history[] = ['from'=>self::position($current), 'to'=>self::position($next),
-            'geometry'=>hash('sha256', json_encode($mapLevels))];
+            'geometry'=>hash('sha256', json_encode($mapLevels)),
+            ...($operationId !== null ? ['operationId'=>$operationId] : [])];
         return ['actorId'=>$actorId, 'revision'=>$next['_entityRevision'], 'history'=>array_slice($history, -20)];
     }
 
