@@ -1406,7 +1406,7 @@ final class SyncV2Store
      *
      * @return array{status:string,event?:array,snapshot?:array,idempotent?:bool,error?:string}
      */
-    public function acceptTokenMove(array $command, string $actorId, array $legacyPlacement): array
+    public function acceptTokenMove(array $command, string $actorId, bool $isGm = false): array
     {
         $normalized = $this->normalizeTokenMove($command);
         $actorId = trim($actorId);
@@ -1444,14 +1444,16 @@ final class SyncV2Store
                 || !is_array($state['placements'][$normalized['sceneId']])) {
                 $state['placements'][$normalized['sceneId']] = [];
             }
-            $current = $state['placements'][$normalized['sceneId']][$normalized['entityId']] ?? [
-                'id' => $normalized['entityId'],
-                'column' => (float) ($legacyPlacement['column'] ?? 0),
-                'row' => (float) ($legacyPlacement['row'] ?? 0),
-                'width' => max(1, (float) ($legacyPlacement['width'] ?? 1)),
-                'height' => max(1, (float) ($legacyPlacement['height'] ?? 1)),
-                '_entityRevision' => 0,
-            ];
+            $current = $state['placements'][$normalized['sceneId']][$normalized['entityId']] ?? null;
+            if (!is_array($current)) return $this->rollbackConflict('placement_missing', $snapshot);
+            if (!$isGm) {
+                if (!$this->playerMayMovePlacement($current)) throw new InvalidArgumentException('You cannot move this token.');
+                foreach (($state['sceneConfig'][$normalized['sceneId']]['mapLevels']['levels'] ?? []) as $level) {
+                    if (($level['id'] ?? null) === $this->placementLevelId($current) && ($level['hidden'] ?? false) === true) {
+                        throw new InvalidArgumentException('You cannot move a token on a hidden floor.');
+                    }
+                }
+            }
             $currentEntityRevision = max(0, (int) ($current['_entityRevision'] ?? 0));
             if ($normalized['entityRevision'] !== $currentEntityRevision) {
                 $this->pdo->exec('ROLLBACK');

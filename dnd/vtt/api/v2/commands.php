@@ -79,7 +79,7 @@ try {
         if (!vttSyncV2CanMovePlacement($auth, $sceneId, $placementId, $placement)) {
             vttSyncV2Respond(403, ['success' => false, 'error' => 'You cannot move this token.']);
         }
-        $result = vttSyncV2Store()->acceptTokenMove($command, (string) ($auth['user'] ?? ''), $placement);
+        $result = vttSyncV2Store()->acceptTokenMove($command, (string) ($auth['user'] ?? ''), (bool) ($auth['isGM'] ?? false));
     } else {
         $auth = vttSyncV2RequireShadowGm();
         $result = vttSyncV2Store()->acceptShadowCommand(

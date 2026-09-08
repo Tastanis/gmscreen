@@ -236,3 +236,15 @@ Validation: 678 tests passed across 77 files. Expanded PHP checks then passed fo
 forged/cloned receipts and changed floor geometry. Three-browser floor QA includes
 Undo move after reload (restoring a fall) and Ctrl+Z (restoring the previous stair
 entry and linked view). No live gameplay writes or deployment were performed.
+
+## Movement authority under concurrent changes
+
+Removed the old movement fallback that could reconstruct a deleted placement
+from a pretransaction API read. Movement now requires an existing canonical token
+and checks current player/team and hidden-floor permissions inside its write
+transaction. Regression cases cover deletion, team changes, and a move to a
+hidden floor without advancing the world revision on rejection.
+
+Validation: all 682 tests passed across 80 files. A fresh disposable fixture also
+passed the three-browser stairs, fall, reload, linked-view, and movement-undo
+journey. Live campaign state was not changed.

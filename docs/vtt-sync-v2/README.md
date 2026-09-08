@@ -807,6 +807,11 @@ geometry must match. This is a new accepted event, not a revision rollback. Rece
 are stripped from added/cloned placements and cannot be patched by a client.
 Flight and whole-group undo remain pending in `../vtt-improvement-plan.md`.
 
+Token movement requires an existing canonical placement. It never reconstructs a
+missing token from an earlier API read. Player token/team and hidden-floor
+permissions are checked again inside the same SQLite transaction as movement,
+so concurrent deletion or permission changes cannot be bypassed by stale input.
+
 The legacy paths being replaced are primarily:
 
 - `dnd/vtt/assets/js/ui/board-interactions.js`
