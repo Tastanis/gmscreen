@@ -6,6 +6,7 @@ require_once __DIR__ . '/PlayerRoster.php';
 require_once __DIR__ . '/SceneCheckpointArchive.php';
 require_once __DIR__ . '/SceneCheckpointRestore.php';
 require_once __DIR__ . '/ScenePackage.php';
+require_once __DIR__ . '/SceneImportValidation.php';
 
 /**
  * SQLite authority for Sync V2.
@@ -294,8 +295,8 @@ final class SyncV2Store
      *
      * @return array{status:string,event:array}
      */
-    /** Internal import authority. The HTTP installer must hold the catalog lock and
-     * validate file fields before calling; no catalog or asset files are written here. */
+    /** Import authority. The HTTP installer holds the catalog lock; validation and
+     * fresh-ID preparation run here before writes. No catalog or asset files are written here. */
     public function installScenePackage(array $package, string $operationId, string $actorId, bool $isGm): array
     {
         if (!$isGm || trim($actorId) === '') throw new InvalidArgumentException('Scene import is GM-only.');
@@ -314,8 +315,15 @@ final class SyncV2Store
                 return ['status'=>'accepted','event'=>$event,'scene'=>json_decode($receipt['catalog_json'],true,128,JSON_THROW_ON_ERROR),'idempotent'=>true];
             }
             if ($this->findEventByOperationId($operationId) !== null) throw new InvalidArgumentException('Operation ID is already in use.');
+            SceneImportValidation::validate($package);
             $sceneId = 'scn-' . substr(hash('sha256', $this->worldId . "\0" . $actorId . "\0" . $operationId), 0, 40);
             $prepared = ScenePackage::prepareForNewScene($package, $sceneId)['package'];
+            $primaryProfiles = [];
+            foreach ($prepared['domains']['placements'] as $placement) if (($placement['primaryPc'] ?? false) === true) {
+                $profile = $this->linkedPlayerProfileForPlacement($placement);
+                if ($profile === null || isset($primaryProfiles[$profile])) throw new InvalidArgumentException('Each imported primary token must have a distinct configured player profile.');
+                $primaryProfiles[$profile] = true;
+            }
             $snapshot = $this->getSnapshot(); $state = $snapshot['state'];
             foreach (['placements','sceneConfig','drawings','templates','combat'] as $domain) {
                 if (array_key_exists($sceneId, $state[$domain] ?? [])) throw new InvalidArgumentException('The reserved scene already exists.');

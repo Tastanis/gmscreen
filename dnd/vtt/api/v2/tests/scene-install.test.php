@@ -10,14 +10,29 @@ try {
     $store->migrateLegacyPlacements(['placements'=>['original'=>[['id'=>'hero','column'=>1,'row'=>2]]]]);
     $before = $store->getSnapshot();
     $package = ScenePackage::build(['id'=>'source','name'=>'Imported','mapUrl'=>'/map.jpg'],['state'=>[
-        'placements'=>['source'=>['visible'=>['id'=>'visible','column'=>3,'row'=>4], 'secret'=>['id'=>'secret','hidden'=>true,'imageUrl'=>'/secret-token.png']]],
+        'placements'=>['source'=>['visible'=>['id'=>'visible','column'=>3,'row'=>4], 'secret'=>['id'=>'secret','column'=>1,'row'=>1,'hidden'=>true,'imageUrl'=>'/secret-token.png']]],
         'sceneConfig'=>['source'=>['mapLevels'=>['levels'=>[['id'=>'secret-floor','hidden'=>true,'mapUrl'=>'/secret-floor.png']]]]],
-        'drawings'=>['source'=>['secret-line'=>['id'=>'secret-line','levelId'=>'secret-floor']]],
+        'drawings'=>['source'=>['secret-line'=>['id'=>'secret-line','levelId'=>'secret-floor','points'=>[['x'=>1,'y'=>1],['x'=>2,'y'=>2]]]]],
         'templates'=>['source'=>['circle'=>['id'=>'circle','type'=>'circle','center'=>['column'=>2,'row'=>2],'radius'=>2]]],
     ]]);
     $denied=false;
     try { $store->installScenePackage($package,'import-operation-1','cal',false); } catch (InvalidArgumentException $error) { $denied=true; }
     verifyInstall($denied && $store->getSnapshot()===$before, 'Players cannot import scenes.');
+    $invalid=[];
+    $bad=$package; $bad['scene']['mapUrl']='data:image/svg+xml;base64,PHN2Zz4='; $invalid[]=$bad;
+    $bad=$package; $bad['domains']['placements']['visible']['column']='not a number'; $invalid[]=$bad;
+    $bad=$package; $bad['domains']['placements']['visible']['width']='broken'; $invalid[]=$bad;
+    $bad=$package; $bad['domains']['drawings']['secret-line']['points']=[['x'=>1,'y'=>2]]; $invalid[]=$bad;
+    $bad=$package; $bad['domains']['templates']['circle']['radius']=-1; $invalid[]=$bad;
+    $bad=$package; $bad['domains']['sceneConfig']['mapLevels']['levels'][0]['cutouts']='broken'; $invalid[]=$bad;
+    $bad=$package; $bad['domains']['sceneConfig']['mapLevels']['baseStairs']=[['id'=>'bad-stair','corners'=>[]]]; $invalid[]=$bad;
+    $bad=$package; $bad['domains']['placements']['visible']['metadata']=['__proto__'=>['polluted'=>true]]; $invalid[]=$bad;
+    $bad=$package; foreach ($bad['domains']['placements'] as &$entry) { $entry['primaryPc']=true; $entry['profileId']='cal'; } unset($entry); $invalid[]=$bad;
+    foreach ($invalid as $index=>$bad) {
+        $denied=false;
+        try { $store->installScenePackage($bad,'invalid-package-'.$index,'GM',true); } catch (InvalidArgumentException $error) { $denied=true; }
+        verifyInstall($denied && $store->getSnapshot()===$before && $store->pendingSceneImports()===[], 'Invalid package is rejected before any persistent change.');
+    }
     $fault = new PDO('sqlite:' . $path);
     $fault->exec("CREATE TRIGGER reject_import_event BEFORE INSERT ON vtt_events WHEN NEW.event_type = 'scene.installed' BEGIN SELECT RAISE(ABORT, 'test interruption'); END");
     $failed=false;

@@ -15,8 +15,11 @@ and scene deletion. GM scene-list GET recovers pending catalog entries under the
 shared catalog lock, preserving already-saved entries with the receipt marker.
 Player event delivery applies the same hidden-token/floor projection as snapshots.
 The reducer installs only a new scene and emits focused domain change flags.
-This remains an internal authority API: file-install validation, visibility wording,
-HTTP/UI wiring and browser installation QA remain pending.
+The GM HTTP/UI importer is now exposed via `api/v2/scene-import.php` after store-level
+file validation and explicit player-browsing acknowledgment. It creates a browsable
+scene without activation; the UI retains operation IDs on retries and offers a reload
+after success. Browser QA covers a lost accepted response, retry, open and reload.
+Private encounter drafts and reload-free catalog integration remain future work.
 
 Keep the VTT's game features, assets, token library, automation, character
 sheets, and visual design. Replace the multiplayer synchronization spine in

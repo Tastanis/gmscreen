@@ -735,3 +735,24 @@ File-install HTTP/UI controls remain pending, along with complete write validati
 and explicit visibility wording. This internal operation creates a browsable scene
 and never activates it; it must not be presented as a private encounter draft.
 All 702 tests across 83 files pass after this change.
+
+### Scene-file import workflow
+
+GM Scenes → Import scene JSON now previews an exported file and offers Import as
+new scene after explicit acknowledgment that players may browse it. No current
+scene routing changes. The result provides Reload VTT to expose the saved copy in
+the scene list; the success message stays visible at 1280×720.
+
+The store validates map references, supported geometry, numeric bounds, drawing
+points, templates, floor lists, stairs, primary-token uniqueness and dangerous object
+properties before writing. Embedded image data is rejected; image URLs and character
+sheet references remain external. Invalid packages can still be previewed where
+their basic structure is readable, with the reason installation is unavailable.
+The UI keeps one operation ID through response loss and retry. Deleted prior imports
+cannot be resurrected by retrying; the user chooses the file again for a new copy.
+
+Browser tests exercise GM/player access, invalid file rejection, explicit browsing
+acknowledgment, simulated loss after server acceptance, one-copy retry, fresh IDs,
+unchanged source/routing, catalog entry, opening and reload. Existing export/preview
+browser tests still pass. All 702 regression tests pass. Scene duplication shortcuts,
+private encounter preparation and reload-free catalog integration remain follow-ups.

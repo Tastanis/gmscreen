@@ -33,7 +33,7 @@ function renderVttSettingsPanel(string $tokenLibraryMarkup = '', bool $isGm = fa
                     </header>
                     <div class="settings-view__content">
                         <details class="vtt-prep-disclosure" data-scene-import-preview>
-                            <summary>Preview scene JSON</summary>
+                            <summary>Import scene JSON</summary>
                             <label for="vtt-scene-import-file">Choose an exported scene package</label>
                             <input id="vtt-scene-import-file" type="file" accept="application/json,.json" />
                             <p role="status" aria-live="polite" data-scene-import-status></p>

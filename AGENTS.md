@@ -11,9 +11,10 @@ by checking that every generated ID is different.
 Scene imports use a Sync V2 transaction plus `vtt_scene_imports` catalog outbox.
 Hold the shared catalog lock before installation/recovery; acknowledge only after
 the catalog save. Never replay the source package to recover catalog metadata.
-Deletion cancels pending catalog recovery. The internal installer currently creates
-browsable scenes without activating them; no file-install HTTP/UI action is exposed
-until complete input validation and explicit visibility wording are implemented.
+Deletion cancels pending catalog recovery. `api/v2/scene-import.php` is GM-only,
+validates packages at the store boundary and requires explicit player-browsing
+acknowledgment. Imported scenes are browsable without activating them. Do not label
+this operation as a private encounter draft. Retain the same operation ID on retries.
 
 ## Version System
 
