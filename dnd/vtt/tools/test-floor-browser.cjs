@@ -51,6 +51,18 @@ if (!['localhost', '127.0.0.1', '[::1]'].includes(new URL(origin).hostname)) thr
     assert.ok(calls.every(call => call.status === 200), JSON.stringify(calls));
     assert.equal(calls.filter(call => call.command.type === 'token.move').length, 3);
     assert.ok(!calls.some(call => call.command.type === 'level.user.set'), 'Floor following must be atomic, without a second player command.');
+    await pc.page.locator(selector).click();
+    await pc.page.locator('[data-action="undo-token-move"]').click();
+    await pc.page.waitForFunction(selector => document.querySelector(selector)?.dataset.mapLevelId === 'test-upper', selector);
+    assert.equal((await placement()).column, 2);
+    assert.equal((await snapshot()).state.sceneConfig[manifest.test_scene_id].userLevelState.cal.levelId, 'test-upper');
+    await pc.page.locator(selector).click();
+    await pc.page.keyboard.press('Control+z');
+    await pc.page.waitForFunction(selector => document.querySelector(selector)?.dataset.mapLevelId === 'level-0', selector);
+    assert.equal((await placement()).row, 3);
+    assert.equal((await placement())._floorTraversal.entry, 'red');
+    assert.equal(calls.filter(call => call.command.payload?.undoRevision !== undefined).length, 2);
+    assert.deepEqual(errors, []);
     console.log('PASS: player stairs across reload, atomic linked view, fall, and three-client recovery.');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -49,6 +49,45 @@ try {
     verifyFloor($state['placements']['scene']['ally']['levelId'] === 'upper', 'Group move uses same stair authority.');
     verifyFloor($state['sceneConfig']['scene']['userLevelState']['cal']['levelId'] === 'level-0', 'Fall follows linked player.');
     verifyFloor(count($batch['event']['payload']['mutations']) === 2, 'Group changes share one accepted event.');
+    $beforeUndo = $store->getSnapshot();
+    $pc = $beforeUndo['state']['placements']['scene']['pc'];
+    $undo = ['type'=>'token.move','operationId'=>'floor-undo-001','baseRevision'=>$beforeUndo['revision'],
+        'sceneId'=>'scene','entityId'=>'pc','entityRevision'=>$pc['_entityRevision'],
+        'payload'=>['column'=>999,'row'=>999,'undoRevision'=>$pc['_entityRevision']]];
+    $wrongActorRejected = false;
+    try { $store->acceptTokenMove($undo, 'sharon', $pc); }
+    catch (InvalidArgumentException $error) { $wrongActorRejected = true; }
+    verifyFloor($wrongActorRejected, 'Another actor cannot use this movement receipt.');
+    $restored = $store->acceptTokenMove($undo, 'cal', $pc);
+    $pc = $store->getSnapshot()['state']['placements']['scene']['pc'];
+    verifyFloor($pc['levelId'] === 'upper' && (float) $pc['column'] === 2.0, 'Undo restores server-owned position and floor, ignoring supplied coordinates.');
+    verifyFloor($store->getSnapshot()['state']['sceneConfig']['scene']['userLevelState']['cal']['levelId'] === 'upper', 'Undo restores linked view atomically.');
+    verifyFloor($store->acceptTokenMove($undo, 'cal', $pc)['idempotent'], 'Duplicate undo must not undo another movement.');
+    $undo['operationId'] = 'floor-undo-002';
+    $undo['baseRevision'] = $store->getSnapshot()['revision'];
+    $undo['entityRevision'] = $pc['_entityRevision'];
+    $undo['payload']['undoRevision'] = $pc['_entityRevision'];
+    $store->acceptTokenMove($undo, 'cal', $pc);
+    $pc = $store->getSnapshot()['state']['placements']['scene']['pc'];
+    verifyFloor($pc['levelId'] === 'level-0' && $pc['_floorTraversal']['entry'] === 'red', 'Repeated undo restores interrupted stair progress.');
+    $receipt = $pc['_movementUndo'];
+    $stale = [...$pc, '_entityRevision'=>$pc['_entityRevision'] + 1];
+    $rejected = false;
+    try { MovementUndo::restore($stale, 'cal', $receipt['revision'], $board['sceneState']['scene']['mapLevels']); }
+    catch (InvalidArgumentException $error) { $rejected = true; }
+    verifyFloor($rejected, 'Intervening token edits invalidate stale undo.');
+    $levels = $store->getSnapshot()['state']['sceneConfig']['scene']['mapLevels'];
+    $levels['levels'][0]['hidden'] = false;
+    $rejected = false;
+    try { MovementUndo::restore($pc, 'cal', $receipt['revision'], $levels); }
+    catch (InvalidArgumentException $error) { $rejected = true; }
+    verifyFloor($rejected, 'Changed floor geometry invalidates undo.');
+    $snapshot = $store->getSnapshot();
+    $store->acceptPlacementBatch(['type'=>'placement.batch','operationId'=>'floor-forged-add','baseRevision'=>$snapshot['revision'],
+        'payload'=>['actions'=>[['kind'=>'add','sceneId'=>'scene','placementId'=>'forged',
+            'placement'=>[...$pc, 'id'=>'forged']]]]], 'cal', false);
+    $added = $store->getSnapshot()['state']['placements']['scene']['forged'];
+    verifyFloor(!isset($added['_movementUndo']) && !isset($added['_floorTraversal']), 'Adding or cloning a token cannot forge server movement receipts.');
     echo "Floor movement: player traversal, DB reopening, atomic viewer, duplicate, permission, group and forced-fall checks passed.\n";
 } finally {
     unset($store);

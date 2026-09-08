@@ -246,6 +246,7 @@ export function createTokenMovementRuntime({
           row: preview.row,
           movementKind: move.movementKind || 'walk',
           path: move.path || [],
+          ...(move.undoRevision !== undefined ? { undoRevision: move.undoRevision } : {}),
         },
         {
           sceneId,
@@ -255,7 +256,7 @@ export function createTokenMovementRuntime({
       );
     } catch (error) {
       const conflictSnapshot = error?.response?.snapshot;
-      if (retry && error?.status === 409 && conflictSnapshot) {
+      if (retry && move.undoRevision === undefined && error?.status === 409 && conflictSnapshot) {
         store.replaceSnapshot(conflictSnapshot, { authoritative: true, source: 'conflict' });
         reconcileSnapshot(store.getConfirmedSnapshot(), { source: 'conflict' });
         return submitOne(sceneId, move, false);

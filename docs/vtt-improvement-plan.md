@@ -12,7 +12,7 @@ User authorized implementing the September 7 product audit, updating/running the
 ## Broken player workflows
 
 - [ ] Server-validated atomic stairs/falls, including player and alternate movement paths.
-  - Core single/group movement now resolves stairs and support on the server; player reload and fall browser journey passes. Flight, undo, and remaining automation entry-point coverage are still pending.
+  - Core single/group movement now resolves stairs and support on the server; player reload, fall, and selected-token undo browser journeys pass. Flight, whole-group undo, and remaining automation entry-point coverage are still pending.
 - [x] Drawing creation/erase/clear/undo persist explicitly through V2, with author/floor scope and hidden-floor projection.
 - [x] Owned temporary template edit/remove permissions; persistent structures retain GM authority.
 - [ ] Exact rejection feedback and pending/accepted state.
@@ -105,3 +105,20 @@ suite passed 677 tests; the subsequent movement-intent merge regression and the
 three existing runtime tests also passed. This is a foundation, not completion
 of the floor/elevation roadmap: flight, undo, feedback, and automation journeys
 remain unfinished.
+
+## Movement undo
+
+Selected-token movement undo now uses up to 20 server-owned receipts, restoring
+position, floor, and interrupted stair progress together. The actor must own the
+receipt, its token revision must still match, and floor geometry must be unchanged.
+Unrelated token edits deliberately invalidate the receipt rather than silently
+overwriting newer work. Receipts survive reload; cloning cannot copy them.
+The Undo move button and Ctrl+Z work outside combat, with movement-cost refunds
+limited to a matching locally tracked combat move. Undo does not re-fire normal
+movement triggers. This reverses movement only, not damage or ability side effects.
+Whole-group undo is still pending; the control explicitly acts on one selected token.
+
+Validation: 678 tests passed across 77 files. Expanded PHP checks then passed for
+forged/cloned receipts and changed floor geometry. Three-browser floor QA includes
+Undo move after reload (restoring a fall) and Ctrl+Z (restoring the previous stair
+entry and linked view). No live gameplay writes or deployment were performed.

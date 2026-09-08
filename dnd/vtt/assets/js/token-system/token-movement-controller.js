@@ -22,6 +22,7 @@ export function createTokenMovementController({
   setRulerSupplement = () => {},
   clearRulerSupplement = () => {},
   restoreMove = () => false,
+  getUndoMove = () => null,
   cancelActiveDrag = () => {},
   isUndoSuppressed = () => false,
   windowRef = typeof window === 'undefined' ? undefined : window,
@@ -32,6 +33,7 @@ export function createTokenMovementController({
   const speedResolver = createTokenSpeedResolver({ routes });
   let dragSession = null;
   let cancelingForTurnChange = false;
+  let undoPending = false;
 
   function syncCombatTurn() {
     const previousSession = dragSession;
@@ -248,20 +250,33 @@ export function createTokenMovementController({
 
     const context = getTurnContext();
     const tokenId = context.activeCombatantId;
-    const move = movementState.peekLastMove(tokenId, context);
+    const move = movementState.peekLastMove(tokenId, context) ?? getUndoMove();
     if (!move) {
       return;
     }
 
     event.preventDefault();
     event.stopPropagation();
-    const restored = await Promise.resolve(restoreMove(move));
+    await undoMove(move, tokenId, context);
+  }
+
+  async function undoMove(move, tokenId, context) {
+    if (!move || undoPending) return false;
+    undoPending = true;
+    let restored;
+    try { restored = await Promise.resolve(restoreMove(move)); }
+    finally { undoPending = false; }
     if (!restored) {
       return;
     }
 
-    movementState.undoLastMove(tokenId, context);
+    const tracked = movementState.peekLastMove(move.tokenId, context);
+    if (tracked && tracked.from.column === move.from.column && tracked.from.row === move.from.row
+      && tracked.to.column === move.to.column && tracked.to.row === move.to.row) {
+      movementState.undoLastMove(move.tokenId, context);
+    }
     clearRulerSupplement();
+    return true;
   }
 
   documentRef?.addEventListener?.('keydown', handleKeydown, true);
@@ -273,6 +288,7 @@ export function createTokenMovementController({
     handleDragMove,
     handleDragEnd,
     handleDragCommitted,
+    undoSelectedMove: () => undoMove(getUndoMove(), getTurnContext().activeCombatantId, getTurnContext()),
     dispose,
   };
 }

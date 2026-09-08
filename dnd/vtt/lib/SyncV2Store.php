@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/FloorGeometry.php';
+require_once __DIR__ . '/MovementUndo.php';
 
 /**
  * SQLite authority for Sync V2.
@@ -1142,6 +1143,7 @@ final class SyncV2Store
                         return $this->rollbackConflict('placement_exists', $snapshot);
                     }
                     $placement = $action['placement'];
+                    unset($placement['_movementUndo'], $placement['_floorTraversal']);
                     if (!$isGm && $this->placementIsHidden($placement)) {
                         throw new InvalidArgumentException('Players cannot add hidden placements.');
                     }
@@ -1191,7 +1193,7 @@ final class SyncV2Store
                 if (!$isGm) {
                     $this->assertPlayerPatchAllowed($patch);
                 }
-                unset($patch['id'], $patch['_entityRevision']);
+                unset($patch['id'], $patch['_entityRevision'], $patch['_movementUndo'], $patch['_floorTraversal']);
                 $next = [...$current, ...$patch];
                 if (!array_key_exists('levelId', $patch)
                     && (array_key_exists('column', $patch) || array_key_exists('row', $patch))) {
@@ -1204,6 +1206,10 @@ final class SyncV2Store
                 }
                 $next['id'] = $placementId;
                 $next['_entityRevision'] = $nextRevision;
+                if (array_key_exists('column', $patch) || array_key_exists('row', $patch)) {
+                    $next['_movementUndo'] = MovementUndo::record($current, $next, $actorId, $state['sceneConfig'][$sceneId]['mapLevels'] ?? []);
+                    $patch['_movementUndo'] = $next['_movementUndo'];
+                }
                 $state['placements'][$sceneId][$placementId] = $next;
                 if (
                     $this->placementLevelId($current)
@@ -1483,10 +1489,21 @@ final class SyncV2Store
             $sceneId = $normalized['sceneId'];
             $placementId = $normalized['entityId'];
             $next = $state['placements'][$sceneId][$placementId];
-            $floor = FloorGeometry::move($current, $next, $state['sceneConfig'][$sceneId]['mapLevels'] ?? [], $normalized['movementKind'], $normalized['path']);
+            $mapLevels = $state['sceneConfig'][$sceneId]['mapLevels'] ?? [];
+            $restore = $normalized['undoRevision'] !== null
+                ? MovementUndo::restore($current, $actorId, $normalized['undoRevision'], $mapLevels) : null;
+            $floor = $restore !== null
+                ? ['levelId'=>$restore['levelId'], 'traversal'=>$restore['_floorTraversal'], 'cause'=>'undo']
+                : FloorGeometry::move($current, $next, $mapLevels, $normalized['movementKind'], $normalized['path']);
+            if ($restore !== null) $next = [...$next, ...$restore];
             $next['levelId'] = $floor['levelId'];
             $next['_floorTraversal'] = $floor['traversal'];
+            if ($restore === null) $next['_movementUndo'] = MovementUndo::record($current, $next, $actorId, $mapLevels);
             $state['placements'][$sceneId][$placementId] = $next;
+            $event['payload']['column'] = $next['column'];
+            $event['payload']['row'] = $next['row'];
+            $event['payload']['_movementUndo'] = $next['_movementUndo'];
+            $event['payload']['movementKind'] = $restore !== null ? 'undo' : $normalized['movementKind'];
             $event['payload']['_floorTraversal'] = $floor['traversal'];
             $event['payload']['levelId'] = $floor['levelId'];
             if ($this->placementLevelId($current) !== $floor['levelId']) {
@@ -1820,6 +1837,7 @@ final class SyncV2Store
             'row' => $row,
             'movementKind' => $this->normalizeMovementKind($command['payload']['movementKind'] ?? 'walk'),
             'path' => $this->normalizeMovementPath($command['payload']['path'] ?? []),
+            'undoRevision' => isset($command['payload']['undoRevision']) ? (int) $command['payload']['undoRevision'] : null,
         ];
     }
 
@@ -2539,7 +2557,7 @@ final class SyncV2Store
     private function assertPlayerPatchAllowed(array $patch): void
     {
         $gmOnly = [
-            'id', 'hidden', 'isHidden', 'flags', 'levelId', '_floorTraversal', 'width', 'height',
+            'id', 'hidden', 'isHidden', 'flags', 'levelId', '_floorTraversal', '_movementUndo', 'width', 'height',
             'size', 'stackOrder', 'monster', 'monsterId', 'monsterRef',
             'team', 'name', 'label', 'image', 'imageUrl', 'tokenId',
             'metadata', 'authorId', 'authorRole', 'authorIsGm',

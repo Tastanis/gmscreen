@@ -148,6 +148,11 @@ triggers. The internal movement command's `movementKind`, path, and
 This does not add flight, fall damage, or vertical-distance automation; those
 mechanics still require manual adjudication where unsupported.
 
+Selected-token movement undo restores only position/floor/stair progress from a
+server receipt and does not re-fire normal movement triggers. It does not reverse
+damage, triggered ability effects, or resource spending. `_movementUndo` and
+`undoRevision` are persistence metadata, not authored automation JSON.
+
 `push`, `pull`, `slide`, `verticalPush`, `verticalPull`, `verticalSlide`
 
 Forced-movement highlights account for target stability and size across PCs and monsters. The highlight is advisory only: the GM can still click any destination, including cells outside the legal highlight.

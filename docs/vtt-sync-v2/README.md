@@ -785,8 +785,13 @@ resumable `_floorTraversal` metadata. Players cannot patch that metadata or choo
 an arbitrary floor. Client stair/fall listeners do not submit additional V2 writes.
 Movement commands accept bounded waypoint paths and `walk`, `forced`, or `teleport`
 intent; generic position patches default to forced movement. Both forced and
-teleport movement bypass stairs but check destination support. Flight and undo
-are still separate pending work, documented in `../vtt-improvement-plan.md`.
+teleport movement bypass stairs but check destination support. `MovementUndo.php`
+stores bounded server-owned receipts on canonical placements. `token.move` with
+`undoRevision` restores the receipt's coordinates, floor, and stair progress;
+supplied coordinates cannot override the receipt. Actor, token revision, and
+geometry must match. This is a new accepted event, not a revision rollback. Receipts
+are stripped from added/cloned placements and cannot be patched by a client.
+Flight and whole-group undo remain pending in `../vtt-improvement-plan.md`.
 
 The legacy paths being replaced are primarily:
 
