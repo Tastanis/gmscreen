@@ -235,16 +235,20 @@ function reducePlacementBatch(state, event, changes) {
   }
 }
 
-function reduceSceneInstalled(state, event, changes) {
+function reduceSceneInstalled(state, event, changes, replace = false) {
   const sceneId = event.sceneId;
   if (typeof sceneId !== 'string' || !sceneId) throw new Error('scene.installed requires sceneId');
+  const previousIds = Object.keys(state.placements?.[sceneId] ?? {});
   for (const domain of ['placements', 'sceneConfig', 'drawings', 'templates']) {
     const entries = event.payload?.domains?.[domain];
     if (!entries || typeof entries !== 'object') throw new Error(`scene.installed requires ${domain}`);
-    if (Object.hasOwn(state[domain] ?? {}, sceneId)) throw new Error('scene.installed cannot replace an existing scene');
+    if (!replace && Object.hasOwn(state[domain] ?? {}, sceneId)) throw new Error('scene.installed cannot replace an existing scene');
     state[domain] = { ...(state[domain] ?? {}), [sceneId]: clone(entries) };
   }
-  changes.placements.added.push(...Object.keys(state.placements[sceneId]));
+  const nextIds = Object.keys(state.placements[sceneId]);
+  changes.placements.added.push(...nextIds.filter(id=>!previousIds.includes(id)));
+  changes.placements.updated.push(...nextIds.filter(id=>previousIds.includes(id)));
+  changes.placements.removed.push(...previousIds.filter(id=>!nextIds.includes(id)));
   changes.levels = changes.grid = changes.fog = changes.drawings = changes.templates = true;
 }
 
@@ -600,6 +604,7 @@ const reducers = Object.freeze({
   'scene.activated': reduceSceneActivated,
   'scene.deleted': reduceSceneDeleted,
   'scene.installed': reduceSceneInstalled,
+  'scene.layoutRestored': (state, event, changes) => reduceSceneInstalled(state, event, changes, true),
   'routing.changed': reduceRoutingChanged,
 });
 

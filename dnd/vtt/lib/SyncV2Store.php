@@ -2135,6 +2135,61 @@ final class SyncV2Store
         return $changed;
     }
 
+    private function checkpointLayoutPlan(array $checkpoint, array $snapshot): array
+    {
+        $placements = $snapshot['state']['placements'][$checkpoint['sceneId']] ?? [];
+        $links = [];
+        foreach ($this->playerCharacterUserIds as $userId) $links[$userId] = $this->resolvePcPlacementIdForUser($placements, $userId);
+        return SceneCheckpointRestore::planLayout($checkpoint,$snapshot,$links);
+    }
+
+    public function previewCheckpointLayout(array $checkpoint): array
+    {
+        return $this->checkpointLayoutPlan($checkpoint,$this->getSnapshot())['preview'];
+    }
+
+    public function restoreCheckpointLayout(array $command, string $actorId, bool $isGm): array
+    {
+        if (!$isGm || trim($actorId) === '') throw new InvalidArgumentException('Checkpoint layout restore is GM-only.');
+        $operationId = $command['operationId'] ?? '';
+        if (!is_string($operationId) || !preg_match('/^[A-Za-z0-9._:-]{8,128}$/',$operationId)) throw new InvalidArgumentException('Invalid operation ID.');
+        if (($command['type'] ?? '') !== 'checkpoint.restoreLayout') throw new InvalidArgumentException('Expected checkpoint.restoreLayout.');
+        $reviewed = $command['payload']['reviewedRevision'] ?? null;
+        if (!is_int($reviewed) || $reviewed < 0) throw new InvalidArgumentException('A reviewed revision is required.');
+        $this->pdo->exec('BEGIN IMMEDIATE');
+        try {
+            $existing = $this->findEventByOperationId($operationId);
+            if ($existing !== null) {
+                if ($existing['actorId'] !== $actorId || $existing['type'] !== 'scene.layoutRestored') throw new InvalidArgumentException('Operation ID is already in use.');
+                $this->pdo->exec('COMMIT');
+                return ['status'=>'accepted','event'=>$existing,'idempotent'=>true];
+            }
+            $snapshot = $this->getSnapshot();
+            if ($snapshot['revision'] !== $reviewed) return $this->rollbackConflict('checkpoint_preview_stale',$snapshot);
+            $checkpoint = $this->sceneCheckpoints()->get((string)($command['payload']['checkpointId'] ?? ''));
+            if ($checkpoint === null) throw new InvalidArgumentException('Checkpoint no longer exists.');
+            $plan = $this->checkpointLayoutPlan($checkpoint,$snapshot);
+            if (!$plan['preview']['hasChanges']) throw new InvalidArgumentException('The scene layout already matches this checkpoint.');
+            $sceneId = $checkpoint['sceneId']; $revision = $snapshot['revision']+1;
+            $domains = $plan['domains']; $state = $snapshot['state']; $now = $this->nowMilliseconds();
+            $domains['sceneConfig']['_revision'] = max($revision,(int)($state['sceneConfig'][$sceneId]['_revision'] ?? 0)+1);
+            foreach ($plan['preview']['viewerChanges'] as $change) $domains['sceneConfig']['userLevelState'][$change['userId']]['updatedAt']=$now;
+            foreach (['placements','drawings','templates'] as $domain) foreach ($domains[$domain] as $id=>&$entry) {
+                $entry['_entityRevision']=max($revision,(int)($entry['_entityRevision'] ?? 0)+1,(int)($state[$domain][$sceneId][$id]['_entityRevision'] ?? 0)+1);
+                unset($entry['_revision']);
+            }
+            unset($entry);
+            foreach ($domains as $domain=>$entries) $state[$domain][$sceneId]=$entries;
+            $event=['revision'=>$revision,'operationId'=>$operationId,'actorId'=>$actorId,'type'=>'scene.layoutRestored',
+                'sceneId'=>$sceneId,'entityId'=>null,'entityRevision'=>$domains['sceneConfig']['_revision'],
+                'payload'=>['domains'=>$domains,'checkpointId'=>$checkpoint['id']],'serverTime'=>$now];
+            $this->insertEvent($event); $this->updateWorldState($revision,$state,$now);
+            if ($revision % $this->snapshotInterval === 0) $this->insertSnapshot($revision,$state,$now);
+            $this->pruneEvents($revision); $this->pdo->exec('COMMIT');
+            return ['status'=>'accepted','event'=>$event,'idempotent'=>false];
+        } catch (Throwable $error) { $this->rollbackTransactionSilently(); throw $error; }
+    }
+
     public function restoreCheckpointPositions(array $command, string $actorId, bool $isGm): array
     {
         if (!$isGm) throw new InvalidArgumentException('Checkpoint restore is GM-only.');

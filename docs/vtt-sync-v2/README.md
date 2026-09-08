@@ -7,6 +7,16 @@ state, combat turns, or rendering subscriptions.
 
 ## Decision
 
+An internal `checkpoint.restoreLayout` authority now plans and atomically restores
+one scene's floors, canonical grid, fog, drawings/templates and existing token
+positions. Current token fields/resources, newer tokens, turns, routing and other
+scenes are preserved. Missing/unsupported floors produce previewed relocations;
+linked following and saved viewer-floor repair preserve Browse preferences.
+`scene.layoutRestored` replaces only those four owned domains with advancing
+revisions, is player-projected like snapshots, and uses focused renderer flags.
+Strict reviewed world revisions reject stale previews; accepted retries survive
+checkpoint archive deletion. HTTP/UI wiring and reopened-grid QA remain pending.
+
 Scene import authority now has an internal `installScenePackage` transaction:
 one `scene.installed` event adds the four new scene domains without touching routing
 or existing scenes. The same transaction writes a world-scoped `vtt_scene_imports`

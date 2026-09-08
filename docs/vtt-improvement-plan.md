@@ -802,3 +802,20 @@ checks panel opacity, verifies ordinary/diagnostic memory visibility, and captur
 settled dark/light/Diablo panels for visual inspection. The floor-view browser
 regression also passes private GM browsing, player Show/reload, token-floor return,
 offline hidden-floor cleanup and unchanged token positions. No gameplay logic changed.
+
+### Internal checkpoint layout restore
+
+The new layout plan describes floor/grid/fog changes, drawing/template additions,
+removals and updates, existing-token destinations, newer-token fallbacks and saved
+viewer-floor changes. The transaction recomputes that plan against the reviewed
+world revision and applies it once. Current token resources/conditions and newer
+tokens survive; geometry-invalid undo/traversal receipts are cleared. Resource
+files, combat turns, routing, base-map/catalog metadata and other scenes are outside
+this scope. Missing/deleted checkpoint tokens are not resurrected.
+
+SQLite tests cover stale previews, player denial, lost content, newer tokens on
+removed floors, resource preservation, linked/Browse views, hidden-floor projection,
+injected event-write failure, and accepted retries after checkpoint deletion. The
+actual JS reducer reproduces the committed state. The HTTP/UI preview/apply workflow
+and canonical grid persistence on scene reopening remain to be completed.
+All 703 tests across 83 files pass after this change.

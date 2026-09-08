@@ -32,6 +32,20 @@ function phpArgsForSqlite() {
   ];
 }
 
+test('checkpoint layout restore is atomic, scoped, preview-bound and replayable', () => {
+  const script = fileURLToPath(new URL('../../../../api/v2/tests/checkpoint-layout.test.php', import.meta.url));
+  const result = spawnSync('php', [...phpArgsForSqlite(), script], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const { before, after, event, playerEvent } = JSON.parse(result.stdout);
+  const reduced = reduceCanonicalEvent(before, event);
+  assert.equal(reduced.status, 'applied'); assert.deepEqual(reduced.snapshot.state, after.state);
+  assert.equal(reduced.changeSet.sceneRouting, false);
+  assert.equal(reduceCanonicalEvent(reduced.snapshot, event).status, 'duplicate');
+  const player = reduceCanonicalEvent(before, playerEvent);
+  assert.equal(player.status, 'applied');
+  assert.equal(JSON.stringify(player.snapshot).includes('/secret-map.jpg'), false);
+});
+
 test('scene import commits once, survives catalog interruption, and replays in the browser reducer', () => {
   const script = fileURLToPath(new URL('../../../../api/v2/tests/scene-install.test.php', import.meta.url));
   const result = spawnSync('php', [...phpArgsForSqlite(), script], { encoding: 'utf8' });

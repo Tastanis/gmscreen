@@ -412,7 +412,7 @@ function vttSyncV2ProjectEventForUser(array $event, array $auth): array
         return $event;
     }
     $type = (string) ($event['type'] ?? '');
-    if ($type === 'scene.installed') {
+    if (in_array($type, ['scene.installed','scene.layoutRestored'], true)) {
         $sceneId = $event['sceneId'];
         $state = [];
         foreach ($event['payload']['domains'] ?? [] as $domain=>$entries) $state[$domain][$sceneId] = $entries;
