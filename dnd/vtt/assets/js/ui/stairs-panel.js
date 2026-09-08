@@ -1,3 +1,4 @@
+import { publishActiveTool } from './active-tool.js';
 /**
  * Stairs side panel — compact GM-only floating panel that owns:
  *   - placement buttons (↑ / ↓)
@@ -108,6 +109,8 @@ function normalizeMode(raw) {
 }
 
 function notifyModeSubscribers() {
+  publishActiveTool('stairs', !isPanelOpen() ? null : mode === 'place-up' ? 'Place stairs up'
+    : mode === 'place-down' ? 'Place stairs down' : 'Edit stairs');
   modeSubscribers.forEach((callback) => {
     try {
       callback({ mode, isPanelOpen: isPanelOpen(), selectedStairId });

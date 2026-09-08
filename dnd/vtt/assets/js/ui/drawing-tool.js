@@ -1,4 +1,5 @@
 import { diffDrawings, applyDrawingEdits, invertDrawingEdits, canEditDrawing } from './drawing-edits.js';
+import { publishActiveTool } from './active-tool.js';
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 let sharedState = null;
@@ -261,6 +262,7 @@ function toggleDrawMode(state, nextActive) {
   }
 
   state.active = nextActive;
+  publishActiveTool('draw', state.active ? 'Draw' : null);
   state.drawButton?.classList.toggle('is-active', state.active);
   if (state.drawButton) {
     state.drawButton.setAttribute('aria-pressed', state.active ? 'true' : 'false');

@@ -2931,6 +2931,7 @@ body.vtt-body .vtt-map-navigation {
 }
 .vtt-map-navigation .btn { min-height: 36px; }
 .vtt-map-navigation output { min-width: 3.5em; text-align: center; font-variant-numeric: tabular-nums; }
+.vtt-active-tool { padding: 6px 8px; font-weight: 600; }
 .vtt-save-feedback > summary { cursor: pointer; padding: 8px; min-height: 36px; }
 .vtt-save-feedback[data-has-failure="true"] > summary { color: #ffb98a; }
 .vtt-save-feedback__body {

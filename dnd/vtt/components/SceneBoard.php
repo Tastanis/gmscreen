@@ -151,6 +151,7 @@ function renderVttSceneBoard(bool $isGm = false): string
         </header>
         <div class="vtt-board__canvas-wrapper">
             <nav class="vtt-map-navigation" aria-label="Map navigation" data-map-navigation-root>
+                <span class="vtt-active-tool" data-active-tool role="status">Tool: Select</span>
                 <button type="button" class="btn" data-connection-status aria-live="polite">Connecting</button>
                 <button type="button" class="btn" data-map-navigation="out" aria-label="Zoom out">−</button>
                 <output data-map-zoom aria-label="Map zoom">100%</output>

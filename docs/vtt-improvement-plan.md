@@ -31,7 +31,7 @@ User authorized implementing the September 7 product audit, updating/running the
 - [ ] Compact inactive tracker and combat character card.
   - Inactive tracker is a collapsed roster disclosure with a compact horizontal toolbar; full tracker opens automatically during combat. Combat character-card work remains pending.
 - [ ] Zoom/fit/center/shortcuts and persistent tool labels.
-  - Visible zoom, Fit Map, Center Selected, and a shortcut guide are implemented and browser-tested. Persistent active-tool labels remain pending.
+  - Visible zoom, Fit Map, Center Selected, shortcut guide, and active-tool labels are implemented. Browser checks cover Draw, Measure, stairs, and template activation/cancellation; cutout-label browser coverage remains pending.
 - [ ] Opaque readable panels, practical targets, diagnostics-only memory counter.
 
 ## Recovery and preparation
@@ -210,6 +210,18 @@ The localhost browser journey verifies real browser offline/online transitions,
 synthetic session rejection, separate save feedback, and manual recovery. All 682
 tests passed across 80 VTT/automation files. This is tab-to-server status, not proof
 that every remote player is connected or that external Pusher delivery was tested.
+
+## Active tool labels
+
+Tool modules publish their actual activation state to a persistent map-toolbar
+label: selection, drawing, measurement, stairs editing/placement, cutout editing,
+and template placement. Multiple active modes remain visible rather than one label
+concealing another. The browser journey verifies Draw/Measure toggles, stairs
+editing and placement, panel closure, template placement, and Escape cancellation.
+It caught a preexisting focus problem: choosing a template left keyboard focus
+outside the board, preventing its Escape handler from running. Placement now
+focuses the board without scrolling. Cutout mode is wired but its browser label
+journey remains pending; broader tool exclusivity is not claimed complete here.
 
 Validation: 678 tests passed across 77 files. Expanded PHP checks then passed for
 forged/cloned receipts and changed floor geometry. Three-browser floor QA includes

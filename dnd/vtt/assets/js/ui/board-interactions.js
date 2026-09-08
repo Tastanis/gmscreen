@@ -80,6 +80,7 @@ import { mountMapNavigation } from './map-navigation.js';
 import { floorRelation } from './floor-geometry.js';
 import { mountSaveFeedback, describeSaveFailure } from './save-feedback.js';
 import { mountConnectionStatus } from './connection-status.js';
+import { publishActiveTool } from './active-tool.js';
 import { createRequestedTestCoordinator } from './requested-test-coordinator.js';
 import {
   applyCanonicalPrimaryTokenSelection,
@@ -23027,6 +23028,7 @@ function createMapLevelCutoutTool() {
     toolbarPosition = null;
     isActive = true;
     mapLevelCutoutEditorActive = true;
+    publishActiveTool('cutouts', 'Edit floor cutouts');
 
     root.hidden = false;
     root.removeAttribute('hidden');
@@ -23059,6 +23061,7 @@ function createMapLevelCutoutTool() {
 
     isActive = false;
     mapLevelCutoutEditorActive = false;
+    publishActiveTool('cutouts');
     editor.hidden = true;
     editor.setAttribute('hidden', '');
     editor.setAttribute('aria-hidden', 'true');
@@ -25710,6 +25713,7 @@ function createTemplateTool() {
   }
 
   function updateLayerVisibility(view = viewState) {
+    publishActiveTool('template', placementState ? `Place ${placementState.type || 'template'}` : null);
     const visible = Boolean(view.mapLoaded && (shapes.length > 0 || previewShape || placementState));
     layer.hidden = !visible;
     layer.setAttribute('aria-hidden', visible ? 'false' : 'true');
@@ -25993,6 +25997,7 @@ function createTemplateTool() {
   function beginPlacement(type, values) {
     cancelPlacement();
     clearSelection();
+    board.focus({ preventScroll: true });
     if (type === 'wall') {
       const totalSquares = Number.isInteger(values?.squares)
         ? values.squares

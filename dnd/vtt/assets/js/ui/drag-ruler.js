@@ -1,4 +1,5 @@
 const SVG_NS = 'http://www.w3.org/2000/svg';
+import { publishActiveTool } from './active-tool.js';
 const MAX_MEASUREMENT_POINTS = 21; // 20 segments
 
 // Arrow visual constants
@@ -163,6 +164,7 @@ function toggleMeasureMode(state, nextActive) {
   }
 
   state.active = nextActive;
+  publishActiveTool('measure', state.active ? 'Measure' : null);
   state.measureButton?.classList.toggle('is-active', state.active);
   if (state.measureButton) {
     state.measureButton.setAttribute('aria-pressed', state.active ? 'true' : 'false');
