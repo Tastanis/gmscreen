@@ -48,6 +48,7 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
     <link rel="stylesheet" href="assets/css/theme.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="assets/css/diablo-skin.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="../dice-roller/diablo-dice.css?v=<?= $assetVersion ?>" />
+    <link rel="stylesheet" href="assets/css/readability.css?v=<?= $assetVersion ?>" />
     <script src="../js/diablo-theme-loader.js?v=<?= $assetVersion ?>"></script>
 </head>
 <body class="vtt-body">

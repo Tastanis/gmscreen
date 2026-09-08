@@ -6,9 +6,10 @@
    'dnd-dashboard-theme' = 'diablo'; js/diablo-theme-loader.js adds the
    .diablo-theme class to <html> and <body>).
 
-   Must be the LAST stylesheet in templates/layout.php: it out-cascades the
+   Must follow other theme stylesheets in templates/layout.php: it out-cascades the
    :root[data-vtt-theme='light'/'dark'] variable blocks, so the Diablo
    palette wins regardless of the VTT's own light/dark setting.
+   readability.css follows the skins for shared control sizes and opaque bases.
    ========================================================================== */
 
 :root.diablo-theme {

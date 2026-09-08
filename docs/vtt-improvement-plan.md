@@ -35,14 +35,15 @@ User authorized implementing the September 7 product audit, updating/running the
   - Inactive tracker is a collapsed roster disclosure; the full tracker opens automatically during combat. The character card prioritizes stamina, recoveries, resources, surges, and conditions, with reference material in a disclosure and existing action controls in the ability tray.
 - [x] Zoom/fit/center/shortcuts and persistent tool labels.
   - Visible zoom, Fit Map, Center Selected, shortcut guide, and active-tool labels are implemented. Browser checks cover Draw, Measure, stairs, templates, cutout editing, and mode handoffs.
-- [ ] Opaque readable panels, practical targets, diagnostics-only memory counter.
+- [x] Opaque readable panels, practical targets, diagnostics-only memory counter.
+  - Main settings/character/monster/chat and token/drawing reading surfaces have opaque bases. Floor controls use 40px targets and readable single-line player controls; settings controls use 36px minimums. Keyboard focus remains visible. Dark/light/Diablo laptop layouts and diagnostics-only memory gating are browser-verified.
 
 ## Recovery and preparation
 
 - [ ] Specific-player preview and useful connection status.
   - Server-check-based connection status and manual reconciliation are implemented; specific-player preview remains pending.
 - [ ] Named encounter checkpoints, scoped restore, scene duplication/export.
-  - GM-only checkpoints and reviewed atomic position/floor restoration are implemented. Scene JSON export includes catalog metadata, board geometry, placements, and image references. Full geometry restore, import, and duplication remain pending.
+  - GM-only checkpoints and reviewed atomic position/floor restoration are implemented. Scene JSON export/import and duplication preserve board geometry and links, survive retries, and open without reload. Full checkpoint geometry restore remains pending.
 - [ ] Encounter presets, favorites and recent assets.
   - Token favorites and the 20 most recently added board tokens are implemented with search and browser-local persistence. Encounter presets and other asset collections remain pending.
 - [ ] Handouts, show-image, and map pins linking existing campaign records.
@@ -786,3 +787,18 @@ navigating/reloading, then verify a later reload. They preserve original scene d
 and initial routing. The success UI is visually checked at 1280×720. Private encounter
 preparation remains pending.
 All 702 tests across 83 files pass after this integration.
+
+### Laptop readability and controls
+
+A final shared CSS layer preserves each theme's palette/gradients while supplying
+opaque bases beneath sheets, chat, settings and token/drawing menus. Floor arrows,
+Show players this floor, Follow/Browse and My token's floor use 40px targets and
+larger text. Player return labels stay on one line; idle floor controls retain a
+compact header. Settings controls have 36px minimum targets and visible keyboard
+focus. The existing memory widget remains available only with `?diagnostics=1`.
+
+The readability browser check measures GM/player targets and bounds at 1280×720,
+checks panel opacity, verifies ordinary/diagnostic memory visibility, and captures
+settled dark/light/Diablo panels for visual inspection. The floor-view browser
+regression also passes private GM browsing, player Show/reload, token-floor return,
+offline hidden-floor cleanup and unchanged token positions. No gameplay logic changed.

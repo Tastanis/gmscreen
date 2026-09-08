@@ -1,0 +1,71 @@
+/* Shared usability layer after theme skins. Preserve their gradients/palette,
+   but provide an opaque base so board details never show through reading panels. */
+body.vtt-body .vtt-character-summary,
+body.vtt-body .vtt-settings-panel,
+body.vtt-body .chat-panel,
+body.vtt-body .vtt-token-settings,
+body.vtt-body .vtt-drawing-settings {
+  background-color: var(--vtt-panel-bg);
+}
+body.vtt-body .vtt-monster-summary { background-color: #050c0a; }
+
+body.vtt-body .vtt-settings-panel,
+body.vtt-body .chat-panel { line-height: 1.45; }
+
+body.vtt-body .vtt-settings-panel button,
+body.vtt-body .vtt-settings-panel input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
+body.vtt-body .vtt-settings-panel select {
+  min-height: 36px;
+}
+body.vtt-body .vtt-settings-panel__header button { min-width: 40px; min-height: 40px; }
+
+body.vtt-body .vtt-board__level-button {
+  width: 40px;
+  height: 40px;
+  font-size: 0.875rem;
+}
+body.vtt-body .vtt-board__level-nav {
+  grid-template-columns: 40px minmax(5rem, 1fr) 40px;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+body.vtt-body .vtt-board__level-name,
+body.vtt-body .vtt-board__level-indicator { font-size: 0.8125rem; line-height: 1.35; }
+body.vtt-body .vtt-board__level-activate {
+  min-height: 40px;
+  font-size: 0.8125rem;
+  line-height: 1.3;
+  text-transform: none;
+  padding: 6px 10px;
+}
+body.vtt-body .vtt-board__level-return,
+body.vtt-body [data-floor-follow-mode] {
+  min-height: 40px;
+  font-size: 0.8125rem;
+  line-height: 1.3;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+body.vtt-body .vtt-board__header.is-combat-idle .vtt-board__scene-meta {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: 0;
+  width: max-content;
+  max-width: min(100%, 44rem);
+}
+body.vtt-body .vtt-board__header.is-combat-idle .vtt-board__level-indicator {
+  width: auto;
+  min-width: 8rem;
+  flex: 0 1 auto;
+}
+body.vtt-body .vtt-board__header.is-combat-idle .vtt-board__level-nav {
+  width: 16rem;
+  flex: 0 0 auto;
+}
+body.vtt-body .vtt-board__scene-meta :is(button, select):focus-visible,
+body.vtt-body .vtt-settings-panel :is(button, input, select, summary):focus-visible {
+  outline: 2px solid var(--vtt-text-primary);
+  outline-offset: 2px;
+}

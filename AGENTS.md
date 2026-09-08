@@ -21,6 +21,9 @@ the first request, not after an uncertain accepted response.
 Import completion calls the existing Sync V2 recovery path and checks all four
 new scene domains before refreshing local catalog metadata or offering Open copy
 for GM. Do not expose an empty local scene before canonical recovery finishes.
+Shared panel opacity, floor-control targets and keyboard focus styles live in
+`dnd/vtt/assets/css/readability.css`, after the theme skins. Preserve palette
+variables and verify settled GM/player panels at 1280×720 in light/dark/Diablo.
 
 ## Version System
 
