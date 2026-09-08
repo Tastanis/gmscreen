@@ -40,7 +40,7 @@ User authorized implementing the September 7 product audit, updating/running the
 - [ ] Specific-player preview and useful connection status.
   - Server-check-based connection status and manual reconciliation are implemented; specific-player preview remains pending.
 - [ ] Named encounter checkpoints, scoped restore, scene duplication/export.
-  - A GM-only immutable scene checkpoint archive and capture/list/read/delete API are implemented and tested. UI, explicit restore scopes, and restore journeys remain pending.
+  - A GM-only immutable scene checkpoint archive, API, and capture/download/delete controls are implemented and tested. Explicit restore scopes and restore journeys remain pending.
 - [ ] Encounter presets, favorites and recent assets.
   - Token favorites and the 20 most recently added board tokens are implemented with search and browser-local persistence. Encounter presets and other asset collections remain pending.
 - [ ] Handouts, show-image, and map pins linking existing campaign records.
@@ -388,3 +388,14 @@ anonymous 401, player 403 for read/write/delete, GM operations and retry behavio
 and identical canonical snapshots before/after archive operations. Checkpoints do
 not include character-sheet files, chat, combat, other campaign stores, or embedded
 media backups. Scoped restore must remain explicit about those boundaries.
+
+The Saved scenes panel now includes a Scene checkpoints disclosure for the active
+scene. It offers named capture, revision/date listings, JSON download, refresh,
+and confirmed archive deletion. Capture retries retain their ID after an uncertain
+response; controls block overlapping archive operations. Scene changes invalidate
+stale list requests. Scope limitations are shown beside the controls. Names allow
+up to 80 characters consistently in the UI and server.
+
+The disposable GM browser journey created a checkpoint, inspected its downloaded
+JSON, reloaded the page, and deleted the archive entry through confirmation. The
+laptop layout was inspected. Scoped restore is not yet exposed or marked complete.

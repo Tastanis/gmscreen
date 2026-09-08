@@ -17,7 +17,7 @@ final class SceneCheckpointArchive
     {
         $name = trim($name); $sceneId = trim($sceneId);
         if (!preg_match('/^[A-Za-z0-9_-]{8,100}$/', $id)) throw new InvalidArgumentException('Invalid checkpoint ID.');
-        if ($name === '' || strlen($name) > 160) throw new InvalidArgumentException('Use a checkpoint name of 1 to 160 bytes.');
+        if ($name === '' || strlen($name) > 320 || preg_match_all('/./us', $name) > 80) throw new InvalidArgumentException('Use a checkpoint name of 1 to 80 characters.');
         if ($sceneId === '' || strlen($sceneId) > 200) throw new InvalidArgumentException('A scene is required.');
         $existing = $this->get($id);
         if ($existing !== null) {

@@ -112,6 +112,19 @@ function renderVttSettingsPanel(string $tokenLibraryMarkup = '', bool $isGm = fa
                         </form>
                         </details>
                         <div class="scene-manager" id="scene-manager"></div>
+                        <details class="vtt-prep-disclosure vtt-checkpoints" data-scene-checkpoints>
+                            <summary>Scene checkpoints</summary>
+                            <p data-checkpoint-scene></p>
+                            <p>Save this scene's tokens, floors, fog, drawings, and templates. Character sheets, chat, combat turns, and image files are not backed up here.</p>
+                            <label for="checkpoint-name">Checkpoint name</label>
+                            <input id="checkpoint-name" data-checkpoint-name maxlength="80" placeholder="Before the ambush" />
+                            <div class="vtt-checkpoints__actions">
+                                <button class="btn" type="button" data-checkpoint-create>Save checkpoint</button>
+                                <button class="btn" type="button" data-checkpoint-refresh>Refresh list</button>
+                            </div>
+                            <p data-checkpoint-status role="status"></p>
+                            <ul data-checkpoint-list></ul>
+                        </details>
                     </div>
                 </section>
             <?php endif; ?>

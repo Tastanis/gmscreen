@@ -1,4 +1,5 @@
 import { renderSceneList } from './scene-manager.js';
+import { mountSceneCheckpoints } from './scene-checkpoints.js';
 import { renderTokenLibrary } from './token-library.js';
 import { updateSceneGrid } from '../services/scene-service.js';
 import { normalizeGridState } from '../state/normalize/grid.js';
@@ -326,6 +327,7 @@ export function mountSettingsPanel(routes, store, user = {}) {
 
   if (isGM) {
     renderSceneList(routes, storeApi);
+    mountSceneCheckpoints(panel.querySelector('[data-scene-checkpoints]'), storeApi);
   }
   renderTokenLibrary(routes, storeApi, { isGM });
 }

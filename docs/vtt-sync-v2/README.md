@@ -842,7 +842,8 @@ Archive operations do not mutate canonical state or advance its revision. Reusin
 an ID with the same name/scene returns the original immutable capture, including
 after scene removal; changing its identity is rejected. Restore must be implemented
 as new canonical commands/events with explicit scopes, never by replacing the
-world row with an archived snapshot. The UI and restore flow remain pending.
+world row with an archived snapshot. The scene preparation UI supports capture,
+listing, download, and confirmed deletion. The scoped restore flow remains pending.
 
 The legacy paths being replaced are primarily:
 
