@@ -878,3 +878,19 @@ asserts no V2 commands, unchanged canonical state and no page errors. The settle
 panel screenshot was inspected. Model tests cover Browse, unavailable primary,
 deleted-floor fallback and a closed player map.
 Full regression suite: 705 tests across 84 files passed.
+
+### Passive fog rendering for graphical preview
+
+The ordinary board now delegates canvas painting to renderFogSurface, which accepts
+an explicit canvas, scene, floor, view geometry and GM/player opacity. It reuses
+existing per-floor reveals and PC-cell reveal behavior, without mounting handlers
+or replacing the active board's singleton context. The fog checker also accepts
+an explicit viewer override for passive player evaluation inside the GM page.
+
+Unit tests cover independent canvases, separate floor reveals, opaque player fog,
+translucent GM fog, grid borders, unchanged source state and clearing a closed scene.
+The isolated browser test enables real canonical fog, then compares passive canvas
+output byte-for-byte with the mounted GM/player canvases. Both match; drawing the
+opposite viewer opacity leaves the mounted canvas unchanged. Graphical preview
+assembly with map/cutout/token/content layers remains outstanding.
+Full regression suite: 706 tests across 85 files passed.

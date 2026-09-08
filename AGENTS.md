@@ -5,6 +5,9 @@ endpoint and the same snapshot projection as the actual player. Never impersonat
 the player session or touch their presence. GM Scenes has read-only Player view
 details; graphical fog/cutout rendering remains pending. Never label server-visible
 token data as on-screen visibility without applying the client geometry and fog.
+`renderFogSurface` paints an independent canvas with explicit scene/floor/viewer
+inputs. Use it for passive preview rather than remounting the singleton fog tool,
+which owns GM interaction state. The ordinary board uses the same painter.
 
 Scene package copying uses `ScenePackage::prepareForNewScene` for explicit board
 ID remapping. Never recursively rewrite all IDs: token-library, sheet and embedded

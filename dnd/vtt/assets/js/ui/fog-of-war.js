@@ -109,7 +109,20 @@ export function renderFog(state) {
 
   syncPanelToggle(enabled);
 
-  const view = viewStateRef ?? {};
+  renderFogSurface({ state, canvas: fogCanvas, view: viewStateRef ?? {},
+    sceneId: activeSceneId, levelId: activeLevelId, gmViewing: isGm });
+}
+
+/** Paint a separate fog canvas without mounting handlers or changing GM context. */
+export function renderFogSurface({ state, canvas, view = {}, sceneId, levelId = BASE_MAP_LEVEL_ID, gmViewing = false } = {}) {
+  const fogCanvas = canvas;
+  const fogCtx = canvas?.getContext('2d');
+  if (!fogCanvas || !fogCtx) return;
+  const activeSceneId = sceneId;
+  const activeLevelId = levelId;
+  if (!activeSceneId) { clearCanvas(fogCtx, fogCanvas); return; }
+  const levelFog = getLevelFog(state, activeSceneId, activeLevelId);
+  const enabled = Boolean(levelFog?.enabled);
   const mapW = Number.isFinite(view.mapPixelSize?.width) ? view.mapPixelSize.width : 0;
   const mapH = Number.isFinite(view.mapPixelSize?.height) ? view.mapPixelSize.height : 0;
   if (mapW <= 0 || mapH <= 0) {
@@ -148,7 +161,7 @@ export function renderFog(state) {
   const revealed = levelFog.revealedCells ?? {};
   const pcCells = buildPcRevealedCells(state, activeSceneId, activeLevelId);
 
-  const alpha = isGm ? GM_FOG_ALPHA : PLAYER_FOG_ALPHA;
+  const alpha = gmViewing ? GM_FOG_ALPHA : PLAYER_FOG_ALPHA;
 
   fogCtx.clearRect(0, 0, mapW, mapH);
   fogCtx.fillStyle = `rgba(${FOG_COLOR},${alpha})`;
@@ -257,8 +270,8 @@ export function isPositionFogged(state, col, row, levelId) {
  * Pre-compute a fog checker for a given level for use during batch rendering.
  * Returns null when fog is inactive on that level.
  */
-export function createFogChecker(state, levelId) {
-  if (isGm) return null;
+export function createFogChecker(state, levelId, { gmViewing = isGm } = {}) {
+  if (gmViewing) return null;
 
   const activeSceneId = state?.boardState?.activeSceneId ?? null;
   if (!activeSceneId) return null;
