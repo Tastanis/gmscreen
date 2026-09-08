@@ -775,6 +775,13 @@ Stop and investigate instead of layering on another guard when:
 
 ## Current-code orientation
 
+Command client diagnostics include `commandState` lifecycle notifications with
+operation ID, command type, status, and failure reason/status (no full payload).
+The UI retains unresolved operation notices independently of later accepted actions.
+An ingestion failure after server acceptance is unconfirmed locally and requires
+reconciliation; it must not be described as a server rejection. This display does
+not persist or retry new commands and is not a second shared-state writer.
+
 ### Authoritative floor movement (September 7 follow-up)
 
 `FloorGeometry.php` resolves stair traversal and destination support within the

@@ -50,6 +50,7 @@ export function createCommandClient({
     }
 
     pendingCommands.add(command);
+    onDiagnostic('commandState', { operationId: command.operationId, type, status: 'sending' });
     let response;
     let body;
     const attempts = Math.max(1, Math.min(5, Math.trunc(Number(maxNetworkAttempts)) || 2));
@@ -71,6 +72,8 @@ export function createCommandClient({
       } catch (error) {
         if (options.signal?.aborted || attempt >= attempts) {
           pendingCommands.fail(command.operationId, { error: error?.message ?? 'network_error' });
+          error.operationId = command.operationId;
+          onDiagnostic('commandState', { operationId: command.operationId, type, status: 'failed', reason: error?.message });
           throw error;
         }
         onDiagnostic('commandRetry', {
@@ -118,15 +121,26 @@ export function createCommandClient({
       const error = new Error(body?.error || `Sync V2 command failed (${response.status})`);
       error.status = response.status;
       error.response = body;
+      error.operationId = command.operationId;
+      onDiagnostic('commandState', { operationId: command.operationId, type, status: 'rejected', httpStatus: response.status, reason: error.message });
       throw error;
     }
 
-    const applyResult = await eventStream.ingest(body.event, 'acknowledgement');
+    let applyResult;
+    try { applyResult = await eventStream.ingest(body.event, 'acknowledgement'); }
+    catch (error) {
+      error.operationId = command.operationId;
+      pendingCommands.fail(command.operationId, { error: error?.message ?? 'replay_error' });
+      onDiagnostic('commandState', { operationId: command.operationId, type, status: 'failed',
+        reason: 'The server accepted this change, but this tab could not apply it. Refresh to reconcile the board.' });
+      throw error;
+    }
     pendingCommands.acknowledge(command.operationId, {
       event: body.event,
       idempotent: Boolean(body.idempotent),
       applyStatus: applyResult.status,
     });
+    onDiagnostic('commandState', { operationId: command.operationId, type, status: 'accepted' });
     return {
       command,
       event: body.event,

@@ -78,6 +78,7 @@ import { createTokenInteractions } from './token-interactions.js';
 import { createTokenMovementRuntime } from '../sync-v2/token-movement-runtime.js';
 import { mountMapNavigation } from './map-navigation.js';
 import { floorRelation } from './floor-geometry.js';
+import { mountSaveFeedback, describeSaveFailure } from './save-feedback.js';
 import { createRequestedTestCoordinator } from './requested-test-coordinator.js';
 import {
   applyCanonicalPrimaryTokenSelection,
@@ -762,6 +763,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const MAP_LOAD_WATCHDOG_DELAY_MS = 5000;
   let tokenDropDepth = 0;
   const selectedTokenIds = new Set();
+  const saveFeedback = mountSaveFeedback(document.querySelector('[data-save-feedback]'));
   mountMapNavigation({
     root: document.querySelector('[data-map-navigation-root]'), board, view: viewState,
     applyTransform: () => applyTransform(), report: message => updateStatus(message),
@@ -1242,6 +1244,7 @@ export function mountBoardInteractions(store, routes = {}) {
     reconcileSnapshot: reconcileTokenMovementSnapshot,
     onError: (error) => reportSyncFailure(error, 'token movement'),
     onDiagnostic: (name, details) => {
+      if (name === 'commandState') saveFeedback.update(details);
       if (name === 'revisionGap') {
         recordSyncDiagnostic('revisionGaps', details);
       } else if (name === 'recoveryStarted') {
@@ -1998,11 +2001,8 @@ export function mountBoardInteractions(store, routes = {}) {
   let syncFailureVisible = false;
 
   function reportSyncFailure(error, source = 'save') {
-    const statusCode = Number(error?.status) || 0;
-    const sessionExpired = statusCode === 401 || statusCode === 403;
-    const message = sessionExpired
-      ? 'Your VTT session expired. Sign in again before making more changes.'
-      : `VTT ${source} failed. Your latest change may not be shared yet.`;
+    const message = describeSaveFailure(error, source);
+    saveFeedback.report(error, source);
     if (status) {
       status.textContent = message;
       status.dataset.syncError = 'true';

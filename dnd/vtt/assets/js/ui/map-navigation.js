@@ -5,6 +5,10 @@ export function mountMapNavigation({ root, board, view, applyTransform, selected
   function run(action) {
     if (action === 'help') {
       help.hidden = !help.hidden;
+      if (!help.hidden) {
+        const feedback = root.querySelector('[data-save-feedback]');
+        if (feedback) feedback.open = false;
+      }
       root.querySelector('[data-map-navigation="help"]').setAttribute('aria-expanded', String(!help.hidden));
       return;
     }

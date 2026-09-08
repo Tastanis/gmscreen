@@ -15,7 +15,7 @@ User authorized implementing the September 7 product audit, updating/running the
   - Core single/group movement now resolves stairs and support on the server; player reload, fall, and selected-token undo browser journeys pass. Flight, whole-group undo, and remaining automation entry-point coverage are still pending.
 - [x] Drawing creation/erase/clear/undo persist explicitly through V2, with author/floor scope and hidden-floor projection.
 - [x] Owned temporary template edit/remove permissions; persistent structures retain GM authority.
-- [ ] Exact rejection feedback and pending/accepted state.
+- [x] Exact rejection feedback and pending/accepted state for canonical board commands; other multi-step action recovery remains below.
 
 ## Coherent geometry and player association
 
@@ -178,6 +178,22 @@ horizontally, with scene/floor information on the next row. The existing active
 combat layout remains intact. `test-tracker-browser.cjs` verifies reveal/hide and
 actual GM Start Combat/confirmed End Combat transitions in the disposable fixture.
 The 1280×720 idle view was visually inspected. No production combat was changed.
+
+## Save feedback
+
+Canonical commands now report sending, accepted, rejected, and unconfirmed outcomes
+to an operation-specific save-status panel. Permission failures retain their server
+reason; 403 no longer incorrectly means an expired session. Unrelated success does
+not remove another operation's failure notice. The panel distinguishes its last
+accepted action from unresolved issues and offers explicit notice dismissal.
+Network failures and accepted-but-unapplied events remain unconfirmed rather than
+being described as safely rejected. Notices are tab-local (up to 20); they are not
+a durable action-recovery journal or a connection-health monitor.
+
+The player browser test holds a move pending, rejects it with a synthetic 403,
+verifies the exact reason, accepts a later move, and checks that the original issue
+remains until dismissal. All 681 tests passed across 79 VTT/automation files. The
+shortcut and save-status popovers close one another to avoid obscuring each other.
 
 Validation: 678 tests passed across 77 files. Expanded PHP checks then passed for
 forged/cloned receipts and changed floor geometry. Three-browser floor QA includes

@@ -157,6 +157,13 @@ function renderVttSceneBoard(bool $isGm = false): string
                 <button type="button" class="btn" data-map-navigation="fit">Fit Map</button>
                 <button type="button" class="btn" data-map-navigation="center">Center Selected</button>
                 <button type="button" class="btn" data-map-navigation="help" aria-expanded="false" aria-controls="vtt-navigation-help">Shortcuts</button>
+                <details class="vtt-save-feedback" data-save-feedback>
+                    <summary aria-live="polite">Save status</summary>
+                    <div class="vtt-save-feedback__body">
+                        <div data-save-feedback-list></div>
+                        <button class="btn" type="button" data-dismiss-save-issues>Dismiss notices</button>
+                    </div>
+                </details>
                 <div id="vtt-navigation-help" data-navigation-help hidden>
                     <p>Right-drag to pan · Mouse wheel to zoom · Drag a token to move it.</p>
                     <p>With the map focused: + / − zoom · F fits the map · C centers selected tokens.</p>
