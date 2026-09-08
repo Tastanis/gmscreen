@@ -1541,3 +1541,22 @@ also verify profile routing, absence of full-sheet payloads and reload outcomes.
 Full suite: 748 tests/97 files passed. The fixture waits for its combat-start
 resource automation before setting the balance. Other full-sheet automation writes,
 durable payment receipts and interrupted-boundary recovery remain outstanding.
+
+### Narrow conditional heroic-resource rule saves
+
+Heroic-resource rule saves now use narrow sync-resource writes for GM, owner and
+other authorized VTT users. Rule writes include expectedValue; under the existing
+write lock the server rejects a stale balance before mutation. Successful resource
+saves alone mark applied resource-rule limits and announce success. Failed saves
+invalidate the cached sheet and ask for review. Resource-only refund routing also
+uses the narrow endpoint, though its separate read/modify/refund lifecycle still
+needs stronger concurrency and interruption guarantees. Recovery full-sheet saves
+and damage-rule limit behavior are unchanged by this milestone.
+
+An isolated browser holds actual combat-start resource automation, changes sheet
+stamina through another request, then releases the resource save. Stamina remains
+unchanged by that save. Direct endpoint checks reject a stale expected balance and
+accept a matching one. Full suite: 748 tests/97 files passed. This closes the
+whole-sheet overwrite path for resource rules; generalized resource operation
+receipts, bounded confirmation for all rule writes, refunds and full recovery
+authority remain outstanding.

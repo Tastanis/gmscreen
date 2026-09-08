@@ -333,3 +333,6 @@ console.log('Button element:', document.getElementById('import-character-btn'));
 
 - Zone upkeep spends through the locked narrow resource endpoint using a profile
   ID. Do not save a cached whole sheet or equate network failure with no funds.
+
+- Heroic-resource rules use narrow conditional writes, never cached whole-sheet
+  saves. Mark applied resource-rule limits only after confirmed persistence.

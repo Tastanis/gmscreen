@@ -716,6 +716,12 @@ switch ($action) {
                 if ($current<$cost) sendJsonResponse(['success'=>true,'paid'=>false,'reason'=>'insufficient resource','resource'=>$current]);
                 $sheet['hero']['resource']['value']=$current-$cost;
             } else {
+                if (isset($requestData['expectedValue'])) {
+                    $expected=filter_var($requestData['expectedValue'],FILTER_VALIDATE_INT);
+                    if ($expected===false || $expected!==(int)($sheet['hero']['resource']['value'] ?? 0)) {
+                        sendJsonResponse(['success'=>false,'error'=>'Resource changed; review its current value before applying this change.']);
+                    }
+                }
                 $sheet['hero']['resource']['value'] = (int)$requestData['value'];
             }
             $allSheets[$requestedCharacter] = $sheet;

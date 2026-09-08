@@ -684,3 +684,12 @@ reject. The client requires an explicit paid result, bounds HTTP/body waiting to
 15 seconds and never retries uncertain payment. Missing linked resources require
 manual review; they no longer grant free upkeep. Failed payment preserves the
 zone and stops its effects; only confirmed insufficient funds trigger removal.
+
+Heroic-resource rule saves now use narrow sync-resource writes for GM, owner and
+other authorized VTT users. Rule writes include expectedValue; under the existing
+write lock the server rejects a stale balance before mutation. Successful resource
+saves alone mark applied resource-rule limits and announce success. Failed saves
+invalidate the cached sheet and ask for review. Resource-only refund routing also
+uses the narrow endpoint, though its separate read/modify/refund lifecycle still
+needs stronger concurrency and interruption guarantees. Recovery full-sheet saves
+and damage-rule limit behavior are unchanged by this milestone.

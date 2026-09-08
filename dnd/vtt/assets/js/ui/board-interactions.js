@@ -3427,10 +3427,8 @@ export function mountBoardInteractions(store, routes = {}) {
       if (!amount && rule.effect.kind !== 'set') return;
       change = normalizeHeroicResourceChange(rule, sheet, amount);
     }
-    if (rule.limit?.markOn === 'applied') {
-      markHeroicResourceRuleLimit(rule, placement.id, eventTargetId);
-    }
     if (rule.effect.kind === 'damage') {
+      if (rule.limit?.markOn === 'applied') markHeroicResourceRuleLimit(rule, placement.id, eventTargetId);
       applyDamageHealToPlacement(placement.id, 'damage', amount);
       return;
     }
@@ -3439,14 +3437,14 @@ export function mountBoardInteractions(store, routes = {}) {
     nextResource.value = change.next;
     hero.resource = nextResource;
     sheet.hero = hero;
-    const applierUserId = normalizeProfileId(getCurrentUserId());
-    if (isGmUser() || normalizeProfileId(profileId) === applierUserId) {
-      await saveAutomationSheetForProfile(profileId, sheet, 'resource');
-    } else {
-      // A player running someone else's hero can't
-      // save that character's full sheet — use the narrow resource sync the
-      // sheet handler allows for any authenticated VTT user.
-      await syncHeroResourceValueForProfile(profileId, change.next, sheet);
+    const saved = await syncHeroResourceValueForProfile(profileId, change.next, sheet, change.current);
+    if (!saved) {
+      characterSummaryCache.delete(profileId);
+      updateStatus('Resource save was not confirmed. Review the current character resource before trying again.');
+      return;
+    }
+    if (rule.limit?.markOn === 'applied') {
+      markHeroicResourceRuleLimit(rule, placement.id, eventTargetId);
     }
     const subject = tokenLabel(placement) || sheet?.hero?.name || 'Hero';
     updateStatus(`${subject}: ${action.toLowerCase()} ${amount} ${resourceName} (${change.current} -> ${change.next}).`);
@@ -3456,7 +3454,7 @@ export function mountBoardInteractions(store, routes = {}) {
   // sheet handler's VTT sync carve-out (any authenticated user). Mirrors
   // saveAutomationSheetForProfile's cache + broadcast behavior so panels
   // refresh the same way.
-  async function syncHeroResourceValueForProfile(profileId, value, sheetForCache = null) {
+  async function syncHeroResourceValueForProfile(profileId, value, sheetForCache = null, expectedValue = null) {
     if (!profileId) return false;
     const endpoint = typeof routes?.sheet === 'string' && routes.sheet ? routes.sheet : '/dnd/character_sheet/handler.php';
     const body = new URLSearchParams();
@@ -3464,6 +3462,7 @@ export function mountBoardInteractions(store, routes = {}) {
     body.set('character', profileId);
     body.set('source', 'vtt');
     body.set('value', String(Math.trunc(Number(value) || 0)));
+    if (expectedValue !== null) body.set('expectedValue', String(expectedValue));
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -3472,7 +3471,7 @@ export function mountBoardInteractions(store, routes = {}) {
         body,
       });
       const payload = await response.json().catch(() => null);
-      const saved = Boolean(response.ok && payload?.success !== false);
+      const saved = Boolean(response.ok && payload?.success === true);
       if (saved) {
         if (sheetForCache && characterSummaryCache instanceof Map) {
           characterSummaryCache.set(profileId, sheetForCache);
@@ -16956,6 +16955,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
   async function saveAutomationSheetForProfile(profileId, sheet, change = 'recovery') {
     if (!profileId || !sheet) return false;
+    if (change === 'resource') return syncHeroResourceValueForProfile(profileId, sheet.hero?.resource?.value, sheet);
     const endpoint = typeof routes?.sheet === 'string' && routes.sheet ? routes.sheet : '/dnd/character_sheet/handler.php';
     const body = new URLSearchParams();
     body.set('action', 'save');
