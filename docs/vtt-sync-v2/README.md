@@ -827,6 +827,15 @@ the current scene configuration inside the write transaction. Level 0 remains
 valid. Missing destinations are rejected; hidden destinations are allowed only for
 the authenticated GM's own view, never for a player view or group activation.
 
+`levels.set` also reconciles saved viewer entries within its transaction. Players
+on hidden or deleted floors return to the nearest surviving visible lower floor,
+or Level 0. The GM may retain an existing hidden-floor view, but deleted floors
+are invalid for everyone. Cleanup uses a manual view without a stale token link;
+valid views and token positions are untouched. `levels.replaced` carries the
+resulting viewer state, with hidden GM entries removed from the player projection.
+The reducer replaces that viewer state alongside floor configuration, so replay
+and offline reload agree. Atomic token relocation on floor deletion remains pending.
+
 ### Named scene checkpoint archive
 
 `SceneCheckpointArchive.php` stores immutable scene captures in

@@ -22,6 +22,7 @@ User authorized implementing the September 7 product audit, updating/running the
 - [ ] Shared floor/elevation/adjacency model used by suggestions, range, auras, and movement.
   - Shared floor participation now guards flanking, aura membership, Stand Firm, and opportunity-attack adjacency. High Ground requires confirmation. Physical elevation, openings, and range integration remain pending.
 - [ ] Hidden/deleted floors, partial support, flight, forced movement, stairs interrupted by reload, and undo tests.
+  - Floor edits now atomically repair invalid saved viewer floors for online/offline users. Hiding preserves tokens and allows GM inspection. Atomic token relocation on deletion remains pending.
 - [ ] Explicit view-versus-token controls and follow/browse/center policy.
   - Viewing labels, Show players this floor, reload-preserved explicit views, and My token's floor are implemented. Camera-follow preferences and configurable primary token association remain pending.
 - [ ] Configurable roster and primary token association, preserving shared allied control.
@@ -435,3 +436,22 @@ mouse drag. The previously failing GM/player tab-switching journey passed three
 consecutive runs without a midway reload; a separate single-player consecutive
 drag trace also passed. No gesture-state workaround was added to the application.
 Full scene geometry restoration and duplication/export remain pending.
+
+
+### Hidden and deleted floor view cleanup
+
+Floor configuration changes now repair saved viewer references in the same
+canonical transaction. Invalid player views fall back to the nearest surviving
+visible lower floor or base. GM views can stay on an existing hidden floor, but
+deleted floors are invalid for everyone. Valid views and placement data remain
+unchanged; fallback views drop stale token associations and persist as manual
+views. The floor event carries cleaned views through player projection, event
+replay, and the focused renderer.
+
+Validation: 689 tests passed. PHP coverage checks hiding, deleting the full stack,
+GM versus player visibility, disconnected users, unchanged tokens, retries, and
+database reopening. The reducer test verifies projection cannot retain a stale
+hidden GM view. A GM/Cal/Sharon browser journey hides a floor while Cal is online
+and Sharon is offline, verifies Cal's event-driven return and Sharon's reload,
+and confirms token state is unchanged. Atomic token relocation and related
+floor-bound content cleanup during deletion remain pending.

@@ -405,9 +405,11 @@ function vttSyncV2ProjectEventForUser(array $event, array $auth): array
         }
     }
     if ($type === 'levels.replaced' && is_array($event['payload']['mapLevels'] ?? null)) {
-        $event['payload']['mapLevels'] = vttSyncV2ProjectSceneConfigForPlayer([
-            'mapLevels' => $event['payload']['mapLevels'],
-        ])['mapLevels'];
+        $projected = vttSyncV2ProjectSceneConfigForPlayer($event['payload']);
+        $event['payload']['mapLevels'] = $projected['mapLevels'];
+        if (isset($event['payload']['userLevelState'])) {
+            $event['payload']['userLevelState'] = $projected['userLevelState'] ?? [];
+        }
     }
     if ($type === 'fog.replaced' && is_array($event['payload']['fogOfWar'] ?? null)) {
         $snapshot = vttSyncV2Store()->getSnapshot();

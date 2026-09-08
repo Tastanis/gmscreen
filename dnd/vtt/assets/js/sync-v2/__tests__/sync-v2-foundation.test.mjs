@@ -22,6 +22,20 @@ function shadowEvent(revision, operationId, payload = {}) {
   };
 }
 
+test('floor replacement applies cleaned viewer state in the same canonical event', () => {
+  const initial = { revision: 3, state: { sceneConfig: { scene: { _revision: 2,
+    mapLevels: { levels: [{ id: 'upper' }] }, userLevelState: { cal: { levelId: 'upper' }, gm: { levelId: 'upper' } },
+  } } } };
+  const result = reduceCanonicalEvent(initial, { ...shadowEvent(4, 'hide-upper'), type: 'levels.replaced',
+    sceneId: 'scene', entityRevision: 3, payload: { mapLevels: { levels: [] },
+      userLevelState: { cal: { levelId: 'level-0', source: 'manual' } } },
+  });
+  assert.equal(result.snapshot.state.sceneConfig.scene.userLevelState.cal.levelId, 'level-0');
+  assert.equal(result.snapshot.state.sceneConfig.scene.userLevelState.gm, undefined, 'Projected GM hidden view cannot linger in the player store.');
+  assert.equal(result.changeSet.levels, true);
+  assert.equal(initial.state.sceneConfig.scene.userLevelState.cal.levelId, 'upper');
+});
+
 test('canonical reducer applies an acknowledgement/broadcast operation only once', () => {
   const initial = { revision: 0, state: {}, appliedOperationIds: [] };
   const first = reduceCanonicalEvent(initial, shadowEvent(1, 'operation-1', { value: 1 }));

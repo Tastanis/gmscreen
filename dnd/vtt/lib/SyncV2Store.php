@@ -691,9 +691,12 @@ final class SyncV2Store
                     $eventType = 'fog.replaced';
                     $eventPayload = ['fogOfWar' => $config['fogOfWar']];
                 } elseif ($type === 'levels.set') {
+                    $config['userLevelState'] = $this->reconcileFloorViews(
+                        $config['userLevelState'] ?? [], $config['mapLevels'] ?? [], $payload['mapLevels']
+                    );
                     $config['mapLevels'] = $payload['mapLevels'];
                     $eventType = 'levels.replaced';
-                    $eventPayload = ['mapLevels' => $config['mapLevels']];
+                    $eventPayload = ['mapLevels' => $config['mapLevels'], 'userLevelState' => $config['userLevelState']];
                 } elseif ($type === 'grid.set') {
                     $config['grid'] = $payload['grid'];
                     $eventType = 'grid.changed';
@@ -1868,6 +1871,35 @@ final class SyncV2Store
     public function sceneCheckpoints(): SceneCheckpointArchive
     {
         return new SceneCheckpointArchive($this->pdo, $this->worldId);
+    }
+
+    private function reconcileFloorViews(array $views, array $before, array $after): array
+    {
+        $available = ['level-0'=>true];
+        $visible = ['level-0'=>true];
+        foreach (($after['levels'] ?? []) as $level) {
+            if (!is_array($level) || !is_string($level['id'] ?? null)) continue;
+            $available[$level['id']] = true;
+            if (($level['hidden'] ?? false) !== true) $visible[$level['id']] = true;
+        }
+        $ordered = array_values(array_filter($before['levels'] ?? [], 'is_array'));
+        usort($ordered, static fn($a, $b) => ((float) ($a['zIndex'] ?? 0)) <=> ((float) ($b['zIndex'] ?? 0)));
+        foreach ($views as $userId => $entry) {
+            if (!is_array($entry)) continue;
+            $levelId = (string) ($entry['levelId'] ?? 'level-0');
+            $allowed = strtolower((string) $userId) === 'gm' ? $available : $visible;
+            if (isset($allowed[$levelId])) continue;
+            $fallback = 'level-0';
+            foreach ($ordered as $level) {
+                if (($level['id'] ?? null) === $levelId) break;
+                if (isset($visible[$level['id'] ?? ''])) $fallback = $level['id'];
+            }
+            // Unknown old IDs have no meaningful place in the stack.
+            if (!in_array($levelId, array_column($ordered, 'id'), true)) $fallback = 'level-0';
+            $views[$userId] = [...$entry, 'levelId'=>$fallback, 'source'=>'manual', 'updatedAt'=>$this->nowMilliseconds()];
+            unset($views[$userId]['tokenId']);
+        }
+        return $views;
     }
 
     public function restoreCheckpointPositions(array $command, string $actorId, bool $isGm): array

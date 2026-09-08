@@ -562,8 +562,10 @@ const reducers = Object.freeze({
   'fog.patched': reduceFogPatched,
   'fog.replaced': reduceFogReplaced,
   'level.changed': reduceLevelChanged,
-  'levels.replaced': (state, event, changes) =>
-    reduceSceneConfigField(state, event, changes, 'mapLevels', 'mapLevels', 'levels'),
+  'levels.replaced': (state, event, changes) => {
+    reduceSceneConfigField(state, event, changes, 'mapLevels', 'mapLevels', 'levels');
+    if (event.payload?.userLevelState) reduceLevelActivated(state, event, changes);
+  },
   'level.userChanged': reduceUserLevelChanged,
   'level.activated': reduceLevelActivated,
   'grid.changed': (state, event, changes) =>
