@@ -788,3 +788,19 @@ one additional focused rejection/deadline test, which also passed. No live write
 The broader goal, mismatch reconciliation and pending UI decisions remain open.
 
 Fresh forced-zone browser check also passed with VTT_TEST_STALL_SHEET=1: a missing receipt keeps the action unconfirmed, with one write and no replay.
+
+
+### Lost stamina response during real zone damage (September 9)
+
+Added VTT_TEST_LOSE_SHEET_RESPONSE=1 to test-forced-zone-browser.cjs. The route
+forwards the actual stamina POST to the disposable server, confirms it committed,
+then aborts its browser response. The actual forced-movement/zone-damage chain
+recovers through receipt inspection and resolves. Asserted one sheet POST, matching
+sheet/token stamina, completed entry claims, then reload and crossing again without
+repeat damage. The fresh loopback journey passed. Stalled and lost-response modes
+are mutually exclusive; existing rejection/stall coverage remains available.
+
+Verification-only checkpoint, no version change or live campaign writes. This
+proves recovery of this still-pending ability effect when its sheet write committed;
+it does not prove repair of genuinely rejected writes, recovery of all multi-step
+abilities after closing the page, or cross-store atomicity. Continue the full goal.

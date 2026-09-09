@@ -72,14 +72,37 @@ const origin='http://127.0.0.1:8129';
     }}}))));
     const sheetUrl=origin+'/dnd/character_sheet/handler.php';
     const stallSheet=process.env.VTT_TEST_STALL_SHEET==='1';
+    const loseSheetResponse=process.env.VTT_TEST_LOSE_SHEET_RESPONSE==='1';
+    assert.ok(!(stallSheet && loseSheetResponse),'Choose either a stalled or lost response scenario');
     let heldWrite=null,sheetWrites=0;
-    await page.route(sheetUrl,route=>{
+    await page.route(sheetUrl,async route=>{
       if(route.request().method()!=='POST'||!route.request().postData()?.includes('action=sync-stamina'))return route.continue();
       sheetWrites++;
+      if(loseSheetResponse) {
+        const saved=await route.fetch();
+        assert.equal((await saved.json()).success,true);
+        await route.abort('failed');
+        return;
+      }
       if(stallSheet){heldWrite=route;return;}
       return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({success:false,error:'Injected sheet sync rejection'})});
     });
-    await move('forced',5,'rejected');
+    await move('forced',5,loseSheetResponse?'resolved':'rejected');
+    if(loseSheetResponse) {
+      await until(async()=>!(await(await page.request.get(origin+'/dnd/vtt/api/v2/zone-entries.php')).json()).claims.length);
+      assert.equal(Number((await tokenState()).hp.current),initial-9);
+      assert.equal(Number((await(await page.request.get(sheetUrl+'?action=sync-stamina&character=cal')).json()).currentStamina),initial-9);
+      assert.equal(sheetWrites,1,'Lost response recovery must not resend damage');
+      await page.unroute(sheetUrl);
+      await page.reload();
+      await page.waitForFunction(()=>document.querySelector('[data-connection-status]')?.textContent.includes('Connected'));
+      await move('forced',8);
+      assert.equal(Number((await tokenState()).hp.current),initial-9,'Recovered completed entry cannot repeat after reload');
+      assert.equal(Number((await(await page.request.get(sheetUrl+'?action=sync-stamina&character=cal')).json()).currentStamina),initial-9);
+      assert.deepEqual(errors,[]);
+      console.log('PASS real forced-zone damage recovers a lost sheet response, completes once, keeps sheet/token agreement and survives reload without repeat damage');
+      return;
+    }
     await until(async()=>(await(await page.request.get(origin+'/dnd/vtt/api/v2/zone-entries.php')).json()).claims.some(c=>c.status==='needs_review'));
     const review=(await(await page.request.get(origin+'/dnd/vtt/api/v2/zone-entries.php')).json()).claims.find(c=>c.status==='needs_review');
     assert.match(review.outcome.reason,/character stamina synchronization was not confirmed/);
