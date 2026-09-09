@@ -1929,3 +1929,20 @@ Generic dice roller integration, mixed-target handling (UI approval pending),
 remaining range consumers and the rest of the active goal are still unfinished.
 
 Full regression suite passed: 773 tests across 102 files.
+
+
+### Ability-roll browser verification (September 9)
+
+`node dnd/vtt/tools/test-power-roll-suggestions-browser.cjs` passed against a fresh
+loopback floor-regression fixture at 1280x720. It opens the real ability window,
+uses the production suggestion calculator with controlled token positions, clicks
+High ground off, verifies refresh preserves the override, moves the controlled
+actor to ground to receive Enemy adjacent, checks modifiers freeze after rolling,
+and verifies reroll and close cleanup. No browser page errors. This verifies the
+runner/calculator integration, not canonical player movement delivery; that journey
+remains in the wider testing scope. No production requests or campaign changes.
+
+The separate generic Dice Roller still lacks combat context. A compact Power roll
+mode with attacker/target/strike type was proposed for approval; do not implement
+that visible change until the user responds. Multi-target UI approval also remains
+pending. Continue height-aware range guides and the rest of the original roadmap.
