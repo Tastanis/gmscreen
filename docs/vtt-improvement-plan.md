@@ -2196,3 +2196,26 @@ bump is needed for this verification-only slice. Prior application suite remains
 The save-wait audit follow-up above is resolved. The wider goal remains active;
 inventory table UI, generic roller/mixed-target UI proposals and other outstanding
 roadmap work are not completed by these checks. Preserve pending user approvals.
+
+
+### Multiplayer swap and forced-effect verification (September 9)
+
+Expanded test-swap-browser.cjs with independent Cal and Sharon sessions. The
+existing held-write, atomic two-token/floor swap and rejected-swap checks remain.
+Both player stores receive both positions/floors; Sharon starts offline and catches
+up without reload. GM and both players reload with the accepted result retained.
+The test passed on a fresh loopback floor fixture. Store convergence is explicit;
+this does not claim every cross-floor token is on-screen through fog/geometry.
+
+Re-ran test-forced-zone-browser.cjs on separate fresh fixtures with ordinary
+rejection and VTT_TEST_STALL_SHEET=1. Both passed: teleport ignores crossed zones
+but applies destination entry, forced movement applies crossed entries, movement
+completion awaits effects, repeated picker clicks cannot resubmit, completed
+entry claims survive reload, and failed/stalled sheet stamina synchronization
+requires review without replaying the write. Accepted board damage may differ
+from the sheet in that uncertain case; automatic reconciliation is not proven or
+implemented by these tests. Preserve this limitation in the remaining goal audit.
+
+Verification-only slice; no application version bump or live campaign writes.
+The full original goal remains active, including unresolved inventory/roller UI
+proposals, sheet reconciliation and remaining gameplay gates.
