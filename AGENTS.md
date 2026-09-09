@@ -882,3 +882,22 @@ save/image upload guards, pending-unsaved-edit behavior during move, and unknown
 write outcomes remain unfinished; do not claim all mutation paths are protected.
 
 Full npm test: 795 passing tests across 105 files.
+
+
+### Inventory item actions await edits - 1.19.138
+
+Delete/share/take capture the source folder and flush that item's debounced fields,
+then await its in-flight/queued field group saves before confirmation/submission.
+A failed field or 15-second wait deadline stops the action; no automatic move or
+retry is sent later. Accepted field revisions are used for the reviewed operation.
+Other items' edits are not flushed or waited on. Existing status text reports
+unsaved edits without adding UI panels. Image upload/full-item requests are not
+part of this field-save barrier.
+
+New browser test proves Move remains pending without opening confirmation while
+an edit is held, then uses its accepted revision; rejected edits retain typed text
+and submit no Move. Existing save-order and stale-refresh browser tests also pass.
+The shared helper is used by Delete/Take too; their pending-save journeys were not
+separately exercised. No live campaign writes. Full original scope stays open.
+
+Full npm test passes: 795 tests across 105 files.

@@ -258,6 +258,35 @@
     return Object.keys(ciSaveTimeouts).length > 0 || ciPendingSaves > 0 || Object.keys(ciFailedFields).length > 0 || Object.keys(ciQueuedFieldSaves).length > 0;
   }
 
+  async function finishItemEdits(folder, itemId) {
+    var prefix = folder + ":" + itemId + ":";
+    var belongs = function (key) { return key.indexOf(prefix) === 0; };
+    Object.keys(ciSaveTimeouts).filter(belongs).forEach(function (key) {
+      clearTimeout(ciSaveTimeouts[key]);
+      delete ciSaveTimeouts[key];
+      var item = findItem(folder, itemId);
+      if (item) {
+        var field = key.slice(prefix.length);
+        saveFieldNow(folder, itemId, field, fieldSaveValue(item, field));
+      }
+    });
+    var deadline = Date.now() + 15000;
+    while ([ciSaveTimeouts, ciFieldSavesInFlight, ciQueuedFieldSaves].some(function (entries) {
+      return Object.keys(entries).some(belongs);
+    })) {
+      if (Date.now() >= deadline) {
+        showStatus("This item's edits are still saving. Try again when they finish.", "error");
+        return false;
+      }
+      await new Promise(function (resolve) { setTimeout(resolve, 40); });
+    }
+    if (Object.keys(ciFailedFields).some(belongs)) {
+      showStatus("This item has unsaved edits. Keep a copy before reloading.", "error");
+      return false;
+    }
+    return Boolean(findItem(folder, itemId));
+  }
+
   // ---------------------------------------------------------------------
   // Rendering
   // ---------------------------------------------------------------------
@@ -516,12 +545,13 @@
     });
   }
 
-  function deleteItem(itemId) {
-    var item = findItem(ciFolder, itemId);
+  async function deleteItem(itemId) {
+    var folder = ciFolder;
+    var item = findItem(folder, itemId);
     if (!item) return;
+    if (!await finishItemEdits(folder, itemId)) return;
     if (!confirm('Delete "' + (item.name || "Unnamed Item") + '"?')) return;
 
-    var folder = ciFolder;
     var params = new URLSearchParams();
     params.append("action", "delete_item");
     params.append("tab", folder);
@@ -560,13 +590,14 @@
     saveFieldNow(ciFolder, itemId, "visible", newVisible ? "true" : "false");
   }
 
-  function shareItem(itemId, toTab) {
-    var item = findItem(ciFolder, itemId);
+  async function shareItem(itemId, toTab) {
+    var folder = ciFolder;
+    var item = findItem(folder, itemId);
     if (!item) return;
+    if (!await finishItemEdits(folder, itemId)) return;
     var target = toTab === "gm" ? "GM folder" : "shared folder";
     if (!confirm('Move "' + (item.name || "Unnamed Item") + '" to the ' + target + "?")) return;
 
-    var folder = ciFolder;
     var params = new URLSearchParams();
     params.append("action", "share_item");
     params.append("from_tab", folder);
@@ -585,12 +616,13 @@
     });
   }
 
-  function takeItem(itemId) {
-    var item = findItem(ciFolder, itemId);
+  async function takeItem(itemId) {
+    var folder = ciFolder;
+    var item = findItem(folder, itemId);
     if (!item) return;
+    if (!await finishItemEdits(folder, itemId)) return;
     if (!confirm('Take "' + (item.name || "Unnamed Item") + '" to your inventory?')) return;
 
-    var folder = ciFolder;
     var params = new URLSearchParams();
     params.append("action", "take_item");
     params.append("from_tab", folder);
