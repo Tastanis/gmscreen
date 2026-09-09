@@ -136,6 +136,7 @@ export async function writeSheetStamina(endpoint, payload = {}, {
   timeoutMs = 15000,
   operationId = globalThis.crypto.randomUUID(),
   journalOverride,
+  recoveryTimeoutMs = 3000,
 } = {}) {
   const body = new URLSearchParams({ action: 'sync-stamina', source: 'vtt', operationId });
   for (const field of ['character', 'currentStamina', 'staminaMax']) {
@@ -169,10 +170,40 @@ export async function writeSheetStamina(endpoint, payload = {}, {
       return response;
     })()]);
   } catch (error) {
+    // Only inspect the accepted operation; never resend the write.
+    clearTimeout(timer);
+    const recovered = await inspectStaminaReceipt(endpoint, body, fetchImpl, recoveryTimeoutMs);
+    if (recovered) {
+      journal?.complete(operationId);
+      return new Response(JSON.stringify(recovered), {headers:{'Content-Type':'application/json'}});
+    }
     error.operationId = operationId;
     try { journal?.fail(operationId,error.message); } catch { /* Preserve the pending record. */ }
     throw error;
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function inspectStaminaReceipt(endpoint, body, fetchImpl, timeoutMs) {
+  const controller=new AbortController();let timer;
+  try {
+    const url=new URL(endpoint,globalThis.location?.href ?? 'http://localhost/');
+    url.searchParams.set('action','operation-status');
+    url.searchParams.set('character',body.get('character') ?? '');
+    url.searchParams.set('operationId',body.get('operationId'));
+    return await Promise.race([
+      new Promise(resolve=>{timer=setTimeout(()=>{controller.abort();resolve(null);},timeoutMs);}),
+      (async()=>{
+        const response=await fetchImpl(url.href,{method:'GET',credentials:'same-origin',cache:'no-store',signal:controller.signal});
+        if(!response.ok)return null;
+        const result=await response.json(),receipt=result?.receipt,saved=receipt?.response;
+        if(result.success!==true || result.recorded!==true || receipt?.action!=='sync-stamina'
+          || receipt.operationId!==body.get('operationId') || saved?.operationId!==body.get('operationId')
+          || saved.success!==true || !Number.isFinite(saved.currentStamina) || saved.currentStamina!==Number(body.get('currentStamina'))
+          || (body.has('staminaMax') && Number(saved.staminaMax)!==Number(body.get('staminaMax'))))return null;
+        return saved;
+      })(),
+    ]);
+  } catch {return null;} finally {clearTimeout(timer);}
 }

@@ -40,17 +40,12 @@ const origin='http://127.0.0.1:8129';
       const journal=getCharacterOperationJournal();
       const cleared=!journal.list().some(e=>e.operationId===saved.operationId);
       const lostId=crypto.randomUUID();let writes=0;
-      try {
-        await writeSheetStamina(endpoint,{character:'cal',currentStamina:17},{operationId:lostId,timeoutMs:1500,
-          fetchImpl:async(...args)=>{writes++;await fetch(...args);return new Promise(()=>{});}});
-        throw Error('Expected lost response timeout');
-      } catch(error) {
-        if(error.operationId!==lostId)throw error;
-      }
-      return {cleared,lostId,writes,pending:journal.list().find(e=>e.operationId===lostId)};
+      const recovered=await (await writeSheetStamina(endpoint,{character:'cal',currentStamina:17},{operationId:lostId,timeoutMs:1500,
+        fetchImpl:async(...args)=>{if(args[1].method==='GET')return fetch(...args);writes++;await fetch(...args);return new Promise(()=>{});}})).json();
+      return {cleared,lostId,writes,recovered,pending:journal.list().find(e=>e.operationId===lostId)};
     });
     assert.equal(client.cleared,true);assert.equal(client.writes,1);
-    assert.equal(client.pending.status,'unconfirmed');
+    assert.equal(client.pending,undefined);assert.equal(client.recovered.currentStamina,17);
     assert.equal((await read()).currentStamina,17);
     const confirmed=await (await page.request.get(endpoint+'?action=operation-status&character=cal&operationId='+client.lostId)).json();
     assert.equal(confirmed.receipt.response.currentStamina,17);
@@ -59,7 +54,7 @@ const origin='http://127.0.0.1:8129';
       const {getCharacterOperationJournal}=await import('/dnd/vtt/assets/js/services/character-operation-journal.js');
       return getCharacterOperationJournal().list().find(e=>e.operationId===id);
     },client.lostId);
-    assert.equal(retained.status,'unconfirmed');
+    assert.equal(retained,undefined);
     assert.equal((await read()).currentStamina,17);
     console.log('PASS stamina receipt: saved with value, read-only status, replay retains later edit, changed payload rejected, reload retained');
   } finally {await browser.close();}

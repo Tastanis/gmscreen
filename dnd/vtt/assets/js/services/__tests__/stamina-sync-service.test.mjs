@@ -152,6 +152,7 @@ describe('stamina write confirmation', () => {
     await assert.rejects(writeSheetStamina('/sheet', {}, {
       timeoutMs:10,
       fetchImpl:async(url,options)=>{
+        if(options.method==='GET')return new Response(JSON.stringify({success:true,recorded:false}));
         calls++;signal=options.signal;
         return new Promise(()=>{});
       },
@@ -169,6 +170,7 @@ describe('stamina write confirmation', () => {
       operationId:'stamina-late-receipt',
       journalOverride:{begin(){},complete:id=>completed.push(id),fail:id=>failed.push(id)},
       fetchImpl:async(url,options)=>{
+        if(options.method==='GET')return new Response(JSON.stringify({success:true,recorded:false}));
         signal=options.signal;
         return {ok:true,clone:()=>({json:()=>new Promise(resolve=>{release=resolve;})})};
       },
@@ -186,8 +188,42 @@ describe('stamina write confirmation', () => {
     await assert.rejects(writeSheetStamina('/sheet',{character:'cal',currentStamina:12},{
       operationId:'stamina-receipt-test',
       journalOverride:{begin:e=>events.push(['begin',e.operationId]),complete:()=>events.push(['complete']),fail:id=>events.push(['fail',id])},
-      fetchImpl:async()=>{events.push(['write']);return new Response(JSON.stringify({success:true,operationId:'another-receipt'}));},
+      fetchImpl:async(url,options)=>{if(options.method==='GET')return new Response(JSON.stringify({success:true,recorded:false}));events.push(['write']);return new Response(JSON.stringify({success:true,operationId:'another-receipt'}));},
     }),error=>error.operationId==='stamina-receipt-test' && /receipt/.test(error.message));
     assert.deepEqual(events,[['begin','stamina-receipt-test'],['write'],['fail','stamina-receipt-test']]);
+  });
+
+  test('lost response is confirmed by one read without replaying the write', async () => {
+    const {writeSheetStamina}=await import(SERVICE_PATH);
+    const methods=[],completed=[];
+    const response=await writeSheetStamina('/sheet',{character:'cal',currentStamina:12},{
+      operationId:'receipt-recovered',
+      journalOverride:{begin(){},complete:id=>completed.push(id),fail(){throw Error('Should confirm');}},
+      fetchImpl:async(url,options)=>{
+        methods.push(options.method);
+        if(options.method==='POST')throw Error('Response lost');
+        assert.equal(new URL(url).searchParams.get('action'),'operation-status');
+        return new Response(JSON.stringify({success:true,recorded:true,receipt:{operationId:'receipt-recovered',action:'sync-stamina',response:{success:true,operationId:'receipt-recovered',currentStamina:12}}}));
+      },
+    });
+    assert.equal((await response.json()).currentStamina,12);
+    assert.deepEqual(methods,['POST','GET']);assert.deepEqual(completed,['receipt-recovered']);
+  });
+
+  test('wrong saved values and a stalled status read cannot confirm the write', async () => {
+    const {writeSheetStamina}=await import(SERVICE_PATH);
+    for(const stalled of [false,true]) {
+      const methods=[];
+      await assert.rejects(writeSheetStamina('/sheet',{character:'cal',currentStamina:12},{
+        operationId:'receipt-uncertain',recoveryTimeoutMs:10,
+        fetchImpl:async(url,options)=>{
+          methods.push(options.method);
+          if(options.method==='POST')throw Error('Lost response');
+          if(stalled)return new Promise(()=>{});
+          return new Response(JSON.stringify({success:true,recorded:true,receipt:{operationId:'receipt-uncertain',action:'sync-stamina',response:{success:true,operationId:'receipt-uncertain',currentStamina:99}}}));
+        },
+      }),/Lost response/);
+      assert.deepEqual(methods,['POST','GET']);
+    }
   });
 });

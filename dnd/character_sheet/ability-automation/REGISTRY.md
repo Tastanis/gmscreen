@@ -838,3 +838,24 @@ mismatched receipts and late response retention. No live campaign writes.
 Remaining: read-only recovery integration and explicit board/sheet reconciliation,
 not automatic replay of damage or whole abilities. Preserve all other original
 goal requirements and pending UI proposals.
+
+
+### Read-only stamina response recovery - 1.19.134
+
+After an unconfirmed stamina response, writeSheetStamina performs one bounded
+GET operation-status lookup (up to three seconds). It requires the same operation
+ID, stamina action, successful receipt and requested saved values. A matching
+receipt confirms this write and clears its local reminder; no POST is replayed.
+Missing, mismatched, failed or stalled reads retain uncertainty and reject the
+original action. This check happens inside the still-pending stamina callback,
+not after the ability has already been abandoned or reloaded. It does not replay
+later ability steps, reconcile newer conflicting values, or scan old reminders.
+
+Browser verification passed for an accepted save with its response withheld:
+only one write, receipt-based completion and no stale reminder after reload.
+Unit checks cover missing/mismatched receipts, wrong saved value, late original
+response and stalled read deadlines. Full suite passed 792 tests/105 files before
+one additional focused rejection/deadline test, which also passed. No live writes.
+The broader goal, mismatch reconciliation and pending UI decisions remain open.
+
+Fresh forced-zone browser check also passed with VTT_TEST_STALL_SHEET=1: a missing receipt keeps the action unconfirmed, with one write and no replay.
