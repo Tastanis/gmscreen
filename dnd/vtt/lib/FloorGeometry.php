@@ -35,6 +35,23 @@ final class FloorGeometry
         return [['id' => self::BASE, 'cutouts' => []], ...$levels];
     }
 
+    /** Compute before player filtering so hidden floors never compress vertical distances. */
+    public static function elevations(array $mapLevels): array
+    {
+        $result = [self::BASE => 0];
+        $previous = 0;
+        foreach (self::orderedLevels($mapLevels) as $level) {
+            if ($level['id'] === self::BASE) continue;
+            $explicit = $level['elevationSquares'] ?? null;
+            $height = (is_int($explicit) || is_float($explicit)) && is_finite((float) $explicit)
+                && floor((float) $explicit) === (float) $explicit && $explicit > 0 && $explicit <= 9007199254740991
+                ? $explicit : $previous + 1;
+            $result[$level['id']] = $height;
+            $previous = $height;
+        }
+        return $result;
+    }
+
     /** Exact union coverage, including fractional positions and partial support. */
     public static function fullyUnsupported(array $placement, array $level): bool
     {

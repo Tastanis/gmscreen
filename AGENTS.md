@@ -407,3 +407,6 @@ Token menu uses a stable border-box width and scrollable height above action tab
 recheck after opening and observe menu/action-tab size changes. Internal menu scrolling
 no longer triggers the outside-scroll dismissal listener. Browser QA passed at
 1280x720 and 1280x500, including lower-menu scrolling, plus five popup unit tests.
+
+
+- Floor-height work is underway: elevationSquares is vertical grid height, never token footprint height or renderer zIndex. Resolve legacy height defaults before filtering hidden floors for player projection. UI and range integration remain pending; see the improvement roadmap.

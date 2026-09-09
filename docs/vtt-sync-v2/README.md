@@ -1291,3 +1291,14 @@ conflict refreshes the projected snapshot but never issues a new undo command.
 Legacy unmarked histories retain single-token undo behavior. Browser verification
 covers a real player group stair drag, floor/view restoration after reload and
 whole-group rejection after a member edit.
+
+
+### Floor-height foundation (next improvement goal)
+
+Client map-level normalization preserves `elevationSquares` and supplies successive
+one-square legacy defaults in physical order, including hidden floors. The virtual
+base is zero. Player projection resolves default heights before removing hidden
+floors, so filtering never changes visible distances. This is a projection only;
+no broad board rewrite or V1 writer is introduced. Shared maximum-axis distance
+math is independent of line of effect. Editable height authority and UI integration
+remain pending in this slice; see the improvement roadmap.

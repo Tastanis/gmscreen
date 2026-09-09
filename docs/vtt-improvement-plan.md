@@ -1809,3 +1809,22 @@ modifiers and need an explicit design before implementation.
 Present a compact floor-panel proposal before UI edits. Keep scene-wide floor height
 separate from independently tracking a flying creature's altitude; the latter has
 not been specified or approved here. New goal has not yet been started.
+
+
+### New goal started: height foundation
+
+The new goal is active. The user approved compact floor rows with Height, View,
+and Edit, keeping detailed map/stair/opening/visibility/delete controls inside Edit.
+Baseline: 759 tests across 100 files passed. Added maximum-axis height math and
+normalization preservation with one-square legacy defaults; 764 tests across 101
+files passed before the projection addition. Hidden-floor projection now resolves
+heights before filtering so player distances do not compress; 18 focused server
+checks passed afterward. Floor height is `elevationSquares`, distinct from token
+footprint `height` and renderer `zIndex`. Existing main UI is unchanged in this slice.
+
+Next: finish canonical height validation/save/import/restore coverage, approved floor
+editor, numeric badges and range/aura consumers. Then dice modifier suggestions,
+remaining combat/movement reliability scope and inventory matrices. Full goal remains
+unfinished. High-ground implementation must account for standing fully above the
+target's space; ranged adjacency bane applies to ranged strikes. Consult rule source
+before connecting suggestions. No live gameplay writes or deployment.

@@ -54,6 +54,7 @@ describe('map level normalization', () => {
       hidden: false,
       opacity: 1,
       zIndex: 2,
+      elevationSquares: 2,
       grid: { size: 80, locked: true, visible: false, offsetX: 12, offsetY: 16 },
       cutouts: [{ column: 2.9, row: 0, width: 1, height: 3, id: 'hole' }],
       stairs: [],
@@ -110,6 +111,7 @@ describe('map level normalization', () => {
           hidden: false,
           opacity: 1,
           zIndex: 0,
+          elevationSquares: 1,
           grid: null,
           cutouts: [],
           stairs: [],
@@ -122,4 +124,12 @@ describe('map level normalization', () => {
       baseStairs: [],
     });
   });
+});
+
+
+test('explicit floor elevations survive repeated normalization and hidden floors retain their height', () => {
+ const input={levels:[{id:'balcony',zIndex:0,elevationSquares:5,hidden:true},{id:'roof',zIndex:1}]};
+ const once=normalizeMapLevelsState(input);
+ assert.deepEqual(once.levels.map(level=>level.elevationSquares),[5,6]);
+ assert.deepEqual(normalizeMapLevelsState(once),once);
 });

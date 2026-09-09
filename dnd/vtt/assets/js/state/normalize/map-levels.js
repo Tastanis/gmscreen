@@ -1,3 +1,4 @@
+import { floorElevations } from './floor-elevation.js';
 import { normalizeGridState } from './grid.js';
 import { roundToPrecision, toBoolean, toNonNegativeInt } from './helpers.js';
 import { normalizeStairList } from './stairs.js';
@@ -75,6 +76,8 @@ export function normalizeMapLevelsState(raw, { sceneGrid = null } = {}) {
     .map((entry, index) => normalizeMapLevelEntry(entry, index, sceneGrid))
     .filter(Boolean);
 
+  const elevations = floorElevations(mapLevels);
+  mapLevels.levels.forEach(level => { level.elevationSquares = elevations.get(level.id); });
   normalizeDefaultPlayerLevel(mapLevels.levels);
   mapLevels.activeLevelId = resolveActiveLevelId(
     raw.activeLevelId ?? raw.activeLevel ?? raw.selectedLevelId ?? null,
@@ -105,6 +108,7 @@ export function normalizeMapLevelEntry(raw = {}, index = 0, sceneGrid = null) {
     hidden: resolveMapLevelHidden(raw),
     opacity: normalizeMapLevelOpacity(raw.opacity),
     zIndex: normalizeMapLevelZIndex(raw.zIndex, index),
+    ...(Number.isSafeInteger(raw.elevationSquares) && raw.elevationSquares > 0 ? { elevationSquares: raw.elevationSquares } : {}),
     grid: hasOwnGrid ? normalizeGridState({ ...(sceneGrid ?? {}), ...raw.grid }) : null,
     cutouts: normalizeMapLevelCutouts(raw.cutouts),
     stairs: normalizeStairList(raw.stairs),
@@ -285,9 +289,11 @@ export function buildLevelViewModel({ baseMapUrl = null, mapLevels = null, scene
     blocksLowerLevelVision: false,
     defaultForPlayers: false,
     isBaseLevel: true,
+    elevationSquares: 0,
   };
 
   const storedLevels = Array.isArray(mapLevels?.levels) ? mapLevels.levels : [];
+  const elevations = floorElevations({levels: storedLevels});
   const storedSorted = storedLevels
     .filter((level) => level && typeof level === 'object' && level.id)
     .slice()
@@ -298,6 +304,7 @@ export function buildLevelViewModel({ baseMapUrl = null, mapLevels = null, scene
     })
     .map((level, index) => ({
       ...level,
+      elevationSquares: elevations.get(level.id),
       // Display labels for stored levels start at "Level 1".
       displayLabel: typeof level.name === 'string' && level.name.trim()
         ? level.name

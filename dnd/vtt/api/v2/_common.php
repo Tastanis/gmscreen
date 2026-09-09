@@ -158,6 +158,7 @@ function vttSyncV2ProjectSceneConfigForPlayer(array $sceneConfig): array
     $mapLevels = is_array($sceneConfig['mapLevels'] ?? null)
         ? $sceneConfig['mapLevels']
         : [];
+    $elevations = FloorGeometry::elevations($mapLevels);
     $visibleLevels = [];
     foreach (($mapLevels['levels'] ?? []) as $level) {
         if (!is_array($level)) {
@@ -167,6 +168,7 @@ function vttSyncV2ProjectSceneConfigForPlayer(array $sceneConfig): array
         if ($levelId === '' || isset($hiddenLevelIds[$levelId])) {
             continue;
         }
+        $level['elevationSquares'] = $elevations[$levelId];
         if (is_array($level['stairs'] ?? null)) {
             $level['stairs'] = array_values(array_filter(
                 $level['stairs'],

@@ -5,6 +5,13 @@ $path = sys_get_temp_dir() . '/vtt-primary-projection-' . bin2hex(random_bytes(8
 putenv('VTT_SYNC_V2_DATABASE=' . $path);
 function verifyPrimaryProjection(bool $ok, string $message): void { if (!$ok) throw new RuntimeException($message); }
 try {
+    $heightConfig = ['mapLevels'=>['levels'=>[
+        ['id'=>'secret-floor','zIndex'=>0,'hidden'=>true,'elevationSquares'=>5],
+        ['id'=>'roof','zIndex'=>1],
+    ]]];
+    $heightProjection = vttSyncV2ProjectSceneConfigForPlayer($heightConfig);
+    verifyPrimaryProjection(count($heightProjection['mapLevels']['levels']) === 1, 'Hidden height floor is not exposed.');
+    verifyPrimaryProjection($heightProjection['mapLevels']['levels'][0]['elevationSquares'] === 6, 'Hidden floors do not compress visible floor heights.');
     $store = vttSyncV2Store();
     $board = ['placements'=>['scene'=>[
         ['id'=>'secret-primary','profileId'=>'cal','primaryPc'=>true,'hidden'=>true,'team'=>'ally','levelId'=>'upper'],
