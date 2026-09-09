@@ -526,6 +526,7 @@
     params.append("action", "delete_item");
     params.append("tab", folder);
     params.append("item_id", itemId);
+    if (item._fieldRevisions) params.append("expected_item_fields", JSON.stringify(item._fieldRevisions));
     post(params, function (result) {
       if (!result.success) return;
       ciData[folder].items = getItems(folder).filter(function (entry) { return entry.id !== itemId; });
@@ -571,6 +572,7 @@
     params.append("from_tab", folder);
     params.append("to_tab", toTab);
     params.append("item_id", itemId);
+    if (item._fieldRevisions) params.append("expected_item_fields", JSON.stringify(item._fieldRevisions));
     post(params, function (result) {
       if (!result.success || !result.item) return;
       ciData[folder].items = getItems(folder).filter(function (entry) { return entry.id !== itemId; });
@@ -593,6 +595,7 @@
     params.append("action", "take_item");
     params.append("from_tab", folder);
     params.append("item_id", itemId);
+    if (item._fieldRevisions) params.append("expected_item_fields", JSON.stringify(item._fieldRevisions));
     post(params, function (result) {
       if (!result.success || !result.item) return;
       ciData[folder].items = getItems(folder).filter(function (entry) { return entry.id !== itemId; });

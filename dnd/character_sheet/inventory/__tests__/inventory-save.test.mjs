@@ -77,6 +77,28 @@ test('stale field edits are rejected while unrelated fields and accepted revisio
   } finally {await f.close();}
 });
 
+test('reviewed deletion and move reject an item changed since loading', async () => {
+  const f=await fixture();
+  try {
+    await writeFile(f.data,JSON.stringify({cal:{items:[{id:'item',name:'Before'}]}}));
+    const initial=(await f.request({action:'load'})).data.cal.items[0];
+    await f.request({action:'update_item_field',tab:'cal',item_id:'item',field:'name',value:'Newer'});
+    const before=await readFile(f.data,'utf8');
+    for(const action of ['delete_item','share_item']) {
+      const response=await f.request({action,tab:'cal',from_tab:'cal',to_tab:'shared',item_id:'item',expected_item_fields:JSON.stringify(initial._fieldRevisions)});
+      assert.equal(response.success,false);assert.match(response.error,/another window/);
+      assert.equal(await readFile(f.data,'utf8'),before);
+    }
+    const current=(await f.request({action:'load'})).data.cal.items[0];
+    const moved=await f.request({action:'share_item',from_tab:'cal',to_tab:'shared',item_id:'item',expected_item_fields:JSON.stringify(current._fieldRevisions)});
+    assert.equal(moved.success,true);assert.equal(moved.item.name,'Newer');
+    const removed=await f.request({action:'delete_item',tab:'shared',item_id:moved.item.id,expected_item_fields:JSON.stringify(moved.item._fieldRevisions)});
+    assert.equal(removed.success,true);
+    const saved=JSON.parse(await readFile(f.data,'utf8'));
+    assert.equal(saved.cal.items.length,0);assert.equal(saved.shared.items.length,0);
+  } finally {await f.close();}
+});
+
 test('unreadable inventory JSON fails closed without replacing campaign data', async () => {
   const f = await fixture();
   try {

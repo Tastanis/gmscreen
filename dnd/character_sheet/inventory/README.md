@@ -42,3 +42,18 @@ Boundary: legacy callers omitting expected_revision remain compatible; save_item
 image upload, deletion and moves are not made revision-guarded by this slice.
 Unconfirmed-save recovery and inventory table UI remain unfinished. Do not claim
 all inventory mutation paths or old already-open client versions are protected.
+
+
+### Reviewed inventory deletion and moves - 1.19.137
+
+Current delete/share/take controls send expected_item_fields from their last known
+field revisions. The locked server compares every field before removal/move;
+stale requests leave the original inventory unchanged. Take checks visibility
+before revision comparison. Legacy callers omitting the guard remain compatible.
+The UI never rebases unseen fields merely because another field save succeeded.
+
+PHP tests cover stale delete/move file preservation and freshly reviewed successful
+move/delete. Two real browser editors now exercise rejected Delete and Move buttons
+in addition to stale field editing. All use disposable localhost data. Whole-item
+save/image upload guards, pending-unsaved-edit behavior during move, and unknown
+write outcomes remain unfinished; do not claim all mutation paths are protected.

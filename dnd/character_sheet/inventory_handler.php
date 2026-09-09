@@ -331,6 +331,19 @@ function ciRespond($payload)
     exit;
 }
 
+function ciCheckReviewedItem($item)
+{
+    if (!isset($_POST['expected_item_fields'])) return;
+    $expected = json_decode((string) $_POST['expected_item_fields'], true);
+    $current = ciFieldRevisions($item);
+    if (!is_array($expected) || count($expected) !== count($current)) ciFail('Reload this item before changing it.');
+    foreach ($current as $field => $revision) {
+        if (!isset($expected[$field]) || !is_string($expected[$field]) || !hash_equals($revision, $expected[$field])) {
+            ciFail('This item changed in another window. Reload it before deleting or moving it.');
+        }
+    }
+}
+
 function ciFail($message)
 {
     ciRespond(array('success' => false, 'error' => $message));
@@ -514,6 +527,7 @@ switch ($action) {
             ciFail('Item not found');
         }
 
+        ciCheckReviewedItem($data[$tab]['items'][$index]);
         $removed = $data[$tab]['items'][$index];
         array_splice($data[$tab]['items'], $index, 1);
 
@@ -576,6 +590,7 @@ switch ($action) {
             ciFail('Item not found');
         }
 
+        ciCheckReviewedItem($data[$fromTab]['items'][$index]);
         $moved = ciCleanItem($data[$fromTab]['items'][$index]);
         $moved['id'] = ciGenerateId();
         array_splice($data[$fromTab]['items'], $index, 1);
@@ -613,6 +628,7 @@ switch ($action) {
         if ($moved['visible'] === false) {
             ciFail('Item not found');
         }
+        ciCheckReviewedItem($data[$fromTab]['items'][$index]);
         $moved['id'] = ciGenerateId();
         array_splice($data[$fromTab]['items'], $index, 1);
         $data[$toTab]['items'][] = $moved;

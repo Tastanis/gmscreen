@@ -32,6 +32,15 @@ const origin='http://127.0.0.1:8129';
     }
     assert.equal((await edit(pages[0],'name','Newest accepted name')).success,true);
     assert.equal((await edit(pages[1],'description','Independent second-window note')).success,true);
+    pages[1].on('dialog',dialog=>dialog.accept());
+    for(const action of ['delete','share']) {
+      const expectedAction=action==='delete'?'delete_item':'share_item';
+      const response=pages[1].waitForResponse(r=>r.url()===endpoint && r.request().postData()?.includes('action='+expectedAction));
+      await pages[1].locator(`[data-ci-action="${action}"][data-item-id="${id}"]`).first().click();
+      const rejected=await(await response).json();
+      assert.equal(rejected.success,false);assert.match(rejected.error,/another window/);
+      assert.equal(await pages[1].locator(`[data-item-id="${id}"] [data-ci-field="name"]`).count(),1);
+    }
     const stale=await edit(pages[1],'name','My unsaved name');
     assert.equal(stale.success,false);assert.match(stale.error,/another window/);
     assert.equal(await pages[1].locator(`[data-item-id="${id}"] [data-ci-field="name"]`).inputValue(),'My unsaved name');
