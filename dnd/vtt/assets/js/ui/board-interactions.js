@@ -4882,7 +4882,7 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
-  function handleAutomationSetAuraRequest(event) {
+  async function handleAutomationSetAuraRequest(event) {
     const detail = event?.detail ?? {};
     const payload = detail.payload && typeof detail.payload === 'object' ? detail.payload : {};
     const resolve = typeof detail.resolve === 'function' ? detail.resolve : null;
@@ -4905,7 +4905,7 @@ export function mountBoardInteractions(store, routes = {}) {
       round: combatRound,
       activeCombatantId,
     });
-    updatePlacementById(placementId, (target) => {
+    const update = updatePlacementById(placementId, (target) => {
       if (automation) {
         const auraId = createAutomationAuraId(automation, payload);
         removeAutomationAuraRecord(target, auraId);
@@ -4935,7 +4935,14 @@ export function mountBoardInteractions(store, routes = {}) {
       if (!enabled || payload.automation === null) {
         delete target.aura.automation;
       }
-    });
+    }, {returnSavePromise:true});
+    try {
+      if (!update?.updated) throw new Error('Aura token is no longer available.');
+      await awaitSuccessfulPlacementSave(update);
+    } catch (error) {
+      reject?.(error);
+      return;
+    }
     renderAuras(boardApi.getState?.() ?? {}, auraLayer, viewState);
     if (activeTokenSettingsId === placementId && typeof refreshTokenSettings === 'function') {
       refreshTokenSettings();

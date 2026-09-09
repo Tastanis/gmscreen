@@ -1,5 +1,8 @@
 # VTT improvement implementation
 
+**Current work:** See [active goal status](vtt-active-goal-status.md) for the current requirement/evidence map and pending UI decisions. The initial checklist below is historical: later user-directed removals and approved changes supersede its old UI descriptions. The full roadmap remains preserved.
+
+
 User authorized implementing the September 7 product audit, updating/running the diagnostic pull, and authenticated website access. Preserve live campaign data. All gameplay QA uses disposable localhost copies. The scope is tracked by the active goal; unfinished boxes are not claims of completed work.
 
 ## Stopping checkpoint
@@ -2297,3 +2300,23 @@ Verification-only checkpoint, no version change or live campaign writes. This
 proves recovery of this still-pending ability effect when its sheet write committed;
 it does not prove repair of genuinely rejected writes, recovery of all multi-step
 abilities after closing the page, or cross-store atomicity. Continue the full goal.
+
+
+### Aura ability save confirmation - 1.19.135
+
+handleAutomationSetAuraRequest now requests and awaits the canonical placement
+save before resolving applied:true. Failed persistence rejects its callback;
+optimistic aura state is not proof of completion. Existing aura identities and
+payload shapes are unchanged. No visible UI additions.
+
+New test-aura-registration-browser.cjs first reproduced the old behavior: its
+callback resolved while the write was held. After the fix it passes held-save
+pending state, accepted canonical record, rejected save and reload persistence
+on a fresh loopback fixture. Actual cross-height aura effect membership remains
+an independent unfinished journey; do not substitute this registration test.
+
+Current requirement/evidence navigation is docs/vtt-active-goal-status.md. The old
+roadmap checklist is retained as history, with an explicit current-status link.
+Pending UI proposals and all remaining original scope stay open.
+
+Full npm test passes: 793 tests across 105 files; no live campaign writes.

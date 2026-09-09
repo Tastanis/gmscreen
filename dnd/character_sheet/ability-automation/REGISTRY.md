@@ -859,3 +859,21 @@ one additional focused rejection/deadline test, which also passed. No live write
 The broader goal, mismatch reconciliation and pending UI decisions remain open.
 
 Fresh forced-zone browser check also passed with VTT_TEST_STALL_SHEET=1: a missing receipt keeps the action unconfirmed, with one write and no replay.
+
+
+### Aura ability save confirmation - 1.19.135
+
+handleAutomationSetAuraRequest now requests and awaits the canonical placement
+save before resolving applied:true. Failed persistence rejects its callback;
+optimistic aura state is not proof of completion. Existing aura identities and
+payload shapes are unchanged. No visible UI additions.
+
+New test-aura-registration-browser.cjs first reproduced the old behavior: its
+callback resolved while the write was held. After the fix it passes held-save
+pending state, accepted canonical record, rejected save and reload persistence
+on a fresh loopback fixture. Actual cross-height aura effect membership remains
+an independent unfinished journey; do not substitute this registration test.
+
+Current requirement/evidence navigation is docs/vtt-active-goal-status.md. The old
+roadmap checklist is retained as history, with an explicit current-status link.
+Pending UI proposals and all remaining original scope stay open.
