@@ -2065,3 +2065,25 @@ not implemented. Continue the original scope; inventory table and other pending
 visible proposals still await responses.
 
 Full regression suite: 784 passing tests across 104 files.
+
+
+### Inventory progression table parsing - 1.19.130
+
+inventory/effect-table.mjs provides strict plain-text table normalization, Markdown
+and tab-separated spreadsheet paste parsing, and quoted TSV export. It preserves
+empty cells, quoted newlines/tabs, escaped Markdown pipes and literal markup.
+Ragged rows, malformed quotes, invalid selected rows and oversized input reject
+instead of silently truncating content. Independent table values use copied rows
+and a selectedRow index. Limits: 200 rows, 32 columns, 8000 characters per cell,
+200000 pasted characters. This is an internal foundation, not a visible feature:
+the current inventory screen does not load it yet and no saved schema is changed.
+The future renderer must escape cell text; this parser does not authorize HTML.
+
+Read-only validation of the actual Eternal-Spire.md Fungal Minions and Resurrection
+tables preserved all 20 rows each through Markdown parse and TSV round trip. No
+campaign file or inventory was changed. Focused tests cover equivalent synthetic
+matrices, independent selection/copies, quoting and rejection. UI integration,
+server validation/persistence of tables, paste/edit controls and browser journey
+remain unfinished pending the layout response. Preserve the whole active goal.
+
+Full regression suite: 788 passing tests across 105 files.
