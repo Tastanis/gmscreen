@@ -1964,3 +1964,22 @@ The browser uses a fresh loopback floor fixture and canonical GM floor edits.
 General effect-range consumers and the rest of the active goal remain unfinished.
 
 Full regression suite: 775 passing tests across 102 files.
+
+
+### Height-aware adjacency effects - 1.19.125
+
+Opportunity-attack and authored move predicates use each recorded endpoint floor,
+height and shared openings, rather than filtering on the mover's final floor.
+A one-square open vertical gap may be adjacent; a five-square gap or solid floor
+is not. Stair/fall transitions inspect endpoints only, without invented floor
+paths. The existing same-floor square-step pass-by check remains bounded at 200
+steps; fractional final steps now terminate at the destination instead of
+oscillating. This is not a new continuous swept-path solver. Move hook endpoint
+payloads retain levelId. Stand Firm applies the same vertical/opening reach filter
+before its existing ally/footprint checks. No new UI or authored fields.
+
+Full suite passed 780 tests across 103 files, including acknowledged movement
+floor retention, ascent/descent, openings, pass-by, fractional movement and Stand
+Firm integration. Full browser opportunity-attack gameplay remains to be verified.
+The rest of the original goal remains active, including the pending approved-UI
+responses, remaining distance consumers and broader gameplay/recovery checks.

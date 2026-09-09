@@ -1,3 +1,4 @@
+import { canReachFloor } from '../floor-geometry.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
@@ -59,4 +60,18 @@ test('stand firm stays inactive without an adjacent ally', () => {
   assert.equal(state.active, false);
   assert.equal(state.stabilityBonus, 0);
   assert.equal(standFirm.conditionPrevented(state, 'frightened'), false);
+});
+
+test('stand firm floor filter allows a nearby opening but excludes high or sealed allies', () => {
+  const guard = { id: 'guard', team: 'ally', column: 2, row: 2, width: 1, height: 1 };
+  const ally = { id: 'ally', team: 'ally', column: 3, row: 2, width: 1, height: 1, levelId: 'upper' };
+  const sheet = { features: [{ automation: { passives: [{ kind: 'standFirm' }] } }] };
+  const floors = { levels: [{ id: 'upper', mapUrl: '/floor.png', elevationSquares: 1, cutouts: [{ column: 2, row: 2, width: 1, height: 1 }] }] };
+  const resolve = () => standFirm.resolveStandFirmState({ placement: guard, placements: [ally].filter(p => canReachFloor(guard, p, 1, floors)), sheet });
+  assert.equal(resolve().active, true);
+  floors.levels[0].elevationSquares = 5;
+  assert.equal(resolve().active, false);
+  floors.levels[0].elevationSquares = 1;
+  floors.levels[0].cutouts = [];
+  assert.equal(resolve().active, false);
 });

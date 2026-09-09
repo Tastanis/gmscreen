@@ -137,7 +137,7 @@ Ordinary conditions may carry persistent `riders: [{ id, when, target, effects }
 
 `hiddenEffect` carries hidden ability-applied rider effects. It is not selectable in the normal condition picker and does not render as token condition text. It remains visible in the VTT character/monster sidebar with an `x` remove button and marks the token with a compact `FX` badge. Supported automatic rider type: `{ "type": "rollModifier", "modifier": "edge" | "bane" | "doubleEdge" | "doubleBane", "appliesTo": { ... }, "consume": "manual" | "nextMatchingRoll" }`.
 
-Board-hosted power roll modals can show clickable suggested edges/banes from current VTT state through `getPowerRollSuggestions`. These are runtime hints; normal board hints are not automation JSON fields. High Ground, Flanking, and Cover are always visible as suggestion toggles; High Ground is explicitly labeled for confirmation and defaults off: floor order alone does not establish occupied vertical space or eligible standing/climbing. Flanking defaults on only for visible adjacent creatures on the same participating floor. Cover remains manual because line-of-effect obstruction is not modeled as a reliable roll predicate. Suggestion tooltips explain these boundaries. Additional board-derived suggestions include prone/restrained/unconscious targets, hidden attackers, weakened/restrained/prone attackers, and source-linked frightened/grabbed/taunted attackers when those facts are present in board state. Ability-applied `hiddenEffect` rollModifier riders also appear as default-on suggestions when their `appliesTo` filters match, and `consume: "nextMatchingRoll"` riders are removed after the accepted matching roll.
+Board-hosted power roll modals can show clickable suggested edges/banes from current VTT state through `getPowerRollSuggestions`. These are runtime hints; normal board hints are not automation JSON fields. High Ground, Flanking, and Cover are always visible as suggestion toggles; High ground defaults on when known elevations place the grounded actor fully above every selected target; uncertain footing or target altitude remains manual. Suggestions refresh before rolling and retain manual overrides for the current attack context. Flanking defaults on only for visible adjacent creatures on the same participating floor. Cover remains manual because line-of-effect obstruction is not modeled as a reliable roll predicate. Suggestion tooltips explain these boundaries. Additional board-derived suggestions include prone/restrained/unconscious targets, hidden attackers, weakened/restrained/prone attackers, and source-linked frightened/grabbed/taunted attackers when those facts are present in board state. Ability-applied `hiddenEffect` rollModifier riders also appear as default-on suggestions when their `appliesTo` filters match, and `consume: "nextMatchingRoll"` riders are removed after the accepted matching roll.
 
 ## Durations — `condition.duration`
 
@@ -147,10 +147,12 @@ Board-hosted power roll modals can show clickable suggested edges/banes from cur
 
 ## Forced-movement verbs — `forcedMovement.verb`
 
-Floor participation is shared by automatic flanking, aura membership, Stand Firm
-adjacency, and opportunity-attack adjacency. Disabled/deleted floors do not prove
-adjacency. Cross-floor reach through openings remains manual until physical
-elevation and line-of-effect geometry are available. No new ability JSON is needed.
+Floor height and shared openings determine aura reach, Stand Firm adjacency,
+and opportunity-attack endpoint adjacency. Flanking retains its same-floor
+opposite-side check. Disabled/deleted floors do not prove adjacency. Movement
+between floors uses endpoint adjacency; no intermediate floor path is inferred.
+The normal-move trigger retains levelId in both endpoint footprints. No new
+authored ability JSON fields are needed.
 
 Board persistence now resolves destination support (including holes) on the
 server for position patches. Generic position patches bypass walking stair
@@ -341,7 +343,7 @@ Lightweight event-driven registry for triggered abilities. JSON-authored `trigge
 
 | eventType | Payload shape | Status |
 |---|---|---|
-| `move` | `{ placementId, sourceId, from: {column,row,width,height}, to: {...}, distance, movedDistance, kind: "normal", sceneId, perWatcher }` | Fires once per `vtt:token-moved` (normal movement only). `distance` / `movedDistance` is Chebyshev square distance. `perWatcher` is a `Map<watcherId, { leaves, enters }>` so a predicate's adjacency filter can resolve relative to its own watcher. |
+| `move` | `{ placementId, sourceId, from: {column,row,width,height,levelId}, to: {...}, distance, movedDistance, kind: "normal", sceneId, perWatcher }` | Fires once per `vtt:token-moved` (normal movement only). `distance` / `movedDistance` is Chebyshev square distance. `perWatcher` is a `Map<watcherId, { leaves, enters }>` so a predicate's adjacency filter can resolve relative to its own watcher. |
 | `forcedMovement` | `{ placementId, targetId, sourceId, actorId, distance, movedDistance, requestedDistance, verb, abilityName, actionId, actionKind, keywords }` | Fires after an automated push/pull/slide/vertical forced movement resolves. Predicates resolve `whose` against the moved token. |
 | `forcedMovementDealt` | Same payload as `forcedMovement`. | Fires alongside `forcedMovement`, but predicates resolve `whose` against the source/actor who caused the forced movement. Mirrors `damageDealt`. |
 | `powerRoll` | `{ actorId, actorName, actionId, actionName, actionKind, cost, keywords, attribute, rollTotal, tier, targetIds, targetNames }` | Fires after the roll is accepted and before tier effects apply. |

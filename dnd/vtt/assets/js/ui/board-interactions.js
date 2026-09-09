@@ -98,10 +98,11 @@ import {
 } from './map-level-renderer.js';
 import { createTokenInteractions } from './token-interactions.js';
 import { createTokenMovementRuntime } from '../sync-v2/token-movement-runtime.js';
-import { floorRelation, canReachFloor } from './floor-geometry.js';
+import { canReachFloor } from './floor-geometry.js';
 import { mountSaveFeedback, describeSaveFailure } from './save-feedback.js';
 import { mountConnectionStatus } from './connection-status.js';
 import { claimActiveTool, publishActiveTool } from './active-tool.js';
+import { movementAdjacencyChanges } from './movement-adjacency.js';
 import { normalMovementDetail } from '../sync-v2/confirmed-movement.js';
 import { createRequestedTestCoordinator } from './requested-test-coordinator.js';
 import {
@@ -2508,14 +2509,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     for (const watcher of scenePlacements) {
       if (!watcher || !watcher.id || watcher.id === movingId) continue;
-      if (floorRelation(watcher, movingPlacement, getActiveSceneTokenLevelState(state)) !== 'same') {
-        perWatcherMoveStates.set(watcher.id, { leaves: false, enters: false });
-        continue;
-      }
-      const leaves = movePathLeavesAdjacency(from, to, watcher);
-      const fromGap = footprintGap(watcher, { column: from.column, row: from.row, width: from.width, height: from.height });
-      const toGap = footprintGap(watcher, { column: to.column, row: to.row, width: to.width, height: to.height });
-      const enters = fromGap > 1 && toGap === 1;
+      const { leaves, enters } = movementAdjacencyChanges(from, to, watcher, getActiveSceneTokenLevelState(state));
       perWatcherMoveStates.set(watcher.id, { leaves, enters });
 
       // Built-in opp-attack: opposing-team watchers whose adjacency the mover
@@ -2537,8 +2531,8 @@ export function mountBoardInteractions(store, routes = {}) {
       triggerFire('move', {
         placementId: movingId,
         sourceId: movingId,
-        from: { column: from.column, row: from.row, width: from.width, height: from.height },
-        to: { column: to.column, row: to.row, width: to.width, height: to.height },
+        from: { column: from.column, row: from.row, width: from.width, height: from.height, levelId: from.levelId || BASE_MAP_LEVEL_ID },
+        to: { column: to.column, row: to.row, width: to.width, height: to.height, levelId: to.levelId || BASE_MAP_LEVEL_ID },
         distance: movedDistance,
         movedDistance,
         kind: detail.kind,
@@ -2622,54 +2616,6 @@ export function mountBoardInteractions(store, routes = {}) {
       }));
     }
     return Promise.all(pendingEntries);
-  }
-
-  // Returns true if at any step along the Chebyshev walk from `from` to `to`
-  // the moving token transitions from adjacent-to-watcher (gap === 1) to
-  // non-adjacent (gap > 1). Catches the "move past an enemy" case.
-  function movePathLeavesAdjacency(from, to, watcher) {
-    if (!from || !to || !watcher) return false;
-    const width = Math.max(1, Number.isFinite(from.width) ? from.width : 1);
-    const height = Math.max(1, Number.isFinite(from.height) ? from.height : 1);
-    let col = from.column ?? 0;
-    let row = from.row ?? 0;
-    let remainingDx = (to.column ?? 0) - col;
-    let remainingDy = (to.row ?? 0) - row;
-    let prevGap = footprintGap(watcher, { column: col, row, width, height });
-    let steps = 0;
-    const maxSteps = 200; // safety guard against pathological inputs
-    while ((remainingDx !== 0 || remainingDy !== 0) && steps < maxSteps) {
-      const stepX = Math.sign(remainingDx);
-      const stepY = Math.sign(remainingDy);
-      col += stepX;
-      row += stepY;
-      remainingDx -= stepX;
-      remainingDy -= stepY;
-      const nextGap = footprintGap(watcher, { column: col, row, width, height });
-      if (prevGap === 1 && nextGap > 1) return true;
-      prevGap = nextGap;
-      steps += 1;
-    }
-    return false;
-  }
-
-  function footprintGap(a, b) {
-    if (!a || !b) return Infinity;
-    const aw = Math.max(1, Number.isFinite(a.width) ? a.width : 1);
-    const ah = Math.max(1, Number.isFinite(a.height) ? a.height : 1);
-    const bw = Math.max(1, Number.isFinite(b.width) ? b.width : 1);
-    const bh = Math.max(1, Number.isFinite(b.height) ? b.height : 1);
-    const ax1 = a.column ?? 0;
-    const ax2 = ax1 + aw - 1;
-    const bx1 = b.column ?? 0;
-    const bx2 = bx1 + bw - 1;
-    const ay1 = a.row ?? 0;
-    const ay2 = ay1 + ah - 1;
-    const by1 = b.row ?? 0;
-    const by2 = by1 + bh - 1;
-    const dx = Math.max(0, Math.max(ax1 - bx2, bx1 - ax2));
-    const dy = Math.max(0, Math.max(ay1 - by2, by1 - ay2));
-    return Math.max(dx, dy);
   }
 
   // ---------- Trigger event bus ----------
@@ -17477,7 +17423,7 @@ export function mountBoardInteractions(store, routes = {}) {
     return helper.resolveStandFirmState({
       placement,
       placements: getPlacementsForActiveScene().filter(candidate =>
-        floorRelation(placement, candidate, getActiveSceneTokenLevelState()) === 'same'),
+        canReachFloor(placement, candidate, 1, getActiveSceneTokenLevelState())),
       sheet,
       monster,
       getTeam: (item) => getCombatantTeam(item?.id) || normalizeCombatTeam(item?.team),
