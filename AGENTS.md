@@ -420,3 +420,19 @@ no longer triggers the outside-scroll dismissal listener. Browser QA passed at
 - Aura reach now combines horizontal radius with canReachFloor vertical radius and exact common openings. Player aura rendering hides out-of-height-range auras; GM overview remains. This is not a general wall/diagonal-ray solver.
 
 - Automatic High ground uses known floor height and target space; flight/uncertain footing remain manual. Adjacent-enemy bane is ranged-strike-only. Preserve short labels and manual overrides; multi-target modifier UI is awaiting approval.
+
+
+### Power-roll suggestion refresh - 1.19.123
+
+The existing ability roll window refreshes board suggestions every second before
+rolling and immediately before each roll/reroll. Manual suggestion toggles survive
+refreshes and temporary absence of that suggestion for the same actor/action/block/
+target set. A new roll block or changed actor/targets resets those overrides.
+Automatic refresh freezes after rolling and stops when the window closes or is
+removed. Unchanged suggestions do not rebuild controls. No new UI or schema fields.
+Focused regressions cover overrides, context changes, refresh, frozen rolls and
+cleanup. Browser interaction QA remains pending; this is not a full gameplay claim.
+Generic dice roller integration, mixed-target handling (UI approval pending),
+remaining range consumers and the rest of the active goal are still unfinished.
+
+Full regression suite passed: 773 tests across 102 files.

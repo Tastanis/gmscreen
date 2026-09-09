@@ -953,14 +953,49 @@
       targetIds: targetGroup.map((target) => target?.id).filter(Boolean),
     };
     try {
+      const contextKey = JSON.stringify([payload.actorId, payload.actionId, block.id,
+        payload.rollEvent, [...payload.targetIds].sort()]);
+      if (state.rollSuggestionContext !== contextKey) {
+        state.rollSuggestionContext = contextKey;
+        state.rollSuggestionOverrides = new Map();
+      }
       const next = callback(payload);
       state.rollSuggestions = (Array.isArray(next) ? next : [])
         .map(normalizeRollSuggestion)
-        .filter(Boolean);
+        .filter(Boolean)
+        .map((suggestion) => {
+          if (state.rollSuggestionOverrides.has(suggestion.id)) {
+            suggestion.active = state.rollSuggestionOverrides.get(suggestion.id);
+          }
+          return suggestion;
+        });
     } catch (err) {
       console.warn("[AbilityAutomationRunner] roll suggestions failed", err);
       state.rollSuggestions = [];
     }
+  }
+
+  function setRollSuggestionActive(state, suggestion, active) {
+    suggestion.active = active;
+    if (!state.rollSuggestionOverrides) state.rollSuggestionOverrides = new Map();
+    state.rollSuggestionOverrides.set(suggestion.id, active);
+  }
+
+  function watchPowerRollSuggestions(host, state, block, render) {
+    let stopped = false;
+    let timer;
+    const tick = () => {
+      if (stopped) return;
+      if (!host.isConnected) { stopped = true; return; }
+      if (!state.roll) {
+        const previous = JSON.stringify(state.rollSuggestions);
+        refreshPowerRollSuggestions(state, block);
+        if (previous !== JSON.stringify(state.rollSuggestions)) render(host, state, block);
+      }
+      timer = window.setTimeout(tick, 1000);
+    };
+    timer = window.setTimeout(tick, 1000);
+    return () => { stopped = true; window.clearTimeout(timer); };
   }
 
   function renderRollSuggestionButtons(state) {
@@ -1225,7 +1260,9 @@
   }
 
   function wirePowerRoll(host, state, block, resolve) {
+    const stopSuggestions = watchPowerRollSuggestions(host, state, block, renderPowerRoll);
     const finish = () => {
+      stopSuggestions();
       host.removeEventListener("click", onClick);
       host.removeEventListener("automation-cancel", onCancel);
       resolve();
@@ -1266,7 +1303,7 @@
         const id = suggestionButton.getAttribute("data-power-roll-suggestion-toggle") || "";
         const suggestion = (state.rollSuggestions || []).find((entry) => entry.id === id);
         if (suggestion) {
-          suggestion.active = !suggestion.active;
+          setRollSuggestionActive(state, suggestion, !suggestion.active);
           state.resultText = state.roll ? "Suggestion changed. Reroll to post the adjusted result." : "";
           renderPowerRoll(host, state, block);
         }
@@ -1297,13 +1334,14 @@
         state.manualBonus = 0;
         state.powerRollSurges = 0;
         (state.rollSuggestions || []).forEach((suggestion) => {
-          suggestion.active = false;
+          setRollSuggestionActive(state, suggestion, false);
         });
         state.resultText = state.roll ? "Adjustments cleared. Reroll to post the adjusted result." : "";
         renderPowerRoll(host, state, block);
         return;
       }
       if (target.closest("[data-power-roll-roll]")) {
+        refreshPowerRollSuggestions(state, block);
         state.roll = rollFormula(block.rollFormula || "2d10");
         const { total, attributeBonus, skill, skillBonus, bonus, edgeState } = getPowerRollTotal(state, block);
         state.baseTier = P.tierFromTotal(total);
@@ -1348,6 +1386,7 @@
     state.selectedTier = null;
     state.baseTier = null;
     state.resultText = "";
+    state.rollSuggestionContext = null;
     refreshPowerRollSuggestions(state, block);
 
     const host = makeHost("Power Roll", state.action.name || "Ability Automation", "power", state.context?.automationAnchor || null);
@@ -4024,6 +4063,9 @@
       return { applied: true };
     },
     __testing: {
+      refreshPowerRollSuggestions,
+      setRollSuggestionActive,
+      watchPowerRollSuggestions,
       getActiveEdgeControl,
       getEdgeState,
       getManualEdgeBaneCounts,
