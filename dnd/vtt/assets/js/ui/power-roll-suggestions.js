@@ -1,5 +1,5 @@
 const EDGE = 'edge';
-import { floorRelation, canConfirmPlanarAdjacency } from './floor-geometry.js';
+import { floorRelation, canReachFloor } from './floor-geometry.js';
 const BANE = 'bane';
 
 function normalizeText(value) {
@@ -73,7 +73,7 @@ function rectDistance(a, b) {
 
 function isAdjacentTo(a, b, mapLevels = []) {
   if (!a || !b || a.id === b.id) return false;
-  if (!canConfirmPlanarAdjacency(a, b, mapLevels)) return false;
+  if (a.hidden || a.isHidden || b.hidden || b.isHidden || !canReachFloor(a, b, 1, mapLevels)) return false;
   return rectDistance(tokenRect(a), tokenRect(b)) <= 1;
 }
 
@@ -174,7 +174,7 @@ function placementTeam(placement, getTeam) {
 }
 
 function isFlanking(actor, target, placements = [], getTeam = null, mapLevels = []) {
-  if (!actor || !target || !isAdjacentTo(actor, target, mapLevels)) return false;
+  if (!actor || !target || floorRelation(actor,target,mapLevels) !== 'same' || !isAdjacentTo(actor, target, mapLevels)) return false;
   const actorTeam = placementTeam(actor, getTeam);
   const targetTeam = placementTeam(target, getTeam);
   if (actorTeam === targetTeam) return false;
@@ -183,7 +183,7 @@ function isFlanking(actor, target, placements = [], getTeam = null, mapLevels = 
     if (placementTeam(candidate, getTeam) !== actorTeam) return false;
     if (placementTeam(candidate, getTeam) === targetTeam) return false;
     if (hasCondition(candidate, 'dazed')) return false;
-    if (!isAdjacentTo(candidate, target, mapLevels)) return false;
+    if (floorRelation(candidate,target,mapLevels) !== 'same' || !isAdjacentTo(candidate, target, mapLevels)) return false;
     return areOppositeAroundTarget(actor, candidate, target);
   });
 }

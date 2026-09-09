@@ -1352,3 +1352,20 @@ getPlayerTokenMapLevelVisibility interaction path checks exact openings but only
 supports looking downward. A shared bidirectional strict opening check is needed
 before permitting cross-floor adjacency/auras. Existing same-floor exclusions must
 not simply be replaced with display visibility. Goal remains active.
+
+
+### Height-aware aura reach and adjacency
+
+canReachFloor combines vertical range with a symmetric exact opening check through
+all intervening blocking floors, within the lower creature's occupied footprint.
+It must be paired with horizontal footprint/radius checks. Automation aura membership
+uses it; player aura painting also rejects floors beyond its radius and removes old
+nodes when range changes. GM overview is retained. Roll-suggestion adjacency uses
+the same height/opening check; flanking retains planar opposite-side checks.
+
+This is vertical opening reach, not a general wall or diagonal-ray line-of-effect
+solver. Existing hidden/opacity/map-image floor blocking semantics are retained.
+No new automation JSON fields or trigger payloads. Full suite passed 769 tests;
+a real-DOM local browser renderer check passed radius cutoff/reach/stale cleanup
+and GM overview. Full gameplay aura-trigger journey, remaining range consumers,
+edge/bane auto-selection UI, and remaining goal scope still require work.

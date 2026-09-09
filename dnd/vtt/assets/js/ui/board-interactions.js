@@ -98,7 +98,7 @@ import {
 } from './map-level-renderer.js';
 import { createTokenInteractions } from './token-interactions.js';
 import { createTokenMovementRuntime } from '../sync-v2/token-movement-runtime.js';
-import { floorRelation } from './floor-geometry.js';
+import { floorRelation, canReachFloor } from './floor-geometry.js';
 import { mountSaveFeedback, describeSaveFailure } from './save-feedback.js';
 import { mountConnectionStatus } from './connection-status.js';
 import { claimActiveTool, publishActiveTool } from './active-tool.js';
@@ -3750,8 +3750,8 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function isPlacementInsideAutomationAura(owner, aura, placement, ownerOverride = null) {
     if (!owner?.id || !aura || !placement?.id) return false;
-    if (floorRelation(ownerOverride ? { ...owner, ...ownerOverride } : owner, placement,
-      getActiveSceneTokenLevelState()) !== 'same') return false;
+    if (!canReachFloor(ownerOverride ? { ...owner, ...ownerOverride } : owner, placement,
+      Math.max(1, Math.min(20, Number.parseInt(aura.radius, 10) || 1)), getActiveSceneTokenLevelState())) return false;
     const automation = aura.automation && typeof aura.automation === 'object' ? aura.automation : {};
     if (!doesAutomationTargetFilterMatch(placement, automation.affects || 'creature', owner)) return false;
     return doesAutomationAreaAffectPlacement(getAuraAreaForPlacement(owner, aura.radius, ownerOverride), placement);

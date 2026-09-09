@@ -450,6 +450,18 @@ function isCellOpenThroughHigherMapLevels(levels, startIndex, endIndex, cell, mo
 
 // Levels v2 §5.5.4: scale below-level tokens by 10% per level of distance,
 // floored at 50%. Same-level and above-level tokens render at 100%.
+export function hasOpenFloorPath(a = {}, b = {}, mapLevelsState = null) {
+  const levels = getOrderedLevelsWithBase(mapLevelsState?.levels ?? []);
+  const aIndex = levels.findIndex(level => level.id === resolvePlacementLevelId(a));
+  const bIndex = levels.findIndex(level => level.id === resolvePlacementLevelId(b));
+  if (aIndex < 0 || bIndex < 0 || levels[aIndex].hidden || levels[bIndex].hidden) return false;
+  if (aIndex === bIndex) return true;
+  const lower = Math.min(aIndex,bIndex), upper = Math.max(aIndex,bIndex);
+  const bounds = normalizePlacementBounds(aIndex < bIndex ? a : b);
+  return getPlacementCells(bounds).some(cell =>
+    isCellOpenThroughHigherMapLevels(levels,lower+1,upper,cell,'interaction',bounds));
+}
+
 export function getMapLevelDistanceScale(direction, distance) {
   if (direction !== 'below') {
     return 1;

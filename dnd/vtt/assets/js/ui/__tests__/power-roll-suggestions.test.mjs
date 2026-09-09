@@ -245,3 +245,15 @@ test('does not count same-team tokens as flankers', () => {
   const target = enemy('ogre', 5, 5, { width: 2, height: 2 });
   assert.equal(__testing.isFlanking(actor, target, [actor, helper, target]), false);
 });
+
+
+test('adjacency measures vertical squares and requires an opening between floors', () => {
+ const actor=ally('actor',2,2), target=enemy('target',2,2,{levelId:'balcony'});
+ const model={levels:[{id:'balcony',mapUrl:'/floor.png',elevationSquares:5,cutouts:[{column:2,row:2,width:1,height:1}]}]};
+ assert.equal(__testing.isAdjacentTo(actor,target,model),false);
+ model.levels[0].elevationSquares=1;
+ assert.equal(__testing.isAdjacentTo(actor,target,model),true);
+ assert.equal(__testing.isAdjacentTo(target,actor,model),true);
+ model.levels[0].cutouts=[];
+ assert.equal(__testing.isAdjacentTo(actor,target,model),false);
+});

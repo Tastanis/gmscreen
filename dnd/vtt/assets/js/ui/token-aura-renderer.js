@@ -1,3 +1,4 @@
+import {verticalFloorDistance} from '../state/normalize/floor-elevation.js';
 import {normalizePlacementForRender} from './token-render-normalize.js';
 import {getRenderableAurasForPlacement} from './token-aura-records.js';
 import {getTokenLevelPresentation} from './token-levels.js';
@@ -88,6 +89,8 @@ export function renderTokenAuras({placements = [], layer, view, gmViewing = fals
 
     auras.forEach((aura) => {
       const auraRadius = Math.max(1, Math.min(20, parseInt(aura.radius, 10) || 1));
+      const floorDistance = verticalFloorDistance(placement,{levelId:auraViewerLevelId},tokenLevelState);
+      if (!gmViewing && (floorDistance === null || floorDistance > auraRadius)) return;
       const auraColor = typeof aura.color === 'string' ? aura.color : '#3b82f6';
       const auraKey = `${normalized.id}:${aura.id || 'manual'}`;
 
