@@ -414,3 +414,5 @@ no longer triggers the outside-scroll dismissal listener. Browser QA passed at
 - Explicit elevationSquares accepts whole numbers 1..1000000 through levels.set, scene import, and checkpoint layout planning. Missing legacy heights remain supported; share FloorGeometry::validateElevations across height write boundaries.
 
 - Compact floor editor height changes keep IDs/stair links and sort physical zIndex by elevation. View must send an explicit user-level.set operation through V2. Preserve open Edit disclosures when refreshing scene markup.
+
+- Numeric token floor badges use vertical squares, but token visual scaling remains based on floor steps. Do not equate expanded look-down presentation masks with strict cross-floor line of effect.

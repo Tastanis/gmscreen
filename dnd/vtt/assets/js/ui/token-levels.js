@@ -1,3 +1,4 @@
+import { verticalFloorDistance } from '../state/normalize/floor-elevation.js';
 import {
   BASE_MAP_LEVEL_ID,
   normalizeMapLevelsState,
@@ -539,8 +540,10 @@ export function getTokenLevelPresentation(placement = {}, mapLevelsState = null,
       : placementLevelIndex > viewerLevelIndex
         ? 'above'
         : 'below';
-  const distance = Math.abs(placementLevelIndex - viewerLevelIndex);
-  const scale = getMapLevelDistanceScale(direction, distance);
+  const floorSteps = Math.abs(placementLevelIndex - viewerLevelIndex);
+  const distance = verticalFloorDistance(placement, {levelId: viewerLevelId}, mapLevelsState) ?? floorSteps;
+  // Height changes the numeric badge, not the existing token-size presentation.
+  const scale = getMapLevelDistanceScale(direction, floorSteps);
   const indicator = direction === 'same' ? null : { direction, distance };
   const placementBounds = normalizePlacementBounds(placement);
 

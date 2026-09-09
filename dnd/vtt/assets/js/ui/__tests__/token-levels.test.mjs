@@ -908,3 +908,17 @@ describe('Levels v2 falling detection', () => {
     assert.equal(getFallingDestinationLevelId(placement, mapLevels), null);
   });
 });
+
+
+test('token badges measure vertical squares while preserving floor-step visual scale', () => {
+ const model={levels:[{id:'balcony',zIndex:0,elevationSquares:5}]};
+ const above=getTokenLevelPresentation({levelId:'balcony'},model,{viewerLevelId:'level-0',gmViewing:true});
+ assert.equal(above.distance,5);
+ assert.deepEqual(above.indicator,{direction:'above',distance:5});
+ assert.equal(above.scale,getMapLevelDistanceScale('above',1));
+ const below=getTokenLevelPresentation({levelId:'level-0'},model,{viewerLevelId:'balcony',gmViewing:true});
+ assert.equal(below.distance,5);
+ assert.equal(below.indicator.direction,'below');
+ const higher={levels:[...model.levels,{id:'roof',zIndex:1,elevationSquares:8}]};
+ assert.equal(getTokenLevelPresentation({levelId:'roof'},higher,{viewerLevelId:'balcony',gmViewing:true}).distance,3);
+});

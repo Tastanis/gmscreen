@@ -1860,3 +1860,21 @@ Browser validation passed height 5 save/reload, View and retained disclosure at
 1280x720 in dark/light/Diablo. Full suite passed 765 tests; scene-manager tests
 passed 11 checks. Numeric token badges and range/aura/dice consumers remain next,
 alongside the remaining full-goal items. No live site writes or deployment.
+
+
+### Numeric floor-height token badges
+
+Token presentation now uses verticalFloorDistance for the displayed distance while
+retaining floor-step-based visual scale. Shared token painting adds a short square-
+distance tooltip/accessibility label; the passive preview inherits the same painter.
+44 token-level tests passed, including explicit 5-square above/below badges and
+3-square differences between elevated floors. The disposable floor-editor browser
+journey now verifies a 5-square lower-token badge after height save/reload and View.
+
+Range/aura integration remains open. Be careful: getTokenLevelPresentation's
+look-down presentation still builds expanded cutout cell sets even with interaction
+mode; do not use that as proof of strict line of effect. The older
+getPlayerTokenMapLevelVisibility interaction path checks exact openings but only
+supports looking downward. A shared bidirectional strict opening check is needed
+before permitting cross-floor adjacency/auras. Existing same-floor exclusions must
+not simply be replaced with display visibility. Goal remains active.

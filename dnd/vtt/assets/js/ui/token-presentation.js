@@ -93,6 +93,8 @@ export function applyTokenLevelPresentation(token, presentation) {
     token.appendChild(indicator);
   }
   indicator.dataset.direction = direction;
+  indicator.title = `${distance} square${distance === 1 ? '' : 's'} ${direction} your viewed floor`;
+  indicator.setAttribute('aria-label', indicator.title);
   const distanceLabel = indicator.querySelector('.vtt-token__level-indicator-distance');
   if (distanceLabel) {
     distanceLabel.textContent = String(distance);
