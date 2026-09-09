@@ -1,3 +1,4 @@
+const { waitForBrowserState } = require('./wait-for-browser-state.cjs');
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const origin = 'http://127.0.0.1:8129';
@@ -20,7 +21,7 @@ const origin = 'http://127.0.0.1:8129';
     async function setHeight(value) {
       await height.fill(String(value));
       await height.press('Tab');
-      await page.waitForFunction(async n => {
+      await waitForBrowserState(page, async n => {
         const s = await fetch('/dnd/vtt/api/v2/snapshot.php').then(r => r.json());
         return Object.values(s.snapshot.state.sceneConfig).some(c => c.mapLevels?.levels?.some(l => l.id === 'test-upper' && l.elevationSquares === n));
       }, value);

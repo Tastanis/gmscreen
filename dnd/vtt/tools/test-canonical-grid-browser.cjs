@@ -1,3 +1,4 @@
+const { waitForBrowserState } = require('./wait-for-browser-state.cjs');
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
 const origin='http://127.0.0.1:8129';
@@ -43,7 +44,7 @@ const origin='http://127.0.0.1:8129';
       const group=gm.locator('.scene-group').filter({has:button});
       if((await group.getAttribute('class')).includes('is-collapsed'))await group.locator('[data-action="toggle-folder"]').click();
       await button.click();
-      await gm.waitForFunction(async id=>(await(await fetch('/dnd/vtt/api/v2/snapshot.php')).json()).snapshot.state.routing.activeSceneId===id,id);
+      await waitForBrowserState(gm, async id=>(await(await fetch('/dnd/vtt/api/v2/snapshot.php')).json()).snapshot.state.routing.activeSceneId===id,id);
     }
     await open(other.id);await open(source.id);
     for(const page of [gm,cal,sharon])await visibleGrid(page);

@@ -1,3 +1,4 @@
+const { waitForBrowserState } = require('./wait-for-browser-state.cjs');
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
 const origin='http://127.0.0.1:8129';
@@ -34,13 +35,13 @@ const origin='http://127.0.0.1:8129';
       await token.hover();const box=await token.boundingBox();assert.ok(box);
       await pc.mouse.move(box.x+box.width/2,box.y+box.height/2);await pc.mouse.down();
       await pc.mouse.move(box.x+box.width/2+dx*box.width,box.y+box.height/2,{steps:30});await pc.mouse.up();
-      await pc.waitForFunction(async({sceneId,column})=>{
+      await waitForBrowserState(pc, async({sceneId,column})=>{
         const s=(await(await fetch('/dnd/vtt/api/v2/snapshot.php')).json()).snapshot;
         return s.state.placements[sceneId]['floor-cal'].column===column;
       },{sceneId,column});
     }
     await drag(6,8);
-    await pc.waitForFunction(async({sceneId,current})=>{
+    await waitForBrowserState(pc, async({sceneId,current})=>{
       const s=(await(await fetch('/dnd/vtt/api/v2/snapshot.php')).json()).snapshot;
       return Number(s.state.placements[sceneId]['floor-cal'].hp.current)===current;
     },{sceneId,current:before-3});

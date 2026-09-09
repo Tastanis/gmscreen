@@ -1,3 +1,4 @@
+const { waitForBrowserState } = require('./wait-for-browser-state.cjs');
 const { chromium } = require('playwright');
 const { randomUUID } = require('node:crypto');
 const assert = require('node:assert/strict');
@@ -33,7 +34,7 @@ const origin = 'http://127.0.0.1:8129';
     const height = gm.locator('[data-action="set-map-level-height"][data-map-level-id="test-upper"]');
     async function setHeight(n) {
       await height.fill(String(n)); await height.press('Tab');
-      await gm.waitForFunction(async n => {
+      await waitForBrowserState(gm, async n => {
         const r = await fetch('/dnd/vtt/api/v2/snapshot.php').then(r => r.json());
         return Object.values(r.snapshot.state.sceneConfig).some(c => c.mapLevels?.levels?.some(l => l.id === 'test-upper' && l.elevationSquares === n));
       }, n);

@@ -1,3 +1,4 @@
+const { waitForBrowserState } = require('./wait-for-browser-state.cjs');
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const origin = process.env.VTT_TEST_ORIGIN || 'http://127.0.0.1:8129';
@@ -75,7 +76,7 @@ if (!['localhost', '127.0.0.1', '[::1]'].includes(new URL(origin).hostname)) thr
       }
       return ids;
     });
-    await gm.page.waitForFunction(async({sceneId,ids})=>{
+    await waitForBrowserState(gm.page, async({sceneId,ids})=>{
       const s=(await(await fetch('/dnd/vtt/api/v2/snapshot.php')).json()).snapshot;
       return ids.every(id=>s.state.placements[sceneId]['floor-cal'].persistentZones?.some(z=>z.id===id));
     },{sceneId:manifest.test_scene_id,ids:zoneIds});
@@ -84,6 +85,8 @@ if (!['localhost', '127.0.0.1', '[::1]'].includes(new URL(origin).hostname)) thr
     const remove = gm.page.locator('[data-action="delete-map-level"][data-map-level-id="test-upper"]');
     const folder = gm.page.locator('.scene-group').filter({ has: remove });
     if ((await folder.getAttribute('class')).includes('is-collapsed')) await folder.locator('[data-action="toggle-folder"]').click();
+    const details = remove.locator('xpath=ancestor::details[1]');
+    if (await details.getAttribute('open') === null) await details.locator('summary').click();
     const beforeDelete = await snapshot();
     const deleteCalls = [];
     gm.page.on('response', r => { if (r.url().endsWith('/commands.php')) deleteCalls.push(r.request().postDataJSON().type); });

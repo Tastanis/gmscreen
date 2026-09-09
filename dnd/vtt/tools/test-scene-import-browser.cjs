@@ -1,3 +1,4 @@
+const { waitForBrowserState } = require('./wait-for-browser-state.cjs');
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
 const origin='http://127.0.0.1:8129';
@@ -85,7 +86,7 @@ const duplicateMode=process.argv.includes('--duplicate');
     await gm.screenshot({path:'.playwright-mcp/scene-import-result.png'});
     assert.equal(await gm.evaluate(()=>window.sceneImportNavigationMarker),'same-page','Import must not reload the browser.');
     await panel.getByRole('button',{name:'Open copy for GM',exact:true}).click();
-    await gm.waitForFunction(async sceneId=>(await(await fetch('/dnd/vtt/api/v2/snapshot.php')).json()).snapshot.state.routing.activeSceneId===sceneId,id);
+    await waitForBrowserState(gm, async sceneId=>(await(await fetch('/dnd/vtt/api/v2/snapshot.php')).json()).snapshot.state.routing.activeSceneId===sceneId,id);
     const firstToken=Object.keys(after.state.placements[id])[0];
     await gm.locator(`[data-placement-id="${firstToken}"]`).first().waitFor({state:'visible'});
     assert.equal(await gm.evaluate(()=>window.sceneImportNavigationMarker),'same-page','Opening the copy must not reload the browser.');

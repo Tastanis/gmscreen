@@ -1,3 +1,4 @@
+const { waitForBrowserState } = require('./wait-for-browser-state.cjs');
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const origin = 'http://127.0.0.1:8129';
@@ -68,7 +69,7 @@ const origin = 'http://127.0.0.1:8129';
       throw Error('Primary token drag did not save');
     }
     await pc.getByRole('combobox',{name:'Floor following',exact:true}).selectOption('browse');
-    await pc.waitForFunction(async sceneId => {
+    await waitForBrowserState(pc, async sceneId => {
       const {getState} = await import('/dnd/vtt/assets/js/state/store.js');
       return getState().boardState.sceneState[sceneId]?.userLevelState?.cal?.followToken === false;
     }, sceneId);
@@ -81,7 +82,7 @@ const origin = 'http://127.0.0.1:8129';
     await pc.waitForFunction(() => document.querySelector('[data-map-level-indicator-value]')?.textContent === 'Test balcony');
     assert.equal(await pc.getByRole('combobox',{name:'Floor following',exact:true}).inputValue(), 'browse', 'One-time floor return preserves browse mode.');
     await pc.getByRole('combobox',{name:'Floor following',exact:true}).selectOption('follow');
-    await pc.waitForFunction(async sceneId => {
+    await waitForBrowserState(pc, async sceneId => {
       const {getState} = await import('/dnd/vtt/assets/js/state/store.js');
       return getState().boardState.sceneState[sceneId]?.userLevelState?.cal?.followToken === true;
     }, sceneId);
@@ -102,7 +103,7 @@ const origin = 'http://127.0.0.1:8129';
       assert.equal(response.status(), 200);
     }
     await hidden(true);
-    await pc.waitForFunction(async sceneId => {
+    await waitForBrowserState(pc, async sceneId => {
       const {getState} = await import('/dnd/vtt/assets/js/state/store.js');
       return getState().boardState.sceneState[sceneId]?.pcTokenAssociations?.cal === null;
     }, sceneId);
@@ -113,7 +114,7 @@ const origin = 'http://127.0.0.1:8129';
     await pc.getByRole('button', {name:"My token's floor",exact:true}).click();
     assert.equal(await pc.locator('[data-map-level-indicator-value]').textContent(), 'Test balcony');
     await hidden(false);
-    await pc.waitForFunction(async sceneId => {
+    await waitForBrowserState(pc, async sceneId => {
       const {getState} = await import('/dnd/vtt/assets/js/state/store.js');
       return getState().boardState.sceneState[sceneId]?.pcTokenAssociations?.cal === 'primary-copy';
     }, sceneId);

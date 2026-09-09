@@ -2171,3 +2171,28 @@ and zone browser scripts contain this pattern). Existing final-state assertions
 remain evidence of their checked values; do not treat an early predicate as proof
 that the requested save completed. The wider goal and pending UI responses remain
 open. Next work should strengthen/re-run those gates, not mark the goal complete.
+
+
+### Browser save-wait audit completed (September 9)
+
+The installed Playwright frames.js tests predicate() truthiness before awaiting
+its return value. An async predicate returns a truthy Promise, so false results
+can prematurely finish waitForFunction instead of polling again. Replaced all 15
+such calls in nine VTT browser scripts with waitForBrowserState: explicitly await
+each page evaluation, poll false results, bound stalled reads and propagate errors.
+Three helper regressions pass (async false/false/true, false/stalled deadlines,
+read failure). Run them with node --test dnd/vtt/tools/wait-for-browser-state.test.cjs;
+they are tool tests, separate from the application npm test suite.
+
+All nine affected journeys passed on fresh disposable loopback fixtures: floor
+editor, range height, GM/two-player height/reconnect, floor deletion, primary token
+following/privacy, canonical grid, zone entry/recovery, zone floor/preview and
+scene import. Floor deletion's script now opens the compact Edit disclosure
+before clicking Delete; its initial hidden-button timeout was a stale test step.
+No application behavior changed and no live campaign data was modified. No version
+bump is needed for this verification-only slice. Prior application suite remains
+790 passing tests across 105 files; it was not rerun for test-only edits.
+
+The save-wait audit follow-up above is resolved. The wider goal remains active;
+inventory table UI, generic roller/mixed-target UI proposals and other outstanding
+roadmap work are not completed by these checks. Preserve pending user approvals.

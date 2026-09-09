@@ -1,3 +1,4 @@
+const { waitForBrowserState } = require('./wait-for-browser-state.cjs');
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
 const origin='http://127.0.0.1:8129';
@@ -23,7 +24,7 @@ const origin='http://127.0.0.1:8129';
       }}}));
     }));
     assert.equal(result.registered,true);
-    await gm.waitForFunction(async({sceneId,id})=>{
+    await waitForBrowserState(gm, async({sceneId,id})=>{
       const s=(await(await fetch('/dnd/vtt/api/v2/snapshot.php')).json()).snapshot;
       return s.state.placements?.[sceneId]?.['floor-cal']?.persistentZones?.some(z=>z.id===id);
     },{sceneId,id:result.zoneId});
@@ -43,7 +44,7 @@ const origin='http://127.0.0.1:8129';
       }}}));
     }));
     assert.equal(lower.registered,true);
-    await gm.waitForFunction(async({sceneId,id})=>{
+    await waitForBrowserState(gm, async({sceneId,id})=>{
       const s=(await(await fetch('/dnd/vtt/api/v2/snapshot.php')).json()).snapshot;
       return s.state.placements[sceneId]['floor-cal'].persistentZones.some(z=>z.id===id);
     },{sceneId,id:lower.zoneId});
@@ -80,7 +81,7 @@ const origin='http://127.0.0.1:8129';
     const zoneNode=pc.locator(`[data-zone-id="${zone.id}"]`);
     await zoneNode.locator('.vtt-persistent-zone__badge').hover();
     await zoneNode.locator('[data-zone-end]').click();
-    await pc.waitForFunction(async({sceneId,id})=>{
+    await waitForBrowserState(pc, async({sceneId,id})=>{
       const s=(await(await fetch('/dnd/vtt/api/v2/snapshot.php')).json()).snapshot;
       return !s.state.placements[sceneId]['floor-cal'].persistentZones?.some(z=>z.id===id);
     },{sceneId,id:zone.id});
