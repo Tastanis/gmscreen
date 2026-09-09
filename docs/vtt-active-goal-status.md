@@ -1,6 +1,6 @@
 # Current VTT improvement goal
 
-Updated September 9, 2026, against the 1.19.135 working implementation.
+Updated September 9, 2026, against the 1.19.136 working implementation.
 The goal is **not complete**. This page is the current navigation aid; the full
 historical roadmap and release handoff remain in force where the user has not
 superseded them. Old checked boxes are not evidence that removed UI should return.
@@ -19,7 +19,7 @@ superseded them. Old checked boxes are not evidence that removed UI should retur
 | Persistent effect/turn timing | `runZoneBoundary` coordinates expiration/ticks; existing round, boundary, conflict, upkeep and failure fixtures are available. | Revalidate required turn journeys against final implementation; a completed entry receipt is not proof that all effects/turn paths are complete. |
 | GM/two-player visibility and recovery | Floor height, hidden-floor, grid and swap tests verify specific live/reload/offline paths. | Broader combat journey with two players and final visual checks; store receipt alone is not on-screen visibility. |
 | Editable inventory progression tables | Markdown/TSV parser, independent selected-row data, validation, storage and preservation implemented. | Actual table display, level selector, paste/cell editing and user journey. Layout approval pending. |
-| Inventory save reliability | Atomic file replacement, precise refresh revision, dirty-draft retention and per-field save ordering implemented. | Cross-browser stale edits and recovery of unconfirmed writes; no separate backup system. |
+| Inventory save reliability | Atomic file replacement, precise refresh revision, dirty-draft retention and per-field save ordering implemented. | Updated-client field edits now reject stale revisions (two-browser test passes). Whole-item/image/delete/move guards and recovery of unconfirmed writes remain; no separate backup system. |
 | Deployment/handoff | Completed slices committed/pushed; diagnostics isolated from live campaign. | Final requirement audit and deployable checkpoint once scope is finished. External Pusher rotation/production soak require external action. |
 
 The old audit also lists encounter presets, other asset collections, handouts/map
@@ -45,13 +45,13 @@ tool strip, a backup system or an ignore-falling toggle.
 
 1. Extend aura coverage to other triggers and larger/fractional creatures as
    needed; the basic five/three-square and opening damage journey now passes.
-2. Audit inventory concurrent writes across two clients; preserve another client's
-   accepted edit rather than overwriting it with a stale draft.
+2. Extend inventory concurrency protection beyond current field edits to the
+   remaining mutation paths, and handle unconfirmed writes without replay.
 3. Address genuinely rejected sheet writes with an explicit, reviewed state
    comparison; any visible recovery control needs a proposal first.
 4. Implement pending table/roller UI only after its response arrives, then exercise
    complete user journeys rather than treating storage/parser support as delivery.
 
 Verification detail and historical results remain in `vtt-improvement-plan.md`.
-The latest complete suite run has 793 passing tests across 105 files (1.19.135).
+The latest complete suite run has 794 passing tests across 105 files (1.19.136).
 Browser scripts are separate from `npm test`.

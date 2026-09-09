@@ -840,3 +840,28 @@ numerically. No application change/version bump or live campaign writes.
 
 This verifies the specified aura distance/opening behavior, not every aura trigger,
 large-token geometry or all turn-boundary effects. Continue remaining full scope.
+
+
+### Inventory stale-field protection - 1.19.136
+
+Inventory load/item responses include response-only _fieldRevisions. Current field
+edits send expected_revision and compare it under the existing request-wide lock
+before mutation. Conflicts preserve the saved file and use the existing error line;
+the unsaved local draft remains dirty/visible. Successful responses update only
+related field revisions, so an unrelated edit cannot silently rebase a stale name.
+Charges/hasCharges and effect/effectSections share dependency fingerprints and
+serialize together in the client. Failed groups discard queued/debounced automatic
+continuations. Metadata is never persisted into item records.
+
+New PHP regression proves stale rejection with unchanged file bytes, independent
+fields, sequential accepted revisions and charge-field dependencies. Real two-editor
+browser regression proves stale name rejection, retained text and an independent
+description save. Existing refresh/save-order browser checks pass; save-order now
+asserts each outgoing expected revision. No live inventory was changed.
+
+Boundary: legacy callers omitting expected_revision remain compatible; save_item,
+image upload, deletion and moves are not made revision-guarded by this slice.
+Unconfirmed-save recovery and inventory table UI remain unfinished. Do not claim
+all inventory mutation paths or old already-open client versions are protected.
+
+Full npm test passes: 794 tests across 105 files.

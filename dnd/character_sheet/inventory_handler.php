@@ -296,8 +296,37 @@ function ciDeleteImageIfUnused($imagePath)
     }
 }
 
+function ciRevisionFields($field)
+{
+    if (in_array($field, array('charges', 'hasCharges'), true)) return array('charges', 'hasCharges');
+    if (in_array($field, array('effect', 'effectSections'), true)) return array('effect', 'effectSections');
+    return array($field);
+}
+
+function ciFieldRevisions($item, $fields = null)
+{
+    $fields = $fields ?? array('name', 'description', 'keywords', 'effect', 'effectSections', 'visible', 'image', 'hasCharges', 'charges');
+    $result = array();
+    foreach ($fields as $field) {
+        $values = array();
+        foreach (ciRevisionFields($field) as $related) $values[$related] = $item[$related] ?? null;
+        $result[$field] = hash('sha256', json_encode($values, JSON_THROW_ON_ERROR));
+    }
+    return $result;
+}
+
 function ciRespond($payload)
 {
+    // Response-only metadata: never write these derived revisions into inventory.
+    if (isset($payload['item']) && is_array($payload['item'])) $payload['item']['_fieldRevisions'] = ciFieldRevisions($payload['item']);
+    if (isset($payload['data']) && is_array($payload['data'])) {
+        foreach ($payload['data'] as &$tab) {
+            if (!isset($tab['items']) || !is_array($tab['items'])) continue;
+            foreach ($tab['items'] as &$item) if (is_array($item)) $item['_fieldRevisions'] = ciFieldRevisions($item);
+            unset($item);
+        }
+        unset($tab);
+    }
     echo json_encode($payload);
     exit;
 }
@@ -425,6 +454,14 @@ switch ($action) {
             }
         }
 
+        if (isset($_POST['expected_revision'])) {
+            $expected = $_POST['expected_revision'];
+            $revision = ciFieldRevisions($data[$tab]['items'][$index], array($field))[$field];
+            if (!is_string($expected) || !hash_equals($revision, $expected)) {
+                ciFail('This field changed in another window. Your edit was not saved; keep a copy of it before reloading.');
+            }
+        }
+
         if ($field === 'visible') {
             if (!$ciIsGm) {
                 ciFail('Only the GM can change visibility');
@@ -455,7 +492,7 @@ switch ($action) {
         $data[$tab]['items'][$index][$field] = $value;
 
         if (ciSaveData($data)) {
-            ciRespond(array('success' => true));
+            ciRespond(array('success' => true, 'field_revisions' => ciFieldRevisions($data[$tab]['items'][$index], ciRevisionFields($field))));
         }
         ciFail('Failed to save data');
         break;

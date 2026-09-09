@@ -189,29 +189,54 @@
     sendQueuedFieldSave(key);
   }
 
+  function fieldSaveGroup(save) {
+    var field = save.field;
+    if (field === "charges" || field === "hasCharges") field = "charges";
+    if (field === "effect" || field === "effectSections") field = "effectSections";
+    return save.folder + ":" + save.itemId + ":" + field;
+  }
+
   function sendQueuedFieldSave(key) {
-    if (ciFieldSavesInFlight[key] || !ciQueuedFieldSaves[key]) return;
+    if (!ciQueuedFieldSaves[key]) return;
     var save = ciQueuedFieldSaves[key];
+    var group = fieldSaveGroup(save);
+    if (ciFieldSavesInFlight[group]) return;
     delete ciQueuedFieldSaves[key];
-    ciFieldSavesInFlight[key] = true;
+    ciFieldSavesInFlight[group] = true;
     var params = new URLSearchParams();
     params.append("action", "update_item_field");
     params.append("tab", save.folder);
     params.append("item_id", save.itemId);
     params.append("field", save.field);
     params.append("value", save.value);
+    var item = findItem(save.folder, save.itemId);
+    var revision = item && item._fieldRevisions && item._fieldRevisions[save.field];
+    if (revision) params.append("expected_revision", revision);
     post(params, function (result) {
-      delete ciFieldSavesInFlight[key];
+      delete ciFieldSavesInFlight[group];
       if (!result.success) {
         // An uncertain response must not release another automatic write.
         if (ciSaveTimeouts[key]) clearTimeout(ciSaveTimeouts[key]);
         delete ciSaveTimeouts[key];
         delete ciQueuedFieldSaves[key];
+        ["charges", "hasCharges", "effect", "effectSections", save.field].forEach(function (field) {
+          if (fieldSaveGroup({folder:save.folder,itemId:save.itemId,field:field}) !== group) return;
+          var relatedKey = save.folder + ":" + save.itemId + ":" + field;
+          if (ciSaveTimeouts[relatedKey]) clearTimeout(ciSaveTimeouts[relatedKey]);
+          delete ciSaveTimeouts[relatedKey];
+        });
+        Object.keys(ciQueuedFieldSaves).forEach(function (pendingKey) {
+          if (fieldSaveGroup(ciQueuedFieldSaves[pendingKey]) === group) delete ciQueuedFieldSaves[pendingKey];
+        });
         ciFailedFields[key] = true;
         return;
       }
+      var currentItem = findItem(save.folder, save.itemId);
+      if (currentItem && result.field_revisions) {
+        currentItem._fieldRevisions = Object.assign({}, currentItem._fieldRevisions || {}, result.field_revisions);
+      }
       if (ciFieldSaveGenerations[key] === save.generation) delete ciFailedFields[key];
-      sendQueuedFieldSave(key);
+      Object.keys(ciQueuedFieldSaves).forEach(sendQueuedFieldSave);
     });
   }
 

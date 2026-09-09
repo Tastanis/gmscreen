@@ -56,6 +56,27 @@ test('concurrent inventory edits to different items survive request-wide locking
   } finally { await f.close(); }
 });
 
+test('stale field edits are rejected while unrelated fields and accepted revision chains remain writable', async () => {
+  const f=await fixture();
+  try {
+    await writeFile(f.data,JSON.stringify({cal:{items:[{id:'item',name:'Before',description:'Note',charges:2,hasCharges:true}]}}));
+    const loaded=await f.request({action:'load'});
+    const revisions=loaded.data.cal.items[0]._fieldRevisions;
+    const edit=(field,value,revision)=>f.request({action:'update_item_field',tab:'cal',item_id:'item',field,value,expected_revision:revision});
+    const first=await edit('name','Newest',revisions.name);assert.equal(first.success,true);
+    const before=await readFile(f.data,'utf8');
+    assert.equal((await edit('name','Stale overwrite',revisions.name)).success,false);
+    assert.equal(await readFile(f.data,'utf8'),before);
+    assert.equal((await edit('description','Independent note',revisions.description)).success,true);
+    assert.equal((await edit('name','Next',first.field_revisions.name)).success,true);
+    assert.equal((await edit('charges','1',revisions.charges)).success,true);
+    assert.equal((await edit('hasCharges','false',revisions.hasCharges)).success,false);
+    const saved=JSON.parse(await readFile(f.data,'utf8')).cal.items[0];
+    assert.equal(saved.name,'Next');assert.equal(saved.description,'Independent note');
+    assert.equal(saved.hasCharges,true);assert.equal(saved._fieldRevisions,undefined);
+  } finally {await f.close();}
+});
+
 test('unreadable inventory JSON fails closed without replacing campaign data', async () => {
   const f = await fixture();
   try {
