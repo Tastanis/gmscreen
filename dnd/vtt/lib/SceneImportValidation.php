@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/ScenePackage.php';
+require_once __DIR__ . '/FloorGeometry.php';
 
 final class SceneImportValidation
 {
@@ -34,6 +35,7 @@ final class SceneImportValidation
         }
         $config = $domains['sceneConfig'];
         $levels = $config['mapLevels'] ?? [];
+        FloorGeometry::validateElevations($levels);
         if (!array_is_list($levels['levels'] ?? [])) throw new InvalidArgumentException('Floors must be a list.');
         foreach ([['stairs'=>$levels['baseStairs'] ?? []], ...($levels['levels'] ?? [])] as $floor) {
             foreach (['stairs','cutouts'] as $key) if (!is_array($floor[$key] ?? []) || !array_is_list($floor[$key] ?? []) || count($floor[$key] ?? []) > 5000) throw new InvalidArgumentException('Invalid floor geometry list.');

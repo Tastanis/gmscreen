@@ -35,6 +35,18 @@ final class FloorGeometry
         return [['id' => self::BASE, 'cutouts' => []], ...$levels];
     }
 
+    public static function validateElevations(array $mapLevels): void
+    {
+        foreach (($mapLevels['levels'] ?? []) as $level) {
+            if (!is_array($level) || !array_key_exists('elevationSquares', $level)) continue;
+            $height = $level['elevationSquares'];
+            if ((!is_int($height) && !is_float($height)) || !is_finite((float) $height)
+                || floor((float) $height) !== (float) $height || $height < 1 || $height > 1000000) {
+                throw new InvalidArgumentException('Floor height must be a whole number from 1 to 1000000 squares.');
+            }
+        }
+    }
+
     /** Compute before player filtering so hidden floors never compress vertical distances. */
     public static function elevations(array $mapLevels): array
     {

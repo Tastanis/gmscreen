@@ -2477,6 +2477,7 @@ final class SyncV2Store
         if ($type === 'levels.set' && !is_array($payload['mapLevels'] ?? null)) {
             throw new InvalidArgumentException('levels.set requires mapLevels.');
         }
+        if ($type === 'levels.set') FloorGeometry::validateElevations($payload['mapLevels']);
         if ($type === 'level.delete' && (!is_string($payload['levelId'] ?? null) || trim($payload['levelId']) === '' || $payload['levelId'] === 'level-0')) {
             throw new InvalidArgumentException('Only a stored floor can be deleted.');
         }

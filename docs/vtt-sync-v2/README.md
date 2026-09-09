@@ -1302,3 +1302,18 @@ floors, so filtering never changes visible distances. This is a projection only;
 no broad board rewrite or V1 writer is introduced. Shared maximum-axis distance
 math is independent of line of effect. Editable height authority and UI integration
 remain pending in this slice; see the improvement roadmap.
+
+
+### Floor-height authority validation
+
+Canonical levels.set now rejects explicit elevationSquares values outside whole
+numbers 1..1000000. Scene import validation and checkpoint layout planning use the
+same validator; omitted legacy heights remain supported. A new authority regression
+checks saving height 5, database reopening, idempotent replay, unchanged placements,
+and rejection of null/boolean/string/zero/negative/fractional/oversized values without
+any state mutation. Full regression suite: 765 tests across 101 files passed.
+
+The floor editor, numeric token badges, height-aware ability/aura consumers, dice
+suggestions, inventory tables, and remaining reliability journeys remain open.
+Next slice should implement the approved floor editor against this authority path.
+No live gameplay changes or deployment were performed.

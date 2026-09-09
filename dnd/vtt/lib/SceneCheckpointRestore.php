@@ -23,6 +23,7 @@ final class SceneCheckpointRestore
             if (($config[$field] ?? []) !== $value) $configChanges[] = $field;
             $config[$field] = $value;
         }
+        FloorGeometry::validateElevations($config['mapLevels'] ?? []);
         $levels = ['level-0'=>['id'=>'level-0']];
         foreach ($config['mapLevels']['levels'] ?? [] as $floor) {
             if (!is_array($floor) || !is_string($floor['id'] ?? null) || isset($levels[$floor['id']])) throw new InvalidArgumentException('Checkpoint contains invalid floor IDs.');

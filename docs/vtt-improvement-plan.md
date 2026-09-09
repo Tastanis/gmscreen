@@ -1828,3 +1828,18 @@ remaining combat/movement reliability scope and inventory matrices. Full goal re
 unfinished. High-ground implementation must account for standing fully above the
 target's space; ranged adjacency bane applies to ranged strikes. Consult rule source
 before connecting suggestions. No live gameplay writes or deployment.
+
+
+### Floor-height authority validation
+
+Canonical levels.set now rejects explicit elevationSquares values outside whole
+numbers 1..1000000. Scene import validation and checkpoint layout planning use the
+same validator; omitted legacy heights remain supported. A new authority regression
+checks saving height 5, database reopening, idempotent replay, unchanged placements,
+and rejection of null/boolean/string/zero/negative/fractional/oversized values without
+any state mutation. Full regression suite: 765 tests across 101 files passed.
+
+The floor editor, numeric token badges, height-aware ability/aura consumers, dice
+suggestions, inventory tables, and remaining reliability journeys remain open.
+Next slice should implement the approved floor editor against this authority path.
+No live gameplay changes or deployment were performed.

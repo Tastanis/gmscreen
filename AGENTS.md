@@ -410,3 +410,5 @@ no longer triggers the outside-scroll dismissal listener. Browser QA passed at
 
 
 - Floor-height work is underway: elevationSquares is vertical grid height, never token footprint height or renderer zIndex. Resolve legacy height defaults before filtering hidden floors for player projection. UI and range integration remain pending; see the improvement roadmap.
+
+- Explicit elevationSquares accepts whole numbers 1..1000000 through levels.set, scene import, and checkpoint layout planning. Missing legacy heights remain supported; share FloorGeometry::validateElevations across height write boundaries.
