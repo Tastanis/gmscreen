@@ -67,3 +67,20 @@ test('unreadable inventory JSON fails closed without replacing campaign data', a
     assert.equal(await readFile(f.data, 'utf8'), original);
   } finally { await f.close(); }
 });
+
+test('load content revision changes even when filesystem timestamps are identical', async () => {
+  const f = await fixture();
+  try {
+    const original = { cal: { items: [{ id: 'item', name: 'Before' }] } };
+    await writeFile(f.data, JSON.stringify(original));
+    const before = await f.request({ action: 'load' });
+    await f.request({ action: 'update_item_field', tab: 'cal', item_id: 'item', field: 'name', value: 'After' });
+    const { utimes } = await import('node:fs/promises');
+    await utimes(f.data, before.last_modified, before.last_modified);
+    const after = await f.request({ action: 'load' });
+    assert.equal(after.last_modified, before.last_modified);
+    assert.notEqual(after.content_revision, before.content_revision);
+    assert.equal(after.data.cal.items[0].name, 'After');
+    assert.equal((await f.request({ action: 'load' })).content_revision, after.content_revision);
+  } finally { await f.close(); }
+});

@@ -323,7 +323,8 @@ switch ($action) {
         }
 
         $lastModified = is_file(CI_DATA_FILE) ? filemtime(CI_DATA_FILE) : null;
-        ciRespond(array('success' => true, 'data' => $data, 'last_modified' => $lastModified));
+        $contentRevision = hash('sha256', json_encode($data, JSON_THROW_ON_ERROR));
+        ciRespond(array('success' => true, 'data' => $data, 'last_modified' => $lastModified, 'content_revision' => $contentRevision));
         break;
 
     case 'add_item':

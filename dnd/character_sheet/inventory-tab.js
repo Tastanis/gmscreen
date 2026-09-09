@@ -12,7 +12,10 @@
   var ciData = {};
   var ciFolder = "";
   var ciOpen = {};
-  var ciLastModified = null;
+  var ciContentRevision = null;
+  var ciEditGeneration = 0;
+  var ciFailedFields = {};
+  var ciFieldSaveGenerations = {};
   var ciLoaded = false;
   var ciSaveTimeouts = {};
   var ciPendingSaves = 0;
@@ -121,6 +124,7 @@
   // ---------------------------------------------------------------------
 
   function post(body, onDone) {
+    if (body.get("action") !== "load") ciEditGeneration++;
     ciPendingSaves++;
     fetch(HANDLER_URL, {
       method: "POST",
@@ -146,15 +150,17 @@
 
   function loadData(options) {
     options = options || {};
+    var requestedAtGeneration = ciEditGeneration;
     var params = new URLSearchParams();
     params.append("action", "load");
 
     post(params, function (result) {
       if (!result.success || !result.data) return;
-      if (options.onlyIfModified && result.last_modified && ciLastModified === result.last_modified) {
+      if (requestedAtGeneration !== ciEditGeneration || hasUnsavedEdits()) return;
+      if (options.onlyIfModified && result.content_revision && ciContentRevision === result.content_revision) {
         return;
       }
-      ciLastModified = result.last_modified || null;
+      ciContentRevision = result.content_revision || null;
       ciData = result.data;
       ciLoaded = true;
       render();
@@ -162,6 +168,7 @@
   }
 
   function queueFieldSave(folder, itemId, field, value) {
+    ciEditGeneration++;
     var key = folder + ":" + itemId + ":" + field;
     if (ciSaveTimeouts[key]) clearTimeout(ciSaveTimeouts[key]);
     ciSaveTimeouts[key] = setTimeout(function () {
@@ -171,13 +178,21 @@
   }
 
   function saveFieldNow(folder, itemId, field, value) {
+    ciEditGeneration++;
+    var key = folder + ":" + itemId + ":" + field;
+    var generation = (ciFieldSaveGenerations[key] || 0) + 1;
+    ciFieldSaveGenerations[key] = generation;
     var params = new URLSearchParams();
     params.append("action", "update_item_field");
     params.append("tab", folder);
     params.append("item_id", itemId);
     params.append("field", field);
     params.append("value", value);
-    post(params);
+    post(params, function (result) {
+      if (ciFieldSaveGenerations[key] !== generation) return;
+      if (result.success) delete ciFailedFields[key];
+      else ciFailedFields[key] = true;
+    });
   }
 
   function flushPendingSaves() {
@@ -195,7 +210,7 @@
   }
 
   function hasUnsavedEdits() {
-    return Object.keys(ciSaveTimeouts).length > 0 || ciPendingSaves > 0;
+    return Object.keys(ciSaveTimeouts).length > 0 || ciPendingSaves > 0 || Object.keys(ciFailedFields).length > 0;
   }
 
   // ---------------------------------------------------------------------

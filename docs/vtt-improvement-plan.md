@@ -2024,3 +2024,24 @@ client save failures, same-second refresh detection and stale effect-list edits
 while awaiting the visible-layout response; retain all wider goal requirements.
 
 Full regression suite: 783 passing tests across 104 files.
+
+
+### Inventory refresh protection - 1.19.128
+
+Inventory load returns content_revision hashed from the audience-projected data,
+under the existing shared request lock. The client compares this instead of
+second-resolution timestamps; legacy last_modified remains in the response.
+A load response is ignored if an edit/mutation started after its request or local
+saves/drafts remain outstanding. Failed field saves retain a dirty marker so polling
+cannot erase the local draft; a later confirmed save of that field clears it.
+No automatic write retry is added. Drafts remain page-local, not durable across
+navigation. Same-field concurrent save ordering and explicit conflict recovery
+are still unfinished; do not claim this solves those cases.
+
+The isolated real-browser test test-inventory-refresh-browser.cjs passed delayed
+response versus local input, failed-draft polling retention, and equal-timestamp
+changed-content refresh. Responses are controlled with all network blocked.
+PHP regression forces equal timestamps and verifies distinct content revisions.
+Progression table UI/storage remain pending; retain the full active goal scope.
+
+Full regression suite: 784 passing tests across 104 files.
