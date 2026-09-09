@@ -98,7 +98,8 @@ import {
 } from './map-level-renderer.js';
 import { createTokenInteractions } from './token-interactions.js';
 import { createTokenMovementRuntime } from '../sync-v2/token-movement-runtime.js';
-import { canReachFloor } from './floor-geometry.js';
+import { canReachFloor, placementSquareDistance } from './floor-geometry.js';
+import { distanceWithFloorHeight } from '../state/normalize/floor-elevation.js';
 import { mountSaveFeedback, describeSaveFailure } from './save-feedback.js';
 import { mountConnectionStatus } from './connection-status.js';
 import { claimActiveTool, publishActiveTool } from './active-tool.js';
@@ -2527,7 +2528,7 @@ export function mountBoardInteractions(store, routes = {}) {
     // dispatches to listeners registered against `eventType === 'move'` and
     // each predicate decides whether it cares about this watcher's edge.
     try {
-      const movedDistance = automationChebyshevDistance(from, to);
+      const movedDistance = distanceWithFloorHeight(automationChebyshevDistance(from, to), from, to, getActiveSceneTokenLevelState(state));
       triggerFire('move', {
         placementId: movingId,
         sourceId: movingId,
@@ -2995,7 +2996,7 @@ export function mountBoardInteractions(store, routes = {}) {
         const a = idA ? getPlacementFromStore(idA) : null;
         const b = idB ? getPlacementFromStore(idB) : null;
         if (!a || !b) return null;
-        return automationChebyshevDistance(getPlacementCenter(a), getPlacementCenter(b));
+        return placementSquareDistance(a, b, getActiveSceneTokenLevelState());
       },
     };
   }
@@ -5116,10 +5117,7 @@ export function mountBoardInteractions(store, routes = {}) {
         const casterPlacement = getPlacementFromStore(casterId);
         const otherPlacement = getPlacementFromStore(otherId);
         if (!casterPlacement || !otherPlacement) return null;
-        return automationChebyshevDistance(
-          getPlacementCenter(casterPlacement),
-          getPlacementCenter(otherPlacement),
-        );
+        return placementSquareDistance(casterPlacement, otherPlacement, getActiveSceneTokenLevelState());
       },
     });
   }
@@ -12750,12 +12748,12 @@ export function mountBoardInteractions(store, routes = {}) {
       return resolveStandFirmForPlacement(placementId, context && typeof context === 'object' ? context : {});
     },
     // Reusable distance check (Layer 2). Returns the square (Chebyshev) distance
-    // between two placement ids, or null when either token is not on the board.
+    // between occupied squares, including floor height; null for missing tokens/floors.
     getDistanceBetween: function (idA, idB) {
       const a = getPlacementFromStore(idA);
       const b = getPlacementFromStore(idB);
       if (!a || !b) return null;
-      return automationChebyshevDistance(getPlacementCenter(a), getPlacementCenter(b));
+      return placementSquareDistance(a, b, getActiveSceneTokenLevelState());
     },
   };
 

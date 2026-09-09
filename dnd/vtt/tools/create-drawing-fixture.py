@@ -11,7 +11,10 @@ spec.loader.exec_module(sync)
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--diagnostic-root', type=Path, required=True)
 parser.add_argument('--floors', action='store_true', help='Build a player stair/fall fixture instead.')
+parser.add_argument('--distance', action='store_true', help='Add a large upper-floor token to the floor fixture.')
 args = parser.parse_args()
+if args.distance and not args.floors:
+    parser.error('--distance requires --floors')
 root = args.diagnostic_root.resolve()
 config = json.loads((root / 'config/local-sync.json').read_text(encoding='utf-8-sig'))
 data = sync.isolated_target(root, config['target_test_data_dir'])
@@ -45,6 +48,12 @@ if args.floors:
     levels['baseStairs'] = [stair]
     levels['levels'][0]['stairs'] = [{**stair,'direction':'down','linkedLevelId':'level-0'}]
     levels['levels'][0]['cutouts'] = [{'column':6,'row':5,'width':2,'height':2}]
+    if args.distance:
+        levels['levels'][0]['elevationSquares'] = 5
+        state['placements'][scene_id]['distance-large'] = {
+            **state['placements'][scene_id]['floor-cal'], 'id': 'distance-large',
+            'name': 'Distance test creature', 'profileId': None, 'team': 'enemy',
+            'column': 3, 'row': 0, 'width': 4, 'height': 4, 'levelId': 'test-upper'}
 scenario = 'floor-regression' if args.floors else 'drawing-regression'
 destination = sync.SOURCE_ROOT / ('.playwright-mcp/' + scenario)
 destination.mkdir(parents=True, exist_ok=True)

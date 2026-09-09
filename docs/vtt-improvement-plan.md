@@ -1983,3 +1983,21 @@ floor retention, ascent/descent, openings, pass-by, fractional movement and Stan
 Firm integration. Full browser opportunity-attack gameplay remains to be verified.
 The rest of the original goal remains active, including the pending approved-UI
 responses, remaining distance consumers and broader gameplay/recovery checks.
+
+
+### Ability distance integration - 1.19.126
+
+The board getDistanceBetween callback, heroic-resource getSquareDistance environment,
+and zone-rule getSquareDistance environment now share placementSquareDistance.
+It measures nearest occupied squares and takes max(horizontal, floor elevation
+separation); it does not use token centers or a hypotenuse. Missing tokens, invalid
+coordinates or unknown floors return null. Distance is separate from visibility
+and openings. Normal-move trigger distance also includes endpoint floor height,
+while movement budgets and push/pull direction calculations retain their existing
+horizontal semantics. No authored JSON or visible controls added.
+
+All 781 tests across 103 files passed. test-ability-distance-browser.cjs passed
+against a fresh --floors --distance disposable fixture: actual board callback,
+5-square altitude, large-token edge distance, symmetric lookup, missing target,
+canonical floor-height edit and reload. No live campaign writes. Broader gameplay
+and remaining approved goal scope are still active.

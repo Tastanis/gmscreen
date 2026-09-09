@@ -1,4 +1,4 @@
-import { verticalFloorDistance } from '../state/normalize/floor-elevation.js';
+import { verticalFloorDistance, distanceWithFloorHeight } from '../state/normalize/floor-elevation.js';
 import { hasOpenFloorPath } from './token-levels.js';
 import { BASE_MAP_LEVEL_ID, buildLevelViewModel } from '../state/normalize/map-levels.js';
 
@@ -29,4 +29,13 @@ export function canReachFloor(a, b, range, raw = {}) {
   const config = Array.isArray(raw) ? {levels:raw} : raw?.mapLevels || raw || {};
   const distance = verticalFloorDistance(a,b,config);
   return distance !== null && distance <= range && hasOpenFloorPath(a,b,config);
+}
+
+/** Range between occupied squares; visibility and openings are separate. */
+export function placementSquareDistance(a, b, levels = {}) {
+  if (!a || !b || ![a.column, a.row, b.column, b.row].every(Number.isFinite)) return null;
+  const size = (p, key) => Math.max(1, Number.isFinite(p[key]) ? p[key] : 1);
+  const dx = Math.max(0, a.column - (b.column + size(b, 'width') - 1), b.column - (a.column + size(a, 'width') - 1));
+  const dy = Math.max(0, a.row - (b.row + size(b, 'height') - 1), b.row - (a.row + size(a, 'height') - 1));
+  return distanceWithFloorHeight(Math.max(dx, dy), a, b, levels);
 }
