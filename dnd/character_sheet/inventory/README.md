@@ -91,3 +91,18 @@ accepted replacements with different paths. Copy/Move held-save and failed-save
 browser cases pass. PHP tests reject stale copy and whole-item saves unchanged.
 No live data writes. Unknown-outcome recovery and table UI remain unfinished; the
 optional guards do not protect old clients that omit them.
+
+
+### Bounded inventory requests - 1.19.140
+
+Inventory JSON requests and image uploads share a 15-second deadline covering both
+fetch and response JSON parsing. Timeout aborts the request and follows the existing
+unconfirmed/failure path; no replay or automatic queued continuation is introduced.
+Late success cannot clear failed fields or release item actions. Local drafts stay
+visible; a deadline is not evidence that the server did not commit.
+
+New browser cases pass stalled request and stalled body, aborted signal, ignored
+late success, retained draft and no subsequent move/confirmation. Existing field
+ordering, pending Move/Copy and refresh regressions pass. No live campaign writes.
+Durable inventory operation receipts and post-reload outcome recovery remain open;
+this timeout is not a backup or proof that an interrupted write failed to save.

@@ -126,16 +126,31 @@
   // Server communication
   // ---------------------------------------------------------------------
 
+  function inventoryRequest(options) {
+    var controller = new AbortController();
+    var timer;
+    var deadline = new Promise(function (resolve, reject) {
+      timer = setTimeout(function () {
+        reject(new Error("Inventory request timed out; its result is unconfirmed."));
+        controller.abort();
+      }, 15000);
+    });
+    return Promise.race([deadline, Promise.resolve().then(function () {
+      return fetch(HANDLER_URL, Object.assign({}, options, {signal:controller.signal}));
+    }).then(function (response) { return response.json(); })]).finally(function () {
+      clearTimeout(timer);
+    });
+  }
+
   function post(body, onDone) {
     if (body.get("action") !== "load") ciEditGeneration++;
     ciPendingSaves++;
-    fetch(HANDLER_URL, {
+    inventoryRequest({
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       credentials: "same-origin",
       body: body.toString()
     })
-      .then(function (response) { return response.json(); })
       .then(function (result) {
         ciPendingSaves--;
         if (!result.success) {
@@ -146,8 +161,8 @@
       .catch(function (error) {
         ciPendingSaves--;
         console.error("Inventory request failed", error);
-        showStatus("Network error", "error");
-        if (onDone) onDone({ success: false, error: "network" });
+        showStatus(error.message || "Network error", "error");
+        if (onDone) onDone({ success: false, error: error.message || "network" });
       });
   }
 
@@ -674,8 +689,7 @@
 
     showStatus("Uploading image...", "loading");
     ciPendingSaves++;
-    fetch(HANDLER_URL, { method: "POST", body: formData, credentials: "same-origin" })
-      .then(function (response) { return response.json(); })
+    inventoryRequest({ method: "POST", body: formData, credentials: "same-origin" })
       .then(function (result) {
         ciPendingSaves--;
         delete ciFieldSavesInFlight[imageKey];
@@ -698,7 +712,7 @@
         delete ciFieldSavesInFlight[imageKey];
         ciFailedFields[imageKey] = true;
         console.error("Image upload failed", error);
-        showStatus("Network error uploading image", "error");
+        showStatus(error.message || "Network error uploading image", "error");
       });
   }
 
