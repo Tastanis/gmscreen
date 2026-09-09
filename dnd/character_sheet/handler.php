@@ -649,6 +649,11 @@ switch ($action) {
                 sendJsonResponse(array('success' => false, 'error' => 'Missing stamina values'));
             }
 
+            $staminaOperationId = CharacterWriteReceipts::operationId($requestData['operationId'] ?? null);
+            $staminaInput = ['currentStamina'=>$currentStamina, 'staminaMax'=>$staminaMax];
+            $replayed = CharacterWriteReceipts::lookup($allSheets, $staminaOperationId, $currentUser, $requestedCharacter, $action, $staminaInput);
+            if ($replayed !== null) sendJsonResponse($replayed);
+
             if ($staminaMax !== null) {
                 $sheet['hero']['vitals']['staminaMax'] = $staminaMax;
             }
@@ -656,9 +661,6 @@ switch ($action) {
 
             $allSheets[$requestedCharacter] = $sheet;
 
-            if (!saveCharacterSheetData($dataDir, $dataFile, $allSheets)) {
-                sendJsonResponse(array('success' => false, 'error' => 'Failed to save stamina values'));
-            }
         }
 
         $response = array(
@@ -668,6 +670,12 @@ switch ($action) {
             'currentStamina' => isset($sheet['hero']['vitals']['currentStamina']) ? $sheet['hero']['vitals']['currentStamina'] : 0,
         );
 
+        if ($requestMethod === 'POST') {
+            $response = CharacterWriteReceipts::record($allSheets, $staminaOperationId, $currentUser, $requestedCharacter, $action, $staminaInput, $response);
+            if (!saveCharacterSheetData($dataDir, $dataFile, $allSheets)) {
+                sendJsonResponse(array('success' => false, 'error' => 'Failed to save stamina values'));
+            }
+        }
         sendJsonResponse($response);
         break;
 

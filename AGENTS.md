@@ -726,3 +726,23 @@ implemented by these tests. Preserve this limitation in the remaining goal audit
 Verification-only slice; no application version bump or live campaign writes.
 The full original goal remains active, including unresolved inventory/roller UI
 proposals, sheet reconciliation and remaining gameplay gates.
+
+
+### Stamina operation receipt foundation - 1.19.132
+
+sync-stamina POST accepts the existing character operationId contract. Its receipt
+and stamina values are saved in the same locked AtomicJsonFile replacement.
+Identical retries return the original outcome without rewriting a later edit;
+reusing the ID with different values fails. Read-only operation-status can inspect
+the saved result. Calls without an ID retain existing behavior. No automation JSON
+fields, visible panels or automatic retries were added.
+
+The disposable test-stamina-receipt-browser.cjs passed against the real endpoint:
+receipt/value persistence, preserved maximum when omitted, newer edit retained by
+old replay, changed payload rejected, read-only receipt lookup and reload.
+Client writeSheetStamina does not yet issue these IDs: connect and verify that
+next, preserving its timeout/no-replay boundary. This foundation does not resolve
+board/sheet mismatch, guarantee cross-store atomicity or authorize automatic effect
+replay. Keep the full original goal and pending UI approvals open.
+
+Validation: PHP syntax check and full npm test pass (790 tests, 105 files).
