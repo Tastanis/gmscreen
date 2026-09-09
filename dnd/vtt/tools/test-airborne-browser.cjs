@@ -1,5 +1,7 @@
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
+const airborneMode = process.env.VTT_TEST_MOVEMENT_MODE || 'fly';
+if (!['fly', 'hover'].includes(airborneMode)) throw Error('Expected fly or hover');
 const origin = process.env.VTT_TEST_ORIGIN || 'http://127.0.0.1:8129';
 if (!['localhost', '127.0.0.1', '[::1]'].includes(new URL(origin).hostname)) throw Error('Loopback required');
 (async () => {
@@ -57,23 +59,30 @@ if (!['localhost', '127.0.0.1', '[::1]'].includes(new URL(origin).hostname)) thr
       assert.equal((await placement()).movementMode, value);
       await pc.page.keyboard.press('Escape');
     }
-    await mode('fly');
+    await mode(airborneMode);
     await pc.page.locator(selector).hover();
     await drag(4, 0, 5, 'test-upper');
     assert.equal((await placement()).column, 6);
     await pc.page.reload();
     await pc.page.locator(selector).waitFor();
-    assert.equal((await placement()).movementMode, 'fly');
+    assert.equal((await placement()).movementMode, airborneMode);
     await pc.page.locator(selector).click({ button: 'right' });
     await pc.page.locator('[data-token-settings-condition-select]').selectOption({ label: 'Grabbed' });
     const conditionResponse = pc.page.waitForResponse(r => r.url().endsWith('/commands.php'));
     await pc.page.getByRole('button', { name: 'Apply condition', exact: true }).click();
     assert.equal((await conditionResponse).status(), 200);
     await pc.page.keyboard.press('Escape');
+    if (airborneMode === 'hover') {
+      assert.equal((await placement()).movementMode, 'hover');
+      assert.equal((await placement()).levelId, 'test-upper');
+      await pc.page.reload(); await pc.page.locator(selector).waitFor();
+      assert.equal((await placement()).movementMode, 'hover');
+      await mode('ground');
+    }
     assert.equal((await placement()).movementMode, 'ground');
     for (const { page } of [gm, pc, other]) await page.waitForFunction(selector => document.querySelector(selector)?.dataset.mapLevelId === 'level-0', selector);
     assert.equal((await snapshot()).state.sceneConfig[manifest.test_scene_id].userLevelState.cal.levelId, 'level-0');
     assert.deepEqual(errors, []);
-    console.log('PASS: player flight control, drag across hole, reload persistence, Grabbed menu application and atomic landing across three clients.');
+    console.log(`PASS: player ${airborneMode} control, drag across hole, reload, Grabbed ${airborneMode === 'hover' ? 'preserves hover; explicit Ground lands' : 'interrupts Fly and lands'}, three-client convergence.`);
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

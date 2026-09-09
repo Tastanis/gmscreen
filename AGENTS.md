@@ -635,3 +635,25 @@ No production requests or campaign changes. These are local Sync V2 recovery
 checks; external Pusher production delivery/secret rotation is not verified here.
 Full active goal remains unfinished, including pending visible UI approvals,
 table user journey, broader combat/movement checks and inventory conflict handling.
+
+
+### Movement browser verification (September 9)
+
+Fresh disposable floor fixtures passed the current real-control journeys:
+- test-floor-browser.cjs: player stair traversal across reload, one confirmed
+  normal movement event carrying start/end floors, linked-view following, fall
+  through the opening and GM/second-player recovery.
+- test-airborne-browser.cjs default Fly: cross the opening without falling,
+  persist through reload, apply Grabbed through token settings, then atomic
+  landing and linked-view return visible across three clients.
+- The airborne browser script now also accepts VTT_TEST_MOVEMENT_MODE=hover.
+  That run passed crossing/reload, Grabbed preserving Hover, another reload,
+  explicit Ground causing landing and three-client convergence.
+- test-group-undo-browser.cjs: real group drag through stairs, whole-group undo
+  after reload, and a later GM edit to one member causing whole-undo rejection
+  with no partial restoration (verified canonical state).
+
+No application behavior changed in this verification slice. Each journey used
+its own fresh loopback fixture; no live campaign data was modified. These results
+cover the listed paths, not all automation movement or opportunity-attack journeys.
+Remaining goal requirements and pending UI proposals stay open.
