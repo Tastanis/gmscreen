@@ -92,7 +92,8 @@
         id: String(section.id || createSectionId()),
         title: String(section.title || ""),
         cost: String(section.cost || ""),
-        text: String(section.text || "")
+        text: String(section.text || ""),
+        ...(Object.prototype.hasOwnProperty.call(section, "table") ? { table: section.table } : {})
       });
     });
     if (!sections.length && item.effect) {
@@ -676,11 +677,14 @@
     var sectionElements = card.querySelectorAll(".ci-effect--editing[data-section-id]");
     var sections = [];
     sectionElements.forEach(function (element) {
+      var sectionId = element.getAttribute("data-section-id") || createSectionId();
+      var previous = (item.effectSections || []).find(function (section) { return section.id === sectionId; });
       sections.push({
-        id: element.getAttribute("data-section-id") || createSectionId(),
+        id: sectionId,
         title: (element.querySelector('[data-ci-sfield="title"]') || {}).value || "",
         cost: (element.querySelector('[data-ci-sfield="cost"]') || {}).value || "",
-        text: (element.querySelector('[data-ci-sfield="text"]') || {}).value || ""
+        text: (element.querySelector('[data-ci-sfield="text"]') || {}).value || "",
+        ...(previous && Object.prototype.hasOwnProperty.call(previous, "table") ? { table: previous.table } : {})
       });
     });
     item.effectSections = sections;

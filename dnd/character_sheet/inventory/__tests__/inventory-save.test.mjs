@@ -11,7 +11,7 @@ async function fixture() {
   const data = path.join(root, 'data', 'character_inventory.json');
   await mkdir(sheet);
   await mkdir(path.dirname(data));
-  for (const name of ['inventory_handler.php', 'AtomicJsonFile.php']) {
+  for (const name of ['inventory_handler.php', 'AtomicJsonFile.php', 'InventoryEffectTable.php']) {
     await copyFile(new URL('../../' + name, import.meta.url), path.join(sheet, name));
   }
   const wrapper = path.join(root, 'request.php');
@@ -82,5 +82,50 @@ test('load content revision changes even when filesystem timestamps are identica
     assert.notEqual(after.content_revision, before.content_revision);
     assert.equal(after.data.cal.items[0].name, 'After');
     assert.equal((await f.request({ action: 'load' })).content_revision, after.content_revision);
+  } finally { await f.close(); }
+});
+
+test('progression tables save independently and legacy text edits preserve them', async () => {
+  const f = await fixture();
+  try {
+    const table = { headers: ['Level', 'Result'], rows: [['1', 'First'], ['2', 'Second']], selectedRow: 0 };
+    const sections = [{ id: 'a', title: 'A', text: 'Keep notes', table }, { id: 'b', title: 'B', text: 'Other notes', table: { ...table, selectedRow: 1 } }];
+    await writeFile(f.data, JSON.stringify({ cal: { items: [{ id: 'item', name: 'Staff' }] } }));
+    const update = value => f.request({ action: 'update_item_field', tab: 'cal', item_id: 'item', field: 'effectSections', value: JSON.stringify(value) });
+    assert.equal((await update(sections)).success, true);
+    let saved = (await f.request({ action: 'load' })).data.cal.items[0];
+    assert.equal(saved.effectSections[0].table.selectedRow, 0);
+    assert.equal(saved.effectSections[1].table.selectedRow, 1);
+    assert.deepEqual(saved.effectSections[0].table.rows, table.rows);
+    assert.equal((await update(sections.map(({ table, ...section }) => ({ ...section, text: 'Legacy edit' })))).success, true);
+    saved = (await f.request({ action: 'load' })).data.cal.items[0];
+    assert.equal(saved.effectSections[1].table.selectedRow, 1);
+    assert.equal(saved.effectSections[0].text, 'Legacy edit');
+    const legacyItem = { ...saved, effectSections: saved.effectSections.map(({ table, ...section }) => section) };
+    assert.equal((await f.request({ action: 'save_item', tab: 'cal', item_data: JSON.stringify(legacyItem) })).success, true);
+    saved = (await f.request({ action: 'load' })).data.cal.items[0];
+    assert.deepEqual(saved.effectSections[0].table, table);
+    assert.equal((await update([{ ...saved.effectSections[0], table: null }, saved.effectSections[1]])).success, true);
+    saved = (await f.request({ action: 'load' })).data.cal.items[0];
+    assert.equal(saved.effectSections[0].table, undefined);
+    assert.equal(saved.effectSections[1].table.selectedRow, 1);
+  } finally { await f.close(); }
+});
+
+test('invalid table input cannot partially save an inventory edit', async () => {
+  const f = await fixture();
+  try {
+    const original = JSON.stringify({ cal: { items: [{ id: 'item', name: 'Keep me', effectSections: [{ id: 'a', text: 'Keep notes' }] }] } });
+    await writeFile(f.data, original);
+    for (const table of [
+      { headers: ['A', 'B'], rows: [['1']], selectedRow: 0 },
+      { headers: ['A', 'B'], rows: [['1', '2']], selectedRow: 8 },
+      { headers: ['A', 'B'], rows: [['1', 2]], selectedRow: 0 },
+      { headers: ['A', 'B'], rows: [['1', '😀'.repeat(4001)]], selectedRow: 0 },
+    ]) {
+      const result = await f.request({ action: 'update_item_field', tab: 'cal', item_id: 'item', field: 'effectSections', value: JSON.stringify([{ id: 'a', text: 'Changed', table }]) });
+      assert.equal(result.success, false);
+      assert.equal(await readFile(f.data, 'utf8'), original);
+    }
   } finally { await f.close(); }
 });

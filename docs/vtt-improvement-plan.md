@@ -2087,3 +2087,24 @@ server validation/persistence of tables, paste/edit controls and browser journey
 remain unfinished pending the layout response. Preserve the whole active goal.
 
 Full regression suite: 788 passing tests across 105 files.
+
+
+### Inventory table storage - 1.19.131
+
+Effect sections accept an optional plain-text table {headers, rows, selectedRow}.
+InventoryEffectTable validates shape, bounds and UTF-16-equivalent cell lengths
+before saving. Invalid input fails without a partial write. Selected rows belong
+to each effect independently. Omitted tables preserve existing section tables by
+ID in field and full-item updates; explicit null removes a table. Duplicate/move
+normalization retains supplied tables. Ordinary client normalization and effect
+text editing also preserve them. See dnd/character_sheet/inventory/README.md.
+
+Disposable PHP endpoint tests passed independent selections, load, legacy field
+and item edits, explicit removal and invalid-input preservation. The real-browser
+save-order fixture also verifies ordinary note editing retains the saved table.
+No inventory or campaign source data was imported or modified. Display, Level
+selector, paste/cell editor and full user journey are still pending the layout
+response; storage support does not mean the feature is usable yet. Full goal stays
+active, including other visible proposals and reliability/visibility checks.
+
+Full regression suite: 790 passing tests across 105 files.

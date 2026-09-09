@@ -3,6 +3,7 @@
 // Standalone handler for the character sheet Inventory tab.
 // Data lives in dnd/data/character_inventory.json.
 require_once __DIR__ . '/AtomicJsonFile.php';
+require_once __DIR__ . '/InventoryEffectTable.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -99,7 +100,7 @@ function ciCanUpdateCharges($data, $tab, $index, $user, $isGm)
     return in_array($tab, $CI_CHARACTER_TABS, true) && $tab === $user;
 }
 
-function ciNormalizeEffectSections($value, $legacyEffect = '', $preserveEmpty = false)
+function ciNormalizeEffectSections($value, $legacyEffect = '', $preserveEmpty = false, $previous = array())
 {
     $sections = array();
 
@@ -118,8 +119,21 @@ function ciNormalizeEffectSections($value, $legacyEffect = '', $preserveEmpty = 
             $title = isset($section['title']) ? trim((string) $section['title']) : '';
             $cost = isset($section['cost']) ? trim((string) $section['cost']) : '';
             $text = isset($section['text']) ? (string) $section['text'] : '';
+            $table = null;
+            $tableSupplied = array_key_exists('table', $section);
+            if ($tableSupplied) {
+                try { $table = InventoryEffectTable::normalize($section['table']); }
+                catch (InvalidArgumentException $error) { ciFail($error->getMessage()); }
+            } else {
+                foreach ($previous as $oldSection) {
+                    if (is_array($oldSection) && ($oldSection['id'] ?? '') === $id) {
+                        $table = $oldSection['table'] ?? null;
+                        break;
+                    }
+                }
+            }
 
-            if (!$preserveEmpty && $title === '' && $cost === '' && trim($text) === '') {
+            if (!$preserveEmpty && $title === '' && $cost === '' && trim($text) === '' && $table === null) {
                 continue;
             }
 
@@ -133,6 +147,7 @@ function ciNormalizeEffectSections($value, $legacyEffect = '', $preserveEmpty = 
                 'cost' => substr($cost, 0, 80),
                 'text' => substr($text, 0, 4000)
             );
+            if ($table !== null) $sections[count($sections) - 1]['table'] = $table;
 
             if (count($sections) >= 20) {
                 break;
@@ -174,7 +189,7 @@ function ciBuildLegacyEffect($sections, $fallback = '')
     return implode("\n\n", array_filter($parts));
 }
 
-function ciCleanItem($raw)
+function ciCleanItem($raw, $previous = array())
 {
     $item = is_array($raw) ? $raw : array();
 
@@ -192,7 +207,8 @@ function ciCleanItem($raw)
     $clean['effectSections'] = ciNormalizeEffectSections(
         isset($item['effectSections']) ? $item['effectSections'] : array(),
         isset($item['effect']) ? $item['effect'] : '',
-        true
+        true,
+        $previous['effectSections'] ?? array()
     );
     $clean['effect'] = ciBuildLegacyEffect($clean['effectSections'], isset($item['effect']) ? $item['effect'] : '');
 
@@ -366,9 +382,9 @@ switch ($action) {
             ciFail('Invalid item data');
         }
 
-        $clean = ciCleanItem($itemData);
         $data = ciLoadData();
-        $index = ciFindItemIndex($data, $tab, $clean['id']);
+        $index = ciFindItemIndex($data, $tab, substr(trim((string) $itemData['id']), 0, 80));
+        $clean = ciCleanItem($itemData, $index >= 0 ? $data[$tab]['items'][$index] : array());
 
         if ($index >= 0) {
             $data[$tab]['items'][$index] = $clean;
@@ -425,7 +441,8 @@ switch ($action) {
             $value = ciNormalizeEffectSections(
                 $value,
                 isset($data[$tab]['items'][$index]['effect']) ? $data[$tab]['items'][$index]['effect'] : '',
-                true
+                true,
+                $data[$tab]['items'][$index]['effectSections'] ?? array()
             );
             $data[$tab]['items'][$index]['effect'] = ciBuildLegacyEffect(
                 $value,
