@@ -34,7 +34,7 @@ function activeIds(suggestions) {
   return suggestions.filter((entry) => entry.active).map((entry) => entry.id).sort();
 }
 
-test('higher floor requires High Ground confirmation rather than an automatic edge', () => {
+test('height and creature space establish automatic High ground', () => {
   const actor = ally('actor', 1, 1, { levelId: 'upper' });
   const target = enemy('target', 1, 2, { levelId: 'ground' });
   const suggestions = getPowerRollSuggestions({
@@ -47,11 +47,11 @@ test('higher floor requires High Ground confirmation rather than an automatic ed
     ],
     context: { keywords: ['Ranged', 'Strike'] },
   });
-  assert.equal(activeIds(suggestions).includes('edge-high-ground'), false);
-  assert.match(suggestions.find(entry => entry.id === 'edge-high-ground').reason, /higher floor/);
+  assert.equal(activeIds(suggestions).includes('edge-high-ground'), true);
+  assert.equal(suggestions.find(entry => entry.id === 'edge-high-ground').reason, 'Fully above target');
 });
 
-test('first stored upper floor at zIndex zero is above virtual ground but still needs confirmation', () => {
+test('first upper floor at height one gives High ground over a size-one target', () => {
   const actor = ally('actor', 1, 1, { levelId: 'upper' });
   const target = enemy('target', 1, 2, { levelId: 'level-0' });
   const suggestions = getPowerRollSuggestions({
@@ -66,8 +66,8 @@ test('first stored upper floor at zIndex zero is above virtual ground but still 
     },
     context: { keywords: ['Ranged', 'Strike'] },
   });
-  assert.equal(activeIds(suggestions).includes('edge-high-ground'), false);
-  assert.match(suggestions.find(entry => entry.id === 'edge-high-ground').reason, /higher floor/);
+  assert.equal(activeIds(suggestions).includes('edge-high-ground'), true);
+  assert.equal(suggestions.find(entry => entry.id === 'edge-high-ground').reason, 'Fully above target');
 });
 
 test('cross-floor and hidden allies cannot supply automatic flanking', () => {
@@ -256,4 +256,26 @@ test('adjacency measures vertical squares and requires an opening between floors
  assert.equal(__testing.isAdjacentTo(target,actor,model),true);
  model.levels[0].cutouts=[];
  assert.equal(__testing.isAdjacentTo(actor,target,model),false);
+});
+
+
+test('ranged strike bane needs an adjacent enemy, not merely a ranged ability or ally', () => {
+ const actor=ally('actor',2,2),target=enemy('target',6,2),near=enemy('near',3,2);
+ const run=(keywords,placements)=>getPowerRollSuggestions({actor,targets:[target],placements:[actor,target,...placements],context:{keywords}});
+ assert.ok(activeIds(run(['Ranged','Strike'],[near])).includes('bane-enemy-adjacent'));
+ assert.equal(activeIds(run(['Ranged'],[near])).includes('bane-enemy-adjacent'),false);
+ assert.equal(activeIds(run(['Melee','Strike'],[near])).includes('bane-enemy-adjacent'),false);
+ assert.equal(activeIds(run(['Ranged','Strike'],[ally('friend',3,2)])).includes('bane-enemy-adjacent'),false);
+});
+test('high ground accounts for large targets and does not assume flying altitude', () => {
+ const actor=ally('actor',2,2,{levelId:'upper'}),target=enemy('target',2,2,{width:2,height:2});
+ const model={levels:[{id:'upper',elevationSquares:1}]};
+ const run=()=>getPowerRollSuggestions({actor,targets:[target],placements:[actor,target],mapLevels:model,context:{keywords:['Ranged','Strike']}});
+ assert.equal(activeIds(run()).includes('edge-high-ground'),false);
+ model.levels[0].elevationSquares=2;
+ assert.ok(activeIds(run()).includes('edge-high-ground'));
+ actor.movementMode='fly';
+ assert.equal(activeIds(run()).includes('edge-high-ground'),false);
+ actor.movementMode='ground';target.movementMode='hover';
+ assert.equal(activeIds(run()).includes('edge-high-ground'),false);
 });

@@ -418,3 +418,5 @@ no longer triggers the outside-scroll dismissal listener. Browser QA passed at
 - Numeric token floor badges use vertical squares, but token visual scaling remains based on floor steps. Do not equate expanded look-down presentation masks with strict cross-floor line of effect.
 
 - Aura reach now combines horizontal radius with canReachFloor vertical radius and exact common openings. Player aura rendering hides out-of-height-range auras; GM overview remains. This is not a general wall/diagonal-ray solver.
+
+- Automatic High ground uses known floor height and target space; flight/uncertain footing remain manual. Adjacent-enemy bane is ranged-strike-only. Preserve short labels and manual overrides; multi-target modifier UI is awaiting approval.

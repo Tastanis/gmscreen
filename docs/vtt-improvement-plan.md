@@ -1895,3 +1895,21 @@ No new automation JSON fields or trigger payloads. Full suite passed 769 tests;
 a real-DOM local browser renderer check passed radius cutoff/reach/stale cleanup
 and GM overview. Full gameplay aura-trigger journey, remaining range consumers,
 edge/bane auto-selection UI, and remaining goal scope still require work.
+
+
+### Automatic roll suggestion rules
+
+Existing ability-runner suggestion buttons now receive active High ground when the
+actor is grounded/not prone or climbing, stands fully above every selected target's
+space, and target altitude is known. Creature space uses the board footprint's
+largest dimension per cubic size convention; flying/hovering targets stay manual.
+High-ground reason labels are short. Ranged strikes with a nearby enemy receive
+Enemy adjacent using height-aware adjacency; ranged non-strikes and melee strikes
+do not. Ambiguous melee/ranged keyword combinations remain pending mode selection.
+
+14 focused suggestion tests and the full 771-test/101-file suite passed. Existing
+runner consumes active suggestions and supports manual toggles. Live re-evaluation,
+override persistence, browser journey, generic roller integration and differing
+multi-target modifiers remain unfinished. A proposed compact per-target modifier
+row was presented via an async question; do not implement that UI before approval.
+Other full-goal scope remains active. No production writes/deployment.

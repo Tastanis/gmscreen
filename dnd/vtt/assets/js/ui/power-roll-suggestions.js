@@ -1,3 +1,4 @@
+import { floorElevations } from '../state/normalize/floor-elevation.js';
 const EDGE = 'edge';
 import { floorRelation, canReachFloor } from './floor-geometry.js';
 const BANE = 'bane';
@@ -288,10 +289,25 @@ export function getPowerRollSuggestions({
   const abilityRoll = isAbilityRollContext(context);
   const targetIds = targetIdSetFromContext(targetList, context);
 
-  const relation = floorRelation(actor, primaryTarget, mapLevels);
-  suggestions.push(makeSuggestion('edge-high-ground', EDGE, 'High Ground (confirm)', false, {
-    reason: `${relation === 'above' ? 'Your token is on a higher floor. ' : ''}Confirm your occupied space is fully above the target and you are standing or eligible to climb. Floor order alone cannot establish this edge.`,
+  const heights = floorElevations(mapLevels);
+  const actorHeight = heights.get(actor.levelId || 'level-0');
+  const standing = (!actor.movementMode || actor.movementMode === 'ground')
+    && !hasCondition(actor,'prone') && !hasCondition(actor,'climbing');
+  const highGround = abilityRoll && standing && targetList.every(target => {
+    const targetHeight = heights.get(target.levelId || 'level-0');
+    const targetSpace = Math.max(1, Number(target.width) || 1, Number(target.height) || 1);
+    return floorRelation(actor,target,mapLevels) === 'above' && Number.isFinite(actorHeight) && Number.isFinite(targetHeight)
+      && (!target.movementMode || target.movementMode === 'ground')
+      && !hasCondition(target,'burrowing') && actorHeight >= targetHeight + targetSpace;
+  });
+  suggestions.push(makeSuggestion('edge-high-ground', EDGE, 'High ground', highGround, {
+    reason: highGround ? 'Fully above target' : 'Confirm height and footing',
   }));
+  const ranged = !melee && keywordsFromContext(context).some(word => word === 'ranged' || word.startsWith('ranged '));
+  if (strike && ranged && placements.some(other => other?.id !== actor.id
+      && placementTeam(other,getTeam) !== placementTeam(actor,getTeam) && isAdjacentTo(actor,other,mapLevels))) {
+    suggestions.push(makeSuggestion('bane-enemy-adjacent', BANE, 'Enemy adjacent', true, {reason:'Ranged strike'}));
+  }
   suggestions.push(makeSuggestion('edge-flanking', EDGE, 'Flanking', melee && strike && isFlanking(actor, primaryTarget, placements, getTeam, mapLevels), {
     reason: 'Automatic flanking checks use visible, adjacent creatures on the same floor. Cross-floor openings and vertical reach require manual confirmation.',
   }));
