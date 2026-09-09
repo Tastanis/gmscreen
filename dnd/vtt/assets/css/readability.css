@@ -119,3 +119,20 @@ body.vtt-body .vtt-token-settings__primary {
 }
 body.vtt-body .vtt-token-settings__primary[hidden] { display: none; }
 body.vtt-body .vtt-token-settings__primary input { width: auto; margin: 0; flex: 0 0 auto; }
+
+body.vtt-body .scene-level__compact-row { display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+body.vtt-body .scene-level__compact-row .scene-level__name { flex:1 1 90px; min-width:0; }
+body.vtt-body .scene-level__height { display:flex; align-items:center; gap:4px; font-size:12px; }
+body.vtt-body .scene-level__height input { width:64px; min-height:28px; padding:3px; }
+body.vtt-body .scene-level__edit > summary { cursor:pointer; padding:4px 0; font-size:12px; }
+body.vtt-body .scene-level__edit[open] > summary { margin-bottom:6px; }
+
+body.vtt-body .scene-level__compact-row { display:grid; grid-template-columns:minmax(0,1fr) auto 42px; gap:4px; }
+body.vtt-body .scene-level__compact-row .scene-level__name { overflow:hidden; text-overflow:ellipsis; font-size:12px; }
+body.vtt-body .scene-level__height { font-size:11px; gap:3px; white-space:nowrap; }
+body.vtt-body .scene-level__height input { width:42px; }
+body.vtt-body .scene-level__compact-row .btn,
+body.vtt-body .scene-level__edit .btn { min-height:28px; padding:4px 6px; font-size:11px; }
+body.vtt-body .scene-level__item { padding:6px; background:var(--vtt-panel-bg); }
+body.vtt-body .scene-level__edit .scene-level__controls { display:flex; flex-wrap:wrap; gap:4px; }
+body.vtt-body .scene-level__edit .scene-level__controls .btn { width:auto; flex:0 0 auto; }

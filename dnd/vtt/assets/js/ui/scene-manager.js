@@ -117,11 +117,15 @@ export function renderSceneList(routes, store) {
       state.boardState && typeof state.boardState.sceneState === 'object'
         ? state.boardState.sceneState
         : {};
+    const openFloorEditors = new Set([...container.querySelectorAll('.scene-level__edit[open]')].map(el => {
+      const row=el.closest('[data-map-level-id]'); return JSON.stringify([row.dataset.sceneId,row.dataset.mapLevelId]);
+    }));
     container.innerHTML = buildSceneMarkup(
       sceneState,
       state.boardState?.activeSceneId ?? null,
       boardSceneState,
       {
+        viewerUserId: String(state.user?.name || '').trim().toLowerCase(),
         mapLevelUploadsEnabled: Boolean(overlayInput && endpoints.uploads),
         mapLevelUploadPending,
         mapLevelUploadPendingSceneId,
@@ -130,6 +134,10 @@ export function renderSceneList(routes, store) {
         playerActiveSceneId: state.boardState?.playerActiveSceneId ?? null,
       }
     );
+    container.querySelectorAll('.scene-level__edit').forEach(el => {
+      const row=el.closest('[data-map-level-id]');
+      el.open=openFloorEditors.has(JSON.stringify([row.dataset.sceneId,row.dataset.mapLevelId]));
+    });
   };
 
   render(stateApi.getState?.());
@@ -238,6 +246,19 @@ export function renderSceneList(routes, store) {
       return;
     }
 
+    if ((action === 'view-floor' || action === 'edit-floor-stairs') && sceneId) {
+      const levelId = target.dataset.mapLevelId;
+      const state = stateApi.getState?.() ?? {};
+      const userId = String(state.user?.name || '').trim().toLowerCase();
+      if (!state.user?.isGM || !userId || state.boardState?.activeSceneId !== sceneId) return;
+      try { await persistBoardStateSnapshot(null,{coalesce:false},[
+        {type:'user-level.set',sceneId,userId,levelId,source:'manual'}
+      ]);
+        if (action === 'edit-floor-stairs') document.querySelector('[data-settings-launch="stairs"]')?.click();
+      }
+      catch(error) { showFeedback(feedback,error?.message || 'Floor view was not saved.','error'); }
+      return;
+    }
     if (action === 'add-map-level' && sceneId) {
       const currentState = stateApi.getState?.() ?? {};
       const sceneState = normalizeSceneState(currentState.scenes);
@@ -499,7 +520,32 @@ export function renderSceneList(routes, store) {
     }
   });
 
-  container.addEventListener('change', (event) => {
+  container.addEventListener('change', async (event) => {
+    const heightInput = event.target.closest('[data-action="set-map-level-height"]');
+    if (heightInput) {
+      const sceneId = heightInput.dataset.sceneId, levelId = heightInput.dataset.mapLevelId;
+      const height = Number(heightInput.value);
+      if (!Number.isSafeInteger(height) || height < 1 || height > 1000000) {
+        showFeedback(feedback, 'Height must be a whole number of squares above ground.', 'error');
+        render(stateApi.getState?.()); return;
+      }
+      let updated = false;
+      mutateSceneMapLevels(stateApi, sceneId, mapLevels => {
+        const level = mapLevels.levels.find(entry => entry.id === levelId);
+        if (!level) return false;
+        if (mapLevels.levels.some(entry => entry.id !== levelId && entry.elevationSquares === height)) {
+          showFeedback(feedback, 'Another floor already has that height.', 'error'); return false;
+        }
+        level.elevationSquares = height;
+        mapLevels.levels = reindexMapLevels([...mapLevels.levels].sort((a,b)=>a.elevationSquares-b.elevationSquares));
+        updated = true; return true;
+      });
+      if (updated) {
+        try { await persistBoardStateSnapshot(sceneId, {coalesce:false}); }
+        catch (error) { showFeedback(feedback, error?.message || 'Height was not saved.', 'error'); }
+      }
+      render(stateApi.getState?.()); return;
+    }
     const opacityInput = event.target.closest('[data-action="set-map-level-opacity"]');
     if (!opacityInput) {
       return;
@@ -1067,6 +1113,7 @@ function createMapLevel(name = '', existingLevels = []) {
     hidden: false,
     opacity: 1,
     zIndex: safeLevels.length,
+    elevationSquares: Math.max(0, ...safeLevels.map((level, index) => level.elevationSquares ?? index + 1)) + 1,
     grid: null,
     cutouts: [],
     blocksLowerLevelInteraction: true,
@@ -1358,6 +1405,7 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
           </div>
           ${renderMapLevelList(scene.id, mapLevelsState, {
             isActiveScene: isActive,
+            viewerLevelId: sceneBoardState.userLevelState?.[options.viewerUserId]?.levelId,
             mapLevelUploadDisabled,
             mapLevelUploadTitle,
           })}
@@ -1379,12 +1427,10 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
 
 function renderMapLevelList(sceneId, mapLevelsState, options = {}) {
   const levels = getOrderedMapLevels(mapLevelsState?.levels ?? []);
-  if (!levels.length) {
-    return '<p class="scene-level__empty">No map levels added yet.</p>';
-  }
 
   return `
     <ul class="scene-level__list">
+      <li class="scene-level__item"><div class="scene-level__compact-row"><span class="scene-level__name">Ground</span><span class="scene-level__height">Height 0 sq</span><button type="button" class="btn btn--tiny" data-action="view-floor" data-scene-id="${sceneId}" data-map-level-id="level-0" ${options.isActiveScene ? '' : 'disabled'}>View</button></div></li>
       ${levels
         .map((level, index) => renderMapLevelListItem(sceneId, mapLevelsState, level, index, levels, options))
         .join('')}
@@ -1396,7 +1442,7 @@ function renderMapLevelListItem(sceneId, mapLevelsState, level, index, levels, o
   const name = escapeHtml(level.name || `Level ${index + 1}`);
   const hidden = level.hidden === true;
   const displayMode = level.displayMode === 'always' ? 'always' : 'auto';
-  const isActiveLevel = mapLevelsState.activeLevelId === level.id;
+  const isActiveLevel = (options.viewerLevelId || mapLevelsState.activeLevelId) === level.id;
   const opacityPercent = formatMapLevelOpacityPercent(level.opacity);
   const hasMap = Boolean(level.mapUrl);
   const canLower = index > 0;
@@ -1428,6 +1474,12 @@ function renderMapLevelListItem(sceneId, mapLevelsState, level, index, levels, o
       data-map-level-hidden="${hidden ? 'true' : 'false'}"
       data-map-level-has-map="${hasMap ? 'true' : 'false'}"
     >
+      <div class="scene-level__compact-row">
+        <span class="scene-level__name" title="${name}">${name}</span>
+        <label class="scene-level__height">Height <input type="number" min="1" max="1000000" step="1" value="${level.elevationSquares}" data-action="set-map-level-height" data-scene-id="${sceneId}" data-map-level-id="${level.id}" aria-label="${name} height in squares" /> sq</label>
+        <button type="button" class="btn btn--tiny" data-action="view-floor" data-scene-id="${sceneId}" data-map-level-id="${level.id}" ${options.isActiveScene ? '' : 'disabled'}>View</button>
+      </div>
+      <details class="scene-level__edit"><summary>Edit</summary>
       <div class="scene-level__header">
         <button
           type="button"
@@ -1442,8 +1494,7 @@ function renderMapLevelListItem(sceneId, mapLevelsState, level, index, levels, o
         >
           ${modeLabel}
         </button>
-        <span class="scene-level__name" title="${name}">${name}</span>
-        <span class="scene-level__map-state">${hasMap ? 'Map' : 'No Map'}</span>
+        <span class="scene-level__map-state">${hasMap ? 'Map' : 'No map'}</span>
       </div>
       <label class="scene-level__opacity">
         <span class="scene-level__opacity-label">Opacity</span>
@@ -1461,6 +1512,7 @@ function renderMapLevelListItem(sceneId, mapLevelsState, level, index, levels, o
         <span class="scene-level__opacity-value">${opacityPercent}%</span>
       </label>
       <div class="scene-level__controls">
+        <button type="button" class="btn btn--ghost btn--tiny" data-action="edit-floor-stairs" data-scene-id="${sceneId}" data-map-level-id="${level.id}" ${options.isActiveScene ? '' : 'disabled'}>Stairs</button>
         <button
           type="button"
           class="btn btn--ghost btn--tiny scene-level__upload"
@@ -1496,26 +1548,6 @@ function renderMapLevelListItem(sceneId, mapLevelsState, level, index, levels, o
         </button>
         <button
           type="button"
-          class="btn btn--ghost btn--tiny scene-level__lower"
-          data-action="lower-map-level"
-          data-scene-id="${sceneId}"
-          data-map-level-id="${level.id}"
-          ${canLower ? '' : 'disabled'}
-        >
-          Lower
-        </button>
-        <button
-          type="button"
-          class="btn btn--ghost btn--tiny scene-level__raise"
-          data-action="raise-map-level"
-          data-scene-id="${sceneId}"
-          data-map-level-id="${level.id}"
-          ${canRaise ? '' : 'disabled'}
-        >
-          Raise
-        </button>
-        <button
-          type="button"
           class="btn btn--ghost btn--tiny scene-level__hide"
           data-action="toggle-map-level-hide"
           data-scene-id="${sceneId}"
@@ -1535,6 +1567,7 @@ function renderMapLevelListItem(sceneId, mapLevelsState, level, index, levels, o
           Delete
         </button>
       </div>
+      </details>
     </li>
   `;
 }

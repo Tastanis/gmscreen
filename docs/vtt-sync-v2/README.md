@@ -1317,3 +1317,20 @@ The floor editor, numeric token badges, height-aware ability/aura consumers, dic
 suggestions, inventory tables, and remaining reliability journeys remain open.
 Next slice should implement the approved floor editor against this authority path.
 No live gameplay changes or deployment were performed.
+
+
+### Approved compact floor editor implemented
+
+Floor cards now show name, editable elevationSquares, View, and a retained Edit
+disclosure containing map upload/rename/display/opacity/cutouts/hide/delete and a
+Stairs shortcut. Ground is shown at height zero. New floors default one square
+above the highest existing floor. Height edits reorder zIndex to match physical
+height and reject duplicate heights in the editor. Existing level IDs and stair
+links are retained. View uses explicit user-level.set through the V2 adapter;
+local state changes alone are not sufficient. Cutout availability follows the
+GM's actual viewed floor. Open Edit disclosures survive scene rerenders.
+
+Browser validation passed height 5 save/reload, View and retained disclosure at
+1280x720 in dark/light/Diablo. Full suite passed 765 tests; scene-manager tests
+passed 11 checks. Numeric token badges and range/aura/dice consumers remain next,
+alongside the remaining full-goal items. No live site writes or deployment.
