@@ -129,12 +129,13 @@ describe('stamina write confirmation', () => {
     const response = await writeSheetStamina('/sheet', {character:'Cal',currentStamina:-2,staminaMax:0}, {
       fetchImpl: async (url, options) => {
         posted = new URLSearchParams(options.body);
-        return new Response(JSON.stringify({success:true}));
+        return new Response(JSON.stringify({success:true,operationId:posted.get('operationId')}));
       },
     });
     assert.equal(response.ok,true);
     assert.equal(posted.get('currentStamina'),'-2');
     assert.equal(posted.get('staminaMax'),'0');
+    assert.ok(posted.get('operationId'));
     for (const value of [{success:false,error:'Rejected'}, {}, null]) {
       await assert.rejects(writeSheetStamina('/sheet', {}, {
         fetchImpl:async()=>new Response(JSON.stringify(value)),
@@ -162,15 +163,31 @@ describe('stamina write confirmation', () => {
   test('bounds body parsing too and does not turn late success into confirmation', async () => {
     const {writeSheetStamina} = await import(SERVICE_PATH);
     let release,signal;
+    const completed=[],failed=[];
     await assert.rejects(writeSheetStamina('/sheet', {}, {
       timeoutMs:10,
+      operationId:'stamina-late-receipt',
+      journalOverride:{begin(){},complete:id=>completed.push(id),fail:id=>failed.push(id)},
       fetchImpl:async(url,options)=>{
         signal=options.signal;
         return {ok:true,clone:()=>({json:()=>new Promise(resolve=>{release=resolve;})})};
       },
     }), /timed out/);
     assert.equal(signal.aborted,true);
-    release({success:true});
+    release({success:true,operationId:'stamina-late-receipt'});
     await new Promise(resolve=>setTimeout(resolve,0));
+    assert.deepEqual(completed,[]);
+    assert.deepEqual(failed,['stamina-late-receipt']);
+  });
+
+  test('records before writing and rejects a mismatched receipt without clearing the record', async () => {
+    const {writeSheetStamina}=await import(SERVICE_PATH);
+    const events=[];
+    await assert.rejects(writeSheetStamina('/sheet',{character:'cal',currentStamina:12},{
+      operationId:'stamina-receipt-test',
+      journalOverride:{begin:e=>events.push(['begin',e.operationId]),complete:()=>events.push(['complete']),fail:id=>events.push(['fail',id])},
+      fetchImpl:async()=>{events.push(['write']);return new Response(JSON.stringify({success:true,operationId:'another-receipt'}));},
+    }),error=>error.operationId==='stamina-receipt-test' && /receipt/.test(error.message));
+    assert.deepEqual(events,[['begin','stamina-receipt-test'],['write'],['fail','stamina-receipt-test']]);
   });
 });

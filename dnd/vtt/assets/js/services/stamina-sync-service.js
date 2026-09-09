@@ -1,3 +1,4 @@
+import {getCharacterOperationJournal} from './character-operation-journal.js';
 /**
  * Stamina sync service
  *
@@ -133,11 +134,15 @@ export function fetchSheetStamina(routes, tokenName) {
 export async function writeSheetStamina(endpoint, payload = {}, {
   fetchImpl = globalThis.fetch,
   timeoutMs = 15000,
+  operationId = globalThis.crypto.randomUUID(),
+  journalOverride,
 } = {}) {
-  const body = new URLSearchParams({ action: 'sync-stamina', source: 'vtt' });
+  const body = new URLSearchParams({ action: 'sync-stamina', source: 'vtt', operationId });
   for (const field of ['character', 'currentStamina', 'staminaMax']) {
     if (payload[field] !== undefined && payload[field] !== null) body.set(field, payload[field]);
   }
+  const journal = journalOverride ?? getCharacterOperationJournal();
+  journal?.begin({operationId,endpoint,action:'sync-stamina',fields:Object.fromEntries(body)});
   const controller = new AbortController();
   let timer;
   const deadline = new Promise((resolve, reject) => {
@@ -159,8 +164,14 @@ export async function writeSheetStamina(endpoint, payload = {}, {
       if (saved?.success !== true) {
         throw new Error(saved?.error || 'Character stamina save was not confirmed.');
       }
+      if (saved.operationId !== operationId) throw new Error('Character stamina receipt was not confirmed.');
+      if (!controller.signal.aborted) journal?.complete(operationId);
       return response;
     })()]);
+  } catch (error) {
+    error.operationId = operationId;
+    try { journal?.fail(operationId,error.message); } catch { /* Preserve the pending record. */ }
+    throw error;
   } finally {
     clearTimeout(timer);
   }

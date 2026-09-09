@@ -1389,3 +1389,24 @@ board/sheet mismatch, guarantee cross-store atomicity or authorize automatic eff
 replay. Keep the full original goal and pending UI approvals open.
 
 Validation: PHP syntax check and full npm test pass (790 tests, 105 files).
+
+
+### Client stamina receipts - 1.19.133
+
+writeSheetStamina now assigns one operation ID, records the attempt in the existing
+per-actor character journal before sending, and requires the same receipt ID in a
+successful response. Confirmation clears that record; failures/timeouts retain it
+and expose error.operationId. Late success after the deadline cannot clear it.
+No write is replayed and no Action review UI was restored. The receipt describes
+only the character stamina write, never completion of subsequent ability steps.
+
+Real localhost browser checks passed for a normal client write and a server-
+committed write whose response was withheld: exactly one send, canonical saved
+value, read-only receipt confirmation and unconfirmed journal retention across
+reload. Forced/teleport zone damage and rejected sheet synchronization also pass.
+Full npm test: 791 tests across 105 files, zero failures. Unit coverage includes
+mismatched receipts and late response retention. No live campaign writes.
+
+Remaining: read-only recovery integration and explicit board/sheet reconciliation,
+not automatic replay of damage or whole abilities. Preserve all other original
+goal requirements and pending UI proposals.

@@ -32,6 +32,35 @@ const origin='http://127.0.0.1:8129';
     assert.equal((await read()).currentStamina,19);
     await page.reload();
     assert.equal((await read()).currentStamina,19);
+    const client=await page.evaluate(async()=>{
+      const {writeSheetStamina}=await import('/dnd/vtt/assets/js/services/stamina-sync-service.js');
+      const {getCharacterOperationJournal}=await import('/dnd/vtt/assets/js/services/character-operation-journal.js');
+      const endpoint='/dnd/character_sheet/handler.php';
+      const saved=await (await writeSheetStamina(endpoint,{character:'cal',currentStamina:18})).json();
+      const journal=getCharacterOperationJournal();
+      const cleared=!journal.list().some(e=>e.operationId===saved.operationId);
+      const lostId=crypto.randomUUID();let writes=0;
+      try {
+        await writeSheetStamina(endpoint,{character:'cal',currentStamina:17},{operationId:lostId,timeoutMs:1500,
+          fetchImpl:async(...args)=>{writes++;await fetch(...args);return new Promise(()=>{});}});
+        throw Error('Expected lost response timeout');
+      } catch(error) {
+        if(error.operationId!==lostId)throw error;
+      }
+      return {cleared,lostId,writes,pending:journal.list().find(e=>e.operationId===lostId)};
+    });
+    assert.equal(client.cleared,true);assert.equal(client.writes,1);
+    assert.equal(client.pending.status,'unconfirmed');
+    assert.equal((await read()).currentStamina,17);
+    const confirmed=await (await page.request.get(endpoint+'?action=operation-status&character=cal&operationId='+client.lostId)).json();
+    assert.equal(confirmed.receipt.response.currentStamina,17);
+    await page.reload();
+    const retained=await page.evaluate(async id=>{
+      const {getCharacterOperationJournal}=await import('/dnd/vtt/assets/js/services/character-operation-journal.js');
+      return getCharacterOperationJournal().list().find(e=>e.operationId===id);
+    },client.lostId);
+    assert.equal(retained.status,'unconfirmed');
+    assert.equal((await read()).currentStamina,17);
     console.log('PASS stamina receipt: saved with value, read-only status, replay retains later edit, changed payload rejected, reload retained');
   } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
