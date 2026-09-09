@@ -2320,3 +2320,19 @@ roadmap checklist is retained as history, with an explicit current-status link.
 Pending UI proposals and all remaining original scope stay open.
 
 Full npm test passes: 793 tests across 105 files; no live campaign writes.
+
+
+### Actual aura height/effect journey (September 9)
+
+New test-aura-height-effects-browser.cjs exercises saved aura automation, actionUsed
+trigger dispatch and actual damage. Radius three excludes a target five squares
+above; at height three it affects that target through the floor cutout; moving
+owner/target under solid floor blocks it again. A same-floor enemy takes damage
+in every case, proving the trigger actually ran. The test waits for the aura's
+post-effect announcement before inspecting canonical stamina. Each floor/position
+change is followed by reload, verifying saved aura/height hydration. It passed on
+a fresh loopback fixture. Canonical stamina can be numeric text and is compared
+numerically. No application change/version bump or live campaign writes.
+
+This verifies the specified aura distance/opening behavior, not every aura trigger,
+large-token geometry or all turn-boundary effects. Continue remaining full scope.
