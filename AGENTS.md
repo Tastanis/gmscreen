@@ -552,3 +552,23 @@ PHP regression forces equal timestamps and verifies distinct content revisions.
 Progression table UI/storage remain pending; retain the full active goal scope.
 
 Full regression suite: 784 passing tests across 104 files.
+
+
+### Inventory field save ordering - 1.19.129
+
+One field save is in flight per folder/item/field. New values coalesce to the latest
+waiting value and dispatch only after successful acknowledgment. Failure clears
+that field's pending debounce/queue and retains its dirty marker and visible draft;
+no automatic continuation/retry occurs. Unchanged input/change notifications no
+longer enqueue duplicate writes, including effect-section and charge controls.
+The browser regression test-inventory-save-order-browser.cjs checks real input
+controls with delayed responses, latest-value coalescing and failure stop. The
+existing refresh/failure browser regression also passes. Tests use blocked network
+and controlled responses; no live campaign data is changed.
+
+This protects ordering within one page; two-browser stale edits and recovery from
+uncertain writes remain unfinished. Draft persistence across navigation is also
+not implemented. Continue the original scope; inventory table and other pending
+visible proposals still await responses.
+
+Full regression suite: 784 passing tests across 104 files.

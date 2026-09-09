@@ -16,6 +16,8 @@
   var ciEditGeneration = 0;
   var ciFailedFields = {};
   var ciFieldSaveGenerations = {};
+  var ciFieldSavesInFlight = {};
+  var ciQueuedFieldSaves = {};
   var ciLoaded = false;
   var ciSaveTimeouts = {};
   var ciPendingSaves = 0;
@@ -182,16 +184,33 @@
     var key = folder + ":" + itemId + ":" + field;
     var generation = (ciFieldSaveGenerations[key] || 0) + 1;
     ciFieldSaveGenerations[key] = generation;
+    ciQueuedFieldSaves[key] = { folder: folder, itemId: itemId, field: field, value: value, generation: generation };
+    sendQueuedFieldSave(key);
+  }
+
+  function sendQueuedFieldSave(key) {
+    if (ciFieldSavesInFlight[key] || !ciQueuedFieldSaves[key]) return;
+    var save = ciQueuedFieldSaves[key];
+    delete ciQueuedFieldSaves[key];
+    ciFieldSavesInFlight[key] = true;
     var params = new URLSearchParams();
     params.append("action", "update_item_field");
-    params.append("tab", folder);
-    params.append("item_id", itemId);
-    params.append("field", field);
-    params.append("value", value);
+    params.append("tab", save.folder);
+    params.append("item_id", save.itemId);
+    params.append("field", save.field);
+    params.append("value", save.value);
     post(params, function (result) {
-      if (ciFieldSaveGenerations[key] !== generation) return;
-      if (result.success) delete ciFailedFields[key];
-      else ciFailedFields[key] = true;
+      delete ciFieldSavesInFlight[key];
+      if (!result.success) {
+        // An uncertain response must not release another automatic write.
+        if (ciSaveTimeouts[key]) clearTimeout(ciSaveTimeouts[key]);
+        delete ciSaveTimeouts[key];
+        delete ciQueuedFieldSaves[key];
+        ciFailedFields[key] = true;
+        return;
+      }
+      if (ciFieldSaveGenerations[key] === save.generation) delete ciFailedFields[key];
+      sendQueuedFieldSave(key);
     });
   }
 
@@ -210,7 +229,7 @@
   }
 
   function hasUnsavedEdits() {
-    return Object.keys(ciSaveTimeouts).length > 0 || ciPendingSaves > 0 || Object.keys(ciFailedFields).length > 0;
+    return Object.keys(ciSaveTimeouts).length > 0 || ciPendingSaves > 0 || Object.keys(ciFailedFields).length > 0 || Object.keys(ciQueuedFieldSaves).length > 0;
   }
 
   // ---------------------------------------------------------------------
@@ -618,6 +637,7 @@
     var field = target.getAttribute("data-ci-field");
     if (field) {
       if (field === "hasCharges") {
+        if (Boolean(item.hasCharges) === Boolean(target.checked)) return;
         item.hasCharges = !!target.checked;
         if (item.hasCharges && typeof item.charges === "undefined") {
           item.charges = 0;
@@ -627,9 +647,11 @@
         return;
       }
       if (field === "charges") {
+        if (normalizeChargeCount(item.charges) === normalizeChargeCount(target.value)) return;
         item.charges = normalizeChargeCount(target.value);
         target.value = item.charges;
       } else {
+        if (String(item[field] || "") === target.value) return;
         item[field] = target.value;
       }
       if (field === "name") {
@@ -641,7 +663,9 @@
 
     var sectionField = target.getAttribute("data-ci-sfield");
     if (sectionField) {
+      var previousSections = JSON.stringify(item.effectSections || []);
       syncSectionsFromCard(card, item);
+      if (JSON.stringify(item.effectSections || []) === previousSections) return;
       queueFieldSave(ciFolder, itemId, "effectSections", function () {
         return JSON.stringify(item.effectSections || []);
       });
