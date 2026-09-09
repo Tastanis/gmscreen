@@ -615,3 +615,23 @@ response; storage support does not mean the feature is usable yet. Full goal sta
 active, including other visible proposals and reliability/visibility checks.
 
 Full regression suite: 790 passing tests across 105 files.
+
+
+### GM/two-player height and visibility verification (September 9)
+
+New test-height-multiplayer-browser.cjs passed against a disposable floor fixture:
+GM plus separate Cal/Sharon browser sessions, a base token beneath an opening,
+5-square badges on all views, live change to 8 squares, one player offline during
+the change, reconnect catch-up without reload, then reload of all three clients.
+Canonical token state was unchanged by height/view operations. No page errors.
+This verifies floor-height delivery/recovery and visible numeric badges, not every
+combat or multi-step action journey in the wider goal.
+
+The existing floor-visibility browser regression was updated to open the approved
+compact floor Edit disclosure. It then passed on a fresh fixture: hidden-floor
+content absent from initial player HTML, hidden tokens/templates absent from both
+players, reveal/hide/reveal without reload and unchanged canonical token state.
+No production requests or campaign changes. These are local Sync V2 recovery
+checks; external Pusher production delivery/secret rotation is not verified here.
+Full active goal remains unfinished, including pending visible UI approvals,
+table user journey, broader combat/movement checks and inventory conflict handling.

@@ -50,6 +50,8 @@ const origin = 'http://127.0.0.1:8129';
     const toggle = gm.locator('[data-action="toggle-map-level-hide"][data-map-level-id="test-upper"]');
     const folder = gm.locator('.scene-group').filter({ has: toggle });
     if ((await folder.getAttribute('class')).includes('is-collapsed')) await folder.locator('[data-action="toggle-folder"]').click();
+    const floorDetails = toggle.locator('xpath=ancestor::details[1]');
+    if (await floorDetails.getAttribute('open') === null) await floorDetails.locator('summary').click();
     for (const hidden of [false, true, false]) {
       const response = gm.waitForResponse(r => r.url().endsWith('/commands.php') && r.request().postDataJSON()?.type === 'levels.set');
       await toggle.click(); assert.equal((await response).status(), 200);
