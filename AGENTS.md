@@ -657,3 +657,24 @@ No application behavior changed in this verification slice. Each journey used
 its own fresh loopback fixture; no live campaign data was modified. These results
 cover the listed paths, not all automation movement or opportunity-attack journeys.
 Remaining goal requirements and pending UI proposals stay open.
+
+
+### Opportunity attack across stairs: browser verification (September 9)
+
+New test-opportunity-stairs-browser.cjs passed on a fresh loopback fixture. A real
+player drag first enters adjacency on the base floor without creating an
+opportunity marker, then leaves that enemy via stairs. Explicit Node-side polling
+awaits the saved position/floor and ready marker. The canonical marker includes
+readyTriggerSources.__opportunityAttack__ = floor-cal and survives GM reload with
+a visible marker. No application changes were needed; a speculative explicit-op
+change was reverted before verification. No live campaign writes occurred.
+
+Important testing follow-up: the initial test used asynchronous waitForFunction
+callbacks for server reads and inspected state too early. Replacing them with an
+explicit awaited polling loop resolved the false missing-source finding. Audit
+other waitForFunction(async ...) uses before relying on them as save-completion
+gates (range/height/floor editor, floor deletion, primary token, scene import/grid,
+and zone browser scripts contain this pattern). Existing final-state assertions
+remain evidence of their checked values; do not treat an early predicate as proof
+that the requested save completed. The wider goal and pending UI responses remain
+open. Next work should strengthen/re-run those gates, not mark the goal complete.
