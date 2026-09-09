@@ -2,6 +2,7 @@
 // Character Sheet Inventory API
 // Standalone handler for the character sheet Inventory tab.
 // Data lives in dnd/data/character_inventory.json.
+require_once __DIR__ . '/AtomicJsonFile.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -29,12 +30,11 @@ function ciLoadData()
     global $CI_TABS;
 
     $data = array();
-    if (is_readable(CI_DATA_FILE)) {
+    if (is_file(CI_DATA_FILE)) {
         $contents = file_get_contents(CI_DATA_FILE);
         $decoded = json_decode((string) $contents, true);
-        if (is_array($decoded)) {
-            $data = $decoded;
-        }
+        if ($contents === false || !is_array($decoded)) ciFail('Inventory data could not be read. No changes were saved.');
+        $data = $decoded;
     }
 
     foreach ($CI_TABS as $tab) {
@@ -56,8 +56,12 @@ function ciSaveData($data)
         mkdir($dir, 0755, true);
     }
 
-    $json = json_encode($data, JSON_PRETTY_PRINT);
-    return file_put_contents(CI_DATA_FILE, $json, LOCK_EX) !== false;
+    try {
+        return AtomicJsonFile::write(CI_DATA_FILE, $data);
+    } catch (Throwable $error) {
+        error_log('Inventory save failed: ' . $error->getMessage());
+        return false;
+    }
 }
 
 function ciGenerateId($prefix = 'item')
@@ -288,6 +292,22 @@ function ciFail($message)
 }
 
 $action = isset($_POST['action']) ? (string) $_POST['action'] : (isset($_GET['action']) ? (string) $_GET['action'] : '');
+
+// Lock a stable sibling file: the JSON destination is atomically replaced.
+// Hold through the whole request so independent edits read the latest inventory.
+$ciDirectory = dirname(CI_DATA_FILE);
+if (!is_dir($ciDirectory) && !mkdir($ciDirectory, 0755, true) && !is_dir($ciDirectory)) {
+    ciFail('Inventory storage is unavailable.');
+}
+$ciLock = fopen(CI_DATA_FILE . '.lock', 'c');
+if ($ciLock === false || !flock($ciLock, $action === 'load' ? LOCK_SH : LOCK_EX)) {
+    if (is_resource($ciLock)) fclose($ciLock);
+    ciFail('Inventory storage is busy. Try again.');
+}
+register_shutdown_function(function () use ($ciLock) {
+    flock($ciLock, LOCK_UN);
+    fclose($ciLock);
+});
 
 switch ($action) {
     case 'load':

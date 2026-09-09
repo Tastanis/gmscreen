@@ -1762,7 +1762,7 @@ Final checkpoint validation: npm test passed 759 tests across 100 files.
 
 ## Deferred requirement: inventory effect tables
 
-- [ ] Support displaying and practically editing/pasting tables or matrices inside character-sheet inventory item effects. Recording/planning only; do not implement until Brandon resumes this work.
+- [ ] Support displaying and practically editing/pasting tables or matrices inside character-sheet inventory item effects. Resumed under the active improvement goal. Save reliability work is underway; the compact table layout proposal awaits an explicit response.
   - Use case: Cal's Eternal Spire contains two 20-level progression matrices, **Fungal Minions** and **Resurrection**, both currently level 1 (as reported when this requirement was recorded).
   - Campaign source of truth: `C:\Users\tasta\Desktop\Claude Work\Claude DND\Obsidian DND\Claude dnd\Reference\Eternal-Spire.md`. Read it when implementing; it is read-only for this task. Do not rewrite campaign content or invent progression values.
   - Reported current limitation: `dnd/character_sheet/inventory-tab.js` renders descriptions and effects as escaped plain text, so pasted Markdown tables do not render as tables. Recheck the current implementation before editing.
@@ -2001,3 +2001,26 @@ against a fresh --floors --distance disposable fixture: actual board callback,
 5-square altitude, large-token edge distance, symmetric lookup, missing target,
 canonical floor-height edit and reload. No live campaign writes. Broader gameplay
 and remaining approved goal scope are still active.
+
+
+### Inventory save foundation - 1.19.127
+
+Inventory API requests now hold a sibling-file lock across the full read/modify/
+save operation, including cleanup. Loads use a shared lock. AtomicJsonFile replaces
+the JSON document; failed reads/invalid JSON fail closed instead of starting an
+empty inventory that could overwrite campaign items. A scan found the character
+inventory handler is the only writer; VTT items.php reads the same document.
+This prevents independent concurrent updates from overwriting one another's file
+contents. It does not resolve two stale edits to the same effect list or item.
+
+A disposable PHP endpoint test sends 30 concurrent distinct-item field updates and
+verifies every saved value and retained note. A corrupt-file test verifies refusal
+without replacement. The new inventory test directory is included by npm test.
+No live inventory or campaign source was edited. Read-only Eternal-Spire.md confirms
+the supplied Fungal Minions progression table; no values were imported or invented.
+Compact current-row/Level/Show full table plus paste-and-cell editing was proposed
+for approval. Table UI and storage integration remain unfinished. Next inspect
+client save failures, same-second refresh detection and stale effect-list edits
+while awaiting the visible-layout response; retain all wider goal requirements.
+
+Full regression suite: 783 passing tests across 104 files.

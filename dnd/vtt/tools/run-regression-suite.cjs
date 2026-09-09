@@ -6,7 +6,7 @@ function walk(folder) {
   return fs.readdirSync(folder, {withFileTypes:true}).flatMap(entry =>
     entry.isDirectory() ? walk(path.join(folder,entry.name)) : [path.join(folder,entry.name)]);
 }
-const files = ['dnd/vtt/assets/js','dnd/character_sheet/ability-automation']
+const files = ['dnd/vtt/assets/js','dnd/character_sheet/ability-automation','dnd/character_sheet/inventory']
   .flatMap(folder => walk(path.join(root,folder))).filter(file => file.endsWith('.test.mjs')).sort();
 let passed = 0, failed = 0;
 const failedFiles = [];

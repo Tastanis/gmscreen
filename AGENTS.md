@@ -508,3 +508,26 @@ against a fresh --floors --distance disposable fixture: actual board callback,
 5-square altitude, large-token edge distance, symmetric lookup, missing target,
 canonical floor-height edit and reload. No live campaign writes. Broader gameplay
 and remaining approved goal scope are still active.
+
+
+### Inventory save foundation - 1.19.127
+
+Inventory API requests now hold a sibling-file lock across the full read/modify/
+save operation, including cleanup. Loads use a shared lock. AtomicJsonFile replaces
+the JSON document; failed reads/invalid JSON fail closed instead of starting an
+empty inventory that could overwrite campaign items. A scan found the character
+inventory handler is the only writer; VTT items.php reads the same document.
+This prevents independent concurrent updates from overwriting one another's file
+contents. It does not resolve two stale edits to the same effect list or item.
+
+A disposable PHP endpoint test sends 30 concurrent distinct-item field updates and
+verifies every saved value and retained note. A corrupt-file test verifies refusal
+without replacement. The new inventory test directory is included by npm test.
+No live inventory or campaign source was edited. Read-only Eternal-Spire.md confirms
+the supplied Fungal Minions progression table; no values were imported or invented.
+Compact current-row/Level/Show full table plus paste-and-cell editing was proposed
+for approval. Table UI and storage integration remain unfinished. Next inspect
+client save failures, same-second refresh detection and stale effect-list edits
+while awaiting the visible-layout response; retain all wider goal requirements.
+
+Full regression suite: 783 passing tests across 104 files.
