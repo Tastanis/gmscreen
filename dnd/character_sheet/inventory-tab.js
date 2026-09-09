@@ -566,12 +566,15 @@
     });
   }
 
-  function duplicateItem(itemId) {
+  async function duplicateItem(itemId) {
     var folder = ciFolder;
+    if (!await finishItemEdits(folder, itemId)) return;
+    var item = findItem(folder, itemId);
     var params = new URLSearchParams();
     params.append("action", "duplicate_item");
     params.append("tab", folder);
     params.append("item_id", itemId);
+    if (item._fieldRevisions) params.append("expected_item_fields", JSON.stringify(item._fieldRevisions));
     post(params, function (result) {
       if (!result.success || !result.item) return;
       ciData[folder].items.push(result.item);
@@ -658,9 +661,16 @@
     }
 
     var formData = new FormData();
+    var imageItem = findItem(ciFolder, ciUploadItemId);
+    if (!imageItem) return;
+    var imageKey = ciFolder + ":" + ciUploadItemId + ":image";
+    if (ciFieldSavesInFlight[imageKey]) return;
+    ciFieldSavesInFlight[imageKey] = true;
+    ciEditGeneration++;
     formData.append("action", "upload_image");
     formData.append("item_id", ciUploadItemId);
     formData.append("image", file);
+    if (imageItem._fieldRevisions && imageItem._fieldRevisions.image) formData.append("expected_revision", imageItem._fieldRevisions.image);
 
     showStatus("Uploading image...", "loading");
     ciPendingSaves++;
@@ -668,17 +678,25 @@
       .then(function (response) { return response.json(); })
       .then(function (result) {
         ciPendingSaves--;
+        delete ciFieldSavesInFlight[imageKey];
         if (!result.success) {
+          ciFailedFields[imageKey] = true;
           showStatus("Error uploading image: " + (result.error || "unknown"), "error");
           return;
         }
         var item = findItem(result.tab, result.item_id);
-        if (item) item.image = result.image_path;
+        if (item) {
+          item.image = result.image_path;
+          item._fieldRevisions = Object.assign({}, item._fieldRevisions || {}, result.field_revisions || {});
+        }
+        delete ciFailedFields[imageKey];
         render();
         showStatus("Image uploaded", "success");
       })
       .catch(function (error) {
         ciPendingSaves--;
+        delete ciFieldSavesInFlight[imageKey];
+        ciFailedFields[imageKey] = true;
         console.error("Image upload failed", error);
         showStatus("Network error uploading image", "error");
       });

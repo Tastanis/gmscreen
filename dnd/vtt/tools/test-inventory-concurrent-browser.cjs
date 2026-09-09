@@ -48,6 +48,19 @@ const origin='http://127.0.0.1:8129';
     const loaded=await(await pages[0].request.post(endpoint,{form:{action:'load'}})).json();
     const saved=loaded.data.cal.items.find(x=>x.id===id);
     assert.equal(saved.name,'Next accepted name');assert.equal(saved.description,'Independent second-window note');
+    async function upload(p) {
+      const chooser=p.waitForEvent('filechooser');
+      await p.locator(`[data-ci-action="upload-image"][data-item-id="${id}"]`).click();
+      const response=p.waitForResponse(r=>r.url()===endpoint && r.request().method()==='POST');
+      await(await chooser).setFiles({name:'pixel.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ1sAAAAASUVORK5CYII=','base64')});
+      return(await response).json();
+    }
+    const firstImage=await upload(pages[0]);assert.equal(firstImage.success,true);
+    const staleImage=await upload(pages[1]);assert.equal(staleImage.success,false);assert.match(staleImage.error,/another window/);
+    const secondImage=await upload(pages[0]);assert.equal(secondImage.success,true);
+    assert.notEqual(secondImage.image_path,firstImage.image_path,'Image replacements get distinct paths');
+    const afterImages=await(await pages[0].request.post(endpoint,{form:{action:'load'}})).json();
+    assert.equal(afterImages.data.cal.items.find(x=>x.id===id).image,secondImage.image_path);
     console.log('PASS two real inventory editors: stale field rejected, draft retained, unrelated field preserved, accepted revision chain continues');
   } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

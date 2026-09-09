@@ -4,7 +4,7 @@ const path=require('node:path');
 (async()=>{
   const browser=await chromium.launch({channel:'chrome',headless:true});
   try {
-    for(const succeeds of [true,false]) {
+    for(const [action,succeeds] of [['share',true],['share',false],['duplicate',true],['duplicate',false]]) {
       const page=await browser.newPage();
       await page.route('**/*',r=>r.abort());
       await page.setContent('<body data-character="cal" data-user="GM" data-is-gm="1" class="edit-mode"><input id="edit-toggle"><div id="inventory-pane"></div></body>');
@@ -17,7 +17,7 @@ const path=require('node:path');
       await page.evaluate(()=>requests[0].respond({success:true,data:{cal:{items:[{id:'item',name:'Before',effectSections:[],_fieldRevisions:{name:'before'}}]}}}));
       await page.locator('[data-ci-action="open"]').click();
       await page.locator('[data-ci-field="name"]').fill('Latest edit');
-      await page.locator('[data-ci-action="share"]').first().click();
+      await page.locator(`[data-ci-action="${action}"]`).first().click();
       await page.waitForFunction(()=>requests.length===2);
       assert.equal(await page.evaluate(()=>requests[1].fields.action),'update_item_field');
       assert.equal(await page.evaluate(()=>confirmations),0,'Move confirmation waits for the pending edit');
@@ -25,9 +25,9 @@ const path=require('node:path');
       if(succeeds) {
         await page.waitForFunction(()=>requests.length===3);
         const move=await page.evaluate(()=>requests[2].fields);
-        assert.equal(move.action,'share_item');
+        assert.equal(move.action,action==='share'?'share_item':'duplicate_item');
         assert.equal(JSON.parse(move.expected_item_fields).name,'accepted');
-        assert.equal(await page.evaluate(()=>confirmations),1);
+        assert.equal(await page.evaluate(()=>confirmations),action==='share'?1:0);
       } else {
         await page.waitForFunction(()=>document.querySelector('#ci-status').textContent.includes('unsaved edits'));
         assert.equal(await page.evaluate(()=>requests.length),2);

@@ -339,7 +339,7 @@ function ciCheckReviewedItem($item)
     if (!is_array($expected) || count($expected) !== count($current)) ciFail('Reload this item before changing it.');
     foreach ($current as $field => $revision) {
         if (!isset($expected[$field]) || !is_string($expected[$field]) || !hash_equals($revision, $expected[$field])) {
-            ciFail('This item changed in another window. Reload it before deleting or moving it.');
+            ciFail('This item changed in another window. Reload it before changing it.');
         }
     }
 }
@@ -426,6 +426,8 @@ switch ($action) {
 
         $data = ciLoadData();
         $index = ciFindItemIndex($data, $tab, substr(trim((string) $itemData['id']), 0, 80));
+        if ($index >= 0) ciCheckReviewedItem($data[$tab]['items'][$index]);
+        elseif (isset($_POST['expected_item_fields'])) ciFail('Item no longer exists.');
         $clean = ciCleanItem($itemData, $index >= 0 ? $data[$tab]['items'][$index] : array());
 
         if ($index >= 0) {
@@ -556,6 +558,7 @@ switch ($action) {
             ciFail('Item not found');
         }
 
+        ciCheckReviewedItem($data[$tab]['items'][$index]);
         $copy = ciCleanItem($data[$tab]['items'][$index]);
         $copy['id'] = ciGenerateId();
         foreach ($copy['effectSections'] as $i => $section) {
@@ -686,7 +689,12 @@ switch ($action) {
             ciFail('Permission denied');
         }
 
-        $fileName = preg_replace('/[^a-z0-9_\-]/i', '', $itemId) . '_' . time() . '.' . $fileExtension;
+        if (isset($_POST['expected_revision'])) {
+            $expected = $_POST['expected_revision'];
+            $revision = ciFieldRevisions($data[$foundTab]['items'][$foundIndex], array('image'))['image'];
+            if (!is_string($expected) || !hash_equals($revision, $expected)) ciFail('This image changed in another window. Reload before replacing it.');
+        }
+        $fileName = preg_replace('/[^a-z0-9_\-]/i', '', $itemId) . '_' . bin2hex(random_bytes(12)) . '.' . $fileExtension;
         $filePath = CI_IMAGES_DIR . '/' . $fileName;
 
         if (!move_uploaded_file($uploadedFile['tmp_name'], $filePath)) {
@@ -703,7 +711,8 @@ switch ($action) {
                 'success' => true,
                 'image_path' => $webPath,
                 'item_id' => $itemId,
-                'tab' => $foundTab
+                'tab' => $foundTab,
+                'field_revisions' => ciFieldRevisions($data[$foundTab]['items'][$foundIndex], array('image'))
             ));
         }
 

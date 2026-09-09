@@ -89,6 +89,10 @@ test('reviewed deletion and move reject an item changed since loading', async ()
       assert.equal(response.success,false);assert.match(response.error,/another window/);
       assert.equal(await readFile(f.data,'utf8'),before);
     }
+    for(const action of ['duplicate_item','save_item']) {
+      const response=await f.request({action,tab:'cal',item_id:'item',item_data:JSON.stringify(initial),expected_item_fields:JSON.stringify(initial._fieldRevisions)});
+      assert.equal(response.success,false);assert.equal(await readFile(f.data,'utf8'),before);
+    }
     const current=(await f.request({action:'load'})).data.cal.items[0];
     const moved=await f.request({action:'share_item',from_tab:'cal',to_tab:'shared',item_id:'item',expected_item_fields:JSON.stringify(current._fieldRevisions)});
     assert.equal(moved.success,true);assert.equal(moved.item.name,'Newer');

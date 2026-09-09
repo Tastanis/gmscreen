@@ -1,6 +1,6 @@
 # Current VTT improvement goal
 
-Updated September 9, 2026, against the 1.19.138 working implementation.
+Updated September 9, 2026, against the 1.19.139 working implementation.
 The goal is **not complete**. This page is the current navigation aid; the full
 historical roadmap and release handoff remain in force where the user has not
 superseded them. Old checked boxes are not evidence that removed UI should return.
@@ -19,7 +19,7 @@ superseded them. Old checked boxes are not evidence that removed UI should retur
 | Persistent effect/turn timing | `runZoneBoundary` coordinates expiration/ticks; existing round, boundary, conflict, upkeep and failure fixtures are available. | Revalidate required turn journeys against final implementation; a completed entry receipt is not proof that all effects/turn paths are complete. |
 | GM/two-player visibility and recovery | Floor height, hidden-floor, grid and swap tests verify specific live/reload/offline paths. | Broader combat journey with two players and final visual checks; store receipt alone is not on-screen visibility. |
 | Editable inventory progression tables | Markdown/TSV parser, independent selected-row data, validation, storage and preservation implemented. | Actual table display, level selector, paste/cell editing and user journey. Layout approval pending. |
-| Inventory save reliability | Atomic file replacement, precise refresh revision, dirty-draft retention and per-field save ordering implemented. | Updated-client field edits now reject stale revisions (two-browser test passes). Delete/move guards now pass two-editor checks; field saves now finish before move/delete/take (Move browser check passes); whole-item/image guards and recovery of unconfirmed writes remain; no separate backup system. |
+| Inventory save reliability | Atomic file replacement, precise refresh revision, dirty-draft retention and per-field save ordering implemented. | Updated-client field edits now reject stale revisions (two-browser test passes). Delete/move guards now pass two-editor checks; field saves now finish before move/delete/take (Move browser check passes); copy/whole-item/image guards are implemented; recovery of unconfirmed writes and old unguarded clients remain; no separate backup system. |
 | Deployment/handoff | Completed slices committed/pushed; diagnostics isolated from live campaign. | Final requirement audit and deployable checkpoint once scope is finished. External Pusher rotation/production soak require external action. |
 
 The old audit also lists encounter presets, other asset collections, handouts/map
@@ -53,5 +53,5 @@ tool strip, a backup system or an ignore-falling toggle.
    complete user journeys rather than treating storage/parser support as delivery.
 
 Verification detail and historical results remain in `vtt-improvement-plan.md`.
-The latest complete suite run has 795 passing tests across 105 files (1.19.138).
+The latest complete suite run has 795 passing tests across 105 files (1.19.139).
 Browser scripts are separate from `npm test`.

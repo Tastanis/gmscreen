@@ -2397,3 +2397,22 @@ The shared helper is used by Delete/Take too; their pending-save journeys were n
 separately exercised. No live campaign writes. Full original scope stays open.
 
 Full npm test passes: 795 tests across 105 files.
+
+
+### Inventory copy/image/whole-item protection - 1.19.139
+
+Copy waits for pending item edits and sends its reviewed fields. Whole-item saves
+accept that same reviewed guard; a missing reviewed item cannot be recreated.
+Legacy callers without guards remain compatible. Image uploads compare the image
+field revision before moving the uploaded file; accepted uploads return that field's
+new revision. Unique random filenames prevent same-second replacements from sharing
+a path. Client uploads participate in the item's pending/failed-save tracking and
+advance edit generation, so stale refreshes and item actions cannot race the upload.
+
+Real two-editor browser checks pass for stale image replacement rejection and two
+accepted replacements with different paths. Copy/Move held-save and failed-save
+browser cases pass. PHP tests reject stale copy and whole-item saves unchanged.
+No live data writes. Unknown-outcome recovery and table UI remain unfinished; the
+optional guards do not protect old clients that omit them.
+
+Full npm test passes: 795 tests across 105 files.
