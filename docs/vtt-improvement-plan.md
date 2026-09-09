@@ -1769,3 +1769,43 @@ Final checkpoint validation: npm test passed 759 tests across 100 files.
   - Suggested display, **not an approved design decision**: show each effect's current-level row with an expandable full progression table.
   - Preserve existing ordinary text effects and safe text rendering. Provide a practical way to edit or paste tabular data; determine the format and editing controls when work resumes.
   - Acceptance targets: both 20-level matrices can be entered, saved, reopened, and displayed on the item; existing text-only items still work. Level selection and compact/expanded presentation require design confirmation before implementation.
+
+
+## Next-goal scope agreed in conversation
+
+Planning record only: do not start a new goal or implement from this note alone.
+Approved direction: movement consistency; reliable multi-step combat actions and
+sheet/token agreement; persistent effects and turn timing; GM/two-player visibility;
+automatic save/reload/reconnect checks; editable inventory effect progression tables.
+Exclude a separate backup system and a GM ignore-falling toggle (Hover covers the
+requested exception). Preserve the current main header and avoid new toolbars or
+Action review UI. Show proposed visible changes before building them.
+
+### Added floor heights and edge/bane suggestions
+
+User requests a focused redesign of the existing floor-management UI, editable floor
+heights in squares, height-aware distance checks, numeric vertical-distance token
+badges, and automatic, overridable edge/bane suggestions in ability/dice workflows.
+
+Proposed interpretation to present before implementation: base floor height 0;
+successive new floors default one square above the preceding floor. Heights are
+absolute relative to base, so a balcony can be set to 5. Existing scenes need a
+predictable compatible default. Vertical distance is the difference in heights;
+combine with existing horizontal grid distance using the greater distance, not a
+diagonal/hypotenuse calculation. Thus horizontal 4 / vertical 2 measures 4, while
+horizontal 2 / vertical 5 measures 5. This distance rule does not itself establish
+line of effect through solid floors or walls.
+
+Token up/down badges should report vertical squares rather than floor counts.
+Use shared height calculations for range, adjacency and aura reach: a radius-3
+aura cannot affect a target vertically 5 squares away. Verify actual rule triggers
+and existing automation before implementation; do not infer universal eligibility
+from these examples. User wants relevant dice edges/banes preselected with short
+reasons such as 'High ground' or 'Enemy adjacent', remaining manually overridable.
+Recompute when actor, target, ability or position changes; avoid duplicate suggestions
+and preserve deliberate manual choices. Multi-target attacks may have different
+modifiers and need an explicit design before implementation.
+
+Present a compact floor-panel proposal before UI edits. Keep scene-wide floor height
+separate from independently tracking a flying creature's altitude; the latter has
+not been specified or approved here. New goal has not yet been started.
