@@ -453,3 +453,21 @@ The separate generic Dice Roller still lacks combat context. A compact Power rol
 mode with attacker/target/strike type was proposed for approval; do not implement
 that visible change until the user responds. Multi-target UI approval also remains
 pending. Continue height-aware range guides and the rest of the original roadmap.
+
+
+### Height-aware targeting guides - 1.19.124
+
+Token and area selection range boxes now compare source/viewer floor elevations.
+A floor beyond the range shows no range box. Reachable floors retain the full
+horizontal range (maximum-axis distance, not a diagonal/hypotenuse calculation).
+Unknown floors do not receive a misleading box. These remain advisory guides;
+this does not enforce target legality or claim visibility/line of effect.
+Both guides refresh from current source placement during existing token rendering,
+including floor configuration/view changes. No new broad subscription or writes.
+Area range initialization now runs after its overlay is assigned, fixing the
+previous missing initial update. Local browser test test-range-height-browser.cjs
+passed token/area opening, exact boundary, max-axis width and live height changes.
+The browser uses a fresh loopback floor fixture and canonical GM floor edits.
+General effect-range consumers and the rest of the active goal remain unfinished.
+
+Full regression suite: 775 passing tests across 102 files.

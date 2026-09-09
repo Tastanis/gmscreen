@@ -115,7 +115,7 @@ import {
   getManualDamageTypeOptions as getCanonicalManualDamageTypeOptions,
   openDamageWeaknessDialog,
 } from './typed-damage-condition.js';
-import { resolveSelectionRangeGuide } from './selection-range-guide.js';
+import { resolveSelectionRangeGuide, selectionRangeReachesFloor } from './selection-range-guide.js';
 import {
   resolveAutomationDamageAmount,
   resolveAutomationForcedMovementDistance,
@@ -8858,6 +8858,8 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function renderTokens(state = {}, layer, view, options = {}) {
+    if (pendingAutomationTarget) renderAutomationTargetRangeOverlay(pendingAutomationTarget.targetConfig);
+    if (pendingAutomationArea) updateAutomationAreaRange();
     recordSyncDiagnostic('tokenLayerReconciliations', {
       sceneId: state?.boardState?.activeSceneId ?? null,
       skipTracker: Boolean(options?.skipTracker),
@@ -16000,6 +16002,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const source = resolveAutomationSourcePlacement(guide.sourcePlacement)
       || (sourceTokenForRange());
     if (!source) return;
+    if (!automationRangeReachesViewedFloor(guide, source)) return;
     // For meleeOrRanged we draw the larger of the two — the secondary is the
     // ranged value, primary is the melee reach.
     const range = guide.range;
@@ -16025,6 +16028,14 @@ export function mountBoardInteractions(store, routes = {}) {
   function clearAutomationTargetRangeOverlay() {
     automationTargetRangeOverlay?.remove();
     automationTargetRangeOverlay = null;
+  }
+
+  function automationRangeReachesViewedFloor(guide, source) {
+    const state = boardApi.getState?.() ?? {};
+    const sceneId = state.boardState?.activeSceneId;
+    return selectionRangeReachesFloor(guide, source,
+      getViewerLevelIdForCurrentUser(state, sceneId),
+      resolveSceneTokenLevelState(state, sceneId));
   }
 
   function sourceTokenForRange() {
@@ -16173,6 +16184,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     automationAreaOverlay = renderAutomationAreaOverlay(pendingAutomationArea);
+    updateAutomationAreaRange();
     updateStatus(formatAutomationAreaPrompt(pendingAutomationArea.targetConfig));
   }
 
@@ -16222,7 +16234,6 @@ export function mountBoardInteractions(store, routes = {}) {
       </div>
     `;
     mapTransform.appendChild(overlay);
-    updateAutomationAreaRange();
     return overlay;
   }
 
@@ -16243,11 +16254,11 @@ export function mountBoardInteractions(store, routes = {}) {
     const rangeNode = automationAreaOverlay.querySelector('[data-automation-area-range]');
     if (!(rangeNode instanceof HTMLElement)) return;
     const guide = resolveSelectionRangeGuide(pendingAutomationArea.targetConfig);
-    const source = guide?.sourcePlacement || pendingAutomationArea.sourcePlacement || null;
+    const source = resolveAutomationSourcePlacement(guide?.sourcePlacement || pendingAutomationArea.sourcePlacement);
     // v3 sends distance.within (number); legacy sent range as a string like "10".
     // Pick whichever is present.
     const range = guide?.range || 0;
-    if (!source || !Number.isFinite(range) || range <= 0) {
+    if (!source || !Number.isFinite(range) || range <= 0 || !automationRangeReachesViewedFloor(guide, source)) {
       rangeNode.hidden = true;
       return;
     }

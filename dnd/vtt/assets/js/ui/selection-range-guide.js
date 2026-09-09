@@ -1,3 +1,12 @@
+import { verticalFloorDistance } from '../state/normalize/floor-elevation.js';
+
+/** Range only: openings, fog and target legality remain separate checks. */
+export function selectionRangeReachesFloor(guide, source, viewerLevelId, mapLevels) {
+  if (!guide || !source || !viewerLevelId) return false;
+  const vertical = verticalFloorDistance(source, { levelId: viewerLevelId }, mapLevels);
+  return vertical !== null && vertical <= guide.range;
+}
+
 function positiveInt(value) {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;

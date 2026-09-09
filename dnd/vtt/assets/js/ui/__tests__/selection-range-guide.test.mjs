@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { resolveSelectionRangeGuide } from '../selection-range-guide.js';
+import { resolveSelectionRangeGuide, selectionRangeReachesFloor } from '../selection-range-guide.js';
 
 test('token distance becomes an advisory selection guide', () => {
   const sourcePlacement = { id: 'hero-1', row: 3, column: 4 };
@@ -39,3 +39,24 @@ test('explicit selection guide is reusable and never enforces target legality', 
   assert.equal(guide.enforce, false);
 });
 
+
+test('floor reach uses the maximum axis: full horizontal range remains at reachable heights', () => {
+  const guide = resolveSelectionRangeGuide({ range: 3 });
+  const floors = { levels: [{ id: 'near', elevationSquares: 3 }, { id: 'far', elevationSquares: 5 }] };
+  const base = { id: 'caster', levelId: 'level-0' };
+  assert.equal(selectionRangeReachesFloor(guide, base, 'near', floors), true);
+  assert.equal(selectionRangeReachesFloor(guide, base, 'far', floors), false);
+  assert.equal(selectionRangeReachesFloor(guide, { levelId: 'far' }, 'near', floors), true);
+  assert.equal(selectionRangeReachesFloor(guide, { levelId: 'far' }, 'level-0', floors), false);
+  assert.equal(guide.range, 3);
+  assert.equal(guide.enforce, false);
+});
+
+test('range guides reject unknown floors and missing sources without treating them as ground', () => {
+  const guide = { range: 10 };
+  assert.equal(selectionRangeReachesFloor(guide, { levelId: 'missing' }, 'level-0', {}), false);
+  assert.equal(selectionRangeReachesFloor(guide, {}, 'missing', {}), false);
+  assert.equal(selectionRangeReachesFloor(guide, null, 'level-0', {}), false);
+  assert.equal(selectionRangeReachesFloor(guide, {}, null, {}), false);
+  assert.equal(selectionRangeReachesFloor(guide, {}, 'level-0', {}), true);
+});
