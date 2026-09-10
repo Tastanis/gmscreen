@@ -119,6 +119,10 @@ function ciNormalizeEffectSections($value, $legacyEffect = '', $preserveEmpty = 
             $title = isset($section['title']) ? trim((string) $section['title']) : '';
             $cost = isset($section['cost']) ? trim((string) $section['cost']) : '';
             $text = isset($section['text']) ? (string) $section['text'] : '';
+            $hasCharges = !empty($section['hasCharges']);
+            $charges = $section['charges'] ?? 0;
+            if (isset($section['hasCharges']) && !is_bool($section['hasCharges'])) ciFail('Effect hasCharges must be true or false.');
+            if (!is_int($charges) || $charges < 0 || $charges > 999) ciFail('Effect charges must be a whole number from 0 to 999.');
             $table = null;
             $tableSupplied = array_key_exists('table', $section);
             if ($tableSupplied) {
@@ -133,7 +137,7 @@ function ciNormalizeEffectSections($value, $legacyEffect = '', $preserveEmpty = 
                 }
             }
 
-            if (!$preserveEmpty && $title === '' && $cost === '' && trim($text) === '' && $table === null) {
+            if (!$preserveEmpty && $title === '' && $cost === '' && trim($text) === '' && $table === null && !$hasCharges) {
                 continue;
             }
 
@@ -148,6 +152,18 @@ function ciNormalizeEffectSections($value, $legacyEffect = '', $preserveEmpty = 
                 'text' => substr($text, 0, 4000)
             );
             if ($table !== null) $sections[count($sections) - 1]['table'] = $table;
+            if (array_key_exists('hasCharges', $section) || array_key_exists('charges', $section)) {
+                $sections[count($sections) - 1]['hasCharges'] = $hasCharges;
+                $sections[count($sections) - 1]['charges'] = $charges;
+            } else {
+                foreach ($previous as $oldSection) {
+                    if (($oldSection['id'] ?? '') === $id && array_key_exists('hasCharges', $oldSection)) {
+                        $sections[count($sections) - 1]['hasCharges'] = $oldSection['hasCharges'];
+                        $sections[count($sections) - 1]['charges'] = $oldSection['charges'] ?? 0;
+                        break;
+                    }
+                }
+            }
 
             if (count($sections) >= 20) {
                 break;
@@ -385,6 +401,7 @@ switch ($action) {
         ciRespond(array('success' => true, 'data' => $data, 'last_modified' => $lastModified, 'content_revision' => $contentRevision));
         break;
 
+    case 'import_item':
     case 'add_item':
         $tab = isset($_POST['tab']) ? strtolower((string) $_POST['tab']) : '';
         if (!in_array($tab, $CI_TABS, true)) {
@@ -400,6 +417,32 @@ switch ($action) {
             'visible' => true,
             'effectSections' => array(array('id' => ciGenerateId('effect'), 'title' => '', 'cost' => '', 'text' => ''))
         ));
+
+        if ($action === 'import_item') {
+            $json = $_POST['item_data'] ?? '';
+            if (!is_string($json) || strlen($json) > 1000000) ciFail('Use an item JSON file smaller than 1 MB.');
+            $import = json_decode($json, true);
+            if (!is_array($import) || !isset($import['name']) || !is_string($import['name']) || trim($import['name']) === '') ciFail('Item JSON needs a name.');
+            $allowed = array('id', 'name', 'description', 'keywords', 'effect', 'effectSections', 'image', 'visible', 'hasCharges', 'charges');
+            foreach (array_keys($import) as $key) if (!in_array($key, $allowed, true)) ciFail('Unsupported item field: ' . $key);
+            foreach (array('name'=>200, 'description'=>8000, 'keywords'=>500, 'effect'=>4000, 'image'=>500) as $key=>$limit) {
+                if (isset($import[$key]) && (!is_string($import[$key]) || strlen($import[$key]) > $limit)) ciFail('Invalid or too long item ' . $key . '.');
+            }
+            foreach (array('visible', 'hasCharges') as $key) if (isset($import[$key]) && !is_bool($import[$key])) ciFail($key . ' must be true or false.');
+            if (isset($import['charges']) && (!is_int($import['charges']) || $import['charges'] < 0 || $import['charges'] > 999)) ciFail('Charges must be a whole number from 0 to 999.');
+            if (isset($import['effectSections'])) {
+                if (!is_array($import['effectSections']) || !array_is_list($import['effectSections']) || count($import['effectSections']) > 20) ciFail('Use a list of up to 20 effects.');
+                foreach ($import['effectSections'] as &$effect) {
+                    if (!is_array($effect)) ciFail('Each effect must be an object.');
+                    foreach (array_keys($effect) as $key) if (!in_array($key, array('id','title','cost','text','table','hasCharges','charges'), true)) ciFail('Unsupported effect field: ' . $key);
+                    foreach (array('title'=>120,'cost'=>80,'text'=>4000) as $key=>$limit) if (isset($effect[$key]) && (!is_string($effect[$key]) || strlen($effect[$key]) > $limit)) ciFail('Invalid effect ' . $key . '.');
+                    $effect['id'] = ciGenerateId('effect');
+                }
+                unset($effect);
+            }
+            $import['id'] = ciGenerateId();
+            $newItem = ciCleanItem($import);
+        }
 
         $data = ciLoadData();
         $data[$tab]['items'][] = $newItem;

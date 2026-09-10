@@ -940,3 +940,6 @@ Full npm test passes: 795 tests across 105 files.
 
 ### Inventory table UI - 1.19.141
 Approved compact table display and independent Level selection now use the existing effectSections save queue. The draft editor supports paste, cells, rows and columns; Cancel does not save. Preserve text escaping and server table validation. Synthetic browser coverage passes, alongside 795 suite tests; server/reload table journey remains. Generic Dice Roller Power roll mode is rejected; multi-target ability UI must group matching targets compactly. See docs/vtt-active-goal-status.md for current approvals and remaining scope.
+
+### Inventory import and effect charges - 1.19.142
+Import JSON creates fresh IDs and validates before saving under the inventory lock. Never turn it into save_item overwrite. Per-effect hasCharges/charges coexist with tables and optional costs; counters are manual, no authored automation hooks. Omitted legacy charge fields preserve saved counters. Browser file picker/effect controls and PHP import checks pass; full suite 796. Persisted browser/reload journey remains; see inventory/README.md and active goal status.

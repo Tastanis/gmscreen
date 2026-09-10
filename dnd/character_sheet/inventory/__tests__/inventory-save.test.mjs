@@ -40,6 +40,26 @@ require __DIR__ . '/character_sheet/inventory_handler.php';
   } };
 }
 
+test('JSON import adds fresh item and effect identities, retains tables and rejects invalid input without mutation', async () => {
+  const f = await fixture();
+  try {
+    await writeFile(f.data, JSON.stringify({cal:{items:[{id:'existing',name:'Keep'}]}}));
+    const item = {id:'existing',name:'Imported',effectSections:[{id:'old-effect',title:'Growth',hasCharges:true,charges:4,table:{headers:['Level','Effect','Range','Cost'],rows:[['1','Small','2','0']],selectedRow:0}}]};
+    const result = await f.request({action:'import_item',tab:'cal',item_data:JSON.stringify(item)});
+    assert.equal(result.success,true); assert.notEqual(result.item.id,'existing');
+    assert.notEqual(result.item.effectSections[0].id,'old-effect');
+    assert.deepEqual(result.item.effectSections[0].table,item.effectSections[0].table);
+    assert.equal(result.item.effectSections[0].charges,4);
+    assert.equal(result.item.effectSections[0].hasCharges,true);
+    const before = await readFile(f.data,'utf8');
+    assert.equal(JSON.parse(before).cal.items[0].name,'Keep');
+    for (const bad of ['{', JSON.stringify({...item,charges:-1}), JSON.stringify({...item,unknown:true}), JSON.stringify({...item,effectSections:[{hasCharges:true,charges:1.5}]}), JSON.stringify({...item,effectSections:[{table:{headers:['A','B'],rows:[['bad']],selectedRow:0}}]})]) {
+      assert.equal((await f.request({action:'import_item',tab:'cal',item_data:bad})).success,false);
+      assert.equal(await readFile(f.data,'utf8'),before);
+    }
+  } finally { await f.close(); }
+});
+
 test('concurrent inventory edits to different items survive request-wide locking', async () => {
   const f = await fixture();
   try {

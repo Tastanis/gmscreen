@@ -1,6 +1,6 @@
 # Current VTT improvement goal
 
-Updated September 9, 2026, against the 1.19.140 working implementation.
+Updated September 9, 2026, against the 1.19.142 working implementation.
 The goal is **not complete**. This page is the current navigation aid; the full
 historical roadmap and release handoff remain in force where the user has not
 superseded them. Old checked boxes are not evidence that removed UI should return.
@@ -18,7 +18,7 @@ superseded them. Old checked boxes are not evidence that removed UI should retur
 | Sheet/token agreement and multi-step actions | Stamina receipts, bounded status lookup, resource protections and zone damage recovery implemented. Real lost-response damage finishes once and agrees with the sheet. | Genuinely rejected sheet writes can still leave a mismatch; interrupted later ability steps and concurrent edits need explicit handling. Never blindly replay damage. |
 | Persistent effect/turn timing | `runZoneBoundary` coordinates expiration/ticks; existing round, boundary, conflict, upkeep and failure fixtures are available. | Revalidate required turn journeys against final implementation; a completed entry receipt is not proof that all effects/turn paths are complete. |
 | GM/two-player visibility and recovery | Floor height, hidden-floor, grid and swap tests verify specific live/reload/offline paths. | Broader combat journey with two players and final visual checks; store receipt alone is not on-screen visibility. |
-| Editable inventory progression tables | Approved display, independent Level selectors, Show full table, draft paste/cell editor and row/column addition implemented. Synthetic browser test passes with four/five columns; existing save-order test passes. | Real persisted/reload journey, JSON item import and flexible per-effect charges. |
+| Editable inventory progression tables | Approved display, independent Level selectors, Show full table, draft paste/cell editor and row/column addition implemented. JSON file import, optional costs and independent manual effect charges now implemented. Browser controls and PHP import/preservation checks pass. | Real persisted/reload table/import/charge journey and final visual checks. |
 | Inventory save reliability | Atomic file replacement, precise refresh revision, dirty-draft retention and per-field save ordering implemented. | Updated-client field edits now reject stale revisions (two-browser test passes). Delete/move guards now pass two-editor checks; field saves now finish before move/delete/take (Move browser check passes); copy/whole-item/image guards are implemented; requests now have bounded deadlines and retain uncertain drafts; durable outcome recovery and old unguarded clients remain; no separate backup system. |
 | Deployment/handoff | Completed slices committed/pushed; diagnostics isolated from live campaign. | Final requirement audit and deployable checkpoint once scope is finished. External Pusher rotation/production soak require external action. |
 
@@ -33,7 +33,7 @@ selector, Show full table, and paste/cell editing. Tables must support more than
 three columns and allow manually advancing each effect over time.
 The user also requested inventory item JSON upload/import and more flexible effect
 configuration: optional costs, charges that can accumulate, and tables. These are
-authorized requirements, not implemented features. Keep charge tracking and tables
+implemented in 1.19.141–142 with the evidence above. Keep charge tracking and tables
 composable; do not infer automatic charge triggers or automatic character leveling.
 ## Roll UI decision — September 9
 
@@ -66,5 +66,5 @@ tool strip, a backup system or an ignore-falling toggle.
    user journeys rather than treating storage/parser support as delivery.
 
 Verification detail and historical results remain in `vtt-improvement-plan.md`.
-The latest complete suite run has 795 passing tests across 105 files (1.19.140).
+The latest complete suite run has 796 passing tests across 105 files (1.19.142).
 Browser scripts are separate from `npm test`.

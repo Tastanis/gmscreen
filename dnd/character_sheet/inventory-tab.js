@@ -13,6 +13,7 @@
   var ciFolder = "";
   var ciOpen = {};
   var ciExpandedTables = {};
+  var ciCostFields = {};
   var ciContentRevision = null;
   var ciEditGeneration = 0;
   var ciFailedFields = {};
@@ -94,6 +95,7 @@
         title: String(section.title || ""),
         cost: String(section.cost || ""),
         text: String(section.text || ""),
+        ...(Object.prototype.hasOwnProperty.call(section, "hasCharges") ? { hasCharges: !!section.hasCharges, charges: normalizeChargeCount(section.charges) } : {}),
         ...(Object.prototype.hasOwnProperty.call(section, "table") ? { table: section.table } : {})
       });
     });
@@ -106,7 +108,7 @@
 
   function meaningfulSections(item) {
     return normalizeSections(item).filter(function (section) {
-      return section.title.trim() || section.cost.trim() || section.text.trim() || section.table;
+      return section.title.trim() || section.cost.trim() || section.text.trim() || section.table || section.hasCharges;
     });
   }
 
@@ -342,6 +344,7 @@
     var toolButtons = "";
     if (editMode && canEdit) {
       toolButtons += '<button type="button" class="ci-btn ci-btn--add" data-ci-action="add">+ Add Item</button>';
+      toolButtons += '<button type="button" class="ci-btn" data-ci-action="import-item">Import JSON</button>';
     }
 
     var grid = items.map(function (item) { return renderItem(item, editMode, canEdit); }).join("");
@@ -509,10 +512,11 @@
         '<div class="ci-effect ci-effect--editing" data-section-id="' + escapeHtml(section.id) + '">' +
         '<div class="ci-effect__head">' +
         '<input type="text" class="ci-input ci-effect__title" data-ci-sfield="title" value="' + escapeHtml(section.title) + '" placeholder="Effect title" />' +
-        '<input type="text" class="ci-input ci-effect__cost" data-ci-sfield="cost" value="' + escapeHtml(section.cost) + '" placeholder="Cost" />' +
+        (section.cost || ciCostFields[section.id] ? '<input type="text" class="ci-input ci-effect__cost" data-ci-sfield="cost" value="' + escapeHtml(section.cost) + '" placeholder="Cost (optional)" aria-label="Effect cost" />' : '<button type="button" class="ci-btn ci-btn--small" data-ci-action="effect-cost">+ Cost</button>') +
         '<button type="button" class="ci-effect__remove" data-ci-action="remove-effect" data-section-id="' + escapeHtml(section.id) + '" aria-label="Remove effect">&times;</button>' +
         "</div>" +
         '<textarea class="ci-input ci-textarea ci-effect__text" data-ci-sfield="text" placeholder="Effect text">' + escapeHtml(section.text) + "</textarea>" +
+        '<label class="ci-effect-charge-toggle"><input type="checkbox" data-ci-effect-charges-toggle' + (section.hasCharges ? ' checked' : '') + '>Track charges</label>' + renderEffectCharges(section) +
         renderEffectTable(section) + '<button type="button" class="ci-btn ci-btn--small" data-ci-action="table-edit">' + (section.table ? 'Edit table' : '+ Table') + '</button></div>'
       );
     }
@@ -522,9 +526,14 @@
       '<div class="ci-effect__head"><strong>' + escapeHtml(section.title || "Effect") + "</strong>" +
       (section.cost ? '<span class="ci-effect__cost-label">' + escapeHtml(section.cost) + "</span>" : "") +
       "</div>" +
-      '<div class="ci-effect__body">' + escapeHtml(section.text) + "</div>" + renderEffectTable(section) +
+      '<div class="ci-effect__body">' + escapeHtml(section.text) + "</div>" + renderEffectCharges(section) + renderEffectTable(section) +
       "</div>"
     );
+  }
+
+  function renderEffectCharges(section) {
+    if (!section.hasCharges) return '';
+    return '<label class="ci-effect-charges">Charges <input type="number" class="ci-input ci-charge-input" min="0" max="999" step="1" data-ci-effect-charges value="' + normalizeChargeCount(section.charges) + '"' + (canEditFolder(ciFolder) ? '' : ' disabled') + '></label>';
   }
 
   function renderEffectTable(section) {
@@ -599,6 +608,33 @@
         nameInput.select();
       }
     });
+  }
+
+  function importItem() {
+    var folder = ciFolder;
+    if (!isEditMode() || !canEditFolder(folder)) return;
+    var input = document.createElement('input');
+    input.type = 'file'; input.accept = '.json,application/json';
+    input.addEventListener('change', async function () {
+      var file = input.files[0];
+      if (!file) return;
+      try {
+        if (file.size > 1000000) throw new Error('Use an item JSON file smaller than 1 MB.');
+        var json = await file.text();
+        var item = JSON.parse(json);
+        if (!item || typeof item.name !== 'string' || !item.name.trim()) throw new Error('Item JSON needs a name.');
+        var params = new URLSearchParams();
+        params.append('action', 'import_item'); params.append('tab', folder); params.append('item_data', json);
+        post(params, function (result) {
+          if (!result.success || !result.item) return;
+          if (!ciData[folder]) ciData[folder] = { items: [] };
+          ciData[folder].items.push(result.item);
+          ciOpen[result.item.id] = true;
+          render(); showStatus('Imported ' + result.item.name, 'success');
+        });
+      } catch (error) { showStatus(error.message || 'Invalid item JSON.', 'error'); }
+    }, { once: true });
+    input.click();
   }
 
   async function deleteItem(itemId) {
@@ -817,6 +853,7 @@
         title: (element.querySelector('[data-ci-sfield="title"]') || {}).value || "",
         cost: (element.querySelector('[data-ci-sfield="cost"]') || {}).value || "",
         text: (element.querySelector('[data-ci-sfield="text"]') || {}).value || "",
+        ...(previous && Object.prototype.hasOwnProperty.call(previous, "hasCharges") ? {hasCharges: previous.hasCharges, charges: previous.charges} : {}),
         ...(previous && Object.prototype.hasOwnProperty.call(previous, "table") ? { table: previous.table } : {})
       });
     });
@@ -876,8 +913,15 @@
     var itemId = target.getAttribute("data-item-id") || "";
 
     switch (action) {
+      case "effect-cost":
+        ciCostFields[target.closest('[data-section-id]').getAttribute('data-section-id')] = true;
+        render();
+        break;
       case "table-edit":
         editEffectTable(target);
+        break;
+      case "import-item":
+        importItem();
         break;
       case "table-expand":
         var sectionId = target.closest('[data-section-id]').getAttribute('data-section-id');
@@ -960,6 +1004,28 @@
       }
     });
     pane.addEventListener("change", function (event) {
+      if (event.target.matches('[data-ci-effect-charges], [data-ci-effect-charges-toggle]')) {
+        if (!canEditFolder(ciFolder)) return;
+        var effectCard = event.target.closest('.ci-card');
+        var effectItem = findItem(ciFolder, effectCard.getAttribute('data-item-id'));
+        var effectId = event.target.closest('[data-section-id]').getAttribute('data-section-id');
+        var effect = effectItem && normalizeSections(effectItem).find(function (entry) { return entry.id === effectId; });
+        if (!effect) return;
+        if (event.target.matches('[data-ci-effect-charges-toggle]')) {
+          if (!isEditMode()) return;
+          if (!!effect.hasCharges === event.target.checked) return;
+          effect.hasCharges = event.target.checked;
+          effect.charges = normalizeChargeCount(effect.charges);
+        } else {
+          var count = Number(event.target.value);
+          if (!Number.isInteger(count) || count < 0 || count > 999) { event.target.value = normalizeChargeCount(effect.charges); return; }
+          if (normalizeChargeCount(effect.charges) === count) return;
+          effect.charges = count;
+        }
+        saveFieldNow(ciFolder, effectItem.id, 'effectSections', JSON.stringify(effectItem.effectSections));
+        render();
+        return;
+      }
       if (event.target.matches('[data-ci-table-level]')) {
         if (!canEditFolder(ciFolder)) return;
         var card = event.target.closest('.ci-card');

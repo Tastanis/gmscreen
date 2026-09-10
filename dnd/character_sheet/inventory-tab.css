@@ -505,6 +505,7 @@
 .ci-effect-table th, .ci-effect-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); min-width: 65px; max-width: 260px; overflow-wrap: anywhere; white-space: pre-wrap; }
 .ci-effect-table tr[aria-current="true"] { background: color-mix(in srgb, var(--accent) 15%, transparent); }
 .ci-effect { min-width: 0; }
+.ci-effect-charges, .ci-effect-charge-toggle { display: flex; align-items: center; gap: 6px; margin: 7px 0; }
 .ci-table-editor { width: min(760px, 94vw); max-height: 85vh; overflow: auto; background: var(--surface, #fbf6ec); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 16px; }
 .ci-table-editor::backdrop { background: rgba(0, 0, 0, .5); }
 .ci-table-editor h3 { margin-top: 0; }

@@ -25,7 +25,47 @@ rows/columns, and explicit table removal. Cancel discards only the dialog draft.
 Apply uses the existing revision-guarded effectSections save queue, not a new writer.
 The table browser regression verifies independent selection, four/five columns,
 escaped content, expansion, editing and cancelled paste with synthetic requests.
-Real server/reload gameplay validation, JSON import and per-effect charges remain.
+Real server/reload table gameplay validation remains.
+
+## JSON item import and optional effect charges — 1.19.142
+
+Edit Mode offers Import JSON beside Add Item. Upload one item object using the
+fields below. Import creates new item/effect IDs and never replaces an existing
+item. The server validates supported fields and tables before its locked atomic
+save. Files are limited to 1 MB, 20 effects, and the existing table limits.
+Malformed or unsupported fields fail rather than silently disappearing. No remote
+image is downloaded; `image` is an existing image reference.
+
+```json
+{
+  "name": "Example charm",
+  "description": "Sample item",
+  "effectSections": [{
+    "title": "Growing ward",
+    "text": "Example effect notes",
+    "hasCharges": true,
+    "charges": 3,
+    "table": {
+      "headers": ["Level", "Effect", "Range", "Duration"],
+      "rows": [["1", "Example", "2 squares", "1 round"]],
+      "selectedRow": 0
+    }
+  }]
+}
+```
+
+Optional item fields: id (replaced on import), name, description, keywords, effect
+(legacy text), effectSections, image, visible, hasCharges, charges. Optional effect
+fields: id (replaced), title, cost, text, table, hasCharges, charges.
+Costs are optional: Edit Mode shows + Cost when empty. Each effect can independently
+enable Track charges and retain a table at the same time. Charges are manual whole
+numbers 0–999, adjustable outside Edit Mode by users with edit permission. No
+automatic accumulation, spending or recharge hooks are implied. Older section
+edits that omit charge fields retain previously saved counters by section ID.
+
+Browser checks cover cost/charge/table coexistence, independent effects, valid
+file selection and malformed-file rejection. PHP tests cover fresh IDs, retained
+tables/charges and unchanged inventory after invalid imports. Full suite: 796 pass.
 
 
 ### Inventory stale-field protection - 1.19.136
