@@ -497,6 +497,23 @@
 
 /* --- Status toast ---------------------------------------------------- */
 
+.ci-effect-table { display: grid; gap: 7px; min-width: 0; margin-top: 8px; }
+.ci-effect-table > label { display: flex; align-items: center; gap: 6px; }
+.ci-effect-table > button { justify-self: start; }
+.ci-effect-table__scroll { overflow-x: auto; max-width: 100%; }
+.ci-effect-table table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.ci-effect-table th, .ci-effect-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); min-width: 65px; max-width: 260px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.ci-effect-table tr[aria-current="true"] { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+.ci-effect { min-width: 0; }
+.ci-table-editor { width: min(760px, 94vw); max-height: 85vh; overflow: auto; background: var(--surface, #fbf6ec); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 16px; }
+.ci-table-editor::backdrop { background: rgba(0, 0, 0, .5); }
+.ci-table-editor h3 { margin-top: 0; }
+.ci-table-editor textarea { display: block; width: 100%; min-height: 90px; margin: 8px 0; }
+.ci-table-editor table { border-collapse: collapse; margin: 10px 0; }
+.ci-table-editor td { padding: 3px; }
+.ci-table-editor td input { width: 140px; }
+.ci-table-editor__actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
 .ci-status {
   position: fixed;
   bottom: 18px;

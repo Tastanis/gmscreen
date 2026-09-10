@@ -937,3 +937,6 @@ Durable inventory operation receipts and post-reload outcome recovery remain ope
 this timeout is not a backup or proof that an interrupted write failed to save.
 
 Full npm test passes: 795 tests across 105 files.
+
+### Inventory table UI - 1.19.141
+Approved compact table display and independent Level selection now use the existing effectSections save queue. The draft editor supports paste, cells, rows and columns; Cancel does not save. Preserve text escaping and server table validation. Synthetic browser coverage passes, alongside 795 suite tests; server/reload table journey remains. Generic Dice Roller Power roll mode is rejected; multi-target ability UI must group matching targets compactly. See docs/vtt-active-goal-status.md for current approvals and remaining scope.

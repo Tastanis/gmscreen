@@ -12,6 +12,7 @@
   var ciData = {};
   var ciFolder = "";
   var ciOpen = {};
+  var ciExpandedTables = {};
   var ciContentRevision = null;
   var ciEditGeneration = 0;
   var ciFailedFields = {};
@@ -105,7 +106,7 @@
 
   function meaningfulSections(item) {
     return normalizeSections(item).filter(function (section) {
-      return section.title.trim() || section.cost.trim() || section.text.trim();
+      return section.title.trim() || section.cost.trim() || section.text.trim() || section.table;
     });
   }
 
@@ -512,18 +513,58 @@
         '<button type="button" class="ci-effect__remove" data-ci-action="remove-effect" data-section-id="' + escapeHtml(section.id) + '" aria-label="Remove effect">&times;</button>' +
         "</div>" +
         '<textarea class="ci-input ci-textarea ci-effect__text" data-ci-sfield="text" placeholder="Effect text">' + escapeHtml(section.text) + "</textarea>" +
-        "</div>"
+        renderEffectTable(section) + '<button type="button" class="ci-btn ci-btn--small" data-ci-action="table-edit">' + (section.table ? 'Edit table' : '+ Table') + '</button></div>'
       );
     }
 
     return (
-      '<div class="ci-effect">' +
+      '<div class="ci-effect" data-section-id="' + escapeHtml(section.id) + '">' +
       '<div class="ci-effect__head"><strong>' + escapeHtml(section.title || "Effect") + "</strong>" +
       (section.cost ? '<span class="ci-effect__cost-label">' + escapeHtml(section.cost) + "</span>" : "") +
       "</div>" +
-      '<div class="ci-effect__body">' + escapeHtml(section.text) + "</div>" +
+      '<div class="ci-effect__body">' + escapeHtml(section.text) + "</div>" + renderEffectTable(section) +
       "</div>"
     );
+  }
+
+  function renderEffectTable(section) {
+    var table = section.table;
+    if (!table || !Array.isArray(table.headers) || !Array.isArray(table.rows)) return "";
+    var selected = table.selectedRow || 0;
+    var expanded = !!ciExpandedTables[section.id];
+    return '<div class="ci-effect-table"><label>Level <select class="ci-input" data-ci-table-level' +
+      (canEditFolder(ciFolder) ? '' : ' disabled') + '>' + table.rows.map(function (row, index) {
+        return '<option value="' + index + '"' + (index === selected ? ' selected' : '') + '>' + escapeHtml(row[0]) + '</option>';
+      }).join('') + '</select></label><div class="ci-effect-table__scroll"><table><thead><tr>' +
+      table.headers.map(function (cell) { return '<th scope="col">' + escapeHtml(cell) + '</th>'; }).join('') +
+      '</tr></thead><tbody>' + table.rows.map(function (row, index) {
+        if (!expanded && index !== selected) return '';
+        return '<tr' + (index === selected ? ' aria-current="true"' : '') + '>' + row.map(function (cell) {
+          return '<td>' + escapeHtml(cell) + '</td>';
+        }).join('') + '</tr>';
+      }).join('') + '</tbody></table></div><button type="button" class="ci-btn ci-btn--small" data-ci-action="table-expand" aria-expanded="' + expanded + '">' +
+      (expanded ? 'Show selected level' : 'Show full table') + '</button></div>';
+  }
+
+  async function editEffectTable(target) {
+    var folder = ciFolder;
+    var card = target.closest('.ci-card');
+    var item = findItem(folder, card.getAttribute('data-item-id'));
+    var sectionId = target.closest('[data-section-id]').getAttribute('data-section-id');
+    if (!item || !isEditMode() || !canEditFolder(folder)) return;
+    syncSectionsFromCard(card, item);
+    var section = item.effectSections.find(function (entry) { return entry.id === sectionId; });
+    target.disabled = true;
+    try {
+      var helpers = await import('./inventory/effect-table.mjs');
+      var editor = await import('./inventory/effect-table-editor.mjs');
+      editor.openEffectTableEditor({ table: section.table, helpers: helpers, onApply: function (table) {
+        section.table = table;
+        saveFieldNow(folder, item.id, 'effectSections', JSON.stringify(item.effectSections));
+        render();
+      }});
+    } catch (error) { showStatus(error.message, 'error'); }
+    finally { target.disabled = false; }
   }
 
   // ---------------------------------------------------------------------
@@ -835,6 +876,14 @@
     var itemId = target.getAttribute("data-item-id") || "";
 
     switch (action) {
+      case "table-edit":
+        editEffectTable(target);
+        break;
+      case "table-expand":
+        var sectionId = target.closest('[data-section-id]').getAttribute('data-section-id');
+        ciExpandedTables[sectionId] = !ciExpandedTables[sectionId];
+        render();
+        break;
       case "folder":
         flushPendingSaves();
         ciFolder = target.getAttribute("data-folder") || ciFolder;
@@ -911,6 +960,19 @@
       }
     });
     pane.addEventListener("change", function (event) {
+      if (event.target.matches('[data-ci-table-level]')) {
+        if (!canEditFolder(ciFolder)) return;
+        var card = event.target.closest('.ci-card');
+        var item = findItem(ciFolder, card.getAttribute('data-item-id'));
+        var sectionId = event.target.closest('[data-section-id]').getAttribute('data-section-id');
+        var section = item && normalizeSections(item).find(function (entry) { return entry.id === sectionId; });
+        var selected = Number(event.target.value);
+        if (!section || !section.table || !Number.isInteger(selected) || selected < 0 || selected >= section.table.rows.length) return;
+        section.table.selectedRow = selected;
+        saveFieldNow(ciFolder, item.id, 'effectSections', JSON.stringify(item.effectSections));
+        render();
+        return;
+      }
       if (event.target.classList.contains("ci__file")) {
         handleFileSelected(event);
       } else if (event.target.matches("[data-ci-field], [data-ci-sfield]")) {

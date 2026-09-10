@@ -17,8 +17,15 @@ a section removes its table. Ordinary client section normalization and DOM text
 editing retain tables. Table rows are copied by the JS normalizer so effects can
 be edited independently.
 
-The storage and parser are implemented. The inventory table display/editor is
-not yet connected; the compact layout proposal still awaits a user response.
+The approved display/editor is connected. Each effect shows its selected row with
+a Level selector and Show full table. The selection can be changed outside Edit
+Mode by users with inventory edit permission. Edit Mode exposes Add/Edit table;
+the dialog keeps a local draft, supports Markdown/TSV paste, cell editing, adding
+rows/columns, and explicit table removal. Cancel discards only the dialog draft.
+Apply uses the existing revision-guarded effectSections save queue, not a new writer.
+The table browser regression verifies independent selection, four/five columns,
+escaped content, expansion, editing and cancelled paste with synthetic requests.
+Real server/reload gameplay validation, JSON import and per-effect charges remain.
 
 
 ### Inventory stale-field protection - 1.19.136
