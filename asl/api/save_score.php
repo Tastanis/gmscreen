@@ -1,6 +1,6 @@
 <?php
 /**
- * Teacher-only: set a student's score (0-4) on one learning target.
+ * Teacher-only: set a defined score (0-4), or clear it with an empty string.
  * Writes the current score AND an append-only history row.
  */
 require_once dirname(__DIR__) . '/config.php';
@@ -13,10 +13,10 @@ $studentId = (int)($_POST['student_id'] ?? 0);
 $targetId = (int)($_POST['target_id'] ?? 0);
 $score = $_POST['score'] ?? null;
 
-if (!is_string($score) || !preg_match('/^[0-4]$/D', $score)) {
+if (!is_string($score) || ($score !== '' && !preg_match('/^[0-4]$/D', $score))) {
     aslhub_json_error('Score must be 0-4.');
 }
-$score = (int)$score;
+$score = $score === '' ? null : (int)$score;
 
 $student = aslhub_require_student_scope($pdo, $teacher, $studentId);
 
@@ -28,17 +28,19 @@ if (!$target) aslhub_json_error('Unknown skill target.', 404);
 if ((int)$target['asl_level'] !== (int)$student['level']) aslhub_json_error('Target belongs to another ASL course.', 403);
 $rubric = $pdo->prepare('SELECT COUNT(*) FROM asl_rubric_levels WHERE learning_target_id=? AND score=?');
 $rubric->execute([$targetId,$score]);
-if (!(int)$rubric->fetchColumn()) aslhub_json_error('That proficiency level is not defined for this target.');
+if (!(int)$rubric->fetchColumn() && $score !== null) aslhub_json_error('That proficiency level is not defined for this target.');
 
 try {
     $pdo->beginTransaction();
     $pdo->prepare("INSERT INTO user_learning_targets (user_id, learning_target_id, score, completed_at)
-        VALUES (?, ?, ?, NOW())
-        ON DUPLICATE KEY UPDATE score = VALUES(score), completed_at = NOW()")
-        ->execute([$studentId, $targetId, $score]);
+        VALUES (?, ?, ?, CASE WHEN ? IS NULL THEN NULL ELSE NOW() END)
+        ON DUPLICATE KEY UPDATE score = VALUES(score), completed_at = VALUES(completed_at)")
+        ->execute([$studentId, $targetId, $score, $score]);
     $pdo->prepare("INSERT INTO user_learning_target_score_history (user_id, learning_target_id, score, scored_at, scored_by)
         VALUES (?, ?, ?, NOW(), ?)")
-        ->execute([$studentId, $targetId, $score, (int)$teacher['id']]);
+        // Clearing leaves the current score NULL and appends a zero-contribution
+        // event so earlier progress snapshots remain intact, with no deleted history.
+        ->execute([$studentId, $targetId, $score ?? 0, (int)$teacher['id']]);
     $pdo->commit();
 } catch (PDOException $e) {
     $pdo->rollBack();

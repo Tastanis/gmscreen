@@ -52,6 +52,14 @@ competency 13's interaction-specific evidence retains that limitation.
 ASL 3 competencies 3 and 4 have no level 4 descriptor, button, or accepted score 4.
 Scores are raw: a 4 offsets a 2, and displayed progress may exceed 100%.
 
+Teacher grading uses Expression, Reception and Other mode filters and named
+competency/element headers. Cell clicks cycle blank through the defined rubric
+levels and back to blank; right-click reverses the cycle. Clearing stores NULL
+as the current score/completion date and appends a zero-contribution history event,
+preserving past snapshots while removing those points from subsequent snapshots.
+Attendance and participation still require Save All Changes; browser drafts are
+not server saves.
+
 ## Planning calendar and graph
 
 September 14, 2026–June 10, 2027 inclusive, weekdays excluding October 12;

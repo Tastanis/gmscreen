@@ -84,6 +84,16 @@ body { background: #f5f5f7 !important; }
 .notes-month h4 { color: #2d3748; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 8px; }
 
 /* ===== Teacher pages ===== */
+.grading-modes { display:flex; gap:4px; padding:3px; background:#edf0f4; border-radius:9px; }
+.grading-modes button { border:0; border-radius:7px; background:transparent; color:#344454; padding:8px 12px; cursor:pointer; font:inherit; }
+.grading-modes button[aria-pressed=true] { background:#293e50; color:white; }
+.grading-modes button:hover:not([aria-pressed=true]) { background:#dce3eb; }
+.grading-layout .grading-grid thead { position:sticky; top:0; z-index:4; }
+.grading-layout .grading-grid th { position:static; }
+.grading-layout .grading-grid th.sticky-col { position:sticky; left:0; }
+.grading-layout .grading-grid th.skill-head { min-width:150px; max-width:190px; white-space:normal; line-height:1.35; padding:10px 12px; }
+.grading-layout .competency-group-head { text-align:left; font-weight:700; background:#e9eef3; }
+.grade-cell[data-score=""] { color:#8b96a4; }
 .grading-grid-wrap { overflow-x: auto; background: rgba(255,255,255,.97); border-radius: 12px; padding: 12px; }
 .grading-grid { border-collapse: collapse; min-width: 100%; }
 .grading-grid th, .grading-grid td { border: 1px solid #e2e8f0; padding: 6px 8px; font-size: .85rem; }

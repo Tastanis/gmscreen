@@ -93,6 +93,38 @@ const fs=require('node:fs/promises');
   assert.equal((await context.request.post(base+'/api/import_competencies.php',{form:{csrf_token:token}})).status(),409);
   await page.goto(base+'/dashboard.php?student_id=2');
   assert.equal(await page.evaluate(()=>Object.values(dashboardData.scores).reduce((a,b)=>a+b,0)),6,'setup preserves prior grades');
+  await page.goto(base+'/teacher/grading.php?level=1');
+  assert.equal(await page.locator('.skill-head').count(),38);
+  assert.equal((await page.locator('.skill-head').first().innerText()).trim(),'Basic declarative statements');
+  await page.screenshot({path:out+'/teacher-grading.png',fullPage:true});
+  const cell=page.locator('.grade-cell[data-student="2"]').first();
+  for(const expected of [1,2,3,4,null]) {
+    const saving=page.waitForResponse(r=>r.url().endsWith('/api/save_score.php'));
+    await cell.click(); const saved=await (await saving).json(); assert.equal(saved.score,expected);
+    await page.waitForFunction(()=>!document.querySelector('.grade-cell.saving'));
+    assert.equal(await cell.getAttribute('data-score'),expected===null?'':String(expected));
+    if(expected===null) assert.equal(saved.progress.overall.find(v=>v!==null),6,'clear removes contribution from current graph');
+  }
+  await page.reload(); assert.equal(await cell.getAttribute('data-score'),'');
+  for(const expected of [4,3,2,1,null]) {
+    const saving=page.waitForResponse(r=>r.url().endsWith('/api/save_score.php'));
+    await cell.click({button:'right'}); assert.equal((await (await saving).json()).score,expected);
+    await page.waitForFunction(()=>!document.querySelector('.grade-cell.saving'));
+  }
+  await page.getByRole('button',{name:'Reception',exact:true}).click(); await page.waitForURL('**mode=reception**');
+  assert.equal(await page.locator('.skill-head').count(),38); assert.equal(await cell.getAttribute('data-score'),'');
+  await page.getByRole('button',{name:'Other',exact:true}).click(); await page.waitForURL('**mode=other**');
+  assert.equal(await page.locator('.skill-head').count(),13);
+  assert.deepEqual(await page.locator('.competency-group-head').allTextContents(),['Conversation Management','Deaf History','Deaf Culture']);
+  await page.goto(base+'/teacher/grading.php?level=3&standard=C3.connections&mode=expression');
+  for(const expected of [1,2,3,null]) {
+    const saving=page.waitForResponse(r=>r.url().endsWith('/api/save_score.php'));
+    await page.locator('.grade-cell').first().click(); assert.equal((await (await saving).json()).score,expected);
+    await page.waitForFunction(()=>!document.querySelector('.grade-cell.saving'));
+  }
+  await context.request.get(base+'/session.php?id=2'); await page.goto(base+'/dashboard.php');
+  assert.equal(await page.evaluate(()=>Object.values(dashboardData.scores).reduce((a,b)=>a+b,0)),6,'cleared target absent on student reload');
+  assert.equal((await post({score:''})).status(),403,'student cannot clear a score');
   assert.deepEqual(errors,[]);
   console.log('PASS teacher/student UI, separate modes, save/reload, singleton, absent 4, scope/CSRF authorization, chart and mobile');
  } finally { await browser.close(); }

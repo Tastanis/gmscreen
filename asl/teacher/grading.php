@@ -10,6 +10,9 @@ $base = aslhub_base_url();
 
 $level = max(1, min(3, (int)($_GET['level'] ?? 1)));
 $taxonomy = aslhub_taxonomy($pdo, $level);
+$hasCompetencies = !empty($taxonomy[0]['standards'][0]['competency']);
+$mode = $_GET['mode'] ?? 'expression';
+if (!in_array($mode, ['expression','reception','other'], true)) $mode = 'expression';
 
 $bucketId = $_GET['bucket'] ?? ($taxonomy[0]['bucket_id'] ?? '');
 $bucket = null;
@@ -20,7 +23,10 @@ $standardId = $_GET['standard'] ?? 'all';
 $standards = [];
 if ($bucket) {
     foreach ($bucket['standards'] as $s) {
-        if ($standardId === 'all' || $s['standard_id'] === $standardId) $standards[] = $s;
+        if ($standardId === 'all' || $s['standard_id'] === $standardId) {
+            if ($hasCompetencies) $s['targets'] = array_values(array_filter($s['targets'], fn($t) => $t['sub_code'] === ['expression'=>'E','reception'=>'R','other'=>'S'][$mode]));
+            if ($s['targets']) $standards[] = $s;
+        }
     }
 }
 
@@ -49,10 +55,10 @@ $targetMeta = [];
 foreach ($standards as $s) {
     foreach ($s['targets'] as $t) {
         $targetMeta[(int)$t['id']] = [
-            'code' => $t['display_code'] ?? $t['target_code'],
+            'code' => $hasCompetencies ? ucfirst($mode) : $t['target_code'],
             'title' => $t['title'],
             'description' => $t['description'] ?? '',
-            'standard' => $s['standard_id'] . ' — ' . $s['name'],
+            'standard' => $s['name'],
             'rubric' => $t['rubric'] ?: new stdClass(),
         ];
     }
@@ -61,6 +67,14 @@ foreach ($standards as $s) {
 aslhub_teacher_header($me, 'Grading', 'grading');
 ?>
     <form class="filters-bar" method="GET" id="filter-form">
+        <?php if ($hasCompetencies): ?>
+        <input type="hidden" name="mode" value="<?php echo aslhub_h($mode); ?>">
+        <div class="grading-modes" role="group" aria-label="Assessment mode">
+        <?php foreach (['expression'=>'Expression','reception'=>'Reception','other'=>'Other'] as $key=>$label): ?>
+            <button type="button" aria-pressed="<?php echo $mode === $key ? 'true' : 'false'; ?>" onclick="this.form.mode.value='<?php echo $key; ?>';this.form.standard.value='all';this.form.submit()"> <?php echo $label; ?> </button>
+        <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
         <select name="level" onchange="this.form.submit()">
             <?php for ($i = 1; $i <= 3; $i++): ?>
                 <option value="<?php echo $i; ?>" <?php echo $level === $i ? 'selected' : ''; ?>>ASL <?php echo $i; ?></option>
@@ -69,14 +83,14 @@ aslhub_teacher_header($me, 'Grading', 'grading');
         <select name="bucket" onchange="this.form.standard.value='all';this.form.submit()">
             <?php foreach ($taxonomy as $b): ?>
                 <option value="<?php echo aslhub_h($b['bucket_id']); ?>" <?php echo $b['bucket_id'] === $bucketId ? 'selected' : ''; ?>>
-                    <?php echo aslhub_h($b['code'] . ' — ' . $b['name']); ?></option>
+                    <?php echo aslhub_h($b['name']); ?></option>
             <?php endforeach; ?>
         </select>
         <select name="standard" onchange="this.form.submit()">
-            <option value="all">Whole bucket</option>
+            <option value="all">All competencies</option>
             <?php foreach (($bucket['standards'] ?? []) as $s): ?>
                 <option value="<?php echo aslhub_h($s['standard_id']); ?>" <?php echo $standardId === $s['standard_id'] ? 'selected' : ''; ?>>
-                    <?php echo aslhub_h($s['standard_id'] . ' — ' . $s['name']); ?></option>
+                    <?php echo aslhub_h($s['name']); ?></option>
             <?php endforeach; ?>
         </select>
         <?php if ($isAdmin): ?>
@@ -93,7 +107,7 @@ aslhub_teacher_header($me, 'Grading', 'grading');
                 <option value="<?php echo $i; ?>" <?php echo (string)$filters['period'] === (string)$i ? 'selected' : ''; ?>>Period <?php echo $i; ?></option>
             <?php endfor; ?>
         </select>
-        <span class="muted" style="font-size:.82rem;">Click a cell to cycle 0 → 1 → 2 → 3 → 4. Saves instantly.
+        <span class="muted" style="font-size:.82rem;">Click a cell to cycle blank → available levels → blank. Saves instantly. Right-click to cycle backward.
             Click a skill header to pin its rubric. Click a student to zoom in.</span>
     </form>
 
@@ -107,10 +121,13 @@ aslhub_teacher_header($me, 'Grading', 'grading');
         <table class="grading-grid">
             <thead>
                 <tr>
-                    <th class="sticky-col">Student</th>
+                    <th class="sticky-col" rowspan="2">Student</th>
+                    <?php foreach ($standards as $s): ?><th colspan="<?php echo count($s['targets']); ?>" class="competency-group-head"><?php echo aslhub_h($s['name']); ?></th><?php endforeach; ?>
+                </tr>
+                <tr>
                     <?php foreach ($standards as $s): foreach ($s['targets'] as $t): ?>
                         <th class="skill-head" data-target="<?php echo (int)$t['id']; ?>"
-                            title="<?php echo aslhub_h($t['title'] . ' — click to pin the rubric'); ?>"><?php echo aslhub_h($t['display_code'] ?? $t['target_code']); ?></th>
+                            title="<?php echo aslhub_h($t['title'] . ' — click to pin the rubric'); ?>"><?php echo aslhub_h($t['title']); ?></th>
                     <?php endforeach; endforeach; ?>
                 </tr>
             </thead>
@@ -127,7 +144,7 @@ aslhub_teacher_header($me, 'Grading', 'grading');
                             data-student="<?php echo $sid; ?>" data-target="<?php echo (int)$t['id']; ?>"
                             data-score="<?php echo $sc === null ? '' : $sc; ?>"
                             style="background:<?php echo $sc === null ? '#f7fafc' : ''; ?>"
-                            title="<?php echo aslhub_h($st['first_name'] . ' — ' . ($t['display_code'] ?? $t['target_code']) . ': ' . ($sc ?? 'not graded')); ?>">
+                            title="<?php echo aslhub_h($st['first_name'] . ' — ' . $t['title'] . ': ' . ($sc ?? 'not graded')); ?>">
                             <?php echo $sc === null ? '·' : $sc; ?></td>
                     <?php endforeach; endforeach; ?>
                 </tr>
@@ -206,23 +223,24 @@ document.getElementById('rubric-side-close')?.addEventListener('click', closeRub
 async function cycle(cell, dir) {
     if (cell.classList.contains('saving')) return;
     const cur = cell.dataset.score === '' ? null : Number(cell.dataset.score);
-    const levels = Object.keys(TARGETS[cell.dataset.target]?.rubric || {}).map(Number).sort((a,b)=>a-b);
-    if (!levels.length) return;
+    const levels = [null, ...Object.keys(TARGETS[cell.dataset.target]?.rubric || {}).map(Number).sort((a,b)=>a-b)];
+    if (levels.length === 1) return;
     const position=levels.indexOf(cur);
     const next=position < 0 ? (dir > 0 ? levels[0] : levels.at(-1)) : levels[(position + dir + levels.length) % levels.length];
     cell.classList.add('saving');
     cell.classList.remove('save-error');
     try {
         const body = new URLSearchParams({
-            csrf_token: CSRF, student_id: cell.dataset.student, target_id: cell.dataset.target, score: next,
+            csrf_token: CSRF, student_id: cell.dataset.student, target_id: cell.dataset.target, score: next ?? '',
         });
         const res = await fetch('<?php echo $base; ?>/api/save_score.php', { method: 'POST', body });
         const out = await res.json();
         if (!out.success) throw new Error(out.error || 'save failed');
-        cell.dataset.score = next;
-        cell.textContent = next;
-        cell.className = 'grade-cell score-' + next + (cell.dataset.target === pinnedTarget ? ' col-selected' : '');
-        cell.style.background = COLORS[next];
+        cell.dataset.score = next ?? '';
+        cell.textContent = next ?? '·';
+        cell.className = 'grade-cell' + (next === null ? '' : ' score-' + next) + (cell.dataset.target === pinnedTarget ? ' col-selected' : '');
+        cell.style.background = next === null ? '#f7fafc' : COLORS[next];
+        cell.title = TARGETS[cell.dataset.target].title + ': ' + (next ?? 'not graded');
     } catch (err) {
         cell.classList.add('save-error');
         cell.title = 'SAVE FAILED — click to retry. ' + err.message;
