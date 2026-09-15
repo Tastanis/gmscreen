@@ -15,7 +15,7 @@ const ASLHUB_BACKUP_TABLES = [
 ];
 
 function aslhub_backup_dir(): string {
-    $dir = dirname(__DIR__) . '/backups';
+    $dir = (PHP_SAPI === 'cli' && getenv('ASLHUB_BACKUP_DIR')) ? getenv('ASLHUB_BACKUP_DIR') : dirname(__DIR__) . '/backups';
     if (!is_dir($dir)) {
         mkdir($dir, 0750, true);
         file_put_contents($dir . '/.htaccess', "Require all denied\n"); // never web-servable
@@ -197,26 +197,30 @@ function aslhub_backup_sql(PDO $pdo): string {
     aslhub_consistent_read($pdo, function () use ($pdo, $tmp): void {
         $fh = fopen($tmp, 'xb');
         if (!$fh) throw new RuntimeException('Could not create SQL backup.');
+        $write = function (string $text) use ($fh): void {
+            if (fwrite($fh, $text) !== strlen($text)) throw new RuntimeException('Incomplete SQL backup write.');
+        };
         try {
-            fwrite($fh, "-- ASL Hub SQL backup " . date('c') . "\nSET FOREIGN_KEY_CHECKS=0;\n\n");
+            $write("-- ASL Hub SQL backup " . date('c') . "\nSET FOREIGN_KEY_CHECKS=0;\n\n");
             foreach (ASLHUB_BACKUP_TABLES as $table) {
                 try {
                     $create = $pdo->query("SHOW CREATE TABLE `$table`")->fetch();
                 } catch (PDOException $e) {
                     continue; // table doesn't exist on this install
                 }
-                fwrite($fh, "DROP TABLE IF EXISTS `$table`;\n" . $create['Create Table'] . ";\n\n");
+                $write("DROP TABLE IF EXISTS `$table`;\n" . $create['Create Table'] . ";\n\n");
                 $stmt = $pdo->query("SELECT * FROM `$table`");
                 while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                     $cols = '`' . implode('`,`', array_keys($row)) . '`';
                     $vals = implode(',', array_map(function ($v) use ($pdo) {
                         return $v === null ? 'NULL' : $pdo->quote((string)$v);
                     }, array_values($row)));
-                    fwrite($fh, "INSERT INTO `$table` ($cols) VALUES ($vals);\n");
+                    $write("INSERT INTO `$table` ($cols) VALUES ($vals);\n");
                 }
-                fwrite($fh, "\n");
+                $write("\n");
             }
-            fwrite($fh, "SET FOREIGN_KEY_CHECKS=1;\n");
+            $write("SET FOREIGN_KEY_CHECKS=1;\n");
+            if (!fflush($fh) || (function_exists('fsync') && !fsync($fh))) throw new RuntimeException('Could not flush SQL backup.');
         } finally {
             fclose($fh);
         }

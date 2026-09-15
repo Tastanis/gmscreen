@@ -943,3 +943,7 @@ Approved compact table display and independent Level selection now use the exist
 
 ### Inventory import and effect charges - 1.19.142
 Import JSON creates fresh IDs and validates before saving under the inventory lock. Never turn it into save_item overwrite. Per-effect hasCharges/charges coexist with tables and optional costs; counters are manual, no authored automation hooks. Omitted legacy charge fields preserve saved counters. Browser file picker/effect controls and PHP import checks pass; full suite 796. Persisted browser/reload journey remains; see inventory/README.md and active goal status.
+
+## ASL account phase 1
+
+Preserve the user-approved auth forms and isolated asl/css/auth.css. Never render the server-side claiming credential. Roster exports stay outside the public checkout and Git. Use the private review-hash-gated asl/scripts/accounts.php migration and its ACCOUNTS-PHASE1.md handoff. Preserve the verified Brandon teacher and test test exception. The old web wipe is disabled. No proficiency migration is included.

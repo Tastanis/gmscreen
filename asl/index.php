@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/config.php';
+header('Cache-Control: no-store');
 
 // Already logged in? Go to the right dashboard.
 $me = aslhub_current_user($pdo);
@@ -16,37 +17,37 @@ $csrf = aslhub_csrf_token();
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>ASL Hub - Login</title>
-    <?php $cssV = @filemtime(__DIR__ . '/css/asl-style.css') ?: 1; $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1; ?>
-    <link rel="stylesheet" href="css/asl-style.css?v=<?php echo $cssV; ?>">
-    <link rel="stylesheet" href="css/hub.css?v=<?php echo $hubV; ?>">
+    <link rel="stylesheet" href="css/auth.css?v=<?php echo filemtime(__DIR__ . '/css/auth.css'); ?>">
 </head>
-<body>
+<body class="auth-page">
     <div class="login-container">
         <div class="login-card">
             <div class="login-header">
                 <h1>ASL Hub</h1>
-                <div class="level-indicator">ASL 1 &middot; 2 &middot; 3</div>
-                <p class="login-subtitle">Your ASL Learning Portal</p>
             </div>
 
-            <?php if (isset($_SESSION['message'])): ?>
-                <div class="message <?php echo aslhub_h($_SESSION['message_type'] ?? 'info'); ?>">
+            <?php if (isset($_SESSION['message']) && ($_SESSION['message_type'] ?? '') === 'error'): ?>
+                <div class="message" role="alert">
                     <?php echo aslhub_h($_SESSION['message']); ?>
                 </div>
-                <?php unset($_SESSION['message'], $_SESSION['message_type']); ?>
             <?php endif; ?>
+            <?php unset($_SESSION['message'], $_SESSION['message_type']); ?>
 
             <div class="form-section">
-                <h2>Student &amp; Teacher Login</h2>
+                <h2>Login</h2>
                 <form action="login.php" method="POST">
                     <input type="hidden" name="csrf_token" value="<?php echo $csrf; ?>">
                     <div class="form-group">
-                        <label for="identifier">First Name or Email</label>
-                        <input type="text" id="identifier" name="identifier" class="form-input" placeholder="First name or school email" required autocomplete="username">
+                        <label for="first_name">First name</label>
+                        <input type="text" id="first_name" name="first_name" class="form-input" required autocomplete="username" autocapitalize="none" spellcheck="false">
+                    </div>
+                    <div class="form-group">
+                        <label for="last_name">Last name</label>
+                        <input type="text" id="last_name" name="last_name" class="form-input" required autocomplete="family-name" autocapitalize="none" spellcheck="false">
                     </div>
                     <div class="form-group">
                         <label for="password">Password</label>
-                        <input type="password" id="password" name="password" class="form-input" placeholder="Enter your password" required autocomplete="current-password">
+                        <input type="password" id="password" name="password" class="form-input" required autocomplete="current-password">
                     </div>
                     <button type="submit" class="form-button">Login</button>
                 </form>

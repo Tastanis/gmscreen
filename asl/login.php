@@ -1,5 +1,7 @@
 <?php
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/lib/account_auth.php';
+header('Cache-Control: no-store');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: index.php');
@@ -7,7 +9,10 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 aslhub_require_csrf(false);
 
-$identifier = trim($_POST['identifier'] ?? '');
+$first = trim((string)($_POST['first_name'] ?? ''));
+$last = trim((string)($_POST['last_name'] ?? ''));
+$identifier = $first . '|' . $last;
+unset($_SESSION['claim_user_id'], $_SESSION['claim_expires']);
 $password = (string)($_POST['password'] ?? '');
 
 function aslhub_login_fail(string $msg): void {
@@ -17,7 +22,7 @@ function aslhub_login_fail(string $msg): void {
     exit;
 }
 
-if ($identifier === '' || $password === '') {
+if ($first === '' || $last === '' || $password === '') {
     aslhub_login_fail('Please fill in all fields.');
 }
 if (!aslhub_login_throttle($pdo, $identifier)) {
@@ -25,25 +30,22 @@ if (!aslhub_login_throttle($pdo, $identifier)) {
 }
 
 try {
-    // Match by email (exact) or first name (may match several students)
-    $stmt = $pdo->prepare("SELECT * FROM users WHERE (email = ? OR first_name = ?) AND is_active = 1");
-    $stmt->execute([$identifier, $identifier]);
-    $candidates = $stmt->fetchAll();
-
-    $authed = null;
-    foreach ($candidates as $user) {
-        if (!empty($user['password']) && password_verify($password, $user['password'])) {
-            $authed = $user;
-            break;
-        }
-    }
+    $authed = aslhub_authenticate($pdo, $first, $last, $password);
 
     if (!$authed) {
-        aslhub_login_fail($candidates ? 'Invalid password.' : 'No account found with that name or email.');
+        aslhub_login_fail('First name, last name, or password is incorrect.');
     }
 
     aslhub_login_clear($pdo, $identifier);
     session_regenerate_id(true);
+    $_SESSION = [];
+    if (!empty($authed['is_unclaimed'])) {
+        $_SESSION['claim_user_id'] = (int)$authed['id'];
+        $_SESSION['claim_expires'] = time() + 900;
+        aslhub_csrf_token();
+        header('Location: create-password.php', true, 303);
+        exit;
+    }
     $_SESSION['user_id'] = (int)$authed['id'];
     $_SESSION['aslhub_csrf'] = null; // fresh token for the new session
     aslhub_csrf_token();
@@ -54,7 +56,7 @@ try {
         header('Location: dashboard.php');
     }
     exit;
-} catch (PDOException $e) {
+} catch (Throwable $e) {
     error_log('ASL login error: ' . $e->getMessage());
     aslhub_login_fail('Login error. Please try again.');
 }

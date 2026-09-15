@@ -4,6 +4,7 @@
  * Credentials live in config.local.php which is git-ignored.
  */
 
+if (is_file(__DIR__ . '/.account-reset.lock')) { http_response_code(503); header('Retry-After: 60'); exit; }
 if (session_status() === PHP_SESSION_NONE) {
     session_set_cookie_params([
         'lifetime' => 0,
@@ -20,6 +21,7 @@ if (!file_exists($localConfig)) {
     die('Missing asl/config.local.php — copy config.local.example.php and fill in database credentials.');
 }
 $creds = require $localConfig;
+if (isset($creds['claim_password'])) define('ASLHUB_CLAIM_PASSWORD', (string)$creds['claim_password']);
 
 try {
     $port = $creds['port'] ?? 3306;

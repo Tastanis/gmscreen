@@ -54,9 +54,7 @@ aslhub_teacher_header($me, 'Settings', 'settings');
                             value="<?php echo (int)$settings['participation_max']; ?>">
                         <small class="muted">Blank participation cells count as this maximum. Finalized blocks keep the maximum they used.</small>
                     </div>
-                    <div class="form-group"><label>Student signup code</label>
-                        <input class="form-input" type="text" name="signup_code" value="<?php echo aslhub_h($settings['signup_code']); ?>"></div>
-                    <button type="submit" class="form-button">Save Participation &amp; Signup Settings</button>
+                    <button type="submit" class="form-button">Save Participation Settings</button>
                     <div id="course-settings-msg" style="margin-top:8px;font-size:.85rem;"></div>
                 </form>
                 <hr style="border:0;border-top:1px solid #e2e8f0;margin:18px 0;">

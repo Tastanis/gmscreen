@@ -1,0 +1,72 @@
+// Usage: node auth-browser.test.cjs <bundled playwright directory> <base URL> <private output directory>
+const { chromium } = require(process.argv[2]);
+const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+(async () => {
+ const browser = await chromium.launch({headless:true,channel:'msedge'});
+ try {
+  const context=await browser.newContext({viewport:{width:1100,height:820}});
+  const page=await context.newPage(); const base=process.argv[3]; const out=process.argv[4];
+  await fs.mkdir(out,{recursive:true});
+  await page.goto(base+'/create-password.php'); assert(page.url().endsWith('/index.php'));
+  await page.screenshot({path:out+'/login.png',fullPage:true});
+  assert.deepEqual(await page.locator('label').allTextContents(),['First name','Last name','Password']);
+  const claim = process.env.ASL_TEST_CLAIM_PASSWORD;
+  assert(claim,'Set the test credential privately in the process environment');
+  assert(!(await page.content()).includes(claim));
+  const csrfDenied=await context.request.post(base+'/login.php',{form:{first_name:'Sample',last_name:'Learner',password:claim,csrf_token:'invalid'}});
+  assert.match(await csrfDenied.text(),/Security token expired/);
+  await page.getByLabel('First name',{exact:true}).fill('Sample');
+  await page.getByLabel('Last name',{exact:true}).fill('Learner');
+  await page.getByLabel('Password',{exact:true}).fill(claim);
+  await page.getByRole('button',{name:'Login',exact:true}).click();
+  await page.waitForURL('**/create-password.php');
+  assert(!(await page.content()).includes(claim));
+  await page.screenshot({path:out+'/create-password.png',fullPage:true});
+  const invalidSave=await context.request.post(base+'/create-password.php',{form:{new_password:'unwanted',confirm_password:'unwanted',csrf_token:'invalid'}});
+  assert.match(await invalidSave.text(),/Security token expired/);
+  const protectedResponse=await context.request.get(base+'/dashboard.php');
+  assert(protectedResponse.url().endsWith('/index.php'),'claim session cannot enter dashboard');
+  await page.getByLabel('New password',{exact:true}).fill('personal-pass');
+  await page.getByLabel('Confirm password',{exact:true}).fill('mismatch');
+  await page.getByRole('button',{name:'Save password'}).click();
+  await page.getByRole('alert').waitFor(); assert.match(await page.getByRole('alert').innerText(),/do not match/);
+  await page.getByLabel('New password',{exact:true}).fill(claim);
+  await page.getByLabel('Confirm password',{exact:true}).fill(claim);
+  await page.getByRole('button',{name:'Save password'}).click();
+  await page.getByRole('alert').waitFor(); assert(!(await page.content()).includes(claim));
+  await page.getByLabel('New password',{exact:true}).fill('personal-pass');
+  await page.getByLabel('Confirm password',{exact:true}).fill('personal-pass');
+  await page.getByRole('button',{name:'Save password'}).click();
+  await page.waitForURL('**/index.php');
+  assert((await context.request.get(base+'/dashboard.php')).url().endsWith('/index.php'),'save returns signed out');
+  await page.getByLabel('First name',{exact:true}).fill('Sample');
+  await page.getByLabel('Last name',{exact:true}).fill('Learner');
+  await page.getByLabel('Password',{exact:true}).fill(claim);
+  await page.getByRole('button',{name:'Login',exact:true}).click();
+  await page.getByRole('alert').waitFor(); assert(page.url().endsWith('/index.php'));
+  await page.getByLabel('First name',{exact:true}).fill('Sample');
+  await page.getByLabel('Last name',{exact:true}).fill('Learner');
+  await page.getByLabel('Password',{exact:true}).fill('personal-pass');
+  await page.getByRole('button',{name:'Login',exact:true}).click();
+  await page.waitForURL('**/dashboard.php'); assert.equal(await page.locator('body').innerText(),'Authenticated fixture');
+  const mobile=await browser.newPage({viewport:{width:375,height:740}});
+  await mobile.goto(base+'/index.php');
+  assert(await mobile.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  await mobile.screenshot({path:out+'/login-mobile.png',fullPage:true});
+  for(let i=0;i<6;i++) {
+   await mobile.getByLabel('First name',{exact:true}).fill('Unknown');
+   await mobile.getByLabel('Last name',{exact:true}).fill('Person');
+   await mobile.getByLabel('Password',{exact:true}).fill('wrong');
+   await mobile.getByRole('button',{name:'Login',exact:true}).click();
+   await mobile.getByRole('alert').waitFor();
+  }
+  assert.match(await mobile.getByRole('alert').innerText(),/Too many attempts/);
+  await mobile.getByLabel('First name',{exact:true}).fill('Brandon');
+  await mobile.getByLabel('Last name',{exact:true}).fill('Harms');
+  await mobile.getByLabel('Password',{exact:true}).fill('fixture-teacher');
+  await mobile.getByRole('button',{name:'Login',exact:true}).click();
+  await mobile.waitForURL('**/teacher/dashboard.php');
+  console.log('PASS real auth pages: CSRF, rate limiting, automatic claim, protected access denied, mismatch/default validation, signed-out return, default disabled, personal and teacher login, desktop/mobile layout');
+ } finally { await browser.close(); }
+})().catch(e=>{console.error(e);process.exitCode=1;});

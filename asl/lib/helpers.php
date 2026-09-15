@@ -27,7 +27,7 @@ function aslhub_current_user(PDO $pdo): ?array {
     $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
     $stmt->execute([(int)$_SESSION['user_id']]);
     $user = $stmt->fetch() ?: null;
-    if ($user && isset($user['is_active']) && !(int)$user['is_active']) {
+    if ($user && ((!empty($user['is_unclaimed'])) || (isset($user['is_active']) && !(int)$user['is_active']))) {
         // Deactivated mid-session: kill the session.
         session_unset();
         session_destroy();
@@ -167,7 +167,6 @@ function aslhub_dashboard_settings(PDO $pdo): array {
         'participation_max' => max(1, (int)aslhub_setting($pdo, 'participation_max', '10')),
         'school_timezone' => aslhub_setting($pdo, 'school_timezone', 'America/Los_Angeles'),
         'calendar_revision' => (int)aslhub_setting($pdo, 'calendar_revision', '0'),
-        'signup_code' => aslhub_setting($pdo, 'signup_code', 'MGHS'),
     ];
 }
 

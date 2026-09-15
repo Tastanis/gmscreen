@@ -145,7 +145,7 @@ function aslhub_seed_teachers(PDO $pdo): array {
     $out = [];
 
     // Tag Harms' existing teacher account (upgrades from the old asl1/asl2 system)
-    $pdo->prepare("UPDATE users SET teacher = 'harms' WHERE is_teacher = TRUE AND teacher IS NULL AND first_name = 'Brandon'")->execute();
+    $pdo->prepare("UPDATE users SET teacher = 'harms' WHERE is_teacher = TRUE AND teacher IS NULL AND first_name = 'Brandon' AND last_name = 'Harms'")->execute();
 
     // Fresh installs: make sure a Harms admin account exists at all
     $stmt = $pdo->prepare("SELECT id FROM users WHERE is_teacher = TRUE AND teacher = 'harms'");
@@ -158,16 +158,5 @@ function aslhub_seed_teachers(PDO $pdo): array {
         $out[] = "Created Harms admin account (default password: $default — change it in Settings)";
     }
 
-    $stmt = $pdo->prepare("SELECT id FROM users WHERE is_teacher = TRUE AND teacher = 'parks'");
-    $stmt->execute();
-    if (!$stmt->fetch()) {
-        $default = 'ParksASL2026'; // temporary — change from the settings page
-        $pdo->prepare("INSERT INTO users (first_name, last_name, password, email, is_teacher, teacher, is_active, must_change_password)
-            VALUES ('Ms.', 'Parks', ?, NULL, TRUE, 'parks', 1, 1)")
-            ->execute([password_hash($default, PASSWORD_DEFAULT)]);
-        $out[] = "Created Parks teacher account (default password: $default — change it in Settings)";
-    } else {
-        $out[] = 'Parks teacher account already exists';
-    }
     return $out;
 }

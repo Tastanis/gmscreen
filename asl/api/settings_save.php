@@ -50,8 +50,6 @@ try {
             $pdo->prepare("UPDATE asl_student_block_metrics m JOIN asl_reporting_blocks b ON b.id=m.block_id
                 SET m.participation_max=? WHERE b.finalized_at IS NULL")
                 ->execute([$participationMax]);
-            $code = trim($_POST['signup_code'] ?? '');
-            if ($code !== '') aslhub_set_setting($pdo, 'signup_code', $code);
             $pdo->commit();
             aslhub_json(['success' => true]);
 

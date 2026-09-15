@@ -131,6 +131,7 @@ asl/config.local.php
 asl/config.test.local.php
 asl/backups/
 asl/tests/output/
+asl/.account-reset.lock
 
 # My Tasks server-only runtime configuration/data must stay outside public_html.
 /tasks/config.local.php

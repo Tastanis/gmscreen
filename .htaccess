@@ -17,5 +17,5 @@ RewriteRule ^asl[12](?:/|$) - [G,END]
 RewriteRule ^asl[12](?:/.*)?$ / [R=302,END]
 
 RewriteRule ^(?:index\.html)?$ asl/index.php [END]
-RewriteRule ^(index|login|logout|dashboard|signup|register)\.php$ asl/$1.php [END]
+RewriteRule ^(index|login|create-password|logout|dashboard|signup|register)\.php$ asl/$1.php [END]
 RewriteRule ^(teacher|api|css|js|scroller|goals)(/.*)?$ asl/$1$2 [END]

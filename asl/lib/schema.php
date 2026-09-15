@@ -10,7 +10,7 @@
  *    on normal page loads once the stored version matches.
  */
 
-const ASLHUB_SCHEMA_VERSION = 7;
+const ASLHUB_SCHEMA_VERSION = 8;
 
 function aslhub_ensure_schema(PDO $pdo, bool $force = false): void {
     static $done = false;
@@ -52,6 +52,8 @@ function aslhub_ensure_schema(PDO $pdo, bool $force = false): void {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
         aslhub_add_column($pdo, 'users', 'email', "VARCHAR(255) NULL");
+        aslhub_add_column($pdo, 'users', 'is_unclaimed', 'TINYINT(1) NOT NULL DEFAULT 0');
+        aslhub_add_column($pdo, 'users', 'skyward_student_id', 'VARCHAR(32) NULL');
         aslhub_add_column($pdo, 'users', 'is_teacher', "BOOLEAN NOT NULL DEFAULT FALSE");
         aslhub_add_column($pdo, 'users', 'level', "TINYINT NULL COMMENT 'ASL level 1-3'");
         aslhub_add_column($pdo, 'users', 'class_period', "INT NULL COMMENT 'Class period 1-6'");
