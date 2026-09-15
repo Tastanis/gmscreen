@@ -1,0 +1,27 @@
+.competency-browser { display:grid; grid-template-columns:1fr; gap:28px; color:#202a35; }
+.competency-browser.has-selection { grid-template-columns:minmax(230px, .85fr) minmax(320px, 1.15fr); }
+.competency-browser.show-scale { grid-template-columns:38px minmax(270px, .85fr) minmax(320px, 1.15fr); }
+.competency-browser h2 { font-size:1.4rem; margin:0 0 18px; }
+.competency-browser h3 { font-size:1.12rem; margin:0 0 16px; }
+.competency-browser h4 { margin:24px 0 10px; }
+.competency-browser p { line-height:1.65; margin:12px 0; }
+.competency-browser button { font:inherit; color:inherit; cursor:pointer; }
+.competency-list button { display:block; background:white; border:0; border-bottom:1px solid #e8eaed; padding:13px 10px; width:100%; text-align:left; line-height:1.4; }
+.competency-list button span { color:#707782; margin-right:6px; }
+.competency-list button[aria-pressed=true], .competency-elements button[aria-pressed=true] { background:#f0f3f6; box-shadow:inset 3px 0 #354d65; }
+.competency-elements { display:flex; flex-direction:column; gap:4px; }
+.competency-elements button { text-align:left; background:white; border:1px solid #e3e7eb; border-radius:4px; padding:10px 12px; }
+.competency-detail { padding:4px 4px 4px 0; }
+.competency-scale { border-left:1px solid #e3e7eb; padding-left:24px; }
+.competency-modes { display:flex; gap:4px; margin-bottom:14px; }
+.competency-modes button { border:1px solid #dce1e6; padding:6px 10px; border-radius:4px; background:white; font-size:.82rem; }
+.competency-modes button[aria-pressed=true] { background:#293e50; color:white; }
+.competency-level { display:grid; grid-template-columns:34px 1fr; gap:10px; text-align:left; width:100%; padding:16px 10px; background:white; border:0; border-bottom:1px solid #e3e7eb; line-height:1.6; }
+.competency-level.selected { background:#edf4f0; box-shadow:inset 3px 0 #458663; }
+.competency-score { font-size:1.25rem; font-weight:700; }
+.competency-return { writing-mode:vertical-rl; transform:rotate(180deg); align-self:stretch; border:1px solid #dce1e6; border-radius:4px; background:#f7f8fa; padding:14px 8px; }
+.open-scale { background:white; border:0; padding:12px 0; margin-top:18px; font-weight:600 !important; }
+.open-scale:disabled { opacity:.4; cursor:default; }
+.competency-browser button:focus-visible { outline:2px solid #446d94; outline-offset:3px; }
+@media(max-width:760px) { .competency-browser.has-selection,.competency-browser.show-scale { grid-template-columns:1fr; } .competency-return { writing-mode:horizontal-tb; transform:none; text-align:left; } .competency-scale { border-left:0; padding:18px 0 0; border-top:1px solid #e3e7eb; } }
+.curriculum-section > [hidden] { display:none !important; }

@@ -17,9 +17,10 @@ test('unified dashboard does not expose legacy Bingo', () => {
 });
 
 test('pace outcomes and calendar-only settings are fixed', () => {
-  assert.match(dashboard, /pace_red_goal \|\| 2\.75/);
-  assert.match(dashboard, /pace_blue_goal \|\| 3\.25/);
-  assert.match(dashboard, /pace_green_goal \|\| 3/);
+  assert.match(dashboard, /pace\(3 \* \.83/);
+  assert.match(dashboard, /pace\(3 \* \.73/);
+  assert.match(dashboard, /pace\(3 \* \.63/);
+  assert.match(dashboard, /scopeTargets \* 3 \* \.60/);
   assert.match(dashboard, /totalInstructionalDays/);
   assert.doesNotMatch(settings, /name="year_start"|name="year_end"|name="pace_green_goal"|name="pace_blue_goal"|name="pace_red_goal"/);
 });

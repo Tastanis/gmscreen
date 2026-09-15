@@ -4,6 +4,7 @@
  * Writes the current score AND an append-only history row.
  */
 require_once dirname(__DIR__) . '/config.php';
+require_once dirname(__DIR__) . '/lib/data.php';
 
 $teacher = aslhub_require_teacher($pdo, true);
 aslhub_require_csrf();
@@ -12,7 +13,7 @@ $studentId = (int)($_POST['student_id'] ?? 0);
 $targetId = (int)($_POST['target_id'] ?? 0);
 $score = $_POST['score'] ?? null;
 
-if ($score === null || $score === '' || !in_array((int)$score, [0, 1, 2, 3, 4], true)) {
+if (!is_string($score) || !preg_match('/^[0-4]$/D', $score)) {
     aslhub_json_error('Score must be 0-4.');
 }
 $score = (int)$score;
@@ -24,6 +25,10 @@ $stmt = $pdo->prepare("SELECT id, asl_level FROM asl_learning_targets WHERE id =
 $stmt->execute([$targetId]);
 $target = $stmt->fetch();
 if (!$target) aslhub_json_error('Unknown skill target.', 404);
+if ((int)$target['asl_level'] !== (int)$student['level']) aslhub_json_error('Target belongs to another ASL course.', 403);
+$rubric = $pdo->prepare('SELECT COUNT(*) FROM asl_rubric_levels WHERE learning_target_id=? AND score=?');
+$rubric->execute([$targetId,$score]);
+if (!(int)$rubric->fetchColumn()) aslhub_json_error('That proficiency level is not defined for this target.');
 
 try {
     $pdo->beginTransaction();
@@ -41,4 +46,5 @@ try {
     aslhub_json_error('Could not save. Try again.', 500);
 }
 
-aslhub_json(['success' => true, 'student_id' => $studentId, 'target_id' => $targetId, 'score' => $score]);
+aslhub_json(['success' => true, 'student_id' => $studentId, 'target_id' => $targetId, 'score' => $score,
+    'progress' => aslhub_block_progress($pdo,$studentId,(int)$student['level'],aslhub_reporting_blocks($pdo))]);

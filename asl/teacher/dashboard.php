@@ -2,6 +2,7 @@
 require_once dirname(__DIR__) . '/config.php';
 require_once dirname(__DIR__) . '/lib/data.php';
 require_once dirname(__DIR__) . '/lib/teacher_layout.php';
+require_once dirname(__DIR__) . '/lib/competencies.php';
 
 $me = aslhub_require_teacher($pdo);
 $isAdmin = aslhub_is_admin($me);
@@ -34,6 +35,20 @@ if ($students) {
 
 aslhub_teacher_header($me, 'ASL Roster', 'dashboard');
 ?>
+    <?php if ($isAdmin && !aslhub_competencies_installed($pdo)): ?>
+    <button type="button" id="import-competencies" class="form-button" style="width:auto">Import competencies</button>
+    <script>
+    document.getElementById('import-competencies').addEventListener('click', async function () {
+        this.disabled=true;
+        try {
+            const response=await fetch('../api/import_competencies.php',{method:'POST',body:new URLSearchParams({csrf_token:<?php echo json_encode(aslhub_csrf_token()); ?>})});
+            const result=await response.json();
+            if (!result.success) throw new Error(result.error || 'Import failed.');
+            this.remove();
+        } catch (e) { alert(e.message); this.disabled=false; }
+    });
+    </script>
+    <?php endif; ?>
     <form class="filters-bar" method="GET">
         <?php if ($isAdmin): ?>
             <select name="teacher">

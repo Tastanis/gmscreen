@@ -79,26 +79,33 @@ function aslhub_finalize_reporting_blocks(PDO $pdo): void {
 }
 
 function aslhub_calendar_apply(PDO $pdo, array $calendar): array {
-    $participationMax = max(1, (int)aslhub_setting($pdo, 'participation_max', '10'));
-    $revision = max(0, (int)aslhub_setting($pdo, 'calendar_revision', '0')) + 1;
-    $today = (new DateTimeImmutable('now', new DateTimeZone($calendar['timezone'])))->format('Y-m-d');
-
-    aslhub_finalize_reporting_blocks($pdo);
-    $finalized = [];
-    foreach ($pdo->query("SELECT * FROM asl_reporting_blocks WHERE finalized_at IS NOT NULL") as $row) {
-        $finalized[(int)$row['block_index']] = $row;
-    }
-    foreach ($finalized as $idx => $old) {
-        $candidate = $calendar['blocks'][$idx - 1] ?? null;
-        if (!$candidate || $candidate['start_date'] !== $old['start_date'] ||
-                $candidate['end_date'] !== $old['end_date'] ||
-                (int)$candidate['instructional_days'] !== (int)$old['instructional_days']) {
-            throw new RuntimeException("The upload changes finalized Block $idx. Past blocks are frozen; correct student values instead of remapping the calendar.");
-        }
-    }
-
-    $pdo->beginTransaction();
+    $ownsTransaction = !$pdo->inTransaction();
+    if ($ownsTransaction) $pdo->beginTransaction();
     try {
+        $participationMax = max(1, (int)aslhub_setting($pdo, 'participation_max', '10'));
+        $revision = max(0, (int)aslhub_setting($pdo, 'calendar_revision', '0')) + 1;
+        $today = (new DateTimeImmutable('now', new DateTimeZone($calendar['timezone'])))->format('Y-m-d');
+
+        aslhub_finalize_reporting_blocks($pdo);
+        $finalized = [];
+        foreach ($pdo->query("SELECT * FROM asl_reporting_blocks WHERE finalized_at IS NOT NULL") as $row) {
+            $finalized[(int)$row['block_index']] = $row;
+        }
+        foreach ($finalized as $idx => $old) {
+            $candidate = $calendar['blocks'][$idx - 1] ?? null;
+            if (!$candidate || $candidate['start_date'] !== $old['start_date'] ||
+                    $candidate['end_date'] !== $old['end_date'] ||
+                    (int)$candidate['instructional_days'] !== (int)$old['instructional_days']) {
+                throw new RuntimeException("The upload changes finalized Block $idx. Past blocks are frozen; correct student values instead of remapping the calendar.");
+            }
+            $dates = $pdo->prepare('SELECT school_date FROM asl_calendar_days WHERE is_instructional=1 AND school_date BETWEEN ? AND ? ORDER BY school_date');
+            $dates->execute([$old['start_date'], $old['end_date']]);
+            $oldDates = $dates->fetchAll(PDO::FETCH_COLUMN);
+            $newDates = array_column(array_filter($calendar['days'], fn($day) => $day['instructional'] &&
+                $day['date'] >= $old['start_date'] && $day['date'] <= $old['end_date']), 'date');
+            if ($oldDates !== $newDates) throw new RuntimeException("The upload changes instructional dates inside finalized Block $idx. Past instructional days are frozen.");
+        }
+
         $pdo->exec("DELETE FROM asl_calendar_days");
         $dayStmt = $pdo->prepare("INSERT INTO asl_calendar_days
             (school_date, is_instructional, label, calendar_revision) VALUES (?, ?, ?, ?)");
@@ -137,13 +144,13 @@ function aslhub_calendar_apply(PDO $pdo, array $calendar): array {
 
         aslhub_set_setting($pdo, 'calendar_revision', (string)$revision);
         aslhub_set_setting($pdo, 'school_timezone', $calendar['timezone']);
-        $pdo->commit();
+        aslhub_migrate_weekly_rows_to_blocks($pdo, $participationMax);
+        if ($ownsTransaction) $pdo->commit();
     } catch (Throwable $e) {
-        if ($pdo->inTransaction()) $pdo->rollBack();
+        if ($ownsTransaction && $pdo->inTransaction()) $pdo->rollBack();
         throw $e;
     }
 
-    aslhub_migrate_weekly_rows_to_blocks($pdo, $participationMax);
     return ['revision' => $revision, 'days' => count($calendar['days']),
         'instructional_days' => count(array_filter($calendar['days'], fn($d) => $d['instructional'])),
         'blocks' => count($calendar['blocks'])];

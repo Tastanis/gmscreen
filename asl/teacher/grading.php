@@ -49,7 +49,7 @@ $targetMeta = [];
 foreach ($standards as $s) {
     foreach ($s['targets'] as $t) {
         $targetMeta[(int)$t['id']] = [
-            'code' => $t['target_code'],
+            'code' => $t['display_code'] ?? $t['target_code'],
             'title' => $t['title'],
             'description' => $t['description'] ?? '',
             'standard' => $s['standard_id'] . ' — ' . $s['name'],
@@ -110,7 +110,7 @@ aslhub_teacher_header($me, 'Grading', 'grading');
                     <th class="sticky-col">Student</th>
                     <?php foreach ($standards as $s): foreach ($s['targets'] as $t): ?>
                         <th class="skill-head" data-target="<?php echo (int)$t['id']; ?>"
-                            title="<?php echo aslhub_h($t['title'] . ' — click to pin the rubric'); ?>"><?php echo aslhub_h($t['target_code']); ?></th>
+                            title="<?php echo aslhub_h($t['title'] . ' — click to pin the rubric'); ?>"><?php echo aslhub_h($t['display_code'] ?? $t['target_code']); ?></th>
                     <?php endforeach; endforeach; ?>
                 </tr>
             </thead>
@@ -127,7 +127,7 @@ aslhub_teacher_header($me, 'Grading', 'grading');
                             data-student="<?php echo $sid; ?>" data-target="<?php echo (int)$t['id']; ?>"
                             data-score="<?php echo $sc === null ? '' : $sc; ?>"
                             style="background:<?php echo $sc === null ? '#f7fafc' : ''; ?>"
-                            title="<?php echo aslhub_h($st['first_name'] . ' — ' . $t['target_code'] . ': ' . ($sc ?? 'not graded')); ?>">
+                            title="<?php echo aslhub_h($st['first_name'] . ' — ' . ($t['display_code'] ?? $t['target_code']) . ': ' . ($sc ?? 'not graded')); ?>">
                             <?php echo $sc === null ? '·' : $sc; ?></td>
                     <?php endforeach; endforeach; ?>
                 </tr>
@@ -177,7 +177,7 @@ function openRubric(id) {
     document.getElementById('rubric-side-title').textContent = t.title;
     document.getElementById('rubric-side-standard').textContent = t.standard;
     document.getElementById('rubric-side-desc').textContent = t.description || '';
-    document.getElementById('rubric-side-rows').innerHTML = [4, 3, 2, 1, 0].map(s => `
+    document.getElementById('rubric-side-rows').innerHTML = Object.keys(t.rubric || {}).map(Number).sort((a,b)=>a-b).map(s => `
         <tr><td class="rubric-score" style="background:${COLORS[s]}">${s}</td>
         <td>${escapeHtml((t.rubric || {})[s] || '')}</td></tr>`).join('');
     document.getElementById('rubric-side').hidden = false;
@@ -206,7 +206,10 @@ document.getElementById('rubric-side-close')?.addEventListener('click', closeRub
 async function cycle(cell, dir) {
     if (cell.classList.contains('saving')) return;
     const cur = cell.dataset.score === '' ? null : Number(cell.dataset.score);
-    let next = cur === null ? (dir > 0 ? 0 : 4) : (cur + dir + 5) % 5;
+    const levels = Object.keys(TARGETS[cell.dataset.target]?.rubric || {}).map(Number).sort((a,b)=>a-b);
+    if (!levels.length) return;
+    const position=levels.indexOf(cur);
+    const next=position < 0 ? (dir > 0 ? levels[0] : levels.at(-1)) : levels[(position + dir + levels.length) % levels.length];
     cell.classList.add('saving');
     cell.classList.remove('save-error');
     try {

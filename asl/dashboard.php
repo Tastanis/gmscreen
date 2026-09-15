@@ -33,6 +33,8 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
     <link rel="stylesheet" href="css/asl-style.css?v=<?php echo $cssV; ?>">
     <link rel="stylesheet" href="css/hub.css?v=<?php echo $hubV; ?>">
     <script src="js/dashboard-chart-math.js?v=<?php echo $chartMathV; ?>"></script>
+    <script src="js/competencies.js?v=<?php echo filemtime(__DIR__.'/js/competencies.js'); ?>"></script>
+    <link rel="stylesheet" href="css/competencies.css?v=<?php echo filemtime(__DIR__.'/css/competencies.css'); ?>">
 </head>
 <body class="student-dashboard-page">
     <div class="student-shell">
@@ -129,13 +131,14 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
                     </div>
                     <div class="chart-wrap">
                         <svg id="progress-chart" role="img" aria-label="Skill points earned over time"></svg>
-                        <p id="chart-empty-note" class="chart-empty-note">The graph will fill in as your skills are rated 1-4. Stay at or above the green line to be on track for proficient (3s) by the end of the school year.</p>
+                        <p id="chart-empty-note" class="chart-empty-note">Progress appears as competencies are scored.</p>
                     </div>
                     <div class="comparison-legend" style="margin-top:8px;">
                         <span><span class="legend-swatch legend-student"></span>You</span>
-                        <span><span class="legend-swatch" style="background:#4caf6d;"></span>All 3s by year end</span>
-                        <span><span class="legend-swatch" style="background:#4a90d9;"></span>25% 4s, rest 3s</span>
-                        <span><span class="legend-swatch" style="background:#e05252;"></span>25% 2s, rest 3s</span>
+                        <span><span class="legend-swatch" style="background:#458663;"></span>A · 100%</span>
+                        <span><span class="legend-swatch" style="background:#507ba2;"></span>B · 83%</span>
+                        <span><span class="legend-swatch" style="background:#938052;"></span>C · 73%</span>
+                        <span><span class="legend-swatch" style="background:#a66c69;"></span>D · 63%</span>
                     </div>
                 </div>
 
@@ -278,6 +281,7 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
                 if (!out.success) throw new Error(out.error || 'save failed');
                 if (!dashboardData.scores || Array.isArray(dashboardData.scores)) dashboardData.scores = {};
                 dashboardData.scores[String(targetId)] = score;
+                if (out.progress) dashboardData.progress = out.progress;
                 renderDashboard();
             } catch (err) {
                 if (row) row.classList.remove('rubric-saving');
@@ -294,7 +298,7 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
         function pointsFor(targets) {
             let earned = 0;
             targets.forEach(t => { const s = scoreOf(t.id); if (s !== null) earned += s; });
-            return { earned, total: targets.length * 4 };
+            return { earned, total: targets.length * 3 };
         }
 
         function progressText(earned, total) {
@@ -528,7 +532,7 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
             const standard = getStandard(state.standardId);
             const bucket = getBucket(state.bucketId);
             if (state.progressScope === 'standard' && standard) {
-                name = standard.standard_id + ' Progress';
+                name = (standard.competency ? standard.name : standard.standard_id) + ' Progress';
                 targets = standard.targets || [];
             } else if (state.progressScope === 'bucket' && bucket) {
                 name = bucket.name + ' Progress';
@@ -539,7 +543,7 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
             context.textContent = name;
             percent.textContent = pct + '%';
             count.textContent = progressText(pts.earned, pts.total);
-            fill.style.width = pct + '%';
+            fill.style.width = Math.min(100, pct) + '%';
         }
 
         /* ============ Reporting-block charts ============ */
@@ -594,17 +598,17 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
                 (withDots ? segments.flat().map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="3.5" class="metric-dot ${dotClass}" ${color ? `style="stroke:${color}"` : ''}></circle>`).join('') : '');
         }
 
-        function chartScaffold(svg, blocks, maxY, unit) {
+        function chartScaffold(svg, blocks, maxY, unit, fractions = null) {
             const width = 920, height = 300;
             const pad = { top: 24, right: 26, bottom: 58, left: 58 };
             const chartWidth = width - pad.left - pad.right;
             const chartHeight = height - pad.top - pad.bottom;
-            const xAt = index => pad.left + (index / Math.max(blocks.length - 1, 1)) * chartWidth;
+            const xAt = index => pad.left + (fractions ? fractions[index] : index / Math.max(blocks.length - 1, 1)) * chartWidth;
             const yAt = value => pad.top + chartHeight - (Math.max(0, Number(value)) / Math.max(maxY, 1)) * chartHeight;
             const grids = blocks.map((block, index) => `<line x1="${xAt(index)}" y1="${pad.top}" x2="${xAt(index)}" y2="${pad.top + chartHeight}" class="chart-block-line ${block.month_label ? 'month' : ''}"></line>`).join('');
             let lastMonth = '';
             const labels = blocks.map((block, index) => {
-                let month = block.month_label || '';
+                let month = fractions ? new Date(blockDate(block) + 'T12:00:00').toLocaleDateString(undefined, { month: 'short' }) : block.month_label || '';
                 if (!month && blockDate(block)) month = new Date(blockDate(block) + 'T12:00:00').toLocaleDateString(undefined, { month: 'short' });
                 if (!month || month === lastMonth) return '';
                 lastMonth = month;
@@ -635,12 +639,12 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
                 values = (progress.byStandard && progress.byStandard[standard.standard_id]) ||
                     (bucket && progress.byBucket && progress.byBucket[bucket.bucket_id]) || [];
                 scopeTargets = (standard.targets || []).length;
-                scopeLabel.textContent = 'Showing ' + standard.standard_id;
+                scopeLabel.textContent = standard.name;
             } else if (state.progressScope === 'bucket' && bucket) {
                 values = (progress.byBucket && progress.byBucket[bucket.bucket_id]) || [];
                 scopeTargets = bucketTargets(bucket).length;
                 scopeLabel.textContent = 'Showing ' + bucket.name;
-            } else scopeLabel.textContent = 'Showing all skill buckets';
+            } else scopeLabel.textContent = 'All competencies';
 
             const visibleValues = blocks.map(block => seriesValue(values, block)).filter(v => v != null).map(Number);
             note.style.display = visibleValues.some(v => v > 0) ? 'none' : 'block';
@@ -649,20 +653,24 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
             const visibleFraction = blocks.length ? paceDayFraction(blocks[blocks.length - 1]) : 0;
             const maxPace = scopeTargets * 4 * (chartState.ranges.progress === 'full' ? 1 : visibleFraction);
             const maxY = Math.max(...visibleValues, maxPace, 1);
-            const frame = chartScaffold(svg, blocks, maxY, 'Pts');
+            const fractions = blocks.map(b => visibleFraction ? paceDayFraction(b) / visibleFraction : 0);
+            const frame = chartScaffold(svg, blocks, maxY, 'Pts', fractions);
             const settings = dashboardData.settings || {};
             const pace = (goal, color, dash) => {
                 if (!allBlocks.length || !scopeTargets || !totalInstructionalDays) return '';
-                const points = blocks.map((block, index) => {
+                const points = [[frame.pad.left, frame.yAt(0)], ...blocks.map((block, index) => {
                     return [frame.xAt(index), frame.yAt(ASLChartMath.paceEndpoint(scopeTargets, goal) * paceDayFraction(block))];
-                });
+                })];
                 return `<polyline points="${points.map(p => p.join(',')).join(' ')}" fill="none" stroke="${color}" stroke-width="2.5" ${dash ? `stroke-dasharray="${dash}"` : ''}></polyline>`;
             };
             const student = seriesPoints(values, blocks, frame.xAt, frame.yAt);
+            const lowPoints = [[frame.pad.left, frame.yAt(0)], ...blocks.map((b,i) => [frame.xAt(i), frame.yAt(scopeTargets * 3 * .60 * paceDayFraction(b))]), [frame.pad.left + frame.chartWidth, frame.yAt(0)]];
             svg.innerHTML = frame.base +
-                pace(Number(settings.pace_red_goal || 2.75), '#e05252', '3 5') +
-                pace(Number(settings.pace_blue_goal || 3.25), '#4a90d9', '7 5') +
-                pace(Number(settings.pace_green_goal || 3), '#4caf6d', '') +
+                `<polygon points="${lowPoints.map(p => p.join(',')).join(' ')}" fill="#f9e8e7"></polygon>` +
+                pace(3, '#458663', '') +
+                pace(3 * .83, '#507ba2', '7 5') +
+                pace(3 * .73, '#938052', '5 5') +
+                pace(3 * .63, '#a66c69', '3 5') +
                 frame.labels +
                 drawSeries(student, 'chart-line', '', '', false) +
                 student.flat().map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="3.5" class="chart-dot"></circle>`).join('');
@@ -818,10 +826,17 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
         }
 
         function renderDashboard() {
+            const competencies = ASLCompetencies.render(dashboardData, standardId => {
+                state.standardId = standardId;
+                state.progressScope = standardId ? 'standard' : 'overall';
+                renderProgressSummary(); renderChart();
+            }, window.ASL_TEACHER_GRADE ? gradeTarget : null);
+            if (!competencies) {
             renderBuckets();
             renderStandards();
             renderRubric();
             applyCurriculumLayout();
+            }
             renderProgressSummary();
             renderChart();
             renderAttendanceChart();
@@ -871,6 +886,7 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
         });
 
         function resetCurriculumSelection() {
+            if (document.getElementById('competency-browser')) return;
             if (!state.bucketId && !state.standardId && !state.targetId && state.progressScope === 'overall') return;
             state.bucketId = null;
             state.standardId = null;
@@ -880,6 +896,7 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
         }
 
         document.addEventListener('click', event => {
+            if (event.target.closest('#competency-browser')) return;
             if (event.target.closest('button, a, input, select, textarea, label, [role="button"], .modal-content')) return;
             if (event.target.closest('#notesModal')) return;
             resetCurriculumSelection();

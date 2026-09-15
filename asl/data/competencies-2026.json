@@ -1,0 +1,6381 @@
+{
+  "version": "competencies-2026-v1",
+  "courses": [
+    {
+      "level": 1,
+      "source": "Proficiency list for asl 1.docx",
+      "sha256": "b83289871f4ae9bfb05711d67637e3e261319d862df0ce9e37186aadebeed3d3",
+      "competencies": [
+        {
+          "key": "sentences",
+          "number": 1,
+          "title": "ASL Sentence Constructions",
+          "text": [
+            {
+              "text": "Use the sentence structure and grammatical marking appropriate to ",
+              "slot": false
+            },
+            {
+              "text": "the intended ASL construction",
+              "slot": true
+            },
+            {
+              "text": ".",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "Basic declarative statements",
+              "notes": [],
+              "key": "declarative",
+              "replacement": "basic declarative statements"
+            },
+            {
+              "label": "Yes/no questions",
+              "notes": [],
+              "key": "yesno",
+              "replacement": "yes/no questions"
+            },
+            {
+              "label": "WH-questions",
+              "notes": [],
+              "key": "wh",
+              "replacement": "WH-questions"
+            },
+            {
+              "label": "Rhetorical questions",
+              "notes": [],
+              "key": "rhetorical",
+              "replacement": "rhetorical questions"
+            },
+            {
+              "label": "Negation",
+              "notes": [],
+              "key": "negation",
+              "replacement": "negation"
+            },
+            {
+              "label": "Conditionals",
+              "notes": [
+                "Examples: if-then constructions, UNDERSTAND used as a conditional connector."
+              ],
+              "key": "conditional",
+              "replacement": "conditionals"
+            },
+            {
+              "label": "Topic-comment structure",
+              "notes": [],
+              "key": "topic",
+              "replacement": "topic-comment structure"
+            },
+            {
+              "label": "Commands",
+              "notes": [],
+              "key": "command",
+              "replacement": "commands"
+            },
+            {
+              "label": "Modal constructions",
+              "notes": [
+                "Examples: constructions using CAN, MUST/HAVE-TO, SHOULD, or WILL."
+              ],
+              "key": "modal",
+              "replacement": "modal constructions"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Use the sentence structure and grammatical marking appropriate to ",
+                "slot": false
+              },
+              {
+                "text": "the intended ASL construction",
+                "slot": true
+              },
+              {
+                "text": ". The features regularly work together as a complete construction.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Use the sentence structure and grammatical marking appropriate to ",
+                "slot": false
+              },
+              {
+                "text": "the intended ASL construction",
+                "slot": true
+              },
+              {
+                "text": ". The features sometimes work together as a complete construction.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Use some of the sentence structure and grammatical marking appropriate to ",
+                "slot": false
+              },
+              {
+                "text": "the intended ASL construction",
+                "slot": true
+              },
+              {
+                "text": ". The features usually remain separate or incomplete.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Use isolated features of the sentence structure or grammatical marking appropriate to ",
+                "slot": false
+              },
+              {
+                "text": "the intended ASL construction",
+                "slot": true
+              },
+              {
+                "text": ".",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "modification",
+          "number": 2,
+          "title": "Manner, Aspect, and Degree Modification",
+          "text": [
+            {
+              "text": "Use the appropriate ASL sign modifications and grammatical markers to convey ",
+              "slot": false
+            },
+            {
+              "text": "the intended meaning",
+              "slot": true
+            },
+            {
+              "text": ".",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "The manner of an action",
+              "notes": [
+                "Examples: slowly, quickly, forcefully, or in a hurry."
+              ],
+              "key": "manner",
+              "replacement": "the manner of an action"
+            },
+            {
+              "label": "Temporal aspect",
+              "notes": [
+                "Variations: continual or over-time action, regular or habitual action, repeated or over-and-over action, prolonged action, and completion (including FINISH used as an aspect marker)."
+              ],
+              "key": "aspect",
+              "replacement": "temporal aspect"
+            },
+            {
+              "label": "Degree or intensity",
+              "notes": [
+                "Examples: very big, very far, too far, or extremely cold."
+              ],
+              "key": "degree",
+              "replacement": "degree or intensity"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Use appropriate ASL sign modifications and grammatical markers to convey ",
+                "slot": false
+              },
+              {
+                "text": "the intended meaning",
+                "slot": true
+              },
+              {
+                "text": " in familiar uses. Control is stable, and meaning is generally conveyed clearly.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Use appropriate ASL sign modifications and grammatical markers to convey ",
+                "slot": false
+              },
+              {
+                "text": "the intended meaning",
+                "slot": true
+              },
+              {
+                "text": " in familiar uses. Control is developing, and meaning is generally conveyed.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Use some appropriate ASL sign modifications or grammatical markers to convey ",
+                "slot": false
+              },
+              {
+                "text": "the intended meaning",
+                "slot": true
+              },
+              {
+                "text": " in familiar uses. Control is inconsistent, and meaning is only partly conveyed.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Attempt ASL sign modifications or grammatical markers associated with ",
+                "slot": false
+              },
+              {
+                "text": "the intended meaning",
+                "slot": true
+              },
+              {
+                "text": " in familiar uses. Meaning is not reliably conveyed.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "connections",
+          "number": 3,
+          "title": "Organizing and Connecting Related Ideas",
+          "text": [
+            {
+              "text": "Use ",
+              "slot": false
+            },
+            {
+              "text": "the appropriate ASL structure",
+              "slot": true
+            },
+            {
+              "text": ", with the required spatial organization, timing, and nonmanual marking, to organize or connect related ideas.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "List structure",
+              "notes": [],
+              "key": "list",
+              "replacement": "list structure"
+            },
+            {
+              "label": "Contrastive structure",
+              "notes": [
+                "Example: contrasting information about two people, things, or ideas."
+              ],
+              "key": "contrast",
+              "replacement": "contrastive structure"
+            },
+            {
+              "label": "Coordination",
+              "notes": [
+                "Examples: placing related ideas next to one another with pauses or holds, or using signs such as AND, PLUS, or BOTH."
+              ],
+              "key": "coordination",
+              "replacement": "coordination"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Use ",
+                "slot": false
+              },
+              {
+                "text": "the appropriate ASL structure",
+                "slot": true
+              },
+              {
+                "text": ", with the appropriate spatial organization, timing, and nonmanual marking, to organize or connect related ideas in familiar uses. The organization or connection is reliably maintained.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Use ",
+                "slot": false
+              },
+              {
+                "text": "the appropriate ASL structure",
+                "slot": true
+              },
+              {
+                "text": ", with the appropriate spatial organization, timing, and nonmanual marking, to organize or connect related ideas in familiar uses. The organization or connection is inconsistently maintained.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Use some features of ",
+                "slot": false
+              },
+              {
+                "text": "the appropriate ASL structure",
+                "slot": true
+              },
+              {
+                "text": " to partially organize or connect related ideas in familiar uses. The appropriate spatial organization, timing, or nonmanual marking is incomplete, and the organization or connection is difficult to maintain.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "In familiar situations, attempt to use isolated features of ",
+                "slot": false
+              },
+              {
+                "text": "the appropriate ASL structure",
+                "slot": true
+              },
+              {
+                "text": " to organize or connect related ideas.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "time",
+          "number": 4,
+          "title": "Time Reference and Relationships",
+          "text": [
+            {
+              "text": "Use appropriate ASL time signs, grammatical markers, sentence structure, and spatial organization to accurately express ",
+              "slot": false
+            },
+            {
+              "text": "time information",
+              "slot": true
+            },
+            {
+              "text": ".",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "A time frame",
+              "notes": [
+                "Establishing, maintaining, or resetting when events occur."
+              ],
+              "key": "frame",
+              "replacement": "a time frame"
+            },
+            {
+              "label": "Frequency or recurrence",
+              "notes": [
+                "Examples: frequency signs and recurring forms such as EVERY-DAY, EVERY-WEEK, EVERY-MONDAY, or EVERY-NIGHT."
+              ],
+              "key": "frequency",
+              "replacement": "frequency or recurrence"
+            },
+            {
+              "label": "Temporal relationships",
+              "notes": [
+                "Examples: FINISH for sequencing events and UP-UNTIL-NOW for relating past time to the present."
+              ],
+              "key": "relationships",
+              "replacement": "temporal relationships"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Regularly use appropriate ASL time signs, grammatical markers, sentence structure, and spatial organization to accurately express ",
+                "slot": false
+              },
+              {
+                "text": "time information",
+                "slot": true
+              },
+              {
+                "text": " in familiar and unfamiliar uses.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Regularly use appropriate ASL time signs, grammatical markers, sentence structure, and spatial organization to accurately express ",
+                "slot": false
+              },
+              {
+                "text": "time information",
+                "slot": true
+              },
+              {
+                "text": " in familiar uses.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Inconsistently use some appropriate ASL time signs, grammatical markers, sentence structure, or spatial organization to express ",
+                "slot": false
+              },
+              {
+                "text": "time information",
+                "slot": true
+              },
+              {
+                "text": " with partial accuracy in familiar uses.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Use isolated ASL time signs, grammatical markers, sentence structure, or spatial organization to attempt to express ",
+                "slot": false
+              },
+              {
+                "text": "time information",
+                "slot": true
+              },
+              {
+                "text": " in familiar uses.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "manual",
+          "number": 5,
+          "title": "Cardinal Numbers and Fingerspelling",
+          "text": [
+            {
+              "text": "Accurately produce ",
+              "slot": false
+            },
+            {
+              "text": "manual",
+              "slot": true
+            },
+            {
+              "text": " sequences using the required handshapes, locations, palm orientations, movements, and order.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "Cardinal-number",
+              "notes": [],
+              "key": "cardinal",
+              "replacement": "cardinal-number"
+            },
+            {
+              "label": "Fingerspelling",
+              "notes": [],
+              "key": "fingerspelling",
+              "replacement": "fingerspelling"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Accurately produce familiar ",
+                "slot": false
+              },
+              {
+                "text": "manual",
+                "slot": true
+              },
+              {
+                "text": " sequences using the required handshapes, locations, palm orientations, movements, and order. Pauses and sequence errors rarely impede understanding.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Accurately produce familiar ",
+                "slot": false
+              },
+              {
+                "text": "manual",
+                "slot": true
+              },
+              {
+                "text": " sequences using the required handshapes, locations, palm orientations, movements, and order. Pauses and sequence errors sometimes impede understanding.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Produce short, familiar ",
+                "slot": false
+              },
+              {
+                "text": "manual",
+                "slot": true
+              },
+              {
+                "text": " sequences with partial accuracy in the required handshapes, locations, palm orientations, movements, and order. Frequent pauses and sequence errors impede understanding.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Attempt to produce ",
+                "slot": false
+              },
+              {
+                "text": "manual",
+                "slot": true
+              },
+              {
+                "text": " sequences by combining isolated forms with developing control of the required handshapes, locations, palm orientations, movements, and order.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "lexicalized",
+          "number": 6,
+          "title": "Lexicalized Fingerspelling",
+          "text": [
+            {
+              "text": "Produce ",
+              "slot": false
+            },
+            {
+              "text": "lexicalized fingerspelled signs",
+              "slot": true
+            },
+            {
+              "text": " using their conventional letter patterns, movement, and orientation.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [],
+          "rubric": {
+            "4": [
+              {
+                "text": "Produce a broader range of familiar ",
+                "slot": false
+              },
+              {
+                "text": "lexicalized fingerspelled signs",
+                "slot": true
+              },
+              {
+                "text": " within connected signing using their conventional letter patterns, movement, and orientation. Their production minimally interrupts the surrounding flow.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Produce a few commonly used ",
+                "slot": false
+              },
+              {
+                "text": "lexicalized fingerspelled signs",
+                "slot": true
+              },
+              {
+                "text": " within connected signing using their conventional letter patterns, movement, and orientation. Their production often interrupts the surrounding flow.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Produce partial forms of a few commonly used ",
+                "slot": false
+              },
+              {
+                "text": "lexicalized fingerspelled signs",
+                "slot": true
+              },
+              {
+                "text": " using some of their conventional letter-pattern, movement, or orientation changes.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Attempt to produce a commonly used ",
+                "slot": false
+              },
+              {
+                "text": "lexicalized fingerspelled sign",
+                "slot": true
+              },
+              {
+                "text": " by applying isolated changes to ordinary fingerspelling.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "formation",
+          "number": 7,
+          "title": "ASL Word Formation",
+          "text": [
+            {
+              "text": "Use ASL ",
+              "slot": false
+            },
+            {
+              "text": "word-formation processes",
+              "slot": true
+            },
+            {
+              "text": " to create the intended word by combining or modifying signs or sign parts.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "Compound formation",
+              "notes": [],
+              "key": "compound",
+              "replacement": "compound formation"
+            },
+            {
+              "label": "Noun-verb pair formation",
+              "notes": [],
+              "key": "nounverb",
+              "replacement": "noun-verb pair formation"
+            },
+            {
+              "label": "Numeral incorporation",
+              "notes": [],
+              "key": "numeral",
+              "replacement": "numeral incorporation"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Regularly use ASL ",
+                "slot": false
+              },
+              {
+                "text": "word-formation processes",
+                "slot": true
+              },
+              {
+                "text": " to create intended words in familiar and unfamiliar uses by appropriately combining or modifying signs or sign parts.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Regularly use ASL ",
+                "slot": false
+              },
+              {
+                "text": "word-formation processes",
+                "slot": true
+              },
+              {
+                "text": " to create intended words in familiar uses by combining or modifying signs or sign parts.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Inconsistently apply learned patterns of ASL ",
+                "slot": false
+              },
+              {
+                "text": "word-formation processes",
+                "slot": true
+              },
+              {
+                "text": " to create intended words by combining or modifying signs or sign parts.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Use isolated features of ASL ",
+                "slot": false
+              },
+              {
+                "text": "word-formation processes",
+                "slot": true
+              },
+              {
+                "text": " when attempting to create intended words by combining or modifying signs or sign parts.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "variety",
+          "number": 8,
+          "title": "Appropriate ASL Variety",
+          "text": [
+            {
+              "text": "Use ",
+              "slot": false
+            },
+            {
+              "text": "ASL language choices",
+              "slot": true
+            },
+            {
+              "text": " appropriate to the intended setting, social relationship, and language community.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [],
+          "rubric": {
+            "4": [
+              {
+                "text": "Occasionally use a learned ",
+                "slot": false
+              },
+              {
+                "text": "ASL language choice",
+                "slot": true
+              },
+              {
+                "text": " appropriate to the intended setting, social relationship, or language community.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Occasionally use a learned ",
+                "slot": false
+              },
+              {
+                "text": "ASL language choice",
+                "slot": true
+              },
+              {
+                "text": " intended to match the setting, social relationship, or language community.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Use a small number of learned ",
+                "slot": false
+              },
+              {
+                "text": "ASL language choices",
+                "slot": true
+              },
+              {
+                "text": ", but do not yet reliably select among them based on the intended setting, social relationship, or language community.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Use a default learned ",
+                "slot": false
+              },
+              {
+                "text": "ASL language choice",
+                "slot": true
+              },
+              {
+                "text": " without yet adapting it to the intended setting, social relationship, or language community.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "depicting",
+          "number": 9,
+          "title": "Depicting Constructions",
+          "text": [
+            {
+              "text": "Use space, perspective, and nonmanual features appropriately to produce ",
+              "slot": false
+            },
+            {
+              "text": "the intended",
+              "slot": true
+            },
+            {
+              "text": " depicting construction.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "Size-and-shape",
+              "notes": [],
+              "key": "shape",
+              "replacement": "size-and-shape"
+            },
+            {
+              "label": "Entity",
+              "notes": [
+                "Example: representing a person walking from one location to another."
+              ],
+              "key": "entity",
+              "replacement": "entity"
+            },
+            {
+              "label": "Handling",
+              "notes": [
+                "Example: representing a hand grasping and moving a toothbrush."
+              ],
+              "key": "handling",
+              "replacement": "handling"
+            },
+            {
+              "label": "Body-part",
+              "notes": [],
+              "key": "bodypart",
+              "replacement": "body-part"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Sometimes produce ",
+                "slot": false
+              },
+              {
+                "text": "intended",
+                "slot": true
+              },
+              {
+                "text": " depicting constructions using space, perspective, and nonmanual features. Errors occur occasionally, but most of the intended meaning can be understood.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Occasionally produce ",
+                "slot": false
+              },
+              {
+                "text": "intended",
+                "slot": true
+              },
+              {
+                "text": " depicting constructions using space, perspective, and emerging nonmanual features. The intended meaning is recognizable, although some details may remain unclear.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Occasionally produce ",
+                "slot": false
+              },
+              {
+                "text": "intended",
+                "slot": true
+              },
+              {
+                "text": " depicting constructions using some features of space or perspective. The general depiction may be recognizable, but the intended meaning remains unclear.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Occasionally produce ",
+                "slot": false
+              },
+              {
+                "text": "intended",
+                "slot": true
+              },
+              {
+                "text": " depicting constructions using isolated features of space or perspective. The intended depiction is not yet recognizable.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "enactment",
+          "number": 10,
+          "title": "Enactment",
+          "text": [
+            {
+              "text": "Use ASL ",
+              "slot": false
+            },
+            {
+              "text": "enactment",
+              "slot": true
+            },
+            {
+              "text": " with appropriate body and head orientation, eye gaze, facial expression, and perspective control.",
+              "slot": false
+            }
+          ],
+          "notes": [
+            "Perspective control: clearly establishing, maintaining, changing, and ending the represented perspective."
+          ],
+          "elements": [
+            {
+              "label": "Character enactment (constructed action)",
+              "notes": [
+                "Example: using the face and body to portray a participant's actions, reactions, manner, or attitude."
+              ],
+              "key": "character",
+              "replacement": "character enactment (constructed action)"
+            },
+            {
+              "label": "Role shift",
+              "notes": [
+                "Example: adopting a participant's perspective to represent that participant's signing or thoughts, including switching between established participants."
+              ],
+              "key": "roleshift",
+              "replacement": "role shift"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Use ASL ",
+                "slot": false
+              },
+              {
+                "text": "enactment",
+                "slot": true
+              },
+              {
+                "text": " with developing coordination of body and head orientation, eye gaze, facial expression, and perspective control. The represented perspective remains recognizable despite errors or pauses.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Use ASL ",
+                "slot": false
+              },
+              {
+                "text": "enactment",
+                "slot": true
+              },
+              {
+                "text": " with developing coordination of body and head orientation, eye gaze, facial expression, and perspective control. Errors or pauses sometimes make the represented perspective unclear.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Use some features of body and head orientation, eye gaze, facial expression, or perspective control during ASL ",
+                "slot": false
+              },
+              {
+                "text": "enactment",
+                "slot": true
+              },
+              {
+                "text": ". Frequent errors make the represented perspective difficult to follow.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Use isolated features of body and head orientation, eye gaze, facial expression, or perspective control when attempting ASL ",
+                "slot": false
+              },
+              {
+                "text": "enactment",
+                "slot": true
+              },
+              {
+                "text": ".",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "spatial",
+          "number": 11,
+          "title": "ASL Spatial Grammar",
+          "text": [
+            {
+              "text": "Use ASL ",
+              "slot": false
+            },
+            {
+              "text": "spatial grammar",
+              "slot": true
+            },
+            {
+              "text": " with appropriate placement, perspective, and reference consistency.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "Spatial layout",
+              "notes": [],
+              "key": "layout",
+              "replacement": "spatial layout"
+            },
+            {
+              "label": "Referent establishment and tracking",
+              "notes": [],
+              "key": "referent",
+              "replacement": "referent establishment and tracking"
+            },
+            {
+              "label": "Directional verbs (also called indicating verbs)",
+              "notes": [],
+              "key": "directional",
+              "replacement": "directional verbs (also called indicating verbs)"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Sometimes use ASL ",
+                "slot": false
+              },
+              {
+                "text": "spatial grammar",
+                "slot": true
+              },
+              {
+                "text": " when appropriate, with developing control of placement, perspective, and reference consistency. Spatial relationships remain understandable despite errors.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Occasionally use ASL ",
+                "slot": false
+              },
+              {
+                "text": "spatial grammar",
+                "slot": true
+              },
+              {
+                "text": " when appropriate, with developing control of placement, perspective, and reference consistency. Errors sometimes make spatial relationships unclear.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Occasionally use ASL ",
+                "slot": false
+              },
+              {
+                "text": "spatial grammar",
+                "slot": true
+              },
+              {
+                "text": " when appropriate, with partial control of placement, perspective, and reference consistency. Frequent errors make spatial relationships difficult to follow.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Attempt isolated uses of ASL ",
+                "slot": false
+              },
+              {
+                "text": "spatial grammar",
+                "slot": true
+              },
+              {
+                "text": " through placement, perspective, or reference to locations in signing space.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "conversation",
+          "number": 12,
+          "title": "Conversation Management",
+          "text": [
+            {
+              "text": "Use appropriate ASL timing, gaze, and manual and nonmanual signals for ",
+              "slot": false
+            },
+            {
+              "text": "conversation management",
+              "slot": true
+            },
+            {
+              "text": ".",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "Conversational turn management",
+              "notes": [
+                "Examples: taking, maintaining, or yielding a conversational turn."
+              ],
+              "key": "turns",
+              "replacement": "conversational turn management"
+            },
+            {
+              "label": "Comprehension feedback and repair",
+              "notes": [
+                "Examples: backchanneling and requesting or responding to clarification, confirmation, or repetition."
+              ],
+              "key": "repair",
+              "replacement": "comprehension feedback and repair"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Use ASL timing, gaze, and manual and nonmanual signals with developing coordination for ",
+                "slot": false
+              },
+              {
+                "text": "conversation management",
+                "slot": true
+              },
+              {
+                "text": ". The signals serve their intended purpose, with occasional hesitation or awkward timing.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Use ASL timing, gaze, and manual and nonmanual signals with developing coordination for ",
+                "slot": false
+              },
+              {
+                "text": "conversation management",
+                "slot": true
+              },
+              {
+                "text": ". The signals are effective but often hesitant or awkwardly timed.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Use some ASL timing, gaze, or manual and nonmanual signals for ",
+                "slot": false
+              },
+              {
+                "text": "conversation management",
+                "slot": true
+              },
+              {
+                "text": ". Missed timing or incomplete coordination often prevents the signals from serving their intended purpose.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Use isolated ASL timing, gaze, or manual and nonmanual signals when attempting ",
+                "slot": false
+              },
+              {
+                "text": "conversation management",
+                "slot": true
+              },
+              {
+                "text": ".",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "single"
+          ]
+        },
+        {
+          "key": "nonmanual",
+          "number": 13,
+          "title": "Nonmanual Signals and Marking",
+          "text": [
+            {
+              "text": "Use appropriate ASL nonmanual signals with appropriate timing and coordination as part of ",
+              "slot": false
+            },
+            {
+              "text": "the intended linguistic use",
+              "slot": true
+            },
+            {
+              "text": ".",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "Individual signs",
+              "notes": [],
+              "key": "signs",
+              "replacement": "individual signs"
+            },
+            {
+              "label": "Meaning modification",
+              "notes": [
+                "Examples: size, manner, intensity, degree."
+              ],
+              "key": "modification",
+              "replacement": "meaning modification"
+            },
+            {
+              "label": "Grammatical marking",
+              "notes": [
+                "Examples: questions, negation, topicalization, conditionals."
+              ],
+              "key": "grammar",
+              "replacement": "grammatical marking"
+            },
+            {
+              "label": "Discourse and interaction",
+              "notes": [
+                "Examples: turn management, reference, perspective, reactions."
+              ],
+              "key": "discourse",
+              "replacement": "discourse and interaction"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Sometimes use appropriate ASL nonmanual signals with accurate timing and coordination as part of ",
+                "slot": false
+              },
+              {
+                "text": "the intended linguistic use",
+                "slot": true
+              },
+              {
+                "text": ". The signals generally convey their intended meaning or serve their intended function.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Occasionally use appropriate ASL nonmanual signals with accurate timing and coordination as part of ",
+                "slot": false
+              },
+              {
+                "text": "the intended linguistic use",
+                "slot": true
+              },
+              {
+                "text": ". The signals generally convey their intended meaning or serve their intended function.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Attempt appropriate ASL nonmanual signals with limited timing and coordination as part of ",
+                "slot": false
+              },
+              {
+                "text": "the intended linguistic use",
+                "slot": true
+              },
+              {
+                "text": ". The signals sometimes convey their intended meaning or serve their intended function.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Attempt isolated features of appropriate ASL nonmanual signals as part of ",
+                "slot": false
+              },
+              {
+                "text": "the intended linguistic use",
+                "slot": true
+              },
+              {
+                "text": ".",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "history",
+          "number": 14,
+          "title": "Deaf History",
+          "text": [
+            {
+              "text": "Identify and describe ",
+              "slot": false
+            },
+            {
+              "text": "aspects of Deaf history",
+              "slot": true
+            },
+            {
+              "text": ", place them in chronological context, and explain their connections and significance to Deaf people and communities.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "Historical figures",
+              "notes": [],
+              "key": "figures",
+              "replacement": "historical figures"
+            },
+            {
+              "label": "Historical events",
+              "notes": [],
+              "key": "events",
+              "replacement": "historical events"
+            },
+            {
+              "label": "Educational developments",
+              "notes": [],
+              "key": "education",
+              "replacement": "educational developments"
+            },
+            {
+              "label": "Deaf rights",
+              "notes": [],
+              "key": "rights",
+              "replacement": "deaf rights"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Identify and clearly describe ",
+                "slot": false
+              },
+              {
+                "text": "aspects of Deaf history",
+                "slot": true
+              },
+              {
+                "text": ", accurately place them in chronological context, and explain their connections and significance to Deaf people and communities using supporting details.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Identify and describe ",
+                "slot": false
+              },
+              {
+                "text": "aspects of Deaf history",
+                "slot": true
+              },
+              {
+                "text": " with relevant details, place them in chronological context, and begin to explain their connections and significance to Deaf people and communities.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Identify and describe ",
+                "slot": false
+              },
+              {
+                "text": "aspects of Deaf history",
+                "slot": true
+              },
+              {
+                "text": " in basic terms and place them in broad chronological context.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Identify ",
+                "slot": false
+              },
+              {
+                "text": "aspects of Deaf history",
+                "slot": true
+              },
+              {
+                "text": " and provide a few relevant facts about them.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "single"
+          ]
+        },
+        {
+          "key": "culture",
+          "number": 15,
+          "title": "Deaf Culture",
+          "text": [
+            {
+              "text": "Describe ",
+              "slot": false
+            },
+            {
+              "text": "aspects of Deaf culture",
+              "slot": true
+            },
+            {
+              "text": " and explain their significance in Deaf people’s lives and communities.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "Social norms",
+              "notes": [],
+              "key": "norms",
+              "replacement": "social norms"
+            },
+            {
+              "label": "Cultural values",
+              "notes": [],
+              "key": "values",
+              "replacement": "cultural values"
+            },
+            {
+              "label": "Deaf identities",
+              "notes": [],
+              "key": "identities",
+              "replacement": "deaf identities"
+            },
+            {
+              "label": "Technologies",
+              "notes": [],
+              "key": "technology",
+              "replacement": "technologies"
+            },
+            {
+              "label": "Visual communication practices",
+              "notes": [],
+              "key": "visual",
+              "replacement": "visual communication practices"
+            },
+            {
+              "label": "Forms of cultural expression",
+              "notes": [],
+              "key": "expression",
+              "replacement": "forms of cultural expression"
+            },
+            {
+              "label": "Forms of Deaf media",
+              "notes": [],
+              "key": "media",
+              "replacement": "forms of Deaf media"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Clearly and accurately describe ",
+                "slot": false
+              },
+              {
+                "text": "aspects of Deaf culture",
+                "slot": true
+              },
+              {
+                "text": " and explain their significance in Deaf people’s lives and communities using supporting details.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Describe ",
+                "slot": false
+              },
+              {
+                "text": "aspects of Deaf culture",
+                "slot": true
+              },
+              {
+                "text": " with relevant details and begin to explain their significance in Deaf people’s lives and communities.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Describe ",
+                "slot": false
+              },
+              {
+                "text": "aspects of Deaf culture",
+                "slot": true
+              },
+              {
+                "text": " in basic terms and identify their purposes, meanings, or roles in Deaf people’s lives and communities.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Identify ",
+                "slot": false
+              },
+              {
+                "text": "aspects of Deaf culture",
+                "slot": true
+              },
+              {
+                "text": " and provide a few relevant details about them.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "single"
+          ]
+        }
+      ],
+      "mode_notes": [
+        "Communication Modes",
+        "IP = Interpersonal    IN = Interpretive    PR = Presentational",
+        "1   IP, IN, PR",
+        "2   IP, IN, PR",
+        "3   IP, IN, PR",
+        "4   IP, IN, PR",
+        "5   IP, IN, PR",
+        "6   IP, IN, PR",
+        "7   IP, IN, PR",
+        "8   IP, IN, PR",
+        "9   IP, IN, PR",
+        "10   IP, IN, PR",
+        "11   IP, IN, PR",
+        "12   IP*",
+        "13   IP, IN, PR**",
+        "* 12 applies directly to interpersonal communication. Recognizing conversation-management signals in a recording does not demonstrate managing an exchange.",
+        "** 13 applies across all three modes, except interaction-specific signals, which follow the limitation for 12.",
+        "These labels apply to the linguistic content. Interpretive assessment requires receptive evidence rather than the current production wording."
+      ]
+    },
+    {
+      "level": 2,
+      "source": "Proficiency list for asl 2.docx",
+      "sha256": "e3c7aee151b5f055854dfe68f235c304529710f0b3d04565b3fa0be58c921da9",
+      "competencies": [
+        {
+          "key": "sentences",
+          "number": 1,
+          "title": "ASL Sentence Constructions",
+          "text": [
+            {
+              "text": "Use the sentence structure and grammatical marking appropriate to ",
+              "slot": false
+            },
+            {
+              "text": "the intended ASL construction",
+              "slot": true
+            },
+            {
+              "text": ".",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "Basic declarative statements",
+              "notes": [],
+              "key": "declarative",
+              "replacement": "basic declarative statements"
+            },
+            {
+              "label": "Yes/no questions",
+              "notes": [],
+              "key": "yesno",
+              "replacement": "yes/no questions"
+            },
+            {
+              "label": "WH-questions",
+              "notes": [],
+              "key": "wh",
+              "replacement": "WH-questions"
+            },
+            {
+              "label": "Rhetorical questions",
+              "notes": [],
+              "key": "rhetorical",
+              "replacement": "rhetorical questions"
+            },
+            {
+              "label": "Negation",
+              "notes": [],
+              "key": "negation",
+              "replacement": "negation"
+            },
+            {
+              "label": "Conditionals",
+              "notes": [
+                "Examples: if-then constructions, UNDERSTAND used as a conditional connector."
+              ],
+              "key": "conditional",
+              "replacement": "conditionals"
+            },
+            {
+              "label": "Topic-comment structure",
+              "notes": [],
+              "key": "topic",
+              "replacement": "topic-comment structure"
+            },
+            {
+              "label": "Commands",
+              "notes": [],
+              "key": "command",
+              "replacement": "commands"
+            },
+            {
+              "label": "Modal constructions",
+              "notes": [
+                "Examples: constructions using CAN, MUST/HAVE-TO, SHOULD, or WILL."
+              ],
+              "key": "modal",
+              "replacement": "modal constructions"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Use the sentence structure and grammatical marking appropriate to ",
+                "slot": false
+              },
+              {
+                "text": "the intended ASL construction",
+                "slot": true
+              },
+              {
+                "text": ". The features consistently work together as a complete construction within connected signing.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Use the sentence structure and grammatical marking appropriate to ",
+                "slot": false
+              },
+              {
+                "text": "the intended ASL construction",
+                "slot": true
+              },
+              {
+                "text": ". The features regularly work together as a complete construction.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Use the sentence structure and grammatical marking appropriate to ",
+                "slot": false
+              },
+              {
+                "text": "the intended ASL construction",
+                "slot": true
+              },
+              {
+                "text": ". The features sometimes work together as a complete construction.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Use some of the sentence structure and grammatical marking appropriate to ",
+                "slot": false
+              },
+              {
+                "text": "the intended ASL construction",
+                "slot": true
+              },
+              {
+                "text": ". The features usually remain separate or incomplete.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "modification",
+          "number": 2,
+          "title": "Manner, Aspect, and Degree Modification",
+          "text": [
+            {
+              "text": "Use the appropriate ASL sign modifications and grammatical markers to convey ",
+              "slot": false
+            },
+            {
+              "text": "the intended meaning",
+              "slot": true
+            },
+            {
+              "text": ".",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "The manner of an action",
+              "notes": [
+                "Examples: slowly, quickly, forcefully, or in a hurry."
+              ],
+              "key": "manner",
+              "replacement": "the manner of an action"
+            },
+            {
+              "label": "Temporal aspect",
+              "notes": [
+                "Variations: continual or over-time action, regular or habitual action, repeated or over-and-over action, prolonged action, and completion (including FINISH used as an aspect marker)."
+              ],
+              "key": "aspect",
+              "replacement": "temporal aspect"
+            },
+            {
+              "label": "Degree or intensity",
+              "notes": [
+                "Examples: very big, very far, too far, or extremely cold."
+              ],
+              "key": "degree",
+              "replacement": "degree or intensity"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Use appropriate ASL sign modifications and grammatical markers to convey ",
+                "slot": false
+              },
+              {
+                "text": "the intended meaning",
+                "slot": true
+              },
+              {
+                "text": " in familiar and unfamiliar uses. Control is stable, and meaning is generally conveyed clearly.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Use appropriate ASL sign modifications and grammatical markers to convey ",
+                "slot": false
+              },
+              {
+                "text": "the intended meaning",
+                "slot": true
+              },
+              {
+                "text": " in familiar uses. Control is stable, and meaning is generally conveyed clearly.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Use appropriate ASL sign modifications and grammatical markers to convey ",
+                "slot": false
+              },
+              {
+                "text": "the intended meaning",
+                "slot": true
+              },
+              {
+                "text": " in familiar uses. Control is developing, and meaning is generally conveyed.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Use some appropriate ASL sign modifications or grammatical markers to convey ",
+                "slot": false
+              },
+              {
+                "text": "the intended meaning",
+                "slot": true
+              },
+              {
+                "text": " in familiar uses. Control is inconsistent, and meaning is only partly conveyed.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "connections",
+          "number": 3,
+          "title": "Organizing and Connecting Related Ideas",
+          "text": [
+            {
+              "text": "Use ",
+              "slot": false
+            },
+            {
+              "text": "the appropriate ASL structure",
+              "slot": true
+            },
+            {
+              "text": ", with the required spatial organization, timing, and nonmanual marking, to organize or connect related ideas.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "List structure",
+              "notes": [],
+              "key": "list",
+              "replacement": "list structure"
+            },
+            {
+              "label": "Contrastive structure",
+              "notes": [
+                "Example: contrasting information about two people, things, or ideas."
+              ],
+              "key": "contrast",
+              "replacement": "contrastive structure"
+            },
+            {
+              "label": "Coordination",
+              "notes": [
+                "Examples: placing related ideas next to one another with pauses or holds, or using signs such as AND, PLUS, or BOTH."
+              ],
+              "key": "coordination",
+              "replacement": "coordination"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Use ",
+                "slot": false
+              },
+              {
+                "text": "the appropriate ASL structure",
+                "slot": true
+              },
+              {
+                "text": ", with the appropriate spatial organization, timing, and nonmanual marking, to organize or connect related ideas in familiar and unfamiliar uses. The organization or connection is reliably maintained.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Use ",
+                "slot": false
+              },
+              {
+                "text": "the appropriate ASL structure",
+                "slot": true
+              },
+              {
+                "text": ", with the appropriate spatial organization, timing, and nonmanual marking, to organize or connect related ideas in familiar uses. The organization or connection is reliably maintained.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Use ",
+                "slot": false
+              },
+              {
+                "text": "the appropriate ASL structure",
+                "slot": true
+              },
+              {
+                "text": ", with the appropriate spatial organization, timing, and nonmanual marking, to organize or connect related ideas in familiar uses. The organization or connection is inconsistently maintained.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Use some features of ",
+                "slot": false
+              },
+              {
+                "text": "the appropriate ASL structure",
+                "slot": true
+              },
+              {
+                "text": " to partially organize or connect related ideas in familiar uses. The appropriate spatial organization, timing, or nonmanual marking is incomplete, and the organization or connection is difficult to maintain.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "time",
+          "number": 4,
+          "title": "Time Reference and Relationships",
+          "text": [
+            {
+              "text": "Use appropriate ASL time signs, grammatical markers, sentence structure, and spatial organization to accurately express ",
+              "slot": false
+            },
+            {
+              "text": "time information",
+              "slot": true
+            },
+            {
+              "text": ".",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "A time frame",
+              "notes": [
+                "Establishing, maintaining, or resetting when events occur."
+              ],
+              "key": "frame",
+              "replacement": "a time frame"
+            },
+            {
+              "label": "Frequency or recurrence",
+              "notes": [
+                "Examples: frequency signs and recurring forms such as EVERY-DAY, EVERY-WEEK, EVERY-MONDAY, or EVERY-NIGHT."
+              ],
+              "key": "frequency",
+              "replacement": "frequency or recurrence"
+            },
+            {
+              "label": "Temporal relationships",
+              "notes": [
+                "Examples: FINISH for sequencing events and UP-UNTIL-NOW for relating past time to the present."
+              ],
+              "key": "relationships",
+              "replacement": "temporal relationships"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Regularly use appropriate ASL time signs, grammatical markers, sentence structure, and spatial organization to accurately express ",
+                "slot": false
+              },
+              {
+                "text": "time information",
+                "slot": true
+              },
+              {
+                "text": " in familiar and unfamiliar uses. Time information remains clear across connected statements.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Regularly use appropriate ASL time signs, grammatical markers, sentence structure, and spatial organization to accurately express ",
+                "slot": false
+              },
+              {
+                "text": "time information",
+                "slot": true
+              },
+              {
+                "text": " in familiar and unfamiliar uses.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Regularly use appropriate ASL time signs, grammatical markers, sentence structure, and spatial organization to accurately express ",
+                "slot": false
+              },
+              {
+                "text": "time information",
+                "slot": true
+              },
+              {
+                "text": " in familiar uses.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Inconsistently use some appropriate ASL time signs, grammatical markers, sentence structure, or spatial organization to express ",
+                "slot": false
+              },
+              {
+                "text": "time information",
+                "slot": true
+              },
+              {
+                "text": " with partial accuracy in familiar uses.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "manual",
+          "number": 5,
+          "title": "Cardinal Numbers and Fingerspelling",
+          "text": [
+            {
+              "text": "Accurately produce ",
+              "slot": false
+            },
+            {
+              "text": "manual",
+              "slot": true
+            },
+            {
+              "text": " sequences using the required handshapes, locations, palm orientations, movements, and order.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "Cardinal-number",
+              "notes": [],
+              "key": "cardinal",
+              "replacement": "cardinal-number"
+            },
+            {
+              "label": "Fingerspelling",
+              "notes": [],
+              "key": "fingerspelling",
+              "replacement": "fingerspelling"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Accurately produce familiar and unfamiliar ",
+                "slot": false
+              },
+              {
+                "text": "manual",
+                "slot": true
+              },
+              {
+                "text": " sequences using the required handshapes, locations, palm orientations, movements, and order. Pauses and sequence errors rarely impede understanding.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Accurately produce familiar ",
+                "slot": false
+              },
+              {
+                "text": "manual",
+                "slot": true
+              },
+              {
+                "text": " sequences using the required handshapes, locations, palm orientations, movements, and order. Pauses and sequence errors rarely impede understanding.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Accurately produce familiar ",
+                "slot": false
+              },
+              {
+                "text": "manual",
+                "slot": true
+              },
+              {
+                "text": " sequences using the required handshapes, locations, palm orientations, movements, and order. Pauses and sequence errors sometimes impede understanding.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Produce short, familiar ",
+                "slot": false
+              },
+              {
+                "text": "manual",
+                "slot": true
+              },
+              {
+                "text": " sequences with partial accuracy in the required handshapes, locations, palm orientations, movements, and order. Frequent pauses and sequence errors impede understanding.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "lexicalized",
+          "number": 6,
+          "title": "Lexicalized Fingerspelling",
+          "text": [
+            {
+              "text": "Produce ",
+              "slot": false
+            },
+            {
+              "text": "lexicalized fingerspelled signs",
+              "slot": true
+            },
+            {
+              "text": " using their conventional letter patterns, movement, and orientation.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [],
+          "rubric": {
+            "4": [
+              {
+                "text": "Produce a broader range of familiar ",
+                "slot": false
+              },
+              {
+                "text": "lexicalized fingerspelled signs",
+                "slot": true
+              },
+              {
+                "text": " within connected signing using their conventional letter patterns, movement, and orientation. Their production consistently maintains the surrounding flow.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Produce a broader range of familiar ",
+                "slot": false
+              },
+              {
+                "text": "lexicalized fingerspelled signs",
+                "slot": true
+              },
+              {
+                "text": " within connected signing using their conventional letter patterns, movement, and orientation. Their production minimally interrupts the surrounding flow.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Produce a few commonly used ",
+                "slot": false
+              },
+              {
+                "text": "lexicalized fingerspelled signs",
+                "slot": true
+              },
+              {
+                "text": " within connected signing using their conventional letter patterns, movement, and orientation. Their production often interrupts the surrounding flow.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Produce partial forms of a few commonly used ",
+                "slot": false
+              },
+              {
+                "text": "lexicalized fingerspelled signs",
+                "slot": true
+              },
+              {
+                "text": " using some of their conventional letter-pattern, movement, or orientation changes.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "formation",
+          "number": 7,
+          "title": "ASL Word Formation",
+          "text": [
+            {
+              "text": "Use ASL ",
+              "slot": false
+            },
+            {
+              "text": "word-formation processes",
+              "slot": true
+            },
+            {
+              "text": " to create the intended word by combining or modifying signs or sign parts.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "Compound formation",
+              "notes": [],
+              "key": "compound",
+              "replacement": "compound formation"
+            },
+            {
+              "label": "Noun-verb pair formation",
+              "notes": [],
+              "key": "nounverb",
+              "replacement": "noun-verb pair formation"
+            },
+            {
+              "label": "Numeral incorporation",
+              "notes": [],
+              "key": "numeral",
+              "replacement": "numeral incorporation"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Regularly use ASL ",
+                "slot": false
+              },
+              {
+                "text": "word-formation processes",
+                "slot": true
+              },
+              {
+                "text": " to create intended words in familiar and unfamiliar uses by appropriately combining or modifying signs or sign parts. The required changes remain accurate within connected signing.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Regularly use ASL ",
+                "slot": false
+              },
+              {
+                "text": "word-formation processes",
+                "slot": true
+              },
+              {
+                "text": " to create intended words in familiar and unfamiliar uses by appropriately combining or modifying signs or sign parts.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Regularly use ASL ",
+                "slot": false
+              },
+              {
+                "text": "word-formation processes",
+                "slot": true
+              },
+              {
+                "text": " to create intended words in familiar uses by combining or modifying signs or sign parts.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Inconsistently apply learned patterns of ASL ",
+                "slot": false
+              },
+              {
+                "text": "word-formation processes",
+                "slot": true
+              },
+              {
+                "text": " to create intended words by combining or modifying signs or sign parts.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "variety",
+          "number": 8,
+          "title": "Appropriate ASL Variety",
+          "text": [
+            {
+              "text": "Use ",
+              "slot": false
+            },
+            {
+              "text": "ASL language choices",
+              "slot": true
+            },
+            {
+              "text": " appropriate to the intended setting, social relationship, and language community.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [],
+          "rubric": {
+            "4": [
+              {
+                "text": "Sometimes use a learned ",
+                "slot": false
+              },
+              {
+                "text": "ASL language choice",
+                "slot": true
+              },
+              {
+                "text": " appropriate to the intended setting, social relationship, or language community.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Occasionally use a learned ",
+                "slot": false
+              },
+              {
+                "text": "ASL language choice",
+                "slot": true
+              },
+              {
+                "text": " appropriate to the intended setting, social relationship, or language community.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Occasionally use a learned ",
+                "slot": false
+              },
+              {
+                "text": "ASL language choice",
+                "slot": true
+              },
+              {
+                "text": " intended to match the setting, social relationship, or language community.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Use a small number of learned ",
+                "slot": false
+              },
+              {
+                "text": "ASL language choices",
+                "slot": true
+              },
+              {
+                "text": ", but do not yet reliably select among them based on the intended setting, social relationship, or language community.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "depicting",
+          "number": 9,
+          "title": "Depicting Constructions",
+          "text": [
+            {
+              "text": "Use space, perspective, and nonmanual features appropriately to produce ",
+              "slot": false
+            },
+            {
+              "text": "the intended",
+              "slot": true
+            },
+            {
+              "text": " depicting construction.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "Size-and-shape",
+              "notes": [],
+              "key": "shape",
+              "replacement": "size-and-shape"
+            },
+            {
+              "label": "Entity",
+              "notes": [
+                "Example: representing a person walking from one location to another."
+              ],
+              "key": "entity",
+              "replacement": "entity"
+            },
+            {
+              "label": "Handling",
+              "notes": [
+                "Example: representing a hand grasping and moving a toothbrush."
+              ],
+              "key": "handling",
+              "replacement": "handling"
+            },
+            {
+              "label": "Body-part",
+              "notes": [],
+              "key": "bodypart",
+              "replacement": "body-part"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Regularly produce ",
+                "slot": false
+              },
+              {
+                "text": "intended",
+                "slot": true
+              },
+              {
+                "text": " depicting constructions using space, perspective, and nonmanual features. Occasionally select and shift between levels of detail appropriate to the intended depiction. Errors occur occasionally, but the intended meaning is generally clear.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Sometimes produce ",
+                "slot": false
+              },
+              {
+                "text": "intended",
+                "slot": true
+              },
+              {
+                "text": " depicting constructions using space, perspective, and nonmanual features. Errors occur occasionally, but most of the intended meaning can be understood.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Occasionally produce ",
+                "slot": false
+              },
+              {
+                "text": "intended",
+                "slot": true
+              },
+              {
+                "text": " depicting constructions using space, perspective, and emerging nonmanual features. The intended meaning is recognizable, although some details may remain unclear.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Occasionally produce ",
+                "slot": false
+              },
+              {
+                "text": "intended",
+                "slot": true
+              },
+              {
+                "text": " depicting constructions using some features of space or perspective. The general depiction may be recognizable, but the intended meaning remains unclear.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "enactment",
+          "number": 10,
+          "title": "Enactment",
+          "text": [
+            {
+              "text": "Use ASL ",
+              "slot": false
+            },
+            {
+              "text": "enactment",
+              "slot": true
+            },
+            {
+              "text": " with appropriate body and head orientation, eye gaze, facial expression, and perspective control.",
+              "slot": false
+            }
+          ],
+          "notes": [
+            "Perspective control: clearly establishing, maintaining, changing, and ending the represented perspective."
+          ],
+          "elements": [
+            {
+              "label": "Character enactment (constructed action)",
+              "notes": [
+                "Example: using the face and body to portray a participant's actions, reactions, manner, or attitude."
+              ],
+              "key": "character",
+              "replacement": "character enactment (constructed action)"
+            },
+            {
+              "label": "Role shift",
+              "notes": [
+                "Example: adopting a participant's perspective to represent that participant's signing or thoughts, including switching between established participants."
+              ],
+              "key": "roleshift",
+              "replacement": "role shift"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Use ASL ",
+                "slot": false
+              },
+              {
+                "text": "enactment",
+                "slot": true
+              },
+              {
+                "text": " with stable coordination of body and head orientation, eye gaze, facial expression, and perspective control. The represented perspective remains clear, with only occasional errors or pauses.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Use ASL ",
+                "slot": false
+              },
+              {
+                "text": "enactment",
+                "slot": true
+              },
+              {
+                "text": " with developing coordination of body and head orientation, eye gaze, facial expression, and perspective control. The represented perspective remains recognizable despite errors or pauses.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Use ASL ",
+                "slot": false
+              },
+              {
+                "text": "enactment",
+                "slot": true
+              },
+              {
+                "text": " with developing coordination of body and head orientation, eye gaze, facial expression, and perspective control. Errors or pauses sometimes make the represented perspective unclear.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Use some features of body and head orientation, eye gaze, facial expression, or perspective control during ASL ",
+                "slot": false
+              },
+              {
+                "text": "enactment",
+                "slot": true
+              },
+              {
+                "text": ". Frequent errors make the represented perspective difficult to follow.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "spatial",
+          "number": 11,
+          "title": "ASL Spatial Grammar",
+          "text": [
+            {
+              "text": "Use ASL ",
+              "slot": false
+            },
+            {
+              "text": "spatial grammar",
+              "slot": true
+            },
+            {
+              "text": " with appropriate placement, perspective, and reference consistency.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "Spatial layout",
+              "notes": [],
+              "key": "layout",
+              "replacement": "spatial layout"
+            },
+            {
+              "label": "Referent establishment and tracking",
+              "notes": [],
+              "key": "referent",
+              "replacement": "referent establishment and tracking"
+            },
+            {
+              "label": "Directional verbs (also called indicating verbs)",
+              "notes": [],
+              "key": "directional",
+              "replacement": "directional verbs (also called indicating verbs)"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Regularly use ASL ",
+                "slot": false
+              },
+              {
+                "text": "spatial grammar",
+                "slot": true
+              },
+              {
+                "text": " when appropriate, with stable control of placement, perspective, and reference consistency. Spatial relationships remain clear despite occasional errors.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Sometimes use ASL ",
+                "slot": false
+              },
+              {
+                "text": "spatial grammar",
+                "slot": true
+              },
+              {
+                "text": " when appropriate, with developing control of placement, perspective, and reference consistency. Spatial relationships remain understandable despite errors.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Occasionally use ASL ",
+                "slot": false
+              },
+              {
+                "text": "spatial grammar",
+                "slot": true
+              },
+              {
+                "text": " when appropriate, with developing control of placement, perspective, and reference consistency. Errors sometimes make spatial relationships unclear.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Occasionally use ASL ",
+                "slot": false
+              },
+              {
+                "text": "spatial grammar",
+                "slot": true
+              },
+              {
+                "text": " when appropriate, with partial control of placement, perspective, and reference consistency. Frequent errors make spatial relationships difficult to follow.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "conversation",
+          "number": 12,
+          "title": "Conversation Management",
+          "text": [
+            {
+              "text": "Use appropriate ASL timing, gaze, and manual and nonmanual signals for ",
+              "slot": false
+            },
+            {
+              "text": "conversation management",
+              "slot": true
+            },
+            {
+              "text": ".",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "Conversational turn management",
+              "notes": [
+                "Examples: taking, maintaining, or yielding a conversational turn."
+              ],
+              "key": "turns",
+              "replacement": "conversational turn management"
+            },
+            {
+              "label": "Comprehension feedback and repair",
+              "notes": [
+                "Examples: backchanneling and requesting or responding to clarification, confirmation, or repetition."
+              ],
+              "key": "repair",
+              "replacement": "comprehension feedback and repair"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Use ASL timing, gaze, and manual and nonmanual signals with stable coordination for ",
+                "slot": false
+              },
+              {
+                "text": "conversation management",
+                "slot": true
+              },
+              {
+                "text": ". The signals serve their intended purpose with timing that generally supports the ongoing exchange.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Use ASL timing, gaze, and manual and nonmanual signals with developing coordination for ",
+                "slot": false
+              },
+              {
+                "text": "conversation management",
+                "slot": true
+              },
+              {
+                "text": ". The signals serve their intended purpose, with occasional hesitation or awkward timing.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Use ASL timing, gaze, and manual and nonmanual signals with developing coordination for ",
+                "slot": false
+              },
+              {
+                "text": "conversation management",
+                "slot": true
+              },
+              {
+                "text": ". The signals are effective but often hesitant or awkwardly timed.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Use some ASL timing, gaze, or manual and nonmanual signals for ",
+                "slot": false
+              },
+              {
+                "text": "conversation management",
+                "slot": true
+              },
+              {
+                "text": ". Missed timing or incomplete coordination often prevents the signals from serving their intended purpose.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "single"
+          ]
+        },
+        {
+          "key": "nonmanual",
+          "number": 13,
+          "title": "Nonmanual Signals and Marking",
+          "text": [
+            {
+              "text": "Use appropriate ASL nonmanual signals with appropriate timing and coordination as part of ",
+              "slot": false
+            },
+            {
+              "text": "the intended linguistic use",
+              "slot": true
+            },
+            {
+              "text": ".",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "Individual signs",
+              "notes": [],
+              "key": "signs",
+              "replacement": "individual signs"
+            },
+            {
+              "label": "Meaning modification",
+              "notes": [
+                "Examples: size, manner, intensity, degree."
+              ],
+              "key": "modification",
+              "replacement": "meaning modification"
+            },
+            {
+              "label": "Grammatical marking",
+              "notes": [
+                "Examples: questions, negation, topicalization, conditionals."
+              ],
+              "key": "grammar",
+              "replacement": "grammatical marking"
+            },
+            {
+              "label": "Discourse and interaction",
+              "notes": [
+                "Examples: turn management, reference, perspective, reactions."
+              ],
+              "key": "discourse",
+              "replacement": "discourse and interaction"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Regularly use appropriate ASL nonmanual signals with accurate timing and coordination as part of ",
+                "slot": false
+              },
+              {
+                "text": "the intended linguistic use",
+                "slot": true
+              },
+              {
+                "text": ". The signals generally convey their intended meaning or serve their intended function.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Sometimes use appropriate ASL nonmanual signals with accurate timing and coordination as part of ",
+                "slot": false
+              },
+              {
+                "text": "the intended linguistic use",
+                "slot": true
+              },
+              {
+                "text": ". The signals generally convey their intended meaning or serve their intended function.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Occasionally use appropriate ASL nonmanual signals with accurate timing and coordination as part of ",
+                "slot": false
+              },
+              {
+                "text": "the intended linguistic use",
+                "slot": true
+              },
+              {
+                "text": ". The signals generally convey their intended meaning or serve their intended function.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Attempt appropriate ASL nonmanual signals with limited timing and coordination as part of ",
+                "slot": false
+              },
+              {
+                "text": "the intended linguistic use",
+                "slot": true
+              },
+              {
+                "text": ". The signals sometimes convey their intended meaning or serve their intended function.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "message",
+          "number": 14,
+          "title": "ASL Message Construction",
+          "text": [
+            {
+              "text": "Select and combine ",
+              "slot": false
+            },
+            {
+              "text": "ASL linguistic resources",
+              "slot": true
+            },
+            {
+              "text": " to convey the intended message effectively and visually.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [],
+          "rubric": {
+            "4": [
+              {
+                "text": "Select and combine ",
+                "slot": false
+              },
+              {
+                "text": "ASL linguistic resources",
+                "slot": true
+              },
+              {
+                "text": " suited to the intended message. The selected resources occasionally work together to convey parts of the message effectively and visually.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Select ",
+                "slot": false
+              },
+              {
+                "text": "ASL linguistic resources",
+                "slot": true
+              },
+              {
+                "text": " suited to the intended message and attempt to combine them to convey related information.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Select some ",
+                "slot": false
+              },
+              {
+                "text": "ASL linguistic resources",
+                "slot": true
+              },
+              {
+                "text": " suited to the intended message. Begin to consider how they could work together to convey related information.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Begin to select ",
+                "slot": false
+              },
+              {
+                "text": "ASL linguistic resources",
+                "slot": true
+              },
+              {
+                "text": " suited to the intended message. Choices show emerging consideration of how to express the information.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "history",
+          "number": 15,
+          "title": "Deaf History",
+          "text": [
+            {
+              "text": "Identify and describe ",
+              "slot": false
+            },
+            {
+              "text": "aspects of Deaf history",
+              "slot": true
+            },
+            {
+              "text": ", place them in chronological context, and explain their connections and significance to Deaf people and communities.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "Historical figures",
+              "notes": [],
+              "key": "figures",
+              "replacement": "historical figures"
+            },
+            {
+              "label": "Historical events",
+              "notes": [],
+              "key": "events",
+              "replacement": "historical events"
+            },
+            {
+              "label": "Educational developments",
+              "notes": [],
+              "key": "education",
+              "replacement": "educational developments"
+            },
+            {
+              "label": "Deaf rights",
+              "notes": [],
+              "key": "rights",
+              "replacement": "deaf rights"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Identify and clearly describe ",
+                "slot": false
+              },
+              {
+                "text": "aspects of Deaf history",
+                "slot": true
+              },
+              {
+                "text": ", accurately place them in chronological context, and explain how historical circumstances contribute to their connections and significance to Deaf people and communities using supporting details.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Identify and clearly describe ",
+                "slot": false
+              },
+              {
+                "text": "aspects of Deaf history",
+                "slot": true
+              },
+              {
+                "text": ", accurately place them in chronological context, and explain their connections and significance to Deaf people and communities using supporting details.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Identify and describe ",
+                "slot": false
+              },
+              {
+                "text": "aspects of Deaf history",
+                "slot": true
+              },
+              {
+                "text": " with relevant details, place them in chronological context, and begin to explain their connections and significance to Deaf people and communities.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Identify and describe ",
+                "slot": false
+              },
+              {
+                "text": "aspects of Deaf history",
+                "slot": true
+              },
+              {
+                "text": " in basic terms and place them in broad chronological context.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "single"
+          ]
+        },
+        {
+          "key": "culture",
+          "number": 16,
+          "title": "Deaf Culture",
+          "text": [
+            {
+              "text": "Describe ",
+              "slot": false
+            },
+            {
+              "text": "aspects of Deaf culture",
+              "slot": true
+            },
+            {
+              "text": " and explain their significance in Deaf people’s lives and communities.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "Social norms",
+              "notes": [],
+              "key": "norms",
+              "replacement": "social norms"
+            },
+            {
+              "label": "Cultural values",
+              "notes": [],
+              "key": "values",
+              "replacement": "cultural values"
+            },
+            {
+              "label": "Deaf identities",
+              "notes": [],
+              "key": "identities",
+              "replacement": "deaf identities"
+            },
+            {
+              "label": "Technologies",
+              "notes": [],
+              "key": "technology",
+              "replacement": "technologies"
+            },
+            {
+              "label": "Visual communication practices",
+              "notes": [],
+              "key": "visual",
+              "replacement": "visual communication practices"
+            },
+            {
+              "label": "Forms of cultural expression",
+              "notes": [],
+              "key": "expression",
+              "replacement": "forms of cultural expression"
+            },
+            {
+              "label": "Forms of Deaf media",
+              "notes": [],
+              "key": "media",
+              "replacement": "forms of Deaf media"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Clearly and accurately describe ",
+                "slot": false
+              },
+              {
+                "text": "aspects of Deaf culture",
+                "slot": true
+              },
+              {
+                "text": " and explain how their significance relates to particular circumstances or experiences in Deaf people’s lives and communities using supporting details.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Clearly and accurately describe ",
+                "slot": false
+              },
+              {
+                "text": "aspects of Deaf culture",
+                "slot": true
+              },
+              {
+                "text": " and explain their significance in Deaf people’s lives and communities using supporting details.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Describe ",
+                "slot": false
+              },
+              {
+                "text": "aspects of Deaf culture",
+                "slot": true
+              },
+              {
+                "text": " with relevant details and begin to explain their significance in Deaf people’s lives and communities.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Describe ",
+                "slot": false
+              },
+              {
+                "text": "aspects of Deaf culture",
+                "slot": true
+              },
+              {
+                "text": " in basic terms and identify their purposes, meanings, or roles in Deaf people’s lives and communities.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "single"
+          ]
+        }
+      ],
+      "mode_notes": [
+        "Communication Modes",
+        "IP = Interpersonal    IN = Interpretive    PR = Presentational",
+        "1   IP, IN, PR",
+        "2   IP, IN, PR",
+        "3   IP, IN, PR",
+        "4   IP, IN, PR",
+        "5   IP, IN, PR",
+        "6   IP, IN, PR",
+        "7   IP, IN, PR",
+        "8   IP, IN, PR",
+        "9   IP, IN, PR",
+        "10   IP, IN, PR",
+        "11   IP, IN, PR",
+        "12   IP*",
+        "13   IP, IN, PR**",
+        "14   IP, IN, PR",
+        "* 12 applies directly to interpersonal communication. Recognizing conversation-management signals in a recording does not demonstrate managing an exchange.",
+        "** 13 applies across all three modes, except interaction-specific signals, which follow the limitation for 12.",
+        "These labels apply to the linguistic content. Interpretive assessment requires receptive evidence rather than the current production wording.",
+        "What Each Scale Measures",
+        "For competencies 1 through 13, ASL 2 levels 1, 2, and 3 retain the descriptors from ASL 1 levels 2, 3, and 4, respectively. Each new level 4 continues the dimensions below or extends their application when the preceding level already describes reliable performance. Competency 14 begins in ASL 2.",
+        "1. Feature completeness and coordination: isolated or incomplete features become a complete construction with increasing consistency. Level 4 extends that coordination into connected signing.",
+        "2. Control of modification and clarity of meaning in familiar uses. Level 4 extends stable control and clear meaning to unfamiliar uses.",
+        "3. Completeness of spatial organization, timing, and nonmanual marking, and reliability of the resulting organization or connection. Level 4 extends reliable organization to unfamiliar uses.",
+        "4. Completeness, accuracy, consistency, and transfer from familiar to unfamiliar uses. Because transfer is already present at level 3, level 4 adds maintaining clear time information across connected statements.",
+        "5. Accuracy of manual forms and sequence order, and the effect of pauses and errors on understanding. Level 4 extends accurate, understandable production to unfamiliar sequences.",
+        "6. Conventional form, range of familiar lexicalized signs, and continuity within connected signing. Level 4 continues the flow dimension from minimal interruption to consistently maintained flow.",
+        "7. Completeness and consistency of word-formation processes, followed by transfer to unfamiliar uses. Because transfer is already present at level 3, level 4 adds maintaining accurate formation within connected signing.",
+        "8. Selection among learned language choices, successful fit to context, and frequency of appropriate adaptation. Level 4 increases appropriate adaptation from occasional to sometimes.",
+        "9. Coordination, frequency, and clarity of depiction. Level 4 increases regularity and clarity and adds occasionally selecting and shifting between appropriate levels of detail.",
+        "10. Coordination of enactment features and continuity and clarity of the represented perspective. Level 4 advances from developing to stable coordination and clearer perspective control.",
+        "11. Frequency of appropriate spatial grammar, control of placement and perspective, reference consistency, and clarity of spatial relationships. Level 4 increases regularity and stability of control.",
+        "12. Completeness and coordination of conversational signals, effectiveness, and timing. Level 4 advances to stable coordination and timing that supports the exchange.",
+        "13. Frequency of appropriate nonmanual use, timing, coordination, and effectiveness. Level 4 continues the frequency progression from sometimes to regularly while maintaining timing and effectiveness."
+      ]
+    },
+    {
+      "level": 3,
+      "source": "Proficiency list for asl 3.docx",
+      "sha256": "8764dfc322783e17597e57277ec5c90d517e49108fc40ad4d43d91ecb7a88e48",
+      "competencies": [
+        {
+          "key": "sentences",
+          "number": 1,
+          "title": "ASL Sentence Constructions",
+          "text": [
+            {
+              "text": "Use the sentence structure and grammatical marking appropriate to ",
+              "slot": false
+            },
+            {
+              "text": "the intended ASL construction",
+              "slot": true
+            },
+            {
+              "text": ".",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "Basic declarative statements",
+              "notes": [],
+              "key": "declarative",
+              "replacement": "basic declarative statements"
+            },
+            {
+              "label": "Yes/no questions",
+              "notes": [],
+              "key": "yesno",
+              "replacement": "yes/no questions"
+            },
+            {
+              "label": "WH-questions",
+              "notes": [],
+              "key": "wh",
+              "replacement": "WH-questions"
+            },
+            {
+              "label": "Rhetorical questions",
+              "notes": [],
+              "key": "rhetorical",
+              "replacement": "rhetorical questions"
+            },
+            {
+              "label": "Negation",
+              "notes": [],
+              "key": "negation",
+              "replacement": "negation"
+            },
+            {
+              "label": "Conditionals",
+              "notes": [
+                "Examples: if-then constructions, UNDERSTAND used as a conditional connector."
+              ],
+              "key": "conditional",
+              "replacement": "conditionals"
+            },
+            {
+              "label": "Topic-comment structure",
+              "notes": [],
+              "key": "topic",
+              "replacement": "topic-comment structure"
+            },
+            {
+              "label": "Commands",
+              "notes": [],
+              "key": "command",
+              "replacement": "commands"
+            },
+            {
+              "label": "Modal constructions",
+              "notes": [
+                "Examples: constructions using CAN, MUST/HAVE-TO, SHOULD, or WILL."
+              ],
+              "key": "modal",
+              "replacement": "modal constructions"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Use the sentence structure and grammatical marking appropriate to ",
+                "slot": false
+              },
+              {
+                "text": "the intended ASL construction",
+                "slot": true
+              },
+              {
+                "text": ". The features consistently work together as a complete construction within connected signing. Select and adapt sentence constructions to effectively express the intended meaning.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Use the sentence structure and grammatical marking appropriate to ",
+                "slot": false
+              },
+              {
+                "text": "the intended ASL construction",
+                "slot": true
+              },
+              {
+                "text": ". The features consistently work together as a complete construction within connected signing.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Use the sentence structure and grammatical marking appropriate to ",
+                "slot": false
+              },
+              {
+                "text": "the intended ASL construction",
+                "slot": true
+              },
+              {
+                "text": ". The features regularly work together as a complete construction.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Use the sentence structure and grammatical marking appropriate to ",
+                "slot": false
+              },
+              {
+                "text": "the intended ASL construction",
+                "slot": true
+              },
+              {
+                "text": ". The features sometimes work together as a complete construction.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "modification",
+          "number": 2,
+          "title": "Manner, Aspect, and Degree Modification",
+          "text": [
+            {
+              "text": "Use the appropriate ASL sign modifications and grammatical markers to convey ",
+              "slot": false
+            },
+            {
+              "text": "the intended meaning",
+              "slot": true
+            },
+            {
+              "text": ".",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "The manner of an action",
+              "notes": [
+                "Examples: slowly, quickly, forcefully, or in a hurry."
+              ],
+              "key": "manner",
+              "replacement": "the manner of an action"
+            },
+            {
+              "label": "Temporal aspect",
+              "notes": [
+                "Variations: continual or over-time action, regular or habitual action, repeated or over-and-over action, prolonged action, and completion (including FINISH used as an aspect marker)."
+              ],
+              "key": "aspect",
+              "replacement": "temporal aspect"
+            },
+            {
+              "label": "Degree or intensity",
+              "notes": [
+                "Examples: very big, very far, too far, or extremely cold."
+              ],
+              "key": "degree",
+              "replacement": "degree or intensity"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Use appropriate ASL sign modifications and grammatical markers to convey ",
+                "slot": false
+              },
+              {
+                "text": "the intended meaning",
+                "slot": true
+              },
+              {
+                "text": " in familiar and unfamiliar uses. Control is stable, and meaning is generally conveyed clearly. Select and adjust these features to convey precise distinctions in meaning.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Use appropriate ASL sign modifications and grammatical markers to convey ",
+                "slot": false
+              },
+              {
+                "text": "the intended meaning",
+                "slot": true
+              },
+              {
+                "text": " in familiar and unfamiliar uses. Control is stable, and meaning is generally conveyed clearly.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Use appropriate ASL sign modifications and grammatical markers to convey ",
+                "slot": false
+              },
+              {
+                "text": "the intended meaning",
+                "slot": true
+              },
+              {
+                "text": " in familiar uses. Control is stable, and meaning is generally conveyed clearly.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Use appropriate ASL sign modifications and grammatical markers to convey ",
+                "slot": false
+              },
+              {
+                "text": "the intended meaning",
+                "slot": true
+              },
+              {
+                "text": " in familiar uses. Control is developing, and meaning is generally conveyed.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "connections",
+          "number": 3,
+          "title": "Organizing and Connecting Related Ideas",
+          "text": [
+            {
+              "text": "Use ",
+              "slot": false
+            },
+            {
+              "text": "the appropriate ASL structure",
+              "slot": true
+            },
+            {
+              "text": ", with the required spatial organization, timing, and nonmanual marking, to organize or connect related ideas.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "List structure",
+              "notes": [],
+              "key": "list",
+              "replacement": "list structure"
+            },
+            {
+              "label": "Contrastive structure",
+              "notes": [
+                "Example: contrasting information about two people, things, or ideas."
+              ],
+              "key": "contrast",
+              "replacement": "contrastive structure"
+            },
+            {
+              "label": "Coordination",
+              "notes": [
+                "Examples: placing related ideas next to one another with pauses or holds, or using signs such as AND, PLUS, or BOTH."
+              ],
+              "key": "coordination",
+              "replacement": "coordination"
+            }
+          ],
+          "rubric": {
+            "3": [
+              {
+                "text": "Use ",
+                "slot": false
+              },
+              {
+                "text": "the appropriate ASL structure",
+                "slot": true
+              },
+              {
+                "text": ", with the appropriate spatial organization, timing, and nonmanual marking, to organize or connect related ideas in familiar and unfamiliar uses. The organization or connection is reliably maintained.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Use ",
+                "slot": false
+              },
+              {
+                "text": "the appropriate ASL structure",
+                "slot": true
+              },
+              {
+                "text": ", with the appropriate spatial organization, timing, and nonmanual marking, to organize or connect related ideas in familiar uses. The organization or connection is reliably maintained.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Use ",
+                "slot": false
+              },
+              {
+                "text": "the appropriate ASL structure",
+                "slot": true
+              },
+              {
+                "text": ", with the appropriate spatial organization, timing, and nonmanual marking, to organize or connect related ideas in familiar uses. The organization or connection is inconsistently maintained.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "time",
+          "number": 4,
+          "title": "Time Reference and Relationships",
+          "text": [
+            {
+              "text": "Use appropriate ASL time signs, grammatical markers, sentence structure, and spatial organization to accurately express ",
+              "slot": false
+            },
+            {
+              "text": "time information",
+              "slot": true
+            },
+            {
+              "text": ".",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "A time frame",
+              "notes": [
+                "Establishing, maintaining, or resetting when events occur."
+              ],
+              "key": "frame",
+              "replacement": "a time frame"
+            },
+            {
+              "label": "Frequency or recurrence",
+              "notes": [
+                "Examples: frequency signs and recurring forms such as EVERY-DAY, EVERY-WEEK, EVERY-MONDAY, or EVERY-NIGHT."
+              ],
+              "key": "frequency",
+              "replacement": "frequency or recurrence"
+            },
+            {
+              "label": "Temporal relationships",
+              "notes": [
+                "Examples: FINISH for sequencing events and UP-UNTIL-NOW for relating past time to the present."
+              ],
+              "key": "relationships",
+              "replacement": "temporal relationships"
+            }
+          ],
+          "rubric": {
+            "3": [
+              {
+                "text": "Regularly use appropriate ASL time signs, grammatical markers, sentence structure, and spatial organization to accurately express ",
+                "slot": false
+              },
+              {
+                "text": "time information",
+                "slot": true
+              },
+              {
+                "text": " in familiar and unfamiliar uses. Time information remains clear across connected statements.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Regularly use appropriate ASL time signs, grammatical markers, sentence structure, and spatial organization to accurately express ",
+                "slot": false
+              },
+              {
+                "text": "time information",
+                "slot": true
+              },
+              {
+                "text": " in familiar and unfamiliar uses.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Regularly use appropriate ASL time signs, grammatical markers, sentence structure, and spatial organization to accurately express ",
+                "slot": false
+              },
+              {
+                "text": "time information",
+                "slot": true
+              },
+              {
+                "text": " in familiar uses.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "manual",
+          "number": 5,
+          "title": "Cardinal Numbers and Fingerspelling",
+          "text": [
+            {
+              "text": "Accurately produce ",
+              "slot": false
+            },
+            {
+              "text": "manual",
+              "slot": true
+            },
+            {
+              "text": " sequences using the required handshapes, locations, palm orientations, movements, and order.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "Cardinal-number",
+              "notes": [],
+              "key": "cardinal",
+              "replacement": "cardinal-number"
+            },
+            {
+              "label": "Fingerspelling",
+              "notes": [],
+              "key": "fingerspelling",
+              "replacement": "fingerspelling"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Accurately produce familiar and unfamiliar ",
+                "slot": false
+              },
+              {
+                "text": "manual",
+                "slot": true
+              },
+              {
+                "text": " sequences using the required handshapes, locations, palm orientations, movements, and order. Pauses and sequence errors rarely impede understanding. Integrate the sequences into connected signing while maintaining the surrounding flow.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Accurately produce familiar and unfamiliar ",
+                "slot": false
+              },
+              {
+                "text": "manual",
+                "slot": true
+              },
+              {
+                "text": " sequences using the required handshapes, locations, palm orientations, movements, and order. Pauses and sequence errors rarely impede understanding.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Accurately produce familiar ",
+                "slot": false
+              },
+              {
+                "text": "manual",
+                "slot": true
+              },
+              {
+                "text": " sequences using the required handshapes, locations, palm orientations, movements, and order. Pauses and sequence errors rarely impede understanding.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Accurately produce familiar ",
+                "slot": false
+              },
+              {
+                "text": "manual",
+                "slot": true
+              },
+              {
+                "text": " sequences using the required handshapes, locations, palm orientations, movements, and order. Pauses and sequence errors sometimes impede understanding.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "lexicalized",
+          "number": 6,
+          "title": "Lexicalized Fingerspelling",
+          "text": [
+            {
+              "text": "Produce ",
+              "slot": false
+            },
+            {
+              "text": "lexicalized fingerspelled signs",
+              "slot": true
+            },
+            {
+              "text": " using their conventional letter patterns, movement, and orientation.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [],
+          "rubric": {
+            "4": [
+              {
+                "text": "Produce a broader range of familiar ",
+                "slot": false
+              },
+              {
+                "text": "lexicalized fingerspelled signs",
+                "slot": true
+              },
+              {
+                "text": " within connected signing using their conventional letter patterns, movement, and orientation. Their production consistently maintains the surrounding flow. Select forms appropriate to the intended meaning and context.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Produce a broader range of familiar ",
+                "slot": false
+              },
+              {
+                "text": "lexicalized fingerspelled signs",
+                "slot": true
+              },
+              {
+                "text": " within connected signing using their conventional letter patterns, movement, and orientation. Their production consistently maintains the surrounding flow.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Produce a broader range of familiar ",
+                "slot": false
+              },
+              {
+                "text": "lexicalized fingerspelled signs",
+                "slot": true
+              },
+              {
+                "text": " within connected signing using their conventional letter patterns, movement, and orientation. Their production minimally interrupts the surrounding flow.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Produce a few commonly used ",
+                "slot": false
+              },
+              {
+                "text": "lexicalized fingerspelled signs",
+                "slot": true
+              },
+              {
+                "text": " within connected signing using their conventional letter patterns, movement, and orientation. Their production often interrupts the surrounding flow.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "formation",
+          "number": 7,
+          "title": "ASL Word Formation",
+          "text": [
+            {
+              "text": "Use ASL ",
+              "slot": false
+            },
+            {
+              "text": "word-formation processes",
+              "slot": true
+            },
+            {
+              "text": " to create the intended word by combining or modifying signs or sign parts.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "Compound formation",
+              "notes": [],
+              "key": "compound",
+              "replacement": "compound formation"
+            },
+            {
+              "label": "Noun-verb pair formation",
+              "notes": [],
+              "key": "nounverb",
+              "replacement": "noun-verb pair formation"
+            },
+            {
+              "label": "Numeral incorporation",
+              "notes": [],
+              "key": "numeral",
+              "replacement": "numeral incorporation"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Consistently use ASL ",
+                "slot": false
+              },
+              {
+                "text": "word-formation processes",
+                "slot": true
+              },
+              {
+                "text": " to create intended words in familiar and unfamiliar uses by appropriately combining or modifying signs or sign parts. The required changes remain accurate within connected signing.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Regularly use ASL ",
+                "slot": false
+              },
+              {
+                "text": "word-formation processes",
+                "slot": true
+              },
+              {
+                "text": " to create intended words in familiar and unfamiliar uses by appropriately combining or modifying signs or sign parts. The required changes remain accurate within connected signing.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Regularly use ASL ",
+                "slot": false
+              },
+              {
+                "text": "word-formation processes",
+                "slot": true
+              },
+              {
+                "text": " to create intended words in familiar and unfamiliar uses by appropriately combining or modifying signs or sign parts.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Regularly use ASL ",
+                "slot": false
+              },
+              {
+                "text": "word-formation processes",
+                "slot": true
+              },
+              {
+                "text": " to create intended words in familiar uses by combining or modifying signs or sign parts.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "variety",
+          "number": 8,
+          "title": "Appropriate ASL Variety",
+          "text": [
+            {
+              "text": "Use ",
+              "slot": false
+            },
+            {
+              "text": "ASL language choices",
+              "slot": true
+            },
+            {
+              "text": " appropriate to the intended setting, social relationship, and language community.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [],
+          "rubric": {
+            "4": [
+              {
+                "text": "Regularly use a learned ",
+                "slot": false
+              },
+              {
+                "text": "ASL language choice",
+                "slot": true
+              },
+              {
+                "text": " appropriate to the intended setting, social relationship, or language community.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Sometimes use a learned ",
+                "slot": false
+              },
+              {
+                "text": "ASL language choice",
+                "slot": true
+              },
+              {
+                "text": " appropriate to the intended setting, social relationship, or language community.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Occasionally use a learned ",
+                "slot": false
+              },
+              {
+                "text": "ASL language choice",
+                "slot": true
+              },
+              {
+                "text": " appropriate to the intended setting, social relationship, or language community.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Occasionally use a learned ",
+                "slot": false
+              },
+              {
+                "text": "ASL language choice",
+                "slot": true
+              },
+              {
+                "text": " intended to match the setting, social relationship, or language community.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "depicting",
+          "number": 9,
+          "title": "Depicting Constructions",
+          "text": [
+            {
+              "text": "Use space, perspective, and nonmanual features appropriately to produce ",
+              "slot": false
+            },
+            {
+              "text": "the intended",
+              "slot": true
+            },
+            {
+              "text": " depicting construction.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "Size-and-shape",
+              "notes": [],
+              "key": "shape",
+              "replacement": "size-and-shape"
+            },
+            {
+              "label": "Entity",
+              "notes": [
+                "Example: representing a person walking from one location to another."
+              ],
+              "key": "entity",
+              "replacement": "entity"
+            },
+            {
+              "label": "Handling",
+              "notes": [
+                "Example: representing a hand grasping and moving a toothbrush."
+              ],
+              "key": "handling",
+              "replacement": "handling"
+            },
+            {
+              "label": "Body-part",
+              "notes": [],
+              "key": "bodypart",
+              "replacement": "body-part"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Regularly produce ",
+                "slot": false
+              },
+              {
+                "text": "intended",
+                "slot": true
+              },
+              {
+                "text": " depicting constructions using space, perspective, and nonmanual features. Regularly select and shift between levels of detail appropriate to the intended depiction. Errors occur occasionally, but the intended meaning is generally clear.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Regularly produce ",
+                "slot": false
+              },
+              {
+                "text": "intended",
+                "slot": true
+              },
+              {
+                "text": " depicting constructions using space, perspective, and nonmanual features. Occasionally select and shift between levels of detail appropriate to the intended depiction. Errors occur occasionally, but the intended meaning is generally clear.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Sometimes produce ",
+                "slot": false
+              },
+              {
+                "text": "intended",
+                "slot": true
+              },
+              {
+                "text": " depicting constructions using space, perspective, and nonmanual features. Errors occur occasionally, but most of the intended meaning can be understood.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Occasionally produce ",
+                "slot": false
+              },
+              {
+                "text": "intended",
+                "slot": true
+              },
+              {
+                "text": " depicting constructions using space, perspective, and emerging nonmanual features. The intended meaning is recognizable, although some details may remain unclear.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "enactment",
+          "number": 10,
+          "title": "Enactment",
+          "text": [
+            {
+              "text": "Use ASL ",
+              "slot": false
+            },
+            {
+              "text": "enactment",
+              "slot": true
+            },
+            {
+              "text": " with appropriate body and head orientation, eye gaze, facial expression, and perspective control.",
+              "slot": false
+            }
+          ],
+          "notes": [
+            "Perspective control: clearly establishing, maintaining, changing, and ending the represented perspective."
+          ],
+          "elements": [
+            {
+              "label": "Character enactment (constructed action)",
+              "notes": [
+                "Example: using the face and body to portray a participant's actions, reactions, manner, or attitude."
+              ],
+              "key": "character",
+              "replacement": "character enactment (constructed action)"
+            },
+            {
+              "label": "Role shift",
+              "notes": [
+                "Example: adopting a participant's perspective to represent that participant's signing or thoughts, including switching between established participants."
+              ],
+              "key": "roleshift",
+              "replacement": "role shift"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Use ASL ",
+                "slot": false
+              },
+              {
+                "text": "enactment",
+                "slot": true
+              },
+              {
+                "text": " with stable coordination of body and head orientation, eye gaze, facial expression, and perspective control. The represented perspective remains clear, with only occasional errors or pauses. Integrate enactment into connected signing with clear transitions into and out of the represented perspective.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Use ASL ",
+                "slot": false
+              },
+              {
+                "text": "enactment",
+                "slot": true
+              },
+              {
+                "text": " with stable coordination of body and head orientation, eye gaze, facial expression, and perspective control. The represented perspective remains clear, with only occasional errors or pauses.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Use ASL ",
+                "slot": false
+              },
+              {
+                "text": "enactment",
+                "slot": true
+              },
+              {
+                "text": " with developing coordination of body and head orientation, eye gaze, facial expression, and perspective control. The represented perspective remains recognizable despite errors or pauses.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Use ASL ",
+                "slot": false
+              },
+              {
+                "text": "enactment",
+                "slot": true
+              },
+              {
+                "text": " with developing coordination of body and head orientation, eye gaze, facial expression, and perspective control. Errors or pauses sometimes make the represented perspective unclear.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "spatial",
+          "number": 11,
+          "title": "ASL Spatial Grammar",
+          "text": [
+            {
+              "text": "Use ASL ",
+              "slot": false
+            },
+            {
+              "text": "spatial grammar",
+              "slot": true
+            },
+            {
+              "text": " with appropriate placement, perspective, and reference consistency.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "Spatial layout",
+              "notes": [],
+              "key": "layout",
+              "replacement": "spatial layout"
+            },
+            {
+              "label": "Referent establishment and tracking",
+              "notes": [],
+              "key": "referent",
+              "replacement": "referent establishment and tracking"
+            },
+            {
+              "label": "Directional verbs (also called indicating verbs)",
+              "notes": [],
+              "key": "directional",
+              "replacement": "directional verbs (also called indicating verbs)"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Regularly use ASL ",
+                "slot": false
+              },
+              {
+                "text": "spatial grammar",
+                "slot": true
+              },
+              {
+                "text": " when appropriate, with stable control of placement, perspective, and reference consistency. Spatial relationships remain clear despite occasional errors. Carry established spatial relationships and references forward as the message develops.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Regularly use ASL ",
+                "slot": false
+              },
+              {
+                "text": "spatial grammar",
+                "slot": true
+              },
+              {
+                "text": " when appropriate, with stable control of placement, perspective, and reference consistency. Spatial relationships remain clear despite occasional errors.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Sometimes use ASL ",
+                "slot": false
+              },
+              {
+                "text": "spatial grammar",
+                "slot": true
+              },
+              {
+                "text": " when appropriate, with developing control of placement, perspective, and reference consistency. Spatial relationships remain understandable despite errors.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Occasionally use ASL ",
+                "slot": false
+              },
+              {
+                "text": "spatial grammar",
+                "slot": true
+              },
+              {
+                "text": " when appropriate, with developing control of placement, perspective, and reference consistency. Errors sometimes make spatial relationships unclear.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "conversation",
+          "number": 12,
+          "title": "Conversation Management",
+          "text": [
+            {
+              "text": "Use appropriate ASL timing, gaze, and manual and nonmanual signals for ",
+              "slot": false
+            },
+            {
+              "text": "conversation management",
+              "slot": true
+            },
+            {
+              "text": ".",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "Conversational turn management",
+              "notes": [
+                "Examples: taking, maintaining, or yielding a conversational turn."
+              ],
+              "key": "turns",
+              "replacement": "conversational turn management"
+            },
+            {
+              "label": "Comprehension feedback and repair",
+              "notes": [
+                "Examples: backchanneling and requesting or responding to clarification, confirmation, or repetition."
+              ],
+              "key": "repair",
+              "replacement": "comprehension feedback and repair"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Use ASL timing, gaze, and manual and nonmanual signals with stable coordination for ",
+                "slot": false
+              },
+              {
+                "text": "conversation management",
+                "slot": true
+              },
+              {
+                "text": ". The signals serve their intended purpose with timing that generally supports the ongoing exchange. Adapt the signals and their timing in response to the other signer and the developing exchange.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Use ASL timing, gaze, and manual and nonmanual signals with stable coordination for ",
+                "slot": false
+              },
+              {
+                "text": "conversation management",
+                "slot": true
+              },
+              {
+                "text": ". The signals serve their intended purpose with timing that generally supports the ongoing exchange.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Use ASL timing, gaze, and manual and nonmanual signals with developing coordination for ",
+                "slot": false
+              },
+              {
+                "text": "conversation management",
+                "slot": true
+              },
+              {
+                "text": ". The signals serve their intended purpose, with occasional hesitation or awkward timing.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Use ASL timing, gaze, and manual and nonmanual signals with developing coordination for ",
+                "slot": false
+              },
+              {
+                "text": "conversation management",
+                "slot": true
+              },
+              {
+                "text": ". The signals are effective but often hesitant or awkwardly timed.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "single"
+          ]
+        },
+        {
+          "key": "nonmanual",
+          "number": 13,
+          "title": "Nonmanual Signals and Marking",
+          "text": [
+            {
+              "text": "Use appropriate ASL nonmanual signals with appropriate timing and coordination as part of ",
+              "slot": false
+            },
+            {
+              "text": "the intended linguistic use",
+              "slot": true
+            },
+            {
+              "text": ".",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "Individual signs",
+              "notes": [],
+              "key": "signs",
+              "replacement": "individual signs"
+            },
+            {
+              "label": "Meaning modification",
+              "notes": [
+                "Examples: size, manner, intensity, degree."
+              ],
+              "key": "modification",
+              "replacement": "meaning modification"
+            },
+            {
+              "label": "Grammatical marking",
+              "notes": [
+                "Examples: questions, negation, topicalization, conditionals."
+              ],
+              "key": "grammar",
+              "replacement": "grammatical marking"
+            },
+            {
+              "label": "Discourse and interaction",
+              "notes": [
+                "Examples: turn management, reference, perspective, reactions."
+              ],
+              "key": "discourse",
+              "replacement": "discourse and interaction"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Consistently use appropriate ASL nonmanual signals with accurate timing and coordination as part of ",
+                "slot": false
+              },
+              {
+                "text": "the intended linguistic use",
+                "slot": true
+              },
+              {
+                "text": ". The signals generally convey their intended meaning or serve their intended function.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Regularly use appropriate ASL nonmanual signals with accurate timing and coordination as part of ",
+                "slot": false
+              },
+              {
+                "text": "the intended linguistic use",
+                "slot": true
+              },
+              {
+                "text": ". The signals generally convey their intended meaning or serve their intended function.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Sometimes use appropriate ASL nonmanual signals with accurate timing and coordination as part of ",
+                "slot": false
+              },
+              {
+                "text": "the intended linguistic use",
+                "slot": true
+              },
+              {
+                "text": ". The signals generally convey their intended meaning or serve their intended function.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Occasionally use appropriate ASL nonmanual signals with accurate timing and coordination as part of ",
+                "slot": false
+              },
+              {
+                "text": "the intended linguistic use",
+                "slot": true
+              },
+              {
+                "text": ". The signals generally convey their intended meaning or serve their intended function.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "message",
+          "number": 14,
+          "title": "ASL Message Construction",
+          "text": [
+            {
+              "text": "Select and combine ",
+              "slot": false
+            },
+            {
+              "text": "ASL linguistic resources",
+              "slot": true
+            },
+            {
+              "text": " to convey the intended message effectively and visually.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [],
+          "rubric": {
+            "4": [
+              {
+                "text": "Select and combine ",
+                "slot": false
+              },
+              {
+                "text": "ASL linguistic resources",
+                "slot": true
+              },
+              {
+                "text": " suited to the intended message. The selected resources sometimes work together to convey parts of the message effectively and visually.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Select and combine ",
+                "slot": false
+              },
+              {
+                "text": "ASL linguistic resources",
+                "slot": true
+              },
+              {
+                "text": " suited to the intended message. The selected resources occasionally work together to convey parts of the message effectively and visually.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Select ",
+                "slot": false
+              },
+              {
+                "text": "ASL linguistic resources",
+                "slot": true
+              },
+              {
+                "text": " suited to the intended message and attempt to combine them to convey related information.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Select some ",
+                "slot": false
+              },
+              {
+                "text": "ASL linguistic resources",
+                "slot": true
+              },
+              {
+                "text": " suited to the intended message. Begin to consider how they could work together to convey related information.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "expression",
+            "reception"
+          ]
+        },
+        {
+          "key": "history",
+          "number": 15,
+          "title": "Deaf History",
+          "text": [
+            {
+              "text": "Identify and describe ",
+              "slot": false
+            },
+            {
+              "text": "aspects of Deaf history",
+              "slot": true
+            },
+            {
+              "text": ", place them in chronological context, and explain their connections and significance to Deaf people and communities.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "Historical figures",
+              "notes": [],
+              "key": "figures",
+              "replacement": "historical figures"
+            },
+            {
+              "label": "Historical events",
+              "notes": [],
+              "key": "events",
+              "replacement": "historical events"
+            },
+            {
+              "label": "Educational developments",
+              "notes": [],
+              "key": "education",
+              "replacement": "educational developments"
+            },
+            {
+              "label": "Deaf rights",
+              "notes": [],
+              "key": "rights",
+              "replacement": "deaf rights"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Identify and clearly describe ",
+                "slot": false
+              },
+              {
+                "text": "aspects of Deaf history",
+                "slot": true
+              },
+              {
+                "text": ", accurately place them in chronological context, and explain how their connections and significance to Deaf people and communities develop over time using supporting historical details.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Identify and clearly describe ",
+                "slot": false
+              },
+              {
+                "text": "aspects of Deaf history",
+                "slot": true
+              },
+              {
+                "text": ", accurately place them in chronological context, and explain how historical circumstances contribute to their connections and significance to Deaf people and communities using supporting details.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Identify and clearly describe ",
+                "slot": false
+              },
+              {
+                "text": "aspects of Deaf history",
+                "slot": true
+              },
+              {
+                "text": ", accurately place them in chronological context, and explain their connections and significance to Deaf people and communities using supporting details.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Identify and describe ",
+                "slot": false
+              },
+              {
+                "text": "aspects of Deaf history",
+                "slot": true
+              },
+              {
+                "text": " with relevant details, place them in chronological context, and begin to explain their connections and significance to Deaf people and communities.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "single"
+          ]
+        },
+        {
+          "key": "culture",
+          "number": 16,
+          "title": "Deaf Culture",
+          "text": [
+            {
+              "text": "Describe ",
+              "slot": false
+            },
+            {
+              "text": "aspects of Deaf culture",
+              "slot": true
+            },
+            {
+              "text": " and explain their significance in Deaf people’s lives and communities.",
+              "slot": false
+            }
+          ],
+          "notes": [],
+          "elements": [
+            {
+              "label": "Social norms",
+              "notes": [],
+              "key": "norms",
+              "replacement": "social norms"
+            },
+            {
+              "label": "Cultural values",
+              "notes": [],
+              "key": "values",
+              "replacement": "cultural values"
+            },
+            {
+              "label": "Deaf identities",
+              "notes": [],
+              "key": "identities",
+              "replacement": "deaf identities"
+            },
+            {
+              "label": "Technologies",
+              "notes": [],
+              "key": "technology",
+              "replacement": "technologies"
+            },
+            {
+              "label": "Visual communication practices",
+              "notes": [],
+              "key": "visual",
+              "replacement": "visual communication practices"
+            },
+            {
+              "label": "Forms of cultural expression",
+              "notes": [],
+              "key": "expression",
+              "replacement": "forms of cultural expression"
+            },
+            {
+              "label": "Forms of Deaf media",
+              "notes": [],
+              "key": "media",
+              "replacement": "forms of Deaf media"
+            }
+          ],
+          "rubric": {
+            "4": [
+              {
+                "text": "Clearly and accurately describe ",
+                "slot": false
+              },
+              {
+                "text": "aspects of Deaf culture",
+                "slot": true
+              },
+              {
+                "text": " and explain how their significance can vary across Deaf people, communities, or contexts using supporting details.",
+                "slot": false
+              }
+            ],
+            "3": [
+              {
+                "text": "Clearly and accurately describe ",
+                "slot": false
+              },
+              {
+                "text": "aspects of Deaf culture",
+                "slot": true
+              },
+              {
+                "text": " and explain how their significance relates to particular circumstances or experiences in Deaf people’s lives and communities using supporting details.",
+                "slot": false
+              }
+            ],
+            "2": [
+              {
+                "text": "Clearly and accurately describe ",
+                "slot": false
+              },
+              {
+                "text": "aspects of Deaf culture",
+                "slot": true
+              },
+              {
+                "text": " and explain their significance in Deaf people’s lives and communities using supporting details.",
+                "slot": false
+              }
+            ],
+            "1": [
+              {
+                "text": "Describe ",
+                "slot": false
+              },
+              {
+                "text": "aspects of Deaf culture",
+                "slot": true
+              },
+              {
+                "text": " with relevant details and begin to explain their significance in Deaf people’s lives and communities.",
+                "slot": false
+              }
+            ]
+          },
+          "modes": [
+            "single"
+          ]
+        }
+      ],
+      "mode_notes": [
+        "Communication Modes",
+        "IP = Interpersonal    IN = Interpretive    PR = Presentational",
+        "1   IP, IN, PR",
+        "2   IP, IN, PR",
+        "3   IP, IN, PR",
+        "4   IP, IN, PR",
+        "5   IP, IN, PR",
+        "6   IP, IN, PR",
+        "7   IP, IN, PR",
+        "8   IP, IN, PR",
+        "9   IP, IN, PR",
+        "10   IP, IN, PR",
+        "11   IP, IN, PR",
+        "12   IP*",
+        "13   IP, IN, PR**",
+        "14   IP, IN, PR",
+        "* 12 applies directly to interpersonal communication. Recognizing conversation-management signals in a recording does not demonstrate managing an exchange.",
+        "** 13 applies across all three modes, except interaction-specific signals, which follow the limitation for 12.",
+        "These labels apply to the linguistic content. Interpretive assessment requires receptive evidence rather than the current production wording.",
+        "What Each Scale Measures",
+        "ASL 3 levels 1, 2, and 3 retain the descriptors from ASL 2 levels 2, 3, and 4, respectively. The notes below identify the additional expectation at ASL 3 level 4.",
+        "1. Selection and adaptation of sentence constructions to express the intended meaning, while maintaining coordinated structure and grammatical marking.",
+        "2. Precision of meaning through selection and adjustment of sign modifications and grammatical markers, while maintaining stable control.",
+        "3. Level 4 is not yet defined.",
+        "4. Level 4 is not yet defined.",
+        "5. Integration of accurate manual sequences into the surrounding flow of connected signing.",
+        "6. Selection of conventional lexicalized forms appropriate to meaning and context, while maintaining accurate production and flow.",
+        "7. Consistency of accurate word formation in familiar and unfamiliar uses within connected signing. Level 4 advances from regularly to consistently.",
+        "8. Frequency of appropriate language choices. Level 4 advances from sometimes to regularly.",
+        "9. Frequency of selecting and shifting between appropriate levels of detail. Level 4 advances from occasionally to regularly.",
+        "10. Integration of enactment into connected signing through clear transitions into and out of the represented perspective.",
+        "11. Continuity of established spatial relationships and references as the message develops.",
+        "12. Adaptation of conversational signals and timing in response to the other signer and the developing exchange.",
+        "13. Consistency of appropriate nonmanual signals with accurate timing and coordination. Level 4 advances from regularly to consistently.",
+        "14. Selection and combination of ASL linguistic resources. The scale moves from consideration and attempts to occasional, then sometimes successful use in conveying parts of a message effectively and visually."
+      ]
+    }
+  ],
+  "calendar": {
+    "school_year": "2026-2027",
+    "timezone": "America/Los_Angeles",
+    "days": [
+      {
+        "date": "2026-09-14",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-09-15",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-09-16",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-09-17",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-09-18",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-09-19",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-09-20",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-09-21",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-09-22",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-09-23",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-09-24",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-09-25",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-09-26",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-09-27",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-09-28",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-09-29",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-09-30",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-10-01",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-10-02",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-10-03",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-10-04",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-10-05",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-10-06",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-10-07",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-10-08",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-10-09",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-10-10",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-10-11",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-10-12",
+        "instructional": false,
+        "label": "No school"
+      },
+      {
+        "date": "2026-10-13",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-10-14",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-10-15",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-10-16",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-10-17",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-10-18",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-10-19",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-10-20",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-10-21",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-10-22",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-10-23",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-10-24",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-10-25",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-10-26",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-10-27",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-10-28",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-10-29",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-10-30",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-10-31",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-11-01",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-11-02",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-11-03",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-11-04",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-11-05",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-11-06",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-11-07",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-11-08",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-11-09",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-11-10",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-11-11",
+        "instructional": false,
+        "label": "No school"
+      },
+      {
+        "date": "2026-11-12",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-11-13",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-11-14",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-11-15",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-11-16",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-11-17",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-11-18",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-11-19",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-11-20",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-11-21",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-11-22",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-11-23",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-11-24",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-11-25",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-11-26",
+        "instructional": false,
+        "label": "No school"
+      },
+      {
+        "date": "2026-11-27",
+        "instructional": false,
+        "label": "No school"
+      },
+      {
+        "date": "2026-11-28",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-11-29",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-11-30",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-12-01",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-12-02",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-12-03",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-12-04",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-12-05",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-12-06",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-12-07",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-12-08",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-12-09",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-12-10",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-12-11",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-12-12",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-12-13",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-12-14",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-12-15",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-12-16",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-12-17",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-12-18",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-12-19",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-12-20",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-12-21",
+        "instructional": false,
+        "label": "No school"
+      },
+      {
+        "date": "2026-12-22",
+        "instructional": false,
+        "label": "No school"
+      },
+      {
+        "date": "2026-12-23",
+        "instructional": false,
+        "label": "No school"
+      },
+      {
+        "date": "2026-12-24",
+        "instructional": false,
+        "label": "No school"
+      },
+      {
+        "date": "2026-12-25",
+        "instructional": false,
+        "label": "No school"
+      },
+      {
+        "date": "2026-12-26",
+        "instructional": false,
+        "label": "No school"
+      },
+      {
+        "date": "2026-12-27",
+        "instructional": false,
+        "label": "No school"
+      },
+      {
+        "date": "2026-12-28",
+        "instructional": false,
+        "label": "No school"
+      },
+      {
+        "date": "2026-12-29",
+        "instructional": false,
+        "label": "No school"
+      },
+      {
+        "date": "2026-12-30",
+        "instructional": false,
+        "label": "No school"
+      },
+      {
+        "date": "2026-12-31",
+        "instructional": false,
+        "label": "No school"
+      },
+      {
+        "date": "2027-01-01",
+        "instructional": false,
+        "label": "No school"
+      },
+      {
+        "date": "2027-01-02",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-01-03",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-01-04",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-01-05",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-01-06",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-01-07",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-01-08",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-01-09",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-01-10",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-01-11",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-01-12",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-01-13",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-01-14",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-01-15",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-01-16",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-01-17",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-01-18",
+        "instructional": false,
+        "label": "No school"
+      },
+      {
+        "date": "2027-01-19",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-01-20",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-01-21",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-01-22",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-01-23",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-01-24",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-01-25",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-01-26",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-01-27",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-01-28",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-01-29",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-01-30",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-01-31",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-02-01",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-02-02",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-02-03",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-02-04",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-02-05",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-02-06",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-02-07",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-02-08",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-02-09",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-02-10",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-02-11",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-02-12",
+        "instructional": false,
+        "label": "No school"
+      },
+      {
+        "date": "2027-02-13",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-02-14",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-02-15",
+        "instructional": false,
+        "label": "No school"
+      },
+      {
+        "date": "2027-02-16",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-02-17",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-02-18",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-02-19",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-02-20",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-02-21",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-02-22",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-02-23",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-02-24",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-02-25",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-02-26",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-02-27",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-02-28",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-03-01",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-03-02",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-03-03",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-03-04",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-03-05",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-03-06",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-03-07",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-03-08",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-03-09",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-03-10",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-03-11",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-03-12",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-03-13",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-03-14",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-03-15",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-03-16",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-03-17",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-03-18",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-03-19",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-03-20",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-03-21",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-03-22",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-03-23",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-03-24",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-03-25",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-03-26",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-03-27",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-03-28",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-03-29",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-03-30",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-03-31",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-04-01",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-04-02",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-04-03",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-04-04",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-04-05",
+        "instructional": false,
+        "label": "No school"
+      },
+      {
+        "date": "2027-04-06",
+        "instructional": false,
+        "label": "No school"
+      },
+      {
+        "date": "2027-04-07",
+        "instructional": false,
+        "label": "No school"
+      },
+      {
+        "date": "2027-04-08",
+        "instructional": false,
+        "label": "No school"
+      },
+      {
+        "date": "2027-04-09",
+        "instructional": false,
+        "label": "No school"
+      },
+      {
+        "date": "2027-04-10",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-04-11",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-04-12",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-04-13",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-04-14",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-04-15",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-04-16",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-04-17",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-04-18",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-04-19",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-04-20",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-04-21",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-04-22",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-04-23",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-04-24",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-04-25",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-04-26",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-04-27",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-04-28",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-04-29",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-04-30",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-05-01",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-05-02",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-05-03",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-05-04",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-05-05",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-05-06",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-05-07",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-05-08",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-05-09",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-05-10",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-05-11",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-05-12",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-05-13",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-05-14",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-05-15",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-05-16",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-05-17",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-05-18",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-05-19",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-05-20",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-05-21",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-05-22",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-05-23",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-05-24",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-05-25",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-05-26",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-05-27",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-05-28",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-05-29",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-05-30",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-05-31",
+        "instructional": false,
+        "label": "No school"
+      },
+      {
+        "date": "2027-06-01",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-06-02",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-06-03",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-06-04",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-06-05",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-06-06",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2027-06-07",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-06-08",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-06-09",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2027-06-10",
+        "instructional": true,
+        "label": null
+      }
+    ]
+  },
+  "calendar_note": "User-selected September 14–June 10 planning window with published breaks; final official last day remains unconfirmed."
+}

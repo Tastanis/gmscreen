@@ -206,7 +206,8 @@ function aslhub_backup_sql(PDO $pdo): string {
                 try {
                     $create = $pdo->query("SHOW CREATE TABLE `$table`")->fetch();
                 } catch (PDOException $e) {
-                    continue; // table doesn't exist on this install
+                    if ($e->getCode() !== '42S02' && ($e->errorInfo[1] ?? null) !== 1146) throw $e;
+                    continue; // Only an absent table is safe to skip; permissions/I/O failures abort.
                 }
                 $write("DROP TABLE IF EXISTS `$table`;\n" . $create['Create Table'] . ";\n\n");
                 $stmt = $pdo->query("SELECT * FROM `$table`");

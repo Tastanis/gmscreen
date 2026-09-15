@@ -1,0 +1,128 @@
+{
+  "ASL Sentence Constructions": {
+    "key": "sentences",
+    "elements": {
+      "Basic declarative statements": "declarative",
+      "Yes/no questions": "yesno",
+      "WH-questions": "wh",
+      "Rhetorical questions": "rhetorical",
+      "Negation": "negation",
+      "Conditionals": "conditional",
+      "Topic-comment structure": "topic",
+      "Commands": "command",
+      "Modal constructions": "modal"
+    }
+  },
+  "Manner, Aspect, and Degree Modification": {
+    "key": "modification",
+    "elements": {
+      "The manner of an action": "manner",
+      "Temporal aspect": "aspect",
+      "Degree or intensity": "degree"
+    }
+  },
+  "Organizing and Connecting Related Ideas": {
+    "key": "connections",
+    "elements": {
+      "List structure": "list",
+      "Contrastive structure": "contrast",
+      "Coordination": "coordination"
+    }
+  },
+  "Time Reference and Relationships": {
+    "key": "time",
+    "elements": {
+      "A time frame": "frame",
+      "Frequency or recurrence": "frequency",
+      "Temporal relationships": "relationships"
+    }
+  },
+  "Cardinal Numbers and Fingerspelling": {
+    "key": "manual",
+    "elements": {
+      "Cardinal-number": "cardinal",
+      "Fingerspelling": "fingerspelling"
+    }
+  },
+  "Lexicalized Fingerspelling": {
+    "key": "lexicalized",
+    "elements": {}
+  },
+  "ASL Word Formation": {
+    "key": "formation",
+    "elements": {
+      "Compound formation": "compound",
+      "Noun-verb pair formation": "nounverb",
+      "Numeral incorporation": "numeral"
+    }
+  },
+  "Appropriate ASL Variety": {
+    "key": "variety",
+    "elements": {}
+  },
+  "Depicting Constructions": {
+    "key": "depicting",
+    "elements": {
+      "Size-and-shape": "shape",
+      "Entity": "entity",
+      "Handling": "handling",
+      "Body-part": "bodypart"
+    }
+  },
+  "Enactment": {
+    "key": "enactment",
+    "elements": {
+      "Character enactment (constructed action)": "character",
+      "Role shift": "roleshift"
+    }
+  },
+  "ASL Spatial Grammar": {
+    "key": "spatial",
+    "elements": {
+      "Spatial layout": "layout",
+      "Referent establishment and tracking": "referent",
+      "Directional verbs (also called indicating verbs)": "directional"
+    }
+  },
+  "Conversation Management": {
+    "key": "conversation",
+    "elements": {
+      "Conversational turn management": "turns",
+      "Comprehension feedback and repair": "repair"
+    }
+  },
+  "Nonmanual Signals and Marking": {
+    "key": "nonmanual",
+    "elements": {
+      "Individual signs": "signs",
+      "Meaning modification": "modification",
+      "Grammatical marking": "grammar",
+      "Discourse and interaction": "discourse"
+    }
+  },
+  "Deaf History": {
+    "key": "history",
+    "elements": {
+      "Historical figures": "figures",
+      "Historical events": "events",
+      "Educational developments": "education",
+      "Deaf rights": "rights"
+    }
+  },
+  "Deaf Culture": {
+    "key": "culture",
+    "elements": {
+      "Social norms": "norms",
+      "Cultural values": "values",
+      "Deaf identities": "identities",
+      "Technologies": "technology",
+      "Visual communication practices": "visual",
+      "Forms of cultural expression": "expression",
+      "Forms of Deaf media": "media"
+    }
+  },
+  "ASL Message Construction": {
+    "key": "message",
+    "elements": {}
+  }
+}

@@ -46,8 +46,18 @@ function aslhub_taxonomy(PDO $pdo, int $level): array {
     }
 
     $standardsByBucket = [];
+    $metadata = [];
+    foreach ($pdo->query("SELECT setting_key, setting_value FROM asl_settings WHERE setting_key LIKE 'competency_%'") as $row) {
+        $metadata[substr($row['setting_key'], 11)] = json_decode($row['setting_value'], true);
+    }
     foreach ($standards as $s) {
+        $s['competency'] = $metadata[$s['standard_id']] ?? null;
         $s['targets'] = $targetsByStandard[$s['standard_id']] ?? [];
+        if ($s['competency']) foreach ($s['targets'] as &$t) {
+            $t['display_code'] = $s['competency']['number'] . '.' . ((int)$t['order_index'] + 1) .
+                ($t['sub_code'] === 'S' ? '' : ' ' . ($t['sub_code'] === 'E' ? 'Expression' : 'Reception'));
+        }
+        unset($t);
         $s['resources'] = $resByStandard[$s['standard_id']] ?? [];
         if ($s['targets']) { // only show standards that have targets at this level
             $standardsByBucket[$s['bucket_id']][] = $s;
