@@ -33,6 +33,7 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
     <link rel="stylesheet" href="css/asl-style.css?v=<?php echo $cssV; ?>">
     <link rel="stylesheet" href="css/hub.css?v=<?php echo $hubV; ?>">
     <script src="js/dashboard-chart-math.js?v=<?php echo $chartMathV; ?>"></script>
+    <script src="js/pace-chart.js?v=<?php echo filemtime(__DIR__.'/js/pace-chart.js'); ?>"></script>
     <script src="js/competencies.js?v=<?php echo filemtime(__DIR__.'/js/competencies.js'); ?>"></script>
     <link rel="stylesheet" href="css/competencies.css?v=<?php echo filemtime(__DIR__.'/css/competencies.css'); ?>">
 </head>
@@ -130,7 +131,8 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
                         </div>
                     </div>
                     <div class="chart-wrap">
-                        <svg id="progress-chart" role="img" aria-label="Skill points earned over time"></svg>
+                        <svg id="progress-chart" role="img" aria-label="Percentage of expected progress over time"></svg>
+                        <p style="font-size:.8rem;color:#667381;margin:8px 0;">Uneven scale · 50–100% expanded; below 50% and above 100% compressed.</p>
                         <p id="chart-empty-note" class="chart-empty-note">Progress appears as competencies are scored.</p>
                     </div>
                     <div class="comparison-legend" style="margin-top:8px;">
@@ -648,32 +650,20 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
 
             const visibleValues = blocks.map(block => seriesValue(values, block)).filter(v => v != null).map(Number);
             note.style.display = visibleValues.some(v => v > 0) ? 'none' : 'block';
-            const totalInstructionalDays = ASLChartMath.totalInstructionalDays(allBlocks);
             const paceDayFraction = block => ASLChartMath.paceDayFraction(allBlocks, block, chartState.ranges.progress);
             const visibleFraction = blocks.length ? paceDayFraction(blocks[blocks.length - 1]) : 0;
-            const maxPace = scopeTargets * 4 * (chartState.ranges.progress === 'full' ? 1 : visibleFraction);
-            const maxY = Math.max(...visibleValues, maxPace, 1);
-            const fractions = blocks.map(b => visibleFraction ? paceDayFraction(b) / visibleFraction : 0);
-            const frame = chartScaffold(svg, blocks, maxY, 'Pts', fractions);
-            const settings = dashboardData.settings || {};
-            const pace = (goal, color, dash) => {
-                if (!allBlocks.length || !scopeTargets || !totalInstructionalDays) return '';
-                const points = [[frame.pad.left, frame.yAt(0)], ...blocks.map((block, index) => {
-                    return [frame.xAt(index), frame.yAt(ASLChartMath.paceEndpoint(scopeTargets, goal) * paceDayFraction(block))];
-                })];
-                return `<polyline points="${points.map(p => p.join(',')).join(' ')}" fill="none" stroke="${color}" stroke-width="2.5" ${dash ? `stroke-dasharray="${dash}"` : ''}></polyline>`;
-            };
-            const student = seriesPoints(values, blocks, frame.xAt, frame.yAt);
-            const lowPoints = [[frame.pad.left, frame.yAt(0)], ...blocks.map((b,i) => [frame.xAt(i), frame.yAt(scopeTargets * 3 * .60 * paceDayFraction(b))]), [frame.pad.left + frame.chartWidth, frame.yAt(0)]];
-            svg.innerHTML = frame.base +
-                `<polygon points="${lowPoints.map(p => p.join(',')).join(' ')}" fill="#f9e8e7"></polygon>` +
-                pace(3, '#458663', '') +
-                pace(3 * .83, '#507ba2', '7 5') +
-                pace(3 * .73, '#938052', '5 5') +
-                pace(3 * .63, '#a66c69', '3 5') +
-                frame.labels +
-                drawSeries(student, 'chart-line', '', '', false) +
-                student.flat().map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="3.5" class="chart-dot"></circle>`).join('');
+            ASLPaceChart.render(svg, blocks.map(block => {
+                const points = seriesValue(values, block);
+                // Current observations always use elapsed days, even in Full Year view.
+                const elapsed = ASLChartMath.paceDayFraction(allBlocks, block, 'ytd');
+                const fraction = block.is_current ? elapsed : paceDayFraction(block);
+                return {
+                    points,
+                    percent: blockHasStarted(block) ? ASLChartMath.pacePercent(points, scopeTargets, elapsed) : null,
+                    fraction: visibleFraction ? fraction / visibleFraction : 0,
+                    date: block.is_current ? dashboardData.today : blockDate(block),
+                };
+            }));
         }
 
         function renderAttendanceChart() {
@@ -908,6 +898,7 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
         });
         renderDashboard();
         setActiveChart('progress');
+        window.addEventListener('resize', renderChart);
     </script>
 </body>
 </html>

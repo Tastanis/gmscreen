@@ -65,6 +65,15 @@ B=83%, C=73%, D=63%. Pale red shading is below 60% of that fixed time-adjusted
 path, with no F line or label. These are visual reference paths, not gradebook rules.
 No adaptive catch-up path, plus/minus grades, vacation-only blocks, or vacation dips.
 
+The progress chart displays earned points divided by the A-path expectation at each
+observation date, as a percentage. A/B/C/D therefore appear as horizontal references.
+The current block uses elapsed instructional days in both date-range views; future
+observations are absent, and zero-day denominators produce no point. The vertical
+axis gives 10% of its height to 0–50%, 80% to 50–100%, and 10% to values above 100%.
+The upper bound expands to include high observations. Axis breaks and a visible
+uneven-scale label disclose the compression. Raw scores, totals, and reference
+expectations are unchanged; attendance and participation keep their existing charts.
+
 ## Validation
 
 - `php asl/tests/competencies.php` (PDO SQLite + mbstring): real import services with

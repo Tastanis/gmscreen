@@ -6,6 +6,21 @@ import fs from 'node:fs';
 const require = createRequire(import.meta.url);
 const math = require('../js/dashboard-chart-math.js');
 
+test('pace percentage preserves raw points and has no zero-day division',()=>{
+  assert.equal(math.pacePercent(3, 2, .5),100);
+  assert.equal(math.pacePercent(6, 2, .5),200);
+  assert.equal(math.pacePercent(0, 2, .5),0);
+  assert.equal(math.pacePercent(null, 2, .5),null);
+  assert.equal(math.pacePercent(3, 2, 0),null);
+  assert.equal(math.pacePercent(3, 0, .5),null);
+});
+test('focused scale is continuous and reserves 80 percent of height for 50–100',()=>{
+  for(const [value,expected] of [[0,0],[50,.1],[100,.9],[140,1]]) assert(Math.abs(math.focusedPosition(value)-expected)<1e-10);
+  assert(Math.abs(math.focusedPosition(83)-math.focusedPosition(73)-.16)<1e-10);
+  assert.equal(math.focusedPosition(2000,2000),1);
+  let last=-1; for(let p=0;p<=2000;p++){const next=math.focusedPosition(p,2000);assert(next>last);last=next;}
+});
+
 const blocks = [
   { sourceIndex: 0, instructional_days: 10, instructional_days_elapsed: 10, is_complete: true },
   { sourceIndex: 1, instructional_days: 10, instructional_days_elapsed: 4, is_current: true },

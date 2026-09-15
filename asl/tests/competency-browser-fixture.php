@@ -8,7 +8,7 @@ $source=dirname(__DIR__);
 foreach (['lib','css','js','api','teacher','data','tests'] as $sub) mkdir($dir.'/'.$sub);
 foreach (['dashboard.php','teacher/dashboard.php','teacher/grading.php','api/save_score.php','api/import_competencies.php',
     'lib/helpers.php','lib/data.php','lib/calendar.php','lib/competencies.php','lib/teacher_layout.php','lib/backup.php','lib/xlsx.php',
-    'css/asl-style.css','css/hub.css','css/competencies.css','js/competencies.js','js/dashboard-chart-math.js',
+    'css/asl-style.css','css/hub.css','css/competencies.css','js/competencies.js','js/dashboard-chart-math.js','js/pace-chart.js',
     'data/competencies-2026.json','tests/competency-fixture.php'] as $f) copy($source.'/'.$f,$dir.'/'.$f);
 file_put_contents($dir.'/config.php', <<<'PHP'
 <?php
