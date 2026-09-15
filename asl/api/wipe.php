@@ -10,6 +10,7 @@
 require_once dirname(__DIR__) . '/config.php';
 require_once dirname(__DIR__) . '/lib/backup.php';
 
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') aslhub_json_error('POST required.', 405);
 $me = aslhub_require_teacher($pdo, true);
 if (!aslhub_is_admin($me)) aslhub_json_error('Admin (Harms) access required.', 403);
 aslhub_require_csrf();
@@ -17,6 +18,9 @@ aslhub_require_csrf();
 if (($_POST['confirm_text'] ?? '') !== 'START FRESH') {
     aslhub_json_error('Type START FRESH (exactly) to confirm.');
 }
+
+require_once dirname(__DIR__) . '/goals/schema.php';
+aslhub_goals_schema($pdo);
 
 try {
     $sqlPath = aslhub_backup_sql($pdo);
@@ -31,6 +35,7 @@ try {
     $count = count($studentIds);
     if ($count) {
         $in = implode(',', array_map('intval', $studentIds));
+        $pdo->exec("DELETE FROM user_goals WHERE user_id IN ($in)");
         $pdo->exec("DELETE FROM asl_student_block_metric_audit WHERE user_id IN ($in)");
         $pdo->exec("DELETE FROM asl_student_block_metrics WHERE user_id IN ($in)");
         $pdo->exec("DELETE FROM user_learning_targets WHERE user_id IN ($in)");

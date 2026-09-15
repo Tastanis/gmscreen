@@ -50,12 +50,8 @@ $csrf = aslhub_csrf_token();
                     </div>
                     <button type="submit" class="form-button">Login</button>
                 </form>
-                <a href="signup.php" class="form-button create-account-btn" style="display:block;text-align:center;text-decoration:none;">Create New Account</a>
             </div>
 
-            <div class="text-center" style="margin-top: 20px;">
-                <a href="../" class="back-btn">&larr; Back to Main Portal</a>
-            </div>
         </div>
     </div>
 </body>

@@ -84,10 +84,8 @@ function aslhub_require_student_scope(PDO $pdo, array $teacher, int $studentId, 
 }
 
 function aslhub_base_url(): string {
-    // /asl regardless of how deep the current script is
-    $dir = dirname($_SERVER['SCRIPT_NAME']);
-    $pos = strpos($dir, '/asl');
-    return $pos === false ? $dir : substr($dir, 0, $pos + 4);
+    // Explicit override supports isolated subdirectory installations. Production is root-mounted.
+    return rtrim((string)(getenv('ASLHUB_BASE_URL') ?: ''), '/');
 }
 
 // ---------- CSRF ----------

@@ -1,0 +1,21 @@
+Options -Indexes
+DirectoryIndex index.php index.html
+RewriteEngine On
+
+# The ASL application remains together on disk; public URLs live at the root.
+# Block private application files before handling old bookmarks.
+RewriteRule ^(?:asl/)?(?:lib|data|backups|tests|scripts)(?:/|$) - [F,END]
+RewriteRule ^(?:asl/)?(?:config(?:\.[^/]*)?\.php|install\.php)$ - [F,END]
+RewriteCond %{THE_REQUEST} \s/+asl(?:[/\s?]) [NC]
+RewriteRule ^asl/?(.*)$ /$1 [R=308,END]
+
+# Preserve the Goals tool at its new address. Retire other old ASL routes.
+RewriteRule ^asl[12]/goals(?:/(.*))?$ /goals/$1 [R=308,END]
+RewriteRule ^asl[12]/scroller\.html$ /scroller/ [R=302,END]
+RewriteCond %{REQUEST_METHOD} !^(GET|HEAD)$
+RewriteRule ^asl[12](?:/|$) - [G,END]
+RewriteRule ^asl[12](?:/.*)?$ / [R=302,END]
+
+RewriteRule ^(?:index\.html)?$ asl/index.php [END]
+RewriteRule ^(index|login|logout|dashboard|signup|register)\.php$ asl/$1.php [END]
+RewriteRule ^(teacher|api|css|js|scroller|goals)(/.*)?$ asl/$1$2 [END]

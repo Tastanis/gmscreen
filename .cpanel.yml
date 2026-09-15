@@ -3,3 +3,5 @@ deployment:
   tasks:
     - export DEPLOYPATH=/home/rylabsuueil3/public_html/
     - /bin/cp -R * $DEPLOYPATH
+    - /bin/cp .htaccess $DEPLOYPATH.htaccess
+    - /usr/local/bin/php asl/scripts/retire_legacy.php $DEPLOYPATH

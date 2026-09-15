@@ -19,7 +19,6 @@ if (!empty($me['is_teacher'])) {
 
 $payload = aslhub_dashboard_payload($pdo, $subject);
 $level = (int)$payload['student']['level'];
-$gamesLevel = min($level, 2); // goals still live in asl1/asl2
 $initials = mb_substr($subject['first_name'] ?? 'A', 0, 1) . mb_substr($subject['last_name'] ?? 'S', 0, 1);
 $cssV = @filemtime(__DIR__ . '/css/asl-style.css') ?: 1;
 $hubV = @filemtime(__DIR__ . '/css/hub.css') ?: 1;
@@ -245,7 +244,7 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
         };
 
         function openGoals() {
-            window.open('../asl<?php echo $gamesLevel; ?>/goals/index.php', 'aslGoalsWindow', 'width=960,height=720,scrollbars=yes,resizable=yes');
+            window.open('goals/index.php', 'aslGoalsWindow', 'width=960,height=720,scrollbars=yes,resizable=yes');
         }
 
         function escapeHtml(value) {
