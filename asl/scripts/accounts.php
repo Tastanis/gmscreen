@@ -44,11 +44,12 @@ try {
     $sql = file_get_contents($backup);
     foreach (ASLHUB_BACKUP_TABLES as $table) if (!str_contains($sql, "CREATE TABLE `$table`")) throw new RuntimeException('Incomplete SQL backup.');
     aslhub_apply_account_reset($pdo, $roster, $plan['review_sha256'], $backup, $backupHash);
-    $actual = $pdo->query('SELECT first_name,last_name,email,skyward_student_id,class_period,level FROM users WHERE is_unclaimed=1 ORDER BY skyward_student_id')->fetchAll();
+    $actual = $pdo->query('SELECT first_name,last_name,email,skyward_student_id,class_period,level FROM users WHERE is_unclaimed=1 AND skyward_student_id IS NOT NULL ORDER BY skyward_student_id')->fetchAll();
     $expected = $roster['students'];
     usort($expected, fn($a,$b) => strcmp($a['skyward_student_id'],$b['skyward_student_id']));
     if ($actual != $expected || (int)$pdo->query('SELECT COUNT(*) FROM users WHERE is_teacher=1')->fetchColumn() !== 1
-        || (int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn() !== count($expected) + 2) throw new RuntimeException('Post-import verification failed.');
+        || (int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn() !== count($expected) + 2
+        || (int)$pdo->query("SELECT COUNT(*) FROM users WHERE first_name='test' AND last_name='test' AND is_teacher=0 AND is_active=1 AND is_unclaimed=1 AND skyward_student_id IS NULL")->fetchColumn() !== 1) throw new RuntimeException('Post-import verification failed.');
     $pdo->prepare("INSERT INTO asl_settings (setting_key,setting_value) VALUES ('accounts_phase1_complete',?)")->execute([json_encode(['backup'=>basename($backup),'sha256'=>$backupHash])]);
     $pdo->commit();
     echo json_encode(['imported'=>count($roster['students']), 'backup'=>$backup, 'sha256'=>$backupHash], JSON_PRETTY_PRINT), PHP_EOL;

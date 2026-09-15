@@ -24,6 +24,6 @@ $pdo=new PDO('sqlite:'.$dir.'/fixture.sqlite');
 $pdo->exec('CREATE TABLE users (id INTEGER PRIMARY KEY,first_name TEXT COLLATE NOCASE,last_name TEXT COLLATE NOCASE,password TEXT,is_active INTEGER DEFAULT 1,is_teacher INTEGER DEFAULT 0,is_unclaimed INTEGER DEFAULT 0,must_change_password INTEGER DEFAULT 0)');
 $pdo->exec("CREATE TABLE asl_login_attempts (attempt_key TEXT, attempted_at TEXT DEFAULT CURRENT_TIMESTAMP)");
 $stmt=$pdo->prepare('INSERT INTO users (first_name,last_name,password,is_unclaimed,is_teacher) VALUES (?,?,?,?,?)');
-$stmt->execute(['Sample','Learner',password_hash('unusable-random',PASSWORD_DEFAULT),1,0]);
+$stmt->execute(['test','test',password_hash('unusable-random',PASSWORD_DEFAULT),1,0]);
 $stmt->execute(['Brandon','Harms',password_hash('fixture-teacher',PASSWORD_DEFAULT),0,1]);
 echo $dir;

@@ -9,7 +9,7 @@ Scope: account cleanup, Skyward roster import, login and password claiming. No p
 - Saving matching passwords hashes the personal password, atomically disables claiming, clears the session and returns signed out. The initial credential cannot be selected as a personal password and is never rendered.
 - Student IDs remain strings. Names preserve case and compound first/surnames; the middle initial is removed. Filenames supply independent course and period values.
 - The private parser verified 143 unique students. Expected real-student filter totals: ASL3 8, period5 30, both 1. The separate test account is not part of those counts.
-- Brandon Harms must be uniquely identified as an active teacher before reset. His password and associated data remain. `test test` is retained or recreated with its test-only password. Other reviewed accounts and their dependent records are removed. The old web wipe is disabled and install no longer recreates the second teacher.
+- Brandon Harms must be uniquely identified as an active teacher before reset. His password and associated data remain. `test test` is retained or recreated as unclaimed and follows the same initial-credential, Create password and signed-out return flow as students. Its old password does not authenticate. It has no Skyward student ID and is excluded from the 143-row import comparison. Other reviewed accounts and their dependent records are removed. The old web wipe is disabled and install no longer recreates the second teacher.
 
 ## Production procedure
 
