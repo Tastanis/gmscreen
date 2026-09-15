@@ -599,7 +599,7 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
         }
 
         function chartScaffold(svg, blocks, maxY, unit, fractions = null) {
-            const width = 920, height = 300;
+            const width = 920, height = 400;
             const pad = { top: 24, right: 26, bottom: 58, left: 58 };
             const chartWidth = width - pad.left - pad.right;
             const chartHeight = height - pad.top - pad.bottom;
