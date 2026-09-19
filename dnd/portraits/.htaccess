@@ -1,0 +1,6 @@
+# Uploaded portraits are static images only.
+Options -ExecCGI -Indexes
+<FilesMatch "(?i)\.(php[0-9]?|phtml|phar|cgi|pl|py|sh|shtml)(\.|$)">
+    Require all denied
+</FilesMatch>
+RemoveHandler .png .jpg .jpeg .gif .bmp .webp

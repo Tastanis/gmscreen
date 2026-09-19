@@ -398,7 +398,7 @@ The old active-tool-label browser script is historical: its visible label was
 intentionally removed; tool coordination remains implemented.
 
 
-## Token settings cleanup — 1.19.116
+## Token settings cleanup ï¿½ 1.19.116
 
 A single linked PC already resolves automatically on the server. Hide the explicit
 Primary token override unless multiple placements link to the same profile; use a
@@ -947,3 +947,6 @@ Import JSON creates fresh IDs and validates before saving under the inventory lo
 ## ASL account phase 1
 
 Preserve the user-approved auth forms and isolated asl/css/auth.css. Never render the server-side claiming credential. Roster exports stay outside the public checkout and Git. Use the private review-hash-gated asl/scripts/accounts.php migration and its ACCOUNTS-PHASE1.md handoff. Preserve the verified Brandon teacher and test test exception. The old web wipe is disabled. No proficiency migration is included.
+
+## Portrait uploads
+The legacy portrait endpoint decodes and re-encodes images as PNG, limits bytes/pixels, and uses random server filenames. Keep portraits/.htaccess execution blocking. Save under the existing characters.lock and preserve old portraits and unrelated character fields. Regression: php -d extension=gd tests/portrait-upload.php.

@@ -1,110 +1,34 @@
 <?php
 session_start();
+header('Content-Type: application/json; charset=utf-8');
+require_once __DIR__ . '/includes/portrait-upload.php';
 
-// Check if user is logged in
-if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
-    echo json_encode(array('success' => false, 'error' => 'Not logged in'));
-    exit;
-}
-
-$user = $_SESSION['user'];
-$is_gm = ($user === 'GM');
-
-// Only allow uploads if user is GM or uploading to their own character
-$character = isset($_POST['character']) ? $_POST['character'] : '';
-$characters = array('cal', 'sharon', 'indigo', 'zepha');
-
-if (!in_array($character, $characters)) {
-    echo json_encode(array('success' => false, 'error' => 'Invalid character'));
-    exit;
-}
-
-// Check permissions: GM can upload for any character, users can only upload for themselves
-if (!$is_gm && $character !== $user) {
-    echo json_encode(array('success' => false, 'error' => 'Permission denied'));
-    exit;
-}
-
-// Check if file was uploaded
-if (!isset($_FILES['portrait']) || $_FILES['portrait']['error'] !== UPLOAD_ERR_OK) {
-    echo json_encode(array('success' => false, 'error' => 'No file uploaded or upload error'));
-    exit;
-}
-
-$uploadedFile = $_FILES['portrait'];
-
-// Validate file type
-$allowedTypes = array('image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/bmp', 'image/webp');
-$fileType = $uploadedFile['type'];
-
-if (!in_array($fileType, $allowedTypes)) {
-    echo json_encode(array('success' => false, 'error' => 'Invalid file type. Only JPG, PNG, GIF, BMP, and WebP images are allowed.'));
-    exit;
-}
-
-// Validate file size (max 5MB)
-$maxSize = 5 * 1024 * 1024; // 5MB in bytes
-if ($uploadedFile['size'] > $maxSize) {
-    echo json_encode(array('success' => false, 'error' => 'File too large. Maximum size is 5MB.'));
-    exit;
-}
-
-// Create portraits directory if it doesn't exist
-$portraitsDir = 'portraits';
-if (!is_dir($portraitsDir)) {
-    mkdir($portraitsDir, 0755, true);
-}
-
-// Generate unique filename
-$fileExtension = pathinfo($uploadedFile['name'], PATHINFO_EXTENSION);
-$fileName = $character . '_portrait_' . time() . '.' . $fileExtension;
-$filePath = $portraitsDir . '/' . $fileName;
-
-// Move uploaded file
-if (move_uploaded_file($uploadedFile['tmp_name'], $filePath)) {
-    // Update character data with portrait path
-    $dataFile = 'data/characters.json';
-    $data = array();
-    
-    if (file_exists($dataFile)) {
-        $content = file_get_contents($dataFile);
-        $data = json_decode($content, true);
-        if (!$data) {
-            $data = array();
-        }
+try {
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+        throw new RuntimeException('Use POST to upload a portrait.');
     }
-    
-    // Initialize character data if it doesn't exist
-    if (!isset($data[$character])) {
-        $data[$character] = array();
+    if (($_SESSION['logged_in'] ?? false) !== true) {
+        throw new RuntimeException('Not logged in');
     }
-    if (!isset($data[$character]['character'])) {
-        $data[$character]['character'] = array();
+    if (($_SERVER['HTTP_SEC_FETCH_SITE'] ?? '') === 'cross-site') {
+        throw new RuntimeException('Cross-site uploads are not allowed.');
     }
-    
-    // Remove old portrait file if it exists
-    if (isset($data[$character]['character']['portrait']) && 
-        file_exists($data[$character]['character']['portrait'])) {
-        unlink($data[$character]['character']['portrait']);
+    $user = $_SESSION['user'] ?? '';
+    $character = $_POST['character'] ?? '';
+    if (!is_string($character) || !in_array($character, ['cal', 'sharon', 'indigo', 'zepha'], true)) {
+        throw new RuntimeException('Invalid character');
     }
-    
-    // Save new portrait path
-    $data[$character]['character']['portrait'] = $filePath;
-    
-    // Save updated data
-    $jsonData = json_encode($data, JSON_PRETTY_PRINT);
-    if (file_put_contents($dataFile, $jsonData)) {
-        echo json_encode(array(
-            'success' => true, 
-            'portrait_path' => $filePath,
-            'message' => 'Portrait uploaded successfully'
-        ));
-    } else {
-        // Delete uploaded file if we can't update the data
-        unlink($filePath);
-        echo json_encode(array('success' => false, 'error' => 'Failed to save portrait data'));
+    if ($user !== 'GM' && $character !== $user) {
+        throw new RuntimeException('Permission denied');
     }
-} else {
-    echo json_encode(array('success' => false, 'error' => 'Failed to save uploaded file'));
+    $upload = $_FILES['portrait'] ?? null;
+    if (!is_array($upload) || ($upload['error'] ?? null) !== UPLOAD_ERR_OK || !is_string($upload['tmp_name'] ?? null) || !is_uploaded_file($upload['tmp_name'])) {
+        throw new RuntimeException('No file uploaded or upload error');
+    }
+    $png = encodePortrait($upload['tmp_name']);
+    $path = savePortrait(__DIR__, $character, $png);
+    echo json_encode(['success' => true, 'portrait_path' => $path, 'message' => 'Portrait uploaded successfully']);
+} catch (Throwable $error) {
+    $message = $error instanceof RuntimeException ? $error->getMessage() : 'The portrait could not be saved. Existing character data has been preserved.';
+    echo json_encode(['success' => false, 'error' => $message]);
 }
-?>
