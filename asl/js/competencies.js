@@ -7,7 +7,8 @@
         return parts.map(p => p.slot ? `<strong><u>${escape(element ?? p.text)}</u></strong>` : escape(p.text)).join('');
     }
     window.ASLCompetencies = {
-        render(data, onScope, onGrade) {
+        clear() { selection.standard=null; selection.element=null; selection.scale=false; },
+        render(data, onScope, onGrade, onSelfAssess) {
             const standards = (data.taxonomy || []).flatMap(b => b.standards || []).filter(s => s.competency);
             if (!standards.length) return false;
             const section = document.querySelector('.curriculum-section');
@@ -29,7 +30,11 @@
             section.classList.toggle('competency-initial', !standard);
             root.innerHTML = `
                 ${selection.scale ? '<button type="button" class="competency-return" aria-label="Return to competencies" title="Return to competencies">←</button>' : `
-                <div class="competency-list"><h2 id="curriculum-heading">Competencies</h2>${standards.map(s => `<button type="button" data-competency="${escape(s.standard_id)}" aria-pressed="${s === standard}"><span>${s.competency.number}.</span> ${escape(s.name)}</button>`).join('')}</div>`}
+                <div class="competency-list"><h2 id="curriculum-heading">Competencies</h2>${standards.map(s => {
+                    const points = s.targets.reduce((sum,t) => sum + Number(data.scores?.[t.id] || 0),0);
+                    const fill = Math.max(0,Math.min(100,100*points/(s.targets.length*3 || 1)));
+                    return `<button type="button" data-competency="${escape(s.standard_id)}" aria-pressed="${s === standard}" style="--competency-progress:${fill}%"><span>${s.competency.number}.</span> ${escape(s.name)}</button>`;
+                }).join('')}</div>`}
                 ${c ? `<div class="competency-detail"><h3>${escape(c.title)}</h3><p class="competency-statement">${phrase(c.text, element?.replacement ?? element?.label)}</p>
                     ${c.notes.map(n => `<p>${escape(n)}</p>`).join('')}
                     ${c.elements.length ? `<h4>Elements</h4><div class="competency-elements">${c.elements.map(e => `<button type="button" data-element="${escape(e.key)}" aria-pressed="${e === element}">${escape(e.label)}</button>`).join('')}</div>` : ''}
@@ -38,15 +43,22 @@
                 </div>` : ''}
                 ${selection.scale && target ? `<div class="competency-scale"><h3>Proficiency scale</h3>
                     ${modes.length > 1 ? `<div class="competency-modes" aria-label="Assessment mode">${modes.map(m => `<button type="button" data-mode="${m}" aria-pressed="${m === selection.mode}">${m[0].toUpperCase()+m.slice(1)}</button>`).join('')}</div>` : ''}
-                    <div class="competency-levels">${Object.entries(target.rubric).sort((a,b) => Number(a[0])-Number(b[0])).map(([score,descriptor]) => `<${onGrade ? 'button type="button"' : 'div'} class="competency-level level-${score} ${Number(data.scores?.[target.id]) === Number(score) ? 'selected' : ''}" ${onGrade ? `data-score="${score}" aria-pressed="${Number(data.scores?.[target.id]) === Number(score)}"` : ''}><span class="competency-level-heading"><span class="competency-score">${score}</span><span class="competency-level-name">${levelNames[score] || ''}</span></span><span>${escape(descriptor)}</span></${onGrade ? 'button' : 'div'}>`).join('')}</div>
+                    <p class="assessment-key">Colored border: ${onGrade ? 'student’s selection' : 'your selection'} · Shaded fill: teacher’s grade</p>
+                    <div class="competency-levels">${Object.entries(target.rubric).sort((a,b) => Number(a[0])-Number(b[0])).map(([score,descriptor]) => {
+                        const graded = Number(data.scores?.[target.id]) === Number(score);
+                        const self = Number(data.self_assessments?.[target.id]) === Number(score);
+                        const clickable = onGrade || onSelfAssess;
+                        return `<${clickable ? 'button type="button"' : 'div'} class="competency-level level-${score} ${graded ? 'selected' : ''} ${self ? 'self-selected' : ''}" ${clickable ? `${onGrade ? 'data-score' : 'data-self-score'}="${score}" aria-pressed="${onGrade ? graded : self}"` : ''}><span class="competency-level-heading"><span class="competency-score">${score}</span><span class="competency-level-name">${levelNames[score] || ''}</span>${self ? `<span class="assessment-marker">${onGrade ? 'Student selection' : 'Your selection'}</span>` : ''}${graded ? '<span class="assessment-marker">Teacher grade</span>' : ''}</span><span>${escape(descriptor)}</span></${clickable ? 'button' : 'div'}>`;
+                    }).join('')}</div>
                 </div>` : ''}`;
-            const rerender = () => { onScope(selection.standard); this.render(data,onScope,onGrade); };
-            root.querySelectorAll('[data-competency]').forEach(b => b.onclick = () => { selection.standard=b.dataset.competency; selection.element=null; selection.scale=false; rerender(); });
+            const rerender = () => { onScope(selection.standard); this.render(data,onScope,onGrade,onSelfAssess); };
+            root.querySelectorAll('[data-competency]').forEach(b => b.onclick = () => { selection.standard=selection.standard === b.dataset.competency ? null : b.dataset.competency; selection.element=null; selection.scale=false; rerender(); });
             root.querySelectorAll('[data-element]').forEach(b => b.onclick = () => { selection.element=b.dataset.element; rerender(); });
             root.querySelector('.open-scale')?.addEventListener('click', () => { selection.scale=true; rerender(); });
             root.querySelector('.competency-return')?.addEventListener('click', () => { selection.standard=null; selection.element=null; selection.scale=false; rerender(); });
             root.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { selection.mode=b.dataset.mode; rerender(); });
             root.querySelectorAll('[data-score]').forEach(b => b.onclick = () => onGrade(target.id,Number(b.dataset.score),b));
+            root.querySelectorAll('[data-self-score]').forEach(b => b.onclick = () => onSelfAssess(target.id,Number(b.dataset.selfScore),b));
             return true;
         }
     };

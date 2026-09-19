@@ -11,7 +11,7 @@ const ASLHUB_BACKUP_TABLES = [
     'user_learning_targets', 'user_learning_target_score_history', 'asl_student_meetings',
     'asl_calendar_days', 'asl_reporting_blocks', 'asl_student_block_metrics',
     'asl_student_block_metric_audit', 'asl_scroller_wordlists', 'asl_scroller_wordlist_levels',
-    'user_goals',
+    'user_goals', 'asl_self_assessments',
 ];
 
 function aslhub_backup_dir(): string {

@@ -83,6 +83,14 @@ function aslhub_student_scores(PDO $pdo, int $userId): array {
     return $out;
 }
 
+function aslhub_student_self_assessments(PDO $pdo, int $userId): object {
+    $stmt = $pdo->prepare('SELECT learning_target_id, score FROM asl_self_assessments WHERE user_id=?');
+    $stmt->execute([$userId]);
+    $out = new stdClass();
+    foreach ($stmt as $row) $out->{(string)$row['learning_target_id']} = (int)$row['score'];
+    return $out;
+}
+
 /** Monday of the week containing $date. */
 function aslhub_week_start(string $date): string {
     $ts = strtotime($date);
@@ -297,5 +305,6 @@ function aslhub_dashboard_payload(PDO $pdo, array $student): array {
         'meetings' => $meetings,
         'taxonomy' => $taxonomy,
         'scores' => $scores ? array_combine(array_map('strval', array_keys($scores)), array_values($scores)) : new stdClass(),
+        'self_assessments' => aslhub_student_self_assessments($pdo, (int)$student['id']),
     ];
 }

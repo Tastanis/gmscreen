@@ -10,7 +10,7 @@
  *    on normal page loads once the stored version matches.
  */
 
-const ASLHUB_SCHEMA_VERSION = 8;
+const ASLHUB_SCHEMA_VERSION = 9;
 
 function aslhub_ensure_schema(PDO $pdo, bool $force = false): void {
     static $done = false;
@@ -241,6 +241,15 @@ function aslhub_ensure_schema(PDO $pdo, bool $force = false): void {
             INDEX idx_asl_metric_audit_user_time (user_id, changed_at),
             INDEX idx_asl_metric_audit_block_time (block_id, changed_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        // Student reflection is deliberately separate from graded scores/history.
+        $pdo->exec("CREATE TABLE IF NOT EXISTS asl_self_assessments (
+            user_id INT NOT NULL,
+            learning_target_id INT NOT NULL,
+            score TINYINT UNSIGNED NOT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id, learning_target_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
         // ----- unified single-computer scroller word banks -----
         $pdo->exec("CREATE TABLE IF NOT EXISTS asl_scroller_wordlists (
             id INT AUTO_INCREMENT PRIMARY KEY,

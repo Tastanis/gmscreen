@@ -1,7 +1,7 @@
 <?php
 /** A private, single-use migration with an exact account review and durable backup. */
 const ASLHUB_ACCOUNT_DEPENDENCIES = ['user_goals', 'asl_student_block_metric_audit',
-    'asl_student_block_metrics', 'user_learning_targets', 'user_learning_target_score_history', 'asl_student_meetings'];
+    'asl_student_block_metrics', 'user_learning_targets', 'user_learning_target_score_history', 'asl_student_meetings', 'asl_self_assessments'];
 
 function aslhub_account_reset_plan(array $users, array $roster): array {
     $teachers = array_values(array_filter($users, fn($u) => !empty($u['is_teacher'])

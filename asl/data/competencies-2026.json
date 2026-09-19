@@ -514,7 +514,7 @@
                 "slot": true
               },
               {
-                "text": " sequences using the required handshapes, locations, palm orientations, movements, and order. Pauses and sequence errors rarely impede understanding.",
+                "text": " sequences on their own and occasionally use them successfully within connected signing. Pauses or corrections may interrupt the surrounding message.",
                 "slot": false
               }
             ],
@@ -528,7 +528,7 @@
                 "slot": true
               },
               {
-                "text": " sequences using the required handshapes, locations, palm orientations, movements, and order. Pauses and sequence errors sometimes impede understanding.",
+                "text": " sequences on their own. Pauses and sequence errors rarely impede understanding.",
                 "slot": false
               }
             ],
@@ -542,7 +542,7 @@
                 "slot": true
               },
               {
-                "text": " sequences with partial accuracy in the required handshapes, locations, palm orientations, movements, and order. Frequent pauses and sequence errors impede understanding.",
+                "text": " sequences with partial accuracy. Pauses and sequence errors sometimes make the intended sequence unclear.",
                 "slot": false
               }
             ],
@@ -556,7 +556,7 @@
                 "slot": true
               },
               {
-                "text": " sequences by combining isolated forms with developing control of the required handshapes, locations, palm orientations, movements, and order.",
+                "text": " sequences with developing control of handshapes, locations, palm orientations, movements, and order. Frequent pauses and sequence errors impede understanding.",
                 "slot": false
               }
             ]
@@ -2122,7 +2122,7 @@
           "rubric": {
             "4": [
               {
-                "text": "Accurately produce familiar and unfamiliar ",
+                "text": "Usually produce accurate ",
                 "slot": false
               },
               {
@@ -2130,7 +2130,7 @@
                 "slot": true
               },
               {
-                "text": " sequences using the required handshapes, locations, palm orientations, movements, and order. Pauses and sequence errors rarely impede understanding.",
+                "text": " sequences within connected signing while maintaining the surrounding flow. Pauses or corrections occasionally interrupt the message.",
                 "slot": false
               }
             ],
@@ -2144,7 +2144,7 @@
                 "slot": true
               },
               {
-                "text": " sequences using the required handshapes, locations, palm orientations, movements, and order. Pauses and sequence errors rarely impede understanding.",
+                "text": " sequences on their own and occasionally use them successfully within connected signing. Pauses or corrections may interrupt the surrounding message.",
                 "slot": false
               }
             ],
@@ -2158,7 +2158,7 @@
                 "slot": true
               },
               {
-                "text": " sequences using the required handshapes, locations, palm orientations, movements, and order. Pauses and sequence errors sometimes impede understanding.",
+                "text": " sequences on their own. Pauses and sequence errors rarely impede understanding.",
                 "slot": false
               }
             ],
@@ -2172,7 +2172,7 @@
                 "slot": true
               },
               {
-                "text": " sequences with partial accuracy in the required handshapes, locations, palm orientations, movements, and order. Frequent pauses and sequence errors impede understanding.",
+                "text": " sequences with partial accuracy. Pauses and sequence errors sometimes make the intended sequence unclear.",
                 "slot": false
               }
             ]
@@ -3809,7 +3809,7 @@
           "rubric": {
             "4": [
               {
-                "text": "Accurately produce familiar and unfamiliar ",
+                "text": "Consistently produce accurate ",
                 "slot": false
               },
               {
@@ -3817,13 +3817,13 @@
                 "slot": true
               },
               {
-                "text": " sequences using the required handshapes, locations, palm orientations, movements, and order. Pauses and sequence errors rarely impede understanding. Integrate the sequences into connected signing while maintaining the surrounding flow.",
+                "text": " sequences within connected signing while maintaining the surrounding flow. Pauses or corrections rarely interrupt the message.",
                 "slot": false
               }
             ],
             "3": [
               {
-                "text": "Accurately produce familiar and unfamiliar ",
+                "text": "Usually produce accurate ",
                 "slot": false
               },
               {
@@ -3831,7 +3831,7 @@
                 "slot": true
               },
               {
-                "text": " sequences using the required handshapes, locations, palm orientations, movements, and order. Pauses and sequence errors rarely impede understanding.",
+                "text": " sequences within connected signing while maintaining the surrounding flow. Pauses or corrections occasionally interrupt the message.",
                 "slot": false
               }
             ],
@@ -3845,7 +3845,7 @@
                 "slot": true
               },
               {
-                "text": " sequences using the required handshapes, locations, palm orientations, movements, and order. Pauses and sequence errors rarely impede understanding.",
+                "text": " sequences on their own and occasionally use them successfully within connected signing. Pauses or corrections may interrupt the surrounding message.",
                 "slot": false
               }
             ],
@@ -3859,7 +3859,7 @@
                 "slot": true
               },
               {
-                "text": " sequences using the required handshapes, locations, palm orientations, movements, and order. Pauses and sequence errors sometimes impede understanding.",
+                "text": " sequences on their own. Pauses and sequence errors rarely impede understanding.",
                 "slot": false
               }
             ]

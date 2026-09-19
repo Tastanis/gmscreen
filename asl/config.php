@@ -45,6 +45,17 @@ require_once __DIR__ . '/lib/schema.php';
 // Additive-only schema check (cheap; guarded by a settings flag once complete)
 aslhub_ensure_schema($pdo);
 
+// Apply approved descriptor revisions once, with a backup, to existing IDs.
+require_once __DIR__ . '/lib/competencies.php';
+require_once __DIR__ . '/lib/backup.php';
+try {
+    aslhub_update_manual_wording($pdo, fn(PDO $db) => aslhub_backup_sql($db));
+} catch (Throwable $e) {
+    error_log('ASL competency wording update failed: '.$e->getMessage());
+    http_response_code(503);
+    exit('The competency update could not finish. Please try again or tell your teacher. Existing grades are unchanged.');
+}
+
 // Keep PHP calendar math and MySQL NOW()/CURDATE() on the same school clock.
 // MySQL installations do not always include named-zone tables, so use the
 // current numeric offset while PHP retains the full IANA timezone for DST.

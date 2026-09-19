@@ -240,6 +240,7 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
             : 'null'; ?>;
 
         const dashboardData = window.ASL_STUDENT_DASHBOARD || {};
+        const selfAssessmentConfig = <?php echo !$viewingAsTeacher ? json_encode(['csrf'=>aslhub_csrf_token(),'api'=>aslhub_base_url().'/api/save_self_assessment.php'], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) : 'null'; ?>;
         const SCORE_COLORS = { 0: '#e05252', 1: '#e05252', 2: '#e8b93e', 3: '#4caf6d', 4: '#4a90d9' };
         const state = { bucketId: null, standardId: null, targetId: null, progressScope: 'overall' };
         const chartState = {
@@ -291,6 +292,25 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
             } finally {
                 gradeTarget.busy = false;
             }
+        }
+
+        async function selfAssessTarget(targetId, score, row) {
+            if (!selfAssessmentConfig || selfAssessTarget.busy) return;
+            selfAssessTarget.busy = true;
+            row?.classList.add('rubric-saving');
+            try {
+                const response = await fetch(selfAssessmentConfig.api, {method:'POST', body:new URLSearchParams({
+                    csrf_token:selfAssessmentConfig.csrf, target_id:targetId, score
+                })});
+                const result = await response.json();
+                if (!result.success) throw new Error(result.error || 'Save failed.');
+                dashboardData.self_assessments ||= {};
+                dashboardData.self_assessments[String(targetId)] = result.score;
+                renderDashboard();
+            } catch (err) {
+                row?.classList.remove('rubric-saving');
+                alert('Could not save your selection: '+err.message);
+            } finally { selfAssessTarget.busy = false; }
         }
 
         function bucketTargets(bucket) {
@@ -632,21 +652,10 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
             const scopeLabel = document.getElementById('chart-scope');
             const blocks = visibleBlocks('progress');
             const allBlocks = reportingBlocks();
-            const bucket = getBucket(state.bucketId);
-            const standard = getStandard(state.standardId);
             const progress = dashboardData.progress || { overall: [], byBucket: {}, byStandard: {} };
-            let values = progress.overall || [];
-            let scopeTargets = Number(dashboardData.target_count || 0);
-            if (state.progressScope === 'standard' && standard) {
-                values = (progress.byStandard && progress.byStandard[standard.standard_id]) ||
-                    (bucket && progress.byBucket && progress.byBucket[bucket.bucket_id]) || [];
-                scopeTargets = (standard.targets || []).length;
-                scopeLabel.textContent = standard.name;
-            } else if (state.progressScope === 'bucket' && bucket) {
-                values = (progress.byBucket && progress.byBucket[bucket.bucket_id]) || [];
-                scopeTargets = bucketTargets(bucket).length;
-                scopeLabel.textContent = 'Showing ' + bucket.name;
-            } else scopeLabel.textContent = 'All competencies';
+            const values = progress.overall || [];
+            const scopeTargets = Number(dashboardData.target_count || 0);
+            scopeLabel.textContent = 'All competencies';
 
             const visibleValues = blocks.map(block => seriesValue(values, block)).filter(v => v != null).map(Number);
             note.style.display = visibleValues.some(v => v > 0) ? 'none' : 'block';
@@ -820,7 +829,7 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
                 state.standardId = standardId;
                 state.progressScope = standardId ? 'standard' : 'overall';
                 renderProgressSummary(); renderChart();
-            }, window.ASL_TEACHER_GRADE ? gradeTarget : null);
+            }, window.ASL_TEACHER_GRADE ? gradeTarget : null, selfAssessmentConfig ? selfAssessTarget : null);
             if (!competencies) {
             renderBuckets();
             renderStandards();
@@ -876,7 +885,7 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
         });
 
         function resetCurriculumSelection() {
-            if (document.getElementById('competency-browser')) return;
+            ASLCompetencies.clear();
             if (!state.bucketId && !state.standardId && !state.targetId && state.progressScope === 'overall') return;
             state.bucketId = null;
             state.standardId = null;
@@ -886,7 +895,6 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
         }
 
         document.addEventListener('click', event => {
-            if (event.target.closest('#competency-browser')) return;
             if (event.target.closest('button, a, input, select, textarea, label, [role="button"], .modal-content')) return;
             if (event.target.closest('#notesModal')) return;
             resetCurriculumSelection();

@@ -12,6 +12,55 @@ function aslhub_competencies_installed(PDO $pdo): bool {
     return (bool)$q->fetchColumn();
 }
 
+/** Versioned prose-only patch: keep target IDs, scores, history and calendar intact. */
+function aslhub_update_manual_wording(PDO $pdo, callable $backup): void {
+    $revision = 'manual_connected_signing_v1';
+    // Read fresh, including after the lock; the general settings helper caches per request.
+    $setting = function(string $key) use ($pdo): string {
+        $q = $pdo->prepare('SELECT setting_value FROM asl_settings WHERE setting_key=?');
+        $q->execute([$key]);
+        return (string)$q->fetchColumn();
+    };
+    if (!aslhub_competencies_installed($pdo) || $setting($revision) === '1') return;
+    if ((int)$pdo->query("SELECT GET_LOCK('aslhub_competencies_import', 10)")->fetchColumn() !== 1) throw new RuntimeException('Curriculum update is busy.');
+    try {
+        if ($setting($revision) === '1') return;
+        $backup($pdo);
+        $pdo->beginTransaction();
+        try {
+            foreach (aslhub_competency_bundle()['courses'] as $course) {
+                $level = (int)$course['level'];
+                $manual = array_values(array_filter($course['competencies'], fn($c) => $c['key'] === 'manual'));
+                if (count($manual) !== 1) throw new RuntimeException('Missing manual competency.');
+                $c = $manual[0];
+                $sid = 'C'.$level.'.manual';
+                $metadata = json_decode($setting('competency_'.$sid), true);
+                if (!$metadata || $metadata['key'] !== 'manual') throw new RuntimeException('Missing installed manual competency.');
+                foreach ($c['elements'] as $element) foreach ($c['modes'] as $mode) {
+                    $q = $pdo->prepare('SELECT id FROM asl_learning_targets WHERE target_code=? AND standard_id=? AND asl_level=? AND active=1');
+                    $q->execute([aslhub_competency_target_code($level,'manual',$element['key'],$mode),$sid,$level]);
+                    $id = $q->fetchColumn();
+                    if (!$id) throw new RuntimeException('Missing existing manual target; no changes applied.');
+                    foreach ($c['rubric'] as $score=>$parts) {
+                        $q = $pdo->prepare('SELECT COUNT(*) FROM asl_rubric_levels WHERE learning_target_id=? AND score=?');
+                        $q->execute([$id,$score]);
+                        if ((int)$q->fetchColumn() !== 1) throw new RuntimeException('Missing existing descriptor; no changes applied.');
+                        $pdo->prepare('UPDATE asl_rubric_levels SET descriptor=? WHERE learning_target_id=? AND score=?')
+                            ->execute([aslhub_competency_text($parts,$element['replacement'] ?? $element['label']),$id,$score]);
+                    }
+                }
+                $metadata['rubric'] = $c['rubric'];
+                aslhub_set_setting($pdo,'competency_'.$sid,json_encode($metadata,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR));
+            }
+            aslhub_set_setting($pdo,$revision,'1');
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $e;
+        }
+    } finally { $pdo->query("SELECT RELEASE_LOCK('aslhub_competencies_import')"); }
+}
+
 function aslhub_competency_text(array $parts, ?string $element = null): string {
     return implode('', array_map(fn($p) => $element !== null && $p['slot'] ? $element : $p['text'], $parts));
 }

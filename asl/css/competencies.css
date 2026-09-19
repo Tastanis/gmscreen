@@ -29,8 +29,16 @@
 .competency-level.level-2 { --level-color:var(--score-2); }
 .competency-level.level-3 { --level-color:var(--score-3); }
 .competency-level.level-4 { --level-color:var(--score-4); }
-.competency-level.selected { border-color:var(--level-color); box-shadow:inset 4px 0 var(--level-color); background:color-mix(in srgb,var(--level-color) 12%,white); }
+.competency-level.selected { background:color-mix(in srgb,var(--level-color) 24%,white); }
 button.competency-level:hover { background:color-mix(in srgb,var(--level-color) 10%,white); }
+.competency-level.selected:hover { background:color-mix(in srgb,var(--level-color) 30%,white); }
+.competency-level.self-selected { border-color:var(--level-color); box-shadow:inset 0 0 0 2px var(--level-color); }
+.competency-level-heading { flex-wrap:wrap; }
+.assessment-marker { font-size:.75rem; font-weight:600; }
+.competency-browser .assessment-key { font-size:.8rem; color:#526071; line-height:1.5; }
+.competency-list button { background-image:linear-gradient(to right,rgba(53,77,101,.12) var(--competency-progress,0%),transparent var(--competency-progress,0%)); color:#202a35; }
+.competency-list button:hover { background-color:#e7ecf1; background-image:linear-gradient(to right,rgba(53,77,101,.12) var(--competency-progress,0%),transparent var(--competency-progress,0%)); }
+.competency-list button[aria-pressed=true] { background-color:#e9eef3; background-image:linear-gradient(to right,rgba(53,77,101,.12) var(--competency-progress,0%),transparent var(--competency-progress,0%)); }
 .competency-level-heading { display:flex; align-items:baseline; gap:10px; }
 .competency-level-name { font-size:.96rem; font-weight:700; }
 .competency-score { font-size:1.25rem; font-weight:700; }

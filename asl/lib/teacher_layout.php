@@ -63,7 +63,7 @@ function aslhub_teacher_header(array $me, string $title, string $active = ''): v
         .teacher-nav a.active { background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); color:#fff; border-color:transparent; }
         .filters-bar { display:flex; gap:10px; flex-wrap:wrap; align-items:center;
             background:rgba(255,255,255,.95); border-radius:12px; padding:12px 16px; margin-bottom:16px; }
-        .filters-bar select, .filters-bar input[type=text], .filters-bar input[type=date] {
+        .filters-bar select, .filters-bar input[type=text], .filters-bar input[type=search], .filters-bar input[type=date] {
             padding:7px 10px; border:1px solid #cbd5e0; border-radius:8px; font-size:.9rem; }
     </style>
 </head>

@@ -16,9 +16,11 @@ No old score is reassigned to a new competency.
 
 ## Source and identity
 
-`data/competencies-2026.json` records the exact source DOCX names and SHA-256 hashes,
+`data/competencies-2026.json` records the original source DOCX names and SHA-256 hashes,
 competency prose, underlined text spans, element labels/examples, scale rows, and
-communication-mode appendix. Original DOCXs are unchanged and are not deployed.
+communication-mode appendix. DOCXs are not deployed. The manual-sequence descriptors
+were revised on September 18, 2026 to match the approved ASL Classes documents;
+the recorded hashes identify the original compilation, before this scoped revision.
 
 Rebuild using Python with python-docx:
 
@@ -32,8 +34,33 @@ its key. Source numbers are display order only. Unknown labels fail compilation.
 Target codes derive from course + permanent competency/element/mode keys, so rewording
 or renumbering cannot transfer or erase scores. `aslhub_write_competencies` can apply a
 reviewed future content revision inside a backed-up transaction; there is no content
-editor or automatic import on deployment. Do not clear the one-time setup marker to
+editor or automatic full import on deployment. Do not clear the one-time setup marker to
 publish a wording revision, since that would also attempt the bundled calendar.
+
+### Connected-signing wording revision and student reflections
+
+For an already-installed curriculum, the first request after deployment applies
+`manual_connected_signing_v1` automatically. It takes a durable SQL backup, verifies
+all twelve existing manual targets and their four rubric rows, and updates only
+those descriptors and the three matching rubric metadata fields in a transaction.
+The existing import lock serializes the revision; its marker is read fresh after
+locking. Failure rolls back and leaves the marker unset for a later retry. Target
+identities, scores/history, other competencies, and calendar rows are never written.
+Connected signing begins at ASL 1 level 4, ASL 2 level 3, and ASL 3 level 2.
+
+Schema version 9 adds `asl_self_assessments`, keyed by student and target. Students
+can save only their own defined, active course proficiency; the API requires login,
+POST and CSRF and accepts no user identity from the client. Reflections never write
+grade or history tables. They appear as a colored border, independently of the
+teacher grade fill, on both student and teacher student-dashboard views. SQL backups
+include reflections; account removal cleans up the removed account's reflections.
+
+The top bar and competency-button fills use current teacher points divided by the
+existing three-points-per-target goal; button fills cap at 100%. Student reflections
+do not affect either. Escape, clicking a selected competency again, or clicking
+noninteractive space clears the selection. The lower progress graph always shows
+overall course progress. Roster selects/checkboxes submit immediately and preserve
+the name search; the search matches name words in either order.
 
 Element labels keep their original text; substituted phrases use grammatical initial
 case while preserving ASL/WH acronyms. Only marked underlined spans are substituted.

@@ -71,9 +71,9 @@ aslhub_teacher_header($me, 'ASL Roster', 'dashboard');
             <?php endfor; ?>
         </select>
         <label style="font-size:.85rem;color:#4a5568;"><input type="checkbox" name="inactive" value="1" <?php echo $filters['include_inactive'] ? 'checked' : ''; ?>> show deactivated</label>
-        <button type="submit" class="form-button" style="width:auto;padding:8px 18px;margin:0;">Filter</button>
-        <input type="text" id="name-search" placeholder="Search name..." style="margin-left:auto;">
-        <span class="pill"><?php echo count($students); ?> students</span>
+        <noscript><button type="submit">Filter</button></noscript>
+        <input type="search" id="name-search" name="q" aria-label="Search students by name" placeholder="Search students by name…" value="<?php echo aslhub_h((string)($_GET['q'] ?? '')); ?>" style="margin-left:auto;">
+        <span class="pill" id="roster-count" aria-live="polite"><?php echo count($students); ?> students</span>
     </form>
 
     <div class="grading-grid-wrap">
@@ -107,11 +107,19 @@ aslhub_teacher_header($me, 'ASL Roster', 'dashboard');
     </div>
 
 <script>
-document.getElementById('name-search').addEventListener('input', function () {
-    const q = this.value.trim().toLowerCase();
+const rosterForm = document.querySelector('.filters-bar');
+rosterForm.querySelectorAll('select, input[type="checkbox"]').forEach(input => input.addEventListener('change', () => rosterForm.requestSubmit()));
+function filterRoster() {
+    const words = document.getElementById('name-search').value.trim().toLowerCase().split(/[\s,]+/).filter(Boolean);
+    let count = 0;
     document.querySelectorAll('#roster-table tbody tr[data-name]').forEach(tr => {
-        tr.style.display = !q || tr.dataset.name.includes(q) ? '' : 'none';
+        const match = words.every(word => tr.dataset.name.includes(word));
+        tr.hidden = !match;
+        if (match) count++;
     });
-});
+    document.getElementById('roster-count').textContent = count+(count === 1 ? ' student' : ' students');
+}
+document.getElementById('name-search').addEventListener('input', filterRoster);
+filterRoster();
 </script>
 <?php aslhub_teacher_footer(); ?>

@@ -59,4 +59,37 @@ foreach ($changed['days'] as &$day) {
 }
 unset($day);
 rejected(fn()=>aslhub_calendar_apply($pdo,$changed),'same-count finalized interior day swap refused');
+// A deployed prose revision must update existing targets without touching grades/calendar.
+$manualIds=$pdo->query("SELECT id FROM asl_learning_targets WHERE standard_id IN ('C1.manual','C2.manual','C3.manual')")->fetchAll(PDO::FETCH_COLUMN);
+foreach ($manualIds as $id) {
+    $pdo->prepare("INSERT INTO user_learning_targets VALUES (2,?,3,'2026-09-14')")->execute([$id]);
+    $pdo->prepare("INSERT INTO user_learning_target_score_history (user_id,learning_target_id,score,scored_at) VALUES (2,?,3,'2026-09-14')")->execute([$id]);
+    $pdo->prepare("UPDATE asl_rubric_levels SET descriptor='Old manual wording' WHERE learning_target_id=?")->execute([$id]);
+}
+$protected=['users','asl_learning_targets','user_learning_targets','user_learning_target_score_history','asl_calendar_days','asl_reporting_blocks','asl_standards'];
+$snapshots=[];
+foreach ($protected as $table) $snapshots[$table]=$pdo->query("SELECT * FROM $table")->fetchAll();
+$oldRubrics=$pdo->query('SELECT * FROM asl_rubric_levels ORDER BY id')->fetchAll();
+rejected(fn()=>aslhub_update_manual_wording($pdo,fn()=>throw new RuntimeException('Backup failed')),'failed backup prevents wording update');
+check($oldRubrics===$pdo->query('SELECT * FROM asl_rubric_levels ORDER BY id')->fetchAll(),'failed backup leaves descriptors intact');
+// Fail partway through, after earlier targets were updated, and verify rollback.
+$missing=end($manualIds);
+$pdo->prepare('UPDATE asl_learning_targets SET active=0 WHERE id=?')->execute([$missing]);
+rejected(fn()=>aslhub_update_manual_wording($pdo,fn()=>null),'missing target rolls back the whole revision');
+check($oldRubrics===$pdo->query('SELECT * FROM asl_rubric_levels ORDER BY id')->fetchAll(),'partial wording writes rolled back');
+$pdo->prepare('UPDATE asl_learning_targets SET active=1 WHERE id=?')->execute([$missing]);
+$backups=0;
+aslhub_update_manual_wording($pdo,function() use (&$backups) {$backups++;});
+aslhub_update_manual_wording($pdo,function() use (&$backups) {$backups++;});
+check($backups===1,'revision is applied only once');
+foreach ($protected as $table) check($snapshots[$table]===$pdo->query("SELECT * FROM $table")->fetchAll(),"revision preserves $table exactly");
+foreach ($pdo->query('SELECT * FROM asl_rubric_levels ORDER BY id') as $i=>$row) {
+    if (!in_array($row['learning_target_id'],$manualIds)) check($row===$oldRubrics[$i],'other competency rubric unchanged');
+    else check($row['descriptor']!=='Old manual wording','manual descriptor updated in place');
+}
+foreach ([1=>4,2=>3,3=>2] as $level=>$score) {
+    $q=$pdo->prepare('SELECT descriptor FROM asl_rubric_levels r JOIN asl_learning_targets t ON t.id=r.learning_target_id WHERE t.standard_id=? AND r.score=?');
+    $q->execute(['C'.$level.'.manual',$score]);
+    foreach ($q as $row) check(str_contains($row['descriptor'],'occasionally use them successfully within connected signing'),'one-step course overlap');
+}
 echo "All competency integration tests passed.\n";

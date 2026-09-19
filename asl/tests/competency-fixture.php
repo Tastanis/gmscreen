@@ -36,6 +36,7 @@ function competency_fixture_schema(PDO $pdo): void {
         'asl_rubric_levels'=>'id INTEGER PRIMARY KEY AUTOINCREMENT,learning_target_id INTEGER,score INTEGER,descriptor TEXT,UNIQUE(learning_target_id,score)',
         'asl_learning_target_resources'=>'id INTEGER PRIMARY KEY,learning_target_id INTEGER,standard_id TEXT,asl_level INTEGER,order_index INTEGER',
         'user_learning_targets'=>'user_id INTEGER,learning_target_id INTEGER,score INTEGER,completed_at TEXT,UNIQUE(user_id,learning_target_id)',
+        'asl_self_assessments'=>'user_id INTEGER,learning_target_id INTEGER,score INTEGER,UNIQUE(user_id,learning_target_id)',
         'user_learning_target_score_history'=>'id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER,learning_target_id INTEGER,score INTEGER,scored_at TEXT,scored_by INTEGER',
         'asl_calendar_days'=>'school_date TEXT PRIMARY KEY,is_instructional INTEGER,label TEXT,calendar_revision INTEGER',
         'asl_reporting_blocks'=>'id INTEGER PRIMARY KEY AUTOINCREMENT,block_index INTEGER UNIQUE,label TEXT,start_date TEXT,end_date TEXT,instructional_days INTEGER,participation_max INTEGER,active INTEGER,finalized_at TEXT,calendar_revision INTEGER',
