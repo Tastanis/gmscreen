@@ -34,8 +34,6 @@ button.competency-level:hover { background:color-mix(in srgb,var(--level-color) 
 .competency-level.selected:hover { background:color-mix(in srgb,var(--level-color) 30%,white); }
 .competency-level.self-selected { border-color:var(--level-color); box-shadow:inset 0 0 0 2px var(--level-color); }
 .competency-level-heading { flex-wrap:wrap; }
-.assessment-marker { font-size:.75rem; font-weight:600; }
-.competency-browser .assessment-key { font-size:.8rem; color:#526071; line-height:1.5; }
 .competency-list button { background-image:linear-gradient(to right,rgba(53,77,101,.12) var(--competency-progress,0%),transparent var(--competency-progress,0%)); color:#202a35; }
 .competency-list button:hover { background-color:#e7ecf1; background-image:linear-gradient(to right,rgba(53,77,101,.12) var(--competency-progress,0%),transparent var(--competency-progress,0%)); }
 .competency-list button[aria-pressed=true] { background-color:#e9eef3; background-image:linear-gradient(to right,rgba(53,77,101,.12) var(--competency-progress,0%),transparent var(--competency-progress,0%)); }

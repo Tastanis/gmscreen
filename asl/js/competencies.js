@@ -43,12 +43,11 @@
                 </div>` : ''}
                 ${selection.scale && target ? `<div class="competency-scale"><h3>Proficiency scale</h3>
                     ${modes.length > 1 ? `<div class="competency-modes" aria-label="Assessment mode">${modes.map(m => `<button type="button" data-mode="${m}" aria-pressed="${m === selection.mode}">${m[0].toUpperCase()+m.slice(1)}</button>`).join('')}</div>` : ''}
-                    <p class="assessment-key">Colored border: ${onGrade ? 'student’s selection' : 'your selection'} · Shaded fill: teacher’s grade</p>
                     <div class="competency-levels">${Object.entries(target.rubric).sort((a,b) => Number(a[0])-Number(b[0])).map(([score,descriptor]) => {
                         const graded = Number(data.scores?.[target.id]) === Number(score);
                         const self = Number(data.self_assessments?.[target.id]) === Number(score);
                         const clickable = onGrade || onSelfAssess;
-                        return `<${clickable ? 'button type="button"' : 'div'} class="competency-level level-${score} ${graded ? 'selected' : ''} ${self ? 'self-selected' : ''}" ${clickable ? `${onGrade ? 'data-score' : 'data-self-score'}="${score}" aria-pressed="${onGrade ? graded : self}"` : ''}><span class="competency-level-heading"><span class="competency-score">${score}</span><span class="competency-level-name">${levelNames[score] || ''}</span>${self ? `<span class="assessment-marker">${onGrade ? 'Student selection' : 'Your selection'}</span>` : ''}${graded ? '<span class="assessment-marker">Teacher grade</span>' : ''}</span><span>${escape(descriptor)}</span></${clickable ? 'button' : 'div'}>`;
+                        return `<${clickable ? 'button type="button"' : 'div'} class="competency-level level-${score} ${graded ? 'selected' : ''} ${self ? 'self-selected' : ''}" ${clickable ? `${onGrade ? 'data-score' : 'data-self-score'}="${score}" aria-pressed="${onGrade ? graded : self}"` : ''}><span class="competency-level-heading"><span class="competency-score">${score}</span><span class="competency-level-name">${levelNames[score] || ''}</span></span><span>${escape(descriptor)}</span></${clickable ? 'button' : 'div'}>`;
                     }).join('')}</div>
                 </div>` : ''}`;
             const rerender = () => { onScope(selection.standard); this.render(data,onScope,onGrade,onSelfAssess); };
