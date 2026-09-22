@@ -67,7 +67,7 @@ function aslhub_teacher_header(array $me, string $title, string $active = ''): v
             padding:7px 10px; border:1px solid #cbd5e0; border-radius:8px; font-size:.9rem; }
     </style>
 </head>
-<body>
+<body class="<?php echo $active === 'grading' ? 'teacher-grading-page' : ''; ?>">
 <div class="container">
     <header>
         <div>

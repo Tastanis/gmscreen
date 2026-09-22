@@ -967,3 +967,13 @@ row anchor across competency/mode navigation. Restoration is tab-local, one-use,
 and matched to the destination URL. Focused browser regression passes with a
 disposable 60-student fixture. The broader competency browser suite currently
 fails its graph-clear assertion identically on baseline and updated grading pages.
+
+### ASL grading header safety - September 21, 2026
+
+The grading table uses an opaque sticky thead and separate zero-spacing borders.
+An 8px header buffer is part of the sticky group and has no grade action. Keep
+its height included in student scroll-anchor measurements. Grading navigation is
+static; downward wheel scrolling over the roster first scrolls the visible page
+header away. Modified/sideways wheel gestures retain native behavior. The roster
+can use 85vh. Local browser hit-testing verifies no underlying cells or student
+links are exposed through the header and buffer clicks never save a grade.

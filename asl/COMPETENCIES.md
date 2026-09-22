@@ -134,3 +134,8 @@ changes. One-use tab-local navigation state restores the visible student row and
 its offset under the table header, plus page scroll. No score writes are involved.
 Run grading-navigation-browser.test.cjs with a --grading-roster browser fixture
 to verify filtering and scroll continuity with 60 disposable students.
+
+Grading headers have an opaque sticky surface and an 8px non-grading separator.
+The top page navigation scrolls away; downward wheel movement over the roster
+first moves that navigation out of view. Header hit-testing is covered by
+`grading-header-browser.test.cjs` with the same --grading-roster fixture.

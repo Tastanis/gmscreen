@@ -88,7 +88,14 @@ body { background: #f5f5f7 !important; }
 .grading-modes button { border:0; border-radius:7px; background:transparent; color:#344454; padding:8px 12px; cursor:pointer; font:inherit; }
 .grading-modes button[aria-pressed=true] { background:#293e50; color:white; }
 .grading-modes button:hover:not([aria-pressed=true]) { background:#dce3eb; }
-.grading-layout .grading-grid thead { position:sticky; top:0; z-index:4; }
+/* Opaque row-group layer covers the spaces between both header rows. */
+.teacher-grading-page > .container > header { position:static; }
+.grading-layout .grading-grid thead { position:sticky; top:0; z-index:4; background:#f7fafc; }
+.grading-layout .grading-grid { border-collapse:separate; border-spacing:0; }
+.grading-layout .grading-grid th, .grading-layout .grading-grid td { border-width:0 1px 1px 0; }
+.grading-layout .grading-grid .grading-header-buffer th {
+    height:8px; padding:0; background:#e2e8f0; border:0; cursor:default;
+}
 .grading-layout .grading-grid th { position:static; }
 .grading-layout .grading-grid th.sticky-col { position:sticky; left:0; }
 .grading-layout .grading-grid th.skill-head { min-width:150px; max-width:190px; white-space:normal; line-height:1.35; padding:10px 12px; }
@@ -111,7 +118,7 @@ body { background: #f5f5f7 !important; }
 
 /* Grading page: grid + pinned rubric panel side by side */
 .grading-layout { display: flex; gap: 14px; align-items: flex-start; }
-.grading-layout .grading-grid-wrap { flex: 1 1 auto; min-width: 0; }
+.grading-layout .grading-grid-wrap { flex: 1 1 auto; min-width: 0; padding-top:0; }
 .rubric-side {
     flex: 0 0 340px; position: sticky; top: 12px;
     background: rgba(255,255,255,.97); border-radius: 12px; padding: 16px 18px;

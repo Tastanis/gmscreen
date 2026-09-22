@@ -120,7 +120,7 @@ aslhub_teacher_header($me, 'Grading', 'grading');
         <div class="rubric-panel"><p class="muted">No skills at this level for that selection.</p></div>
     <?php else: ?>
     <div class="grading-layout">
-    <div class="grading-grid-wrap" style="max-height:70vh;overflow-y:auto;">
+    <div class="grading-grid-wrap" style="max-height:85vh;overflow-y:auto;">
         <table class="grading-grid">
             <thead>
                 <tr>
@@ -133,6 +133,7 @@ aslhub_teacher_header($me, 'Grading', 'grading');
                             title="<?php echo aslhub_h($t['title'] . ' — click to pin the rubric'); ?>"><?php echo aslhub_h($t['title']); ?></th>
                     <?php endforeach; endforeach; ?>
                 </tr>
+                <tr class="grading-header-buffer" aria-hidden="true"><th colspan="<?php echo count($targetIds) + 1; ?>"></th></tr>
             </thead>
             <tbody>
                 <?php foreach ($students as $st): $sid = (int)$st['id']; ?>
@@ -180,6 +181,21 @@ const TARGETS = <?php echo json_encode($targetMeta, JSON_HEX_TAG | JSON_HEX_APOS
 const gradingForm = document.getElementById('filter-form');
 const studentSearch = document.getElementById('student-search');
 const gradingWrap = document.querySelector('.grading-grid-wrap');
+if (gradingWrap) {
+    gradingWrap.addEventListener('wheel', event => {
+        if (event.ctrlKey || event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY) || event.deltaY <= 0) return;
+        const header = document.querySelector('.teacher-grading-page > .container > header');
+        const remaining = header ? header.getBoundingClientRect().bottom + 20 : 0;
+        const available = document.documentElement.scrollHeight - innerHeight - scrollY;
+        if (remaining > 0 && available > 0) {
+            event.preventDefault();
+            const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? innerHeight : 1);
+            const pageStep = Math.min(delta, remaining, available);
+            window.scrollBy(0, pageStep);
+            gradingWrap.scrollTop += delta - pageStep;
+        }
+    }, {passive:false});
+}
 const studentRows = [...document.querySelectorAll('[data-student-row]')];
 const normalizeName = value => value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase();
 function filterStudentNames() {
