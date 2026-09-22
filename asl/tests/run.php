@@ -13,10 +13,13 @@ function expect_same($expected, $actual, string $label): void {
 }
 
 $days = [];
-for ($i=1; $i<=23; $i++) $days[] = ['date' => sprintf('2026-01-%02d',$i), 'instructional' => true, 'label' => null];
+for ($date = new DateTimeImmutable('2026-01-05'); count($days) < 23; $date = $date->modify('+1 day')) {
+    if ((int)$date->format('N') <= 5) $days[] = ['date' => $date->format('Y-m-d'), 'instructional' => true, 'label' => null];
+}
 $blocks = aslhub_calendar_build_blocks($days);
 expect_same([10,10,3], array_column($blocks,'instructional_days'), 'calendar chunks 23 school days into 10, 10, 3');
-expect_same(['2026-01-01','2026-01-11','2026-01-21'], array_column($blocks,'start_date'), 'block starts follow instructional-day order');
+expect_same(['2026-01-05','2026-01-19','2026-02-02'], array_column($blocks,'start_date'), 'block starts follow fixed fortnight dates');
+expect_same(['2026-01-16','2026-01-30','2026-02-13'], array_column($blocks,'end_date'), 'every block ends on its scheduled Friday');
 
 $scoreBlocks = [
     ['start_date'=>'2026-01-01','end_date'=>'2026-01-10'],

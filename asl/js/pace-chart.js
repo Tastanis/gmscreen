@@ -2,8 +2,8 @@
     'use strict';
     const esc = value => String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     window.ASLPaceChart = {
-        render(svg, samples) {
-            const width = Math.max(280, svg.clientWidth), height = 510;
+        render(svg, samples, options = {}) {
+            const width = Math.max(280, svg.clientWidth), height = options.height || 510;
             const left=58, right=76, top=40, bottom=52, w=width-left-right, h=height-top-bottom;
             const finite=samples.filter(s=>s.percent!==null);
             const upper=Math.max(140,...finite.map(s=>Math.ceil(s.percent/20)*20));

@@ -89,13 +89,15 @@ not server saves.
 
 ## Planning calendar and graph
 
-September 14, 2026–June 10, 2027 inclusive, weekdays excluding October 12;
+September 8, 2026–June 10, 2027 inclusive, weekdays excluding October 12;
 November 11, 26–27; December 21–January 1; January 18; February 12 and 15;
-April 5–9; May 31. This yields 171 instructional days: seventeen ten-day blocks
-plus a one-day final block. The user selected the endpoint; the published-break
+April 5–9; May 31. This yields 175 instructional days in twenty fixed two-week
+blocks ending on Fridays. The first is September 8–18 (nine days); the last is
+May 31–June 11 (eight instructional days, ending instruction June 10). Holidays
+reduce a block's days, never shift its dates. The user selected the endpoint; the published-break
 baseline is not a confirmed final district calendar.
 
-At instructional day `d`, paths are `p * 3 * target_count * d / 171`, for A=100%,
+At instructional day `d`, paths are `p * 3 * target_count * d / 175`, for A=100%,
 B=83%, C=73%, D=63%. Pale red shading is below 60% of that fixed time-adjusted
 path, with no F line or label. These are visual reference paths, not gradebook rules.
 No adaptive catch-up path, plus/minus grades, vacation-only blocks, or vacation dips.

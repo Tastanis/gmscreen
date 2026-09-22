@@ -29,6 +29,7 @@ try {
         $blockStmt->execute([$blockId]);
         $block = $blockStmt->fetch();
         if (!$block) throw new InvalidArgumentException('Unknown reporting block.');
+        aslhub_check_calendar_revision($pdo, $_POST['calendar_revision'] ?? null);
         if ($block['start_date'] > $schoolToday) throw new InvalidArgumentException('Future blocks cannot be edited yet.');
         $isFinalized = $block['finalized_at'] !== null;
 
@@ -52,7 +53,7 @@ try {
         if ($newAbsences !== null && $newAbsences > (int)$block['instructional_days']) {
             throw new InvalidArgumentException('Absences cannot exceed the instructional days in the block.');
         }
-        $max = (int)$block['participation_max'];
+        $max = aslhub_participation_max((int)$block['instructional_days']);
         if ($newPoints !== null && $newPoints > $max) {
             throw new InvalidArgumentException("Participation cannot exceed the block maximum of $max.");
         }

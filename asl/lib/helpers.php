@@ -152,6 +152,11 @@ function aslhub_set_setting(PDO $pdo, string $key, string $value): void {
     $stmt->execute([$key, $value]);
 }
 
+/** Participation maximum always follows this block's actual instructional days. */
+function aslhub_participation_max(int $instructionalDays): int {
+    return 3 * max(0, $instructionalDays);
+}
+
 /** Fixed proficiency outcomes for the three calendar-driven pace lines. */
 function aslhub_pace_goals(): array {
     return [
@@ -164,7 +169,7 @@ function aslhub_pace_goals(): array {
 /** Dashboard/settings values. Calendar dates come only from the uploaded calendar. */
 function aslhub_dashboard_settings(PDO $pdo): array {
     return aslhub_pace_goals() + [
-        'participation_max' => max(1, (int)aslhub_setting($pdo, 'participation_max', '10')),
+        'participation_max' => aslhub_participation_max(10),
         'school_timezone' => aslhub_setting($pdo, 'school_timezone', 'America/Los_Angeles'),
         'calendar_revision' => (int)aslhub_setting($pdo, 'calendar_revision', '0'),
     ];

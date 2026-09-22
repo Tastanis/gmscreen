@@ -32,7 +32,7 @@ foreach ([1=>89,2=>91,3=>91] as $level=>$count) {
     check($max===[1=>356,2=>364,3=>352][$level],"ASL $level defined maximum");
 }
 $calendar=aslhub_calendar_parse(json_encode($bundle['calendar']));
-check(array_sum(array_column($calendar['blocks'],'instructional_days'))===171 && count($calendar['blocks'])===18 && $calendar['blocks'][17]['instructional_days']===1,'171 days, seventeen full blocks plus one day');
+check(array_sum(array_column($calendar['blocks'],'instructional_days'))===175 && count($calendar['blocks'])===20 && $calendar['blocks'][0]['instructional_days']===9 && $calendar['blocks'][19]['instructional_days']===8,'175 days in twenty fixed fortnights, with nine-day opening and eight-day ending blocks');
 foreach ($calendar['days'] as $d) if ($d['instructional']) check((int)date('N',strtotime($d['date']))<=5,'instructional weekday '.$d['date']);
 $code=aslhub_competency_target_code(1,'sentences','declarative','expression');
 $q=$pdo->prepare('SELECT * FROM asl_learning_targets WHERE target_code=?'); $q->execute([$code]); $t=$q->fetch();

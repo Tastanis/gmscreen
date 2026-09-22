@@ -1,0 +1,44 @@
+* { box-sizing: border-box; }
+body { margin: 0; background: #eee; color: #20252b; font: 11pt/1.3 Arial, sans-serif; }
+.report-sheet { width: 7.7in; min-height: 10.2in; margin: 20px auto; padding: 0; background: white; }
+.report-actions { width: 7.7in; margin: 16px auto 0; text-align: right; }
+.report-actions button { border: 1px solid #bbb; border-radius: 999px; padding: 7px 16px; background: white; color: #20252b; font: inherit; cursor: pointer; }
+.report-content { padding: 12px; }
+h1, h2, h3, p { margin: 0; }
+h1 { font-size: 20pt; }
+h2 { font-size: 11pt; margin-bottom: 5px; }
+h3 { font-size: 9.5pt; margin-bottom: 3px; }
+.report-header { display: flex; justify-content: space-between; gap: 16px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+.report-header > p { text-align: right; font-size: 10pt; }
+.report-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 22px; padding: 12px 0; border-bottom: 1px solid #aaa; }
+.report-summary h2 { color: #444; margin-bottom: 3px; }
+.report-summary > div:first-child > strong { font-size: 22pt; }
+.report-summary p { font-size: 10pt; }
+.report-improvements { margin-top: 12px; }
+.improvement-columns { columns: 2; column-gap: 22px; font-size: 9pt; }
+.improvement-group { margin-bottom: 8px; }
+.improvement-group h3 { break-after: avoid; }
+.improvement-row { break-inside: avoid; margin-bottom: 4px; }
+.improvement-row > span { display: block; }
+.score-changes { color: #333; font-variant-numeric: tabular-nums; }
+.improvement-row.compact > span { display: inline; }
+.improvement-row.compact .score-changes { white-space: nowrap; margin-left: 4px; }
+.dense .improvement-columns { columns: 3; column-gap: 14px; font-size: 8.5pt; line-height: 1.15; }
+.dense .improvement-group { margin-bottom: 6px; }
+.dense .improvement-group h3 { font-size: 8.5pt; }
+.dense .improvement-row { margin-bottom: 3px; }
+.report-progress { margin-top: 10px; break-inside: avoid; }
+#report-progress-chart { width: 100%; display: block; }
+.chart-bg { fill: white; }
+.chart-label, .chart-axis-label { font: 11px Arial, sans-serif; fill: #303840; }
+.chart-axis { stroke: #606870; stroke-width: 1.5; }
+.chart-line { stroke: #1f5591; stroke-width: 2.5; }
+.chart-dot { stroke: #1f5591; stroke-width: 2; fill: white; }
+.report-comments { margin-top: 10px; break-inside: avoid; }
+.comment-space { height: 62px; background: repeating-linear-gradient(to bottom, transparent 0, transparent 20px, #b9b9b9 20px, #b9b9b9 21px); }
+@page { size: letter portrait; margin: .4in; }
+@media print {
+    .report-actions { display: none; }
+    body { background: white; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    .report-sheet { margin: 0; min-height: 0; width: 100%; }
+}

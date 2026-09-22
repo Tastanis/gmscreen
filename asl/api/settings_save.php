@@ -32,26 +32,7 @@ try {
 
         case 'save_course_settings':
             if (!aslhub_is_admin($me)) aslhub_json_error('Admin only.', 403);
-            $participationMax = (int)($_POST['participation_max'] ?? 10);
-            if ($participationMax < 1 || $participationMax > 1000) {
-                aslhub_json_error('Participation maximum must be between 1 and 1000.');
-            }
-            $maxOpenScore = (int)$pdo->query("SELECT COALESCE(MAX(m.participation_points),0) AS m
-                FROM asl_student_block_metrics m JOIN asl_reporting_blocks b ON b.id=m.block_id
-                WHERE b.finalized_at IS NULL")->fetch()['m'];
-            if ($participationMax < $maxOpenScore) {
-                aslhub_json_error("Participation maximum cannot be below an existing open-block score of $maxOpenScore.");
-            }
-            $pdo->beginTransaction();
-            aslhub_set_setting($pdo, 'participation_max', (string)$participationMax);
-            // Finalized blocks keep the maximum they were graded against; only open/future blocks follow the global setting.
-            $pdo->prepare("UPDATE asl_reporting_blocks SET participation_max=? WHERE finalized_at IS NULL")
-                ->execute([$participationMax]);
-            $pdo->prepare("UPDATE asl_student_block_metrics m JOIN asl_reporting_blocks b ON b.id=m.block_id
-                SET m.participation_max=? WHERE b.finalized_at IS NULL")
-                ->execute([$participationMax]);
-            $pdo->commit();
-            aslhub_json(['success' => true]);
+            aslhub_json_error('Participation maximum is fixed at three points per instructional day.', 409);
 
         default:
             aslhub_json_error('Unknown action.');

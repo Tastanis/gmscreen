@@ -249,8 +249,8 @@ function aslhub_import_run(PDO $pdo, string $path, bool $commit): array {
             $end = trim((string)($r['end_date'] ?? ''));
             if ($index < 1 || !preg_match('/^\d{4}-\d{2}-\d{2}$/',$start) || !preg_match('/^\d{4}-\d{2}-\d{2}$/',$end)) { $skipped++; continue; }
             $label = trim((string)($r['label'] ?? '')) ?: ('Block '.$index);
-            $days = max(1,min(10,(int)($r['instructional_days'] ?? 10)));
-            $max = max(1,(int)($r['participation_max'] ?? 10));
+            $days = max(0,min(10,(int)($r['instructional_days'] ?? 10)));
+            $max = aslhub_participation_max($days);
             $active = ($r['active'] ?? '') === '' ? 1 : (int)(bool)$r['active'];
             $finalized = trim((string)($r['finalized_at'] ?? '')) ?: null;
             $revision = max(1,(int)($r['calendar_revision'] ?? 1));
@@ -261,18 +261,26 @@ function aslhub_import_run(PDO $pdo, string $path, bool $commit): array {
                     label=VALUES(label), start_date=IF(finalized_at IS NULL,VALUES(start_date),start_date),
                     end_date=IF(finalized_at IS NULL,VALUES(end_date),end_date),
                     instructional_days=IF(finalized_at IS NULL,VALUES(instructional_days),instructional_days),
-                    participation_max=IF(finalized_at IS NULL,VALUES(participation_max),participation_max),
+                    participation_max=3*instructional_days,
                     active=VALUES(active), finalized_at=COALESCE(finalized_at,VALUES(finalized_at)),
                     calendar_revision=GREATEST(calendar_revision,VALUES(calendar_revision))")
                     ->execute([$index,$label,$start,$end,$days,$max,$active,$finalized,$revision]);
-            } else $previewBlockIndexes[$index] = true;
+            } else $previewBlockIndexes[$index] = $days;
             $set++;
         }
         $summary['ReportingBlocks'] = "set $set, skip $skipped";
 
         $blockByIndex = [];
-        foreach ($pdo->query('SELECT id,block_index FROM asl_reporting_blocks') as $r) $blockByIndex[(int)$r['block_index']] = (int)$r['id'];
-        if (!$commit) foreach (array_keys($previewBlockIndexes) as $index) $blockByIndex[$index] ??= -$index;
+        $daysByBlock = [];
+        foreach ($pdo->query('SELECT id,block_index,instructional_days,finalized_at FROM asl_reporting_blocks') as $r) {
+            $index = (int)$r['block_index'];
+            $blockByIndex[$index] = (int)$r['id'];
+            $daysByBlock[(int)$r['id']] = !$commit && $r['finalized_at'] === null && isset($previewBlockIndexes[$index])
+                ? $previewBlockIndexes[$index] : (int)$r['instructional_days'];
+        }
+        if (!$commit) foreach ($previewBlockIndexes as $index => $days) {
+            if (!isset($blockByIndex[$index])) { $blockByIndex[$index] = -$index; $daysByBlock[-$index] = $days; }
+        }
 
         // ---- Attendance and participation block values ----
         $rows = aslhub_sheet_assoc($book['BlockMetrics'] ?? []);
@@ -283,7 +291,8 @@ function aslhub_import_run(PDO $pdo, string $path, bool $commit): array {
             if (!$uid || !$bid) { $skipped++; continue; }
             $abs = ($r['absences'] ?? '') !== '' ? max(0,(int)$r['absences']) : null;
             $pts = ($r['participation_points'] ?? '') !== '' ? max(0,(int)$r['participation_points']) : null;
-            $max = max(1,(int)($r['participation_max'] ?? 10));
+            $max = aslhub_participation_max($daysByBlock[$bid]);
+            if ($pts !== null && $pts > $max) throw new RuntimeException('Imported participation exceeds three points per instructional day.');
             $version = max(1,(int)($r['version'] ?? 1));
             $by = $userByEmail[mb_strtolower(trim((string)($r['updated_by_email'] ?? '')))] ?? null;
             if ($commit && $uid > 0) {

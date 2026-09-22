@@ -120,7 +120,7 @@ function aslhub_reporting_blocks(PDO $pdo): array {
             'is_current' => $row['start_date'] <= $today && $row['end_date'] >= $today,
             'is_finalized' => $row['finalized_at'] !== null,
             'month_label' => $startMonth === $endMonth ? $endMonth : "$startMonth-$endMonth",
-            'participation_max' => (int)$row['participation_max'],
+            'participation_max' => aslhub_participation_max((int)$row['instructional_days']),
         ];
     }
     unset($row);
@@ -197,16 +197,21 @@ function aslhub_student_meetings(PDO $pdo, int $userId): array {
 function aslhub_block_metric_payload(PDO $pdo, array $student, array $blocks): array {
     $empty = [
         'attendance' => ['absences' => [], 'block_percent' => [], 'ytd_percent' => [],
-            'class_block_average_percent' => [], 'class_ytd_average_percent' => []],
+            'class_block_average_percent' => [], 'class_ytd_average_percent' => [],
+            'absence_percentile' => [], 'ytd_absences' => []],
         'participation_metrics' => ['points' => [], 'max_points' => [], 'percent' => [],
             'rolling_4_block_percent' => [], 'class_average_percent' => []],
     ];
     if (!$blocks) return $empty;
-    $peerStmt = $pdo->prepare("SELECT id FROM users WHERE is_teacher=FALSE AND is_active=1
-        AND teacher=? AND class_period=? AND level=? ORDER BY id");
-    $peerStmt->execute([$student['teacher'], $student['class_period'], $student['level']]);
-    $peerIds = array_map('intval', $peerStmt->fetchAll(PDO::FETCH_COLUMN));
+    $peers = $pdo->query("SELECT id, teacher, class_period, level FROM users
+        WHERE is_teacher=FALSE AND is_active=1 ORDER BY id")->fetchAll();
+    $peerIds = array_map('intval', array_column($peers, 'id'));
+    $classIds = array_map('intval', array_column(array_filter($peers, fn($peer) =>
+        $peer['teacher'] === $student['teacher'] &&
+        (string)$peer['class_period'] === (string)$student['class_period'] &&
+        (int)$peer['level'] === (int)$student['level']), 'id'));
     if (!in_array((int)$student['id'], $peerIds, true)) $peerIds[] = (int)$student['id'];
+    if (!in_array((int)$student['id'], $classIds, true)) $classIds[] = (int)$student['id'];
     $blockIds = array_column($blocks, 'id');
     $metrics = [];
     if ($peerIds && $blockIds) {
@@ -216,7 +221,11 @@ function aslhub_block_metric_payload(PDO $pdo, array $student, array $blocks): a
         $stmt->execute(array_merge($peerIds, $blockIds));
         foreach ($stmt->fetchAll() as $row) $metrics[(int)$row['user_id']][(int)$row['block_id']] = $row;
     }
-    $sid = (int)$student['id'];
+    return aslhub_metrics_from_rows((int)$student['id'], $blocks, $metrics, $peerIds, $classIds, $empty);
+}
+
+/** All-student comparison exposes only aggregates. Ties are not "more often". */
+function aslhub_metrics_from_rows(int $sid, array $blocks, array $metrics, array $peerIds, array $classIds, array $empty): array {
     $attendance = $empty['attendance']; $participation = $empty['participation_metrics'];
     $studentCumAbs = 0; $studentCumDays = 0;
     $peerCumAbs = array_fill_keys($peerIds, 0); $peerCumDays = array_fill_keys($peerIds, 0);
@@ -238,28 +247,40 @@ function aslhub_block_metric_payload(PDO $pdo, array $student, array $blocks): a
         foreach ($peerIds as $peerId) {
             $peerRow = $metrics[$peerId][$block['id']] ?? null;
             $peerAbs = $peerRow && $peerRow['absences'] !== null ? min((int)$peerRow['absences'], $elapsed) : 0;
-            $classBlock[] = 100 * max(0, $elapsed - $peerAbs) / $elapsed;
             $peerCumAbs[$peerId] += $peerAbs; $peerCumDays[$peerId] += $elapsed;
-            $classYtd[] = 100 * max(0, $peerCumDays[$peerId] - $peerCumAbs[$peerId]) / $peerCumDays[$peerId];
+            if (in_array($peerId, $classIds, true)) {
+                $classBlock[] = 100 * max(0, $elapsed - $peerAbs) / $elapsed;
+                $classYtd[] = 100 * max(0, $peerCumDays[$peerId] - $peerCumAbs[$peerId]) / $peerCumDays[$peerId];
+            }
         }
+        $others = array_values(array_filter($peerIds, fn($id) => $id !== $sid));
+        $lessAbsent = count(array_filter($others, fn($id) =>
+            $peerCumAbs[$id] * $studentCumDays < $studentCumAbs * $peerCumDays[$id]));
+        $attendance['absence_percentile'][] = $others ? round(100 * $lessAbsent / count($others), 1) : null;
+        $attendance['ytd_absences'][] = $studentCumAbs;
         $attendance['class_block_average_percent'][] = round(array_sum($classBlock) / max(1, count($classBlock)), 1);
         $attendance['class_ytd_average_percent'][] = round(array_sum($classYtd) / max(1, count($classYtd)), 1);
 
-        $max = $row ? max(1, (int)$row['participation_max']) : (int)$block['participation_max'];
+        $max = aslhub_participation_max((int)$block['instructional_days']);
         $points = $row && $row['participation_points'] !== null ? (int)$row['participation_points'] : $max;
         $participation['points'][] = $points;
         $participation['max_points'][] = $max;
         $participation['percent'][] = round(100 * min($points, $max) / $max, 1);
         $classPart = [];
-        foreach ($peerIds as $peerId) {
+        foreach ($classIds as $peerId) {
             $peerRow = $metrics[$peerId][$block['id']] ?? null;
-            $peerMax = $peerRow ? max(1, (int)$peerRow['participation_max']) : (int)$block['participation_max'];
+            $peerMax = $max;
             $peerPoints = $peerRow && $peerRow['participation_points'] !== null ? (int)$peerRow['participation_points'] : $peerMax;
             $classPart[] = 100 * min($peerPoints, $peerMax) / $peerMax;
         }
         $participation['class_average_percent'][] = round(array_sum($classPart) / max(1, count($classPart)), 1);
-        $window = array_slice($participation['percent'], max(0, count($participation['percent']) - 4));
-        $participation['rolling_4_block_percent'][] = round(array_sum($window) / count($window), 1);
+        $scoredIndexes = array_keys(array_filter($participation['max_points'], fn($value) => $value !== null && $value > 0));
+        $windowPoints = 0; $windowMaximum = 0;
+        foreach (array_slice($scoredIndexes, -4) as $index) {
+            $windowPoints += $participation['points'][$index];
+            $windowMaximum += $participation['max_points'][$index];
+        }
+        $participation['rolling_4_block_percent'][] = $windowMaximum > 0 ? round(100 * $windowPoints / $windowMaximum, 1) : null;
     }
     return ['attendance' => $attendance, 'participation_metrics' => $participation];
 }

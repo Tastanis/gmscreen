@@ -5,3 +5,4 @@ deployment:
     - /bin/cp -R * $DEPLOYPATH
     - /bin/cp .htaccess $DEPLOYPATH.htaccess
     - /usr/local/bin/php asl/scripts/retire_legacy.php $DEPLOYPATH
+    - /usr/local/bin/php ${DEPLOYPATH}asl/scripts/correct_opening_calendar.php --apply

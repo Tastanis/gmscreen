@@ -48,21 +48,11 @@ aslhub_teacher_header($me, 'Settings', 'settings');
                     blue finishes at 25% 4s and 75% 3s (average 3.25).
                     Current skill counts: ASL 1 = <?php echo $counts[1]; ?>, ASL 2 = <?php echo $counts[2]; ?>, ASL 3 = <?php echo $counts[3]; ?>.
                 </p>
-                <form id="course-settings-form">
-                    <div class="form-group"><label>Participation maximum per 10-day block</label>
-                        <input class="form-input" type="number" min="1" max="1000" name="participation_max"
-                            value="<?php echo (int)$settings['participation_max']; ?>">
-                        <small class="muted">Blank participation cells count as this maximum. Finalized blocks keep the maximum they used.</small>
-                    </div>
-                    <button type="submit" class="form-button">Save Participation Settings</button>
-                    <div id="course-settings-msg" style="margin-top:8px;font-size:.85rem;"></div>
-                </form>
                 <hr style="border:0;border-top:1px solid #e2e8f0;margin:18px 0;">
                 <h4 style="color:#2d3748;">Upload the shared school calendar</h4>
                 <p class="muted" style="font-size:.84rem;margin:6px 0 10px;">
                     Current calendar: <strong><?php echo (int)$calendarCounts['instructional']; ?> instructional days</strong>
                     in <strong><?php echo count($reportingBlocks); ?> reporting blocks</strong>.
-                    Every consecutive 10 instructional days becomes one block; the last/current block may be shorter.
                     Past blocks finalize automatically and cannot be remapped by a later calendar upload.
                 </p>
                 <details style="font-size:.82rem;margin-bottom:10px;">
@@ -199,11 +189,6 @@ document.getElementById('pw-form').addEventListener('submit', async e => {
     if (out.success) e.target.reset();
 });
 <?php if ($isAdmin): ?>
-document.getElementById('course-settings-form').addEventListener('submit', async e => {
-    e.preventDefault();
-    const out = await post(API, { action: 'save_course_settings', ...Object.fromEntries(new FormData(e.target)) });
-    show('course-settings-msg', out, 'Saved');
-});
 let calendarToken = null;
 document.getElementById('calendar-form').addEventListener('submit', async e => {
     e.preventDefault();

@@ -56,7 +56,7 @@ aslhub_teacher_header($me, 'Attendance & Participation', 'weekly');
         <option value="all">All levels</option>
         <?php for ($i=1;$i<=3;$i++): ?><option value="<?php echo $i; ?>" <?php echo (string)$filters['level']===(string)$i?'selected':''; ?>>ASL <?php echo $i; ?></option><?php endfor; ?>
     </select>
-    <span class="muted" style="font-size:.82rem;">Each block is 10 instructional days. Blank attendance = 0 absences; blank participation = the block maximum. A blank finalized cell still accepts its first late entry; changing an existing finalized value requires correction mode.</span>
+    <span class="muted" style="font-size:.82rem;">Blank attendance = 0 absences; blank participation = the block maximum. A blank finalized cell still accepts its first late entry; changing an existing finalized value requires correction mode.</span>
 </form>
 
 <?php if (!$allBlocks): ?>
@@ -108,7 +108,8 @@ aslhub_teacher_header($me, 'Attendance & Participation', 'weekly');
 const CSRF = <?php echo json_encode($csrf); ?>;
 const API = <?php echo json_encode($base . '/api/save_block_metrics.php'); ?>;
 const FIELD = <?php echo json_encode($metric === 'attendance' ? 'absences' : 'participation_points'); ?>;
-const DRAFT_KEY = 'asl-block-draft:' + FIELD + ':' + <?php echo json_encode(($filters['teacher']??'').':'.$filters['period'].':'.$filters['level']); ?>;
+const CALENDAR_REVISION = <?php echo (int)$pdo->query("SELECT setting_value FROM asl_settings WHERE setting_key='calendar_revision'")->fetchColumn(); ?>;
+const DRAFT_KEY = 'asl-block-draft:' + FIELD + ':' + CALENDAR_REVISION + ':' + <?php echo json_encode(($filters['teacher']??'').':'.$filters['period'].':'.$filters['level']); ?>;
 const cells = [...document.querySelectorAll('.block-cell')];
 let dirty = new Set();
 let saving = false;
@@ -163,7 +164,7 @@ async function saveAll() {
     saving = true; updateState('Saving…');
     try {
         const body = new URLSearchParams({ csrf_token: CSRF, changes: JSON.stringify(changes),
-            correction: finalizedDirty ? '1' : '' });
+            correction: finalizedDirty ? '1' : '', calendar_revision: String(CALENDAR_REVISION) });
         const out = await (await fetch(API, { method:'POST', body })).json();
         if (!out.success) throw new Error(out.error || 'Save failed');
         (out.saved || []).forEach(saved => {

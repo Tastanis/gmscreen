@@ -1,5 +1,13 @@
 <?php
-/** Shared school-calendar and ten-instructional-day reporting-block helpers. */
+/** Shared school-calendar and instructional-day reporting-block helpers. */
+
+/** Called after locking the edited block, so a queued old grid cannot use new dates. */
+function aslhub_check_calendar_revision(PDO $pdo, $expected): void {
+    $current = $pdo->query("SELECT setting_value FROM asl_settings WHERE setting_key='calendar_revision' FOR UPDATE")->fetchColumn();
+    if (filter_var($expected, FILTER_VALIDATE_INT) === false || (int)$expected !== (int)$current) {
+        throw new RuntimeException('The calendar changed. Reload before entering values for these block dates.');
+    }
+}
 
 function aslhub_calendar_parse(string $raw): array {
     try {
@@ -51,10 +59,19 @@ function aslhub_calendar_parse(string $raw): array {
 }
 
 function aslhub_calendar_build_blocks(array $instructionalDays): array {
+    $instructionalDays = array_values(array_filter($instructionalDays, fn($day) =>
+        (int)(new DateTimeImmutable($day['date']))->format('N') <= 5));
+    if (!$instructionalDays) return [];
+    usort($instructionalDays, fn($a, $b) => strcmp($a['date'], $b['date']));
     $blocks = [];
-    foreach (array_chunk($instructionalDays, 10) as $i => $chunk) {
-        $start = $chunk[0]['date'];
-        $end = $chunk[count($chunk) - 1]['date'];
+    $firstDate = $instructionalDays[0]['date'];
+    $lastDate = $instructionalDays[count($instructionalDays) - 1]['date'];
+    $anchor = (new DateTimeImmutable($firstDate))->modify('monday this week');
+    // Fixed Monday–second-Friday windows. Holidays never move later boundaries.
+    for ($i = 0; $anchor->format('Y-m-d') <= $lastDate; $i++, $anchor = $anchor->modify('+14 days')) {
+        $start = $i === 0 ? $firstDate : $anchor->format('Y-m-d');
+        $end = $anchor->modify('+11 days')->format('Y-m-d');
+        $chunk = array_filter($instructionalDays, fn($day) => $day['date'] >= $start && $day['date'] <= $end);
         $startMonth = (new DateTimeImmutable($start))->format('M');
         $endMonth = (new DateTimeImmutable($end))->format('M');
         $blocks[] = [
@@ -82,7 +99,6 @@ function aslhub_calendar_apply(PDO $pdo, array $calendar): array {
     $ownsTransaction = !$pdo->inTransaction();
     if ($ownsTransaction) $pdo->beginTransaction();
     try {
-        $participationMax = max(1, (int)aslhub_setting($pdo, 'participation_max', '10'));
         $revision = max(0, (int)aslhub_setting($pdo, 'calendar_revision', '0')) + 1;
         $today = (new DateTimeImmutable('now', new DateTimeZone($calendar['timezone'])))->format('Y-m-d');
 
@@ -121,13 +137,14 @@ function aslhub_calendar_apply(PDO $pdo, array $calendar): array {
         $update = $pdo->prepare("UPDATE asl_reporting_blocks SET label=?, start_date=?, end_date=?,
             instructional_days=?, participation_max=?, active=1, calendar_revision=? WHERE id=?");
         foreach ($calendar['blocks'] as $block) {
+            $participationMax = aslhub_participation_max((int)$block['instructional_days']);
             $find->execute([$block['block_index']]);
             $existing = $find->fetch();
             $finalizedAt = $block['end_date'] < $today ? date('Y-m-d H:i:s') : null;
             if ($existing) {
                 if ($existing['finalized_at'] !== null) {
-                    $pdo->prepare("UPDATE asl_reporting_blocks SET active=1, calendar_revision=? WHERE id=?")
-                        ->execute([$revision, $existing['id']]);
+                    $pdo->prepare("UPDATE asl_reporting_blocks SET active=1, calendar_revision=?, participation_max=? WHERE id=?")
+                        ->execute([$revision, $participationMax, $existing['id']]);
                 } else {
                     $update->execute([$block['label'], $block['start_date'], $block['end_date'],
                         $block['instructional_days'], $participationMax, $revision, $existing['id']]);
@@ -140,11 +157,18 @@ function aslhub_calendar_apply(PDO $pdo, array $calendar): array {
                 $insert->execute([$block['block_index'], $block['label'], $block['start_date'], $block['end_date'],
                     $block['instructional_days'], $participationMax, $finalizedAt, $revision]);
             }
+            if ($existing) {
+                $check = $pdo->prepare('SELECT COUNT(*) FROM asl_student_block_metrics WHERE block_id=? AND participation_points>?');
+                $check->execute([$existing['id'], $participationMax]);
+                if ((int)$check->fetchColumn()) throw new RuntimeException('A saved participation score exceeds the new block maximum.');
+                $pdo->prepare('UPDATE asl_student_block_metrics SET participation_max=?,version=version+1 WHERE block_id=? AND participation_max<>?')
+                    ->execute([$participationMax, $existing['id'], $participationMax]);
+            }
         }
 
         aslhub_set_setting($pdo, 'calendar_revision', (string)$revision);
         aslhub_set_setting($pdo, 'school_timezone', $calendar['timezone']);
-        aslhub_migrate_weekly_rows_to_blocks($pdo, $participationMax);
+        aslhub_migrate_weekly_rows_to_blocks($pdo);
         if ($ownsTransaction) $pdo->commit();
     } catch (Throwable $e) {
         if ($ownsTransaction && $pdo->inTransaction()) $pdo->rollBack();
@@ -157,7 +181,11 @@ function aslhub_calendar_apply(PDO $pdo, array $calendar): array {
 }
 
 /** Preserve existing weekly values by copying them into an empty matching block. Legacy rows remain untouched. */
-function aslhub_migrate_weekly_rows_to_blocks(PDO $pdo, int $defaultMax): void {
+function aslhub_migrate_weekly_rows_to_blocks(PDO $pdo): void {
+    $maxByBlock = [];
+    foreach ($pdo->query('SELECT id,instructional_days FROM asl_reporting_blocks') as $block) {
+        $maxByBlock[(int)$block['id']] = aslhub_participation_max((int)$block['instructional_days']);
+    }
     $rows = $pdo->query("SELECT m.*,
             (SELECT b.id FROM asl_reporting_blocks b
              WHERE b.active=1
@@ -180,7 +208,8 @@ function aslhub_migrate_weekly_rows_to_blocks(PDO $pdo, int $defaultMax): void {
         (user_id, block_id, absences, participation_points, participation_max, version)
         VALUES (?, ?, ?, ?, ?, 1)");
     foreach ($grouped as $g) {
-        $max = $g['has_points'] ? max($defaultMax, $g['points']) : $defaultMax;
+        $max = $maxByBlock[$g['block_id']];
+        if ($g['points'] > $max) throw new RuntimeException('Legacy participation exceeds three points per school day; review the saved values.');
         $stmt->execute([$g['user_id'], $g['block_id'], $g['absences'], $g['has_points'] ? $g['points'] : null, $max]);
     }
 }

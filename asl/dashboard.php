@@ -48,6 +48,7 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
                     <a href="teacher/student.php?id=<?php echo (int)$subject['id']; ?>" class="pill" style="text-decoration:none;">Manage student</a>
                     <a href="teacher/weekly.php?metric=attendance&amp;student_id=<?php echo (int)$subject['id']; ?>" class="pill" style="text-decoration:none;">Enter attendance</a>
                     <a href="teacher/weekly.php?metric=participation&amp;student_id=<?php echo (int)$subject['id']; ?>" class="pill" style="text-decoration:none;">Enter participation</a>
+                    <a href="report.php?student_id=<?php echo (int)$subject['id']; ?>" class="pill" style="text-decoration:none;" target="_blank" rel="noopener">Report card</a>
                     <a href="teacher/grading.php?level=<?php echo $level; ?>" class="pill" style="text-decoration:none;">&larr; Grading grid</a>
                     <a href="teacher/dashboard.php" class="pill" style="text-decoration:none;">&larr; Roster</a>
                 </span>
@@ -685,10 +686,9 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
             document.getElementById('attendance-empty-note').style.display = hasData ? 'none' : 'block';
             const latestBlock = [...blocks].reverse().find(block => seriesValue(student, block) != null || seriesValue(classAverage, block) != null);
             const latestStudent = latestBlock ? seriesValue(student, latestBlock) : null;
-            const latestClass = latestBlock ? seriesValue(classAverage, latestBlock) : null;
             document.getElementById('attendance-summary').innerHTML = `
                 <span><small>Your attendance</small><strong>${latestStudent == null ? '&mdash;' : formatNumber(latestStudent) + '%'}</strong></span>
-                <span><small>Class average</small><strong>${latestClass == null ? '&mdash;' : formatNumber(latestClass) + '%'}</strong></span>`;
+                <span><small>You are absent more often than</small><strong>${latestBlock == null || seriesValue(attendance.absence_percentile, latestBlock) == null ? '&mdash;' : formatNumber(seriesValue(attendance.absence_percentile, latestBlock)) + '%'} of the students</strong></span>`;
             const frame = chartScaffold(svg, blocks, 100, '%');
             svg.innerHTML = frame.base + frame.labels +
                 drawSeries(seriesPoints(classAverage, blocks, frame.xAt, frame.yAt), 'metric-line metric-line-class') +

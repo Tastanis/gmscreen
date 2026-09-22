@@ -41,11 +41,24 @@ test('pace endpoints match requested distributions', () => {
   assert.equal(math.paceEndpoint(60, 3.25), 195);
 });
 
+test('short weeks advance proficiency expectations only for their school days', () => {
+  const dailyGoal = math.paceEndpoint(89, 3) / 175;
+  const twoDayGoal = dailyGoal * 2, fiveDayGoal = dailyGoal * 5;
+  assert(Math.abs(twoDayGoal / fiveDayGoal - 2 / 5) < 1e-10);
+  assert.equal(math.pacePercent(twoDayGoal, 89, 2 / 175), 100);
+  const holidayBlocks = [
+    {instructional_days:2,instructional_days_elapsed:2,is_complete:true},
+    {instructional_days:0,instructional_days_elapsed:0,is_current:true},
+    {instructional_days:10,instructional_days_elapsed:0},
+  ];
+  assert.equal(math.paceDayFraction(holidayBlocks,holidayBlocks[1],'ytd'),2/12);
+});
+
 test('approved calendar and A/B/C/D paths use raw 3N goals', () => {
   const bundle=JSON.parse(fs.readFileSync(new URL('../data/competencies-2026.json', import.meta.url),'utf8'));
   const days=bundle.calendar.days.filter(d=>d.instructional);
-  assert.equal(days.length,171);
-  assert.equal(days[0].date,'2026-09-14');
+  assert.equal(days.length,175);
+  assert.equal(days[0].date,'2026-09-08');
   assert.equal(days.at(-1).date,'2027-06-10');
   for (const date of ['2026-10-12','2026-11-11','2026-11-26','2026-11-27','2026-12-21','2027-01-01','2027-01-18','2027-02-12','2027-02-15','2027-04-05','2027-04-09','2027-05-31']) assert(!days.some(d=>d.date===date),date);
   for (const [level,N] of [[1,89],[2,91],[3,91]]) {
@@ -53,7 +66,7 @@ test('approved calendar and A/B/C/D paths use raw 3N goals', () => {
     assert.equal(targets,N);
     for (const p of [1,.83,.73,.63,.60]) {
       assert(Math.abs(math.paceEndpoint(N,3*p)-3*N*p)<1e-10);
-      assert(Math.abs(math.paceEndpoint(N,3*p)*10/171 - p*3*N*10/171)<1e-10);
+      assert(Math.abs(math.paceEndpoint(N,3*p)*9/175 - p*3*N*9/175)<1e-10);
     }
   }
   assert.equal((4+2)/(3*2)*100,100,'a 4 offsets a 2');

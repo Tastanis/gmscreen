@@ -40,7 +40,7 @@ For the initial account reset, use the admin Start Fresh tool after verifying SQ
 - `scripts/nightly_backup.php` is the CLI entry point for Task Scheduler/cron.
   Copy backups off the web server using encrypted storage approved by the school.
 
-## Ten-school-day teacher rhythm
+## Two-week teacher rhythm
 
 1. **Grading** tab — pick level + bucket, click cells (left-click up, right-click down).
 2. **Attendance & Participation** tab — students down the left, reporting blocks
@@ -64,7 +64,17 @@ the checkpoint contributes. Past checkpoints remain historical snapshots.
 Settings shows a copyable example. The required top-level fields are
 `school_year`, IANA `timezone`, and `days`. Each day is a unique object containing
 `date` (`YYYY-MM-DD`), boolean `instructional`, and an optional `label`. Upload is
-preview-first. A new calendar cannot remap finalized blocks.
+preview-first. A new calendar cannot remap finalized blocks. Reporting blocks use
+fixed two-week windows ending on Fridays; holidays reduce instructional days
+without moving the next block. Participation is three points per instructional
+day. Proficiency expectations advance by instructional days, so a two-day week
+requires two-fifths of the progress of a five-day week. Closed weeks add neither
+participation points nor expected proficiency progress.
+
+Teachers can open Report card beside Enter participation on a student's dashboard.
+The one-page report contains completion, projected grade, changes since the prior
+block, attendance comparison, participation totals, a small progress graph and a
+blank comments area. Print opens the browser print dialog.
 
 ## Disposable test data
 

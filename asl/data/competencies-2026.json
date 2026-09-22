@@ -5026,6 +5026,36 @@
     "timezone": "America/Los_Angeles",
     "days": [
       {
+        "date": "2026-09-08",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-09-09",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-09-10",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-09-11",
+        "instructional": true,
+        "label": null
+      },
+      {
+        "date": "2026-09-12",
+        "instructional": false,
+        "label": null
+      },
+      {
+        "date": "2026-09-13",
+        "instructional": false,
+        "label": null
+      },
+      {
         "date": "2026-09-14",
         "instructional": true,
         "label": null
@@ -6377,5 +6407,5 @@
       }
     ]
   },
-  "calendar_note": "User-selected September 14–June 10 planning window with published breaks; final official last day remains unconfirmed."
+  "calendar_note": "User-selected September 8–June 10 planning window; first block September 8–18 is nine instructional days. Published breaks preserved; final official last day remains unconfirmed."
 }

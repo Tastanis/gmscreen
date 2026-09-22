@@ -69,13 +69,13 @@ def main():
     a=argparse.ArgumentParser(); a.add_argument('source',type=Path); args=a.parse_args()
     courses=[compile_course(args.source/f'Proficiency list for asl {i}.docx',i) for i in [1,2,3]]
     closed={'2026-10-12','2026-11-11','2026-11-26','2026-11-27','2027-01-18','2027-02-12','2027-02-15','2027-05-31'}
-    days=[]; d=date(2026,9,14)
+    days=[]; d=date(2026,9,8)
     while d<=date(2027,6,10):
         iso=d.isoformat(); holiday=iso in closed or '2026-12-21'<=iso<='2027-01-01' or '2027-04-05'<=iso<='2027-04-09'
         days.append({'date':iso,'instructional':d.weekday()<5 and not holiday,'label':'No school' if holiday else None}); d+=timedelta(days=1)
-    assert sum(d['instructional'] for d in days)==171
+    assert sum(d['instructional'] for d in days)==175
     bundle={'version':'competencies-2026-v1','courses':courses,'calendar':{'school_year':'2026-2027','timezone':'America/Los_Angeles','days':days},
-            'calendar_note':'User-selected September 14–June 10 planning window with published breaks; final official last day remains unconfirmed.'}
+            'calendar_note':'User-selected September 8–June 10 planning window; first block September 8–18 is nine instructional days. Published breaks preserved; final official last day remains unconfirmed.'}
     dest=Path(__file__).resolve().parents[1]/'data'/'competencies-2026.json'
     dest.write_text(json.dumps(bundle,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
     print('Compiled',dest)

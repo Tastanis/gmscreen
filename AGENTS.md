@@ -950,3 +950,11 @@ Preserve the user-approved auth forms and isolated asl/css/auth.css. Never rende
 
 ## Portrait uploads
 The legacy portrait endpoint decodes and re-encodes images as PNG, limits bytes/pixels, and uses random server filenames. Keep portraits/.htaccess execution blocking. Save under the existing characters.lock and preserve old portraits and unrelated character fields. Regression: php -d extension=gd tests/portrait-upload.php.
+
+## ASL reports and fixed two-week calendar — 1.19.144
+
+Blocks use fixed two-week windows ending on Fridays. September 8–18, 2026 is the nine-day opening block. Holidays reduce days without shifting dates; fully closed blocks have zero days. Participation is always three times actual instructional days. Proficiency pacing advances only with school days; four-block participation trends weight earned/possible points and skip closed blocks. Preserve explicit earned points, never rescale them from an old maximum.
+
+The approved teacher Report card/Print controls use existing student scope and 3N completion. Improvements compare history endpoints; matching Expression/Reception changes can share a compact line. Eight new skills per block is expected report volume, not permission to truncate history. All-student attendance percentile excludes self and ties and returns only aggregates. Obsolete participation settings and ten-day prose were removed with approval.
+
+Deployment runs asl/scripts/correct_opening_calendar.php --apply, with SQL/XLSX backups, a transaction, stable existing block IDs and a one-time marker. Refuse ambiguous saved entries in shifted later blocks. Entry saves check calendar revision under lock; never restore browser drafts under changed dates. See asl/REPORT-CALENDAR-HANDOFF.md for validation and production/print status.
