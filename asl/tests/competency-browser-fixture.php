@@ -29,4 +29,8 @@ echo json_encode(['csrf'=>aslhub_csrf_token()]);
 PHP);
 $pdo=new CompetencyFixturePDO($dir.'/fixture.sqlite'); competency_fixture_schema($pdo);
 aslhub_import_competencies($pdo,fn()=>null);
+if (in_array('--grading-roster', $argv, true)) {
+    $insert = $pdo->prepare("INSERT INTO users (first_name,last_name,email,password,is_teacher,teacher,level,class_period) VALUES (?,?,'fixture@example.invalid','fixture',0,'harms',1,1)");
+    for ($i=0; $i<60; $i++) $insert->execute(['Learner', sprintf('Roster%02d', $i)]);
+}
 echo $dir;

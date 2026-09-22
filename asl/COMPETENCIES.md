@@ -127,3 +127,10 @@ expectations are unchanged; attendance and participation keep their existing cha
 The browser fixture identity/reset endpoint exists only in the temporary copy.
 Tests never load production config or touch the live database. SQLite validates
 transactional behavior; MySQL-specific named-lock concurrency is not simulated.
+
+Teacher grading includes an immediate student-name search (case-insensitive, first/last
+name in either order). Search remains in the filter URL across competency/mode
+changes. One-use tab-local navigation state restores the visible student row and
+its offset under the table header, plus page scroll. No score writes are involved.
+Run grading-navigation-browser.test.cjs with a --grading-roster browser fixture
+to verify filtering and scroll continuity with 60 disposable students.

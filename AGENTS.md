@@ -958,3 +958,12 @@ Blocks use fixed two-week windows ending on Fridays. September 8–18, 2026 is t
 The approved teacher Report card/Print controls use existing student scope and 3N completion. Improvements compare history endpoints; matching Expression/Reception changes can share a compact line. Eight new skills per block is expected report volume, not permission to truncate history. All-student attendance percentile excludes self and ties and returns only aggregates. Obsolete participation settings and ten-day prose were removed with approval.
 
 Deployment runs asl/scripts/correct_opening_calendar.php --apply, with SQL/XLSX backups, a transaction, stable existing block IDs and a one-time marker. Refuse ambiguous saved entries in shifted later blocks. Entry saves check calendar revision under lock; never restore browser drafts under changed dates. See asl/REPORT-CALENDAR-HANDOFF.md for validation and production/print status.
+
+### ASL grading navigation - September 21, 2026
+
+Teacher grading name search filters the authorized roster locally and survives
+filter submissions. Use requestSubmit so the submit handler can preserve a student
+row anchor across competency/mode navigation. Restoration is tab-local, one-use,
+and matched to the destination URL. Focused browser regression passes with a
+disposable 60-student fixture. The broader competency browser suite currently
+fails its graph-clear assertion identically on baseline and updated grading pages.
