@@ -977,3 +977,13 @@ static; downward wheel scrolling over the roster first scrolls the visible page
 header away. Modified/sideways wheel gestures retain native behavior. The roster
 can use 85vh. Local browser hit-testing verifies no underlying cells or student
 links are exposed through the header and buffer clicks never save a grade.
+
+### Progress start and attendance comparison - September 21, 2026
+
+Progress has a synthetic zero baseline on the first school date, followed by
+completed block endpoints and the current block as of today. It creates no score
+history records. Date labels include day numbers. Attendance averages and absence
+comparisons use the student teacher's active roster across every period and level;
+participation retains its period/level scope. Latest attendance percentages are
+visible and both values appear in each point tooltip, including overlapping lines.
+Report/calendar, chart unit, and disposable chart browser checks passed.

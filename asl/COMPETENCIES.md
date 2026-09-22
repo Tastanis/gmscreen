@@ -139,3 +139,13 @@ Grading headers have an opaque sticky surface and an 8px non-grading separator.
 The top page navigation scrolls away; downward wheel movement over the roster
 first moves that navigation out of view. Header hit-testing is covered by
 `grading-header-browser.test.cjs` with the same --grading-roster fixture.
+
+### Progress start and attendance comparison - September 21, 2026
+
+Progress has a synthetic zero baseline on the first school date, followed by
+completed block endpoints and the current block as of today. It creates no score
+history records. Date labels include day numbers. Attendance averages and absence
+comparisons use the student teacher's active roster across every period and level;
+participation retains its period/level scope. Latest attendance percentages are
+visible and both values appear in each point tooltip, including overlapping lines.
+Report/calendar, chart unit, and disposable chart browser checks passed.

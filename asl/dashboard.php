@@ -163,7 +163,7 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
                     </div>
                     <div class="comparison-legend">
                         <span><span class="legend-swatch metric-student-swatch"></span>You</span>
-                        <span><span class="legend-swatch legend-class"></span>Class average</span>
+                        <span><span class="legend-swatch legend-class"></span>All-student average</span>
                     </div>
                 </div>
 
@@ -197,7 +197,7 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
                         <span>Proficiency</span><small>Standards progress</small>
                     </button>
                     <button type="button" role="tab" aria-selected="false" data-chart-select="attendance">
-                        <span>Attendance</span><small>Student and class</small>
+                        <span>Attendance</span><small>Student and all-student average</small>
                     </button>
                     <button type="button" role="tab" aria-selected="false" data-chart-select="participation">
                         <span>Participation</span><small>Scores and trend</small>
@@ -662,7 +662,7 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
             note.style.display = visibleValues.some(v => v > 0) ? 'none' : 'block';
             const paceDayFraction = block => ASLChartMath.paceDayFraction(allBlocks, block, chartState.ranges.progress);
             const visibleFraction = blocks.length ? paceDayFraction(blocks[blocks.length - 1]) : 0;
-            ASLPaceChart.render(svg, blocks.map(block => {
+            const samples = blocks.map(block => {
                 const points = seriesValue(values, block);
                 // Current observations always use elapsed days, even in Full Year view.
                 const elapsed = ASLChartMath.paceDayFraction(allBlocks, block, 'ytd');
@@ -673,7 +673,12 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
                     fraction: visibleFraction ? fraction / visibleFraction : 0,
                     date: block.is_current ? dashboardData.today : blockDate(block),
                 };
-            }));
+            });
+            // A display baseline, not a score-history event or a zero-day pace calculation.
+            if (allBlocks[0]?.start_date <= dashboardData.today) {
+                samples.unshift({points:0, percent:0, fraction:0, date:allBlocks[0].start_date, baseline:true});
+            }
+            ASLPaceChart.render(svg, samples);
         }
 
         function renderAttendanceChart() {
@@ -686,13 +691,24 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
             document.getElementById('attendance-empty-note').style.display = hasData ? 'none' : 'block';
             const latestBlock = [...blocks].reverse().find(block => seriesValue(student, block) != null || seriesValue(classAverage, block) != null);
             const latestStudent = latestBlock ? seriesValue(student, latestBlock) : null;
+            const latestAverage = latestBlock ? seriesValue(classAverage, latestBlock) : null;
             document.getElementById('attendance-summary').innerHTML = `
                 <span><small>Your attendance</small><strong>${latestStudent == null ? '&mdash;' : formatNumber(latestStudent) + '%'}</strong></span>
+                <span><small>All-student average</small><strong>${latestAverage == null ? '&mdash;' : formatNumber(latestAverage) + '%'}</strong></span>
                 <span><small>You are absent more often than</small><strong>${latestBlock == null || seriesValue(attendance.absence_percentile, latestBlock) == null ? '&mdash;' : formatNumber(seriesValue(attendance.absence_percentile, latestBlock)) + '%'} of the students</strong></span>`;
             const frame = chartScaffold(svg, blocks, 100, '%');
             svg.innerHTML = frame.base + frame.labels +
                 drawSeries(seriesPoints(classAverage, blocks, frame.xAt, frame.yAt), 'metric-line metric-line-class') +
                 drawSeries(seriesPoints(student, blocks, frame.xAt, frame.yAt), 'metric-line metric-line-student');
+            // Each hit target describes both series, including when the lines overlap.
+            svg.innerHTML += blocks.map((block, index) => {
+                if (!blockHasStarted(block)) return '';
+                const yours = seriesValue(student, block), average = seriesValue(classAverage, block);
+                const date = block.is_current ? dashboardData.today : blockDate(block);
+                const label = `${date}: Your attendance ${yours == null ? 'not available' : formatNumber(yours) + '%'}; All-student average ${average == null ? 'not available' : formatNumber(average) + '%'}`;
+                return [...new Set([yours, average].filter(value => value != null))].map(value =>
+                    `<circle class="attendance-value" cx="${frame.xAt(index)}" cy="${frame.yAt(value)}" r="12" fill="transparent" tabindex="0" aria-label="${escapeHtml(label)}"><title>${escapeHtml(label)}</title></circle>`).join('');
+            }).join('');
         }
 
         function rollingFour(series) {

@@ -203,8 +203,10 @@ function aslhub_block_metric_payload(PDO $pdo, array $student, array $blocks): a
             'rolling_4_block_percent' => [], 'class_average_percent' => []],
     ];
     if (!$blocks) return $empty;
-    $peers = $pdo->query("SELECT id, teacher, class_period, level FROM users
-        WHERE is_teacher=FALSE AND is_active=1 ORDER BY id")->fetchAll();
+    $peerQuery = $pdo->prepare("SELECT id, teacher, class_period, level FROM users
+        WHERE is_teacher=FALSE AND is_active=1 AND teacher=? ORDER BY id");
+    $peerQuery->execute([$student['teacher']]);
+    $peers = $peerQuery->fetchAll();
     $peerIds = array_map('intval', array_column($peers, 'id'));
     $classIds = array_map('intval', array_column(array_filter($peers, fn($peer) =>
         $peer['teacher'] === $student['teacher'] &&
@@ -248,10 +250,9 @@ function aslhub_metrics_from_rows(int $sid, array $blocks, array $metrics, array
             $peerRow = $metrics[$peerId][$block['id']] ?? null;
             $peerAbs = $peerRow && $peerRow['absences'] !== null ? min((int)$peerRow['absences'], $elapsed) : 0;
             $peerCumAbs[$peerId] += $peerAbs; $peerCumDays[$peerId] += $elapsed;
-            if (in_array($peerId, $classIds, true)) {
-                $classBlock[] = 100 * max(0, $elapsed - $peerAbs) / $elapsed;
-                $classYtd[] = 100 * max(0, $peerCumDays[$peerId] - $peerCumAbs[$peerId]) / $peerCumDays[$peerId];
-            }
+            // Attendance compares every active student assigned to this teacher.
+            $classBlock[] = 100 * max(0, $elapsed - $peerAbs) / $elapsed;
+            $classYtd[] = 100 * max(0, $peerCumDays[$peerId] - $peerCumAbs[$peerId]) / $peerCumDays[$peerId];
         }
         $others = array_values(array_filter($peerIds, fn($id) => $id !== $sid));
         $lessAbsent = count(array_filter($others, fn($id) =>

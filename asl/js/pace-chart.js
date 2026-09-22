@@ -22,7 +22,7 @@
             for(const p of [50,100]) markup+=`<path d="M ${left-5} ${y(p)+8} l 10 -5 m -10 11 l 10 -5" stroke="#667381" fill="none"/>`;
             let lastLabel='',lastX=-Infinity;
             samples.forEach(s=>{
-                const label=new Date(s.date+'T12:00:00').toLocaleDateString(undefined,{month:'short'});
+                const label=new Date(s.date+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'});
                 if(label===lastLabel || x(s)-lastX<(width<480?65:45))return;
                 lastLabel=label;lastX=x(s);
                 markup+=`<text x="${x(s)}" y="${height-18}" text-anchor="${s.fraction>.95?'end':'middle'}" class="chart-label">${esc(label)}</text>`;
@@ -37,7 +37,7 @@
                         .sort((a,b)=>a.fraction-b.fraction);
                     markup+=`<polyline points="${[previous,...cuts,s].map(p=>`${x(p)},${y(p.percent)}`).join(' ')}" class="chart-line" fill="none"/>`;
                 }
-                const label=`${s.date}: ${s.percent.toFixed(1)}% of expected progress; ${s.points} points earned`;
+                const label=s.baseline ? `${s.date}: School-year starting point; 0 points` : `${s.date}: ${s.percent.toFixed(1)}% of expected progress; ${s.points} points earned`;
                 markup+=`<circle cx="${x(s)}" cy="${y(s.percent)}" r="4" class="chart-dot"/><circle cx="${x(s)}" cy="${y(s.percent)}" r="12" fill="transparent" aria-label="${esc(label)}"><title>${esc(label)}</title></circle>`;
                 previous=s;
             });

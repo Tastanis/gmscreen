@@ -73,17 +73,17 @@ $other->exec('DELETE FROM asl_student_block_metrics');
 $other->exec('INSERT INTO asl_student_block_metrics VALUES (2,1,10,10,10,1)');
 rejects(fn() => aslhub_correct_opening_calendar($other, fn() => null), 'out-of-range saved count is never clipped');
 
-// Attendance compares all active students, while the existing class chart stays class-scoped.
+// Attendance compares this teacher across periods/levels; participation keeps its class scope.
 $pdo->exec("INSERT INTO users (id,first_name,last_name,is_teacher,teacher,is_active,level,class_period) VALUES
     (5,'Other','Class',0,'parks',1,2,4),(6,'Inactive','Student',0,'parks',0,2,4)");
-$pdo->prepare('INSERT INTO asl_student_block_metrics VALUES (3,?,2,NULL,9,1)')->execute([$id]);
+$pdo->prepare('INSERT INTO asl_student_block_metrics VALUES (3,?,0,NULL,9,1)')->execute([$id]);
 $pdo->prepare('INSERT INTO asl_student_block_metrics VALUES (5,?,0,NULL,9,1)')->execute([$id]);
 $blocks = [['id' => (int)$id,'instructional_days' => 9,'instructional_days_elapsed' => 9,'participation_max' => 27]];
 $student = $pdo->query('SELECT * FROM users WHERE id=2')->fetch();
 $metrics = aslhub_block_metric_payload($pdo, $student, $blocks);
-verify($metrics['attendance']['absence_percentile'] === [50.0], 'all-class percentile excludes self, ties, teachers and inactive users');
+verify($metrics['attendance']['absence_percentile'] === [100.0], 'attendance comparison includes another level but excludes other teachers and inactive students');
 verify($metrics['attendance']['ytd_percent'] === [77.8] && $metrics['attendance']['ytd_absences'] === [2], 'nine-day attendance denominator and days missed');
-verify($metrics['attendance']['class_ytd_average_percent'] === [77.8], 'class graph scope preserved');
+verify($metrics['attendance']['class_ytd_average_percent'] === [88.9], 'attendance average includes every active student of this teacher across levels');
 verify($metrics['participation_metrics']['percent'] === [29.6], 'participation uses three points per school day');
 $twoDayBlocks = [['id' => (int)$id, 'instructional_days' => 2, 'instructional_days_elapsed' => 2, 'participation_max' => 999]];
 $pdo->prepare('UPDATE asl_student_block_metrics SET participation_points=5 WHERE user_id=2 AND block_id=?')->execute([$id]);
