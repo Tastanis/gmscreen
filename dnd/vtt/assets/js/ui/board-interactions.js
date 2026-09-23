@@ -773,17 +773,36 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function patchTokenMovementNode(sceneId, placementId, placement) {
-    const activeSceneId = boardApi.getState?.()?.boardState?.activeSceneId ?? null;
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
     if (!tokenLayer || !viewState.mapLoaded || sceneId !== activeSceneId) {
       return;
     }
     const node = Array.from(tokenLayer.children ?? []).find(
       (child) => child?.dataset?.placementId === placementId
     );
-    if (!node) {
+    const rendered = renderedPlacements.find((entry) => entry?.id === placementId);
+    const current = state.boardState?.placements?.[sceneId]?.find(entry => entry?.id === placementId);
+    const normalized = normalizePlacementForRender(current ?? placement);
+    const viewerLevelId = getViewerLevelIdForCurrentUser(state, sceneId);
+    const presentation = normalized && resolveVisibleTokenPresentation(normalized, getActiveSceneTokenLevelState(state), {
+      viewerLevelId,
+      gmViewing: isGmUser(),
+      isCellFogged: isGmUser() ? null : createFogChecker(state, viewerLevelId),
+    });
+    // Visibility changes need node creation/removal. Keep the cheap transform
+    // path for ordinary movement with unchanged floor/fog presentation.
+    if (Boolean(node) !== Boolean(presentation) || (presentation && (
+      rendered?.levelId !== presentation.levelId
+      || rendered?.scale !== presentation.scale
+      || rendered?.levelDirection !== presentation.direction
+      || rendered?.levelDistance !== presentation.distance
+    ))) {
+      renderTokens(state, tokenLayer, viewState);
+      renderPersistentZoneOverlays();
       return;
     }
-    const rendered = renderedPlacements.find((entry) => entry?.id === placementId);
+    if (!node) return;
     const gridSize = Math.max(8, Number(viewState.gridSize) || 64);
     const left = (Number(viewState.gridOffsets?.left) || 0) + Number(placement.column) * gridSize;
     const top = (Number(viewState.gridOffsets?.top) || 0) + Number(placement.row) * gridSize;
@@ -1155,6 +1174,10 @@ export function mountBoardInteractions(store, routes = {}) {
     if (changeSet.fog || changeSet.levels) {
       renderFog(state);
       renderFogSelection();
+      if (changeSet.fog && !changeSet.levels) {
+        renderTokens(state, tokenLayer, viewState);
+        renderPersistentZoneOverlays();
+      }
     }
     if (changeSet.templates || changeSet.levels) {
       templateTool.notifyMapState();
@@ -16502,6 +16525,8 @@ export function mountBoardInteractions(store, routes = {}) {
       totalImmunity: damageResolution.totalImmunity,
       vulnerability: adjustment.vulnerability,
       hidden: isAutomationPlacementHidden(resultPlacement),
+      // Chat is shared, even when the GM runs the ability.
+      hideHitPointValues: !shouldRevealPlacementHitPointValues(resultPlacement, { isGm: false }),
     });
   }
 
@@ -16594,6 +16619,7 @@ export function mountBoardInteractions(store, routes = {}) {
       ...result,
       hidden: isAutomationPlacementHidden(placement),
       allowTempHp,
+      hideHitPointValues: !shouldRevealPlacementHitPointValues(placement, { isGm: false }),
     });
   }
 

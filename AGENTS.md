@@ -1008,3 +1008,29 @@ The nightly CLI also checks these snapshots but requires host scheduling.
 See asl/README.md for exact timing, override and recovery instructions. Local
 SQLite-backed browser and restore tests do not prove production host permissions
 or a production MySQL restore; verify the first deployed backup separately.
+
+### Scene and token visibility fixes - 1.19.149
+
+Save Scene now uses the same GM activation path as opening a saved scene and
+submits the scene configuration through Sync V2 before reporting success. The old
+form changed only local routing without marking activation dirty. This is a
+verified defect consistent with split GM/player scene state, not proof of the
+exact production incident.
+
+Accepted movement reevaluates the shared floor/fog presentation before using the
+transform-only fast path. Visibility changes reconcile the token layer so a
+previously fogged token can appear without reload and an entering token disappears.
+Fog events also reconcile tokens and persistent-zone overlays. No map reload or
+new broad store subscriber. Shared automation chat receives audience-based
+hideHitPointValues for enemy damage/healing/refunds even when run by GM; no ability
+JSON changes are required. Create a token retains its details disclosure with the
+existing button skin. No other frontend controls or prose were added.
+
+The synthetic scene-visibility browser fixture verifies Save Scene/Show players,
+GM plus two players, hidden reveal then movement out of fog, movement back into
+fog, clear/cover, hide/reveal, GM/player damage callbacks and the creation button.
+
+Validation: 798 tests across 105 files passed. The browser regression also fails
+against the original Save Scene and movement code, then passes with both fixes.
+Asset build 393 is verified in the rendered configuration; the current VTT layout
+has no visible version footer. Production gameplay/deployment was not tested.

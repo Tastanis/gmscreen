@@ -24,7 +24,7 @@ function renderVttTokenLibrary(bool $isGm = false): string
                 <button class="btn" type="button" data-action="import-monster">Import Monster</button>
                 <p class="token-maker__feedback" data-token-feedback hidden></p>
                 <details class="vtt-prep-disclosure" data-token-creation>
-                    <summary>Create a token</summary>
+                    <summary class="btn">Create a token</summary>
                 <section class="token-maker" data-module="vtt-token-maker" aria-label="Token image builder">
                     <div class="token-maker__preview" data-token-preview>
                         <span class="token-maker__preview-hint" data-token-placeholder>Drop an image or browse to begin.</span>

@@ -758,25 +758,10 @@ export function renderSceneList(routes, store) {
         if (scene.folderId && !hasFolder && scene.folder) {
           draft.scenes.folders.push(scene.folder);
         }
-        const boardDraft = ensureBoardStateDraft(draft);
-        boardDraft.activeSceneId = scene.id;
-        boardDraft.mapUrl = scene.mapUrl ?? null;
-        boardDraft.thumbnailUrl = scene.thumbnailUrl ?? null;
-        ensureSceneBoardStateEntry(boardDraft, scene.id, scene.grid ?? null);
-        if (!draft.grid || typeof draft.grid !== 'object') {
-          draft.grid = normalizeGridConfig({});
-        }
-        // CRITICAL: Always use the scene's permanent grid property.
-        // Grid is saved with the scene and should be the authoritative source.
-        const gridConfig = normalizeGridConfig(scene.grid ?? {});
-        draft.grid = { ...draft.grid, ...gridConfig };
-        // Also update the sceneState entry to match the scene's permanent grid
-        if (boardDraft.sceneState && boardDraft.sceneState[scene.id]) {
-          boardDraft.sceneState[scene.id].grid = gridConfig;
-        }
       });
-
-      persistBoardStateSnapshot();
+      activateSceneForGm(scene);
+      const saved = await persistBoardStateSnapshot(scene.id, { coalesce: false });
+      if (saved?.success === false) throw saved.error || new Error('Unable to activate saved scene.');
 
       if (nameInput) {
         nameInput.value = '';

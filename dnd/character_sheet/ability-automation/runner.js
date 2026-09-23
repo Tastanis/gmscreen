@@ -2008,7 +2008,7 @@
       const adjustmentText = adjustments.length
         ? ` (${amountBeforeSurge}${damageType ? ` ${damageType}` : ""} ${adjustments.join(" ")} = ${finalAmount})`
         : "";
-      const remaining = result?.max !== null && result?.max !== undefined
+      const remaining = result?.hideHitPointValues ? "" : result?.max !== null && result?.max !== undefined
         ? ` (${result.current}/${result.max} stamina remaining)`
         : result?.current !== undefined
           ? ` (${result.current} stamina remaining)`
@@ -2215,7 +2215,7 @@
         ? `${result.current}`
         : "?";
     await postChat(state.context, {
-      message: `${state.heroName} - ${state.action.name || "Ability"}: ${targetName} takes ${taken} of ${originalAmount} (refunded ${refund} stamina; ${display}).`,
+      message: `${state.heroName} - ${state.action.name || "Ability"}: ${targetName} takes ${taken} of ${originalAmount} (refunded ${refund} stamina${result?.hideHitPointValues ? "" : `; ${display}`}).`,
     });
   }
 
@@ -2320,11 +2320,11 @@
       const max = result.max;
       const current = result.current;
       const display = max !== null && max !== undefined ? `${current}/${max}` : `${current}`;
-      const overage = allowTempHp && Number.isFinite(max) && current > max ? ` (+${current - max} temp)` : "";
+      const overage = !result.hideHitPointValues && allowTempHp && Number.isFinite(max) && current > max ? ` (+${current - max} temp)` : "";
       const finalRecoveryNote = recoveries && recoveryValueUsed
         ? ` (spent ${recoverySpent || recoveries} ${recoverySourceName} recovery -> ${recoveryValueUsed}${flatAmount ? `+${flatAmount}` : ""}${recoveryManualDecrement ? "; decrement recoveries on sheet" : ""})`
         : "";
-      lines.push(`${targetName} recovers ${result.change || amount} stamina${overage}${finalRecoveryNote} (${display}).`);
+      lines.push(`${targetName} recovers ${result.change || amount} stamina${overage}${finalRecoveryNote}${result.hideHitPointValues ? "" : ` (${display})`}.`);
     }
     if (lines.length) {
       await postChat(state.context, {

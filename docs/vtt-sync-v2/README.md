@@ -1449,3 +1449,14 @@ an independent unfinished journey; do not substitute this registration test.
 Current requirement/evidence navigation is docs/vtt-active-goal-status.md. The old
 roadmap checklist is retained as history, with an explicit current-status link.
 Pending UI proposals and all remaining original scope stay open.
+
+## September 23 scene and visibility correction
+
+Save Scene now marks GM scene activation/routing and persists its initial scene
+configuration through the existing V2 adapter. Previously that form only updated
+local state. Accepted token movements recompute shared floor/fog presentation;
+the transform fast path is retained when presentation is unchanged. Visibility
+changes reconcile the token layer. Fog domain events also refresh tokens and
+persistent-zone overlays, without remounting the scene or restoring a broad
+subscriber. See `tools/test-scene-visibility-browser.cjs` under `dnd/vtt` for the
+GM/two-player synthetic regression.

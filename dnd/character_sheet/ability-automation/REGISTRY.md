@@ -286,8 +286,8 @@ These are called by `runner.js` and dispatched as `vtt:automation-*` CustomEvent
 | `selectTarget(config)` | target block fields + `{ pickIndex, pickTotal, allowDone }`; may include `promptTitle` / `promptText` for picker wording | `{ id, name, hidden?, placement? }` or `{ skipped }` / `{ done }` / `{ canceled }` |
 | `selectAreaTarget(config)` | target block fields + `sourcePlacement` | `{ targets: [...] }` or `{ skipped }` / `{ canceled }` |
 | `chooseDamageType(payload)` | `{ abilityName, actionId, options }` for a normalized `damageTypeOptions` choice | selected type string or `{ damageType }`; `null`/an invalid type cancels before resource spending or effect application |
-| `applyDamage(payload)` | `{ placementId, amount, damageType, abilityName }`; `damageType` is the already-selected scalar even when the authored effect used `damageTypeOptions` | Resolves after the canonical placement save with `{ name, amount, current, max, hidden, vulnerability, immunity }`; rejects when the server rejects the effect. Players may damage any visible placement. |
-| `applyHeal(payload)` | `{ placementId, amount, allowTempHp, abilityName }` | `{ name, change, current, max, hidden, allowTempHp }` |
+| `applyDamage(payload)` | `{ placementId, amount, damageType, abilityName }`; `damageType` is the already-selected scalar even when the authored effect used `damageTypeOptions` | Resolves after the canonical placement save with `{ name, amount, current, max, hidden, hideHitPointValues, vulnerability, immunity }`; rejects when the server rejects the effect. Players may damage any visible placement. |
+| `applyHeal(payload)` | `{ placementId, amount, allowTempHp, abilityName }` | `{ name, change, current, max, hidden, hideHitPointValues, allowTempHp }` |
 | `applyCondition(payload)` | `{ placementId, condition: {name, duration}, sourceId, sourceName }` | `{ ok }` |
 | `checkPotency(payload)` | `{ placementId, attribute, threshold, sourceStats }` | `{ passes: bool }` |
 | `forceMove(payload)` | `{ movement, verb, verbLabel?, distance, upTo, ignoreStability?, targetId, target, sourcePlacement, sourceTraits, abilityName }` | Resolves after the canonical placement save with `{ name, movedDistance, collision?, skipped? }`; rejects when the server rejects the move. Players may force-move any visible placement, including enemies. |
@@ -877,3 +877,5 @@ an independent unfinished journey; do not substitute this registration test.
 Current requirement/evidence navigation is docs/vtt-active-goal-status.md. The old
 roadmap checklist is retained as history, with an explicit current-status link.
 Pending UI proposals and all remaining original scope stay open.
+
+Shared damage, healing, temporary stamina and damage-refund chat omit enemy current/maximum stamina when the board returns `hideHitPointValues:true`. This flag is derived from the player audience even for GM-run abilities. Damage amounts and immunity/weakness adjustments remain visible. It is a runtime hook result, not an authored JSON field.

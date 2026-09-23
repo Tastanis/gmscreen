@@ -1709,3 +1709,27 @@ test('runner forwards structured trigger lifetime metadata', async () => {
     harness.close();
   }
 });
+
+for (const hideHitPointValues of [true, false]) {
+  test(`shared ability damage/heal chat respects enemy privacy: ${hideHitPointValues}`, async () => {
+    const harness = await createAbilityAutomationHarness();
+    try {
+      const result = await harness.runAutomation({
+        automation: { schema:'ability-automation/v3', cards:[
+          {type:'target',name:'enemy',mode:'token'},
+          {type:'effect',target:'enemy',effects:[{kind:'damage',amount:50,damageType:'fire'},{kind:'heal',amount:10}]},
+        ]},
+        contextOverrides: {
+          applyDamage: async () => ({name:'Monster',amount:45,immunity:5,current:350,max:400,hideHitPointValues}),
+          applyHeal: async () => ({name:'Monster',change:10,current:360,max:400,hideHitPointValues}),
+        },
+      });
+      const chat=result.calls.postChat.map(c=>c.message||'').join('\n');
+      assert.match(chat,/45 fire damage/);
+      assert.match(chat,/-5 immunity/);
+      assert.match(chat,/recovers 10 stamina/);
+      if(hideHitPointValues) assert.doesNotMatch(chat,/350|360|400|stamina remaining/);
+      else {assert.match(chat,/350\/400/);assert.match(chat,/360\/400/);}
+    } finally {harness.close();}
+  });
+}

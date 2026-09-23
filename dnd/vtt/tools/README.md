@@ -28,3 +28,20 @@ Do not run `--apply` against production implicitly as part of deployment.
 Take the site offline or otherwise prevent concurrent writes, review the dry
 run, preserve the backup, and perform the production repair as a separate
 authorized maintenance action.
+
+## Scene and fog visibility regression
+
+From the repository root, build a fresh synthetic fixture (no campaign data or
+production requests):
+
+```powershell
+python dnd/vtt/tools/create-scene-visibility-fixture.py
+powershell -File dnd/vtt/tools/start-diagnostic.ps1 -DiagnosticRoot .playwright-mcp/scene-visibility-regression -Port 18767
+```
+
+In another terminal, run `node dnd/vtt/tools/test-scene-visibility-browser.cjs`.
+It opens isolated GM, cal and sharon sessions, checks actual Save Scene and Show
+players controls, reveal/movement/fog transitions without reload, damage privacy
+hook results, and the Create a token disclosure/button styling. The runner blocks
+all non-loopback browser requests and requires the synthetic manifest marker.
+Stop the PHP server with Ctrl+C when finished.

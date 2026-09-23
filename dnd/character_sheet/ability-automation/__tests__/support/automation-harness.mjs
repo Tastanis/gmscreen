@@ -753,6 +753,8 @@ export async function createAbilityAutomationHarness(options = {}) {
       },
     };
 
+    Object.assign(context, runOptions.contextOverrides || {});
+
     validateAutomation(runOptions.automation, { strict: runOptions.strictValidation ?? true });
 
     const driver = createUiDriver(window, script);

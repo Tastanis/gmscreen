@@ -1506,6 +1506,17 @@ body.vtt-body {
   outline-offset: 2px;
 }
 
+[data-token-creation] > summary.btn {
+  display: inline-block;
+  min-height: 0;
+  padding: 0.35rem 0.7rem;
+  list-style: none;
+}
+
+[data-token-creation] > summary.btn::-webkit-details-marker {
+  display: none;
+}
+
 .token-library-hint {
   color: var(--vtt-text-primary);
   font-size: 0.85rem;
