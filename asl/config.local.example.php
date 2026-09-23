@@ -8,6 +8,8 @@
  * control panel and use it here.
  */
 return [
+    // Optional absolute directory outside the website/checkout:
+    // 'backup_dir' => '/home/YOUR_ACCOUNT/asl-private-backups',
     'host' => 'localhost',
     'dbname' => 'asl_users',
     'user' => 'asl_admin',

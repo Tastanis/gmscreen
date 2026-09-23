@@ -15,8 +15,10 @@ if (PHP_SAPI !== 'cli') {
 
 require_once dirname(__DIR__) . '/config.php';
 require_once dirname(__DIR__) . '/lib/backup.php';
+require_once dirname(__DIR__) . '/lib/automatic_backup.php';
 
 try {
+    aslhub_automatic_backup($pdo);
     $sql = aslhub_backup_sql($pdo);
     $xlsx = aslhub_backup_xlsx($pdo);
     aslhub_backup_prune();

@@ -86,7 +86,7 @@ function aslhub_calendar_build_blocks(array $instructionalDays): array {
     return $blocks;
 }
 
-/** Past blocks finalize automatically. Corrections remain possible through the explicit correction API flag. */
+/** Past blocks finalize automatically. Teachers can edit past entries directly; changes remain audited. */
 function aslhub_finalize_reporting_blocks(PDO $pdo): void {
     $timezone = aslhub_setting($pdo, 'school_timezone', 'America/Los_Angeles');
     try { $today = (new DateTimeImmutable('now', new DateTimeZone($timezone)))->format('Y-m-d'); }

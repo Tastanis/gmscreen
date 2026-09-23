@@ -35,12 +35,12 @@ function aslhub_teacher_header(array $me, string $title, string $active = ''): v
     $base = aslhub_base_url();
     $isAdmin = aslhub_is_admin($me);
     $nav = [
-        'dashboard' => ['dashboard.php', 'Roster'],
         'grading' => ['grading.php', 'Grading'],
         'weekly' => ['weekly.php', 'Attendance & Participation'],
         'notes' => ['notes.php', 'Notes'],
         'scroller' => ['scroller.php', 'Scroller'],
         'resources' => ['resources.php', 'Resources'],
+        'dashboard' => ['dashboard.php', 'Roster'],
         'settings' => ['settings.php', 'Settings'],
     ];
     ?>

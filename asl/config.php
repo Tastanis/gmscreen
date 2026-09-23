@@ -21,6 +21,7 @@ if (!file_exists($localConfig)) {
     die('Missing asl/config.local.php — copy config.local.example.php and fill in database credentials.');
 }
 $creds = require $localConfig;
+if (!empty($creds['backup_dir'])) define('ASLHUB_BACKUP_DIR', (string)$creds['backup_dir']);
 if (isset($creds['claim_password'])) define('ASLHUB_CLAIM_PASSWORD', (string)$creds['claim_password']);
 
 try {
@@ -67,4 +68,15 @@ try {
     $pdo->prepare('SET time_zone = ?')->execute([$offset]);
 } catch (Throwable $e) {
     error_log('ASL Hub timezone alignment failed: ' . $e->getMessage());
+}
+
+// Runs before teacher page/API work, including the first edits of a new block.
+// A failed backup is logged and retried next request; it never clears student data.
+if (!empty($_SESSION['user_id'])) {
+    $backupUser = aslhub_current_user($pdo);
+    if (!empty($backupUser['is_teacher'])) {
+        require_once __DIR__ . '/lib/automatic_backup.php';
+        try { aslhub_automatic_backup($pdo); }
+        catch (Throwable $e) { error_log('ASL automatic backup failed: ' . $e->getMessage()); }
+    }
 }

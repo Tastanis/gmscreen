@@ -1,7 +1,7 @@
 <?php
 require_once dirname(__DIR__) . '/config.php';
 $me = aslhub_require_login($pdo);
-if (!empty($me['is_teacher'])) { header('Location: ' . aslhub_base_url() . '/teacher/dashboard.php'); exit; }
+if (!empty($me['is_teacher'])) { header('Location: ' . aslhub_base_url() . '/teacher/grading.php'); exit; }
 require_once __DIR__ . '/schema.php';
 aslhub_goals_schema($pdo);
 $ASL_RELATIVE_PATH = aslhub_base_url();

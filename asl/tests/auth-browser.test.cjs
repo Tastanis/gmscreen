@@ -66,7 +66,7 @@ const fs = require('node:fs/promises');
   await mobile.getByLabel('Last name',{exact:true}).fill('Harms');
   await mobile.getByLabel('Password',{exact:true}).fill('fixture-teacher');
   await mobile.getByRole('button',{name:'Login',exact:true}).click();
-  await mobile.waitForURL('**/teacher/dashboard.php');
+  await mobile.waitForURL('**/teacher/grading.php');
   console.log('PASS real auth pages: CSRF, rate limiting, automatic claim, protected access denied, mismatch/default validation, signed-out return, default disabled, personal and teacher login, desktop/mobile layout');
  } finally { await browser.close(); }
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -15,13 +15,27 @@ const ASLHUB_BACKUP_TABLES = [
 ];
 
 function aslhub_backup_dir(): string {
-    $dir = (PHP_SAPI === 'cli' && getenv('ASLHUB_BACKUP_DIR')) ? getenv('ASLHUB_BACKUP_DIR') : dirname(__DIR__) . '/backups';
+    $dir = defined('ASLHUB_BACKUP_DIR') ? ASLHUB_BACKUP_DIR : getenv('ASLHUB_BACKUP_DIR');
+    if (!$dir) {
+        // cPanel deployments and repository checkouts share the account's private home.
+        $account = function_exists('posix_getpwuid') ? posix_getpwuid(fileowner(dirname(__DIR__))) : false;
+        $home = $account['dir'] ?? dirname(__DIR__, 3);
+        $dir = $home . '/asl-private-backups';
+    }
     if (!is_dir($dir)) {
-        mkdir($dir, 0750, true);
+        if (!mkdir($dir, 0700, true) && !is_dir($dir)) throw new RuntimeException('Could not create private ASL backup directory.');
         file_put_contents($dir . '/.htaccess', "Require all denied\n"); // never web-servable
         file_put_contents($dir . '/index.php', '<?php http_response_code(403);');
     }
-    return $dir;
+    $resolved = realpath($dir);
+    $site = realpath(dirname(__DIR__, 2));
+    $web = !empty($_SERVER['DOCUMENT_ROOT']) ? realpath($_SERVER['DOCUMENT_ROOT']) : false;
+    foreach ([$site, $web] as $root) {
+        if ($root && ($resolved === $root || str_starts_with(str_replace('\\', '/', $resolved).'/', str_replace('\\', '/', $root).'/'))) {
+            throw new RuntimeException('ASL backups must be outside the website and checkout.');
+        }
+    }
+    return $resolved;
 }
 
 /** Collision-resistant filename stamp (multiple saves can happen in one second). */
@@ -178,7 +192,7 @@ function aslhub_export_sheets(PDO $pdo): array {
     ];
 }
 
-/** Write a timestamped xlsx backup into asl/backups/. Returns the path. */
+/** Write a timestamped xlsx backup into the private backup directory. */
 function aslhub_backup_xlsx(PDO $pdo): string {
     $path = aslhub_backup_dir() . '/asl_backup_' . aslhub_backup_stamp() . '.xlsx';
     $tmp = $path . '.tmp';
@@ -191,9 +205,10 @@ function aslhub_backup_xlsx(PDO $pdo): string {
 }
 
 /** Plain-SQL dump (schema + data) of every ASL table. Returns the path. */
-function aslhub_backup_sql(PDO $pdo): string {
-    $path = aslhub_backup_dir() . '/asl_backup_' . aslhub_backup_stamp() . '.sql';
+function aslhub_backup_sql(PDO $pdo, ?string $directory = null): string {
+    $path = ($directory ?? aslhub_backup_dir()) . '/asl_backup_' . aslhub_backup_stamp() . '.sql';
     $tmp = $path . '.tmp';
+    try {
     aslhub_consistent_read($pdo, function () use ($pdo, $tmp): void {
         $fh = fopen($tmp, 'xb');
         if (!$fh) throw new RuntimeException('Could not create SQL backup.');
@@ -226,6 +241,10 @@ function aslhub_backup_sql(PDO $pdo): string {
             fclose($fh);
         }
     });
+    } catch (Throwable $e) {
+        @unlink($tmp);
+        throw $e;
+    }
     if (!rename($tmp, $path)) {
         @unlink($tmp);
         throw new RuntimeException('Could not finalize SQL backup.');

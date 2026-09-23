@@ -8,7 +8,6 @@ aslhub_require_csrf();
 $changes = json_decode((string)($_POST['changes'] ?? ''), true);
 if (!is_array($changes) || !$changes) aslhub_json_error('No changes to save.');
 if (count($changes) > 500) aslhub_json_error('Save at most 500 student/block rows at once.');
-$correction = !empty($_POST['correction']);
 
 aslhub_finalize_reporting_blocks($pdo);
 $schoolTimezone = aslhub_setting($pdo, 'school_timezone', 'America/Los_Angeles');
@@ -35,11 +34,6 @@ try {
 
         $metricStmt->execute([$studentId, $blockId]);
         $old = $metricStmt->fetch();
-        // A teacher may make the first explicit entry late. Once a finalized
-        // block already has an explicit row, changing it is an audited correction.
-        if ($isFinalized && $old && !$correction) {
-            throw new RuntimeException('Block ' . $block['block_index'] . ' is finalized. Use the explicit correction action.');
-        }
         $oldVersion = $old ? (int)$old['version'] : 0;
         if ($expectedVersion !== $oldVersion) {
             throw new DomainException('VERSION_CONFLICT:' . $studentId . ':' . $blockId . ':' . $oldVersion);
@@ -54,9 +48,6 @@ try {
             throw new InvalidArgumentException('Absences cannot exceed the instructional days in the block.');
         }
         $max = aslhub_participation_max((int)$block['instructional_days']);
-        if ($newPoints !== null && $newPoints > $max) {
-            throw new InvalidArgumentException("Participation cannot exceed the block maximum of $max.");
-        }
         $newVersion = $oldVersion + 1;
         if ($old) {
             $pdo->prepare("UPDATE asl_student_block_metrics SET absences=?, participation_points=?,

@@ -10,7 +10,7 @@ if (!empty($me['is_teacher'])) {
     // Teachers may view a student's dashboard exactly as the student sees it.
     $studentId = (int)($_GET['student_id'] ?? 0);
     if (!$studentId) {
-        header('Location: teacher/dashboard.php');
+        header('Location: teacher/grading.php');
         exit;
     }
     $subject = aslhub_require_student_scope($pdo, $me, $studentId, false);

@@ -19,7 +19,7 @@ $pdo=new FixturePDO('sqlite:'.__DIR__.'/fixture.sqlite',null,null,[PDO::ATTR_ERR
 require_once __DIR__.'/lib/helpers.php';
 PHP);
 file_put_contents($dir.'/dashboard.php',"<?php require __DIR__.'/config.php'; aslhub_require_login(\$pdo); echo 'Authenticated fixture';");
-file_put_contents($dir.'/teacher/dashboard.php',"<?php require dirname(__DIR__).'/config.php'; aslhub_require_teacher(\$pdo); echo 'Authenticated teacher fixture';");
+file_put_contents($dir.'/teacher/grading.php',"<?php require dirname(__DIR__).'/config.php'; aslhub_require_teacher(\$pdo); echo 'Authenticated teacher fixture';");
 $pdo=new PDO('sqlite:'.$dir.'/fixture.sqlite');
 $pdo->exec('CREATE TABLE users (id INTEGER PRIMARY KEY,first_name TEXT COLLATE NOCASE,last_name TEXT COLLATE NOCASE,password TEXT,is_active INTEGER DEFAULT 1,is_teacher INTEGER DEFAULT 0,is_unclaimed INTEGER DEFAULT 0,must_change_password INTEGER DEFAULT 0)');
 $pdo->exec("CREATE TABLE asl_login_attempts (attempt_key TEXT, attempted_at TEXT DEFAULT CURRENT_TIMESTAMP)");

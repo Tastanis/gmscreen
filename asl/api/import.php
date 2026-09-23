@@ -292,7 +292,6 @@ function aslhub_import_run(PDO $pdo, string $path, bool $commit): array {
             $abs = ($r['absences'] ?? '') !== '' ? max(0,(int)$r['absences']) : null;
             $pts = ($r['participation_points'] ?? '') !== '' ? max(0,(int)$r['participation_points']) : null;
             $max = aslhub_participation_max($daysByBlock[$bid]);
-            if ($pts !== null && $pts > $max) throw new RuntimeException('Imported participation exceeds three points per instructional day.');
             $version = max(1,(int)($r['version'] ?? 1));
             $by = $userByEmail[mb_strtolower(trim((string)($r['updated_by_email'] ?? '')))] ?? null;
             if ($commit && $uid > 0) {

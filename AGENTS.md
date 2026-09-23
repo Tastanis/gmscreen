@@ -987,3 +987,24 @@ comparisons use the student teacher's active roster across every period and leve
 participation retains its period/level scope. Latest attendance percentages are
 visible and both values appear in each point tooltip, including overlapping lines.
 Report/calendar, chart unit, and disposable chart browser checks passed.
+
+
+### ASL teacher workflow - 1.19.148
+
+Teacher entry routes default to Grading; Roster follows Resources in navigation.
+Grading filters use six period buttons, three level buttons, competencies, then
+assessment modes. Names display first-last with fixed single-line rows while the
+query remains last-name sorted. Do not add unapproved visible controls or prose.
+Attendance/participation autosaves serialize version-checked writes, preserve
+newer in-flight edits and retain drafts by actor/calendar revision. Past blocks
+remain editable with audit history and date-based calculation finalization.
+Above-maximum participation is permitted (including Excel recovery imports),
+with only the requested nonblocking name/overage popup. Existing chart percentage
+caps are unchanged. Never replay uncertain saves or silently rebase conflicts.
+Automatic SQL backups run before authenticated teacher requests: first use each
+day and each started block, outside the site/checkout in the hosting account's
+asl-private-backups directory. Retain 60 daily snapshots and all block snapshots.
+The nightly CLI also checks these snapshots but requires host scheduling.
+See asl/README.md for exact timing, override and recovery instructions. Local
+SQLite-backed browser and restore tests do not prove production host permissions
+or a production MySQL restore; verify the first deployed backup separately.

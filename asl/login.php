@@ -51,7 +51,7 @@ try {
     aslhub_csrf_token();
 
     if (!empty($authed['is_teacher'])) {
-        header('Location: ' . (!empty($authed['must_change_password']) ? 'teacher/settings.php?change_pw=1' : 'teacher/dashboard.php'));
+        header('Location: ' . (!empty($authed['must_change_password']) ? 'teacher/settings.php?change_pw=1' : 'teacher/grading.php'));
     } else {
         header('Location: dashboard.php');
     }

@@ -31,7 +31,7 @@ if ($bucket) {
 }
 
 $filters = [
-    'teacher' => $_GET['teacher'] ?? ($isAdmin ? $me['teacher'] : null),
+    'teacher' => $me['teacher'],
     'period' => $_GET['period'] ?? 'all',
     'level' => (string)$level,
 ];
@@ -67,6 +67,25 @@ foreach ($standards as $s) {
 aslhub_teacher_header($me, 'Grading', 'grading');
 ?>
     <form class="filters-bar" method="GET" id="filter-form">
+        <input type="hidden" name="period" value="<?php echo aslhub_h($filters['period']); ?>">
+        <div class="grading-modes" role="group" aria-label="Period">
+        <?php for ($i=1; $i<=6; $i++): ?>
+            <button type="button" aria-pressed="<?php echo (string)$filters['period']===(string)$i?'true':'false'; ?>" onclick="this.form.period.value='<?php echo $i; ?>';this.form.requestSubmit()">Period <?php echo $i; ?></button>
+        <?php endfor; ?>
+        </div>
+        <input type="hidden" name="level" value="<?php echo $level; ?>">
+        <div class="grading-modes" role="group" aria-label="ASL level">
+        <?php for ($i=1; $i<=3; $i++): ?>
+            <button type="button" aria-pressed="<?php echo $level===$i?'true':'false'; ?>" onclick="this.form.level.value='<?php echo $i; ?>';this.form.standard.value='all';this.form.requestSubmit()">ASL <?php echo $i; ?></button>
+        <?php endfor; ?>
+        </div>
+        <select name="standard" onchange="this.form.requestSubmit()">
+            <option value="all">All competencies</option>
+            <?php foreach (($bucket['standards'] ?? []) as $s): ?>
+                <option value="<?php echo aslhub_h($s['standard_id']); ?>" <?php echo $standardId === $s['standard_id'] ? 'selected' : ''; ?>>
+                    <?php echo aslhub_h($s['name']); ?></option>
+            <?php endforeach; ?>
+        </select>
         <?php if ($hasCompetencies): ?>
         <input type="hidden" name="mode" value="<?php echo aslhub_h($mode); ?>">
         <div class="grading-modes" role="group" aria-label="Assessment mode">
@@ -75,38 +94,6 @@ aslhub_teacher_header($me, 'Grading', 'grading');
         <?php endforeach; ?>
         </div>
         <?php endif; ?>
-        <select name="level" onchange="this.form.requestSubmit()">
-            <?php for ($i = 1; $i <= 3; $i++): ?>
-                <option value="<?php echo $i; ?>" <?php echo $level === $i ? 'selected' : ''; ?>>ASL <?php echo $i; ?></option>
-            <?php endfor; ?>
-        </select>
-        <select name="bucket" onchange="this.form.standard.value='all';this.form.requestSubmit()">
-            <?php foreach ($taxonomy as $b): ?>
-                <option value="<?php echo aslhub_h($b['bucket_id']); ?>" <?php echo $b['bucket_id'] === $bucketId ? 'selected' : ''; ?>>
-                    <?php echo aslhub_h($b['name']); ?></option>
-            <?php endforeach; ?>
-        </select>
-        <select name="standard" onchange="this.form.requestSubmit()">
-            <option value="all">All competencies</option>
-            <?php foreach (($bucket['standards'] ?? []) as $s): ?>
-                <option value="<?php echo aslhub_h($s['standard_id']); ?>" <?php echo $standardId === $s['standard_id'] ? 'selected' : ''; ?>>
-                    <?php echo aslhub_h($s['name']); ?></option>
-            <?php endforeach; ?>
-        </select>
-        <?php if ($isAdmin): ?>
-            <select name="teacher" onchange="this.form.requestSubmit()">
-                <option value="all" <?php echo $filters['teacher'] === 'all' ? 'selected' : ''; ?>>All teachers</option>
-                <?php foreach (aslhub_valid_teachers() as $key => $label): ?>
-                    <option value="<?php echo $key; ?>" <?php echo $filters['teacher'] === $key ? 'selected' : ''; ?>><?php echo $label; ?></option>
-                <?php endforeach; ?>
-            </select>
-        <?php endif; ?>
-        <select name="period" onchange="this.form.requestSubmit()">
-            <option value="all">All periods</option>
-            <?php for ($i = 1; $i <= 6; $i++): ?>
-                <option value="<?php echo $i; ?>" <?php echo (string)$filters['period'] === (string)$i ? 'selected' : ''; ?>>Period <?php echo $i; ?></option>
-            <?php endfor; ?>
-        </select>
         <label for="student-search" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">Find student
         <input type="search" id="student-search" name="student_search" placeholder="Student name" autocomplete="off"
             value="<?php echo aslhub_h(is_string($_GET['student_search'] ?? '') ? ($_GET['student_search'] ?? '') : ''); ?>"></label>
@@ -140,7 +127,7 @@ aslhub_teacher_header($me, 'Grading', 'grading');
                 <tr data-student-row="<?php echo $sid; ?>">
                     <td class="sticky-col"><a class="student-link" href="<?php echo $base; ?>/dashboard.php?student_id=<?php echo $sid; ?>"
                             title="Zoom in on <?php echo aslhub_h($st['first_name']); ?> — browse the standards and grade from the rubrics"><?php
-                            echo aslhub_h($st['last_name'] . ', ' . $st['first_name']); ?></a>
+                            echo aslhub_h($st['first_name'] . ' ' . $st['last_name']); ?></a>
                         <span class="muted" style="font-size:.75rem;">P<?php echo (int)$st['class_period']; ?></span></td>
                     <?php foreach ($standards as $s): foreach ($s['targets'] as $t):
                         $sc = $scores[$sid][(int)$t['id']] ?? null; ?>

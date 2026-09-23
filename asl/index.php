@@ -5,7 +5,7 @@ header('Cache-Control: no-store');
 // Already logged in? Go to the right dashboard.
 $me = aslhub_current_user($pdo);
 if ($me) {
-    header('Location: ' . (!empty($me['is_teacher']) ? 'teacher/dashboard.php' : 'dashboard.php'));
+    header('Location: ' . (!empty($me['is_teacher']) ? 'teacher/grading.php' : 'dashboard.php'));
     exit;
 }
 

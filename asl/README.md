@@ -29,20 +29,42 @@ For the initial account reset, use the admin Start Fresh tool after verifying SQ
 - Block attendance/participation saves are transactional, version checked, and
   audit logged. Finalized changes retain who/when audit history without requiring
   the teacher to enter a justification.
-- Entry grids keep browser-local drafts, show dirty cells, save as a batch, retry
-  safely, and warn before leaving with unsaved work.
+- Entry grids autosave version-checked batches and retain browser-local drafts.
+  Uncertain saves are not replayed automatically; reload checks the current value.
+  Completed blocks remain directly editable and changes retain their audit trail.
+  Above-maximum participation values save with a nonblocking name/overage warning.
 - Excel export/import is the preview-first, add/update-only portable class-data
   format. SQL is the complete disaster-recovery backup.
 - Import, calendar replacement, Install reseeding, hard student deletion, and
   Start Fresh take automatic SQL + Excel backups before writing.
 - Backup reads use a consistent database snapshot and atomic filenames.
-- Server-side backups live in `asl/backups/` (web access denied; newest 40 kept).
+- Backups default to `<hosting-account-home>/asl-private-backups/`, outside both
+  the deployed website and checkout. Override with `backup_dir` in the private
+  `config.local.php` or the server-only `ASLHUB_BACKUP_DIR` environment variable.
+  Existing files in the old `asl/backups/` folder are left untouched.
+- Every authenticated teacher request checks for a full SQL snapshot for today
+  and the latest started reporting block, before that request edits data.
+  `automatic/daily-YYYY-MM-DD.sql` retains 60 daily snapshots;
+  `automatic/block-YYYY-MM-DD.sql` retains each block's first-use snapshot without
+  automatic deletion. No visit means no new request-triggered snapshot that day.
+  The existing nightly CLI script also runs this check if scheduled by the host.
+  Failed attempts log `ASL automatic backup failed` and retry on the next request.
+- Manual SQL/Excel backups retain the newest 40 files separately from automatic
+  snapshots. A file lock prevents overlapping automatic backups; only completed
+  atomic files count as successful snapshots.
+- To recover after database loss, import a selected SQL snapshot with MySQL or
+  phpMyAdmin into an empty recovery database first and check users, skills,
+  score history, reporting blocks and block metrics before switching the site's
+  private database configuration. SQL restore replaces the included ASL tables.
+  These files contain student records and account hashes; keep them private.
+  Outside-webroot storage protects against ordinary website deployment, but
+  remains on the same server and cannot protect against loss of that server.
 - `scripts/nightly_backup.php` is the CLI entry point for Task Scheduler/cron.
   Copy backups off the web server using encrypted storage approved by the school.
 
 ## Two-week teacher rhythm
 
-1. **Grading** tab — pick level + bucket, click cells (left-click up, right-click down).
+1. **Grading** tab — pick period, level, competency and assessment mode, click cells (left-click up, right-click down).
 2. **Attendance & Participation** tab — students down the left, reporting blocks
    across the top. Blank attendance means zero absences; blank participation means
    the saved block maximum. Enter moves down and Tab moves right.
