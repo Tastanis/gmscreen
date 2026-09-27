@@ -61,7 +61,8 @@ forced movement remains manual, so forced-downward damage has no new movement UI
 Teleport now confirms the destination height after release, displays surface elevations
 + 1, and checks the ability range using maximum horizontal/vertical displacement.
 Grounded airborne arrivals produce a fall review; flying arrivals retain altitude.
-Cancel performs no movement. Alt-drag has no ability range attached.
+Cancel performs no movement. Hold Space when releasing a token drag to teleport;
+this gesture has no ability range attached. Alt remains the map ping shortcut.
 
 Validation on September 27: `npm test` passed 827 tests across 112 files.
 The disposable GM/two-player browser checks passed portal updates, secret-door

@@ -303,7 +303,7 @@ Pending UI proposals and all remaining original scope stay open.
 
 Locally acknowledged Shift drag movement emits `vtt:token-moved` with kind `shift`
 and its accepted operation/revision. Built-in opportunity attacks remain restricted
-to `normal`; other move predicates receive the actual kind. Ctrl/Alt drag commits
+to `normal`; other move predicates receive the actual kind. Ctrl/Space drag commits
 use forced/teleport receipts and explicitly await zone-entry claims without emitting
 a duplicate normal-walking hook. Alt ignores intervening path entry; Ctrl clipping
 and collision damage use the existing awaited damage adapter after movement.

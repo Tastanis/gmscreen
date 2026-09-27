@@ -13,6 +13,11 @@ const ARROW_COLOR_END = '#0f0f0f';      // near-black at destination
 
 let sharedState = null;
 let cachedMapRect = null;
+let teleportSpaceHeld = false;
+
+export function dragMovementKind(event) {
+  return teleportSpaceHeld ? 'teleport' : event.ctrlKey ? 'forced' : event.shiftKey ? 'shift' : 'walk';
+}
 
 export function mountDragRuler() {
   const ruler = document.getElementById('vtt-distance-ruler');
@@ -49,14 +54,23 @@ export function mountDragRuler() {
   sharedState = state;
   // Match release priority, and update even while the pointer is stationary.
   const updateMovementLabel = event => {
-    state.movementLabel = event.altKey ? 'Teleport' : event.ctrlKey ? 'Forced movement' : event.shiftKey ? 'Shift' : 'Move';
+    if (event.code === 'Space' || event.key === ' ') {
+      if (event.type === 'keyup') teleportSpaceHeld = false;
+      else if (event.type === 'keydown') {
+        if (event.target?.closest?.('input,textarea,select,[contenteditable],button,[role="button"],dialog')) return;
+        if (!mapSurface.getClientRects().length) return;
+        teleportSpaceHeld = true;
+        event.preventDefault();
+      }
+    }
+    state.movementLabel = {teleport:'Teleport',forced:'Forced movement',shift:'Shift',walk:'Move'}[dragMovementKind(event)];
     if (state.mode === 'external' && state.measuring) updateOverlay(state);
   };
   document.addEventListener('keydown', updateMovementLabel, true);
   document.addEventListener('keyup', updateMovementLabel, true);
   mapSurface.addEventListener('pointerdown', updateMovementLabel, true);
   mapSurface.addEventListener('pointermove', updateMovementLabel, true);
-  window.addEventListener('blur', () => { state.movementLabel = 'Move'; });
+  window.addEventListener('blur', () => { teleportSpaceHeld = false; state.movementLabel = 'Move'; });
 
 
   state.measureButton.setAttribute('aria-pressed', 'false');
@@ -164,6 +178,7 @@ export function mountDragRuler() {
 
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
+      teleportSpaceHeld = false;
       clearMeasurement(state);
     }
   });

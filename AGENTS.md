@@ -10,6 +10,11 @@ The campaign vault's AGENTS.md and .claude/CLAUDE.md already point to that same 
 
 # Codex Development Notes
 
+Token drag teleport uses Space held at release (1.19.158). Alt remains map ping;
+Ctrl is forced movement and Shift is shift movement. The ruler and commit share
+dragMovementKind; Space state clears on keyup, blur and hidden document. Preserve
+text input/button behavior when changing these keyboard handlers.
+
 ## Dungeon Alchemist layered maps
 
 Before creating, exporting, importing, or repairing Dungeon Alchemist terrain,

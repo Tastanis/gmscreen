@@ -1,4 +1,5 @@
 import {chooseTeleportHeight} from './teleport-choice.js';
+import {dragMovementKind} from './drag-ruler.js';
 import {floorElevations as teleportFloorElevations} from '../state/normalize/floor-elevation.js';
 import {mountFallReview} from './fall-review.js';
 import {settleCollisionEffects} from '../services/collision-effects.js';
@@ -6727,7 +6728,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (viewState.dragState && event.pointerId === viewState.dragState.pointerId) {
       const isPrimaryButton = event.button === 0 || event.button === -1;
-      endTokenDrag({ commit: isPrimaryButton, pointerId: event.pointerId, movementKind: event.altKey ? 'teleport' : event.ctrlKey ? 'forced' : event.shiftKey ? 'shift' : 'walk' });
+      endTokenDrag({ commit: isPrimaryButton, pointerId: event.pointerId, movementKind: dragMovementKind(event) });
     } else if (viewState.dragCandidate && event.pointerId === viewState.dragCandidate.pointerId) {
       clearDragCandidate(event.pointerId);
     }
