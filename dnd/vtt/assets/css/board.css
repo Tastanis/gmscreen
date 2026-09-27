@@ -2855,6 +2855,11 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
   z-index: var(--z-dropdown, 500);
 }
 
+/* Selection guides stay visible in unexplored space without altering the fog. */
+.height-vision-active .vtt-automation-move {
+  z-index: 100005;
+}
+
 .vtt-automation-move__svg {
   position: absolute;
   inset: 0;

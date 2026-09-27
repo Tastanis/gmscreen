@@ -7402,7 +7402,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
 
-  function getLocalMapPoint(event) {
+  function getLocalMapPoint(event, { terrain = true } = {}) {
     const pointer = getPointerPosition(event, mapSurface);
     const scale = Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
     const translation = viewState.translation ?? { x: 0, y: 0 };
@@ -7413,7 +7413,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!Number.isFinite(localX) || !Number.isFinite(localY)) {
       return null;
     }
-    return window.terrainPrototype?.unproject({x:localX,y:localY}) ?? {x:localX,y:localY};
+    return terrain ? (window.terrainPrototype?.unproject({x:localX,y:localY}) ?? {x:localX,y:localY}) : {x:localX,y:localY};
   }
 
   function getMapImagePoint(localPoint) {
@@ -17672,8 +17672,9 @@ export function mountBoardInteractions(store, routes = {}) {
     const originDistance = automationChebyshevDistance(getPlacementCenter(source), getPlacementCenter(target));
     for (let dy = -distance; dy <= distance; dy += 1) {
       for (let dx = -distance; dx <= distance; dx += 1) {
-        const column = target.column + dx;
-        const row = target.row + dy;
+        // A fractional starting placement must not shift the visible selection grid.
+        const column = Math.floor(target.column) + dx;
+        const row = Math.floor(target.row) + dy;
         const movedDistance = automationChebyshevDistance(target, { column, row });
         if (movedDistance > distance || movedDistance === 0) continue;
         if (!isAutomationMovePathLegal(source, target, { column, row }, baseVerb)) continue;
@@ -17972,15 +17973,18 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function getAutomationGridCellFromEvent(event) {
-    const localPoint = getLocalMapPoint(event);
+    // These selection cells are painted in the flat map-transform plane. Applying
+    // terrain unprojection here makes the pointer disagree with the visible cell.
+    const localPoint = getLocalMapPoint(event, { terrain: false });
     const gridPoint = localPoint ? mapPointToGrid(localPoint) : null;
     if (!gridPoint) {
       return null;
     }
-    return {
-      column: Math.floor(gridPoint.column),
-      row: Math.floor(gridPoint.row),
-    };
+    return clampPlacementToBounds(
+      Math.floor(gridPoint.column), Math.floor(gridPoint.row),
+      pendingAutomationMove?.targetSnapshot.width || 1,
+      pendingAutomationMove?.targetSnapshot.height || 1
+    );
   }
 
   function automationChebyshevDistance(left, right) {

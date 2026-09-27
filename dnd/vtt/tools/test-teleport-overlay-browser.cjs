@@ -1,0 +1,27 @@
+const {chromium}=require('playwright'),assert=require('node:assert/strict');
+const base=process.env.VTT_TEST_ORIGIN||'http://127.0.0.1:18789';
+if(!['127.0.0.1','localhost'].includes(new URL(base).hostname))throw Error('Disposable loopback fixture only');
+(async()=>{const b=await chromium.launch({channel:'chrome',headless:true});try{
+const p=await b.newPage({viewport:{width:1280,height:800}}),errors=[];p.on('pageerror',e=>errors.push(e.message));await p.route('**/*',r=>new URL(r.request().url()).origin===base?r.continue():r.abort());await p.goto(base+'/test-login.php?user=GM');
+const snapshot=async()=>(await(await p.request.get(base+'/dnd/vtt/api/v2/snapshot.php')).json()).snapshot;
+let s=await snapshot();const source=s.state.routing.activeSceneId,pkg=(await(await p.request.get(base+'/dnd/vtt/api/v2/scene-export.php?sceneId='+source)).json()).package;
+pkg.scene.name='Disposable teleport overlay regression';pkg.domains.placements={};pkg.domains.drawings={};pkg.domains.templates={};pkg.domains.sceneConfig={grid:{size:150,visible:true,locked:false,offsetX:0,offsetY:0},mapLevels:{levels:[]}};
+const imp=await p.request.post(base+'/dnd/vtt/api/v2/scene-import.php',{data:{package:pkg,operationId:crypto.randomUUID(),allowPlayerBrowsing:true}});assert.equal(imp.status(),200,await imp.text());const scene=(await imp.json()).scene;
+async function cmd(type,payload){s=await snapshot();const r=await p.request.post(base+'/dnd/vtt/api/v2/commands.php',{data:{type,sceneId:scene.id,baseRevision:s.revision,entityRevision:type==='routing.set'?s.state.routing._revision:s.state.sceneConfig[scene.id]._revision,operationId:crypto.randomUUID(),payload}});assert.equal(r.status(),200,await r.text());return r.json();}
+await cmd('routing.set',{routing:{activeSceneId:scene.id,mapUrl:scene.mapUrl,playerMapDisabled:false,playerActiveSceneId:scene.id,playerMapUrl:scene.mapUrl}});
+await cmd('environment.set',{field:'terrain',expectedRevision:0,value:{n:2,m:2,h:[2,2,2,2],bounds:{left:0,top:0,width:24,height:32}}});
+await cmd('placement.batch',{actions:[{kind:'add',sceneId:scene.id,placementId:'overlay-traveler',placement:{id:'overlay-traveler',name:'Overlay traveler',column:4.25,row:15.25,width:1,height:1,levelId:'level-0',team:'ally',imageUrl:'/dnd/vtt/assets/images/terrain-walker.svg'}}]});
+await p.reload();await p.waitForFunction(()=>window.terrainPrototype?.active&&terrainContext().view.mapLoaded);
+await p.evaluate(()=>{window.moveResult=null;document.dispatchEvent(new CustomEvent('vtt:automation-apply-teleport',{detail:{payload:{targetId:'overlay-traveler',distance:5},resolve:r=>window.moveResult=r,reject:e=>window.moveResult={error:e.message}}}));});
+await p.waitForSelector('[data-automation-move-ghost]');
+const screen=async(column,row)=>p.evaluate(({column,row})=>{const c=terrainContext(),t=document.getElementById('vtt-map-transform'),r=t.getBoundingClientRect();return{x:r.left+((c.view.gridOffsets.left||0)+column*c.view.gridSize)*r.width/t.offsetWidth,y:r.top+((c.view.gridOffsets.top||0)+row*c.view.gridSize)*r.height/t.offsetHeight};},{column,row});
+for(const [x,y,column,row] of [[5.04,15.04,5,15],[5.96,15.96,5,15],[6.04,15.04,6,15],[5.04,16.04,5,16]]){const q=await screen(x,y);await p.mouse.move(q.x,q.y);const cell=await p.evaluate(()=>{const e=document.querySelector('[data-automation-move-ghost]'),v=terrainContext().view;return{column:(parseFloat(e.style.left)-(v.gridOffsets.left||0))/v.gridSize,row:(parseFloat(e.style.top)-(v.gridOffsets.top||0))/v.gridSize};});assert.deepEqual(cell,{column,row});}
+assert.equal(await p.evaluate(()=>{const v=terrainContext().view;return [...document.querySelectorAll('.vtt-automation-move__cell')].every(e=>Number.isInteger((parseFloat(e.style.left)-(v.gridOffsets.left||0))/v.gridSize)&&Number.isInteger((parseFloat(e.style.top)-(v.gridOffsets.top||0))/v.gridSize));}),true);console.log('PASS destination follows visible cell edges despite terrain parallax and fractional starting position');
+await p.evaluate(()=>{document.body.classList.add('height-vision-active');const fog=document.createElement('div');fog.id='qa-opaque-fog';fog.style.cssText='position:absolute;inset:0;background:black;z-index:100003;pointer-events:none';document.getElementById('vtt-map-transform').append(fog);});
+const q=await screen(5.08,15.08);await p.mouse.move(q.x,q.y);
+assert.equal(await p.evaluate(()=>+getComputedStyle(document.querySelector('.vtt-automation-move')).zIndex>+getComputedStyle(document.querySelector('#qa-opaque-fog')).zIndex),true);
+await p.screenshot({path:'.playwright-mcp/teleport-fog-overlay.png',animations:'disabled',timeout:15000});
+await p.mouse.click(q.x,q.y);await p.waitForFunction(()=>document.querySelector('[data-teleport-choice]')?.dataset.ready==='true');await p.locator('[data-teleport-choice]').getByRole('button',{name:'Ground 3'}).click();await p.waitForFunction(()=>window.moveResult!==null);
+assert.equal(await p.evaluate(()=>moveResult.error),undefined);s=await snapshot();assert.equal(s.state.placements[scene.id]['overlay-traveler'].column,5);assert.equal(s.state.placements[scene.id]['overlay-traveler'].row,15);assert.equal(await p.locator('#qa-opaque-fog').count(),1);assert.equal(await p.locator('#qa-opaque-fog').evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(0, 0, 0)');
+console.log('PASS visible destination above opaque fog; accepted landing matches highlight without removing fog');assert.deepEqual(errors,[]);
+}finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

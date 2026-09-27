@@ -29,6 +29,12 @@ creature does. Each struck creature is prone only when faller size exceeds its
 Might (ties do not qualify). Conditions are plain text, distinct from editable
 damage, and retain the existing durable claim/no-replay boundary.
 
+Ability movement overlays (1.19.161) use the flat map-transform grid as the selection
+plane. Their pointer picker must bypass terrain unprojection to agree with visible
+cell boundaries. Preview and commit share footprint bounds clamping. Height-vision
+fog stays intact beneath the overlay; keep its cell/ghost guides above that fog.
+Ordinary map/terrain interactions still use terrain unprojection.
+
 ## Dungeon Alchemist layered maps
 
 Before creating, exporting, importing, or repairing Dungeon Alchemist terrain,

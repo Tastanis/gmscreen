@@ -84,6 +84,14 @@ Unlimited, noncombat, nonflying travel to a single same-height surface skips the
 chooser. Displayed heights are rounded; exact geometry remains intact. This UI
 change does not complete the separate audit of rounding across all gameplay rules.
 
+Ability teleport/forced movement selection uses the visible overlay's flat grid
+coordinates, bypassing the terrain correction used by ordinary map picking. This
+keeps cell-edge hover and confirmed placement consistent; it does not warp the
+selection grid onto terrain. Canonical destination height is resolved separately.
+The guide layer is above height-vision fog and does not modify fog or reveal map
+content. `test-teleport-overlay-browser.cjs` covers terrain-shifted picking at both
+cell edges, opaque fog stacking, and confirmed landing in the previewed cell.
+
 Validation on September 27: `npm test` passed 827 tests across 112 files.
 The disposable GM/two-player browser checks passed portal updates, secret-door
 projection, queued terrain strokes, undo after acknowledged saves, reconnect,
