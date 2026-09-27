@@ -64,6 +64,16 @@ Grounded airborne arrivals produce a fall review; flying arrivals retain altitud
 Cancel performs no movement. Hold Space when releasing a token drag to teleport;
 this gesture has no ability range attached. Alt remains the map ping shortcut.
 
+The teleport chooser is anchored beside the destination, with a 500 ms input guard.
+Surface buttons confirm directly; red buttons warn about insufficient range but
+remain clickable. Surface/Custom Go clicks explicitly send allowOutOfRange when
+needed, which players may use; no extra confirmation is required. Server geometry
+and landing validation still apply. This is movement intent, not ability-authoring JSON.
+Custom whole-number standing height uses Go, while Cancel performs no movement.
+Unlimited, noncombat, nonflying travel to a single same-height surface skips the
+chooser. Displayed heights are rounded; exact geometry remains intact. This UI
+change does not complete the separate audit of rounding across all gameplay rules.
+
 Validation on September 27: `npm test` passed 827 tests across 112 files.
 The disposable GM/two-player browser checks passed portal updates, secret-door
 projection, queued terrain strokes, undo after acknowledged saves, reconnect,

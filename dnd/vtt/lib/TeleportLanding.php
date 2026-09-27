@@ -20,7 +20,9 @@ final class TeleportLanding {
   $height=$choice['height']??null;$range=$choice['range']??null;
   if((!is_int($height)&&!is_float($height))||!is_finite((float)$height)||$height< -1000000||$height>1000000)throw new InvalidArgumentException('Invalid teleport height.');
   $distance=max(abs($to['column']-$from['column']),abs($to['row']-$from['row']),abs($height-WallMovement::height($from,$config)));
-  if($range!==null&&((!is_int($range)&&!is_float($range))||!is_finite((float)$range)||$range<0||$distance>$range+1e-6))throw new InvalidArgumentException('Chosen teleport height exceeds the available distance.');
+  if(array_key_exists('allowOutOfRange',$choice)&&!is_bool($choice['allowOutOfRange']))throw new InvalidArgumentException('Invalid teleport range override.');
+  if($range!==null&&((!is_int($range)&&!is_float($range))||!is_finite((float)$range)||$range<0))throw new InvalidArgumentException('Invalid teleport range.');
+  if($range!==null&&$distance>$range+1e-6&&($choice['allowOutOfRange']??false)!==true)throw new InvalidArgumentException('Chosen teleport height exceeds the available distance.');
   $surfaces=self::surfaces($to,$config,$gm);$landing=null;
   foreach($surfaces as $surface)if($surface['height']<=$height+1e-6){$landing=$surface;break;}
   if(!$landing)throw new InvalidArgumentException('Teleport height is below the ground.');

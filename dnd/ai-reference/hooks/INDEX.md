@@ -322,8 +322,10 @@ field or new automation hook. See docs/vtt-reliability-pass-2026-09-26.md.
 Ability-driven forced movement shares canonical collision intent and durable
 typed-damage recovery with Ctrl-drag. Teleport abilities use their existing distance
 and now request a destination standing height (actual surface elevation + 1).
-The server checks maximum horizontal/vertical displacement; selected air arrivals
-fall unless flying. Cancellation commits no movement. No new authoring keys.
+The server checks maximum horizontal/vertical displacement. The destination chooser
+warns in red about excess range but permits players to confirm it through internal
+allowOutOfRange movement intent. No extra confirmation or new authoring keys.
+Selected air arrivals fall unless flying. Cancellation commits no movement.
 Fall Apply/Dismiss is actor-only, with editable damage, Agility and Prone; interrupted
 effects remain GM-reviewable without replay. Future sheet-based fall reduction and
 vertical forced throws remain manual. See docs/vtt-map-runtime-release.md.

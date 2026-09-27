@@ -15,6 +15,13 @@ Ctrl is forced movement and Shift is shift movement. The ruler and commit share
 dragMovementKind; Space state clears on keyup, blur and hidden document. Preserve
 text input/button behavior when changing these keyboard handlers.
 
+Teleport chooser (1.19.159) sits beside the destination and ignores input for 500 ms.
+Red surface/Custom Go choices warn about range but remain actionable by players;
+the explicit internal allowOutOfRange flag preserves this intent at the server.
+Do not turn these warnings back into disabled choices. Single-surface, same-height,
+unlimited noncombat ground travel bypasses the chooser. Whole-number UI labels do
+not imply that the separate gameplay-rounding audit has been completed.
+
 ## Dungeon Alchemist layered maps
 
 Before creating, exporting, importing, or repairing Dungeon Alchemist terrain,

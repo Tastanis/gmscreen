@@ -8,6 +8,10 @@ $from=['id'=>'pc','column'=>0,'row'=>0,'levelId'=>'upper'];$to=[...$from,'column
 $r=TeleportLanding::resolve($from,$to,$config,['height'=>1,'range'=>5],false);tpCheck($r['placement']['levelId']==='level-0'&&$r['fall']===null&&$r['distance']==4,'Height 5 to height 1 arrives without falling');
 $high=[...$from,'movementMode'=>'fly','flightHeight'=>10];
 try{TeleportLanding::resolve($high,$to,$config,['height'=>1,'range'=>5],false);throw new RuntimeException('Range bypass');}catch(InvalidArgumentException $e){}
+$override=TeleportLanding::resolve($high,[...$to,'movementMode'=>'fly'],$config,['height'=>1,'range'=>5,'allowOutOfRange'=>true],false);
+tpCheck($override['placement']['flightHeight']===1&&$override['distance']==9,'Player may explicitly choose a red out-of-range destination');
+$custom=TeleportLanding::resolve([...$high,'flightHeight'=>1],[...$to,'movementMode'=>'fly'],$config,['height'=>9,'range'=>3,'allowOutOfRange'=>true],false);
+tpCheck($custom['placement']['flightHeight']===9,'Custom displayed height 10 is accepted beyond ability range');
 $config['mapLevels']['levels'][0]['elevationSquares']=10;
 $r=TeleportLanding::resolve($from,$to,$config,['height'=>5,'range'=>5],false);tpCheck($r['fall']['squares']===4,'Grounded airborne arrival falls to ground');
 $r=TeleportLanding::resolve($high,[...$to,'movementMode'=>'fly'],$config,['height'=>5,'range'=>5],false);tpCheck($r['fall']===null&&$r['placement']['flightHeight']===5,'Flying arrival remains airborne');

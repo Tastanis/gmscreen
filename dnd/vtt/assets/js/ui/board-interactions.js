@@ -1309,7 +1309,7 @@ export function mountBoardInteractions(store, routes = {}) {
   function promptTeleport(from,to,range=null){
     const context=window.terrainContext(),active=window.terrainPrototype?.active;
     const startHeight=active?terrainPrototype.groundFor(from):from.flightHeight??teleportFloorElevations(context.state.boardState.sceneState?.[context.state.boardState.activeSceneId]?.mapLevels).get(from.levelId||'level-0')??0;
-    return chooseTeleportHeight({from,to,range,context,startHeight,ground:(x,y)=>active?terrainPrototype.heightAt((context.view.gridOffsets.left||0)+x*context.view.gridSize,(context.view.gridOffsets.top||0)+y*context.view.gridSize):0});
+    return chooseTeleportHeight({from,to,range,context,startHeight,combatActive,ground:(x,y)=>active?terrainPrototype.heightAt((context.view.gridOffsets.left||0)+x*context.view.gridSize,(context.view.gridOffsets.top||0)+y*context.view.gridSize):0});
   }
 
   async function commitCanonicalTokenMoves({ sceneId, moves, source, originalPositions = null, movementKind = 'walk' }) {

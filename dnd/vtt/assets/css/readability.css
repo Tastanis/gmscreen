@@ -136,3 +136,23 @@ body.vtt-body .scene-level__edit .btn { min-height:28px; padding:4px 6px; font-s
 body.vtt-body .scene-level__item { padding:6px; background:var(--vtt-panel-bg); }
 body.vtt-body .scene-level__edit .scene-level__controls { display:flex; flex-wrap:wrap; gap:4px; }
 body.vtt-body .scene-level__edit .scene-level__controls .btn { width:auto; flex:0 0 auto; }
+
+/* Compact destination-anchored teleport chooser, shared by all theme skins. */
+body.vtt-body dialog.vtt-teleport-choice { position:fixed; inset:auto; margin:0; width:264px; max-width:calc(100vw - 24px); max-height:calc(100vh - 24px); overflow:auto; box-sizing:border-box; padding:14px; color:#eee9df; background:#25262c; border:1px solid #958466; border-radius:10px; box-shadow:0 8px 28px #0009; font:14px/1.4 system-ui,sans-serif; }
+.vtt-teleport-choice::backdrop { background:transparent; }
+.vtt-teleport-choice__header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px; }
+.vtt-teleport-choice__header strong { font-size:16px; }
+body.vtt-body .vtt-teleport-choice button { appearance:none; box-sizing:border-box; font:inherit; border:1px solid #847659; border-radius:6px; padding:8px 10px; color:#f4efdf; background:#3c382f; cursor:pointer; box-shadow:none; text-shadow:none; }
+body.vtt-body .vtt-teleport-choice button:hover:not(:disabled) { background:#514a3b; border-color:#d1b879; }
+body.vtt-body .vtt-teleport-choice button:focus-visible,body.vtt-body .vtt-teleport-choice input:focus-visible { outline:2px solid #d6bf87; outline-offset:2px; }
+body.vtt-body .vtt-teleport-choice button:disabled { cursor:default; opacity:.6; }
+body.vtt-body .vtt-teleport-choice .vtt-teleport-choice__cancel { border:0; background:transparent; color:#cbc7be; padding:4px 0 4px 8px; font-size:12px; }
+.vtt-teleport-choice__info { display:flex; gap:16px; color:#bbb9b2; font-size:12px; margin-bottom:12px; }
+.vtt-teleport-choice__locations { display:grid; gap:6px; }
+body.vtt-body .vtt-teleport-choice .vtt-teleport-choice__location { display:flex; align-items:center; justify-content:space-between; width:100%; gap:12px; text-align:left; }
+body.vtt-body .vtt-teleport-choice .is-out-of-range { background:#48292c; border-color:#955057; color:#f0b1b5; opacity:1; }
+.vtt-teleport-choice__custom { display:flex; align-items:center; gap:8px; border-top:1px solid #ffffff19; padding-top:12px; margin-top:12px; }
+.vtt-teleport-choice__custom label { display:flex; align-items:center; justify-content:space-between; gap:8px; flex:1; font-size:12px; }
+body.vtt-body .vtt-teleport-choice input { box-sizing:border-box; width:56px; height:34px; border:1px solid #6c6b6c; border-radius:5px; background:#191b20; color:#f4efdf; padding:5px; font:14px system-ui,sans-serif; text-align:center; }
+body.vtt-body .vtt-teleport-choice__custom button { height:34px; padding:5px 10px; }
+.vtt-teleport-choice__warning { font-size:12px; color:#e7ba8b; margin-top:8px; }
