@@ -138,6 +138,11 @@ export function createEventStream({
 
   async function ingest(event, source = 'transport') {
     const revision = eventRevision(event);
+    if (event?.type === 'sync.recoveryRequired' && revision !== null) {
+      for(let attempt=0;attempt<3&&revision>store.getRevision();attempt++)await runRecovery();
+      if(revision>store.getRevision())throw Error('Recovery notice remains ahead of the local revision');
+      return {status:'recovered',revision:store.getRevision()};
+    }
     if (revision === null) {
       return { status: 'invalid', reason: 'invalid_revision' };
     }

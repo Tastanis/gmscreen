@@ -123,6 +123,8 @@ function reduceTokenMoved(state, event, changes) {
     ...current,
     column,
     row,
+    ...(Object.hasOwn(event.payload || {}, '_supportSurfaceId') ? {_supportSurfaceId:event.payload._supportSurfaceId} : {}),
+    ...(Object.hasOwn(event.payload || {}, 'flightHeight') ? {flightHeight:event.payload.flightHeight} : {}),
     ...(Object.hasOwn(event.payload || {}, 'levelId') ? { levelId: event.payload.levelId } : {}),
     ...(Object.hasOwn(event.payload || {}, '_floorTraversal') ? { _floorTraversal: event.payload._floorTraversal } : {}),
     ...(Object.hasOwn(event.payload || {}, '_movementUndo') ? { _movementUndo: event.payload._movementUndo } : {}),
@@ -581,6 +583,7 @@ const reducers = Object.freeze({
   'fog.replaced': reduceFogReplaced,
   'level.changed': reduceLevelChanged,
   'levels.replaced': (state, event, changes) => {
+    if(event.payload?.environment)reduceSceneConfigField(state,event,changes,'environment','environment','environment');
     reduceSceneConfigField(state, event, changes, 'mapLevels', 'mapLevels', 'levels');
     if (event.payload?.userLevelState) reduceLevelActivated(state, event, changes);
     if (event.payload?.mutations) reducePlacementBatch(state, event, changes);
@@ -598,6 +601,25 @@ const reducers = Object.freeze({
   },
   'level.userChanged': reduceUserLevelChanged,
   'level.activated': reduceLevelActivated,
+  'environment.changed': (state,event,changes) => {
+    if(event.payload?.environment)return reduceSceneConfigField(state,event,changes,'environment','environment','environment');
+    const config=getSceneCollection(state,'sceneConfig',event.sceneId);
+    config.environment={...config.environment,[event.payload.field]:clone(event.payload.entry)};
+    config._revision=event.entityRevision;changes.environment=true;
+  },
+  'environment.portalChanged': (state,event,changes) => {
+    const config=getSceneCollection(state,'sceneConfig',event.sceneId);config.environment=clone(config.environment||{});const walls=config.environment.walls;
+    if(!walls||!walls.value.segments.some(e=>e.id===event.payload.segment.id))throw Error('Portal update requires wall recovery');
+    walls.value.segments=walls.value.segments.map(e=>e.id===event.payload.segment.id?clone(event.payload.segment):e);
+    walls.revision=event.payload.wallsRevision;config._revision=event.entityRevision;changes.environment=true;
+  },
+  'environment.terrainPatched': (state,event,changes) => {
+    const config=getSceneCollection(state,'sceneConfig',event.sceneId);config.environment=clone(config.environment||{});const terrain=config.environment.terrain;
+    if(!terrain)throw Error('Terrain patch requires recovery');
+    const p=event.payload.patch;let k=0;
+    for(let j=p.j0;j<=p.j1;j++)for(let i=p.i0;i<=p.i1;i++)terrain.value.h[j*terrain.value.n+i]=p.values[k++];
+    terrain.revision=event.payload.terrainRevision;config._revision=event.entityRevision;changes.environment=true;
+  },
   'grid.changed': (state, event, changes) =>
     reduceSceneConfigField(state, event, changes, 'grid', 'grid', 'grid'),
   'ping.added': reducePingAdded,

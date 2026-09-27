@@ -1,4 +1,26 @@
+## Current map runtime authority — September 27, 2026
+
+The deployable source is now checked in under `dnd/vtt/assets/js/ui/`, the Sync V2
+API and `dnd/vtt/lib/`. Older references below to ignored prototype modules are
+historical. Never copy those prototype modules over the repository version.
+Read `docs/vtt-map-runtime-release.md` for packaging, migration and verification.
+Read `docs/dungeon-alchemist-map-import.md` before map work. Preserve native files,
+exported images and existing sandbox data; code updates never require scene setup.
+The campaign vault's AGENTS.md and .claude/CLAUDE.md already point to that same guide.
+
 # Codex Development Notes
+
+## Dungeon Alchemist layered maps
+
+Before creating, exporting, importing, or repairing Dungeon Alchemist terrain,
+walls, roofs, balconies, or stairs, read `docs/dungeon-alchemist-map-import.md`.
+It indexes the local prototype sources and tested import process, documents the
+rendering/movement boundaries and accepted limitations, and lists regression
+scenarios. Prototype artifacts under `.playwright-mcp/terrain-prototype/` are
+local and Git-ignored; do not assume they exist in a fresh checkout. Preserve the
+authoritative native map and existing sandbox state; do not run rebuild/setup
+scripts as routine updates. Inspect test side effects before moving user tokens,
+especially their mid-stair traversal state.
 
 Player preview uses the GM-only read-only `api/v2/player-preview.php?user=...`
 endpoint and the same snapshot projection as the actual player. Never impersonate
@@ -1034,3 +1056,41 @@ Validation: 798 tests across 105 files passed. The browser regression also fails
 against the original Save Scene and movement code, then passes with both fixes.
 Asset build 393 is verified in the rendered configuration; the current VTT layout
 has no visible version footer. Production gameplay/deployment was not tested.
+
+- September 26 terrain sandbox: shared sceneConfig.environment uses GM-only V2
+  commands and per-document revisions. See the map import guide's shared-map pass
+  before editing. flightHeight and visionOwners are canonical placement fields;
+  ownership does not relink sheets. Preserve sticky selected-owned player vision,
+  GM unselected overview, and explicit hidden-token projection. Ctrl-drag collision
+  saves follow accepted movement separately; uncertain damage needs review.
+
+- Grounded teleport stair floor resolution follows shift entry/exit geometry on
+  the direct start/end route. Ignore teleport waypoints; preserve teleport intent
+  and partial stair traversal. Do not turn it into walking hooks or swept zones.
+
+- WallMovement enforces canonical environment walls for token.move and positional
+  placement batches. Preserve waypoint geometry, GM walk/shift override, teleport
+  bypass and receipt-based undo. Forced movement remains checked for every actor.
+  Reject blocked batches atomically; never apply damage or clip destinations in
+  this validator. Floor support/falling is still a separate FloorGeometry boundary.
+
+- Personal exploration remains per player/browser and survives refresh, with compatible
+  per-token memories migrated into the personal mask. Do not share party exploration.
+  Teleport stays unrestricted through darkness/walls; evaluate falling at landing.
+  Forced flight retains altitude and collides with rising terrain; grounded slope
+  slam threshold remains pending the user comparison. Floor deletion repair deferred.
+
+- Yellow slope decision is resolved: grounded forced movement slams uphill at
+  grade >= 2 using Chebyshev grid distance and eighth-square samples. Keep browser
+  forcedTerrainBlocked and server WallMovement aligned. Downhill/shallower terrain
+  is passable; do not collide with terrain below elevated support.
+
+
+- September 26 map reliability: read docs/vtt-reliability-pass-2026-09-26.md.
+  Forced creature checks use current server state. Ctrl-drag damage reservations
+  never grant a second execution; interrupted outcomes require GM review, not
+  replay. Authored ability-picker damage is not yet journaled. FloorSupport PHP/JS
+  share positive-area footprint support over polygon plates/holes and cutouts.
+  Preserve checkpoint relocation semantics and under-stair traversal. Four QA
+  passes use disposable runtimes, never user token/map reset. Prototype packaging
+  and production deployment remain separate; 82-token rendering still needs work.

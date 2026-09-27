@@ -298,3 +298,32 @@ an independent unfinished journey; do not substitute this registration test.
 Current requirement/evidence navigation is docs/vtt-active-goal-status.md. The old
 roadmap checklist is retained as history, with an explicit current-status link.
 Pending UI proposals and all remaining original scope stay open.
+
+### September 26 drag movement kinds
+
+Locally acknowledged Shift drag movement emits `vtt:token-moved` with kind `shift`
+and its accepted operation/revision. Built-in opportunity attacks remain restricted
+to `normal`; other move predicates receive the actual kind. Ctrl/Alt drag commits
+use forced/teleport receipts and explicitly await zone-entry claims without emitting
+a duplicate normal-walking hook. Alt ignores intervening path entry; Ctrl clipping
+and collision damage use the existing awaited damage adapter after movement.
+Collision damage is not atomically coupled to movement and must not be replayed
+after an uncertain write. No authored ability JSON fields were added.
+
+Ctrl-drag collisions now reserve per-target outcomes from the accepted movement's
+server-computed plan. Movement, zone outcomes and damage remain awaited in order.
+An uncertain damage write is never replayed; GM review is in Scenes > Zone entry
+recovery. The ledger does not yet cover the authored ability-picker collision
+path. forcedDestination is internal movement transport, not an authored effect
+field or new automation hook. See docs/vtt-reliability-pass-2026-09-26.md.
+
+### Map movement and falling review (September 27)
+
+Ability-driven forced movement shares canonical collision intent and durable
+typed-damage recovery with Ctrl-drag. Teleport abilities use their existing distance
+and now request a destination standing height (actual surface elevation + 1).
+The server checks maximum horizontal/vertical displacement; selected air arrivals
+fall unless flying. Cancellation commits no movement. No new authoring keys.
+Fall Apply/Dismiss is actor-only, with editable damage, Agility and Prone; interrupted
+effects remain GM-reviewable without replay. Future sheet-based fall reduction and
+vertical forced throws remain manual. See docs/vtt-map-runtime-release.md.

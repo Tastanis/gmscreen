@@ -818,6 +818,7 @@ try {
                 'sceneId' => 'scene-1',
                 'placementId' => 'token-2',
                 'entityRevision' => $enemyBeforeAbility['_entityRevision'],
+                'movementKind' => 'teleport',
                 'patch' => [
                     'column' => 9,
                     'row' => 8,

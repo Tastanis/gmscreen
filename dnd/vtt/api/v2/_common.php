@@ -150,6 +150,7 @@ function vttSyncV2PlacementHiddenForPlayer(array $placement, array $sceneConfig)
 
 function vttSyncV2ProjectSceneConfigForPlayer(array $sceneConfig): array
 {
+    if(isset($sceneConfig['environment']))$sceneConfig['environment']=SceneEnvironment::project($sceneConfig['environment']);
     $hiddenLevelIds = vttSyncV2HiddenMapLevelIds($sceneConfig);
     if ($hiddenLevelIds === []) {
         return $sceneConfig;
@@ -430,6 +431,14 @@ function vttSyncV2ProjectEventForUser(array $event, array $auth): array
     // Full movement evidence stays server-side; a batch may include hidden tokens.
     unset($event['payload']['zoneEntryReceipt'], $event['payload']['zoneEntryReceipts'], $event['payload']['groupUndoAnchor']);
     $type = (string) ($event['type'] ?? '');
+    if(isset($event['payload']['environment']))$event['payload']['environment']=SceneEnvironment::project($event['payload']['environment']);
+    if($type==='environment.changed' && ($event['payload']['field']??'')==='walls'){
+        $safe=SceneEnvironment::project(['walls'=>$event['payload']['entry']]);$event['payload']['entry']=$safe['walls'];
+    }
+    if($type==='environment.portalChanged'){
+        $safe=SceneEnvironment::project(['walls'=>['value'=>['segments'=>[$event['payload']['segment']]]]]);
+        $event['payload']['segment']=$safe['walls']['value']['segments'][0];
+    }
     if (in_array($type, ['scene.installed','scene.layoutRestored'], true)) {
         $sceneId = $event['sceneId'];
         $state = [];

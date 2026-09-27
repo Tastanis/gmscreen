@@ -1,3 +1,9 @@
+import {chooseTeleportHeight} from './teleport-choice.js';
+import {floorElevations as teleportFloorElevations} from '../state/normalize/floor-elevation.js';
+import {mountFallReview} from './fall-review.js';
+import {settleCollisionEffects} from '../services/collision-effects.js';
+import {PLAYER_CHARACTER_USER_IDS as visionOwnerProfiles} from '../state/normalize/map-levels.js';
+import {resolveForcedDrag} from './forced-drag.js';
 import {configureCharacterOperationJournal} from '../services/character-operation-journal.js';
 import {confirmCharacterWrite} from '../services/character-write.js';
 import {spendCharacterRecoveries} from '../services/recovery-spend.js';
@@ -685,6 +691,15 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   const boardApi = store ?? {};
+  window.submitEnvironmentCommand = descriptor => tokenMovementRuntime.submitBoardDomainCommands([descriptor], true);
+  window.submitFlightHeight = (token,flightHeight) => tokenMovementRuntime.submitPlacementOps([{type:'placement.update',sceneId:getActiveSceneId(),placementId:token.id,patch:{flightHeight}}], false);
+  window.terrainContext = () => {
+    const state=store.getState(),sceneId=state.boardState.activeSceneId,scene=state.boardState.sceneState?.[sceneId],userId=getCurrentUserId();
+    const linked=resolvePcTokenForUser({userId,placements:state.boardState.placements?.[sceneId],viewerAssociation:scene?.pcTokenAssociations?.[userId]});
+    return {view:viewState,state,levelId:getViewerLevelIdForCurrentUser(state,sceneId),userId,isGM:isGmUser(),followId:linked?.placementId,selectedIds:[...selectedTokenIds]};
+  };
+  mountFallReview({context:()=>({userId:getCurrentUserId(),sceneId:getActiveSceneId()}),placement:getPlacementFromStore,traits:getAutomationTraitsForPlacement,damage:applyAutomationCollisionDamage,
+    prone:async id=>{const result=applyConditionToPlacement(id,{name:'Prone'},{returnSavePromise:true});if(!result)throw Error('Prone could not be saved');await awaitSuccessfulPlacementSave(result);}});
   configureCharacterOperationJournal(getCurrentUserId());
   const syncV2Config =
     typeof window !== 'undefined' && window.vttConfig?.syncV2
@@ -835,6 +850,14 @@ export function mountBoardInteractions(store, routes = {}) {
       target._syncV2EntityRevision = Number(placement._entityRevision) || 0;
     });
     patchTokenMovementNode(sceneId, placementId, placement);
+
+    if (context?.event?.payload?.movementKind === 'teleport' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      const node=Array.from(tokenLayer.children).find(node=>node.dataset.placementId===placementId);
+      if(node){
+        if(!document.getElementById('vtt-teleport-style')){const style=document.createElement('style');style.id='vtt-teleport-style';style.textContent='@keyframes vttTeleportArrival{from{scale:.15;opacity:.15}to{scale:1;opacity:1}}.vtt-teleport-arrival{animation:vttTeleportArrival 220ms ease-out}';document.head.append(style);}
+        node.classList.add('vtt-teleport-arrival');setTimeout(()=>node.classList.remove('vtt-teleport-arrival'),240);
+      }
+    }
 
     const movementDetail = normalMovementDetail(sceneId, placementId, previous, placement, context);
     if (movementDetail) {
@@ -1282,23 +1305,57 @@ export function mountBoardInteractions(store, routes = {}) {
     return { refunded: true };
   }
 
-  function commitCanonicalTokenMoves({ sceneId, moves, source, originalPositions = null }) {
+  function promptTeleport(from,to,range=null){
+    const context=window.terrainContext(),active=window.terrainPrototype?.active;
+    const startHeight=active?terrainPrototype.groundFor(from):from.flightHeight??teleportFloorElevations(context.state.boardState.sceneState?.[context.state.boardState.activeSceneId]?.mapLevels).get(from.levelId||'level-0')??0;
+    return chooseTeleportHeight({from,to,range,context,startHeight,ground:(x,y)=>active?terrainPrototype.heightAt((context.view.gridOffsets.left||0)+x*context.view.gridSize,(context.view.gridOffsets.top||0)+y*context.view.gridSize):0});
+  }
+
+  async function commitCanonicalTokenMoves({ sceneId, moves, source, originalPositions = null, movementKind = 'walk' }) {
     const ruler = source === 'drag' ? getCurrentMeasurementPoints() : [];
     const canonical = tokenMovementRuntime.getConfirmedSnapshot()?.state?.placements?.[sceneId] ?? {};
     const hasMatchingOrigin = Array.isArray(ruler) && ruler.length > 1 && moves.some((move) => {
       const origin = canonical[move.placementId];
       return origin && Math.abs(origin.column - ruler[0].column) < 0.01 && Math.abs(origin.row - ruler[0].row) < 0.01;
     });
+    if(movementKind==='teleport'){
+      for(const move of moves){const origin=canonical[move.placementId];if(!origin)return;
+        updatePlacementById(move.placementId,p=>Object.assign(p,origin),{syncBoard:false});
+        const choice=await promptTeleport(origin,move);if(!choice||sceneId!==getActiveSceneId()){renderTokens(boardApi.getState?.()??{},tokenLayer,viewState);return;}
+        move.teleportChoice=choice;
+      }
+    }
+    const collisions = new Map();
+    if (movementKind === 'forced' && moves.length !== 1) {updateStatus('Force move one token at a time.');renderTokens(boardApi.getState?.() ?? {},tokenLayer,viewState);return;}
     const intendedMoves = moves.map((move) => {
       const origin = canonical[move.placementId];
       const path = hasMatchingOrigin && origin ? ruler.map((point) => clampPlacementToBounds(
         point.column + origin.column - ruler[0].column,
         point.row + origin.row - ruler[0].row, origin.width || 1, origin.height || 1
       )) : [];
-      return { ...move, movementKind: 'walk', path };
+      if (movementKind === 'forced' && origin) {
+        const collision=resolveForcedDrag(origin,move,Object.values(canonical),{
+          wallBlocked:(from,to)=>window.wallPrototype?.forcedBlockedMove?.(from,to)||false,
+          height:token=>window.terrainPrototype?.groundFor(token)??0,
+        });
+        collisions.set(move.placementId,collision);
+        return {...collision.destination,movementKind,path:[],forcedDestination:{column:move.column,row:move.row}};
+      }
+      return { ...move, movementKind, path: movementKind === 'teleport' ? [] : path };
     });
-    tokenMovementRuntime.submitMoves(sceneId, intendedMoves)
-      .then(() => {
+    let movementAccepted = false;
+    return tokenMovementRuntime.submitMoves(sceneId, intendedMoves)
+      .then(async (results) => {
+        movementAccepted = true;
+        if (source === 'drag' && ['teleport','forced'].includes(movementKind)) {
+          for (let index=0;index<moves.length;index++) {
+            const id=moves[index].placementId, result=results[index] || results[0];
+            const outcomes=await checkPersistentZoneEntries(id,canonical[id],getPlacementFromStore(id),{sceneId,kind:movementKind,movementOperationId:result?.event?.operationId});
+            assertZoneEntryOutcomesConfirmed(outcomes);
+          }
+        }
+
+        if(movementKind==='forced')await settleCollisionEffects(results[0]?.event?.operationId,applyAutomationCollisionDamage);
         clearSyncFailure();
         const movedIds = moves.map((move) => move.placementId);
         const fallenIds = source === 'drag'
@@ -1317,12 +1374,12 @@ export function mountBoardInteractions(store, routes = {}) {
           sceneId,
           movedIds,
           originalPositions,
-          preview: new Map(moves.map((move) => [move.placementId, move])),
+          preview: new Map(intendedMoves.map((move) => [move.placementId, move])),
         });
       })
       .catch((error) => {
-        reportSyncFailure(error, 'token movement');
-        updateStatus(error?.message || 'Token movement was rejected.');
+        reportSyncFailure(error, movementAccepted ? 'movement follow-up' : 'token movement');
+        updateStatus(movementAccepted ? 'Movement saved; a follow-up effect needs review. Do not repeat the move to retry damage.' : (error?.message || 'Token movement was rejected.'));
       });
   }
 
@@ -2513,7 +2570,7 @@ export function mountBoardInteractions(store, routes = {}) {
   // authored `trigger` blocks with a `match.event === "move"` can react.
   document.addEventListener('vtt:token-moved', (event) => {
     const detail = event?.detail || {};
-    if (detail.kind !== 'normal') return;
+    if (!['normal','shift','teleport'].includes(detail.kind)) return;
     const movingId = detail.placementId;
     const from = detail.from;
     const to = detail.to;
@@ -2538,7 +2595,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
       // Built-in opp-attack: opposing-team watchers whose adjacency the mover
       // left during NORMAL movement while combat is active.
-      if (combatActive && leaves) {
+      if (combatActive && leaves && detail.kind === 'normal') {
         const watcherTeam = getCombatantTeam(watcher.id) || normalizeCombatTeam(watcher.team);
         if (!movingTeam || !watcherTeam || movingTeam !== watcherTeam) {
           markTriggerReady(watcher.id, '__opportunityAttack__', movingId);
@@ -6670,7 +6727,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (viewState.dragState && event.pointerId === viewState.dragState.pointerId) {
       const isPrimaryButton = event.button === 0 || event.button === -1;
-      endTokenDrag({ commit: isPrimaryButton, pointerId: event.pointerId });
+      endTokenDrag({ commit: isPrimaryButton, pointerId: event.pointerId, movementKind: event.altKey ? 'teleport' : event.ctrlKey ? 'forced' : event.shiftKey ? 'shift' : 'walk' });
     } else if (viewState.dragCandidate && event.pointerId === viewState.dragCandidate.pointerId) {
       clearDragCandidate(event.pointerId);
     }
@@ -7355,7 +7412,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!Number.isFinite(localX) || !Number.isFinite(localY)) {
       return null;
     }
-    return { x: localX, y: localY };
+    return window.terrainPrototype?.unproject({x:localX,y:localY}) ?? {x:localX,y:localY};
   }
 
   function getMapImagePoint(localPoint) {
@@ -7644,7 +7701,9 @@ export function mountBoardInteractions(store, routes = {}) {
     if (movementQueue.length >= MAX_QUEUED_MOVEMENTS) {
       return;
     }
-    movementQueue.push({ x: stepX, y: stepY });
+    movementQueue.push({ x: stepX, y: stepY,
+      sceneId: boardApi.getState?.()?.boardState?.activeSceneId,
+      selection: [...selectedTokenIds].sort().join('\u0000') });
     scheduleMovementProcessing();
   }
 
@@ -7657,15 +7716,23 @@ export function mountBoardInteractions(store, routes = {}) {
     schedule(processMovementQueue);
   }
 
-  function processMovementQueue() {
-    movementScheduled = false;
+  // Sandbox serialized keyboard movement: keep the guard through acknowledgment.
+  async function processMovementQueue() {
     const next = movementQueue.shift();
-    if (!next) {
-      return;
-    }
-    applyMovementDelta(next);
-    if (movementQueue.length) {
-      scheduleMovementProcessing();
+    try {
+      if (!next) return;
+      if (next.sceneId !== boardApi.getState?.()?.boardState?.activeSceneId
+          || next.selection !== [...selectedTokenIds].sort().join('\u0000')) {
+        movementQueue.length = 0;
+        return;
+      }
+      if (await applyMovementDelta(next) === false) movementQueue.length = 0;
+    } catch (error) {
+      movementQueue.length = 0;
+      reportSyncFailure(error, 'token movement');
+    } finally {
+      movementScheduled = false;
+      if (movementQueue.length) scheduleMovementProcessing();
     }
   }
 
@@ -7750,7 +7817,7 @@ export function mountBoardInteractions(store, routes = {}) {
         }
       }
       if (moves.length) {
-        commitCanonicalTokenMoves({
+        return commitCanonicalTokenMoves({
           sceneId: activeSceneId,
           moves,
           source: 'keyboard',
@@ -14400,10 +14467,10 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     if (
-      localX < offsetLeft ||
+      !window.terrainPrototype?.active && (localX < offsetLeft ||
       localX > offsetLeft + innerWidth ||
       localY < offsetTop ||
-      localY > offsetTop + innerHeight
+      localY > offsetTop + innerHeight)
     ) {
       return null;
     }
@@ -14415,7 +14482,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const pointX = localX - offsetLeft;
     const pointY = localY - offsetTop;
-    const pointCell = {
+    let pointCell = {
       column: Math.floor(pointX / gridSize),
       row: Math.floor(pointY / gridSize),
     };
@@ -14427,6 +14494,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     for (let index = renderedPlacements.length - 1; index >= 0; index -= 1) {
       const placement = renderedPlacements[index];
+      if(window.visionPrototype?.tokenVisible && !window.visionPrototype.tokenVisible(placement?.id))continue;
       if (!placement || typeof placement !== 'object') {
         continue;
       }
@@ -14453,7 +14521,12 @@ export function mountBoardInteractions(store, routes = {}) {
       const top = centerY - halfH;
       const bottom = centerY + halfH;
 
-      if (pointX >= left && pointX < right && pointY >= top && pointY < bottom) {
+      // Terrain sandbox token hit rectangles retain the existing cell/fog authority checks.
+      const terrainNode=window.terrainPrototype?.active ? Array.from(tokenLayer.children).find(node=>node.dataset.placementId===placement.id) : null;
+      const terrainRect=terrainNode?.getBoundingClientRect();
+      const terrainHit=terrainRect && event.clientX>=terrainRect.left && event.clientX<terrainRect.right && event.clientY>=terrainRect.top && event.clientY<terrainRect.bottom;
+      if (window.terrainPrototype?.active ? terrainHit : (pointX >= left && pointX < right && pointY >= top && pointY < bottom)) {
+        if(terrainHit)pointCell={column:Math.floor(column+(event.clientX-terrainRect.left)/terrainRect.width*width),row:Math.floor(row+(event.clientY-terrainRect.top)/terrainRect.height*height)};
         if (!gmViewing) {
           const interactable = getTokenLevelPresentation(placement, tokenLevelState, {
             viewerLevelId,
@@ -17439,6 +17512,8 @@ export function mountBoardInteractions(store, routes = {}) {
         placement?.size,
         placement?.sizeOverride
       ),
+      agility:Number(sheet?.hero?.stats?.agility??traits.agility??monster.attributes?.agility??monster.characteristics?.agility??monster.stats?.agility??monster.agility??0)||0,
+      might:Number(sheet?.hero?.stats?.might??traits.might??monster.attributes?.might??monster.characteristics?.might??monster.stats?.might??monster.might??0)||0,
       stability: stabilityWithBonus,
     };
   }
@@ -17745,24 +17820,48 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     const clickedPlacement = findRenderedPlacementAtPoint(event);
     const cell = getAutomationGridCellFromEvent(event) || request.previewCell;
-    const collisionPlacement = clickedPlacement && clickedPlacement.id !== request.targetSnapshot.id
+    const collisionPlacement = request.movementKind!=='teleport' && clickedPlacement && clickedPlacement.id !== request.targetSnapshot.id
       ? clickedPlacement
       : null;
     const destination = collisionPlacement
       ? getAutomationCollisionStopCell(request.targetSnapshot, getAutomationPlacementSnapshot(collisionPlacement))
       : cell;
-    const clamped = clampPlacementToBounds(
+    let clamped = clampPlacementToBounds(
       destination.column,
       destination.row,
       request.targetSnapshot.width,
       request.targetSnapshot.height
     );
+    let teleportChoice=null;
+    if(request.movementKind==='teleport'){
+      request.committing=true;
+      const origin=getPlacementFromStore(request.targetSnapshot.id);
+      teleportChoice=await promptTeleport(origin,clamped,request.effectiveDistance);
+      if(!teleportChoice||request.sceneId!==getActiveSceneId()){clearAutomationMoveOverlay();request.resolve?.({skipped:true,reason:'user-cancel'});return true;}
+    }
+    let forcedIntent=null,forcedCollision=null;
+    if((request.movementKind||'forced')==='forced'){
+      const canonical=tokenMovementRuntime.getConfirmedSnapshot()?.state?.placements?.[request.sceneId]||{};
+      const origin=canonical[request.targetSnapshot.id];
+      if(!origin){clearAutomationMoveOverlay();request.reject?.(new Error('Movement target is unavailable.'));return true;}
+      forcedIntent={column:clamped.column,row:clamped.row};
+      if(collisionPlacement){
+        const dx=collisionPlacement.column-origin.column,dy=collisionPlacement.row-origin.row,d=Math.max(Math.abs(dx),Math.abs(dy));
+        if(d)forcedIntent={column:origin.column+dx/d*request.effectiveDistance,row:origin.row+dy/d*request.effectiveDistance};
+        forcedIntent=clampPlacementToBounds(forcedIntent.column,forcedIntent.row,origin.width||1,origin.height||1);
+      }
+      forcedCollision=resolveForcedDrag(origin,forcedIntent,Object.values(canonical),{
+        wallBlocked:(from,to)=>window.wallPrototype?.forcedBlockedMove?.(from,to)||false,
+        height:token=>window.terrainPrototype?.groundFor(token)??0,
+      });
+      clamped=forcedCollision.destination;
+    }
     const movedDistance = automationChebyshevDistance(request.targetSnapshot, clamped);
     request.committing=true;
     const moveResult = updatePlacementById(request.targetSnapshot.id, (placement) => {
       placement.column = clamped.column;
       placement.row = clamped.row;
-    }, { returnSavePromise: true, movementKind: request.movementKind || 'forced' });
+    }, { returnSavePromise: true, movementKind: request.movementKind || 'forced', forcedDestination:forcedIntent, teleportChoice, collisionDamageType:request.collisionDamageType||'' });
     if (!moveResult?.updated) {
       clearAutomationMoveOverlay();
       request.reject?.(new Error('Unable to move that token.'));
@@ -17788,21 +17887,14 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     let collision = null;
-    if (collisionPlacement) {
+    if(forcedIntent){
       try {
-        const collisionDamage = Math.max(1, request.effectiveDistance - movedDistance);
-        const targetDamage = await applyAutomationCollisionDamage(request.targetSnapshot.id, collisionDamage, request.collisionDamageType);
-        const otherDamage = await applyAutomationCollisionDamage(collisionPlacement.id, collisionDamage, request.collisionDamageType);
-        collision = {
-          targetName: targetDamage?.name || request.targetSnapshot.name,
-          collidedName: otherDamage?.name || tokenLabel(collisionPlacement),
-          damage: collisionDamage,
-        };
-      } catch (error) {
-        renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState, { skipTracker: true });
-        clearAutomationMoveOverlay();
-        request.reject?.(error);
-        return true;
+        const saved=await moveResult.savePromise;
+        await settleCollisionEffects(saved?.event?.operationId,applyAutomationCollisionDamage);
+        if(forcedCollision.damage>0)collision={targetName:request.targetSnapshot.name,collidedName:forcedCollision.collidedIds.map(id=>tokenLabel(getPlacementFromStore(id))).join(', ')||'Obstacle',damage:forcedCollision.damage};
+      } catch(error){
+        renderTokens(boardApi.getState?.() ?? {},tokenLayer,viewState,{skipTracker:true});
+        clearAutomationMoveOverlay();request.reject?.(error);return true;
       }
     }
 
@@ -17824,6 +17916,7 @@ export function mountBoardInteractions(store, routes = {}) {
       return getZeroDamageResult(placementId);
     }
     const result = applyDamageHealToPlacement(placementId, 'damage', adjustedAmount);
+    if (!result) throw new Error('Collision damage could not be saved. Check the target and resolve the pending outcome.');
     if (result) {
       await awaitSuccessfulPlacementSave(result);
       floatStaminaDelta(placementId, adjustedAmount, 'damage');
@@ -18389,7 +18482,7 @@ export function mountBoardInteractions(store, routes = {}) {
   function updatePlacementById(
     placementId,
     mutator,
-    { syncBoard = true, returnSavePromise = false, movementKind = 'forced' } = {}
+    { syncBoard = true, returnSavePromise = false, movementKind = 'forced', forcedDestination = null, teleportChoice = null, collisionDamageType = '' } = {}
   ) {
     if (!placementId || typeof mutator !== 'function' || typeof boardApi.updateState !== 'function') {
       return false;
@@ -18436,7 +18529,7 @@ export function mountBoardInteractions(store, routes = {}) {
       // dirty, fall through to the snapshot path unchanged.
       let updateOps = null;
       if (USE_DELTA_SAVES && (placementsV2Enabled || !hasNonPlacementDirtyState())) {
-        const patch = buildPlacementUpdatePatch(beforeSnapshot, afterSnapshot);
+        const patch = (forcedDestination||teleportChoice) ? {...(buildPlacementUpdatePatch(beforeSnapshot, afterSnapshot)||{}),column:afterSnapshot.column,row:afterSnapshot.row} : buildPlacementUpdatePatch(beforeSnapshot, afterSnapshot);
         if (patch) {
           updateOps = [
             {
@@ -18444,6 +18537,8 @@ export function mountBoardInteractions(store, routes = {}) {
               sceneId: activeSceneId,
               placementId,
               movementKind,
+              ...(forcedDestination ? {forcedDestination,collisionDamageType} : {}),
+              ...(teleportChoice ? {teleportChoice} : {}),
               patch,
             },
           ];
@@ -19488,7 +19583,11 @@ export function mountBoardInteractions(store, routes = {}) {
               <option value="ground">Ground</option><option value="fly">Fly</option><option value="hover">Hover</option>
             </select>
           </label>
+          <label class="vtt-token-settings__row" data-flight-height-row hidden>Height
+            <input type="number" min="0" max="1000000" step="1" data-token-flight-height aria-label="Flying height" style="width:6em" />
+          </label>
         </div>
+        ${gmUser ? `<label class="vtt-token-settings__section">Owners<select multiple size="4" data-token-vision-owners aria-label="Token owners">${visionOwnerProfiles.map(id=>`<option value="${escapeHtml(id)}">${escapeHtml(id)}</option>`).join('')}</select></label>` : ''}
         ${hiddenToggleMarkup}
       </form>
     `;
@@ -19522,6 +19621,7 @@ export function mountBoardInteractions(store, routes = {}) {
       levelDownButton: element.querySelector('[data-token-settings-level="down"]'),
       levelUpButton: element.querySelector('[data-token-settings-level="up"]'),
       movementMode: element.querySelector('[data-token-movement-mode]'),
+      visionOwners: element.querySelector('[data-token-vision-owners]'),
       primaryPc: element.querySelector('[data-token-primary-pc]'),
       primaryProfile: element.querySelector('[data-token-primary-profile]'),
       auraToggle: element.querySelector('[data-token-settings-toggle="aura"]'),
@@ -19568,6 +19668,14 @@ export function mountBoardInteractions(store, routes = {}) {
     menu.levelUpButton?.addEventListener('click', () => {
       handleTokenLevelMoveClick('up');
     });
+    menu.visionOwners?.addEventListener('change', async () => {
+      const placementId=activeTokenSettingsId,sceneId=getActiveSceneId();
+      const visionOwners=Array.from(menu.visionOwners.selectedOptions,option=>option.value);
+      menu.visionOwners.disabled=true;
+      try {await tokenMovementRuntime.submitPlacementOps([{type:'placement.update',sceneId,placementId,patch:{visionOwners}}]);}
+      catch(error){updateStatus(error?.message||'Token ownership was not saved.');}
+      finally {menu.visionOwners.disabled=false;syncTokenLevelControls(getPlacementFromStore(activeTokenSettingsId));}
+    });
     menu.primaryPc?.addEventListener('change', async () => {
       const placementId = activeTokenSettingsId;
       const state = boardApi.getState?.();
@@ -19590,6 +19698,10 @@ export function mountBoardInteractions(store, routes = {}) {
       } catch (error) { updateStatus(error?.message || 'Primary token was not saved.'); }
       finally { syncTokenLevelControls(getPlacementFromStore(activeTokenSettingsId)); }
     });
+    element.querySelector('[data-token-flight-height]')?.addEventListener('change', async event => {
+      const token=getPlacementFromStore(activeTokenSettingsId);if(!token||!['fly','hover'].includes(token.movementMode))return;
+      try{await window.terrainPrototype.setTokenHeight(token,Number(event.target.value));event.target.value=window.terrainPrototype.groundFor(getPlacementFromStore(token.id));}catch(error){updateStatus(error.message);}
+    });
     menu.movementMode?.addEventListener('change', async () => {
       const placementId = activeTokenSettingsId;
       const sceneId = boardApi.getState?.()?.boardState?.activeSceneId;
@@ -19603,7 +19715,7 @@ export function mountBoardInteractions(store, routes = {}) {
       } catch (error) { updateStatus(error?.message || 'Movement mode was not saved.'); }
       finally {
         menu.movementMode.disabled = false;
-        menu.movementMode.value = getPlacementFromStore(activeTokenSettingsId)?.movementMode || 'ground';
+        menu.movementMode.value = getPlacementFromStore(activeTokenSettingsId)?.movementMode || 'ground';syncTokenLevelControls(getPlacementFromStore(activeTokenSettingsId));
       }
     });
 
@@ -20439,7 +20551,11 @@ export function mountBoardInteractions(store, routes = {}) {
       tokenSettingsMenu.primaryPc.disabled = !profile;
       tokenSettingsMenu.primaryProfile.textContent = profile ? ` (${profile})` : ' (link a player profile first)';
     }
+    if(tokenSettingsMenu?.visionOwners)for(const option of tokenSettingsMenu.visionOwners.options)option.selected=placement?.visionOwners?.includes(option.value)===true;
     if (tokenSettingsMenu?.movementMode) tokenSettingsMenu.movementMode.value = placement?.movementMode || 'ground';
+    const flightInput=tokenSettingsMenu?.element.querySelector('[data-token-flight-height]');
+    if(flightInput){flightInput.closest('label').hidden=!['fly','hover'].includes(placement?.movementMode);if(document.activeElement!==flightInput)flightInput.value=window.terrainPrototype?.groundFor(placement)??0;}
+
     if (!tokenSettingsMenu?.levelSection) {
       return;
     }

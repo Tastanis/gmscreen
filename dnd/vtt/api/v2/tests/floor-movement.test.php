@@ -9,6 +9,7 @@ $stairs = ['id'=>'stair-1','direction'=>'up','linkedLevelId'=>'upper',
     'edgeColors'=>['2,2-3,2'=>'red','3,2-4,2'=>'red','2,4-3,4'=>'green','3,4-4,4'=>'green']];
 $board = ['placements'=>['scene'=>[
     ['id'=>'pc','name'=>'Cal','profileId'=>'cal','team'=>'ally','column'=>2,'row'=>0,'width'=>1,'height'=>1,'levelId'=>'level-0'],
+    ['id'=>'teleporter','team'=>'ally','column'=>2,'row'=>0,'width'=>1,'height'=>1,'levelId'=>'level-0'],
     ['id'=>'ally','name'=>'Companion','team'=>'ally','column'=>3,'row'=>0,'width'=>1,'height'=>1,'levelId'=>'level-0'],
 ]],'sceneState'=>['scene'=>['mapLevels'=>['baseStairs'=>[$stairs], 'levels'=>[
     ['id'=>'hidden-mid','zIndex'=>0,'hidden'=>true],
@@ -16,6 +17,19 @@ $board = ['placements'=>['scene'=>[
 ]]]]];
 try {
     $store->migrateLegacyPlacements($board); $store->migrateLegacyBoardDomains($board);
+    foreach ([2,4] as $index => $row) {
+        $snap = $store->getSnapshot();
+        $token = $snap['state']['placements']['scene']['teleporter'];
+        $teleport = $store->acceptTokenMove(['type'=>'token.move','operationId'=>'stairs-teleport-'.$index,
+            'sceneId'=>'scene','entityId'=>'teleporter','baseRevision'=>$snap['revision'],
+            'entityRevision'=>$token['_entityRevision'] ?? 0,
+            'payload'=>['column'=>2,'row'=>$row,'movementKind'=>'teleport']], 'cal', false);
+        verifyFloor($teleport['event']['payload']['movementKind']==='teleport', 'Stair transition must retain teleport intent.');
+        unset($store); $store = new SyncV2Store($database);
+        $token = $store->getSnapshot()['state']['placements']['scene']['teleporter'];
+        verifyFloor($token['levelId']===($index===0?'level-0':'upper'), 'Teleport resolves and persists stair destination.');
+        if ($index===0) verifyFloor($token['_floorTraversal']['entry']==='red', 'Teleport halfway preserves authoritative progress.');
+    }
     $snapshot = $store->getSnapshot();
     $half = ['type'=>'token.move','operationId'=>'floor-half-001','sceneId'=>'scene','entityId'=>'pc',
         'baseRevision'=>$snapshot['revision'],'entityRevision'=>0,'payload'=>['column'=>2,'row'=>2,'zoneEntryReceipt'=>['from'=>['column'=>999]]]];

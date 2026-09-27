@@ -6,6 +6,8 @@
 $assetVersion = (int) ($config['assetsVersion'] ?? 1);
 $pusherEnabled = !empty($config['pusher']) || !empty($config['chatPusher']);
 $jsonScriptFlags = JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_PRETTY_PRINT;
+require_once __DIR__ . '/../lib/ModuleAssets.php';
+$moduleMap = ModuleAssets::importMap(__DIR__ . '/../assets/js', $assetVersion);
 
 // Include navigation bar
 require_once __DIR__ . '/../../includes/strix-nav.php';
@@ -17,6 +19,7 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>VTT Workspace</title>
+    <script type="importmap"><?= json_encode($moduleMap, $jsonScriptFlags) ?></script>
     <script>
         (function () {
             try {
@@ -84,5 +87,6 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
     <script src="assets/js/ui/monster-summary-panel.js?v=<?= $assetVersion ?>"></script>
     <script type="module" src="assets/js/ui/theme-settings.js?v=<?= $assetVersion ?>"></script>
     <script type="module" src="assets/js/bootstrap.js?v=<?= $assetVersion ?>"></script>
+    <script type="module" src="assets/js/ui/terrain-prototype.js?v=<?= $assetVersion ?>"></script>
 </body>
 </html>

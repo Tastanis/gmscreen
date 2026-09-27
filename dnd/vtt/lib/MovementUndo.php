@@ -7,6 +7,8 @@ final class MovementUndo
     private static function position(array $placement): array
     {
         return ['column'=>$placement['column'], 'row'=>$placement['row'],
+            '_supportSurfaceId'=>$placement['_supportSurfaceId']??null,
+            'flightHeight'=>$placement['flightHeight']??null,
             'levelId'=>$placement['levelId'] ?? FloorGeometry::BASE,
             '_floorTraversal'=>$placement['_floorTraversal'] ?? null];
     }

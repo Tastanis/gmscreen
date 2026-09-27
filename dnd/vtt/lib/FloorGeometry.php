@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__.'/FloorSupport.php';
 
 /** Pure geometry for authoritative movement. No persistence, sessions, or UI. */
 final class FloorGeometry
@@ -100,7 +101,7 @@ final class FloorGeometry
         return count($cuts) > 0;
     }
 
-    public static function fallingDestination(array $placement, array $mapLevels): ?string
+    public static function fallingDestination(array $placement, array $mapLevels, array $surfaces = []): ?string
     {
         $levels = self::orderedLevels($mapLevels);
         $id = $placement['levelId'] ?? self::BASE;
@@ -109,7 +110,8 @@ final class FloorGeometry
         $index = $start;
         while ($index > 0) {
             $level = $levels[$index];
-            if (($level['hidden'] ?? false) !== true && !self::fullyUnsupported($placement, $level)) break;
+            $supported=FloorSupport::supported([...$placement,'levelId'=>$level['id']],$surfaces,$level['cutouts']??[]);
+            if (($level['hidden'] ?? false) !== true && ($supported ?? !self::fullyUnsupported($placement, $level))) break;
             $index--;
         }
         return $index === $start ? null : $levels[$index]['id'];
@@ -183,10 +185,20 @@ final class FloorGeometry
                 $before = self::inside(['x'=>$a['x']+($t-$delta)*$dx, 'y'=>$a['y']+($t-$delta)*$dy], $edges);
                 $after = self::inside(['x'=>$a['x']+($t+$delta)*$dx, 'y'=>$a['y']+($t+$delta)*$dy], $edges);
                 if ($before === $after) continue; // Tangency, not an entrance/exit.
+                // Sandbox: the bottom two squares admit a side entrance.
+                if ($hit['color'] === 'barrier' && ((!$before && ($stair['direction'] ?? '') === 'up') || ($before && ($stair['direction'] ?? '') === 'down' && $entry === 'green'))) {
+                    $point = ['x'=>$a['x']+$t*$dx, 'y'=>$a['y']+$t*$dy];
+                    foreach ($edges as $lowEdge) {
+                        if (($stair['edgeColors'][$lowEdge['id']] ?? 'barrier') !== 'red') continue;
+                        $lo=$lowEdge['from']; $hi=$lowEdge['to']; $lx=$hi['x']-$lo['x']; $ly=$hi['y']-$lo['y'];
+                        $ll=$lx*$lx+$ly*$ly; $u=$ll ? max(0,min(1,(($point['x']-$lo['x'])*$lx+($point['y']-$lo['y'])*$ly)/$ll)) : 0;
+                        if (hypot($point['x']-$lo['x']-$u*$lx,$point['y']-$lo['y']-$u*$ly)<=2+self::EPSILON) { $hit['color']='red'; break; }
+                    }
+                }
                 $endsInside = $after;
                 if (!$before) {
                     // Don't count a completed prior entrance twice at a shared endpoint.
-                    if ($t > self::EPSILON || $entry === null) $entry = $hit['color'];
+                    if ($t > self::EPSILON || $entry === null || ($i === 1 && $priorEntry === null)) $entry = $hit['color'];
                     continue;
                 }
                 $up = ($stair['direction'] ?? '') === 'up';
@@ -201,16 +213,18 @@ final class FloorGeometry
     }
 
     /** Derive floor and resumable stair progress from canonical geometry only. */
-    public static function move(array $current, array $destination, array $mapLevels, string $kind = 'walk', array $waypoints = []): array
+    public static function move(array $current, array $destination, array $mapLevels, string $kind = 'walk', array $waypoints = [], array $surfaces = []): array
     {
         $levelId = (string) ($current['levelId'] ?? self::BASE);
         $levels = self::orderedLevels($mapLevels);
         $byId = array_column($levels, null, 'id');
         $result = ['levelId'=>$levelId, 'traversal'=>null, 'cause'=>null];
+        $supportedStair = false;
         $width = max(1, (float) ($current['width'] ?? 1));
         $height = max(1, (float) ($current['height'] ?? 1));
         $path = [];
-        foreach ([$current, ...$waypoints, $destination] as $point) {
+        // Teleports use the direct stair route only; skipped waypoints are not travelled.
+        foreach ([$current, ...($kind === 'teleport' ? [] : $waypoints), $destination] as $point) {
             if (!is_numeric($point['column'] ?? null) || !is_numeric($point['row'] ?? null)) throw new InvalidArgumentException('Movement path requires numeric coordinates.');
             $x = (float) $point['column']; $y = (float) $point['row'];
             if (!is_finite($x) || !is_finite($y) || $x < 0 || $y < 0 || $x > 100000 || $y > 100000) throw new InvalidArgumentException('Movement path coordinates are out of range.');
@@ -218,7 +232,8 @@ final class FloorGeometry
         }
         if (count($path) > 258) throw new InvalidArgumentException('Movement path has too many waypoints.');
         if (self::isAirborne($current)) return $result;
-        if ($kind === 'walk' && ($byId[$levelId]['hidden'] ?? false) !== true) {
+        foreach($surfaces as $surface)if(!empty($current['_supportSurfaceId'])&&($surface['id']??null)===$current['_supportSurfaceId']&&FloorSupport::intersects([...$current,...$destination],$surface))return $result;
+        if (in_array($kind, ['walk','shift','teleport'], true) && ($byId[$levelId]['hidden'] ?? false) !== true) {
             $stairs = $levelId === self::BASE ? ($mapLevels['baseStairs'] ?? []) : ($byId[$levelId]['stairs'] ?? []);
             foreach ($stairs as $stair) {
                 $target = $stair['linkedLevelId'] ?? '';
@@ -229,11 +244,12 @@ final class FloorGeometry
                 if ($crossing['fired']) { $result['levelId']=$target; $result['cause']='stairs'; break; }
                 if ($crossing['endsInside']) {
                     $result['traversal']=['stairId'=>$stair['id'], 'signature'=>$signature, 'entry'=>$crossing['entry']];
+                    $supportedStair = (($stair['direction'] ?? '') === 'down' && $crossing['entry'] === 'green') || (($stair['direction'] ?? '') === 'up' && $crossing['entry'] === 'red');
                     break;
                 }
             }
         }
-        $fall = self::fallingDestination([...$current, ...$destination, 'levelId'=>$result['levelId']], $mapLevels);
+        $fall = $supportedStair ? null : self::fallingDestination([...$current, ...$destination, 'levelId'=>$result['levelId']], $mapLevels, $surfaces);
         if ($fall !== null) { $result['levelId']=$fall; $result['cause']='fall'; $result['traversal']=null; }
         return $result;
     }

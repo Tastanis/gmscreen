@@ -879,3 +879,13 @@ roadmap checklist is retained as history, with an explicit current-status link.
 Pending UI proposals and all remaining original scope stay open.
 
 Shared damage, healing, temporary stamina and damage-refund chat omit enemy current/maximum stamina when the board returns `hideHitPointValues:true`. This flag is derived from the player audience even for GM-run abilities. Damage amounts and immunity/weakness adjustments remain visible. It is a runtime hook result, not an authored JSON field.
+
+### September 27 movement clarification
+
+Existing teleport distance is checked against the selected destination's maximum
+horizontal/vertical displacement. The user chooses the destination height before
+the move commits; a grounded airborne arrival yields a separate fall review.
+Height labels are surface elevation + 1. Forced-movement collision damage now uses
+the shared authoritative resolver and durable per-target records, including authored
+damage type. Falls offer editable damage and Prone with uncertain outcomes retained
+for GM review, never automatic replay. No new ability JSON fields were introduced.

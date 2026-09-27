@@ -1,4 +1,25 @@
+## Current map runtime authority — September 27, 2026
+
+The deployable source is now checked in under `dnd/vtt/assets/js/ui/`, the Sync V2
+API and `dnd/vtt/lib/`. Older references below to ignored prototype modules are
+historical. Never copy those prototype modules over the repository version.
+Read `docs/vtt-map-runtime-release.md` for packaging, migration and verification.
+Read `docs/dungeon-alchemist-map-import.md` before map work. Preserve native files,
+exported images and existing sandbox data; code updates never require scene setup.
+The campaign vault's AGENTS.md and .claude/CLAUDE.md already point to that same guide.
+
 # Claude Code Development Notes
+
+## Dungeon Alchemist layered maps
+
+Before creating, exporting, importing, or repairing Dungeon Alchemist maps,
+read `docs/dungeon-alchemist-map-import.md` and the current `AGENTS.md`.
+Follow the guide's source lookup, preservation rules, and validation passes.
+Its prototype artifacts are local and Git-ignored; recover missing inputs rather
+than inventing them. Never run rebuild/setup scripts as routine sandbox refreshes.
+The campaign vault entry point is `Guides/Dungeon-Alchemist-Map-Import.md` under
+`C:/Users/tasta/Desktop/Claude Work/Claude DND/Obsidian DND/Claude dnd`.
+Keep technical instructions in the gmscreen guide; vault instructions link to it.
 
 ## Version System
 

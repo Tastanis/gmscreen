@@ -170,7 +170,10 @@ export function normalizePlacementEntry(entry) {
   const normalized = {
     id,
     movementMode: ['fly', 'hover'].includes(entry.movementMode) ? entry.movementMode : 'ground',
+    _supportSurfaceId: typeof entry._supportSurfaceId === "string" ? entry._supportSurfaceId : null,
+    flightHeight: Number.isFinite(entry.flightHeight) ? entry.flightHeight : null,
     primaryPc: entry.primaryPc === true,
+    visionOwners: Array.isArray(entry.visionOwners) ? entry.visionOwners.filter(id=>typeof id==='string') : [],
     tokenId,
     name,
     imageUrl,
@@ -309,6 +312,10 @@ function normalizePlacementTraits(value) {
   if (!value || typeof value !== 'object') {
     return traits;
   }
+  for(const key of ['agility','might','stability']){
+    const number=Number(value[key]);if(value[key]!==undefined&&value[key]!==null&&Number.isFinite(number)&&Math.abs(number)<=1000000)traits[key]=number;
+  }
+  if(typeof value.size==='string'||Number.isFinite(value.size))traits.size=value.size;
 
   const speed = toOptionalMovementSpeed(value.speed ?? value.movement ?? null);
   if (speed !== null) {

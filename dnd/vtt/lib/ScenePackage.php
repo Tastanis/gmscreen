@@ -82,6 +82,19 @@ final class ScenePackage
             foreach ($config['fogOfWar']['byLevel'] as $id=>$value) $fog[$maps['levels'][$id]] = $value;
             $config['fogOfWar']['byLevel'] = $fog;
         }
+        foreach (['roofs'=>['levelId'],'ramps'=>['fromLevel','toLevel']] as $list=>$fields) {
+            foreach ($config['environment']['walls']['value'][$list] ?? [] as $index=>$item) {
+                if ($list === 'ramps' && isset($item['id'], $item['fromLevel'], $item['toLevel'])) {
+                    $pair=[$item['fromLevel'],$item['toLevel']]; sort($pair,SORT_STRING);
+                    $item['id']=$fresh('stairs',json_encode([$pair,$item['id']],JSON_THROW_ON_ERROR));
+                }
+                foreach ($fields as $field) if (isset($item[$field])) {
+                    if (!isset($maps['levels'][$item[$field]])) throw new InvalidArgumentException('Map design references a missing floor.');
+                    $item[$field]=$maps['levels'][$item[$field]];
+                }
+                $config['environment']['walls']['value'][$list][$index]=$item;
+            }
+        }
         unset($config);
         $copy['scene']['id'] = $targetSceneId;
         $copy['scene']['folderId'] = null;
@@ -160,7 +173,7 @@ final class ScenePackage
         $scan = static function (array $value) use (&$scan, &$assets): void {
             foreach ($value as $key=>$item) {
                 if (is_array($item)) $scan($item);
-                elseif (in_array($key, ['mapUrl','imageUrl','thumbnailUrl','image','backgroundUrl','assetUrl'], true)
+                elseif (in_array($key, ['mapUrl','imageUrl','thumbnailUrl','image','backgroundUrl','assetUrl','imageId'], true)
                     && is_string($item) && trim($item) !== '' && !str_starts_with($item, 'data:')) $assets[$item] = true;
             }
         };

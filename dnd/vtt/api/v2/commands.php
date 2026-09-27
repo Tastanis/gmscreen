@@ -36,6 +36,9 @@ try {
         'level.user.set' => 'levels',
         'level.activate' => 'levels',
         'grid.set' => 'grid',
+        'environment.set' => 'levels',
+        'environment.portal.set' => 'levels',
+        'environment.terrain.patch' => 'levels',
         'scene.activate' => 'scenes',
         'routing.set' => 'routing',
     ];

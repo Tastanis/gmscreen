@@ -2,6 +2,9 @@
 declare(strict_types=1);
 require_once __DIR__ . '/ScenePackage.php';
 require_once __DIR__ . '/FloorGeometry.php';
+require_once __DIR__ . '/SceneEnvironment.php';
+require_once __DIR__ . '/PlayerRoster.php';
+require_once __DIR__ . '/FlightHeight.php';
 
 final class SceneImportValidation
 {
@@ -11,7 +14,13 @@ final class SceneImportValidation
         self::scan($package);
         if (!is_string($package['scene']['mapUrl'] ?? null) || trim($package['scene']['mapUrl']) === '') throw new InvalidArgumentException('The imported scene needs a base map image.');
         $domains = $package['domains'];
+        foreach (($domains['sceneConfig']['environment'] ?? []) as $field=>$entry) {
+            if (!is_array($entry)||!is_int($entry['revision'] ?? null)||$entry['revision']<1||!is_array($entry['value'] ?? null)) throw new InvalidArgumentException('Invalid map design revision.');
+            SceneEnvironment::validate($field,$entry['value']);
+        }
         foreach ($domains['placements'] as $entry) {
+            if(isset($entry['visionOwners']) && array_diff(PlayerRoster::normalize($entry['visionOwners']),PlayerRoster::playerIds()))throw new InvalidArgumentException('Unknown token vision owner.');
+            if(array_key_exists('flightHeight',$entry))FlightHeight::validate($entry['flightHeight']);
             self::point($entry, 'column', 'row');
             foreach (['width','height'] as $key) if (isset($entry[$key])) self::number($entry[$key], $key, 0.01);
             foreach (['hidden','primaryPc'] as $key) if (isset($entry[$key]) && !is_bool($entry[$key])) throw new InvalidArgumentException($key . ' must be boolean.');

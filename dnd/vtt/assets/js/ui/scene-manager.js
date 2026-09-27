@@ -1,3 +1,4 @@
+// Sandbox relocated level controls
 import {
   createScene,
   createSceneFolder,
@@ -117,7 +118,7 @@ export function renderSceneList(routes, store) {
       state.boardState && typeof state.boardState.sceneState === 'object'
         ? state.boardState.sceneState
         : {};
-    const openFloorEditors = new Set([...container.querySelectorAll('.scene-level__edit[open]')].map(el => {
+    const openFloorEditors = new Set([...document.querySelectorAll('.scene-level__edit[open]')].map(el => {
       const row=el.closest('[data-map-level-id]'); return JSON.stringify([row.dataset.sceneId,row.dataset.mapLevelId]);
     }));
     container.innerHTML = buildSceneMarkup(
@@ -160,7 +161,8 @@ export function renderSceneList(routes, store) {
     return null;
   };
 
-  container.addEventListener('click', async (event) => {
+  document.addEventListener('click', async (event) => {
+    if (!container.contains(event.target) && !event.target.closest('#edits-levels')) return;
     const target = event.target.closest('[data-action]');
     if (!target) return;
 
@@ -520,7 +522,8 @@ export function renderSceneList(routes, store) {
     }
   });
 
-  container.addEventListener('change', async (event) => {
+  document.addEventListener('change', async (event) => {
+    if (!container.contains(event.target) && !event.target.closest('#edits-levels')) return;
     const heightInput = event.target.closest('[data-action="set-map-level-height"]');
     if (heightInput) {
       const sceneId = heightInput.dataset.sceneId, levelId = heightInput.dataset.mapLevelId;

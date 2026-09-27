@@ -16,6 +16,7 @@ try {
                 'entityRevision'=>$snapshot['state']['placements']['scene']['hero']['_entityRevision'],'patch'=>$patch]]]], $isGm ? 'GM' : 'cal', $isGm);
     };
     $patch(['movementMode'=>'fly']);
+    $patch(['flightHeight'=>7]);
     $snapshot = $store->getSnapshot();
     $store->acceptTokenMove(['type'=>'token.move','operationId'=>'air-walk-over-hole','sceneId'=>'scene','entityId'=>'hero',
         'baseRevision'=>$snapshot['revision'],'entityRevision'=>$snapshot['state']['placements']['scene']['hero']['_entityRevision'],
@@ -23,6 +24,7 @@ try {
     verifyAir($store->getSnapshot()['state']['placements']['scene']['hero']['levelId'] === 'upper', 'Flying token stays over a hole.');
     unset($store); $store = new SyncV2Store($database);
     verifyAir($store->getSnapshot()['state']['placements']['scene']['hero']['movementMode'] === 'fly', 'Flight survives reload.');
+    verifyAir((float)$store->getSnapshot()['state']['placements']['scene']['hero']['flightHeight']===7.0, 'Explicit flight altitude survives movement and reload.');
     $patch(['movementMode'=>'hover']); $patch(['conditions'=>[['name'=>'Prone']]]);
     verifyAir($store->getSnapshot()['state']['placements']['scene']['hero']['levelId'] === 'upper', 'Hover remains airborne while prone.');
     $rejected = false;
@@ -81,3 +83,20 @@ try {
     unset($store, $patch);
     foreach (['', '-wal', '-shm'] as $suffix) if (is_file($database . $suffix)) unlink($database . $suffix);
 }
+
+$config=['environment'=>['terrain'=>['value'=>['n'=>3,'m'=>2,'h'=>[0,5,0,0,5,0],'bounds'=>['left'=>0,'top'=>0,'width'=>4,'height'=>2]]]]];
+$from=['column'=>0,'row'=>0,'movementMode'=>'fly','width'=>1,'height'=>1,'flightHeight'=>2];
+$to=[...$from,'column'=>3];
+$height=FlightHeight::resolve($from,$to,$config);
+verifyAir($height===5.0,'Crossing a hill raises canonical altitude.');
+verifyAir(FlightHeight::resolve([...$to,'flightHeight'=>$height],[...$from,'flightHeight'=>$height],$config)===5.0,'Returning to lower ground never lowers retained flight.');
+verifyAir(FlightHeight::resolve($from,[...$to,'movementMode'=>'ground'],$config)===null,'Ground mode clears retained flight height.');
+verifyAir(FlightHeight::resolve($from,$to,$config,'teleport')===2.0,'Teleport ignores intervening hills.');
+verifyAir(FlightHeight::resolve([...$to,'flightHeight'=>5],$from,$config,'undo')===2.0,'Undo restores recorded altitude without climbing the intervening hill again.');
+
+verifyAir(FlightHeight::resolve($from,$to,$config,'forced')===5.0,'Accepted forced flight follows crossed ground; collision resolver clips steep paths first.');
+require_once __DIR__.'/../../../lib/WallMovement.php';
+$blocked=false;
+try{WallMovement::assertAllowed($from,$to,$config,'forced',[],true);}catch(InvalidArgumentException $e){$blocked=str_contains($e->getMessage(),'steep uphill');}
+verifyAir($blocked,'Server rejects forced flight through rising terrain even without a wall document.');
+WallMovement::assertAllowed($from,$to,$config,'teleport',[],false);

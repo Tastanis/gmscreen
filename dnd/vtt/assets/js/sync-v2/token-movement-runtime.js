@@ -134,6 +134,7 @@ export function createTokenMovementRuntime({
         || changeSet?.pings
         || changeSet?.fog
         || changeSet?.levels
+        || changeSet?.environment
         || changeSet?.grid
         || changeSet?.sceneRouting
       ) {
@@ -249,6 +250,8 @@ export function createTokenMovementRuntime({
           row: preview.row,
           movementKind: move.movementKind || 'walk',
           path: move.path || [],
+          ...(move.teleportChoice ? {teleportChoice:move.teleportChoice} : {}),
+          ...(move.forcedDestination ? {forcedDestination:move.forcedDestination} : {}),
           ...(move.undoRevision !== undefined ? { undoRevision: move.undoRevision } : {}),
         },
         {
@@ -259,7 +262,7 @@ export function createTokenMovementRuntime({
       );
     } catch (error) {
       const conflictSnapshot = error?.response?.snapshot;
-      if (retry && move.undoRevision === undefined && error?.status === 409 && conflictSnapshot) {
+      if (retry && !move.teleportChoice && !move.forcedDestination && move.undoRevision === undefined && error?.status === 409 && conflictSnapshot) {
         store.replaceSnapshot(conflictSnapshot, { authoritative: true, source: 'conflict' });
         reconcileSnapshot(store.getConfirmedSnapshot(), { source: 'conflict' });
         return submitOne(sceneId, move, false);
@@ -293,6 +296,7 @@ export function createTokenMovementRuntime({
           row: Number(move?.row),
           movementKind: move.movementKind || 'walk',
           path: move.path || [],
+          ...(move.teleportChoice?{teleportChoice:move.teleportChoice}:{}),
         }))
       );
       return [result];
@@ -346,6 +350,8 @@ export function createTokenMovementRuntime({
             placementId,
             patch,
             movementKind: op.movementKind || (op.type === 'placement.move' ? 'walk' : 'forced'),
+            ...(op.teleportChoice ? {teleportChoice:op.teleportChoice} : {}),
+            ...(op.forcedDestination ? {forcedDestination:op.forcedDestination,collisionDamageType:op.collisionDamageType||''} : {}),
             path: op.path || [],
             entityRevision: Number(current?._entityRevision) || 0,
           });
@@ -365,7 +371,7 @@ export function createTokenMovementRuntime({
       return await commandClient.submit('placement.batch', { actions });
     } catch (error) {
       const conflictSnapshot = error?.response?.snapshot;
-      if (retry && error?.status === 409 && conflictSnapshot) {
+      if (retry && !actions.some(action=>action.forcedDestination||action.teleportChoice) && error?.status === 409 && conflictSnapshot) {
         store.replaceSnapshot(conflictSnapshot, { authoritative: true, source: 'conflict' });
         reconcileSnapshot(store.getConfirmedSnapshot(), { source: 'conflict' });
         const safe = actions.every(action => {
@@ -463,6 +469,9 @@ export function createTokenMovementRuntime({
       || type === 'level.user.set'
       || type === 'level.activate'
       || type === 'grid.set'
+      || type === 'environment.set'
+      || type === 'environment.portal.set'
+      || type === 'environment.terrain.patch'
     ) {
       return Number(state.sceneConfig?.[sceneId]?._revision) || 0;
     }
@@ -496,7 +505,7 @@ export function createTokenMovementRuntime({
         const conflictSnapshot = error?.response?.snapshot;
         const retryableSharedConfig = new Set([
           'fog.set', 'levels.set', 'level.user.set', 'level.activate',
-          'grid.set', 'scene.activate', 'routing.set',
+          'grid.set', 'scene.activate', 'routing.set', 'environment.set', 'environment.portal.set', 'environment.terrain.patch',
         ]);
         if (error?.status === 409 && conflictSnapshot) {
           store.replaceSnapshot(conflictSnapshot, { authoritative: true, source: 'conflict' });
@@ -594,7 +603,7 @@ export function createTokenMovementRuntime({
         boardState.sceneState[sceneId] && typeof boardState.sceneState[sceneId] === 'object'
           ? boardState.sceneState[sceneId]
           : {};
-      for (const field of ['grid', 'fogOfWar', 'mapLevels', 'userLevelState', 'pcTokenAssociations']) {
+      for (const field of ['grid', 'fogOfWar', 'mapLevels', 'userLevelState', 'pcTokenAssociations', 'environment']) {
         if (Object.prototype.hasOwnProperty.call(config ?? {}, field)) {
           boardState.sceneState[sceneId][field] = clone(config[field]);
         }

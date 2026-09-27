@@ -619,7 +619,7 @@ export function createTokenInteractions({
     }
   }
 
-  function endTokenDrag({ commit = false, pointerId = null } = {}) {
+  function endTokenDrag({ commit = false, pointerId = null, movementKind = 'walk' } = {}) {
     // Cancel any pending drag render so the final render below is immediate
     if (dragRenderRafId != null) {
       cancelFrame(dragRenderRafId);
@@ -702,7 +702,7 @@ export function createTokenInteractions({
     }
 
     if (commit && moved && preview && preview.size) {
-      commitDragPreview(preview, { startTime, deferredUpdates, originalPositions });
+      commitDragPreview(preview, { startTime, deferredUpdates, originalPositions, movementKind });
     } else {
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
     }
@@ -760,7 +760,7 @@ export function createTokenInteractions({
 
   function commitDragPreview(
     preview,
-    { startTime = 0, deferredUpdates = null, originalPositions = null } = {}
+    { startTime = 0, deferredUpdates = null, originalPositions = null, movementKind = 'walk' } = {}
   ) {
     if (typeof boardApi.updateState !== 'function') {
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
@@ -833,6 +833,7 @@ export function createTokenInteractions({
         moves,
         originalPositions,
         source: 'drag',
+        movementKind,
       });
       return;
     }

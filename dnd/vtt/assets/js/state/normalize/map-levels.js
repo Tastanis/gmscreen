@@ -474,7 +474,7 @@ function normalizeLinkedProfileId(value) {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
 }
 
-function resolvePlacementLinkedProfileId(placement) {
+export function resolvePlacementLinkedProfileId(placement) {
   if (!placement || typeof placement !== 'object') {
     return null;
   }

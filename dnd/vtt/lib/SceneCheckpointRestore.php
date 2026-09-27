@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/FloorGeometry.php';
+require_once __DIR__ . '/SceneEnvironment.php';
 
 /** Read-only restore planning; only the listed scope may later be applied. */
 final class SceneCheckpointRestore
@@ -23,6 +24,19 @@ final class SceneCheckpointRestore
             if (($config[$field] ?? []) !== $value) $configChanges[] = $field;
             $config[$field] = $value;
         }
+        // Older checkpoints contain no environment; preserve current design in that case.
+        if (isset($saved['sceneConfig']['environment'])) {
+            $environment=$saved['sceneConfig']['environment'];
+            foreach ($environment as $field=>&$entry) {
+                SceneEnvironment::validate($field,$entry['value']);
+                $entry['revision']=(int)($currentConfig['environment'][$field]['revision'] ?? 0)+1;
+            }
+            unset($entry);
+            // Restoring layout must not revive explored memory from before a GM reset.
+            if(isset($currentConfig['environment']['exploration'])) $environment['exploration']=$currentConfig['environment']['exploration'];
+            $config['environment']=$environment;
+            $configChanges[]='environment';
+        }
         FloorGeometry::validateElevations($config['mapLevels'] ?? []);
         $levels = ['level-0'=>['id'=>'level-0']];
         foreach ($config['mapLevels']['levels'] ?? [] as $floor) {
@@ -43,7 +57,7 @@ final class SceneCheckpointRestore
             if (!isset($levels[$next['levelId']])) { $next['levelId']='level-0'; $reason='Current floor is absent from the checkpoint'; }
             $candidate = [...$placement,...$next];
             if (!FloorGeometry::isAirborne($candidate)) {
-                $fall = FloorGeometry::fallingDestination($candidate,$config['mapLevels']);
+                $fall = FloorGeometry::fallingDestination($candidate,$config['mapLevels'],$config['environment']['walls']['value']['roofs']??[]);
                 if ($fall !== null) { $next['levelId']=$fall; $reason='Restored geometry does not support this token'; }
             }
             if ($from !== $next) {

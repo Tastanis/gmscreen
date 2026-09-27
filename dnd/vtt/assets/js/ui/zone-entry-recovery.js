@@ -1,3 +1,4 @@
+import {collisionRequest} from '../services/collision-effects.js';
 import {zoneEntryRequest} from '../services/zone-entry-claims.js';
 
 export function mountZoneEntryRecovery(root,store,{api=zoneEntryRequest}={}) {
@@ -44,6 +45,27 @@ export function mountZoneEntryRecovery(root,store,{api=zoneEntryRequest}={}) {
         list.append(row);
       }
       status.textContent=claims.length?`${claims.length} unresolved entries${claims.length>=limit?' (oldest first; refresh after resolving to see more)':''}. Check stamina and conditions before resolving.`:'No unresolved zone entries.';
+      const collisions=await collisionRequest();
+      for(const record of collisions){
+        const row=document.createElement('li'),title=document.createElement('strong'),detail=document.createElement('p');
+        const state=store.getState?.() ?? {};
+        const placements=state.placements?.[record.sceneId] ?? state.boardState?.placements?.[record.sceneId];
+        const target=Array.isArray(placements)?placements.find(p=>p.id===record.targetId):placements?.[record.targetId];
+        title.textContent=`${record.kind==='fall'?'Fall review':'Collision damage'}: ${target?.name || record.targetId}`;
+        detail.textContent=`${record.amount}${record.damageType?' '+record.damageType:''} damage before resistance; ${record.status}. Scene ${record.sceneId}. Check current stamina before resolving. Movement ${record.operationId}`;
+        if(record.kind==='fall')detail.textContent=`Fell ${record.details?.squares} squares; ${record.status}. Review stamina, prone and landing for all affected creatures. No automatic replay.`;row.append(title,detail);
+        for(const [outcome,label] of [['completed','Mark damage resolved'],['dismissed','Dismiss without replay']]){
+          const button=document.createElement('button');button.type='button';button.className='btn';button.textContent=label;
+          button.addEventListener('click',async()=>{
+            if(busy)return;setBusy(true);
+            try{await collisionRequest({action:'finish',operationId:record.operationId,targetId:record.targetId,status:outcome});setBusy(false);await refresh();}
+            catch(error){status.textContent=`Collision outcome unconfirmed: ${error.message}`;setBusy(false);}
+          });row.append(button);
+        }
+        list.append(row);
+      }
+      if(collisions.length)status.textContent+=` ${collisions.length} collision damage outcomes need review. No damage is automatically replayed.`;
+
     } catch(error) {status.textContent=`Could not refresh entries: ${error.message}`;}
     finally {setBusy(false);}
   }

@@ -1,6 +1,13 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/FloorGeometry.php';
+require_once __DIR__ . '/SceneEnvironment.php';
+require_once __DIR__ . '/FlightHeight.php';
+require_once __DIR__ . '/WallMovement.php';
+require_once __DIR__ . '/ForcedMovement.php';
+require_once __DIR__ . '/CollisionEffects.php';
+require_once __DIR__ . '/FallOutcome.php';
+require_once __DIR__ . '/TeleportLanding.php';
 require_once __DIR__ . '/MovementUndo.php';
 require_once __DIR__ . '/PlayerRoster.php';
 require_once __DIR__ . '/SceneCheckpointArchive.php';
@@ -655,6 +662,7 @@ final class SyncV2Store
         bool $isGm
     ): array {
         $normalized = $this->normalizeBoardDomainCommand($command);
+        if (in_array($normalized['type'], ['environment.set','environment.portal.set','environment.terrain.patch'], true) && !$isGm) throw new InvalidArgumentException('Map design is GM-only.');
         $actorId = trim($actorId);
         if ($actorId === '') {
             throw new InvalidArgumentException('An authenticated actor ID is required.');
@@ -742,7 +750,7 @@ final class SyncV2Store
                 $eventPayload = ['ping' => $ping];
             } elseif (in_array($type, [
                 'fog.set', 'levels.set', 'level.delete', 'level.user.set',
-                'level.activate', 'grid.set',
+                'level.activate', 'grid.set', 'environment.set', 'environment.portal.set', 'environment.terrain.patch',
             ], true)) {
                 $state['sceneConfig'] = is_array($state['sceneConfig'] ?? null)
                     ? $state['sceneConfig']
@@ -771,7 +779,21 @@ final class SyncV2Store
                 }
                 $config['_revision'] = $currentRevision + 1;
                 $entityRevision = $config['_revision'];
-                if ($type === 'fog.set') {
+                if ($type === 'environment.set') {
+                    $config['environment'] = SceneEnvironment::apply($config['environment'] ?? [], $payload);
+                    $eventType = 'environment.changed';
+                    $eventPayload = ['field'=>$payload['field'], 'entry'=>$config['environment'][$payload['field']]];
+                } elseif ($type === 'environment.portal.set') {
+                    $config['environment'] = SceneEnvironment::portal($config['environment'] ?? [], $payload);
+                    $eventType='environment.portalChanged';
+                    $segments=$config['environment']['walls']['value']['segments'];
+                    $edge=array_values(array_filter($segments,fn($e)=>$e['id']===$payload['segmentId']))[0];
+                    $eventPayload=['segment'=>$edge,'wallsRevision'=>$config['environment']['walls']['revision']];
+                } elseif ($type === 'environment.terrain.patch') {
+                    $config['environment']=SceneEnvironment::terrainPatch($config['environment'] ?? [],$payload);
+                    $eventType='environment.terrainPatched';
+                    $eventPayload=['patch'=>$payload['patch'],'terrainRevision'=>$config['environment']['terrain']['revision']];
+                } elseif ($type === 'fog.set') {
                     $config['fogOfWar'] = $payload['fogOfWar'];
                     $eventType = 'fog.replaced';
                     $eventPayload = ['fogOfWar' => $config['fogOfWar']];
@@ -790,6 +812,9 @@ final class SyncV2Store
                     $config['userLevelState'] = $this->reconcileFloorViews(
                         $config['userLevelState'] ?? [], $config['mapLevels'] ?? [], $payload['mapLevels']
                     );
+                    $removedLevels=array_values(array_diff(array_column($config['mapLevels']['levels']??[], 'id'),array_column($payload['mapLevels']['levels']??[], 'id')));
+                    $oldEnvironment=$config['environment']??[];
+                    $config['environment']=SceneEnvironment::removeLevels($oldEnvironment,$removedLevels);
                     $config['mapLevels'] = $payload['mapLevels'];
                     foreach ($mutations as $mutation) {
                         if (!in_array('levelId', $mutation['changedFields'], true)) continue;
@@ -799,6 +824,7 @@ final class SyncV2Store
                     }
                     $eventType = 'levels.replaced';
                     $eventPayload = ['mapLevels' => $config['mapLevels'], 'userLevelState' => $config['userLevelState'], 'mutations'=>$mutations];
+                    if($oldEnvironment!==$config['environment'])$eventPayload['environment']=$config['environment'];
                     if ($removedContent !== null) $eventPayload['removedContent'] = $removedContent;
                     if ($visibilityChanges !== []) $eventPayload['visibilityChanges'] = $visibilityChanges;
                     if ($removedContent !== null || $visibilityChanges !== []) {
@@ -1325,12 +1351,18 @@ final class SyncV2Store
                         return $this->rollbackConflict('placement_exists', $snapshot);
                     }
                     $placement = $action['placement'];
+                    if (isset($placement['visionOwners'])) {
+                        if (!$isGm && $placement['visionOwners']!==[]) throw new InvalidArgumentException('Only the GM may assign vision owners.');
+                        $placement['visionOwners']=$this->validateVisionOwners($placement['visionOwners']);
+                    }
                     if (isset($placement['primaryPc']) && !is_bool($placement['primaryPc'])) throw new InvalidArgumentException('Primary token flag must be boolean.');
                     if (!$isGm && !empty($placement['primaryPc'])) throw new InvalidArgumentException('Only the GM may select a primary token.');
                     if (($placement['primaryPc'] ?? false) === true && $this->linkedPlayerProfileForPlacement($placement) === null) throw new InvalidArgumentException('A primary token must link to a configured player profile.');
                     if (isset($placement['movementMode']) && !in_array($placement['movementMode'], ['ground','fly','hover'], true)) throw new InvalidArgumentException('Unknown movement mode.');
                     if (($placement['movementMode'] ?? '') === 'fly' && FloorGeometry::flightInterrupted($placement)) throw new InvalidArgumentException('Prone or speed-zero conditions prevent ordinary flight.');
-                    unset($placement['_movementUndo'], $placement['_floorTraversal']);
+                    if(array_key_exists('flightHeight',$placement))FlightHeight::validate($placement['flightHeight']);
+                    if(FloorGeometry::isAirborne($placement))$placement['flightHeight']=FlightHeight::resolve($placement,$placement,$state['sceneConfig'][$sceneId]??[]);
+                    unset($placement['_movementUndo'], $placement['_floorTraversal'], $placement['_supportSurfaceId']);
                     if (!$isGm && $this->placementIsHidden($placement)) {
                         throw new InvalidArgumentException('Players cannot add hidden placements.');
                     }
@@ -1378,6 +1410,8 @@ final class SyncV2Store
 
                 $restore = $movementRestores[$sceneId.'::'.$placementId] ?? null;
                 $patch = $restore ?? $action['patch'];
+                if (array_key_exists('visionOwners',$patch)) $patch['visionOwners']=$this->validateVisionOwners($patch['visionOwners']);
+                if(array_key_exists('flightHeight',$patch)){FlightHeight::validate($patch['flightHeight']);if(!$isGm&&!$this->playerMayMovePlacement($current))throw new InvalidArgumentException('You cannot change this token flight height.');}
                 if (array_key_exists('movementMode', $patch)) {
                     if (!in_array($patch['movementMode'], ['ground', 'fly', 'hover'], true)) throw new InvalidArgumentException('Unknown movement mode.');
                     if (!$isGm && !$this->playerMayMovePlacement($current)) throw new InvalidArgumentException('You cannot change this token movement mode.');
@@ -1388,7 +1422,8 @@ final class SyncV2Store
                 if (!$isGm && $restore === null) {
                     $this->assertPlayerPatchAllowed($patch);
                 }
-                unset($patch['id'], $patch['_entityRevision'], $patch['_movementUndo'], $patch['_floorTraversal']);
+                unset($patch['id'], $patch['_entityRevision'], $patch['_movementUndo'], $patch['_floorTraversal'], $patch['_supportSurfaceId']);
+                $floor=null;
                 $next = [...$current, ...$patch];
                 if (isset($next['primaryPc']) && !is_bool($next['primaryPc'])) throw new InvalidArgumentException('Primary token flag must be boolean.');
                 if (($next['primaryPc'] ?? false) === true
@@ -1401,19 +1436,40 @@ final class SyncV2Store
                     $patch['movementMode'] = 'ground'; $next['movementMode'] = 'ground';
                 }
                 if (array_key_exists('movementMode', $patch)) {
-                    $floor = FloorGeometry::move($next, $next, $state['sceneConfig'][$sceneId]['mapLevels'] ?? [], 'forced');
+                    $floor = FloorGeometry::move($next, $next, $state['sceneConfig'][$sceneId]['mapLevels'] ?? [], 'forced', [], $state['sceneConfig'][$sceneId]['environment']['walls']['value']['roofs']??[]);
                     $patch['levelId'] = $floor['levelId']; $patch['_floorTraversal'] = null;
                     $patch['_movementUndo'] = [];
                     $next = [...$next, ...$patch];
                 }
+                if($restore===null && $action['forcedDestination']!==null){
+                    $plan=ForcedMovement::plan($current,$next,$action['forcedDestination'],$action['movementKind'],$state['placements'][$sceneId],$state['sceneConfig'][$sceneId]??[]);
+                    (new CollisionEffects($this->pdo,$this->worldId))->record($normalized['operationId'],$sceneId,$actorId,$placementId,$plan,$action['collisionDamageType']);
+                }
+                if ($restore === null && $action['forcedDestination']===null && (array_key_exists('column',$patch)||array_key_exists('row',$patch))) {
+                    if($action['movementKind']==='forced') ForcedMovement::assertClear($current,$next,$state['placements'][$sceneId],$state['sceneConfig'][$sceneId]??[]);
+                    WallMovement::assertAllowed($current,$next,$state['sceneConfig'][$sceneId]??[],$action['movementKind'],$action['path'],$isGm);
+                }
                 if (!array_key_exists('levelId', $patch)
                     && (array_key_exists('column', $patch) || array_key_exists('row', $patch))) {
-                    $floor = FloorGeometry::move($current, $next, $state['sceneConfig'][$sceneId]['mapLevels'] ?? [], $action['movementKind'], $action['path']);
+                    $floor = FloorGeometry::move($current, $next, $state['sceneConfig'][$sceneId]['mapLevels'] ?? [], $action['movementKind'], $action['path'], $state['sceneConfig'][$sceneId]['environment']['walls']['value']['roofs']??[]);
                     $patch['levelId'] = $floor['levelId'];
                     $patch['_floorTraversal'] = $floor['traversal'];
                     $next = [...$next, ...$patch];
                 } elseif (array_key_exists('levelId', $patch)) {
                     $next['_floorTraversal'] = null;
+                }
+                if(FloorGeometry::isAirborne($next)||array_key_exists('flightHeight',$current)||array_key_exists('flightHeight',$patch)){
+                    $patch['flightHeight']=FlightHeight::resolve($current,$next,$state['sceneConfig'][$sceneId]??[],$action['movementKind'],$action['path']);
+                    $next['flightHeight']=$patch['flightHeight'];
+                }
+                $teleport=null;
+                if($action['teleportChoice']!==null){
+                    if($action['movementKind']!=='teleport'||!is_array($action['teleportChoice']))throw new InvalidArgumentException('Invalid teleport choice.');
+                    $teleport=TeleportLanding::resolve($current,$next,$state['sceneConfig'][$sceneId]??[],$action['teleportChoice'],$isGm);$next=$teleport['placement'];$patch['levelId']=$next['levelId'];$patch['_supportSurfaceId']=$next['_supportSurfaceId'];$patch['flightHeight']=$next['flightHeight']??null;
+                } elseif(!empty($next['_supportSurfaceId'])&&!TeleportLanding::retained($next,$state['sceneConfig'][$sceneId]??[])){$next['_supportSurfaceId']=null;$patch['_supportSurfaceId']=null;}
+                if($restore===null){
+                    $fall=$teleport['fall']??FallOutcome::plan($current,$next,$state['sceneConfig'][$sceneId]??[],$action['movementKind'],$action['path'],$floor['cause']??'');
+                    if($fall){$landing=FallOutcome::landing($next,$state['placements'][$sceneId],$state['sceneConfig'][$sceneId]??[]);$next=$landing['placement'];$patch['column']=$next['column'];$patch['row']=$next['row'];unset($landing['placement']);(new CollisionEffects($this->pdo,$this->worldId))->recordFall($normalized['operationId'],$sceneId,$actorId,$placementId,[...$fall,...$landing]);}
                 }
                 $next['id'] = $placementId;
                 $next['_entityRevision'] = $nextRevision;
@@ -1727,12 +1783,34 @@ final class SyncV2Store
             $mapLevels = $state['sceneConfig'][$sceneId]['mapLevels'] ?? [];
             $restore = $normalized['undoRevision'] !== null
                 ? MovementUndo::restore($current, $actorId, $normalized['undoRevision'], $mapLevels) : null;
+            $collisionPlan=null;
+            if($restore===null && $normalized['forcedDestination']!==null){
+                $collisionPlan=ForcedMovement::plan($current,$next,$normalized['forcedDestination'],$normalized['movementKind'],$state['placements'][$sceneId],$state['sceneConfig'][$sceneId]??[]);
+            }
+            if ($restore === null && $collisionPlan===null && $normalized['movementKind']==='forced') ForcedMovement::assertClear($current,$next,$state['placements'][$sceneId],$state['sceneConfig'][$sceneId]??[]);
+            if ($restore === null && $collisionPlan===null) WallMovement::assertAllowed($current,$next,$state['sceneConfig'][$sceneId]??[],$normalized['movementKind'],$normalized['path'],$isGm);
             $floor = $restore !== null
                 ? ['levelId'=>$restore['levelId'], 'traversal'=>$restore['_floorTraversal'], 'cause'=>'undo']
-                : FloorGeometry::move($current, $next, $mapLevels, $normalized['movementKind'], $normalized['path']);
+                : FloorGeometry::move($current, $next, $mapLevels, $normalized['movementKind'], $normalized['path'], $state['sceneConfig'][$sceneId]['environment']['walls']['value']['roofs']??[]);
             if ($restore !== null) $next = [...$next, ...$restore];
             $next['levelId'] = $floor['levelId'];
             $next['_floorTraversal'] = $floor['traversal'];
+            if(FloorGeometry::isAirborne($next)||array_key_exists('flightHeight',$current)){
+                $next['flightHeight']=FlightHeight::resolve($current,$next,$state['sceneConfig'][$sceneId]??[],$restore !== null ? 'undo' : $normalized['movementKind'],$normalized['path']);
+                $event['payload']['flightHeight']=$next['flightHeight'];
+            }
+            $teleport=null;
+            if($normalized['teleportChoice']!==null){
+                if($normalized['movementKind']!=='teleport'||!is_array($normalized['teleportChoice']))throw new InvalidArgumentException('Invalid teleport choice.');
+                $teleport=TeleportLanding::resolve($current,$next,$state['sceneConfig'][$sceneId]??[],$normalized['teleportChoice'],$isGm);$next=$teleport['placement'];$floor['levelId']=$next['levelId'];$floor['traversal']=null;$event['payload']['flightHeight']=$next['flightHeight']??null;
+            } elseif(!empty($next['_supportSurfaceId'])&&!TeleportLanding::retained($next,$state['sceneConfig'][$sceneId]??[]))$next['_supportSurfaceId']=null;
+            $event['payload']['_supportSurfaceId']=$next['_supportSurfaceId']??null;
+            $fall=null;
+            if($restore===null){
+                $fall=$teleport['fall']??FallOutcome::plan($current,$next,$state['sceneConfig'][$sceneId]??[],$normalized['movementKind'],$normalized['path'],$floor['cause']);
+                if($fall){$landing=FallOutcome::landing($next,$state['placements'][$sceneId],$state['sceneConfig'][$sceneId]??[]);$next=$landing['placement'];unset($landing['placement']);(new CollisionEffects($this->pdo,$this->worldId))->recordFall($normalized['operationId'],$sceneId,$actorId,$placementId,[...$fall,...$landing]);}
+            }
+            if($collisionPlan!==null)(new CollisionEffects($this->pdo,$this->worldId))->record($normalized['operationId'],$sceneId,$actorId,$placementId,$collisionPlan);
             if ($restore === null) $next['_movementUndo'] = MovementUndo::record($current, $next, $actorId, $mapLevels, $normalized['operationId']);
             $state['placements'][$sceneId][$placementId] = $next;
             $event['payload']['column'] = $next['column'];
@@ -1767,6 +1845,7 @@ final class SyncV2Store
                 ];
             }
 
+            if($fall)$event['payload']['fallDistance']=$fall['squares'];
             if ($restore === null) {
                 $event['payload']['zoneEntryReceipt'] = ZoneEntryReceipt::create(
                     $sceneId, $placementId, $current, $next, $state['combat'][$sceneId] ?? [], $normalized['movementKind']
@@ -1790,6 +1869,14 @@ final class SyncV2Store
             $this->rollbackTransactionSilently();
             throw $error;
         }
+    }
+
+    public function collisionEffects(array $request,string $actor,bool $gm,bool $write=false):array {
+        $ledger=new CollisionEffects($this->pdo,$this->worldId);
+        if(!$write)return $ledger->list($actor,$gm,$request['operationId']??null);
+        $this->pdo->exec('BEGIN IMMEDIATE');
+        try{$result=$ledger->update($request,$actor,$gm);$this->pdo->exec('COMMIT');return $result;}
+        catch(Throwable $e){$this->rollbackTransactionSilently();throw $e;}
     }
 
     public function unresolvedZoneEntries(string $actorId,bool $isGm): array
@@ -2154,6 +2241,8 @@ final class SyncV2Store
             'row' => $row,
             'movementKind' => $this->normalizeMovementKind($command['payload']['movementKind'] ?? 'walk'),
             'path' => $this->normalizeMovementPath($command['payload']['path'] ?? []),
+            'forcedDestination' => $command['payload']['forcedDestination'] ?? null,
+            'teleportChoice' => $command['payload']['teleportChoice'] ?? null,
             'undoRevision' => isset($command['payload']['undoRevision']) ? (int) $command['payload']['undoRevision'] : null,
         ];
     }
@@ -2230,9 +2319,10 @@ final class SyncV2Store
                     }
                 }
                 $next['levelId'] = $destination;
+                $next['_supportSurfaceId'] = null;
                 $next['_floorTraversal'] = null;
                 $next['_movementUndo'] = [];
-                array_push($changedFields, 'levelId', '_floorTraversal', '_movementUndo');
+                array_push($changedFields, 'levelId', '_floorTraversal', '_movementUndo', '_supportSurfaceId');
             }
             if ($changedFields === []) continue;
             $next['_entityRevision'] = max(0, (int) ($placement['_entityRevision'] ?? 0)) + 1;
@@ -2372,7 +2462,7 @@ final class SyncV2Store
         $preview = SceneCheckpointRestore::previewPositions($checkpoint, $snapshot);
         $actions = [];
         foreach ($preview['changes'] as $change) {
-            $actions[] = ['kind'=>'patch', 'sceneId'=>$preview['sceneId'], 'placementId'=>$change['id'],
+            $actions[] = ['kind'=>'patch', 'movementKind'=>'teleport', 'sceneId'=>$preview['sceneId'], 'placementId'=>$change['id'],
                 'entityRevision'=>$change['entityRevision'], 'patch'=>$change['to']];
         }
         if ($actions === []) throw new InvalidArgumentException('No positions differ. Refresh the preview.');
@@ -2383,7 +2473,7 @@ final class SyncV2Store
 
     private function normalizeMovementKind($kind): string
     {
-        if (!in_array($kind, ['walk','forced','teleport'], true)) throw new InvalidArgumentException('Unknown movement kind.');
+        if (!in_array($kind, ['walk','shift','forced','teleport'], true)) throw new InvalidArgumentException('Unknown movement kind.');
         return $kind;
     }
 
@@ -2409,7 +2499,7 @@ final class SyncV2Store
             'template.upsert', 'template.remove',
             'drawing.upsert', 'drawing.remove',
             'ping.add', 'fog.set', 'levels.set', 'level.delete',
-            'level.user.set', 'level.activate', 'grid.set',
+            'level.user.set', 'level.activate', 'grid.set', 'environment.set', 'environment.portal.set', 'environment.terrain.patch',
             'scene.activate', 'routing.set',
         ];
         if (!in_array($type, $allowed, true)) {
@@ -2619,6 +2709,11 @@ final class SyncV2Store
                 $entry['patch'] = $action['patch'];
                 $entry['movementKind'] = $this->normalizeMovementKind($action['movementKind'] ?? 'forced');
                 $entry['path'] = $this->normalizeMovementPath($action['path'] ?? []);
+                $entry['forcedDestination'] = $action['forcedDestination'] ?? null;
+                $entry['teleportChoice']=$action['teleportChoice']??null;
+                $entry['collisionDamageType'] = $action['collisionDamageType'] ?? '';
+                if(!is_string($entry['collisionDamageType'])||strlen($entry['collisionDamageType'])>64)throw new InvalidArgumentException('Invalid collision damage type.');
+                if($entry['forcedDestination']!==null && (count($command['payload']['actions'])!==1 || isset($action['patch']['levelId']) || $entry['movementKind']!=='forced'))throw new InvalidArgumentException('Collision intent requires one forced movement without an explicit floor override.');
                 $entry['entityRevision'] = $this->normalizeEntityRevision($action);
             } elseif ($kind === 'remove') {
                 $entry['entityRevision'] = $this->normalizeEntityRevision($action);
@@ -3125,7 +3220,7 @@ final class SyncV2Store
     private function assertPlayerPatchAllowed(array $patch): void
     {
         $gmOnly = [
-            'primaryPc', 'profileId', 'profile', 'playerId', 'player', 'owner', 'controller', 'meta',
+            'visionOwners', 'primaryPc', 'profileId', 'profile', 'playerId', 'player', 'owner', 'controller', 'meta',
             'id', 'hidden', 'isHidden', 'flags', 'levelId', '_floorTraversal', '_movementUndo', 'width', 'height',
             'size', 'stackOrder', 'monster', 'monsterId', 'monsterRef',
             'team', 'name', 'label', 'image', 'imageUrl', 'tokenId',
@@ -3136,6 +3231,13 @@ final class SyncV2Store
                 throw new InvalidArgumentException('Only the GM may change placement field: ' . $field);
             }
         }
+    }
+
+    private function validateVisionOwners($owners): array
+    {
+        $normalized=PlayerRoster::normalize($owners);
+        if (array_diff($normalized,$this->playerCharacterUserIds)) throw new InvalidArgumentException('Vision owner must be a configured player.');
+        return $normalized;
     }
 
     private function normalizeOptionalId($value): ?string

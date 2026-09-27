@@ -1,3 +1,4 @@
+// Terrain sandbox ruler integration
 const SVG_NS = 'http://www.w3.org/2000/svg';
 import { claimActiveTool, publishActiveTool } from './active-tool.js';
 const MAX_MEASUREMENT_POINTS = 21; // 20 segments
@@ -42,9 +43,21 @@ export function mountDragRuler() {
     grid,
     overlaySize: { width: 0, height: 0 },
     mode: null,
+    movementLabel: 'Move',
   };
 
   sharedState = state;
+  // Match release priority, and update even while the pointer is stationary.
+  const updateMovementLabel = event => {
+    state.movementLabel = event.altKey ? 'Teleport' : event.ctrlKey ? 'Forced movement' : event.shiftKey ? 'Shift' : 'Move';
+    if (state.mode === 'external' && state.measuring) updateOverlay(state);
+  };
+  document.addEventListener('keydown', updateMovementLabel, true);
+  document.addEventListener('keyup', updateMovementLabel, true);
+  mapSurface.addEventListener('pointerdown', updateMovementLabel, true);
+  mapSurface.addEventListener('pointermove', updateMovementLabel, true);
+  window.addEventListener('blur', () => { state.movementLabel = 'Move'; });
+
 
   state.measureButton.setAttribute('aria-pressed', 'false');
 
@@ -318,7 +331,8 @@ function isPointerOverToken(event) {
 }
 
 function getSnappedPoint(state, event) {
-  const mapCoords = getMapCoordinates(state.mapTransform, event);
+  const rawCoords = getMapCoordinates(state.mapTransform, event);
+  const mapCoords = rawCoords && (window.terrainPrototype?.unproject(rawCoords) ?? rawCoords);
   if (!mapCoords) {
     return null;
   }
@@ -420,8 +434,10 @@ function getGridMetrics(grid, mapTransform) {
 }
 
 function updateOverlay(state) {
-  const points = getRenderablePoints(state);
-  const segments = getSegments(points);
+  const rawPoints = getRenderablePoints(state);
+  const terrain=window.terrainPrototype?.active ? window.terrainPrototype : null;
+  const points = terrain ? rawPoints.map(p=>({...p,...terrain.rulerPoint(p)})) : rawPoints;
+  const segments = getSegments(rawPoints).map(segment=>terrain ? {...segment,squares:terrain.route(segment.start,segment.end).cost,start:{...segment.start,...terrain.rulerPoint(segment.start)},end:{...segment.end,...terrain.rulerPoint(segment.end)}} : segment);
   const totalSquares = segments.reduce((sum, segment) => sum + segment.squares, 0);
 
   if (!segments.length) {
@@ -450,8 +466,10 @@ function updateOverlay(state) {
   // Build a king-move SVG path: diagonal segment from source, smooth bend,
   // cardinal segment into destination. Pure cardinal/diagonal collapses to
   // a straight line.
-  const pathD = buildArrowPathD(points, gridSize);
+  const pathD = terrain ? terrain.routePath(rawPoints) : buildArrowPathD(points, gridSize);
   state.overlay.path.setAttribute('d', pathD);
+  if(terrain)terrain.paintRoute(state.overlay,rawPoints,gridSize);
+  else {state.overlay.path.style.opacity='';state.overlay.svg.querySelector('[data-terrain-route]')?.remove();}
 
   // Stroke thickness scales with grid size so it looks consistent at any zoom.
   state.overlay.path.setAttribute(
@@ -474,13 +492,13 @@ function updateOverlay(state) {
   syncSegmentLabels(state.overlay.labels, segments);
 
   state.ruler.removeAttribute('hidden');
-  state.rulerValue.textContent =
-    totalSquares === 1 ? '1 square' : `${totalSquares} squares`;
+  const distanceLabel = totalSquares === 1 ? '1 square' : `${totalSquares} squares`;
+  state.rulerValue.textContent = state.mode === 'external' && state.measuring
+    ? `${state.movementLabel} - ${distanceLabel}` : distanceLabel;
 
   const endPoint = points[points.length - 1];
   if (state.overlay.total && endPoint) {
-    state.overlay.total.textContent =
-      totalSquares === 1 ? '1 square' : `${totalSquares} squares`;
+    state.overlay.total.textContent = state.rulerValue.textContent;
     state.overlay.total.setAttribute('x', endPoint.mapX);
     state.overlay.total.setAttribute('y', endPoint.mapY);
     state.overlay.total.removeAttribute('hidden');

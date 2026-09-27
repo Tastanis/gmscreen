@@ -16,24 +16,35 @@ same($first['levelId'], 'level-0', 'Halfway remains on current floor');
 $saved = json_decode(json_encode([...$from, 'row'=>2, '_floorTraversal'=>$first['traversal']]), true);
 same(FloorGeometry::move($saved, $end, $map)['levelId'], 'upper', 'Traversal survives serialization/reload');
 same(FloorGeometry::move($from, $end, $map, 'forced')['levelId'], 'level-0', 'Forced movement never climbs stairs');
-same(FloorGeometry::move($from, $end, $map, 'teleport')['levelId'], 'level-0', 'Teleport never crosses intervening stairs');
+same(FloorGeometry::move($from, $end, $map, 'teleport')['levelId'], 'upper', 'Teleport resolves the same stair landing as shift');
+same(FloorGeometry::move($from, ['column'=>2,'row'=>2], $map, 'teleport'), $first, 'Teleport partway retains stair progress instead of jumping to the top');
+same(FloorGeometry::move($saved, $end, $map, 'teleport')['levelId'], 'upper', 'Teleport resumes canonical stair progress');
+same(FloorGeometry::move($from, ['column'=>0,'row'=>0], $map, 'teleport', [$end])['levelId'], 'level-0', 'Skipped teleport waypoints cannot change floors');
+same(FloorGeometry::move([...$from,'movementMode'=>'fly'], $end, $map, 'teleport')['levelId'], 'level-0', 'Airborne teleport does not attach to stairs');
 same(FloorGeometry::move([...$from, 'row'=>2], $end, $map)['levelId'], 'level-0', 'Spawning inside is under stairs');
 same(FloorGeometry::move([...$from, 'column'=>0,'row'=>2], ['column'=>4,'row'=>2], $map)['levelId'], 'level-0', 'Side entry is a barrier');
 $changed = $map; $changed['baseStairs'][0]['edgeColors'] = [];
 same(FloorGeometry::move($saved, $end, $changed)['levelId'], 'level-0', 'Edited stair invalidates saved progress');
 $hidden = $map; $hidden['levels'][0]['hidden'] = true;
 same(FloorGeometry::move($from, $end, $hidden)['levelId'], 'level-0', 'Hidden destination cannot be used');
+same(FloorGeometry::move($from, $end, $hidden, 'teleport')['levelId'], 'level-0', 'Teleport cannot reveal hidden floor');
 $missing = $map; $missing['levels'] = [];
 same(FloorGeometry::move($from, $end, $missing)['levelId'], 'level-0', 'Deleted destination cannot be used');
 $reverse = [...$stair, 'direction'=>'down','linkedLevelId'=>'level-0'];
 $map['levels'][0]['stairs'] = [$reverse];
 same(FloorGeometry::move([...$from, 'row'=>4,'levelId'=>'upper'], ['column'=>2,'row'=>0], $map)['levelId'], 'level-0', 'Reverse descending traversal');
 
+same(FloorGeometry::move([...$from, 'row'=>4,'levelId'=>'upper'], ['column'=>2,'row'=>0], $map, 'teleport')['levelId'], 'level-0', 'Teleport descends like shift');
+
 // Even-sized tokens can stop with their center exactly on the entry edge.
 $large = [...$from, 'width'=>2,'height'=>2,'column'=>2,'row'=>0];
 $onEdge = FloorGeometry::move($large, ['column'=>2,'row'=>1], $map);
 $resume = [...$large, 'row'=>1,'_floorTraversal'=>$onEdge['traversal']];
 same(FloorGeometry::move($resume, ['column'=>2,'row'=>4], $map)['levelId'], 'upper', 'Boundary entrance is not counted twice');
+
+$northLanding = [...$reverse, 'edgeColors'=>['2,2-3,2'=>'green','3,2-4,2'=>'green','2,4-3,4'=>'red','3,4-4,4'=>'red']];
+same(FloorGeometry::crossing([['x'=>2.5,'y'=>2],['x'=>2.5,'y'=>5]],$northLanding)['fired'],true,'Turning back from the exact top edge descends');
+same(FloorGeometry::crossing([['x'=>2.5,'y'=>2],['x'=>2.5,'y'=>5]],$northLanding,'barrier')['fired'],false,'Known under-stair traversal does not attach at the edge');
 
 $hole = ['column'=>2,'row'=>2,'width'=>2,'height'=>2];
 $floors = ['levels'=>[
@@ -47,4 +58,4 @@ same(FloorGeometry::fullyUnsupported(['column'=>2,'row'=>2,'width'=>2,'height'=>
 ]]), true, 'Adjacent cutouts jointly remove support');
 same(FloorGeometry::fullyUnsupported(['column'=>2,'row'=>2,'width'=>3,'height'=>2], ['cutouts'=>[$hole]]), false, 'Large token remains supported');
 same(FloorGeometry::move(['levelId'=>'upper','column'=>0,'row'=>2], ['column'=>2,'row'=>2], $floors, 'forced')['levelId'], 'level-0', 'Forced movement still falls');
-echo "Floor geometry: 17 traversal, boundary, support and hidden/deleted-floor checks passed.\n";
+echo "Floor geometry: Traversal, teleport, boundary, support and hidden/deleted-floor checks passed.\n";

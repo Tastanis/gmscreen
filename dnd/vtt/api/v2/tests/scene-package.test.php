@@ -50,6 +50,9 @@ $reusable['domains']['placements']['hero']['tokenId'] = 'hero';
 $reusable['domains']['placements']['hero']['metadata'] = ['monsterId'=>'hero','abilities'=>[['id'=>'hero','text'=>'hero']]];
 $reusable['domains']['placements']['hero']['conditions'] = [['name'=>'Marked','sourceId'=>'hero','duration'=>['targetTokenId'=>'hero'], 'instanceId'=>'old','riderExecutions'=>['rider'=>'turn-old']]];
 $reusable['domains']['placements']['hero']['marks'] = ['test'=>['sourceId'=>'hero','targetId'=>'hero','abilityId'=>'hero']];
+$reusable['domains']['sceneConfig']['environment']=['walls'=>['revision'=>3,'value'=>['version'=>1,'nodes'=>[],'segments'=>[],
+    'roofs'=>[['levelId'=>'upper','height'=>3,'imageId'=>'/dnd/vtt/uploads/roof.png']],
+    'ramps'=>[['id'=>'stairs','fromLevel'=>'level-0','toLevel'=>'upper','left'=>0,'right'=>1,'top'=>0,'bottom'=>3,'base'=>0,'height'=>3]]]]];
 $source = $reusable;
 $prepared = ScenePackage::prepareForNewScene($reusable,'scn-new-scene-123');
 $copy = $prepared['package']; $ids = $prepared['idMap'];
@@ -69,3 +72,8 @@ $rejected=false;
 try { ScenePackage::prepareForNewScene($source,'scn-new-scene-123'); } catch (InvalidArgumentException $error) { $rejected=true; }
 verifyPackage($rejected, 'Cross-scene effect references cannot silently point back to the original encounter.');
 echo "Scene copy preparation: fresh IDs, linked geometry, combat references, stable retries and source preservation passed.\n";
+
+$design=$copy['domains']['sceneConfig']['environment']['walls']['value'];
+verifyPackage($design['ramps'][0]['id']===$floors['baseStairs'][0]['id'], 'Copied ramp retains the mirrored stair identity.');
+verifyPackage($design['ramps'][0]['toLevel']===$ids['levels']['upper'] && $design['roofs'][0]['levelId']===$ids['levels']['upper'], 'Roof and ramp levels follow copied floors.');
+verifyPackage(in_array('/dnd/vtt/uploads/roof.png',$copy['assetReferences'],true), 'Shared roof image is retained in the asset manifest.');

@@ -12,6 +12,13 @@ require_once __DIR__ . '/PusherClient.php';
  */
 final class SyncV2PusherTransport
 {
+    public static function boundedEvent(array $event): array
+    {
+        if(strlen(json_encode(['event'=>$event], JSON_THROW_ON_ERROR))<=8000)return $event;
+        // A notice never advances the client cursor. Fetch the original projected
+        // event (or a complete snapshot) through authenticated HTTP recovery.
+        return ['type'=>'sync.recoveryRequired','revision'=>$event['revision'],'operationId'=>$event['operationId'],'sceneId'=>$event['sceneId']??null];
+    }
     /**
      * Deliver canonical events to authenticated role-specific audiences.
      * GM clients receive the full event; player clients receive only the
@@ -50,13 +57,13 @@ final class SyncV2PusherTransport
             [
                 'channel' => $gmChannel,
                 'name' => 'sync-v2-event',
-                'data' => ['event' => $gmEvent],
+                'data' => ['event' => self::boundedEvent($gmEvent)],
                 'socket_id' => $excludeSocketId,
             ],
             [
                 'channel' => $playerChannel,
                 'name' => 'sync-v2-event',
-                'data' => ['event' => $playerEvent],
+                'data' => ['event' => self::boundedEvent($playerEvent)],
                 'socket_id' => $excludeSocketId,
             ],
         ];
@@ -103,7 +110,7 @@ final class SyncV2PusherTransport
             return $client->trigger(
                 $channel,
                 'sync-v2-event',
-                ['event' => $event],
+                ['event' => self::boundedEvent($event)],
                 $excludeSocketId
             );
         } catch (Throwable $error) {

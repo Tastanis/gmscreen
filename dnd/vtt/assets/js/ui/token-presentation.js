@@ -1,4 +1,5 @@
 import {getOrderedTokenMapLevels, getTokenLevelPresentation} from './token-levels.js';
+import {isAlwaysVisibleAlly} from './vision-ownership.js';
 const TOKEN_LEVEL_STACK_STRIDE = 10000;
 
 export function normalizeTokenRenderGeometry(placement = {}) {
@@ -9,9 +10,10 @@ export function normalizeTokenRenderGeometry(placement = {}) {
 
 export function resolveVisibleTokenPresentation(placement, levels, {viewerLevelId, gmViewing=false, isCellFogged=null} = {}) {
   if (!placement || (placement.hidden && !gmViewing)) return null;
-  const presentation=getTokenLevelPresentation(placement,levels,{viewerLevelId,gmViewing,mode:'vision'});
+  const teammate=isAlwaysVisibleAlly(placement);
+  const presentation=getTokenLevelPresentation(placement,levels,{viewerLevelId,gmViewing:gmViewing||teammate,mode:'vision'});
   if (!presentation.visible) return null;
-  if (!gmViewing && isCellFogged) {
+  if (!gmViewing && !teammate && isCellFogged) {
     let revealed=false;
     for(let dx=0;dx<placement.width && !revealed;dx++) {
       for(let dy=0;dy<placement.height && !revealed;dy++) {

@@ -1460,3 +1460,182 @@ changes reconcile the token layer. Fog domain events also refresh tokens and
 persistent-zone overlays, without remounting the scene or restoring a broad
 subscriber. See `tools/test-scene-visibility-browser.cjs` under `dnd/vtt` for the
 GM/two-player synthetic regression.
+
+## September 26 shared terrain sandbox authority
+
+`environment.set` is a GM-only sceneConfig command for revisioned terrain, wall/
+portal/roof documents and exploration reset markers. It uses existing V2 delivery,
+recovery and per-document stale-write checks. Packages/copies/checkpoint layout
+planning retain this domain. `FlightHeight.php` resolves retained flying altitude
+in canonical placement/movement transactions; event hydration carries flightHeight.
+`visionOwners` is GM-assigned, roster-validated and independent of PC sheet linkage.
+The local prototype consumes this authority; its renderer/assets are not promoted
+into the ordinary runtime by this change. See docs/dungeon-alchemist-map-import.md
+for test evidence, migration order and outstanding authoritative wall/polygon work.
+Ctrl-drag damage currently follows accepted movement with awaited separate saves;
+do not replay an uncertain collision or describe it as one atomic transaction.
+
+### Teleport stair destinations (September 26, sandbox build 462)
+
+Grounded teleports resolve the direct start-to-end stair crossing using the same
+canonical entry/exit rules as shifts. A partial climb retains `_floorTraversal`;
+exiting the linked landing changes floors. Descending behaves symmetrically.
+Teleport waypoints are ignored, and movement intent remains `teleport` for
+opportunity attacks and destination-only zone processing. Airborne tokens retain
+the existing flight behavior. This is stair-route floor inference, not arbitrary
+cross-floor teleport targeting. The sandbox retains low-step side entry and upper
+step walk-under behavior. Tests cover canonical persistence/reopening and both
+geometry implementations; no existing user tokens are moved for this check.
+
+### Server wall movement authority — September 26 (sandbox build 463)
+
+`WallMovement.php` validates saved `sceneConfig.environment.walls` inside both
+`token.move` and position-changing `placement.batch` transactions. It ports the
+client swept-footprint/height checks: strict touching permits wall sliding,
+waypoints are checked in order, open doors/windows pass, directional movement
+restrictions apply, and flight/floor/ramp elevations select intersecting walls.
+Stair entry/exit and falling remain in `FloorGeometry`; this does not change floor
+support authority. Imported floor plates are used only to match collision height,
+not to replace the rectangular server falling calculation.
+
+Preserved policies: GM walk/shift override, teleport skips intervening walls,
+trusted movement undo retains its existing receipt behavior, and forced movement
+collides for GM and players. A blocked command is rejected atomically; the server
+never clips a requested destination, applies collision damage, or replays effects.
+The existing Ctrl drag clips first, then runs confirmed zone and damage handling.
+A door closing after that preview causes rejection before damage. A later blocked
+member rolls back the entire placement batch. No client wall revision is trusted.
+Maps without a shared wall document retain existing behavior; migrate their design
+from the original GM browser before expecting enforcement. Arbitrary GM placement
+patches default to forced intent, so position-changing automation must explicitly
+supply teleport/walk/shift when those semantics are intended.
+
+Verification: 809 tests passed, including server rejection/atomicity, current door
+state, waypoint detours, flight, stair height, large footprints and reload.
+500 generated geometry cases and 240 actual Elfsong cases across floors/heights
+matched the client checker. `final-test/test-wall-authority.cjs` verified direct
+player API rejection for walk/shift/forced and accepted teleport delivery to GM,
+cal and sharon plus reload. An initial browser startup timeout passed on retry.
+`test-forced-collision.cjs` retained clipping and confirmed damage to both tokens.
+Browser tests removed their disposable tokens; native maps and user tokens were
+not edited. Production deployment and polygon-floor support unification remain
+separate work. The local updater installs WallMovement.php without rebuilding data.
+
+### Personal fog, drag labels and forced flight - September 26 (build 464)
+
+User decisions: personal explored areas stay in each player's browser and survive
+refresh, not party-wide/server-shared. Teleport may pass through darkness/walls;
+only destination support applies to falling. Floor deletion cleanup is deferred
+at the user's request. Grounded forced-movement slope/slam threshold is pending:
+emailed a same-scale comparison of arrow landmarks 1:1 green, 2:1 yellow, 4:1 red.
+These colors interpolate and use the steepest local eighth-square sample. The
+existing separate cliff check is 3:1, not the red landmark.
+
+Drag ruler shows Move / Shift / Forced movement / Teleport while dragging. Keydown,
+keyup and pointer modifiers use the same Alt > Ctrl > Shift priority as release;
+the label changes with a stationary pointer too. Pure measurement stays unchanged.
+Local updater applies patch-drag-label.py without removing terrain projection.
+
+Personal fog uses a stable per-player mask across owned-token switches, with
+compatible legacy per-token masks merged only for the same player, scene, map,
+reset epoch and geometry key. Other-player masks never merge. Terrain/map geometry
+changes still select another compatible mask; refresh alone does not. Periodic
+saving no longer waits indefinitely for continuous painting to stop. Browser
+storage deletion/new devices remain fresh exploration. Remembered silhouettes do
+not remember enemy tokens or grant current line of sight.
+
+Height tethers already include all visible tokens, regardless of ownership.
+Added inert data-tether-placement-id for browser verification; explicit GM Hidden
+continues to suppress the token and its line.
+
+Forced airborne movement retains its altitude; rising terrain intersecting that
+altitude blocks the server request and participates in Ctrl-drag clipping/damage.
+This is distinct from the pending grounded slope threshold. Ordinary flight still
+rises over terrain; teleport ignores intervening hills. Grounded steep-slope slams,
+authoritative creature collisions and atomic collision damage remain unfinished.
+
+Validation: 810 tests across 108 files passed. Browser checks passed actual modifier
+labels/releases, a non-owner player's visible ally tether, hidden-token suppression,
+legacy personal-memory migration, privacy, actual reload and reset. The fog browser
+had an initial app startup timeout; retry passed. Browser fixtures used isolated
+storage and disposable tokens; existing user tokens and native maps were preserved.
+
+### Yellow terrain slams - September 26 (sandbox build 465)
+
+The user selected yellow: forced grounded movement slams at an uphill grade of
+2 or more vertical squares per horizontal grid step. Use Chebyshev grid distance
+and eighth-square sampling, matching terrain-arrow grade units. Grade is measured
+in the movement direction: downhill, cross-slope, and shallower uphill movement
+remain passable. Sample only actual terrain support; terrain below a solid upper
+floor or supported ramp is not an obstacle to its occupant.
+
+forcedTerrainBlocked shares the existing Ctrl-drag wall/terrain stop search and
+unused-distance + 2 solid-obstacle damage. WallMovement validates the same threshold
+for canonical forced commands, including GM commands, without applying damage or
+silently clipping requests. Ordinary walking/shifting and teleport remain unchanged;
+forced flight keeps its separate retained-altitude terrain intersection rule.
+
+Verification: 811 tests across 108 files passed; boundary 1.99/2/4, downhill,
+cross-slope, floor isolation, stopping position and damage covered. 240 read-only
+actual-map client/server comparisons passed. Real Ctrl-drag creature-collision
+regression still stops correctly and saves damage to both creatures; its temporary
+tokens were removed. No user tokens or map terrain were changed.
+
+### Reliability pass - September 26 (sandbox build 466)
+
+See [the reliability report](../vtt-reliability-pass-2026-09-26.md) for the three
+repair areas, four validation passes, measurements and remaining boundaries.
+Canonical forced endpoints now check creatures. Ctrl-drag collision outcomes use
+per-target durable reservations with manual review after uncertain damage; this is
+not atomic sheet damage and does not yet journal authored ability-picker damage.
+Polygon footprint support is shared between server falling/checkpoint planning and
+the local imported-map renderer. Shared map design activates rendering after image
+URL changes. Checkpoint relocation and exact stair-top turnarounds have regressions.
+
+Complete suite: 817 passing tests across 110 files. Separate GM/two-player browser
+passes cover a newly imported/remapped Observatory, all three stairs in both
+directions with walk/shift/teleport, actual collision damage, pending-damage reload
+and GM review, environment sync, copy/checkpoint recovery, personal fog and tethers.
+Elfsong performance was about 56 fps; Observatory about 57 fps with two tokens and
+28 fps with 82 tokens. No production delivery/performance claim. User sandbox map
+state and native sources were preserved; QA used a separate SQLite backup/runtime.
+Do not run fixture/setup scripts against an existing user sandbox.
+
+## September 27 map transport and movement updates
+
+Shared environment now has GM-only `environment.portal.set` and
+`environment.terrain.patch` commands, both retaining expected field revisions.
+`environment.changed` emits one changed field; portal events replace one projected
+segment and terrain events replace one sample rectangle. Recovery remains complete.
+Oversized audience messages become `sync.recoveryRequired` notices. Never advance
+the local cursor for a notice; recover the original projected events/snapshot over
+authenticated HTTP. SQLite still retains full changed-field events for replay.
+Secret-door projection runs for scene config, snapshots, imports/restores and events.
+Closed secret doors are plain walls for players; open ones are ordinary doors.
+
+Own editor save acknowledgments preserve undo. Local edits during a save queue a
+new revision-checked draft; foreign edits still reject. Wall validation rejects
+duplicate node pairs, and a malformed model cannot terminate the wall frame loop.
+Floor deletion removes linked surfaces/ramps in the same scene transaction.
+Missing plates on a particular floor use the legacy rectangle support rule.
+
+Collision stopping and terrain slope contact are paired PHP/JS rules. Validated
+collision intent permits the agreed 75%-step rounding/slight clipping; do not apply
+an additional unsnapped endpoint rejection after validating that canonical plan.
+Flight height is at least traversed ground height; gentle forced rises lift it.
+
+Teleport `teleportChoice` carries the selected actual elevation and optional ability
+range. The server verifies max-axis distance, selects a real supporting surface,
+and owns `_supportSurfaceId`. Never trust that field in ordinary placement patches.
+The UI displays actual elevation + 1 and commits only after confirmation. Roof
+support is retained while the token remains on its polygon. Airborne grounded
+arrivals create a fall review; fliers retain the chosen altitude. Legacy teleport
+commands without a choice retain their existing direct stair inference.
+
+Fall geometry is recorded transactionally in CollisionEffects under a namespaced
+receipt associated with the accepted move. Only the actor gets an Apply/Dismiss
+prompt; damage/Prone remain awaited, separately persisted effects. An uncertain
+application stays needs_review and never replays. GM recovery is inspection/manual
+resolution. No new authored ability JSON fields were added. Downward forced throws
+remain manual; the fall-damage calculator supports Agility-zero but no vertical
+movement control was introduced.

@@ -294,6 +294,8 @@ export function getPowerRollSuggestions({
   const standing = (!actor.movementMode || actor.movementMode === 'ground')
     && !hasCondition(actor,'prone') && !hasCondition(actor,'climbing');
   const highGround = abilityRoll && standing && targetList.every(target => {
+    // Terrain sandbox advantage; authored abilities and production rules remain unchanged.
+    if (globalThis.terrainPrototype?.active) return !hasCondition(target,'burrowing') && globalThis.terrainPrototype.highGround(actor,target);
     const targetHeight = heights.get(target.levelId || 'level-0');
     const targetSpace = Math.max(1, Number(target.width) || 1, Number(target.height) || 1);
     return floorRelation(actor,target,mapLevels) === 'above' && Number.isFinite(actorHeight) && Number.isFinite(targetHeight)
@@ -301,7 +303,7 @@ export function getPowerRollSuggestions({
       && !hasCondition(target,'burrowing') && actorHeight >= targetHeight + targetSpace;
   });
   suggestions.push(makeSuggestion('edge-high-ground', EDGE, 'High ground', highGround, {
-    reason: highGround ? 'Fully above target' : 'Confirm height and footing',
+    reason: highGround ? (globalThis.terrainPrototype?.active ? 'Higher effective height' : 'Fully above target') : 'Confirm height and footing',
   }));
   const ranged = !melee && keywordsFromContext(context).some(word => word === 'ranged' || word.startsWith('ranged '));
   if (strike && ranged && placements.some(other => other?.id !== actor.id

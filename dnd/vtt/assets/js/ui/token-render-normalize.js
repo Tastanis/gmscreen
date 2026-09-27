@@ -69,6 +69,9 @@ export function normalizePlacementForRender(placement) {
 
   return {
     id,
+    _supportSurfaceId: typeof placement._supportSurfaceId === "string" ? placement._supportSurfaceId : null,
+    flightHeight: Number.isFinite(placement.flightHeight) ? placement.flightHeight : null,
+    visionOwners: Array.isArray(placement.visionOwners) ? placement.visionOwners : [],
     column,
     row,
     width,

@@ -23,3 +23,8 @@ test('normal hooks preserve floors and exclude undo, forced movement, patches, a
   assert.equal(normalMovementDetail('scene', 'pc', before, before, context), null);
   assert.ok(normalMovementDetail('scene', 'pc', before, { ...before, levelId: 'upper' }, context));
 });
+
+test('acknowledged shifts preserve movement receipts with a non-normal trigger kind',()=>{
+ const detail=normalMovementDetail('scene','pc',{column:0,row:0},{column:1,row:0},{source:'acknowledgement',event:{type:'token.moved',operationId:'shift-test',revision:2,payload:{movementKind:'shift'}}});
+ assert.equal(detail.kind,'shift');assert.equal(detail.movementOperationId,'shift-test');
+});

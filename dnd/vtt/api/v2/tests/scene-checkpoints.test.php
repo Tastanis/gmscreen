@@ -52,7 +52,7 @@ try {
     $store->sceneCheckpoints()->capture('restore-checkpoint', 'Before play', 'scene', $saved, 'GM');
     foreach (array_chunk($tokens, 100) as $index => $chunk) {
         $actions = array_map(fn($token) => ['kind'=>'patch', 'sceneId'=>'scene', 'placementId'=>$token['id'],
-            'entityRevision'=>0, 'patch'=>['column'=>8, 'row'=>9, 'levelId'=>'level-0', 'stamina'=>7, 'conditions'=>['prone']]], $chunk);
+            'movementKind'=>'teleport', 'entityRevision'=>0, 'patch'=>['column'=>8, 'row'=>9, 'levelId'=>'level-0', 'stamina'=>7, 'conditions'=>['prone']]], $chunk);
         $store->acceptPlacementBatch(['type'=>'placement.batch', 'operationId'=>'prepare-restore-'.$index,
             'baseRevision'=>$store->getSnapshot()['revision'], 'payload'=>['actions'=>$actions]], 'GM', true);
     }
