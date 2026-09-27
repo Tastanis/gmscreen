@@ -1,4 +1,5 @@
 import {chooseTeleportHeight} from './teleport-choice.js';
+import {projectedMovementCell, movementCellContains, paintProjectedMovementCell, updateMovementLoupe} from './movement-cell-projection.js';
 import {dragMovementKind} from './drag-ruler.js';
 import {floorElevations as teleportFloorElevations} from '../state/normalize/floor-elevation.js';
 import {mountFallReview} from './fall-review.js';
@@ -17757,10 +17758,17 @@ export function mountBoardInteractions(store, routes = {}) {
     request.legalCells.forEach((cell) => {
       const node = document.createElement('div');
       node.className = 'vtt-automation-move__cell';
-      positionAutomationCell(node, cell.column, cell.row, request.targetSnapshot.width, request.targetSnapshot.height);
+      paintProjectedMovementCell(node, cell, automationMovementShape(cell, true));
       legalLayer?.appendChild(node);
     });
     mapTransform.appendChild(overlay);
+    overlay.addEventListener('keydown', event => {
+      if (!['Enter', ' '].includes(event.key) || !event.target.closest?.('[data-movement-cell]')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const rect = event.target.getBoundingClientRect();
+      handleAutomationMovePointerDown({target: event.target, button: 0, clientX: rect.x + rect.width / 2, clientY: rect.y + rect.height / 2, preventDefault() {}});
+    });
     return overlay;
   }
 
@@ -17779,6 +17787,15 @@ export function mountBoardInteractions(store, routes = {}) {
     const cell = getAutomationGridCellFromEvent(event);
     if (!cell) return;
     updateAutomationMovePreview(cell);
+    if (automationMoveOverlay && !pendingAutomationMove?.committing) {
+      const target = pendingAutomationMove.targetSnapshot;
+      updateMovementLoupe(automationMoveOverlay, {
+        event, cell, shape: automationMovementShape(cell, true), scale: viewState.scale || 1,
+        localPoint: getLocalMapPoint(event, {terrain: false}),
+        clampCell: c => clampPlacementToBounds(c.column, c.row, target.width, target.height),
+        legalCells: pendingAutomationMove.legalCells,
+      });
+    }
   }
 
   async function handleAutomationMovePointerDown(event) {
@@ -17787,6 +17804,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     if(pendingAutomationMove.committing) {event.preventDefault();return true;}
     const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest('[data-movement-cell]')?.disabled) {event.preventDefault();return true;}
     if (target?.closest('[data-skip-automation-move]')) {
       event.preventDefault();
       const request = pendingAutomationMove;
@@ -17820,7 +17838,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if(request.sceneId!==getActiveSceneId()) {
       clearAutomationMoveOverlay();request.reject?.(new Error('Scene changed before movement was confirmed.'));return true;
     }
-    const clickedPlacement = findRenderedPlacementAtPoint(event);
+    const clickedPlacement = target?.closest('[data-movement-loupe]') ? null : findRenderedPlacementAtPoint(event);
     const cell = getAutomationGridCellFromEvent(event) || request.previewCell;
     const collisionPlacement = request.movementKind!=='teleport' && clickedPlacement && clickedPlacement.id !== request.targetSnapshot.id
       ? clickedPlacement
@@ -17945,15 +17963,14 @@ export function mountBoardInteractions(store, routes = {}) {
     const ghost = automationMoveOverlay.querySelector('[data-automation-move-ghost]');
     const arrow = automationMoveOverlay.querySelector('[data-automation-move-arrow]');
     if (ghost instanceof HTMLElement) {
-      positionAutomationCell(ghost, cell.column, cell.row, pendingAutomationMove.targetSnapshot.width, pendingAutomationMove.targetSnapshot.height);
+      paintProjectedMovementCell(ghost, cell, automationMovementShape(cell));
     }
+    automationMoveOverlay.querySelectorAll('[data-movement-cell]').forEach(button => {
+      button.setAttribute('aria-pressed', String(Number(button.dataset.column) === cell.column && Number(button.dataset.row) === cell.row));
+    });
     if (arrow instanceof SVGLineElement) {
-      const start = getCellPixelCenter(pendingAutomationMove.targetSnapshot);
-      const end = getCellPixelCenter({
-        ...pendingAutomationMove.targetSnapshot,
-        column: cell.column,
-        row: cell.row,
-      });
+      const start = automationMovementShape(pendingAutomationMove.targetSnapshot).center;
+      const end = automationMovementShape(cell).center;
       arrow.setAttribute('x1', String(start.x));
       arrow.setAttribute('y1', String(start.y));
       arrow.setAttribute('x2', String(end.x));
@@ -17973,9 +17990,21 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function getAutomationGridCellFromEvent(event) {
-    // These selection cells are painted in the flat map-transform plane. Applying
-    // terrain unprojection here makes the pointer disagree with the visible cell.
-    const localPoint = getLocalMapPoint(event, { terrain: false });
+    if (pendingAutomationMove) {
+      const button = event.target instanceof Element ? event.target.closest('[data-movement-cell]') : null;
+      if (button && automationMoveOverlay?.contains(button)) {
+        return button.disabled ? pendingAutomationMove.previewCell : {column: Number(button.dataset.column), row: Number(button.dataset.row)};
+      }
+      if (event.target instanceof Element && event.target.closest('[data-movement-loupe]')) return pendingAutomationMove.previewCell;
+      const point = getLocalMapPoint(event, {terrain: false});
+      // Pick the same shapes we paint, including upper-floor supports. Later
+      // cells win overlaps, matching the guide's visual stacking order.
+      for (let i = pendingAutomationMove.legalCells.length - 1; point && i >= 0; i--) {
+        const cell = pendingAutomationMove.legalCells[i];
+        if (movementCellContains(automationMovementShape(cell, true), point)) return cell;
+      }
+    }
+    const localPoint = getLocalMapPoint(event, {terrain: Boolean(pendingAutomationMove)});
     const gridPoint = localPoint ? mapPointToGrid(localPoint) : null;
     if (!gridPoint) {
       return null;
@@ -17985,6 +18014,16 @@ export function mountBoardInteractions(store, routes = {}) {
       pendingAutomationMove?.targetSnapshot.width || 1,
       pendingAutomationMove?.targetSnapshot.height || 1
     );
+  }
+
+  function automationMovementShape(cell, singleSquare = false) {
+    const offsets = viewState.gridOffsets || {};
+    const terrain = window.terrainPrototype;
+    const target = {...pendingAutomationMove.targetSnapshot, ...cell, ...(singleSquare ? {width: 1, height: 1} : {})};
+    // Destination squares follow ground, not a flying token's altitude.
+    const standing = {...target, movementMode: 'ground'};
+    const project = terrain?.active ? point => terrain.project(point.x, point.y, terrain.groundFor(standing, point)) : point => point;
+    return projectedMovementCell(target, {left: offsets.left || 0, top: offsets.top || 0, size: viewState.gridSize || 64}, project);
   }
 
   function automationChebyshevDistance(left, right) {

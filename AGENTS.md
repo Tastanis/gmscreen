@@ -10,6 +10,14 @@ The campaign vault's AGENTS.md and .claude/CLAUDE.md already point to that same 
 
 # Codex Development Notes
 
+Movement destination guides use movement-cell-projection.js for terrain-shaped
+outlines and matching hit tests. A nearby 3x3 magnifier expands visually compressed
+cells (under 40% of normal thickness), retaining canonical coordinates. It contains
+only guide tiles, never fog-hidden imagery/tokens, and stays anchored while entered.
+This threshold is presentation only, not a cliff/falling rule. Keep the fog stacking,
+keyboard selection, bounds and server movement validation. Browser coverage lives in
+test-teleport-overlay-browser.cjs; use its disposable loopback fixture only.
+
 Token drag teleport uses Space held at release (1.19.158). Alt remains map ping;
 Ctrl is forced movement and Shift is shift movement. The ruler and commit share
 dragMovementKind; Space state clears on keyup, blur and hidden document. Preserve

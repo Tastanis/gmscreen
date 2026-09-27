@@ -112,3 +112,13 @@ validation. Before publication, check legacy-map migration requirements above an
 run the hosted GM/two-player delivery test. Changing scenes while an editor save
 and additional strokes are pending still needs a dedicated regression; finish
 editing and let saves settle before switching scenes in the meantime.
+# Terrain-shaped destination guides
+
+Ability movement destination outlines now follow projected terrain/floor support,
+with picking against the same shapes. Compressed cells open a nearby, stationary
+3x3 magnifier at 40% of ordinary cell thickness. Enlarged tiles select original
+canonical coordinates and retain server range/collision/landing authority. The
+magnifier contains outlines only and remains above fog. No cliff classification,
+falling mechanics, ordinary drag rules, or saved map data changed in this update.
+The cutoff is a visual default, not a movement rule. Browser regression covers
+raised-terrain edges, fog, magnifier anchoring, exact accepted landing and cleanup.
