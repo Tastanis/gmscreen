@@ -327,5 +327,10 @@ warns in red about excess range but permits players to confirm it through intern
 allowOutOfRange movement intent. No extra confirmation or new authoring keys.
 Selected air arrivals fall unless flying. Cancellation commits no movement.
 Fall Apply/Dismiss is actor-only, with editable damage, Agility and Prone; interrupted
-effects remain GM-reviewable without replay. Future sheet-based fall reduction and
+effects remain GM-reviewable without replay. The Agility reduction is never negative;
+negative Agility gives no reduction and adds no damage. Future sheet-based fall reduction and
 vertical forced throws remain manual. See docs/vtt-map-runtime-release.md.
+Fall Prone uses the effective ground-fall threshold, with the separate rule that
+landing on another creature makes the faller prone. Each struck creature compares
+the faller's size against its own Might using strict greater-than. The popup shows
+these condition outcomes as text; damage overrides do not rewrite them.

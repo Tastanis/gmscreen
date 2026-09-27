@@ -7,7 +7,7 @@ import {reduceCanonicalEvent} from '../../sync-v2/event-reducer.js';
 import {terrainContact} from '../terrain-contact.js';
 import {terrainPatch} from '../environment-sync.mjs';
 import {resolveForcedDrag} from '../forced-drag.js';
-import {fallDamage,ownsFall} from '../fall-review.js';
+import {fallDamage,ownsFall,fallerLandsProne,landingTargetProne} from '../fall-review.js';
 import {teleportDistance} from '../teleport-choice.js';
 import {createEntityStore} from '../../sync-v2/entity-store.js';
 import {createEventStream} from '../../sync-v2/event-stream.js';
@@ -30,7 +30,21 @@ test('canonical falls and legacy ledger migration',()=>{
 });
 test('fall damage thresholds, cap, forced descent and actor-only prompt routing',()=>{
  assert.equal(fallDamage(3,2),0);assert.equal(fallDamage(4,2),4);assert.equal(fallDamage(100,0),50);assert.equal(fallDamage(4,2,true),8);
+ assert.equal(fallDamage(3,-1),6,'Negative Agility cannot increase falling damage');
+ assert.equal(fallDamage(3,0),6);assert.equal(fallDamage(1,-2),0,'Negative Agility cannot turn a short fall into a damaging one');
+ assert.equal(fallDamage(3,-1,true),6);assert.equal(fallDamage(3,5),0);
  const r={kind:'fall',status:'pending',actorId:'Cal',sceneId:'s'};assert.equal(ownsFall(r,'cal','s'),true);assert.equal(ownsFall(r,'GM','s'),false);assert.equal(ownsFall(r,'cal','other'),false);
+});
+test('fall Prone distinguishes cushioned landings and each creature underneath',()=>{
+ assert.equal(fallerLandsProne({squares:3},2),false);
+ assert.equal(fallerLandsProne({squares:3},-1),true);
+ assert.equal(fallerLandsProne({squares:1},0),false);
+ assert.equal(fallerLandsProne({squares:3,forcedDown:true},5),true);
+ assert.equal(fallerLandsProne({squares:1,collidedIds:['other']},5),true);
+ assert.equal(landingTargetProne('1L',0),true);
+ assert.equal(landingTargetProne(2,2),false);
+ assert.equal(landingTargetProne(2,3),false);
+ assert.equal(landingTargetProne(3,2),true);
 });
 test('portal events, terrain patches and authoritative state reduce identically',()=>{
  const r=spawnSync(php,[...phpArgs,fileURLToPath(new URL('../../../../api/v2/tests/environment-handoff.test.php',import.meta.url))],{encoding:'utf8'});

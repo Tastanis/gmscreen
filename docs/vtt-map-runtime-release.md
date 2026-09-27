@@ -55,8 +55,18 @@ Only the actor receives an editable damage/Prone prompt; interrupted or partial
 application requires manual GM review and never automatically replays. Landing
 relocation searches nearby supported free spaces; a packed area requires GM review.
 Agility/Might are read from existing sheets/monster data, with manual damage adjustment
-available. A future sheet feature for fall reduction remains unimplemented. Vertical
+available. Agility reduction is clamped to zero: negative Agility never increases
+fall damage (three squares with Agility -1 is six damage). Forced-downward falls
+still receive no Agility reduction. A future sheet feature for fall reduction remains unimplemented. Vertical
 forced movement remains manual, so forced-downward damage has no new movement UI.
+
+Fall review uses the actual map token as its anchor, not a tracker entry with the
+same placement ID. Each affected creature is listed, with plain "Will be prone"
+text only for qualifying recipients. A reduced ground fall below two effective
+squares does not make the faller prone. Landing on another creature does make the
+faller prone; each creature underneath is prone only if the faller's size exceeds
+that creature's Might. Equal size/Might does not qualify. Editing damage does not
+rewrite these separately computed condition rules.
 
 Teleport now confirms the destination height after release, displays surface elevations
 + 1, and checks the ability range using maximum horizontal/vertical displacement.

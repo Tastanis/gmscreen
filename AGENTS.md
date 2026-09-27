@@ -22,6 +22,13 @@ Do not turn these warnings back into disabled choices. Single-surface, same-heig
 unlimited noncombat ground travel bypasses the chooser. Whole-number UI labels do
 not imply that the separate gameplay-rounding audit has been completed.
 
+Fall review (1.19.160) anchors only to #vtt-token-layer placements, never tracker
+entries. Negative Agility gives zero reduction rather than extra fall damage.
+Ground falls below two effective squares do not add Prone; landing on another
+creature does. Each struck creature is prone only when faller size exceeds its
+Might (ties do not qualify). Conditions are plain text, distinct from editable
+damage, and retain the existing durable claim/no-replay boundary.
+
 ## Dungeon Alchemist layered maps
 
 Before creating, exporting, importing, or repairing Dungeon Alchemist terrain,
