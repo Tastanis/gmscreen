@@ -59,4 +59,57 @@ final class FloorSupport {
   return $best;
  }
 
+ public static function retained(array $p,array $surfaces,array $mapLevels):?array {
+  if(empty($p['_supportSurfaceId']))return null;
+  $levels=array_column($mapLevels['levels']??[],null,'id');
+  foreach($surfaces as $s)if(($s['id']??null)===$p['_supportSurfaceId']&&self::intersects($p,$s,$levels[$s['levelId']??'']['cutouts']??[]))return $s;
+  return null;
+ }
+
+ /** Follow nearly flush floor edges, retaining support over excavated terrain.
+  * Contact is acquired at an edge, never by comparing a distant endpoint with
+  * the starting height. Teleports and stair traversal do not use this path.
+  */
+ public static function walkContact(array $from,array $to,array $path,array $surfaces,array $mapLevels,callable $terrain):?array {
+  if(FloorGeometry::isAirborne($from)||!empty($from['_floorTraversal']))return null;
+  $levels=array_column($mapLevels['levels']??[],null,'id');
+  $floors=array_values(array_filter($surfaces,fn($s)=>($s['kind']??'')==='floor'&&isset($levels[$s['levelId']??''])&&!($levels[$s['levelId']]['hidden']??false)));
+  if(!$floors)return null;
+  $overlap=fn($p,$s)=>self::intersects($p,$s,$levels[$s['levelId']]['cutouts']??[]);
+  $support=null;
+  foreach($floors as $s)if((($from['_supportSurfaceId']??null)===($s['id']??null)||($from['levelId']??'level-0')===$s['levelId'])&&$overlap($from,$s)){$support=$s;break;}
+  $support??=self::terrainContact($from,$floors,$mapLevels,$terrain($from));
+  $previous=$from;
+  foreach([...$path,$to] as $end){
+   $start=$previous;$dx=$end['column']-$start['column'];$dy=$end['row']-$start['row'];
+   $steps=max(1,min(8192,(int)ceil(max(abs($dx),abs($dy))*8)));
+   for($i=1;$i<=$steps;$i++){
+    $p=[...$from,'column'=>$start['column']+$dx*$i/$steps,'row'=>$start['row']+$dy*$i/$steps];
+    $height=$support['height']??$terrain($previous);
+    if(!$support||!$overlap($p,$support)){
+     $support=null;
+     foreach($floors as $s)if(!$overlap($previous,$s)&&$overlap($p,$s)&&abs($s['height']-$height)<=.1+1e-6&&$s['height']>=$terrain($p)-.1-1e-6&&(!$support||$s['height']>$support['height']))$support=$s;
+    }
+    $previous=$p;
+   }
+  }
+  return $support;
+ }
+
+ /** Highest supported visible surface below a descending flier. */
+ public static function landing(array $p,array $surfaces,array $mapLevels,float $altitude,float $ground):array {
+  $levels=array_column($mapLevels['levels']??[],null,'id');
+  $best=['levelId'=>'level-0','height'=>$ground,'id'=>null];
+  foreach($surfaces as $s){
+   $id=$s['levelId']??'level-0';$level=$levels[$id]??null;
+   if(($id!=='level-0'&&!$level)||($level['hidden']??false)||$s['height']>$altitude+1e-6||$s['height']<$best['height']-1e-6)continue;
+   if(self::intersects($p,$s,$level['cutouts']??[]))$best=$s;
+  }
+  foreach(FloorGeometry::elevations($mapLevels) as $id=>$height){
+   if($id==='level-0'||($levels[$id]['hidden']??false)||$height>$altitude+1e-6||$height<=$best['height'])continue;
+   if(self::supported([...$p,'levelId'=>$id],$surfaces)===null&&!FloorGeometry::fullyUnsupported($p,$levels[$id]))$best=['levelId'=>$id,'height'=>$height,'id'=>null];
+  }
+  return $best;
+ }
+
 }

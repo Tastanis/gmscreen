@@ -232,7 +232,8 @@ final class FloorGeometry
         }
         if (count($path) > 258) throw new InvalidArgumentException('Movement path has too many waypoints.');
         if (self::isAirborne($current)) return $result;
-        foreach($surfaces as $surface)if(!empty($current['_supportSurfaceId'])&&($surface['id']??null)===$current['_supportSurfaceId']&&FloorSupport::intersects([...$current,...$destination],$surface))return $result;
+        $retained=FloorSupport::retained([...$current,...$destination],$surfaces,$mapLevels);
+        if($retained&&($retained['kind']??'roof')!=='floor')return $result;
         if (in_array($kind, ['walk','shift','teleport'], true) && ($byId[$levelId]['hidden'] ?? false) !== true) {
             $stairs = $levelId === self::BASE ? ($mapLevels['baseStairs'] ?? []) : ($byId[$levelId]['stairs'] ?? []);
             foreach ($stairs as $stair) {
@@ -249,6 +250,10 @@ final class FloorGeometry
                 }
             }
         }
+        if($terrainAt!==null && $surfaces && $kind!=='teleport' && !$supportedStair && $result['traversal']===null && $result['cause']!=='stairs'){
+            $contact=FloorSupport::walkContact($current,[...$current,...$destination],$waypoints,$surfaces,$mapLevels,$terrainAt);
+            if($contact)return ['levelId'=>$contact['levelId'],'traversal'=>null,'cause'=>'surface','supportSurfaceId'=>$contact['id']??null];
+        }
         $fall = $supportedStair ? null : self::fallingDestination([...$current, ...$destination, 'levelId'=>$result['levelId']], $mapLevels, $surfaces);
         if ($fall !== null) { $result['levelId']=$fall; $result['cause']='fall'; $result['traversal']=null; }
 
@@ -257,7 +262,7 @@ final class FloorGeometry
         if($terrainAt!==null && $surfaces && $result['levelId']===self::BASE && !$supportedStair && $result['traversal']===null && $result['cause']!=='stairs'){
             $p=[...$current,...$destination];
             $contact=FloorSupport::terrainContact($p,$surfaces,$mapLevels,$terrainAt($p));
-            if($contact){$result['levelId']=$contact['levelId'];$result['cause']='surface';}
+            if($contact){$result['levelId']=$contact['levelId'];$result['cause']='surface';$result['supportSurfaceId']=$contact['id']??null;}
         }
         return $result;
     }

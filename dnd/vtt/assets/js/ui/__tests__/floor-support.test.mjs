@@ -31,3 +31,16 @@ test('roof-only levels have polygon support; truly unmodeled levels keep legacy 
  assert.equal(floorSupported({column:1,row:1,levelId:'roof'},nodeRoof),true);
  assert.equal(floorSupported({column:5,row:1,levelId:'roof'},nodeRoof),false);
 });
+
+import {walkFloorContact} from '../floor-support.js';
+test('raised room edge contact retains support over basements without acquiring ceilings',()=>{
+ const s={id:'room',kind:'floor',levelId:'room',height:2,points:[{x:2,y:0},{x:10,y:0},{x:10,y:4},{x:2,y:4}]},levels={levels:[{id:'room',elevationSquares:2}]},from={column:0,row:1,width:1,height:1,levelId:'level-0'},to={column:8,row:1};
+ for(const [outside,inside,height] of [[2,2,2],[2,0,2],[2,0,1.9],[2.05,0,2],[0,-2,0]]){
+  const plate={...s,height};assert.equal(walkFloorContact(from,to,[],[plate],levels,p=>p.column<1.5?outside:inside),plate);
+ }
+ assert.equal(walkFloorContact(from,to,[],[s],levels,p=>p.column<.5?2:0),null,'No bridge from a distant height');
+ assert.equal(walkFloorContact(from,to,[],[s],levels,()=>0),null,'No ceiling acquisition');
+ assert.equal(walkFloorContact(from,to,[],[s],{levels:[{id:'room',hidden:true}]},()=>2),null);
+ assert.equal(walkFloorContact({...from,movementMode:'fly',flightHeight:3},to,[],[s],levels,()=>2),null);
+ assert.equal(walkFloorContact(from,to,[],[s],levels,()=>1.8),null,'No large step');
+});

@@ -1175,3 +1175,11 @@ has no visible version footer. Production gameplay/deployment was not tested.
 - Imported point-outline roofs/floors do not have wall-node IDs. Preserve them
   when matching or editing node-authored roofs. The disposable three-client
   test-playtest-fixes-browser.cjs covers flight, doors, height races and Escape.
+
+- Raised-room entry follows the travelled floor edge with a 0.1-square vertical
+  tolerance in either direction, then retains the exact supporting surface over
+  excavated terrain. Do not infer support from a distant start or endpoint alone.
+  Keep client/server wall-height checks paired, including movement waypoints.
+  Support IDs must respect floor cutouts. Ending/interrupted flight chooses the
+  highest visible supported surface beneath the flier. Use the disposable
+  test-raised-room-browser.cjs; never alter campaign maps to test this behavior.

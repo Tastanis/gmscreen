@@ -46,3 +46,25 @@ export function resolveSupportSurfaces(model={}){
  const nodes=new Map((model.nodes||[]).map(n=>[n.id,n]));
  return surfaces.map(s=>s.points?s:{...s,points:(s.nodes||[]).map(id=>nodes.get(id)).filter(Boolean)});
 }
+
+// Paired with FloorSupport::walkContact. Edge contact, not endpoint height guessing.
+export function walkFloorContact(from,to,path,surfaces,mapLevels,terrain){
+ if(['fly','hover'].includes(from.movementMode)||from._floorTraversal)return null;
+ const levels=new Map((mapLevels?.levels||[]).map(l=>[l.id,l]));
+ const floors=surfaces.filter(s=>s.kind==='floor'&&levels.has(s.levelId)&&!levels.get(s.levelId).hidden);
+ if(!floors.length)return null;
+ const overlap=(p,s)=>intersectsFloor(p,s,levels.get(s.levelId).cutouts||[]);
+ let support=floors.find(s=>((from._supportSurfaceId&&from._supportSurfaceId===s.id)||(from.levelId||'level-0')===s.levelId)&&overlap(from,s))||terrainFloorContact(from,floors,mapLevels,terrain(from)),previous=from;
+ for(const end of [...path,to]){
+  const start=previous,dx=end.column-start.column,dy=end.row-start.row,steps=Math.max(1,Math.min(8192,Math.ceil(Math.max(Math.abs(dx),Math.abs(dy))*8)));
+  for(let i=1;i<=steps;i++){
+   const p={...from,column:start.column+dx*i/steps,row:start.row+dy*i/steps},height=support?.height??terrain(previous);
+   if(!support||!overlap(p,support)){
+    support=null;
+    for(const s of floors)if(!overlap(previous,s)&&overlap(p,s)&&Math.abs(s.height-height)<=.1+1e-6&&s.height>=terrain(p)-.1-1e-6&&(!support||s.height>support.height))support=s;
+   }
+   previous=p;
+  }
+ }
+ return support;
+}

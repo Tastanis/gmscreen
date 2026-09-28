@@ -1,4 +1,4 @@
-import {floorSupported,intersectsFloor,terrainFloorContact,resolveSupportSurfaces} from './floor-support.js';
+import {floorSupported,intersectsFloor,terrainFloorContact,resolveSupportSurfaces,walkFloorContact} from './floor-support.js';
 import {sharedField,saveShared,acknowledgedRevision} from './environment-sync.mjs';
 import {rampAt,rampHeight,rampPick,rampGround,rampSupports,rampLanding} from './imported-ramps.mjs';
 import './height-tethers.js';
@@ -154,7 +154,7 @@ function groundFor(placement,point=null){
  if(!placement)return 0;
  const level=placement.levelId||'level-0',base=floorElevations(levelConfig()).get(level)??0;
  if(['fly','hover'].includes(placement.movementMode))return Math.max(base,flight.height(placement,(x,y)=>flightGround(x,y,placement)));
- if(placement._supportSurfaceId){const surface=resolveSupportSurfaces(importedDesign()||{}).find(s=>s.id===placement._supportSurfaceId);if(surface&&intersectsFloor(placement,surface))return surface.height;}
+ if(placement._supportSurfaceId){const surface=resolveSupportSurfaces(importedDesign()||{}).find(s=>s.id===placement._supportSurfaceId);if(surface&&intersectsFloor(placement,surface,(levelConfig()?.levels||[]).find(l=>l.id===surface.levelId)?.cutouts||[]))return surface.height;}
  if(importedDesign()){
   const d=dimensions(),x=point?(point.x-(ctx.view.gridOffsets.left||0))/d.grid:placement.column+(placement.width||1)/2,y=point?(point.y-(ctx.view.gridOffsets.top||0))/d.grid:placement.row+(placement.height||1)/2;
   const z=rampGround((importedDesign()?.ramps||[]),placement,{x,y});if(z!==null)return z;
@@ -167,6 +167,12 @@ function groundFor(placement,point=null){
  const contact=!placement._floorTraversal?terrainFloorContact(p,resolveSupportSurfaces(importedDesign()||{}),levelConfig(),ground):null;
  return contact?.height??ground;
 }
+function movementPlacement(from,to){
+ const d=dimensions(),terrain=p=>heightAt((ctx.view.gridOffsets.left||0)+(p.column+(p.width||1)/2)*d.grid,(ctx.view.gridOffsets.top||0)+(p.row+(p.height||1)/2)*d.grid);
+ const surface=walkFloorContact(from,to,[],resolveSupportSurfaces(importedDesign()||{}),levelConfig(),terrain);
+ return surface?{...to,levelId:surface.levelId,_supportSurfaceId:surface.id}:to;
+}
+function movementGroundFor(from,to){return groundFor(movementPlacement(from,to));}
 function highGround(actor,target){return effectiveHeight(groundFor(actor),Math.max(actor.width||1,actor.height||1))-effectiveHeight(groundFor(target),Math.max(target.width||1,target.height||1))>=1;}
 function isCliff(x,y){const g=dimensions().grid;return [[1,0],[0,1],[1,1],[1,-1]].some(([dx,dy])=>Math.abs(heightAt(x+dx*g/2,y+dy*g/2)-heightAt(x-dx*g/2,y-dy*g/2))>=3-1e-6);}
 function rulerActor(){const placements=ctx.state.boardState.placements[ctx.state.boardState.activeSceneId]||[];return placements.find(p=>p.id===(ctx.selectedIds[0]||window.visionPrototype?.viewerTokenId));}
@@ -238,7 +244,7 @@ function paintRoute(overlay,points,gridSize){
  overlay.path.style.opacity='0';
 }
 window.addEventListener('storage',e=>{if(e.key===key&&!drawing){key='';}});
-window.terrainPrototype={get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,heightAt,groundFor,highGround,isCliff,route,rulerPoint,routePath,paintRoute,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get key(){return key;},get storageError(){return storageError;},project,get active(){return active;}};
+window.terrainPrototype={get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,heightAt,groundFor,movementGroundFor,movementPlacement,highGround,isCliff,route,rulerPoint,routePath,paintRoute,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get key(){return key;},get storageError(){return storageError;},project,get active(){return active;}};
 requestAnimationFrame(tick);
 
 import('./wall-prototype.js');

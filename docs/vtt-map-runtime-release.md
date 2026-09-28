@@ -268,3 +268,31 @@ This does not establish live Pusher latency or combat stair-drag coverage.
 The shared tracker retains its existing GM Hide policy. Upper-floor template
 filtering and roof-edge look-down behavior are unchanged. Publication is Git
 commit/push only; no cPanel installation or production deployment is claimed.
+
+## Raised-room support - 1.19.170
+
+Walking, shifting and forced movement acquire a floor at its travelled entrance
+when the floor is within 0.1 vertical squares of the preceding support height,
+including a slight step down. Once acquired, the physical plate height and ID
+persist over lower terrain, rather than following an excavated basement below.
+This supersedes the endpoint-only contact restriction documented for 1.19.164.
+Teleports retain their explicit landing choice and stairs retain their authority.
+
+Client and server wall checks use the acquired support height, including paths
+with waypoints, so entering a room cannot pass underneath its interior walls.
+Exact surface IDs respect polygon holes and level cutouts. Ending flight or
+interrupting ordinary flight selects the highest supported visible surface below
+its altitude, including fractional plate heights. It does not acquire ceilings
+above the flier or reveal hidden floors.
+
+The canonical raised-room regression covers walk/shift/forced/batch commands,
+reopened storage, no false basement falls, interior walls and flight interruption.
+The three-client browser fixture tests all six reported terrain variants with
+real player drags, canonical movement, landing, floor visibility and reload.
+Run `node dnd/vtt/tools/test-raised-room-browser.cjs` against a disposable clone
+marked `test_fixture: "playtest-fixes"`, on loopback port 18795 by default.
+No campaign data or production hosting is changed by this release.
+
+Validation: all 841 tests pass across 115 files. The six-variant three-browser
+regression passes on version 1.19.170 with no page errors; room enemies remain
+visible and basement enemies stay hidden after vision initializes and reloads.

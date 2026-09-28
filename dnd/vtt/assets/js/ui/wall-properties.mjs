@@ -22,19 +22,19 @@ export function movementBlocked(model,from,to,groundFor,groundAt){
   }
   if(lo>=hi||hi<0||lo>1)continue;
   const steps=Math.max(1,Math.ceil(Math.hypot(dx,dy)*(hi-lo)*8));
-  for(let i=0;i<=steps;i++){const t=lo+(hi-lo)*(i+.5)/(steps+1),token={...from,column:from.column+dx*t,row:from.row+dy*t},p={x:token.column+w/2,y:token.row+h/2},u=Math.max(0,Math.min(1,((p.x-a.x)*vx+(p.y-a.y)*vy)/(vx*vx+vy*vy))),q={x:a.x+vx*u,y:a.y+vy*u},range=wallHeights(e,a,b,q,groundAt),z=groundFor(token);if(z<range.top-1e-7&&z+Math.max(w,h)>range.base+1e-7)return true;}
+  for(let i=0;i<=steps;i++){const t=lo+(hi-lo)*(i+.5)/(steps+1),token={...from,column:from.column+dx*t,row:from.row+dy*t},p={x:token.column+w/2,y:token.row+h/2},u=Math.max(0,Math.min(1,((p.x-a.x)*vx+(p.y-a.y)*vy)/(vx*vx+vy*vy))),q={x:a.x+vx*u,y:a.y+vy*u},range=wallHeights(e,a,b,q,groundAt),z=groundFor(token,from);if(z<range.top-1e-7&&z+Math.max(w,h)>range.base+1e-7)return true;}
  }
  return false;
 }
 
 // Check the submitted waypoints in order, not the chord between their endpoints.
-export function movementPathBlocked(model,from,to,groundFor,groundAt){
+export function movementPathBlocked(model,from,to,groundFor,groundAt,resolvePosition=(_from,to)=>to){
  let previous=from;
  for(const point of [...(Array.isArray(to.path)?to.path:[]),to]){
   if(!Number.isFinite(point.column)||!Number.isFinite(point.row))continue;
-  const next={...from,column:point.column,row:point.row};
+  const next={...previous,column:point.column,row:point.row};
   if(movementBlocked(model,previous,next,groundFor,groundAt))return true;
-  previous=next;
+  previous=resolvePosition(previous,next);
  }
  return false;
 }

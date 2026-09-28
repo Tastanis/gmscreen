@@ -33,8 +33,6 @@ final class TeleportLanding {
   return ['placement'=>$to,'fall'=>$fall,'distance'=>$distance];
  }
  public static function retained(array $to,array $config):?array {
-  if(empty($to['_supportSurfaceId']))return null;
-  foreach(FloorSupport::surfaces($config['environment']['walls']['value']??[]) as $surface)if(($surface['id']??null)===$to['_supportSurfaceId']&&FloorSupport::intersects($to,$surface))return $surface;
-  return null;
+  return FloorSupport::retained($to,FloorSupport::surfaces($config['environment']['walls']['value']??[]),$config['mapLevels']??[]);
  }
 }

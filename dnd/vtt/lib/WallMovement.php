@@ -21,9 +21,9 @@ final class WallMovement
         if (empty($model['segments'])) return;
         $previous=$from;
         foreach ([...$path,$to] as $point) {
-            $next=[...$from,'column'=>$point['column'],'row'=>$point['row']];
+            $next=[...$previous,'column'=>$point['column'],'row'=>$point['row']];
             if (self::blocked($model,$previous,$next,$config)) throw new InvalidArgumentException('Movement blocked by a wall or closed door/window.');
-            $previous=$next;
+            $previous=self::movementPlacement($previous,$next,$config);
         }
     }
 
@@ -47,7 +47,8 @@ final class WallMovement
         $level=$token['levelId']??'level-0';
         $base=(float)(FloorGeometry::elevations($config['mapLevels']??[])[$level]??0);
         if(FloorGeometry::isAirborne($token))return max($base,(float)($token['flightHeight']??(FlightHeight::ground($token,$config)+1)));
-        foreach(FloorSupport::surfaces($config['environment']['walls']['value']??[]) as $surface)if(!empty($token['_supportSurfaceId'])&&($surface['id']??null)===$token['_supportSurfaceId']&&FloorSupport::intersects($token,$surface))return (float)$surface['height'];
+        $surface=FloorSupport::retained($token,FloorSupport::surfaces($config['environment']['walls']['value']??[]),$config['mapLevels']??[]);
+        if($surface)return (float)$surface['height'];
         $x=$token['column']+($token['width']??1)/2;$y=$token['row']+($token['height']??1)/2;
         $model=$config['environment']['walls']['value']??[];
         foreach($model['ramps']??[] as $s){
@@ -70,6 +71,17 @@ final class WallMovement
             return $contact?(float)$contact['height']:$ground;
         }
         return $base;
+    }
+
+    public static function movementHeight(array $from,array $to,array $config): float
+    {
+        return self::height(self::movementPlacement($from,$to,$config),$config);
+    }
+
+    private static function movementPlacement(array $from,array $to,array $config): array
+    {
+        $surface=FloorSupport::walkContact($from,$to,[],FloorSupport::surfaces($config['environment']['walls']['value']??[]),$config['mapLevels']??[],fn($p)=>self::terrain($p['column']+($p['width']??1)/2,$p['row']+($p['height']??1)/2,$config));
+        return $surface?[...$to,'levelId'=>$surface['levelId'],'_supportSurfaceId'=>$surface['id']??null]:$to;
     }
 
     public static function blocked(array $model,array $from,array $to,array $config): bool
@@ -103,7 +115,7 @@ final class WallMovement
                 $u=max(0,min(1,(($px-$a['x'])*$vx+($py-$a['y'])*$vy)/($vx*$vx+$vy*$vy)));
                 $base=$e['baseMode']==='fixed'?$e['base']:self::terrain($a['x']+$vx*$u,$a['y']+$vy*$u,$config)+$e['base'];
                 $top=$e['baseMode']==='fixed'||$e['topMode']==='follow'?$base+$e['height']:max(self::terrain($a['x'],$a['y'],$config),self::terrain($b['x'],$b['y'],$config))+$e['base']+$e['height'];
-                $z=self::height($token,$config);
+                $z=self::movementHeight($from,$token,$config);
                 if($z<$top-1e-7&&$z+max($w,$h)>$base+1e-7)return true;
             }
         }

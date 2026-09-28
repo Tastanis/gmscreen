@@ -1437,7 +1437,13 @@ final class SyncV2Store
                 }
                 if (array_key_exists('movementMode', $patch)) {
                     $floor = FloorGeometry::move($next, $next, $state['sceneConfig'][$sceneId]['mapLevels'] ?? [], 'forced', [], FloorSupport::surfaces($state['sceneConfig'][$sceneId]['environment']['walls']['value']??[]), fn($p)=>WallMovement::terrain($p['column']+($p['width']??1)/2,$p['row']+($p['height']??1)/2,$state['sceneConfig'][$sceneId]??[]));
+                    if(FloorGeometry::isAirborne($current)&&!FloorGeometry::isAirborne($next)){
+                        $config=$state['sceneConfig'][$sceneId]??[];
+                        $landing=FloorSupport::landing($next,FloorSupport::surfaces($config['environment']['walls']['value']??[]),$config['mapLevels']??[],WallMovement::height($current,$config),WallMovement::terrain($next['column']+($next['width']??1)/2,$next['row']+($next['height']??1)/2,$config));
+                        $floor=['levelId'=>$landing['levelId'],'traversal'=>null,'cause'=>'fall','supportSurfaceId'=>$landing['id']??null];
+                    }
                     $patch['levelId'] = $floor['levelId']; $patch['_floorTraversal'] = null;
+                    if(array_key_exists('supportSurfaceId',$floor))$patch['_supportSurfaceId']=$floor['supportSurfaceId'];
                     $patch['_movementUndo'] = [];
                     $next = [...$next, ...$patch];
                 }
@@ -1454,6 +1460,7 @@ final class SyncV2Store
                     $floor = FloorGeometry::move($current, $next, $state['sceneConfig'][$sceneId]['mapLevels'] ?? [], $action['movementKind'], $action['path'], FloorSupport::surfaces($state['sceneConfig'][$sceneId]['environment']['walls']['value']??[]), fn($p)=>WallMovement::terrain($p['column']+($p['width']??1)/2,$p['row']+($p['height']??1)/2,$state['sceneConfig'][$sceneId]??[]));
                     $patch['levelId'] = $floor['levelId'];
                     $patch['_floorTraversal'] = $floor['traversal'];
+                    if(array_key_exists('supportSurfaceId',$floor))$patch['_supportSurfaceId']=$floor['supportSurfaceId'];
                     $next = [...$next, ...$patch];
                 } elseif (array_key_exists('levelId', $patch)) {
                     $next['_floorTraversal'] = null;
@@ -1795,6 +1802,7 @@ final class SyncV2Store
             if ($restore !== null) $next = [...$next, ...$restore];
             $next['levelId'] = $floor['levelId'];
             $next['_floorTraversal'] = $floor['traversal'];
+            if(array_key_exists('supportSurfaceId',$floor))$next['_supportSurfaceId']=$floor['supportSurfaceId'];
             if(FloorGeometry::isAirborne($next)||array_key_exists('flightHeight',$current)){
                 $next['flightHeight']=FlightHeight::resolve($current,$next,$state['sceneConfig'][$sceneId]??[],$restore !== null ? 'undo' : $normalized['movementKind'],$normalized['path']);
                 $event['payload']['flightHeight']=$next['flightHeight'];

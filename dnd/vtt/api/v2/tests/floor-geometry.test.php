@@ -67,7 +67,7 @@ $walker=['column'=>0,'row'=>1,'width'=>1,'height'=>1,'levelId'=>'level-0'];
 $at=['column'=>3,'row'=>1];
 same(FloorGeometry::move($walker,$at,$contactLevels,'walk',[],[$plate],fn($p)=>1.95416665)['levelId'],'paved','Terrain reacquires nearly flush paving');
 same(FloorGeometry::move($walker,$at,$contactLevels,'walk',[],[$plate],fn($p)=>0.)['levelId'],'level-0','Walking below an overhead plate never acquires it');
-same(FloorGeometry::move($walker,['column'=>8,'row'=>1],$contactLevels,'walk',[],[$plate],fn($p)=>$p['column']<3?1.95:0.)['levelId'],'level-0','Do not infer an elevated intermediate route above endpoint terrain');
+same(FloorGeometry::move($walker,['column'=>8,'row'=>1],$contactLevels,'walk',[],[$plate],fn($p)=>$p['column']<3?1.95:0.)['levelId'],'paved','Retain the floor acquired at its nearly flush entrance over excavated terrain');
 same(FloorGeometry::move($walker,['column'=>8,'row'=>1],$contactLevels,'teleport',[],[$plate],fn($p)=>$p['column']<3?1.95:0.)['levelId'],'level-0','Teleport never traverses an intermediate plate edge');
 $holed=[...$plate,'holes'=>[[['x'=>3,'y'=>0],['x'=>5,'y'=>0],['x'=>5,'y'=>4],['x'=>3,'y'=>4]]]];
 same(FloorGeometry::move($walker,$at,$contactLevels,'walk',[],[$holed],fn($p)=>1.95)['levelId'],'level-0','A hole has no contact support');
@@ -87,3 +87,23 @@ same(FloorGeometry::fallingDestination(['column'=>3,'row'=>1,'levelId'=>'roof'],
 $nodeRoof=FloorSupport::surfaces(['nodes'=>[['id'=>'a','x'=>0,'y'=>0],['id'=>'b','x'=>4,'y'=>0],['id'=>'c','x'=>4,'y'=>4],['id'=>'d','x'=>0,'y'=>4]],'roofs'=>[['id'=>'nodeRoof','levelId'=>'roof','height'=>6,'nodes'=>['a','b','c','d']]]]);
 same(FloorSupport::supported(['column'=>1,'row'=>1,'levelId'=>'roof'],$nodeRoof),true,'Node-authored roof interior supports');
 same(FloorSupport::supported(['column'=>5,'row'=>1,'levelId'=>'roof'],$nodeRoof),false,'Node-authored roof exterior has no support');
+
+// Raised rooms retain edge contact over sloped or excavated basements.
+foreach ([['flush',2.,2.,2.],['slope',2.,0.,2.],['pit',2.,0.,2.],['lower plate',2.,0.,1.9],['higher outside',2.05,0.,2.],['negative basement',0.,-2.,0.]] as [$label,$outside,$inside,$floorHeight]) {
+ $s=[...$plate,'height'=>$floorHeight];
+ $terrain=fn($p)=>$p['column']<1.5?$outside:($label==='slope'?max($inside,$outside-($p['column']-1.5)/3):$inside);
+ foreach(['walk','shift','forced'] as $kind){
+  $r=FloorGeometry::move($walker,['column'=>8,'row'=>1],$contactLevels,$kind,[],[$s],$terrain);
+  same($r['levelId'],'paved',"$label $kind enters room");same($r['supportSurfaceId'],'paving',"$label retains exact surface");
+ }
+ $land=FloorSupport::landing([...$walker,...$at],[$s],$contactLevels,3.,$inside);
+ same($land['id'],'paving',"$label flier lands on plate");
+}
+same(FloorSupport::walkContact($walker,['column'=>8,'row'=>1],[],[$plate],$contactLevels,fn($p)=>$p['column']<.5?2.:0.),null,'Distant starting height cannot bridge a pit before the entrance');
+same(FloorSupport::walkContact($walker,$at,[],[$plate],$contactLevels,fn($p)=>1.8),null,'A real step over tolerance is not acquired');
+same(FloorSupport::landing([...$walker,...$at],[$plate],$contactLevels,1.,0.)['levelId'],'level-0','Flier below ceiling never lands above it');
+same(FloorSupport::landing([...$walker,...$at],[$plate],$hidden,3.,0.)['levelId'],'level-0','Hidden floor is not a landing');
+same(FloorSupport::landing([...$walker,...$at],[$holed],$contactLevels,3.,0.)['levelId'],'level-0','Landing respects holes');
+
+$cutLevels=['levels'=>[['id'=>'paved','elevationSquares'=>2,'cutouts'=>[['column'=>3,'row'=>0,'width'=>2,'height'=>4]]]]];
+same(FloorSupport::retained([...$walker,...$at,'_supportSurfaceId'=>'paving'],[$plate],$cutLevels),null,'Retained surface IDs cannot bridge floor cutouts');

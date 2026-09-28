@@ -1658,3 +1658,13 @@ Placement conflicts reconcile supplied authoritative snapshots even when semanti
 retry is disabled. Explicit height edits use the existing field-safe bounded
 retry for unrelated changes; concurrent edits to height are preserved and reported
 to the user. No new write authority or retry of uncertain accepted effects.
+
+Raised-room support (1.19.170) supersedes endpoint-only terrain contact: ordinary
+movement follows nearly flush floor-edge contact along the accepted path and
+persists the server-selected surface ID with the existing placement event.
+The 0.1-square tolerance is symmetric and applies at entry, not to a remote
+starting height. Client/server wall checks preserve that height across waypoints.
+Retained support respects floor cutouts. Flight interruption and Ground mode
+select the highest visible support below the previous airborne height in the
+same placement transaction; linked viewer updates and durable fall review remain
+on the existing authority paths. No client-supplied support IDs are accepted.
