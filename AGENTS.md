@@ -1160,3 +1160,9 @@ has no visible version footer. Production gameplay/deployment was not tested.
   for the held drag and update terrain picking after the camera transform. Preserve
   movement modifiers, selected groups, waypoints and picker cancellation. Exercise
   actual combined buttons with test-movement-pan-browser.cjs in a disposable copy.
+
+- Fall review selection skips receipts whose faller or struck creatures are
+  unavailable, retaining those receipts for manual recovery. An orphaned pending
+  receipt must not block later actor-owned reviews. Preserve scene/actor scope,
+  durable claims and no replay after completion; use the disposable Ctrl-drag
+  regression in test-forced-fall-review-browser.cjs.

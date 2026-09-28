@@ -6,6 +6,12 @@ export function fallDamage(squares,agility=0,forcedDown=false){
 export function fallerLandsProne(details,agility=0){return !!details.collidedIds?.length||fallDamage(details.squares,agility,details.forcedDown)>0;}
 export function landingTargetProne(fallerSize,targetMight){return (Number.parseFloat(fallerSize)||1)>Number(targetMight||0);}
 export function ownsFall(record,user,scene){return record.kind==='fall'&&record.status==='pending'&&record.actorId.toLowerCase()===String(user).toLowerCase()&&record.sceneId===scene;}
+export function nextReviewableFall(records,user,scene,placement){
+ // Missing creatures require manual recovery. Keep their durable receipts, but
+ // do not let one unavailable fall block every later review in this scene.
+ return records.find(record=>ownsFall(record,user,scene)&&
+  [record.targetId,...(record.details?.collidedIds||[])].every(id=>!!placement(id)));
+}
 export function mountFallReview({context,placement,traits,damage,prone,api=collisionRequest}){
  let busy=false,popup=null,disposed=false;
  const tick=async()=>{
@@ -13,7 +19,7 @@ export function mountFallReview({context,placement,traits,damage,prone,api=colli
   try{
    if(busy||popup||document.hidden)return;
    busy=true;const c=context();if(!c?.userId)return;
-   const records=await api(),record=records.find(r=>ownsFall(r,c.userId,c.sceneId));if(!record)return;
+   const records=await api(),record=nextReviewableFall(records,c.userId,c.sceneId,placement);if(!record)return;
    const faller=placement(record.targetId);if(!faller)return;
    const stats=await traits(faller),details=record.details||{},targets=[{id:record.targetId,name:faller.name||'Token',prone:fallerLandsProne(details,Number(stats.agility)||0)}];
    for(const id of details.collidedIds||[]){const p=placement(id);if(!p)throw Error('Fall target is unavailable; GM review is required.');const t=await traits(p);targets.push({id,name:p.name||'Creature',prone:landingTargetProne(stats.size,t.might)});}

@@ -230,3 +230,19 @@ and teleport pickers, both release orders, group movement, retained waypoints,
 pre-activation panning, pointer cancellation, Escape and a real player session.
 Accepted moves submit once and finish at the intended cell. Original scene tokens
 remain unchanged. The complete suite passes 837 tests across 115 files.
+
+## Unblocked fall reviews — 1.19.168
+
+The reported Bathhouse forced move (19,30) to (22,33) already recorded a fall
+from support height 2 to terrain -5.8719419: 7 whole falling squares under the
+existing policy. An earlier pending receipt for a deleted test token blocked
+the client review queue. Review selection now skips unavailable fallers or
+struck creatures, leaving their receipts intact for manual GM recovery.
+
+The disposable browser regression reproduces the missing dialog on the prior
+code, then verifies a real Ctrl-drag creates one fall receipt and opens its
+review after the fix. Reload preserves the pending review; Apply deducts 14
+stamina at Agility 0 and adds Prone once. A subsequent reload never reapplies
+the outcome. The orphan receipt and original scene tokens remain unchanged.
+All 838 regressions pass across 115 files. Fall geometry and downhill movement
+rules are unchanged; this fixes presentation of already-recorded outcomes.

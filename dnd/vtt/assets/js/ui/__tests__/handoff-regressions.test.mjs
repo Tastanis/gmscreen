@@ -7,7 +7,7 @@ import {reduceCanonicalEvent} from '../../sync-v2/event-reducer.js';
 import {terrainContact} from '../terrain-contact.js';
 import {terrainPatch} from '../environment-sync.mjs';
 import {resolveForcedDrag} from '../forced-drag.js';
-import {fallDamage,ownsFall,fallerLandsProne,landingTargetProne} from '../fall-review.js';
+import {fallDamage,ownsFall,fallerLandsProne,landingTargetProne,nextReviewableFall} from '../fall-review.js';
 import {teleportDistance} from '../teleport-choice.js';
 import {createEntityStore} from '../../sync-v2/entity-store.js';
 import {createEventStream} from '../../sync-v2/event-stream.js';
@@ -45,6 +45,18 @@ test('fall Prone distinguishes cushioned landings and each creature underneath',
  assert.equal(landingTargetProne(2,2),false);
  assert.equal(landingTargetProne(2,3),false);
  assert.equal(landingTargetProne(3,2),true);
+});
+
+test('missing fallers or landing creatures cannot block later actor-owned fall reviews',()=>{
+ const record={kind:'fall',status:'pending',actorId:'GM',sceneId:'s',targetId:'present',details:{collidedIds:[]}};
+ const records=[{...record,targetId:'deleted'}, {...record,details:{collidedIds:['deleted']}},
+  {...record,actorId:'sharon'}, {...record,sceneId:'other'}, {...record,status:'needs_review'},
+  {...record,status:'completed'}, {...record,status:'dismissed'}, record];
+ const before=structuredClone(records),placement=id=>id==='present'?{id}:null;
+ assert.equal(nextReviewableFall(records,'gm','s',placement),record);
+ assert.deepEqual(records,before,'Queue selection never changes or settles receipts');
+ assert.equal(nextReviewableFall(records.slice(0,-1),'gm','s',placement),undefined);
+ assert.equal(nextReviewableFall(records,'gm','s',id=>({id})),records[0],'Restored targets can still be reviewed');
 });
 test('portal events, terrain patches and authoritative state reduce identically',()=>{
  const r=spawnSync(php,[...phpArgs,fileURLToPath(new URL('../../../../api/v2/tests/environment-handoff.test.php',import.meta.url))],{encoding:'utf8'});

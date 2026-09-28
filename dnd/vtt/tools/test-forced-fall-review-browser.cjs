@@ -1,0 +1,34 @@
+const {chromium}=require('playwright'),assert=require('node:assert/strict');
+const base=process.env.VTT_TEST_ORIGIN||'http://127.0.0.1:18795';
+if(!['127.0.0.1','localhost'].includes(new URL(base).hostname))throw Error('Loopback fixture required');
+(async()=>{assert.equal((await(await fetch(base+'/diagnostic-manifest.json')).json()).test_fixture,'fall-review');const browser=await chromium.launch({channel:'chrome',headless:true});try{
+ const p=await browser.newPage({viewport:{width:1600,height:1000}}),errors=[],moves=[];p.on('pageerror',e=>errors.push(e.message));p.on('request',r=>{if(r.url().endsWith('/api/v2/commands.php')&&r.method()==='POST'){const d=r.postDataJSON();if(d.type==='token.move'||d.payload?.actions?.some(a=>a.forcedDestination))moves.push(d);}});
+ await p.route('**/*',r=>new URL(r.request().url()).origin===base?r.continue():r.abort());await p.goto(base+'/test-login.php?user=GM');
+ const snap=async()=>(await(await p.request.get(base+'/dnd/vtt/api/v2/snapshot.php')).json()).snapshot;
+ let s=await snap();const original=s.state.placements['scn_6229fb476a9c'];
+ const pkg=(await(await p.request.get(base+'/dnd/vtt/api/v2/scene-export.php?sceneId=scn_6229fb476a9c')).json()).package;
+ pkg.scene.name='Disposable forced fall review';pkg.domains.placements={};pkg.domains.drawings={};pkg.domains.templates={};
+ const imported=await p.request.post(base+'/dnd/vtt/api/v2/scene-import.php',{data:{package:pkg,operationId:crypto.randomUUID(),allowPlayerBrowsing:true}});assert.equal(imported.status(),200,await imported.text());const scene=(await imported.json()).scene;
+ async function cmd(type,payload,extra={}){s=await snap();const r=await p.request.post(base+'/dnd/vtt/api/v2/commands.php',{data:{type,sceneId:scene.id,baseRevision:s.revision,entityRevision:type==='routing.set'?s.state.routing._revision:s.state.sceneConfig[scene.id]._revision,operationId:crypto.randomUUID(),payload,...extra}});assert.equal(r.status(),200,await r.text());}
+ await cmd('routing.set',{routing:{activeSceneId:scene.id,mapUrl:scene.mapUrl,playerActiveSceneId:scene.id,playerMapUrl:scene.mapUrl,playerMapDisabled:false}});
+ s=await snap();const level=s.state.sceneConfig[scene.id].mapLevels.levels.find(l=>l.elevationSquares===2).id;
+ const token=id=>({id,name:id,column:19,row:30,width:1,height:1,levelId:level,team:'ally',movementMode:'ground',traits:{agility:0},hp:{current:50,max:50},imageUrl:'/dnd/vtt/assets/images/terrain-walker.svg'});
+ await cmd('placement.batch',{actions:[{kind:'add',sceneId:scene.id,placementId:'deleted-faller',placement:token('deleted-faller')}]});
+ s=await snap();const orphanOperation='0000-orphan-'+crypto.randomUUID();await cmd('token.move',{column:22,row:33,movementKind:'forced'},{entityId:'deleted-faller',entityRevision:s.state.placements[scene.id]['deleted-faller']._entityRevision,operationId:orphanOperation});
+ s=await snap();await cmd('placement.batch',{actions:[{kind:'remove',sceneId:scene.id,placementId:'deleted-faller',entityRevision:s.state.placements[scene.id]['deleted-faller']._entityRevision},{kind:'add',sceneId:scene.id,placementId:'fall-traveler',placement:token('fall-traveler')}]});
+ await p.reload();await p.waitForFunction(()=>window.terrainPrototype?.active&&window.terrainContext&&terrainContext().view.mapLoaded);
+ // Center only this browser's camera so the actual combined-button drag is visible.
+ await p.evaluate(()=>{const v=terrainContext().view,t=document.getElementById('vtt-map-transform'),surface=document.getElementById('vtt-map-surface').getBoundingClientRect(),x=(v.gridOffsets.left||0)+20*v.gridSize,y=(v.gridOffsets.top||0)+31*v.gridSize;v.scale=.4;v.translation={x:surface.width/2-x*v.scale,y:surface.height/2-y*v.scale};t.style.transform=`translate3d(${v.translation.x}px, ${v.translation.y}px, 0) scale(${v.scale})`;});
+ const start=await p.locator('#vtt-token-layer [data-placement-id="fall-traveler"]').boundingBox();assert.ok(start);
+ const end=await p.evaluate(()=>{const v=terrainContext().view,t=document.getElementById('vtt-map-transform'),r=t.getBoundingClientRect(),x=(v.gridOffsets.left||0)+22.5*v.gridSize,y=(v.gridOffsets.top||0)+33.5*v.gridSize,q=terrainPrototype.project(x,y,terrainPrototype.heightAt(x,y));return{x:r.left+q.x*r.width/t.offsetWidth,y:r.top+q.y*r.height/t.offsetHeight};});
+ await p.keyboard.down('Control');await p.mouse.move(start.x+start.width/2,start.y+start.height/2);await p.mouse.down();await p.mouse.move(end.x,end.y,{steps:25});await p.mouse.up();await p.keyboard.up('Control');
+ await p.waitForFunction(scene=>{const t=terrainContext().state.boardState.placements[scene].find(t=>t.id==='fall-traveler');return t.column===22&&t.row===33;},scene.id);
+ assert.equal(moves.length,1,'one Ctrl-drag command');const operationId=moves[0].operationId;
+ const receipt=async op=>(await(await p.request.get(base+'/dnd/vtt/api/v2/collision-effects.php?operationId='+op)).json()).result;
+ const records=await receipt(operationId);assert.equal(records.length,1);assert.equal(records[0].kind,'fall');assert.equal(records[0].details.squares,7);assert.equal(records[0].details.fromHeight,2);assert.ok(Math.abs(records[0].details.landingHeight+5.8719419)<.00001);console.log('PASS Ctrl-drag records one fall',records[0].details);
+ await p.waitForSelector('[data-fall-review]',{timeout:12000});assert.equal(await p.locator('[data-fall-review]').count(),1);assert.match(await p.locator('[data-fall-review]').innerText(),/fall-traveler/);assert.equal(await p.locator('[data-fall-review] input').inputValue(),'14');
+ await p.reload();await p.waitForSelector('[data-fall-review]',{timeout:12000});assert.equal(await p.locator('[data-fall-review]').count(),1);assert.equal((await receipt(operationId)).length,1);assert.equal(Number((await snap()).state.placements[scene.id]['fall-traveler'].hp.current),50);
+ await p.locator('[data-fall-review]').getByRole('button',{name:'Apply',exact:true}).click();await p.waitForFunction(()=>!document.querySelector('[data-fall-review]'));s=await snap();assert.equal(Number(s.state.placements[scene.id]['fall-traveler'].hp.current),36);assert.ok(s.state.placements[scene.id]['fall-traveler'].conditions.some(c=>(c.name||c)==='Prone'));
+ assert.equal((await receipt(operationId))[0].status,'completed');assert.equal((await receipt(orphanOperation))[0].status,'pending','Orphan receipt preserved for manual recovery');
+ await p.reload();await p.waitForTimeout(6500);assert.equal(await p.locator('[data-fall-review]').count(),0);assert.equal(Number((await snap()).state.placements[scene.id]['fall-traveler'].hp.current),36);assert.deepEqual((await snap()).state.placements['scn_6229fb476a9c'],original);assert.deepEqual(errors,[]);console.log('PASS orphan bypass, reload recovery, one damage/Prone application, no replay and original tokens unchanged');
+}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1});
