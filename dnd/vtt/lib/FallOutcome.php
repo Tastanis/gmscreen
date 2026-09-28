@@ -34,7 +34,7 @@ final class FallOutcome {
    foreach($candidates as [$x,$y]){
     $p=[...$to,'column'=>round($to['column'])+$x,'row'=>round($to['row'])+$y];
     if($p['column']<0||$p['row']<0||array_filter($others,fn($other)=>self::overlaps($p,$other)))continue;
-    if(FloorGeometry::fallingDestination($p,$config['mapLevels']??[],$config['environment']['walls']['value']['roofs']??[])!==null)continue;
+    if(FloorGeometry::fallingDestination($p,$config['mapLevels']??[],FloorSupport::surfaces($config['environment']['walls']['value']??[]))!==null)continue;
     if(abs(WallMovement::height($p,$config)-WallMovement::height($to,$config))>.03)continue;
     if(WallMovement::blocked($config['environment']['walls']['value']??['nodes'=>[],'segments'=>[]],$to,$p,$config))continue;
     return ['placement'=>$p,'collidedIds'=>array_column($hit,'id'),'relocated'=>true];

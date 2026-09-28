@@ -1141,3 +1141,9 @@ has no visible version footer. Production gameplay/deployment was not tested.
   filtering. Canonical movement reacquires plate support at accepted endpoints;
   do not infer an elevated intermediate route absent wall/stair validation. Never fix underfoot black paving by clearing
   fog or revealing overhead floors. Existing token state is not rewritten on load.
+
+- Roof-only levels use authored roof polygons for support and teleport choices.
+  An empty floor-polygon list is not a full-map plane when roof geometry exists.
+  Preserve true unmodeled legacy floors, floor-before-roof precedence, polygon
+  holes and node-authored roof resolution. Test grounded roof exits and ending
+  flight outside the roof with disposable tokens; never reset user map state.

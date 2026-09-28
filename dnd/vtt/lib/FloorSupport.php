@@ -28,8 +28,22 @@ final class FloorSupport {
   }
   return false;
  }
+ /** Resolve both imported polygon plates and node-authored roofs. */
+ public static function surfaces(array $model):array {
+  $surfaces=$model['roofs']??[];
+  if(!array_filter($surfaces,fn($s)=>!isset($s['points'])))return $surfaces;
+  $nodes=array_column($model['nodes']??[],null,'id');
+  return array_map(static function($surface)use($nodes){
+   if(!isset($surface['points']))$surface['points']=array_values(array_filter(array_map(fn($id)=>$nodes[$id]??null,$surface['nodes']??[])));
+   return $surface;
+  },$surfaces);
+ }
  public static function supported(array $p,array $surfaces,array $cuts=[]):?bool {
-  $floors=array_values(array_filter($surfaces,fn($s)=>($s['kind']??'')==='floor'&&($s['levelId']??'level-0')===($p['levelId']??'level-0')));
+  $matching=array_values(array_filter($surfaces,fn($s)=>($s['levelId']??'level-0')===($p['levelId']??'level-0')));
+  $floors=array_values(array_filter($matching,fn($s)=>($s['kind']??'')==='floor'));
+  // A roof-only level is bounded by its authored roof, not an infinite legacy plane.
+  // Where a real floor exists, its support remains independent of the roof above it.
+  if(!$floors)$floors=array_values(array_filter($matching,fn($s)=>($s['kind']??'roof')==='roof'));
   if(!$floors)return null;
   foreach($floors as $s)if(($s['levelId']??'level-0')===($p['levelId']??'level-0')&&self::intersects($p,$s,$cuts))return true;
   return false;

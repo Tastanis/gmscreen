@@ -24,7 +24,10 @@ export function intersectsFloor(p,surface,cuts=[]){
  return false;
 }
 export function floorSupported(p,surfaces,cuts=[]){
- const floors=surfaces.filter(s=>s.kind==='floor'&&(s.levelId||'level-0')===(p.levelId||'level-0'));if(!floors.length)return null;
+ const matching=surfaces.filter(s=>(s.levelId||'level-0')===(p.levelId||'level-0'));
+ let floors=matching.filter(s=>s.kind==='floor');
+ if(!floors.length)floors=matching.filter(s=>(s.kind||'roof')==='roof');
+ if(!floors.length)return null;
  return floors.some(s=>(s.levelId||'level-0')===(p.levelId||'level-0')&&intersectsFloor(p,s,cuts));
 }
 
@@ -36,4 +39,10 @@ export function terrainFloorContact(p,surfaces,mapLevels,ground){
   if(intersectsFloor(p,surface,level.cutouts||[])&&(!best||height>best.height))best=surface;
  }
  return best;
+}
+
+export function resolveSupportSurfaces(model={}){
+ const surfaces=model.roofs||[];if(surfaces.every(s=>s.points))return surfaces;
+ const nodes=new Map((model.nodes||[]).map(n=>[n.id,n]));
+ return surfaces.map(s=>s.points?s:{...s,points:(s.nodes||[]).map(id=>nodes.get(id)).filter(Boolean)});
 }

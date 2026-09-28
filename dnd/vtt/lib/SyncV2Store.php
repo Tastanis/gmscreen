@@ -1436,7 +1436,7 @@ final class SyncV2Store
                     $patch['movementMode'] = 'ground'; $next['movementMode'] = 'ground';
                 }
                 if (array_key_exists('movementMode', $patch)) {
-                    $floor = FloorGeometry::move($next, $next, $state['sceneConfig'][$sceneId]['mapLevels'] ?? [], 'forced', [], $state['sceneConfig'][$sceneId]['environment']['walls']['value']['roofs']??[], fn($p)=>WallMovement::terrain($p['column']+($p['width']??1)/2,$p['row']+($p['height']??1)/2,$state['sceneConfig'][$sceneId]??[]));
+                    $floor = FloorGeometry::move($next, $next, $state['sceneConfig'][$sceneId]['mapLevels'] ?? [], 'forced', [], FloorSupport::surfaces($state['sceneConfig'][$sceneId]['environment']['walls']['value']??[]), fn($p)=>WallMovement::terrain($p['column']+($p['width']??1)/2,$p['row']+($p['height']??1)/2,$state['sceneConfig'][$sceneId]??[]));
                     $patch['levelId'] = $floor['levelId']; $patch['_floorTraversal'] = null;
                     $patch['_movementUndo'] = [];
                     $next = [...$next, ...$patch];
@@ -1451,7 +1451,7 @@ final class SyncV2Store
                 }
                 if (!array_key_exists('levelId', $patch)
                     && (array_key_exists('column', $patch) || array_key_exists('row', $patch))) {
-                    $floor = FloorGeometry::move($current, $next, $state['sceneConfig'][$sceneId]['mapLevels'] ?? [], $action['movementKind'], $action['path'], $state['sceneConfig'][$sceneId]['environment']['walls']['value']['roofs']??[], fn($p)=>WallMovement::terrain($p['column']+($p['width']??1)/2,$p['row']+($p['height']??1)/2,$state['sceneConfig'][$sceneId]??[]));
+                    $floor = FloorGeometry::move($current, $next, $state['sceneConfig'][$sceneId]['mapLevels'] ?? [], $action['movementKind'], $action['path'], FloorSupport::surfaces($state['sceneConfig'][$sceneId]['environment']['walls']['value']??[]), fn($p)=>WallMovement::terrain($p['column']+($p['width']??1)/2,$p['row']+($p['height']??1)/2,$state['sceneConfig'][$sceneId]??[]));
                     $patch['levelId'] = $floor['levelId'];
                     $patch['_floorTraversal'] = $floor['traversal'];
                     $next = [...$next, ...$patch];
@@ -1791,7 +1791,7 @@ final class SyncV2Store
             if ($restore === null && $collisionPlan===null) WallMovement::assertAllowed($current,$next,$state['sceneConfig'][$sceneId]??[],$normalized['movementKind'],$normalized['path'],$isGm);
             $floor = $restore !== null
                 ? ['levelId'=>$restore['levelId'], 'traversal'=>$restore['_floorTraversal'], 'cause'=>'undo']
-                : FloorGeometry::move($current, $next, $mapLevels, $normalized['movementKind'], $normalized['path'], $state['sceneConfig'][$sceneId]['environment']['walls']['value']['roofs']??[], fn($p)=>WallMovement::terrain($p['column']+($p['width']??1)/2,$p['row']+($p['height']??1)/2,$state['sceneConfig'][$sceneId]??[]));
+                : FloorGeometry::move($current, $next, $mapLevels, $normalized['movementKind'], $normalized['path'], FloorSupport::surfaces($state['sceneConfig'][$sceneId]['environment']['walls']['value']??[]), fn($p)=>WallMovement::terrain($p['column']+($p['width']??1)/2,$p['row']+($p['height']??1)/2,$state['sceneConfig'][$sceneId]??[]));
             if ($restore !== null) $next = [...$next, ...$restore];
             $next['levelId'] = $floor['levelId'];
             $next['_floorTraversal'] = $floor['traversal'];

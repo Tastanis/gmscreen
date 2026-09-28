@@ -1646,3 +1646,8 @@ terrain contact can be acquired; genuine ceilings, holes and hidden floors canno
 Acquired floor changes flow through the existing atomic placement/view projection,
 movement receipts and undo. No new client-authoritative support field or snapshot
 writer. See the 1.19.164 map runtime release notes for the validated scope.
+
+Roof-only support is bounded by authored polygons rather than the legacy unmodeled
+floor fallback. Accepted movement and flight landing use that shared support check;
+player projection, movement/undo receipts and manual fall-review authority remain
+unchanged. See 1.19.165 roof support validation in the map runtime release guide.

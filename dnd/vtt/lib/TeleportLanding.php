@@ -3,7 +3,7 @@ declare(strict_types=1);
 require_once __DIR__.'/WallMovement.php';
 final class TeleportLanding {
  public static function surfaces(array $to,array $config,bool $gm):array {
-  $heights=FloorGeometry::elevations($config['mapLevels']??[]);$surfaces=$config['environment']['walls']['value']['roofs']??[];
+  $heights=FloorGeometry::elevations($config['mapLevels']??[]);$surfaces=FloorSupport::surfaces($config['environment']['walls']['value']??[]);
   $result=[['height'=>WallMovement::terrain($to['column']+($to['width']??1)/2,$to['row']+($to['height']??1)/2,$config),'levelId'=>'level-0','surfaceId'=>null]];
   $hidden=[];
   foreach($config['mapLevels']['levels']??[] as $level){
@@ -34,7 +34,7 @@ final class TeleportLanding {
  }
  public static function retained(array $to,array $config):?array {
   if(empty($to['_supportSurfaceId']))return null;
-  foreach($config['environment']['walls']['value']['roofs']??[] as $surface)if(($surface['id']??null)===$to['_supportSurfaceId']&&FloorSupport::intersects($to,$surface))return $surface;
+  foreach(FloorSupport::surfaces($config['environment']['walls']['value']??[]) as $surface)if(($surface['id']??null)===$to['_supportSurfaceId']&&FloorSupport::intersects($to,$surface))return $surface;
   return null;
  }
 }

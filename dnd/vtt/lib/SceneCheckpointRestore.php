@@ -57,7 +57,7 @@ final class SceneCheckpointRestore
             if (!isset($levels[$next['levelId']])) { $next['levelId']='level-0'; $reason='Current floor is absent from the checkpoint'; }
             $candidate = [...$placement,...$next];
             if (!FloorGeometry::isAirborne($candidate)) {
-                $fall = FloorGeometry::fallingDestination($candidate,$config['mapLevels'],$config['environment']['walls']['value']['roofs']??[]);
+                $fall = FloorGeometry::fallingDestination($candidate,$config['mapLevels'],FloorSupport::surfaces($config['environment']['walls']['value']??[]));
                 if ($fall !== null) { $next['levelId']=$fall; $reason='Restored geometry does not support this token'; }
             }
             if ($from !== $next) {

@@ -186,3 +186,25 @@ blue token at (11,31), with support height 2 and opaque paving pixels underfoot,
 without changing any token or viewer state. Live static-file inspection still
 showed the pre-fix renderer; SSH authentication was rejected. Publication awaits
 hosting access and must be verified separately from the Git push.
+
+### Authored roof support bounds — 1.19.165
+
+A roof-only level uses its authored roof polygons for support instead of treating
+an empty floor-polygon list as a legacy full-map plane. Existing floor polygons
+remain authoritative on levels that contain a floor; truly unmodeled legacy
+levels keep their prior cutout fallback. Server and client resolve imported
+polygon rings and node-authored roofs consistently, including polygon holes.
+Movement, flight interruption/landing, checkpoint support, collision heights and
+teleport destination choices share that boundary. No floor is revealed or token
+moved merely by loading the updated code.
+
+The disposable Bathhouse regression failed on the old source because (23,35)
+offered Roof 7 outside the roof polygon. It passed after the fix: no exterior
+Roof option, inside-roof support retained, walking off the roof falls, ending
+flight outside it lands on real support, and a custom-height teleport cannot
+manufacture an exterior roof. Reload retained the accepted landing, and the
+original blue token was unchanged. The complete suite passed 835 tests across
+114 files, including paired roof/legacy/node-geometry support checks.
+
+Publication scope: commit/push and a code-only Bathhouse sandbox update. The user
+explicitly requested no cPanel installation; no production deployment is claimed.

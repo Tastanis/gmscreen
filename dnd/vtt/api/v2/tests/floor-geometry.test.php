@@ -74,3 +74,16 @@ same(FloorGeometry::move($walker,$at,$contactLevels,'walk',[],[$holed],fn($p)=>1
 same(FloorGeometry::move([...$walker,'movementMode'=>'hover'],$at,$contactLevels,'walk',[],[$plate],fn($p)=>1.95)['levelId'],'level-0','Hover does not attach to paving');
 $hidden=['levels'=>[[...$contactLevels['levels'][0],'hidden'=>true]]];
 same(FloorGeometry::move($walker,$at,$hidden,'walk',[],[$plate],fn($p)=>1.95)['levelId'],'level-0','Hidden floors do not acquire tokens');
+
+// Roof-only levels are bounded by their real roof polygon, including openings.
+$roof=[...$plate,'id'=>'roof','kind'=>'roof','levelId'=>'roof','height'=>6];
+$roofLevels=['levels'=>[['id'=>'roof','elevationSquares'=>6,'cutouts'=>[]],['id'=>'legacy','elevationSquares'=>8,'cutouts'=>[]]]];
+same(FloorGeometry::fallingDestination(['column'=>11,'row'=>1,'levelId'=>'roof'],$roofLevels,[$roof]),'level-0','Outside an authored roof is unsupported even without cutouts');
+same(FloorGeometry::fallingDestination(['column'=>3,'row'=>1,'levelId'=>'roof'],$roofLevels,[$roof]),null,'Inside roof retains support');
+same(FloorGeometry::fallingDestination(['column'=>11,'row'=>1,'levelId'=>'legacy'],$roofLevels,[$roof]),null,'Genuinely unmodeled legacy levels retain their existing support');
+same(FloorGeometry::move(['column'=>3,'row'=>1,'levelId'=>'roof'],['column'=>11,'row'=>1],$roofLevels,'walk',[],[$roof])['cause'],'fall','Walking off a roof falls');
+$roofHole=[...$holed,'kind'=>'roof','levelId'=>'roof','height'=>6];
+same(FloorGeometry::fallingDestination(['column'=>3,'row'=>1,'levelId'=>'roof'],$roofLevels,[$roofHole]),'level-0','Roof holes remain unsupported');
+$nodeRoof=FloorSupport::surfaces(['nodes'=>[['id'=>'a','x'=>0,'y'=>0],['id'=>'b','x'=>4,'y'=>0],['id'=>'c','x'=>4,'y'=>4],['id'=>'d','x'=>0,'y'=>4]],'roofs'=>[['id'=>'nodeRoof','levelId'=>'roof','height'=>6,'nodes'=>['a','b','c','d']]]]);
+same(FloorSupport::supported(['column'=>1,'row'=>1,'levelId'=>'roof'],$nodeRoof),true,'Node-authored roof interior supports');
+same(FloorSupport::supported(['column'=>5,'row'=>1,'levelId'=>'roof'],$nodeRoof),false,'Node-authored roof exterior has no support');

@@ -47,7 +47,7 @@ final class WallMovement
         $level=$token['levelId']??'level-0';
         $base=(float)(FloorGeometry::elevations($config['mapLevels']??[])[$level]??0);
         if(FloorGeometry::isAirborne($token))return max($base,(float)($token['flightHeight']??(FlightHeight::ground($token,$config)+1)));
-        foreach($config['environment']['walls']['value']['roofs']??[] as $surface)if(!empty($token['_supportSurfaceId'])&&($surface['id']??null)===$token['_supportSurfaceId']&&FloorSupport::intersects($token,$surface))return (float)$surface['height'];
+        foreach(FloorSupport::surfaces($config['environment']['walls']['value']??[]) as $surface)if(!empty($token['_supportSurfaceId'])&&($surface['id']??null)===$token['_supportSurfaceId']&&FloorSupport::intersects($token,$surface))return (float)$surface['height'];
         $x=$token['column']+($token['width']??1)/2;$y=$token['row']+($token['height']??1)/2;
         $model=$config['environment']['walls']['value']??[];
         foreach($model['ramps']??[] as $s){
@@ -62,11 +62,11 @@ final class WallMovement
         // Only maps with canonical floor plates use imported-map terrain fallback.
         if($level!=='level-0'){
             $cuts=[];foreach($config['mapLevels']['levels']??[] as $floor)if($floor['id']===$level){$cuts=$floor['cutouts']??[];break;}
-            if(FloorSupport::supported($token,$model['roofs']??[],$cuts)===false)return self::terrain($x,$y,$config);
+            if(FloorSupport::supported($token,FloorSupport::surfaces($model),$cuts)===false)return self::terrain($x,$y,$config);
         }
         if($level==='level-0'){
             $ground=self::terrain($x,$y,$config);
-            $contact=empty($token['_floorTraversal'])?FloorSupport::terrainContact($token,$model['roofs']??[],$config['mapLevels']??[],$ground):null;
+            $contact=empty($token['_floorTraversal'])?FloorSupport::terrainContact($token,FloorSupport::surfaces($model),$config['mapLevels']??[],$ground):null;
             return $contact?(float)$contact['height']:$ground;
         }
         return $base;

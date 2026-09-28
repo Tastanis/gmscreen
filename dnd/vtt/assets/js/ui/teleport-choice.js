@@ -1,8 +1,8 @@
 import {floorElevations} from '../state/normalize/floor-elevation.js';
-import {floorSupported,intersectsFloor} from './floor-support.js';
+import {floorSupported,intersectsFloor,resolveSupportSurfaces} from './floor-support.js';
 export function teleportDistance(from,to,startHeight,endHeight){return Math.max(Math.abs(to.column-from.column),Math.abs(to.row-from.row),Math.abs(endHeight-startHeight));}
 export function chooseTeleportHeight({from,to,range=null,context,ground,startHeight,combatActive=false}){
- const config=context.state.boardState.sceneState?.[context.state.boardState.activeSceneId]||{},surfaces=config.environment?.walls?.value?.roofs||[],heights=floorElevations(config.mapLevels);
+ const config=context.state.boardState.sceneState?.[context.state.boardState.activeSceneId]||{},surfaces=resolveSupportSurfaces(config.environment?.walls?.value),heights=floorElevations(config.mapLevels);
  const x=to.column+(from.width||1)/2,y=to.row+(from.height||1)/2,p={...from,...to};
  const choices=[{height:ground(x,y),label:'Ground',levelId:'level-0'}];
  for(const l of config.mapLevels?.levels||[]){

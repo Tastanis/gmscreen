@@ -1,4 +1,4 @@
-import {floorSupported,intersectsFloor,terrainFloorContact} from './floor-support.js';
+import {floorSupported,intersectsFloor,terrainFloorContact,resolveSupportSurfaces} from './floor-support.js';
 import {sharedField,saveShared,acknowledgedRevision} from './environment-sync.mjs';
 import {rampAt,rampHeight,rampPick,rampGround,rampSupports,rampLanding} from './imported-ramps.mjs';
 import './height-tethers.js';
@@ -60,7 +60,7 @@ function unproject(p){
   const g=dimensions().grid,ox=ctx.view.gridOffsets.left||0,oy=ctx.view.gridOffsets.top||0,actor=rulerActor();
   const raw={x:(p.x-ox)/g,y:(p.y-oy)/g};
   for(const r of (importedDesign()?.ramps||[])){const q=rampPick(r,raw);if(q&&actor&&rampSupports(r,actor,q))return {x:ox+q.x*g,y:oy+q.y*g};}
-  if(actor){const h=groundFor(actor);for(const f of (importedDesign()?.roofs||[]).filter(f=>f.kind==='floor'&&f.height<=h+.7).sort((a,b)=>b.height-a.height)){
+  if(actor){const h=groundFor(actor);for(const f of (resolveSupportSurfaces(importedDesign()||{})).filter(f=>f.kind==='floor'&&f.height<=h+.7).sort((a,b)=>b.height-a.height)){
    const q={x:raw.x-f.height*.12,y:raw.y+f.height*.36};if(onSurface(f,q))return {x:ox+q.x*g,y:oy+q.y*g};
   }}
  }
@@ -154,17 +154,17 @@ function groundFor(placement,point=null){
  if(!placement)return 0;
  const level=placement.levelId||'level-0',base=floorElevations(levelConfig()).get(level)??0;
  if(['fly','hover'].includes(placement.movementMode))return Math.max(base,flight.height(placement,(x,y)=>flightGround(x,y,placement)));
- if(placement._supportSurfaceId){const surface=importedDesign()?.roofs?.find(s=>s.id===placement._supportSurfaceId);if(surface&&intersectsFloor(placement,surface))return surface.height;}
+ if(placement._supportSurfaceId){const surface=resolveSupportSurfaces(importedDesign()||{}).find(s=>s.id===placement._supportSurfaceId);if(surface&&intersectsFloor(placement,surface))return surface.height;}
  if(importedDesign()){
   const d=dimensions(),x=point?(point.x-(ctx.view.gridOffsets.left||0))/d.grid:placement.column+(placement.width||1)/2,y=point?(point.y-(ctx.view.gridOffsets.top||0))/d.grid:placement.row+(placement.height||1)/2;
   const z=rampGround((importedDesign()?.ramps||[]),placement,{x,y});if(z!==null)return z;
-  if(level!=='level-0'&&floorSupported({...placement,column:x-(placement.width||1)/2,row:y-(placement.height||1)/2},importedDesign()?.roofs||[],(levelConfig()?.levels||[]).find(f=>f.id===level)?.cutouts||[])===false)return heightAt((ctx.view.gridOffsets.left||0)+x*d.grid,(ctx.view.gridOffsets.top||0)+y*d.grid);
+  if(level!=='level-0'&&floorSupported({...placement,column:x-(placement.width||1)/2,row:y-(placement.height||1)/2},resolveSupportSurfaces(importedDesign()||{}),(levelConfig()?.levels||[]).find(f=>f.id===level)?.cutouts||[])===false)return heightAt((ctx.view.gridOffsets.left||0)+x*d.grid,(ctx.view.gridOffsets.top||0)+y*d.grid);
  }
 
  if(level!=='level-0')return base;
  const d=dimensions(),x=point?.x??((placement.column+placement.width/2)*d.grid+(ctx.view.gridOffsets.left||0)),y=point?.y??((placement.row+placement.height/2)*d.grid+(ctx.view.gridOffsets.top||0));
  const ground=heightAt(x,y),p={...placement,column:(x-(ctx.view.gridOffsets.left||0))/d.grid-(placement.width||1)/2,row:(y-(ctx.view.gridOffsets.top||0))/d.grid-(placement.height||1)/2};
- const contact=!placement._floorTraversal?terrainFloorContact(p,importedDesign()?.roofs||[],levelConfig(),ground):null;
+ const contact=!placement._floorTraversal?terrainFloorContact(p,resolveSupportSurfaces(importedDesign()||{}),levelConfig(),ground):null;
  return contact?.height??ground;
 }
 function highGround(actor,target){return effectiveHeight(groundFor(actor),Math.max(actor.width||1,actor.height||1))-effectiveHeight(groundFor(target),Math.max(target.width||1,target.height||1))>=1;}
@@ -172,7 +172,7 @@ function isCliff(x,y){const g=dimensions().grid;return [[1,0],[0,1],[1,1],[1,-1]
 function rulerActor(){const placements=ctx.state.boardState.placements[ctx.state.boardState.activeSceneId]||[];return placements.find(p=>p.id===(ctx.selectedIds[0]||window.visionPrototype?.viewerTokenId));}
 function rulerGround(column,row,actor){
  const d=dimensions();
- if(actor&&importedDesign()){const p={x:column+(actor.width||1)/2,y:row+(actor.height||1)/2};return rampLanding((importedDesign()?.ramps||[]),(importedDesign()?.roofs||[]),actor,p,onSurface)??groundFor({...actor,column,row});}
+ if(actor&&importedDesign()){const p={x:column+(actor.width||1)/2,y:row+(actor.height||1)/2};return rampLanding((importedDesign()?.ramps||[]),(resolveSupportSurfaces(importedDesign()||{})),actor,p,onSurface)??groundFor({...actor,column,row});}
  if(actor&&((actor.levelId&&actor.levelId!=='level-0')||(actor.movementMode&&actor.movementMode!=='ground')))return groundFor(actor);
  return heightAt((ctx.view.gridOffsets.left||0)+(column+.5)*d.grid,(ctx.view.gridOffsets.top||0)+(row+.5)*d.grid);
 }
