@@ -59,3 +59,18 @@ same(FloorGeometry::fullyUnsupported(['column'=>2,'row'=>2,'width'=>2,'height'=>
 same(FloorGeometry::fullyUnsupported(['column'=>2,'row'=>2,'width'=>3,'height'=>2], ['cutouts'=>[$hole]]), false, 'Large token remains supported');
 same(FloorGeometry::move(['levelId'=>'upper','column'=>0,'row'=>2], ['column'=>2,'row'=>2], $floors, 'forced')['levelId'], 'level-0', 'Forced movement still falls');
 echo "Floor geometry: Traversal, teleport, boundary, support and hidden/deleted-floor checks passed.\n";
+
+// Nearly flush terrain-to-paving contact, kept distinct from stairs and ceilings.
+$plate=['id'=>'paving','kind'=>'floor','levelId'=>'paved','height'=>2,'points'=>[['x'=>2,'y'=>0],['x'=>10,'y'=>0],['x'=>10,'y'=>4],['x'=>2,'y'=>4]],'holes'=>[]];
+$contactLevels=['levels'=>[['id'=>'paved','elevationSquares'=>2,'cutouts'=>[]]]];
+$walker=['column'=>0,'row'=>1,'width'=>1,'height'=>1,'levelId'=>'level-0'];
+$at=['column'=>3,'row'=>1];
+same(FloorGeometry::move($walker,$at,$contactLevels,'walk',[],[$plate],fn($p)=>1.95416665)['levelId'],'paved','Terrain reacquires nearly flush paving');
+same(FloorGeometry::move($walker,$at,$contactLevels,'walk',[],[$plate],fn($p)=>0.)['levelId'],'level-0','Walking below an overhead plate never acquires it');
+same(FloorGeometry::move($walker,['column'=>8,'row'=>1],$contactLevels,'walk',[],[$plate],fn($p)=>$p['column']<3?1.95:0.)['levelId'],'level-0','Do not infer an elevated intermediate route above endpoint terrain');
+same(FloorGeometry::move($walker,['column'=>8,'row'=>1],$contactLevels,'teleport',[],[$plate],fn($p)=>$p['column']<3?1.95:0.)['levelId'],'level-0','Teleport never traverses an intermediate plate edge');
+$holed=[...$plate,'holes'=>[[['x'=>3,'y'=>0],['x'=>5,'y'=>0],['x'=>5,'y'=>4],['x'=>3,'y'=>4]]]];
+same(FloorGeometry::move($walker,$at,$contactLevels,'walk',[],[$holed],fn($p)=>1.95)['levelId'],'level-0','A hole has no contact support');
+same(FloorGeometry::move([...$walker,'movementMode'=>'hover'],$at,$contactLevels,'walk',[],[$plate],fn($p)=>1.95)['levelId'],'level-0','Hover does not attach to paving');
+$hidden=['levels'=>[[...$contactLevels['levels'][0],'hidden'=>true]]];
+same(FloorGeometry::move($walker,$at,$hidden,'walk',[],[$plate],fn($p)=>1.95)['levelId'],'level-0','Hidden floors do not acquire tokens');

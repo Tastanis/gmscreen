@@ -34,4 +34,15 @@ final class FloorSupport {
   foreach($floors as $s)if(($s['levelId']??'level-0')===($p['levelId']??'level-0')&&self::intersects($p,$s,$cuts))return true;
   return false;
  }
+ /** Contact tolerance for nearly flush imported paving; never a full-square climb. */
+ public static function terrainContact(array $p,array $surfaces,array $mapLevels,float $ground):?array {
+  $levels=array_column($mapLevels['levels']??[],null,'id');$best=null;
+  foreach($surfaces as $surface){
+   $level=$levels[$surface['levelId']??'']??null;$height=(float)($surface['height']??0);
+   if(($surface['kind']??'')!=='floor'||!$level||($level['hidden']??false)||$height<$ground-1e-6||$height>$ground+.1+1e-6)continue;
+   if(self::intersects($p,$surface,$level['cutouts']??[])&&(!$best||$height>$best['height']))$best=$surface;
+  }
+  return $best;
+ }
+
 }

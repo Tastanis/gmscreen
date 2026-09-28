@@ -1639,3 +1639,10 @@ application stays needs_review and never replays. GM recovery is inspection/manu
 resolution. No new authored ability JSON fields were added. Downward forced throws
 remain manual; the fall-damage calculator supports Agility-zero but no vertical
 movement control was introduced.
+
+Terrain-to-floor reacquisition uses server-owned polygon contact in FloorGeometry
+for token.move and position-only placement batches. A floor within 0.1 squares of
+terrain contact can be acquired; genuine ceilings, holes and hidden floors cannot.
+Acquired floor changes flow through the existing atomic placement/view projection,
+movement receipts and undo. No new client-authoritative support field or snapshot
+writer. See the 1.19.164 map runtime release notes for the validated scope.

@@ -1,0 +1,25 @@
+const {chromium}=require('playwright'),assert=require('node:assert/strict');
+const base=process.env.VTT_TEST_ORIGIN||'http://127.0.0.1:18795';
+if(!['127.0.0.1','localhost'].includes(new URL(base).hostname))throw Error('Loopback fixture required');
+(async()=>{assert.equal((await(await fetch(base+'/diagnostic-manifest.json')).json()).test_fixture,'walkway-support');const b=await chromium.launch({channel:'chrome',headless:true});try{
+const errors=[];async function page(user){const p=await b.newPage({viewport:{width:1280,height:900}});p.on('pageerror',e=>errors.push(e.message));await p.route('**/*',r=>new URL(r.request().url()).origin===base?r.continue():r.abort());await p.goto(base+'/test-login.php?user='+user);await p.waitForFunction(()=>window.terrainPrototype?.active&&terrainContext().view.mapLoaded);return p;}
+const gm=await page('GM'),snap=async()=>(await(await gm.request.get(base+'/dnd/vtt/api/v2/snapshot.php')).json()).snapshot;
+let s=await snap();const scene='scn_6229fb476a9c',id='qa-walkway-'+Date.now(),original=s.state.placements[scene]['bathhouse-test-vision-blue'];
+const placement={id,name:'Walkway support QA',column:11,row:31,width:1,height:1,levelId:'level-0',team:'ally',visionOwners:['sharon'],imageUrl:original.imageUrl};
+let r=await gm.request.post(base+'/dnd/vtt/api/v2/commands.php',{data:{type:'placement.batch',sceneId:scene,baseRevision:s.revision,operationId:crypto.randomUUID(),payload:{actions:[{kind:'add',sceneId:scene,placementId:id,placement}]}}});assert.equal(r.status(),200,await r.text());
+const p=await page('sharon');await p.evaluate(({scene,id})=>localStorage.setItem('last-owned-view:sharon:'+scene,id),{scene,id});await p.reload();await p.waitForFunction(id=>window.visionPrototype?.viewerTokenId===id,id);
+async function view(){await p.waitForTimeout(350);return p.evaluate(({scene,id})=>{const t=terrainContext().state.boardState.placements[scene].find(t=>t.id===id),z=terrainPrototype.groundFor(t),point={x:t.column+.5,y:t.row+.5},v=terrainContext().view,q=terrainPrototype.project((v.gridOffsets.left||0)+point.x*v.gridSize,(v.gridOffsets.top||0)+point.y*v.gridSize,z);const color=[...document.querySelector('#roof-prototype').getContext('2d').getImageData(Math.round(q.x),Math.round(q.y),1,1).data];return {column:t.column,row:t.row,level:t.levelId,z,visible:!!document.querySelector('[data-vision-placement-id="'+id+'"]'),sight:visionPrototype.visible(point,z+.01,t),color};},{scene,id});}
+console.log('initial',await view());assert.equal((await view()).z,2);assert.ok((await view()).color[3]>0,'Paving rendered under viewer');
+async function move(column,row){s=await snap();const t=s.state.placements[scene][id];const r=await p.request.post(base+'/dnd/vtt/api/v2/commands.php',{data:{type:'token.move',sceneId:scene,entityId:id,entityRevision:t._entityRevision,baseRevision:s.revision,operationId:crypto.randomUUID(),payload:{column,row,movementKind:'walk'}}});assert.equal(r.status(),200,await r.text());await p.waitForFunction(({scene,id,column,row})=>{const t=terrainContext().state.boardState.placements[scene].find(t=>t.id===id);return t.column===column&&t.row===row;},{scene,id,column,row});return view();}
+for(let i=0;i<3;i++){console.log('off',await move(15,29));const on=await move(11,31);console.log('on',on);assert.equal(on.level,'bath-level-0');assert.equal(on.z,2);assert.ok(on.sight&&on.visible&&on.color[3]>0);}
+await move(12,31);
+async function drag(column,row){
+ const token=p.locator('#vtt-token-layer [data-placement-id="'+id+'"]'),box=await token.boundingBox();assert.ok(box);
+ const end=await p.evaluate(({column,row})=>{const c=terrainContext(),v=c.view,t=document.querySelector('#vtt-map-transform'),r=t.getBoundingClientRect(),raw={x:(v.gridOffsets.left||0)+(column+.5)*v.gridSize,y:(v.gridOffsets.top||0)+(row+.5)*v.gridSize},q=terrainPrototype.project(raw.x,raw.y,terrainPrototype.heightAt(raw.x,raw.y));return{x:r.left+q.x*r.width/t.offsetWidth,y:r.top+q.y*r.height/t.offsetHeight};},{column,row});
+ await p.mouse.move(box.x+box.width/2,box.y+box.height/2);await p.mouse.down();await p.mouse.move(end.x,end.y,{steps:20});await p.mouse.up();
+ await p.waitForFunction(({scene,id,column,row})=>{const t=terrainContext().state.boardState.placements[scene].find(t=>t.id===id);return t.column===column&&t.row===row;},{scene,id,column,row});
+}
+await drag(15,29);assert.equal((await view()).level,'level-0');await drag(12,31);assert.equal((await view()).level,'bath-level-0');console.log('PASS actual player pointer drags off and back onto paving');
+await p.reload();await p.waitForFunction(id=>window.visionPrototype?.viewerTokenId===id,id);assert.equal((await view()).z,2);await p.screenshot({path:'.playwright-mcp/walkway-support-fixed.png'});
+assert.deepEqual((await snap()).state.placements[scene]['bathhouse-test-vision-blue'],original);assert.deepEqual(errors,[]);console.log('PASS repeated player terrain/paving contact, artwork, sight, reload and unchanged original token');
+}finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1});

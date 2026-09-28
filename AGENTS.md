@@ -1135,3 +1135,9 @@ has no visible version footer. Production gameplay/deployment was not tested.
   selection sight, player privacy and height-aware render cache invalidation.
   Player terrain scaling follows the owned token actually supplying personal
   vision, including below zero. See docs/vtt-map-runtime-release.md.
+
+- Nearly flush imported paving contact uses the paired FloorSupport terrainContact
+  helpers with a 0.1-square upward tolerance, polygon holes/cutouts and hidden-floor
+  filtering. Canonical movement reacquires plate support at accepted endpoints;
+  do not infer an elevated intermediate route absent wall/stair validation. Never fix underfoot black paving by clearing
+  fog or revealing overhead floors. Existing token state is not rewritten on load.

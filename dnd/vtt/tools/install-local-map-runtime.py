@@ -38,6 +38,10 @@ def install(package: Path, app: Path, sandbox_version=None, sandbox_build=None):
                     raise ValueError('Refusing to lower the sandbox build.')
                 version.update(version=sandbox_version, build_number=sandbox_build)
                 data = (json.dumps(version, indent=2) + '\n').encode()
+            # Unchanged PHP endpoints may be open in the running local server.
+            # Avoid replacing them; changed files still use atomic replacement.
+            if target.is_file() and target.read_bytes() == data:
+                continue
             target.parent.mkdir(parents=True, exist_ok=True)
             temporary = target.with_name(target.name + '.install-part')
             temporary.write_bytes(data)

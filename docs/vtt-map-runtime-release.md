@@ -152,3 +152,37 @@ physical support -6.164 squares: its personal sight and token rendering remained
 active, and terrain presentation followed its -6 display band instead of the old
 linked-floor reference. This test uses a separate SQLite backup/runtime; it does
 not move or remove user tokens in the Bathhouse sandbox.
+
+### Paving support reacquisition — 1.19.164
+
+Grounded movement can reacquire a known, non-hidden floor plate where terrain is
+within 0.1 vertical squares below that plate. This narrow contact tolerance handles
+nearly flush imported paving; it does not permit climbing a whole square or
+attaching to an overhead floor. Positive footprint area, authored holes and floor
+cutouts use the shared polygon support rules. Stair progress and airborne tokens
+retain their existing authority. Contact checks the accepted endpoint and retains the acquired floor on subsequent
+movement. It does not invent an elevated intermediate route through walls or over
+a gap. Separate explicit teleport landing choices retain their authority.
+
+Both token.move and position-only placement batches resolve contact on the server.
+Client ground height and server collision height recognize the same contact, so an
+existing token resting just below paving renders on it immediately without a data
+rewrite; its next accepted movement persists the floor assignment. Roof visibility
+and personal fog were not relaxed. The Bathhouse datum remains 0/2/4/6.
+
+The copied Bathhouse fixture passed three player off/on trips, actual pointer drags,
+paving pixels beneath the token, personal sight, reload and original-token
+preservation. Separate negative-terrain player vision passed at -6.164 squares.
+Pure server/client checks cover raised overhead floors, holes/cutouts, hidden floors,
+hover and the absence of unvalidated intermediate support;
+existing stair checks remain in the complete regression suite. The local code-only
+installer skips byte-identical files so open unchanged PHP polling endpoints do
+not prevent refresh. Existing database, images and configuration are preserved.
+
+Final 1.19.164 verification: 834 tests across 114 files passed. The original
+Bathhouse sandbox was updated by the code-only installer; its complete canonical
+state remained unchanged at revision 3866. A fresh GM browser verified the existing
+blue token at (11,31), with support height 2 and opaque paving pixels underfoot,
+without changing any token or viewer state. Live static-file inspection still
+showed the pre-fix renderer; SSH authentication was rejected. Publication awaits
+hosting access and must be verified separately from the Git push.

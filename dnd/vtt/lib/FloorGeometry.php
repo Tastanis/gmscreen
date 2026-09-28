@@ -213,7 +213,7 @@ final class FloorGeometry
     }
 
     /** Derive floor and resumable stair progress from canonical geometry only. */
-    public static function move(array $current, array $destination, array $mapLevels, string $kind = 'walk', array $waypoints = [], array $surfaces = []): array
+    public static function move(array $current, array $destination, array $mapLevels, string $kind = 'walk', array $waypoints = [], array $surfaces = [], ?callable $terrainAt = null): array
     {
         $levelId = (string) ($current['levelId'] ?? self::BASE);
         $levels = self::orderedLevels($mapLevels);
@@ -251,6 +251,14 @@ final class FloorGeometry
         }
         $fall = $supportedStair ? null : self::fallingDestination([...$current, ...$destination, 'levelId'=>$result['levelId']], $mapLevels, $surfaces);
         if ($fall !== null) { $result['levelId']=$fall; $result['cause']='fall'; $result['traversal']=null; }
+
+        // Reacquire contact at the accepted endpoint. Do not infer an elevated
+        // intermediate route that wall/stair authority has not validated.
+        if($terrainAt!==null && $surfaces && $result['levelId']===self::BASE && !$supportedStair && $result['traversal']===null && $result['cause']!=='stairs'){
+            $p=[...$current,...$destination];
+            $contact=FloorSupport::terrainContact($p,$surfaces,$mapLevels,$terrainAt($p));
+            if($contact){$result['levelId']=$contact['levelId'];$result['cause']='surface';}
+        }
         return $result;
     }
 }

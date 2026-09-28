@@ -64,7 +64,12 @@ final class WallMovement
             $cuts=[];foreach($config['mapLevels']['levels']??[] as $floor)if($floor['id']===$level){$cuts=$floor['cutouts']??[];break;}
             if(FloorSupport::supported($token,$model['roofs']??[],$cuts)===false)return self::terrain($x,$y,$config);
         }
-        return $level==='level-0'?self::terrain($x,$y,$config):$base;
+        if($level==='level-0'){
+            $ground=self::terrain($x,$y,$config);
+            $contact=empty($token['_floorTraversal'])?FloorSupport::terrainContact($token,$model['roofs']??[],$config['mapLevels']??[],$ground):null;
+            return $contact?(float)$contact['height']:$ground;
+        }
+        return $base;
     }
 
     public static function blocked(array $model,array $from,array $to,array $config): bool

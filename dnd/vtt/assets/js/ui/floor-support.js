@@ -27,3 +27,13 @@ export function floorSupported(p,surfaces,cuts=[]){
  const floors=surfaces.filter(s=>s.kind==='floor'&&(s.levelId||'level-0')===(p.levelId||'level-0'));if(!floors.length)return null;
  return floors.some(s=>(s.levelId||'level-0')===(p.levelId||'level-0')&&intersectsFloor(p,s,cuts));
 }
+
+// Match FloorSupport::terrainContact: a nearly flush imported surface, not a stair.
+export function terrainFloorContact(p,surfaces,mapLevels,ground){
+ const levels=new Map((mapLevels?.levels||[]).map(l=>[l.id,l]));let best=null;
+ for(const surface of surfaces){const level=levels.get(surface.levelId),height=surface.height;
+  if(surface.kind!=='floor'||!level||level.hidden||height<ground-1e-6||height>ground+.1+1e-6)continue;
+  if(intersectsFloor(p,surface,level.cutouts||[])&&(!best||height>best.height))best=surface;
+ }
+ return best;
+}
