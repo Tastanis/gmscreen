@@ -1651,3 +1651,10 @@ Roof-only support is bounded by authored polygons rather than the legacy unmodel
 floor fallback. Accepted movement and flight landing use that shared support check;
 player projection, movement/undo receipts and manual fall-review authority remain
 unchanged. See 1.19.165 roof support validation in the map runtime release guide.
+
+Confirmed movement projection also applies movementMode, flightHeight and
+server-owned _supportSurfaceId before board visibility refresh (1.19.169).
+Placement conflicts reconcile supplied authoritative snapshots even when semantic
+retry is disabled. Explicit height edits use the existing field-safe bounded
+retry for unrelated changes; concurrent edits to height are preserved and reported
+to the user. No new write authority or retry of uncertain accepted effects.

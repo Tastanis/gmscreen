@@ -371,9 +371,11 @@ export function createTokenMovementRuntime({
       return await commandClient.submit('placement.batch', { actions });
     } catch (error) {
       const conflictSnapshot = error?.response?.snapshot;
-      if (retry && !actions.some(action=>action.forcedDestination||action.teleportChoice) && error?.status === 409 && conflictSnapshot) {
+      if (error?.status === 409 && conflictSnapshot) {
         store.replaceSnapshot(conflictSnapshot, { authoritative: true, source: 'conflict' });
         reconcileSnapshot(store.getConfirmedSnapshot(), { source: 'conflict' });
+      }
+      if (retry && !actions.some(action=>action.forcedDestination||action.teleportChoice) && error?.status === 409 && conflictSnapshot) {
         const safe = actions.every(action => {
           const previous = placementFromSnapshot(before, action.sceneId, action.placementId);
           const current = placementFromSnapshot(conflictSnapshot, action.sceneId, action.placementId);

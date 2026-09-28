@@ -246,3 +246,25 @@ stamina at Agility 0 and adds Prone once. A subsequent reload never reapplies
 the outcome. The orphan receipt and original scene tokens remain unchanged.
 All 838 regressions pass across 115 files. Fall geometry and downhill movement
 rules are unchanged; this fixes presentation of already-recorded outcomes.
+
+## Playtest fixes - 1.19.169
+
+Confirmed moves now apply flight altitude, movement mode and supporting surface
+to the live board before visibility refresh. Point-outline imported roofs/floors
+no longer crash the wall roof editor or prevent subsequent door updates.
+Height edits retry unrelated revision conflicts through the existing field-safe
+retry; competing height edits retain the accepted value and display an inline
+error. Escape closes the Templates menu and returns focus to its button.
+
+All 839 tests pass across 115 files. The disposable loopback regression
+`node dnd/vtt/tools/test-playtest-fixes-browser.cjs` requires a cloned diagnostic
+app marked with `test_fixture: "playtest-fixes"` and the Bathhouse source scene.
+It imports a separate synthetic hill/building scene, then verifies GM/Cal/Sharon
+flight visibility before/after reload, flying teleport, point-outline doors,
+node-roof editing, both height conflict cases and Templates Escape. No page errors;
+original scene placements remain unchanged. A scene switch completed in 1.2 seconds.
+This does not establish live Pusher latency or combat stair-drag coverage.
+
+The shared tracker retains its existing GM Hide policy. Upper-floor template
+filtering and roof-edge look-down behavior are unchanged. Publication is Git
+commit/push only; no cPanel installation or production deployment is claimed.

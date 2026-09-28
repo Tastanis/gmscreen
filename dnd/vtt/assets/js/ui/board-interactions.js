@@ -694,7 +694,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
   const boardApi = store ?? {};
   window.submitEnvironmentCommand = descriptor => tokenMovementRuntime.submitBoardDomainCommands([descriptor], true);
-  window.submitFlightHeight = (token,flightHeight) => tokenMovementRuntime.submitPlacementOps([{type:'placement.update',sceneId:getActiveSceneId(),placementId:token.id,patch:{flightHeight}}], false);
+  window.submitFlightHeight = (token,flightHeight) => tokenMovementRuntime.submitPlacementOps([{type:'placement.update',sceneId:getActiveSceneId(),placementId:token.id,patch:{flightHeight}}]);
   window.terrainContext = () => {
     const state=store.getState(),sceneId=state.boardState.activeSceneId,scene=state.boardState.sceneState?.[sceneId],userId=getCurrentUserId();
     const linked=resolvePcTokenForUser({userId,placements:state.boardState.placements?.[sceneId],viewerAssociation:scene?.pcTokenAssociations?.[userId]});
@@ -847,11 +847,15 @@ export function mountBoardInteractions(store, routes = {}) {
       target.column = Number(placement.column);
       target.row = Number(placement.row);
       target.levelId = placement.levelId || BASE_MAP_LEVEL_ID;
+      target.movementMode = placement.movementMode || 'ground';
+      target.flightHeight = placement.flightHeight ?? null;
+      target._supportSurfaceId = placement._supportSurfaceId ?? null;
       target._floorTraversal = placement._floorTraversal ?? null;
       target._movementUndo = placement._movementUndo ?? null;
       target._syncV2EntityRevision = Number(placement._entityRevision) || 0;
     });
     patchTokenMovementNode(sceneId, placementId, placement);
+    if (activeTokenSettingsId === placementId) syncTokenLevelControls(getPlacementFromStore(placementId));
 
     if (context?.event?.payload?.movementKind === 'teleport' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       const node=Array.from(tokenLayer.children).find(node=>node.dataset.placementId===placementId);
@@ -19592,6 +19596,7 @@ export function mountBoardInteractions(store, routes = {}) {
           <label class="vtt-token-settings__row" data-flight-height-row hidden>Height
             <input type="number" min="0" max="1000000" step="1" data-token-flight-height aria-label="Flying height" style="width:6em" />
           </label>
+          <p data-flight-height-error role="alert" hidden></p>
         </div>
         ${gmUser ? `<label class="vtt-token-settings__section">Owners<select multiple size="4" data-token-vision-owners aria-label="Token owners">${visionOwnerProfiles.map(id=>`<option value="${escapeHtml(id)}">${escapeHtml(id)}</option>`).join('')}</select></label>` : ''}
         ${hiddenToggleMarkup}
@@ -19706,7 +19711,11 @@ export function mountBoardInteractions(store, routes = {}) {
     });
     element.querySelector('[data-token-flight-height]')?.addEventListener('change', async event => {
       const token=getPlacementFromStore(activeTokenSettingsId);if(!token||!['fly','hover'].includes(token.movementMode))return;
-      try{await window.terrainPrototype.setTokenHeight(token,Number(event.target.value));event.target.value=window.terrainPrototype.groundFor(getPlacementFromStore(token.id));}catch(error){updateStatus(error.message);}
+      const input=event.target,errorLabel=element.querySelector('[data-flight-height-error]');
+      errorLabel.hidden=true;errorLabel.textContent='';input.disabled=true;
+      try{await window.terrainPrototype.setTokenHeight(token,Number(input.value));}
+      catch(error){if(activeTokenSettingsId===token.id){errorLabel.textContent='Height was not saved. '+(error?.message||'Check the current height before trying again.');errorLabel.hidden=false;}}
+      finally{input.disabled=false;if(activeTokenSettingsId===token.id)input.value=window.terrainPrototype.groundFor(getPlacementFromStore(token.id));}
     });
     menu.movementMode?.addEventListener('change', async () => {
       const placementId = activeTokenSettingsId;
@@ -20039,6 +20048,8 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     activeTokenSettingsId = placementId;
+    const flightError = tokenSettingsMenu.element.querySelector('[data-flight-height-error]');
+    if (flightError) { flightError.hidden = true; flightError.textContent = ''; }
     hitPointsEditSession = null;
     syncTokenSettingsForm(placement);
 
@@ -24551,8 +24562,16 @@ function createTemplateTool() {
 
     document.body.appendChild(menu);
 
+    const handleMenuEscape = event => {
+      if (event.key !== 'Escape' || menu.hidden) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      hideMenu();
+      templatesButton?.focus({ preventScroll: true });
+    };
     function hideMenu() {
       menu.hidden = true;
+      document.removeEventListener('keydown', handleMenuEscape, true);
       templatesButton?.setAttribute('aria-expanded', 'false');
       if (outsideClickHandler) {
         document.removeEventListener('pointerdown', outsideClickHandler, true);
@@ -24590,6 +24609,7 @@ function createTemplateTool() {
 
         menu.style.left = `${left}px`;
         menu.style.visibility = '';
+        document.addEventListener('keydown', handleMenuEscape, true);
         templatesButton?.setAttribute('aria-expanded', 'true');
         if (!outsideClickHandler) {
           outsideClickHandler = (event) => {

@@ -1166,3 +1166,12 @@ has no visible version footer. Production gameplay/deployment was not tested.
   receipt must not block later actor-owned reviews. Preserve scene/actor scope,
   durable claims and no replay after completion; use the disposable Ctrl-drag
   regression in test-forced-fall-review-browser.cjs.
+
+- Confirmed movement must hydrate flightHeight, movementMode and server-owned
+  support alongside position/floor before visibility is refreshed. Height edits
+  may retry an unrelated revision conflict only through the existing field-safe
+  placement retry; competing height changes stay authoritative and show an error.
+  Always reconcile supplied conflict snapshots even when semantic retry is off.
+- Imported point-outline roofs/floors do not have wall-node IDs. Preserve them
+  when matching or editing node-authored roofs. The disposable three-client
+  test-playtest-fixes-browser.cjs covers flight, doors, height races and Escape.

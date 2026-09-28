@@ -7,6 +7,23 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+test('a placement conflict refreshes confirmed state even when semantic retry is disabled', async () => {
+  let writes=0;const reconciled=[];
+  const original={id:'token',movementMode:'fly',flightHeight:1,_entityRevision:1};
+  const newer={...original,flightHeight:4,_entityRevision:2};
+  const snapshot=token=>({revision:token._entityRevision,state:{placements:{scene:{token}}}});
+  const runtime=createTokenMovementRuntime({enabled:true,placementsEnabled:true,commandsEndpoint:'/commands',snapshotEndpoint:'/snapshot',eventsEndpoint:'/sync',windowRef:{},
+    reconcileSnapshot:(s,c)=>reconciled.push([s,c]),
+    fetchImpl:async(url)=>{
+      if(String(url).includes('snapshot'))return response(200,{success:true,snapshot:snapshot(original)});
+      writes++;return response(409,{success:false,error:'entity_revision_mismatch',snapshot:snapshot(newer)});
+    },
+  });
+  await assert.rejects(runtime.submitPlacementOps([{type:'placement.update',sceneId:'scene',placementId:'token',patch:{flightHeight:2}}],false));
+  assert.equal(writes,1);assert.equal(runtime.getConfirmedSnapshot().state.placements.scene.token.flightHeight,4);
+  assert.ok(reconciled.some(([s,c])=>c.source==='conflict'&&s.state.placements.scene.token.flightHeight===4));
+});
+
 test('checkpoint restore preserves the reviewed revision and never retries a stale preview', async () => {
   const commands = [];
   const runtime = createTokenMovementRuntime({
