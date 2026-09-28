@@ -121,10 +121,9 @@ function tick(now){
    const placements=ctx.state.boardState.placements[ctx.state.boardState.activeSceneId]||[];
    flight.select('terrain-flight:v1:'+ctx.state.boardState.activeSceneId);flight.update(placements,flightGround);
    if(ctx.isGM)for(const token of placements)if(['fly','hover'].includes(token.movementMode)&&!Number.isFinite(token.flightHeight)&&!flightMigrationPending.has(ctx.state.boardState.activeSceneId+':'+token.id)){flightMigrationPending.add(ctx.state.boardState.activeSceneId+':'+token.id);window.submitFlightHeight(token,flight.height(token,(x,y)=>flightGround(x,y,token))).catch(console.error);}
-   const reference=placements.find(p=>p.id===(ctx.isGM?(ctx.selectedIds.length===1?ctx.selectedIds[0]:window.visionPrototype?.viewerTokenId):ctx.followId));
+   const reference=placements.find(p=>p.id===(ctx.isGM?(ctx.selectedIds.length===1?ctx.selectedIds[0]:window.visionPrototype?.viewerTokenId):(window.visionPrototype?.viewerTokenId||ctx.followId)));
    viewerHeight=window.gmVision?.manual?window.gmVision.height:reference ? heightBand(groundFor(reference))*2 : (floorElevations(levelConfig()).get(ctx.levelId)||0);
-   const wallTop=ctx.isGM?window.wallPrototype?.selectedTopHeight:null,displayHeight=wallTop==null?viewerHeight:Math.round(wallTop*100)/100;
-   const label=$('[data-map-level-nav-name]');if(label)label.textContent=displayHeight===0?'Level 0':`Height ${displayHeight}`;
+   window.gmVision?.syncNavigation();
    button.hidden=!ctx.isGM;
    if(!ctx.isGM&&!panel.hidden)setOpen(false);
 

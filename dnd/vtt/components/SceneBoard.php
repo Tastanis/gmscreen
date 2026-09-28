@@ -26,24 +26,24 @@ function renderVttSceneBoard(bool $isGm = false): string
                     hidden
                     aria-hidden="true"
                     role="group"
-                    aria-label="Map level navigation"
+                    aria-label="GM viewing height"
                 >
                     <button
                         class="vtt-board__level-button"
                         type="button"
                         data-action="view-map-level-down"
-                        aria-label="View lower map level"
-                        title="View lower map level"
+                        aria-label="Lower viewing height"
+                        title="Lower viewing height"
                     >
                         <span aria-hidden="true">&#9660;</span>
                     </button>
-                    <span class="vtt-board__level-name" data-map-level-nav-name>Base map</span>
+                    <span class="vtt-board__level-name" data-map-level-nav-name>Height 0</span>
                     <button
                         class="vtt-board__level-button"
                         type="button"
                         data-action="view-map-level-up"
-                        aria-label="View higher map level"
-                        title="View higher map level"
+                        aria-label="Raise viewing height"
+                        title="Raise viewing height"
                     >
                         <span aria-hidden="true">&#9650;</span>
                     </button>

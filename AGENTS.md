@@ -1127,3 +1127,11 @@ has no visible version footer. Production gameplay/deployment was not tested.
   Preserve checkpoint relocation semantics and under-stair traversal. Four QA
   passes use disposable runtimes, never user token/map reset. Prototype packaging
   and production deployment remain separate; 82-token rendering still needs work.
+
+- GM inspection arrows change local physical Height in one-square increments,
+  including negative heights; never restore discrete-floor stepping or board
+  writes to these controls. Show players remains an explicit canonical floor
+  activation using the floor at/below the inspection height. Preserve token
+  selection sight, player privacy and height-aware render cache invalidation.
+  Player terrain scaling follows the owned token actually supplying personal
+  vision, including below zero. See docs/vtt-map-runtime-release.md.

@@ -122,3 +122,33 @@ magnifier contains outlines only and remains above fog. No cliff classification,
 falling mechanics, ordinary drag rules, or saved map data changed in this update.
 The cutoff is a visual default, not a movement rule. Browser regression covers
 raised-terrain edges, fog, magnifier anchoring, exact accepted landing and cleanup.
+
+### GM inspection height — 1.19.163
+
+The GM header arrows now change a scene-local inspection height by one square,
+including below zero and above the highest floor. They do not select discrete
+floors, move tokens, or submit viewer commands. The label always says Height.
+A height click overrides selected-token sight locally; selecting another token
+restores token sight. The preference survives reload. Explicit Show players still
+uses the canonical floor command, resolving intermediate heights to the floor at
+or below the inspection height (the lowest floor when below all floors).
+
+Vision repaint signatures include viewer floor, physical ground height and
+inspection height. Terrain projection and roof/stair painting consume that same
+height. This does not rebase imported geometry: the Bathhouse basement/ground/
+upper/roof remain at 0/2/4/6. Its basement artwork is visible at Height 0.
+Player terrain scaling now uses the owned token supplying personal vision,
+including on negative terrain, rather than an unrelated linked-floor reference.
+
+Validation: the final suite passed 833 tests across 114 files, including new
+height-state tests for floor gaps, selected-token overrides and player isolation. The read-only
+Bathhouse browser regression passed -3 through 8, intermediate-height repaints,
+basement/ground artwork, reload, unchanged canonical state and zero board command
+requests. Native map, tokens, player views and sandbox data were preserved.
+Live publication requires a separate confirmed hosting deployment.
+
+The separate negative-player-height browser fixture verified an owned token at
+physical support -6.164 squares: its personal sight and token rendering remained
+active, and terrain presentation followed its -6 display band instead of the old
+linked-floor reference. This test uses a separate SQLite backup/runtime; it does
+not move or remove user tokens in the Bathhouse sandbox.

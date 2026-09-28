@@ -8463,6 +8463,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     const gmUser = isGmUser();
+    if (gmUser && window.gmVision?.syncNavigation()) return;
     const controls = getMapLevelNavigationControlState(mapLevelsState, options);
     const visible = gmUser && controls.hasLevels;
     mapLevelNav.hidden = !visible;
@@ -8521,91 +8522,10 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function handleMapLevelNavigationClick(direction = 'up') {
-    if (!isGmUser()) {
-      return;
-    }
-
-    const activeSceneId = getActiveSceneId();
-    if (!activeSceneId || typeof boardApi.updateState !== 'function') {
-      return;
-    }
-
-    const state = boardApi.getState?.() ?? {};
-    const mapLevels = resolveSceneTokenLevelState(state, activeSceneId);
-    // Levels v2: GM browsing operates on the GM's own per-user level
-    // (`userLevelState[gmId]`), not the legacy scene-global active id.
-    // The nav includes the virtual Level 0 entry, so up/down can step
-    // into and out of the base map.
-    const currentLevelId = getViewerLevelIdForCurrentUser(state, activeSceneId);
-    const controls = getMapLevelNavigationControlState(mapLevels, {
-      currentLevelId,
-      includeBaseLevel: true,
-    });
-    const targetLevel = getAdjacentTokenLevel(mapLevels, controls.currentLevelId, direction, {
-      includeBaseLevel: true,
-    });
-    if (!targetLevel?.id) {
-      syncMapLevelNavigationControls(mapLevels, { currentLevelId, includeBaseLevel: true });
-      return;
-    }
-
-    const gmUserId = getCurrentUserId();
-    if (!gmUserId) {
-      syncMapLevelNavigationControls(mapLevels, { currentLevelId });
-      return;
-    }
-
-    const updatedAt = Date.now();
-    let updated = false;
-    boardApi.updateState?.((draft) => {
-      const sceneEntry = ensureSceneStateDraftEntry(draft, activeSceneId);
-      if (!sceneEntry) {
-        return;
-      }
-
-      if (!sceneEntry.userLevelState || typeof sceneEntry.userLevelState !== 'object') {
-        sceneEntry.userLevelState = {};
-      }
-      const existing = sceneEntry.userLevelState[gmUserId];
-      if (existing && existing.levelId === targetLevel.id && existing.source === 'manual') {
-        return;
-      }
-      sceneEntry.userLevelState[gmUserId] = {
-        levelId: targetLevel.id,
-        source: 'manual',
-        updatedAt,
-      };
-      updated = true;
-    });
-
-    if (!updated) {
-      syncMapLevelNavigationControls(mapLevels, { currentLevelId, includeBaseLevel: true });
-      return;
-    }
-
-    markSceneStateDirty(activeSceneId, 'userLevelState');
-    // Levels v2: broadcast the GM's per-user level change as a
-    // `user-level.set` op so other clients pick it up via the existing
-    // op applier path. The op applier mirrors the local mutation above.
-    const userLevelOp = {
-      type: 'user-level.set',
-      sceneId: activeSceneId,
-      userId: gmUserId,
-      levelId: targetLevel.id,
-      source: 'manual',
-    };
-    persistBoardStateSnapshot({ serializeWithSnapshots: true }, [userLevelOp]);
-
-    const latestState = boardApi.getState?.() ?? {};
-    syncMapLevelsForState(latestState, activeSceneId);
-    if (status) {
-      status.textContent = `Viewing ${targetLevel.name || 'map level'}.`;
-    }
+    if (isGmUser()) window.gmVision?.step(direction);
   }
 
-  // Levels v2 (§5.3): GM-only Activate. Pulls every known user (the
-  // configured chat/player roster, not just connected sockets) to the
-  // GM's current viewing level. Tokens are not moved.
+  // Explicit Show players resolves the inspection height to a real floor.
   function handleMapLevelActivateClick() {
     if (!isGmUser()) {
       return;
@@ -8617,7 +8537,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     const state = boardApi.getState?.() ?? {};
-    const targetLevelId = getViewerLevelIdForCurrentUser(state, activeSceneId);
+    const targetLevelId = window.gmVision?.playerFloorId ?? getViewerLevelIdForCurrentUser(state, activeSceneId);
     if (!targetLevelId) {
       return;
     }

@@ -47,7 +47,7 @@ function tick(){
   // Terrain edits change projection; avoid applying an old silhouette to changed geometry.
   if(terrainCache.explorationHash===undefined){let hash=2166136261;for(const h of terrain.field.h){hash=Math.imul(hash^Math.round(h*10000),16777619);}terrainCache.explorationHash=hash>>>0;}
   exploration.select(JSON.stringify([c.userId,c.state.boardState.activeSceneId,c.state.boardState.mapUrl,c.isGM?'stacked-view-v2':'player-view-v3',sharedField('exploration')?.value.resetId||'initial',c.isGM?token?.id:'personal',v.gridSize,v.gridOffsets,v.mapInsets,v.mapPixelSize,terrainCache.explorationHash]),v.mapPixelSize.width,v.mapPixelSize.height);
-  const next=JSON.stringify([terrain.markersVisible,gmVision.manual,gmVision.lighting,gmVision.revision,exploration.revision,editing,token,placements.map(p=>[p.id,p.column,p.row,p.width,p.height,p.levelId,p.movementMode,p.visionOwners,p.team,p.combatTeam]),wallRevision,roofRenderer.revision,terrain.flightRevision,terrain.revision,v.mapPixelSize,v.mapInsets,v.gridOffsets,v.gridSize]);
+  const next=JSON.stringify([c.levelId,viewerGround,inspectionHeight,terrain.markersVisible,gmVision.manual,gmVision.lighting,gmVision.revision,exploration.revision,editing,token,placements.map(p=>[p.id,p.column,p.row,p.width,p.height,p.levelId,p.movementMode,p.visionOwners,p.team,p.combatTeam]),wallRevision,roofRenderer.revision,terrain.flightRevision,terrain.revision,v.mapPixelSize,v.mapInsets,v.gridOffsets,v.gridSize]);
   const changed=next!==signature;
   if(changed){
    signature=next;const start=performance.now();
