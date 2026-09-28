@@ -6206,6 +6206,56 @@ export function mountBoardInteractions(store, routes = {}) {
     { passive: false }
   );
 
+  // A mouse chord changes `buttons` through pointermove, not another
+  // pointerdown/up. Route camera gestures before either movement picker.
+  let movementPanActive = false;
+  const hasHeldMovement = () => !!(viewState.dragState || viewState.dragCandidate || pendingAutomationMove);
+  function startMovementPan(event) {
+    movementPanActive = true;
+    viewState.isPanning = true;
+    viewState.pointerId = event.pointerId;
+    viewState.lastPointer = { x: event.clientX, y: event.clientY };
+    mapSurface.classList.add('is-panning');
+    try { mapSurface.setPointerCapture(event.pointerId); } catch (_) {}
+  }
+  mapSurface.addEventListener('pointerdown', (event) => {
+    if (event.button !== 2 || !hasHeldMovement() || !viewState.mapLoaded) return;
+    startMovementPan(event);
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }, true);
+  mapSurface.addEventListener('pointermove', (event) => {
+    if (event.pointerType !== 'mouse' || (!movementPanActive && !hasHeldMovement())) return;
+    if (movementPanActive && event.pointerId !== viewState.pointerId) return;
+    if (!(event.buttons & 2)) {
+      if (movementPanActive) endPan(event);
+      return;
+    }
+    if (!movementPanActive) startMovementPan(event);
+    const dx = event.clientX - viewState.lastPointer.x;
+    const dy = event.clientY - viewState.lastPointer.y;
+    viewState.translation.x += dx;
+    viewState.translation.y += dy;
+    viewState.lastPointer = { x: event.clientX, y: event.clientY };
+    applyTransform();
+    if (viewState.dragCandidate) {
+      // Panning alone must not activate the pending left-button drag.
+      viewState.dragCandidate.startClient.x += dx;
+      viewState.dragCandidate.startClient.y += dy;
+    }
+    if (!(event.buttons & 1) && event.button === 0) {
+      // Left was released first while right remains down: commit once, then
+      // retain camera capture until the right button is released.
+      handlePointerUp(event);
+      try { mapSurface.setPointerCapture(event.pointerId); } catch (_) {}
+    } else if (viewState.dragState && (event.buttons & 1)) {
+      updateTokenDrag(event);
+    }
+    if (pendingAutomationMove) handleAutomationMovePointerMove(event);
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }, true);
+
   mapSurface.addEventListener('pointerdown', async (event) => {
     if (isPersistentZoneControlTarget(event.target)) {
       return;
@@ -6712,11 +6762,14 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    movementPanActive = false;
     viewState.isPanning = false;
     viewState.pointerId = null;
     mapSurface.classList.remove('is-panning');
     try {
-      mapSurface.releasePointerCapture?.(event.pointerId);
+      if (viewState.dragState?.pointerId !== event.pointerId && viewState.dragCandidate?.pointerId !== event.pointerId) {
+        mapSurface.releasePointerCapture?.(event.pointerId);
+      }
     } catch (error) {
       // Ignore capture release errors
     }
@@ -6727,10 +6780,10 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    if (viewState.dragState && event.pointerId === viewState.dragState.pointerId) {
-      const isPrimaryButton = event.button === 0 || event.button === -1;
-      endTokenDrag({ commit: isPrimaryButton, pointerId: event.pointerId, movementKind: dragMovementKind(event) });
-    } else if (viewState.dragCandidate && event.pointerId === viewState.dragCandidate.pointerId) {
+    const isPrimaryButton = event.button === 0 || event.button === -1;
+    if (isPrimaryButton && viewState.dragState && event.pointerId === viewState.dragState.pointerId) {
+      endTokenDrag({ commit: true, pointerId: event.pointerId, movementKind: dragMovementKind(event) });
+    } else if (isPrimaryButton && viewState.dragCandidate && event.pointerId === viewState.dragCandidate.pointerId) {
       clearDragCandidate(event.pointerId);
     }
 
@@ -17733,22 +17786,11 @@ export function mountBoardInteractions(store, routes = {}) {
       updateStatus('Forced movement skipped.');
       return true;
     }
-    // Right-click during force-move: start a pan so the GM can scroll the map
-    // to find their destination. The bubble-phase pan handler doesn't fire
-    // because the capture-phase listener returns early when pendingAutomationMove
-    // is active, so we set up the pan here directly.
+    // Keep direct callers on the same camera path as captured pointer events.
     if (event.button === 2) {
-      viewState.isPanning = true;
-      viewState.pointerId = event.pointerId;
-      viewState.lastPointer = { x: event.clientX, y: event.clientY };
-      mapSurface.classList.add('is-panning');
-      try {
-        mapSurface.setPointerCapture(event.pointerId);
-      } catch (error) {
-        // Ignore capture failures — pan still works via mouse-move events.
-      }
-      // Don't preventDefault; let the contextmenu listener suppress the menu.
-      return true; // handle it so the capture listener calls stopImmediatePropagation
+      startMovementPan(event);
+      event.preventDefault();
+      return true;
     }
     if (event.button !== 0) {
       return false;

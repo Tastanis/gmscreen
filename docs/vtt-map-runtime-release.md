@@ -215,3 +215,18 @@ original blue token was unchanged. The complete suite passed 835 tests across
 
 Publication scope: commit/push and a code-only Bathhouse sandbox update. The user
 explicitly requested no cPanel installation; no production deployment is claimed.
+
+## Held movement camera panning — 1.19.167
+
+Right-button dragging pans the camera while retaining a held token or an ability
+movement picker. Mouse button chords are handled before token movement because
+the additional press/release arrives as pointermove. Releasing right ends only
+the pan and retains left-button capture; releasing left first commits once and
+allows the pan to continue. Movement picking runs after the camera transform.
+
+The isolated browser regression covers actual combined buttons at zoom on raised
+terrain: walk, shift, forced movement, teleport, flying/hovering, push/pull/slide
+and teleport pickers, both release orders, group movement, retained waypoints,
+pre-activation panning, pointer cancellation, Escape and a real player session.
+Accepted moves submit once and finish at the intended cell. Original scene tokens
+remain unchanged. The complete suite passes 837 tests across 115 files.

@@ -1153,3 +1153,10 @@ has no visible version footer. Production gameplay/deployment was not tested.
   quarter-run ledges and the separate downhill fall policy. Measured Bathhouse
   cliff regressions cover both reported westward routes and canonical player
   collision receipts without moving the user's tokens.
+
+- Right-button camera panning during a token drag or movement picker must preserve
+  the movement. Mouse chords report button changes through pointermove; releasing
+  right ends only the pan, while releasing left first commits once. Keep capture
+  for the held drag and update terrain picking after the camera transform. Preserve
+  movement modifiers, selected groups, waypoints and picker cancellation. Exercise
+  actual combined buttons with test-movement-pan-browser.cjs in a disposable copy.
