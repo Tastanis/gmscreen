@@ -1147,3 +1147,9 @@ has no visible version footer. Production gameplay/deployment was not tested.
   Preserve true unmodeled legacy floors, floor-before-roof precedence, polygon
   holes and node-authored roof resolution. Test grounded roof exits and ending
   flight outside the roof with disposable tokens; never reset user map state.
+
+- Short uphill terrain faces qualify for forced slams at one square of rise over
+  half a square of run (the existing 2:1 grade). Keep client/PHP checks paired,
+  quarter-run ledges and the separate downhill fall policy. Measured Bathhouse
+  cliff regressions cover both reported westward routes and canonical player
+  collision receipts without moving the user's tokens.

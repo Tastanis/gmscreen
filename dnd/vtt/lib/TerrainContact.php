@@ -8,7 +8,10 @@ final class TerrainContact {
   $sample=function($s)use($from,$ux,$uy,$ground,$support,$air,$alt,$sign){$p=[...$from,'column'=>$from['column']+$ux*$s,'row'=>$from['row']+$uy*$s];$z=$ground($p['column']+($p['width']??1)/2,$p['row']+($p['height']??1)/2);return ['z'=>$sign*($air?max($alt,$z):$z),'on'=>$air||!$support||abs($support($p)-$z)<=.03];};
   for($k=0;$k<=ceil($d*8);$k++){
    $start=$k/8;$a=$sample($start);if(!$a['on'])continue;
-   foreach([[1,self::GRADE],[self::FACE_RUN,self::FACE_RISE]] as [$run,$rise]){
+   // One-square uphill faces use the existing 2:1 grade; downhill falls retain their policy.
+   $windows=[[1,self::GRADE],[self::FACE_RUN,self::FACE_RISE]];
+   if($sign>0)$windows[]=[self::FACE_RISE/self::GRADE,self::FACE_RISE];
+   foreach($windows as [$run,$rise]){
     $b=$sample($start+$run);if(!$b['on']||$b['z']-$a['z']<$rise-1e-6)continue;
     $previous=$a;
     for($j=1;$j<=ceil($run*8);$j++){

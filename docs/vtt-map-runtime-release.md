@@ -47,6 +47,13 @@ ownership/PC links, rather than the ally team label, determine always-visible ma
 
 Forced collision stops use the 75% whole-step rule and grid coordinates. Terrain
 slams use a whole-square yellow-grade window plus one-square quarter-run faces.
+Short uphill faces also qualify with one square of rise over half a square of run,
+preserving the 2:1 steepness threshold rather than lowering it for the whole map.
+The shared PHP/client contact checks retain the separate downhill fall policy.
+Version 1.19.166 passed 837 regressions and isolated player browser checks against
+both measured Bathhouse faces: rejected bypass, matching stop and four-damage
+collision receipts, reload, and unchanged original token. This verifies the
+browser collision planner and command path; it does not retest physical Ctrl-drag.
 Gentle rises lift a pushed flier only as far as the ground it crosses. Server and
 client checks must remain paired. Ordinary walking and advisory budgets are unchanged.
 

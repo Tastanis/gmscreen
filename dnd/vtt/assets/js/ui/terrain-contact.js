@@ -10,7 +10,11 @@ export function terrainContact(from,to,ground,support=null,sign=1){
  const sample=s=>{const p={...from,column:from.column+ux*s,row:from.row+uy*s},z=ground(p.column+(p.width||1)/2,p.row+(p.height||1)/2);return {z:sign*(air?Math.max(alt,z):z),on:air||!support||Math.abs(support(p)-z)<=.03};};
  for(let k=0;k<=Math.ceil(d*8);k++){
   const start=k/8,a=sample(start);if(!a.on)continue;
-  for(const [run,rise] of [[1,FORCED_TERRAIN_SLAM_GRADE],[TERRAIN_FACE_RUN,TERRAIN_FACE_RISE]]){
+  // Uphill slams need only one square of face at the same 2:1 grade.
+  // Keep the separate downhill fall-contact policy unchanged.
+  const windows=[[1,FORCED_TERRAIN_SLAM_GRADE],[TERRAIN_FACE_RUN,TERRAIN_FACE_RISE]];
+  if(sign>0)windows.push([TERRAIN_FACE_RISE/FORCED_TERRAIN_SLAM_GRADE,TERRAIN_FACE_RISE]);
+  for(const [run,rise] of windows){
    const b=sample(start+run);if(!b.on||b.z-a.z<rise-1e-6)continue;
    let previous=a;
    for(let j=1;j<=Math.ceil(run*8);j++){
