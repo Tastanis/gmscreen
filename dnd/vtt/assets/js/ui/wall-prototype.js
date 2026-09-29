@@ -1,3 +1,4 @@
+import {wallCubeModel} from './wall-cubes.js';
 import {forcedTerrainBlocked} from './forced-flight-terrain.js';
 import {shareRoofImages} from './roof-images.mjs';
 import {sharedField,saveShared,acknowledgedRevision} from './environment-sync.mjs';
@@ -24,6 +25,7 @@ const snapPoint=p=>snapInput.checked?{x:Math.round(p.x*2)/2,y:Math.round(p.y*2)/
 const editor=createWallEditor({panel,transform,selected:()=>selectedEdges(),model:()=>model,context:()=>context,projected,groundAt,change,render,copyWalls});
 const svg=document.createElementNS(ns,'svg');svg.id='wall-overlay';svg.style.cssText='position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:35';transform.append(svg);
 let sharedRevision=-1,savingShared=false,dirtyWhileSaving=false;
+let cubeSignature='';
 let revision=0;const selectedIds=new Set();let propertiesOpen=false,rangeStart=null,portalSignature='';
 const selectedEdges=()=>model.segments.filter(e=>selectedIds.has(e.id));
 let context=null,model=emptyWalls(),key='',history=[],selection=null,anchor=null,hover=null,drag=null,signature='',storedError=false;
@@ -130,6 +132,7 @@ function tick(){
    const nextKey=storageKey(c);if(nextKey!==key){cancelDrag();context=c;key=nextKey;sharedRevision=-1;history=[];propertiesOpen=false;rangeStart=null;selectedIds.clear();selection=null;anchor=null;hover=null;storedError=false;model=emptyWalls();render();}else context=c;
    const shared=sharedField('walls');if(!savingShared&&!drag&&!anchor&&!storedError&&shared&&shared.revision!==sharedRevision){model=validateWalls(shared.value);sharedRevision=shared.revision;history=[];render();}
    button.hidden=!c.isGM;button.disabled=storedError;if(!c.isGM&&!panel.hidden)setOpen(false);
+   const cubeKey=JSON.stringify([c.state.boardState.templates?.[c.state.boardState.activeSceneId]||[],c.state.boardState.sceneState?.[c.state.boardState.activeSceneId]?.mapLevels]);if(cubeKey!==cubeSignature){cubeSignature=cubeKey;revision++;}
    const next=JSON.stringify([c.isGM,c.view.scale,c.view.gridSize,c.view.gridOffsets,c.view.mapPixelSize,terrainPrototype?.revision||0]);if(next!==signature){signature=next;render();}
  }else {svg.style.display='none';button.disabled=true;}
  const ps=JSON.stringify([panel.hidden,window.visionPrototype?.stats.paints,revision,context?.isGM]);if(ps!==portalSignature){portalSignature=ps;editor.portals();}
@@ -139,11 +142,17 @@ function tick(){
  } finally { requestAnimationFrame(tick); }
 }
 window.addEventListener('storage',e=>{if(e.key===key){cancelDrag();key='';}});
+let cubeModelRevision=-1,cachedCubeModel=null;
+function activeModel(){
+ if(!context)return model;
+ if(cubeModelRevision!==revision){cachedCubeModel=wallCubeModel(model,context.state.boardState.templates?.[context.state.boardState.activeSceneId]||[],context.state.boardState.sceneState?.[context.state.boardState.activeSceneId]||{},groundAt);cubeModelRevision=revision;}
+ return cachedCubeModel;
+}
 function groundAt(x,y){const v=context.view;return terrainPrototype.heightAt((v.gridOffsets.left||0)+x*v.gridSize,(v.gridOffsets.top||0)+y*v.gridSize);}
 window.wallPrototype={get selectedTopHeight(){
  if(!context?.isGM||panel.hidden||selection?.kind!=='segment')return null;
  const edge=model.segments.find(e=>e.id===selection.id);if(!edge)return null;
  const a=pointNode(edge.a),b=pointNode(edge.b);
  return wallHeights(edge,a,b,{x:(a.x+b.x)/2,y:(a.y+b.y)/2},groundAt).top;
-},forcedBlockedMove:(from,to)=>!!context&&(forcedTerrainBlocked(from,to,groundAt,t=>terrainPrototype.groundFor(t))||movementBlocked(model,from,to,(t,origin)=>terrainPrototype.movementGroundFor(origin,t),groundAt)),blockedMove:(from,to)=>!!context&&!context.isGM&&(from.levelId||'level-0')===(context.levelId||'level-0')&&movementPathBlocked(model,from,to,(t,origin)=>terrainPrototype.movementGroundFor(origin,t),groundAt,(a,b)=>terrainPrototype.movementPlacement(a,b)),get saving(){return savingShared;},get revision(){return revision;},get model(){return copyWalls(model);},get key(){return key;},blocksSight:(a,b)=>blocksSight(model,a,b)};
+},forcedBlockedMove:(from,to)=>!!context&&(forcedTerrainBlocked(from,to,groundAt,t=>terrainPrototype.groundFor(t))||movementBlocked(activeModel(),from,to,(t,origin)=>terrainPrototype.movementGroundFor(origin,t),groundAt)),blockedMove:(from,to)=>!!context&&!context.isGM&&(from.levelId||'level-0')===(context.levelId||'level-0')&&movementPathBlocked(activeModel(),from,to,(t,origin)=>terrainPrototype.movementGroundFor(origin,t),groundAt,(a,b)=>terrainPrototype.movementPlacement(a,b)),get saving(){return savingShared;},get revision(){return revision;},get model(){return activeModel();},get key(){return key;},blocksSight:(a,b)=>blocksSight(activeModel(),a,b)};
 requestAnimationFrame(tick);

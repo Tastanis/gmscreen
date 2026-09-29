@@ -463,6 +463,9 @@ function renderAbilityTest(test) {
       if (data.damage_type) {
         parts.push(`Type: ${data.damage_type}`);
       }
+      if (data.tier_effect) {
+        parts.push(data.tier_effect);
+      }
       if (data.has_attribute_check) {
         const checkParts = ['Check:'];
         if (data.attribute) {

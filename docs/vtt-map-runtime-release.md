@@ -365,3 +365,38 @@ completed-review no-replay, orphan bypass and unchanged original tokens passed.
 Focused tests cover overlapping wakeups, next-review scheduling, duplicate clicks,
 uncertain damage, actor/scene filtering and disposal during trait loading. This
 local timing does not establish production network latency.
+
+
+### Combat and solid wall templates (1.19.175)
+
+Combat recovery restores the owning player's existing End Turn prompt without
+replaying turn-start effects. Early End Round uses the existing confirmation.
+Fresh average Victories is collected before combat.start; the server atomically
+adds heroes + 1 at start and heroes + round number at each round advance.
+Monster Malice cancellation refunds only the amount actually debited. Monster
+power-roll tier_effect text survives both normalizers and appears in tray hover,
+chat text and the stat block; previously stripped snapshots need replacement.
+
+Each wall-template square is a solid one-square cube. Optional square elevation
+is a nonnegative stacking offset above terrain, supported ramp or native floor.
+Legacy squares default to zero. Stone, dirt, metal, ice and fire all block movement
+and sight at their actual height. Their generated textures share projected faces
+between the ordinary board and passive previews. Repeated clicks stack; projected
+faces retain their canonical column/row, including the next-cube ghost. Click a
+cube and Delete removes only that cube. Whole-template dragging retains elevations.
+
+Cube barriers and support lids are derived from canonical templates at runtime,
+never saved as duplicate native walls. Upsert/import/checkpoint boundaries validate
+cube coordinates, elevations and duplicates. Player ownership and floor projection
+remain unchanged. Teleport/explicit altitude cannot end inside cube volume; flying
+above it remains valid. Same-height tops and touching lower tops support movement.
+Existing fall receipts prevent replay. Removing an occupied support cube does not
+start an extra physics transaction; support resolves on subsequent movement.
+
+Validation: complete suite passes (865 tests across 119 files). Disposable GM,
+Cal and Sharon browsers verify own-turn refresh, turn convergence, Malice
+permissions/add/spend, fresh Victories, box/G groups, natural/early round advances,
+five-cube stacking through shifted top faces, individual deletion/reload and all
+five textures. Actual monster hover/chat/stat-block formatting is browser-checked.
+Canonical campaign tokens are unchanged. These local checks do not establish live
+Pusher latency or exhaustive coverage of every authored ability.

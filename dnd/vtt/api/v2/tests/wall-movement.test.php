@@ -69,3 +69,5 @@ foreach([1,1.99,2,4] as $grade){
  checkWall(allowedWall([...$from,'levelId'=>'upper'],$to,$terrain,'forced'),'Terrain below a solid upper floor does not slam its occupant');
 }
 echo "Yellow terrain threshold, downhill, voluntary movement, teleport and floor isolation passed.\n";
+
+require __DIR__.'/wall-cubes.test.php';

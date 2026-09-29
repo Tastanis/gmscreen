@@ -1,7 +1,40 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 import { normalizeMonsterSnapshot } from '../normalize/monsters.js';
+
+test('monster tier riders survive normalization, including rider-only tiers', () => {
+  const monster = normalizeMonsterSnapshot({
+    id: 'tier-riders', name: 'Siren',
+    abilities: { action: [{ name: 'Undertow Song', has_test: true, test: {
+      tier1: { damage_amount: '7', damage_type: 'psychic', tier_effect: ' pull 2 ',
+        has_attribute_check: true, attribute: 'intuition', attribute_threshold: 1,
+        attribute_effect: 'Enthralled (save ends)' },
+      tier2: { tier_effect: 'pull 3' },
+      tier3: { tierEffect: 'Enthralled (save ends)' },
+    } }] },
+  });
+  assert.deepEqual(monster.abilities.action[0].test, {
+    tier1: { damage_amount: '7', damage_type: 'psychic', tier_effect: 'pull 2',
+      has_attribute_check: true, attribute: 'intuition', attribute_threshold: 1,
+      attribute_effect: 'Enthralled (save ends)' },
+    tier2: { tier_effect: 'pull 3' },
+    tier3: { tier_effect: 'Enthralled (save ends)' },
+  });
+});
+
+test('server normalization retains flat riders and rider-only tiers', () => {
+  const helper = fileURLToPath(new URL('../../../../api/monster_helpers.php', import.meta.url));
+  const tiers = { tier1: { damage_amount: '7', tier_effect: ' pull 2 ' },
+    tier2: { tier_effect: 'the target gains 2 rage' }, tier3: { tier_effect: '  ' } };
+  const normalized = JSON.parse(execFileSync(process.env.PHP_BINARY || 'php', ['-r',
+    'require $argv[1]; echo json_encode(normalizeMonsterAbilityTest(json_decode($argv[2], true)));',
+    helper, JSON.stringify(tiers)], { encoding: 'utf8' }));
+  assert.deepEqual(normalized, { tier1: { damage_amount: '7', tier_effect: 'pull 2' },
+    tier2: { tier_effect: 'the target gains 2 rage' } });
+});
 
 test('normalizeMonsterSnapshot preserves monster ability automation payloads', () => {
   const monster = normalizeMonsterSnapshot({

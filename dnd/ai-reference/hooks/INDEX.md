@@ -43,6 +43,7 @@ Known current limitation: manual/non-automation damage does not fire typed `dama
 The full monster authoring reference is `monster-automation.md` (this folder). Monster ability execution is bridged by `monster-ability-runner-glue.js`.
 
 - Villain and malice categories spend from `window.MaliceTracker`.
+- Malice reservations record the actual debit. If the GM confirms an ability whose cost exceeds the pool, cancellation restores only the points removed, including zero when the pool was empty; it cannot create Malice from the unfunded portion of the cost.
 - Monster trigger blocks with a structured `match` are auto-armed on the bus whenever the placement is in the active scene (`registerMonsterAuthoredTriggersForPlacement` in `board-interactions.js`). Player clients arm them too via the stripped `monsterTriggerHooks` placement field, so events caused by a player's own client still mark enemy triggers ready.
 - Firing a triggered action from the tray prompts for confirmation, then resolves: a ready trigger passes the captured event payload; a manual fire sets `manualTriggerResolution` so the trigger card's effects execute instead of arm-only. Non-free triggered actions consume the round's triggered action via `consumeTriggeredAction` (a `resource_cost` containing "free" is exempt).
 - Monsters should use `flatBonus`; attribute lookup exists as a fallback.

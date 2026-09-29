@@ -105,7 +105,7 @@ export function normalizeTemplateEntry(entry) {
         if (!Number.isFinite(column) || !Number.isFinite(row)) {
           return null;
         }
-        return { column: Math.max(0, column), row: Math.max(0, row) };
+        return { column: Math.max(0, column), row: Math.max(0, row), ...(Number.isInteger(square.elevation) && square.elevation >= 0 ? {elevation:square.elevation} : {}) };
       })
       .filter(Boolean);
     const normalized = {

@@ -131,7 +131,7 @@ export function createTemplateGeometry(getView = () => ({})) {
           if (!Number.isFinite(column) || !Number.isFinite(row)) {
             return null;
           }
-          return { column: Math.max(0, column), row: Math.max(0, row) };
+          return { column: Math.max(0, column), row: Math.max(0, row), ...(Number.isInteger(square.elevation) && square.elevation >= 0 ? {elevation:square.elevation} : {}) };
         })
         .filter(Boolean);
 
@@ -200,12 +200,13 @@ export function createTemplateGeometry(getView = () => ({})) {
       if (column === null || row === null) {
         return;
       }
-      const key = `${column},${row}`;
+      const elevation=Number.isInteger(square.elevation)&&square.elevation>=0?square.elevation:0;
+      const key = `${column},${row},${elevation}`;
       if (seen.has(key)) {
         return;
       }
       seen.add(key);
-      result.push({ column, row });
+      result.push({ column, row, ...(elevation ? {elevation} : {}) });
     });
     return result;
   }

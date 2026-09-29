@@ -1224,3 +1224,16 @@ The prompt and animation start together. Animation is deduplicated per receipt
 within the mounted reviewer; pending reviews still recover after reload. Never
 resolve physical falls again or bypass the durable start/finish damage claim.
 Repeated Apply/Dismiss callbacks are guarded; uncertain effects remain manual.
+
+
+## Combat and wall cube release - 1.19.175
+
+Wall cube barriers/support are derived from canonical templates via WallCubes.php
+and wall-cubes.js. Never persist these derived segments into native wall data.
+Optional square elevation is a stacking offset, not floor ID or renderer zIndex.
+Projected cube faces and ghost placement carry canonical square identity. Keep
+individual Delete ownership checks and elevation preservation through drag/sync.
+Cube lids do not turn an unmodeled legacy floor into bounded imported support.
+Combat round Malice is server-owned and atomic; do not add it again on delivery.
+Recovery restores turn controls only, never turn-start automation. Monster refunds
+reserve actual debits. See the runtime release guide for tests and limitations.

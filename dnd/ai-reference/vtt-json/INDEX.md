@@ -46,6 +46,7 @@ Use only these category keys:
 - `freeStrike` opens a VTT target prompt, rolls the free strike, and applies damage automatically. Use `text` to tell the player which target the rules require if the current schema cannot enforce that exact source.
 - Full monster imports should use `immunities` and `weaknesses` arrays of `{ "type", "value" }`.
 - Per-ability automation belongs on the individual ability object as `automation`.
+- Monster `test.tierN.tier_effect` is display text retained by both VTT normalizers and shown in the tray hover card, chat post and stat block, including rider-only tiers. It does not execute effects; mirror each rider in the separate tier automation.
 - If a mechanic is unsupported, use `note` or `other`, not invented fields.
 
 ## Range-guide recipe
@@ -142,3 +143,5 @@ character sheet, edit the resource card and enable **Edge costs 1 less
 accepted power roll, and refunds 1 Insight after resolution when the roll has a
 net edge or double edge. The refund happens at most once per ability use, even
 for multiple targets or multiple power rolls.
+
+Wall template squares optionally carry elevation (whole nonnegative stacking offset, default 0). Distinct elevations at the same column/row remain distinct cubes; all five wall materials are solid movement/sight blockers. This is VTT geometry, not a new ability automation field.

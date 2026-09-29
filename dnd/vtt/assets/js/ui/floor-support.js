@@ -1,5 +1,7 @@
 export const FLOOR_GROUND_CLEARANCE = .125;
 const supportLevels=mapLevels=>new Map([{id:'level-0',cutouts:[]},...(mapLevels?.levels||[])].map(l=>[l.id,l]));
+const surfaceBounds=s=>({left:Math.min(...s.points.map(p=>p.x)),right:Math.max(...s.points.map(p=>p.x)),top:Math.min(...s.points.map(p=>p.y)),bottom:Math.max(...s.points.map(p=>p.y))});
+const touchingSurfaces=(first,second)=>{const a=surfaceBounds(first),b=surfaceBounds(second);return !(b.left>a.right+1e-7||a.left>b.right+1e-7||b.top>a.bottom+1e-7||a.top>b.bottom+1e-7);};
 // Same positive-area polygon support contract as FloorSupport.php.
 const bands=(ring,x)=>{const ys=[];for(let i=0,j=ring.length-1;i<ring.length;j=i++){const a=ring[i],b=ring[j];if((a.x>x)!==(b.x>x))ys.push(a.y+(x-a.x)*(b.y-a.y)/(b.x-a.x));}ys.sort((a,b)=>a-b);const result=[];for(let i=0;i+1<ys.length;i+=2)result.push([ys[i],ys[i+1]]);return result;};
 export function intersectsFloor(p,surface,cuts=[]){
@@ -26,7 +28,7 @@ export function intersectsFloor(p,surface,cuts=[]){
  return false;
 }
 export function floorSupported(p,surfaces,cuts=[]){
- const matching=surfaces.filter(s=>(s.levelId||'level-0')===(p.levelId||'level-0'));
+ const matching=surfaces.filter(s=>!s.templateCube&&(s.levelId||'level-0')===(p.levelId||'level-0'));
  let floors=matching.filter(s=>s.kind==='floor');
  if(!floors.length)floors=matching.filter(s=>(s.kind||'roof')==='roof');
  if(!floors.length)return null;
@@ -53,20 +55,38 @@ export function resolveSupportSurfaces(model={}){
 export function walkFloorContact(from,to,path,surfaces,mapLevels,terrain){
  if(['fly','hover'].includes(from.movementMode)||from._floorTraversal)return null;
  const levels=supportLevels(mapLevels);
- const floors=surfaces.filter(s=>s.kind==='floor'&&levels.has(s.levelId)&&!levels.get(s.levelId).hidden);
+ const floors=surfaces.filter(s=>(s.kind==='floor'||s.templateCube)&&levels.has(s.levelId)&&!levels.get(s.levelId).hidden);
  if(!floors.length)return null;
  const overlap=(p,s)=>intersectsFloor(p,s,levels.get(s.levelId).cutouts||[]);
- let support=floors.find(s=>((from._supportSurfaceId&&from._supportSurfaceId===s.id)||((from.levelId||'level-0')!=='level-0'&&from.levelId===s.levelId))&&overlap(from,s))||terrainFloorContact(from,floors,mapLevels,terrain(from)),previous=from;
+ let support=floors.find(s=>from._supportSurfaceId&&from._supportSurfaceId===s.id&&overlap(from,s))
+  ||floors.find(s=>!s.templateCube&&(from.levelId||'level-0')!=='level-0'&&from.levelId===s.levelId&&overlap(from,s))
+  ||terrainFloorContact(from,floors,mapLevels,terrain(from)),previous=from;
  for(const end of [...path,to]){
   const start=previous,dx=end.column-start.column,dy=end.row-start.row,steps=Math.max(1,Math.min(8192,Math.ceil(Math.max(Math.abs(dx),Math.abs(dy))*8)));
   for(let i=1;i<=steps;i++){
    const p={...from,column:start.column+dx*i/steps,row:start.row+dy*i/steps},height=support?.height??terrain(previous);
    if(!support||!overlap(p,support)){
+    const prior=support;
     support=null;
-    for(const s of floors)if(!overlap(previous,s)&&overlap(p,s)&&Math.abs(s.height-height)<=.1+1e-6&&s.height>=terrain(p)-.1-1e-6&&(!support||s.height>support.height))support=s;
+    for(const s of floors)if((!overlap(previous,s)||(prior&&(prior.templateCube||s.templateCube)&&touchingSurfaces(prior,s)))&&overlap(p,s)&&Math.abs(s.height-height)<=.1+1e-6&&s.height>=terrain(p)-.1-1e-6&&(!support||s.height>support.height))support=s;
    }
    previous=p;
   }
  }
  return support;
+}
+
+// A retained cube can step down to a touching cube; terrain never grants a climb.
+// Paired with FloorSupport::cubeStepDown; fall consequences remain server-owned.
+export function cubeStepDown(from,to,surfaces,mapLevels){
+ const levels=supportLevels(mapLevels),overlap=(p,s)=>intersectsFloor(p,s,levels.get(s.levelId)?.cutouts||[]);
+ const old=surfaces.find(s=>s.id===from._supportSurfaceId&&s.templateCube&&overlap(from,s));
+ if(!old||overlap({...from,...to},old))return null;
+ let best=null;
+ for(const s of surfaces){
+  if(!s.templateCube||s.height>old.height+1e-7||!overlap({...from,...to},s))continue;
+  if(!touchingSurfaces(old,s))continue;
+  if(!best||s.height>best.height)best=s;
+ }
+ return best;
 }

@@ -4,6 +4,7 @@ require_once __DIR__ . '/FloorGeometry.php';
 require_once __DIR__ . '/SceneEnvironment.php';
 require_once __DIR__ . '/FlightHeight.php';
 require_once __DIR__ . '/WallMovement.php';
+require_once __DIR__ . '/WallCubes.php';
 require_once __DIR__ . '/ForcedMovement.php';
 require_once __DIR__ . '/CollisionEffects.php';
 require_once __DIR__ . '/FallOutcome.php';
@@ -720,6 +721,7 @@ final class SyncV2Store
                     $eventType = $domain === 'templates' ? 'template.removed' : 'drawing.removed';
                 } else {
                     $entry = $payload[$payloadKey];
+                    if ($domain === 'templates') WallCubes::validate($entry);
                     // Authenticated ownership cannot be supplied or reassigned by a player.
                     $entry['authorId'] = $current['authorId']
                         ?? ($isGm ? ($entry['authorId'] ?? strtolower($actorId)) : strtolower($actorId));
@@ -1027,6 +1029,7 @@ final class SyncV2Store
                 $combat['active'] = true;
                 $combat['isActive'] = true;
                 $combat['round'] = 1;
+                $combat['malice'] += $this->combatHeroCount($state, $sceneId) + 1;
                 $combat['activeCombatantId'] = null;
                 $combat['completedCombatantIds'] = [];
                 $combat['startingTeam'] = $startingTeam;
@@ -1175,6 +1178,7 @@ final class SyncV2Store
                     $transition['combatantId'] = $finishedId;
                 }
                 $combat['round'] = max(1, $combat['round'] + 1);
+                $combat['malice'] += $this->combatHeroCount($state, $sceneId) + $combat['round'];
                 $combat['activeCombatantId'] = null;
                 $combat['completedCombatantIds'] = [];
                 $combat['roundTurnCount'] = 0;
@@ -1340,6 +1344,7 @@ final class SyncV2Store
             )) > 1;
             foreach ($normalized['actions'] as $action) {
                 $sceneId = $action['sceneId'];
+                $movementConfig = WallCubes::withTemplates($state['sceneConfig'][$sceneId] ?? [], $state['templates'][$sceneId] ?? []);
                 $placementId = $action['placementId'];
                 $state['placements'][$sceneId] = is_array($state['placements'][$sceneId] ?? null)
                     ? $state['placements'][$sceneId]
@@ -1361,7 +1366,7 @@ final class SyncV2Store
                     if (isset($placement['movementMode']) && !in_array($placement['movementMode'], ['ground','fly','hover'], true)) throw new InvalidArgumentException('Unknown movement mode.');
                     if (($placement['movementMode'] ?? '') === 'fly' && FloorGeometry::flightInterrupted($placement)) throw new InvalidArgumentException('Prone or speed-zero conditions prevent ordinary flight.');
                     if(array_key_exists('flightHeight',$placement))FlightHeight::validate($placement['flightHeight']);
-                    if(FloorGeometry::isAirborne($placement))$placement['flightHeight']=FlightHeight::resolve($placement,$placement,$state['sceneConfig'][$sceneId]??[]);
+                    if(FloorGeometry::isAirborne($placement))$placement['flightHeight']=FlightHeight::resolve($placement,$placement,$movementConfig);
                     unset($placement['_movementUndo'], $placement['_floorTraversal'], $placement['_supportSurfaceId']);
                     if (!$isGm && $this->placementIsHidden($placement)) {
                         throw new InvalidArgumentException('Players cannot add hidden placements.');
@@ -1415,7 +1420,7 @@ final class SyncV2Store
                 if (array_key_exists('movementMode', $patch)) {
                     if (!in_array($patch['movementMode'], ['ground', 'fly', 'hover'], true)) throw new InvalidArgumentException('Unknown movement mode.');
                     if (!$isGm && !$this->playerMayMovePlacement($current)) throw new InvalidArgumentException('You cannot change this token movement mode.');
-                    if (!$isGm) foreach (($state['sceneConfig'][$sceneId]['mapLevels']['levels'] ?? []) as $level) {
+                    if (!$isGm) foreach (($movementConfig['mapLevels']['levels'] ?? []) as $level) {
                         if (($level['id'] ?? '') === ($current['levelId'] ?? 'level-0') && ($level['hidden'] ?? false) === true) throw new InvalidArgumentException('You cannot change a token on a hidden floor.');
                     }
                 }
@@ -1436,9 +1441,9 @@ final class SyncV2Store
                     $patch['movementMode'] = 'ground'; $next['movementMode'] = 'ground';
                 }
                 if (array_key_exists('movementMode', $patch)) {
-                    $floor = FloorGeometry::move($next, $next, $state['sceneConfig'][$sceneId]['mapLevels'] ?? [], 'forced', [], FloorSupport::surfaces($state['sceneConfig'][$sceneId]['environment']['walls']['value']??[]), fn($p)=>WallMovement::terrain($p['column']+($p['width']??1)/2,$p['row']+($p['height']??1)/2,$state['sceneConfig'][$sceneId]??[]));
+                    $floor = FloorGeometry::move($next, $next, $movementConfig['mapLevels'] ?? [], 'forced', [], FloorSupport::surfaces($movementConfig['environment']['walls']['value']??[]), fn($p)=>WallMovement::terrain($p['column']+($p['width']??1)/2,$p['row']+($p['height']??1)/2,$movementConfig));
                     if(FloorGeometry::isAirborne($current)&&!FloorGeometry::isAirborne($next)){
-                        $config=$state['sceneConfig'][$sceneId]??[];
+                        $config=$movementConfig;
                         $landing=FloorSupport::landing($next,FloorSupport::surfaces($config['environment']['walls']['value']??[]),$config['mapLevels']??[],WallMovement::height($current,$config),WallMovement::terrain($next['column']+($next['width']??1)/2,$next['row']+($next['height']??1)/2,$config));
                         $floor=['levelId'=>$landing['levelId'],'traversal'=>null,'cause'=>'fall','supportSurfaceId'=>$landing['id']??null];
                     }
@@ -1448,16 +1453,16 @@ final class SyncV2Store
                     $next = [...$next, ...$patch];
                 }
                 if($restore===null && $action['forcedDestination']!==null){
-                    $plan=ForcedMovement::plan($current,$next,$action['forcedDestination'],$action['movementKind'],$state['placements'][$sceneId],$state['sceneConfig'][$sceneId]??[]);
+                    $plan=ForcedMovement::plan($current,$next,$action['forcedDestination'],$action['movementKind'],$state['placements'][$sceneId],$movementConfig);
                     (new CollisionEffects($this->pdo,$this->worldId))->record($normalized['operationId'],$sceneId,$actorId,$placementId,$plan,$action['collisionDamageType']);
                 }
                 if ($restore === null && $action['forcedDestination']===null && (array_key_exists('column',$patch)||array_key_exists('row',$patch))) {
-                    if($action['movementKind']==='forced') ForcedMovement::assertClear($current,$next,$state['placements'][$sceneId],$state['sceneConfig'][$sceneId]??[]);
-                    WallMovement::assertAllowed($current,$next,$state['sceneConfig'][$sceneId]??[],$action['movementKind'],$action['path'],$isGm);
+                    if($action['movementKind']==='forced') ForcedMovement::assertClear($current,$next,$state['placements'][$sceneId],$movementConfig);
+                    WallMovement::assertAllowed($current,$next,$movementConfig,$action['movementKind'],$action['path'],$isGm);
                 }
                 if (!array_key_exists('levelId', $patch)
                     && (array_key_exists('column', $patch) || array_key_exists('row', $patch))) {
-                    $floor = FloorGeometry::move($current, $next, $state['sceneConfig'][$sceneId]['mapLevels'] ?? [], $action['movementKind'], $action['path'], FloorSupport::surfaces($state['sceneConfig'][$sceneId]['environment']['walls']['value']??[]), fn($p)=>WallMovement::terrain($p['column']+($p['width']??1)/2,$p['row']+($p['height']??1)/2,$state['sceneConfig'][$sceneId]??[]));
+                    $floor = FloorGeometry::move($current, $next, $movementConfig['mapLevels'] ?? [], $action['movementKind'], $action['path'], FloorSupport::surfaces($movementConfig['environment']['walls']['value']??[]), fn($p)=>WallMovement::terrain($p['column']+($p['width']??1)/2,$p['row']+($p['height']??1)/2,$movementConfig));
                     $patch['levelId'] = $floor['levelId'];
                     $patch['_floorTraversal'] = $floor['traversal'];
                     if(array_key_exists('supportSurfaceId',$floor))$patch['_supportSurfaceId']=$floor['supportSurfaceId'];
@@ -1466,23 +1471,25 @@ final class SyncV2Store
                     $next['_floorTraversal'] = null;
                 }
                 if(FloorGeometry::isAirborne($next)||array_key_exists('flightHeight',$current)||array_key_exists('flightHeight',$patch)){
-                    $patch['flightHeight']=FlightHeight::resolve($current,$next,$state['sceneConfig'][$sceneId]??[],$action['movementKind'],$action['path']);
+                    $patch['flightHeight']=FlightHeight::resolve($current,$next,$movementConfig,$action['movementKind'],$action['path']);
                     $next['flightHeight']=$patch['flightHeight'];
                 }
+                if(array_key_exists('flightHeight',$patch)||array_key_exists('movementMode',$patch))WallCubes::assertDestination($next,$movementConfig);
                 $teleport=null;
                 if($action['teleportChoice']!==null){
                     if($action['movementKind']!=='teleport'||!is_array($action['teleportChoice']))throw new InvalidArgumentException('Invalid teleport choice.');
-                    $teleport=TeleportLanding::resolve($current,$next,$state['sceneConfig'][$sceneId]??[],$action['teleportChoice'],$isGm);$next=$teleport['placement'];$patch['levelId']=$next['levelId'];$patch['_supportSurfaceId']=$next['_supportSurfaceId'];$patch['flightHeight']=$next['flightHeight']??null;
-                } elseif(!empty($next['_supportSurfaceId'])&&!TeleportLanding::retained($next,$state['sceneConfig'][$sceneId]??[])){$next['_supportSurfaceId']=null;$patch['_supportSurfaceId']=null;}
+                    $teleport=TeleportLanding::resolve($current,$next,$movementConfig,$action['teleportChoice'],$isGm);$next=$teleport['placement'];$patch['levelId']=$next['levelId'];$patch['_supportSurfaceId']=$next['_supportSurfaceId'];$patch['flightHeight']=$next['flightHeight']??null;
+                } elseif(!empty($next['_supportSurfaceId'])&&!TeleportLanding::retained($next,$movementConfig)){$next['_supportSurfaceId']=null;$patch['_supportSurfaceId']=null;}
                 if($restore===null){
-                    $fall=$teleport['fall']??FallOutcome::plan($current,$next,$state['sceneConfig'][$sceneId]??[],$action['movementKind'],$action['path'],$floor['cause']??'');
-                    if($fall){$landing=FallOutcome::landing($next,$state['placements'][$sceneId],$state['sceneConfig'][$sceneId]??[]);$next=$landing['placement'];$patch['column']=$next['column'];$patch['row']=$next['row'];unset($landing['placement']);(new CollisionEffects($this->pdo,$this->worldId))->recordFall($normalized['operationId'],$sceneId,$actorId,$placementId,[...$fall,...$landing]);}
+                    if($action['movementKind']==='teleport')WallCubes::assertDestination($next,$movementConfig);
+                    $fall=$teleport['fall']??FallOutcome::plan($current,$next,$movementConfig,$action['movementKind'],$action['path'],$floor['cause']??'');
+                    if($fall){$landing=FallOutcome::landing($next,$state['placements'][$sceneId],$movementConfig);$next=$landing['placement'];$patch['column']=$next['column'];$patch['row']=$next['row'];unset($landing['placement']);(new CollisionEffects($this->pdo,$this->worldId))->recordFall($normalized['operationId'],$sceneId,$actorId,$placementId,[...$fall,...$landing]);}
                 }
                 $next['id'] = $placementId;
                 $next['_entityRevision'] = $nextRevision;
                 if ($restore !== null) { $next = [...$next, ...$restore]; $patch = [...$patch, ...$restore]; }
                 if ($restore === null && (array_key_exists('column', $patch) || array_key_exists('row', $patch))) {
-                    $next['_movementUndo'] = MovementUndo::record($current, $next, $actorId, $state['sceneConfig'][$sceneId]['mapLevels'] ?? [], $normalized['operationId'], $groupMove);
+                    $next['_movementUndo'] = MovementUndo::record($current, $next, $actorId, $movementConfig['mapLevels'] ?? [], $normalized['operationId'], $groupMove);
                     $patch['_movementUndo'] = $next['_movementUndo'];
                 }
                 if ($restore === null && (array_key_exists('column', $patch) || array_key_exists('row', $patch) || array_key_exists('levelId', $patch))) {
@@ -1785,38 +1792,40 @@ final class SyncV2Store
                 '_entityRevision' => $entityRevision,
             ];
             $sceneId = $normalized['sceneId'];
+            $movementConfig = WallCubes::withTemplates($state['sceneConfig'][$sceneId] ?? [], $state['templates'][$sceneId] ?? []);
             $placementId = $normalized['entityId'];
             $next = $state['placements'][$sceneId][$placementId];
-            $mapLevels = $state['sceneConfig'][$sceneId]['mapLevels'] ?? [];
+            $mapLevels = $movementConfig['mapLevels'] ?? [];
             $restore = $normalized['undoRevision'] !== null
                 ? MovementUndo::restore($current, $actorId, $normalized['undoRevision'], $mapLevels) : null;
             $collisionPlan=null;
             if($restore===null && $normalized['forcedDestination']!==null){
-                $collisionPlan=ForcedMovement::plan($current,$next,$normalized['forcedDestination'],$normalized['movementKind'],$state['placements'][$sceneId],$state['sceneConfig'][$sceneId]??[]);
+                $collisionPlan=ForcedMovement::plan($current,$next,$normalized['forcedDestination'],$normalized['movementKind'],$state['placements'][$sceneId],$movementConfig);
             }
-            if ($restore === null && $collisionPlan===null && $normalized['movementKind']==='forced') ForcedMovement::assertClear($current,$next,$state['placements'][$sceneId],$state['sceneConfig'][$sceneId]??[]);
-            if ($restore === null && $collisionPlan===null) WallMovement::assertAllowed($current,$next,$state['sceneConfig'][$sceneId]??[],$normalized['movementKind'],$normalized['path'],$isGm);
+            if ($restore === null && $collisionPlan===null && $normalized['movementKind']==='forced') ForcedMovement::assertClear($current,$next,$state['placements'][$sceneId],$movementConfig);
+            if ($restore === null && $collisionPlan===null) WallMovement::assertAllowed($current,$next,$movementConfig,$normalized['movementKind'],$normalized['path'],$isGm);
             $floor = $restore !== null
                 ? ['levelId'=>$restore['levelId'], 'traversal'=>$restore['_floorTraversal'], 'cause'=>'undo']
-                : FloorGeometry::move($current, $next, $mapLevels, $normalized['movementKind'], $normalized['path'], FloorSupport::surfaces($state['sceneConfig'][$sceneId]['environment']['walls']['value']??[]), fn($p)=>WallMovement::terrain($p['column']+($p['width']??1)/2,$p['row']+($p['height']??1)/2,$state['sceneConfig'][$sceneId]??[]));
+                : FloorGeometry::move($current, $next, $mapLevels, $normalized['movementKind'], $normalized['path'], FloorSupport::surfaces($movementConfig['environment']['walls']['value']??[]), fn($p)=>WallMovement::terrain($p['column']+($p['width']??1)/2,$p['row']+($p['height']??1)/2,$movementConfig));
             if ($restore !== null) $next = [...$next, ...$restore];
             $next['levelId'] = $floor['levelId'];
             $next['_floorTraversal'] = $floor['traversal'];
             if(array_key_exists('supportSurfaceId',$floor))$next['_supportSurfaceId']=$floor['supportSurfaceId'];
             if(FloorGeometry::isAirborne($next)||array_key_exists('flightHeight',$current)){
-                $next['flightHeight']=FlightHeight::resolve($current,$next,$state['sceneConfig'][$sceneId]??[],$restore !== null ? 'undo' : $normalized['movementKind'],$normalized['path']);
+                $next['flightHeight']=FlightHeight::resolve($current,$next,$movementConfig,$restore !== null ? 'undo' : $normalized['movementKind'],$normalized['path']);
                 $event['payload']['flightHeight']=$next['flightHeight'];
             }
             $teleport=null;
             if($normalized['teleportChoice']!==null){
                 if($normalized['movementKind']!=='teleport'||!is_array($normalized['teleportChoice']))throw new InvalidArgumentException('Invalid teleport choice.');
-                $teleport=TeleportLanding::resolve($current,$next,$state['sceneConfig'][$sceneId]??[],$normalized['teleportChoice'],$isGm);$next=$teleport['placement'];$floor['levelId']=$next['levelId'];$floor['traversal']=null;$event['payload']['flightHeight']=$next['flightHeight']??null;
-            } elseif(!empty($next['_supportSurfaceId'])&&!TeleportLanding::retained($next,$state['sceneConfig'][$sceneId]??[]))$next['_supportSurfaceId']=null;
+                $teleport=TeleportLanding::resolve($current,$next,$movementConfig,$normalized['teleportChoice'],$isGm);$next=$teleport['placement'];$floor['levelId']=$next['levelId'];$floor['traversal']=null;$event['payload']['flightHeight']=$next['flightHeight']??null;
+            } elseif(!empty($next['_supportSurfaceId'])&&!TeleportLanding::retained($next,$movementConfig))$next['_supportSurfaceId']=null;
             $event['payload']['_supportSurfaceId']=$next['_supportSurfaceId']??null;
             $fall=null;
             if($restore===null){
-                $fall=$teleport['fall']??FallOutcome::plan($current,$next,$state['sceneConfig'][$sceneId]??[],$normalized['movementKind'],$normalized['path'],$floor['cause']);
-                if($fall){$landing=FallOutcome::landing($next,$state['placements'][$sceneId],$state['sceneConfig'][$sceneId]??[]);$next=$landing['placement'];unset($landing['placement']);(new CollisionEffects($this->pdo,$this->worldId))->recordFall($normalized['operationId'],$sceneId,$actorId,$placementId,[...$fall,...$landing]);}
+                if($normalized['movementKind']==='teleport')WallCubes::assertDestination($next,$movementConfig);
+                $fall=$teleport['fall']??FallOutcome::plan($current,$next,$movementConfig,$normalized['movementKind'],$normalized['path'],$floor['cause']);
+                if($fall){$landing=FallOutcome::landing($next,$state['placements'][$sceneId],$movementConfig);$next=$landing['placement'];unset($landing['placement']);(new CollisionEffects($this->pdo,$this->worldId))->recordFall($normalized['operationId'],$sceneId,$actorId,$placementId,[...$fall,...$landing]);}
             }
             if($collisionPlan!==null)(new CollisionEffects($this->pdo,$this->worldId))->record($normalized['operationId'],$sceneId,$actorId,$placementId,$collisionPlan);
             if ($restore === null) $next['_movementUndo'] = MovementUndo::record($current, $next, $actorId, $mapLevels, $normalized['operationId']);
@@ -3133,6 +3142,17 @@ final class SyncV2Store
     {
         $levelId = trim((string) ($placement['levelId'] ?? ''));
         return $levelId !== '' ? $levelId : 'level-0';
+    }
+
+    private function combatHeroCount(array $state, string $sceneId): int
+    {
+        $profiles = [];
+        foreach ($state['placements'][$sceneId] ?? [] as $placement) {
+            if (!is_array($placement) || $this->combatantTeam($placement) !== 'ally') continue;
+            $profile = $this->linkedPlayerProfileForPlacement($placement);
+            if ($profile !== null) $profiles[$profile] = true;
+        }
+        return count($profiles);
     }
 
     private function linkedPlayerProfileForPlacement(array $placement): ?string

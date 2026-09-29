@@ -81,6 +81,7 @@ final class WallMovement
     private static function movementPlacement(array $from,array $to,array $config): array
     {
         $surface=FloorSupport::walkContact($from,$to,[],FloorSupport::surfaces($config['environment']['walls']['value']??[]),$config['mapLevels']??[],fn($p)=>self::terrain($p['column']+($p['width']??1)/2,$p['row']+($p['height']??1)/2,$config));
+         $surface??=FloorSupport::cubeStepDown($from,$to,FloorSupport::surfaces($config['environment']['walls']['value']??[]),$config['mapLevels']??[]);
         return $surface?[...$to,'levelId'=>$surface['levelId'],'_supportSurfaceId'=>$surface['id']??null]:$to;
     }
 

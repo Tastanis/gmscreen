@@ -286,6 +286,11 @@ export function normalizeMonsterAbilityTest(raw) {
       tierEntry.damage_type = damageType;
     }
 
+    const tierEffect = sanitizeMonsterString(data.tier_effect ?? data.tierEffect ?? '');
+    if (tierEffect) {
+      tierEntry.tier_effect = tierEffect;
+    }
+
     const hasAttributeCheck = data.has_attribute_check === true || data.hasAttributeCheck === true;
     if (hasAttributeCheck) {
       tierEntry.has_attribute_check = true;

@@ -672,12 +672,13 @@ function normalizeMonsterAbilityTest($raw): array
         $tierData = $raw[$tier];
         $damageAmount = sanitizeMonsterString($tierData['damage_amount'] ?? '');
         $damageType = sanitizeMonsterString($tierData['damage_type'] ?? '');
+        $tierEffect = sanitizeMonsterString($tierData['tier_effect'] ?? '');
         $hasAttributeCheck = filter_var($tierData['has_attribute_check'] ?? false, FILTER_VALIDATE_BOOLEAN);
         $attribute = sanitizeMonsterString($tierData['attribute'] ?? '');
         $threshold = sanitizeMonsterInt($tierData['attribute_threshold'] ?? null, -1000, 1000, true);
         $attributeEffect = sanitizeMonsterString($tierData['attribute_effect'] ?? '');
 
-        if ($damageAmount === '' && $damageType === '' && $hasAttributeCheck === false && $attribute === '' && $attributeEffect === '' && $threshold === null) {
+        if ($damageAmount === '' && $damageType === '' && $tierEffect === '' && $hasAttributeCheck === false && $attribute === '' && $attributeEffect === '' && $threshold === null) {
             continue;
         }
 
@@ -687,6 +688,9 @@ function normalizeMonsterAbilityTest($raw): array
         }
         if ($damageType !== '') {
             $entry['damage_type'] = $damageType;
+        }
+        if ($tierEffect !== '') {
+            $entry['tier_effect'] = $tierEffect;
         }
         if ($hasAttributeCheck) {
             $entry['has_attribute_check'] = true;

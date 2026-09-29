@@ -5,6 +5,7 @@ require_once __DIR__ . '/FloorGeometry.php';
 require_once __DIR__ . '/SceneEnvironment.php';
 require_once __DIR__ . '/PlayerRoster.php';
 require_once __DIR__ . '/FlightHeight.php';
+require_once __DIR__ . '/WallCubes.php';
 
 final class SceneImportValidation
 {
@@ -36,6 +37,7 @@ final class SceneImportValidation
                 case 'circle': self::point($entry['center'] ?? null); self::number($entry['radius'] ?? null, 'Template radius', 0.5); break;
                 case 'rectangle': self::point($entry['start'] ?? null); self::number($entry['length'] ?? null, 'Template length', 1); self::number($entry['width'] ?? null, 'Template width', 1); break;
                 case 'wall':
+                    WallCubes::validate($entry);
                     if (!is_array($entry['squares'] ?? null) || !array_is_list($entry['squares']) || count($entry['squares']) > 50000) throw new InvalidArgumentException('Invalid wall template squares.');
                     foreach ($entry['squares'] as $point) self::point($point);
                     break;

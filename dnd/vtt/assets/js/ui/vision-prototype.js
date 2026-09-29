@@ -29,7 +29,7 @@ function tick(){
  if(document.hidden){requestAnimationFrame(tick);return;}
  const c=window.terrainContext?.(),wallApi=window.wallPrototype;
  if(wallApi&&wallApi.revision!==wallRevision){wallRevision=wallApi.revision;walls=wallApi.model;}
- const enabled=!!(window.terrainPrototype?.active&&window.terrainPrototype?.field&&c?.view.mapLoaded&&(sharedField('walls')||sharedField('terrain'))&&walls);
+ const enabled=!!(window.terrainPrototype?.active&&window.terrainPrototype?.field&&c?.view.mapLoaded&&(sharedField('walls')||sharedField('terrain')||(c.state.boardState.templates?.[c.state.boardState.activeSceneId]||[]).some(t=>t.type==='wall'))&&walls);
  const editing=['#wall-panel','#terrain-panel'].some(id=>document.querySelector(id)?.hidden===false);
  canvas.hidden=tokenView.hidden=!enabled||editing;document.documentElement.classList.toggle('height-vision-active',enabled&&!editing);
  if(enabled){

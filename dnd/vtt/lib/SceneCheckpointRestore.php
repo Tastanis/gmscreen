@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/FloorGeometry.php';
 require_once __DIR__ . '/SceneEnvironment.php';
+require_once __DIR__ . '/WallCubes.php';
 
 /** Read-only restore planning; only the listed scope may later be applied. */
 final class SceneCheckpointRestore
@@ -91,6 +92,7 @@ final class SceneCheckpointRestore
             $entries=$saved[$domain] ?? [];
             if (!is_array($entries)) throw new InvalidArgumentException('Checkpoint contains invalid board content.');
             foreach ($entries as $entry) if (!is_array($entry) || !isset($levels[$entry['levelId'] ?? 'level-0'])) throw new InvalidArgumentException('Checkpoint content references a missing floor.');
+            if ($domain === 'templates') foreach ($entries as $entry) WallCubes::validate($entry);
             $current=$state[$domain][$sceneId] ?? [];
             $updated=0;
             foreach (array_intersect_key($entries,$current) as $id=>$entry) {

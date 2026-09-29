@@ -24,6 +24,7 @@ import {normalizePlacementCondition,ensurePlacementCondition,normalizePlacementC
 import {syncTokenTeamAffiliation,paintTokenMarkIndicator,paintTokenConditionLabel} from './token-status-presentation.js';
 import {normalizeHitPointsValue,normalizePlacementHitPoints,parseHitPointsNumber,calculateHitPointsFillPercentage,formatHitPointsDisplayParts,syncTokenHitPoints,shouldRevealPlacementHitPointValues} from './token-hit-points.js';
 import {paintWallTemplate} from './template-wall-renderer.js';
+import {wallSquareKey,nextWallElevation} from './wall-cubes.js';
 import {createTemplateGeometry, TEMPLATE_COLORS} from './template-geometry.js';
 import {paintTemplateArea} from './template-area-renderer.js';
 import {resolveTemplateLevelPresentation, applyTemplateVisibilityMask, clearTemplateVisibilityMask} from './template-presentation.js';
@@ -1114,9 +1115,7 @@ export function mountBoardInteractions(store, routes = {}) {
         fireTimingBoundary('roundStart', { round: 1 });
       });
       resetTriggeredActionsForActiveScene();
-      computeInitialMalice().then((initialMalice) => {
-        setMaliceCount(initialMalice);
-      });
+      // Initial/round malice is committed with the server combat transition.
       return;
     }
     if (type === 'round.advance') {
@@ -1128,8 +1127,7 @@ export function mountBoardInteractions(store, routes = {}) {
       resetAutomationScopedFlags('round');
       resetPersistentZoneRoundState();
       fireTimingBoundary('roundStart', { round: combat?.round ?? previousRound + 1 });
-      const profiles = getUniquePlayerProfiles(boardApi.getState?.() ?? {});
-      setMaliceCount((Number(combat?.malice) || 0) + profiles.length + (Number(combat?.round) || 1));
+      // Round malice is already present in the accepted canonical combat state.
       return;
     }
     if (type === 'combat.end') {
@@ -2129,7 +2127,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const sheetSyncQueue = new Map();
   let staminaHydrationSceneId = null;
   let staminaHydrationPromise = Promise.resolve();
-  const maliceVictoriesCache = new Map();
+  let preparingCombatStart = false;
   // Sand timer artwork is resolved via CSS data-stage attributes using
   // assets/images/turn-timer/sand-timer-{stage}.png.
   const SOUND_PROFILES = {
@@ -2492,11 +2490,14 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   if (endRoundButton) {
-    endRoundButton.addEventListener('click', (event) => {
+    endRoundButton.addEventListener('click', async (event) => {
       event.preventDefault();
       if (!isGmUser() || !combatActive) {
         return;
       }
+      const sceneId = getActiveSceneId(), round = combatRound, encounterId = combatEncounterId;
+      if (!(await confirmBoardAction('End this round and reset all turns?', {title:'End Round',confirmText:'End round',danger:true}))) return;
+      if (!combatActive || getActiveSceneId() !== sceneId || combatRound !== round || combatEncounterId !== encounterId) return;
       advanceCombatRound();
     });
   }
@@ -10919,6 +10920,7 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    if (activeTurnDialog?.combatantId === combatantId) return;
     closePlayerTurnStartButton();
     closeTurnPrompt();
 
@@ -11518,10 +11520,6 @@ export function mountBoardInteractions(store, routes = {}) {
       return 0;
     }
 
-    if (maliceVictoriesCache.has(normalized)) {
-      return maliceVictoriesCache.get(normalized) ?? 0;
-    }
-
     const endpoint = typeof routes?.sheet === 'string' ? routes.sheet : null;
     if (!endpoint || typeof fetch !== 'function') {
       return 0;
@@ -11539,11 +11537,9 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       const payload = await response.json();
       if (!payload || typeof payload !== 'object' || payload.success === false) {
-        maliceVictoriesCache.set(normalized, 0);
         return 0;
       }
       const victories = parseVictoryValue(payload.victories ?? payload.data?.victories ?? 0);
-      maliceVictoriesCache.set(normalized, victories);
       return victories;
     } catch (error) {
       console.warn('[VTT] Failed to fetch victories', error);
@@ -11601,11 +11597,17 @@ export function mountBoardInteractions(store, routes = {}) {
     }));
   }
 
-  function handleStartCombat() {
-    if (combatActive) {
+  async function handleStartCombat() {
+    if (combatActive || preparingCombatStart) {
       return;
     }
 
+    const startingSceneId = getActiveSceneId();
+    preparingCombatStart = true;
+    let initialMalice;
+    try { initialMalice = await computeInitialMalice(); }
+    finally { preparingCombatStart = false; }
+    if (combatActive || getActiveSceneId() !== startingSceneId) return;
     stopAllyTurnTimer();
     clearTurnBorderFlash();
     pendingTurnTransition = null;
@@ -11614,7 +11616,7 @@ export function mountBoardInteractions(store, routes = {}) {
     combatActive = true;
     combatRound = 1;
     combatEncounterId = generateCombatEncounterId();
-    setMaliceCount(0, { sync: false });
+    setMaliceCount(initialMalice, { sync: false });
     if (isGmUser()) {
       combatTimerService.startCombat({ round: combatRound });
     } else {
@@ -11858,6 +11860,12 @@ export function mountBoardInteractions(store, routes = {}) {
         activeCombatantId = effectiveActiveCombatantId;
         refreshCombatantStateClasses();
       }
+      // Recovery restores only the existing controls, never turn-start effects.
+      const ownsActiveTurn = effectiveActiveCombatantId && (
+        normalizeProfileId(normalized.turnLock?.holderId) === getCurrentUserId()
+        || isCurrentUserTurnCombatant(effectiveActiveCombatantId)
+      );
+      if (combatActive && ownsActiveTurn && !activeTurnDialog) openTurnPrompt(effectiveActiveCombatantId);
       tokenMovementController?.syncCombatTurn();
 
       updateStartCombatButton();
@@ -12347,6 +12355,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function advanceCombatRound() {
+    if (combatV2Enabled) return submitCanonicalCombatIntent('round.advance');
     if (combatActive && activeCombatantId) {
       completeActiveCombatant({
         forceReleaseLock: true,
@@ -12665,8 +12674,9 @@ export function mountBoardInteractions(store, routes = {}) {
     spend: function (amount) {
       const n = Math.max(0, Math.trunc(Number(amount) || 0));
       if (n <= 0) return { spent: 0, remaining: maliceCount };
-      setMaliceCount(Math.max(0, maliceCount - n));
-      return { spent: n, remaining: maliceCount };
+      const spent = Math.min(n, maliceCount);
+      if (spent > 0) setMaliceCount(maliceCount - spent);
+      return { spent, remaining: maliceCount };
     },
     add: function (amount) {
       const n = Math.max(0, Math.trunc(Number(amount) || 0));
@@ -22891,6 +22901,7 @@ function createTemplateTool() {
   const layer = templateLayer;
   const shapes = [];
   let selectedId = null;
+  let selectedWallSquareKey = null;
   let pendingTemplateSave = 0;
   let templateSaveQueue = Promise.resolve();
   const pendingTemplateScenes = new Map();
@@ -23038,7 +23049,7 @@ function createTemplateTool() {
           if (!Number.isFinite(column) || !Number.isFinite(row)) {
             return null;
           }
-          return { column: Math.max(0, column), row: Math.max(0, row) };
+          return { column: Math.max(0, column), row: Math.max(0, row), ...(Number.isInteger(square.elevation) && square.elevation >= 0 ? {elevation:square.elevation} : {}) };
         })
         .filter(Boolean);
       // Include wall color if set
@@ -23271,7 +23282,7 @@ function createTemplateTool() {
     }
 
     if ((event.key === 'Delete' || event.key === 'Backspace') && selectedId) {
-      removeShape(selectedId);
+      removeSelectedTemplate();
       event.preventDefault();
       return true;
     }
@@ -23301,7 +23312,7 @@ function createTemplateTool() {
     if (!localPoint) {
       return;
     }
-    const gridPoint = mapPointToGrid(localPoint, viewState);
+    const gridPoint = wallPointerCell(event) ?? mapPointToGrid(localPoint, viewState);
     if (!gridPoint) {
       return;
     }
@@ -23445,6 +23456,18 @@ function createTemplateTool() {
       return;
     }
 
+    if (placementState.type === 'wall') {
+      const point = getLocalMapPoint(event);
+      const cell = wallPointerCell(event) ?? (point ? mapPointToGrid(point, viewState) : null);
+      const square = cell && snapWallSquare(cell, viewState);
+      if (square) {
+        square.elevation = wallStackHeight(square);
+        updateWallPreviewShape(placementState.squares || []);
+        previewShape.hoverSquare = square;
+        render(viewState);
+      }
+      return;
+    }
     const stage = placementState.stage;
     const trackingHover = stage === 'hover-circle' || stage === 'hover-rectangle';
     if (!trackingHover) {
@@ -23764,6 +23787,7 @@ function createTemplateTool() {
       node = document.createElement('button');
       node.type = 'button';
       node.className = 'vtt-wall__hitbox';
+      node.append(wallTileContainer);
       node.dataset.templateNode = id;
       node.setAttribute('aria-label', 'Select wall template');
       root.appendChild(node);
@@ -23812,13 +23836,13 @@ function createTemplateTool() {
       ...templateAuthority({ ...data, authorId: providedId ? data.authorId : getCurrentUserId() }),
       levelId: typeof data.levelId === 'string' && data.levelId.trim()
         ? data.levelId.trim()
-        : BASE_MAP_LEVEL_ID,
+        : (isPreview ? getActiveTokenPlacementLevelId() : null) ?? BASE_MAP_LEVEL_ID,
     };
 
     Object.assign(shape, geometryForTemplate(type, data, viewState));
 
     if (!isPreview) {
-      node.title = canEditTemplate(shape, { userId: getCurrentUserId(), isGM: isGmUser() }) ? 'Drag to move. Delete removes this template.' : 'Read-only: another author or a persistent structure. Ask the GM to edit.';
+      node.title = canEditTemplate(shape, { userId: getCurrentUserId(), isGM: isGmUser() }) ? (type === 'wall' ? 'Drag to move. Click a cube and press Delete to remove it.' : 'Drag to move. Delete removes this template.') : 'Read-only: another author or a persistent structure. Ask the GM to edit.';
       node.addEventListener('keydown', (event) => handleNodeKeydown(event, shape));
       node.addEventListener('pointerdown', (event) => handleNodePointerDown(event, shape));
       node.addEventListener('pointermove', (event) => handleNodePointerMove(event, shape));
@@ -23848,9 +23872,14 @@ function createTemplateTool() {
       return;
     }
     selectedId = id;
+    selectedWallSquareKey = null;
     shapes.forEach((shape) => {
       const isSelected = shape.id === id;
       shape.elements.root.classList.toggle('is-selected', isSelected);
+      if (!isSelected) {
+        shape.selectedSquareKey = null;
+        shape.elements.root.querySelectorAll('.is-selected-cube').forEach(cube => cube.classList.remove('is-selected-cube'));
+      }
       if (isSelected) {
         try {
           shape.elements.node.focus({ preventScroll: true });
@@ -23868,10 +23897,40 @@ function createTemplateTool() {
 
   function clearSelection() {
     selectedId = null;
+    selectedWallSquareKey = null;
+    for (const shape of shapes) shape.selectedSquareKey = null;
     shapes.forEach((shape) => {
       shape.elements.root.classList.remove('is-selected');
     });
     restoreTemplateStatus();
+  }
+
+  function removeSelectedTemplate() {
+    const shape = shapes.find(item => item.id === selectedId);
+    if (!shape || !canManageShape(shape)) return;
+    if (shape.type !== 'wall' || !selectedWallSquareKey) { removeShape(selectedId); return; }
+    const remaining = shape.squares.filter(square => wallSquareKey(square) !== selectedWallSquareKey);
+    if (remaining.length === shape.squares.length) return;
+    if (!remaining.length) { removeShape(shape.id); return; }
+    shape.squares = remaining;
+    shape.selectedSquareKey = selectedWallSquareKey = null;
+    render(viewState);
+    commitShapes();
+  }
+
+  function wallPointerCell(event) {
+    if (placementState && placementState.type !== 'wall') return null;
+    const cube = event.target?.closest?.('[data-wall-square]');
+    return cube ? { column: Number(cube.dataset.wallColumn), row: Number(cube.dataset.wallRow) } : null;
+  }
+
+  function selectWallCube(event, shape) {
+    if (shape.type !== 'wall') return;
+    const cube = event.target?.closest?.('[data-wall-square]');
+    if (!cube) return;
+    selectedWallSquareKey = cube.dataset.wallSquare;
+    shape.selectedSquareKey = selectedWallSquareKey;
+    render(viewState);
   }
 
   function removeShape(id) {
@@ -24061,7 +24120,7 @@ function createTemplateTool() {
       event.preventDefault();
       event.stopPropagation();
       selectShape(shape.id);
-      removeShape(shape.id);
+      removeSelectedTemplate();
       return;
     }
 
@@ -24078,16 +24137,19 @@ function createTemplateTool() {
     event.preventDefault();
     event.stopPropagation();
     selectShape(shape.id);
+    selectWallCube(event, shape);
     activateTemplate(shape);
   }
 
   function handleNodePointerDown(event, shape) {
+    if (placementState) return;
     if (event.button !== 0 || activeRotation || !canManageShape(shape)) {
       return;
     }
     event.preventDefault();
     event.stopPropagation();
     selectShape(shape.id);
+    selectWallCube(event, shape);
     activateTemplate(shape);
 
     const localPoint = getLocalMapPoint(event);
@@ -24111,7 +24173,7 @@ function createTemplateTool() {
       origin,
       startPointer: gridPoint,
       originalSquares: shape.type === 'wall'
-        ? shape.squares?.map((square) => ({ column: square.column, row: square.row })) ?? []
+        ? shape.squares?.map((square) => ({ ...square })) ?? []
         : null,
       anchorOrigin:
         shape.type === 'rectangle' && Number.isFinite(shape.anchor?.column) && Number.isFinite(shape.anchor?.row)
@@ -24186,6 +24248,7 @@ function createTemplateTool() {
       const moveRow = Math.round(deltaRow);
       const clamped = clampWallDelta(originalSquares, moveColumn, moveRow, viewState);
       shape.squares = originalSquares.map((square) => ({
+        ...square,
         column: square.column + clamped.column,
         row: square.row + clamped.row,
       }));
@@ -24244,7 +24307,8 @@ function createTemplateTool() {
     root.style.setProperty('--vtt-grid-size', `${gridSize}px`);
 
     if (shape.type === 'wall') {
-      paintWallTemplate(shape, view);
+      const state = boardApi.getState?.()?.boardState || {};
+      paintWallTemplate(shape, view, { config: state.sceneState?.[state.activeSceneId] || {} });
       node.style.left = '0';
       node.style.top = '0';
       node.style.width = '100%';
@@ -24869,6 +24933,12 @@ function createTemplateTool() {
 
 
 
+  function wallStackHeight(square) {
+    const levelId = getActiveTokenPlacementLevelId() ?? BASE_MAP_LEVEL_ID;
+    const existing = shapes.filter(shape => shape.type === 'wall' && shape.levelId === levelId).flatMap(shape => shape.squares || []);
+    return nextWallElevation(square, [...existing, ...(placementState?.squares || [])]);
+  }
+
   function handleWallPlacement(gridPoint) {
     const square = snapWallSquare(gridPoint, viewState);
     if (!square) {
@@ -24879,9 +24949,7 @@ function createTemplateTool() {
       placementState.squares = [];
     }
 
-    if (placementState.squares.some((existing) => existing.column === square.column && existing.row === square.row)) {
-      return;
-    }
+    square.elevation = wallStackHeight(square);
 
     if (placementState.squares.length > 0 && !isWallSquareAdjacent(square, placementState.squares)) {
       updateStatus('Select an adjacent square to continue the wall.');
@@ -24890,6 +24958,8 @@ function createTemplateTool() {
 
     placementState.squares.push(square);
     updateWallPreviewShape(placementState.squares);
+    previewShape.hoverSquare = { ...square, elevation: square.elevation + 1 };
+    render(viewState);
 
     const total = Number.isInteger(placementState.values?.squares) ? placementState.values.squares : placementState.squares.length;
     const remaining = Math.max(0, total - placementState.squares.length);
@@ -24944,7 +25014,7 @@ function createTemplateTool() {
     return existing.some((square) => {
       const dx = Math.abs(square.column - candidate.column);
       const dy = Math.abs(square.row - candidate.row);
-      return dx <= 1 && dy <= 1 && (dx !== 0 || dy !== 0);
+      return dx <= 1 && dy <= 1;
     });
   }
 
@@ -24956,6 +25026,7 @@ function createTemplateTool() {
       layer.appendChild(previewShape.elements.root);
     } else {
       previewShape.squares = sanitized;
+      previewShape.hoverSquare = null;
     }
     render(viewState);
     updateLayerVisibility();

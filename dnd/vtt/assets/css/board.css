@@ -5931,3 +5931,11 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
   color: var(--dice-muted, #6f5d45);
   font-size: 0.84rem;
 }
+
+/* Solid template cubes: only painted faces receive pointer input. */
+.vtt-wall__hitbox { pointer-events: none; }
+.vtt-wall__cube { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+.vtt-wall__cube [data-cube-face] { pointer-events: auto; cursor: grab; stroke: rgba(0,0,0,.55); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.vtt-wall__cube.is-selected-cube [data-cube-face] { stroke: #e2e8f0; stroke-width: 2; }
+.vtt-wall__cube.is-ghost { opacity: .45; }
+.vtt-wall__cube.is-ghost [data-cube-face] { stroke: #fff; stroke-dasharray: 4 2; cursor: crosshair; }

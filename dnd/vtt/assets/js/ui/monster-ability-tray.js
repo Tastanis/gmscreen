@@ -294,6 +294,8 @@
 
             // Potency clause: "M<2 prone"
             var attr = (entry.attribute || '').toString().trim();
+            var tierEffect = (entry.tier_effect || '').toString().trim();
+            if (tierEffect) pieces.push(tierEffect);
             var attrEffect = (entry.attribute_effect || '').toString().trim();
             if (attrEffect) {
                 var attrInitial = attr ? attr.charAt(0).toUpperCase() : '';
@@ -391,6 +393,8 @@
                 pieces.push((dmgAmount + (dmgType ? ' ' + dmgType : '') + ' damage').trim());
             }
             var attr = (entry.attribute || '').toString().trim();
+            var tierEffect = (entry.tier_effect || '').toString().trim();
+            if (tierEffect) pieces.push(tierEffect);
             var attrEffect = (entry.attribute_effect || '').toString().trim();
             if (attrEffect) {
                 var attrInitial = attr ? attr.charAt(0).toUpperCase() : '';

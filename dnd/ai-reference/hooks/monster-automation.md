@@ -26,6 +26,8 @@ Abilities live in `monster.abilities.<category>` arrays. Use ONLY these category
 
 The category is the array the ability sits in — there is no `category` field on the ability itself. PHP round-trips `automation` opaquely (`dnd/vtt/api/monster_helpers.php`); validation happens in `schema.js`.
 
+Tier rules text uses `test.tierN.tier_effect` for flat riders alongside damage and potency fields. Both VTT normalizers retain it, and the tray hover card, chat post and stat block display it. This is descriptive text, independent of automation; old board snapshots stripped by earlier normalizers need replacement or re-import to recover missing text.
+
 ## Monster authoring rules (differences from PCs)
 
 | Rule | Detail |

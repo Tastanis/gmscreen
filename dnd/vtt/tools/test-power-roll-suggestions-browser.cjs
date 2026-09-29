@@ -1,9 +1,10 @@
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
-const origin = 'http://127.0.0.1:8129';
+const origin = process.env.VTT_TEST_ORIGIN || 'http://127.0.0.1:8129';
+if (!['127.0.0.1', 'localhost'].includes(new URL(origin).hostname)) throw Error('Loopback required');
 
 (async () => {
-  assert.equal((await fetch(origin + '/diagnostic-manifest.json').then(r => r.json())).test_fixture, 'floor-regression');
+  assert.ok(['floor-regression', 'combat-wall-audit'].includes((await fetch(origin + '/diagnostic-manifest.json').then(r => r.json())).test_fixture));
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
   try {
     const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
@@ -14,6 +15,8 @@ const origin = 'http://127.0.0.1:8129';
     await page.waitForFunction(() => document.querySelector('[data-connection-status]')?.textContent === 'Connected');
     await page.evaluate(async () => {
       const { getPowerRollSuggestions } = await import('/dnd/vtt/assets/js/ui/power-roll-suggestions.js');
+      // This runner test owns synthetic floor geometry, independent of the active scene.
+      window.terrainPrototype = { ...window.terrainPrototype, active: false };
       const actor = { id: 'suggestion-actor', name: 'Archer', column: 2, row: 2, width: 1, height: 1, levelId: 'upper', team: 'ally' };
       const target = { id: 'suggestion-target', name: 'Enemy', column: 3, row: 2, width: 1, height: 1, levelId: 'level-0', team: 'enemy' };
       window.suggestionFixture = { actor, target, reads: 0, chat: [] };

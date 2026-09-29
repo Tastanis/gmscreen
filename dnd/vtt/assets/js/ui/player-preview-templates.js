@@ -34,7 +34,7 @@ export function renderPlayerPreviewTemplates(stage,preview,view,levelId) {
     const shape={...data,...geometry.geometryForTemplate(data.type,data),elements:{root,node,label,tileContainer,tiles:new Map(),connectors:new Map()}};
     if(wall){
       root.style.setProperty('--vtt-grid-size',view.gridSize+'px');
-      paintWallTemplate(shape,view);node.style.left='0';node.style.top='0';node.style.width='100%';node.style.height='100%';
+      paintWallTemplate(shape,view,{config});node.style.left='0';node.style.top='0';node.style.width='100%';node.style.height='100%';
     } else paintTemplateArea(shape,view);
     const presentation=resolveTemplateLevelPresentation(shape,view,context);
     root.hidden=!presentation.visible;root.setAttribute('aria-hidden',String(!presentation.visible));

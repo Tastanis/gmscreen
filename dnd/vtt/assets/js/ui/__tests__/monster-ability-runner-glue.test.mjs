@@ -5,17 +5,17 @@ import vm from 'node:vm';
 
 const source = await readFile(new URL('../monster-ability-runner-glue.js', import.meta.url), 'utf8');
 
-function createRuntime({ runnerResult } = {}) {
+function createRuntime({ runnerResult, initialMalice = 10 } = {}) {
   const spends = [];
   const refunds = [];
   const openCalls = [];
-  let malice = 10;
+  let malice = initialMalice;
   const window = {
     confirm: () => true,
     UIKit: { confirm: async () => true },
     MaliceTracker: {
       get: () => malice,
-      spend: (amount) => { spends.push(amount); malice -= amount; },
+      spend: (amount) => { const spent = Math.min(amount, malice); if (spent > 0) spends.push(spent); malice -= spent; return { spent, remaining: malice }; },
       add: (amount) => { refunds.push(amount); malice += amount; },
     },
     AbilityAutomationRunner: {
@@ -71,4 +71,30 @@ test('a canceled Malice-costed monster trigger refunds its exact spend', async (
   assert.deepEqual(runtime.spends, [2]);
   assert.deepEqual(runtime.refunds, [2]);
   assert.equal(runtime.getMalice(), 10);
+});
+
+test('canceling an over-budget monster ability restores only its actual Malice debit', async () => {
+  const runtime = createRuntime({ runnerResult: 'refund', initialMalice: 2 });
+  await runtime.window.MonsterAbilityRunner.start(
+    { name: 'Goblin', attributes: {} },
+    { name: 'Expensive attack', resource_cost: '5 Malice', automation: { schema: 'ability-automation/v3', cards: [{ type: 'effect', effects: [] }] } },
+    'malice', { id: 'goblin' },
+  );
+  assert.deepEqual(runtime.spends, [2]);
+  assert.deepEqual(runtime.refunds, [2]);
+  assert.equal(runtime.openCalls[0].resourceReservation.maliceSpent, 2);
+  assert.equal(runtime.getMalice(), 2);
+});
+
+test('an over-budget ability at zero Malice has no debit or refundable reservation', async () => {
+  const runtime = createRuntime({ runnerResult: 'refund', initialMalice: 0 });
+  await runtime.window.MonsterAbilityRunner.start(
+    { name: 'Goblin', attributes: {} },
+    { name: 'Expensive attack', resource_cost: '5 Malice', automation: { schema: 'ability-automation/v3', cards: [{ type: 'effect', effects: [] }] } },
+    'malice', { id: 'goblin' },
+  );
+  assert.deepEqual(runtime.spends, []);
+  assert.deepEqual(runtime.refunds, []);
+  assert.equal(runtime.openCalls[0].resourceReservation.maliceSpent, 0);
+  assert.equal(runtime.getMalice(), 0);
 });

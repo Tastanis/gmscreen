@@ -211,7 +211,7 @@ Every ability has **three channels**, and each owns a different job. The #1 mist
 ### Per-tier fields (inside `test.tier1` / `tier2` / `tier3`)
 
 - `damage_amount` — the tier's damage as a string (`"11"`, or dice like `"2d6"`). `damage_type` — the damage type (`"fire"`, etc.); omit/empty for untyped.
-- `tier_effect` — **free-text rider for a flat (non-potency) effect on that tier**, e.g. `"pull 2 toward the cluster"`, `"prone"`, `"slide 3"`. This is the structured home for tier riders that used to get stranded in prose. Renders right after the damage on the tier line. Mirror it with the matching automation effect (`forcedMovement`, `condition`, etc.) in the same tier.
+- `tier_effect` — **free-text rider for a flat (non-potency) effect on that tier**, e.g. `"pull 2 toward the cluster"`, `"prone"`, `"slide 3"`. This is the structured home for tier riders that used to get stranded in prose. The creator and VTT preserve this text, including tiers containing only a rider. The VTT hover card and chat post show it after damage and before potency; the VTT stat block also shows it. Mirror it with the matching automation effect (`forcedMovement`, `condition`, etc.) in the same tier. Existing board snapshots that already lost the field must be replaced or re-imported to recover it.
 - `has_attribute_check` + `attribute` + `attribute_threshold` + `attribute_effect` — a **potency-gated** rider for "Attribute ≤ N: effect" lines (the book's `M<2 prone`). The display shows "Might ≤2: prone". Set `has_attribute_check: true`, pick the `attribute`, the numeric `attribute_threshold`, and the `attribute_effect` text. Use `tier_effect` for flat riders and these fields for potency-gated ones — a tier can use both.
 
 ### Automation

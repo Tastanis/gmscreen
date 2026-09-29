@@ -289,12 +289,17 @@
             );
             if (!ok) return { proceed: false, cost: cost };
         }
-        tracker.spend(cost);
+        var debit = tracker.spend(cost);
+        // Spending below zero is explicitly allowed by the GM, but a later
+        // cancellation must restore only the amount that was actually debited.
+        var spent = debit && Number.isFinite(Number(debit.spent))
+            ? Math.max(0, Math.min(cost, Number(debit.spent)))
+            : Math.max(0, Math.min(cost, current - tracker.get()));
         postChat({
             message: (monster && monster.name ? monster.name : 'Monster') +
                 ' spends ' + cost + ' malice → ' + (ability.name || 'ability')
         });
-        return { proceed: true, cost: cost };
+        return { proceed: true, cost: cost, spent: spent };
     }
 
     async function start(monster, ability, category, placement, options) {
@@ -323,11 +328,11 @@
 
         var context = buildMonsterContext(monster, ability, category, placement);
         context.resourceReservation = {
-            maliceSpent: maliceResult.cost > 0 && !maliceResult.skippedSpend ? maliceResult.cost : 0
+            maliceSpent: maliceResult.spent || 0
         };
         context.refundAbility = async function (payload) {
-            if (maliceResult.cost > 0 && !maliceResult.skippedSpend && window.MaliceTracker) {
-                window.MaliceTracker.add(maliceResult.cost);
+            if (maliceResult.spent > 0 && window.MaliceTracker) {
+                window.MaliceTracker.add(maliceResult.spent);
             }
             if (payload && payload.triggeredActionSpend && payload.triggeredActionSpend.consumed && context.refundTriggeredAction) {
                 await context.refundTriggeredAction({ placementId: payload.sourcePlacementId });

@@ -41,7 +41,7 @@ final class FloorSupport {
   },$surfaces);
  }
  public static function supported(array $p,array $surfaces,array $cuts=[]):?bool {
-  $matching=array_values(array_filter($surfaces,fn($s)=>($s['levelId']??'level-0')===($p['levelId']??'level-0')));
+  $matching=array_values(array_filter($surfaces,fn($s)=>($s['levelId']??'level-0')===($p['levelId']??'level-0')&&empty($s['templateCube'])));
   $floors=array_values(array_filter($matching,fn($s)=>($s['kind']??'')==='floor'));
   // A roof-only level is bounded by its authored roof, not an infinite legacy plane.
   // Where a real floor exists, its support remains independent of the roof above it.
@@ -84,11 +84,12 @@ final class FloorSupport {
  public static function walkContact(array $from,array $to,array $path,array $surfaces,array $mapLevels,callable $terrain):?array {
   if(FloorGeometry::isAirborne($from)||!empty($from['_floorTraversal']))return null;
   $levels=self::levels($mapLevels);
-  $floors=array_values(array_filter($surfaces,fn($s)=>($s['kind']??'')==='floor'&&isset($levels[$s['levelId']??''])&&!($levels[$s['levelId']]['hidden']??false)));
+  $floors=array_values(array_filter($surfaces,fn($s)=>(($s['kind']??'')==='floor'||!empty($s['templateCube']))&&isset($levels[$s['levelId']??''])&&!($levels[$s['levelId']]['hidden']??false)));
   if(!$floors)return null;
   $overlap=fn($p,$s)=>self::intersects($p,$s,$levels[$s['levelId']]['cutouts']??[]);
   $support=null;
-  foreach($floors as $s)if((($from['_supportSurfaceId']??null)===($s['id']??null)||(($from['levelId']??'level-0')!=='level-0'&&$from['levelId']===$s['levelId']))&&$overlap($from,$s)){$support=$s;break;}
+  foreach($floors as $s)if(($from['_supportSurfaceId']??null)===($s['id']??null)&&$overlap($from,$s)){$support=$s;break;}
+  if(!$support)foreach($floors as $s)if(($s['kind']??'')==='floor'&&($from['levelId']??'level-0')!=='level-0'&&$from['levelId']===$s['levelId']&&$overlap($from,$s)){$support=$s;break;}
   $support??=self::terrainContact($from,$floors,$mapLevels,$terrain($from));
   $previous=$from;
   foreach([...$path,$to] as $end){
@@ -98,13 +99,33 @@ final class FloorSupport {
     $p=[...$from,'column'=>$start['column']+$dx*$i/$steps,'row'=>$start['row']+$dy*$i/$steps];
     $height=$support['height']??$terrain($previous);
     if(!$support||!$overlap($p,$support)){
-     $support=null;
-     foreach($floors as $s)if(!$overlap($previous,$s)&&$overlap($p,$s)&&abs($s['height']-$height)<=.1+1e-6&&$s['height']>=$terrain($p)-.1-1e-6&&(!$support||$s['height']>$support['height']))$support=$s;
+     $priorSupport=$support;$support=null;
+     foreach($floors as $s)if((!$overlap($previous,$s)||($priorSupport&&(!empty($priorSupport['templateCube'])||!empty($s['templateCube']))&&self::cubeTouches($priorSupport,$s)))&&$overlap($p,$s)&&abs($s['height']-$height)<=.1+1e-6&&$s['height']>=$terrain($p)-.1-1e-6&&(!$support||$s['height']>$support['height']))$support=$s;
     }
     $previous=$p;
    }
   }
   return $support;
+ }
+
+ private static function cubeTouches(array $a,array $b):bool {
+  $left=min(array_column($a['points'],'x'));$right=max(array_column($a['points'],'x'));$top=min(array_column($a['points'],'y'));$bottom=max(array_column($a['points'],'y'));
+  return min(array_column($b['points'],'x'))<=$right+1e-7&&max(array_column($b['points'],'x'))>=$left-1e-7&&min(array_column($b['points'],'y'))<=$bottom+1e-7&&max(array_column($b['points'],'y'))>=$top-1e-7;
+ }
+
+ /** A step off a cube can land on a touching lower cube, never climb from terrain. */
+ public static function cubeStepDown(array $from,array $to,array $surfaces,array $mapLevels):?array {
+  $old=self::retained($from,$surfaces,$mapLevels);
+  if(!$old||empty($old['templateCube'])||self::retained([...$from,...$to],$surfaces,$mapLevels))return null;
+  $bounds=static fn($s)=>[min(array_column($s['points'],'x')),max(array_column($s['points'],'x')),min(array_column($s['points'],'y')),max(array_column($s['points'],'y'))];
+  [$a,$b,$c,$d]=$bounds($old);$levels=self::levels($mapLevels);$best=null;
+  foreach($surfaces as $s){
+   if(empty($s['templateCube'])||$s['height']>$old['height']+1e-7||!self::intersects($to,$s,$levels[$s['levelId']]['cutouts']??[]))continue;
+   [$e,$f,$g,$h]=$bounds($s);
+   if($e>$b+1e-7||$a>$f+1e-7||$g>$d+1e-7||$c>$h+1e-7)continue;
+   if(!$best||$s['height']>$best['height'])$best=$s;
+  }
+  return $best;
  }
 
  /** Highest supported visible surface below a descending flier. */

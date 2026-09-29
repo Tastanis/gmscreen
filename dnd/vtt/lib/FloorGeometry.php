@@ -257,7 +257,12 @@ final class FloorGeometry
         }
         if($terrainAt!==null && $surfaces && $kind!=='teleport' && !$supportedStair && $result['traversal']===null && $result['cause']!=='stairs'){
             $contact=FloorSupport::walkContact($current,[...$current,...$destination],$waypoints,$surfaces,$mapLevels,$terrainAt);
-            if($contact)return ['levelId'=>$contact['levelId'],'traversal'=>null,'cause'=>'surface','supportSurfaceId'=>$contact['id']??null];
+             $contact??=FloorSupport::cubeStepDown($current,[...$current,...$destination],$surfaces,$mapLevels);
+            if($contact){
+                $prior=FloorSupport::retained($current,$surfaces,$mapLevels);
+                $cause=$prior&&!empty($prior['templateCube'])&&$prior['height']-$contact['height']>=2-1e-7?'fall':'surface';
+                return ['levelId'=>$contact['levelId'],'traversal'=>null,'cause'=>$cause,'supportSurfaceId'=>$contact['id']??null];
+            }
         }
         $fall = $supportedStair ? null : self::fallingDestination([...$current, ...$destination, 'levelId'=>$result['levelId']], $mapLevels, $surfaces);
         if ($fall !== null) { $result['levelId']=$fall; $result['cause']='fall'; $result['traversal']=null; }
