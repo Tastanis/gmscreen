@@ -13,7 +13,7 @@ import {terrainFloorContact} from '../floor-support.js';
 test('terrain contact matches near-flush paving without exposing ceilings or holes',()=>{
  const s={...floor,levelId:'paved',height:2},levels={levels:[{id:'paved',elevationSquares:2}]},p={column:3,row:1,width:1,height:1,levelId:'level-0'};
  assert.equal(terrainFloorContact(p,[s],levels,1.95416665),s);
- for(const z of [1.899,0,-6,2.2])assert.equal(terrainFloorContact(p,[s],levels,z),null);
+ for(const z of [1.874,0,-6,2.2])assert.equal(terrainFloorContact(p,[s],levels,z),null);
  assert.equal(terrainFloorContact({...p,column:1,row:1},[s],levels,1.95),null);
  assert.equal(terrainFloorContact(p,[s],{levels:[{...levels.levels[0],hidden:true}]},1.95),null);
  assert.equal(terrainFloorContact(p,[{...s,kind:'roof'}],levels,1.95),null);

@@ -1,18 +1,24 @@
 import {floorElevations} from '../state/normalize/floor-elevation.js';
-import {floorSupported,intersectsFloor,resolveSupportSurfaces} from './floor-support.js';
+import {floorSupported,intersectsFloor,resolveSupportSurfaces,terrainFloorContact} from './floor-support.js';
 export function teleportDistance(from,to,startHeight,endHeight){return Math.max(Math.abs(to.column-from.column),Math.abs(to.row-from.row),Math.abs(endHeight-startHeight));}
-export function chooseTeleportHeight({from,to,range=null,context,ground,startHeight,combatActive=false}){
+export function teleportSurfaces({from,to,context,ground}){
  const config=context.state.boardState.sceneState?.[context.state.boardState.activeSceneId]||{},surfaces=resolveSupportSurfaces(config.environment?.walls?.value),heights=floorElevations(config.mapLevels);
  const x=to.column+(from.width||1)/2,y=to.row+(from.height||1)/2,p={...from,...to};
- const choices=[{height:ground(x,y),label:'Ground',levelId:'level-0'}];
+ const contact=terrainFloorContact(p,surfaces,config.mapLevels,ground(x,y));
+ const choices=contact?[]:[{height:ground(x,y),label:'Ground',levelId:'level-0'}];
  for(const l of config.mapLevels?.levels||[]){
   if(l.hidden&&!context.isGM)continue;
   const support=floorSupported({...p,levelId:l.id},surfaces,l.cutouts||[]);
   const centerInHole=(l.cutouts||[]).some(c=>p.column>=c.column&&p.row>=c.row&&p.column+(p.width||1)<=c.column+c.width&&p.row+(p.height||1)<=c.row+c.height);
-  if(support??!centerInHole)choices.push({height:heights.get(l.id),label:l.name||'Floor',levelId:l.id});
+  if(support===null&&!centerInHole)choices.push({height:heights.get(l.id),label:l.name||'Floor',levelId:l.id});
  }
- for(const s of surfaces){if((config.mapLevels?.levels||[]).some(l=>l.id===s.levelId&&l.hidden&&!context.isGM))continue;if(intersectsFloor(p,s))choices.push({height:s.height,label:s.kind==='floor'?'Floor':'Roof',levelId:s.levelId||'level-0'});}
+ for(const s of surfaces){if((config.mapLevels?.levels||[]).some(l=>l.id===s.levelId&&l.hidden&&!context.isGM))continue;if(intersectsFloor(p,s,(config.mapLevels?.levels||[]).find(l=>l.id===s.levelId)?.cutouts||[]))choices.push({height:s.height,label:s.kind==='floor'?'Floor':'Roof',levelId:s.levelId||'level-0',surfaceId:s.id});}
+ choices.sort((a,b)=>Number(!!b.surfaceId)-Number(!!a.surfaceId));
  const unique=choices.filter((c,i)=>Number.isFinite(c.height)&&choices.findIndex(v=>v.height===c.height)===i).sort((a,b)=>a.height-b.height);
+ return unique;
+}
+export function chooseTeleportHeight({from,to,range=null,context,ground,startHeight,combatActive=false}){
+ const unique=teleportSurfaces({from,to,context,ground}),x=to.column+(from.width||1)/2,y=to.row+(from.height||1)/2;
  const display=z=>Math.round(z)+1,air=['fly','hover'].includes(from.movementMode);
  if(!combatActive&&range===null&&!air&&unique.length===1&&Math.abs(unique[0].height-startHeight)<1e-6)return Promise.resolve({height:unique[0].height,range});
  return new Promise(resolve=>{

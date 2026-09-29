@@ -2,6 +2,8 @@
 declare(strict_types=1);
 /** Positive-area footprint support on floor polygons minus holes and cutouts. */
 final class FloorSupport {
+ public const GROUND_CLEARANCE = .125;
+ private static function levels(array $mapLevels):array {return ['level-0'=>['id'=>'level-0','cutouts'=>[]],...array_column($mapLevels['levels']??[],null,'id')];}
  public static function contains(array $ring,float $x,float $y):bool {
   $inside=false;$j=count($ring)-1;foreach($ring as $i=>$p){$q=$ring[$j];if(($p['y']>$y)!==($q['y']>$y)&&$x<($q['x']-$p['x'])*($y-$p['y'])/($q['y']-$p['y'])+$p['x'])$inside=!$inside;$j=$i;}return $inside;
  }
@@ -50,10 +52,10 @@ final class FloorSupport {
  }
  /** Contact tolerance for nearly flush imported paving; never a full-square climb. */
  public static function terrainContact(array $p,array $surfaces,array $mapLevels,float $ground):?array {
-  $levels=array_column($mapLevels['levels']??[],null,'id');$best=null;
+  $levels=self::levels($mapLevels);$best=null;
   foreach($surfaces as $surface){
    $level=$levels[$surface['levelId']??'']??null;$height=(float)($surface['height']??0);
-   if(($surface['kind']??'')!=='floor'||!$level||($level['hidden']??false)||$height<$ground-1e-6||$height>$ground+.1+1e-6)continue;
+   if(($surface['kind']??'')!=='floor'||!$level||($level['hidden']??false)||$height<$ground-1e-6||$height>$ground+self::GROUND_CLEARANCE+1e-6)continue;
    if(self::intersects($p,$surface,$level['cutouts']??[])&&(!$best||$height>$best['height']))$best=$surface;
   }
   return $best;
@@ -61,9 +63,18 @@ final class FloorSupport {
 
  public static function retained(array $p,array $surfaces,array $mapLevels):?array {
   if(empty($p['_supportSurfaceId']))return null;
-  $levels=array_column($mapLevels['levels']??[],null,'id');
+  $levels=self::levels($mapLevels);
   foreach($surfaces as $s)if(($s['id']??null)===$p['_supportSurfaceId']&&self::intersects($p,$s,$levels[$s['levelId']??'']['cutouts']??[]))return $s;
   return null;
+ }
+
+ public static function stairLanding(array $p,array $surfaces,array $mapLevels):?array {
+  $id=$p['levelId']??'level-0';$levels=self::levels($mapLevels);$height=FloorGeometry::elevations($mapLevels)[$id]??0;$best=null;
+  foreach($surfaces as $s){
+   if(($s['kind']??'')!=='floor'||($s['levelId']??'level-0')!==$id||($levels[$id]['hidden']??false)||abs($s['height']-$height)>self::GROUND_CLEARANCE+1e-6)continue;
+   if(self::intersects($p,$s,$levels[$id]['cutouts']??[])&&(!$best||$s['height']>$best['height']))$best=$s;
+  }
+  return $best;
  }
 
  /** Follow nearly flush floor edges, retaining support over excavated terrain.
@@ -72,12 +83,12 @@ final class FloorSupport {
   */
  public static function walkContact(array $from,array $to,array $path,array $surfaces,array $mapLevels,callable $terrain):?array {
   if(FloorGeometry::isAirborne($from)||!empty($from['_floorTraversal']))return null;
-  $levels=array_column($mapLevels['levels']??[],null,'id');
+  $levels=self::levels($mapLevels);
   $floors=array_values(array_filter($surfaces,fn($s)=>($s['kind']??'')==='floor'&&isset($levels[$s['levelId']??''])&&!($levels[$s['levelId']]['hidden']??false)));
   if(!$floors)return null;
   $overlap=fn($p,$s)=>self::intersects($p,$s,$levels[$s['levelId']]['cutouts']??[]);
   $support=null;
-  foreach($floors as $s)if((($from['_supportSurfaceId']??null)===($s['id']??null)||($from['levelId']??'level-0')===$s['levelId'])&&$overlap($from,$s)){$support=$s;break;}
+  foreach($floors as $s)if((($from['_supportSurfaceId']??null)===($s['id']??null)||(($from['levelId']??'level-0')!=='level-0'&&$from['levelId']===$s['levelId']))&&$overlap($from,$s)){$support=$s;break;}
   $support??=self::terrainContact($from,$floors,$mapLevels,$terrain($from));
   $previous=$from;
   foreach([...$path,$to] as $end){
@@ -98,7 +109,7 @@ final class FloorSupport {
 
  /** Highest supported visible surface below a descending flier. */
  public static function landing(array $p,array $surfaces,array $mapLevels,float $altitude,float $ground):array {
-  $levels=array_column($mapLevels['levels']??[],null,'id');
+  $levels=self::levels($mapLevels);
   $best=['levelId'=>'level-0','height'=>$ground,'id'=>null];
   foreach($surfaces as $s){
    $id=$s['levelId']??'level-0';$level=$levels[$id]??null;

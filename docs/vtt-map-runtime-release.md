@@ -296,3 +296,34 @@ No campaign data or production hosting is changed by this release.
 Validation: all 841 tests pass across 115 files. The six-variant three-browser
 regression passes on version 1.19.170 with no page errors; room enemies remain
 visible and basement enemies stay hidden after vision initializes and reloads.
+
+## Basement stair support and floor precedence - 1.19.172
+
+The reported Bathhouse landing has terrain at -0.125 and a basement floor at 0.
+Both round to standing height 1, but they are different physical surfaces. The
+base-level plate was missing from contact lookup because it had no separate
+mapLevels entry; stair exits also saved only the level, without concrete support.
+
+Base-level plates now participate in support resolution. Stairs attach a matching
+floor plate at the destination level, including level-0, and movement retains its
+support ID. Floors win over terrain at exactly equal physical height. The shared
+0.125-square ground-clearance rule also treats terrain immediately beneath a floor
+as buried contact, replacing that unusable teleport destination with the floor.
+This is separate from the 0.1-square walking edge-step tolerance. Terrain heights
+are unchanged. Holes/cutouts, outside terrain and larger underfloor gaps remain.
+
+Teleport choices use authored physical surface heights instead of also inventing
+a generic level plane where authored geometry exists. Equal-height ties prefer
+concrete surface IDs. Older requests into the near-flush buried terrain normalize
+to the accessible floor; real below-floor destinations remain distinct.
+
+The actual Bathhouse regression is test-basement-support-browser.cjs, using a
+marked disposable SQLite copy and temporary player token. It traverses the real
+stair, walks several basement cells, checks support and sight after reload, and
+checks one accessible basement landing with no false fall. See the import guide
+for repeatable endpoint and clearance preflight checks for future maps.
+
+Validation: 842 tests across 116 files pass. Actual Bathhouse three-client
+regression passes, including real mouse stair descent, several basement steps,
+reload, visible floor artwork and sight, one accessible basement choice and no
+false fall. Existing user placements remain unchanged in the disposable copy.

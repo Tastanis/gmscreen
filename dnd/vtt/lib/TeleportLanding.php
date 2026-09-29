@@ -4,21 +4,27 @@ require_once __DIR__.'/WallMovement.php';
 final class TeleportLanding {
  public static function surfaces(array $to,array $config,bool $gm):array {
   $heights=FloorGeometry::elevations($config['mapLevels']??[]);$surfaces=FloorSupport::surfaces($config['environment']['walls']['value']??[]);
-  $result=[['height'=>WallMovement::terrain($to['column']+($to['width']??1)/2,$to['row']+($to['height']??1)/2,$config),'levelId'=>'level-0','surfaceId'=>null]];
+  $ground=WallMovement::terrain($to['column']+($to['width']??1)/2,$to['row']+($to['height']??1)/2,$config);
+  $contact=FloorSupport::terrainContact($to,$surfaces,$config['mapLevels']??[],$ground);
+  $result=$contact?[]:[['height'=>$ground,'levelId'=>'level-0','surfaceId'=>null]];
   $hidden=[];
   foreach($config['mapLevels']['levels']??[] as $level){
    if(!$gm&&($level['hidden']??false)){$hidden[]=$level['id'];continue;}
    $p=[...$to,'levelId'=>$level['id']];$support=FloorSupport::supported($p,$surfaces,$level['cutouts']??[]);
-   if($support??!FloorGeometry::fullyUnsupported($p,$level))$result[]=['height'=>$heights[$level['id']],'levelId'=>$level['id'],'surfaceId'=>null];
+   if($support===null&&!FloorGeometry::fullyUnsupported($p,$level))$result[]=['height'=>$heights[$level['id']],'levelId'=>$level['id'],'surfaceId'=>null];
   }
-  foreach($surfaces as $s){if(in_array($s['levelId']??'level-0',$hidden,true)||!isset($s['id'])||!FloorSupport::intersects($to,$s))continue;
+  $levels=array_column($config['mapLevels']['levels']??[],null,'id');
+  foreach($surfaces as $s){if(in_array($s['levelId']??'level-0',$hidden,true)||!isset($s['id'])||!FloorSupport::intersects($to,$s,$levels[$s['levelId']??'']['cutouts']??[]))continue;
    $result[]=['height'=>(float)$s['height'],'levelId'=>$s['levelId']??'level-0','surfaceId'=>$s['id']];
   }
-  usort($result,fn($a,$b)=>$b['height']<=>$a['height']);return $result;
+  usort($result,fn($a,$b)=>($b['height']<=>$a['height'])?:((int)($b['surfaceId']!==null)<=>(int)($a['surfaceId']!==null)));return $result;
  }
  public static function resolve(array $from,array $to,array $config,array $choice,bool $gm):array {
   $height=$choice['height']??null;$range=$choice['range']??null;
   if((!is_int($height)&&!is_float($height))||!is_finite((float)$height)||$height< -1000000||$height>1000000)throw new InvalidArgumentException('Invalid teleport height.');
+  $ground=WallMovement::terrain($to['column']+($to['width']??1)/2,$to['row']+($to['height']??1)/2,$config);
+  $contact=FloorSupport::terrainContact($to,FloorSupport::surfaces($config['environment']['walls']['value']??[]),$config['mapLevels']??[],$ground);
+  if($contact&&$height>=$ground-1e-6&&$height<$contact['height'])$height=$contact['height'];
   $distance=max(abs($to['column']-$from['column']),abs($to['row']-$from['row']),abs($height-WallMovement::height($from,$config)));
   if(array_key_exists('allowOutOfRange',$choice)&&!is_bool($choice['allowOutOfRange']))throw new InvalidArgumentException('Invalid teleport range override.');
   if($range!==null&&((!is_int($range)&&!is_float($range))||!is_finite((float)$range)||$range<0))throw new InvalidArgumentException('Invalid teleport range.');

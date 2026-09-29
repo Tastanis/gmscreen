@@ -1197,3 +1197,12 @@ and the root routing rule (Apache live deployment is not locally exercised).
 Roster, weekly entry and Notes share period/level buttons and use the signed-in
 teacher instead of a teacher dropdown. Choosing a class clears a student-only
 weekly filter. Shared page headers omit the redundant teacher identity badge.
+
+- Authored walkable floors take precedence over terrain at equal physical height.
+  Base-level plates participate in contact lookup even without an explicit level
+  entry. FLOOR_GROUND_CLEARANCE / FloorSupport::GROUND_CLEARANCE is 0.125 square
+  for terrain immediately beneath a floor; ordinary edge steps retain their
+  separate 0.1-square tolerance. Never merge by rounded display labels.
+  Stair exits attach the destination plate ID (including level-0), and retain it
+  while walking. Teleport candidates use authored heights/IDs, exclude holes and
+  cutouts, and suppress only near-flush buried terrain. Larger underpasses remain.

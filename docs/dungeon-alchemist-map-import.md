@@ -388,3 +388,37 @@ Elfsong performance was about 56 fps; Observatory about 57 fps with two tokens a
 28 fps with 82 tokens. No production delivery/performance claim. User sandbox map
 state and native sources were preserved; QA used a separate SQLite backup/runtime.
 Do not run fixture/setup scripts against an existing user sandbox.
+
+## Floor contact and stair endpoint preflight - 1.19.172
+
+A walkable authored floor at the same physical height as terrain is the support
+surface, including basement plates assigned to implicit level-0. Preserve its ID;
+a base-level label by itself is not enough to distinguish a basement floor from
+terrain underneath it. Never use rounded standing-height labels to merge geometry.
+
+Terrain from zero through 0.125 square beneath a supported floor is treated as
+near-flush buried ground: support and teleport use the authored floor instead.
+This accommodates the measured Bathhouse export clearance of 0.1249999 square.
+The separate walking edge-step tolerance remains 0.1 square in either direction.
+Larger clearances retain separate destinations, including genuine underpasses.
+Do not flatten terrain, shift the whole map or reveal hidden floors to fix contact.
+
+For every imported stair and walkable plate:
+
+1. Check physical plate height and owning level ID, including level-0. Inspect
+   terrain clearance at the entrance, stair landing and several interior cells.
+2. Verify each stair endpoint overlaps its destination plate outside holes and
+   cutouts. Its destination height must match the plate within 0.125 square;
+   repair inconsistent authored stair/level geometry before accepting the import.
+3. In a disposable copy, walk both directions through the stair and several cells
+   beyond it. Confirm canonical levelId and _supportSurfaceId, actual support
+   height, clear floor artwork/sight, no false fall receipt, and persistence after
+   reload. Teleport-only testing does not verify stair completion.
+4. Check the teleport chooser at the landing. Near-flush terrain should contribute
+   no separate underneath-floor choice. Also test an actual opening, a point
+   outside the footprint and a real separated underfloor space; each must retain
+   terrain access. Two equal rounded labels do not prove duplicate geometry.
+
+The actual Bathhouse journey is covered by test-basement-support-browser.cjs;
+paired PHP/JS fixtures cover equal heights, 0.125 clearance, holes, outside terrain
+and a two-square underpass. These checks preserve native sources and campaign data.

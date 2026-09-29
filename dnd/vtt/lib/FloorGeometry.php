@@ -250,6 +250,11 @@ final class FloorGeometry
                 }
             }
         }
+        if($result['cause']==='stairs'){
+            $p=[...$current,...$destination,'levelId'=>$result['levelId']];
+            $contact=FloorSupport::stairLanding($p,$surfaces,$mapLevels);
+            if($contact){$result['supportSurfaceId']=$contact['id']??null;return $result;}
+        }
         if($terrainAt!==null && $surfaces && $kind!=='teleport' && !$supportedStair && $result['traversal']===null && $result['cause']!=='stairs'){
             $contact=FloorSupport::walkContact($current,[...$current,...$destination],$waypoints,$surfaces,$mapLevels,$terrainAt);
             if($contact)return ['levelId'=>$contact['levelId'],'traversal'=>null,'cause'=>'surface','supportSurfaceId'=>$contact['id']??null];

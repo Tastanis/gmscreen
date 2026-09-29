@@ -107,3 +107,14 @@ same(FloorSupport::landing([...$walker,...$at],[$holed],$contactLevels,3.,0.)['l
 
 $cutLevels=['levels'=>[['id'=>'paved','elevationSquares'=>2,'cutouts'=>[['column'=>3,'row'=>0,'width'=>2,'height'=>4]]]]];
 same(FloorSupport::retained([...$walker,...$at,'_supportSurfaceId'=>'paving'],[$plate],$cutLevels),null,'Retained surface IDs cannot bridge floor cutouts');
+
+$basement=[...$plate,'id'=>'basement','levelId'=>'level-0','height'=>0,'points'=>[['x'=>0,'y'=>0],['x'=>10,'y'=>0],['x'=>10,'y'=>10],['x'=>0,'y'=>10]]];
+$down=[...$stair,'direction'=>'down','linkedLevelId'=>'level-0','edgeColors'=>['2,2-3,2'=>'green','3,2-4,2'=>'green','2,4-3,4'=>'red','3,4-4,4'=>'red']];
+$basementMap=['levels'=>[['id'=>'upper','elevationSquares'=>2,'stairs'=>[$down]]]];
+$stairsFrom=[...$from,'levelId'=>'upper'];
+$stairsEnd=FloorGeometry::move($stairsFrom,$end,$basementMap,'walk',[],[$basement],fn($p)=>-.125);
+same($stairsEnd['levelId'],'level-0','Stairs exit at basement level');same($stairsEnd['supportSurfaceId'],'basement','Stairs attach concrete base-level support');
+$landed=[...$stairsFrom,...$end,'levelId'=>'level-0','_supportSurfaceId'=>'basement'];
+same(FloorGeometry::move($landed,['column'=>5,'row'=>5],$basementMap,'walk',[],[$basement],fn($p)=>-.125)['supportSurfaceId'],'basement','Walking retains basement plate');
+same(FloorSupport::terrainContact($landed,[$basement],$basementMap,-.125)['id'],'basement','Base floor contacts an eighth-square clearance');
+same(FloorSupport::walkContact([...$landed,'_supportSurfaceId'=>null],['column'=>5,'row'=>5],[],[$basement],$basementMap,fn($p)=>-2.),null,'Sharing base-level label cannot attach an underpass occupant to its ceiling');

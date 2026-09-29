@@ -1668,3 +1668,12 @@ Retained support respects floor cutouts. Flight interruption and Ground mode
 select the highest visible support below the previous airborne height in the
 same placement transaction; linked viewer updates and durable fall review remain
 on the existing authority paths. No client-supplied support IDs are accepted.
+
+Base-level floor precedence (1.19.172): implicit level-0 participates in contact
+lookup, but a shared level-0 label alone never assigns an overhead floor. Stair
+completion selects the concrete destination plate ID using physical destination
+height; the existing accepted movement event carries that ID. Near-flush ground
+contact uses 0.125 square, separate from the 0.1-square edge-step tolerance.
+Exact-height authored floor support wins over terrain. Teleport resolves the same
+accessible surfaces as the client, preserves real underpasses and rejects holes
+as support. No stored terrain or map data is rewritten to implement this policy.
