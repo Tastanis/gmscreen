@@ -1257,3 +1257,11 @@ visibility report. Do not widen fog or change authored support to mask it.
 Fog toggle dirty tracking must explicitly name `fogOfWar`; a wildcard also submits
 levels/grid replacements. Preserve shared revision guards. The disposable
 `test-fog-toggle-browser.cjs` checks only fog commands and three-client convergence.
+
+
+### Wall-cube deletion — 1.19.177
+
+Single-click selects; double-click and keyboard deletion use confirmation. Wall
+pointer capture redirects clicks to the container, so retain the pointerdown cube
+pick and clear it on empty-space pointerdown. Do not delete a replacement shape
+from an earlier pending dialog. Stacking remains repeated placement clicks.

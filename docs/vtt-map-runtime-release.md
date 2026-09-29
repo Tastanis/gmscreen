@@ -445,3 +445,20 @@ toggles send exactly `fog.set`, converge, and preserve floors, grid and tokens.
 Scene revision guards and conflict recovery remain unchanged. This addresses a
 verified cause of unnecessary writes; the reported live toast may also arise
 from legitimate concurrent edits and is not proof of the cliff-rendering cause.
+
+
+### 1.19.177 — deliberate wall-cube deletion
+
+Single click selects a wall cube. Double click opens the existing themed deletion
+confirmation for that cube; Delete/Backspace also confirms cube or whole-wall
+removal. Cancellation changes no geometry. Repeated delete requests share one
+pending dialog. A recovered/replaced shape cannot be deleted by an old dialog.
+Pointer capture retargets the double click to the wall container, so deletion uses
+the cube picked on pointerdown; clicking empty wall space clears that cube pick.
+Stacking/dragging gestures and author/GM permissions remain unchanged.
+
+The disposable wall-cube browser regression verifies single-click safety, keyboard
+confirmation cancellation, canceled/confirmed double click, one-cube removal and
+GM/Cal/Sharon reload convergence, alongside shifted-face stacking and all materials.
+
+Validation: 879 tests across 122 files pass; the expanded three-client wall-cube browser regression passes without page errors or campaign token changes.

@@ -22902,6 +22902,7 @@ function createTemplateTool() {
   const shapes = [];
   let selectedId = null;
   let selectedWallSquareKey = null;
+  let wallDeletePending = false;
   let pendingTemplateSave = 0;
   let templateSaveQueue = Promise.resolve();
   const pendingTemplateScenes = new Map();
@@ -23842,13 +23843,20 @@ function createTemplateTool() {
     Object.assign(shape, geometryForTemplate(type, data, viewState));
 
     if (!isPreview) {
-      node.title = canEditTemplate(shape, { userId: getCurrentUserId(), isGM: isGmUser() }) ? (type === 'wall' ? 'Drag to move. Click a cube and press Delete to remove it.' : 'Drag to move. Delete removes this template.') : 'Read-only: another author or a persistent structure. Ask the GM to edit.';
+      node.title = canEditTemplate(shape, { userId: getCurrentUserId(), isGM: isGmUser() }) ? (type === 'wall' ? 'Drag to move. Double-click a cube to confirm deletion.' : 'Drag to move. Delete removes this template.') : 'Read-only: another author or a persistent structure. Ask the GM to edit.';
       node.addEventListener('keydown', (event) => handleNodeKeydown(event, shape));
       node.addEventListener('pointerdown', (event) => handleNodePointerDown(event, shape));
       node.addEventListener('pointermove', (event) => handleNodePointerMove(event, shape));
       node.addEventListener('pointerup', handleNodePointerUp);
       node.addEventListener('pointercancel', handleNodePointerCancel);
       node.addEventListener('click', (event) => handleNodeClick(event, shape));
+      if (type === 'wall') node.addEventListener('dblclick', (event) => {
+        // Pointer capture retargets clicks to the wall button; use the cube picked on pointerdown.
+        if (placementState || !canManageShape(shape) || selectedId !== shape.id || !selectedWallSquareKey) return;
+        event.preventDefault(); event.stopPropagation();
+        selectShape(shape.id); selectWallCube(event, shape);
+        void removeSelectedTemplate();
+      });
       if (rotateHandle) {
         rotateHandle.addEventListener('pointerdown', (event) => startRectangleRotation(event, shape));
         rotateHandle.addEventListener('pointermove', (event) => updateRectangleRotation(event, shape));
@@ -23905,11 +23913,25 @@ function createTemplateTool() {
     restoreTemplateStatus();
   }
 
-  function removeSelectedTemplate() {
+  async function removeSelectedTemplate() {
     const shape = shapes.find(item => item.id === selectedId);
     if (!shape || !canManageShape(shape)) return;
-    if (shape.type !== 'wall' || !selectedWallSquareKey) { removeShape(selectedId); return; }
-    const remaining = shape.squares.filter(square => wallSquareKey(square) !== selectedWallSquareKey);
+    if (shape.type !== 'wall') { removeShape(shape.id); return; }
+    if (wallDeletePending) return;
+    const squareKey = selectedWallSquareKey;
+    wallDeletePending = true;
+    let confirmed = false;
+    try {
+      const message = squareKey ? 'Delete this wall cube?' : 'Delete this entire wall template?';
+      confirmed = typeof window.UIKit?.confirm === 'function'
+        ? await window.UIKit.confirm({title:'Delete wall',message,confirmText:'Delete',danger:true})
+        : window.confirm(message);
+    } catch { return; }
+    finally { wallDeletePending = false; }
+    // Recovery or a scene switch may replace the shape while the dialog is open.
+    if (!confirmed || !shapes.includes(shape) || !canManageShape(shape)) return;
+    if (!squareKey) { removeShape(shape.id); return; }
+    const remaining = shape.squares.filter(square => wallSquareKey(square) !== squareKey);
     if (remaining.length === shape.squares.length) return;
     if (!remaining.length) { removeShape(shape.id); return; }
     shape.squares = remaining;
@@ -23927,10 +23949,12 @@ function createTemplateTool() {
   function selectWallCube(event, shape) {
     if (shape.type !== 'wall') return;
     const cube = event.target?.closest?.('[data-wall-square]');
-    if (!cube) return;
-    selectedWallSquareKey = cube.dataset.wallSquare;
+    if (!cube && event.type !== 'pointerdown') return;
+    selectedWallSquareKey = cube?.dataset.wallSquare ?? null;
     shape.selectedSquareKey = selectedWallSquareKey;
-    render(viewState);
+    shape.elements.root.querySelectorAll('[data-wall-square]').forEach(tile => {
+      tile.classList.toggle('is-selected-cube', tile.dataset.wallSquare === selectedWallSquareKey);
+    });
   }
 
   function removeShape(id) {

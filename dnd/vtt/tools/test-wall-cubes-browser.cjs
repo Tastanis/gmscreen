@@ -24,10 +24,13 @@ if(!['127.0.0.1','localhost'].includes(new URL(origin).hostname))throw Error('Lo
  let s=await snapshot(),wall=Object.values(s.state.templates[scene.id])[0];assert.equal(wall.squares.length,5);assert.deepEqual(wall.squares.map(q=>`${q.column},${q.row},${q.elevation||0}`).sort(),['4,5,0','4,5,1','4,5,2','5,5,0','5,5,1']);
  for(const c of clients)await c.page.waitForFunction(()=>document.querySelectorAll('.vtt-template--wall:not(.vtt-template--preview) .vtt-wall__cube').length===5);
  assert.equal(await gm.page.evaluate(()=>wallPrototype.model.segments.filter(e=>e.id.startsWith('template-cube:')).length),20);
- const top=gm.page.locator('.vtt-template--wall [data-wall-column="4"][data-wall-row="5"][data-wall-elevation="2"] [data-cube-face="top"]');await top.click();await gm.page.keyboard.press('Delete');
+ const top=gm.page.locator('.vtt-template--wall [data-wall-column="4"][data-wall-row="5"][data-wall-elevation="2"] [data-cube-face="top"]');await top.click();assert.equal(await gm.page.locator('.uik-modal').count(),0,'single click only selects');
+ await gm.page.keyboard.press('Delete');await gm.page.locator('.uik-modal').getByRole('button',{name:'Cancel',exact:true}).click();assert.equal((await snapshot()).state.templates[scene.id][wall.id].squares.length,5,'cancelled keyboard delete keeps cube');
+ await top.dblclick();await gm.page.locator('.uik-modal').getByRole('button',{name:'Cancel',exact:true}).click();assert.equal((await snapshot()).state.templates[scene.id][wall.id].squares.length,5,'cancelled double click keeps cube');
+ await top.dblclick();await gm.page.locator('.uik-modal').getByRole('button',{name:'Delete',exact:true}).click();
  await gm.page.waitForFunction(()=>document.querySelectorAll('.vtt-template--wall:not(.vtt-template--preview) .vtt-wall__cube').length===4);s=await snapshot();assert.equal(s.state.templates[scene.id][wall.id].squares.length,4);assert.ok(!s.state.templates[scene.id][wall.id].squares.some(q=>q.column===4&&q.row===5&&q.elevation===2));
  for(const c of clients){await c.page.reload();await c.page.waitForFunction(()=>window.terrainContext?.().view.mapLoaded);await c.page.waitForFunction(()=>document.querySelectorAll('.vtt-template--wall .vtt-wall__cube').length===4);}
- console.log('PASS five-cube mouse placement, parallax top stacking, individual Delete, three-client reload');
+ console.log('PASS five-cube mouse placement, parallax top stacking, single-click safety, double-click confirmation/cancel, keyboard confirmation, three-client reload');
  // Existing material picker values must resolve to distinct generated assets.
  for(const [index,material] of ['dirt','metal','ice','fire'].entries()){const id='cube-material-'+material;await cmd('template.upsert',{template:{id,type:'wall',levelId:'level-0',wallColor:material,squares:[{column:7+index,row:5}]}},{entityId:id,entityRevision:0});}
  await gm.page.waitForFunction(()=>document.querySelectorAll('.vtt-wall__cube').length===8);
