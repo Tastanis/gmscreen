@@ -352,3 +352,16 @@ Validation: all 849 tests across 117 files pass. Browser regression passes all
 eight scenarios with no page errors. The 50-arrow burst at 1.2 seconds per reply
 starts only three moves; no fresh queued move starts beyond the input deadline.
 The original scene placements remain unchanged.
+
+
+### Fall prompt timing (1.19.174)
+
+Fall review wakes on accepted movement/placement changes and recovery, coalescing
+notifications into one ledger read at a time. Prompts open alongside the animation
+instead of waiting for it; periodic recovery remains. A real Ctrl-drag in a
+disposable Bathhouse copy opened the prompt 269 ms after acceptance, recorded one
+fall and one animation, and applied damage/Prone once. Pending-review reload,
+completed-review no-replay, orphan bypass and unchanged original tokens passed.
+Focused tests cover overlapping wakeups, next-review scheduling, duplicate clicks,
+uncertain damage, actor/scene filtering and disposal during trait loading. This
+local timing does not establish production network latency.

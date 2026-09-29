@@ -13,19 +13,25 @@ export function nextReviewableFall(records,user,scene,placement){
   [record.targetId,...(record.details?.collidedIds||[])].every(id=>!!placement(id)));
 }
 export function mountFallReview({context,placement,traits,damage,prone,api=collisionRequest}){
- let busy=false,popup=null,disposed=false;
+ let busy=false,popup=null,disposed=false,timer=null,wakePending=false;
+ const animated=new Set();
+ const schedule=delay=>{clearTimeout(timer);if(!disposed)timer=setTimeout(tick,delay);};
+ // Wakeups are hints to read the actor-owned ledger, never permission to apply effects.
+ const wake=()=>{if(disposed)return;wakePending=true;if(!busy&&!popup)schedule(0);};
  const tick=async()=>{
-  if(disposed)return;
+  if(disposed||busy)return;
+  if(popup||document.hidden){schedule(4000);return;}
+  busy=true;wakePending=false;
   try{
-   if(busy||popup||document.hidden)return;
-   busy=true;const c=context();if(!c?.userId)return;
+   const c=context();if(!c?.userId)return;
    const records=await api(),record=nextReviewableFall(records,c.userId,c.sceneId,placement);if(!record)return;
    const faller=placement(record.targetId);if(!faller)return;
    const stats=await traits(faller),details=record.details||{},targets=[{id:record.targetId,name:faller.name||'Token',prone:fallerLandsProne(details,Number(stats.agility)||0)}];
    for(const id of details.collidedIds||[]){const p=placement(id);if(!p)throw Error('Fall target is unavailable; GM review is required.');const t=await traits(p);targets.push({id,name:p.name||'Creature',prone:landingTargetProne(stats.size,t.might)});}
-   if(context().sceneId!==record.sceneId)return;
+   if(disposed||document.hidden||context()?.sceneId!==record.sceneId||String(context()?.userId).toLowerCase()!==String(c.userId).toLowerCase())return;
    const token=[...document.querySelectorAll('#vtt-token-layer [data-placement-id]')].find(e=>e.dataset.placementId===record.targetId);
-   await playTokenFallAnimation(token);
+   const animationKey=JSON.stringify([record.sceneId,record.operationId,record.targetId]);
+   if(!animated.has(animationKey)){animated.add(animationKey);void playTokenFallAnimation(token);}
    const panel=document.createElement('div');popup=panel;panel.dataset.fallReview='';panel.setAttribute('role','dialog');panel.setAttribute('aria-label','Review fall');
    panel.className='vtt-fall-review';
    const title=document.createElement('strong');title.className='vtt-fall-review__title';title.textContent='Fall';
@@ -38,9 +44,10 @@ export function mountFallReview({context,placement,traits,damage,prone,api=colli
    const label=document.createElement('label');label.className='vtt-fall-review__damage';label.textContent='Damage';const input=document.createElement('input');input.type='number';input.min='0';input.max='1000000';input.step='1';input.value=fallDamage(details.squares,Number(stats.agility)||0,details.forcedDown);label.append(input);
    const status=document.createElement('p');status.className='vtt-fall-review__status';status.setAttribute('aria-live','polite');if(details.needsPlacementReview)status.textContent='GM: choose a free landing space.';
    const actions=document.createElement('div');actions.className='vtt-fall-review__actions';const apply=document.createElement('button'),dismiss=document.createElement('button');apply.textContent='Apply';dismiss.textContent='Dismiss';apply.type=dismiss.type='button';dismiss.className='vtt-fall-review__dismiss';actions.append(dismiss,apply);
-   const close=()=>{panel.remove();popup=null;};const key={operationId:record.operationId,targetId:record.targetId};
-   dismiss.onclick=async()=>{apply.disabled=dismiss.disabled=true;try{await api({...key,action:'finish',status:'dismissed'});close();}catch(e){status.textContent='Dismissal unconfirmed. Reload to check the outcome.';}};
+   const close=()=>{panel.remove();popup=null;wake();};const key={operationId:record.operationId,targetId:record.targetId};
+   dismiss.onclick=async()=>{if(dismiss.disabled)return;apply.disabled=dismiss.disabled=true;try{await api({...key,action:'finish',status:'dismissed'});close();}catch(e){status.textContent='Dismissal unconfirmed. Reload to check the outcome.';}};
    apply.onclick=async()=>{
+    if(apply.disabled)return;
     const amount=Number(input.value);if(!Number.isInteger(amount)||amount<0||amount>1000000)return;
     if(context().sceneId!==record.sceneId){status.textContent='Return to the original scene before applying.';return;}
     apply.disabled=dismiss.disabled=input.disabled=true;
@@ -52,7 +59,12 @@ export function mountFallReview({context,placement,traits,damage,prone,api=colli
    panel.append(title,summary,affected,label,status,actions);document.body.append(panel);
    const bounds=token?.getBoundingClientRect(),box=panel.getBoundingClientRect();let left=(bounds?.right??20)+12;if(left+box.width>innerWidth-12)left=(bounds?.left??innerWidth)-box.width-12;
    panel.style.left=Math.max(12,Math.min(innerWidth-box.width-12,left))+'px';panel.style.top=Math.max(12,Math.min(innerHeight-box.height-12,bounds?.top??20))+'px';
-  }catch(error){console.error('Fall review unavailable',error);}finally{busy=false;if(!disposed)setTimeout(tick,4000);}
+  }catch(error){console.error('Fall review unavailable',error);}finally{busy=false;schedule(wakePending&&!popup?0:4000);}
  };
- setTimeout(tick,2000);return ()=>{disposed=true;popup?.remove();};
+ const visible=()=>{if(!document.hidden)wake();};
+ document.addEventListener('visibilitychange',visible);
+ schedule(0);
+ const dispose=()=>{disposed=true;clearTimeout(timer);document.removeEventListener('visibilitychange',visible);popup?.remove();};
+ dispose.wake=wake;
+ return dispose;
 }

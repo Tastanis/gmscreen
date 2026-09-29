@@ -1213,3 +1213,14 @@ weekly filter. Shared page headers omit the redundant teacher identity badge.
   uncertain outcomes discard pending input; never cancel or semantically replay
   an already-issued move. Its network latency and existing operation-ID transport
   retry are separate from the local input deadline. No new movement UI.
+
+
+### Fall review latency - 1.19.174
+
+Accepted canonical movement, relevant placement patches and recovery wake the
+actor-owned fall ledger check. Keep one in-flight read and one fallback timer;
+coalesce wakeups during requests and advance immediately after closing a review.
+The prompt and animation start together. Animation is deduplicated per receipt
+within the mounted reviewer; pending reviews still recover after reload. Never
+resolve physical falls again or bypass the durable start/finish damage claim.
+Repeated Apply/Dismiss callbacks are guarded; uncertain effects remain manual.

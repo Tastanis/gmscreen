@@ -1684,3 +1684,13 @@ Selection/scene changes or failed outcomes clear pending input. The existing
 serial acknowledgment guard, operation-ID retries, accepted movement receipts and
 collision/fall authority remain intact. No timeout cancellation or semantic replay
 is introduced; already-issued network work can outlast the local input deadline.
+
+
+### Fall review wakeups (1.19.174)
+
+Canonical movement and relevant placement callbacks wake a single-flight read
+of the existing actor-owned collision ledger. Snapshot recovery and tab visibility
+also wake it; the four-second fallback remains. Wakeups never create falls or
+execute damage. The review no longer awaits the animation. Duplicate wakeups
+cannot open parallel reviews, and duplicate action callbacks cannot claim twice.
+Existing server start/finish receipts and uncertain-outcome no-replay are unchanged.

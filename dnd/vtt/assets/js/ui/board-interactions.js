@@ -701,7 +701,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const linked=resolvePcTokenForUser({userId,placements:state.boardState.placements?.[sceneId],viewerAssociation:scene?.pcTokenAssociations?.[userId]});
     return {view:viewState,state,levelId:getViewerLevelIdForCurrentUser(state,sceneId),userId,isGM:isGmUser(),followId:linked?.placementId,selectedIds:[...selectedTokenIds]};
   };
-  mountFallReview({context:()=>({userId:getCurrentUserId(),sceneId:getActiveSceneId()}),placement:getPlacementFromStore,traits:getAutomationTraitsForPlacement,damage:applyAutomationCollisionDamage,
+  const fallReview = mountFallReview({context:()=>({userId:getCurrentUserId(),sceneId:getActiveSceneId()}),placement:getPlacementFromStore,traits:getAutomationTraitsForPlacement,damage:applyAutomationCollisionDamage,
     prone:async id=>{const result=applyConditionToPlacement(id,{name:'Prone'},{returnSavePromise:true});if(!result)throw Error('Prone could not be saved');await awaitSuccessfulPlacementSave(result);}});
   configureCharacterOperationJournal(getCurrentUserId());
   const syncV2Config =
@@ -859,6 +859,7 @@ export function mountBoardInteractions(store, routes = {}) {
       target._syncV2EntityRevision = Number(placement._entityRevision) || 0;
     });
     patchTokenMovementNode(sceneId, placementId, placement);
+    fallReview.wake();
     if (activeTokenSettingsId === placementId) syncTokenLevelControls(getPlacementFromStore(placementId));
 
     if (context?.event?.payload?.movementKind === 'teleport' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -884,6 +885,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function reconcileTokenMovementSnapshot(snapshot, context = {}) {
+    fallReview.wake();
     applyConfirmedRequestedTests(snapshot);
     boardApi.updateStateSilently?.((draft) => {
       if (placementsV2Enabled) {
@@ -1000,6 +1002,10 @@ export function mountBoardInteractions(store, routes = {}) {
         // never reload the page, map, fog, drawings, templates, or stairs.
         renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
       }
+    }
+    if (activeMutations.some(mutation => mutation.changedFields?.some(field =>
+      ['*', 'column', 'row', 'levelId', 'movementMode', 'flightHeight', 'conditions'].includes(field)))) {
+      fallReview.wake();
     }
     if (activeSceneId && placementMutationsAffectPersistentZones(activeMutations)) {
       // Persistent zones are placement fields, but their visuals live in a
