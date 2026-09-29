@@ -1,3 +1,4 @@
+import { validateMapBundle, uploadMapBundle, MAX_BUNDLE_BYTES } from './scene-map-bundle.mjs';
 let copyPreview = null;
 
 export async function previewSceneCopy(packageData) {
@@ -11,8 +12,8 @@ export function mountSceneImportPreview(root, store) {
   const status = root.querySelector('[data-scene-import-status]');
   const result = root.querySelector('[data-scene-import-result]');
   let busy = false;
-  async function previewText(packageText) {
-    if (busy) throw Error('Wait for the current scene request to finish.');
+  async function previewText(packageText, bundle = null, ownsBusy = false) {
+    if (busy && !ownsBusy) throw Error('Wait for the current scene request to finish.');
     busy = true;
     input.disabled = true; result.replaceChildren(); status.textContent = 'Checking scene package…';
     try {
@@ -24,7 +25,7 @@ export function mountSceneImportPreview(root, store) {
       const counts = document.createElement('p');
       counts.textContent = `${preview.counts.placements} tokens · ${preview.counts.floors} floors · ${preview.counts.drawings} drawings · ${preview.counts.templates} templates`;
       result.append(title,counts);
-      for (const warning of preview.warnings) {const text=document.createElement('p');text.textContent=warning;result.append(text);}
+      for (const warning of (bundle ? ['All map images are included and will be uploaded with this scene. Character sheets remain separate.'] : preview.warnings)) {const text=document.createElement('p');text.textContent=warning;result.append(text);}
       const assets = document.createElement('details'); const summary=document.createElement('summary');
       summary.textContent=`${preview.assetReferences.length} image references`; assets.append(summary);
       const list=document.createElement('ul');
@@ -43,16 +44,20 @@ export function mountSceneImportPreview(root, store) {
       const install = document.createElement('button'); install.type='button'; install.className='btn btn--primary'; install.textContent='Import as new scene'; install.disabled=true;
       const operationId = `scene-import-${crypto.randomUUID()}`;
       let requestBody = null;
+      let selectedName = null;
+      const uploadedImages = new Map();
       visibility.addEventListener('change',()=>{install.disabled=!visibility.checked;});
       install.addEventListener('click',async()=>{
         if (!nameInput.value.trim()) {status.textContent='Enter a name for the new scene.';nameInput.focus();return;}
-        if (requestBody === null) {
-          const packageData = JSON.parse(packageText); packageData.scene.name=nameInput.value.trim();
-          requestBody=JSON.stringify({package:packageData,operationId,allowPlayerBrowsing:true});
-        }
         busy=true; install.disabled=true; visibility.disabled=true; input.disabled=true; nameInput.disabled=true;
         status.textContent='Importing scene…';
         try {
+          if (requestBody === null) {
+            selectedName ??= nameInput.value.trim();
+            const packageData = bundle ? await uploadMapBundle(bundle, uploadedImages, fetch, text=>{status.textContent=text;}) : JSON.parse(packageText);
+            packageData.scene.name=selectedName;
+            requestBody=JSON.stringify({package:packageData,operationId,allowPlayerBrowsing:true});
+          }
           const response = await fetch('/dnd/vtt/api/v2/scene-import.php',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},
             body:requestBody});
           const data = await response.json();
@@ -83,11 +88,21 @@ export function mountSceneImportPreview(root, store) {
     finally {input.disabled=false;input.value='';busy=false;}
   }
   input.addEventListener('change',async()=>{
-    const file=input.files?.[0]; if(!file)return;
+    const file=input.files?.[0]; if(!file || busy)return;
+    busy=true; input.disabled=true; result.replaceChildren(); status.textContent='Checking scene package…';
     try {
-      if(file.size>33554432) throw Error('Scene JSON file is too large (32 MB maximum).');
-      await previewText(await file.text());
+      if(file.size>MAX_BUNDLE_BYTES) throw Error('Map package is too large (128 MB maximum).');
+      const text=await file.text();
+      const parsed=JSON.parse(text);
+      if(parsed.format==='gmscreen-map/v1') {
+        const bundle=await validateMapBundle(parsed);
+        await previewText(JSON.stringify(bundle.package),bundle,true);
+      } else {
+        if(file.size>33554432) throw Error('Scene JSON file is too large (32 MB maximum).');
+        await previewText(text,null,true);
+      }
     } catch(error) {status.textContent=error.message || 'Unable to read scene file.';}
+    finally {input.disabled=false;input.value='';busy=false;}
   });
   copyPreview = async packageData => {
     if(busy) throw Error('Wait for the current scene request to finish.');

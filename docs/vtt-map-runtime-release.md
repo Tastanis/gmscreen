@@ -400,3 +400,48 @@ five-cube stacking through shifted top faces, individual deletion/reload and all
 five textures. Actual monster hover/chat/stat-block formatting is browser-checked.
 Canonical campaign tokens are unchanged. These local checks do not establish live
 Pusher latency or exhaustive coverage of every authored ability.
+
+
+### 1.19.176 — terrain rendering and cliff regression
+
+Terrain token presentation batches layout reads and writes attributes/styles only
+when their values change. Wall-cube invalidation serializes templates and floor
+cutouts only when the immutable store snapshot inputs change. Sight rays reject
+conservatively disjoint wall bounds before the unchanged exact intersection,
+height, limited-wall and directional checks. No geometry or visibility rules change.
+
+The disposable exact-import cliff browser fixture checks Sharon at column 24,
+row 27 on terrain height 1.7484, five visible downhill terrain pixels, roof/fog
+compositing and closed-basement privacy. Original scene placements are preserved.
+Idle token attribute mutations fell from 903 to zero over five seconds; this is
+a local measurement, not a live FPS result. Exact geometry produced identical
+sight results in 117,045 before/after comparisons. Live black-ground reports are
+not yet reproduced on this runtime; build/cache equivalence remains unverified.
+
+Run `node dnd/vtt/tools/test-cliff-vision-browser.cjs` only against a disposable
+loopback app with manifest `test_fixture: vision-performance`, copied map assets
+and test-login support. `VTT_TEST_ORIGIN` selects its origin; `VTT_TEST_PACKAGE`
+selects the read-only scene export (default local Downloads scene-bathouse.json).
+Never point the test at production or a campaign sandbox.
+
+
+This release also includes the reviewed single-file `.vttmap` importer and builder
+from the Bathhouse map task. It validates bundled image checksums, uploads images
+through the existing authenticated GM endpoint, remaps image references only and
+uses the existing scene-import transaction/recovery. Six importer/UI tests, two
+builder tests and a real four-image loopback HTTP import passed. Transport retry
+retains the scene operation ID; an uncertain image-upload response can leave an
+unused duplicate image asset. No campaign map or live deployment is performed.
+
+Combined validation: 879 automated tests across 122 files pass. The exact-cliff
+browser also verifies height/projection updates after accepted movement and reload.
+
+
+Fog toggling now marks only `fogOfWar` dirty. Previously it marked all scene
+configuration dirty and additionally sent floor and grid replacements, increasing
+revision contention and risking unrelated overwrites. The real store regression
+checks field scope. A disposable GM/Cal/Sharon browser test checks that on/off
+toggles send exactly `fog.set`, converge, and preserve floors, grid and tokens.
+Scene revision guards and conflict recovery remain unchanged. This addresses a
+verified cause of unnecessary writes; the reported live toast may also arise
+from legitimate concurrent edits and is not proof of the cliff-rendering cause.

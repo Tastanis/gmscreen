@@ -25,7 +25,7 @@ const snapPoint=p=>snapInput.checked?{x:Math.round(p.x*2)/2,y:Math.round(p.y*2)/
 const editor=createWallEditor({panel,transform,selected:()=>selectedEdges(),model:()=>model,context:()=>context,projected,groundAt,change,render,copyWalls});
 const svg=document.createElementNS(ns,'svg');svg.id='wall-overlay';svg.style.cssText='position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:35';transform.append(svg);
 let sharedRevision=-1,savingShared=false,dirtyWhileSaving=false;
-let cubeSignature='';
+let cubeSignature='',cubeInputs=null;
 let revision=0;const selectedIds=new Set();let propertiesOpen=false,rangeStart=null,portalSignature='';
 const selectedEdges=()=>model.segments.filter(e=>selectedIds.has(e.id));
 let context=null,model=emptyWalls(),key='',history=[],selection=null,anchor=null,hover=null,drag=null,signature='',storedError=false;
@@ -132,7 +132,12 @@ function tick(){
    const nextKey=storageKey(c);if(nextKey!==key){cancelDrag();context=c;key=nextKey;sharedRevision=-1;history=[];propertiesOpen=false;rangeStart=null;selectedIds.clear();selection=null;anchor=null;hover=null;storedError=false;model=emptyWalls();render();}else context=c;
    const shared=sharedField('walls');if(!savingShared&&!drag&&!anchor&&!storedError&&shared&&shared.revision!==sharedRevision){model=validateWalls(shared.value);sharedRevision=shared.revision;history=[];render();}
    button.hidden=!c.isGM;button.disabled=storedError;if(!c.isGM&&!panel.hidden)setOpen(false);
-   const cubeKey=JSON.stringify([c.state.boardState.templates?.[c.state.boardState.activeSceneId]||[],c.state.boardState.sceneState?.[c.state.boardState.activeSceneId]?.mapLevels]);if(cubeKey!==cubeSignature){cubeSignature=cubeKey;revision++;}
+   const cubeScene=c.state.boardState.activeSceneId,cubeTemplates=c.state.boardState.templates?.[cubeScene],cubeLevels=c.state.boardState.sceneState?.[cubeScene]?.mapLevels;
+   // Store snapshots retain references until a mutation; serialize large floor cutouts only then.
+   if(!cubeInputs||cubeInputs.scene!==cubeScene||cubeInputs.templates!==cubeTemplates||cubeInputs.levels!==cubeLevels){
+     cubeInputs={scene:cubeScene,templates:cubeTemplates,levels:cubeLevels};
+     const cubeKey=JSON.stringify([cubeScene,cubeTemplates||[],cubeLevels]);if(cubeKey!==cubeSignature){cubeSignature=cubeKey;revision++;}
+   }
    const next=JSON.stringify([c.isGM,c.view.scale,c.view.gridSize,c.view.gridOffsets,c.view.mapPixelSize,terrainPrototype?.revision||0]);if(next!==signature){signature=next;render();}
  }else {svg.style.display='none';button.disabled=true;}
  const ps=JSON.stringify([panel.hidden,window.visionPrototype?.stats.paints,revision,context?.isGM]);if(ps!==portalSignature){portalSignature=ps;editor.portals();}

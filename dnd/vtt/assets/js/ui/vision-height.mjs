@@ -21,7 +21,7 @@ function hitParameter(p,q,a,b){
 // Compile once per viewpoint. Heights remain terrain-relative at each crossing.
 export function makeSight({viewer,groundAt,walls,terrain=null,viewerGround=groundAt(center(viewer).x,center(viewer).y)}){
  const origin=center(viewer),eye=head(viewer,viewerGround),nodes=new Map(walls.nodes.map(n=>[n.id,n]));
- const edges=walls.segments.map(restrictions).filter(e=>e.sight!=='pass').map(e=>{const a=nodes.get(e.a),b=nodes.get(e.b);return {...e,a,b,gap:wallGap(viewer,a,b)};}).filter(e=>applies(e.sightDirection,e.a,e.b,origin));
+ const edges=walls.segments.map(restrictions).filter(e=>e.sight!=='pass').map(e=>{const a=nodes.get(e.a),b=nodes.get(e.b);const pad=EPS*(Math.abs(b.x-a.x)+Math.abs(b.y-a.y)+1);return {...e,a,b,gap:wallGap(viewer,a,b),left:Math.min(a.x,b.x)-pad,right:Math.max(a.x,b.x)+pad,top:Math.min(a.y,b.y)-pad,bottom:Math.max(a.y,b.y)+pad};}).filter(e=>applies(e.sightDirection,e.a,e.b,origin));
  const side=(a,b,p)=>(b.x-a.x)*(p.y-a.y)-(b.y-a.y)*(p.x-a.x);
  const contactCliffs=(terrain?.cliffs||[]).filter(e=>eye<e.high-EPS&&wallGap(viewer,e.a,e.b)<EPS&&side(e.a,e.b,origin)*side(e.a,e.b,e.lowPoint)>0);
  return function visible(target,z,targetToken=null){
@@ -29,8 +29,12 @@ export function makeSight({viewer,groundAt,walls,terrain=null,viewerGround=groun
   if(distance<EPS)return true;
   if(rampsBlock(walls.ramps||[],origin,eye,target,z))return false;
   if(contactCliffs.some(e=>hitParameter(origin,target,e.a,e.b)!==null))return false;
+  const pad=EPS*(Math.abs(target.x-origin.x)+Math.abs(target.y-origin.y)+1);
+  const left=Math.min(origin.x,target.x)-pad,right=Math.max(origin.x,target.x)+pad,rayTop=Math.min(origin.y,target.y)-pad,rayBottom=Math.max(origin.y,target.y)+pad;
   const limitedHits=[];
   for(const e of edges){
+   // Conservative broad phase only; exact ray, direction and height rules follow.
+   if(e.right<left||e.left>right||e.bottom<rayTop||e.top>rayBottom)continue;
    const t=hitParameter(origin,target,e.a,e.b);if(t===null)continue;
    const crossing={x:origin.x+(target.x-origin.x)*t,y:origin.y+(target.y-origin.y)*t};
    const {base,top}=wallHeights(e,e.a,e.b,crossing,groundAt);

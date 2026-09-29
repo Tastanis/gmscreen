@@ -307,7 +307,7 @@ export function toggleFogForLevel(sceneId, levelId, enabled, options = {}) {
     levelEntry.enabled = Boolean(enabled);
   });
 
-  if (typeof markDirty === 'function') markDirty(sceneId);
+  if (typeof markDirty === 'function') markDirty(sceneId, 'fogOfWar');
 }
 
 /**

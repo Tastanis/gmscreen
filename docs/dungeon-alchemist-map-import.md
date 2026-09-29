@@ -422,3 +422,32 @@ For every imported stair and walkable plate:
 The actual Bathhouse journey is covered by test-basement-support-browser.cjs;
 paired PHP/JS fixtures cover equal heights, 0.125 clearance, holes, outside terrain
 and a two-square underpass. These checks preserve native sources and campaign data.
+
+
+## Portable map packages - September 29, 2026
+
+Use a single `.vttmap` when transferring a completed map. It contains the canonical
+`gmscreen-scene/v1` scene plus every referenced image, with SHA-256 integrity checks.
+Native Dungeon Alchemist sources remain separate editable preservation artifacts.
+
+1. Export the verified scene JSON through the GM scene export API/UI. Supply an
+   explicit JSON object mapping every image reference to its verified local file.
+2. Run `python dnd/vtt/tools/build-scene-map-package.py scene.json --assets images.json --output map.vttmap`.
+   Relative image paths resolve beside the mapping JSON. No credentials or remote
+   fetching are used. Missing/extra images fail packaging rather than disappearing.
+3. In GM Scenes, choose **Import scene package**, select the `.vttmap`, review its
+   scene/floor counts and approve browsing. Ordinary scene JSON remains supported.
+4. Import uploads assets directly through the authenticated GM image endpoint,
+   rewrites only documented image fields, and installs one new scene through the
+   existing Sync V2 idempotent importer. No temporary scenes are created. Canonical
+   recovery confirms the new board before offering Open copy for GM. Scene folder
+   placement retains the existing Unsorted import behavior; activation is separate.
+
+Limits: 128 MB complete package, 64 images, 40 MB each image, existing 16 MB scene
+JSON validation. JPEG/PNG/GIF/WebP only; the server still validates actual decoding
+and dimensions. Retrying within the same preview reuses accepted uploads and the
+same scene operation; do not choose the file again after an uncertain scene response.
+Failed image uploads create no scene; successfully uploaded assets can remain if
+an import is abandoned. Package transfer does not deploy code or character sheets.
+
+Focused tests: `node --test dnd/vtt/assets/js/ui/__tests__/scene-map-bundle.test.mjs`.

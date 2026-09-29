@@ -128,19 +128,21 @@ function tick(now){
    if(!ctx.isGM&&!panel.hidden)setOpen(false);
 
  }
- for(const token of document.querySelectorAll('#vtt-token-layer [data-placement-id],#vtt-token-layer [data-vtt-drag-ghost]')){
-   if(!active){token.style.translate='';token.style.scale='';continue;}
-   const matrix=new DOMMatrix(token.style.transform),x=matrix.m41+token.offsetWidth/2,y=matrix.m42+token.offsetHeight/2;
-   const placement=ctx.state.boardState.placements[ctx.state.boardState.activeSceneId]?.find(p=>p.id===(token.dataset.placementId||token.dataset.terrainSourceId));
-   if(placement&&token.dataset.placementId)token.dataset.terrainSourceId=placement.id;
+ // Read token geometry together before writing styles to avoid per-token layout flushes.
+ const placementById=new Map((ctx?.state.boardState.placements[ctx.state.boardState.activeSceneId]||[]).map(p=>[p.id,p]));
+ const tokenGeometry=Array.from(document.querySelectorAll('#vtt-token-layer [data-placement-id],#vtt-token-layer [data-vtt-drag-ghost]'),token=>{const matrix=active?new DOMMatrix(token.style.transform):null;return {token,matrix,x:active?matrix.m41+token.offsetWidth/2:0,y:active?matrix.m42+token.offsetHeight/2:0};});
+ for(const {token,matrix,x,y} of tokenGeometry){
+   if(!active){if(token.style.translate)token.style.translate='';if(token.style.scale)token.style.scale='';continue;}
+   const placement=placementById.get(token.dataset.placementId||token.dataset.terrainSourceId);
+   if(placement&&token.dataset.placementId&&token.dataset.terrainSourceId!==placement.id)token.dataset.terrainSourceId=placement.id;
    const z=placement?Math.max(groundFor(placement,{x,y}),token.dataset.vttDragGhost&&['fly','hover'].includes(placement.movementMode)?heightAt(x,y):-Infinity):heightAt(x,y),g=dimensions().grid;
-   const value=`${z*g*.12}px ${-z*g*.36}px`;if(token.style.translate!==value)token.style.translate=value;token.dataset.terrainHeight=z.toFixed(2);
+   const value=`${z*g*.12}px ${-z*g*.36}px`;if(token.style.translate!==value)token.style.translate=value;const heightText=z.toFixed(2);if(token.dataset.terrainHeight!==heightText)token.dataset.terrainHeight=heightText;
    const targetScale=relativeScale(z,viewerHeight),oldHeight=tokenHeights.get(token.dataset.placementId),whole=groundSquare(z);
-   token.style.transition='';token.style.scale='';const placed=`translate3d(${matrix.m41}px, ${matrix.m42}px, 0px)`;const scaled=`${placed} scale(${targetScale})`;if(token.style.transform!==scaled)token.style.transform=scaled;
+   if(token.style.transition)token.style.transition='';if(token.style.scale)token.style.scale='';const placed=`translate3d(${matrix.m41}px, ${matrix.m42}px, 0px)`;const scaled=`${placed} scale(${targetScale})`;if(token.style.transform!==scaled)token.style.transform=scaled;
    if(oldHeight!==undefined&&whole>oldHeight&&heightBand(whole)===heightBand(oldHeight)&&!matchMedia('(prefers-reduced-motion: reduce)').matches)token.animate([{transform:scaled},{transform:`${placed} scale(${targetScale*1.045})`},{transform:scaled}],{duration:220});
    tokenHeights.set(token.dataset.placementId,whole);
    const delta=heightBand(z)*2-viewerHeight,badgeKey=String(delta);if(token.dataset.terrainBadge!==badgeKey||Boolean(delta)!==Boolean(token.querySelector('.vtt-token__level-indicator'))||delta&&token.querySelector('.vtt-token__level-indicator-distance')?.textContent!==String(Math.abs(delta))){applyTokenLevelPresentation(token,{direction:delta>0?'above':delta<0?'below':'same',indicator:delta!==0,distance:Math.abs(delta)});token.dataset.terrainBadge=badgeKey;}
-   token.dataset.terrainEffectiveHeight=effectiveHeight(z,Math.max(placement?.width||1,placement?.height||1));
+   const effectiveText=String(effectiveHeight(z,Math.max(placement?.width||1,placement?.height||1)));if(token.dataset.terrainEffectiveHeight!==effectiveText)token.dataset.terrainEffectiveHeight=effectiveText;
 
  }
  }catch(e){console.error(e);}requestAnimationFrame(tick);

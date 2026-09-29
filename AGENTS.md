@@ -1237,3 +1237,23 @@ Cube lids do not turn an unmodeled legacy floor into bounded imported support.
 Combat round Malice is server-owned and atomic; do not add it again on delivery.
 Recovery restores turn controls only, never turn-start automation. Monster refunds
 reserve actual debits. See the runtime release guide for tests and limitations.
+
+
+### Terrain rendering regression — 1.19.176
+
+Terrain token geometry reads are batched before presentation writes. Retain
+conditional attribute/style writes: unchanged dataset assignments invalidate the
+vision token observer and cause needless serialization. Wall cube signatures use
+immutable store-snapshot references; preserve scene ID and native wall revision
+invalidation. Sight broad-phase bounds are conservative only; exact ray/height/
+direction/limited-wall checks remain authoritative.
+
+The exact imported cliff fixture is `test-cliff-vision-browser.cjs`, restricted to
+a disposable loopback vision-performance app. It verifies downhill fog/roof pixels,
+closed-basement privacy, movement/reload and preservation of original tokens.
+Local success does not prove the live deployed assets or resolve a live-only
+visibility report. Do not widen fog or change authored support to mask it.
+
+Fog toggle dirty tracking must explicitly name `fogOfWar`; a wildcard also submits
+levels/grid replacements. Preserve shared revision guards. The disposable
+`test-fog-toggle-browser.cjs` checks only fog commands and three-client convergence.
