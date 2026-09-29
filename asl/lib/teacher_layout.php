@@ -36,6 +36,7 @@ function aslhub_teacher_header(array $me, string $title, string $active = ''): v
     $isAdmin = aslhub_is_admin($me);
     $nav = [
         'grading' => ['grading.php', 'Grading'],
+        'reports' => ['reports.php', 'Reports'],
         'weekly' => ['weekly.php', 'Attendance & Participation'],
         'notes' => ['notes.php', 'Notes'],
         'scroller' => ['scroller.php', 'Scroller'],
@@ -72,7 +73,6 @@ function aslhub_teacher_header(array $me, string $title, string $active = ''): v
     <header>
         <div>
             <h1 style="font-size:1.7rem;"><?php echo aslhub_h($title); ?></h1>
-            <span class="pill"><?php echo $isAdmin ? 'Admin · Mr. Harms' : aslhub_h(aslhub_valid_teachers()[$me['teacher']] ?? 'Teacher'); ?></span>
         </div>
         <nav class="teacher-nav">
             <?php foreach ($nav as $key => [$href, $label]): ?>
@@ -86,4 +86,19 @@ function aslhub_teacher_header(array $me, string $title, string $active = ''): v
 
 function aslhub_teacher_footer(): void {
     echo "</div></body></html>";
+}
+
+/** Shared roster filters; ownership is always supplied by the signed-in teacher. */
+function aslhub_class_filter_buttons(array $filters): void {
+    foreach (['period' => [6, 'Period', 'All periods'], 'level' => [3, 'ASL', 'All levels']] as $name => [$count, $label, $all]) {
+        $value = (string)($filters[$name] ?? 'all');
+        echo '<input type="hidden" name="'.$name.'" value="'.aslhub_h($value).'">';
+        echo '<div class="grading-modes" role="group" aria-label="'.($name === 'period' ? 'Period' : 'ASL level').'">';
+        foreach (array_merge(['all'], range(1, $count)) as $option) {
+            $text = $option === 'all' ? $all : $label.' '.$option;
+            $action = "this.form.elements['$name'].value='$option';if(this.form.elements['student_id'])this.form.elements['student_id'].value='';this.form.requestSubmit()";
+            echo '<button type="button" aria-pressed="'.($value === (string)$option ? 'true' : 'false').'" onclick="'.aslhub_h($action).'">'.$text.'</button>';
+        }
+        echo '</div>';
+    }
 }

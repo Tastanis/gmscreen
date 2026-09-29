@@ -9,7 +9,7 @@ $csrf = aslhub_csrf_token();
 $base = aslhub_base_url();
 $metric = ($_GET['metric'] ?? 'participation') === 'attendance' ? 'attendance' : 'participation';
 $filters = [
-    'teacher' => $_GET['teacher'] ?? ($isAdmin ? $me['teacher'] : null),
+    'teacher' => $me['teacher'],
     'period' => $_GET['period'] ?? 'all',
     'level' => $_GET['level'] ?? 'all',
 ];
@@ -40,22 +40,7 @@ aslhub_teacher_header($me, 'Attendance & Participation', 'weekly');
 <form class="filters-bar" method="GET" id="block-filters">
     <input type="hidden" name="metric" value="<?php echo aslhub_h($metric); ?>">
     <?php if ($studentFilter): ?><input type="hidden" name="student_id" value="<?php echo $studentFilter; ?>"><?php endif; ?>
-    <?php if ($isAdmin): ?>
-    <select name="teacher" onchange="this.form.submit()">
-        <option value="all" <?php echo $filters['teacher'] === 'all' ? 'selected' : ''; ?>>All teachers</option>
-        <?php foreach (aslhub_valid_teachers() as $key => $label): ?>
-            <option value="<?php echo $key; ?>" <?php echo $filters['teacher'] === $key ? 'selected' : ''; ?>><?php echo $label; ?></option>
-        <?php endforeach; ?>
-    </select>
-    <?php endif; ?>
-    <select name="period" onchange="this.form.submit()">
-        <option value="all">All periods</option>
-        <?php for ($i=1;$i<=6;$i++): ?><option value="<?php echo $i; ?>" <?php echo (string)$filters['period']===(string)$i?'selected':''; ?>>Period <?php echo $i; ?></option><?php endfor; ?>
-    </select>
-    <select name="level" onchange="this.form.submit()">
-        <option value="all">All levels</option>
-        <?php for ($i=1;$i<=3;$i++): ?><option value="<?php echo $i; ?>" <?php echo (string)$filters['level']===(string)$i?'selected':''; ?>>ASL <?php echo $i; ?></option><?php endfor; ?>
-    </select>
+<?php aslhub_class_filter_buttons($filters); ?>
 </form>
 
 <?php if (!$allBlocks): ?>

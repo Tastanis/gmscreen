@@ -28,7 +28,7 @@ h3 { font-size: 9.5pt; margin-bottom: 3px; }
 .dense .improvement-group h3 { font-size: 8.5pt; }
 .dense .improvement-row { margin-bottom: 3px; }
 .report-progress { margin-top: 10px; break-inside: avoid; }
-#report-progress-chart { width: 100%; display: block; }
+.report-progress-chart { width: 100%; display: block; }
 .chart-bg { fill: white; }
 .chart-label, .chart-axis-label { font: 11px Arial, sans-serif; fill: #303840; }
 .chart-axis { stroke: #606870; stroke-width: 1.5; }
@@ -40,5 +40,6 @@ h3 { font-size: 9.5pt; margin-bottom: 3px; }
 @media print {
     .report-actions { display: none; }
     body { background: white; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-    .report-sheet { margin: 0; min-height: 0; width: 100%; }
+    .report-sheet + .report-sheet { break-before:page; }
+    .report-sheet { margin: 0; min-height: 0; width: 7.7in; }
 }

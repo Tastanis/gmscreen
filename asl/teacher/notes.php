@@ -4,15 +4,14 @@ require_once dirname(__DIR__).'/lib/data.php';
 require_once dirname(__DIR__).'/lib/teacher_layout.php';
 $me=aslhub_require_teacher($pdo);$isAdmin=aslhub_is_admin($me);$csrf=aslhub_csrf_token();$base=aslhub_base_url();
 $date=$_GET['date']??date('Y-m-d'); if(!preg_match('/^\d{4}-\d{2}-\d{2}$/',$date))$date=date('Y-m-d');
-$filters=['teacher'=>$_GET['teacher']??($isAdmin?$me['teacher']:null),'period'=>$_GET['period']??'all','level'=>$_GET['level']??'all'];
+$filters=['teacher'=>$me['teacher'],'period'=>$_GET['period']??'all','level'=>$_GET['level']??'all'];
 $students=aslhub_scoped_students($pdo,$me,$filters);$rows=[];
 if($students){$ids=implode(',',array_map(fn($s)=>(int)$s['id'],$students));$stmt=$pdo->prepare("SELECT user_id,notes FROM asl_student_meetings WHERE meeting_date=? AND user_id IN ($ids)");$stmt->execute([$date]);foreach($stmt->fetchAll() as $r)$rows[(int)$r['user_id']]=$r['notes'];}
 aslhub_teacher_header($me,'Dated Notes','notes');
 ?>
 <form class="filters-bar" method="GET"><label>Date <input type="date" name="date" value="<?php echo aslhub_h($date); ?>" onchange="this.form.submit()"></label>
-<?php if($isAdmin): ?><select name="teacher" onchange="this.form.submit()"><option value="all">All teachers</option><?php foreach(aslhub_valid_teachers() as $k=>$v): ?><option value="<?php echo $k; ?>" <?php echo $filters['teacher']===$k?'selected':''; ?>><?php echo aslhub_h($v); ?></option><?php endforeach; ?></select><?php endif; ?>
-<select name="period" onchange="this.form.submit()"><option value="all">All periods</option><?php for($i=1;$i<=6;$i++): ?><option value="<?php echo $i; ?>" <?php echo (string)$filters['period']===(string)$i?'selected':''; ?>>Period <?php echo $i; ?></option><?php endfor; ?></select>
-<select name="level" onchange="this.form.submit()"><option value="all">All levels</option><?php for($i=1;$i<=3;$i++): ?><option value="<?php echo $i; ?>" <?php echo (string)$filters['level']===(string)$i?'selected':''; ?>>ASL <?php echo $i; ?></option><?php endfor; ?></select></form>
+<?php aslhub_class_filter_buttons($filters); ?>
+</form>
 <div style="display:flex;justify-content:flex-end;gap:10px;margin:10px 0"><span id="state" class="muted"></span><button id="save" type="button" class="form-button" style="width:auto;padding:9px 18px">Save All Notes</button></div>
 <div class="grading-grid-wrap"><table class="grading-grid" style="width:100%"><thead><tr><th class="sticky-col">Student</th><th>Note for <?php echo aslhub_h($date); ?></th></tr></thead><tbody>
 <?php foreach($students as $s):$id=(int)$s['id']; ?><tr><td class="sticky-col"><?php echo aslhub_h($s['last_name'].', '.$s['first_name']); ?></td><td><textarea class="note" data-student="<?php echo $id; ?>" rows="2" style="width:100%" placeholder="Optional note"><?php echo aslhub_h($rows[$id]??''); ?></textarea></td></tr><?php endforeach; ?>

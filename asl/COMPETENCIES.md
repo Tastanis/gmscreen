@@ -149,3 +149,17 @@ comparisons use the student teacher's active roster across every period and leve
 participation retains its period/level scope. Latest attendance percentages are
 visible and both values appear in each point tooltip, including overlapping lines.
 Report/calendar, chart unit, and disposable chart browser checks passed.
+
+### Class reports and teacher controls - September 28, 2026
+
+Root Apache routing must include report.php; otherwise the dashboard Report card
+link returns 404 despite the file existing under asl/. Reports tab selects a
+period and optional level, printing active students from the signed-in teacher
+only. Individual reports retain their existing scope checks. report_sheet.php is
+a shared per-student template; report.js initializes and fits each sheet separately.
+Print width stays 7.7in with page breaks between sheets. Browser regression checks
+two students produce exactly two PDF pages, individual reports, access boundaries,
+and the root routing rule (Apache live deployment is not locally exercised).
+Roster, weekly entry and Notes share period/level buttons and use the signed-in
+teacher instead of a teacher dropdown. Choosing a class clears a student-only
+weekly filter. Shared page headers omit the redundant teacher identity badge.

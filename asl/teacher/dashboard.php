@@ -8,7 +8,7 @@ $me = aslhub_require_teacher($pdo);
 $isAdmin = aslhub_is_admin($me);
 
 $filters = [
-    'teacher' => $_GET['teacher'] ?? ($isAdmin ? $me['teacher'] : null),
+    'teacher' => $me['teacher'],
     'period' => $_GET['period'] ?? 'all',
     'level' => $_GET['level'] ?? 'all',
     'include_inactive' => !empty($_GET['inactive']),
@@ -50,26 +50,7 @@ aslhub_teacher_header($me, 'ASL Roster', 'dashboard');
     </script>
     <?php endif; ?>
     <form class="filters-bar" method="GET">
-        <?php if ($isAdmin): ?>
-            <select name="teacher">
-                <option value="all" <?php echo $filters['teacher'] === 'all' ? 'selected' : ''; ?>>All teachers</option>
-                <?php foreach (aslhub_valid_teachers() as $key => $label): ?>
-                    <option value="<?php echo $key; ?>" <?php echo $filters['teacher'] === $key ? 'selected' : ''; ?>><?php echo $label; ?></option>
-                <?php endforeach; ?>
-            </select>
-        <?php endif; ?>
-        <select name="period">
-            <option value="all">All periods</option>
-            <?php for ($i = 1; $i <= 6; $i++): ?>
-                <option value="<?php echo $i; ?>" <?php echo (string)$filters['period'] === (string)$i ? 'selected' : ''; ?>>Period <?php echo $i; ?></option>
-            <?php endfor; ?>
-        </select>
-        <select name="level">
-            <option value="all">All levels</option>
-            <?php for ($i = 1; $i <= 3; $i++): ?>
-                <option value="<?php echo $i; ?>" <?php echo (string)$filters['level'] === (string)$i ? 'selected' : ''; ?>>ASL <?php echo $i; ?></option>
-            <?php endfor; ?>
-        </select>
+<?php aslhub_class_filter_buttons($filters); ?>
         <label style="font-size:.85rem;color:#4a5568;"><input type="checkbox" name="inactive" value="1" <?php echo $filters['include_inactive'] ? 'checked' : ''; ?>> show deactivated</label>
         <noscript><button type="submit">Filter</button></noscript>
         <input type="search" id="name-search" name="q" aria-label="Search students by name" placeholder="Search students by name…" value="<?php echo aslhub_h((string)($_GET['q'] ?? '')); ?>" style="margin-left:auto;">

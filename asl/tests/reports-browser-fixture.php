@@ -1,7 +1,7 @@
 <?php
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 ob_start(); require __DIR__ . '/competency-browser-fixture.php'; $fixtureDir = trim(ob_get_clean());
-foreach (['report.php','lib/report.php','lib/calendar_correction.php','css/report.css','js/report.js',
+foreach (['teacher/reports.php','teacher/notes.php','lib/report_sheet.php','report.php','lib/report.php','lib/calendar_correction.php','css/report.css','js/report.js',
     'js/block-metrics.js','teacher/weekly.php','teacher/settings.php','api/save_block_metrics.php','api/settings_save.php'] as $file) {
     copy(dirname(__DIR__) . '/' . $file, $fixtureDir . '/' . $file);
 }
