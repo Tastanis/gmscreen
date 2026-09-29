@@ -327,3 +327,28 @@ Validation: 842 tests across 116 files pass. Actual Bathhouse three-client
 regression passes, including real mouse stair descent, several basement steps,
 reload, visible floor artwork and sight, one accessible basement choice and no
 false fall. Existing user placements remain unchanged in the disposable copy.
+
+## Bounded arrow movement backlog - 1.19.173
+
+Keyboard input retains FIFO order and the existing 12-input cap, with a new
+3000 ms maximum age before dispatch. Waiting for a prior move's acknowledgment
+counts toward that age. A slow response therefore cannot leave a long sequence
+of old arrows moving the token after the user has stopped pressing keys.
+
+The queue remains locked until the issued move and its existing follow-up settle.
+Selection or scene changes discard unsent inputs, including switching away and
+back. Rejection, timeout or failed follow-up clears them too. Nothing cancels an
+issued command, creates an extra replay, changes movement receipts, or adds UI.
+An in-flight request can finish after the three-second window; its network time
+and existing idempotent transport retries are not part of the unsent input budget.
+
+Focused queue tests cover 50-input bursts, long acknowledgment waits, normal short
+bursts, direction changes, held repeat, selection/scene changes, rejection and
+timeout. test-keyboard-queue-browser.cjs exercises real board keyboard events with
+slow replies, atomic group moves and an accepted move whose response is lost.
+The fixture is loopback-only, marked playtest-fixes, and imports a private scene.
+
+Validation: all 849 tests across 117 files pass. Browser regression passes all
+eight scenarios with no page errors. The 50-arrow burst at 1.2 seconds per reply
+starts only three moves; no fresh queued move starts beyond the input deadline.
+The original scene placements remain unchanged.

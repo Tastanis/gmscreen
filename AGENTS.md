@@ -1206,3 +1206,10 @@ weekly filter. Shared page headers omit the redundant teacher identity badge.
   Stair exits attach the destination plate ID (including level-0), and retain it
   while walking. Teleport candidates use authored heights/IDs, exclude holes and
   cutouts, and suppress only near-flush buried terrain. Larger underpasses remain.
+
+- Arrow movement uses keyboard-movement-queue.js: unsent inputs expire after
+  3000 ms (including time waiting for an acknowledgment), with at most 12 pending.
+  Preserve serial awaited submissions. Selection/scene changes and rejected or
+  uncertain outcomes discard pending input; never cancel or semantically replay
+  an already-issued move. Its network latency and existing operation-ID transport
+  retry are separate from the local input deadline. No new movement UI.

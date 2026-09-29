@@ -1677,3 +1677,10 @@ contact uses 0.125 square, separate from the 0.1-square edge-step tolerance.
 Exact-height authored floor support wins over terrain. Teleport resolves the same
 accessible surfaces as the client, preserves real underpasses and rejects holes
 as support. No stored terrain or map data is rewritten to implement this policy.
+
+Keyboard backlog (1.19.173) is bounded before canonical submission: a maximum of
+12 pending inputs and a 3000 ms age limit, including time awaiting the prior move.
+Selection/scene changes or failed outcomes clear pending input. The existing
+serial acknowledgment guard, operation-ID retries, accepted movement receipts and
+collision/fall authority remain intact. No timeout cancellation or semantic replay
+is introduced; already-issued network work can outlast the local input deadline.

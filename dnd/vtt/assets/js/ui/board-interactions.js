@@ -1,4 +1,5 @@
 import {chooseTeleportHeight} from './teleport-choice.js';
+import {createKeyboardMovementQueue} from './keyboard-movement-queue.js';
 import {projectedMovementCell, movementCellContains, paintProjectedMovementCell, updateMovementLoupe} from './movement-cell-projection.js';
 import {dragMovementKind} from './drag-ruler.js';
 import {floorElevations as teleportFloorElevations} from '../state/normalize/floor-elevation.js';
@@ -775,9 +776,12 @@ export function mountBoardInteractions(store, routes = {}) {
   let mapLoadSequence = 0;
   let mapLoadWatchdogId = null;
   let lastActiveSceneId = null;
-  const movementQueue = [];
-  let movementScheduled = false;
-  const MAX_QUEUED_MOVEMENTS = 12;
+  const keyboardMovementQueue = createKeyboardMovementQueue({
+    move: applyMovementDelta,
+    getContext: () => JSON.stringify([boardApi.getState?.()?.boardState?.activeSceneId, [...selectedTokenIds].sort()]),
+    schedule: callback => (window.requestAnimationFrame?.bind(window) ?? (fn => window.setTimeout(fn, 16)))(callback),
+    onError: error => reportSyncFailure(error, 'token movement'),
+  });
   const DRAG_ACTIVATION_DISTANCE = 6;
   let tokenMovementController = null;
   let tokenMovementRuntime = null;
@@ -1386,6 +1390,7 @@ export function mountBoardInteractions(store, routes = {}) {
       .catch((error) => {
         reportSyncFailure(error, movementAccepted ? 'movement follow-up' : 'token movement');
         updateStatus(movementAccepted ? 'Movement saved; a follow-up effect needs review. Do not repeat the move to retry damage.' : (error?.message || 'Token movement was rejected.'));
+        return false;
       });
   }
 
@@ -6085,7 +6090,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     event.preventDefault();
-    enqueueMovement(movement);
+    keyboardMovementQueue.enqueue(movement);
   });
 
   board.addEventListener('contextmenu', (event) => {
@@ -7268,6 +7273,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function notifySelectionChanged() {
+    keyboardMovementQueue.syncContext();
     if (groupButton) {
       const canGroup = selectedTokenIds.size > 1;
       groupButton.disabled = !canGroup;
@@ -7746,53 +7752,6 @@ export function mountBoardInteractions(store, routes = {}) {
       column: clamp(Math.round(column), 0, maxColumn),
       row: clamp(Math.round(row), 0, maxRow),
     };
-  }
-
-  function enqueueMovement(delta) {
-    if (!delta || typeof delta !== 'object') {
-      return;
-    }
-    const stepX = Number.isFinite(delta.x) ? Math.trunc(delta.x) : 0;
-    const stepY = Number.isFinite(delta.y) ? Math.trunc(delta.y) : 0;
-    if (stepX === 0 && stepY === 0) {
-      return;
-    }
-    if (movementQueue.length >= MAX_QUEUED_MOVEMENTS) {
-      return;
-    }
-    movementQueue.push({ x: stepX, y: stepY,
-      sceneId: boardApi.getState?.()?.boardState?.activeSceneId,
-      selection: [...selectedTokenIds].sort().join('\u0000') });
-    scheduleMovementProcessing();
-  }
-
-  function scheduleMovementProcessing() {
-    if (movementScheduled) {
-      return;
-    }
-    movementScheduled = true;
-    const schedule = window.requestAnimationFrame?.bind(window) ?? ((callback) => window.setTimeout(callback, 16));
-    schedule(processMovementQueue);
-  }
-
-  // Sandbox serialized keyboard movement: keep the guard through acknowledgment.
-  async function processMovementQueue() {
-    const next = movementQueue.shift();
-    try {
-      if (!next) return;
-      if (next.sceneId !== boardApi.getState?.()?.boardState?.activeSceneId
-          || next.selection !== [...selectedTokenIds].sort().join('\u0000')) {
-        movementQueue.length = 0;
-        return;
-      }
-      if (await applyMovementDelta(next) === false) movementQueue.length = 0;
-    } catch (error) {
-      movementQueue.length = 0;
-      reportSyncFailure(error, 'token movement');
-    } finally {
-      movementScheduled = false;
-      if (movementQueue.length) scheduleMovementProcessing();
-    }
   }
 
   function applyMovementDelta(delta) {
