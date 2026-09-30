@@ -1295,3 +1295,12 @@ Consequence-free zero-damage ground fall reviews are durably dismissed without
 a panel. Do not skip creature landings, conditions or placement review. Failed
 dismissal keeps the receipt blocked; never loop completion or apply effects.
 Refresh portal glyphs with each vision paint before uncovering the player map.
+
+### GM height inspection - 1.19.180
+
+GM Height inspection uses wall-height-slice.mjs for matching rendered/picked wall
+portions and endpoint handles. Keep floor imagery visible while Walls is open.
+Inspection is local only: never slice canonical collision/sight models or publish
+player view changes. Height changes cancel unfinished wall drags before saving.
+New edges may initialize a fixed base at the inspected height when their default
+terrain-based range would otherwise be invisible; existing edges are not rebased.

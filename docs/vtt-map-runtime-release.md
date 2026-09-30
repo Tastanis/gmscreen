@@ -554,3 +554,24 @@ errors. Portal refresh matches the new vision mask before startup is uncovered.
 Validation: 903 tests across 128 files pass, including durable zero-damage fall
 dismissal/reload and uncertainty cases. The combined disposable GM/player fog
 and portal browser regression passes with original placements unchanged.
+
+### 1.19.180 - GM height inspection
+
+The existing Height arrows now slice GM wall outlines at the inspected physical
+height. Bases are inclusive and tops exclusive; terrain-following edges show only
+their intersecting portions. Wall picking and corner handles use the same slice
+and projected height plane. Floor/roof imagery remains visible with Walls open.
+Changing height clears local selection and cancels an unfinished drag before saving.
+
+Existing geometry, full collision/sight models and player vision are unchanged.
+Newly drawn edges use a fixed base at the inspected height only when their default
+terrain-based height would make them entirely absent from the current slice.
+
+The disposable browser regression checks actual image pixels and wall IDs at
+heights 0, 2, 4 and 6, including the existing arrows with Walls open, hidden-edge
+picking and a height change followed by pointer release before the next frame.
+It confirms no unintended environment writes, unchanged original placements and
+unchanged player masking. This is local verification, not live deployment.
+
+Validation: 909 tests across 129 files pass; the GM height inspection browser
+regression passes with no page errors or unintended canonical changes.

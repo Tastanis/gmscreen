@@ -1753,3 +1753,8 @@ floor filtering and movement authority are unaffected by the display toggle.
 Zero-damage ground fall auto-dismiss uses the existing actor-owned durable finish
 receipt with no effect execution or new claim. Uncertain outcomes remain blocked
 and read-only until authoritative recovery; consequences still require review.
+
+GM height inspection (1.19.180) slices only local wall rendering/picking and floor
+imagery. The complete canonical wall model remains collision/sight authority.
+Height changes cancel local drafts without publishing environment or player view
+changes. Only explicitly drawing a new wall can initialize its base at that height.

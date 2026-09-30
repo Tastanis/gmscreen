@@ -33,6 +33,7 @@ function tick(){
  if(c?.view.mapLoaded&&preparePlayerVisibility(c.state,{isGm:c.isGM,levelId:c.levelId}))renderFog(c.state);
  if(wallApi&&wallApi.revision!==wallRevision){wallRevision=wallApi.revision;walls=wallApi.model;}
  const enabled=!!(window.terrainPrototype?.active&&window.terrainPrototype?.field&&c?.view.mapLoaded&&(sharedField('walls')||sharedField('terrain')||(c.state.boardState.templates?.[c.state.boardState.activeSceneId]||[]).some(t=>t.type==='wall'))&&walls);
+ const wallInspection=!!c?.isGM&&document.querySelector('#wall-panel')?.hidden===false;
  const editing=['#wall-panel','#terrain-panel'].some(id=>document.querySelector(id)?.hidden===false);
  canvas.hidden=tokenView.hidden=!enabled||editing;document.documentElement.classList.toggle('height-vision-active',enabled&&!editing);
  if(enabled){
@@ -42,8 +43,8 @@ function tick(){
   const selectedToken=resolveVisionToken(placements,{...c,lastId});
   if(!c.isGM&&selectedToken&&selectedToken.id!==lastId)try{localStorage.setItem(viewKey,selectedToken.id);}catch{}
   const image=document.querySelector('#vtt-map-image');
-  const token=(gmVision.manual||(!gmVision.fogEnabled&&!selectedToken))?{id:'map-inspection',levelId:c.levelId,column:(v.mapInsets.left-v.gridOffsets.left+image.naturalWidth/2)/v.gridSize-.5,row:(v.mapInsets.top-v.gridOffsets.top+image.naturalHeight/2)/v.gridSize-.5,width:1,height:1}:selectedToken;
-  const viewerGround=gmVision.manual?gmVision.height:terrain.groundFor(token),inspectionHeight=c.isGM&&(gmVision.manual||!gmVision.lighting)?viewerGround:null;
+  const token=(wallInspection||gmVision.manual||(!gmVision.fogEnabled&&!selectedToken))?{id:'map-inspection',levelId:c.levelId,column:(v.mapInsets.left-v.gridOffsets.left+image.naturalWidth/2)/v.gridSize-.5,row:(v.mapInsets.top-v.gridOffsets.top+image.naturalHeight/2)/v.gridSize-.5,width:1,height:1}:selectedToken;
+  const viewerGround=(wallInspection||gmVision.manual)?gmVision.height:terrain.groundFor(token),inspectionHeight=wallInspection||c.isGM&&(gmVision.manual||!gmVision.lighting)?viewerGround:null;
   const nextTerrainKey=JSON.stringify([terrain.key,terrain.revision,v.gridSize,v.gridOffsets,v.mapInsets,image.naturalWidth,image.naturalHeight]);
   if(terrainKey!==nextTerrainKey){terrainKey=nextTerrainKey;terrainCache=compileTerrainVision(terrain.field,{left:((v.mapInsets.left||0)-(v.gridOffsets.left||0))/v.gridSize,top:((v.mapInsets.top||0)-(v.gridOffsets.top||0))/v.gridSize,width:image.naturalWidth/v.gridSize,height:image.naturalHeight/v.gridSize});terrainBuilds++;}
   const groundAt=terrainCache.heightAt;
@@ -57,7 +58,7 @@ function tick(){
    if(canvas.width!==v.mapPixelSize.width||canvas.height!==v.mapPixelSize.height){canvas.width=v.mapPixelSize.width;canvas.height=v.mapPixelSize.height;}
    ctx.globalCompositeOperation='source-over';ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height);
    viewerTokenId=gmVision.manual?null:selectedToken?.id||null;observer=token?center(token):null;sight=!gmVision.fogEnabled?()=>true:token?makeSight({viewer:token,viewerGround,groundAt,walls,terrain:terrainCache}):null;
-   if(sight)sight=gmVision.lighting?roofRenderer.blockSight(observer,head(token,viewerGround),sight,walls):()=>true;
+   if(sight)sight=gmVision.lighting&&!wallInspection?roofRenderer.blockSight(observer,head(token,viewerGround),sight,walls):()=>true;
    portalView={viewer:observer,ground:viewerGround,eye:token?head(token,viewerGround):0,sight};
    if(sight&&gmVision.lighting){
     const image=document.querySelector('#vtt-map-image'),g=v.gridSize,ox=v.gridOffsets.left||0,oy=v.gridOffsets.top||0;
@@ -78,7 +79,7 @@ function tick(){
     exploration.paint(ctx,path,!editing&&!gmVision.manual,g*.10);
    }
    if(!gmVision.lighting)ctx.clearRect(0,0,canvas.width,canvas.height);
-   roofRenderer.paint({inspectionHeight,lighting:gmVision.lighting,context:c,viewer:observer,token,terrain:terrainCache,viewerGround,sight,groundAt,model:walls,editing,enabled});
+   roofRenderer.paint({inspectionHeight,lighting:gmVision.lighting&&!wallInspection,context:c,viewer:observer,token,terrain:terrainCache,viewerGround,sight,groundAt,model:walls,editing:editing&&!wallInspection,enabled});
    wallApi.refreshPortals?.();
    confirmPlayerHeightPaint(c.state,c.view,c.isGM,c.levelId);
    lastMs=performance.now()-start;paints++;
