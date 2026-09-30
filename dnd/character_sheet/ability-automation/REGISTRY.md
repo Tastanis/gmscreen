@@ -12,6 +12,30 @@ For *how* to write JSON, see `AUTHORING.md`. This file is `what is supported`.
 
 ## Normalization metadata
 
+### Power-roll execution and board modifiers
+
+Active automatic edges and banes accumulate, capped at two on each side before
+cancellation. High ground compares the grounded caster's feet with the top of
+the target's full space, using confirmed terrain/floor/cube support heights;
+caster size does not grant High ground. A Prone target grants an edge to melee
+abilities, not ranged strikes. Prone attackers take a bane on strikes.
+
+The roll popup allows one pending roll/chat operation at a time. A rejected
+operation stops and cleans up the ability chain instead of leaving its popup
+promise pending. Closing during a pending operation prevents later continuation;
+it never retries a possibly accepted write or rolls/effects again automatically.
+Launching or canceling a free ability before picking targets does not mark its
+turn action used. The first actual roll, confirmed positive cost, or mechanical
+effect attempt dispatches `actionUsed` once; later cancellation or an uncertain
+partial effect does not undo or replay that mark. Requested-test flows retain
+their existing deferred mark/refund boundary. The VTT action-use event adapter
+still sends its existing asynchronous board update without awaiting a separate
+canonical action-mark acknowledgment; this change does not claim that transport
+has been upgraded.
+Token multi-pick, optional and custom prompts use the board's existing target
+prompt exclusively, including Done/cancel controls; the runner does not place
+a second overlapping target popup over it.
+
 ### VTT template ownership
 
 Temporary measurement templates record the authenticated author. Players can edit
@@ -378,7 +402,7 @@ Additional accepted events:
 | `potency` | Automated potency checks only. Useful for "uses an ability with potency" listeners. |
 | `staminaZero` | Fires when automated damage, manual VTT damage/HP edits, or character-sheet stamina sync drops a target from above 0 stamina to 0 or lower. |
 | `markApplied` | Fires when automation applies or transfers a mark. Supports `markType` and `source` filters. |
-| `actionUsed` | Fires at the start of a normal ability automation run when the host exposes `fireTriggerEvent`. Payload: `{ actorId, actionId, actionName, actionKind, keywords }`. |
+| `actionUsed` | Fires once when an ability rolls, attempts a concrete effect, confirms a positive resource cost, or completes successfully (including manual `note`/`other` effects), when the host exposes `fireTriggerEvent`. Canceling target selection before those steps does not use an action. Partial or uncertain effect attempts retain the mark; they are never replayed or refunded automatically. Requested-test abilities defer the event until successful completion. Arming a triggered-only ability does not emit it. Payload: `{ actorId, actionId, actionName, actionKind, keywords }`. |
 
 ### Authored trigger `match` shape
 

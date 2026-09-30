@@ -612,3 +612,30 @@ Exactly one accepted teleport command retains cube support on all clients and
 reload, without fall receipts/prompts. Existing scene placements/configuration
 remain identical. Static roof/chooser browser checks pass without page errors.
 Live deployment and hosted delivery latency remain separate verification.
+
+
+### 1.19.184 - Session maintenance
+
+Ability roll callback failures stop and clean up the picker instead of leaving
+the chain pending. Initial target cancellation leaves the action unused; actual
+execution and successful manual completion consume it once. Automatic edges add
+with the two-edge cap; prone-target edge is melee-only. The VTT surge lookup uses
+its configured endpoint.
+
+Unchanged sheet/card polling preserves open confirmations and focus. Reads begun
+before local writes cannot restore stale respite VP or stamina afterward. Selected
+power-roll tiers use readable text, and the existing hero-token confirmation flips
+and clamps within the screen, outside the scrolling card.
+
+Idle replay avoids whole-world JSON decoding, with contiguous event and snapshot
+fallback safeguards. Request-local snapshot reuse invalidates on database changes.
+Failed recovery backs off and retains bounded HTTP identifiers; command operation
+identities and receipt protection remain. Failed roof/stair imagery retries at most
+three times; opaque cover and closed-building sight persist while unavailable.
+
+Validation: 945 tests across 135 files pass. Separate loopback Chrome journeys
+verify respite/save races, card convergence, popup placement, roll contrast,
+503-first roof recovery/privacy, cube cutaways and the Wall chooser. Live testing
+and restoration evidence, hosting diagnosis limits and measured local timings are
+in docs/vtt-session-audit-2026-09-29.md and
+docs/vtt-performance-audit-2026-09-29.md. Package/deployment remains code-only.

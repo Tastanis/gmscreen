@@ -34,6 +34,31 @@ function activeIds(suggestions) {
   return suggestions.filter((entry) => entry.active).map((entry) => entry.id).sort();
 }
 
+test('terrain High ground compares feet to the full target space, never actor size or midpoint height', () => {
+  const saved = globalThis.terrainPrototype;
+  globalThis.terrainPrototype = { active: true, groundFor: p => p.feet, highGround: () => { throw Error('Legacy midpoint comparison must not run'); } };
+  try {
+    const actor = ally('actor', 0, 0, { feet: 0, width: 5, height: 5 });
+    const target = enemy('target', 4, 4, { feet: 0 });
+    const high = (a, t) => activeIds(getPowerRollSuggestions({ actor:a, targets:[t], context:{keywords:['Ranged','Strike']} })).includes('edge-high-ground');
+    assert.equal(high(actor,target), false, 'large actor standing on same ground has no High ground');
+    assert.equal(high({...actor,feet:1,width:1,height:1},target), true, 'feet touching target top qualifies');
+    assert.equal(high({...actor,feet:2.9}, {...target,width:3,height:3}), false, 'feet below full target space do not qualify');
+    assert.equal(high({...actor,feet:3}, {...target,width:3,height:3}), true);
+    assert.equal(high({...actor,feet:3,movementMode:'fly'},target), false, 'flying caster is not standing on ground');
+    assert.equal(high({...actor,feet:3,conditions:['Prone']},target), false);
+  } finally { if(saved===undefined)delete globalThis.terrainPrototype;else globalThis.terrainPrototype=saved; }
+});
+
+test('Prone target grants an edge to melee abilities but never to ranged strikes', () => {
+  const actor=ally('actor',0,0),target=enemy('target',4,4,{conditions:[{name:'Prone'}]});
+  const suggestions=keywords=>getPowerRollSuggestions({actor,targets:[target],context:{keywords}});
+  assert.equal(activeIds(suggestions(['Ranged','Strike'])).includes('edge-prone'),false);
+  assert.equal(activeIds(suggestions(['Melee','Magic'])).includes('edge-prone'),true);
+  const proneActor=getPowerRollSuggestions({actor:{...actor,conditions:['Prone']},targets:[target],context:{keywords:['Ranged','Strike']}});
+  assert.equal(activeIds(proneActor).includes('bane-prone'),true);
+});
+
 test('height and creature space establish automatic High ground', () => {
   const actor = ally('actor', 1, 1, { levelId: 'upper' });
   const target = enemy('target', 1, 2, { levelId: 'ground' });

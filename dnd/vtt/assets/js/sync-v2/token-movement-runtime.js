@@ -2,6 +2,7 @@ import { createEntityStore } from './entity-store.js';
 import { createEventStream, createPusherEventTransport } from './event-stream.js';
 import { createRecoveryClient } from './recovery-client.js';
 import { createCommandClient } from './command-client.js';
+import { createRecoveryPolling } from './recovery-polling.js';
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value ?? {}));
@@ -93,7 +94,6 @@ export function createTokenMovementRuntime({
       previewPlacement(sceneId, placementId, preview);
     }
   }
-  let intervalId = null;
   let stopped = false;
   let startPromise = null;
 
@@ -197,6 +197,7 @@ export function createTokenMovementRuntime({
     getSocketId: () => pusherTransport.getSocketId(),
     onDiagnostic,
   });
+  const recoveryPolling=createRecoveryPolling({recover:()=>eventStream.recover(),isRecovering:()=>eventStream.isRecovering(),windowRef,intervalMs:pollIntervalMs,onError});
 
   async function start() {
     if (startPromise) return startPromise;
@@ -206,11 +207,7 @@ export function createTokenMovementRuntime({
       onDiagnostic('bootstrapSnapshotApplied', { revision: store.getRevision() });
       reconcileSnapshot(store.getConfirmedSnapshot(), { source: 'bootstrap' });
       pusherTransport.connect();
-      if (!stopped && typeof windowRef?.setInterval === 'function') {
-        intervalId = windowRef.setInterval(() => {
-          eventStream.recover().catch(onError);
-        }, Math.max(100, Number(pollIntervalMs) || 500));
-      }
+      if (!stopped) recoveryPolling.start();
       return true;
     })().catch((error) => {
       startPromise = null;
@@ -224,10 +221,7 @@ export function createTokenMovementRuntime({
 
   function stop() {
     stopped = true;
-    if (intervalId !== null && typeof windowRef?.clearInterval === 'function') {
-      windowRef.clearInterval(intervalId);
-    }
-    intervalId = null;
+    recoveryPolling.stop();
     pusherTransport.disconnect();
   }
 

@@ -11,7 +11,8 @@ const root=path.resolve(__dirname,'../../..'),server=http.createServer((req,res)
  try{
   page.on('pageerror',e=>errors.push(e.message));await page.goto(origin);
   const data=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=c.height=512;const x=c.getContext('2d');x.fillStyle='rgb(210,40,60)';x.fillRect(0,0,512,512);return c.toDataURL().split(',')[1];});
-  await page.route('**/dnd/vtt/cutaway-qa.png',r=>r.fulfill({contentType:'image/png',body:Buffer.from(data,'base64')}));
+  let imageRequests=0;
+  await page.route('**/dnd/vtt/cutaway-qa.png',r=>++imageRequests===1?r.fulfill({status:503,body:'Temporarily unavailable'}):r.fulfill({contentType:'image/png',body:Buffer.from(data,'base64')}));
   await page.evaluate(async()=>{
    const {roofRenderer}=await import('/dnd/vtt/assets/js/ui/roof-renderer.js'),{makeSight,center,head}=await import('/dnd/vtt/assets/js/ui/vision-height.mjs');
    const g=50,ox=75,oy=150;window.terrainPrototype={project:(x,y,z)=>({x:x+z*g*.12,y:y-z*g*.36}),markersVisible:false};
@@ -23,7 +24,11 @@ const root=path.resolve(__dirname,'../../..'),server=http.createServer((req,res)
    window.cutawayQA={roofRenderer,model,cube,paint(column,row,ground){const token={column,row,width:1,height:1},viewer=center(token),sight=roofRenderer.blockSight(viewer,head(token,ground),makeSight({viewer:token,viewerGround:ground,groundAt:()=>0,walls:model}),model);roofRenderer.paint({context,viewer,token,viewerGround:ground,sight,groundAt:()=>0,terrain:null,model,editing:false,enabled:true,lighting:true});return{sight,token};},pixel(){const p=terrainPrototype.project(ox+2*g,oy+2*g,4);return [...document.getElementById('roof-prototype').getContext('2d').getImageData(p.x,p.y,1,1).data];}};
    cutawayQA.paint(4,2,0);
   });
+  await page.waitForFunction(()=>window.cutawayQA);
+  assert.equal(await page.evaluate(()=>cutawayQA.paint(4,2,0).sight({x:2,y:2},0)),false,'Closed interior stays physically hidden while artwork is unavailable');
+  assert.deepEqual(await page.evaluate(()=>cutawayQA.pixel()),[0,0,0,255],'Unavailable roof artwork retains opaque cover over the underlying map');
   await page.waitForFunction(()=>cutawayQA.roofRenderer.revision>0);
+  assert.equal(imageRequests,2,'A transient failed roof image recovers automatically without reloading');
   const paint=async(column,row,ground)=>page.evaluate(({column,row,ground})=>{const result=cutawayQA.paint(column,row,ground);return{pixel:cutawayQA.pixel(),closedInterior:result.sight({x:2,y:2},0)};},{column,row,ground});
   assert.deepEqual((await paint(4,2,0)).pixel,[210,40,60,255],'Outside underneath a touching floating cube keeps native roof artwork');
   for(const ground of [3,5]){await page.evaluate(z=>{cutawayQA.cube.height=z;cutawayQA.cube.base=z-1;},ground);const result=await paint(4,2,ground);assert.deepEqual(result.pixel,[210,40,60,255],'Outside on cube top keeps closed roof');assert.equal(result.closedInterior,false,'Closed interior remains physically occluded');}
@@ -39,6 +44,6 @@ const root=path.resolve(__dirname,'../../..'),server=http.createServer((req,res)
   const choices=page.locator('[data-teleport-choice] .vtt-teleport-choice__location');assert.equal(await choices.count(),1,'Only exposed stack lid is offered');assert.equal(await choices.first().innerText(),'Wall4');assert.equal(await choices.first().isDisabled(),true,'Initial 500 ms input guard remains');
   await page.waitForFunction(()=>document.querySelector('[data-teleport-choice]')?.dataset.ready==='true');assert.equal(await choices.first().isDisabled(),false,'Out-of-range wall remains actionable');await choices.first().click();
   assert.deepEqual(await page.evaluate(()=>qaTeleportResult),{height:3,range:1,allowOutOfRange:true});
-  assert.deepEqual(errors,[]);console.log('PASS actual roof renderer: outside touching cube does not expose roof/interior, inside native cutaway remains, cube classification cache refreshes; real teleport dialog offers exposed Wall4 with guard/actionable range warning');
+  assert.deepEqual(errors,[]);console.log('PASS actual roof renderer: failed/loading artwork retains opaque cover and recovers without reload; outside touching cube does not expose roof/interior, inside native cutaway remains, cube classification cache refreshes; real teleport dialog offers exposed Wall4 with guard/actionable range warning');
  }finally{await browser.close();server.close();}
 })().catch(e=>{server.close();console.error(e);process.exitCode=1;});

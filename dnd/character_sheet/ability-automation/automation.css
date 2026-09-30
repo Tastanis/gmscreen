@@ -404,10 +404,17 @@
   opacity: 0.72;
 }
 
-.power-roll-runner__tier--selected {
+.power-roll-runner__tier--selected,
+.power-roll-runner__tier--selected:disabled {
   border-color: var(--success);
   box-shadow: inset 0 0 0 2px rgba(90, 128, 64, 0.28);
   background: linear-gradient(145deg, #e6d8c5 0%, #d8ccb0 100%);
+  color: #231b12;
+  opacity: 1;
+}
+
+.power-roll-runner__tier--selected .power-roll-runner__tier-range {
+  color: #4a3420;
 }
 
 .power-roll-runner__tier-range {

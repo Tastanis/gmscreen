@@ -1,3 +1,5 @@
+import {retryAfterMilliseconds} from './retry-after.js';
+import {attachHttpErrorDetails} from './http-error-details.js';
 export function createRecoveryClient({
   endpoint,
   fetchImpl = typeof fetch === 'function' ? fetch.bind(globalThis) : null,
@@ -40,6 +42,8 @@ export function createRecoveryClient({
       if (!response.ok || body?.success !== true || !body?.recovery) {
         const error = new Error(body?.error || `Sync V2 recovery failed (${response.status})`);
         error.status = response.status;
+        error.retryAfterMs = retryAfterMilliseconds(response);
+        attachHttpErrorDetails(error, response);
         throw error;
       }
       return body.recovery;

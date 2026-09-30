@@ -1,4 +1,6 @@
 import { createPendingCommands } from './pending-commands.js';
+import { retryAfterMilliseconds } from './retry-after.js';
+import { attachHttpErrorDetails } from './http-error-details.js';
 
 function fallbackOperationId() {
   const random = Math.random().toString(36).slice(2);
@@ -96,7 +98,7 @@ export function createCommandClient({
           attempt,
           reason: `http_${response.status}`,
         });
-        await sleep(Math.max(0, Number(retryDelayMs) || 0) * attempt);
+        await sleep(Math.max(Math.max(0, Number(retryDelayMs) || 0) * attempt,retryAfterMilliseconds(response)));
         continue;
       }
       if (
@@ -122,6 +124,7 @@ export function createCommandClient({
       error.status = response.status;
       error.response = body;
       error.operationId = command.operationId;
+      attachHttpErrorDetails(error, response);
       onDiagnostic('commandState', { operationId: command.operationId, type, status: 'rejected', httpStatus: response.status, reason: error.message });
       throw error;
     }

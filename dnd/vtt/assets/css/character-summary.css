@@ -371,16 +371,18 @@ button.vtt-character-pill:focus-visible,
 }
 
 .vtt-character-token-confirmation {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
+  position: fixed;
+  box-sizing: border-box;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - 16px);
+  overflow: auto;
   width: 188px;
   padding: 8px;
   border: 1px solid var(--vtt-sheet-border-strong);
   border-radius: 5px;
   background: var(--vtt-sheet-panel-strong);
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.46);
-  z-index: 5;
+  z-index: 15000;
 }
 
 .vtt-character-token-confirmation__text {

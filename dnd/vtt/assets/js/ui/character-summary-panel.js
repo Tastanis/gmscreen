@@ -1,3 +1,4 @@
+import {showHeroTokenConfirmation} from './hero-token-confirmation.js';
 const PC_CHARACTER_IDS = new Set(['cal', 'sharon', 'indigo', 'zepha']);
 
 const SKILL_GROUPS = {
@@ -120,6 +121,8 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   let heroTokenSyncChannel = null;
   let staminaSyncChannel = null;
   let sheetSyncInFlight = false;
+  let sheetReadEpoch = 0;
+  let sheetRefreshRequested = false;
   let pendingResourceSave = null;
   const resourceSaveNotices = new Map();
   const resourceControlSelector = '[data-character-stamina-action], [data-character-recovery], [data-character-surge-delta], [data-character-resource-delta], [data-character-resource-roll], [data-character-add-victory]';
@@ -264,23 +267,28 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   };
 
   const refreshActiveSheet = async ({ force = false } = {}) => {
-    if (!activeCharacterId || sheetSyncInFlight || pendingResourceSave) {
-      return;
-    }
+    if (!activeCharacterId) return;
+    if (force) sheetReadEpoch++;
+    if (sheetSyncInFlight) { if (force) sheetRefreshRequested = true; return; }
+    if (pendingResourceSave) return;
     if (!force && document.visibilityState === 'hidden') {
       return;
     }
     sheetSyncInFlight = true;
     try {
       const characterId = activeCharacterId;
+      const readEpoch = sheetReadEpoch;
       const sheet = await fetchCharacterSummary(routes, characterId);
-      if (activeCharacterId !== characterId || pendingResourceSave) return;
+      if (activeCharacterId !== characterId || pendingResourceSave || readEpoch !== sheetReadEpoch) return;
+      // Preserve open confirmations and ability-tray focus on idle polling.
+      if (JSON.stringify(activeSheet) === JSON.stringify(sheet)) return;
       activeSheet = sheet;
       renderActiveSheet();
     } catch (error) {
       console.warn('[VTT] Failed to refresh character summary', error);
     } finally {
       sheetSyncInFlight = false;
+      if (sheetRefreshRequested) { sheetRefreshRequested = false; refreshActiveSheet({ force: true }); }
     }
   };
 
@@ -350,6 +358,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     const characterId = activeCharacterId;
     const sheet = clonePlain(activeSheet);
     pendingResourceSave = characterId;
+    sheetReadEpoch++;
     resourceSaveNotices.set(characterId, 'Saving character resources…');
     syncResourceSaveStatus();
     try {
@@ -379,6 +388,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
       return false;
     } finally {
       pendingResourceSave = null;
+      sheetReadEpoch++;
       syncResourceSaveStatus();
       if (activeCharacterId === characterId) refreshActiveSheet({ force: true });
     }
@@ -421,11 +431,13 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     }
 
     const isNewCharacter = activeCharacterId !== characterId;
+    if (isNewCharacter) sheetReadEpoch++;
     activeCharacterId = characterId;
     if (isNewCharacter) {
       activeAbilityCategory = null;
     }
     const requestId = ++activeRequestId;
+    const readEpoch = sheetReadEpoch;
     const token = detail.token && typeof detail.token === 'object' ? detail.token : {};
     activeToken = clonePlain(token);
     if (!isNewCharacter && pendingResourceSave === characterId) {
@@ -438,7 +450,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
 
     try {
       const sheet = await fetchCharacterSummary(routes, characterId);
-      if (requestId !== activeRequestId || activeCharacterId !== characterId) {
+      if (requestId !== activeRequestId || activeCharacterId !== characterId || readEpoch !== sheetReadEpoch) {
         return;
       }
       if (!isNewCharacter && pendingResourceSave === characterId) return;
@@ -2718,7 +2730,7 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
       const fallback = Math.max(0, numberLike(sheet?.hero?.surges, 0));
       if (!options?.characterId) return { current: fallback };
       try {
-        const freshSheet = await fetchCharacterSummary(routes, options.characterId);
+        const freshSheet = await fetchCharacterSummary(options.routes, options.characterId);
         const current = Math.max(0, numberLike(freshSheet?.hero?.surges, fallback));
         if (sheet?.hero && typeof sheet.hero === 'object') {
           sheet.hero.surges = current;
@@ -3780,6 +3792,7 @@ export const __testing = {
   saveCharacterSummaryResources,
   saveCharacterSummarySheet,
   spendHeroicResource,
+  startAbilityAutomation,
 };
 
 function parseStaticAutoResource(value) {
@@ -3803,33 +3816,6 @@ function resolveAutoResourceGain(value) {
     return { amount: staticAmount, label: `static +${staticAmount}` };
   }
   return null;
-}
-
-function showHeroTokenConfirmation(button) {
-  return new Promise((resolve) => {
-    document.querySelectorAll('.vtt-character-token-confirmation').forEach((el) => el.remove());
-    const host = button?.parentElement;
-    if (!host) {
-      resolve(false);
-      return;
-    }
-    const confirm = document.createElement('div');
-    confirm.className = 'vtt-character-token-confirmation';
-    confirm.innerHTML = `
-      <div class="vtt-character-token-confirmation__text">Does everyone agree to use a hero token?</div>
-      <div class="vtt-character-token-confirmation__actions">
-        <button type="button" data-confirm-hero-token>Yes</button>
-        <button type="button" data-cancel-hero-token>Cancel</button>
-      </div>
-    `;
-    const finish = (value) => {
-      confirm.remove();
-      resolve(value);
-    };
-    confirm.querySelector('[data-confirm-hero-token]')?.addEventListener('click', () => finish(true));
-    confirm.querySelector('[data-cancel-hero-token]')?.addEventListener('click', () => finish(false));
-    host.appendChild(confirm);
-  });
 }
 
 function formatSigned(value) {

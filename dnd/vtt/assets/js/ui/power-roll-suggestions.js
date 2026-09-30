@@ -290,20 +290,20 @@ export function getPowerRollSuggestions({
   const targetIds = targetIdSetFromContext(targetList, context);
 
   const heights = floorElevations(mapLevels);
-  const actorHeight = heights.get(actor.levelId || 'level-0');
   const standing = (!actor.movementMode || actor.movementMode === 'ground')
     && !hasCondition(actor,'prone') && !hasCondition(actor,'climbing');
   const highGround = abilityRoll && standing && targetList.every(target => {
-    // Terrain sandbox advantage; authored abilities and production rules remain unchanged.
-    if (globalThis.terrainPrototype?.active) return !hasCondition(target,'burrowing') && globalThis.terrainPrototype.highGround(actor,target);
-    const targetHeight = heights.get(target.levelId || 'level-0');
+    if (hasCondition(target,'burrowing')) return false;
+    const terrain = globalThis.terrainPrototype;
+    const groundedHeight = placement => terrain?.active && typeof terrain.groundFor === 'function'
+      ? terrain.groundFor(placement)
+      : ['fly','hover'].includes(placement.movementMode) ? placement.flightHeight : heights.get(placement.levelId || 'level-0');
+    const feet = groundedHeight(actor), targetHeight = groundedHeight(target);
     const targetSpace = Math.max(1, Number(target.width) || 1, Number(target.height) || 1);
-    return floorRelation(actor,target,mapLevels) === 'above' && Number.isFinite(actorHeight) && Number.isFinite(targetHeight)
-      && (!target.movementMode || target.movementMode === 'ground')
-      && !hasCondition(target,'burrowing') && actorHeight >= targetHeight + targetSpace;
+    return Number.isFinite(feet) && Number.isFinite(targetHeight) && feet >= targetHeight + targetSpace;
   });
   suggestions.push(makeSuggestion('edge-high-ground', EDGE, 'High ground', highGround, {
-    reason: highGround ? (globalThis.terrainPrototype?.active ? 'Higher effective height' : 'Fully above target') : 'Confirm height and footing',
+    reason: highGround ? 'Fully above target' : 'Confirm height and footing',
   }));
   const ranged = !melee && keywordsFromContext(context).some(word => word === 'ranged' || word.startsWith('ranged '));
   if (strike && ranged && placements.some(other => other?.id !== actor.id

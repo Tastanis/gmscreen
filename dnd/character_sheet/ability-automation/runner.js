@@ -241,8 +241,8 @@
   }
 
   function getEdgeState(edgeCount, baneCount) {
-    const edge = Math.max(0, asInt(edgeCount));
-    const bane = Math.max(0, asInt(baneCount));
+    const edge = Math.max(0, Math.min(2, asInt(edgeCount)));
+    const bane = Math.max(0, Math.min(2, asInt(baneCount)));
     const net = edge - bane;
     if (net === 0) return { edge, bane, net, bonus: 0, tierShift: 0, label: "Normal roll" };
     if (net > 0) {
@@ -564,8 +564,8 @@
     suggestions.forEach((suggestion) => {
       if (!suggestion?.active) return;
       const count = Math.max(1, Math.min(2, asInt(suggestion.count, 1)));
-      if (suggestion.kind === "edge") counts.edge = Math.max(counts.edge, count);
-      if (suggestion.kind === "bane") counts.bane = Math.max(counts.bane, count);
+      if (suggestion.kind === "edge") counts.edge = Math.min(2, counts.edge + count);
+      if (suggestion.kind === "bane") counts.bane = Math.min(2, counts.bane + count);
     });
     return counts;
   }
@@ -755,7 +755,10 @@
   }
 
   async function runTargetBlock(state, block) {
-    const useBoardOnlyPrompt = block.mode === "token" && Boolean(block.promptTitle || block.promptText);
+    const desired = getTokenTargetCount(block);
+    const upTo = block.count?.mode === "upTo";
+    // The board already owns the multi-pick/Done prompt and its cancellation.
+    const useBoardOnlyPrompt = block.mode === "token" && Boolean(block.promptTitle || block.promptText || block.optional || upTo || desired > 1);
     const host = useBoardOnlyPrompt ? null : showTargetPrompt(state, block);
     const finish = () => removeRunnerHost(host);
 
@@ -843,8 +846,6 @@
         throw new Error("Target selection is not available.");
       }
 
-      const desired = getTokenTargetCount(block);
-      const upTo = block.count?.mode === "upTo";
       const rangeOriginPlacement = getRangeOriginPlacement(state, block);
       const selected = [];
       const seen = new Set();
@@ -901,6 +902,10 @@
         if (!Number.isFinite(desired)) break;
       }
       setTargetGroup(state, block.name, selected);
+    } catch (error) {
+      if (block.mode === "area") state.context.cancelAreaSelection?.();
+      else state.context.cancelTargetSelection?.();
+      throw error;
     } finally {
       finish();
     }
@@ -1259,13 +1264,16 @@
     };
   }
 
-  function wirePowerRoll(host, state, block, resolve) {
+  function wirePowerRoll(host, state, block, resolve, reject) {
     const stopSuggestions = watchPowerRollSuggestions(host, state, block, renderPowerRoll);
-    const finish = () => {
+    let finished = false, pending = false;
+    const finish = (error) => {
+      if (finished) return;
+      finished = true;
       stopSuggestions();
       host.removeEventListener("click", onClick);
       host.removeEventListener("automation-cancel", onCancel);
-      resolve();
+      if (error) reject(error); else resolve();
     };
     const onCancel = () => {
       state.aborted = true;
@@ -1280,6 +1288,9 @@
         finish();
         return;
       }
+      if (pending || finished) return;
+      pending = true;
+      try {
       if (target.closest("[data-power-roll-edge-adjust]")) {
         const button = target.closest("[data-power-roll-edge-adjust]");
         const selection = setManualEdgeBaneSelection(state, "edge", button?.getAttribute("data-power-roll-edge-adjust"));
@@ -1346,12 +1357,14 @@
         const { total, attributeBonus, skill, skillBonus, bonus, edgeState } = getPowerRollTotal(state, block);
         state.baseTier = P.tierFromTotal(total);
         state.selectedTier = P.shiftTierKey(state.baseTier, edgeState.tierShift);
+        fireActionUsedEvent(state);
         state.resultText = `Rolled ${total}. Auto-selected ${P.tierLabel(state.selectedTier)}${
           state.baseTier !== state.selectedTier
             ? ` from ${P.tierLabel(state.baseTier)} (${edgeState.label}).`
             : "."
         }`;
         await postChat(state.context, buildRollChatEntry(state, block, total, attributeBonus, bonus, edgeState.bonus, { skill, skillBonus }));
+        if (finished) return;
         renderPowerRoll(host, state, block);
         return;
       }
@@ -1370,6 +1383,11 @@
         closeRunner();
         finish();
       }
+      } catch (error) {
+        if (finished) return;
+        removeRunnerHost(host);
+        finish(error);
+      } finally { pending = false; }
     };
 
     host.addEventListener("click", onClick);
@@ -1391,7 +1409,7 @@
 
     const host = makeHost("Power Roll", state.action.name || "Ability Automation", "power", state.context?.automationAnchor || null);
     renderPowerRoll(host, state, block);
-    await new Promise((resolve) => wirePowerRoll(host, state, block, resolve));
+    await new Promise((resolve, reject) => wirePowerRoll(host, state, block, resolve, reject));
 
     if (state.aborted) return;
     if (!state.selectedTier) return;
@@ -1588,6 +1606,7 @@
 
     if (block.match && typeof ctx.registerTrigger === "function") {
       try {
+        if (["main","maneuver"].includes(getActionKind(state))) fireActionUsedEvent(state);
         await ctx.registerTrigger({
           casterId,
           abilityId: state.action?.id || state.action?._stableActionId || `ability_${block.id}`,
@@ -1658,6 +1677,7 @@
             attributeBonuses[attr] = ctx.getAttributeBonus(attr) || 0;
           }
         }
+        fireActionUsedEvent(state);
         const result = await ctx.registerPersistentZone({
           casterId: state.sourcePlacement?.id || "",
           abilityId: state.action?.id || `ability_${block.id}`,
@@ -1719,6 +1739,9 @@
 
   async function applyEffect(state, effect, targets, ctx) {
     if (!effect || typeof effect !== "object") return;
+    if (targets.length && ["damage","condition","forcedMovement","shift","setScopedFlag","applyMark","endMark","halveTriggeringDamage","aura","heal","temporaryStamina","teleport","swap","resourceGain","surgeGain"].includes(effect.kind)) {
+      fireActionUsedEvent(state);
+    }
     switch (effect.kind) {
       case "damage":
         return applyDamageEffect(state, effect, targets, ctx);
@@ -2864,6 +2887,7 @@
       }
     }
     const spent = spendResult?.spent || effect.amount || 1;
+    if (spent > 0) fireActionUsedEvent(state);
     const resource = spendResult?.resource || effect.resource || "resource";
     await postChat(state.context, {
       message: `${state.heroName} - ${state.action.name || "Ability"}: spent ${spent} ${resource}.`,
@@ -3591,8 +3615,11 @@
     });
   }
 
-  function fireActionUsedEvent(state) {
+  function fireActionUsedEvent(state, force = false) {
+    if (state.actionUsedFired || (state.deferActionUsed && !force)) return;
     if (typeof state.context.fireTriggerEvent !== "function") return;
+    // Reserve once before dispatch: an uncertain/partial execution is never replayed.
+    state.actionUsedFired = true;
     state.context.fireTriggerEvent({
       eventType: "actionUsed",
       payload: {
@@ -3882,6 +3909,7 @@
       const triggerOnlyAction = actionType.includes("trigger") || isNonFreeTriggeredAction(state.action);
       const isArmingOnly = triggerOnlyAction && structuredTriggerBlocks.length > 0 && !isResolvingReadyTrigger && !isManualTriggerResolution;
       const defersActionUsed = blocks.some((block) => block?.type === "requestedTest");
+      state.deferActionUsed = defersActionUsed;
 
       if (!isArmingOnly) {
         for (const block of blocks) {
@@ -3926,6 +3954,7 @@
           return;
         }
         state.abilityResourceSpend = spendResult || null;
+        if (Number(spendResult?.spent) > 0) fireActionUsedEvent(state);
       }
 
       if (isArmingOnly) {
@@ -3936,7 +3965,6 @@
         return;
       }
 
-      if (!defersActionUsed) fireActionUsedEvent(state);
       if ((isResolvingReadyTrigger || isManualTriggerResolution) && isNonFreeTriggeredAction(state.action) && typeof state.context.consumeTriggeredAction === "function") {
         const consumeResult = await state.context.consumeTriggeredAction({
           placementId: state.sourcePlacement?.id || "",
@@ -3953,6 +3981,7 @@
       await markUsageLimit(state);
       if ((isResolvingReadyTrigger || isManualTriggerResolution) && structuredTriggerBlocks.length) {
         await runReadyTriggerResolution(state, blocks);
+        if (!state.aborted) fireActionUsedEvent(state, defersActionUsed);
         return;
       }
       for (let index = 0; index < blocks.length; index += 1) {
@@ -3961,7 +3990,9 @@
         if (isResolvingReadyTrigger && block?.type === "trigger") continue;
         await runBlockAt(state, blocks, index);
       }
-      if (!state.aborted && defersActionUsed) fireActionUsedEvent(state);
+      // Manual/narrative effects still represent a successfully used ability.
+      // Earlier concrete attempts reserve this once; canceled selection does not.
+      if (!state.aborted) fireActionUsedEvent(state, defersActionUsed);
       if (state.aborted) {
         await postChat(state.context, {
           message: `${state.heroName} - ${state.action.name || "Ability"} automation canceled.`,

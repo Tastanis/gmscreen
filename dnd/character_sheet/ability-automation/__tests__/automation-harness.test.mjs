@@ -1651,7 +1651,7 @@ test('runner applies double edge and double bane as tier shifts without +/-2 bon
           { kind: 'edge', count: 1, active: true },
         ],
       }),
-      { edge: 1, bane: 0 }
+      { edge: 2, bane: 0 }
     );
     assert.deepEqual(
       getTotalEdgeBaneCounts({

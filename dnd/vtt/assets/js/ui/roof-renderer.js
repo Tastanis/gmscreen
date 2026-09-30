@@ -8,10 +8,12 @@ import {wallHeights} from './wall-properties.mjs';
 import {nearestOnSegment} from './wall-geometry.mjs';
 import {makeSight,head} from './vision-height.mjs';
 import {insideRoom,roofSurfaces,ceilingBlocks} from './roof-geometry.mjs';import {getRoofImage} from './roof-images.mjs';import {adaptiveFog} from './adaptive-fog.mjs';
+import {createRoofImageCache} from './roof-image-cache.mjs';
 const canvas=document.createElement('canvas');canvas.id='roof-prototype';canvas.style.cssText='position:absolute;inset:0;pointer-events:none;z-index:100001';document.querySelector('#vtt-map-transform').append(canvas);
 const roofLayer=document.createElement('canvas');
-const cache=new Map();let revision=0,cutawayKey='',buildingCutaway=null;
-function requestImage(id){if(!id||cache.has(id))return;cache.set(id,null);(id.startsWith('/dnd/vtt/')?fetch(id).then(r=>{if(!r.ok)throw Error('Roof image failed');return r.blob();}):getRoofImage(id)).then(blob=>blob?createImageBitmap(blob):null).then(image=>{cache.set(id,image);revision++;}).catch(e=>console.error('Roof image could not be loaded',e));}
+let revision=0,cutawayKey='',buildingCutaway=null;
+const cache=createRoofImageCache({load:id=>(id.startsWith('/dnd/vtt/')?fetch(id).then(r=>{if(!r.ok)throw Error('Roof image failed ('+r.status+')');return r.blob();}):getRoofImage(id)).then(blob=>blob?createImageBitmap(blob):null),onLoaded:()=>revision++,onError:e=>console.error('Roof image could not be loaded',e)});
+function requestImage(id){cache.request(id);}
 export const roofRenderer={get revision(){return revision;},surfaces:roofSurfaces,
  blockSight(viewer,eye,sight,model){const roofs=roofSurfaces(model);return (p,z,t)=>!ceilingBlocks(viewer,eye,p,z,roofs)&&sight(p,z,t);},
  paint({inspectionHeight=null,lighting=true,context,viewer,token,viewerGround,sight,groundAt,terrain,model,editing,enabled}){
@@ -33,7 +35,8 @@ export const roofRenderer={get revision(){return revision;},surfaces:roofSurface
    const peek=edgeOn?landingPeekRamps(importedRamps,token,viewerGround,roof.height):[];
    if(edgeOn&&!peek.length)continue;
    if(inspectionHeight!==null&&roof.height>inspectionHeight+.001)continue;
-   requestImage(roof.imageId);const image=cache.get(roof.imageId);if(!image)continue;
+   if(!roof.imageId)continue;
+   requestImage(roof.imageId);const image=cache.get(roof.imageId);
    const underneath=viewerGround<roof.height-.01;if(inspectionHeight===null&&underneath&&insideRoom(viewer,roof.points))continue;
    if(roofLayer.width!==canvas.width||roofLayer.height!==canvas.height){roofLayer.width=canvas.width;roofLayer.height=canvas.height;}
    const ctx=roofLayer.getContext('2d');ctx.clearRect(0,0,roofLayer.width,roofLayer.height);
@@ -66,8 +69,10 @@ export const roofRenderer={get revision(){return revision;},surfaces:roofSurface
    }
    const outline=surfacePath(roof,project);
    // A hidden solid floor is opaque; only its authored holes expose below.
-   if(roof.kind==='floor'){ctx.save();ctx.fillStyle='#000';if(edgeOn)ctx.clip(path);ctx.fill(outline,'evenodd');ctx.restore();}
-   ctx.save();ctx.clip(outline,'evenodd');ctx.clip(path);const at=window.terrainPrototype.project(v.mapInsets.left,v.mapInsets.top,roof.height);ctx.drawImage(image,at.x,at.y);ctx.restore();
+   // Loading/failed artwork must not remove physical cover over the base map.
+   // The normal interior/doorway cutaways below still apply to this layer.
+   if(roof.kind==='floor'||!image){ctx.save();ctx.fillStyle='#000';if(edgeOn)ctx.clip(path);ctx.fill(outline,'evenodd');ctx.restore();}
+   if(image){ctx.save();ctx.clip(outline,'evenodd');ctx.clip(path);const at=window.terrainPrototype.project(v.mapInsets.left,v.mapInsets.top,roof.height);ctx.drawImage(image,at.x,at.y);ctx.restore();}
    // Cut at the displayed interior's height, not at the roof height. Erase only
    // this roof layer so the lower floor remains intact under the same pixels.
    if(lighting&&underneath&&(roof.kind!=='floor'||head(token,viewerGround)<roof.height-.01)){

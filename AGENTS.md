@@ -1313,3 +1313,21 @@ Keep the 500 ms chooser guard and actionable out-of-range warnings. Server
 TeleportLanding/WallCubes remain authoritative; never persist derived geometry.
 Building cutaway grouping excludes templateCube lids, even when touching native
 rooms. Retain those lids in physical ceiling/sight checks and support resolution.
+
+
+## Session maintenance - 1.19.184
+
+Ability roll callback failures propagate and clean up the active picker. Canceling
+initial target selection does not spend the main action; concrete/partial execution
+and successful manual ability completion retain once-only action consumption.
+Automatic edge sources sum with the existing two-edge cap; prone-target edge is
+melee-only. Character sheet/VTT polling preserves unchanged UI and rejects reads
+started before a local save, including respite victories and stamina.
+
+Idle Sync V2 replay uses revision metadata, with contiguous event checks and
+audience-projected snapshot fallback. Snapshot reuse is request-local and
+invalidates on own writes or external database changes. Failed recovery polls
+back off without changing normal delivery or explicit recovery; commands preserve
+operation identities. Never prune durable receipts as a performance shortcut.
+
+See docs/vtt-session-audit-2026-09-29.md for evidence and deployment limits.

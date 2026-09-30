@@ -34,6 +34,8 @@ final class SyncV2Store
     private int $eventRetention;
     private int $snapshotInterval;
     private int $snapshotRetention;
+    private ?array $snapshotCache = null;
+    private ?int $snapshotDataVersion = null;
 
     public function __construct(
         string $databasePath,
@@ -76,6 +78,11 @@ final class SyncV2Store
 
     public function getSnapshot(): array
     {
+        $dataVersion=(int)$this->pdo->query('PRAGMA data_version')->fetchColumn();
+        if ($this->snapshotCache !== null) {
+            $metadata=$this->worldMetadata(false);
+            if($dataVersion===$this->snapshotDataVersion&&$metadata['revision']===$this->snapshotCache['revision'])return $this->snapshotCache;
+        }
         $statement = $this->pdo->prepare(
             'SELECT revision, state_json, updated_at
              FROM vtt_world_state
@@ -92,7 +99,8 @@ final class SyncV2Store
         // any stale claim domain left by an older deployment; the next
         // canonical write permanently drops it.
         unset($state['claims']);
-        return [
+        $this->snapshotDataVersion=$dataVersion;
+        return $this->snapshotCache = [
             'revision' => max(0, (int) $row['revision']),
             'state' => $state,
             'serverTime' => (int) $row['updated_at'],
@@ -1979,13 +1987,15 @@ final class SyncV2Store
     {
         $afterRevision = max(0, $afterRevision);
         $limit = max(1, min(1000, $limit));
-        $snapshot = $this->getSnapshot();
+        // Idle polling and event replay need the cursor, not every map's geometry.
+        // Decode the full world only when a real snapshot fallback is necessary.
+        $metadata = $this->worldMetadata(false);
 
-        if ($afterRevision >= $snapshot['revision']) {
+        if ($afterRevision >= $metadata['revision']) {
             return [
                 'mode' => 'events',
                 'fromRevision' => $afterRevision,
-                'revision' => $snapshot['revision'],
+                'revision' => $metadata['revision'],
                 'events' => [],
             ];
         }
@@ -1995,19 +2005,20 @@ final class SyncV2Store
             return [
                 'mode' => 'snapshot',
                 'reason' => 'event_retention_gap',
-                'snapshot' => $snapshot,
+                'snapshot' => $this->getSnapshot(),
             ];
         }
 
         $statement = $this->pdo->prepare(
             'SELECT *
              FROM vtt_events
-             WHERE world_id = :world_id AND revision > :after_revision
+             WHERE world_id = :world_id AND revision > :after_revision AND revision <= :through_revision
              ORDER BY revision ASC
              LIMIT :event_limit'
         );
         $statement->bindValue(':world_id', $this->worldId, PDO::PARAM_STR);
         $statement->bindValue(':after_revision', $afterRevision, PDO::PARAM_INT);
+        $statement->bindValue(':through_revision', $metadata['revision'], PDO::PARAM_INT);
         $statement->bindValue(':event_limit', $limit + 1, PDO::PARAM_INT);
         $statement->execute();
         $rows = $statement->fetchAll();
@@ -2016,21 +2027,29 @@ final class SyncV2Store
             return [
                 'mode' => 'snapshot',
                 'reason' => 'event_limit_exceeded',
-                'snapshot' => $snapshot,
+                'snapshot' => $this->getSnapshot(),
             ];
         }
 
+        // Concurrent retention pruning cannot produce a partial declared cursor.
+        $expected = $afterRevision + 1;
+        foreach ($rows as $row) {
+            if ((int) $row['revision'] !== $expected++) break;
+        }
+        if ($expected - 1 !== $metadata['revision'] || count($rows) !== $metadata['revision'] - $afterRevision) {
+            return ['mode'=>'snapshot','reason'=>'event_retention_gap','snapshot'=>$this->getSnapshot()];
+        }
         return [
             'mode' => 'events',
             'fromRevision' => $afterRevision,
-            'revision' => $snapshot['revision'],
+            'revision' => $metadata['revision'],
             'events' => array_map(fn (array $row): array => $this->decodeEventRow($row), $rows),
         ];
     }
 
     public function getOperationalStatus(): array
     {
-        $snapshot = $this->getSnapshot();
+        $metadata = $this->worldMetadata();
         $counts = [];
         foreach (['vtt_events', 'vtt_operations', 'vtt_snapshots'] as $table) {
             $statement = $this->pdo->prepare(
@@ -2041,8 +2060,8 @@ final class SyncV2Store
         }
         return [
             'worldId' => $this->worldId,
-            'revision' => $snapshot['revision'],
-            'updatedAt' => $snapshot['serverTime'],
+            'revision' => $metadata['revision'],
+            'updatedAt' => $metadata['serverTime'],
             'minimumRetainedRevision' => $this->minimumRetainedRevision(),
             'retainedEvents' => $counts['vtt_events'],
             'operationLedgerEntries' => $counts['vtt_operations'],
@@ -2051,6 +2070,16 @@ final class SyncV2Store
             'snapshotInterval' => $this->snapshotInterval,
             'snapshotRetention' => $this->snapshotRetention,
         ];
+    }
+
+    private function worldMetadata(bool $includeTimestamp = true): array
+    {
+        // updated_at follows the large JSON column in the SQLite record. Asking
+        // for it forces overflow-page reads even without decoding that JSON.
+        $statement=$this->pdo->prepare($includeTimestamp?'SELECT revision,updated_at FROM vtt_world_state WHERE world_id = :world_id':'SELECT revision FROM vtt_world_state WHERE world_id = :world_id');
+        $statement->execute(['world_id'=>$this->worldId]);$row=$statement->fetch();
+        if(!is_array($row))throw new RuntimeException('Sync V2 world state is unavailable.');
+        return ['revision'=>max(0,(int)$row['revision']),'serverTime'=>(int)($row['updated_at']??0)];
     }
 
     private function initializeSchema(): void
@@ -3340,6 +3369,7 @@ final class SyncV2Store
 
     private function updateWorldState(int $revision, array $state, int $serverTime): void
     {
+        $this->snapshotCache = null;
         $statement = $this->pdo->prepare(
             'UPDATE vtt_world_state
              SET revision = :revision, state_json = :state_json, updated_at = :updated_at

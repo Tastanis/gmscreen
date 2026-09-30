@@ -1758,3 +1758,18 @@ GM height inspection (1.19.180) slices only local wall rendering/picking and flo
 imagery. The complete canonical wall model remains collision/sight authority.
 Height changes cancel local drafts without publishing environment or player view
 changes. Only explicitly drawing a new wall can initialize its base at that height.
+
+
+Session maintenance (1.19.184): idle recovery reads the world revision without
+decoding scene geometry. Replay must cover every revision through the declared
+cursor; gaps still recover an audience-projected snapshot. One decoded snapshot
+may be reused within a store instance only while its revision and SQLite data
+version remain unchanged. Own writes invalidate it. No shared domain writer,
+receipt policy, event projection or command validation changes.
+
+Failed fallback polling uses bounded backoff/Retry-After and cannot overlap an
+explicit recovery. Healthy 500 ms delivery and explicit recovery remain unchanged.
+Command retries keep the identical operation ID and existing attempt limit.
+Durable receipt deletion is deliberately excluded: retention must prevent old
+retries from becoming new effects or resource writes. See
+../vtt-session-audit-2026-09-29.md for measured local results and live limits.

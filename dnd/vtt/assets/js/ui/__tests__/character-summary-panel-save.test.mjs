@@ -3,6 +3,20 @@ import assert from 'node:assert/strict';
 
 import { __testing } from '../character-summary-panel.js';
 
+test('power-roll surge refresh reads the configured character endpoint', async () => {
+ const oldWindow=globalThis.window,oldFetch=globalThis.fetch;let runner=null,requested=null;
+ globalThis.window={location:{href:'http://localhost/dnd/vtt/'},AbilityAutomationRunner:{open:config=>{runner=config;}}};
+ globalThis.fetch=async(url)=>{requested=url;return{ok:true,json:async()=>({success:true,data:{hero:{surges:4}}})};};
+ try{
+  const sheet={hero:{surges:1}};
+  __testing.startAbilityAutomation(sheet,{name:'Test',automation:{cards:[]}},'mains',null,{characterId:'cal',routes:{sheet:'/custom/sheet.php'}});
+  assert.deepEqual(await runner.getSurges(),{current:4});
+  assert.equal(new URL(requested).pathname,'/custom/sheet.php');
+  assert.equal(new URL(requested).searchParams.get('character'),'cal');
+  assert.equal(sheet.hero.surges,4);
+ }finally{globalThis.window=oldWindow;globalThis.fetch=oldFetch;}
+});
+
 function withFakeSaveEnvironment(fn, fetchImpl = null) {
   const originalFetch = globalThis.fetch;
   const originalBroadcastChannel = globalThis.BroadcastChannel;

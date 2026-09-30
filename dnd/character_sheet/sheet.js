@@ -703,6 +703,8 @@ let heroTokenSyncChannel = null;
 let heroTokenVisibilityHandler = null;
 let sheetSyncIntervalId = null;
 let sheetSyncInFlight = false;
+let pendingSheetWrites = 0;
+let sheetWriteEpoch = 0;
 let sheetSyncChannel = null;
 let sheetSyncVisibilityHandler = null;
 
@@ -810,8 +812,10 @@ async function pollStaminaSync() {
   if (!activeCharacter) return;
   if (document.visibilityState === "hidden") return;
   if (staminaSyncInFlight) return;
+  if (pendingSheetWrites) return;
 
   staminaSyncInFlight = true;
+  const character = activeCharacter, readEpoch = sheetWriteEpoch;
   try {
     const response = await fetch(
       `handler.php?action=sync-stamina&character=${encodeURIComponent(activeCharacter)}`,
@@ -821,7 +825,7 @@ async function pollStaminaSync() {
       throw new Error(`Stamina sync failed (${response.status})`);
     }
     const data = await response.json();
-    if (!data || data.error) return;
+    if (!data || data.error || character !== activeCharacter || readEpoch !== sheetWriteEpoch || pendingSheetWrites) return;
     applyStaminaSync({
       currentStamina: data.currentStamina,
       staminaMax: data.staminaMax,
@@ -976,7 +980,9 @@ function broadcastSheetSync(change = "sheet") {
 function applyRemoteSheetSync(data) {
   if (!data || typeof data !== "object") return;
   if (document.body.classList.contains("edit-mode")) return;
+  if (pendingSheetWrites) return;
   const nextState = mergeWithDefaults(data);
+  if (JSON.stringify(sheetState) === JSON.stringify(nextState)) return;
   sheetState = nextState;
   renderAll();
 }
@@ -986,8 +992,10 @@ async function pollSheetSync() {
   if (document.visibilityState === "hidden") return;
   if (document.body.classList.contains("edit-mode")) return;
   if (sheetSyncInFlight) return;
+  if (pendingSheetWrites) return;
 
   sheetSyncInFlight = true;
+  const character = activeCharacter, readEpoch = sheetWriteEpoch;
   try {
     const response = await fetch(
       `handler.php?action=load&character=${encodeURIComponent(activeCharacter)}`,
@@ -997,7 +1005,7 @@ async function pollSheetSync() {
       throw new Error(`Sheet sync failed (${response.status})`);
     }
     const result = await response.json();
-    if (result?.success && result.data) {
+    if (result?.success && result.data && character === activeCharacter && readEpoch === sheetWriteEpoch && !pendingSheetWrites) {
       applyRemoteSheetSync(result.data);
     }
   } catch (error) {
@@ -3882,6 +3890,8 @@ function saveSheet({ keepalive = false } = {}) {
     payload.append("character", activeCharacter);
   }
   payload.append("data", JSON.stringify(sheetState));
+  pendingSheetWrites++;
+  sheetWriteEpoch++;
 
   const send = async () => {
     try {
@@ -3905,14 +3915,10 @@ function saveSheet({ keepalive = false } = {}) {
     }
   };
 
-  if (keepalive) {
-    return send();
-  }
-
-  // Preserve edit order. Previously overlapping whole-sheet requests could
-  // finish out of order and let an older snapshot reset a newer skill edit.
-  sheetSaveQueue = sheetSaveQueue.catch(() => false).then(send);
-  return sheetSaveQueue;
+  // Preserve edit order. Keep polling from restoring a pre-save response,
+  // including a stale victory count while a respite save is queued.
+  const saving = keepalive ? send() : (sheetSaveQueue = sheetSaveQueue.catch(() => false).then(send));
+  return saving.finally(() => { pendingSheetWrites--; sheetWriteEpoch++; });
 }
 
 /* ─── Post-to-Chat System ─── */
