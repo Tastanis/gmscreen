@@ -19,7 +19,7 @@ export const roofRenderer={get revision(){return revision;},surfaces:roofSurface
   if(canvas.width!==v.mapPixelSize.width||canvas.height!==v.mapPixelSize.height){canvas.width=v.mapPixelSize.width;canvas.height=v.mapPixelSize.height;}
   const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);if(!viewer||!sight)return;
   const surfaces=roofSurfaces(model).sort((a,b)=>a.height-b.height),nodes=new Map(model.nodes.map(n=>[n.id,n]));
-  const nextCutawayKey=JSON.stringify(surfaces.map(s=>[s.id,s.height,s.points]));
+  const nextCutawayKey=JSON.stringify(surfaces.map(s=>[s.id,s.height,s.points,s.templateCube===true]));
   if(nextCutawayKey!==cutawayKey){cutawayKey=nextCutawayKey;buildingCutaway=compileBuildingCutaway(surfaces);}
   const interiorHidden=inspectionHeight===null?buildingCutaway(viewer,head(token,viewerGround),viewerGround):new Set();
   const openRooms=inspectionHeight===null&&lighting?doorwayCutaways(model,head(token,viewerGround),groundAt,sight):[];

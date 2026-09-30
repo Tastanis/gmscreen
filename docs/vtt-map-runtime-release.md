@@ -587,3 +587,28 @@ and exposed side/top click surfaces without sessions or canonical writes.
 
 Validation: all 910 automated tests pass (full suite plus focused rerun of the
 new coordinate assertion with floating-point tolerance); browser checks pass.
+
+### 1.19.182 - Wall top teleport choices and roof cutaway isolation
+
+Teleport choices derive cube lids from canonical templates using wallCubeModel.
+Exposed tops have the Wall label and retain actual support height (displayed
+standing height is surface + 1). Buried stack lids and arrivals intersecting
+cube solids are omitted; legal Ground beneath floating cubes and native Roof
+choices remain. The 500 ms input guard, out-of-range warning override, player
+projection and authoritative support validation remain unchanged.
+
+Building cutaway groups exclude temporary templateCube lids. A cube touching an
+authored building must not classify a token underneath it as indoors and remove
+the building roof. Cubes remain part of physical sight/support geometry. Native
+inside-building cutaways still work; the cutaway cache includes cube classification.
+
+Static Chrome verification exercises the actual roof painter outside underneath,
+on and above a touching cube, closed interior sight, native interior cutaway and
+cache refresh. It also clicks the real Wall choice and verifies height/override.
+
+Validation: 917 tests across 130 files pass. The disposable GM/Cal/Sharon browser
+journey performs an actual player Space-drag and selects Wall4 (support height3).
+Exactly one accepted teleport command retains cube support on all clients and
+reload, without fall receipts/prompts. Existing scene placements/configuration
+remain identical. Static roof/chooser browser checks pass without page errors.
+Live deployment and hosted delivery latency remain separate verification.

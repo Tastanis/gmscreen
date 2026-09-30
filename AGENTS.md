@@ -1304,3 +1304,12 @@ Inspection is local only: never slice canonical collision/sight models or publis
 player view changes. Height changes cancel unfinished wall drags before saving.
 New edges may initialize a fixed base at the inspected height when their default
 terrain-based range would otherwise be invisible; existing edges are not rebased.
+
+### Wall cube teleport/cutaway boundary - 1.19.182
+
+teleport-choice.js derives exposed cube lids from canonical templates via
+wallCubeModel, labels them Wall and filters body intersections with solid cubes.
+Keep the 500 ms chooser guard and actionable out-of-range warnings. Server
+TeleportLanding/WallCubes remain authoritative; never persist derived geometry.
+Building cutaway grouping excludes templateCube lids, even when touching native
+rooms. Retain those lids in physical ceiling/sight checks and support resolution.

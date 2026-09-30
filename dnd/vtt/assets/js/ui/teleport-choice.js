@@ -1,8 +1,9 @@
 import {floorElevations} from '../state/normalize/floor-elevation.js';
 import {floorSupported,intersectsFloor,resolveSupportSurfaces,terrainFloorContact} from './floor-support.js';
+import {wallCubeModel} from './wall-cubes.js';
 export function teleportDistance(from,to,startHeight,endHeight){return Math.max(Math.abs(to.column-from.column),Math.abs(to.row-from.row),Math.abs(endHeight-startHeight));}
 export function teleportSurfaces({from,to,context,ground}){
- const config=context.state.boardState.sceneState?.[context.state.boardState.activeSceneId]||{},surfaces=resolveSupportSurfaces(config.environment?.walls?.value),heights=floorElevations(config.mapLevels);
+ const sceneId=context.state.boardState.activeSceneId,config=context.state.boardState.sceneState?.[sceneId]||{},model=wallCubeModel(config.environment?.walls?.value,context.state.boardState.templates?.[sceneId]||[],config,ground),surfaces=resolveSupportSurfaces(model),heights=floorElevations(config.mapLevels);
  const x=to.column+(from.width||1)/2,y=to.row+(from.height||1)/2,p={...from,...to};
  const contact=terrainFloorContact(p,surfaces,config.mapLevels,ground(x,y));
  const choices=contact?[]:[{height:ground(x,y),label:'Ground',levelId:'level-0'}];
@@ -12,9 +13,13 @@ export function teleportSurfaces({from,to,context,ground}){
   const centerInHole=(l.cutouts||[]).some(c=>p.column>=c.column&&p.row>=c.row&&p.column+(p.width||1)<=c.column+c.width&&p.row+(p.height||1)<=c.row+c.height);
   if(support===null&&!centerInHole)choices.push({height:heights.get(l.id),label:l.name||'Floor',levelId:l.id});
  }
- for(const s of surfaces){if((config.mapLevels?.levels||[]).some(l=>l.id===s.levelId&&l.hidden&&!context.isGM))continue;if(intersectsFloor(p,s,(config.mapLevels?.levels||[]).find(l=>l.id===s.levelId)?.cutouts||[]))choices.push({height:s.height,label:s.kind==='floor'?'Floor':'Roof',levelId:s.levelId||'level-0',surfaceId:s.id});}
- choices.sort((a,b)=>Number(!!b.surfaceId)-Number(!!a.surfaceId));
- const unique=choices.filter((c,i)=>Number.isFinite(c.height)&&choices.findIndex(v=>v.height===c.height)===i).sort((a,b)=>a.height-b.height);
+ for(const s of surfaces){if((config.mapLevels?.levels||[]).some(l=>l.id===s.levelId&&l.hidden&&!context.isGM))continue;if(intersectsFloor(p,s,(config.mapLevels?.levels||[]).find(l=>l.id===s.levelId)?.cutouts||[]))choices.push({height:s.height,label:s.templateCube?'Wall':s.kind==='floor'?'Floor':'Roof',levelId:s.levelId||'level-0',surfaceId:s.id});}
+ // Match WallCubes::assertDestination. Buried lids and terrain inside a stack
+ // are not landing choices; empty space beneath a floating cube remains usable.
+ const bodyHeight=Math.max(p.width||1,p.height||1),cubes=surfaces.filter(s=>s.templateCube);
+ const legalChoices=choices.filter(c=>!cubes.some(s=>c.height<s.height-1e-7&&c.height+bodyHeight>s.base+1e-7&&intersectsFloor(p,s)));
+ legalChoices.sort((a,b)=>Number(!!b.surfaceId)-Number(!!a.surfaceId));
+ const unique=legalChoices.filter((c,i)=>Number.isFinite(c.height)&&legalChoices.findIndex(v=>v.height===c.height)===i).sort((a,b)=>a.height-b.height);
  return unique;
 }
 export function chooseTeleportHeight({from,to,range=null,context,ground,startHeight,combatActive=false}){

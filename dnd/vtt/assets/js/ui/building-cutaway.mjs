@@ -7,7 +7,9 @@ export function connectedSurfaces(a,b){
  return a.points.some((p,i)=>b.points.some((q,j)=>intersects(p,a.points[(i+1)%a.points.length],q,b.points[(j+1)%b.points.length])));
 }
 export function compileBuildingCutaway(surfaces){
- const remaining=new Set(surfaces),groups=[];
+ // Temporary solid cubes are obstacles, not room envelopes. A lid touching a
+ // building must never classify an exterior observer as inside that building.
+ const remaining=new Set(surfaces.filter(s=>!s.templateCube)),groups=[];
  while(remaining.size){const seed=remaining.values().next().value,group=[seed];remaining.delete(seed);
   for(let i=0;i<group.length;i++)for(const other of remaining)if(connectedSurfaces(group[i],other)){group.push(other);remaining.delete(other);}
   groups.push(group);
