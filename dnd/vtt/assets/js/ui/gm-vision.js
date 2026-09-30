@@ -1,4 +1,5 @@
 import {floorElevations} from '../state/normalize/floor-elevation.js';
+import {groundSquare} from './terrain-math.mjs';
 // Inspection height stays local; automatic fog is a canonical GM scene setting.
 const state={height:0,revision:0};let scene=null,controls=null,selection=null,override=false,level=null,automatic=null,togglePending=false;
 function fogEnabled(c){return c?.state.boardState.sceneState?.[c.state.boardState.activeSceneId]?.fogOfWar?.automaticEnabled !== false;}
@@ -62,6 +63,6 @@ export const gmVision={
  // Show players remains an explicit canonical floor command. Intermediate heights
  // resolve to the supporting floor below; below all floors uses the lowest floor.
  get playerFloorId(){const c=context();if(!c?.isGM)return null;const floors=[...floorElevations(c.state.boardState.sceneState?.[scene]?.mapLevels)].sort((a,b)=>a[1]-b[1]);return floors.filter(([,h])=>h<=this.height).at(-1)?.[0]??floors[0]?.[0]??'level-0';},
- syncNavigation(){const c=context(),nav=document.querySelector('[data-map-level-nav]');if(!c?.isGM||!nav)return false;nav.hidden=false;nav.setAttribute('aria-hidden','false');const label=nav.querySelector('[data-map-level-nav-name]'),text=`Height ${Math.round(this.height*100)/100}`;if(label&&label.textContent!==text){label.textContent=text;label.title=text;}for(const button of nav.querySelectorAll('[data-action^="view-map-level-"]')){button.disabled=false;button.setAttribute('aria-disabled','false');}return true;}
+ syncNavigation(){const c=context(),nav=document.querySelector('[data-map-level-nav]');if(!c?.isGM||!nav)return false;nav.hidden=false;nav.setAttribute('aria-hidden','false');const label=nav.querySelector('[data-map-level-nav-name]'),text=`Height ${groundSquare(this.height)}`;if(label&&label.textContent!==text){label.textContent=text;label.title=text;}for(const button of nav.querySelectorAll('[data-action^="view-map-level-"]')){button.disabled=false;button.setAttribute('aria-disabled','false');}return true;}
 };
 window.gmVision=gmVision;requestAnimationFrame(update);

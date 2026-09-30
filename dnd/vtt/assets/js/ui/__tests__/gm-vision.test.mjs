@@ -22,4 +22,18 @@ test('height control leaves a selected token viewpoint locally and a new selecti
 test('player cannot enable GM inspection or change the saved preference',()=>{
  const saved=localStorage.getItem('gm-inspection-height:a');c.isGM=false;gmVision.step('down');assert.equal(gmVision.manual,false);assert.equal(gmVision.lighting,true);assert.equal(gmVision.playerFloorId,null);assert.equal(localStorage.getItem('gm-inspection-height:a'),saved);
 });
+test('fractional inspection displays the terrain square without changing exact height',()=>{
+ c.isGM=true;c.selectedIds=[];
+ const before=JSON.stringify(c.state);
+ for(const [height,display] of [[.93,1],[2.5832915,3],[2.49,2],[-.93,-1],[-.5,0]]){
+  c.state.boardState.activeSceneId='height-display-'+height;
+  savedPreferences.set('gm-inspection-height:'+c.state.boardState.activeSceneId,JSON.stringify({height}));
+  gmVision.syncNavigation();
+  assert.equal(label.textContent,'Height '+display);
+  assert.equal(label.title,'Height '+display);
+  assert.equal(gmVision.height,height);
+ }
+ c.state.boardState.activeSceneId='a';
+ assert.equal(JSON.stringify(c.state),before);
+});
 

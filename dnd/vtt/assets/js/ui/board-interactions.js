@@ -1,4 +1,5 @@
 import {chooseTeleportHeight} from './teleport-choice.js';
+import {groundSquare} from './terrain-math.mjs';
 import {beginPlayerVisibility} from './player-visibility-ready.js';
 import {createKeyboardMovementQueue} from './keyboard-movement-queue.js';
 import {projectedMovementCell, movementCellContains, paintProjectedMovementCell, updateMovementLoupe} from './movement-cell-projection.js';
@@ -19713,10 +19714,12 @@ export function mountBoardInteractions(store, routes = {}) {
     element.querySelector('[data-token-flight-height]')?.addEventListener('change', async event => {
       const token=getPlacementFromStore(activeTokenSettingsId);if(!token||!['fly','hover'].includes(token.movementMode))return;
       const input=event.target,errorLabel=element.querySelector('[data-flight-height-error]');
+      const requested=input.valueAsNumber,current=window.terrainPrototype.groundFor(token);
+      if(!Number.isInteger(requested)||requested===groundSquare(current)){input.value=groundSquare(current);return;}
       errorLabel.hidden=true;errorLabel.textContent='';input.disabled=true;
-      try{await window.terrainPrototype.setTokenHeight(token,Number(input.value));}
+      try{await window.terrainPrototype.setTokenHeight(token,requested);}
       catch(error){if(activeTokenSettingsId===token.id){errorLabel.textContent='Height was not saved. '+(error?.message||'Check the current height before trying again.');errorLabel.hidden=false;}}
-      finally{input.disabled=false;if(activeTokenSettingsId===token.id)input.value=window.terrainPrototype.groundFor(getPlacementFromStore(token.id));}
+      finally{input.disabled=false;if(activeTokenSettingsId===token.id)input.value=groundSquare(window.terrainPrototype.groundFor(getPlacementFromStore(token.id)));}
     });
     menu.movementMode?.addEventListener('change', async () => {
       const placementId = activeTokenSettingsId;
@@ -20572,7 +20575,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if(tokenSettingsMenu?.visionOwners)for(const option of tokenSettingsMenu.visionOwners.options)option.selected=placement?.visionOwners?.includes(option.value)===true;
     if (tokenSettingsMenu?.movementMode) tokenSettingsMenu.movementMode.value = placement?.movementMode || 'ground';
     const flightInput=tokenSettingsMenu?.element.querySelector('[data-token-flight-height]');
-    if(flightInput){flightInput.closest('label').hidden=!['fly','hover'].includes(placement?.movementMode);if(document.activeElement!==flightInput)flightInput.value=window.terrainPrototype?.groundFor(placement)??0;}
+    if(flightInput){flightInput.closest('label').hidden=!['fly','hover'].includes(placement?.movementMode);if(document.activeElement!==flightInput)flightInput.value=groundSquare(window.terrainPrototype?.groundFor(placement)??0);}
 
     if (!tokenSettingsMenu?.levelSection) {
       return;
