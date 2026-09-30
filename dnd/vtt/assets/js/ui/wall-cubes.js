@@ -31,7 +31,8 @@ export function projectWallCube(square,base,gridSize,offsetLeft=0,offsetTop=0){
  const project=(x,y,z)=>({x:offsetLeft+(x+z*.12)*gridSize,y:offsetTop+(y-z*.36)*gridSize});
  const bottom=[[0,0],[1,0],[1,1],[0,1]].map(([x,y])=>project(square.column+x,square.row+y,base));
  const top=[[0,0],[1,0],[1,1],[0,1]].map(([x,y])=>project(square.column+x,square.row+y,base+1));
- return {top,east:[bottom[1],bottom[2],top[2],top[1]],south:[bottom[2],bottom[3],top[3],top[2]]};
+ // Height projects toward the upper right, exposing the west and south faces.
+ return {top,west:[bottom[3],bottom[0],top[0],top[3]],south:[bottom[2],bottom[3],top[3],top[2]]};
 }
 
 export function wallTerrainAt(config,view,x,y){

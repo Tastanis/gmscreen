@@ -33,9 +33,9 @@ export function paintWallTemplate(shape,view={},options={}) {
   pattern.id=svg.dataset.patternId;pattern.setAttribute('patternUnits','userSpaceOnUse');pattern.setAttribute('width',bounds.gridSize);pattern.setAttribute('height',bounds.gridSize);
   image.setAttribute('href',`/dnd/vtt/assets/images/wall-${wallMaterial(shape.wallColor)}.png`);image.setAttribute('width',bounds.gridSize);image.setAttribute('height',bounds.gridSize);image.setAttribute('preserveAspectRatio','xMidYMid slice');pattern.append(image);defs.append(pattern);
   svg.replaceChildren(defs);
-  for(const side of ['east','south','top']){
+  for(const side of ['west','south','top']){
    const polygon=document.createElementNS(ns,'polygon');polygon.dataset.cubeFace=side;polygon.setAttribute('points',faces[side].map(p=>`${p.x-left},${p.y-top}`).join(' '));polygon.setAttribute('fill',`url(#${pattern.id})`);svg.append(polygon);
-   if(side!=='top'){const shade=polygon.cloneNode();shade.removeAttribute('data-cube-face');shade.setAttribute('fill','#000');shade.setAttribute('opacity',side==='east'?'.35':'.18');shade.style.pointerEvents='none';svg.append(shade);}
+   if(side!=='top'){const shade=polygon.cloneNode();shade.removeAttribute('data-cube-face');shade.setAttribute('fill','#000');shade.setAttribute('opacity',side==='west'?'.35':'.18');shade.style.pointerEvents='none';svg.append(shade);}
   }
   container.append(svg);
  }

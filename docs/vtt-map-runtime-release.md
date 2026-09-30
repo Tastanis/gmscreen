@@ -575,3 +575,15 @@ unchanged player masking. This is local verification, not live deployment.
 
 Validation: 909 tests across 129 files pass; the GM height inspection browser
 regression passes with no page errors or unintended canonical changes.
+
+### 1.19.181 - Exposed wall cube side face
+
+The height projection exposes the west and south faces. The template renderer
+previously painted the east face, which was covered by the top and left the
+visible side open. It now paints the textured, shaded west face instead. Cube
+stacking, selection, collision, support and sight geometry are unchanged.
+The static loopback browser fixture checks all five materials, two-cube stacks
+and exposed side/top click surfaces without sessions or canonical writes.
+
+Validation: all 910 automated tests pass (full suite plus focused rerun of the
+new coordinate assertion with floating-point tolerance); browser checks pass.

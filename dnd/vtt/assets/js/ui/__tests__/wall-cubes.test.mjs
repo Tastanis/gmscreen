@@ -8,6 +8,15 @@ import {floorSupported,walkFloorContact,terrainFloorContact,cubeStepDown} from '
 const template={id:'stack',type:'wall',levelId:'level-0',color:'gray',squares:[
  {column:3,row:2},{column:3,row:2,elevation:1},{column:3,row:2,elevation:2},
 ]};
+
+test('cube projection closes the exposed west and south sides of the top',()=>{
+ const cube=projectWallCube({column:0,row:0},0,100);
+ const rounded=face=>face.map(p=>({x:Math.round(p.x*1e8)/1e8,y:Math.round(p.y*1e8)/1e8}));
+ assert.deepEqual(rounded(cube.west),[{x:0,y:100},{x:0,y:0},{x:12,y:-36},{x:12,y:64}]);
+ assert.deepEqual(rounded(cube.south),[{x:100,y:100},{x:0,y:100},{x:12,y:64},{x:112,y:64}]);
+ assert.deepEqual(cube.west.slice(2),[cube.top[0],cube.top[3]]);
+ assert.deepEqual(cube.south.slice(2),[cube.top[3],cube.top[2]]);
+});
 const actor={column:0,row:2,width:1,height:1,levelId:'level-0'};
 
 test('wall cubes derive independent faces and lids without changing native geometry',()=>{
