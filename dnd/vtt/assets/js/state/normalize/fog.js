@@ -50,7 +50,7 @@ export function normalizeFogOfWarEntry(raw) {
     }
   }
 
-  return { byLevel };
+  return { byLevel, ...(typeof raw.automaticEnabled === 'boolean' ? { automaticEnabled: raw.automaticEnabled } : {}) };
 }
 
 /**

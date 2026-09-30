@@ -24,7 +24,7 @@ new MutationObserver(()=>{tokenDirty=true;}).observe(originalTokens,{subtree:tru
 function tokenVisible(id){
  if(!document.documentElement.classList.contains('height-vision-active'))return true;
  const c=window.terrainContext?.(),p=c?.state.boardState.placements[c.state.boardState.activeSceneId]?.find(p=>p.id===id);
- if(!p)return false;if(gmVision.manual)return true;
+ if(!p)return false;if(gmVision.manual||!gmVision.fogEnabled)return true;
  return isAlwaysVisibleAlly(p)||Boolean(sight?.(center(p),head(p,window.terrainPrototype.groundFor(p)),p));
 }
 function tick(){
@@ -42,7 +42,7 @@ function tick(){
   const selectedToken=resolveVisionToken(placements,{...c,lastId});
   if(!c.isGM&&selectedToken&&selectedToken.id!==lastId)try{localStorage.setItem(viewKey,selectedToken.id);}catch{}
   const image=document.querySelector('#vtt-map-image');
-  const token=gmVision.manual?{id:'gm-inspection',column:(v.mapInsets.left-v.gridOffsets.left+image.naturalWidth/2)/v.gridSize-.5,row:(v.mapInsets.top-v.gridOffsets.top+image.naturalHeight/2)/v.gridSize-.5,width:1,height:1}:selectedToken;
+  const token=(gmVision.manual||(!gmVision.fogEnabled&&!selectedToken))?{id:'map-inspection',levelId:c.levelId,column:(v.mapInsets.left-v.gridOffsets.left+image.naturalWidth/2)/v.gridSize-.5,row:(v.mapInsets.top-v.gridOffsets.top+image.naturalHeight/2)/v.gridSize-.5,width:1,height:1}:selectedToken;
   const viewerGround=gmVision.manual?gmVision.height:terrain.groundFor(token),inspectionHeight=c.isGM&&(gmVision.manual||!gmVision.lighting)?viewerGround:null;
   const nextTerrainKey=JSON.stringify([terrain.key,terrain.revision,v.gridSize,v.gridOffsets,v.mapInsets,image.naturalWidth,image.naturalHeight]);
   if(terrainKey!==nextTerrainKey){terrainKey=nextTerrainKey;terrainCache=compileTerrainVision(terrain.field,{left:((v.mapInsets.left||0)-(v.gridOffsets.left||0))/v.gridSize,top:((v.mapInsets.top||0)-(v.gridOffsets.top||0))/v.gridSize,width:image.naturalWidth/v.gridSize,height:image.naturalHeight/v.gridSize});terrainBuilds++;}
@@ -56,7 +56,7 @@ function tick(){
    signature=next;const start=performance.now();
    if(canvas.width!==v.mapPixelSize.width||canvas.height!==v.mapPixelSize.height){canvas.width=v.mapPixelSize.width;canvas.height=v.mapPixelSize.height;}
    ctx.globalCompositeOperation='source-over';ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height);
-   viewerTokenId=gmVision.manual?null:token?.id||null;observer=token?center(token):null;sight=token?makeSight({viewer:token,viewerGround,groundAt,walls,terrain:terrainCache}):null;
+   viewerTokenId=gmVision.manual?null:selectedToken?.id||null;observer=token?center(token):null;sight=!gmVision.fogEnabled?()=>true:token?makeSight({viewer:token,viewerGround,groundAt,walls,terrain:terrainCache}):null;
    if(sight)sight=gmVision.lighting?roofRenderer.blockSight(observer,head(token,viewerGround),sight,walls):()=>true;
    portalView={viewer:observer,ground:viewerGround,eye:token?head(token,viewerGround):0,sight};
    if(sight&&gmVision.lighting){
@@ -79,6 +79,7 @@ function tick(){
    }
    if(!gmVision.lighting)ctx.clearRect(0,0,canvas.width,canvas.height);
    roofRenderer.paint({inspectionHeight,lighting:gmVision.lighting,context:c,viewer:observer,token,terrain:terrainCache,viewerGround,sight,groundAt,model:walls,editing,enabled});
+   wallApi.refreshPortals?.();
    confirmPlayerHeightPaint(c.state,c.view,c.isGM,c.levelId);
    lastMs=performance.now()-start;paints++;
   }

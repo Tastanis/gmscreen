@@ -2581,6 +2581,9 @@ final class SyncV2Store
         if ($type === 'fog.set' && !is_array($payload['fogOfWar'] ?? null)) {
             throw new InvalidArgumentException('fog.set requires fogOfWar.');
         }
+        if ($type === 'fog.set' && array_key_exists('automaticEnabled', $payload['fogOfWar']) && !is_bool($payload['fogOfWar']['automaticEnabled'])) {
+            throw new InvalidArgumentException('Automatic fog must be a boolean.');
+        }
         if ($type === 'levels.set' && !is_array($payload['mapLevels'] ?? null)) {
             throw new InvalidArgumentException('levels.set requires mapLevels.');
         }

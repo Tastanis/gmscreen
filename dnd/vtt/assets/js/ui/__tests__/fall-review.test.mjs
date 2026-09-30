@@ -20,17 +20,17 @@ function fixture(options={}){
  const doc={body,hidden:false,createElement:tag=>new Element(tag),querySelector:s=>body.querySelector(s),querySelectorAll:s=>body.querySelectorAll(s),addEventListener(){},removeEventListener(){}};
  const old={document:globalThis.document,innerWidth:globalThis.innerWidth,innerHeight:globalThis.innerHeight};
  Object.assign(globalThis,{document:doc,innerWidth:1280,innerHeight:720});
- let sceneId='scene',records=[],reads=0,active=0,maxActive=0,damage=0,prone=0,claims=0,animations=0;
+ let sceneId='scene',records=[],reads=0,active=0,maxActive=0,damage=0,prone=0,claims=0,animations=0,writes=[];
  const token=document.querySelector('[data-placement-id]'),add=token.classList.add.bind(token.classList);
  token.classList.add=(...names)=>{if(names.includes('vtt-token--falling'))animations++;add(...names);};
- const handle=mountFallReview({context:()=>({userId:'GM',sceneId}),placement:id=>({id,name:id}),traits:async()=>({agility:0,size:1}),
+ const handle=mountFallReview({context:()=>({userId:'GM',sceneId}),placement:id=>({id,name:id}),traits:async()=>({agility:options.agility||0,size:1}),
   damage:async()=>{damage++;if(options.failDamage)throw Error('uncertain');},prone:async()=>{prone++;},
   api:async request=>{
-   if(request){const r=records.find(r=>r.operationId===request.operationId);if(request.action==='start'){claims++;if(r.status!=='pending')return {granted:false};r.status='applying';return {granted:true};}r.status=request.status;return {};}
+   if(request){writes.push(request);if(options.failFinish&&request.action==='finish')throw Error('uncertain dismissal');const r=records.find(r=>r.operationId===request.operationId);if(request.action==='start'){claims++;if(r.status!=='pending')return {granted:false};r.status='applying';return {granted:true};}r.status=request.status;return {};}
    reads++;active++;maxActive=Math.max(maxActive,active);const snapshot=structuredClone(records);
    try{if(options.read)await options.read(reads);return snapshot;}finally{active--;}
   },...options.mount});
- return {handle,get reads(){return reads;},get maxActive(){return maxActive;},get damage(){return damage;},get prone(){return prone;},get claims(){return claims;},get animations(){return animations;},
+ return {handle,get writes(){return writes;},get reads(){return reads;},get maxActive(){return maxActive;},get damage(){return damage;},get prone(){return prone;},get claims(){return claims;},get animations(){return animations;},
   set records(value){records=value;},get records(){return records;},scene:value=>sceneId=value,
   panel:()=>document.querySelector('[data-fall-review]'),close:()=>{handle();Object.assign(globalThis,old);}};
 }
@@ -61,4 +61,56 @@ test('scene change or disposal during trait loading cannot open an obsolete popu
 });
 test('ledger polling never opens another actor or scene review',async()=>{
  const f=fixture();try{f.records=[{...record(),actorId:'Cal'},{...record('two'),sceneId:'other'}];await until(()=>f.reads>0);await delay(20);assert.equal(f.panel(),null);assert.equal(f.damage,0);}finally{f.close();}
+});
+
+
+test('harmless ground falls dismiss durably without popup or effects, including after reload',async()=>{
+ for(const [squares,agility] of [[1,0],[3,2]]){
+  const f=fixture({agility});let saved;
+  try{
+   f.records=[{...record(),details:{squares}}];await until(()=>f.records[0].status==='dismissed');
+   assert.equal(f.panel(),null);assert.equal(f.claims,0);assert.equal(f.damage,0);assert.equal(f.prone,0);
+   assert.deepEqual(f.writes,[{operationId:'one',targetId:'one',action:'finish',status:'dismissed'}]);
+   saved=structuredClone(f.records);
+  }finally{f.close();}
+  const reload=fixture({agility});try{
+   reload.records=saved;await until(()=>reload.reads>0);await delay(20);
+   assert.equal(reload.panel(),null);assert.deepEqual(reload.writes,[]);assert.equal(reload.claims,0);
+  }finally{reload.close();}
+ }
+});
+test('zero damage still reviews creature landing and placement consequences',async()=>{
+ for(const details of [{squares:1,collidedIds:['two']},{squares:1,needsPlacementReview:true}]){
+  const f=fixture();try{
+   f.records=[{...record(),details}];await until(f.panel);
+   assert.deepEqual(f.writes,[],'Consequential receipt stays pending for explicit review');
+   assert.equal(f.records[0].status,'pending');
+   if(details.collidedIds)assert.match(f.panel().textContent,/Will be prone/);
+   else assert.match(f.panel().textContent,/choose a free landing space/);
+  }finally{f.close();}
+ }
+});
+test('uncertain harmless dismissal retains review and never loops or applies effects',async()=>{
+ const f=fixture({failFinish:true});try{
+  f.records=[{...record(),details:{squares:1}}];await until(f.panel);
+  assert.match(f.panel().textContent,/Dismissal unconfirmed/);
+  assert.equal(f.records[0].status,'pending');assert.equal(f.writes.length,1);
+  assert.equal(f.panel().querySelectorAll('button').every(b=>b.disabled),true);
+  for(let i=0;i<20;i++)f.handle.wake();await delay(20);
+  assert.equal(f.writes.length,1);assert.equal(f.claims,0);assert.equal(f.damage,0);assert.equal(f.prone,0);
+ }finally{f.close();}
+});
+
+test('uncertain dismissal settling after scene change cannot open obsolete panel or retry on return',async()=>{
+ const gate=deferred();let finishes=0;
+ const f=fixture({mount:{api:async request=>{
+  if(!request)return [{...record(),details:{squares:1}}];
+  finishes++;await gate.promise;throw Error('uncertain');
+ }}});
+ try{
+  await until(()=>finishes===1);f.scene('other');gate.resolve();await delay(20);
+  assert.equal(f.panel(),null);f.scene('scene');f.handle.wake();await until(f.panel);
+  assert.match(f.panel().textContent,/Dismissal unconfirmed/);assert.equal(finishes,1);
+  assert.equal(f.damage,0);assert.equal(f.prone,0);
+ }finally{f.close();}
 });

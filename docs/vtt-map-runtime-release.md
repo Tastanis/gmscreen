@@ -523,3 +523,34 @@ or original placement changes. The manual retirement check verifies transparent
 active/passive legacy layers with saved enabled-empty records, retained automatic
 height painting, absent manual controls and available Reset explored areas.
 No fog commands or canonical configuration/placement changes occur in that check.
+
+### 1.19.179 - Automatic fog toggle and visible portal symbols
+
+The existing GM fog panel has one Automatic fog checkbox. The scene-wide
+fogOfWar.automaticEnabled boolean defaults true independently of retired manual
+byLevel flags. Confirmed fog.set commands synchronize it to players and reload;
+only the GM can write it. Off clears automatic vision masking without changing
+movement collision, selected floors or hidden-token server projection. It does
+not record whole-map exploration, so on restores prior personal vision. Players
+without a vision token can still see the map when the GM explicitly disables fog.
+Manual painting tools remain retired, and the startup readiness gate remains.
+
+Players see the existing door/window glyphs only through the portal near-face
+sight check. Their buttons are read-only, secret portals stay hidden, and GM
+portal controls remain unchanged. The vertical near-face check uses eye height
+for portals slightly above adjacent terrain, retaining the upper/floor boundary.
+
+Consequence-free ground falls now complete their durable receipt as dismissed
+without opening the review. One-square falls and three-square falls with Agility
+two are covered; no damage/condition writes occur. Creature landings, placement
+review and nonzero damage remain reviewed. An uncertain dismissal stays blocked
+for inspection without repeated completion or effect application.
+
+The disposable GM/player browser regression passes off/on synchronization, saved
+off/on reloads, no-viewer map display, rejected player writes, visible read-only
+door symbols and occluded window hiding, with no original token changes or page
+errors. Portal refresh matches the new vision mask before startup is uncovered.
+
+Validation: 903 tests across 128 files pass, including durable zero-damage fall
+dismissal/reload and uncertainty cases. The combined disposable GM/player fog
+and portal browser regression passes with original placements unchanged.

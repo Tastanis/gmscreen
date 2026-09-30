@@ -1,8 +1,12 @@
 import {floorElevations} from '../state/normalize/floor-elevation.js';
-// GM inspection preferences stay local and never reveal player fog.
-const state={height:0,revision:0};let scene=null,controls=null,selection=null,override=false,level=null;
+// Inspection height stays local; automatic fog is a canonical GM scene setting.
+const state={height:0,revision:0};let scene=null,controls=null,selection=null,override=false,level=null,automatic=null,togglePending=false;
+function fogEnabled(c){return c?.state.boardState.sceneState?.[c.state.boardState.activeSceneId]?.fogOfWar?.automaticEnabled !== false;}
 function context(){
- const c=window.terrainContext?.();if(!c?.isGM)return c;
+ const c=window.terrainContext?.();
+ const signature=JSON.stringify([c?.state.boardState.activeSceneId,fogEnabled(c)]);
+ if(signature!==automatic){automatic=signature;state.revision++;}
+ if(!c?.isGM)return c;
  const next=c.state.boardState.activeSceneId,key=JSON.stringify(c.selectedIds||[]);
  if(scene!==next){
   scene=next;level=c.levelId;selection=key;override=false;let saved={};
@@ -23,18 +27,35 @@ function update(){const c=window.terrainContext?.();if(c?.isGM){
  context();gmVision.syncNavigation();
  const panel=document.querySelector('#vtt-fog-panel');if(panel&&!panel.querySelector('[data-gm-vision]')){
   controls=document.createElement('div');controls.dataset.gmVision='';controls.style.cssText='display:grid;gap:10px;padding:12px 0';
-  controls.innerHTML='<button type="button" class="vtt-fog-panel__btn" data-reset-explored>Reset explored areas</button>';
+  controls.innerHTML='<label><input type="checkbox" data-automatic-fog> Automatic fog</label><button type="button" class="vtt-fog-panel__btn" data-reset-explored>Reset explored areas</button>';
   panel.querySelector('.vtt-fog-panel__header').after(controls);
+  controls.querySelector('[data-automatic-fog]').addEventListener('change',async e=>{
+   const current=window.terrainContext?.();if(!current?.isGM){sync();return;}
+   const input=e.currentTarget,enabled=input.checked,sceneId=current.state.boardState.activeSceneId;
+   input.checked=fogEnabled(current);
+   if(togglePending||!sceneId)return;
+   togglePending=true;sync();
+   const fogOfWar=structuredClone(current.state.boardState.sceneState?.[sceneId]?.fogOfWar||{});
+   fogOfWar.automaticEnabled=enabled;
+   try{
+    if(typeof window.submitEnvironmentCommand!=='function')throw Error('Board commands unavailable');
+    const results=await window.submitEnvironmentCommand({type:'fog.set',sceneId,payload:{fogOfWar}});
+    if(!Array.isArray(results)||results.length!==1)throw Error('Fog change was not accepted');
+   }catch(error){console.error('Automatic fog change failed',error);window.alert('Could not change automatic fog. Please try again.');}
+   finally{togglePending=false;sync();}
+  });
   controls.querySelector('[data-reset-explored]').addEventListener('click',async e=>{
    if(!window.terrainContext?.().isGM||!window.visionPrototype)return;
    const button=e.currentTarget;button.disabled=true;
    try{await window.visionPrototype.resetExplored();}catch(error){console.error('Explored fog reset failed',error);window.alert('Could not reset explored areas. Please try again.');}finally{button.disabled=false;}
   });sync();
  }
+ sync();
 }else if(controls){controls.remove();controls=null;}requestAnimationFrame(update);}
-function sync(){}
+function sync(){const input=controls?.querySelector('[data-automatic-fog]');if(input){input.checked=fogEnabled(window.terrainContext?.());input.disabled=togglePending;}}
 export const gmVision={
- get lighting(){const c=context();return !c?.isGM||(!override&&c.selectedIds?.length===1);},
+ get fogEnabled(){return fogEnabled(context());},
+ get lighting(){const c=context();return fogEnabled(c)&&(!c?.isGM||(!override&&c.selectedIds?.length===1));},
  get manual(){const c=context();return !!c?.isGM&&(override||c.selectedIds?.length!==1);},
  get height(){return currentHeight(context());},get revision(){context();return state.revision;},
  step(direction){const c=context();if(!c?.isGM)return;const height=currentHeight(c)+(direction==='down'?-1:1);if(!Number.isFinite(height))return;state.height=height;override=true;state.revision++;try{localStorage.setItem('gm-inspection-height:'+scene,JSON.stringify({height}));}catch{}this.syncNavigation();},

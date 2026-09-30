@@ -1282,3 +1282,16 @@ vision is painted. Preserve same-image reload/floor readiness and stale-mask gua
 Manual Fog of War is retired at the user request: stored fogOfWar fields remain
 compatible but do not hide active/preview content. Retain automatic vision and
 the existing Reset explored areas action; do not restore manual masking controls.
+
+### Automatic fog and player portal markers - 1.19.179
+Automatic fog is a scene-wide GM toggle via fogOfWar.automaticEnabled/fog.set,
+default true, independent of retired manual fog fields. Preserve confirmed-only
+UI, reload synchronization, startup coverage and hidden-token projection. Off
+does not expand remembered exploration or remove collision/floor rules.
+Player door/window markers reuse near-face vision and are read-only. Secret
+portals remain hidden; small exterior floor gaps compare eye to portal base.
+
+Consequence-free zero-damage ground fall reviews are durably dismissed without
+a panel. Do not skip creature landings, conditions or placement review. Failed
+dismissal keeps the receipt blocked; never loop completion or apply effects.
+Refresh portal glyphs with each vision paint before uncovering the player map.

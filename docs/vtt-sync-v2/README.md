@@ -1743,3 +1743,13 @@ Manual fog retirement preserves fogOfWar storage/event/package compatibility;
 no shared migration or data deletion occurs. Its legacy display and interaction
 mask is inactive at the user request. Automatic height/wall/floor vision remains
 local presentation using confirmed state, guarded during map loading.
+
+Automatic fog control (1.19.179) uses the existing GM-only fog.set command and
+fog.replaced event. fogOfWar.automaticEnabled is an explicit boolean, default on,
+retained by bootstrap normalization. UI state waits for accepted persistence;
+legacy manual enabled/revealedCells remain inactive. Hidden token projection,
+floor filtering and movement authority are unaffected by the display toggle.
+
+Zero-damage ground fall auto-dismiss uses the existing actor-owned durable finish
+receipt with no effect execution or new claim. Uncertain outcomes remain blocked
+and read-only until authoritative recovery; consequences still require review.

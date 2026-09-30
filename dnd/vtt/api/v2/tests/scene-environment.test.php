@@ -25,3 +25,17 @@ $before=$s->getSnapshot();
 $bad=['type'=>'placement.batch','operationId'=>'steal-owner','baseRevision'=>$before['revision'],'payload'=>['actions'=>[['kind'=>'patch','sceneId'=>'test','placementId'=>'owner-test','entityRevision'=>1,'patch'=>['visionOwners'=>['sharon']]]]]];
 try{$s->acceptPlacementBatch($bad,'cal',false);throw new Exception('Player changed owner');}catch(InvalidArgumentException $e){}
 if($s->getSnapshot()!==$before)throw new Exception('Owner rejection changed state');
+
+// Scene-wide automatic fog is GM-owned and independent of retired manual records.
+$fogStore=new SyncV2Store(':memory:');
+$fogCommand=['type'=>'fog.set','sceneId'=>'fog-test','operationId'=>'automatic-fog-off','baseRevision'=>0,'entityRevision'=>0,'payload'=>['fogOfWar'=>['automaticEnabled'=>false,'byLevel'=>['level-0'=>['enabled'=>true,'revealedCells'=>[]]]]]];
+try{$fogStore->acceptBoardDomainCommand($fogCommand,'cal',false);throw new Exception('Player toggled automatic fog');}catch(InvalidArgumentException $e){}
+if($fogStore->getSnapshot()['revision']!==0)throw new Exception('Player fog rejection mutated state');
+$fogStore->acceptBoardDomainCommand($fogCommand,'GM',true);
+$fogSnapshot=$fogStore->getSnapshot();
+if($fogSnapshot['state']['sceneConfig']['fog-test']['fogOfWar']!==$fogCommand['payload']['fogOfWar'])throw new Exception('Automatic fog or legacy data lost');
+if(!$fogStore->acceptBoardDomainCommand($fogCommand,'GM',true)['idempotent'])throw new Exception('Fog replay duplicated');
+$fogCommand['operationId']='invalid-fog-boolean';$fogCommand['baseRevision']=1;$fogCommand['entityRevision']=1;$fogCommand['payload']['fogOfWar']['automaticEnabled']='false';
+try{$fogStore->acceptBoardDomainCommand($fogCommand,'GM',true);throw new Exception('Invalid fog boolean accepted');}catch(InvalidArgumentException $e){}
+if($fogStore->getSnapshot()!==$fogSnapshot)throw new Exception('Invalid fog changed state');
+echo "PASS automatic fog authority, persistence, replay and validation\n";

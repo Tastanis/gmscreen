@@ -154,7 +154,7 @@ function activeModel(){
  return cachedCubeModel;
 }
 function groundAt(x,y){const v=context.view;return terrainPrototype.heightAt((v.gridOffsets.left||0)+x*v.gridSize,(v.gridOffsets.top||0)+y*v.gridSize);}
-window.wallPrototype={get selectedTopHeight(){
+window.wallPrototype={refreshPortals:()=>editor.portals(),get selectedTopHeight(){
  if(!context?.isGM||panel.hidden||selection?.kind!=='segment')return null;
  const edge=model.segments.find(e=>e.id===selection.id);if(!edge)return null;
  const a=pointNode(edge.a),b=pointNode(edge.b);
