@@ -96,7 +96,7 @@ test('PHP template authority allows own temporary removal and protects other aut
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 
-for (const file of ['replay-performance.test.php', 'raised-room.test.php', 'collision-reliability.test.php', 'wall-movement.test.php', 'scene-environment.test.php', 'zone-entry-claims.test.php', 'scene-package.test.php', 'floor-follow.test.php', 'primary-projection.test.php', 'player-roster.test.php', 'floor-geometry.test.php', 'floor-height.test.php', 'floor-movement.test.php', 'airborne-movement.test.php', 'floor-view-lifecycle.test.php', 'scene-checkpoints.test.php']) {
+for (const file of ['explicit-floor-support.test.php', 'replay-performance.test.php', 'raised-room.test.php', 'collision-reliability.test.php', 'wall-movement.test.php', 'scene-environment.test.php', 'zone-entry-claims.test.php', 'scene-package.test.php', 'floor-follow.test.php', 'primary-projection.test.php', 'player-roster.test.php', 'floor-geometry.test.php', 'floor-height.test.php', 'floor-movement.test.php', 'airborne-movement.test.php', 'floor-view-lifecycle.test.php', 'scene-checkpoints.test.php']) {
   test(`PHP ${file} validates canonical board behavior`, () => {
     const script = fileURLToPath(new URL(`../../../../api/v2/tests/${file}`, import.meta.url));
     const result = spawnSync('php', [...phpArgsForSqlite(), script], { encoding: 'utf8' });

@@ -1436,6 +1436,11 @@ final class SyncV2Store
                     $this->assertPlayerPatchAllowed($patch);
                 }
                 unset($patch['id'], $patch['_entityRevision'], $patch['_movementUndo'], $patch['_floorTraversal'], $patch['_supportSurfaceId']);
+                $explicitFloorOnly = $isGm && $restore === null && array_key_exists('levelId', $patch)
+                    && $patch['levelId'] !== ($current['levelId'] ?? 'level-0')
+                    && !FloorGeometry::isAirborne($current)
+                    && !array_intersect(array_keys($patch), ['column', 'row', 'movementMode', 'flightHeight'])
+                    && $action['teleportChoice'] === null;
                 $floor=null;
                 $next = [...$current, ...$patch];
                 if (isset($next['primaryPc']) && !is_bool($next['primaryPc'])) throw new InvalidArgumentException('Primary token flag must be boolean.');
@@ -1477,6 +1482,16 @@ final class SyncV2Store
                     $next = [...$next, ...$patch];
                 } elseif (array_key_exists('levelId', $patch)) {
                     $next['_floorTraversal'] = null;
+                    if ($explicitFloorOnly && !FloorGeometry::isAirborne($next)) {
+                        // The GM's existing floor arrows choose a floor, not the
+                        // retained physical plate from the previous floor.
+                        $support = FloorSupport::stairLanding($next,
+                            FloorSupport::surfaces($movementConfig['environment']['walls']['value'] ?? []),
+                            $movementConfig['mapLevels'] ?? []);
+                        $patch['_supportSurfaceId'] = $support['id'] ?? null;
+                        $patch['_floorTraversal'] = null;
+                        $next = [...$next, ...$patch];
+                    }
                 }
                 if(FloorGeometry::isAirborne($next)||array_key_exists('flightHeight',$current)||array_key_exists('flightHeight',$patch)){
                     $patch['flightHeight']=FlightHeight::resolve($current,$next,$movementConfig,$action['movementKind'],$action['path']);
@@ -1490,7 +1505,7 @@ final class SyncV2Store
                 } elseif(!empty($next['_supportSurfaceId'])&&!TeleportLanding::retained($next,$movementConfig)){$next['_supportSurfaceId']=null;$patch['_supportSurfaceId']=null;}
                 if($restore===null){
                     if($action['movementKind']==='teleport')WallCubes::assertDestination($next,$movementConfig);
-                    $fall=$teleport['fall']??FallOutcome::plan($current,$next,$movementConfig,$action['movementKind'],$action['path'],$floor['cause']??'');
+                    $fall=$teleport['fall']??FallOutcome::plan($current,$next,$movementConfig,$explicitFloorOnly?'teleport':$action['movementKind'],$action['path'],$floor['cause']??'');
                     if($fall){$landing=FallOutcome::landing($next,$state['placements'][$sceneId],$movementConfig);$next=$landing['placement'];$patch['column']=$next['column'];$patch['row']=$next['row'];unset($landing['placement']);(new CollisionEffects($this->pdo,$this->worldId))->recordFall($normalized['operationId'],$sceneId,$actorId,$placementId,[...$fall,...$landing]);}
                 }
                 $next['id'] = $placementId;

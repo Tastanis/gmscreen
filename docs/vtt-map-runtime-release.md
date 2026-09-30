@@ -639,3 +639,21 @@ verify respite/save races, card convergence, popup placement, roll contrast,
 and restoration evidence, hosting diagnosis limits and measured local timings are
 in docs/vtt-session-audit-2026-09-29.md and
 docs/vtt-performance-audit-2026-09-29.md. Package/deployment remains code-only.
+
+
+### 1.19.185 - Live-audit follow-up
+
+Grounded GM floor arrows reconcile target-floor support instead of retaining a
+downstairs plate. Same-level edits retain rooftop/cube support. Normal movement,
+flight interruption, teleport and undo keep their existing authority paths;
+manual floor selection does not manufacture a fall.
+
+During manual damage/healing selection, overlapping door/window symbols yield
+clicks to tokens and remain visible. Cancel/close restores portal interaction;
+scene changes clear the old picker. Actual Chrome hit-testing covers both modes
+and normal portal clicks before/after. No new visible controls.
+
+Live test damage/positions/readiness/actions are restored and freshly verified;
+combat round2, Indigo active and Malice6 remain. Zepha saved/displayed VPboth0.
+No production respite or deployment was performed. Final suite count is recorded
+in docs/vtt-session-audit-2026-09-29.md.

@@ -7075,6 +7075,7 @@ export function mountBoardInteractions(store, routes = {}) {
       const activeSceneId = state.boardState?.activeSceneId ?? null;
       if (activeSceneId !== lastActiveSceneId) {
         lastActiveSceneId = activeSceneId;
+        closeDamageHealWidget({ restoreMessage: false });
         mapLevelRenderer.reset();
         mapLevelCutoutTool.reset();
         // Levels v2 §5.2: drop the previous scene's view-follow baseline so
@@ -15588,6 +15589,8 @@ export function mountBoardInteractions(store, routes = {}) {
       damageType: mode === 'damage' ? normalizeAutomationDamageType(damageType) : '',
       previousStatus,
     };
+    // Token targeting takes priority over door/window controls underneath it.
+    mapSurface.classList.add('vtt-manual-token-targeting');
 
     clearDamageHealStatusTimeout();
 
@@ -15612,6 +15615,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const previousStatus = pendingDamageHeal.previousStatus;
     pendingDamageHeal = null;
+    mapSurface.classList.remove('vtt-manual-token-targeting');
     clearDamageHealStatusTimeout();
     setDamageHealMode(null);
 

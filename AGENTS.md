@@ -1331,3 +1331,13 @@ back off without changing normal delivery or explicit recovery; commands preserv
 operation identities. Never prune durable receipts as a performance shortcut.
 
 See docs/vtt-session-audit-2026-09-29.md for evidence and deployment limits.
+
+
+GM floor-arrow support correction - 1.19.185: actual grounded GM floor changes
+reconcile native support instead of retaining the previous plate. Never apply this
+exception to same-floor edits, flight interruption, walking, teleport or undo.
+Protected support/traversal fields remain server-derived.
+
+Manual damage/healing targeting temporarily disables only portal hit targets;
+symbols stay visible. Shared cancel/close and scene changes restore them. Keep
+automation capture handling and ordinary portal interaction unchanged.

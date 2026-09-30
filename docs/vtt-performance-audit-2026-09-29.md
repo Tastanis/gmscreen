@@ -115,4 +115,5 @@ failure's cause. Correlate the next HTTP status and identifier with origin logs.
 The PHP authority wrapper passed all 24 checks, including cache isolation, foreign
 and same-revision writes, rollback, contiguous recovery, gap/limit fallback and
 durable retries after event deletion. Focused request/runtime/foundation tests
-passed. The final complete checked-in suite passed **945 tests across 135 files**.
+passed. The final complete checked-in suite, including the live-audit follow-up,
+passed **947 tests across 135 files**.

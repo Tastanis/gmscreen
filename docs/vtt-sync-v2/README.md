@@ -1773,3 +1773,11 @@ Command retries keep the identical operation ID and existing attempt limit.
 Durable receipt deletion is deliberately excluded: retention must prevent old
 retries from becoming new effects or resource writes. See
 ../vtt-session-audit-2026-09-29.md for measured local results and live limits.
+
+
+Floor-control follow-up (1.19.185): an actual grounded GM levelId-only change
+reacquires target-floor native support and clears old stair traversal. Same-level
+edits retain support, and normal position/mode/flight/teleport/undo paths are
+unchanged. Manual floor selection creates no fall receipt; flight interruption
+continues through its original fall path. New authority checks cover retries,
+reopen and unrelated scenes. No client may supply protected support IDs.
