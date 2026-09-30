@@ -1,4 +1,5 @@
 import {chooseTeleportHeight} from './teleport-choice.js';
+import {beginPlayerVisibility} from './player-visibility-ready.js';
 import {createKeyboardMovementQueue} from './keyboard-movement-queue.js';
 import {projectedMovementCell, movementCellContains, paintProjectedMovementCell, updateMovementLoupe} from './movement-cell-projection.js';
 import {dragMovementKind} from './drag-ruler.js';
@@ -2422,9 +2423,12 @@ export function mountBoardInteractions(store, routes = {}) {
     button.disabled = true;
     try {
       const changed = await reconcileCurrentPlayerViewToPcToken({ force: true });
+      // Floor rendering and terrain projection settle before measuring the token.
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const centered = centerCurrentPlayerToken();
       const board = boardApi.getState?.()?.boardState;
       const unavailable = board?.sceneState?.[board?.activeSceneId]?.pcTokenAssociations?.[getCurrentUserId()] === null;
-      updateStatus(changed ? 'Viewing your token’s floor.' : unavailable ? 'No available primary token in this scene. Ask the GM to check your token association.' : 'Already on your token’s floor, or no unique linked token is available in this scene.');
+      updateStatus(centered ? 'Viewing your token.' : changed ? 'Viewing your token’s floor.' : unavailable ? 'No available primary token in this scene. Ask the GM to check your token association.' : 'Already on your token’s floor, or no unique linked token is available in this scene.');
     } catch (error) {
       reportSyncFailure(error, 'return to token floor');
     } finally {
@@ -8134,6 +8138,8 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function loadMap(url) {
+    const visibilityState=boardApi.getState?.() ?? {};
+    beginPlayerVisibility(visibilityState, {isGm:isGmUser(),levelId:getViewerLevelIdForCurrentUser(visibilityState,visibilityState.boardState?.activeSceneId)});
     recordSyncDiagnostic('mapLoads', {
       hasUrl: Boolean(url),
     });
@@ -8209,6 +8215,7 @@ export function mountBoardInteractions(store, routes = {}) {
         applyGridState(boardApi.getState?.().grid ?? {});
       }
       const latestState = boardApi.getState?.() ?? {};
+      renderFog(latestState);
       const activeSceneId = latestState.boardState?.activeSceneId ?? null;
       syncMapLevelsForState(latestState, activeSceneId);
       if (status) {
@@ -8735,6 +8742,25 @@ export function mountBoardInteractions(store, routes = {}) {
     applyTransform();
     renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
     templateTool.notifyMapState();
+  }
+
+  function centerCurrentPlayerToken() {
+    const state = boardApi.getState?.() ?? {};
+    const sceneId = state.boardState?.activeSceneId;
+    const userId = getCurrentUserId();
+    if (!sceneId || !userId || !viewState.mapLoaded) return false;
+    const scene = state.boardState.sceneState?.[sceneId];
+    const linked = resolvePcTokenForUser({userId,placements:state.boardState.placements?.[sceneId],viewerAssociation:scene?.pcTokenAssociations?.[userId]});
+    if (!linked) return false;
+    // Use the board token, never a tracker entry. Its bounds include terrain parallax and scaling.
+    const token = Array.from(tokenLayer.querySelectorAll('[data-placement-id]')).find(node => node.dataset.placementId === linked.placementId);
+    if (!token || token.hidden) return false;
+    const tokenRect = token.getBoundingClientRect(), boardRect = board.getBoundingClientRect();
+    if (!tokenRect.width || !tokenRect.height) return false;
+    viewState.translation.x += boardRect.left + boardRect.width/2 - tokenRect.left - tokenRect.width/2;
+    viewState.translation.y += boardRect.top + boardRect.height/2 - tokenRect.top - tokenRect.height/2;
+    applyTransform();
+    return true;
   }
 
   function applyTransform() {

@@ -29,6 +29,11 @@ export function normalizeSceneBoardState(raw = {}) {
     const fogOfWar = normalizeFogOfWarEntry(value.fogOfWar ?? null);
     const userLevelState = normalizeUserLevelStateMap(value.userLevelState ?? null);
     const entry = { grid, mapLevels, userLevelState };
+    // Bootstrap already contains the server-projected canonical geometry. Keep it
+    // available to the privacy renderers before the first V2 recovery response.
+    if (value.environment && typeof value.environment === 'object' && !Array.isArray(value.environment)) {
+      entry.environment = JSON.parse(JSON.stringify(value.environment));
+    }
     if (value.pcTokenAssociations && typeof value.pcTokenAssociations === 'object') entry.pcTokenAssociations = Object.fromEntries(Object.entries(value.pcTokenAssociations).map(([id, tokenId]) => [id, typeof tokenId === 'string' ? tokenId : null]));
 
     if (combat) {

@@ -1729,3 +1729,17 @@ five-cube stacking through shifted top faces, individual deletion/reload and all
 five textures. Actual monster hover/chat/stat-block formatting is browser-checked.
 Canonical campaign tokens are unchanged. These local checks do not establish live
 Pusher latency or exhaustive coverage of every authored ability.
+
+
+Movement latency maintenance (1.19.178): unchanged pending geometry paints once
+before submission. Conflict reconciliation still repaints the intended retry; group
+rejection restores confirmed bodies and clears pending entries. This changes only
+local presentation, retaining server validation, operation IDs, receipt ownership
+and canonical fog/vision. Floor-support indexes/topology are bounded request-local
+pure caches with exact fallback rules; no new persisted movement fields exist.
+My token camera centering is local; its existing floor-return command is unchanged.
+
+Manual fog retirement preserves fogOfWar storage/event/package compatibility;
+no shared migration or data deletion occurs. Its legacy display and interaction
+mask is inactive at the user request. Automatic height/wall/floor vision remains
+local presentation using confirmed state, guarded during map loading.

@@ -39,7 +39,7 @@ function initWithLevel0Fog(extraInit = {}) {
 }
 
 describe('fog revealedCells through real store (per-level)', () => {
-  test('the real fog toggle marks only fog dirty and preserves reveals and unrelated scene fields', () => {
+  test('retired manual toggle never writes or changes saved compatibility records', () => {
     initWithLevel0Fog();
     updateState(draft => {
       draft.boardState.sceneState['scene-1'].fogOfWar.byLevel[LEVEL_0].revealedCells['5,5'] = true;
@@ -50,16 +50,11 @@ describe('fog revealedCells through real store (per-level)', () => {
     try {
       globalThis.document = { getElementById: () => null };
       mountFogOfWar({ boardApi: { updateState }, isGm: false });
-      toggleFogForLevel('scene-1', LEVEL_0, false, {
+      assert.equal(toggleFogForLevel('scene-1', LEVEL_0, false, {
         markSceneStateDirty: (sceneId, field = '*') => dirty.push([sceneId, field]),
-      });
-      assert.deepEqual(dirty, [['scene-1', 'fogOfWar']], 'a fog toggle must not request whole-scene/grid/floor saves');
-      const after = getState().boardState.sceneState['scene-1'];
-      assert.equal(after.fogOfWar.byLevel[LEVEL_0].enabled, false);
-      assert.deepEqual(after.fogOfWar.byLevel[LEVEL_0].revealedCells, before.fogOfWar.byLevel[LEVEL_0].revealedCells);
-      const { fogOfWar: oldFog, ...oldOtherFields } = before;
-      const { fogOfWar: newFog, ...newOtherFields } = after;
-      assert.deepEqual(newOtherFields, oldOtherFields);
+      }), false);
+      assert.deepEqual(dirty, [], 'legacy calls must not submit fog or unrelated configuration writes');
+      assert.deepEqual(getState().boardState.sceneState['scene-1'], before);
     } finally {
       mountFogOfWar({ boardApi: null, isGm: false });
       if (previousDocument === undefined) delete globalThis.document;

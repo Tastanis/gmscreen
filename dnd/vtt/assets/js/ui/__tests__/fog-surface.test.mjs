@@ -1,35 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {renderFogSurface,createFogChecker} from '../fog-of-war.js';
-
+import {renderFogSurface,createFogChecker,isPositionFogged} from '../fog-of-war.js';
 function canvas() {
-  const paints=[];
-  const context={clearRect(){paints.length=0;},fillRect(...rect){paints.push({rect,color:this.fillStyle});}};
-  return {width:0,height:0,style:{},getContext:()=>context,paints};
+ const paints=[{color:'old black mask'}],clears=[];
+ const context={clearRect(...rect){clears.push(rect);paints.length=0;},fillRect(...rect){paints.push({rect,color:this.fillStyle});}};
+ return {width:0,height:0,style:{},getContext:()=>context,paints,clears};
 }
-test('independent player and GM fog surfaces share cells but never context or opacity',()=>{
-  const fogOfWar = {byLevel: {
-    'level-0': {enabled:true, revealedCells:{'0,0':true}},
-    upper: {enabled:true, revealedCells:{'1,1':true}},
-  }};
-  const state = {
-    tokens: {items:[], folders:[]},
-    boardState: {activeSceneId:'scene', placements:{scene:[]}, sceneState:{scene:{fogOfWar}}},
-  };
-  const before=structuredClone(state),gm=canvas(),player=canvas();
-  const view={mapPixelSize:{width:40,height:40},gridSize:16,gridOffsets:{left:4,top:4,right:4,bottom:4}};
-  renderFogSurface({state,canvas:gm,view,sceneId:'scene',gmViewing:true});
-  const gmPaints=structuredClone(gm.paints);
-  renderFogSurface({state,canvas:player,view,sceneId:'scene',levelId:'upper'});
-  assert.equal(gm.paints.every(p=>p.color==='rgba(0,0,0,0.7)'),true);
-  assert.equal(player.paints.every(p=>p.color==='rgba(0,0,0,1)'),true);
-  assert.equal(player.paints.some(p=>JSON.stringify(p.rect)==='[20,20,16,16]'),false,'Upper revealed cell remains clear');
-  assert.equal(player.paints.some(p=>JSON.stringify(p.rect)==='[4,4,16,16]'),true,'Base reveal does not reveal upper floor');
-  assert.deepEqual(gm.paints,gmPaints,'Preview does not redraw GM canvas');
-  const check=createFogChecker(state,'upper',{gmViewing:false});
-  assert.equal(check(1,1),false);assert.equal(check(0,0),true);
-  assert.equal(createFogChecker(state,'upper',{gmViewing:true}),null);
-  assert.deepEqual(state,before);
-  renderFogSurface({state,canvas:player,view,sceneId:null});
-  assert.deepEqual(player.paints,[],'Closed scene clears preview');
+test('saved enabled manual fog is inert on independent GM and player preview surfaces',()=>{
+ const state={boardState:{activeSceneId:'scene',sceneState:{scene:{fogOfWar:{byLevel:{
+  'level-0':{enabled:true,revealedCells:{}},upper:{enabled:true,revealedCells:{'1,1':true}},
+ }}}}}};
+ const before=structuredClone(state),gm=canvas(),player=canvas();
+ const view={mapPixelSize:{width:40,height:40},gridSize:16,gridOffsets:{left:4,top:4}};
+ renderFogSurface({state,canvas:gm,view,sceneId:'scene',gmViewing:true});
+ renderFogSurface({state,canvas:player,view,sceneId:'scene',levelId:'upper'});
+ assert.deepEqual(gm.paints,[]);assert.deepEqual(player.paints,[]);
+ assert.deepEqual(gm.clears,[[0,0,40,40]],'Preview never paints into GM context');
+ assert.deepEqual(player.clears,[[0,0,40,40]]);
+ assert.equal(player.style.width,'40px');assert.equal(player.height,40);
+ for(const level of ['level-0','upper'])for(const gmViewing of [false,true]){
+  assert.equal(createFogChecker(state,level,{gmViewing}),null);
+  assert.equal(isPositionFogged(state,0,0,level),false);
+ }
+ assert.deepEqual(state,before,'Retirement does not rewrite imported compatibility data');
 });

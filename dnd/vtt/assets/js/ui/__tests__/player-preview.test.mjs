@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import {describePlayerPreview} from '../player-preview.js';
 import {buildPlayerPreviewState} from '../player-preview-map.js';
 import {createFogChecker} from '../fog-of-war.js';
-test('preview PC fog reveals use the same normalized team aliases as the player board',()=>{
+test('saved manual fog never hides player preview tokens',()=>{
   const config={fogOfWar:{byLevel:{'level-0':{enabled:true,revealedCells:{}}}}};
   const preview={snapshot:{state:{routing:{activeSceneId:'scene'},sceneConfig:{scene:config},
     placements:{scene:{hero:{id:'hero',team:'ally',column:2,row:3,width:1,height:1}}}}}};
   const before=structuredClone(preview);
   const state=buildPlayerPreviewState(preview);
   const fog=createFogChecker(state,'level-0',{gmViewing:false});
-  assert.equal(fog(2,3),false);assert.equal(fog(1,3),true);
+  assert.equal(fog,null,'Old enabled/empty fog is ignored by passive token rendering');
   assert.deepEqual(preview,before);
   preview.snapshot.state.placements.scene.hero.column=2.5;
   assert.equal(buildPlayerPreviewState(preview).boardState.placements.scene[0].column,2.5,'Canonical fractional positions survive preview');

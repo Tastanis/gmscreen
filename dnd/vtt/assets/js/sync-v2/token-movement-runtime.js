@@ -82,6 +82,17 @@ export function createTokenMovementRuntime({
   const store = createEntityStore();
   const recoveryClient = createRecoveryClient({ endpoint: eventsEndpoint, fetchImpl });
   const pendingPreview = new Map();
+  function paintPendingPreview(sceneId, placementId, preview) {
+    const key = `${sceneId}:${placementId}`;
+    const previous = pendingPreview.get(key);
+    pendingPreview.set(key, preview);
+    // submitMoves previews immediately, then submitOne refreshes confirmed
+    // metadata. Avoid running the same DOM/floor/fog checks twice before POST.
+    const fields = ['column', 'row', 'width', 'height', 'levelId', 'movementMode', 'flightHeight', '_supportSurfaceId'];
+    if (!previous || fields.some(field => previous[field] !== preview[field])) {
+      previewPlacement(sceneId, placementId, preview);
+    }
+  }
   let intervalId = null;
   let stopped = false;
   let startPromise = null;
@@ -238,8 +249,7 @@ export function createTokenMovementRuntime({
       column: Number(move.column),
       row: Number(move.row),
     };
-    pendingPreview.set(`${sceneId}:${placementId}`, preview);
-    previewPlacement(sceneId, placementId, preview);
+    paintPendingPreview(sceneId, placementId, preview);
 
     try {
       return await commandClient.submit(
@@ -265,6 +275,7 @@ export function createTokenMovementRuntime({
       if (retry && !move.teleportChoice && !move.forcedDestination && move.undoRevision === undefined && error?.status === 409 && conflictSnapshot) {
         store.replaceSnapshot(conflictSnapshot, { authoritative: true, source: 'conflict' });
         reconcileSnapshot(store.getConfirmedSnapshot(), { source: 'conflict' });
+        pendingPreview.delete(`${sceneId}:${placementId}`);
         return submitOne(sceneId, move, false);
       }
       pendingPreview.delete(`${sceneId}:${placementId}`);
@@ -282,24 +293,33 @@ export function createTokenMovementRuntime({
       if (!placementId) continue;
       const current = getEffectivePlacement(sceneId, placementId) ?? {};
       const preview = { ...current, ...move, id: placementId };
-      pendingPreview.set(`${sceneId}:${placementId}`, preview);
-      previewPlacement(sceneId, placementId, preview);
+      paintPendingPreview(sceneId, placementId, preview);
     }
     await start();
     if (placementsEnabled && (moves?.length ?? 0) > 1) {
-      const result = await submitPlacementOps(
-        moves.map((move) => ({
-          type: 'placement.move',
-          sceneId,
-          placementId: String(move?.placementId ?? move?.id ?? '').trim(),
-          column: Number(move?.column),
-          row: Number(move?.row),
-          movementKind: move.movementKind || 'walk',
-          path: move.path || [],
-          ...(move.teleportChoice?{teleportChoice:move.teleportChoice}:{}),
-        }))
-      );
-      return [result];
+      try {
+        const result = await submitPlacementOps(
+          moves.map((move) => ({
+            type: 'placement.move',
+            sceneId,
+            placementId: String(move?.placementId ?? move?.id ?? '').trim(),
+            column: Number(move?.column),
+            row: Number(move?.row),
+            movementKind: move.movementKind || 'walk',
+            path: move.path || [],
+            ...(move.teleportChoice?{teleportChoice:move.teleportChoice}:{}),
+          }))
+        );
+        return [result];
+      } catch (error) {
+        for (const move of moves) {
+          const placementId = String(move?.placementId ?? move?.id ?? '').trim();
+          pendingPreview.delete(`${sceneId}:${placementId}`);
+          const confirmed = placementFromSnapshot(store.getConfirmedSnapshot(), sceneId, placementId);
+          if (confirmed) applyConfirmedPlacement(sceneId, placementId, confirmed, { source: 'rejected' });
+        }
+        throw error;
+      }
     }
     const results = [];
     for (const move of moves ?? []) {

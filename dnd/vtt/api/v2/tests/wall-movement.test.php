@@ -71,3 +71,4 @@ foreach([1,1.99,2,4] as $grade){
 echo "Yellow terrain threshold, downhill, voluntary movement, teleport and floor isolation passed.\n";
 
 require __DIR__.'/wall-cubes.test.php';
+require __DIR__.'/compiled-support.test.php';

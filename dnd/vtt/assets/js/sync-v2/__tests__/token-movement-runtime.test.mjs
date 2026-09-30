@@ -170,6 +170,72 @@ function createClient(server, id) {
   return { id, runtime, patches, previews, get snapshotReconciliations() { return snapshotReconciliations; } };
 }
 
+test('a started single-token drag paints once before its accepted command', async () => {
+  const client = createClient(createCanonicalServer(), 'player');
+  await client.runtime.start();
+  const promise = client.runtime.submitMoves('scene-1', [{ placementId: 'token-1', column: 4, row: 3 }]);
+  assert.equal(client.previews.length, 1, 'the body preview is immediate');
+  await promise;
+  assert.equal(client.previews.length, 1, 'refreshing confirmed metadata must not duplicate DOM work');
+  assert.equal(client.patches.at(-1).placement.column, 4);
+  assert.equal(client.runtime.__testing.pendingPreview.size, 0);
+});
+
+test('a single-token conflict repaints its pending intent after authoritative reconciliation', async () => {
+  let writes = 0;
+  const token = { id: 'token-1', column: 1, row: 1, width: 1, height: 1, _entityRevision: 0 };
+  const server = { fetchImpl: async (url, options) => {
+    if (String(url).includes('snapshot')) return response(200, { success: true, snapshot: { revision: 0, state: { placements: { 'scene-1': { 'token-1': token } } } } });
+    const command = JSON.parse(options.body);
+    if (++writes === 1) return response(409, { success: false, error: 'entity_revision_mismatch', snapshot: { revision: 1, state: { placements: { 'scene-1': { 'token-1': { ...token, column: 2, _entityRevision: 1 } } } } } });
+    return response(200, { success: true, event: { revision: 2, entityRevision: 2, sceneId: 'scene-1', entityId: 'token-1', type: 'token.moved', operationId: command.operationId, serverTime: 2, payload: { column: 4, row: 3 } } });
+  } };
+  const client = createClient(server, 'player');
+  await client.runtime.start();
+  await client.runtime.submitMoves('scene-1', [{ placementId: 'token-1', column: 4, row: 3 }]);
+  assert.equal(writes, 2);
+  assert.equal(client.previews.length, 2, 'the conflict snapshot reset the DOM, so retry needs one new preview');
+  assert.equal(client.runtime.getEffectivePlacement('scene-1', 'token-1').column, 4);
+  assert.equal(client.runtime.__testing.pendingPreview.size, 0);
+});
+
+test('a rejected single-token drag rolls its one immediate preview back to confirmed state', async () => {
+  const token = { id: 'token-1', column: 1, row: 1, width: 1, height: 1, _entityRevision: 0 };
+  let writes = 0;
+  const client = createClient({ fetchImpl: async url => {
+    if (String(url).includes('snapshot')) return response(200, { success: true, snapshot: { revision: 0, state: { placements: { 'scene-1': { 'token-1': token } } } } });
+    writes++; return response(400, { success: false, error: 'Movement blocked by a wall.' });
+  } }, 'player');
+  await client.runtime.start();
+  await assert.rejects(client.runtime.submitMoves('scene-1', [{ placementId: 'token-1', column: 4, row: 3 }]), /wall/);
+  assert.equal(writes, 1);
+  assert.equal(client.previews.length, 1);
+  assert.equal(client.patches.at(-1).placement.column, 1);
+  assert.equal(client.runtime.__testing.pendingPreview.size, 0);
+});
+
+test('a rejected group drag clears every pending body and restores confirmed coordinates', async () => {
+  const tokens = { a: { id: 'a', column: 1, row: 1, width: 1, height: 1, _entityRevision: 1 }, b: { id: 'b', column: 2, row: 1, width: 1, height: 1, _entityRevision: 1 } };
+  const restored = [], previews = [];
+  let writes = 0;
+  const runtime = createTokenMovementRuntime({ enabled: true, placementsEnabled: true, commandsEndpoint: '/commands', snapshotEndpoint: '/snapshot', eventsEndpoint: '/sync', windowRef: {},
+    previewPlacement: (_, id, placement) => previews.push([id, placement.column]),
+    applyConfirmedPlacement: (_, id, placement) => restored.push([id, placement.column]),
+    fetchImpl: async url => {
+      if (String(url).includes('snapshot')) return response(200, { success: true, snapshot: { revision: 1, state: { placements: { scene: tokens } } } });
+      writes++; return response(400, { success: false, error: 'Movement blocked by a wall.' });
+    },
+  });
+  await runtime.start();
+  await assert.rejects(runtime.submitMoves('scene', [{ placementId: 'a', column: 5, row: 1 }, { placementId: 'b', column: 6, row: 1 }]), /wall/);
+  assert.equal(writes, 1);
+  assert.deepEqual(previews, [['a', 5], ['b', 6]]);
+  assert.deepEqual(restored, [['a', 1], ['b', 2]]);
+  assert.equal(runtime.__testing.pendingPreview.size, 0);
+  assert.equal(runtime.getEffectivePlacement('scene', 'a').column, 1);
+  assert.equal(runtime.getEffectivePlacement('scene', 'b').column, 2);
+});
+
 test('three clients converge through replay and simultaneous same-token conflicts without full-board work', async () => {
   const server = createCanonicalServer();
   const clients = ['gm', 'player-a', 'player-b'].map((id) => createClient(server, id));

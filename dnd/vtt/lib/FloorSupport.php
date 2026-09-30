@@ -10,18 +10,72 @@ final class FloorSupport {
  private static function bands(array $ring,float $x):array {
   $ys=[];$j=count($ring)-1;foreach($ring as $i=>$a){$b=$ring[$j];if(($a['x']>$x)!==($b['x']>$x))$ys[]=$a['y']+($x-$a['x'])*($b['y']-$a['y'])/($b['x']-$a['x']);$j=$i;}sort($ys,SORT_NUMERIC);$bands=[];for($i=0;$i+1<count($ys);$i+=2)$bands[]=[$ys[$i],$ys[$i+1]];return $bands;
  }
- public static function intersects(array $p,array $surface,array $cuts=[]):bool {
-  $left=(float)$p['column'];$right=$left+($p['width']??1);$top=(float)$p['row'];$bottom=$top+($p['height']??1);
-  $holes=$surface['holes']??[];
+ private static array $cutIndexes=[];
+ private static function nearbyCuts(array $cuts,float $left,float $right,float $top,float $bottom):array {
+  if(!$cuts)return ['nearby'=>[],'boundaries'=>[]];
+  $index=null;
+  foreach(self::$cutIndexes as $cached)if($cached['source']===$cuts){$index=$cached;break;}
+  if($index===null){
+   $bins=[];$wide=[];$memberships=0;$boundaries=[];
+   foreach($cuts as $id=>$c){$boundaries[]=$c['column'];$boundaries[]=$c['column']+$c['width'];$x0=(int)floor($c['column']);$x1=(int)ceil($c['column']+$c['width'])-1;$y0=(int)floor($c['row']);$y1=(int)ceil($c['row']+$c['height'])-1;
+    // Bound total memberships too, not just one unusually large rectangle.
+    $cost=($x1-$x0+1)*($y1-$y0+1);if($cost>4096||$memberships+$cost>8192){$wide[]=$id;continue;}$memberships+=$cost;
+    for($x=$x0;$x<=$x1;$x++)for($y=$y0;$y<=$y1;$y++)$bins[$x.','.$y][]=$id;
+   }
+   sort($boundaries,SORT_NUMERIC);$unique=[];foreach($boundaries as $x)if(!$unique||$x!=$unique[count($unique)-1])$unique[]=$x;
+   $index=['source'=>$cuts,'bins'=>$bins,'wide'=>$wide,'boundaries'=>$unique];if(count(self::$cutIndexes)>=8)self::$cutIndexes=[];self::$cutIndexes[]=$index;
+  }
+  $x0=(int)floor($left);$x1=(int)ceil($right)-1;$y0=(int)floor($top);$y1=(int)ceil($bottom)-1;
+  if(($x1-$x0+1)*($y1-$y0+1)>4096)$ids=array_keys($cuts);
+  else{$seen=array_fill_keys($index['wide'],true);for($x=$x0;$x<=$x1;$x++)for($y=$y0;$y<=$y1;$y++)foreach($index['bins'][$x.','.$y]??[] as $id)$seen[$id]=true;$ids=array_keys($seen);}
+  sort($ids,SORT_NUMERIC); // Keep canonical cutout order in exact hole subtraction.
+  $nearby=[];foreach($ids as $id){$c=$cuts[$id];if($c['column']<$right&&$c['column']+$c['width']>$left&&$c['row']<$bottom&&$c['row']+$c['height']>$top)$nearby[]=$c;}
+  // Even distant cutout vertices historically partition x bands. Preserve those
+  // exact partitions: skipping them can change sub-epsilon residual support.
+  $all=$index['boundaries'];$lo=0;$hi=count($all);while($lo<$hi){$mid=intdiv($lo+$hi,2);if($all[$mid]<=$left)$lo=$mid+1;else $hi=$mid;}
+  $boundaries=[];for($i=$lo;$i<count($all)&&$all[$i]<$right;$i++)$boundaries[]=$all[$i];
+  return ['nearby'=>$nearby,'boundaries'=>$boundaries];
+ }
+
+ private static array $geometryCache=[];
+ private static function geometry(array $surface,array $cuts):array {
+  $outer=$surface['points']??[];$holes=$surface['holes']??[];
+  $key=hash('sha256',serialize([$outer,$holes,$cuts]));
+  if(isset(self::$geometryCache[$key]))return self::$geometryCache[$key];
   foreach($cuts as $c){$x=$c['column'];$y=$c['row'];$w=$c['width'];$h=$c['height'];$holes[]=[['x'=>$x,'y'=>$y],['x'=>$x+$w,'y'=>$y],['x'=>$x+$w,'y'=>$y+$h],['x'=>$x,'y'=>$y+$h]];}
-  $outer=$surface['points']??[];if(count($outer)<3)return false;
-  $rings=[$outer,...$holes];$xs=[$left,$right];$edges=[];
-  foreach($rings as $ring){$j=count($ring)-1;foreach($ring as $i=>$a){$b=$ring[$j];$j=$i;if(max($a['x'],$b['x'])>$left&&min($a['x'],$b['x'])<$right&&max($a['y'],$b['y'])>$top&&min($a['y'],$b['y'])<$bottom)$edges[]=[$a,$b];if($a['x']>$left&&$a['x']<$right)$xs[]=$a['x'];foreach([$top,$bottom] as $y)if(($a['y']>$y)!==($b['y']>$y)){$x=$a['x']+($y-$a['y'])*($b['x']-$a['x'])/($b['y']-$a['y']);if($x>$left&&$x<$right)$xs[]=$x;}}}
-  // Boundary intersections partition overlapping holes without double subtraction.
-  for($i=0;$i<count($edges);$i++)for($j=$i+1;$j<count($edges);$j++){
+  $edges=[];foreach([$outer,...$holes] as $ring){$j=count($ring)-1;foreach($ring as $a){$edges[]=[$a,$ring[$j]];$j++;if($j===count($ring))$j=0;}}
+  // Bound cold compilation and cached topology; larger designs retain local work.
+  $crossings=count($edges)>256?null:[];
+  if($crossings!==null)for($i=0;$i<count($edges);$i++)for($j=$i+1;$j<count($edges);$j++){
    [$a,$b]=$edges[$i];[$c,$d]=$edges[$j];$vx=$b['x']-$a['x'];$vy=$b['y']-$a['y'];$wx=$d['x']-$c['x'];$wy=$d['y']-$c['y'];$den=$vx*$wy-$vy*$wx;if(abs($den)<1e-12)continue;
    $t=(($c['x']-$a['x'])*$wy-($c['y']-$a['y'])*$wx)/$den;$u=(($c['x']-$a['x'])*$vy-($c['y']-$a['y'])*$vx)/$den;
-   if($t>=0&&$t<=1&&$u>=0&&$u<=1){$x=$a['x']+$t*$vx;if($x>$left&&$x<$right)$xs[]=$x;}
+   if($t>=0&&$t<=1&&$u>=0&&$u<=1){if(count($crossings)>=1024){$crossings=null;break 2;}$crossings[]=['x'=>$a['x']+$t*$vx,'a'=>[min($a['x'],$b['x']),max($a['x'],$b['x']),min($a['y'],$b['y']),max($a['y'],$b['y'])],'b'=>[min($c['x'],$d['x']),max($c['x'],$d['x']),min($c['y'],$d['y']),max($c['y'],$d['y'])]];}
+  }
+  $geometry=['outer'=>$outer,'holes'=>$holes,'crossings'=>$crossings,'edges'=>$crossings===null?$edges:[],'left'=>$outer?min(array_column($outer,'x')):0,'right'=>$outer?max(array_column($outer,'x')):0,'top'=>$outer?min(array_column($outer,'y')):0,'bottom'=>$outer?max(array_column($outer,'y')):0];
+  // Request-local and bounded. Geometry edits select a new content key.
+  if(count(self::$geometryCache)>=64)self::$geometryCache=[];
+  return self::$geometryCache[$key]=$geometry;
+ }
+
+ public static function intersects(array $p,array $surface,array $cuts=[]):bool {
+  $left=(float)$p['column'];$right=$left+($p['width']??1);$top=(float)$p['row'];$bottom=$top+($p['height']??1);
+  $geometry=self::geometry($surface,[]);$outer=$geometry['outer'];if(count($outer)<3)return false;
+  // Broad phase rejects only wholly disjoint bounds; exact positive-area bands follow.
+  if($right<=$geometry['left']||$left>=$geometry['right']||$bottom<=$geometry['top']||$top>=$geometry['bottom'])return false;
+  $cutGeometry=self::nearbyCuts($cuts,$left,$right,$top,$bottom);$nearby=$cutGeometry['nearby'];if($nearby)$geometry=self::geometry($surface,$nearby);
+  $holes=$geometry['holes'];$rings=[$outer,...$holes];$xs=[$left,$right,...$cutGeometry['boundaries']];
+  foreach($rings as $ring){$j=count($ring)-1;foreach($ring as $i=>$a){$b=$ring[$j];$j=$i;if($a['x']>$left&&$a['x']<$right)$xs[]=$a['x'];foreach([$top,$bottom] as $y)if(($a['y']>$y)!==($b['y']>$y)){$x=$a['x']+($y-$a['y'])*($b['x']-$a['x'])/($b['y']-$a['y']);if($x>$left&&$x<$right)$xs[]=$x;}}}
+  // Reuse topology, retaining the same local edge filter and epsilon partitions.
+  if($geometry['crossings']!==null)foreach($geometry['crossings'] as $crossing){$x=$crossing['x'];if($x<=$left||$x>=$right)continue;foreach(['a','b'] as $edge){[$a,$b,$c,$d]=$crossing[$edge];if($b<=$left||$a>=$right||$d<=$top||$c>=$bottom)continue 2;}$xs[]=$x;}
+  else{
+   // Very large native rings keep the prior local algorithm instead of a
+   // quadratic whole-map compilation cost on a cold request.
+   $edges=array_values(array_filter($geometry['edges'],fn($e)=>max($e[0]['x'],$e[1]['x'])>$left&&min($e[0]['x'],$e[1]['x'])<$right&&max($e[0]['y'],$e[1]['y'])>$top&&min($e[0]['y'],$e[1]['y'])<$bottom));
+   for($i=0;$i<count($edges);$i++)for($j=$i+1;$j<count($edges);$j++){
+    [$a,$b]=$edges[$i];[$c,$d]=$edges[$j];$vx=$b['x']-$a['x'];$vy=$b['y']-$a['y'];$wx=$d['x']-$c['x'];$wy=$d['y']-$c['y'];$den=$vx*$wy-$vy*$wx;if(abs($den)<1e-12)continue;
+    $t=(($c['x']-$a['x'])*$wy-($c['y']-$a['y'])*$wx)/$den;$u=(($c['x']-$a['x'])*$vy-($c['y']-$a['y'])*$vx)/$den;
+    if($t>=0&&$t<=1&&$u>=0&&$u<=1){$x=$a['x']+$t*$vx;if($x>$left&&$x<$right)$xs[]=$x;}
+   }
   }
   sort($xs,SORT_NUMERIC);
   for($i=1;$i<count($xs);$i++){

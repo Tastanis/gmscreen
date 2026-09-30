@@ -1,22 +1,7 @@
 /**
- * Fog of War module — per-level.
- *
- * Each level in a scene has its own fog layer:
- *
- *   boardState.sceneState[sceneId].fogOfWar = {
- *     byLevel: {
- *       [levelId]: { enabled: boolean, revealedCells: { "col,row": true } }
- *     }
- *   }
- *
- * The viewer sees fog for whichever level they're currently on. The GM panel
- * (Enabled toggle, Select Area, Clear Fog, Add Fog) acts on whichever level
- * the GM is currently viewing.
- *
- * Cutout cascade: when fog is revealed on a square that sits over a cutout,
- * the same square is auto-revealed on the level immediately below — and if
- * that level also has a cutout there, it cascades further down. "Add Fog"
- * does NOT cascade (one-way).
+ * Manual fog is retired. Saved records and pure legacy helpers remain compatible,
+ * but rendering and interaction use automatic height/wall/floor vision only.
+ * The existing panel retains the automatic Reset explored areas control.
  */
 
 import {
@@ -29,6 +14,7 @@ import {
   buildLevelViewModel,
 } from '../state/normalize/map-levels.js';
 import {normalizeCombatTeam} from '../state/normalize/placements.js';
+import {preparePlayerVisibility,confirmPlayerFogPaint} from './player-visibility-ready.js';
 
 // ── Constants ────────────────────────────────────────────────────
 
@@ -87,7 +73,7 @@ export function mountFogOfWar(options = {}) {
 
   if (isGm) {
     mountPanel();
-    mountFogSelectInteraction();
+    deactivateFogSelect();
   }
 }
 
@@ -105,209 +91,58 @@ export function renderFog(state) {
   }
 
   const activeLevelId = resolveActiveLevelId(state, activeSceneId);
-  const levelFog = getLevelFog(state, activeSceneId, activeLevelId);
-  const enabled = Boolean(levelFog && levelFog.enabled);
-
-  syncPanelToggle(enabled);
+  preparePlayerVisibility(state,{isGm,levelId:activeLevelId});
+  syncPanelToggle(false);
 
   renderFogSurface({ state, canvas: fogCanvas, view: viewStateRef ?? {},
     sceneId: activeSceneId, levelId: activeLevelId, gmViewing: isGm });
+  confirmPlayerFogPaint(state,viewStateRef,isGm,activeLevelId);
 }
 
 /** Paint a separate fog canvas without mounting handlers or changing GM context. */
-export function renderFogSurface({ state, canvas, view = {}, sceneId, levelId = BASE_MAP_LEVEL_ID, gmViewing = false } = {}) {
-  const fogCanvas = canvas;
-  const fogCtx = canvas?.getContext('2d');
-  if (!fogCanvas || !fogCtx) return;
-  const activeSceneId = sceneId;
-  const activeLevelId = levelId;
-  if (!activeSceneId) { clearCanvas(fogCtx, fogCanvas); return; }
-  const levelFog = getLevelFog(state, activeSceneId, activeLevelId);
-  const enabled = Boolean(levelFog?.enabled);
-  const mapW = Number.isFinite(view.mapPixelSize?.width) ? view.mapPixelSize.width : 0;
-  const mapH = Number.isFinite(view.mapPixelSize?.height) ? view.mapPixelSize.height : 0;
-  if (mapW <= 0 || mapH <= 0) {
-    clearCanvas(fogCtx, fogCanvas);
-    return;
-  }
-
-  // Size the canvas to the map
-  if (fogCanvas.width !== mapW || fogCanvas.height !== mapH) {
-    fogCanvas.width = mapW;
-    fogCanvas.height = mapH;
-  }
-  fogCanvas.style.width = mapW + 'px';
-  fogCanvas.style.height = mapH + 'px';
-
-  if (!enabled) {
-    fogCtx.clearRect(0, 0, mapW, mapH);
-    return;
-  }
-
-  const gridSize = Math.max(8, Number.isFinite(view.gridSize) ? view.gridSize : 64);
-  const offsets = view.gridOffsets ?? {};
-  const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
-  const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
-  const offsetRight = Number.isFinite(offsets.right) ? offsets.right : 0;
-  const offsetBottom = Number.isFinite(offsets.bottom) ? offsets.bottom : 0;
-
-  const innerWidth = Math.max(0, mapW - offsetLeft - offsetRight);
-  const innerHeight = Math.max(0, mapH - offsetTop - offsetBottom);
-  const cols = Math.floor(innerWidth / gridSize);
-  const rows = Math.floor(innerHeight / gridSize);
-
-  const gridRight = offsetLeft + cols * gridSize;
-  const gridBottom = offsetTop + rows * gridSize;
-
-  const revealed = levelFog.revealedCells ?? {};
-  const pcCells = buildPcRevealedCells(state, activeSceneId, activeLevelId);
-
-  const alpha = gmViewing ? GM_FOG_ALPHA : PLAYER_FOG_ALPHA;
-
-  fogCtx.clearRect(0, 0, mapW, mapH);
-  fogCtx.fillStyle = `rgba(${FOG_COLOR},${alpha})`;
-
-  // Border bands — anything outside the gridded area is unreachable, so it
-  // always reads as fogged. Painting these covers the previously-visible
-  // strips at the top/left/right/bottom of the map when a non-zero grid
-  // origin shifts the addressable grid inward.
-  if (offsetLeft > 0) {
-    fogCtx.fillRect(0, 0, offsetLeft, mapH);
-  }
-  if (gridRight < mapW) {
-    fogCtx.fillRect(gridRight, 0, mapW - gridRight, mapH);
-  }
-  if (offsetTop > 0) {
-    fogCtx.fillRect(offsetLeft, 0, gridRight - offsetLeft, offsetTop);
-  }
-  if (gridBottom < mapH) {
-    fogCtx.fillRect(offsetLeft, gridBottom, gridRight - offsetLeft, mapH - gridBottom);
-  }
-
-  // Addressable cells.
-  for (let c = 0; c < cols; c++) {
-    for (let r = 0; r < rows; r++) {
-      const key = c + ',' + r;
-      if (revealed[key] || pcCells.has(key)) continue;
-
-      const x = offsetLeft + c * gridSize;
-      const y = offsetTop + r * gridSize;
-      fogCtx.fillRect(x, y, gridSize, gridSize);
-    }
-  }
+export function renderFogSurface({ canvas, view = {} } = {}) {
+  const ctx = canvas?.getContext('2d');
+  if (!canvas || !ctx) return;
+  const width = Math.max(0, Number(view.mapPixelSize?.width) || 0);
+  const height = Math.max(0, Number(view.mapPixelSize?.height) || 0);
+  if (canvas.width !== width) canvas.width = width;
+  if (canvas.height !== height) canvas.height = height;
+  canvas.style.width = width + 'px';
+  canvas.style.height = height + 'px';
+  ctx.clearRect(0, 0, width, height);
 }
 
 /**
  * Render the selection highlight overlay (separate canvas).
  */
 export function renderFogSelection() {
-  if (!selCanvas || !selCtx) return;
-
-  const view = viewStateRef ?? {};
-  const mapW = Number.isFinite(view.mapPixelSize?.width) ? view.mapPixelSize.width : 0;
-  const mapH = Number.isFinite(view.mapPixelSize?.height) ? view.mapPixelSize.height : 0;
-  if (mapW <= 0 || mapH <= 0) {
-    clearCanvas(selCtx, selCanvas);
-    return;
-  }
-
-  if (selCanvas.width !== mapW || selCanvas.height !== mapH) {
-    selCanvas.width = mapW;
-    selCanvas.height = mapH;
-  }
-  selCanvas.style.width = mapW + 'px';
-  selCanvas.style.height = mapH + 'px';
-
-  selCtx.clearRect(0, 0, mapW, mapH);
-
-  if (selectedCells.size === 0) return;
-
-  const gridSize = Math.max(8, Number.isFinite(view.gridSize) ? view.gridSize : 64);
-  const offsets = view.gridOffsets ?? {};
-  const offsetLeft = Number.isFinite(offsets.left) ? offsets.left : 0;
-  const offsetTop = Number.isFinite(offsets.top) ? offsets.top : 0;
-
-  selCtx.fillStyle = SELECTION_FILL;
-  selCtx.strokeStyle = SELECTION_STROKE;
-  selCtx.lineWidth = 2;
-
-  selectedCells.forEach((key) => {
-    const [cStr, rStr] = key.split(',');
-    const c = parseInt(cStr, 10);
-    const r = parseInt(rStr, 10);
-    if (!Number.isFinite(c) || !Number.isFinite(r)) return;
-
-    const x = offsetLeft + c * gridSize;
-    const y = offsetTop + r * gridSize;
-    selCtx.fillRect(x, y, gridSize, gridSize);
-    selCtx.strokeRect(x + 1, y + 1, gridSize - 2, gridSize - 2);
-  });
+  if (selCanvas && selCtx) clearCanvas(selCtx, selCanvas);
 }
 
 /**
- * Returns true if a placement at the given grid position on the given level
- * is hidden by fog for a non-GM user. Used to block token clicks.
+ * Legacy manual-fog interaction check. Automatic vision owns visibility now.
  */
-export function isPositionFogged(state, col, row, levelId) {
-  if (isGm) return false;
-
-  const activeSceneId = state?.boardState?.activeSceneId ?? null;
-  if (!activeSceneId) return false;
-
-  const lvlId = levelId || resolveActiveLevelId(state, activeSceneId);
-  const levelFog = getLevelFog(state, activeSceneId, lvlId);
-  if (!levelFog || !levelFog.enabled) return false;
-
-  const key = Math.floor(col) + ',' + Math.floor(row);
-  if (levelFog.revealedCells && levelFog.revealedCells[key]) return false;
-
-  const pcCells = buildPcRevealedCells(state, activeSceneId, lvlId);
-  if (pcCells.has(key)) return false;
-
-  return true;
+export function isPositionFogged() {
+  return false;
 }
 
 /**
- * Pre-compute a fog checker for a given level for use during batch rendering.
- * Returns null when fog is inactive on that level.
+ * Legacy manual-fog batch check, inactive for both board and passive preview.
  */
-export function createFogChecker(state, levelId, { gmViewing = isGm } = {}) {
-  if (gmViewing) return null;
-
-  const activeSceneId = state?.boardState?.activeSceneId ?? null;
-  if (!activeSceneId) return null;
-
-  const lvlId = levelId || resolveActiveLevelId(state, activeSceneId);
-  const levelFog = getLevelFog(state, activeSceneId, lvlId);
-  if (!levelFog || !levelFog.enabled) return null;
-
-  const revealed = levelFog.revealedCells ?? {};
-  const pcCells = buildPcRevealedCells(state, activeSceneId, lvlId);
-
-  return (col, row) => {
-    const key = Math.floor(col) + ',' + Math.floor(row);
-    return !revealed[key] && !pcCells.has(key);
-  };
+export function createFogChecker() {
+  return null;
 }
 
 export function isFogSelectActive() {
-  return fogSelectActive;
+  return false;
 }
 
 /**
- * Toggle fog enabled/disabled for a specific level within a scene.
+ * Retired manual-fog toggle retained for source compatibility.
  */
-export function toggleFogForLevel(sceneId, levelId, enabled, options = {}) {
-  if (!boardApi || !sceneId || !levelId) return;
-  const markDirty = options.markSceneStateDirty;
-
-  boardApi.updateState((draft) => {
-    const sceneEntry = ensureSceneEntry(draft, sceneId);
-    const levelEntry = ensureLevelFogEntry(sceneEntry, levelId);
-    levelEntry.enabled = Boolean(enabled);
-  });
-
-  if (typeof markDirty === 'function') markDirty(sceneId, 'fogOfWar');
+export function toggleFogForLevel() {
+  // Compatibility entry point: old callers cannot revive retired manual fog.
+  return false;
 }
 
 /**
@@ -561,38 +396,8 @@ function mountPanel() {
     deactivateFogSelect();
   });
 
-  const toggleInput = panelEl.querySelector('[data-fog-toggle]');
-  if (toggleInput) {
-    toggleInput.addEventListener('change', () => {
-      const state = boardApi?.getState?.() ?? {};
-      const sceneId = state.boardState?.activeSceneId;
-      if (!sceneId) return;
-      const levelId = resolveActiveLevelId(state, sceneId);
-      toggleFogForLevel(sceneId, levelId, toggleInput.checked, {
-        markSceneStateDirty: boardApi._markSceneStateDirty,
-      });
-      if (typeof boardApi._persistBoardState === 'function') {
-        boardApi._persistBoardState();
-      }
-    });
-  }
-
-  panelEl.querySelector('[data-fog-select]')?.addEventListener('click', () => {
-    fogSelectActive = !fogSelectActive;
-    updateSelectButtonState();
-    if (!fogSelectActive) {
-      clearFogSelection();
-    }
-    updateActionButtonStates();
-  });
-
-  panelEl.querySelector('[data-fog-clear]')?.addEventListener('click', () => {
-    applyFogChange(false);
-  });
-
-  panelEl.querySelector('[data-fog-add]')?.addEventListener('click', () => {
-    applyFogChange(true);
-  });
+  // Remove obsolete controls if an existing panel survives a remount.
+  panelEl.querySelectorAll('.vtt-fog-panel__toggle-row, .vtt-fog-panel__divider, .vtt-fog-panel__actions, [data-fog-status]').forEach(node => node.remove());
 
   panelEl.hidden = true;
 }
@@ -607,26 +412,6 @@ function createPanelElement() {
       <h3 class="vtt-fog-panel__title">Fog of War</h3>
       <button type="button" class="vtt-fog-panel__close" data-fog-close>&times;</button>
     </div>
-    <div class="vtt-fog-panel__toggle-row">
-      <span class="vtt-fog-panel__toggle-label">Enabled (this level)</span>
-      <label class="vtt-fog-toggle">
-        <input type="checkbox" data-fog-toggle />
-        <span class="vtt-fog-toggle__slider"></span>
-      </label>
-    </div>
-    <hr class="vtt-fog-panel__divider" />
-    <div class="vtt-fog-panel__actions">
-      <button type="button" class="vtt-fog-panel__btn" data-fog-select aria-pressed="false">
-        <span class="vtt-fog-panel__btn-icon">&#9634;</span> Select Area
-      </button>
-      <button type="button" class="vtt-fog-panel__btn" data-fog-clear disabled>
-        <span class="vtt-fog-panel__btn-icon">&#9728;</span> Clear Fog
-      </button>
-      <button type="button" class="vtt-fog-panel__btn" data-fog-add disabled>
-        <span class="vtt-fog-panel__btn-icon">&#9724;</span> Add Fog
-      </button>
-    </div>
-    <div class="vtt-fog-panel__status" data-fog-status></div>
   `;
   return div;
 }

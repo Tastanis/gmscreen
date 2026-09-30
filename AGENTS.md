@@ -1265,3 +1265,20 @@ Single-click selects; double-click and keyboard deletion use confirmation. Wall
 pointer capture redirects clicks to the container, so retain the pointerdown cube
 pick and clear it on empty-space pointerdown. Do not delete a replacement shape
 from an earlier pending dialog. Stacking remains repeated placement clicks.
+
+
+### Movement performance and camera — 1.19.178
+
+My token centers the local view using only the associated board token; same-floor
+centering is local and cross-floor return preserves Browse. Never use tracker
+bounds or bypass a null projected primary association.
+Floor support caches are request-local and bounded. Preserve all cut x partitions
+for exact epsilon behavior, including distant cuts; overflow uses exact fallbacks.
+Pending movement preview deduplication must not advance fog/vision observers or
+execute effects. Conflict retries repaint, and group rejection clears every preview.
+
+Player map readiness is fail-closed from initial HTML until applicable automatic
+vision is painted. Preserve same-image reload/floor readiness and stale-mask guards.
+Manual Fog of War is retired at the user request: stored fogOfWar fields remain
+compatible but do not hide active/preview content. Retain automatic vision and
+the existing Reset explored areas action; do not restore manual masking controls.

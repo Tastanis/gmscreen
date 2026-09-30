@@ -13,9 +13,10 @@ $moduleMap = ModuleAssets::importMap(__DIR__ . '/../assets/js', $assetVersion);
 require_once __DIR__ . '/../../includes/strix-nav.php';
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en"<?= empty($config['isGM']) ? ' class="vtt-player-visibility-pending"' : '' ?>>
 <head>
     <meta charset="utf-8" />
+    <style>.vtt-player-visibility-pending #vtt-map-transform{opacity:0!important;pointer-events:none!important}</style>
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>VTT Workspace</title>

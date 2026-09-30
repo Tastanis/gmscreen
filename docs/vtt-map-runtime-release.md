@@ -462,3 +462,64 @@ confirmation cancellation, canceled/confirmed double click, one-cube removal and
 GM/Cal/Sharon reload convergence, alongside shifted-face stacking and all materials.
 
 Validation: 879 tests across 122 files pass; the expanded three-client wall-cube browser regression passes without page errors or campaign token changes.
+
+
+### 1.19.178 — My token camera and movement latency
+
+My token returns to the associated token's floor and centers the local camera on
+its actual board bounds, including terrain parallax and scaling. Zoom, the Browse
+preference, token position and other clients' cameras are preserved. Same-floor
+centering issues no shared command; unavailable/hidden primary associations do not
+fall back to another token. Existing accessibility text describes the behavior.
+
+FloorSupport compiles bounded request-local cutout indexes and polygon topology.
+Only overlapping cutout holes participate in exact support calculation; all original
+cut x partitions are retained, including distant cuts and tiny epsilon intervals.
+Content keys invalidate edited geometry. Large rings, crossing counts, wide cuts
+and index budget overflow use exact conservative fallbacks. Floor heights, collision
+rules, walking/shift/flight, authority and fall/zone receipts are unchanged.
+
+Exact Bathhouse wall validation benchmarks improved blocked 13-square drags from
+3.0–3.8 seconds to approximately 54–87ms and one legal 12-square drag from 853ms to
+approximately 5–8ms. These are local PHP validation timings, not production HTTP
+latency. 750 original/optimized actual-map footprint support comparisons agree.
+
+The movement runtime renders each unchanged pending geometry once instead of
+twice before POST. Conflict reconciliation still repaints retries; rejected group
+moves clear stale previews and restore confirmed positions. Pending bodies never
+change canonical vision/fog observers or execute accepted-movement effects.
+
+Disposable camera regression: `test-my-token-camera-browser.cjs`, restricted to a
+loopback vision-performance app. It checks cross-floor and same-floor centering,
+terrain projection, unchanged zoom/Browse preference and original token state.
+
+Validation: 883 tests across 122 files pass. The disposable camera browser check
+passes. The exact-map HTTP regression rejects a blocked drag with 422 without
+changing placements, revisions or collision receipts, and accepts a legal drag
+exactly once. Its measured wall rejection was 305 ms including HTTP overhead;
+these loopback results do not establish production network or Pusher latency.
+
+Player loading and manual-fog retirement (same release): first HTML keeps the
+map transform hidden for players until rendering preparation and the applicable
+automatic height-vision mask are ready. Reloads and same-image floor changes
+re-cover the map; stale scene/floor callbacks and zero-sized views cannot release
+it. GM startup is unchanged. No loading control or label is added.
+
+The user retired manual Fog of War. Saved per-floor enabled/revealedCells data
+remains compatible with scene packages and checkpoints but no longer masks active
+or passive surfaces or filters tokens. Manual Enabled/Select/Clear/Add controls
+are removed; the existing automatic Reset explored areas control is retained.
+Automatic wall, floor, terrain-height, roof occlusion and explored vision remain.
+
+Final automated validation: 892 tests across 125 files pass. Bootstrap
+normalization retains already server-projected canonical environment data, so a
+height map cannot be mistaken for a flat map before V2 recovery. All player maps
+wait for the initialized renderer to paint or explicitly confirm no height mask
+is applicable. Geometry activation re-covers the view before that decision.
+
+Disposable browser validation passes for delayed height-map startup, same-URL
+reload and ordinary flat-map initialization with no exposure frames, page errors
+or original placement changes. The manual retirement check verifies transparent
+active/passive legacy layers with saved enabled-empty records, retained automatic
+height painting, absent manual controls and available Reset explored areas.
+No fog commands or canonical configuration/placement changes occur in that check.
