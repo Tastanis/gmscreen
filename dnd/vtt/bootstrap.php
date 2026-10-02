@@ -904,6 +904,7 @@ function sanitizePlacementForPlayerView(array $placement): array
 
     if (!canPlayersViewPlacementMonster($placement)) {
         $sanitized = attachSafeMovementTrait($sanitized);
+        $sanitized = attachPlayerAutomationData($sanitized);
         unset($sanitized['monster'], $sanitized['monsterId']);
 
         if (isset($sanitized['metadata']) && is_array($sanitized['metadata'])) {
@@ -917,6 +918,55 @@ function sanitizePlacementForPlayerView(array $placement): array
     }
 
     return $sanitized;
+}
+
+/** Automation inputs only: never use this block to render a monster stat panel. */
+function attachPlayerAutomationData(array $entity): array
+{
+    $monster = $entity['monster'] ?? ($entity['metadata']['monster'] ?? null);
+    if (!is_array($monster)) return $entity;
+    $number = static function ($value): int {
+        if (is_numeric($value)) return (int) $value;
+        return is_string($value) ? (int) preg_replace('/[^0-9-]/', '', $value) : 0;
+    };
+    $traits = ['attributes' => []];
+    foreach (['might', 'agility', 'reason', 'intuition', 'presence'] as $key) {
+        $traits['attributes'][$key] = $number($monster['attributes'][$key] ?? $monster[$key] ?? $monster['stats'][$key] ?? 0);
+    }
+    $traits['stability'] = $number($monster['stability'] ?? $monster['defenses']['stability'] ?? 0);
+    $traits['size'] = $monster['size'] ?? $monster['token_size'] ?? $monster['tokenSize'] ?? '';
+    foreach (['immunity' => 'immunities', 'weakness' => 'weaknesses'] as $kind => $listKey) {
+        $entries = array_merge(
+            is_array($monster['defenses'][$listKey] ?? null) ? $monster['defenses'][$listKey] : [],
+            is_array($monster[$listKey] ?? null) ? $monster[$listKey] : []
+        );
+        if (!$entries) {
+            $entries = isset($monster['defenses'][$kind]) && is_array($monster['defenses'][$kind])
+                ? [$monster['defenses'][$kind]]
+                : [['type' => $monster[$kind . '_type'] ?? $monster[$kind . 'Type'] ?? '',
+                    'value' => $monster[$kind . '_value'] ?? $monster[$kind . 'Value'] ?? 0]];
+        }
+        $traits[$listKey] = [];
+        foreach ($entries as $entry) {
+            if (!is_array($entry)) continue;
+            $value = $number($entry['value'] ?? $entry['amount'] ?? 0);
+            if ($value > 0) $traits[$listKey][] = ['type' => (string) ($entry['type'] ?? ''), 'value' => $value];
+        }
+    }
+    $entity['automationTraits'] = $traits;
+    $entity['monsterTriggerHooks'] = [];
+    foreach (['passive', 'maneuver', 'action', 'triggered_action', 'villain_action', 'malice'] as $category) {
+        foreach (($monster['abilities'][$category] ?? []) as $ability) {
+            if (!is_array($ability) || empty($ability['name'])) continue;
+            $blocks = array_values(array_filter($ability['automation']['cards'] ?? [], static function ($block): bool {
+                return is_array($block) && ($block['type'] ?? '') === 'trigger' && !empty($block['match']['event']);
+            }));
+            if (!$blocks) continue;
+            $entity['monsterTriggerHooks'][] = ['category' => $category, 'name' => $ability['name'],
+                'resourceCost' => (string) ($ability['resource_cost'] ?? ''), 'blocks' => $blocks];
+        }
+    }
+    return $entity;
 }
 
 /**

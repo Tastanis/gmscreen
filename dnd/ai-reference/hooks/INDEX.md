@@ -335,3 +335,9 @@ Fall Prone uses the effective ground-fall threshold, with the separate rule that
 landing on another creature makes the faller prone. Each struck creature compares
 the faller's size against its own Might using strict greater-than. The popup shows
 these condition outcomes as text; damage overrides do not rewrite them.
+
+
+October 2, 2026: player monster automation uses server-projected `automationTraits`
+and `monsterTriggerHooks`, without rendering enemy defense numbers. Monster action
+categories emit main/maneuver/triggered/villain event kinds. Multiple trigger cards
+register independently. See the automation REGISTRY October 2 corrections.

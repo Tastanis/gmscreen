@@ -5,7 +5,31 @@ import {createRecoveryClient} from '../recovery-client.js';
 import {createCommandClient} from '../command-client.js';
 import {createTokenMovementRuntime} from '../token-movement-runtime.js';
 import {retryAfterMilliseconds} from '../retry-after.js';
+import {createPusherEventTransport} from '../event-stream.js';
 const response=(status,body,header=null)=>({status,ok:status>=200&&status<300,json:async()=>body,headers:{get:()=>header}});
+
+test('poll cadence slows only while subscribed and returns to fallback after a disconnect', async () => {
+ let time=0,calls=0,healthy=false;
+ const polling=createRecoveryPolling({now:()=>time,getInterval:()=>healthy?2000:500,windowRef:{setInterval(){return 1;},clearInterval(){}},recover:async()=>{calls++;}});
+ polling.start(); await polling.tick(); assert.equal(calls,1);
+ healthy=true; time=500; await polling.tick(); time=1500; await polling.tick(); assert.equal(calls,1);
+ time=2000; await polling.tick(); assert.equal(calls,2);
+ healthy=false; time=2500; await polling.tick(); assert.equal(calls,3);
+ polling.stop(); time=5000; await polling.tick(); assert.equal(calls,3);
+});
+
+test('Pusher subscription health resets after errors, disconnect and reconnect', () => {
+ const handlers={}; let connection,change;
+ class Pusher { constructor(){connection=this.connection={state:'connected',bind(_name,fn){change=fn;}};} subscribe(){return {bind(name,fn){handlers[name]=fn;}};} disconnect(){} unsubscribe(){} }
+ const transport=createPusherEventTransport({PusherClass:Pusher,key:'key',cluster:'cluster',channel:'private-test',onEvent(){}});
+ transport.connect(); assert.equal(transport.isSubscribed(),false);
+ handlers['pusher:subscription_succeeded'](); assert.equal(transport.isSubscribed(),true);
+ handlers['pusher:subscription_error']({status:403}); assert.equal(transport.isSubscribed(),false);
+ handlers['pusher:subscription_succeeded'](); connection.state='disconnected'; change({current:'disconnected'});
+ connection.state='connected'; change({current:'connected'}); assert.equal(transport.isSubscribed(),false);
+ handlers['pusher:subscription_succeeded'](); assert.equal(transport.isSubscribed(),true);
+ transport.disconnect(); assert.equal(transport.isSubscribed(),false);
+});
 
 test('healthy polling stays at 500ms and suppresses overlap with pending/explicit recovery',async()=>{
  let callback,cleared=false,calls=0,release,external=false;

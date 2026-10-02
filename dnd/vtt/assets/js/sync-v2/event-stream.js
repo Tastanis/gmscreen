@@ -212,6 +212,7 @@ export function createPusherEventTransport({
       disconnect: () => {},
       getSocketId: () => null,
       getState: () => 'unavailable',
+      isSubscribed: () => false,
     };
   }
   if (typeof onEvent !== 'function') {
@@ -220,6 +221,7 @@ export function createPusherEventTransport({
 
   let client = null;
   let subscription = null;
+  let subscribed = false;
   function connect() {
     if (client) {
       return true;
@@ -229,9 +231,14 @@ export function createPusherEventTransport({
       options.channelAuthorization = { endpoint: authEndpoint };
     }
     client = new PusherClass(key, options);
-    client.connection?.bind?.('state_change', (change) => onConnectionChange(change));
+    client.connection?.bind?.('state_change', (change) => {
+      if (change.current !== 'connected') subscribed = false;
+      onConnectionChange(change);
+    });
     subscription = client.subscribe(channel);
+    subscription.bind?.('pusher:subscription_succeeded', () => { subscribed = true; });
     subscription.bind?.('pusher:subscription_error', (error) => {
+      subscribed = false;
       onConnectionChange({ current: 'subscription_error', error });
     });
     subscription.bind('sync-v2-event', (message) => {
@@ -243,6 +250,7 @@ export function createPusherEventTransport({
   }
 
   function disconnect() {
+    subscribed = false;
     if (subscription && client) {
       client.unsubscribe?.(channel);
     }
@@ -255,6 +263,7 @@ export function createPusherEventTransport({
     connect,
     disconnect,
     getSocketId: () => client?.connection?.socket_id ?? null,
+    isSubscribed: () => subscribed && client?.connection?.state === 'connected',
     getState: () => client?.connection?.state ?? (client ? 'initialized' : 'disconnected'),
   };
 }

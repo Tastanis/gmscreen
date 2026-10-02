@@ -1804,3 +1804,15 @@ The Monster Creator can import one complete monster from a JSON file. Use the te
 
 Monster `immunities` and `weaknesses` (each an array of `{ "type", "value" }` entries) are applied by VTT automated damage when an entry's `type` matches the incoming `damageType`. Multiple matching entries stack additively. The legacy single-field form (`immunity_type` / `immunity_value` / `weakness_type` / `weakness_value`) is still accepted for back-compat; it's auto-promoted to a one-entry list on import. Temporary automation-applied riders still use `damageImmunity` and `damageWeakness` conditions.
 
+
+
+### Runtime corrections, October 2, 2026
+
+Multiple authored trigger cards in one ability register independently; their ready
+indicator still represents one ability. Area predicates are relative to the caster.
+Forced movement follows Big Versus Little: no penalty for moving a larger creature;
++1 square when a larger caster uses a melee weapon ability on a smaller creature.
+The runner forwards effective keywords for this check. No new authoring fields.
+Surge damage spends at most three surges, using the highest characteristic for each,
+and asks for one recipient when the first damage effect has multiple targets.
+The potency surge option remains manual.

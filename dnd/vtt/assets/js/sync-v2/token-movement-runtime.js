@@ -197,7 +197,7 @@ export function createTokenMovementRuntime({
     getSocketId: () => pusherTransport.getSocketId(),
     onDiagnostic,
   });
-  const recoveryPolling=createRecoveryPolling({recover:()=>eventStream.recover(),isRecovering:()=>eventStream.isRecovering(),windowRef,intervalMs:pollIntervalMs,onError});
+  const recoveryPolling=createRecoveryPolling({recover:()=>eventStream.recover(),isRecovering:()=>eventStream.isRecovering(),windowRef,intervalMs:pollIntervalMs,getInterval:()=>pusherTransport.isSubscribed()?Math.max(2000,pollIntervalMs):pollIntervalMs,onError});
 
   async function start() {
     if (startPromise) return startPromise;

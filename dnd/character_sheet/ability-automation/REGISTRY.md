@@ -55,7 +55,7 @@ Unknown properties are ignored by the runtime but preserved in a single `_extra`
 | type | Implementation |
 |---|---|
 | `target` | Full |
-| `powerRoll` | Full. Supports `flatBonus` (literal roll bonus that bypasses attribute lookup — monster-friendly), `whenWinded` overrides (see Universal Modifiers), and the runtime surge button that spends caster surges for +2 damage each on the first damage effect from the accepted roll. PC-hosted rolls refresh the live sheet surge count before opening; available and armed states are visually distinct, including in the Diablo skin. |
+| `powerRoll` | Full. Supports `flatBonus` (literal roll bonus that bypasses attribute lookup — monster-friendly), `whenWinded` overrides (see Universal Modifiers), and the runtime surge button that spends up to three caster surges for damage equal to the highest characteristic per surge on the first damage effect from the accepted roll; a multi-target effect asks which single target receives that bonus. PC-hosted rolls refresh the live sheet surge count before opening; available and armed states are visually distinct, including in the Diablo skin. |
 | `requestedTest` | Full on the VTT. Sends an ability-score test to the selected token's linked player, or to an online GM when no linked owner is available, and falls back to the ability user. The remote roller gets the normal power-roll UI using the target token's stats. `rollMode` is `individual`, `singleHighest`, or `groupByAttribute`. The initiating ability pauses until all accepted tiers return. Closing any test cancels the whole batch; tracked resource, malice, and triggered-action use are refunded. Put this card before all state-changing cards. |
 | `effect` | Full. Supports `whenWinded` overrides (see Universal Modifiers). |
 | `trigger` | Schema + registration against `AbilityTriggerBus`. PC trigger actions in the Triggers list are always-on once that character token is present in the active VTT scene; opening the character summary is not required. Authored `match` config fires the blue `!` overlay when its event/filter matches; click to resolve with the captured event payload. Direct-clicking the trigger ability in the tray resolves the post-trigger cards manually even when no event payload was captured. `autoResolve:true` immediately runs the trigger block's own `effects` instead of showing the ready overlay; it uses the limited ongoing-effect subset documented in AUTHORING.md and schema validation warns on unsupported effects. Trigger cards embedded in PC main actions/maneuvers execute in card order, register as free delayed riders, and survive normal sheet/damage trigger refreshes. No structured `match` -> chat reminder fallback. |
@@ -913,3 +913,27 @@ Height labels are surface elevation + 1. Forced-movement collision damage now us
 the shared authoritative resolver and durable per-target records, including authored
 damage type. Falls offer editable damage and Prone with uncertain outcomes retained
 for GM review, never automatic replay. No new ability JSON fields were introduced.
+
+
+### October 2 test-report corrections (1.19.186)
+
+- Player projection carries `automationTraits` (characteristics, size, Stability,
+  immunity and weakness) and `monsterTriggerHooks`. These are automation inputs,
+  not a player stat panel. Shared enemy damage chat omits defense arithmetic as
+  well as stamina totals. Hidden-token/floor projection still applies.
+- Authored trigger cards register separately by their card index under one ability
+  readiness ID. Runtime delayed-trigger replication remains unsupported.
+- Area ally/enemy/self filters use the casting placement, including monsters.
+- Monster action events map action to main, triggered_action to triggered, and
+  villain_action to villain. Initial monster cost handling does not emit a second
+  generic resource-spend reminder; existing Malice reservation remains authoritative.
+- Damage and healing events read canonical hp.current; automated healing awaits
+  its placement save before reporting success or firing stamina events.
+- Forced movement has no smaller-versus-larger penalty. A larger creature's melee
+  weapon ability adds one square before Stability. Runtime requests carry effective
+  ability keywords. Legacy ignoreSizePenalty remains accepted without introducing
+  an automatic size penalty. Voluntary shift/collision behavior is still pending.
+- Winded fallback reads live placement HP, captured placement HP, then PC vitals.
+- Surge damage uses the highest characteristic, at most three surges, on one chosen
+  target of the first damage effect. Separate later damage effects and the two-surge
+  potency option remain outside this automated selection; resolve those manually.

@@ -1781,3 +1781,15 @@ edits retain support, and normal position/mode/flight/teleport/undo paths are
 unchanged. Manual floor selection creates no fall receipt; flight interruption
 continues through its original fall path. New authority checks cover retries,
 reopen and unrelated scenes. No client may supply protected support IDs.
+
+
+## October 2 test-report corrections - 1.19.186
+
+Recovery polling retains a 500 ms fallback and backs off failures as before. Only
+an established private Pusher subscription permits a 2 s healthy cadence; subscription
+errors or disconnects restore fallback. Reconnect recovery remains immediate.
+Player snapshots/events share the narrow automationTraits/monsterTriggerHooks
+projection. Enemy stat panels and shared defense arithmetic remain hidden.
+Automated healing awaits accepted placement persistence before reporting success.
+No queue, semantic retry, partial-conflict snapshot, or stamina-delta authority was
+introduced. B5/B5b remain unresolved; see ../vtt-testing-review-2026-10-02.md.

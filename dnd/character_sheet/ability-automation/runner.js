@@ -327,13 +327,21 @@
         if (typeof result === "boolean") return result;
       } catch (_err) { /* fall through */ }
     }
+    const sourceToken = state?.sourcePlacement || state?.sourceToken;
+    const livePlacement = sourceToken?.id && typeof state?.context?.getPlacementById === "function"
+      ? state.context.getPlacementById(sourceToken.id)
+      : null;
     const candidates = [
+      { cur: livePlacement?.hp?.current, max: livePlacement?.hp?.max },
+      { cur: sourceToken?.hp?.current, max: sourceToken?.hp?.max },
+      { cur: state?.hero?.vitals?.currentStamina, max: state?.hero?.vitals?.staminaMax },
       { cur: state?.hero?.currentStamina, max: state?.hero?.maxStamina },
       { cur: state?.hero?.hp, max: state?.hero?.maxHp },
       { cur: state?.hero?.stamina, max: state?.hero?.maxStaminaTotal },
       { cur: state?.sourceToken?.hp, max: state?.sourceToken?.maxHp },
     ];
     for (const c of candidates) {
+      if (c.cur == null || c.max == null || String(c.cur).trim() === "" || String(c.max).trim() === "") continue;
       const cur = Number(c.cur);
       const max = Number(c.max);
       if (Number.isFinite(cur) && Number.isFinite(max) && max > 0) {
@@ -1087,6 +1095,12 @@
     return getAvailableSurges(state);
   }
 
+  function surgeDamagePerSpend(state) {
+    const bonus = state.context?.getStrongestAttribute?.()?.bonus;
+    if (Number.isFinite(Number(bonus))) return Math.max(0, asInt(bonus, 0));
+    return Math.max(0, ...["might", "agility", "reason", "intuition", "presence"].map(key => asInt(state.hero?.stats?.[key], 0)));
+  }
+
   function canUsePowerRollSurges(block) {
     return block?.rollEvent !== "abilityTest";
   }
@@ -1097,7 +1111,7 @@
       return 0;
     }
     const available = getAvailableSurges(state);
-    state.powerRollSurges = Math.max(0, Math.min(available, asInt(state.powerRollSurges, 0)));
+    state.powerRollSurges = Math.max(0, Math.min(3, available, asInt(state.powerRollSurges, 0)));
     return state.powerRollSurges;
   }
 
@@ -1108,32 +1122,39 @@
     const hasAvailableSurges = available > 0;
     const hasArmedSurges = count > 0;
     const disabledMinus = count <= 0 ? "disabled" : "";
-    const disabledPlus = count >= available ? "disabled" : "";
+    const disabledPlus = count >= Math.min(3, available) ? "disabled" : "";
     const plusTitle = available <= 0
       ? ' title="No surges available on this character" aria-label="No surges available"'
       : hasArmedSurges
-        ? ` title="${count} surge${count === 1 ? "" : "s"} armed for +${count * 2} damage" aria-label="${count} surge${count === 1 ? "" : "s"} armed for +${count * 2} damage"`
-        : ' title="Spend one surge for +2 damage" aria-label="Spend one surge for +2 damage"';
+        ? ` title="${count} surge${count === 1 ? "" : "s"} armed for +${count * surgeDamagePerSpend(state)} damage" aria-label="${count} surge${count === 1 ? "" : "s"} armed for +${count * surgeDamagePerSpend(state)} damage"`
+        : ` title="Spend one surge for +${surgeDamagePerSpend(state)} damage" aria-label="Spend one surge for +${surgeDamagePerSpend(state)} damage"`;
     return `
       <div class="power-roll-runner__surges ${hasAvailableSurges ? "power-roll-runner__surges--available" : ""} ${hasArmedSurges ? "power-roll-runner__surges--armed" : ""}">
         <span>Surges: ${escapeHtml(available)}</span>
         <button class="power-roll-runner__mini-btn" type="button" data-power-roll-surge-adjust="-1" ${disabledMinus}>-</button>
-        <strong class="${hasArmedSurges ? "is-armed" : ""}" data-power-roll-surge-count>${escapeHtml(count)} (+${escapeHtml(count * 2)} damage)</strong>
-        <button class="power-roll-runner__mini-btn power-roll-runner__surge-btn ${hasAvailableSurges ? "is-available" : ""} ${hasArmedSurges ? "is-armed" : ""}" type="button" data-power-roll-surge-adjust="1" aria-pressed="${hasArmedSurges ? "true" : "false"}" ${disabledPlus}${plusTitle}>${hasArmedSurges ? "Surge Armed" : "Surge +2"}</button>
+        <strong class="${hasArmedSurges ? "is-armed" : ""}" data-power-roll-surge-count>${escapeHtml(count)} (+${escapeHtml(count * surgeDamagePerSpend(state))} damage)</strong>
+        <button class="power-roll-runner__mini-btn power-roll-runner__surge-btn ${hasAvailableSurges ? "is-available" : ""} ${hasArmedSurges ? "is-armed" : ""}" type="button" data-power-roll-surge-adjust="1" aria-pressed="${hasArmedSurges ? "true" : "false"}" ${disabledPlus}${plusTitle}>${hasArmedSurges ? "Surge Armed" : `Surge +${surgeDamagePerSpend(state)}`}</button>
       </div>
     `;
   }
 
-  async function consumePowerRollSurgeBonus(state, ctx) {
+  async function consumePowerRollSurgeBonus(state, ctx, targets) {
     const surgeCtx = ctx?.powerRollSurges;
     if (!surgeCtx || surgeCtx.consumed) return { spent: 0, damage: 0 };
     surgeCtx.consumed = true;
-    const requested = Math.max(0, asInt(surgeCtx.requested, 0));
+    const requested = Math.max(0, Math.min(3, asInt(surgeCtx.requested, 0)));
     if (!requested) return { spent: 0, damage: 0 };
+    const eligible = [...new Map((targets || []).filter(target => target?.id).map(target => [target.id, target])).values()];
+    if (!eligible.length) return { spent: 0, damage: 0 };
+    const choice = await askChoice(state, {
+      prompt: "Which target receives the surge damage?",
+      options: eligible.map(target => ({ id: target.id, label: target.hidden || target.placement?.hidden ? "Hidden target" : target.name || "Target" })),
+    });
+    if (state.aborted || !choice) return { spent: 0, damage: 0 };
     const placementId = state.sourcePlacement?.id || "";
     if (!placementId || typeof state.context.applySurgeGain !== "function") {
       await postChat(state.context, {
-        message: `${state.heroName} - ${state.action.name || "Ability"}: spend ${requested} surge${requested === 1 ? "" : "s"} manually for +${requested * 2} damage.`,
+        message: `${state.heroName} - ${state.action.name || "Ability"}: spend ${requested} surge${requested === 1 ? "" : "s"} manually for +${requested * surgeDamagePerSpend(state)} damage.`,
       });
       return { spent: 0, damage: 0 };
     }
@@ -1154,8 +1175,8 @@
       state.hero.surges = current;
     }
     surgeCtx.spent = spent;
-    surgeCtx.damage = spent * 2;
-    return { spent, damage: spent * 2 };
+    surgeCtx.damage = spent * surgeDamagePerSpend(state);
+    return { spent, damage: spent * surgeDamagePerSpend(state), targetId: choice.id };
   }
 
   function renderPowerRoll(host, state, block) {
@@ -1334,7 +1355,7 @@
           asInt(state.powerRollSurges, 0) + asInt(surgeButton.getAttribute("data-power-roll-surge-adjust"), 0);
         const count = clampPowerRollSurges(state, block);
         state.resultText = count
-          ? `${count} surge${count === 1 ? "" : "s"} armed for +${count * 2} damage after this roll.`
+          ? `${count} surge${count === 1 ? "" : "s"} armed for +${count * surgeDamagePerSpend(state)} damage after this roll.`
           : "No surges armed.";
         renderPowerRoll(host, state, block);
         return;
@@ -1978,10 +1999,11 @@
     }
     const lines = [];
     let visibleHidden = 0;
-    const surgeBonus = await consumePowerRollSurgeBonus(state, ctx);
+    const selectedSurgeBonus = await consumePowerRollSurgeBonus(state, ctx, targets);
     for (const target of targets) {
       if (state.aborted) return;
       if (!target?.id) continue;
+      const surgeBonus = selectedSurgeBonus.targetId === target.id ? selectedSurgeBonus : { spent: 0, damage: 0 };
       const diceAmount = rollDiceFormula(effect.amountDice);
       let markBonus = 0;
       if (effect.markBonusDice && typeof state.context.checkMark === "function") {
@@ -2028,7 +2050,7 @@
       if (Number.isFinite(result?.vulnerability) && result.vulnerability > 0) adjustments.push(`+${result.vulnerability} vulnerability`);
       if (Number.isFinite(result?.immunity) && result.immunity > 0) adjustments.push(`-${result.immunity} immunity`);
       if (Number.isFinite(result?.ignoredImmunity) && result.ignoredImmunity > 0) adjustments.push(`${result.ignoredImmunity} immunity ignored`);
-      const adjustmentText = adjustments.length
+      const adjustmentText = !result?.hideHitPointValues && adjustments.length
         ? ` (${amountBeforeSurge}${damageType ? ` ${damageType}` : ""} ${adjustments.join(" ")} = ${finalAmount})`
         : "";
       const remaining = result?.hideHitPointValues ? "" : result?.max !== null && result?.max !== undefined
@@ -2388,6 +2410,7 @@
         target,
         sourcePlacement: state.sourcePlacement || null,
         sourceTraits: state.sourceTraits || {},
+        keywords: getAbilityKeywords(state),
         abilityName: state.action.name || "Ability",
         ...(effect.ignoreStability !== undefined ? { ignoreStability: effect.ignoreStability } : {}),
       });
@@ -2418,7 +2441,8 @@
         state.context.fireTriggerEvent({ eventType: "forcedMovement", payload: eventPayload });
         state.context.fireTriggerEvent({ eventType: "forcedMovementDealt", payload: eventPayload });
       }
-      lines.push(`${result.name || target.name || "Target"} is ${verb}ed ${moved} square${moved === 1 ? "" : "s"}.`);
+      const pastVerb = ({ push: "pushed", pull: "pulled", slide: "slid", verticalPush: "vertically pushed", verticalPull: "vertically pulled", verticalSlide: "vertically slid" })[verb] || "moved";
+      lines.push(`${result.name || target.name || "Target"} is ${pastVerb} ${moved} square${moved === 1 ? "" : "s"}.`);
       if (result.collision) {
         lines.push(
           `Collision: ${result.collision.targetName || "Target"} and ${result.collision.collidedName || "the other token"} each take ${result.collision.damage} untyped damage.`

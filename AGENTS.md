@@ -1341,3 +1341,18 @@ Protected support/traversal fields remain server-derived.
 Manual damage/healing targeting temporarily disables only portal hit targets;
 symbols stay visible. Shared cancel/close and scene changes restore them. Keep
 automation capture handling and ordinary portal interaction unchanged.
+
+
+### Test-report corrections - 1.19.186
+
+Player projection carries automationTraits and monsterTriggerHooks for automation,
+never a player stat display. Shared enemy chat hides defense arithmetic. Authored
+trigger cards register independently under one ability ID. Automated healing awaits
+accepted placement persistence before reporting success or stamina events.
+Area predicates use the caster; monster action events use main/triggered/villain.
+Forced movement uses Big Versus Little, with effective keywords in the request.
+Surge damage uses the highest characteristic, caps at three, and selects one target
+of the first damage effect. Potency surge spending remains manual. Recovery polling
+slows only after private-channel subscription succeeds. B5/B5b concurrent-write
+fixes remain pending; do not blindly queue/rebase whole arrays or absolute stamina.
+See docs/vtt-testing-review-2026-10-02.md for deferrals and validation boundaries.

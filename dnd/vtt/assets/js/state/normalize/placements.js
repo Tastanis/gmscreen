@@ -215,6 +215,10 @@ export function normalizePlacementEntry(entry) {
     normalized.monsterTriggerHooks = clonePlainObject(entry.monsterTriggerHooks);
   }
 
+  if (entry.automationTraits && typeof entry.automationTraits === 'object') {
+    normalized.automationTraits = clonePlainObject(entry.automationTraits);
+  }
+
   if (Object.keys(traits).length > 0) {
     normalized.traits = traits;
   }

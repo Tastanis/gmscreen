@@ -2787,13 +2787,14 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!entry || !entry.tokenId || !entry.eventType || typeof entry.predicate !== 'function') {
       return null;
     }
-    // De-duplicate: if the same token already has an entry with this abilityId,
-    // drop the old one so re-casting the ability replaces instead of stacking.
+    // Replace the same registration, preserving distinct authored trigger cards
+    // within one ability. Runtime re-casts retain their existing replacement key.
     // Without this, every cast adds a fresh predicate to the registry and the
     // same trigger fires N times per matching event.
     if (entry.abilityId) {
       const existingForToken = triggerRegistry.byToken.get(entry.tokenId) || [];
-      const stale = existingForToken.filter((e) => e.abilityId === entry.abilityId);
+      const stale = existingForToken.filter((e) => e.abilityId === entry.abilityId
+        && (e.registrationKey || '') === (entry.registrationKey || ''));
       for (const old of stale) {
         const eventList = triggerRegistry.byEvent.get(old.eventType);
         if (eventList) {
@@ -5279,7 +5280,7 @@ export function mountBoardInteractions(store, routes = {}) {
     return text.includes('triggered') && text.includes('free');
   }
 
-  function registerAuthoredTriggerBlock({ placementId, action, actionIndex, block, usageLimit = null }) {
+  function registerAuthoredTriggerBlock({ placementId, action, actionIndex, block, blockIndex = 0, usageLimit = null }) {
     const match = block?.match && typeof block.match === 'object' ? block.match : null;
     if (!placementId || !match?.event) return false;
     const casterTeam = getTeamForPlacementId(placementId);
@@ -5293,6 +5294,7 @@ export function mountBoardInteractions(store, routes = {}) {
       match,
       targetIds: [],
       abilityId,
+      registrationKey: `authored:${blockIndex}`,
       abilityName: action?.name || 'Triggered Ability',
       freeTriggered: isFreeTriggeredActionLabel(action?.actionLabel || action?.type || action?.kind || ''),
       authored: true,
@@ -5358,12 +5360,13 @@ export function mountBoardInteractions(store, routes = {}) {
       const isFree = hook.category !== 'triggered_action'
         || String(hook.resourceCost || '').toLowerCase().includes('free');
       const actionLabel = isFree ? 'Free Triggered Action' : 'Triggered Action';
-      (Array.isArray(hook.blocks) ? hook.blocks : []).forEach((block) => {
+      (Array.isArray(hook.blocks) ? hook.blocks : []).forEach((block, blockIndex) => {
         const ok = registerAuthoredTriggerBlock({
           placementId,
           action: { _stableActionId: stableId, name: hook.name, actionLabel },
           actionIndex: hookIndex,
           block,
+          blockIndex,
         });
         if (ok) registered += 1;
       });
@@ -5398,8 +5401,8 @@ export function mountBoardInteractions(store, routes = {}) {
         const automation = normalizeAuthoredAutomation(action?.automation);
         if (!hasAuthoredAutomation(automation)) return;
         const triggerBlocks = (automation.cards || []).filter((block) => block?.type === 'trigger' && block.match);
-        triggerBlocks.forEach((block) => {
-          if (registerAuthoredTriggerBlock({ placementId, action, actionIndex, block, usageLimit: automation.usageLimit || null })) {
+        triggerBlocks.forEach((block, blockIndex) => {
+          if (registerAuthoredTriggerBlock({ placementId, action, actionIndex, block, blockIndex, usageLimit: automation.usageLimit || null })) {
             registered += 1;
           }
         });
@@ -6446,7 +6449,7 @@ export function mountBoardInteractions(store, routes = {}) {
         : action.mode === 'damage'
           ? ` (${hpDisplay} HP remaining).`
           : ` (${hpDisplay} HP).`;
-      const adjustmentText = action.mode === 'damage'
+      const adjustmentText = action.mode === 'damage' && showHitPointValues
         ? formatManualDamageAdjustment(result)
         : '';
       updateStatus(`${name} ${verb} ${change} ${effectLabel}${adjustmentText}${suffix}`);
@@ -16096,7 +16099,8 @@ export function mountBoardInteractions(store, routes = {}) {
       return true;
     }
 
-    const placement = findRenderedPlacementAtPoint(event);
+    const hit = findRenderedPlacementAtPoint(event);
+    const placement = hit?.id ? getPlacementFromStore(hit.id) : null;
     if (!placement) {
       cancelPendingAutomationTarget('Target selection canceled.');
       return true;
@@ -16372,7 +16376,7 @@ export function mountBoardInteractions(store, routes = {}) {
     return getPlacementsForActiveScene().filter((placement) => {
       if (!placement?.id) return false;
       if (!doesAutomationAreaAffectPlacement(area, placement)) return false;
-      return doesAutomationTargetFilterMatch(placement, config.creature || config.affects || 'creature');
+      return doesAutomationTargetFilterMatch(placement, config.creature || config.affects || 'creature', config.sourcePlacement);
     });
   }
 
@@ -16464,8 +16468,8 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
     const beforePlacement = getPlacementFromStore(payload.placementId);
-    const beforeStamina = Number.isFinite(beforePlacement?.currentStamina)
-      ? beforePlacement.currentStamina
+    const beforeStamina = beforePlacement
+      ? parseHitPointNumber(ensurePlacementHitPoints(beforePlacement.hp).current)
       : null;
     await Promise.all([
       registerAuthoredTriggersForPlacement(payload.placementId),
@@ -16635,14 +16639,22 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
     const beforePlacement = getPlacementFromStore(payload.placementId);
-    const beforeStamina = Number.isFinite(beforePlacement?.currentStamina)
-      ? beforePlacement.currentStamina
+    const beforeStamina = beforePlacement
+      ? parseHitPointNumber(ensurePlacementHitPoints(beforePlacement.hp).current)
       : null;
     // For heal: cap at max. For temporaryStamina: allow going over (allowTempHp=true).
     const allowTempHp = Boolean(payload.allowTempHp);
-    const result = applyDamageHealToPlacement(payload.placementId, 'heal', amount, { allowTempHp });
+    const result = applyDamageHealToPlacement(payload.placementId, 'heal', amount, { allowTempHp, fireStaminaTriggers: false });
     if (!result) {
       reject?.(new Error('Unable to update stamina for that token.'));
+      return;
+    }
+    try {
+      await awaitSuccessfulPlacementSave(result);
+    } catch (error) {
+      renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState, { skipTracker: true });
+      refreshTokenSettings();
+      reject?.(error);
       return;
     }
     const placement = getPlacementFromStore(payload.placementId);
@@ -16853,8 +16865,8 @@ export function mountBoardInteractions(store, routes = {}) {
     const lists = sheet?.sidebar?.lists && typeof sheet.sidebar.lists === 'object' ? sheet.sidebar.lists : {};
     const sheetImmunity = parseDamageAdjustmentList(lists.immunity, damageType);
     const sheetVulnerability = parseDamageAdjustmentList(lists.vulnerability ?? lists.weakness, damageType);
-    const monsterImmunity = parseMonsterDefenseDamageAdjustment(placement?.monster, 'immunity', damageType);
-    const monsterVulnerability = parseMonsterDefenseDamageAdjustment(placement?.monster, 'weakness', damageType);
+    const monsterImmunity = parseMonsterDefenseDamageAdjustment(placement?.monster || placement?.automationTraits, 'immunity', damageType);
+    const monsterVulnerability = parseMonsterDefenseDamageAdjustment(placement?.monster || placement?.automationTraits, 'weakness', damageType);
     // Per-placement condition riders. Stack additively on top of the sheet's
     // immunity/vulnerability lists. `damageWeakness` adds to vulnerability,
     // `damageImmunity` adds to immunity. An empty / "untyped" damageType on
@@ -17436,12 +17448,13 @@ export function mountBoardInteractions(store, routes = {}) {
     };
     const sourceRank = getAutomationSizeRank(sourceTraits.size, sourcePlacement);
     const targetRank = getAutomationSizeRank(targetTraits.size, targetPlacement);
-    const sizeDifference = targetRank - sourceRank;
+    const keywords = (Array.isArray(payload.keywords) ? payload.keywords : []).map((value) => String(value).trim().toLowerCase());
+    const sizeBonus = sourceRank > targetRank && keywords.includes('melee') && keywords.includes('weapon') ? 1 : 0;
 
     const movementResolution = resolveAutomationForcedMovementDistance({
-      distance: requestedDistance,
+      distance: requestedDistance + sizeBonus,
       stability: targetTraits.stability,
-      sizePenalty: Math.max(0, sizeDifference),
+      sizePenalty: 0,
       ignoreStability: payload.ignoreStability,
       ignoreSizePenalty: payload.ignoreSizePenalty,
     });
@@ -17474,7 +17487,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const sheet = await getAutomationSheetForPlacement(placement?.id);
     const vitals = sheet?.hero?.vitals && typeof sheet.hero.vitals === 'object' ? sheet.hero.vitals : {};
     const traits = placement?.traits && typeof placement.traits === 'object' ? placement.traits : {};
-    const monster = placement?.monster && typeof placement.monster === 'object' ? placement.monster : {};
+    const monster = placement?.monster || placement?.automationTraits || {};
     const defenses = monster.defenses && typeof monster.defenses === 'object' ? monster.defenses : {};
     const baseStability = firstAutomationTraitValue(
       vitals.stability,
@@ -17536,7 +17549,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (Object.keys(stats).length > 0) {
       return stats;
     }
-    return getMonsterAutomationStats(placement?.monster);
+    return getMonsterAutomationStats(placement?.monster || placement?.automationTraits);
   }
 
   function getMonsterAutomationStats(monster) {

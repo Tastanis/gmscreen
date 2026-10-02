@@ -165,7 +165,7 @@
             description: ability.effect || '',
             range: ability.range || '',
             cost: ability.resource_cost || '',
-            actionKind: category || '',
+            actionKind: ({ action: 'main', triggered_action: 'triggered', villain_action: 'villain' })[category] || category || '',
             actionLabel: actionLabel
         };
 
@@ -181,6 +181,9 @@
 
         // Monster-flavored spendResource: rejects PC-only resources with chat note.
         function spendResource(spec) {
+            // The runner passes the ability itself for its initial cost. Malice
+            // is already reserved by start(); only explicit spend effects belong here.
+            if (spec === action) return { skipped: true, reason: 'handled-ability-cost' };
             var resource = spec && spec.resource ? String(spec.resource).toLowerCase() : '';
             if (resource === 'heroic' || resource === 'recovery' || resource === 'recoveries') {
                 postChat({

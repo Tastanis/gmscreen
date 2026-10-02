@@ -98,3 +98,16 @@ test('an over-budget ability at zero Malice has no debit or refundable reservati
   assert.equal(runtime.openCalls[0].resourceReservation.maliceSpent, 0);
   assert.equal(runtime.getMalice(), 0);
 });
+
+test('monster action events use canonical action kinds and initial costs are not spent twice', async () => {
+  for (const [category, kind] of [['action', 'main'], ['maneuver', 'maneuver'], ['triggered_action', 'triggered'], ['villain_action', 'villain']]) {
+    const runtime = createRuntime();
+    await runtime.window.MonsterAbilityRunner.start({ name: 'Dummy' }, {
+      name: 'Test', automation: { schema: 'ability-automation/v3', cards: [{ type: 'effect', effects: [] }] },
+    }, category, { id: 'dummy' });
+    const context = runtime.openCalls[0];
+    assert.equal(context.action.actionKind, kind);
+    assert.equal(context.spendResource(context.action).reason, 'handled-ability-cost');
+    assert.deepEqual(runtime.spends, []);
+  }
+});

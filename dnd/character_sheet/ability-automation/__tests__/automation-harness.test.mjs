@@ -1012,12 +1012,34 @@ test('power roll refreshes live surges before enabling the surge control', async
   }
 });
 
+test('surges cap at three and apply highest-characteristic damage only to the chosen target', async () => {
+  const targets = [{id:'first',name:'First'}, {id:'second',name:'Second'}];
+  const harness = await createAbilityAutomationHarness({attributes:{Might:1,Agility:3},targets});
+  try {
+    const result = await harness.runAutomation({
+      automation:{schema:'ability-automation/v3',cards:[
+        {type:'target',name:'primary',mode:'token',predicate:'enemy',count:{value:2,mode:'exact'}},
+        {type:'powerRoll',attribute:'Might',target:'primary',tiers:{
+          tier1:{effects:[{kind:'damage',amount:5}]},tier2:{effects:[{kind:'damage',amount:5}]},tier3:{effects:[{kind:'damage',amount:5}]},
+        }},
+      ]},
+      hero:{name:'Hero',surges:8},targetSelections:targets,powerRollSurges:[5],powerRollTiers:['tier2'],choiceSelections:['second'],
+    });
+    assert.equal(result.calls.applySurgeGain[0].amount,-3);
+    assert.equal(result.calls.applyDamage[0].amount,5);
+    assert.equal(result.calls.applyDamage[0].includesSurge,undefined);
+    assert.equal(result.calls.applyDamage[1].amount,14);
+    assert.equal(result.calls.applyDamage[1].surgeDamage,9);
+    assert.equal(result.calls.applyDamage[1].surgeSpent,3);
+  } finally { harness.close(); }
+});
+
 test('power roll surge control exposes available and armed visual states', async () => {
   const harness = await createAbilityAutomationHarness();
   try {
     const render = harness.window.AbilityAutomationRunner.__testing.renderPowerRollSurgeControls;
     const availableHtml = render(
-      { hero: { surges: 2 }, powerRollSurges: 0 },
+      { hero: { surges: 2, stats: { agility: 2 } }, powerRollSurges: 0 },
       { type: 'powerRoll', tiers: {} },
     );
     assert.match(availableHtml, /power-roll-runner__surges--available/);
@@ -1026,7 +1048,7 @@ test('power roll surge control exposes available and armed visual states', async
     assert.match(availableHtml, />Surge \+2<\/button>/);
 
     const armedHtml = render(
-      { hero: { surges: 2 }, powerRollSurges: 1 },
+      { hero: { surges: 2, stats: { agility: 2 } }, powerRollSurges: 1 },
       { type: 'powerRoll', tiers: {} },
     );
     assert.match(armedHtml, /power-roll-runner__surges--armed/);
@@ -1726,7 +1748,8 @@ for (const hideHitPointValues of [true, false]) {
       });
       const chat=result.calls.postChat.map(c=>c.message||'').join('\n');
       assert.match(chat,/45 fire damage/);
-      assert.match(chat,/-5 immunity/);
+      if (hideHitPointValues) assert.doesNotMatch(chat,/immunity/);
+      else assert.match(chat,/-5 immunity/);
       assert.match(chat,/recovers 10 stamina/);
       if(hideHitPointValues) assert.doesNotMatch(chat,/350|360|400|stamina remaining/);
       else {assert.match(chat,/350\/400/);assert.match(chat,/360\/400/);}
