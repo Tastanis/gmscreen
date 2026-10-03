@@ -40,7 +40,7 @@ function aslhub_apply_account_reset(PDO $pdo, array $roster, string $reviewHash,
         $pdo->prepare("INSERT INTO users (first_name,last_name,password,is_teacher,teacher,is_active,is_unclaimed,level,class_period) VALUES ('test','test',?,0,'harms',1,1,1,1)")
             ->execute([password_hash(bin2hex(random_bytes(32)), PASSWORD_DEFAULT)]);
     }
-    $insert = $pdo->prepare("INSERT INTO users (first_name,last_name,email,skyward_student_id,level,class_period,password,is_teacher,teacher,is_active,is_unclaimed) VALUES (?,?,?,?,?,?,?,0,'harms',1,1)");
-    foreach ($roster['students'] as $s) $insert->execute([$s['first_name'],$s['last_name'],$s['email'],$s['skyward_student_id'],$s['level'],$s['class_period'],password_hash(bin2hex(random_bytes(32)),PASSWORD_DEFAULT)]);
+    $insert = $pdo->prepare("INSERT INTO users (first_name,last_name,email,level,class_period,password,is_teacher,teacher,is_active,is_unclaimed) VALUES (?,?,?,?,?,?,0,'harms',1,1)");
+    foreach ($roster['students'] as $s) $insert->execute([$s['first_name'],$s['last_name'],$s['email'],$s['level'],$s['class_period'],password_hash(bin2hex(random_bytes(32)),PASSWORD_DEFAULT)]);
     return $plan;
 }

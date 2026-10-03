@@ -40,6 +40,7 @@ refused(fn()=>aslhub_apply_account_reset($pdo,$roster,'stale',$backup,$hash),'st
 refused(fn()=>aslhub_apply_account_reset($pdo,$roster,$plan['review_sha256'],$backup,'bad'),'corrupt backup refused');
 aslhub_apply_account_reset($pdo,$roster,$plan['review_sha256'],$backup,$hash);
 check((int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn()===5,'roster accounts plus teacher and test');
+check((int)$pdo->query('SELECT COUNT(*) FROM users WHERE skyward_student_id IS NOT NULL')->fetchColumn()===0,'reset import never stores Skyward numbers even when passed legacy input');
 foreach (ASLHUB_ACCOUNT_DEPENDENCIES as $t) check((int)$pdo->query("SELECT COUNT(*) FROM `$t`")->fetchColumn()===2,"retained data in $t");
 check($pdo->query('SELECT password FROM users WHERE id=1')->fetchColumn()===$users[0]['password'],'teacher password preserved');
 check(aslhub_authenticate($pdo,'test','test','test')===null,'old test password cannot bypass claiming');
@@ -74,8 +75,8 @@ if (isset($argv[1])) {
     check(count(aslhub_scoped_students($pdo,$teacher,['level'=>3]))===8,'private roster all ASL3 = 8');
     check(count(aslhub_scoped_students($pdo,$teacher,['period'=>5]))===30,'private roster period5 = 30');
     check(count(aslhub_scoped_students($pdo,$teacher,['period'=>5,'level'=>3]))===1,'private roster period5 ASL3 = 1');
-    $actual=$pdo->query('SELECT first_name,last_name,email,skyward_student_id,class_period,level FROM users WHERE is_unclaimed=1 AND skyward_student_id IS NOT NULL ORDER BY skyward_student_id')->fetchAll();
-    $expected=$r['students']; usort($expected,fn($a,$b)=>strcmp($a['skyward_student_id'],$b['skyward_student_id']));
+    $actual=$pdo->query("SELECT first_name,last_name,email,class_period,level FROM users WHERE is_unclaimed=1 AND is_teacher=0 AND NOT (first_name='test' AND last_name='test') ORDER BY email")->fetchAll();
+    $expected=$r['students']; usort($expected,fn($a,$b)=>strcmp($a['email'],$b['email']));
     check($actual==$expected,'all 143 stored names emails course and period match source');
     $pdo->rollBack(); unlink($privateBackup);
 }

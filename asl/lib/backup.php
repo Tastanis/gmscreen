@@ -227,6 +227,8 @@ function aslhub_backup_sql(PDO $pdo, ?string $directory = null): string {
                 $write("DROP TABLE IF EXISTS `$table`;\n" . $create['Create Table'] . ";\n\n");
                 $stmt = $pdo->query("SELECT * FROM `$table`");
                 while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                    // Never reproduce legacy Skyward numbers in new backups.
+                    if ($table === 'users' && array_key_exists('skyward_student_id', $row)) $row['skyward_student_id'] = null;
                     $cols = '`' . implode('`,`', array_keys($row)) . '`';
                     $vals = implode(',', array_map(function ($v) use ($pdo) {
                         return $v === null ? 'NULL' : $pdo->quote((string)$v);

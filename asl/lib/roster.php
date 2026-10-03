@@ -40,7 +40,7 @@ function aslhub_read_rosters(string $directory): array {
             if (isset($names[$key]) || isset($ids[$id]) || isset($emails[strtolower($email)])) throw new RuntimeException('Duplicate roster identity; no accounts imported.');
             if ($key === 'test|test' || $key === 'brandon|harms') throw new RuntimeException('Roster collides with a retained account.');
             $names[$key] = $ids[$id] = $emails[strtolower($email)] = true;
-            $students[] = ['first_name'=>$first, 'last_name'=>$last, 'email'=>$email, 'skyward_student_id'=>$id, 'class_period'=>$period, 'level'=>$level];
+            $students[] = ['first_name'=>$first, 'last_name'=>$last, 'email'=>$email, 'class_period'=>$period, 'level'=>$level];
             $count++;
         }
         if (!$count) throw new RuntimeException('Empty roster: ' . basename($file));
