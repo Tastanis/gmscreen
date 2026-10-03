@@ -6,6 +6,9 @@ const errors=[];page.on('pageerror',e=>errors.push(e.message));
 await page.goto(base+'/session.php?id=1');await page.goto(base+'/dashboard.php?student_id=2');
 for(const range of ['ytd','full']){
  await page.locator('[data-range-toggle="progress"] [data-range="'+range+'"]').click();
+ const noGoal=page.locator('#progress-chart circle[aria-label*="No growth required"]');
+ assert.equal(await noGoal.count(),1);
+ assert.equal(await page.locator('#progress-chart .chart-line').count(),2,'zero-target first block retains both connecting segments');
  const baseline=page.locator('#progress-chart circle[aria-label*="School-year starting point"]');
  assert.equal(await baseline.count(),1);assert.equal(Number(await baseline.getAttribute('cx')),58);
  assert.match(await baseline.getAttribute('aria-label'),/2026-09-08.*0 growth points/);

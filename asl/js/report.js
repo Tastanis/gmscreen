@@ -16,7 +16,7 @@
 
         const points = data.progress[sourceIndex];
 
-        return {fraction, points, date: block.is_current ? data.today : block.end_date,
+        return {fraction, points, noExpectation: block.instructional_days_elapsed > 0 && points != null && ASLChartMath.expectedGrowth(blocks, data.target_count, sourceIndex) === 0, date: block.is_current ? data.today : block.end_date,
 
             percent: block.instructional_days_elapsed > 0 ? ASLChartMath.scheduledPacePercent(points, blocks, data.target_count, sourceIndex) : null};
 

@@ -201,3 +201,5 @@ February 5 clock), grading navigation/header tests, and class report PDF page co
 Local fixtures do not verify production MySQL migration or hosted deployment.
 
 Reports show a percentage-only year-end skills projection and an estimated grade from `(2 * skills_pace_percent + participation_percent) / 3`, excluding leadership. The participation summary remains total earned / total available; its chart shows each block's own percentage, never a rolling average. Short blocks use their own three-points-per-instructional-day maximum. Reports retain monochrome one-page fitting with both proficiency and participation charts.
+
+Zero-expectation blocks retain a connected baseline marker in dashboard and report charts, labeled No growth required with the actual earned growth in its tooltip. This is a display convention, not a zero-percent pace grade; the mathematical pace and report estimate remain undefined until expectations begin. Missing observations still break the line.

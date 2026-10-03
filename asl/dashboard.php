@@ -669,6 +669,7 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
                 const fraction = block.is_current ? elapsed : paceDayFraction(block);
                 return {
                     points,
+                    noExpectation: blockHasStarted(block) && points != null && ASLChartMath.expectedGrowth(allBlocks, scopeTargets, block.sourceIndex ?? allBlocks.indexOf(block)) === 0,
                     percent: blockHasStarted(block) ? ASLChartMath.scheduledPacePercent(points, allBlocks, scopeTargets, block.sourceIndex ?? allBlocks.indexOf(block)) : null,
                     fraction: visibleFraction ? fraction / visibleFraction : 0,
                     date: block.is_current ? dashboardData.today : blockDate(block),

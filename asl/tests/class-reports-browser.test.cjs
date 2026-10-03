@@ -18,7 +18,14 @@ for(const path of ['dashboard','weekly','notes','reports']) {
 await page.screenshot({path:out+'-reports.png',fullPage:true});
 const popupPromise=page.waitForEvent('popup');await page.getByRole('link',{name:'Print class reports (2)'}).click();const reports=await popupPromise;await reports.waitForLoadState();
 assert.equal(await reports.locator('.report-sheet').count(),2);
-assert.equal(await reports.locator('.report-progress-chart .chart-dot').count()>2,true);
+assert.equal(await reports.locator('.report-progress-chart .chart-dot').count(),6);
+assert.equal(await reports.locator('.report-progress-chart .chart-line').count(),4);
+assert.equal(await reports.locator('.report-progress-chart circle[aria-label*="No growth required"]').count(),2);
+for (const sheet of await reports.locator('.report-sheet').all()) {
+ const earned=await sheet.locator('.report-data').evaluate(e=>JSON.parse(e.textContent).progress[0]);
+ assert(earned>0,'fixture includes genuine first-block growth');
+ assert.match(await sheet.locator('circle[aria-label*="No growth required"]').getAttribute('aria-label'),new RegExp(earned+' growth points earned'));
+}
 assert.deepEqual(await reports.locator('.report-header h1').allTextContents(),['ASL3 Student','Demo Student']);
 await reports.emulateMedia({media:'print'});
 assert.deepEqual(await reports.locator('body').evaluate(e=>({background:getComputedStyle(e).backgroundColor,color:getComputedStyle(e).color})),{background:'rgb(255, 255, 255)',color:'rgb(0, 0, 0)'});
@@ -49,6 +56,12 @@ await page.goto(base+'/report.php?period=1&level=1');assert.equal(await page.loc
 await page.goto(base+'/report.php?student_id=2');assert.equal(await page.locator('.report-sheet').count(),1);
 assert.equal((await page.goto(base+'/report.php?period=all')).status(),400);
 await page.goto(base+'/dashboard.php?student_id=2');
+for (const range of ['ytd','full']) {
+ await page.locator('[data-range-toggle="progress"] [data-range="'+range+'"]').click();
+ assert.equal(await page.locator('#progress-chart .chart-dot').count(),3);
+ assert.equal(await page.locator('#progress-chart .chart-line').count(),2);
+ assert.equal(await page.locator('#progress-chart circle[aria-label*="No growth required"]').count(),1);
+}
 await page.locator('[data-chart-select="participation"]').click();
 await page.getByRole('button',{name:'Block Percentage',exact:true}).click();
 assert.match(await page.locator('#participation-summary').innerText(),/Latest block percentage/);
