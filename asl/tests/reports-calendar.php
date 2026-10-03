@@ -155,10 +155,10 @@ $semesters = aslhub_metrics_from_rows(2, [$crossing,$later],
     [2=>[20=>['absences'=>6,'absences_next_semester'=>1,'participation_points'=>null],21=>['absences'=>2,'participation_points'=>null]]], [2], [2], aslhub_block_metric_payload($pdo,$student,[]));
 verify($semesters['attendance']['ytd_absences'] === [7,8] && $semesters['attendance']['absences'] === [7,1], 'later semester totals replace only their own semester, preserving the previous semester');
 $paceBlocks = array_fill(0, 20, ['instructional_days'=>10,'instructional_days_elapsed'=>0]);
-foreach ([89,91] as $targetCount) {
+foreach ([62,64] as $targetCount) {
     foreach ($paceBlocks as &$paceBlock) $paceBlock['instructional_days_elapsed'] = 0;
     unset($paceBlock);
-    foreach ([0,8,16,26] as $i=>$expected) {
+    foreach ([0,3,6] as $i=>$expected) {
         $paceBlocks[$i]['instructional_days_elapsed'] = 10;
         verify(abs(aslhub_expected_growth($paceBlocks,$targetCount)-$expected)<.00001, 'slower cumulative block goal');
     }

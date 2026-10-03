@@ -36,15 +36,15 @@
     // Early blocks are fixed growth goals; later goals share the remaining school days.
     function expectedGrowth(blocks, targetCount, endIndex, elapsedOnly = true) {
         const annual = Math.max(0, Number(targetCount) * 2);
-        const start = [0, 8, 8, 10];
-        const earlyTotal = blocks.slice(0, 4).reduce((sum, _, i) => sum + start[i], 0);
+        const start = [0, 3, 3];
+        const earlyTotal = blocks.slice(0, start.length).reduce((sum, _, i) => sum + start[i], 0);
         const scale = earlyTotal ? Math.min(1, annual / earlyTotal) : 1;
-        const remainingDays = totalInstructionalDays(blocks.slice(4));
+        const remainingDays = totalInstructionalDays(blocks.slice(start.length));
         let expected = 0;
         blocks.forEach((block, i) => {
             if (i > endIndex) return;
             const days = Number(block.instructional_days || 0);
-            const goal = i < 4 ? start[i] * scale : (remainingDays ? Math.max(0, annual - earlyTotal) * days / remainingDays : 0);
+            const goal = i < start.length ? start[i] * scale : (remainingDays ? Math.max(0, annual - earlyTotal) * days / remainingDays : 0);
             const elapsed = elapsedOnly ? Math.max(0, Math.min(days, Number(block.instructional_days_elapsed || 0))) : days;
             expected += days ? goal * elapsed / days : 0;
         });

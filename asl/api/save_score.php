@@ -9,6 +9,11 @@ require_once dirname(__DIR__) . '/lib/data.php';
 $teacher = aslhub_require_teacher($pdo, true);
 aslhub_require_csrf();
 
+require_once dirname(__DIR__) . '/lib/curriculum_reduction.php';
+try { aslhub_reduction_lock($pdo); }
+catch (RuntimeException $e) { aslhub_json_error($e->getMessage(), 409); }
+register_shutdown_function(fn()=>aslhub_reduction_unlock($pdo));
+
 $studentId = (int)($_POST['student_id'] ?? 0);
 $targetId = (int)($_POST['target_id'] ?? 0);
 $score = $_POST['score'] ?? null;

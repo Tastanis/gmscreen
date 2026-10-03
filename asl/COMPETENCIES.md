@@ -97,7 +97,7 @@ May 31–June 11 (eight instructional days, ending instruction June 10). Holiday
 reduce a block's days, never shift its dates. The user selected the endpoint; the published-break
 baseline is not a confirmed final district calendar.
 
-Expected new growth is 0, 8, 8, and 10 points in the first four blocks for every ASL level. Later blocks divide the remaining annual `2 * target_count - 26` points in proportion to their instructional days. Within a block, expectation advances by elapsed instructional days. Charts and report projections compare cumulative earned growth to cumulative expected growth; zero expectation has no pace percentage. Reference paths are percentages of this schedule, for 100%,
+Expected new growth is 0, 3, and 3 points in the first three blocks for every ASL level. Later blocks divide the remaining annual `2 * target_count - 6` points in proportion to their instructional days. Within a block, expectation advances by elapsed instructional days. Charts and report projections compare cumulative earned growth to cumulative expected growth; zero expectation has no pace percentage. Reference paths are percentages of this schedule, for 100%,
 83%, 73%, and 63% references. Pale red shading is below 60% of that fixed time-adjusted
 path, with no F line or label. These are visual reference paths, not gradebook rules.
 No adaptive catch-up path, plus/minus grades, vacation-only blocks, or vacation dips.
@@ -203,3 +203,49 @@ Local fixtures do not verify production MySQL migration or hosted deployment.
 Reports show a percentage-only year-end skills projection and an estimated grade from `(2 * skills_pace_percent + participation_percent) / 3`, excluding leadership. The participation summary remains total earned / total available; its chart shows each block's own percentage, never a rolling average. Short blocks use their own three-points-per-instructional-day maximum. Reports retain monochrome one-page fitting with both proficiency and participation charts.
 
 Zero-expectation blocks retain a connected baseline marker in dashboard and report charts, labeled No growth required with the actual earned growth in its tooltip. This is a display convention, not a zero-percent pace grade; the mathematical pace and report estimate remain undefined until expectations begin. Missing observations still break the line.
+
+
+## Reviewed curriculum reduction — October 3, 2026
+
+The active bundle for fresh installations is `data/competencies-2026-reduced.json`.
+The original `competencies-2026.json` is retained as the migration source; do not
+regenerate it over the reduced curriculum. Existing installations use their stored
+metadata until the explicit migration is applied. Deployment alone does not merge grades.
+
+ASL 1 now has 62 targets (124 annual growth points); ASL 2/3 have 64 (128).
+The approved opening block goals are 0, 3, 3; the remaining annual points
+are distributed by instructional days. Attendance and participation are unchanged.
+
+Numbers and Fingerspelling has cardinal numbers, fingerspelled words, and numeral
+incorporation. The whole `forms` slot is replaced in the approved production scale.
+Numeral incorporation retains its target IDs and grade history while moving standards.
+Word Formation becomes Sign Accuracy and Clarity; compound/noun-verb scores merge.
+Other merges use the highest current source score separately per assessment mode.
+Historical reconstruction uses each source's state at each original timestamp,
+including later corrections, and never stamps old growth with the migration date.
+Original current/history/self-assessment records remain on inactive source targets.
+Resources linked to merged targets are retargeted; numeral resources retain their IDs.
+Retired discourse/interaction and history education/rights do not transfer scores.
+
+Run privately on the target server after deploying the reviewed code:
+
+```sh
+php asl/scripts/reduce_curriculum.php
+php asl/scripts/reduce_curriculum.php --apply=REVIEW_DIGEST_FROM_PREVIEW
+```
+
+The first command only reads and prints the destination, individual merge results,
+original-date history, and any scored records on retired-only elements. Keep its
+output private. Review it before running apply. The digest includes current data,
+curriculum and database destination; any intervening change requires a fresh preview.
+A private SQL backup must succeed before writes. Apply holds the shared score lock,
+then locks the affected tables' rows in one transaction and records its manifest.
+Teacher scores, student reflections and workbook writes share the score lock.
+Do not run account-reset or other administrative CLI scripts concurrently. A mismatch
+between a current source score and its history blocks the entire migration rather
+than inventing an assessment date. Reapply is refused; never remove the marker to retry.
+
+No production migration was executed during development. SQLite preservation/rollback
+and browser fixture checks do not establish live MySQL locking or hosting state.
+Restore planning must account for any grades entered after migration; do not blindly
+restore a full pre-migration backup over newer student work.

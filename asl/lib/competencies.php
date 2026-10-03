@@ -2,8 +2,8 @@
 /** Bundled curriculum: semantic keys, never titles or source numbers, identify scores. */
 require_once __DIR__ . '/calendar.php';
 
-function aslhub_competency_bundle(): array {
-    return json_decode(file_get_contents(dirname(__DIR__) . '/data/competencies-2026.json'), true, 512, JSON_THROW_ON_ERROR);
+function aslhub_competency_bundle(bool $legacy = false): array {
+    return json_decode(file_get_contents(dirname(__DIR__) . ($legacy ? '/data/competencies-2026.json' : '/data/competencies-2026-reduced.json')), true, 512, JSON_THROW_ON_ERROR);
 }
 
 function aslhub_competencies_installed(PDO $pdo): bool {
@@ -28,7 +28,7 @@ function aslhub_update_manual_wording(PDO $pdo, callable $backup): void {
         $backup($pdo);
         $pdo->beginTransaction();
         try {
-            foreach (aslhub_competency_bundle()['courses'] as $course) {
+            foreach (aslhub_competency_bundle(true)['courses'] as $course) {
                 $level = (int)$course['level'];
                 $manual = array_values(array_filter($course['competencies'], fn($c) => $c['key'] === 'manual'));
                 if (count($manual) !== 1) throw new RuntimeException('Missing manual competency.');
@@ -80,7 +80,7 @@ function aslhub_write_competencies(PDO $pdo, array $bundle): void {
     $standard = $pdo->prepare('INSERT INTO asl_standards (standard_id,bucket_id,name,description,order_index,active) VALUES (?,?,?,?,?,1)
         ON DUPLICATE KEY UPDATE name=VALUES(name),description=VALUES(description),order_index=VALUES(order_index),active=1');
     $target = $pdo->prepare('INSERT INTO asl_learning_targets (standard_id,title,description,order_index,active,asl_level,target_code,sub_code) VALUES (?,?,?,?,1,?,?,?)
-        ON DUPLICATE KEY UPDATE title=VALUES(title),description=VALUES(description),order_index=VALUES(order_index),active=1');
+        ON DUPLICATE KEY UPDATE standard_id=VALUES(standard_id),title=VALUES(title),description=VALUES(description),order_index=VALUES(order_index),active=1');
     $find = $pdo->prepare('SELECT id FROM asl_learning_targets WHERE target_code=?');
     $rubric = $pdo->prepare('INSERT INTO asl_rubric_levels (learning_target_id,score,descriptor) VALUES (?,?,?)
         ON DUPLICATE KEY UPDATE descriptor=VALUES(descriptor)');
@@ -94,7 +94,7 @@ function aslhub_write_competencies(PDO $pdo, array $bundle): void {
             aslhub_set_setting($pdo,'competency_'.$sid,json_encode($c,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR));
             $elements=$c['elements'] ?: [['key'=>'whole','label'=>$c['title']]];
             foreach ($elements as $i=>$e) foreach ($c['modes'] as $mode) {
-                $code=aslhub_competency_target_code($level,$c['key'],$e['key'],$mode);
+                $code=aslhub_competency_target_code($level,$e['identity_competency'] ?? $c['key'],$e['key'],$mode);
                 if (isset($seen[$code])) throw new RuntimeException('Duplicate semantic target identity.');
                 $seen[$code]=true;
                 $replacement=$c['elements'] ? ($e['replacement'] ?? $e['label']) : null;
@@ -124,6 +124,7 @@ function aslhub_import_competencies(PDO $pdo, callable $backup): void {
             aslhub_calendar_apply($pdo,$calendar);
             aslhub_write_competencies($pdo,$bundle);
             aslhub_set_setting($pdo,'competencies_installed',$bundle['version']);
+            aslhub_set_setting($pdo,'manual_connected_signing_v1','1');
             $pdo->commit();
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) $pdo->rollBack();

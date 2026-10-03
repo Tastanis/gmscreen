@@ -55,13 +55,13 @@ test('short weeks advance proficiency expectations only for their school days', 
 });
 
 test('approved calendar and percentage paths use growth 2N goals', () => {
-  const bundle=JSON.parse(fs.readFileSync(new URL('../data/competencies-2026.json', import.meta.url),'utf8'));
+  const bundle=JSON.parse(fs.readFileSync(new URL('../data/competencies-2026-reduced.json', import.meta.url),'utf8'));
   const days=bundle.calendar.days.filter(d=>d.instructional);
   assert.equal(days.length,175);
   assert.equal(days[0].date,'2026-09-08');
   assert.equal(days.at(-1).date,'2027-06-10');
   for (const date of ['2026-10-12','2026-11-11','2026-11-26','2026-11-27','2026-12-21','2027-01-01','2027-01-18','2027-02-12','2027-02-15','2027-04-05','2027-04-09','2027-05-31']) assert(!days.some(d=>d.date===date),date);
-  for (const [level,N] of [[1,89],[2,91],[3,91]]) {
+  for (const [level,N] of [[1,62],[2,64],[3,64]]) {
     const targets=bundle.courses[level-1].competencies.reduce((n,c)=>n+Math.max(1,c.elements.length)*c.modes.length,0);
     assert.equal(targets,N);
     for (const p of [1,.83,.73,.63,.60]) {
@@ -76,16 +76,16 @@ test('approved calendar and percentage paths use growth 2N goals', () => {
  test('slow start is cumulative, prorated, and reaches each full-year target', () => {
    const schedule = Array.from({length:20}, (_,i)=>({instructional_days:i===0?9:10,instructional_days_elapsed:i===0?9:10}));
    schedule[4].instructional_days = schedule[4].instructional_days_elapsed = 5;
-   for (const n of [89,91]) {
-     for (const [index,goal] of [[0,0],[1,8],[2,16],[3,26],[19,2*n]])
+   for (const n of [62,64]) {
+     for (const [index,goal] of [[0,0],[1,3],[2,6],[19,2*n]])
        assert(Math.abs(math.expectedGrowth(schedule,n,index)-goal)<1e-9);
-     assert.equal(math.scheduledPacePercent(8,schedule,n,1),100);
-     assert.equal(math.scheduledPacePercent(4,schedule,n,1),50);
+     assert.equal(math.scheduledPacePercent(3,schedule,n,1),100);
+     assert.equal(math.scheduledPacePercent(1.5,schedule,n,1),50);
      assert.equal(math.scheduledPacePercent(0,schedule,n,0),null);
-     const short = math.expectedGrowth(schedule,n,4)-26;
+     const short = math.expectedGrowth(schedule,n,4)-math.expectedGrowth(schedule,n,3);
      const normal = math.expectedGrowth(schedule,n,5)-math.expectedGrowth(schedule,n,4);
      assert(Math.abs(short*2-normal)<1e-9);
    }
    schedule[1].instructional_days_elapsed=5;
-   assert.equal(math.expectedGrowth(schedule,91,1),4);
+   assert.equal(math.expectedGrowth(schedule,64,1),1.5);
  });

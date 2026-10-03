@@ -24,12 +24,12 @@ rejected(fn()=>aslhub_import_competencies($pdo,fn()=>throw new RuntimeException(
 check($users===$pdo->query('SELECT * FROM users')->fetchAll(),'accounts and passwords unchanged');
 check((int)$pdo->query('SELECT active FROM asl_learning_targets WHERE id=999')->fetchColumn()===0,'legacy target retired');
 check((int)$pdo->query('SELECT score FROM user_learning_targets WHERE learning_target_id=999')->fetchColumn()===4,'legacy grade preserved');
-foreach ([1=>89,2=>91,3=>91] as $level=>$count) {
+foreach ([1=>62,2=>64,3=>64] as $level=>$count) {
     check(aslhub_target_count($pdo,$level)===$count,"ASL $level target count");
     $taxonomy=aslhub_taxonomy($pdo,$level);
     check(count($taxonomy[0]['standards'])===($level===1?15:16),"ASL $level competency metadata");
     $max=(int)$pdo->query("SELECT SUM(m) FROM (SELECT MAX(r.score) m FROM asl_learning_targets t JOIN asl_rubric_levels r ON t.id=r.learning_target_id WHERE t.active=1 AND t.asl_level=$level GROUP BY t.id)")->fetchColumn();
-    check($max===[1=>356,2=>364,3=>352][$level],"ASL $level defined maximum");
+    check($max===[1=>248,2=>256,3=>250][$level],"ASL $level defined maximum");
 }
 $calendar=aslhub_calendar_parse(json_encode($bundle['calendar']));
 check(array_sum(array_column($calendar['blocks'],'instructional_days'))===175 && count($calendar['blocks'])===20 && $calendar['blocks'][0]['instructional_days']===9 && $calendar['blocks'][19]['instructional_days']===8,'175 days in twenty fixed fortnights, with nine-day opening and eight-day ending blocks');
@@ -59,6 +59,10 @@ foreach ($changed['days'] as &$day) {
 }
 unset($day);
 rejected(fn()=>aslhub_calendar_apply($pdo,$changed),'same-count finalized interior day swap refused');
+// The historical prose migration remains testable against the original installed curriculum.
+$pdo=new CompetencyFixturePDO(':memory:'); competency_fixture_schema($pdo);
+$pdo->beginTransaction(); aslhub_write_competencies($pdo,aslhub_competency_bundle(true)); $pdo->commit();
+aslhub_set_setting($pdo,'competencies_installed','competencies-2026-v1');
 // A deployed prose revision must update existing targets without touching grades/calendar.
 $manualIds=$pdo->query("SELECT id FROM asl_learning_targets WHERE standard_id IN ('C1.manual','C2.manual','C3.manual')")->fetchAll(PDO::FETCH_COLUMN);
 foreach ($manualIds as $id) {

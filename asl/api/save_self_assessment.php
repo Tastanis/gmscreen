@@ -4,6 +4,11 @@ $student = aslhub_require_login($pdo, true);
 if (!empty($student['is_teacher'])) aslhub_json_error('Student access required.', 403);
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') aslhub_json_error('POST required.', 405);
 aslhub_require_csrf();
+require_once dirname(__DIR__) . '/lib/curriculum_reduction.php';
+try { aslhub_reduction_lock($pdo); }
+catch (RuntimeException $e) { aslhub_json_error($e->getMessage(), 409); }
+register_shutdown_function(fn()=>aslhub_reduction_unlock($pdo));
+
 $targetId = (int)($_POST['target_id'] ?? 0);
 $score = $_POST['score'] ?? null;
 if (!is_string($score) || !preg_match('/^[1-4]$/D', $score)) aslhub_json_error('Choose a defined proficiency level.');

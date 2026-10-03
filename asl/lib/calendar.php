@@ -3,14 +3,14 @@
 /** Cumulative expected growth, prorated inside each block by instructional days. */
 function aslhub_expected_growth(array $blocks, int $targetCount): float {
     $annual = max(0, $targetCount * 2);
-    $start = [0, 8, 8, 10];
-    $earlyTotal = array_sum(array_slice($start, 0, min(4, count($blocks))));
+    $start = [0, 3, 3];
+    $earlyTotal = array_sum(array_slice($start, 0, min(count($start), count($blocks))));
     $scale = $earlyTotal ? min(1, $annual / $earlyTotal) : 1;
-    $remainingDays = array_sum(array_column(array_slice($blocks, 4), 'instructional_days'));
+    $remainingDays = array_sum(array_column(array_slice($blocks, count($start)), 'instructional_days'));
     $expected = 0.0;
     foreach (array_values($blocks) as $i => $block) {
         $days = (int)$block['instructional_days'];
-        $goal = $i < 4 ? $start[$i] * $scale : ($remainingDays ? max(0, $annual - $earlyTotal) * $days / $remainingDays : 0);
+        $goal = $i < count($start) ? $start[$i] * $scale : ($remainingDays ? max(0, $annual - $earlyTotal) * $days / $remainingDays : 0);
         $elapsed = max(0, min($days, (int)($block['instructional_days_elapsed'] ?? 0)));
         $expected += $days ? $goal * $elapsed / $days : 0;
     }

@@ -14,6 +14,11 @@ $me = aslhub_require_teacher($pdo, true);
 if (!aslhub_is_admin($me)) aslhub_json_error('Admin (Harms) access required.', 403);
 aslhub_require_csrf();
 
+require_once dirname(__DIR__) . '/lib/curriculum_reduction.php';
+try { aslhub_reduction_lock($pdo); }
+catch (RuntimeException $e) { aslhub_json_error($e->getMessage(), 409); }
+register_shutdown_function(fn()=>aslhub_reduction_unlock($pdo));
+
 $mode = $_POST['mode'] ?? 'dryrun';
 aslhub_backup_prune();
 aslhub_scroller_ensure_schema($pdo);

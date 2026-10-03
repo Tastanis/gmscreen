@@ -8,9 +8,9 @@ $dir=$fixtureRoot.'/site'; mkdir($dir);
 $source=dirname(__DIR__);
 foreach (['lib','css','js','api','teacher','data','tests'] as $sub) mkdir($dir.'/'.$sub);
 foreach (['dashboard.php','teacher/dashboard.php','teacher/grading.php','api/save_score.php','api/save_self_assessment.php','api/import_competencies.php',
-    'lib/helpers.php','lib/data.php','lib/calendar.php','lib/competencies.php','lib/teacher_layout.php','lib/backup.php','lib/xlsx.php',
+    'lib/curriculum_reduction.php','lib/helpers.php','lib/data.php','lib/calendar.php','lib/competencies.php','lib/teacher_layout.php','lib/backup.php','lib/xlsx.php',
     'css/asl-style.css','css/hub.css','css/competencies.css','js/competencies.js','js/dashboard-chart-math.js','js/pace-chart.js',
-    'data/competencies-2026.json','tests/competency-fixture.php'] as $f) copy($source.'/'.$f,$dir.'/'.$f);
+    'data/competencies-2026-reduced.json','data/competencies-2026.json','tests/competency-fixture.php'] as $f) copy($source.'/'.$f,$dir.'/'.$f);
 file_put_contents($dir.'/config.php', <<<'PHP'
 <?php
 session_start();
@@ -19,6 +19,8 @@ require __DIR__.'/tests/competency-fixture.php';
 require __DIR__.'/lib/helpers.php';
 date_default_timezone_set('America/Los_Angeles');
 $pdo=new CompetencyFixturePDO(__DIR__.'/fixture.sqlite');
+// Score timestamps are deterministic, including when this fixture runs on a weekend.
+$pdo->sqliteCreateFunction('NOW',fn()=>'2026-10-02 12:00:00');
 PHP);
 // Fixture-only identity switch; never copied into the application.
 file_put_contents($dir.'/session.php', <<<'PHP'
