@@ -97,7 +97,7 @@ May 31–June 11 (eight instructional days, ending instruction June 10). Holiday
 reduce a block's days, never shift its dates. The user selected the endpoint; the published-break
 baseline is not a confirmed final district calendar.
 
-At instructional day `d`, paths are `p * 2 * target_count * d / 175`, for 100%,
+Expected new growth is 0, 8, 8, and 10 points in the first four blocks for every ASL level. Later blocks divide the remaining annual `2 * target_count - 26` points in proportion to their instructional days. Within a block, expectation advances by elapsed instructional days. Charts and report projections compare cumulative earned growth to cumulative expected growth; zero expectation has no pace percentage. Reference paths are percentages of this schedule, for 100%,
 83%, 73%, and 63% references. Pale red shading is below 60% of that fixed time-adjusted
 path, with no F line or label. These are visual reference paths, not gradebook rules.
 No adaptive catch-up path, plus/minus grades, vacation-only blocks, or vacation dips.
@@ -199,3 +199,5 @@ Verified with reports-calendar.php, run.php, competencies.php, chart unit/static
 growth-attendance-browser.test.cjs, semester-attendance-browser.test.cjs (a disposable
 February 5 clock), grading navigation/header tests, and class report PDF page counts.
 Local fixtures do not verify production MySQL migration or hosted deployment.
+
+Reports show a percentage-only year-end skills projection and an estimated grade from `(2 * skills_pace_percent + participation_percent) / 3`, excluding leadership. The participation summary remains total earned / total available; its chart shows each block's own percentage, never a rolling average. Short blocks use their own three-points-per-instructional-day maximum. Reports retain monochrome one-page fitting with both proficiency and participation charts.

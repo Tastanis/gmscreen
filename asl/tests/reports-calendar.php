@@ -96,7 +96,7 @@ $weighted = aslhub_metrics_from_rows(2, [
     ['id'=>3,'instructional_days'=>10,'instructional_days_elapsed'=>10]],
     [2=>[1=>['absences'=>0,'participation_points'=>0],3=>['absences'=>0,'participation_points'=>30]]],
     [2], [2], aslhub_block_metric_payload($pdo, $student, []));
-verify($weighted['participation_metrics']['rolling_4_block_percent'] === [0.0,null,83.3], 'participation trend weights days and skips no-school blocks');
+verify($weighted['participation_metrics']['percent'] === [0.0,null,100.0], 'participation percentages use each block maximum and skip no-school blocks');
 $sparseDays = [['date'=>'2026-09-08'],['date'=>'2026-09-09'],['date'=>'2026-10-05']];
 $sparseBlocks = aslhub_calendar_build_blocks($sparseDays);
 verify(array_column($sparseBlocks, 'instructional_days') === [2,0,1]
@@ -122,7 +122,7 @@ $payload = ['reporting_blocks'=>[
     'student'=>[], 'today'=>'2026-09-21', 'attendance'=>['ytd_absences'=>[2,2],'absence_percentile'=>[50,50],'ytd_percent'=>[77.8,80]],
     'participation_metrics'=>['points'=>[24,24,null],'max_points'=>[27,30,null]]];
 $summary = aslhub_report_summary($payload);
-verify($summary['completion_percent'] === 50.0 && abs($summary['pace_percent'] - 875) < .01, 'completion and pacing share the dashboard growth 2N denominator and elapsed school days');
+verify($summary['completion_percent'] === 50.0 && abs($summary['pace_percent'] - 1000) < .01, 'completion and pacing share the dashboard growth 2N denominator and the slower starting schedule');
 verify($summary['participation_points'] === 48 && $summary['participation_max'] === 57 && $summary['participation_percent'] === 84.2, 'report sums participation points and denominators, not average percentages');
 $cumulative = aslhub_metrics_from_rows(2, [
     ['id'=>1,'instructional_days'=>10,'instructional_days_elapsed'=>10],
@@ -138,7 +138,7 @@ verify($cumulative['attendance']['class_ytd_average_percent'][1] === 75.0, 'all-
 verify(aslhub_report_improvements([['learning_target_id'=>1,'score'=>1,'scored_at'=>'2026-09-21']], $targets, null, '2026-09-21') === [], 'baseline ones are not reported as improvement');
 $firstTwo = aslhub_report_improvements([['learning_target_id'=>1,'score'=>2,'scored_at'=>'2026-09-21']], $targets, null, '2026-09-21');
 verify($firstTwo[0]['from'] === 1 && $firstTwo[0]['change'] === 1, 'first demonstrated two improves from baseline one');
-verify($summary['growth_target'] === 2 && $summary['projected_points'] === 17.5, 'full-year projection uses two growth points per target');
+verify($summary['growth_target'] === 2 && $summary['projected_points'] === 20.0, 'full-year projection uses two growth points per target');
 foreach ([null,0,1,2,3,4] as $score) verify(aslhub_effective_score($score) === max(1,(int)$score), 'baseline preserves defined higher scores');
 $pdo->exec('INSERT INTO user_learning_targets (user_id,learning_target_id,score) VALUES (2,999,0)');
 verify(aslhub_student_scores($pdo,2)[999] === 1, 'legacy saved zero reads as baseline one');
@@ -154,4 +154,20 @@ $later['attendance_periods'] = aslhub_attendance_periods($later, $schoolDates, '
 $semesters = aslhub_metrics_from_rows(2, [$crossing,$later],
     [2=>[20=>['absences'=>6,'absences_next_semester'=>1,'participation_points'=>null],21=>['absences'=>2,'participation_points'=>null]]], [2], [2], aslhub_block_metric_payload($pdo,$student,[]));
 verify($semesters['attendance']['ytd_absences'] === [7,8] && $semesters['attendance']['absences'] === [7,1], 'later semester totals replace only their own semester, preserving the previous semester');
+$paceBlocks = array_fill(0, 20, ['instructional_days'=>10,'instructional_days_elapsed'=>0]);
+foreach ([89,91] as $targetCount) {
+    foreach ($paceBlocks as &$paceBlock) $paceBlock['instructional_days_elapsed'] = 0;
+    unset($paceBlock);
+    foreach ([0,8,16,26] as $i=>$expected) {
+        $paceBlocks[$i]['instructional_days_elapsed'] = 10;
+        verify(abs(aslhub_expected_growth($paceBlocks,$targetCount)-$expected)<.00001, 'slower cumulative block goal');
+    }
+    foreach ($paceBlocks as &$paceBlock) $paceBlock['instructional_days_elapsed'] = 10;
+    unset($paceBlock);
+    verify(abs(aslhub_expected_growth($paceBlocks,$targetCount)-2*$targetCount)<.00001, 'slower start retains annual target');
+}
+verify(abs($summary['estimated_grade_percent'] - 694.7) < .01, 'grade estimate weights skills twice participation and excludes leadership');
+$noPace = $payload;
+$noPace['reporting_blocks'][1]['instructional_days_elapsed'] = 0;
+verify(aslhub_report_summary($noPace)['estimated_grade_percent'] === null, 'no grade estimate before a nonzero skills expectation');
 echo "ALL REPORT AND CALENDAR TESTS PASSED\n";

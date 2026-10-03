@@ -24,8 +24,9 @@ $percent = fn($value) => $value === null ? '—' : $number($value) . '%';
         <p><?php echo aslhub_h($report['block']['label'] ?? ''); ?><br><?php echo aslhub_h($report['block'] ? date('M j', strtotime($report['block']['start_date'])) . '–' . date('M j', strtotime($report['block']['end_date'])) : ''); ?></p>
     </header>
     <section class="report-summary">
+        <div class="report-estimate"><h2>Estimated grade</h2><p><strong><?php echo $percent($report['estimated_grade_percent']); ?></strong> · Based on skills and participation</p></div>
         <div><h2>Overall completion</h2><strong><?php echo $percent($report['completion_percent']); ?></strong></div>
-        <div><h2>ASL skills pacing</h2><p>At this pace, by year-end: <strong><?php echo $number($report['projected_points']); ?> of <?php echo $number($report['growth_target']); ?> growth points (<?php echo $percent($report['pace_percent']); ?>)</strong></p></div>
+        <div><h2>ASL skills pacing</h2><p>Projected year-end skills: <strong><?php echo $percent($report['pace_percent']); ?></strong></p></div>
         <div><h2>Attendance</h2><p>Days missed: <strong><?php echo $number($report['absences']); ?></strong></p>
             <p>More absences than <strong><?php echo $percent($report['absence_percentile']); ?></strong> of students.</p><p>You have missed <strong><?php echo $percent($report['attendance_percent'] === null ? null : 100 - $report['attendance_percent']); ?></strong> of class.</p></div>
         <div><h2>Participation</h2><p><strong><?php echo $number($report['participation_points']); ?> / <?php echo $number($report['participation_max']); ?></strong> points · <strong><?php echo $percent($report['participation_percent']); ?></strong></p></div>
@@ -45,10 +46,12 @@ $percent = fn($value) => $value === null ? '—' : $number($value) . '%';
         </div>
     </section>
     <section class="report-progress"><h2>Proficiency progress</h2><svg class="report-progress-chart" role="img"></svg></section>
+    <section class="report-participation"><h2>Participation by block</h2><svg class="report-participation-chart" role="img" aria-label="Participation percentage earned in each block"></svg></section>
     <section class="report-comments"><h2>Comments</h2><div class="comment-space"></div></section>
 </div>
 <script type="application/json" class="report-data"><?php echo json_encode([
     'reporting_blocks' => $payload['reporting_blocks'], 'progress' => $payload['progress']['overall'],
+    'participation' => $payload['participation_metrics'],
     'target_count' => $payload['target_count'], 'today' => $payload['today'],
 ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR); ?></script>
 </main>

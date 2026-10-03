@@ -176,7 +176,7 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
                         <div class="chart-header-tools">
                             <div class="chart-toggle" data-participation-view aria-label="Participation chart view">
                                 <button type="button" data-view="raw" class="active">Score / Max</button>
-                                <button type="button" data-view="trend">4-Block Trend</button>
+                                <button type="button" data-view="trend">Block Percentage</button>
                             </div>
                             <div class="chart-toggle" data-range-toggle="participation" aria-label="Participation chart date range">
                                 <button type="button" data-range="ytd" class="active">Year to Date</button>
@@ -669,7 +669,7 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
                 const fraction = block.is_current ? elapsed : paceDayFraction(block);
                 return {
                     points,
-                    percent: blockHasStarted(block) ? ASLChartMath.pacePercent(points, scopeTargets, elapsed) : null,
+                    percent: blockHasStarted(block) ? ASLChartMath.scheduledPacePercent(points, allBlocks, scopeTargets, block.sourceIndex ?? allBlocks.indexOf(block)) : null,
                     fraction: visibleFraction ? fraction / visibleFraction : 0,
                     date: block.is_current ? dashboardData.today : blockDate(block),
                 };
@@ -710,15 +710,6 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
             }).join('');
         }
 
-        function rollingFour(series) {
-            return series.map((value, index) => {
-                if (index < 3) return null;
-                const windowValues = series.slice(index - 3, index + 1);
-                return windowValues.every(v => v != null && v !== '')
-                    ? windowValues.reduce((sum, v) => sum + Number(v), 0) / 4 : null;
-            });
-        }
-
         function renderParticipationChart() {
             const svg = document.getElementById('participation-chart');
             const blocks = visibleBlocks('participation');
@@ -731,7 +722,7 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
                 const score = seriesValue(scores, block), max = seriesValue(maxima, block);
                 return score == null || !Number(max) ? null : (Number(score) / Number(max)) * 100;
             });
-            const trend = participation.rolling_4_block_percent || participation.rolling_4_pct || participation.trend_4_pct || rollingFour(pct);
+            const trend = pct;
             const isTrend = chartState.participationView === 'trend';
             const primary = isTrend ? trend : scores;
             const rawValues = blocks.flatMap(block => [seriesValue(scores, block), seriesValue(maxima, block)]).filter(v => v != null).map(Number);
@@ -743,7 +734,7 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
             const latestMax = latestBlock ? seriesValue(maxima, latestBlock) : null;
             const latestTrend = latestBlock ? seriesValue(trend, latestBlock) : null;
             document.getElementById('participation-summary').innerHTML = isTrend
-                ? `<span><small>Latest 4-block trend</small><strong>${latestTrend == null ? '&mdash;' : formatNumber(latestTrend) + '%'}</strong></span>`
+                ? `<span><small>Latest block percentage</small><strong>${latestTrend == null ? '&mdash;' : formatNumber(latestTrend) + '%'}</strong></span>`
                 : `<span><small>Latest score</small><strong>${latestScore == null ? '&mdash;' : formatNumber(latestScore)}${latestMax == null ? '' : ' / ' + formatNumber(latestMax)}</strong></span>`;
             const frame = chartScaffold(svg, blocks, maxY, isTrend ? '%' : 'Pts');
             svg.innerHTML = frame.base + frame.labels + (isTrend
@@ -751,7 +742,7 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
                 : drawSeries(seriesPoints(maxima, blocks, frame.xAt, frame.yAt), 'metric-line participation-max') +
                   drawSeries(seriesPoints(scores, blocks, frame.xAt, frame.yAt), 'metric-line participation-score'));
             document.getElementById('participation-legend').innerHTML = isTrend
-                ? '<span><span class="legend-swatch participation-trend-swatch"></span>Your rolling average across the latest 4 completed blocks</span>'
+                ? '<span><span class="legend-swatch participation-trend-swatch"></span>Your percentage in each block</span>'
                 : '<span><span class="legend-swatch participation-score-swatch"></span>Your score</span><span><span class="legend-swatch participation-max-swatch"></span>Maximum</span>';
         }
 

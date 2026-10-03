@@ -72,3 +72,20 @@ test('approved calendar and percentage paths use growth 2N goals', () => {
   assert.equal(((4-1)+(2-1))/(2*2)*100,100,'a 4 offsets a 2');
   assert((4-1)/2*100>100,'raw scores may exceed 100%');
 });
+
+ test('slow start is cumulative, prorated, and reaches each full-year target', () => {
+   const schedule = Array.from({length:20}, (_,i)=>({instructional_days:i===0?9:10,instructional_days_elapsed:i===0?9:10}));
+   schedule[4].instructional_days = schedule[4].instructional_days_elapsed = 5;
+   for (const n of [89,91]) {
+     for (const [index,goal] of [[0,0],[1,8],[2,16],[3,26],[19,2*n]])
+       assert(Math.abs(math.expectedGrowth(schedule,n,index)-goal)<1e-9);
+     assert.equal(math.scheduledPacePercent(8,schedule,n,1),100);
+     assert.equal(math.scheduledPacePercent(4,schedule,n,1),50);
+     assert.equal(math.scheduledPacePercent(0,schedule,n,0),null);
+     const short = math.expectedGrowth(schedule,n,4)-26;
+     const normal = math.expectedGrowth(schedule,n,5)-math.expectedGrowth(schedule,n,4);
+     assert(Math.abs(short*2-normal)<1e-9);
+   }
+   schedule[1].instructional_days_elapsed=5;
+   assert.equal(math.expectedGrowth(schedule,91,1),4);
+ });

@@ -26,8 +26,6 @@ function aslhub_report_improvements(array $events, array $targets, ?string $prev
 
 function aslhub_report_summary(array $payload): array {
     $blocks = $payload['reporting_blocks'];
-    $totalDays = array_sum(array_column($blocks, 'instructional_days'));
-    $elapsedDays = array_sum(array_column($blocks, 'instructional_days_elapsed'));
     $targets = [];
     foreach ($payload['taxonomy'] as $bucket) foreach ($bucket['standards'] as $standard) {
         foreach ($standard['targets'] as $target) $targets[] = $target + ['competency' => $standard['name']];
@@ -37,20 +35,24 @@ function aslhub_report_summary(array $payload): array {
     foreach ($targets as $target) $points += aslhub_growth_points($scores[$target['id']] ?? null);
     $maximum = count($targets) * 2; // Same completion denominator as the dashboard.
     $completion = $maximum ? 100 * $points / $maximum : null;
-    $pace = $completion !== null && $elapsedDays > 0 && $totalDays > 0
-        ? $completion * $totalDays / $elapsedDays : null;
+    $expected = aslhub_expected_growth($blocks, count($targets));
+    $pace = $expected > 0 ? 100 * $points / $expected : null;
     $currentIndex = null;
     foreach ($blocks as $i => $block) if ($block['instructional_days_elapsed'] > 0) $currentIndex = $i;
     $participation = $payload['participation_metrics'];
     $earned = array_sum($participation['points']); $possible = array_sum($participation['max_points']);
+    $participationPercent = $possible > 0 ? 100 * $earned / $possible : null;
+    $estimatedGrade = $pace !== null && $participationPercent !== null
+        ? (2 * $pace + $participationPercent) / 3 : null;
     return [
+        'estimated_grade_percent' => $estimatedGrade === null ? null : round($estimatedGrade, 1),
         'student' => $payload['student'], 'today' => $payload['today'],
         'block' => $currentIndex === null ? null : $blocks[$currentIndex],
         'previous_block' => $currentIndex !== null && $currentIndex > 0 ? $blocks[$currentIndex - 1] : null,
         'completion_percent' => $completion === null ? null : round($completion),
         'pace_percent' => $pace === null ? null : round($pace, 1),
         'growth_target' => $maximum,
-        'projected_points' => $elapsedDays > 0 ? round($points * $totalDays / $elapsedDays, 1) : null,
+        'projected_points' => $pace !== null ? round($maximum * $pace / 100, 1) : null,
         'absences' => $currentIndex === null ? null : $payload['attendance']['ytd_absences'][$currentIndex],
         'absence_percentile' => $currentIndex === null ? null : $payload['attendance']['absence_percentile'][$currentIndex],
         'attendance_percent' => $currentIndex === null ? null : $payload['attendance']['ytd_percent'][$currentIndex],

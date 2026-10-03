@@ -207,7 +207,7 @@ function aslhub_block_metric_payload(PDO $pdo, array $student, array $blocks): a
             'class_block_average_percent' => [], 'class_ytd_average_percent' => [],
             'absence_percentile' => [], 'ytd_absences' => []],
         'participation_metrics' => ['points' => [], 'max_points' => [], 'percent' => [],
-            'rolling_4_block_percent' => [], 'class_average_percent' => []],
+            'class_average_percent' => []],
     ];
     if (!$blocks) return $empty;
     $peerQuery = $pdo->prepare("SELECT id, teacher, class_period, level FROM users
@@ -293,13 +293,7 @@ function aslhub_metrics_from_rows(int $sid, array $blocks, array $metrics, array
             $classPart[] = 100 * min($peerPoints, $peerMax) / $peerMax;
         }
         $participation['class_average_percent'][] = round(array_sum($classPart) / max(1, count($classPart)), 1);
-        $scoredIndexes = array_keys(array_filter($participation['max_points'], fn($value) => $value !== null && $value > 0));
-        $windowPoints = 0; $windowMaximum = 0;
-        foreach (array_slice($scoredIndexes, -4) as $index) {
-            $windowPoints += $participation['points'][$index];
-            $windowMaximum += $participation['max_points'][$index];
-        }
-        $participation['rolling_4_block_percent'][] = $windowMaximum > 0 ? round(100 * $windowPoints / $windowMaximum, 1) : null;
+
     }
     return ['attendance' => $attendance, 'participation_metrics' => $participation];
 }

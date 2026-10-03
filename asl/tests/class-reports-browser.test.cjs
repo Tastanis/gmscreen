@@ -27,7 +27,10 @@ for(const mark of await reports.locator('.report-progress-chart line, .report-pr
  assert.equal(await mark.evaluate(e=>getComputedStyle(e).stroke),'rgb(0, 0, 0)','monochrome chart marks');
 }
 assert.equal(await reports.locator('.report-progress-chart polyline[stroke-dasharray="7 5"]').count(),2,'grade reference dash patterns retained');
-assert.equal(await reports.getByText('At this pace, by year-end:',{exact:false}).count(),2);
+assert.equal(await reports.getByText('Projected year-end skills:',{exact:false}).count(),2);
+assert.equal(await reports.locator('.report-participation-chart').count(),2);
+assert.equal(await reports.locator('.report-estimate').count(),2);
+assert(await reports.locator('.report-participation-chart polyline').count() >= 2);
 assert.equal(await reports.locator('.report-sheet').nth(1).evaluate(e=>getComputedStyle(e).breakBefore),'page');
 for(const content of await reports.locator('.report-content').all())assert((await content.boundingBox()).height<980,'report fits one letter page');
 const pdf=await reports.pdf({path:out+'.pdf',preferCSSPageSize:true,printBackground:true});
@@ -45,6 +48,13 @@ await page.emulateMedia({media:'screen'});
 await page.goto(base+'/report.php?period=1&level=1');assert.equal(await page.locator('.report-sheet').count(),1);
 await page.goto(base+'/report.php?student_id=2');assert.equal(await page.locator('.report-sheet').count(),1);
 assert.equal((await page.goto(base+'/report.php?period=all')).status(),400);
+await page.goto(base+'/dashboard.php?student_id=2');
+await page.locator('[data-chart-select="participation"]').click();
+await page.getByRole('button',{name:'Block Percentage',exact:true}).click();
+assert.match(await page.locator('#participation-summary').innerText(),/Latest block percentage/);
+assert.match(await page.locator('#participation-legend').innerText(),/Your percentage in each block/);
+assert.equal(await page.getByRole('button',{name:'4-Block Trend',exact:true}).count(),0);
+assert.equal(await page.locator('#participation-chart .participation-trend').count()>0,true);
 await page.goto(base+'/session.php?id=4');await page.goto(base+'/report.php?period=1');assert.equal(await page.locator('.report-sheet').count(),0,'another teacher cannot print Harms roster');
 await page.goto(base+'/report.php?student_id=2');assert.match(await page.locator('body').innerText(),/not in your classes/);
 const rules=fs.readFileSync('.htaccess','utf8');assert.match(rules,/RewriteRule \^\([^\n]*\|report\|[^\n]*asl\/\$1\.php/);
