@@ -138,10 +138,10 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
                     </div>
                     <div class="comparison-legend" style="margin-top:8px;">
                         <span><span class="legend-swatch legend-student"></span>You</span>
-                        <span><span class="legend-swatch" style="background:#458663;"></span>A · 100%</span>
-                        <span><span class="legend-swatch" style="background:#507ba2;"></span>B · 83%</span>
-                        <span><span class="legend-swatch" style="background:#938052;"></span>C · 73%</span>
-                        <span><span class="legend-swatch" style="background:#a66c69;"></span>D · 63%</span>
+                        <span><span class="legend-swatch" style="background:#458663;"></span>100%</span>
+                        <span><span class="legend-swatch" style="background:#507ba2;"></span>83%</span>
+                        <span><span class="legend-swatch" style="background:#938052;"></span>73%</span>
+                        <span><span class="legend-swatch" style="background:#a66c69;"></span>63%</span>
                     </div>
                 </div>
 
@@ -267,7 +267,7 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
 
         function scoreOf(targetId) {
             const s = dashboardData.scores && dashboardData.scores[String(targetId)];
-            return (s === undefined || s === null) ? null : Number(s);
+            return Math.max(1, Number(s || 1));
         }
 
         /* Teacher-view only: save a score by clicking a rubric level. */
@@ -320,13 +320,13 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
 
         function pointsFor(targets) {
             let earned = 0;
-            targets.forEach(t => { const s = scoreOf(t.id); if (s !== null) earned += s; });
-            return { earned, total: targets.length * 3 };
+            targets.forEach(t => { const s = scoreOf(t.id); if (s !== null) earned += Math.max(0, s - 1); });
+            return { earned, total: targets.length * 2 };
         }
 
         function progressText(earned, total) {
             if (!total) return 'No skills at this level yet';
-            return earned + ' of ' + total + ' points';
+            return earned + ' of ' + total + ' growth points';
         }
 
         function getBucket(bucketId) {
@@ -691,10 +691,9 @@ $chartMathV = @filemtime(__DIR__ . '/js/dashboard-chart-math.js') ?: 1;
             document.getElementById('attendance-empty-note').style.display = hasData ? 'none' : 'block';
             const latestBlock = [...blocks].reverse().find(block => seriesValue(student, block) != null || seriesValue(classAverage, block) != null);
             const latestStudent = latestBlock ? seriesValue(student, latestBlock) : null;
-            const latestAverage = latestBlock ? seriesValue(classAverage, latestBlock) : null;
             document.getElementById('attendance-summary').innerHTML = `
-                <span><small>Your attendance</small><strong>${latestStudent == null ? '&mdash;' : formatNumber(latestStudent) + '%'}</strong></span>
-                <span><small>All-student average</small><strong>${latestAverage == null ? '&mdash;' : formatNumber(latestAverage) + '%'}</strong></span>
+                <span><small>Percentage of class missed</small><strong>${latestStudent == null ? '&mdash;' : formatNumber(100 - latestStudent) + '%'}</strong></span>
+
                 <span><small>You are absent more often than</small><strong>${latestBlock == null || seriesValue(attendance.absence_percentile, latestBlock) == null ? '&mdash;' : formatNumber(seriesValue(attendance.absence_percentile, latestBlock)) + '%'} of the students</strong></span>`;
             const frame = chartScaffold(svg, blocks, 100, '%');
             svg.innerHTML = frame.base + frame.labels +

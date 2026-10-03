@@ -16,6 +16,7 @@ catch (Throwable $e) { $schoolToday = date('Y-m-d'); }
 $saved = [];
 try {
     $pdo->beginTransaction();
+    $attendanceDays = aslhub_attendance_calendar_days($pdo);
     $blockStmt = $pdo->prepare("SELECT * FROM asl_reporting_blocks WHERE id=? AND active=1 FOR UPDATE");
     $metricStmt = $pdo->prepare("SELECT * FROM asl_student_block_metrics WHERE user_id=? AND block_id=? FOR UPDATE");
     foreach ($changes as $i => $change) {
@@ -40,35 +41,45 @@ try {
         }
 
         $hasAbsences = array_key_exists('absences', $change);
+        $hasNextAbsences = array_key_exists('absences_next_semester', $change);
         $hasPoints = array_key_exists('participation_points', $change);
-        if (!$hasAbsences && !$hasPoints) continue;
+        if (!$hasAbsences && !$hasNextAbsences && !$hasPoints) continue;
         $newAbsences = $hasAbsences ? aslhub_optional_nonnegative_int($change['absences'], 'Absences') : ($old['absences'] ?? null);
+        $newNextAbsences = $hasNextAbsences ? aslhub_optional_nonnegative_int($change['absences_next_semester'], 'Semester 2 absences') : ($old['absences_next_semester'] ?? null);
         $newPoints = $hasPoints ? aslhub_optional_nonnegative_int($change['participation_points'], 'Participation') : ($old['participation_points'] ?? null);
-        if ($newAbsences !== null && $newAbsences > (int)$block['instructional_days']) {
-            throw new InvalidArgumentException('Absences cannot exceed the instructional days in the block.');
+        $periods = array_column(aslhub_attendance_periods($block, $attendanceDays, $schoolToday), null, 'field');
+        foreach (['absences'=>$newAbsences, 'absences_next_semester'=>$newNextAbsences] as $field=>$value) {
+            if (!array_key_exists($field, $change)) continue;
+            if (!isset($periods[$field]) || $periods[$field]['instructional_days_elapsed'] <= 0) {
+                throw new InvalidArgumentException('That attendance period is not open for entry.');
+            }
+            if ($value !== null && $value > $periods[$field]['maximum']) {
+                throw new InvalidArgumentException('Absences cannot exceed the instructional days elapsed in this semester.');
+            }
         }
         $max = aslhub_participation_max((int)$block['instructional_days']);
         $newVersion = $oldVersion + 1;
         if ($old) {
-            $pdo->prepare("UPDATE asl_student_block_metrics SET absences=?, participation_points=?,
+            $pdo->prepare("UPDATE asl_student_block_metrics SET absences=?, absences_next_semester=?, participation_points=?,
                     participation_max=?, version=?, updated_by=? WHERE id=?")
-                ->execute([$newAbsences, $newPoints, $max, $newVersion, (int)$teacher['id'], $old['id']]);
+                ->execute([$newAbsences, $newNextAbsences, $newPoints, $max, $newVersion, (int)$teacher['id'], $old['id']]);
         } else {
             $pdo->prepare("INSERT INTO asl_student_block_metrics
-                    (user_id, block_id, absences, participation_points, participation_max, version, updated_by)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)")
-                ->execute([$studentId, $blockId, $newAbsences, $newPoints, $max, $newVersion, (int)$teacher['id']]);
+                    (user_id, block_id, absences, absences_next_semester, participation_points, participation_max, version, updated_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+                ->execute([$studentId, $blockId, $newAbsences, $newNextAbsences, $newPoints, $max, $newVersion, (int)$teacher['id']]);
         }
         $pdo->prepare("INSERT INTO asl_student_block_metric_audit
                 (user_id, block_id, old_absences, new_absences, old_participation_points,
                  new_participation_points, participation_max, old_version, new_version,
-                 changed_by, is_correction)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+                 changed_by, is_correction, old_absences_next_semester, new_absences_next_semester)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
             ->execute([$studentId, $blockId, $old['absences'] ?? null, $newAbsences,
                 $old['participation_points'] ?? null, $newPoints, $max, $oldVersion,
-                $newVersion, (int)$teacher['id'], ($isFinalized && $old) ? 1 : 0]);
+                $newVersion, (int)$teacher['id'], ($isFinalized && $old) ? 1 : 0,
+                $old['absences_next_semester'] ?? null, $newNextAbsences]);
         $saved[] = ['student_id' => $studentId, 'block_id' => $blockId,
-            'absences' => $newAbsences, 'participation_points' => $newPoints,
+            'absences' => $newAbsences, 'absences_next_semester' => $newNextAbsences, 'participation_points' => $newPoints,
             'participation_max' => $max, 'version' => $newVersion];
     }
     $pdo->commit();

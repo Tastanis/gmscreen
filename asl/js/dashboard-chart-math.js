@@ -29,7 +29,7 @@
     }
 
     function pacePercent(points, targetCount, fraction) {
-        const expected = paceEndpoint(targetCount, 3) * fraction;
+        const expected = paceEndpoint(targetCount, 2) * fraction;
         return points == null || expected <= 0 ? null : Number(points) / expected * 100;
     }
 

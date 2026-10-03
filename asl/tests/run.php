@@ -35,9 +35,9 @@ $events = [
     ['learning_target_id'=>1,'score'=>3,'scored_at'=>'2026-01-15 09:00:00','bucket_id'=>'CLS','standard_id'=>'CLS.1'],
 ];
 $progress = aslhub_progress_from_events($events,$scoreBlocks,'2026-01-15');
-expect_same([3,4,null], $progress['overall'], 'repeated clicks use only latest target score at each checkpoint');
-expect_same([2,3,null], $progress['byStandard']['CLS.1'], 'standard series is independently scoped');
-expect_same([3,4,null], $progress['byBucket']['CLS'], 'bucket series is independently scoped');
+expect_same([1,2,null], $progress['overall'], 'repeated clicks use only latest target score at each checkpoint');
+expect_same([1,2,null], $progress['byStandard']['CLS.1'], 'standard series is independently scoped');
+expect_same([1,2,null], $progress['byBucket']['CLS'], 'bucket series is independently scoped');
 
 $participation = [100,100,100,60,60,60,60,60];
 $trend = [];

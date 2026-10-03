@@ -27,7 +27,7 @@ const fs=require('node:fs/promises');
   await root.locator('[data-score="4"]').click(); const response=await saved; assert.equal(response.status(),200);
   await root.locator('[data-score="4"].selected').waitFor();
   await root.getByRole('button',{name:'Reception',exact:true}).click();
-  assert.equal(await root.locator('.competency-level.selected').count(),0);
+  assert.equal(await root.locator('[data-score="1"].selected').count(),1);
   const savedReception=page.waitForResponse(r=>r.url().endsWith('/api/save_score.php'));
   await root.locator('[data-score="2"]').click(); await savedReception;
   await root.locator('[data-score="2"].selected').waitFor();
@@ -94,36 +94,36 @@ const fs=require('node:fs/promises');
   await page.goto(base+'/dashboard.php?student_id=2');
   assert.equal(await page.evaluate(()=>Object.values(dashboardData.scores).reduce((a,b)=>a+b,0)),6,'setup preserves prior grades');
   await page.goto(base+'/teacher/grading.php?level=1');
-  assert.equal(await page.locator('.skill-head').count(),38);
-  assert.equal((await page.locator('.skill-head').first().innerText()).trim(),'Basic declarative statements');
+  assert.equal(await page.locator('.grading-grid-wrap .skill-head').count(),38);
+  assert.equal((await page.locator('.grading-grid-wrap .skill-head').first().innerText()).trim(),'Basic declarative statements');
   await page.screenshot({path:out+'/teacher-grading.png',fullPage:true});
   const cell=page.locator('.grade-cell[data-student="2"]').first();
-  for(const expected of [1,2,3,4,null]) {
+  for(const expected of [2,3,4,1]) {
     const saving=page.waitForResponse(r=>r.url().endsWith('/api/save_score.php'));
     await cell.click(); const saved=await (await saving).json(); assert.equal(saved.score,expected);
     await page.waitForFunction(()=>!document.querySelector('.grade-cell.saving'));
-    assert.equal(await cell.getAttribute('data-score'),expected===null?'':String(expected));
-    if(expected===null) assert.equal(saved.progress.overall.find(v=>v!==null),6,'clear removes contribution from current graph');
+    assert.equal(await cell.getAttribute('data-score'),String(expected));
+    if(expected===1) assert.equal(saved.progress.overall.filter(v=>v!==null).at(-1),4,'baseline removes only this target growth from current graph');
   }
-  await page.reload(); assert.equal(await cell.getAttribute('data-score'),'');
-  for(const expected of [4,3,2,1,null]) {
+  await page.reload(); assert.equal(await cell.getAttribute('data-score'),'1');
+  for(const expected of [4,3,2,1]) {
     const saving=page.waitForResponse(r=>r.url().endsWith('/api/save_score.php'));
     await cell.click({button:'right'}); assert.equal((await (await saving).json()).score,expected);
     await page.waitForFunction(()=>!document.querySelector('.grade-cell.saving'));
   }
   await page.getByRole('button',{name:'Reception',exact:true}).click(); await page.waitForURL('**mode=reception**');
-  assert.equal(await page.locator('.skill-head').count(),38); assert.equal(await cell.getAttribute('data-score'),'');
+  assert.equal(await page.locator('.grading-grid-wrap .skill-head').count(),38); assert.equal(await cell.getAttribute('data-score'),'1');
   await page.getByRole('button',{name:'Other',exact:true}).click(); await page.waitForURL('**mode=other**');
-  assert.equal(await page.locator('.skill-head').count(),13);
-  assert.deepEqual(await page.locator('.competency-group-head').allTextContents(),['Conversation Management','Deaf History','Deaf Culture']);
+  assert.equal(await page.locator('.grading-grid-wrap .skill-head').count(),13);
+  assert.deepEqual(await page.locator('.grading-grid-wrap .competency-group-head').allTextContents(),['Conversation Management','Deaf History','Deaf Culture']);
   await page.goto(base+'/teacher/grading.php?level=3&standard=C3.connections&mode=expression');
-  for(const expected of [1,2,3,null]) {
+  for(const expected of [2,3,1]) {
     const saving=page.waitForResponse(r=>r.url().endsWith('/api/save_score.php'));
     await page.locator('.grade-cell').first().click(); assert.equal((await (await saving).json()).score,expected);
     await page.waitForFunction(()=>!document.querySelector('.grade-cell.saving'));
   }
   await context.request.get(base+'/session.php?id=2'); await page.goto(base+'/dashboard.php');
-  assert.equal(await page.evaluate(()=>Object.values(dashboardData.scores).reduce((a,b)=>a+b,0)),6,'cleared target absent on student reload');
+  assert.equal(await page.evaluate(()=>Object.values(dashboardData.scores).reduce((a,b)=>a+b,0)),7,'baseline target and higher grades survive student reload');
   assert.equal((await post({score:''})).status(),403,'student cannot clear a score');
   // Student reflection persists independently of points/history and teacher selection.
   const prior=await page.evaluate(()=>JSON.stringify({scores:dashboardData.scores,progress:dashboardData.progress}));
@@ -179,7 +179,7 @@ const fs=require('node:fs/promises');
   await page.goto(base+'/teacher/dashboard.php');
   await page.getByRole('searchbox',{name:'Search students by name'}).fill('Student, Demo');
   assert.equal(await page.locator('#roster-count').innerText(),'1 student');
-  await page.locator('select[name="level"]').selectOption('3');
+  await page.getByRole('button',{name:'ASL 3',exact:true}).click();
   await page.waitForURL('**level=3**');
   assert.equal(await page.locator('#name-search').inputValue(),'Student, Demo','search survives auto filtering');
   assert.equal(await page.locator('#roster-count').innerText(),'0 students');

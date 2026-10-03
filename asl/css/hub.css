@@ -176,3 +176,11 @@ body { background: #f5f5f7 !important; }
 .danger-zone { border: 2px solid #e05252; border-radius: 12px; padding: 18px; background: #fff5f5; margin-top: 24px; }
 .danger-zone h3 { color: #c53030; }
 .btn-danger { background: linear-gradient(135deg, #e05252 0%, #c53030 100%) !important; }
+
+/* The grading roster scrolls with the page; only its horizontal overflow is local. */
+.teacher-grading-page .grading-grid-wrap { max-height:none; }
+.grading-floating-header { position:fixed; display:block; overflow:hidden; z-index:20; background:#f7fafc; }
+.grading-floating-header[hidden] { display:none; }
+.grading-floating-header .grading-grid { margin:0; }
+
+.teacher-grading-page #filter-form { position:sticky; top:0; z-index:21; background:#fff; }

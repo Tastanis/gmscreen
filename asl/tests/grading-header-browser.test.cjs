@@ -14,10 +14,11 @@ await page.locator('.grading-grid-wrap').hover();
 await page.mouse.wheel(0,220);
 await page.waitForTimeout(250);
 assert(await page.locator('header').evaluate(e=>e.getBoundingClientRect().bottom)<=0,'navigation leaves screen when scrolling over roster');
-await page.locator('.grading-grid-wrap').evaluate(e=>{e.scrollTop=800;});
+await page.evaluate(()=>window.scrollTo(0,800));
+await page.waitForTimeout(100);
 const points=await page.evaluate(()=>{
- const head=document.querySelector('.grading-grid thead'),r=head.getBoundingClientRect();
- const buffer=document.querySelector('.grading-header-buffer').getBoundingClientRect();
+ const head=document.querySelector('.grading-floating-header thead'),r=head.getBoundingClientRect();
+ const buffer=document.querySelector('.grading-floating-header .grading-header-buffer').getBoundingClientRect();
  const hits=[];
  for(let y=r.top+1;y<r.bottom;y+=3)for(let x=r.left+2;x<Math.min(r.right,innerWidth-30);x+=13){
  const hit=document.elementFromPoint(x,y);
@@ -29,6 +30,17 @@ assert.deepEqual(points.hits,[],'every point in pinned header blocks underlying 
 await page.mouse.click(points.buffer.x,points.buffer.y);
 assert.equal(saves,0,'buffer never saves a score');
 await page.screenshot({path:process.argv[4],fullPage:false});
+await Promise.all([page.waitForNavigation(),page.locator('[name=standard]').selectOption('all')]);
+await page.locator('.grading-grid-wrap').evaluate(e=>e.scrollLeft=700);
+await page.waitForTimeout(100);
+const alignment=await page.evaluate(()=>{
+ const source=[...document.querySelectorAll('.grading-grid-wrap .skill-head')];
+ const pinned=[...document.querySelectorAll('.grading-floating-header .skill-head')];
+ return source.map((cell,i)=>Math.abs(cell.getBoundingClientRect().left-pinned[i].getBoundingClientRect().left));
+});
+assert(alignment.every(delta=>delta<2),'horizontal scrolling keeps pinned skill columns aligned');
+const x=await page.locator('.grading-grid-wrap').evaluate(e=>e.scrollLeft);
+assert(x>0,'horizontal overflow remains available');
 console.log('PASS solid header hit testing, non-grading buffer, navigation scroll-away');
 }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -130,8 +130,8 @@ function aslhub_export_sheets(PDO $pdo): array {
 
     $calendar = [['date', 'instructional', 'label', 'calendar_revision']];
     $blocks = [['block_index', 'label', 'start_date', 'end_date', 'instructional_days', 'participation_max', 'active', 'finalized_at', 'calendar_revision']];
-    $blockMetrics = [['student_email', 'block_index', 'absences', 'participation_points', 'participation_max', 'version', 'updated_by_email', 'updated_at']];
-    $blockAudit = [['student_email', 'block_index', 'old_absences', 'new_absences', 'old_participation_points', 'new_participation_points', 'participation_max', 'old_version', 'new_version', 'changed_by_email', 'is_correction', 'changed_at']];
+    $blockMetrics = [['student_email', 'block_index', 'absences', 'absences_next_semester', 'participation_points', 'participation_max', 'version', 'updated_by_email', 'updated_at']];
+    $blockAudit = [['student_email', 'block_index', 'old_absences', 'new_absences', 'old_absences_next_semester', 'new_absences_next_semester', 'old_participation_points', 'new_participation_points', 'participation_max', 'old_version', 'new_version', 'changed_by_email', 'is_correction', 'changed_at']];
     if (aslhub_backup_table_exists($pdo, 'asl_calendar_days')) {
         foreach ($pdo->query('SELECT * FROM asl_calendar_days ORDER BY school_date') as $r) {
             $calendar[] = [$r['school_date'], $r['is_instructional'], $r['label'], $r['calendar_revision']];
@@ -146,7 +146,7 @@ function aslhub_export_sheets(PDO $pdo): array {
     if (aslhub_backup_table_exists($pdo, 'asl_student_block_metrics')) {
         foreach ($pdo->query("SELECT m.*, b.block_index FROM asl_student_block_metrics m
                 JOIN asl_reporting_blocks b ON b.id=m.block_id ORDER BY b.block_index,m.user_id") as $r) {
-            $blockMetrics[] = [$emailById[(int)$r['user_id']] ?? '', $r['block_index'], $r['absences'],
+            $blockMetrics[] = [$emailById[(int)$r['user_id']] ?? '', $r['block_index'], $r['absences'], $r['absences_next_semester'] ?? null,
                 $r['participation_points'], $r['participation_max'], $r['version'],
                 $emailById[(int)$r['updated_by']] ?? '', $r['updated_at']];
         }
@@ -155,7 +155,7 @@ function aslhub_export_sheets(PDO $pdo): array {
         foreach ($pdo->query("SELECT a.*, b.block_index FROM asl_student_block_metric_audit a
                 JOIN asl_reporting_blocks b ON b.id=a.block_id ORDER BY a.changed_at,a.id") as $r) {
             $blockAudit[] = [$emailById[(int)$r['user_id']] ?? '', $r['block_index'], $r['old_absences'],
-                $r['new_absences'], $r['old_participation_points'], $r['new_participation_points'],
+                $r['new_absences'], $r['old_absences_next_semester'] ?? null, $r['new_absences_next_semester'] ?? null, $r['old_participation_points'], $r['new_participation_points'],
                 $r['participation_max'], $r['old_version'], $r['new_version'],
                 $emailById[(int)$r['changed_by']] ?? '', $r['is_correction'], $r['changed_at']];
         }

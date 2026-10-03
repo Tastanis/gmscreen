@@ -15,7 +15,7 @@
             let markup=`<rect width="${width}" height="${height}" class="chart-bg"/><text x="${left}" y="20" class="chart-axis-label">% of expected progress</text>
                 <polygon points="${left},${y(0)} ${left},${y(60)} ${left+w},${y(60)} ${left+w},${y(0)}" fill="#f9e8e7"/>`;
             for(const p of [0,50,60,70,80,90,100,upper]) markup+=`<line x1="${left}" x2="${left+w}" y1="${y(p)}" y2="${y(p)}" stroke="#e3e7eb"/><text x="${left-8}" y="${y(p)+4}" text-anchor="end" class="chart-label">${p}%</text>`;
-            for(const [p,label,color,dash] of [[100,'A · 100%','#458663',''],[83,'B · 83%','#507ba2','7 5'],[73,'C · 73%','#938052','5 5'],[63,'D · 63%','#a66c69','3 5']]) {
+            for(const [p,label,color,dash] of [[100,'100%','#458663',''],[83,'83%','#507ba2','7 5'],[73,'73%','#938052','5 5'],[63,'63%','#a66c69','3 5']]) {
                 markup+=`<polyline points="${left},${y(p)} ${left+w},${y(p)}" fill="none" stroke="${color}" stroke-width="2.5" stroke-dasharray="${dash}"/><text x="${left+w+8}" y="${y(p)+4}" class="chart-label">${label}</text>`;
             }
             markup+=`<line x1="${left}" x2="${left}" y1="${top}" y2="${y(0)}" class="chart-axis"/>`;
@@ -37,7 +37,7 @@
                         .sort((a,b)=>a.fraction-b.fraction);
                     markup+=`<polyline points="${[previous,...cuts,s].map(p=>`${x(p)},${y(p.percent)}`).join(' ')}" class="chart-line" fill="none"/>`;
                 }
-                const label=s.baseline ? `${s.date}: School-year starting point; 0 points` : `${s.date}: ${s.percent.toFixed(1)}% of expected progress; ${s.points} points earned`;
+                const label=s.baseline ? `${s.date}: School-year starting point; 0 growth points` : `${s.date}: ${s.percent.toFixed(1)}% of expected progress; ${s.points} growth points earned`;
                 markup+=`<circle cx="${x(s)}" cy="${y(s.percent)}" r="4" class="chart-dot"/><circle cx="${x(s)}" cy="${y(s.percent)}" r="12" fill="transparent" aria-label="${esc(label)}"><title>${esc(label)}</title></circle>`;
                 previous=s;
             });

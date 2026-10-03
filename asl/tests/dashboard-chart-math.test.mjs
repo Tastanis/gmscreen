@@ -7,8 +7,8 @@ const require = createRequire(import.meta.url);
 const math = require('../js/dashboard-chart-math.js');
 
 test('pace percentage preserves raw points and has no zero-day division',()=>{
-  assert.equal(math.pacePercent(3, 2, .5),100);
-  assert.equal(math.pacePercent(6, 2, .5),200);
+  assert.equal(math.pacePercent(2, 2, .5),100);
+  assert.equal(math.pacePercent(4, 2, .5),200);
   assert.equal(math.pacePercent(0, 2, .5),0);
   assert.equal(math.pacePercent(null, 2, .5),null);
   assert.equal(math.pacePercent(3, 2, 0),null);
@@ -42,7 +42,7 @@ test('pace endpoints match requested distributions', () => {
 });
 
 test('short weeks advance proficiency expectations only for their school days', () => {
-  const dailyGoal = math.paceEndpoint(89, 3) / 175;
+  const dailyGoal = math.paceEndpoint(89, 2) / 175;
   const twoDayGoal = dailyGoal * 2, fiveDayGoal = dailyGoal * 5;
   assert(Math.abs(twoDayGoal / fiveDayGoal - 2 / 5) < 1e-10);
   assert.equal(math.pacePercent(twoDayGoal, 89, 2 / 175), 100);
@@ -54,7 +54,7 @@ test('short weeks advance proficiency expectations only for their school days', 
   assert.equal(math.paceDayFraction(holidayBlocks,holidayBlocks[1],'ytd'),2/12);
 });
 
-test('approved calendar and A/B/C/D paths use raw 3N goals', () => {
+test('approved calendar and percentage paths use growth 2N goals', () => {
   const bundle=JSON.parse(fs.readFileSync(new URL('../data/competencies-2026.json', import.meta.url),'utf8'));
   const days=bundle.calendar.days.filter(d=>d.instructional);
   assert.equal(days.length,175);
@@ -65,10 +65,10 @@ test('approved calendar and A/B/C/D paths use raw 3N goals', () => {
     const targets=bundle.courses[level-1].competencies.reduce((n,c)=>n+Math.max(1,c.elements.length)*c.modes.length,0);
     assert.equal(targets,N);
     for (const p of [1,.83,.73,.63,.60]) {
-      assert(Math.abs(math.paceEndpoint(N,3*p)-3*N*p)<1e-10);
-      assert(Math.abs(math.paceEndpoint(N,3*p)*9/175 - p*3*N*9/175)<1e-10);
+      assert(Math.abs(math.paceEndpoint(N,2*p)-2*N*p)<1e-10);
+      assert(Math.abs(math.paceEndpoint(N,2*p)*9/175 - p*2*N*9/175)<1e-10);
     }
   }
-  assert.equal((4+2)/(3*2)*100,100,'a 4 offsets a 2');
-  assert(4/3*100>100,'raw scores may exceed 100%');
+  assert.equal(((4-1)+(2-1))/(2*2)*100,100,'a 4 offsets a 2');
+  assert((4-1)/2*100>100,'raw scores may exceed 100%');
 });

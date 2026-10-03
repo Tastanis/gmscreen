@@ -20,14 +20,14 @@ $percent = fn($value) => $value === null ? '—' : $number($value) . '%';
 <div class="report-content<?php echo $skillCount > 18 ? ' dense' : ''; ?>">
     <header class="report-header">
         <div><h1><?php echo aslhub_h($subject['first_name'] . ' ' . $subject['last_name']); ?></h1>
-            <p>ASL <?php echo (int)$subject['level']; ?> · Period <?php echo (int)$subject['class_period']; ?> · Report card</p></div>
-        <p><?php echo aslhub_h($report['block']['label'] ?? ''); ?><br><?php echo aslhub_h($report['today']); ?></p>
+            <p>ASL <?php echo (int)$subject['level']; ?> Report Card</p></div>
+        <p><?php echo aslhub_h($report['block']['label'] ?? ''); ?><br><?php echo aslhub_h($report['block'] ? date('M j', strtotime($report['block']['start_date'])) . '–' . date('M j', strtotime($report['block']['end_date'])) : ''); ?></p>
     </header>
     <section class="report-summary">
         <div><h2>Overall completion</h2><strong><?php echo $percent($report['completion_percent']); ?></strong></div>
-        <div><h2>ASL skills pacing</h2><p>Continuing at this pace, likely year-end grade: <strong><?php echo $report['projected_grade'] ?? '—'; ?></strong></p></div>
-        <div><h2>Attendance</h2><p>You have missed <strong><?php echo $number($report['absences']); ?></strong> days.</p>
-            <p>You have been absent more often than <strong><?php echo $percent($report['absence_percentile']); ?></strong> of students.</p></div>
+        <div><h2>ASL skills pacing</h2><p>At this pace, by year-end: <strong><?php echo $number($report['projected_points']); ?> of <?php echo $number($report['growth_target']); ?> growth points (<?php echo $percent($report['pace_percent']); ?>)</strong></p></div>
+        <div><h2>Attendance</h2><p>Days missed: <strong><?php echo $number($report['absences']); ?></strong></p>
+            <p>More absences than <strong><?php echo $percent($report['absence_percentile']); ?></strong> of students.</p><p>You have missed <strong><?php echo $percent($report['attendance_percent'] === null ? null : 100 - $report['attendance_percent']); ?></strong> of class.</p></div>
         <div><h2>Participation</h2><p><strong><?php echo $number($report['participation_points']); ?> / <?php echo $number($report['participation_max']); ?></strong> points · <strong><?php echo $percent($report['participation_percent']); ?></strong></p></div>
     </section>
     <section class="report-improvements">
@@ -44,7 +44,7 @@ $percent = fn($value) => $value === null ? '—' : $number($value) . '%';
         <?php endforeach; ?>
         </div>
     </section>
-    <section class="report-progress"><h2>Proficiency progress over time</h2><svg class="report-progress-chart" role="img"></svg></section>
+    <section class="report-progress"><h2>Proficiency progress</h2><svg class="report-progress-chart" role="img"></svg></section>
     <section class="report-comments"><h2>Comments</h2><div class="comment-space"></div></section>
 </div>
 <script type="application/json" class="report-data"><?php echo json_encode([

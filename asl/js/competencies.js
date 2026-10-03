@@ -31,8 +31,8 @@
             root.innerHTML = `
                 ${selection.scale ? '<button type="button" class="competency-return" aria-label="Return to competencies" title="Return to competencies">←</button>' : `
                 <div class="competency-list"><h2 id="curriculum-heading">Competencies</h2>${standards.map(s => {
-                    const points = s.targets.reduce((sum,t) => sum + Number(data.scores?.[t.id] || 0),0);
-                    const fill = Math.max(0,Math.min(100,100*points/(s.targets.length*3 || 1)));
+                    const points = s.targets.reduce((sum,t) => sum + Math.max(0, Number(data.scores?.[t.id] || 1) - 1),0);
+                    const fill = Math.max(0,Math.min(100,100*points/(s.targets.length*2 || 1)));
                     return `<button type="button" data-competency="${escape(s.standard_id)}" aria-pressed="${s === standard}" style="--competency-progress:${fill}%"><span>${s.competency.number}.</span> ${escape(s.name)}</button>`;
                 }).join('')}</div>`}
                 ${c ? `<div class="competency-detail"><h3>${escape(c.title)}</h3><p class="competency-statement">${phrase(c.text, element?.replacement ?? element?.label)}</p>
@@ -44,7 +44,7 @@
                 ${selection.scale && target ? `<div class="competency-scale"><h3>Proficiency scale</h3>
                     ${modes.length > 1 ? `<div class="competency-modes" aria-label="Assessment mode">${modes.map(m => `<button type="button" data-mode="${m}" aria-pressed="${m === selection.mode}">${m[0].toUpperCase()+m.slice(1)}</button>`).join('')}</div>` : ''}
                     <div class="competency-levels">${Object.entries(target.rubric).sort((a,b) => Number(a[0])-Number(b[0])).map(([score,descriptor]) => {
-                        const graded = Number(data.scores?.[target.id]) === Number(score);
+                        const graded = Math.max(1, Number(data.scores?.[target.id] || 1)) === Number(score);
                         const self = Number(data.self_assessments?.[target.id]) === Number(score);
                         const clickable = onGrade || onSelfAssess;
                         return `<${clickable ? 'button type="button"' : 'div'} class="competency-level level-${score} ${graded ? 'selected' : ''} ${self ? 'self-selected' : ''}" ${clickable ? `${onGrade ? 'data-score' : 'data-self-score'}="${score}" aria-pressed="${onGrade ? graded : self}"` : ''}><span class="competency-level-heading"><span class="competency-score">${score}</span><span class="competency-level-name">${levelNames[score] || ''}</span></span><span>${escape(descriptor)}</span></${clickable ? 'button' : 'div'}>`;

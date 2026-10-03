@@ -97,7 +97,7 @@ aslhub_teacher_header($me, 'Grading', 'grading');
         <label for="student-search" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">Find student
         <input type="search" id="student-search" name="student_search" placeholder="Student name" autocomplete="off"
             value="<?php echo aslhub_h(is_string($_GET['student_search'] ?? '') ? ($_GET['student_search'] ?? '') : ''); ?>"></label>
-        <span class="muted" style="font-size:.82rem;">Click a cell to cycle blank → available levels → blank. Saves instantly. Right-click to cycle backward.
+        <span class="muted" style="font-size:.82rem;">Click a cell to cycle 1 → available levels → 1. Saves instantly. Right-click to cycle backward.
             Click a skill header to pin its rubric. Click a student to zoom in.</span>
     </form>
 
@@ -107,7 +107,7 @@ aslhub_teacher_header($me, 'Grading', 'grading');
         <div class="rubric-panel"><p class="muted">No skills at this level for that selection.</p></div>
     <?php else: ?>
     <div class="grading-layout">
-    <div class="grading-grid-wrap" style="max-height:85vh;overflow-y:auto;">
+    <div class="grading-grid-wrap">
         <table class="grading-grid">
             <thead>
                 <tr>
@@ -130,7 +130,7 @@ aslhub_teacher_header($me, 'Grading', 'grading');
                             echo aslhub_h($st['first_name'] . ' ' . $st['last_name']); ?></a>
                         <span class="muted" style="font-size:.75rem;">P<?php echo (int)$st['class_period']; ?></span></td>
                     <?php foreach ($standards as $s): foreach ($s['targets'] as $t):
-                        $sc = $scores[$sid][(int)$t['id']] ?? null; ?>
+                        $sc = aslhub_effective_score($scores[$sid][(int)$t['id']] ?? null); ?>
                         <td class="grade-cell <?php echo $sc === null ? '' : 'score-' . $sc; ?>"
                             data-student="<?php echo $sid; ?>" data-target="<?php echo (int)$t['id']; ?>"
                             data-score="<?php echo $sc === null ? '' : $sc; ?>"
@@ -159,8 +159,7 @@ aslhub_teacher_header($me, 'Grading', 'grading');
 
 <script>
 const CSRF = '<?php echo $csrf; ?>';
-// An explicit zero is a proficiency score, so it shares the red intervention
-// color with a 1. An empty cell remains the neutral "not graded" state.
+// Missing and legacy zero scores display the level-one starting baseline.
 const COLORS = { 0: '#e05252', 1: '#e05252', 2: '#e8b93e', 3: '#4caf6d', 4: '#4a90d9' };
 const TARGETS = <?php echo json_encode($targetMeta, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE); ?>;
 
@@ -168,21 +167,6 @@ const TARGETS = <?php echo json_encode($targetMeta, JSON_HEX_TAG | JSON_HEX_APOS
 const gradingForm = document.getElementById('filter-form');
 const studentSearch = document.getElementById('student-search');
 const gradingWrap = document.querySelector('.grading-grid-wrap');
-if (gradingWrap) {
-    gradingWrap.addEventListener('wheel', event => {
-        if (event.ctrlKey || event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY) || event.deltaY <= 0) return;
-        const header = document.querySelector('.teacher-grading-page > .container > header');
-        const remaining = header ? header.getBoundingClientRect().bottom + 20 : 0;
-        const available = document.documentElement.scrollHeight - innerHeight - scrollY;
-        if (remaining > 0 && available > 0) {
-            event.preventDefault();
-            const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? innerHeight : 1);
-            const pageStep = Math.min(delta, remaining, available);
-            window.scrollBy(0, pageStep);
-            gradingWrap.scrollTop += delta - pageStep;
-        }
-    }, {passive:false});
-}
 const studentRows = [...document.querySelectorAll('[data-student-row]')];
 const normalizeName = value => value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase();
 function filterStudentNames() {
@@ -201,7 +185,7 @@ filterStudentNames();
 const positionKey = 'asl-grading-position:' + location.pathname;
 gradingForm.addEventListener('submit', () => {
     if (!gradingWrap) return;
-    const top = gradingWrap.getBoundingClientRect().top + gradingWrap.querySelector('thead').getBoundingClientRect().height;
+    const top = Math.max(0, document.querySelector('.filters-bar').getBoundingClientRect().bottom) + gradingWrap.querySelector('thead').getBoundingClientRect().height;
     const anchor = studentRows.find(row => !row.hidden && row.getBoundingClientRect().bottom > top);
     const destination = new URL(location.href);
     destination.search = new URLSearchParams(new FormData(gradingForm)).toString();
@@ -210,7 +194,7 @@ gradingForm.addEventListener('submit', () => {
             destination: destination.href, y: window.scrollY,
             student: anchor?.dataset.studentRow,
             offset: anchor ? anchor.getBoundingClientRect().top - top : 0,
-            scrollTop: gradingWrap.scrollTop
+            x: gradingWrap.scrollLeft
         }));
     } catch (_) { /* Navigation still works when browser storage is disabled. */ }
 });
@@ -218,12 +202,13 @@ try {
     const saved = JSON.parse(sessionStorage.getItem(positionKey) || 'null');
     sessionStorage.removeItem(positionKey);
     if (saved?.destination === location.href && gradingWrap) {
+        gradingWrap.scrollLeft = saved.x || 0;
         const anchor = studentRows.find(row => !row.hidden && row.dataset.studentRow === saved.student);
         if (anchor) {
-            const top = gradingWrap.getBoundingClientRect().top + gradingWrap.querySelector('thead').getBoundingClientRect().height;
-            gradingWrap.scrollTop += anchor.getBoundingClientRect().top - top - saved.offset;
-        } else gradingWrap.scrollTop = saved.scrollTop;
-        window.scrollTo(0, saved.y);
+            window.scrollTo(0, saved.y);
+            const top = Math.max(0, document.querySelector('.filters-bar').getBoundingClientRect().bottom) + gradingWrap.querySelector('thead').getBoundingClientRect().height;
+            window.scrollBy(0, anchor.getBoundingClientRect().top - top - saved.offset);
+        } else window.scrollTo(0, saved.y);
     }
 } catch (_) { /* An unavailable or old browser state must not prevent grading. */ }
 
@@ -278,7 +263,7 @@ document.getElementById('rubric-side-close')?.addEventListener('click', closeRub
 async function cycle(cell, dir) {
     if (cell.classList.contains('saving')) return;
     const cur = cell.dataset.score === '' ? null : Number(cell.dataset.score);
-    const levels = [null, ...Object.keys(TARGETS[cell.dataset.target]?.rubric || {}).map(Number).sort((a,b)=>a-b)];
+    const levels = Object.keys(TARGETS[cell.dataset.target]?.rubric || {}).map(Number).filter(n => n >= 1).sort((a,b)=>a-b);
     if (levels.length === 1) return;
     const position=levels.indexOf(cur);
     const next=position < 0 ? (dir > 0 ? levels[0] : levels.at(-1)) : levels[(position + dir + levels.length) % levels.length];
@@ -302,6 +287,51 @@ async function cycle(cell, dir) {
     } finally {
         cell.classList.remove('saving');
     }
+}
+
+if (gradingWrap) {
+    const table = gradingWrap.querySelector('table');
+    const head = table.querySelector('thead');
+    const floating = document.createElement('div');
+    floating.className = 'grading-floating-header grading-layout';
+    floating.hidden = true;
+    const copy = table.cloneNode(false);
+    copy.removeAttribute('id');
+    copy.append(head.cloneNode(true));
+    copy.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
+    floating.append(copy);
+    document.body.append(floating);
+    floating.addEventListener('click', event => {
+        const target = event.target.closest('.skill-head');
+        if (target) pinnedTarget === target.dataset.target ? closeRubric() : openRubric(target.dataset.target);
+    });
+    const updateHeader = () => {
+        const bounds = gradingWrap.getBoundingClientRect();
+        const top = Math.max(0, document.querySelector('.filters-bar').getBoundingClientRect().bottom);
+        const height = head.getBoundingClientRect().height;
+        floating.hidden = head.getBoundingClientRect().top >= top || bounds.bottom <= top;
+        floating.style.left = (bounds.left + 12) + 'px';
+        floating.style.width = (gradingWrap.clientWidth - 24) + 'px';
+        floating.style.top = Math.min(top, bounds.bottom - height) + 'px';
+        floating.style.height = height + 'px';
+        floating.scrollLeft = gradingWrap.scrollLeft;
+    };
+    const sizeHeader = () => {
+        copy.style.width = table.getBoundingClientRect().width + 'px';
+        copy.style.tableLayout = 'fixed';
+        const originals = [...head.querySelectorAll('th')];
+        copy.querySelectorAll('th').forEach((cell, i) => {
+            const width = originals[i].getBoundingClientRect().width;
+            cell.style.width = cell.style.minWidth = cell.style.maxWidth = width + 'px';
+            cell.style.boxSizing = 'border-box';
+        });
+        updateHeader();
+    };
+    gradingWrap.addEventListener('scroll', updateHeader, {passive:true});
+    window.addEventListener('scroll', updateHeader, {passive:true});
+    window.addEventListener('resize', sizeHeader);
+    new ResizeObserver(sizeHeader).observe(table);
+    sizeHeader();
 }
 
 // Paint initial colors

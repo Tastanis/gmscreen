@@ -55,8 +55,8 @@ grade or history tables. They appear as a colored border, independently of the
 teacher grade fill, on both student and teacher student-dashboard views. SQL backups
 include reflections; account removal cleans up the removed account's reflections.
 
-The top bar and competency-button fills use current teacher points divided by the
-existing three-points-per-target goal; button fills cap at 100%. Student reflections
+The top bar and competency-button fills use growth above level one divided by the
+two-growth-points-per-target goal; button fills cap at 100%. Student reflections
 do not affect either. Escape, clicking a selected competency again, or clicking
 noninteractive space clears the selection. The lower progress graph always shows
 overall course progress. Roster selects/checkboxes submit immediately and preserve
@@ -97,19 +97,19 @@ May 31–June 11 (eight instructional days, ending instruction June 10). Holiday
 reduce a block's days, never shift its dates. The user selected the endpoint; the published-break
 baseline is not a confirmed final district calendar.
 
-At instructional day `d`, paths are `p * 3 * target_count * d / 175`, for A=100%,
-B=83%, C=73%, D=63%. Pale red shading is below 60% of that fixed time-adjusted
+At instructional day `d`, paths are `p * 2 * target_count * d / 175`, for 100%,
+83%, 73%, and 63% references. Pale red shading is below 60% of that fixed time-adjusted
 path, with no F line or label. These are visual reference paths, not gradebook rules.
 No adaptive catch-up path, plus/minus grades, vacation-only blocks, or vacation dips.
 
-The progress chart displays earned points divided by the A-path expectation at each
-observation date, as a percentage. A/B/C/D therefore appear as horizontal references.
+The progress chart displays earned growth points divided by the 100% expectation at each
+observation date, as a percentage. Percentages appear as horizontal references, without letter grades.
 The current block uses elapsed instructional days in both date-range views; future
 observations are absent, and zero-day denominators produce no point. The vertical
 axis gives 10% of its height to 0–50%, 80% to 50–100%, and 10% to values above 100%.
 The upper bound expands to include high observations. Axis breaks and a visible
-uneven-scale label disclose the compression. Raw scores, totals, and reference
-expectations are unchanged; attendance and participation keep their existing charts.
+uneven-scale label disclose the compression. Recorded scores remain unchanged. Growth and expectations use the level-one baseline;
+attendance and participation keep their existing chart metrics.
 
 ## Validation
 
@@ -136,8 +136,9 @@ Run grading-navigation-browser.test.cjs with a --grading-roster browser fixture
 to verify filtering and scroll continuity with 60 disposable students.
 
 Grading headers have an opaque sticky surface and an 8px non-grading separator.
-The top page navigation scrolls away; downward wheel movement over the roster
-first moves that navigation out of view. Header hit-testing is covered by
+The top page navigation scrolls away with the document. The roster has no inner
+vertical scrollbar or custom wheel interception. A header-only overlay tracks the
+horizontal table offset beneath the pinned filters. Header hit-testing is covered by
 `grading-header-browser.test.cjs` with the same --grading-roster fixture.
 
 ### Progress start and attendance comparison - September 21, 2026
@@ -163,3 +164,38 @@ and the root routing rule (Apache live deployment is not locally exercised).
 Roster, weekly entry and Notes share period/level buttons and use the signed-in
 teacher instead of a teacher dropdown. Choosing a class clears a student-only
 weekly filter. Shared page headers omit the redundant teacher identity badge.
+
+### Level-one growth and semester attendance - October 2, 2026
+
+Blank, null and legacy zero teacher scores read/display as one. No bulk grade writes
+or synthetic assessment events are created. Growth is max(0, score - 1); the full-year
+proficiency goal is 2N. Twos, threes and fours retain their recorded scores. Historical
+snapshots, current completion, roster points and report projections share this math.
+Report improvements compare effective endpoints and exclude zero/blank-to-one changes.
+
+Attendance entries are cumulative within a semester. Missing entries carry the previous
+semester total; decreases are corrections, not inferred resets. Year attendance sums
+the latest value from each semester and retains all-student teacher scope. The official
+MSD25 family calendar (https://aptg.co/NVHvM7, revised September 21, 2026) ends semester
+one January 29, 2027; February 1 is a workday and semester-two classes start February 2.
+Only attendance uses this boundary; the approved proficiency/participation calendar
+is preserved. Do not reuse that boundary for another school year without verification.
+
+A block crossing the boundary exposes two attendance entries, with the first semester
+in absences and the second in absences_next_semester. Schema 10 adds that nullable
+column and its audit columns, without rewriting existing values. Both cells share the
+existing row version; autosaves combine changed fields per row in one transaction.
+SQL and workbook backups include both fields. API limits use elapsed semester days.
+The dashboard shows Percentage of class missed and the absence percentile; the graph
+retains the student attendance and all-student average lines and tooltips.
+
+Reports omit period/year in the header, show the block date range and full-year growth
+projection, and print in monochrome. The graph stays 300px high at full page width;
+excess improvement rows are hidden with an omitted count instead of shrinking the
+whole sheet. Hidden rows are restored before every print-fit pass; saved history is
+never truncated.
+
+Verified with reports-calendar.php, run.php, competencies.php, chart unit/static tests,
+growth-attendance-browser.test.cjs, semester-attendance-browser.test.cjs (a disposable
+February 5 clock), grading navigation/header tests, and class report PDF page counts.
+Local fixtures do not verify production MySQL migration or hosted deployment.

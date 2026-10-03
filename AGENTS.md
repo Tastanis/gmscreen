@@ -1356,3 +1356,20 @@ of the first damage effect. Potency surge spending remains manual. Recovery poll
 slows only after private-channel subscription succeeds. B5/B5b concurrent-write
 fixes remain pending; do not blindly queue/rebase whole arrays or absolute stamina.
 See docs/vtt-testing-review-2026-10-02.md for deferrals and validation boundaries.
+
+
+### ASL growth baseline and semester attendance - October 2, 2026
+
+Level one is the effective baseline for blank/null/zero teacher scores, with no bulk
+score/history rewrite. Use two growth points per target for full-year pacing and
+max(0, score - 1) for current/historic progress. Reports suppress baseline-only gains
+and use percentage/full-year growth projections instead of letter grades.
+Attendance is semester-cumulative. The verified MSD25 2026-27 boundary is January 29
+semester end, February 1 workday, February 2 new semester. The crossing block has
+separate attendance fields, sharing one row version and atomic autosave; preserve
+both in audit and backups. This does not alter proficiency/participation block dates.
+Schema 10 adds only nullable attendance/audit columns. See asl/COMPETENCIES.md for
+source, semantics, and disposable regression commands. Grading uses document vertical
+scroll and a horizontally aligned opaque header overlay; do not restore wheel splitting.
+Reports retain a fixed 300px monochrome graph and omit excess printed improvement rows
+with a count instead of shrinking the entire sheet. Existing assessment history stays.

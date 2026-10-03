@@ -21,11 +21,27 @@ assert.equal(await reports.locator('.report-sheet').count(),2);
 assert.equal(await reports.locator('.report-progress-chart .chart-dot').count()>2,true);
 assert.deepEqual(await reports.locator('.report-header h1').allTextContents(),['ASL3 Student','Demo Student']);
 await reports.emulateMedia({media:'print'});
+assert.deepEqual(await reports.locator('body').evaluate(e=>({background:getComputedStyle(e).backgroundColor,color:getComputedStyle(e).color})),{background:'rgb(255, 255, 255)',color:'rgb(0, 0, 0)'});
+assert.equal(await reports.locator('.report-progress-chart polygon').first().evaluate(e=>getComputedStyle(e).fill),'none','no colored or gray chart bands');
+for(const mark of await reports.locator('.report-progress-chart line, .report-progress-chart polyline, .report-progress-chart path, .chart-dot').all()) {
+ assert.equal(await mark.evaluate(e=>getComputedStyle(e).stroke),'rgb(0, 0, 0)','monochrome chart marks');
+}
+assert.equal(await reports.locator('.report-progress-chart polyline[stroke-dasharray="7 5"]').count(),2,'grade reference dash patterns retained');
+assert.equal(await reports.getByText('At this pace, by year-end:',{exact:false}).count(),2);
 assert.equal(await reports.locator('.report-sheet').nth(1).evaluate(e=>getComputedStyle(e).breakBefore),'page');
 for(const content of await reports.locator('.report-content').all())assert((await content.boundingBox()).height<980,'report fits one letter page');
 const pdf=await reports.pdf({path:out+'.pdf',preferCSSPageSize:true,printBackground:true});
 assert.equal((pdf.toString('latin1').match(/\/Type\s*\/Page\b/g)||[]).length,2,'one PDF page per student');
 await reports.screenshot({path:out+'-class.png',fullPage:true});
+await page.goto(base+'/report.php?period=2&level=2');
+assert.equal(await page.locator('.report-sheet').count(),1);
+assert.match(await page.locator('.report-improvements').innerText(),/Expression/);
+assert.match(await page.locator('.report-improvements').innerText(),/Reception/);
+await page.emulateMedia({media:'print'});
+const asl2pdf=await page.pdf({path:out+'-asl2.pdf',preferCSSPageSize:true,printBackground:true});
+assert.equal((asl2pdf.toString('latin1').match(/\/Type\s*\/Page\b/g)||[]).length,1,'dense ASL2 report fits one page without dropping modes');
+await page.screenshot({path:out+'-asl2.png',fullPage:true});
+await page.emulateMedia({media:'screen'});
 await page.goto(base+'/report.php?period=1&level=1');assert.equal(await page.locator('.report-sheet').count(),1);
 await page.goto(base+'/report.php?student_id=2');assert.equal(await page.locator('.report-sheet').count(),1);
 assert.equal((await page.goto(base+'/report.php?period=all')).status(),400);

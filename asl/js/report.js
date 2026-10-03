@@ -14,9 +14,21 @@
     const content = sheet.querySelector('.report-content');
     const fit = () => {
         content.style.zoom = 1;
-        ASLPaceChart.render(sheet.querySelector('.report-progress-chart'), samples, {height: 200});
+        content.querySelectorAll('.improvement-row, .improvement-group').forEach(el => el.hidden = false);
+        sheet.querySelector('.report-omitted')?.remove();
+        ASLPaceChart.render(sheet.querySelector('.report-progress-chart'), samples, {height: 300});
         const available = 10.2 * 96 - 2;
-        if (content.scrollHeight > available) content.style.zoom = available / content.scrollHeight;
+        const rows = [...content.querySelectorAll('.improvement-row')];
+        let omitted = 0;
+        const note = document.createElement('p');
+        note.className = 'report-omitted';
+        while (content.scrollHeight > available && rows.length) {
+            const row = rows.pop(); row.hidden = true; omitted++;
+            const group = row.closest('.improvement-group');
+            if (![...group.querySelectorAll('.improvement-row')].some(el => !el.hidden)) group.hidden = true;
+            note.textContent = `${omitted} additional improved skills omitted from this printed page.`;
+            content.querySelector('.report-improvements').append(note);
+        }
     };
     fit();
     window.addEventListener('beforeprint', fit);

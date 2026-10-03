@@ -114,16 +114,44 @@ $changes = aslhub_report_improvements($events, $targets, '2026-09-18', '2026-09-
 verify(count($changes) === 1 && $changes[0]['from'] === 2 && $changes[0]['to'] === 3 && $changes[0]['change'] === 1, 'report compares final scores across the corrected boundary');
 $events[] = ['learning_target_id'=>1,'score'=>null,'scored_at'=>'2026-09-21 09:02:00'];
 verify(aslhub_report_improvements($events, $targets, '2026-09-18', '2026-09-21') === [], 'cleared grades are not improvements');
-foreach ([100=>'A',83=>'B',73=>'C',63=>'D',62=>'F'] as $pace=>$grade) verify(aslhub_report_grade($pace) === $grade, "projected $grade matches existing chart threshold");
-verify(aslhub_report_grade(null) === null && aslhub_report_grade(82.99) === 'C', 'unknown pace and below-threshold values handled without rounding up');
 $payload = ['reporting_blocks'=>[
     ['instructional_days'=>9,'instructional_days_elapsed'=>9,'end_date'=>'2026-09-18'],
     ['instructional_days'=>10,'instructional_days_elapsed'=>1,'end_date'=>'2026-10-02'],
     ['instructional_days'=>156,'instructional_days_elapsed'=>0,'end_date'=>'2027-06-10']],
-    'taxonomy'=>[['standards'=>[['name'=>'Sentences','targets'=>$targets]]]], 'scores'=>[1=>1],
+    'taxonomy'=>[['standards'=>[['name'=>'Sentences','targets'=>$targets]]]], 'scores'=>[1=>2],
     'student'=>[], 'today'=>'2026-09-21', 'attendance'=>['ytd_absences'=>[2,2],'absence_percentile'=>[50,50],'ytd_percent'=>[77.8,80]],
     'participation_metrics'=>['points'=>[24,24,null],'max_points'=>[27,30,null]]];
 $summary = aslhub_report_summary($payload);
-verify($summary['completion_percent'] === 33.0 && abs($summary['pace_percent'] - 583.3) < .01, 'completion and pacing share the dashboard 3N denominator and elapsed school days');
+verify($summary['completion_percent'] === 50.0 && abs($summary['pace_percent'] - 875) < .01, 'completion and pacing share the dashboard growth 2N denominator and elapsed school days');
 verify($summary['participation_points'] === 48 && $summary['participation_max'] === 57 && $summary['participation_percent'] === 84.2, 'report sums participation points and denominators, not average percentages');
+$cumulative = aslhub_metrics_from_rows(2, [
+    ['id'=>1,'instructional_days'=>10,'instructional_days_elapsed'=>10],
+    ['id'=>2,'instructional_days'=>10,'instructional_days_elapsed'=>10],
+    ['id'=>3,'instructional_days'=>10,'instructional_days_elapsed'=>10]],
+    [2=>[1=>['absences'=>6,'participation_points'=>null],2=>['absences'=>6,'participation_points'=>null]],
+     3=>[1=>['absences'=>3,'participation_points'=>null],2=>['absences'=>4,'participation_points'=>null]]],
+    [2,3], [2,3], aslhub_block_metric_payload($pdo, $student, []));
+verify($cumulative['attendance']['ytd_absences'] === [6,6,6], 'repeated totals and missing blocks carry six absences, never sum twelve');
+verify($cumulative['attendance']['absences'] === [6,0,0], 'block count is the difference between cumulative totals');
+verify($cumulative['attendance']['ytd_percent'] === [40.0,70.0,80.0], 'attendance percentages recalculate from cumulative total');
+verify($cumulative['attendance']['class_ytd_average_percent'][1] === 75.0, 'all-student average uses cumulative totals for every peer');
+verify(aslhub_report_improvements([['learning_target_id'=>1,'score'=>1,'scored_at'=>'2026-09-21']], $targets, null, '2026-09-21') === [], 'baseline ones are not reported as improvement');
+$firstTwo = aslhub_report_improvements([['learning_target_id'=>1,'score'=>2,'scored_at'=>'2026-09-21']], $targets, null, '2026-09-21');
+verify($firstTwo[0]['from'] === 1 && $firstTwo[0]['change'] === 1, 'first demonstrated two improves from baseline one');
+verify($summary['growth_target'] === 2 && $summary['projected_points'] === 17.5, 'full-year projection uses two growth points per target');
+foreach ([null,0,1,2,3,4] as $score) verify(aslhub_effective_score($score) === max(1,(int)$score), 'baseline preserves defined higher scores');
+$pdo->exec('INSERT INTO user_learning_targets (user_id,learning_target_id,score) VALUES (2,999,0)');
+verify(aslhub_student_scores($pdo,2)[999] === 1, 'legacy saved zero reads as baseline one');
+verify((int)$pdo->query('SELECT score FROM user_learning_targets WHERE learning_target_id=999')->fetchColumn() === 0, 'reading baseline does not rewrite stored zero');
+$schoolDates = array_column(array_values(array_filter($plan['days'], fn($day)=>$day['instructional'])), 'date');
+$crossing = ['id'=>20,'start_date'=>'2027-01-25','end_date'=>'2027-02-05','instructional_days'=>10,'instructional_days_elapsed'=>10];
+$crossing['attendance_periods'] = aslhub_attendance_periods($crossing, $schoolDates, '2027-02-19');
+verify(array_column($crossing['attendance_periods'], 'start_date') === ['2027-01-25','2027-02-02']
+    && array_column($crossing['attendance_periods'], 'end_date') === ['2027-01-29','2027-02-05'], 'official semester boundary creates separate attendance snapshots inside the existing block');
+verify(array_column($crossing['attendance_periods'], 'instructional_days_elapsed') === [5,4], 'teacher workday excluded from attendance without changing proficiency calendar');
+$later = ['id'=>21,'start_date'=>'2027-02-08','end_date'=>'2027-02-19','instructional_days'=>8,'instructional_days_elapsed'=>8];
+$later['attendance_periods'] = aslhub_attendance_periods($later, $schoolDates, '2027-02-19');
+$semesters = aslhub_metrics_from_rows(2, [$crossing,$later],
+    [2=>[20=>['absences'=>6,'absences_next_semester'=>1,'participation_points'=>null],21=>['absences'=>2,'participation_points'=>null]]], [2], [2], aslhub_block_metric_payload($pdo,$student,[]));
+verify($semesters['attendance']['ytd_absences'] === [7,8] && $semesters['attendance']['absences'] === [7,1], 'later semester totals replace only their own semester, preserving the previous semester');
 echo "ALL REPORT AND CALENDAR TESTS PASSED\n";

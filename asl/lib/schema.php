@@ -10,7 +10,7 @@
  *    on normal page loads once the stored version matches.
  */
 
-const ASLHUB_SCHEMA_VERSION = 9;
+const ASLHUB_SCHEMA_VERSION = 10;
 
 function aslhub_ensure_schema(PDO $pdo, bool $force = false): void {
     static $done = false;
@@ -241,6 +241,10 @@ function aslhub_ensure_schema(PDO $pdo, bool $force = false): void {
             INDEX idx_asl_metric_audit_user_time (user_id, changed_at),
             INDEX idx_asl_metric_audit_block_time (block_id, changed_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        // Retain both attendance snapshots in a reporting block crossing semesters.
+        aslhub_add_column($pdo, 'asl_student_block_metrics', 'absences_next_semester', 'INT NULL');
+        aslhub_add_column($pdo, 'asl_student_block_metric_audit', 'old_absences_next_semester', 'INT NULL');
+        aslhub_add_column($pdo, 'asl_student_block_metric_audit', 'new_absences_next_semester', 'INT NULL');
         // Student reflection is deliberately separate from graded scores/history.
         $pdo->exec("CREATE TABLE IF NOT EXISTS asl_self_assessments (
             user_id INT NOT NULL,

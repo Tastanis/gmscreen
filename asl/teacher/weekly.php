@@ -20,6 +20,14 @@ if ($studentFilter) {
 }
 $allBlocks = aslhub_reporting_blocks($pdo);
 $blocks = array_values(array_filter($allBlocks, fn($b) => $b['instructional_days_elapsed'] > 0));
+if ($metric === 'attendance') {
+    $attendanceBlocks = [];
+    foreach ($blocks as $block) foreach ($block['attendance_periods'] as $period) {
+        if ($period['instructional_days_elapsed'] <= 0) continue;
+        $attendanceBlocks[] = array_merge($block, $period, ['cumulative_days'=>$period['maximum']]);
+    }
+    $blocks = $attendanceBlocks;
+}
 $focusBlockId = null;
 foreach ($blocks as $block) if ($block['is_complete']) $focusBlockId = $block['id'];
 if ($focusBlockId === null && $blocks) $focusBlockId = $blocks[count($blocks) - 1]['id'];
@@ -52,13 +60,15 @@ aslhub_teacher_header($me, 'Attendance & Participation', 'weekly');
     <span id="save-state" class="muted" aria-live="polite"></span>
 </div>
 
+<?php if ($metric === 'attendance'): ?><p class="muted">Enter semester-to-date absences. Totals restart each semester; a block crossing the boundary has a separate entry for each semester.</p><?php endif; ?>
 <div class="grading-grid-wrap" id="block-grid-wrap" style="max-height:72vh;overflow:auto;">
 <table class="grading-grid" id="block-grid" style="min-width:max-content;">
     <thead><tr><th class="sticky-col">Student</th>
     <?php foreach ($blocks as $block): ?>
-        <th id="block-<?php echo $block['id']; ?>" style="min-width:112px;<?php echo $block['id']===$focusBlockId?'background:#ebf8ff;':''; ?>">
+        <th id="block-<?php echo $block['id'] . '-' . ($block['field'] ?? 'participation'); ?>" style="min-width:112px;<?php echo $block['id']===$focusBlockId?'background:#ebf8ff;':''; ?>">
             <?php echo aslhub_h('Block '.$block['block_index']); ?><br><small><?php echo aslhub_h($block['month_label']); ?> - <?php echo $block['instructional_days']; ?> days</small><br>
             <small><?php echo date('m/d', strtotime($block['start_date'])); ?> - <?php echo date('m/d', strtotime($block['end_date'])); ?></small>
+            <?php if ($metric==='attendance'): ?><br><small>Semester <?php echo $block['semester_number']; ?> total</small><?php endif; ?>
             <?php if ($block['is_current']): ?><br><small>current - <?php echo $block['instructional_days_elapsed']; ?> days so far</small><?php endif; ?>
         </th>
     <?php endforeach; ?></tr></thead>
@@ -67,13 +77,14 @@ aslhub_teacher_header($me, 'Attendance & Participation', 'weekly');
         <tr data-student="<?php echo $sid; ?>">
             <td class="sticky-col"><?php echo aslhub_h($student['last_name'].', '.$student['first_name']); ?><br><small class="muted">ASL <?php echo (int)$student['level']; ?> · P<?php echo (int)$student['class_period']; ?></small></td>
             <?php foreach ($blocks as $block): $row=$rows[$sid][$block['id']]??null;
-                $field=$metric==='attendance'?'absences':'participation_points';
-                $value=$row&&$row[$field]!==null?(int)$row[$field]:'';
+                $field=$metric==='attendance'?$block['field']:'participation_points';
+                $value=isset($row[$field])?(int)$row[$field]:'';
                 $placeholder=$metric==='attendance'?'0':(string)$block['participation_max']; ?>
                 <td style="text-align:center;">
-                    <input type="number" min="0" data-maximum="<?php echo $metric==='attendance'?$block['instructional_days']:$block['participation_max']; ?>"
-                        <?php if ($metric==='attendance'): ?>max="<?php echo $block['instructional_days']; ?>"<?php endif; ?> class="cell-input block-cell" style="width:72px;text-align:center;"
+                    <input type="number" min="0" data-maximum="<?php echo $metric==='attendance'?$block['cumulative_days']:$block['participation_max']; ?>"
+                        <?php if ($metric==='attendance'): ?>max="<?php echo $block['cumulative_days']; ?>"<?php endif; ?> class="cell-input block-cell" style="width:72px;text-align:center;"
                         data-student-name="<?php echo aslhub_h($student['first_name'].' '.$student['last_name']); ?>" data-student="<?php echo $sid; ?>" data-block="<?php echo $block['id']; ?>"
+                        data-field="<?php echo $field; ?>"
                         data-version="<?php echo $row?(int)$row['version']:0; ?>"
                         value="<?php echo $value; ?>" placeholder="<?php echo $placeholder; ?>" >
                 </td>

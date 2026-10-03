@@ -20,7 +20,7 @@ $points = [];
 $lastGraded = [];
 if ($students) {
     $ids = implode(',', array_map(fn($s) => (int)$s['id'], $students));
-    foreach ($pdo->query("SELECT u.user_id, SUM(u.score) AS pts
+    foreach ($pdo->query("SELECT u.user_id, SUM(CASE WHEN u.score > 1 THEN u.score - 1 ELSE 0 END) AS pts
             FROM user_learning_targets u
             JOIN asl_learning_targets t ON t.id = u.learning_target_id AND t.active = 1
             JOIN users s ON s.id = u.user_id AND t.asl_level = s.level
@@ -63,7 +63,7 @@ aslhub_teacher_header($me, 'ASL Roster', 'dashboard');
                 <tr>
                     <th class="sticky-col">Student</th>
                     <th>Level</th><th>Period</th><th>Teacher</th>
-                    <th>Points</th><th>Last graded</th><th>Status</th><th></th>
+                    <th>Growth points</th><th>Last graded</th><th>Status</th><th></th>
                 </tr>
             </thead>
             <tbody>

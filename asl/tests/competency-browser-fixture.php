@@ -3,7 +3,8 @@ if (PHP_SAPI!=='cli') { http_response_code(404); exit; }
 require __DIR__.'/competency-fixture.php';
 require dirname(__DIR__).'/lib/helpers.php';
 require dirname(__DIR__).'/lib/competencies.php';
-$dir=sys_get_temp_dir().'/asl-competency-'.bin2hex(random_bytes(6)); mkdir($dir);
+$fixtureRoot=sys_get_temp_dir().'/asl-competency-'.bin2hex(random_bytes(6)); mkdir($fixtureRoot);
+$dir=$fixtureRoot.'/site'; mkdir($dir);
 $source=dirname(__DIR__);
 foreach (['lib','css','js','api','teacher','data','tests'] as $sub) mkdir($dir.'/'.$sub);
 foreach (['dashboard.php','teacher/dashboard.php','teacher/grading.php','api/save_score.php','api/save_self_assessment.php','api/import_competencies.php',
@@ -13,6 +14,7 @@ foreach (['dashboard.php','teacher/dashboard.php','teacher/grading.php','api/sav
 file_put_contents($dir.'/config.php', <<<'PHP'
 <?php
 session_start();
+define('ASLHUB_BACKUP_DIR', dirname(__DIR__) . '-private-backups');
 require __DIR__.'/tests/competency-fixture.php';
 require __DIR__.'/lib/helpers.php';
 date_default_timezone_set('America/Los_Angeles');

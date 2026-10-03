@@ -5,7 +5,8 @@
     const state = document.getElementById('save-state');
     const warning = document.getElementById('participation-warning');
     const storageKey = `asl-block-autosave:${config.actor}:${config.field}:${config.revision}`;
-    const key = cell => `${cell.dataset.student}:${cell.dataset.block}`;
+    const field = cell => cell.dataset.field || config.field;
+    const key = cell => `${cell.dataset.student}:${cell.dataset.block}${field(cell) === config.field ? '' : ':' + field(cell)}`;
     let drafts = {};
     try { drafts = JSON.parse(localStorage.getItem(storageKey) || '{}'); } catch (_) {}
     if (!drafts || typeof drafts !== 'object' || Array.isArray(drafts)) drafts = {};
@@ -63,7 +64,7 @@
         cell.addEventListener('keydown', event => {
             if (event.key !== 'Enter') return;
             event.preventDefault();
-            const column = cells.filter(c => c.dataset.block === cell.dataset.block);
+            const column = cells.filter(c => c.dataset.block === cell.dataset.block && field(c) === field(cell));
             const next = column[column.indexOf(cell) + 1];
             if (next) { next.focus(); next.select(); }
             save();
@@ -74,10 +75,14 @@
         const pending = [...dirty].filter(cell => !blocked.has(cell) && cell.validity.valid).slice(0, 500);
         if (!pending.length) return;
         const sent = new Map(pending.map(cell => [cell, cell.value]));
-        const changes = pending.map(cell => ({
-            student_id: Number(cell.dataset.student), block_id: Number(cell.dataset.block),
-            version: Number(cell.dataset.version), [config.field]: cell.value === '' ? null : Number(cell.value)
-        }));
+        const rows = new Map();
+        pending.forEach(cell => {
+            const id = `${cell.dataset.student}:${cell.dataset.block}`;
+            const row = rows.get(id) || {student_id:Number(cell.dataset.student), block_id:Number(cell.dataset.block), version:Number(cell.dataset.version)};
+            row[field(cell)] = cell.value === '' ? null : Number(cell.value);
+            rows.set(id,row);
+        });
+        const changes = [...rows.values()];
         saving = true;
         state.textContent = 'Saving…';
         const controller = new AbortController();
@@ -92,7 +97,11 @@
             }
             pending.forEach(cell => {
                 const saved = out.saved.find(row => row.student_id === Number(cell.dataset.student) && row.block_id === Number(cell.dataset.block));
-                cell.dataset.version = saved.version;
+                // Both semester cells share one versioned, transactional metrics row.
+                cells.filter(other => other.dataset.student === cell.dataset.student && other.dataset.block === cell.dataset.block).forEach(other => {
+                    other.dataset.version = saved.version;
+                    if (drafts[key(other)]) drafts[key(other)].version = saved.version;
+                });
                 cell.dataset.initial = sent.get(cell);
                 if (cell.value === sent.get(cell)) {
                     dirty.delete(cell); delete drafts[key(cell)]; cell.classList.remove('dirty');

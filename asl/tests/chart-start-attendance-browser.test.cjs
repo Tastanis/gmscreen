@@ -8,11 +8,11 @@ for(const range of ['ytd','full']){
  await page.locator('[data-range-toggle="progress"] [data-range="'+range+'"]').click();
  const baseline=page.locator('#progress-chart circle[aria-label*="School-year starting point"]');
  assert.equal(await baseline.count(),1);assert.equal(Number(await baseline.getAttribute('cx')),58);
- assert.match(await baseline.getAttribute('aria-label'),/2026-09-08.*0 points/);
+ assert.match(await baseline.getAttribute('aria-label'),/2026-09-08.*0 growth points/);
  assert.equal(await page.locator('#progress-chart .chart-dot').count(),await page.evaluate(()=>1+reportingBlocks().filter(blockHasStarted).length),'baseline plus two started reporting blocks, no daily history');
 }
 await page.locator('[data-chart-select="attendance"]').click();
-assert.match(await page.locator('#attendance-summary').innerText(),/All-student average\s+100%/);
+assert.match(await page.locator('#attendance-summary').innerText(),/Percentage of class missed\s+0%/);
 const hits=page.locator('.attendance-value');assert.equal(await hits.count(),await page.evaluate(()=>reportingBlocks().filter(blockHasStarted).length),'overlapping lines share one hit target per block');
 assert.match(await hits.first().getAttribute('aria-label'),/Your attendance 100%; All-student average 100%/);
 await hits.first().hover();assert.match(await hits.first().locator('title').textContent(),/100%/);

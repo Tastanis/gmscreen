@@ -20,11 +20,14 @@ const assert=require('node:assert/strict');
  await search.fill('');
  const position=()=>page.evaluate(()=>{
  const w=document.querySelector('.grading-grid-wrap');
- const top=w.getBoundingClientRect().top+w.querySelector('thead').getBoundingClientRect().height;
+ const top=Math.max(0,document.querySelector('.filters-bar').getBoundingClientRect().bottom)+w.querySelector('thead').getBoundingClientRect().height;
  const row=[...document.querySelectorAll('[data-student-row]')].find(r=>!r.hidden&&r.getBoundingClientRect().bottom>top);
  return {id:row.dataset.studentRow,offset:row.getBoundingClientRect().top-top};
  });
- await page.locator('.grading-grid-wrap').evaluate(w=>w.scrollTop=1000);
+ await page.evaluate(()=>window.scrollTo(0,1000));
+ await page.waitForTimeout(100);
+ assert.equal(await page.locator('.grading-grid-wrap').evaluate(w=>w.scrollHeight-w.clientHeight),0,'no nested vertical scrollbar');
+ assert.equal(await page.locator('.grading-floating-header').isVisible(),true,'headings stay pinned');
  const before=await position();
  await Promise.all([page.waitForNavigation(), page.locator('[name=standard]').selectOption({index:3})]);
  const after=await position();

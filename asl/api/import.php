@@ -290,18 +290,20 @@ function aslhub_import_run(PDO $pdo, string $path, bool $commit): array {
             $bid = $blockByIndex[(int)($r['block_index'] ?? 0)] ?? null;
             if (!$uid || !$bid) { $skipped++; continue; }
             $abs = ($r['absences'] ?? '') !== '' ? max(0,(int)$r['absences']) : null;
+            $nextAbs = ($r['absences_next_semester'] ?? '') !== '' ? max(0,(int)$r['absences_next_semester']) : null;
             $pts = ($r['participation_points'] ?? '') !== '' ? max(0,(int)$r['participation_points']) : null;
             $max = aslhub_participation_max($daysByBlock[$bid]);
             $version = max(1,(int)($r['version'] ?? 1));
             $by = $userByEmail[mb_strtolower(trim((string)($r['updated_by_email'] ?? '')))] ?? null;
             if ($commit && $uid > 0) {
                 $pdo->prepare("INSERT INTO asl_student_block_metrics
-                    (user_id,block_id,absences,participation_points,participation_max,version,updated_by)
-                    VALUES (?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE
+                    (user_id,block_id,absences,absences_next_semester,participation_points,participation_max,version,updated_by)
+                    VALUES (?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE
                     absences=COALESCE(VALUES(absences),absences), participation_points=COALESCE(VALUES(participation_points),participation_points),
+                    absences_next_semester=COALESCE(VALUES(absences_next_semester),absences_next_semester),
                     participation_max=VALUES(participation_max), version=GREATEST(version,VALUES(version)),
                     updated_by=COALESCE(VALUES(updated_by),updated_by)")
-                    ->execute([$uid,$bid,$abs,$pts,$max,$version,$by]);
+                    ->execute([$uid,$bid,$abs,$nextAbs,$pts,$max,$version,$by]);
             }
             $set++;
         }

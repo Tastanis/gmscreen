@@ -2,14 +2,6 @@
 /** Read-only report calculations shared with the dashboard's calendar and scores. */
 require_once __DIR__ . '/data.php';
 
-function aslhub_report_grade(?float $pace): ?string {
-    if ($pace === null) return null;
-    foreach ([100 => 'A', 83 => 'B', 73 => 'C', 63 => 'D'] as $threshold => $grade) {
-        if ($pace >= $threshold) return $grade;
-    }
-    return 'F';
-}
-
 /** Replay by target, not summed clicks. Null is an explicitly cleared grade. */
 function aslhub_report_improvements(array $events, array $targets, ?string $previousEnd, string $cutoff): array {
     $before = []; $after = [];
@@ -22,11 +14,11 @@ function aslhub_report_improvements(array $events, array $targets, ?string $prev
     }
     $changes = [];
     foreach ($targets as $target) {
-        $id = (int)$target['id']; $old = $before[$id] ?? null; $new = $after[$id] ?? null;
-        if ($new !== null && $new > ($old ?? 0)) {
+        $id = (int)$target['id']; $old = aslhub_effective_score($before[$id] ?? null); $new = aslhub_effective_score($after[$id] ?? null);
+        if ($new > $old) {
             $changes[] = ['id' => $id, 'competency' => $target['competency'], 'skill' => $target['title'],
                 'mode' => ['E' => 'Expression', 'R' => 'Reception'][$target['sub_code']] ?? '',
-                'from' => $old, 'to' => $new, 'change' => $old === null ? null : $new - $old];
+                'from' => $old, 'to' => $new, 'change' => $new - $old];
         }
     }
     return $changes;
@@ -42,8 +34,8 @@ function aslhub_report_summary(array $payload): array {
     }
     $points = 0;
     $scores = (array)$payload['scores'];
-    foreach ($targets as $target) $points += (int)($scores[$target['id']] ?? 0);
-    $maximum = count($targets) * 3; // Same completion denominator as the dashboard.
+    foreach ($targets as $target) $points += aslhub_growth_points($scores[$target['id']] ?? null);
+    $maximum = count($targets) * 2; // Same completion denominator as the dashboard.
     $completion = $maximum ? 100 * $points / $maximum : null;
     $pace = $completion !== null && $elapsedDays > 0 && $totalDays > 0
         ? $completion * $totalDays / $elapsedDays : null;
@@ -57,7 +49,8 @@ function aslhub_report_summary(array $payload): array {
         'previous_block' => $currentIndex !== null && $currentIndex > 0 ? $blocks[$currentIndex - 1] : null,
         'completion_percent' => $completion === null ? null : round($completion),
         'pace_percent' => $pace === null ? null : round($pace, 1),
-        'projected_grade' => aslhub_report_grade($pace),
+        'growth_target' => $maximum,
+        'projected_points' => $elapsedDays > 0 ? round($points * $totalDays / $elapsedDays, 1) : null,
         'absences' => $currentIndex === null ? null : $payload['attendance']['ytd_absences'][$currentIndex],
         'absence_percentile' => $currentIndex === null ? null : $payload['attendance']['absence_percentile'][$currentIndex],
         'attendance_percent' => $currentIndex === null ? null : $payload['attendance']['ytd_percent'][$currentIndex],

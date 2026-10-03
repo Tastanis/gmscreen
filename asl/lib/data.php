@@ -72,13 +72,17 @@ function aslhub_taxonomy(PDO $pdo, int $level): array {
     return $out;
 }
 
+/** Level one is a display/calculation baseline, never a synthetic assessment event. */
+function aslhub_effective_score($score): int { return max(1, (int)$score); }
+function aslhub_growth_points($score): int { return aslhub_effective_score($score) - 1; }
+
 /** Current scores for a student: [target_id => score]. */
 function aslhub_student_scores(PDO $pdo, int $userId): array {
     $stmt = $pdo->prepare("SELECT learning_target_id, score FROM user_learning_targets WHERE user_id = ?");
     $stmt->execute([$userId]);
     $out = [];
     foreach ($stmt->fetchAll() as $r) {
-        if ($r['score'] !== null) $out[(int)$r['learning_target_id']] = (int)$r['score'];
+        $out[(int)$r['learning_target_id']] = aslhub_effective_score($r['score']);
     }
     return $out;
 }
@@ -104,6 +108,7 @@ function aslhub_reporting_blocks(PDO $pdo): array {
     try { $today = (new DateTimeImmutable('now', new DateTimeZone($timezone)))->format('Y-m-d'); }
     catch (Throwable $e) { $today = date('Y-m-d'); }
     $rows = $pdo->query("SELECT * FROM asl_reporting_blocks WHERE active=1 ORDER BY block_index")->fetchAll();
+    $attendanceDays = aslhub_attendance_calendar_days($pdo);
     $elapsedStmt = $pdo->prepare("SELECT COUNT(*) AS c FROM asl_calendar_days
         WHERE is_instructional=1 AND school_date BETWEEN ? AND ? AND school_date <= ?");
     foreach ($rows as &$row) {
@@ -122,6 +127,7 @@ function aslhub_reporting_blocks(PDO $pdo): array {
             'month_label' => $startMonth === $endMonth ? $endMonth : "$startMonth-$endMonth",
             'participation_max' => aslhub_participation_max((int)$row['instructional_days']),
         ];
+        $row['attendance_periods'] = aslhub_attendance_periods($row, $attendanceDays, $today);
     }
     unset($row);
     return $rows;
@@ -163,9 +169,10 @@ function aslhub_progress_from_events(array $events, array $blocks, string $today
             $standardOf[$tid] = $events[$i]['standard_id'];
             $i++;
         }
-        $overall[] = array_sum($latest);
+        $overall[] = array_sum(array_map('aslhub_growth_points', $latest));
         $totals = []; $standardTotals = [];
         foreach ($latest as $tid => $score) {
+            $score = aslhub_growth_points($score);
             $bucket = $bucketOf[$tid];
             $totals[$bucket] = ($totals[$bucket] ?? 0) + $score;
             $standard = $standardOf[$tid];
@@ -231,6 +238,7 @@ function aslhub_metrics_from_rows(int $sid, array $blocks, array $metrics, array
     $attendance = $empty['attendance']; $participation = $empty['participation_metrics'];
     $studentCumAbs = 0; $studentCumDays = 0;
     $peerCumAbs = array_fill_keys($peerIds, 0); $peerCumDays = array_fill_keys($peerIds, 0);
+    $semesterAbsences = [];
     foreach ($blocks as $block) {
         $elapsed = (int)$block['instructional_days_elapsed'];
         if ($elapsed <= 0) {
@@ -239,28 +247,38 @@ function aslhub_metrics_from_rows(int $sid, array $blocks, array $metrics, array
             continue;
         }
         $row = $metrics[$sid][$block['id']] ?? null;
-        $abs = $row && $row['absences'] !== null ? (int)$row['absences'] : 0;
-        $effectiveAbs = min($abs, $elapsed);
-        $attendance['absences'][] = $abs;
-        $attendance['block_percent'][] = round(100 * max(0, $elapsed - $effectiveAbs) / $elapsed, 1);
-        $studentCumAbs += $effectiveAbs; $studentCumDays += $elapsed;
-        $attendance['ytd_percent'][] = round(100 * max(0, $studentCumDays - $studentCumAbs) / $studentCumDays, 1);
+        $periods = $block['attendance_periods'] ?? [['semester'=>'default', 'field'=>'absences', 'instructional_days_elapsed'=>$elapsed]];
+        $attendanceElapsed = 0;
+        $blockAbsences = array_fill_keys(array_unique(array_merge([$sid], $peerIds)), 0);
+        foreach ($periods as $period) {
+            if ($period['instructional_days_elapsed'] <= 0) continue;
+            $attendanceElapsed += $period['instructional_days_elapsed'];
+            foreach ($blockAbsences as $id => $_) {
+                $previous = $semesterAbsences[$id][$period['semester']] ?? 0;
+                $value = $metrics[$id][$block['id']][$period['field']] ?? $previous;
+                $blockAbsences[$id] += max(0, (int)$value - $previous);
+                $semesterAbsences[$id][$period['semester']] = (int)$value;
+            }
+        }
+        $attendance['absences'][] = $blockAbsences[$sid];
+        $attendance['block_percent'][] = $attendanceElapsed > 0 ? round(100 * max(0, $attendanceElapsed - $blockAbsences[$sid]) / $attendanceElapsed, 1) : null;
+        $studentCumAbs = array_sum($semesterAbsences[$sid] ?? []); $studentCumDays += $attendanceElapsed;
+        $attendance['ytd_percent'][] = $studentCumDays > 0 ? round(100 * max(0, $studentCumDays - $studentCumAbs) / $studentCumDays, 1) : null;
         $classBlock = []; $classYtd = [];
         foreach ($peerIds as $peerId) {
-            $peerRow = $metrics[$peerId][$block['id']] ?? null;
-            $peerAbs = $peerRow && $peerRow['absences'] !== null ? min((int)$peerRow['absences'], $elapsed) : 0;
-            $peerCumAbs[$peerId] += $peerAbs; $peerCumDays[$peerId] += $elapsed;
+            $peerCumAbs[$peerId] = array_sum($semesterAbsences[$peerId] ?? []);
+            $peerCumDays[$peerId] += $attendanceElapsed;
             // Attendance compares every active student assigned to this teacher.
-            $classBlock[] = 100 * max(0, $elapsed - $peerAbs) / $elapsed;
-            $classYtd[] = 100 * max(0, $peerCumDays[$peerId] - $peerCumAbs[$peerId]) / $peerCumDays[$peerId];
+            if ($attendanceElapsed > 0) $classBlock[] = 100 * max(0, $attendanceElapsed - $blockAbsences[$peerId]) / $attendanceElapsed;
+            if ($peerCumDays[$peerId] > 0) $classYtd[] = 100 * max(0, $peerCumDays[$peerId] - $peerCumAbs[$peerId]) / $peerCumDays[$peerId];
         }
         $others = array_values(array_filter($peerIds, fn($id) => $id !== $sid));
         $lessAbsent = count(array_filter($others, fn($id) =>
             $peerCumAbs[$id] * $studentCumDays < $studentCumAbs * $peerCumDays[$id]));
         $attendance['absence_percentile'][] = $others ? round(100 * $lessAbsent / count($others), 1) : null;
         $attendance['ytd_absences'][] = $studentCumAbs;
-        $attendance['class_block_average_percent'][] = round(array_sum($classBlock) / max(1, count($classBlock)), 1);
-        $attendance['class_ytd_average_percent'][] = round(array_sum($classYtd) / max(1, count($classYtd)), 1);
+        $attendance['class_block_average_percent'][] = $classBlock ? round(array_sum($classBlock) / count($classBlock), 1) : null;
+        $attendance['class_ytd_average_percent'][] = $classYtd ? round(array_sum($classYtd) / count($classYtd), 1) : null;
 
         $max = aslhub_participation_max((int)$block['instructional_days']);
         $points = $row && $row['participation_points'] !== null ? (int)$row['participation_points'] : $max;

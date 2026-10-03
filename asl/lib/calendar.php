@@ -1,6 +1,39 @@
 <?php
 /** Shared school-calendar and instructional-day reporting-block helpers. */
 
+/** Attendance inputs are semester totals; the approved proficiency calendar is independent.
+ * MSD25 family calendar, revised September 21, 2026: https://aptg.co/NVHvM7
+ * January 29 ends semester one; February 1 is a workday; classes resume February 2.
+ * Do not infer a new year's semester boundary from a decreasing/corrected count.
+ */
+function aslhub_attendance_calendar_days(PDO $pdo): array {
+    return $pdo->query('SELECT school_date FROM asl_calendar_days WHERE is_instructional=1 ORDER BY school_date')->fetchAll(PDO::FETCH_COLUMN);
+}
+
+function aslhub_attendance_periods(array $block, array $schoolDays, string $today): array {
+    if (!$schoolDays) return [];
+    $first = $schoolDays[0]; $last = $schoolDays[count($schoolDays)-1];
+    $terms = [['start'=>$first, 'end'=>$last, 'number'=>1]];
+    if ($first >= '2026-07-01' && $first < '2027-02-02' && $last >= '2027-02-02' && $last <= '2027-08-31') {
+        $terms = [['start'=>$first, 'end'=>'2027-01-29', 'number'=>1],
+            ['start'=>'2027-02-02', 'end'=>$last, 'number'=>2]];
+    }
+    $periods = [];
+    foreach ($terms as $term) {
+        $start = max($block['start_date'], $term['start']);
+        $end = min($block['end_date'], $term['end']);
+        if ($start > $end) continue;
+        $count = fn($from, $to) => count(array_filter($schoolDays, fn($day) => $day >= $from && $day <= $to));
+        $periods[] = ['semester'=>$term['start'], 'semester_number'=>$term['number'],
+            'field'=>$periods ? 'absences_next_semester' : 'absences',
+            'start_date'=>$start, 'end_date'=>$end, 'instructional_days'=>$count($start,$end),
+            'is_complete'=>$end < $today, 'is_current'=>$start <= $today && $end >= $today,
+            'instructional_days_elapsed'=>$count($start,min($end,$today)),
+            'maximum'=>$count($term['start'],min($end,$today))];
+    }
+    return $periods;
+}
+
 /** Called after locking the edited block, so a queued old grid cannot use new dates. */
 function aslhub_check_calendar_revision(PDO $pdo, $expected): void {
     $current = $pdo->query("SELECT setting_value FROM asl_settings WHERE setting_key='calendar_revision' FOR UPDATE")->fetchColumn();
