@@ -14,6 +14,7 @@ $filters = [
     'include_inactive' => !empty($_GET['inactive']),
 ];
 $students = aslhub_scoped_students($pdo, $me, $filters);
+$ready = aslhub_ready_for_review($pdo, $students);
 
 // quick stats per student: total points + last graded date
 $points = [];
@@ -57,6 +58,25 @@ aslhub_teacher_header($me, 'ASL Roster', 'dashboard');
         <span class="pill" id="roster-count" aria-live="polite"><?php echo count($students); ?> students</span>
     </form>
 
+    <details class="rubric-panel" id="ready-for-review" style="margin-bottom:18px;" <?php echo $ready ? 'open' : ''; ?>>
+        <summary style="cursor:pointer;font-weight:700;">Ready for review <span class="pill" id="ready-count"><?php echo count($ready); ?></span></summary>
+        <div style="overflow-x:auto;margin-top:12px;">
+        <table class="grading-grid" style="width:100%;">
+            <thead><tr><th>Student</th><th>Skill</th><th>Student</th><th>Teacher</th><th></th></tr></thead>
+            <tbody>
+            <?php foreach ($ready as $r): ?>
+                <tr data-name="<?php echo aslhub_h(mb_strtolower($r['first_name'].' '.$r['last_name'])); ?>">
+                    <td><?php echo aslhub_h($r['last_name'].', '.$r['first_name']); ?></td>
+                    <td><?php echo aslhub_h($r['competency']); ?><br><span class="muted"><?php echo aslhub_h($r['title'].($r['sub_code']==='S' ? '' : ' · '.($r['sub_code']==='E' ? 'Expression' : 'Reception'))); ?></span></td>
+                    <td><?php echo (int)$r['student_score']; ?></td><td><?php echo (int)$r['teacher_score']; ?></td>
+                    <td><a class="pill" href="<?php echo aslhub_h(aslhub_base_url()); ?>/dashboard.php?student_id=<?php echo (int)$r['user_id']; ?>&amp;target_id=<?php echo (int)$r['learning_target_id']; ?>">Review →</a></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        </div>
+    </details>
+
     <div class="grading-grid-wrap">
         <table class="grading-grid" id="roster-table" style="width:100%;">
             <thead>
@@ -99,7 +119,14 @@ function filterRoster() {
         if (match) count++;
     });
     document.getElementById('roster-count').textContent = count+(count === 1 ? ' student' : ' students');
+    let readyCount = 0;
+    document.querySelectorAll('#ready-for-review tbody tr').forEach(tr => {
+        tr.hidden = !words.every(word => tr.dataset.name.includes(word));
+        if (!tr.hidden) readyCount++;
+    });
+    document.getElementById('ready-count').textContent = readyCount;
 }
+window.addEventListener('pageshow', event => { if (event.persisted) window.location.reload(); });
 document.getElementById('name-search').addEventListener('input', filterRoster);
 filterRoster();
 </script>

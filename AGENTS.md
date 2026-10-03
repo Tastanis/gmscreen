@@ -1373,3 +1373,14 @@ source, semantics, and disposable regression commands. Grading uses document ver
 scroll and a horizontally aligned opaque header overlay; do not restore wheel splitting.
 Reports retain a fixed 300px monochrome graph and omit excess printed improvement rows
 with a count instead of shrinking the entire sheet. Existing assessment history stays.
+
+### ASL self-assessment readiness - October 3, 2026
+
+Proficiency cards label Teacher and Student selections separately. The teacher roster
+shows Ready for review only where an active student's current self-rating exceeds
+their effective teacher score (blank/zero = one), within the authorized class filters
+and current active curriculum. This is a read-only comparison, not a notification
+ledger or grade mutation. Review links open the exact student/target/mode scale.
+Matching or higher teacher grades clear the item on the next roster load; a later
+higher self-rating makes it reappear. Preserve this separation and student access
+scope. Coverage: asl/tests/readiness.php and competency-browser.test.cjs.

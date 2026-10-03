@@ -1,6 +1,7 @@
 (function () {
     'use strict';
     const selection = { standard: null, element: null, mode: 'expression', scale: false };
+    let initialTargetHandled = false;
     const levelNames = {1:'Beginning', 2:'Developing', 3:'Proficient', 4:'Advanced'};
     const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     function phrase(parts, element) {
@@ -11,6 +12,19 @@
         render(data, onScope, onGrade, onSelfAssess) {
             const standards = (data.taxonomy || []).flatMap(b => b.standards || []).filter(s => s.competency);
             if (!standards.length) return false;
+            if (!initialTargetHandled) {
+                initialTargetHandled = true;
+                const id = new URLSearchParams(window.location.search).get('target_id');
+                const owner = standards.find(s => s.targets.some(t => String(t.id) === id));
+                const requested = owner?.targets.find(t => String(t.id) === id);
+                if (requested) {
+                    selection.standard = owner.standard_id;
+                    selection.element = owner.competency.elements[Number(requested.order_index)]?.key ?? null;
+                    selection.mode = {E:'expression',R:'reception',S:'single'}[requested.sub_code];
+                    selection.scale = true;
+                    onScope(selection.standard);
+                }
+            }
             const section = document.querySelector('.curriculum-section');
             let root = document.getElementById('competency-browser');
             if (!root) {
@@ -47,7 +61,7 @@
                         const graded = Math.max(1, Number(data.scores?.[target.id] || 1)) === Number(score);
                         const self = Number(data.self_assessments?.[target.id]) === Number(score);
                         const clickable = onGrade || onSelfAssess;
-                        return `<${clickable ? 'button type="button"' : 'div'} class="competency-level level-${score} ${graded ? 'selected' : ''} ${self ? 'self-selected' : ''}" ${clickable ? `${onGrade ? 'data-score' : 'data-self-score'}="${score}" aria-pressed="${onGrade ? graded : self}"` : ''}><span class="competency-level-heading"><span class="competency-score">${score}</span><span class="competency-level-name">${levelNames[score] || ''}</span></span><span>${escape(descriptor)}</span></${clickable ? 'button' : 'div'}>`;
+                        return `<${clickable ? 'button type="button"' : 'div'} class="competency-level level-${score} ${graded ? 'selected' : ''} ${self ? 'self-selected' : ''}" ${clickable ? `${onGrade ? 'data-score' : 'data-self-score'}="${score}" aria-pressed="${onGrade ? graded : self}"` : ''}><span class="competency-level-heading"><span class="competency-score">${score}</span><span class="competency-level-name">${levelNames[score] || ''}</span>${graded ? '<span class="assessment-label">Teacher</span>' : ''}${self ? '<span class="assessment-label">Student</span>' : ''}</span><span>${escape(descriptor)}</span></${clickable ? 'button' : 'div'}>`;
                     }).join('')}</div>
                 </div>` : ''}`;
             const rerender = () => { onScope(selection.standard); this.render(data,onScope,onGrade,onSelfAssess); };

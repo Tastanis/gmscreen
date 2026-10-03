@@ -95,6 +95,26 @@ function aslhub_student_self_assessments(PDO $pdo, int $userId): object {
     return $out;
 }
 
+/** Current readiness differences, restricted to the already authorized roster. */
+function aslhub_ready_for_review(PDO $pdo, array $students): array {
+    if (!$students) return [];
+    $ids = array_map(fn($s) => (int)$s['id'], $students);
+    $in = implode(',', array_fill(0, count($ids), '?'));
+    $baseline = 'CASE WHEN g.score > 1 THEN g.score ELSE 1 END';
+    $q = $pdo->prepare("SELECT a.user_id, a.learning_target_id, a.score AS student_score,
+            $baseline AS teacher_score, u.first_name, u.last_name, u.level, u.class_period,
+            t.title, t.sub_code, s.name AS competency
+        FROM asl_self_assessments a
+        JOIN users u ON u.id=a.user_id AND u.is_teacher=0 AND u.is_active=1 AND u.is_unclaimed=0
+        JOIN asl_learning_targets t ON t.id=a.learning_target_id AND t.active=1 AND t.asl_level=u.level
+        JOIN asl_standards s ON s.standard_id=t.standard_id AND s.active=1
+        LEFT JOIN user_learning_targets g ON g.user_id=a.user_id AND g.learning_target_id=a.learning_target_id
+        WHERE a.user_id IN ($in) AND a.score > ($baseline)
+        ORDER BY u.last_name, u.first_name, u.id, s.order_index, t.order_index, t.sub_code");
+    $q->execute($ids);
+    return $q->fetchAll();
+}
+
 /** Monday of the week containing $date. */
 function aslhub_week_start(string $date): string {
     $ts = strtotime($date);
