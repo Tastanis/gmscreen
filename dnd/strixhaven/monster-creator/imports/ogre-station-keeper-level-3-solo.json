@@ -1,0 +1,849 @@
+{
+  "id": "ogre-station-keeper-level-3-solo",
+  "name": "Ogre Station Keeper",
+  "level": 3,
+  "role": "Solo",
+  "types": "Giant, Ogre",
+  "ev": 60,
+  "size": "2",
+  "speed": 6,
+  "movement": "",
+  "stamina": 300,
+  "stability": 3,
+  "free_strike": 6,
+  "immunities": [],
+  "weaknesses": [],
+  "attributes": {
+    "might": 3,
+    "agility": 1,
+    "reason": 0,
+    "intuition": 2,
+    "presence": 1
+  },
+  "traits": [],
+  "abilities": {
+    "passive": [
+      {
+        "name": "Solo Monster — End Effect",
+        "effect": "At the end of each of her turns, the ogre can take 5 damage to end one effect on her that can be ended by a saving throw. This damage can't be reduced in any way.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "target": "self",
+              "effects": [
+                {
+                  "kind": "ifPrompt",
+                  "target": "self",
+                  "question": "Take 5 irreducible damage to end one save-ends effect?",
+                  "yesLabel": "Take 5 Damage",
+                  "noLabel": "Cancel",
+                  "then": [
+                    {
+                      "kind": "damage",
+                      "target": "self",
+                      "amount": 5,
+                      "raw": true
+                    },
+                    {
+                      "kind": "note",
+                      "text": "Remove one effect on the ogre that can be ended by a saving throw."
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "Solo Monster — Solo Turns",
+        "effect": "The ogre takes two turns each round. She can't take turns consecutively."
+      },
+      {
+        "name": "Destructive Path",
+        "effect": "When the ogre moves or is force moved, she can destroy mundane size 1 objects in her path and break through mundane wood or stone walls up to 2 squares thick. Broken wall squares become difficult terrain."
+      },
+      {
+        "name": "Defiant Anger",
+        "effect": "While winded, the ogre has damage immunity 2.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "branch",
+              "condition": {
+                "kind": "winded"
+              },
+              "then": [
+                {
+                  "type": "effect",
+                  "target": "self",
+                  "effects": [
+                    {
+                      "kind": "condition",
+                      "name": "damageImmunity",
+                      "amount": 2,
+                      "duration": "endOfEncounter"
+                    },
+                    {
+                      "kind": "floatingText",
+                      "text": "Defiant Anger!",
+                      "tone": "danger"
+                    }
+                  ]
+                }
+              ],
+              "else": [
+                {
+                  "type": "effect",
+                  "effects": [
+                    {
+                      "kind": "note",
+                      "text": "The ogre isn't winded yet. Use this once she drops to 150 Stamina or lower."
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "Ogre Malice",
+        "effect": "At the start of the ogre's turn, the Director can spend Malice to activate one of her Malice features."
+      }
+    ],
+    "maneuver": [
+      {
+        "name": "Out You Go!",
+        "keywords": "Melee, Weapon",
+        "range": "Melee 2",
+        "targets": "One size 1 creature or object",
+        "roll_bonus": 3,
+        "effect": "The ogre scoops up the target and hurls them.",
+        "has_test": true,
+        "test": {
+          "tier1": {
+            "damage_amount": "",
+            "damage_type": "",
+            "tier_effect": "vertical push 2"
+          },
+          "tier2": {
+            "damage_amount": "",
+            "damage_type": "",
+            "tier_effect": "vertical push 3"
+          },
+          "tier3": {
+            "damage_amount": "",
+            "damage_type": "",
+            "tier_effect": "vertical push 5"
+          }
+        },
+        "additional_effect": "The ogre can use this maneuver only once per round.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "usageLimit": {
+            "scope": "round",
+            "key": "ogre-out-you-go",
+            "target": "self",
+            "message": "Out You Go! has already been used this round."
+          },
+          "cards": [
+            {
+              "type": "target",
+              "name": "primary",
+              "mode": "token",
+              "predicate": "creature",
+              "count": {
+                "value": 1,
+                "mode": "exact"
+              },
+              "distance": {
+                "form": "melee",
+                "value": 2
+              }
+            },
+            {
+              "type": "powerRoll",
+              "flatBonus": 3,
+              "target": "primary",
+              "tiers": {
+                "tier1": {
+                  "effects": [
+                    {
+                      "kind": "forcedMovement",
+                      "verb": "verticalPush",
+                      "distance": 2
+                    }
+                  ]
+                },
+                "tier2": {
+                  "effects": [
+                    {
+                      "kind": "forcedMovement",
+                      "verb": "verticalPush",
+                      "distance": 3
+                    }
+                  ]
+                },
+                "tier3": {
+                  "effects": [
+                    {
+                      "kind": "forcedMovement",
+                      "verb": "verticalPush",
+                      "distance": 5
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "action": [
+      {
+        "name": "Crush Underfoot",
+        "keywords": "Melee, Strike, Weapon",
+        "range": "Melee 2",
+        "targets": "Two creatures or objects",
+        "roll_bonus": 3,
+        "effect": "Signature Ability. The ogre stomps and swats at whoever is closest.",
+        "has_test": true,
+        "test": {
+          "tier1": {
+            "damage_amount": "8",
+            "damage_type": "",
+            "tier_effect": ""
+          },
+          "tier2": {
+            "damage_amount": "12",
+            "damage_type": "",
+            "tier_effect": "",
+            "has_attribute_check": true,
+            "attribute": "might",
+            "attribute_threshold": 2,
+            "attribute_effect": "prone"
+          },
+          "tier3": {
+            "damage_amount": "15",
+            "damage_type": "",
+            "tier_effect": "prone"
+          }
+        },
+        "additional_effect": "A target who is already prone takes 4 extra damage.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "primary",
+              "mode": "token",
+              "predicate": "creature",
+              "count": {
+                "value": 2,
+                "mode": "upTo"
+              },
+              "distance": {
+                "form": "melee",
+                "value": 2
+              }
+            },
+            {
+              "type": "target",
+              "name": "alreadyProne",
+              "mode": "token",
+              "predicate": "creature",
+              "count": {
+                "value": 2,
+                "mode": "upTo"
+              },
+              "distance": {
+                "form": "melee",
+                "value": 2
+              },
+              "promptTitle": "Already prone?",
+              "promptText": "Select any target that was ALREADY prone before this attack (they take 4 extra damage). Choose Done if none."
+            },
+            {
+              "type": "effect",
+              "target": "alreadyProne",
+              "effects": [
+                {
+                  "kind": "damage",
+                  "amount": 4
+                }
+              ]
+            },
+            {
+              "type": "powerRoll",
+              "flatBonus": 3,
+              "target": "primary",
+              "tiers": {
+                "tier1": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 8
+                    }
+                  ]
+                },
+                "tier2": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 12
+                    },
+                    {
+                      "kind": "potency",
+                      "attribute": "M",
+                      "threshold": 2,
+                      "onFail": [
+                        {
+                          "kind": "condition",
+                          "name": "prone"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "tier3": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 15
+                    },
+                    {
+                      "kind": "condition",
+                      "name": "prone"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Throw Something Heavy",
+        "keywords": "Ranged, Strike, Weapon",
+        "range": "Ranged 10",
+        "targets": "One creature or object",
+        "roll_bonus": 3,
+        "effect": "The ogre rips loose a stone, crate, or chunk of rubble and hurls it.",
+        "has_test": true,
+        "test": {
+          "tier1": {
+            "damage_amount": "9",
+            "damage_type": "",
+            "tier_effect": ""
+          },
+          "tier2": {
+            "damage_amount": "13",
+            "damage_type": "",
+            "tier_effect": "push 2"
+          },
+          "tier3": {
+            "damage_amount": "16",
+            "damage_type": "",
+            "tier_effect": "push 3"
+          }
+        },
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "primary",
+              "mode": "token",
+              "predicate": "creature",
+              "count": {
+                "value": 1,
+                "mode": "exact"
+              },
+              "distance": {
+                "form": "ranged",
+                "value": 10
+              }
+            },
+            {
+              "type": "powerRoll",
+              "flatBonus": 3,
+              "target": "primary",
+              "tiers": {
+                "tier1": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 9
+                    }
+                  ]
+                },
+                "tier2": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 13
+                    },
+                    {
+                      "kind": "forcedMovement",
+                      "verb": "push",
+                      "distance": 2
+                    }
+                  ]
+                },
+                "tier3": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 16
+                    },
+                    {
+                      "kind": "forcedMovement",
+                      "verb": "push",
+                      "distance": 3
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Bring It Down!",
+        "keywords": "Area, Weapon",
+        "range": "3 cube within 2",
+        "targets": "Each creature in the area",
+        "resource_cost": "3 Malice",
+        "roll_bonus": 3,
+        "effect": "The ogre smashes a wall, shelf, railing, or rock face down onto the space beside it. She must be adjacent to a structure or rock face to use this ability.",
+        "has_test": true,
+        "test": {
+          "tier1": {
+            "damage_amount": "5",
+            "damage_type": "",
+            "tier_effect": "",
+            "has_attribute_check": true,
+            "attribute": "agility",
+            "attribute_threshold": 1,
+            "attribute_effect": "prone"
+          },
+          "tier2": {
+            "damage_amount": "8",
+            "damage_type": "",
+            "tier_effect": "",
+            "has_attribute_check": true,
+            "attribute": "agility",
+            "attribute_threshold": 2,
+            "attribute_effect": "prone"
+          },
+          "tier3": {
+            "damage_amount": "11",
+            "damage_type": "",
+            "tier_effect": "",
+            "has_attribute_check": true,
+            "attribute": "agility",
+            "attribute_threshold": 3,
+            "attribute_effect": "prone"
+          }
+        },
+        "additional_effect": "The area becomes difficult terrain.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "primary",
+              "mode": "area",
+              "predicate": "creature",
+              "shape": "cube",
+              "size": 3,
+              "distance": {
+                "form": "cube",
+                "value": 3,
+                "within": 2
+              }
+            },
+            {
+              "type": "powerRoll",
+              "flatBonus": 3,
+              "target": "primary",
+              "tiers": {
+                "tier1": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 5
+                    },
+                    {
+                      "kind": "potency",
+                      "attribute": "A",
+                      "threshold": 1,
+                      "onFail": [
+                        {
+                          "kind": "condition",
+                          "name": "prone"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "tier2": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 8
+                    },
+                    {
+                      "kind": "potency",
+                      "attribute": "A",
+                      "threshold": 2,
+                      "onFail": [
+                        {
+                          "kind": "condition",
+                          "name": "prone"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "tier3": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 11
+                    },
+                    {
+                      "kind": "potency",
+                      "attribute": "A",
+                      "threshold": 3,
+                      "onFail": [
+                        {
+                          "kind": "condition",
+                          "name": "prone"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "effect",
+              "effects": [
+                {
+                  "kind": "note",
+                  "text": "The area becomes difficult terrain. Mark the map."
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "triggered_action": [
+      {
+        "name": "Swat the Fly",
+        "keywords": "Melee",
+        "range": "Melee 1",
+        "targets": "The triggering creature",
+        "trigger": "A creature within distance moves or shifts away from the ogre.",
+        "effect": "The ogre slides the target up to 3 squares.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "swatTarget",
+              "mode": "token",
+              "predicate": "creature",
+              "count": {
+                "value": 1,
+                "mode": "exact"
+              },
+              "distance": {
+                "form": "melee",
+                "value": 1
+              },
+              "promptTitle": "Swat the Fly",
+              "promptText": "Select the creature that moved or shifted away from the ogre."
+            },
+            {
+              "type": "effect",
+              "target": "swatTarget",
+              "effects": [
+                {
+                  "kind": "forcedMovement",
+                  "verb": "slide",
+                  "distance": 3
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "villain_action": [],
+    "malice": [
+      {
+        "name": "Shockwave",
+        "resource_cost": "3 Malice",
+        "keywords": "Area",
+        "range": "3 burst",
+        "targets": "Each size 1 creature in the area",
+        "effect": "The ogre slams the ground. Each target makes a Might or Agility test (their choice). ≤11: 5 damage, vertical push 3. 12–16: 4 damage, vertical push 2. 17+: push 1.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "might",
+              "mode": "token",
+              "predicate": "creature",
+              "count": {
+                "value": 30,
+                "mode": "upTo"
+              },
+              "distance": {
+                "form": "burst",
+                "value": 3
+              },
+              "promptTitle": "Shockwave — Might",
+              "promptText": "Select every size 1 creature within 3 squares who chooses Might, then choose Done."
+            },
+            {
+              "type": "target",
+              "name": "agility",
+              "mode": "token",
+              "predicate": "creature",
+              "count": {
+                "value": 30,
+                "mode": "upTo"
+              },
+              "distance": {
+                "form": "burst",
+                "value": 3
+              },
+              "promptTitle": "Shockwave — Agility",
+              "promptText": "Select every size 1 creature within 3 squares who chooses Agility, then choose Done.",
+              "excludeGroups": [
+                "might"
+              ]
+            },
+            {
+              "type": "requestedTest",
+              "target": "might",
+              "attribute": "Might",
+              "rollMode": "individual",
+              "label": "Shockwave: Might test",
+              "tiers": {
+                "tier1": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 5
+                    },
+                    {
+                      "kind": "forcedMovement",
+                      "verb": "verticalPush",
+                      "distance": 3
+                    }
+                  ]
+                },
+                "tier2": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 4
+                    },
+                    {
+                      "kind": "forcedMovement",
+                      "verb": "verticalPush",
+                      "distance": 2
+                    }
+                  ]
+                },
+                "tier3": {
+                  "effects": [
+                    {
+                      "kind": "forcedMovement",
+                      "verb": "push",
+                      "distance": 1
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "requestedTest",
+              "target": "agility",
+              "attribute": "Agility",
+              "rollMode": "individual",
+              "label": "Shockwave: Agility test",
+              "tiers": {
+                "tier1": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 5
+                    },
+                    {
+                      "kind": "forcedMovement",
+                      "verb": "verticalPush",
+                      "distance": 3
+                    }
+                  ]
+                },
+                "tier2": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 4
+                    },
+                    {
+                      "kind": "forcedMovement",
+                      "verb": "verticalPush",
+                      "distance": 2
+                    }
+                  ]
+                },
+                "tier3": {
+                  "effects": [
+                    {
+                      "kind": "forcedMovement",
+                      "verb": "push",
+                      "distance": 1
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Bully",
+        "resource_cost": "5 Malice",
+        "range": "Self",
+        "targets": "Self",
+        "effect": "The ogre shifts up to her speed and makes a free strike.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "target": "self",
+              "effects": [
+                {
+                  "kind": "shift",
+                  "distance": "speed"
+                },
+                {
+                  "kind": "freeStrike",
+                  "against": "creature"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "Rampage",
+        "resource_cost": "7 Malice",
+        "range": "Self",
+        "targets": "Self",
+        "effect": "Until the end of the round, the ogre has damage immunity 5 and deals 5 extra damage with her abilities. While Rampage is active, heroic abilities that target her cost 1 less of their Heroic Resource (minimum 1). This replaces Defiant Anger's immunity rather than stacking with it.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "branch",
+              "condition": {
+                "kind": "winded"
+              },
+              "then": [
+                {
+                  "type": "effect",
+                  "target": "self",
+                  "effects": [
+                    {
+                      "kind": "condition",
+                      "name": "damageImmunity",
+                      "amount": 3,
+                      "duration": "endOfEncounter"
+                    },
+                    {
+                      "kind": "note",
+                      "text": "RAMPAGE: +3 immunity on top of Defiant Anger's 2 = 5 total. Remove the +3 at the end of the round."
+                    }
+                  ]
+                }
+              ],
+              "else": [
+                {
+                  "type": "effect",
+                  "target": "self",
+                  "effects": [
+                    {
+                      "kind": "condition",
+                      "name": "damageImmunity",
+                      "amount": 5,
+                      "duration": "endOfEncounter"
+                    },
+                    {
+                      "kind": "note",
+                      "text": "RAMPAGE: Remove this immunity at the end of the round."
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "effect",
+              "effects": [
+                {
+                  "kind": "floatingText",
+                  "text": "RAMPAGE!",
+                  "tone": "danger"
+                },
+                {
+                  "kind": "note",
+                  "text": "RAMPAGE: Until the end of the round, add 5 damage to each of her abilities, and heroic abilities that target her cost 1 less Heroic Resource (minimum 1)."
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "Solo Action",
+        "resource_cost": "5 Malice",
+        "range": "Self",
+        "targets": "Self",
+        "effect": "The ogre takes an additional main action on her turn. She can use this feature even if she is dazed.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "usageLimit": {
+            "scope": "turn",
+            "key": "ogre-solo-action",
+            "target": "self"
+          },
+          "cards": [
+            {
+              "type": "effect",
+              "effects": [
+                {
+                  "kind": "note",
+                  "text": "SOLO ACTION: Take one additional main action this turn, even if dazed."
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

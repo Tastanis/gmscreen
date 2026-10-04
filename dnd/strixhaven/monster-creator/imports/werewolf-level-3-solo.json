@@ -1,0 +1,868 @@
+{
+  "id": "werewolf-level-3-solo",
+  "name": "Werewolf",
+  "level": 3,
+  "role": "Solo",
+  "types": "Accursed, Humanoid, Werebeast",
+  "ev": 60,
+  "size": "1M",
+  "speed": 7,
+  "movement": "",
+  "stamina": 300,
+  "stability": 1,
+  "free_strike": 6,
+  "immunities": [],
+  "weaknesses": [],
+  "attributes": {
+    "might": 3,
+    "agility": 2,
+    "reason": -1,
+    "intuition": 1,
+    "presence": 1
+  },
+  "traits": [],
+  "abilities": {
+    "passive": [
+      {
+        "name": "Solo Monster — End Effect",
+        "effect": "At the end of each of their turns, the werewolf can take 5 damage to end one effect on them that can be ended by a saving throw. This damage can’t be reduced in any way.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "target": "self",
+              "effects": [
+                {
+                  "kind": "ifPrompt",
+                  "target": "self",
+                  "question": "Use End Effect now? The werewolf takes 5 irreducible damage, then the Director manually removes one effect that can be ended by a saving throw.",
+                  "yesLabel": "Take 5 Damage",
+                  "noLabel": "Cancel",
+                  "then": [
+                    {
+                      "kind": "damage",
+                      "target": "self",
+                      "amount": 5,
+                      "raw": true
+                    },
+                    {
+                      "kind": "note",
+                      "text": "END EFFECT: The werewolf took 5 irreducible damage. The Director now chooses and manually removes one effect on the werewolf that can be ended by a saving throw."
+                    }
+                  ],
+                  "else": [
+                    {
+                      "kind": "note",
+                      "text": "END EFFECT declined; no damage or condition removal occurs."
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "Solo Monster — Solo Turns",
+        "effect": "The werewolf can take two turns each round. They can’t take turns consecutively."
+      },
+      {
+        "name": "Accursed Rage",
+        "effect": "The werewolf’s ferocity is expressed through rage, and their abilities can inflict rage points on any enemy except a stormwight fury. A creature who starts their turn with 10 or more rage expends their rage. Then before taking their turn, they must shift up to their speed toward the nearest creature and make a melee free strike against them. A creature who takes damage from this free strike gains 1 rage. Accumulated rage disappears after a character finishes a respite. Rage is tracked manually by each player."
+      },
+      {
+        "name": "Shapeshifter",
+        "effect": "The werewolf enters combat in their hybrid humanoid form. Their shape can’t be changed by any external effect. The werewolf remains in hybrid form for the entire encounter."
+      },
+      {
+        "name": "Vukenstep",
+        "effect": "The werewolf ignores difficult terrain."
+      },
+      {
+        "name": "Werewolf Malice",
+        "effect": "At the start of the werewolf’s turn, the Director can spend Malice to activate one of the werewolf’s Malice features."
+      }
+    ],
+    "maneuver": [
+      {
+        "name": "Wall Leap",
+        "keywords": "Move",
+        "range": "Self",
+        "targets": "Self; then one creature for the melee free strike",
+        "effect": "The werewolf jumps up to 4 squares. If they end this jump at a wall, the werewolf jumps off the wall up to 4 squares and can make a melee free strike. If the target of the free strike has M<2, they are knocked prone. The Director adjudicates jump paths, wall contact, legal landing spaces, and the M<2 prone rider.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "target": "self",
+              "effects": [
+                {
+                  "kind": "note",
+                  "text": "WALL LEAP: Move the werewolf with the first up-to-4-square picker as a jump. The Director validates the jump path and landing space."
+                },
+                {
+                  "kind": "shift",
+                  "distance": 4,
+                  "label": "First jump"
+                },
+                {
+                  "kind": "ifPrompt",
+                  "target": "self",
+                  "question": "Did the first jump legally end at a wall?",
+                  "yesLabel": "Leap Off Wall",
+                  "noLabel": "End Maneuver",
+                  "then": [
+                    {
+                      "kind": "shift",
+                      "distance": 4,
+                      "label": "Wall jump"
+                    },
+                    {
+                      "kind": "freeStrike",
+                      "against": "creature",
+                      "text": "Choose the creature hit by the werewolf’s melee free strike after the wall jump."
+                    },
+                    {
+                      "kind": "note",
+                      "text": "WALL LEAP PRONE RIDER: If the free-strike target has Might lower than 2, manually apply prone. The VTT free-strike picker does not expose that selected target to a following potency check."
+                    }
+                  ],
+                  "else": [
+                    {
+                      "kind": "note",
+                      "text": "The first jump did not end at a valid wall, so there is no second jump or free strike."
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "action": [
+      {
+        "name": "Accursed Bite",
+        "keywords": "Charge, Melee, Strike, Weapon",
+        "range": "Melee 1",
+        "targets": "One creature or object",
+        "roll_bonus": 3,
+        "effect": "",
+        "has_test": true,
+        "test": {
+          "tier1": {
+            "damage_amount": "9",
+            "damage_type": "",
+            "tier_effect": "the target gains 2 rage"
+          },
+          "tier2": {
+            "damage_amount": "13",
+            "damage_type": "",
+            "tier_effect": "the target gains 4 rage"
+          },
+          "tier3": {
+            "damage_amount": "16",
+            "damage_type": "",
+            "tier_effect": "the target gains 5 rage"
+          }
+        },
+        "additional_effect": "2 Malice: If the target has P<0, they are afflicted with lycanthropy. Each time the target is unaffected by the potency effect, the potency increases by 1 the next time the werewolf uses this ability against the same target. A creature afflicted with lycanthropy gains 2 rage at the end of each of their turns whenever they’re in combat. Their rage doesn’t disappear after finishing a respite, and they must complete the Find a Cure downtime project to end this effect. The Director manually spends this optional Malice, tracks each target’s escalating potency, and records lycanthropy outside the VTT encounter state.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "biteTarget",
+              "mode": "token",
+              "predicate": "creatureOrObject",
+              "count": {
+                "value": 1,
+                "mode": "exact"
+              },
+              "distance": {
+                "form": "melee",
+                "value": 1
+              },
+              "promptTitle": "Accursed Bite",
+              "promptText": "Choose the creature or object bitten by the werewolf."
+            },
+            {
+              "type": "powerRoll",
+              "target": "biteTarget",
+              "flatBonus": 3,
+              "tiers": {
+                "tier1": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 9
+                    },
+                    {
+                      "kind": "note",
+                      "text": "ACCURSED BITE — TIER 1: The target gains 2 rage. The player updates their manually tracked rage total."
+                    }
+                  ]
+                },
+                "tier2": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 13
+                    },
+                    {
+                      "kind": "note",
+                      "text": "ACCURSED BITE — TIER 2: The target gains 4 rage. The player updates their manually tracked rage total."
+                    }
+                  ]
+                },
+                "tier3": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 16
+                    },
+                    {
+                      "kind": "note",
+                      "text": "ACCURSED BITE — TIER 3: The target gains 5 rage. The player updates their manually tracked rage total."
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "effect",
+              "target": "biteTarget",
+              "effects": [
+                {
+                  "kind": "note",
+                  "text": "OPTIONAL LYCANTHROPY RIDER — Do not spend Malice automatically. If the Director spends 2 Malice and the target’s Presence is lower than the current potency (starting at P<0), the target is afflicted with lycanthropy. If unaffected, increase this Bite’s potency by 1 against this same target next time. Record the per-target potency and any lasting lycanthropy manually. An afflicted target gains 2 rage at the end of each combat turn, keeps rage through respites, and requires Find a Cure."
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "Ripping Claws",
+        "keywords": "Melee, Strike, Weapon",
+        "range": "Melee 1",
+        "targets": "Two creatures or objects",
+        "roll_bonus": 3,
+        "effect": "",
+        "has_test": true,
+        "test": {
+          "tier1": {
+            "damage_amount": "9",
+            "damage_type": "",
+            "tier_effect": "",
+            "has_attribute_check": true,
+            "attribute": "might",
+            "attribute_threshold": 1,
+            "attribute_effect": "bleeding (save ends)"
+          },
+          "tier2": {
+            "damage_amount": "13",
+            "damage_type": "",
+            "tier_effect": "the target gains 1 rage",
+            "has_attribute_check": true,
+            "attribute": "might",
+            "attribute_threshold": 2,
+            "attribute_effect": "bleeding (save ends)"
+          },
+          "tier3": {
+            "damage_amount": "16",
+            "damage_type": "",
+            "tier_effect": "the target gains 3 rage",
+            "has_attribute_check": true,
+            "attribute": "might",
+            "attribute_threshold": 3,
+            "attribute_effect": "bleeding (save ends)"
+          }
+        },
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "clawTargets",
+              "mode": "token",
+              "predicate": "creatureOrObject",
+              "count": {
+                "value": 2,
+                "mode": "exact"
+              },
+              "distance": {
+                "form": "melee",
+                "value": 1
+              },
+              "promptTitle": "Ripping Claws",
+              "promptText": "Choose one or two creatures or objects within melee 1, then choose Done."
+            },
+            {
+              "type": "powerRoll",
+              "target": "clawTargets",
+              "flatBonus": 3,
+              "tiers": {
+                "tier1": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 9
+                    },
+                    {
+                      "kind": "potency",
+                      "attribute": "M",
+                      "threshold": 1,
+                      "onFail": [
+                        {
+                          "kind": "condition",
+                          "name": "bleeding",
+                          "duration": "saveEnds"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "tier2": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 13
+                    },
+                    {
+                      "kind": "note",
+                      "text": "RIPPING CLAWS — TIER 2: Each target gains 1 rage. Each player updates their manually tracked rage total."
+                    },
+                    {
+                      "kind": "potency",
+                      "attribute": "M",
+                      "threshold": 2,
+                      "onFail": [
+                        {
+                          "kind": "condition",
+                          "name": "bleeding",
+                          "duration": "saveEnds"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "tier3": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 16
+                    },
+                    {
+                      "kind": "note",
+                      "text": "RIPPING CLAWS — TIER 3: Each target gains 3 rage. Each player updates their manually tracked rage total."
+                    },
+                    {
+                      "kind": "potency",
+                      "attribute": "M",
+                      "threshold": 3,
+                      "onFail": [
+                        {
+                          "kind": "condition",
+                          "name": "bleeding",
+                          "duration": "saveEnds"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Berserker Slash",
+        "resource_cost": "3 Malice",
+        "keywords": "Area",
+        "range": "1 burst",
+        "targets": "Each enemy and object in the area",
+        "roll_bonus": 3,
+        "effect": "",
+        "has_test": true,
+        "test": {
+          "tier1": {
+            "damage_amount": "5",
+            "damage_type": "",
+            "tier_effect": "push 2"
+          },
+          "tier2": {
+            "damage_amount": "7",
+            "damage_type": "",
+            "tier_effect": "push 3; the target gains 1 rage"
+          },
+          "tier3": {
+            "damage_amount": "9",
+            "damage_type": "",
+            "tier_effect": "slide 3; the target gains 3 rage"
+          }
+        },
+        "additional_effect": "The werewolf shifts up to their speed before using this ability. Because this Malice-costed ability is correctly stored as a main action, the current VTT does not auto-spend its cost; the Director manually spends 3 Malice before clicking it.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "target": "self",
+              "effects": [
+                {
+                  "kind": "note",
+                  "text": "BERSERKER SLASH COST: Manually spend 3 Malice. The monster runtime does not auto-spend costs on main-action category abilities."
+                },
+                {
+                  "kind": "shift",
+                  "distance": "speed",
+                  "label": "Shift before Berserker Slash"
+                }
+              ]
+            },
+            {
+              "type": "target",
+              "name": "slashTargets",
+              "mode": "token",
+              "predicate": "creatureOrObject",
+              "count": "all",
+              "distance": {
+                "form": "burst",
+                "value": 1
+              },
+              "promptTitle": "Berserker Slash — 1 Burst",
+              "promptText": "Select every enemy and object within 1 square of the werewolf. Do not select the werewolf or its allies. Choose Done when all valid targets are selected."
+            },
+            {
+              "type": "powerRoll",
+              "target": "slashTargets",
+              "flatBonus": 3,
+              "tiers": {
+                "tier1": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 5
+                    },
+                    {
+                      "kind": "forcedMovement",
+                      "verb": "push",
+                      "distance": 2
+                    }
+                  ]
+                },
+                "tier2": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 7
+                    },
+                    {
+                      "kind": "forcedMovement",
+                      "verb": "push",
+                      "distance": 3
+                    },
+                    {
+                      "kind": "note",
+                      "text": "BERSERKER SLASH — TIER 2: Each target gains 1 rage. Each player updates their manually tracked rage total."
+                    }
+                  ]
+                },
+                "tier3": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 9
+                    },
+                    {
+                      "kind": "forcedMovement",
+                      "verb": "slide",
+                      "distance": 3
+                    },
+                    {
+                      "kind": "note",
+                      "text": "BERSERKER SLASH — TIER 3: Each target gains 3 rage. Each player updates their manually tracked rage total."
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "triggered_action": [
+      {
+        "name": "Facepalm and Head Slam",
+        "resource_cost": "2 Malice",
+        "keywords": "Melee",
+        "range": "Melee 1",
+        "targets": "The triggering creature",
+        "trigger": "A creature within distance targets the werewolf with a melee ability after charging or moving 2 or more squares in a straight line toward them.",
+        "effect": "The target is knocked prone and takes 6 damage before the triggering ability is resolved. The Director recognizes the trigger and clicks this triggered action manually; the VTT does not attempt to detect the charge, straight-line movement, or targeting requirement.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "headSlamTarget",
+              "mode": "token",
+              "predicate": "creature",
+              "count": {
+                "value": 1,
+                "mode": "exact"
+              },
+              "distance": {
+                "form": "melee",
+                "value": 1
+              },
+              "promptTitle": "Facepalm and Head Slam",
+              "promptText": "Select the creature whose charge or straight-line approach triggered this action. Resolve this before its triggering ability."
+            },
+            {
+              "type": "effect",
+              "target": "headSlamTarget",
+              "effects": [
+                {
+                  "kind": "damage",
+                  "amount": 6
+                },
+                {
+                  "kind": "condition",
+                  "name": "prone"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "villain_action": [
+      {
+        "name": "Howl — Villain Action 1",
+        "keywords": "Area",
+        "range": "5 burst",
+        "targets": "Each enemy in the area",
+        "effect": "Each target makes an Intuition test. Tier 1: The target must move their speed in a straight line away from the werewolf; frightened (save ends). Tier 2: Frightened (EoT). Tier 3: No effect. After the tests resolve, any enemy in the encounter who has 1 or more rage gains 4 rage and howls along with the werewolf. The movement and all rage changes are tracked manually.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "howlTargets",
+              "mode": "token",
+              "predicate": "enemy",
+              "count": "all",
+              "distance": {
+                "form": "burst",
+                "value": 5
+              },
+              "promptTitle": "Howl — 5 Burst",
+              "promptText": "Select every enemy within 5 squares of the werewolf, then choose Done. Each selected target makes an Intuition test."
+            },
+            {
+              "type": "requestedTest",
+              "target": "howlTargets",
+              "attribute": "Intuition",
+              "rollMode": "individual",
+              "label": "Howl Intuition test",
+              "prompt": "The werewolf’s howl drives enemies into supernatural terror.",
+              "tiers": {
+                "tier1": {
+                  "effects": [
+                    {
+                      "kind": "condition",
+                      "name": "frightened",
+                      "duration": "saveEnds"
+                    },
+                    {
+                      "kind": "note",
+                      "text": "HOWL — TIER 1: Before continuing, this target must manually move their speed in a straight line away from the werewolf."
+                    }
+                  ]
+                },
+                "tier2": {
+                  "effects": [
+                    {
+                      "kind": "condition",
+                      "name": "frightened",
+                      "duration": "endOfTurn"
+                    }
+                  ]
+                },
+                "tier3": {
+                  "effects": []
+                }
+              }
+            },
+            {
+              "type": "effect",
+              "effects": [
+                {
+                  "kind": "note",
+                  "text": "HOWL RAGE: Every enemy anywhere in the encounter who already has 1 or more rage gains 4 rage and howls along with the werewolf. Players update rage manually, including enemies outside the 5-burst test area."
+                }
+              ]
+            }
+          ],
+          "usageLimit": {
+            "scope": "encounter",
+            "key": "werewolf-villain-action-1-howl",
+            "target": "self",
+            "message": "Howl, Villain Action 1, has already been used this encounter."
+          }
+        }
+      },
+      {
+        "name": "Rampage — Villain Action 3",
+        "keywords": "Area",
+        "range": "2 burst",
+        "targets": "Each creature in the area",
+        "roll_bonus": 3,
+        "effect": "",
+        "has_test": true,
+        "test": {
+          "tier1": {
+            "damage_amount": "6",
+            "damage_type": "",
+            "tier_effect": "the target gains 2 rage",
+            "has_attribute_check": true,
+            "attribute": "might",
+            "attribute_threshold": 1,
+            "attribute_effect": "bleeding (save ends)"
+          },
+          "tier2": {
+            "damage_amount": "10",
+            "damage_type": "",
+            "tier_effect": "the target gains 4 rage",
+            "has_attribute_check": true,
+            "attribute": "might",
+            "attribute_threshold": 2,
+            "attribute_effect": "bleeding (save ends)"
+          },
+          "tier3": {
+            "damage_amount": "13",
+            "damage_type": "",
+            "tier_effect": "the target gains 8 rage",
+            "has_attribute_check": true,
+            "attribute": "might",
+            "attribute_threshold": 3,
+            "attribute_effect": "bleeding (save ends)"
+          }
+        },
+        "additional_effect": "The werewolf shifts up to their speed before and after using this ability.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "target": "self",
+              "effects": [
+                {
+                  "kind": "shift",
+                  "distance": "speed",
+                  "label": "Shift before Rampage"
+                }
+              ]
+            },
+            {
+              "type": "target",
+              "name": "rampageTargets",
+              "mode": "token",
+              "predicate": "creature",
+              "count": "all",
+              "distance": {
+                "form": "burst",
+                "value": 2
+              },
+              "promptTitle": "Rampage — 2 Burst",
+              "promptText": "Select every other creature within 2 squares of the werewolf after its first shift, then choose Done. The area does not target the werewolf."
+            },
+            {
+              "type": "powerRoll",
+              "target": "rampageTargets",
+              "flatBonus": 3,
+              "tiers": {
+                "tier1": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 6
+                    },
+                    {
+                      "kind": "note",
+                      "text": "RAMPAGE — TIER 1: Each target gains 2 rage. Each player updates their manually tracked rage total."
+                    },
+                    {
+                      "kind": "potency",
+                      "attribute": "M",
+                      "threshold": 1,
+                      "onFail": [
+                        {
+                          "kind": "condition",
+                          "name": "bleeding",
+                          "duration": "saveEnds"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "tier2": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 10
+                    },
+                    {
+                      "kind": "note",
+                      "text": "RAMPAGE — TIER 2: Each target gains 4 rage. Each player updates their manually tracked rage total."
+                    },
+                    {
+                      "kind": "potency",
+                      "attribute": "M",
+                      "threshold": 2,
+                      "onFail": [
+                        {
+                          "kind": "condition",
+                          "name": "bleeding",
+                          "duration": "saveEnds"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "tier3": {
+                  "effects": [
+                    {
+                      "kind": "damage",
+                      "amount": 13
+                    },
+                    {
+                      "kind": "note",
+                      "text": "RAMPAGE — TIER 3: Each target gains 8 rage. Each player updates their manually tracked rage total."
+                    },
+                    {
+                      "kind": "potency",
+                      "attribute": "M",
+                      "threshold": 3,
+                      "onFail": [
+                        {
+                          "kind": "condition",
+                          "name": "bleeding",
+                          "duration": "saveEnds"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "effect",
+              "target": "self",
+              "effects": [
+                {
+                  "kind": "shift",
+                  "distance": "speed",
+                  "label": "Shift after Rampage"
+                }
+              ]
+            }
+          ],
+          "usageLimit": {
+            "scope": "encounter",
+            "key": "werewolf-villain-action-3-rampage",
+            "target": "self",
+            "message": "Rampage, Villain Action 3, has already been used this encounter."
+          }
+        }
+      }
+    ],
+    "malice": [
+      {
+        "name": "Blood in Their Eyes",
+        "resource_cost": "3 Malice",
+        "range": "Self",
+        "targets": "Self",
+        "effect": "The werewolf gains 15 temporary Stamina and a +3 bonus to speed until the end of their turn. The werewolf can’t use this feature if they took any holy damage since ending their last turn. The Director manually verifies the holy-damage restriction and applies the temporary speed bonus when moving.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "target": "self",
+              "effects": [
+                {
+                  "kind": "temporaryStamina",
+                  "target": "self",
+                  "amount": 15
+                },
+                {
+                  "kind": "note",
+                  "text": "BLOOD IN THEIR EYES: The werewolf has +3 Speed until the end of this turn. Apply that movement bonus manually. This feature was legal only if the werewolf took no holy damage since ending their last turn."
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "Solo Action",
+        "resource_cost": "5 Malice",
+        "range": "Self",
+        "targets": "Self",
+        "effect": "The werewolf takes an additional main action on their turn. They can use this feature even if they are dazed. The Director chooses and resolves the additional main action manually after this feature spends Malice.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "effects": [
+                {
+                  "kind": "note",
+                  "text": "SOLO ACTION: The werewolf takes one additional main action on this turn, even if dazed. Choose and run that main action manually from the monster tray."
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "Moonfall",
+        "resource_cost": "10 Malice",
+        "range": "Self",
+        "targets": "The encounter map and each creature with rage",
+        "effect": "Until the end of the encounter, the encounter map turns to night and the moon appears impossibly huge in the sky. The werewolf can take an additional move action or maneuver on each of their turns while they have line of effect to the moon. Any creature who ends their turn with line of effect to the moon with 1 or more rage gains 2 rage. The Director tracks the map state, line of effect, extra action, and rage manually.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "effects": [
+                {
+                  "kind": "floatingText",
+                  "text": "MOONFALL",
+                  "audience": "all",
+                  "tone": "danger"
+                },
+                {
+                  "kind": "note",
+                  "text": "MOONFALL — UNTIL ENCOUNTER END: The map is night beneath an impossibly huge moon. On each werewolf turn with line of effect to the moon, the werewolf gains one additional move action or maneuver. Any creature ending a turn with line of effect to the moon and 1 or more rage gains 2 rage. Track line of effect, extra actions, and rage manually."
+                }
+              ]
+            }
+          ],
+          "usageLimit": {
+            "scope": "encounter",
+            "key": "werewolf-moonfall",
+            "target": "self",
+            "message": "Moonfall is already active for this encounter."
+          }
+        }
+      }
+    ]
+  }
+}

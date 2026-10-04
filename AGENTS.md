@@ -1239,7 +1239,7 @@ Recovery restores turn controls only, never turn-start automation. Monster refun
 reserve actual debits. See the runtime release guide for tests and limitations.
 
 
-### Terrain rendering regression — 1.19.176
+### Terrain rendering regression ï¿½ 1.19.176
 
 Terrain token geometry reads are batched before presentation writes. Retain
 conditional attribute/style writes: unchanged dataset assignments invalidate the
@@ -1259,7 +1259,7 @@ levels/grid replacements. Preserve shared revision guards. The disposable
 `test-fog-toggle-browser.cjs` checks only fog commands and three-client convergence.
 
 
-### Wall-cube deletion — 1.19.177
+### Wall-cube deletion ï¿½ 1.19.177
 
 Single-click selects; double-click and keyboard deletion use confirmation. Wall
 pointer capture redirects clicks to the container, so retain the pointerdown cube
@@ -1267,7 +1267,7 @@ pick and clear it on empty-space pointerdown. Do not delete a replacement shape
 from an earlier pending dialog. Stacking remains repeated placement clicks.
 
 
-### Movement performance and camera — 1.19.178
+### Movement performance and camera ï¿½ 1.19.178
 
 My token centers the local view using only the associated board token; same-floor
 centering is local and cross-floor return preserves Browse. Never use tracker
@@ -1343,6 +1343,18 @@ symbols stay visible. Shared cancel/close and scene changes restore them. Keep
 automation capture handling and ordinary portal interaction unchanged.
 
 
+## ASL single-student enrollment and monochrome reports - October 1, 2026
+
+Use `asl/scripts/add_student.php` and `asl/scripts/ADD-STUDENT.md` for additive enrollment. The default is a private read-only preview; apply requires its student/teacher/database review digest. Never rerun the Phase 1 reset or workbook restore to add one student. Existing full name or provided email (including inactive accounts) is a stop, never an update. Email is optional. Skyward input is rejected and never stored. The command inserts one unclaimed Harms student and uses the existing password-claim flow. Synthetic tests: `asl/tests/student-enrollment.php`. SQLite proves preservation/rollback/persistence, not MySQL locking or live hosting.
+
+Report monochrome styling stays scoped to `asl/css/report.css`; retain grade labels and dashed reference lines, all skill changes, and one student per printed page. Verify with `asl/tests/class-reports-browser.test.cjs` using the disposable report fixture. Do not publish code or enroll production students without the specifically authorized destination/details.
+
+
+### Skyward number privacy
+
+External Skyward numbers are not internal account IDs. Do not persist them in new imports/enrollment or reproduce them in SQL backups. `asl/scripts/remove_skyward_ids.php` previews counts/destination only and requires an approved review digest plus confirmation to clear the legacy column. It never runs on deployment. Preserve `users.id`, all other account fields and related grades/progress. Read `asl/scripts/SKYWARD-PRIVACY.md`; historical backups/logs require separately verified scope and approval. Live purge/deployment is not established by local tests.
+
+
 ### Test-report corrections - 1.19.186
 
 Player projection carries automationTraits and monsterTriggerHooks for automation,
@@ -1384,3 +1396,11 @@ ledger or grade mutation. Review links open the exact student/target/mode scale.
 Matching or higher teacher grades clear the item on the next roster load; a later
 higher self-rating makes it reappear. Preserve this separation and student access
 scope. Coverage: asl/tests/readiness.php and competency-browser.test.cjs.
+
+### Strixhaven 3D map save isolation - 1.19.192
+
+Hex save/reload and image callbacks retain their original selection; late responses must
+not clear a different hex's draft or lock. Notes edited during a save remain dirty.
+Terrain saves serialize batches and acknowledge only matching submitted values; painting
+during a request, including reverting to the old server value, remains queued.
+Regression coverage lives in dnd/strixhaven/map3d/tests/save-races.test.mjs and npm test.

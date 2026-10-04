@@ -1,5 +1,7 @@
 # Phase 1 account deployment
 
+Privacy update: Skyward numbers are no longer persisted. See `SKYWARD-PRIVACY.md` for the separately approved removal procedure. Never rerun this account reset for enrollment or privacy cleanup.
+
 Scope: account cleanup, Skyward roster import, login and password claiming. No proficiency migration. The roster files remain private and are not part of Git or a public deployment archive.
 
 ## Prepared behavior
@@ -7,7 +9,7 @@ Scope: account cleanup, Skyward roster import, login and password claiming. No p
 - The two approved authentication screens use isolated `css/auth.css`.
 - Login requires first name, full last name and password. A server-validated unclaimed account gets a 15-minute restricted password-creation session, not a signed-in session.
 - Saving matching passwords hashes the personal password, atomically disables claiming, clears the session and returns signed out. The initial credential cannot be selected as a personal password and is never rendered.
-- Student IDs remain strings. Names preserve case and compound first/surnames; the middle initial is removed. Filenames supply independent course and period values.
+- Private source student IDs remain strings for duplicate validation only and are discarded before import; website accounts do not store them. Names preserve case and compound first/surnames; the middle initial is removed. Filenames supply independent course and period values.
 - The private parser verified 143 unique students. Expected real-student filter totals: ASL3 8, period5 30, both 1. The separate test account is not part of those counts.
 - Brandon Harms must be uniquely identified as an active teacher before reset. His password and associated data remain. `test test` is retained or recreated as unclaimed and follows the same initial-credential, Create password and signed-out return flow as students. Its old password does not authenticate. It has no Skyward student ID and is excluded from the 143-row import comparison. Other reviewed accounts and their dependent records are removed. The old web wipe is disabled and install no longer recreates the second teacher.
 

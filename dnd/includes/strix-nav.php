@@ -2,18 +2,19 @@
 /**
  * Tiny navigation bar for Strixhaven pages
  * Include this file and call renderStrixNav($currentPage) where $currentPage is one of:
- * 'dashboard', 'map', 'students', 'staff', 'schedule', 'vtt', 'charactersheet'
+ * 'dashboard', 'map', 'students', 'staff', 'schedule', 'vtt', 'charactersheet', 'map3d'
  */
 
 function renderStrixNav($currentPage = '') {
     $navItems = [
         'dashboard' => ['label' => 'Dashboard', 'url' => '/dnd/dashboard.php'],
-        'map' => ['label' => 'Map', 'url' => '/dnd/strixhaven/map/index.php'],
+        'map' => ['label' => 'Old Map', 'url' => '/dnd/strixhaven/map/index.php'],
         'students' => ['label' => 'Students', 'url' => '/dnd/strixhaven/students/index.php'],
         'staff' => ['label' => 'Staff', 'url' => '/dnd/strixhaven/staff/index.php'],
         'schedule' => ['label' => 'Schedule', 'url' => '/dnd/schedule/index.php'],
         'vtt' => ['label' => 'VTT', 'url' => '/dnd/vtt/index.php'],
         'charactersheet' => ['label' => 'Sheet', 'url' => '/dnd/character_sheet/index.php'],
+        'map3d' => ['label' => 'Map', 'url' => '/dnd/strixhaven/map3d/index.php'],
     ];
 
     $currentPage = strtolower($currentPage);

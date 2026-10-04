@@ -1,3 +1,4 @@
 # Ignore ping data files
 *.json
+*.lock
 !.gitignore

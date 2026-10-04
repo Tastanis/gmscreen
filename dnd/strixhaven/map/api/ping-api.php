@@ -162,6 +162,13 @@ function handlePostRequest() {
             $y = floatval($input['y']);
             $type = ($input['type'] ?? 'ping') === 'focus' ? 'focus' : 'ping';
 
+            // Optional exact camera for the 3D map (position x,y,z then target x,y,z).
+            // Only the GM's view is ever stored, so only the GM can put players on a view.
+            $view = null;
+            if ($user === 'GM' && isset($input['view']) && is_array($input['view']) && count($input['view']) === 6) {
+                $view = array_map('floatval', array_values($input['view']));
+            }
+
             // Normalize coordinates to 0-1 range
             $x = max(0, min(1, $x));
             $y = max(0, min(1, $y));
@@ -180,6 +187,9 @@ function handlePostRequest() {
                 'createdAt' => $now,
                 'authorId' => $user
             ];
+            if ($view !== null) {
+                $pingEntry['view'] = $view;
+            }
 
             // Load existing pings
             $pings = loadPings($pingDataFile);

@@ -11,6 +11,18 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 $user = $_SESSION['user'] ?? 'unknown';
 $isGM = ($user === 'GM');
 
+/**
+ * What a result may carry back to whoever asked. A save returns the whole hex record,
+ * and for anyone but the GM the GM section must not go with it.
+ */
+function forViewer($result) {
+    global $isGM;
+    if (!$isGM && is_array($result) && isset($result['data']) && is_array($result['data'])) {
+        unset($result['data']['gm']);
+    }
+    return $result;
+}
+
 // Ensure hex-data directory exists
 $hexDataDir = 'hex-data';
 if (!is_dir($hexDataDir)) {
@@ -235,7 +247,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $hexData[$section]['notes'] = $notes;
                 return $hexData;
             });
-            echo json_encode($result);
+            echo json_encode(forViewer($result));
             break;
 
         case 'save_title':
@@ -252,7 +264,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $hexData[$section]['title'] = $title;
                 return $hexData;
             });
-            echo json_encode($result);
+            echo json_encode(forViewer($result));
             break;
 
         case 'save_all':
@@ -280,13 +292,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 return $hexData;
             });
-            echo json_encode($result);
+            echo json_encode(forViewer($result));
             break;
             
         case 'upload_image':
             $section = $_POST['section'] ?? '';
             $result = handleImageUpload($q, $r, $section);
-            echo json_encode($result);
+            echo json_encode(forViewer($result));
             break;
 
         case 'share_gm_images':
@@ -344,6 +356,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             break;
 
+        case 'unshare_gm_images':
+            // GM-only: stop showing the GM's images to players. Only the shared copies in the
+            // player list are removed; the image files and the GM's own list are left alone.
+            if (!$isGM) {
+                echo json_encode(['success' => false, 'error' => 'GM access required']);
+                break;
+            }
+            $result = lockedModifyHexData($q, $r, function($hexData) {
+                if (isset($hexData['player']['images']) && is_array($hexData['player']['images'])) {
+                    $hexData['player']['images'] = array_values(array_filter(
+                        $hexData['player']['images'],
+                        function ($image) {
+                            return !(is_array($image) && isset($image['shared_from']) && $image['shared_from'] === 'gm');
+                        }
+                    ));
+                }
+                return $hexData;
+            });
+            echo json_encode(['success' => $result['success'], 'error' => $result['error'] ?? null]);
+            break;
+
         case 'delete_image':
             $section = $_POST['section'] ?? '';
             $filename = $_POST['filename'] ?? '';
@@ -397,7 +430,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 return $hexData;
             });
-            echo json_encode($result);
+            echo json_encode(forViewer($result));
             break;
             
         case 'lock_edit':
@@ -428,7 +461,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($lockError) {
                 echo json_encode(['success' => false, 'error' => $lockError]);
             } else {
-                echo json_encode($result);
+                echo json_encode(forViewer($result));
             }
             break;
 
@@ -456,7 +489,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($unlockError) {
                 echo json_encode(['success' => false, 'error' => $unlockError]);
             } else {
-                echo json_encode($result);
+                echo json_encode(forViewer($result));
             }
             break;
             

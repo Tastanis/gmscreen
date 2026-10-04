@@ -70,6 +70,25 @@ The current example URL is `http://127.0.0.1:18769/dnd/vtt/`. Verify the runtime
 7. Record the chosen export settings. The successful Observatory settings were Image Only → Orthographic, Only render lights in image, 150 DPI, small borders, All Layers + Roofs, Grid Off. Confirm current UI options in the application rather than blindly replaying clicks.
 8. Check image dimensions and alignment at several recognizable corners, doorways, and stair landings. A correct-looking center is insufficient.
 
+### 3a. Generated `.dam` rules that fail silently (verified October 1, 2026)
+
+Library: `.playwright-mcp/terrain-prototype/chorus-hollow/damlib.py`. Run `python damlib.py <map.dam> ...` on every generated map before opening it in Dungeon Alchemist. It reports both problems below and passes the user's application-saved maps.
+
+**Windows and doors set between two wall sections.** One wall opening spans L unit wall pieces, and each piece carries a cutout. When the piece's wall record runs opposite to the opening (`wallPieceSection` start→end), DA counts `cutoutPosition` from the far end: piece k gets `-(L-1-k)` plus `cutoutFlipped: true`. A forward piece gets `-k`. Counting from the near end on a reversed wall moves the hole one piece over. The frame then straddles two wall sections. This only shows on openings 2 or more squares wide on reversed walls. `Map.opening` implements the rule. Instance center = start + direction×L/2; rotation = `-180 - atan2(dy, dx)`. Never stack openings on the same unit piece on two floors.
+
+**Waterfalls (calibrated against the user's hand placement, Crystal Maze v16).** The workshop waterfalls are Large, Medium and Small Waterfall.
+- **Model anatomy.** Flow runs along local +x. Each model has three parts. A flat stream runs about 2 units back along the top. A near-vertical *curtain* hangs at local x ≈ 0.39. A splash pool spreads forward at the bottom.
+- **Height and scale.** The instance height is the model's base. DA applies the config `yOffset` scaled: world z = height + (local_y + yOffset) × scale. Local +x maps to world `(cos yaw, -sin yaw)`.
+- **Placement rule.** Position by the curtain, never by the back of the model.
+  - The flat top stream must lie above or inside the wall. Otherwise it flows horizontally across nothing.
+  - The curtain hangs just in front of the face: about 0.65 from a sloped face's foot, about 0.3 from a vertical wall (the user's falls measured 0.55–0.9 and 0.27).
+  - Where the cliff has a recess, slide the fall into it.
+- **Tools.** Call `Map.waterfall(block, water_x, water_y, yaw, lip_z=None)` with a point in the water in front of the cliff. It finds the foot, places the curtain and solves height and scale.
+  - `waterfall_report` measures a placed fall. `lint_dam` flags a curtain inside rock, a curtain more than 1.0 from the foot (stream over air), or a floating bottom.
+  - `waterfall-calibration.py` must reproduce the reference falls in `calibration/crystal-maze-v16-brandon-waterfalls.dam` within 0.3; it currently passes with 0.23.
+  - Lint is calibrated only for south-flowing falls (yaw 90). Verify other yaws visually.
+- **Water.** Terrain water renders only on painted samples below 0, so carve a plunge pool where a fall lands outside the main pool. For water above that level (a plateau pond), use the workshop "Animated water" tile. It is a 5×5 surface placed at any height, in a carved basin whose rim hides the tile edges.
+
 **Example values, not defaults for another map:** Observatory is 21×22 native squares, with a one-square export border, yielding 23×24 squares and 3450×3600 pixels at 150 pixels/square. Its transform is `xVtt=xNative+1`, `yVtt=22+1-yNative`, `zVtt=(zNative-0.2)/1.2`. Measure and record the next map's border, origin, Y direction, scale, and elevation conversion independently.
 
 ## 4. Build the geometry once, in canonical coordinates
@@ -275,7 +294,7 @@ cross-floor teleport targeting. The sandbox retains low-step side entry and uppe
 step walk-under behavior. Tests cover canonical persistence/reopening and both
 geometry implementations; no existing user tokens are moved for this check.
 
-### Server wall movement authority � September 26 (sandbox build 463)
+### Server wall movement authority � September 26 (sandbox build 463)
 
 `WallMovement.php` validates saved `sceneConfig.environment.walls` inside both
 `token.move` and position-changing `placement.batch` transactions. It ports the

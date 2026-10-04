@@ -1,0 +1,327 @@
+{
+  "id": "gary-prysmback-myrad-level-4-retainer",
+  "name": "Gary — Prysmback Myrad",
+  "level": 4,
+  "organization": "Retainer",
+  "tactical_role": "Brute",
+  "role": "Brute Retainer",
+  "types": "Myrad",
+  "ev": 0,
+  "size": "2",
+  "speed": 6,
+  "stamina": 48,
+  "stability": 3,
+  "free_strike": 5,
+  "attributes": {
+    "might": 2,
+    "agility": 1,
+    "reason": -2,
+    "intuition": 0,
+    "presence": 1
+  },
+  "traits": [
+    {
+      "name": "Living Battering Ram",
+      "text": "Gary deals double damage to objects with Rolling Ram."
+    }
+  ],
+  "abilities": {
+    "passive": [],
+    "maneuver": [
+      {
+        "name": "Armored Roller",
+        "keywords": "",
+        "range": "Self",
+        "targets": "Self",
+        "effect": "Gary gains damage immunity 7 until the start of his next turn. Psychic and sonic damage ignore this immunity. The effect ends after Gary deals damage.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "effect",
+              "target": "self",
+              "effects": [
+                {
+                  "kind": "condition",
+                  "name": "other",
+                  "text": "Armored Roller — damage immunity 7 until the start of Gary’s next turn; psychic and sonic damage ignore this immunity; remove after Gary deals damage.",
+                  "duration": "endOfEncounter"
+                },
+                {
+                  "kind": "note",
+                  "text": "ARMORED ROLLER: Apply damage immunity 7 manually. Psychic and sonic damage ignore it. Remove it at the start of Gary’s next turn or immediately after Gary deals damage."
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "action": [
+      {
+        "name": "Rolling Ram",
+        "keywords": "Charge, Melee, Strike, Weapon",
+        "range": "Melee 1",
+        "targets": "one creature or object",
+        "roll_bonus": 2,
+        "effect": "",
+        "has_test": true,
+        "test": {
+          "tier1": {
+            "damage_amount": "4",
+            "damage_type": "",
+            "tier_effect": "push 2"
+          },
+          "tier2": {
+            "damage_amount": "6",
+            "damage_type": "",
+            "tier_effect": "push 3"
+          },
+          "tier3": {
+            "damage_amount": "8",
+            "damage_type": "",
+            "tier_effect": "push 4; Might resistance or prone"
+          }
+        },
+        "additional_effect": "If Gary moved at least 3 squares straight toward the target, the strike deals 1 extra damage.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "rollingRamTarget",
+              "mode": "token",
+              "predicate": "creatureOrObject",
+              "count": {
+                "value": 1,
+                "mode": "exact"
+              },
+              "distance": {
+                "form": "melee",
+                "value": 1
+              }
+            },
+            {
+              "type": "choice",
+              "name": "rollingRamTargetType",
+              "prompt": "Is the Rolling Ram target a creature or an object?",
+              "options": [
+                {
+                  "id": "creature",
+                  "label": "Creature",
+                  "cards": [
+                    {
+                      "type": "powerRoll",
+                      "target": "rollingRamTarget",
+                      "flatBonus": 2,
+                      "tiers": {
+                        "tier1": {
+                          "effects": [
+                            {
+                              "kind": "damage",
+                              "amount": 4
+                            },
+                            {
+                              "kind": "forcedMovement",
+                              "verb": "push",
+                              "distance": 2
+                            },
+                            {
+                              "kind": "ifPrompt",
+                              "question": "Did Gary move at least 3 squares straight toward the target?",
+                              "yesLabel": "Yes — add 1 damage",
+                              "noLabel": "No",
+                              "then": [
+                                {
+                                  "kind": "damage",
+                                  "amount": 1
+                                }
+                              ],
+                              "else": []
+                            }
+                          ]
+                        },
+                        "tier2": {
+                          "effects": [
+                            {
+                              "kind": "damage",
+                              "amount": 6
+                            },
+                            {
+                              "kind": "forcedMovement",
+                              "verb": "push",
+                              "distance": 3
+                            },
+                            {
+                              "kind": "ifPrompt",
+                              "question": "Did Gary move at least 3 squares straight toward the target?",
+                              "yesLabel": "Yes — add 1 damage",
+                              "noLabel": "No",
+                              "then": [
+                                {
+                                  "kind": "damage",
+                                  "amount": 1
+                                }
+                              ],
+                              "else": []
+                            }
+                          ]
+                        },
+                        "tier3": {
+                          "effects": [
+                            {
+                              "kind": "damage",
+                              "amount": 8
+                            },
+                            {
+                              "kind": "forcedMovement",
+                              "verb": "push",
+                              "distance": 4
+                            },
+                            {
+                              "kind": "ifPrompt",
+                              "question": "Did Gary move at least 3 squares straight toward the target?",
+                              "yesLabel": "Yes — add 1 damage",
+                              "noLabel": "No",
+                              "then": [
+                                {
+                                  "kind": "damage",
+                                  "amount": 1
+                                }
+                              ],
+                              "else": []
+                            },
+                            {
+                              "kind": "ifPrompt",
+                              "question": "Did the target fail the Might resistance?",
+                              "yesLabel": "Yes — prone",
+                              "noLabel": "No",
+                              "then": [
+                                {
+                                  "kind": "condition",
+                                  "name": "prone"
+                                }
+                              ],
+                              "else": []
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "object",
+                  "label": "Object — double damage",
+                  "cards": [
+                    {
+                      "type": "powerRoll",
+                      "target": "rollingRamTarget",
+                      "flatBonus": 2,
+                      "tiers": {
+                        "tier1": {
+                          "effects": [
+                            {
+                              "kind": "damage",
+                              "amount": 8
+                            },
+                            {
+                              "kind": "forcedMovement",
+                              "verb": "push",
+                              "distance": 2
+                            },
+                            {
+                              "kind": "ifPrompt",
+                              "question": "Did Gary move at least 3 squares straight toward the target?",
+                              "yesLabel": "Yes — add 2 damage",
+                              "noLabel": "No",
+                              "then": [
+                                {
+                                  "kind": "damage",
+                                  "amount": 2
+                                }
+                              ],
+                              "else": []
+                            }
+                          ]
+                        },
+                        "tier2": {
+                          "effects": [
+                            {
+                              "kind": "damage",
+                              "amount": 12
+                            },
+                            {
+                              "kind": "forcedMovement",
+                              "verb": "push",
+                              "distance": 3
+                            },
+                            {
+                              "kind": "ifPrompt",
+                              "question": "Did Gary move at least 3 squares straight toward the target?",
+                              "yesLabel": "Yes — add 2 damage",
+                              "noLabel": "No",
+                              "then": [
+                                {
+                                  "kind": "damage",
+                                  "amount": 2
+                                }
+                              ],
+                              "else": []
+                            }
+                          ]
+                        },
+                        "tier3": {
+                          "effects": [
+                            {
+                              "kind": "damage",
+                              "amount": 16
+                            },
+                            {
+                              "kind": "forcedMovement",
+                              "verb": "push",
+                              "distance": 4
+                            },
+                            {
+                              "kind": "ifPrompt",
+                              "question": "Did Gary move at least 3 squares straight toward the target?",
+                              "yesLabel": "Yes — add 2 damage",
+                              "noLabel": "No",
+                              "then": [
+                                {
+                                  "kind": "damage",
+                                  "amount": 2
+                                }
+                              ],
+                              "else": []
+                            },
+                            {
+                              "kind": "ifPrompt",
+                              "question": "Did the target fail the Might resistance?",
+                              "yesLabel": "Yes — prone",
+                              "noLabel": "No",
+                              "then": [
+                                {
+                                  "kind": "condition",
+                                  "name": "prone"
+                                }
+                              ],
+                              "else": []
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "triggered_action": [],
+    "villain_action": [],
+    "malice": []
+  }
+}

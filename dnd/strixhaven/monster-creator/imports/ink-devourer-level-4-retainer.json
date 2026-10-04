@@ -1,0 +1,250 @@
+{
+  "id": "ink-devourer-level-4-retainer",
+  "name": "Ink Devourer",
+  "level": 4,
+  "organization": "Retainer",
+  "tactical_role": "Support",
+  "role": "Support Retainer",
+  "types": "Ink Devourer",
+  "ev": 0,
+  "size": "1T",
+  "speed": 6,
+  "movement": "Hover",
+  "stamina": 12,
+  "stability": 0,
+  "free_strike": 1,
+  "attributes": {
+    "might": -2,
+    "agility": 1,
+    "reason": 2,
+    "intuition": 1,
+    "presence": 0
+  },
+  "traits": [],
+  "abilities": {
+    "passive": [],
+    "maneuver": [
+      {
+        "name": "Ink Blast",
+        "keywords": "Area, Magic",
+        "range": "2 burst",
+        "targets": "The Ink Devourer and each creature or object in the area",
+        "effect": "Until the start of the Ink Devourer’s next turn, it and each creature or object in the area have concealment.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "inkBlastTargets",
+              "mode": "area",
+              "predicate": "creatureOrObject",
+              "shape": "burst",
+              "size": 2,
+              "distance": {
+                "form": "burst",
+                "value": 2
+              },
+              "promptTitle": "Ink Blast — 2 burst",
+              "promptText": "Select the Ink Devourer and each creature or object in the area."
+            },
+            {
+              "type": "effect",
+              "target": "inkBlastTargets",
+              "effects": [
+                {
+                  "kind": "condition",
+                  "name": "other",
+                  "text": "Concealment until the start of the Ink Devourer’s next turn",
+                  "duration": "endOfEncounter"
+                },
+                {
+                  "kind": "note",
+                  "text": "INK BLAST: The VTT marks the selected tokens with concealment. Remove those markers at the start of the Ink Devourer’s next turn."
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "action": [
+      {
+        "name": "Devour Written Ward",
+        "keywords": "Magic",
+        "range": "Melee 1",
+        "targets": "one written ward, glyph, or seal",
+        "roll_bonus": 2,
+        "effect": "Special: The Ink Devourer can’t target writing created by a creature above its mentor’s level. It can attempt each ward only once.\n\nPower Roll + Reason",
+        "has_test": true,
+        "test": {
+          "tier1": {
+            "damage_amount": "",
+            "damage_type": "",
+            "tier_effect": "Nothing happens."
+          },
+          "tier2": {
+            "damage_amount": "",
+            "damage_type": "",
+            "tier_effect": "The ward activates immediately."
+          },
+          "tier3": {
+            "damage_amount": "",
+            "damage_type": "",
+            "tier_effect": "The ward is erased without activating."
+          }
+        },
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "writtenWard",
+              "mode": "token",
+              "predicate": "object",
+              "count": {
+                "value": 1,
+                "mode": "exact"
+              },
+              "distance": {
+                "form": "melee",
+                "value": 1
+              },
+              "promptTitle": "Devour Written Ward",
+              "promptText": "Select the object token representing the written ward, glyph, or seal."
+            },
+            {
+              "type": "branch",
+              "condition": {
+                "kind": "prompt",
+                "question": "Was this writing created by a creature above the Ink Devourer’s mentor’s level?",
+                "yesLabel": "Yes — can’t target it",
+                "noLabel": "No — continue",
+                "target": "writtenWard"
+              },
+              "then": [
+                {
+                  "type": "effect",
+                  "effects": [
+                    {
+                      "kind": "note",
+                      "text": "DEVOUR WRITTEN WARD: The Ink Devourer can’t target this writing. No attempt is made."
+                    }
+                  ]
+                }
+              ],
+              "else": [
+                {
+                  "type": "branch",
+                  "condition": {
+                    "kind": "scopedFlag",
+                    "scope": "encounter",
+                    "key": "ink-devourer-written-ward-attempted",
+                    "source": "self",
+                    "target": "target",
+                    "mode": "notSet"
+                  },
+                  "then": [
+                    {
+                      "type": "effect",
+                      "target": "writtenWard",
+                      "effects": [
+                        {
+                          "kind": "setScopedFlag",
+                          "scope": "encounter",
+                          "key": "ink-devourer-written-ward-attempted",
+                          "source": "self",
+                          "target": "target"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "powerRoll",
+                      "target": "writtenWard",
+                      "flatBonus": 2,
+                      "tiers": {
+                        "tier1": {
+                          "effects": [
+                            {
+                              "kind": "note",
+                              "text": "Nothing happens."
+                            }
+                          ]
+                        },
+                        "tier2": {
+                          "effects": [
+                            {
+                              "kind": "note",
+                              "text": "The ward activates immediately."
+                            }
+                          ]
+                        },
+                        "tier3": {
+                          "effects": [
+                            {
+                              "kind": "note",
+                              "text": "The ward is erased without activating."
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ],
+                  "else": [
+                    {
+                      "type": "effect",
+                      "effects": [
+                        {
+                          "kind": "note",
+                          "text": "DEVOUR WRITTEN WARD: The Ink Devourer already attempted this ward and can’t attempt it again."
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "Consume Affliction",
+        "keywords": "Magic",
+        "range": "Melee 1",
+        "targets": "one ally",
+        "effect": "End one save-ends condition affecting the target.",
+        "automation": {
+          "schema": "ability-automation/v3",
+          "cards": [
+            {
+              "type": "target",
+              "name": "afflictedAlly",
+              "mode": "token",
+              "predicate": "ally",
+              "count": {
+                "value": 1,
+                "mode": "exact"
+              },
+              "distance": {
+                "form": "melee",
+                "value": 1
+              }
+            },
+            {
+              "type": "effect",
+              "target": "afflictedAlly",
+              "effects": [
+                {
+                  "kind": "note",
+                  "text": "CONSUME AFFLICTION: End one save-ends condition affecting the selected ally using the token’s condition controls."
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "triggered_action": [],
+    "villain_action": [],
+    "malice": []
+  }
+}
