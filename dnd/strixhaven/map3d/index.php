@@ -72,12 +72,14 @@ require_once '../../includes/strix-nav.php';
 <script type="importmap">
 { "imports": {
   "three": "./lib/three/build/three.module.js",
-  "three/addons/": "./lib/three/examples/jsm/"
+  "three/addons/": "./lib/three/examples/jsm/",
+<?php $sxu = dirname($_SERVER['SCRIPT_NAME']) . '/lib/three/examples/jsm/controls/OrbitControls.js'; echo '  ' . json_encode($sxu, JSON_UNESCAPED_SLASHES) . ': ' . json_encode($sxu . '?v=' . @filemtime(__DIR__ . '/lib/three/examples/jsm/controls/OrbitControls.js'), JSON_UNESCAPED_SLASHES) . "
+"; ?>
 } }
 </script>
 </head>
 <body>
-<?php renderStrixNav('map3d'); ?>
+<?php renderStrixNav('map'); ?>
 <canvas id="c"></canvas>
 <div id="labels"></div>
 <div id="hud">
@@ -375,6 +377,8 @@ const SLUICE = (() => { const A = [[33, 34], [32, 35], [32, 36], [31, 37], [30, 
   return { A, B, C, D, lines, dist, basins }; })();
 const ARBIT = hexC([26, 21], [26, 22], [27, 21]), SEALW = hexD(31, 19), METER = hexD(34, 17), ASHG = hexC([28, 21], [28, 22], [29, 21]), CLAR = hexD(24, 16), EWF = (() => { const p = hexC([25, 17], [24, 17], [25, 16]); return [p[0] - 30, p[1]]; })(), STAR2 = (() => { const p = hexD(26, 19); return [p[0] - 14, p[1] + 4]; })(), COLDS = hexD(35, 4);
 const MAZE = (() => { const p = hexC([16, 16], [17, 16], [16, 17]); return [p[0] - 7, p[1] + 7]; })();
+// the players' workshop (1,39 2,39 1,40), in the hills behind the Draftfire House: where its gate stands, where the dome beside it stands, and the way the gate faces (at that house)
+const WKG = [-1738 / S, 318 / S], WKD = [-1694 / S, 296 / S], WKO = [.784, .622];
 // the Wanderer's round of Prismari: east of the Draftfire House, over the hills behind it, south through Furygale, out to the mountains in the south-east and back along the lake
 const WANDER = [[.064,.718],[.098,.745],[.150,.755],[.200,.762],[.232,.80],[.228,.85],[.255,.888],[.290,.900],[.283,.845],[.272,.787],[.243,.768],[.205,.735],[.16,.715],[.118,.69],[.109,.642],[.096,.622],[.081,.588],[.078,.553],[.064,.528],[.040,.540],[.024,.566],[.010,.600],[.012,.650],[.024,.705]];
 const WPATH = makePath(uvs([...WANDER, WANDER[0]]), 160, 60);
@@ -621,6 +625,7 @@ function sample(x, z) {
   { const d = Math.hypot(x - BITTER[0], z - BITTER[1]); if (d < 52) h = lerp(h, 4, sstep(52, 40, d)) + 15 * sstep(44, 4, d); }                                              // Bitterroot Knowl is a knoll
   const sluD = SLUICE.dist(x, z); if (sluD < 32) { h = lerp(h, 5.5, sstep(32, 18, sluD)); h -= 4.2 * sstep(8.5, 6, sluD); }                                                  // the sluice is cut down into a stone-paved flat
   site(HATCH, 70, 16); site(ARBIT, 70, 16); site(SEALW, 62, 16); site(METER, 40, 14); site(ASHG, 76, 15); site(CLAR, 26, 15); site(EWF, 78, 15); site(STAR2, 30, 15);
+  notch(WKG, -WKO[0], -WKO[1], -24, 10, 15, 83); site(WKD, 9, 101.5);   // the workshop's forecourt, cut back to a sheer face for the gate; and the dome's shelf
   // --- walkways
   let walk = 0;
   for (const p of WALKS) { const d = polyDist(p, x, z); if (d < 10) walk = Math.max(walk, sstep(8.5, 5.5, d)); }
@@ -1003,6 +1008,7 @@ function addThing(name, icon, at, k, foot, build, o = {}) {
       const geos = list.map(m => { m.updateMatrix(); const ge = (m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone()).applyMatrix4(m.matrix); for (const k of Object.keys(ge.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv') ge.deleteAttribute(k); return ge; });
       if (geos.some(ge => !ge.attributes.uv)) continue;
       for (const m of list) g.remove(m); const mm = new THREE.Mesh(mergeGeometries(geos), mat); mm.userData.noShadow = ns; g.add(mm); } }
+  weights(at[0] / S, at[1] / S); texRegion = 0; for (let i = 1; i < 9; i++) if (WT[i] > WT[texRegion]) texRegion = i;
   const t = { id: thingSeq++, name, icon, group: g, x: at[0], z: at[1], labelY: (o.y ?? g.position.y) + (o.top ?? 40) * k, hexes: [], mats: [], view: o.view ?? 520 };
   g.traverse(m => { if (m.isMesh) { m.material = texAuto(m.material.clone()); m.material.userData.e0 = m.material.emissive ? m.material.emissive.clone() : null; t.mats.push(m.material); m.castShadow = !m.userData.noShadow; m.receiveShadow = true; } });
   // every hex whose centre falls inside the footprint is linked to this thing
@@ -1074,6 +1080,31 @@ const TEXGL = {
   paper: [
     '{ float f1 = texture2D(uNoise, vec2(vSxL.x / 2.1, vSxL.z / 17.0) + vSxL.y * 0.31).r, f2 = texture2D(uNoise, vSxL.zx / 6.3 + 0.4).r; vec2 gq = abs(fract(vSxL.xz / 8.0) - 0.5) * 8.0;',
     '  float cr = 1.0 - smoothstep(0.08, 0.5, min(gq.x, gq.y)); diffuseColor.rgb *= (0.78 + 0.16 * f1 + 0.14 * f2) * (1.0 - 0.3 * cr); }'].join('\n'),
+  // plain built surfaces. plain3 (Prismari): strong mottling, a lift so near-black stone still shows it, and faint courses on upright faces, each a shade of its own
+  plain3: [
+    '{ vec3 n = normalize(vSxLN), an = abs(n), w = pow(an, vec3(4.0)); w /= (w.x + w.y + w.z);',
+    '  float big = sxTri(vSxL, w, 70.0), mid = sxTri(vSxL, w, 17.0), fine = sxTri(vSxL, w, 3.6), aa = length(fwidth(vSxL)), nr = 1.0 - smoothstep(0.5, 2.0, aa);',
+    '  float wall = 1.0 - smoothstep(0.55, 0.8, an.y), row = floor(vSxL.y / 3.4), ln = abs(fract(vSxL.y / 3.4) - 0.5) * 3.4, seam = smoothstep(1.46, 1.66, ln) * wall * nr;',
+    '  float tone = (0.74 + 0.32 * mid + 0.2 * (big - 0.5) + 0.12 * fine * nr) * (1.0 + (sxTH(vec2(row, 7.1)) - 0.5) * 0.16 * wall);',
+    '  diffuseColor.rgb = diffuseColor.rgb * tone * mix(vec3(1.05, 1.0, 0.94), vec3(0.94, 0.99, 1.06), smoothstep(0.3, 0.7, big)) * (1.0 - 0.24 * seam) + vec3(0.03, 0.026, 0.032) * (mid * 0.6 + fine * 0.6) * (1.0 - seam);',
+    '  sxBump = (texture2D(uNoise, vSxL.xy / 2.7 + vSxL.z * 0.31).gbr - 0.5) * 0.16 * nr; }'].join('\n'),
+  // plain2 (Quandrix, and anything smooth or metal): only a little unevenness of tone and a fine grain
+  plain2: [
+    '{ vec3 n = normalize(vSxLN), w = pow(abs(n), vec3(4.0)); w /= (w.x + w.y + w.z);',
+    '  float mid = sxTri(vSxL, w, 21.0), fine = sxTri(vSxL, w, 4.3), nr = 1.0 - smoothstep(0.5, 2.0, length(fwidth(vSxL)));',
+    '  diffuseColor.rgb = diffuseColor.rgb * (0.86 + 0.22 * mid + 0.08 * fine * nr) + vec3(0.012) * fine;',
+    '  sxBump = (texture2D(uNoise, vSxL.xy / 2.7 + vSxL.z * 0.31).gbr - 0.5) * 0.07 * nr; }'].join('\n'),
+  // marble (Silverquill): the faintest clouding and a thin vein here and there - grey in white stone, pale in black
+  marble: [
+    '{ vec3 n = normalize(vSxLN), w = pow(abs(n), vec3(4.0)); w /= (w.x + w.y + w.z);',
+    '  float a = sxTri(vSxL, w, 44.0), b = sxTri(vSxL + 17.3, w, 13.0), nr = 1.0 - smoothstep(0.6, 2.4, length(fwidth(vSxL)));',
+    '  float vein = pow(1.0 - abs(sin((vSxL.x + vSxL.y * 0.7 + vSxL.z * 0.45) * 0.21 + a * 9.0 + b * 3.0)), 12.0) * nr, lum = dot(diffuseColor.rgb, vec3(0.3, 0.6, 0.1));',
+    '  diffuseColor.rgb *= 0.97 + 0.06 * b; diffuseColor.rgb = mix(diffuseColor.rgb, lum > 0.3 ? diffuseColor.rgb * 0.84 : diffuseColor.rgb + vec3(0.09), vein * 0.5); }'].join('\n'),
+  // the same for many copies of one small shape set out across a town (worked from where each point is in the world, so no two houses match)
+  marbleW: [
+    '{ vec3 p = vSxW; float a = texture2D(uNoise, p.xz / 44.0 + p.y * 0.031).r, b = texture2D(uNoise, p.xy / 13.0 + p.z * 0.07).r, nr = 1.0 - smoothstep(0.6, 2.4, length(fwidth(p)));',
+    '  float vein = pow(1.0 - abs(sin((p.x + p.y * 0.7 + p.z * 0.45) * 0.21 + a * 9.0 + b * 3.0)), 12.0) * nr, lum = dot(diffuseColor.rgb, vec3(0.3, 0.6, 0.1));',
+    '  diffuseColor.rgb *= 0.96 + 0.08 * b; diffuseColor.rgb = mix(diffuseColor.rgb, lum > 0.3 ? diffuseColor.rgb * 0.84 : diffuseColor.rgb + vec3(0.09), vein * 0.5); }'].join('\n'),
   // a folded paper dart or boat, in its own frame: the crease runs down the middle (z = 0) and each side shades away from it
   fold: [
     '{ float f1 = texture2D(uNoise, vec2(vSxL.x / 2.1, vSxL.z / 9.0) + vSxL.y * 0.31).r, az = abs(vSxL.z);',
@@ -1086,8 +1117,16 @@ const applyTex = (m, kind) => { if (!m.isMeshStandardMaterial || m.fog === false
   m.customProgramCacheKey = () => 'sxtex-' + kind; m.needsUpdate = true; return m; };
 const tx = (m, kind) => { m.userData.tex = kind; return m; };
 // anything plain, matt and green is foliage or moss, and gets the leaf texture without being asked
-const texAuto = m => { if (m.userData.tex) return applyTex(m, m.userData.tex); const c = m.color;
-  if (m.isMeshStandardMaterial && !m.map && !m.transparent && !m.name && m.metalness < .05 && m.roughness >= .9 && c.g > c.r * 1.12 && c.g > c.b * 1.12 && (m.emissiveIntensity < .5 || m.emissive.getHex() === 0)) applyTex(m, 'leaf'); return m; };
+let texRegion = 0;   // the college whose ground the thing being built stands on: addThing sets it
+const texAuto = m => { if (m.userData.tex) return applyTex(m, m.userData.tex); if (!m.isMeshStandardMaterial || m.transparent || m.name || m.fog === false) return m;
+  const c = m.color, glow = m.emissiveIntensity >= .5 && m.emissive.getHex() !== 0;
+  if (!m.map && !glow && m.metalness < .05 && m.roughness >= .9 && c.g > c.r * 1.12 && c.g > c.b * 1.12) return applyTex(m, 'leaf');   // anything plain, matt and green is foliage or moss
+  if (glow) return m;
+  if (texRegion === SILV) return m.map || c.r + c.g + c.b > 1.5 ? applyTex(m, 'marble') : m;
+  if (m.map) return m;
+  if (texRegion === PRIS || texRegion === VOLCB) return applyTex(m, m.metalness > .3 || m.roughness < .4 ? 'plain2' : 'plain3');
+  if (texRegion === QUAN) return applyTex(m, 'plain2');
+  return m; };
 const nearWalk = (x, z, r) => { for (const p of WALKS) if (polyDist(p, x / S, z / S) < r / S) return true; return false; };
 
 // Prismari spire: the ground itself swept up by the wind and frozen - flared foot, arcing over downwind to a point
@@ -1702,14 +1741,29 @@ function buildProps() {
   // ---------- the fire giants' works on the great volcano ----------
   // Cinder Halo (5,38): a massive ring of fire hanging over the caldera, turning slowly; every so often fire flares across the inside of it
   { const v0 = VOLC[0], rimY = v0.rimH * S, R = v0.rc * S * 1.75;
-    addThing('Cinder Halo', '🔥', VW, 1, 30, g => { const ring = new THREE.Group(); ring.position.y = rimY + 78;
-      M(ring, new THREE.TorusGeometry(R, 7.5, 10, 72), glowM(0xff5a12, 3.4), 0, 0, 0, { rx: Math.PI / 2 }); M(ring, new THREE.TorusGeometry(R, 11, 8, 72), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, .5, .08), transparent: true, opacity: .35, depthWrite: false, blending: THREE.AdditiveBlending }), 0, 0, 0, { rx: Math.PI / 2 });
-      for (let i = 0; i < 26; i++) { const a = i / 26 * 6.283; M(ring, new THREE.ConeGeometry(3.4, 14 + (i * 7) % 12, 5), glowM(0xffa030, 3), Math.cos(a) * R, 9, Math.sin(a) * R, { rz: Math.cos(a) * .5, rx: -Math.sin(a) * .5 }); }   // licking flames
+    let ringG = null;
+    addThing('Cinder Halo', '🔥', VW, 1, 30, g => { const ring = ringG = new THREE.Group(); ring.position.y = rimY + 78;
+      M(ring, new THREE.TorusGeometry(R, 1.8, 8, 96), glowM(0xffc060, 3.8), 0, 0, 0, { rx: Math.PI / 2 });                                                     // the white-hot thread the fire burns from
       const flare = M(ring, new THREE.CircleGeometry(R - 6, 48), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6, .8, .12), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }), 0, 0, 0, { rx: -Math.PI / 2 });
       ring.traverse(m => { m.userData.noShadow = true; }); flare.raycast = () => {}; g.add(ring); spin.push({ o: ring, speed: .16, bolt: false });
       anim.push(t => { const c = t % 8.5, k = c < 1.6 ? Math.sin(c / 1.6 * Math.PI) * (.55 + .45 * Math.sin(t * 31)) : 0; flare.material.opacity = k * .75; });
       M(g, new THREE.CylinderGeometry(v0.rc * S * .9, v0.rc * S * .9, 6, 20), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }), 0, v0.lavaLvl * S, 0).userData.noShadow = true;   // click target over the crater
     }, { y: 0, hexes: [[5, 38]], top: rimY + 130, view: 760 });
+    // the fire itself: sheets of flame standing round the ring and a band of it lying flat (so it reads from above as well), all drawn from the drifting noise so the flames lick upward and run round the circle.
+    // They are put on after the thing is made, because a thing copies its materials and these have to keep the one clock
+    { const fireMat = (k, flat) => new THREE.ShaderMaterial({ transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, uniforms: { uNoise: U.uNoise, uTime: U.uTime, uK: { value: k }, uFlat: { value: flat } },
+        vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+        fragmentShader: [
+          'uniform sampler2D uNoise; uniform float uTime, uK, uFlat; varying vec2 vUv;',
+          'void main(){ float u = vUv.x, v = mix(vUv.y, abs(vUv.y - 0.5) * 2.0, uFlat);',
+          '  float n1 = texture2D(uNoise, vec2(u * 9.0 - uTime * 0.11, v * 0.9 - uTime * 0.42)).r, n2 = texture2D(uNoise, vec2(u * 23.0 - uTime * 0.19, v * 2.1 - uTime * 0.8)).r;',   // big tongues, and small ones racing over them
+          '  float f = clamp((n1 * 0.65 + n2 * 0.5 - v * 0.95 + 0.1) * 2.2, 0.0, 1.0);',
+          '  vec3 col = mix(vec3(1.0, 0.16, 0.02), vec3(1.0, 0.62, 0.1), smoothstep(0.2, 0.6, f)); col = mix(col, vec3(1.0, 0.95, 0.7), smoothstep(0.7, 1.0, f));',               // red at the tips, orange, near white at the root
+          '  gl_FragColor = vec4(col * f * f * uK * smoothstep(0.0, 0.05, v + uFlat), 1.0); }'].join('\n') });
+      const put = m => { m.raycast = () => {}; m.frustumCulled = false; m.renderOrder = 40; ringG.add(m); };
+      for (const [r0, r1, hh, k] of [[R, R + 4, 48, .7], [R + 8, R + 16, 34, .42], [R - 8, R - 15, 34, .42]]) { const ge = new THREE.CylinderGeometry(r1, r0, hh, 128, 1, true); ge.translate(0, hh / 2 - 3, 0); put(new THREE.Mesh(ge, fireMat(k, 0))); }
+      { const TS = 128, fg = new THREE.RingGeometry(R - 18, R + 18, TS, 1), fu = fg.attributes.uv; for (let i = 0; i < fu.count; i++) fu.setXY(i, (i % (TS + 1)) / TS, i > TS ? 1 : 0); const m = new THREE.Mesh(fg, fireMat(.45, 1)); m.rotation.x = -Math.PI / 2; m.position.y = 1; put(m); }
+      const em = mist({ n: 240, seed: 55, r0: R - 4, r1: R + 8, y0: -4, y1: 64, spin: .55, rise: .2, pow: 1, size: 5, alpha: .9, col: [2.4, .9, .16], add: true }); em.position.set(VW[0], rimY + 78, VW[1]); scene.add(em); }   // sparks carried round and up
     for (let i = 0; i < 22; i++) { const a = i / 22 * 6.283; lanternPts.push([VW[0] + Math.cos(a) * R, rimY + 82 + (i % 3) * 6, VW[1] + Math.sin(a) * R, emberSt(12 + (i % 3) * 5)]); } }
 
   // Emberstamp Mint (5,37): a fire giant gateway into the side of the volcano, magma dripping across it, with the stamping block outside
@@ -1750,6 +1804,31 @@ function buildProps() {
       for (let u = -16; u >= -44; u -= 7) { const y = sl.gh(u, 0); P2(new THREE.BoxGeometry(7.4, 5, 30), basalt, u, 0, y - 1); NS(P2(new THREE.BoxGeometry(7.6, .8, 7), lavaG, u, 0, y + 1.7)); }   // steps, lava running down the middle
     }, { y: sl.cy, hexes: [[4, 39]], top: 150, view: 520 }); }
 
+  // The players' workshop (1,39 2,39 1,40). For now only what shows from outside: a gateway cut back into the hillside, looking at the Draftfire House, and on a small shelf beside it to the east
+  // a carved stone dome whose one round window looks down on that house. Golden light comes out of the dome, and a drift of fungal spores
+  { const G = Wp(WKG), D0 = Wp(WKD), dx = WKO[0], dz = WKO[1], gy = 83 * S, py = 101.5 * S, ry = -Math.atan2(dz, dx), toL = (wx, wz) => [(wx - G[0]) * dx + (wz - G[1]) * dz, -(wx - G[0]) * dz + (wz - G[1]) * dx], toW = (lx, lz) => [G[0] + lx * dx - lz * dz, G[1] + lx * dz + lz * dx];
+    const dh = hexW(2, 40), wl = Math.hypot(dh[0] - D0[0], dh[1] - D0[1]), wdx = (dh[0] - D0[0]) / wl, wdz = (dh[1] - D0[1]) / wl, FX = -13;   // the way the dome's window looks; and where the cut face stands, in the gate's own frame (x out of the hill)
+    addThing("Players' Workshop", '🚪', G, 1, 30, g => { const k = kit(g), st = tx(solid(0x4f4c55, .9), 'plain2'), tr = tx(solid(0x64606b, .88), 'plain2'), rk = tx(solid(0x6a676c, .92), 'plain2'), dark = solid(0x0b090d, 1), bronze = new THREE.MeshStandardMaterial({ color: 0x7c5a34, roughness: .45, metalness: .75 }), iron = new THREE.MeshStandardMaterial({ color: 0x2a2630, roughness: .5, metalness: .7 }), gold = glowM(0xffa030, 2.6);
+      // the gateway: two great piers and a lintel standing proud of the rock, a stepped crown over them, a second frame set back inside, and the dark of the way in
+      for (const sd of [-1, 1]) { k.B(7, 34, 7, st, FX + 2.5, 17, sd * 12.5); k.B(8, 2, 8, tr, FX + 2.5, 1, sd * 12.5); k.B(8, 1.6, 8, tr, FX + 2.5, 33.4, sd * 12.5); k.B(3.4, 30, 3, tr, FX + .6, 15, sd * 8); NS(k.B(.3, 18, 1.1, gold, FX + 6.05, 17, sd * 12.5)); }
+      k.B(8, 6, 34, st, FX + 3, 37.2, 0); k.B(9.6, 1.6, 36, tr, FX + 3.2, 41, 0); k.B(6.4, 4, 23, st, FX + 2.6, 43.8, 0); k.B(5, 3.2, 12, st, FX + 2.2, 47.4, 0); k.B(3.4, 3, 19, tr, FX + .6, 31.5, 0);
+      NS(M(g, new THREE.OctahedronGeometry(2.3, 0), gold, FX + 7.4, 37.2, 0)); k.B(1.2, 30, 16, dark, FX - .4, 15, 0); NS(k.B(.3, 15, 4.5, glowM(0xffb060, 1.1), FX + .3, 8.5, 0));                                    // a warm light a long way in
+      for (const [zz, th] of [[8, 1.833], [-8, 1.309]]) { const sg = zz > 0 ? -1 : 1, cx = FX + 1.6 + 3.86, cz = zz + sg * 1.04; k.B(.9, 28, 8, bronze, cx, 14, cz, { ry: th }); for (const yy of [5, 14, 23]) k.B(1.2, 1.4, 8.2, iron, cx, yy, cz, { ry: th }); }   // its two doors standing open
+      k.B(13, 1.2, 30, tr, FX + 7.5, .6, 0); k.B(5, .6, 26, tr, FX + 16, .3, 0);                                                                                                                                   // threshold and a step
+      for (const sd of [-1, 1]) { k.B(27, 11, 2.6, st, FX + 15.5, 5.5, sd * 20); k.B(28, 1.1, 3.6, tr, FX + 15.5, 11.5, sd * 20); k.C(2, 2.7, 8, 8, tr, FX + 30.5, 4, sd * 20); k.C(2.6, 2, 1.4, 8, iron, FX + 30.5, 8.7, sd * 20); const f = M(g, new THREE.SphereGeometry(1.7, 8, 6), fireG, FX + 30.5, 10.2, sd * 20); f.userData.keepSep = 1; f.userData.noShadow = true; }   // low walls holding the cut back, a brazier at the end of each
+      // the dome, on its shelf: a low drum and a smooth cap of plain cut stone, a round window in a stone sleeve, toadstools round its foot and bracket-fungus up its side
+      const dm = new THREE.Group(), kd = kit(dm), dl = toL(D0[0], D0[1]), wloc = [wdx * dx + wdz * dz, -wdx * dz + wdz * dx], capG = new THREE.MeshStandardMaterial({ color: 0xc9772e, emissive: 0xff8a1e, emissiveIntensity: .9, roughness: .6 }), stem = solid(0xe8dcc0, .8);
+      kd.C(10.6, 11.2, 6, 24, rk, 0, 3, 0); kd.D(10.4, rk, 0, 6, 0);                                                                                       // plain cut stone, nothing carved on it
+      kd.C(3.5, 3.5, 3, 14, rk, 10, 7, 0, { rz: Math.PI / 2 }); kd.T(3.3, .45, rk, 11.5, 7, 0, { ry: Math.PI / 2 }); NS(kd.C(2.8, 2.8, .4, 16, gold, 11.3, 7, 0, { rz: Math.PI / 2 })); NS(kd.B(.3, 5.6, .35, dark, 11.6, 7, 0)); NS(kd.B(.3, .35, 5.6, dark, 11.6, 7, 0));
+      { const cone = M(dm, new THREE.ConeGeometry(15, 62, 18, 1, true), new THREE.ShaderMaterial({ transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, vertexShader: 'varying vec2 vUv; varying vec3 vN, vV; void main(){ vUv = uv; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalMatrix * normal; vV = -mv.xyz; gl_Position = projectionMatrix * mv; }', fragmentShader: 'varying vec2 vUv; varying vec3 vN, vV; void main(){ float rim = abs(dot(normalize(vN), normalize(vV))); gl_FragColor = vec4(vec3(1.0, 0.55, 0.16) * rim * rim * vUv.y * vUv.y * 0.42, 1.0); }' }), 11.5 + .819 * 31, 7 - .574 * 31, 0, { rz: .96 }); cone.userData.noShadow = true; cone.raycast = () => {}; }   // the light it throws down toward the house
+      for (let i = 0; i < 12; i++) { const a = .75 + i * .43, r = 11.9 + (i % 3) * 1.5, hh = 1.5 + (i % 4) * .7, x = Math.cos(a) * r, z = Math.sin(a) * r; kd.C(.28, .36, hh, 6, stem, x, hh / 2, z); kd.S(.9 + .26 * (i % 3), capG, x, hh, z, { sy: .5 }); }
+      for (let i = 0; i < 6; i++) { const az = 1 + i * .95, el = .3 + .13 * i; kd.S(1.25 - .1 * i, capG, Math.cos(el) * Math.cos(az) * 10.3, 6 + Math.sin(el) * 10.3, Math.cos(el) * Math.sin(az) * 10.3, { sy: .34 }); }
+      dm.position.set(dl[0], py - gy, dl[1]); dm.rotation.y = -Math.atan2(wloc[1], wloc[0]); dm.updateMatrix(); for (const m of [...dm.children]) { m.applyMatrix4(dm.matrix); g.add(m); }
+    }, { y: gy, ry, hexes: [[1, 39], [2, 39], [1, 40]], top: 62, view: 420 });
+    for (const [n, col, sd] of [[110, [1.7, 1.05, .32], 91], [60, [.75, 1.35, .5], 92]]) { const sp = mist({ n, seed: sd, r0: 3, r1: 48, y0: 5, y1: 90, spin: .09, rise: .04, pow: .8, size: 4.2, alpha: .6, col, add: true }); sp.position.set(D0[0] + wdx * 9, py, D0[1] + wdz * 9); scene.add(sp); }   // spores: gold out of the window, and a paler green among them, rising and spreading
+    lanternPts.push([D0[0] + wdx * 12.5, py + 7, D0[1] + wdz * 12.5, { c: [2.8, 1.5, .4], size: 18, drift: .15, speed: .5 }]);
+    for (const sd of [-1, 1]) { const p = toW(FX + 30.5, sd * 20); lanternPts.push([p[0], gy + 11, p[1], { c: [2.6, 1.4, .45], size: 10, drift: .4, speed: .5 }]); } }
+
   // Draftfire House (2,40): a house set back into the mountainside on a rock shelf, elemental smoke of every colour rising from its chimneys, ice hanging from the shelf below
   { const c = hexW(2, 40), mk = MOUNTS[1], sl = slope(c, mk.x * S - c[0], mk.z * S - c[1]);
     addThing('Draftfire House', '🏠', c, 1, 30, g => { const P2 = (geo, mat, u, v, y, o) => sl.put(g, geo, mat, u, v, y, o), top = sl.gh(-8, 0), lo = Math.min(sl.gh(-24, -12), sl.gh(-24, 12)), tm = solid(0x4a3524, .9), rf = solid(0x3a2a4a, .8), win = glowM(0xffc060, 2.4);
@@ -1765,12 +1844,25 @@ function buildProps() {
   // ---------- Furygale ----------
   // Ring of the DraftCoil (2,41): a ring-shaped glacier cut with glowing runes, black ruins standing round it
   { const c = hexW(2, 41), cy = heightAt(c[0], c[1]), gh = (x, z) => heightAt(c[0] + x, c[1] + z) - cy;
-    addThing('Ring of the DraftCoil', '❄️', c, 1, 30, g => { const k = kit(g), iceM = new THREE.MeshStandardMaterial({ color: 0xcfe6f2, roughness: .22, envMapIntensity: 1.5 }), blackM = solid(0x121016, .5, { flatShading: true }), rune = glowM(0x6fc8ff, 3);
+    addThing('Ring of the DraftCoil', '❄️', c, 1, 30, g => { const k = kit(g), iceM = new THREE.MeshStandardMaterial({ color: 0xcfe6f2, roughness: .22, envMapIntensity: 1.5 }), blackM = solid(0x121016, .5, { flatShading: true }), rune = glowM(0x6fc8ff, 3), frost = solid(0xf2f7fa, .95);
       k.T(40, 10, iceM, 0, 1, 0, { rx: Math.PI / 2, sz: .5 }); k.C(30, 30, 1, 32, new THREE.MeshStandardMaterial({ color: 0x0e1420, roughness: .05, envMapIntensity: 2 }), 0, 1.2, 0);
       for (let i = 0; i < 16; i++) { const a = i / 16 * 6.283; NS(k.B(3.4, .6, 5.5, rune, Math.cos(a) * 40, 6.2, Math.sin(a) * 40, { ry: -a })); }
       NS(k.S(3, rune, 0, 3, 0));
-      for (let i = 0; i < 9; i++) { const a = i / 9 * 6.283 + .3, d = 58 + (i % 3) * 5, x = Math.cos(a) * d, z = Math.sin(a) * d, hh = 12 + (i * 11) % 26; k.B(6, hh, 6, blackM, x, gh(x, z) + hh / 2 - 3, z, { ry: a, rz: i % 3 === 0 ? .5 : 0 }); if (i % 2) k.B(9, 4, 5, blackM, x + 8, gh(x + 8, z) + 1, z, { ry: a * 2 }); }
-    }, { y: cy, hexes: [[2, 41]], top: 50, view: 380 });
+      for (let i = 0; i < 9; i++) { const a = i / 9 * 6.283 + .3, d = 58 + (i % 3) * 5, x = Math.cos(a) * d, z = Math.sin(a) * d, hh = 12 + (i * 11) % 26; k.B(6, hh, 6, blackM, x, gh(x, z) + hh / 2 - 3, z, { ry: a, rz: i % 3 === 0 ? .5 : 0 }); if (i % 2) k.B(9, 4, 5, blackM, x + 8, gh(x + 8, z) + 1, z, { ry: a * 2 });
+        if (i % 3) { k.B(7.2, 1.4, 7.2, blackM, x, gh(x, z) + hh - 2.6, z, { ry: a }); k.B(6.6, .7, 6.6, frost, x, gh(x, z) + hh - 1.6, z, { ry: a }); }                                                   // a capstone on those still standing, snow lying on it
+        if (i === 1 || i === 5) { const a2 = a + .21, x2 = Math.cos(a2) * d, z2 = Math.sin(a2) * d; k.B(5, hh - 4, 5, blackM, x2, gh(x2, z2) + hh / 2 - 5, z2, { ry: a2 }); k.B(5, 3.4, 17, blackM, (x + x2) / 2, gh(x, z) + hh - 5.5, (z + z2) / 2, { ry: -(a + a2) / 2 }); } }   // two pairs still carry a lintel between them
+      const iceD = new THREE.MeshStandardMaterial({ color: 0x9fc8e2, roughness: .16, envMapIntensity: 1.6, flatShading: true }), ir = mulberry32(241);
+      for (let i = 0; i < 36; i++) { const a = ir() * 6.283, rr = 33 + ir() * 15, hh = 5 + ir() * 13, lean = .2 + ir() * .5; k.K(1.5 + ir() * 2.2, hh, 5, i % 3 ? iceD : iceM, Math.cos(a) * rr, 4 + hh * .4, Math.sin(a) * rr, { rz: -Math.cos(a) * lean, rx: Math.sin(a) * lean }); }   // shards standing out of the glacier
+      for (let i = 0; i < 12; i++) { const a = i / 12 * 6.283 + .2; k.S(4.2 + (i % 3), frost, Math.cos(a) * 40, 5.7, Math.sin(a) * 40, { sy: .2, sx: 1.4, ry: -a }); }                                              // snow lying along its back
+      NS(k.T(32.6, .32, rune, 0, 3.4, 0, { rx: Math.PI / 2 })); NS(k.T(47.4, .32, rune, 0, 2.8, 0, { rx: Math.PI / 2 }));                                                                                        // a channel of rune-light round its inner and its outer edge,
+      for (let i = 0; i < 16; i++) { const a = (i + .5) / 16 * 6.283; NS(k.B(.5, .3, 9, rune, Math.cos(a) * 40, 5.95, Math.sin(a) * 40, { ry: -a + Math.PI / 2 })); }                                              // spokes of it between the tablets,
+      for (let i = 0; i < 10; i++) { const a = ir() * 6.283, L = 9 + ir() * 16; NS(k.B(L, .25, .34, rune, Math.cos(a) * (4 + L * .5), 1.85, Math.sin(a) * (4 + L * .5), { ry: -a + (ir() - .5) * .5 })); }         // and cracks of it in the black ice within
+      { const coil = new THREE.Group(), pts = [], pg = []; for (let i = 0; i <= 90; i++) { const t = i / 90, an = t * 6.283 * 3.5, rr = lerp(13, 2.5, t), y = 4 + t * 36; pts.push(new THREE.Vector3(Math.cos(an) * rr, y, Math.sin(an) * rr)); pg.push(new THREE.Vector3(Math.cos(an) * (rr + 1.5), y, Math.sin(an) * (rr + 1.5))); }
+        M(coil, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 150, 1.35, 7, false), iceD, 0, 0, 0); NS(M(coil, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pg), 150, .3, 5, false), rune, 0, 0, 0)); NS(M(coil, new THREE.OctahedronGeometry(2.4, 0), rune, 0, 43.5, 0));
+        coil.traverse(m => { m.userData.noShadow = true; }); g.add(coil); spin.push({ o: coil, speed: .22, bolt: false }); }                                                                                    // the coil itself: a spiral of ice wound up out of the middle, a line of rune-light along it, turning
+      for (let i = 0; i < 16; i++) { const a = ir() * 6.283, d2 = 52 + ir() * 22, x = Math.cos(a) * d2, z = Math.sin(a) * d2, q = 1.6 + ir() * 2.6; M(g, new THREE.DodecahedronGeometry(q, 0), blackM, x, gh(x, z) + q * .3, z, { rx: i, ry: i * 2, sy: .7 }); }   // fallen stone
+    }, { y: cy, hexes: [[2, 41]], top: 56, view: 380 });
+    { const fm = mist({ n: 120, seed: 77, r0: 18, r1: 54, y0: 2, y1: 16, spin: .2, rise: .05, size: 20, alpha: .11, col: [.8, .92, 1] }); fm.position.set(c[0], cy, c[1]); scene.add(fm); }                      // cold air turning slowly over it
     lanternPts.push([c[0], cy + 8, c[1], { c: [.9, 1.8, 2.8], size: 24, drift: .2, speed: .5 }]); }
 
   // Archive of Unfinished Spells (2,42): only its door shows - a sealed, chained gothic doorway set into the hill, lit by violet lanterns
@@ -2080,7 +2172,7 @@ function buildProps() {
 
   // ================= Lorehold locations from the live map (each linked to its real hex ids) =================
   { const LST = tx(solid(0xb48d60, .85), 'masonry'), LDK = tx(solid(0x8f6e4a, .9), 'masonry'), LWH = tx(solid(0xe6dcc6, .8), 'rock'), LRK = tx(solid(0x7a5236, .95, { flatShading: true }), 'rock'), timber = solid(0x4a3524, .9), ironM = new THREE.MeshStandardMaterial({ color: 0x3c3a3a, roughness: .55, metalness: .7 }), brassM = new THREE.MeshStandardMaterial({ color: 0xb8923c, roughness: .35, metalness: .8 });
-    const boneM = solid(0xd8d2bc, .8), darkM = solid(0x120e0a, 1), rustM = new THREE.MeshStandardMaterial({ color: 0x5a3626, roughness: .8, metalness: .4, flatShading: true });
+    const boneM = tx(solid(0xd8d2bc, .8), 'rock'), darkM = solid(0x120e0a, 1), rustM = new THREE.MeshStandardMaterial({ color: 0x5a3626, roughness: .8, metalness: .4, flatShading: true });
     const warm = { c: [2.6, 1.5, .5], size: 9, drift: .4, speed: .5 }, lr = mulberry32(2028), gAt = (c, x, z) => heightAt(c[0] + x, c[1] + z);
     const toW = (c, ry, x, z) => [c[0] + x * Math.cos(ry) + z * Math.sin(ry), c[1] - x * Math.sin(ry) + z * Math.cos(ry)];                                    // a point in a turned thing's own frame, out in the world
     const bake = (g, sub) => { sub.updateMatrix(); for (const m of [...sub.children]) { m.applyMatrix4(sub.matrix); g.add(m); } };                           // fold a positioned sub-assembly into its parent so the parts can merge
@@ -2595,8 +2687,8 @@ function buildProps() {
         for (let i = 0; i < 7; i++) for (const st of [1, 3]) { const A2 = tips[i], B2 = tips[(i + st) % 7], dx = B2[0] - A2[0], dy = B2[1] - A2[1], dz = B2[2] - A2[2], L = Math.hypot(dx, dy, dz), m = new THREE.Mesh(new THREE.CylinderGeometry(.35, .35, L, 5), beam); m.position.set((A2[0] + B2[0]) / 2, (A2[1] + B2[1]) / 2, (A2[2] + B2[2]) / 2); m.quaternion.setFromUnitVectors(UPV, new THREE.Vector3(dx / L, dy / L, dz / L)); m.userData.noShadow = true; m.raycast = () => {}; g.add(m); beams.push(m); }
       }, { y: y0, hexes: [[23, 14]], top: 90, view: 420 });
       // Every three minutes by the clock (so everybody at the table sees the same thing at the same moment) the pylons fire. A dome of force comes up over the Beastward, the Chalkfall and the Snarl,
-      // a giant eagle appears inside it, and for most of a minute it flies from wall to wall, flaring and wheeling away each time it strikes. Then both are gone. Between times the beams keep their own hours
-      const EC = [-810, -1870], ER = 540, EH = 520, EY = 20, V3 = THREE.Vector3, SPEED = 135, LIM = .82, FLOOR = 335, BIG = 1.5, DT = 1 / 30;   // FLOOR keeps it clear of the Deathfall's top, the tallest thing under the dome
+      // a giant eagle appears inside it, and for some ten seconds it flies from wall to wall, flaring and wheeling away each time it strikes. Then both are gone. Between times the beams keep their own hours
+      const EC = [-810, -1870], ER = 540, EH = 520, EY = 20, V3 = THREE.Vector3, SPEED = 190, LIM = .82, FLOOR = 335, BIG = 1.5, DT = 1 / 30;   // FLOOR keeps it clear of the Deathfall's top, the tallest thing under the dome
       const dome = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 48, 0, Math.PI * 2, 0, Math.PI / 2 + .12), new THREE.ShaderMaterial({ transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
         uniforms: { uTime: U.uTime, uK: { value: 0 }, uRise: { value: 0 }, uHit: { value: new V3(0, 1, 0) }, uHitT: { value: 99 } },
         vertexShader: 'varying vec3 vP, vN, vV; void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.0); vP = position; vN = normalMatrix * normal; vV = -mv.xyz; gl_Position = projectionMatrix * mv; }',
@@ -2613,8 +2705,23 @@ function buildProps() {
           '  float a = 0.012 + 0.03 * tone + 0.3 * f * f + ln * (0.07 + 0.3 * f) + lip * 1.2 + ring * 1.4 + foot * 0.6;',
           '  gl_FragColor = vec4(mix(mix(vec3(0.2, 1.25, 1.1), vec3(0.5, 0.8, 1.6), tone), vec3(1.0), clamp(ln * 0.25 + ring, 0.0, 1.0)) * a * uK, 1.0); }'].join('\n') }));
       dome.position.set(EC[0], EY, EC[1]); dome.scale.set(ER, EH, ER); dome.visible = false; dome.raycast = () => {}; dome.frustumCulled = false; dome.renderOrder = 60; scene.add(dome);
-      const link = (() => { const a = new V3(c[0], y0 + 96, c[1]), b = new V3(EC[0], EY + EH, EC[1]), dv = b.clone().sub(a), m = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, dv.length(), 6, 1, true), new THREE.MeshBasicMaterial({ color: new THREE.Color(.4, 1.6, 1.5), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
-        m.position.copy(a).add(b).multiplyScalar(.5); m.quaternion.setFromUnitVectors(UPV, dv.normalize()); m.visible = false; m.raycast = () => {}; m.frustumCulled = false; scene.add(m); return m; })();   // the line of force from the pylons to the crown of the dome
+      // the line of force from the pylons to the crown of the dome: an arc of energy thrown high over the land between. A bright core with no hard edge, a wide faint glow round it,
+      // two thin strands wound about it, and pulses running along the whole of it toward the dome. It shoots out from the pylons before the dome rises
+      const linkU = { uTime: U.uTime, uA: { value: 0 }, uGrow: { value: 0 } };
+      const linkMat = k => new THREE.ShaderMaterial({ transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, uniforms: { uTime: linkU.uTime, uA: linkU.uA, uGrow: linkU.uGrow, uK: { value: k } },
+        vertexShader: 'varying vec2 vUv; varying vec3 vN, vV; void main(){ vUv = uv; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalMatrix * normal; vV = -mv.xyz; gl_Position = projectionMatrix * mv; }',
+        fragmentShader: [
+          'uniform float uTime, uA, uGrow, uK; varying vec2 vUv; varying vec3 vN, vV;',
+          'void main(){ float rim = abs(dot(normalize(vN), normalize(vV))), soft = rim * rim * rim;',                                                              // brightest through the middle, nothing at the edge: light, not a pipe
+          '  float pulse = 0.62 + 0.38 * sin(vUv.x * 110.0 - uTime * 16.0) * sin(vUv.x * 27.0 - uTime * 6.0 + 1.3) + 0.5 * pow(0.5 + 0.5 * sin(vUv.x * 9.0 - uTime * 7.0), 8.0);',   // fast ripples, and now and then a surge
+          '  float head = 1.0 - smoothstep(uGrow - 0.05, uGrow, vUv.x), tip = exp(-pow((vUv.x - uGrow) / 0.03, 2.0)) * step(uGrow, 1.02);',                               // its leading end, bright as it travels
+          '  float ends = smoothstep(0.0, 0.025, vUv.x) * (1.0 - smoothstep(0.985, 1.0, vUv.x));',
+          '  gl_FragColor = vec4(mix(vec3(0.22, 1.35, 1.2), vec3(0.85, 1.0, 1.0), soft * soft) * (soft * pulse * head + tip * soft * 2.0) * ends * uA * uK, 1.0); }'].join('\n') });
+      const link = (() => { const a = new V3(c[0], y0 + 96, c[1]), b = new V3(EC[0], EY + EH, EC[1]), mid = a.clone().add(b).multiplyScalar(.5); mid.y += 520; const arc = new THREE.QuadraticBezierCurve3(a, mid, b), grp = new THREE.Group(), N = 220, fr = arc.computeFrenetFrames(N, false), P = arc.getSpacedPoints(N);
+        const tube = (curve, r, k, seg) => { const m = new THREE.Mesh(new THREE.TubeGeometry(curve, seg, r, 10, false), linkMat(k)); m.raycast = () => {}; m.frustumCulled = false; m.renderOrder = 61; grp.add(m); };
+        tube(arc, 2.6, 1.5, 160); tube(arc, 9, .32, 120);
+        for (const ph of [0, Math.PI]) { const pts = P.map((p, i) => { const t = i / N, an = t * 6.283 * 9 + ph, rr = 12 * Math.sin(Math.PI * t); return p.clone().addScaledVector(fr.normals[i], Math.cos(an) * rr).addScaledVector(fr.binormals[i], Math.sin(an) * rr); }); tube(new THREE.CatmullRomCurve3(pts), .9, .9, 420); }   // the strands part from the core in the middle and close on it again at each end
+        grp.visible = false; scene.add(grp); return grp; })();
       // ---- the eagle: built feather by feather. Forward is +x, the right wing +z
       const eagle = new THREE.Group(), inner = new THREE.Group(), L = 46, W = 60, C = 21, cM = new THREE.Color(), K = h => new THREE.Color(h);
       const K1 = K(0x3e2b1c), K2 = K(0x23170f), K3 = K(0x5e4630), K4 = K(0x80633f), WH = K(0xf4f1e8), WH2 = K(0xcfc9b8);
@@ -2667,17 +2774,17 @@ function buildProps() {
           const a = ev.rng() * 6.283; ev.tgt.set(Math.cos(a), (ev.rng() - .5) * .5, Math.sin(a)).addScaledVector(nV, .9).normalize(); if (ev.tgt.dot(nV) < .3) ev.tgt.addScaledVector(nV, .6).normalize(); }   // ...and away on some new heading
         if (low) { ev.dir.y = Math.abs(ev.dir.y); ev.tgt.y = Math.abs(ev.tgt.y) + .15; ev.tgt.normalize(); }                                                 // it keeps above the hilltops
         ev.t += DT; };
-      anim.push((t, dt) => { const now = Date.now() / 1000 + (window.__eagleOff || 0), idx = Math.floor(now / 180), e = now - idx * 180, on = e < 52, hold = sstep(0, .9, e) * (1 - sstep(49, 52, e)), flash = Math.exp(-Math.pow((e - 1.1) / .3, 2));
+      anim.push((t, dt) => { const now = Date.now() / 1000 + (window.__eagleOff || 0), idx = Math.floor(now / 180), e = now - idx * 180, on = e < 13, hold = sstep(0, .9, e) * (1 - sstep(11, 13, e)), flash = Math.exp(-Math.pow((e - 1.1) / .3, 2));
         beams.forEach((m, i) => { const sg = Math.sin(t * (.23 + .05 * (i % 5)) + i * 1.9) + Math.sin(t * (.61 + .03 * (i % 7)) + i * .7), own = sstep(.2, .45, sg), lit = Math.max(own, hold);
           const fl = lit > .02 && lit < .98 ? .45 + .55 * Math.abs(Math.sin(t * 31 + i * 2.3)) : 1, th = 1 + 2.2 * flash + .5 * hold; m.visible = lit > .02; m.material.opacity = Math.min(1, lit * fl * (.5 + .3 * hold + .5 * flash)); m.scale.set(th, 1, th); });
         tipsM.forEach((m, i) => { m.material.emissiveIntensity = 2.2 + 1.6 * hold + 6 * flash + .5 * Math.sin(t * 3 + i); m.scale.setScalar(1 + .18 * hold + .55 * flash); });
-        link.visible = hold > .01; link.material.opacity = Math.min(1, .45 * hold + flash); if (dome.visible && !on) Q.nudge(); dome.visible = on; eagle.visible = on && e > 3; if (!on) return;
-        const du = dome.material.uniforms, ts = clamp(e - 3, 0, 47); du.uRise.value = sstep(0, 3, e) * 1.12; du.uK.value = (1 - sstep(49, 52, e)) * (.85 + .08 * Math.sin(t * 2.1));
+        link.visible = hold > .01; linkU.uA.value = Math.min(1.8, .85 * hold + 1.1 * flash) * (.9 + .1 * Math.sin(t * 9)); linkU.uGrow.value = sstep(.25, 1.25, e) * 1.08; if (dome.visible && !on) Q.nudge(); dome.visible = on; eagle.visible = on && e > 1.5; if (!on) return;
+        const du = dome.material.uniforms, ts = clamp(e - 1.5, 0, 11); du.uRise.value = sstep(0, 2, e) * 1.12; du.uK.value = (1 - sstep(11, 13, e)) * (.85 + .08 * Math.sin(t * 2.1));
         if (idx !== ev.idx || ts < ev.t - .2) reset(idx); let guard = 0; while (ev.t + DT <= ts && guard++ < 1600) step();
         const since = Math.max(ts - ev.hitAt, 0), flare = Math.exp(-Math.pow(since / .45, 2)); du.uHit.value.copy(ev.hitDir); du.uHitT.value = since;
         rp.copy(ev.prev).lerp(ev.pos, clamp((ts - ev.t) / DT, 0, 1)); const fdt = Math.min(dt || .016, .1); face.lerp(ev.dir, 1 - Math.exp(-fdt * 4)).normalize();
         const yaw = Math.atan2(-face.z, face.x); let dyw = yaw - yawPrev; dyw = Math.atan2(Math.sin(dyw), Math.cos(dyw)); yawPrev = yaw; bank = lerp(bank, clamp(dyw / Math.max(fdt, .004) * .45, -1, 1), .08);
-        const sc = sstep(3, 4.6, e) * (1 - sstep(47.5, 49.5, e)); eagle.position.set(EC[0] + rp.x, EY + rp.y, EC[1] + rp.z); eagle.scale.setScalar(Math.max(sc * BIG, .001)); eagle.rotation.set(-bank, yaw, Math.asin(clamp(face.y, -1, 1)) * .8 + .5 * flare, 'YZX');   // banking into each turn, rearing as it strikes
+        const sc = sstep(1.5, 2.5, e) * (1 - sstep(10, 11.5, e)); eagle.position.set(EC[0] + rp.x, EY + rp.y, EC[1] + rp.z); eagle.scale.setScalar(Math.max(sc * BIG, .001)); eagle.rotation.set(-bank, yaw, Math.asin(clamp(face.y, -1, 1)) * .8 + .5 * flare, 'YZX');   // banking into each turn, rearing as it strikes
         const glide = sstep(-.2, .5, Math.sin(ts * .55 + idx)), w = ts * 5.2, amp = .25 + .75 * glide, f1 = .1 + .5 * amp * Math.sin(w) + .55 * flare, f2 = .12 + .45 * amp * Math.sin(w - .9) + .3 * flare;                                                         // a few deep beats, then a glide; the hand trails the arm
         for (const wg of wings) { wg.arm.rotation.x = -wg.sd * f1; wg.hand.rotation.x = -wg.sd * f2; } inner.position.y = -Math.sin(w) * 1.6 * amp; }); }
   }
@@ -3076,9 +3183,9 @@ function buildProps() {
           const dark = (x / S - X(.83)) * .8 + (z / S - Z(.305)) * .6 + 34 * fbm(x / S / 75, z / S / 75, 3) < 0, w = 12.5 + 2.5 * jw, d = 13 + 2 * jx, h = 17 + 17 * jh * jh, px = x + (jx - .5) * 2, pz = z + (jz - .5) * 2, v = .85 + .3 * jz, ry = (Math.floor(ix / 5) + Math.floor(iz / 4)) % 2 ? Math.PI / 2 : 0, rt = dark ? [.006, .006, .01] : [.3 * v, .32 * v, .38 * v];
           bodies.push({ x: px, y: GY + h / 2, z: pz, sx: w, sy: h, sz: d, ry, tint: dark ? [.013 * v, .013 * v, .018 * v] : [.6 * v, .585 * v, .54 * v] }); roofs.push({ x: px, y: GY + h, z: pz, sx: w + 1.2, sy: w * .7, sz: d + 1.2, ry, tint: rt });
           if (jw > .88) spires.push({ x: px, y: GY + h + w * .5 + h * .3, z: pz, sx: w * .22, sy: h * .9, sz: w * .22, ry: ry + Math.PI / 4, tint: rt }); (dark ? (jz < .8 ? winP : winW) : winW).push({ x: px, y: GY, z: pz, sx: w, sy: h, sz: d, ry }); }
-      const plain = new THREE.MeshStandardMaterial({ roughness: .35 }), wq = []; for (const sd of [-1, 1]) for (const wx of [-.26, .26]) for (const wy of [.3, .66]) { const q = new THREE.PlaneGeometry(.13, .2); if (sd < 0) q.rotateY(Math.PI); q.translate(wx, wy, sd * .504); wq.push(q); }
+      const plain = applyTex(new THREE.MeshStandardMaterial({ roughness: .35 }), 'marbleW'), roofM = new THREE.MeshStandardMaterial({ roughness: .35 }), wq = []; for (const sd of [-1, 1]) for (const wx of [-.26, .26]) for (const wy of [.3, .66]) { const q = new THREE.PlaneGeometry(.13, .2); if (sd < 0) q.rotateY(Math.PI); q.translate(wx, wy, sd * .504); wq.push(q); }
       const winGeo = mergeGeometries(wq), mk = (geo, mat, list, sh) => { const m = instanced(geo, mat, list); if (m) { m.castShadow = sh; m.raycast = () => {}; } };
-      mk(new THREE.BoxGeometry(1, 1, 1), plain, bodies, true); mk(gable(1, 1, 1), plain, roofs, true); mk(new THREE.ConeGeometry(1, 1, 4), plain, spires, true); mk(winGeo, glowM(0xa860ff, 2.2), winP, false); mk(winGeo, glowM(0xffe2a8, 1.5), winW, false); window.__cityHouses = bodies.length; }
+      mk(new THREE.BoxGeometry(1, 1, 1), plain, bodies, true); mk(gable(1, 1, 1), roofM, roofs, true); mk(new THREE.ConeGeometry(1, 1, 4), roofM, spires, true); mk(winGeo, glowM(0xa860ff, 2.2), winP, false); mk(winGeo, glowM(0xffe2a8, 1.5), winW, false); window.__cityHouses = bodies.length; }
 
     // ---------------- and round all of it, the wall: black marble, towers along it, a line of violet light running round its top; open only at the gate ----------------
     { const segs = [], tw = [], cones = [], glowS = [], W = SQWALL.map(p => [p[0] * S, p[1] * S]), n = W.length;
@@ -3089,7 +3196,7 @@ function buildProps() {
   }
 
   // ================= Witherbloom locations from the live map =================
-  { const wr = mulberry32(3131), plank = solid(0x7a6040, .9), plankD = solid(0x54402a, .95), timber = solid(0x3a2c20, .95), rope = solid(0x8a7a5a, 1), moss = solid(0x4a6a2e, 1, { flatShading: true }), mossD = solid(0x2c4424, 1, { flatShading: true }), barkM = solid(0x3a2e22, .95, { flatShading: true }), boneM = solid(0xd8d2bc, .8), stoneM = solid(0x6c6a60, .95, { flatShading: true }), thatch = solid(0x8a7440, 1, { flatShading: true });
+  { const wr = mulberry32(3131), plank = solid(0x7a6040, .9), plankD = solid(0x54402a, .95), timber = solid(0x3a2c20, .95), rope = solid(0x8a7a5a, 1), moss = solid(0x4a6a2e, 1, { flatShading: true }), mossD = solid(0x2c4424, 1, { flatShading: true }), barkM = solid(0x3a2e22, .95, { flatShading: true }), boneM = tx(solid(0xd8d2bc, .8), 'rock'), stoneM = solid(0x6c6a60, .95, { flatShading: true }), thatch = solid(0x8a7440, 1, { flatShading: true });
     const glassW = new THREE.MeshStandardMaterial({ color: 0xcfe8d8, roughness: .06, transparent: true, opacity: .2, envMapIntensity: 2, side: THREE.DoubleSide, depthWrite: false }), litG = glowM(0x9dff5a, 2.6), litY = glowM(0xe6ff6a, 2.2), litA = glowM(0xffb030, 2.6), litO = glowM(0xffd9a0, 2.6), leaf = [solid(0x26402a, 1, { flatShading: true }), solid(0x35553a, 1, { flatShading: true }), solid(0x1f3626, 1, { flatShading: true })];
     const rod = (g, mat, a, b, r0, r1 = r0, seg = 6) => { const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), L = d.length(), m = new THREE.Mesh(new THREE.CylinderGeometry(r1, r0, L, seg), mat); m.position.set((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); g.add(m); return m; };
     const fold = (g, sub) => { sub.updateMatrix(); for (const m of [...sub.children]) { m.applyMatrix4(sub.matrix); g.add(m); } }, cenW = hx => { const p = hx.map(([q, r]) => hexW(q, r)); return [p.reduce((a, v) => a + v[0], 0) / p.length, p.reduce((a, v) => a + v[1], 0) / p.length]; };
@@ -3127,10 +3234,23 @@ function buildProps() {
 
     // Boneroot Causeway (21,33 21,34 21,35): the raised path from the Greenward down to the Sporewind - packed bone laid on a bed of roots, with the ribcages of four enormous dead things arching over it
     { const HX = [[21, 33], [21, 34], [21, 35]], c = hexW(21, 34), gA = Wp(GREENW), sA = Wp(SPOREW), pts = [[gA[0] - 14, gA[1] + 30], hexW(21, 33), hexW(21, 34), hexW(21, 35), [sA[0] - 22, sA[1] - 26]], Y = 11;
-      addThing('Boneroot Causeway', '🦴', c, 1, 30, g => { for (let i = 0; i + 1 < pts.length; i++) { const A = pts[i], B = pts[i + 1], dx = B[0] - A[0], dz = B[1] - A[1], L = Math.hypot(dx, dz), ux = dx / L, uz = dz / L, nx = -uz, nz = ux, ry = -Math.atan2(uz, ux);
-          M(g, new THREE.BoxGeometry(L + 4, 2.4, 13), barkM, (A[0] + B[0]) / 2 - c[0], Y - 1.6, (A[1] + B[1]) / 2 - c[1], { ry });
-          for (let d = 0; d < L; d += 2.6) { const of = (wr() - .5) * 9, x = A[0] + ux * d + nx * of - c[0], z = A[1] + uz * d + nz * of - c[1]; if (wr() < .55) M(g, new THREE.CylinderGeometry(.55, .55, 4 + 5 * wr(), 5), boneM, x, Y + .1, z, { rz: Math.PI / 2, ry: ry + wr() * 3 }); else M(g, new THREE.SphereGeometry(1 + wr(), 6, 5), boneM, x, Y - .2, z, { sy: .6 }); }      // the bone paving
-          for (let d = 4; d < L; d += 9) for (const sd of [-1, 1]) { const x = A[0] + ux * d + nx * sd * 6.5, z = A[1] + uz * d + nz * sd * 6.5, ex = x + nx * sd * (5 + 6 * wr()) + ux * (wr() - .5) * 8, ez = z + nz * sd * (5 + 6 * wr()) + uz * (wr() - .5) * 8; rod(g, barkM, [x - c[0], Y - 1, z - c[1]], [ex - c[0], Math.min(heightAt(ex, ez), 0) - 4, ez - c[1]], 1.3, .5, 5); } }   // roots holding it up
+      addThing('Boneroot Causeway', '🦴', c, 1, 30, g => { const bA = tx(solid(0xddd6c0, .75), 'rock'), bB = tx(solid(0xc4ba9e, .8), 'rock'), bC = tx(solid(0x9f9577, .85), 'rock'), pit = solid(0x14110c, 1), bm = [bA, bB, bA, bC, bB], P = (p, y) => [p[0] - c[0], y, p[1] - c[1]];
+        // a long bone: a shaft with a pair of knuckles at each end
+        const bone = (mat, a, b, r) => { rod(g, mat, a, b, r * .72, r * .72, 6); let px = -(b[2] - a[2]), pz = b[0] - a[0]; const pl = Math.hypot(px, pz); if (pl < 1e-3) { px = 1; pz = 0; } else { px /= pl; pz /= pl; }
+          for (const e of [a, b]) for (const sd of [-1, 1]) M(g, new THREE.SphereGeometry(r * 1.05, 6, 4), mat, e[0] + px * sd * r * .6, e[1], e[2] + pz * sd * r * .6); };
+        // the skull of some horned beast, facing along its own +x
+        const skull = (x, y, z, sz, ry) => { const sk = new THREE.Group(); M(sk, new THREE.SphereGeometry(1, 9, 7), bA, 0, .95 * sz, 0, { sx: 1.15 * sz, sy: .95 * sz, sz: .95 * sz }); M(sk, new THREE.BoxGeometry(1.25 * sz, .62 * sz, .78 * sz), bA, 1.15 * sz, .62 * sz, 0); M(sk, new THREE.BoxGeometry(1.0 * sz, .16 * sz, .6 * sz), bB, 1.1 * sz, .12 * sz, 0, { rz: -.12 });
+          for (const sd of [-1, 1]) { M(sk, new THREE.SphereGeometry(.3 * sz, 7, 5), pit, .72 * sz, 1.02 * sz, sd * .52 * sz); M(sk, new THREE.ConeGeometry(.2 * sz, 1.5 * sz, 5), bB, -.5 * sz, 1.75 * sz, sd * .6 * sz, { rz: .5, rx: sd * .5 }); for (let i = 0; i < 5; i++) M(sk, new THREE.ConeGeometry(.08 * sz, .3 * sz, 4), bA, (.75 + i * .22) * sz, .26 * sz, sd * .3 * sz, { rz: Math.PI }); }
+          sk.position.set(x, y, z); sk.rotation.y = ry; fold(g, sk); };
+        const prevTop = [null, null]; let posts = 0;
+        for (let i = 0; i + 1 < pts.length; i++) { const A = pts[i], B = pts[i + 1], dx = B[0] - A[0], dz = B[1] - A[1], L = Math.hypot(dx, dz), ux = dx / L, uz = dz / L, nx = -uz, nz = ux, ry = -Math.atan2(uz, ux), at = (d, o) => [A[0] + ux * d + nx * o, A[1] + uz * d + nz * o];
+          for (let d = 0; d < L; d += 2.25) { const hw = 6.3 + 1.1 * wr() + (wr() < .12 ? 2.2 : 0), skw = (wr() - .5) * 1.6, yy = Y + (wr() - .5) * .5; bone(bm[Math.floor(wr() * 5)], P(at(d + skw, -hw), yy), P(at(d - skw, hw), yy), 1.05 + .2 * wr()); }      // the deck: long bones laid side by side across the way, their knuckles out at both edges
+          for (const o of [-4.4, 4.4]) for (let d = 0; d < L; d += 30) bone(bC, P(at(d, o), Y - 2.5), P(at(Math.min(d + 30, L), o), Y - 2.5), 2.3);                                                                                                     // carried on two runs of thigh-bones from something vast
+          for (let d = 8; d < L; d += 30) for (const sd of [-1, 1]) { const top = at(d, sd * 4.6), ft = at(d + (wr() - .5) * 8, sd * (11 + 5 * wr())), gy = Math.min(heightAt(ft[0], ft[1]), 0) - 3; bone(bB, P(top, Y - 3.4), P(ft, gy), 1.9);                 // and standing on splayed leg-bones sunk in the mire,
+            const rt = at(d + (wr() - .5) * 14, sd * (17 + 6 * wr())); rod(g, barkM, [(top[0] + ft[0]) / 2 - c[0], (Y - 3.4 + gy) / 2, (top[1] + ft[1]) / 2 - c[1]], [rt[0] - c[0], Math.min(heightAt(rt[0], rt[1]), 0) - 4, rt[1] - c[1]], 1.1, .4, 5); }   // each with a root grown round it
+          for (let d = 3; d < L; d += 7.5) { for (const sd of [-1, 1]) { const b0 = P(at(d, sd * 7.2), Y + .4), tp = P(at(d, sd * 7.5), Y + 6.2), k2 = sd > 0 ? 1 : 0; bone(bB, b0, tp, .55); if (prevTop[k2]) bone(bA, prevTop[k2], tp, .4); prevTop[k2] = tp;            // a rail of thin bones lashed from post to post,
+              if (posts % 4 === (sd > 0 ? 0 : 2)) skull(tp[0], tp[1] + .2, tp[2], 1.5, ry + (sd > 0 ? -Math.PI / 2 : Math.PI / 2)); } posts++; } }                                                                                                       // a small skull set on every few
+        for (const [pt, nb, sd] of [[pts[0], pts[1], 1], [pts[4], pts[3], -1]]) { const a = Math.atan2(nb[1] - pt[1], nb[0] - pt[0]), ox = -Math.sin(a) * 15 * sd, oz = Math.cos(a) * 15 * sd; skull(pt[0] + ox - c[0], Math.max(heightAt(pt[0] + ox, pt[1] + oz), 0) + .5, pt[1] + oz - c[1], 5.5, -a + Math.PI); }   // and a great one at each end, looking out along the way
         for (let i = 0; i < 4; i++) { const f = (i + .5) / 4 * 3, j = Math.min(Math.floor(f) + 0, 3), A = pts[j === 0 ? 1 : j], B = pts[(j === 0 ? 1 : j) + 1] || pts[4], t = f - Math.floor(f), mx = lerp(A[0], B[0], t) - c[0], mz = lerp(A[1], B[1], t) - c[1], ry = -Math.atan2(B[1] - A[1], B[0] - A[0]), Rr = 24 + (i % 2) * 7, cage = new THREE.Group();
           for (let q = 0; q < 8; q++) { const xx = (q - 3.5) * 5.6, sc2 = 1 - .07 * Math.abs(q - 3.5); M(cage, new THREE.TorusGeometry(Rr * sc2, 1.3, 5, 16, Math.PI), boneM, xx, 0, 0, { ry: Math.PI / 2, rz: 0 }); M(cage, new THREE.SphereGeometry(2.6, 7, 5), boneM, xx, Rr * sc2 + .6, 0, { sx: 1.25 }); }
           M(cage, new THREE.CylinderGeometry(1.8, 1.8, 46, 7), boneM, 0, Rr + .4, 0, { rz: Math.PI / 2 }); cage.position.set(mx, Y - 6, mz); cage.rotation.y = ry; fold(g, cage); }
@@ -3838,7 +3958,7 @@ addEventListener('pagehide', () => release(cur));
 
 // the players' travel overlay, shared with the flat map (same endpoint, same hexes): destinations, a route drawn hex to hex, and how hard the going is in each hex. Everybody always sees it; the tools to change it open from the button
 const PATHAPI = API + 'api/player-path-api.php', COST = { normal: 1 / 3, fast: 1 / 26, yellow: .5, red: 1 }, TCOL = { fast: 0x46d17a, yellow: 0xf2d24a, red: 0xe0483a };
-const PS = { on: false, tool: 'marker', diff: 'red', sections: [], markers: {}, terrain: {}, lock: null, mine: false, curId: null, sig: null, hex: null, pending: new Map(), brush: 0, painting: false }, pathG = new THREE.Group(); scene.add(pathG);
+const PS = { on: false, tool: 'none', drawing: false, drawn: false, diff: 'red', sections: [], markers: {}, terrain: {}, lock: null, mine: false, curId: null, sig: null, hex: null, pending: new Map(), brush: 0, painting: false }, pathG = new THREE.Group(); scene.add(pathG);
 // terrain difficulty: what the server holds, overlaid with whatever the GM has painted and not yet saved
 const TRGB = { fast: [70, 209, 122], yellow: [242, 210, 74], red: [224, 72, 58] }, terrData = new Uint8Array(64 * 64 * 4), terrTex = new THREE.DataTexture(terrData, 64, 64, THREE.RGBAFormat); terrTex.magFilter = terrTex.minFilter = THREE.NearestFilter; terrTex.needsUpdate = true; U.uTerr.value = terrTex;
 const seaG = new THREE.Group(); seaG.visible = false; scene.add(seaG);
@@ -3881,24 +4001,31 @@ function drawPath() { for (const o of [...pathG.children]) { pathG.remove(o); if
     strip(pts, 10, 0x14240c, .8, 3, 1); strip(pts, 5.5, 0xd8ff3f, .96, 3.7, 2); hexes += r.length - 1; total += cost; const e = pts[pts.length - 1], sp = textSprite(blocks(cost)); sp.position.set(e[0], e[1] + 36, e[2]); pathG.add(sp); }
   for (const k in PS.markers) { const mk = PS.markers[k], h = hexAt(mk.q, mk.r), y = gY(h.x, h.z), pin = new THREE.Mesh(new THREE.ConeGeometry(9, 36, 6), new THREE.MeshBasicMaterial({ color: 0xc7ff2e, fog: false })); pin.rotation.x = Math.PI; pin.position.set(h.x, y + 20, h.z); pin.raycast = () => {}; pathG.add(pin); const sp = textSprite(mk.note || 'Destination'); sp.position.set(h.x, y + 66, h.z); pathG.add(sp); }
   $('pathTotal').textContent = hexes ? hexes + ' hex' + (hexes === 1 ? '' : 'es') + ' / ' + blocks(total) : ''; }
-function applyPath(st) { PS.lock = st.drawLock || null; const obj = v => (v && !Array.isArray(v) ? v : {}), sig = JSON.stringify([st.markers, st.path && st.path.sections, st.terrain]); if (sig === PS.sig) return; PS.sig = sig; PS.markers = obj(st.markers); PS.sections = (st.path && st.path.sections) || []; PS.terrain = obj(st.terrain); if (window.__sx) drawPath(); else PS.sig = null; }
+function applyPath(st) { PS.lock = st.drawLock || null; if (PS.drawing) return; /* a line being dragged is not swapped for the older one the server holds */ const obj = v => (v && !Array.isArray(v) ? v : {}), sig = JSON.stringify([st.markers, st.path && st.path.sections, st.terrain]); if (sig === PS.sig) return; PS.sig = sig; PS.markers = obj(st.markers); PS.sections = (st.path && st.path.sections) || []; PS.terrain = obj(st.terrain); if (window.__sx) drawPath(); else PS.sig = null; }
 setInterval(() => { if (document.hidden || !window.__sx) return; fetch(PATHAPI + '?action=get_state', { cache: 'no-store', credentials: 'same-origin' }).then(r => r.ok ? r.json() : null).then(d => { if (d && d.success && d.data) applyPath(d.data); }).catch(() => {}); }, 1500);
 setInterval(() => { if (PS.mine) pathApi('heartbeat_lock'); }, 30000);
 const hexLine = (a, b) => { const n = Math.max(Math.abs(a.q - b.q), Math.abs(a.r - b.r), Math.abs(a.q + a.r - b.q - b.r)), out = []; for (let i = 1; i <= n; i++) { const t = i / n, q = a.q + (b.q - a.q) * t + 1e-6, r = a.r + (b.r - a.r) * t + 1e-6, sv = -q - r; let rq = Math.round(q), rr = Math.round(r); const rs = Math.round(sv), dq = Math.abs(rq - q), dr = Math.abs(rr - r), ds = Math.abs(rs - sv); if (dq > dr && dq > ds) rq = -rr - rs; else if (dr > ds) rr = -rq - rs; out.push({ q: rq, r: rr }); } return out; };   // every hex on the straight line between two
-function pathClick(cx, cy) { if (!PS.on) return false; const p = pick(cx, cy); if (!p) return true; const h = worldToHex(p.x, p.z), key = h.q + ',' + h.r;
+function pathClick(cx, cy) { if (!PS.on || PS.tool === 'none') return false; const p = pick(cx, cy); if (!p) return true; const h = worldToHex(p.x, p.z), key = h.q + ',' + h.r;
   if (PS.tool === 'marker') { PS.hex = { q: h.q, r: h.r }; $('pathNoteRow').style.display = 'flex'; $('pathNoteAt').textContent = 'Hex ' + key; $('pathNote').value = (PS.markers[key] || {}).note || ''; $('pathNote').focus(); }
-  else if (PS.tool === 'draw') { if (!PS.mine) { pathSay(PS.lock && PS.lock.user ? PS.lock.user + ' is drawing the route' : 'Still fetching the pen - try again in a moment'); return true; } let sc = PS.sections.find(x => x.id === PS.curId);
-    if (!sc) { sc = { id: 'section:' + Date.now() + ':' + Math.random().toString(36).slice(2, 8), route: [{ q: h.q, r: h.r }], createdAt: Date.now() }; PS.sections = [...PS.sections, sc]; PS.curId = sc.id; } else sc.route = [...sc.route, ...hexLine(sc.route[sc.route.length - 1], h)];
-    PS.sig = null; drawPath(); pathApi('save_path', { sections: PS.sections }); }
   else if (PS.tool === 'delete') { if (PS.markers[key]) pathApi('delete_marker', { q: h.q, r: h.r }); else for (const sc of PS.sections) { const i = sc.route.findIndex(x => x.q === h.q && x.r === h.r); if (i >= 0) { if (sc.route.length < 2) { PS.sections = PS.sections.filter(x => x !== sc); pathApi('acquire_lock').then(d => d && d.success && pathApi('save_path', { sections: PS.sections }).then(() => pathApi('release_lock'))); } else pathApi('delete_path_segment', { sectionId: sc.id, segmentIndex: clamp(i, 0, sc.route.length - 2) }); break; } } }
   return true; }
 const setTool = async tool => { if (PS.tool === 'terrain' && tool !== 'terrain' && !(await saveTerrain())) return;                    // leaving the terrain tool is what saves it
   if (PS.mine && tool !== 'draw') { PS.mine = false; pathApi('release_lock'); } PS.tool = tool; PS.curId = null; $('pathNoteRow').style.display = 'none'; for (const b of document.querySelectorAll('#pathBar [data-tool]')) b.classList.toggle('on', b.dataset.tool === tool); $('pathDiff').style.display = tool === 'terrain' ? 'flex' : 'none';
-  pathSay({ marker: 'Click a hex to set a destination there', draw: 'Click hexes to lay the route; New line starts another', delete: 'Click a destination, or any hex of a route, to remove it', terrain: 'Pick a type, then click or drag across hexes. Click Terrain again to save and close' }[tool]);
+  pathSay({ none: 'Pick a tool', marker: 'Click a hex to set a destination there', draw: 'Click a hex, then click the next to join them - or hold and drag to lay it as you go. Esc, or Draw again, stops', delete: 'Click a destination, or any hex of a route, to remove it', terrain: 'Pick a type, then click or drag across hexes. Click Terrain again to save and close' }[tool]);
   if (tool === 'draw' && !PS.mine) { const d = await pathApi('acquire_lock'); PS.mine = !!(d && d.success) && PS.tool === 'draw' && PS.on; if (!(d && d.success)) pathSay((d && d.error) || 'Somebody else is drawing the route'); } };
-const setPathMode = on => { PS.on = on; U.uTerrOn.value = on ? 1 : 0; seaG.visible = on; if (!on && PS.tool === 'terrain') { saveTerrain(); PS.tool = 'marker'; } $('pathTools').style.display = on ? 'flex' : 'none'; $('pathToggle').classList.toggle('on', on); if (on) setTool(PS.tool === 'terrain' && !role.gm ? 'marker' : PS.tool); else { if (PS.mine) { PS.mine = false; pathApi('release_lock'); } $('pathNoteRow').style.display = 'none'; pathSay(''); } };
+const setPathMode = on => { PS.on = on; U.uTerrOn.value = on ? 1 : 0; seaG.visible = on; if (!on && PS.tool === 'terrain') saveTerrain(); if (!on) PS.tool = 'none'; $('pathTools').style.display = on ? 'flex' : 'none'; $('pathToggle').classList.toggle('on', on); if (on) setTool('none'); else { if (PS.mine) { PS.mine = false; pathApi('release_lock'); } $('pathNoteRow').style.display = 'none'; pathSay(''); } };
 $('pathToggle').onclick = () => setPathMode(!PS.on);
-for (const b of document.querySelectorAll('#pathBar [data-tool]')) b.onclick = () => setTool(b.dataset.tool === 'terrain' && PS.tool === 'terrain' ? 'marker' : b.dataset.tool);   // Terrain a second time: save and close
+for (const b of document.querySelectorAll('#pathBar [data-tool]')) b.onclick = () => setTool(b.dataset.tool === PS.tool ? 'none' : b.dataset.tool);   // a tool's button a second time turns it off (and for Terrain, saves)
+addEventListener('keydown', e => { if (e.key === 'Escape' && PS.on && PS.tool !== 'none') setTool('none'); });
+// drawing the route: with Draw on, the left button lays route instead of dragging the map. Click a hex to set a node, click another and the two are joined; or hold and drag, and it is laid hex by hex under the cursor until the button comes up
+const drawTo = h => { if (!PS.mine) { pathSay(PS.lock && PS.lock.user ? PS.lock.user + ' is drawing the route' : 'Still fetching the pen - try again in a moment'); return false; } let sc = PS.sections.find(x => x.id === PS.curId);
+  if (!sc) { sc = { id: 'section:' + Date.now() + ':' + Math.random().toString(36).slice(2, 8), route: [{ q: h.q, r: h.r }], createdAt: Date.now() }; PS.sections = [...PS.sections, sc]; PS.curId = sc.id; }
+  else { const last = sc.route[sc.route.length - 1]; if (last.q === h.q && last.r === h.r) return false; sc.route = [...sc.route, ...hexLine(last, h)]; }
+  PS.sig = null; drawPath(); return true; };
+const drawAt = e => { const p = pick(e.clientX, e.clientY); if (p && drawTo(worldToHex(p.x, p.z))) PS.drawn = true; };
+canvas.addEventListener('pointerdown', e => { if (!PS.on || PS.tool !== 'draw' || e.button !== 0 || e.altKey) return; e.preventDefault(); e.stopImmediatePropagation(); PS.drawing = true; PS.drawn = false; try { canvas.setPointerCapture(e.pointerId); } catch (_) {} drawAt(e); }, true);
+canvas.addEventListener('pointermove', e => { if (PS.drawing) drawAt(e); });
+for (const ev of ['pointerup', 'pointercancel']) canvas.addEventListener(ev, () => { if (!PS.drawing) return; PS.drawing = false; if (PS.drawn) pathApi('save_path', { sections: PS.sections }); PS.drawn = false; });
 for (const b of document.querySelectorAll('#pathBar [data-brush]')) { b.classList.toggle('on', +b.dataset.brush === PS.brush); b.onclick = () => { PS.brush = +b.dataset.brush; for (const o of document.querySelectorAll('#pathBar [data-brush]')) o.classList.toggle('on', o === b); }; }
 // painting: with the terrain tool up, the left button paints instead of dragging the map (right-drag, the wheel and the keys still move it)
 let paintLast = null;

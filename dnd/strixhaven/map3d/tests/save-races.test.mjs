@@ -4,7 +4,11 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const source = fs.readFileSync(new URL('../index.php', import.meta.url), 'utf8');
-const slice = (start, end) => source.slice(source.indexOf(start), source.indexOf(end));
+const slice = (start, end) => {
+  const from = source.indexOf(start), to = source.indexOf(end, from + start.length);
+  assert.ok(from >= 0 && to > from, `Missing source boundaries: ${start} / ${end}`);
+  return source.slice(from, to);
+};
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
 const flush = () => new Promise(resolve => setImmediate(resolve));
 function panel() {

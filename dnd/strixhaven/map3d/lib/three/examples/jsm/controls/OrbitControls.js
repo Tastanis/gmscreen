@@ -494,7 +494,9 @@ class OrbitControls extends EventDispatcher {
 
 		function getZoomScale( delta ) {
 
-			const normalized_delta = Math.abs( delta ) / ( 100 * ( window.devicePixelRatio | 0 ) );
+			// Local fix (the r160 line divided by devicePixelRatio rounded down, which is 0 whenever the page is zoomed out below 100% - one wheel click then jumped all the way in or out).
+			// This is how later three.js releases work it out; the cap keeps a free-spinning wheel from doing the same.
+			const normalized_delta = Math.min( Math.abs( delta * 0.01 ), 3 );
 			return Math.pow( 0.95, scope.zoomSpeed * normalized_delta );
 
 		}
