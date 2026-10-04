@@ -1094,17 +1094,28 @@ const TEXGL = {
     '  float mid = sxTri(vSxL, w, 21.0), fine = sxTri(vSxL, w, 4.3), nr = 1.0 - smoothstep(0.5, 2.0, length(fwidth(vSxL)));',
     '  diffuseColor.rgb = diffuseColor.rgb * (0.86 + 0.22 * mid + 0.08 * fine * nr) + vec3(0.012) * fine;',
     '  sxBump = (texture2D(uNoise, vSxL.xy / 2.7 + vSxL.z * 0.31).gbr - 0.5) * 0.07 * nr; }'].join('\n'),
-  // marble (Silverquill): the faintest clouding and a thin vein here and there - grey in white stone, pale in black
+  // marble (Silverquill's great buildings): clouded stone with two sets of veins and the faint lines of its courses. Light stone takes darker marks and dark stone paler ones, so white stays white and black stays black
   marble: [
-    '{ vec3 n = normalize(vSxLN), w = pow(abs(n), vec3(4.0)); w /= (w.x + w.y + w.z);',
-    '  float a = sxTri(vSxL, w, 44.0), b = sxTri(vSxL + 17.3, w, 13.0), nr = 1.0 - smoothstep(0.6, 2.4, length(fwidth(vSxL)));',
-    '  float vein = pow(1.0 - abs(sin((vSxL.x + vSxL.y * 0.7 + vSxL.z * 0.45) * 0.21 + a * 9.0 + b * 3.0)), 12.0) * nr, lum = dot(diffuseColor.rgb, vec3(0.3, 0.6, 0.1));',
-    '  diffuseColor.rgb *= 0.97 + 0.06 * b; diffuseColor.rgb = mix(diffuseColor.rgb, lum > 0.3 ? diffuseColor.rgb * 0.84 : diffuseColor.rgb + vec3(0.09), vein * 0.5); }'].join('\n'),
-  // the same for many copies of one small shape set out across a town (worked from where each point is in the world, so no two houses match)
+    '{ vec3 n = normalize(vSxLN), an = abs(n), w = pow(an, vec3(4.0)); w /= (w.x + w.y + w.z);',
+    '  float a = sxTri(vSxL, w, 44.0), b = sxTri(vSxL + 17.3, w, 13.0), c = sxTri(vSxL + 5.1, w, 4.6), nr = 1.0 - smoothstep(0.6, 2.4, length(fwidth(vSxL)));',
+    '  float v1 = pow(1.0 - abs(sin((vSxL.x + vSxL.y * 0.7 + vSxL.z * 0.45) * 0.21 + a * 9.0 + b * 3.0)), 9.0), v2 = 0.6 * pow(1.0 - abs(sin((vSxL.x * 0.6 - vSxL.y + vSxL.z * 0.8) * 0.33 + b * 7.0)), 14.0), vein = max(v1, v2) * nr;',
+    '  float cy = fract(vSxL.y / 4.6), joint = (1.0 - smoothstep(0.0, 0.03, min(cy, 1.0 - cy))) * (1.0 - smoothstep(0.55, 0.8, an.y)) * nr, lum = dot(diffuseColor.rgb, vec3(0.3, 0.6, 0.1));',
+    '  diffuseColor.rgb *= 0.91 + 0.16 * b + 0.06 * (c - 0.5) * nr;',
+    '  diffuseColor.rgb = lum > 0.3 ? diffuseColor.rgb * (1.0 - 0.2 * vein) * (1.0 - 0.1 * joint) : diffuseColor.rgb + vec3(0.085) * vein + vec3(0.03) * joint; }'].join('\n'),
+  // the same for the small houses, which are many copies of one box set out across the town. Veins and clouding come from where each point is in the world, so no two houses match;
+  // and from where it is on the box itself come a plinth, a cornice under the roof, quoins up the corners and a string course at each floor
   marbleW: [
-    '{ vec3 p = vSxW; float a = texture2D(uNoise, p.xz / 44.0 + p.y * 0.031).r, b = texture2D(uNoise, p.xy / 13.0 + p.z * 0.07).r, nr = 1.0 - smoothstep(0.6, 2.4, length(fwidth(p)));',
-    '  float vein = pow(1.0 - abs(sin((p.x + p.y * 0.7 + p.z * 0.45) * 0.21 + a * 9.0 + b * 3.0)), 12.0) * nr, lum = dot(diffuseColor.rgb, vec3(0.3, 0.6, 0.1));',
-    '  diffuseColor.rgb *= 0.96 + 0.08 * b; diffuseColor.rgb = mix(diffuseColor.rgb, lum > 0.3 ? diffuseColor.rgb * 0.84 : diffuseColor.rgb + vec3(0.09), vein * 0.5); }'].join('\n'),
+    '{ vec3 p = vSxW, q = vSxL; float a = texture2D(uNoise, p.xz / 44.0 + p.y * 0.031).r, b = texture2D(uNoise, p.xy / 13.0 + p.z * 0.07).r, c = texture2D(uNoise, p.zy / 4.1 + p.x * 0.13).r, nr = 1.0 - smoothstep(0.6, 2.4, length(fwidth(p)));',
+    '  float vein = pow(1.0 - abs(sin((p.x + p.y * 0.7 + p.z * 0.45) * 0.21 + a * 9.0 + b * 3.0)), 9.0) * nr, lum = dot(diffuseColor.rgb, vec3(0.3, 0.6, 0.1));',
+    '  float plinth = 1.0 - smoothstep(-0.44, -0.425, q.y), cornice = smoothstep(0.45, 0.465, q.y), fl = fract(p.y / 8.5), course = (1.0 - smoothstep(0.0, 0.035, min(fl, 1.0 - fl))) * nr;',
+    '  float quoin = smoothstep(0.43, 0.445, min(abs(q.x), abs(q.z))) * step(0.5, fract(p.y / 3.4)) * nr, mark = max(max(plinth, cornice), max(quoin * 0.7, course * 0.8));',
+    '  diffuseColor.rgb *= 0.9 + 0.2 * b + 0.07 * (c - 0.5) * nr;',
+    '  diffuseColor.rgb = lum > 0.3 ? diffuseColor.rgb * (1.0 - 0.2 * vein) * (1.0 - 0.17 * mark) : diffuseColor.rgb + vec3(0.075) * vein + vec3(0.04) * mark; }'].join('\n'),
+  // their roofs: slates in rows, unevenly weathered
+  slateW: [
+    '{ vec3 p = vSxW; float b = texture2D(uNoise, p.xz / 9.0 + p.y * 0.11).r, c = texture2D(uNoise, p.xz / 2.3 + p.y * 0.4).r, nr = 1.0 - smoothstep(0.5, 2.0, length(fwidth(p)));',
+    '  float row = fract(p.y / 1.9), ln = (1.0 - smoothstep(0.0, 0.14, row)) * nr, lum = dot(diffuseColor.rgb, vec3(0.3, 0.6, 0.1));',
+    '  diffuseColor.rgb = lum > 0.05 ? diffuseColor.rgb * (0.8 + 0.3 * b + 0.1 * (c - 0.5) * nr) * (1.0 - 0.24 * ln) : diffuseColor.rgb * (0.8 + 0.5 * b) + vec3(0.012, 0.012, 0.017) * (b + c * nr + ln * 1.6); }'].join('\n'),
   // a folded paper dart or boat, in its own frame: the crease runs down the middle (z = 0) and each side shades away from it
   fold: [
     '{ float f1 = texture2D(uNoise, vec2(vSxL.x / 2.1, vSxL.z / 9.0) + vSxL.y * 0.31).r, az = abs(vSxL.z);',
@@ -3183,7 +3194,7 @@ function buildProps() {
           const dark = (x / S - X(.83)) * .8 + (z / S - Z(.305)) * .6 + 34 * fbm(x / S / 75, z / S / 75, 3) < 0, w = 12.5 + 2.5 * jw, d = 13 + 2 * jx, h = 17 + 17 * jh * jh, px = x + (jx - .5) * 2, pz = z + (jz - .5) * 2, v = .85 + .3 * jz, ry = (Math.floor(ix / 5) + Math.floor(iz / 4)) % 2 ? Math.PI / 2 : 0, rt = dark ? [.006, .006, .01] : [.3 * v, .32 * v, .38 * v];
           bodies.push({ x: px, y: GY + h / 2, z: pz, sx: w, sy: h, sz: d, ry, tint: dark ? [.013 * v, .013 * v, .018 * v] : [.6 * v, .585 * v, .54 * v] }); roofs.push({ x: px, y: GY + h, z: pz, sx: w + 1.2, sy: w * .7, sz: d + 1.2, ry, tint: rt });
           if (jw > .88) spires.push({ x: px, y: GY + h + w * .5 + h * .3, z: pz, sx: w * .22, sy: h * .9, sz: w * .22, ry: ry + Math.PI / 4, tint: rt }); (dark ? (jz < .8 ? winP : winW) : winW).push({ x: px, y: GY, z: pz, sx: w, sy: h, sz: d, ry }); }
-      const plain = applyTex(new THREE.MeshStandardMaterial({ roughness: .35 }), 'marbleW'), roofM = new THREE.MeshStandardMaterial({ roughness: .35 }), wq = []; for (const sd of [-1, 1]) for (const wx of [-.26, .26]) for (const wy of [.3, .66]) { const q = new THREE.PlaneGeometry(.13, .2); if (sd < 0) q.rotateY(Math.PI); q.translate(wx, wy, sd * .504); wq.push(q); }
+      const plain = applyTex(new THREE.MeshStandardMaterial({ roughness: .35 }), 'marbleW'), roofM = applyTex(new THREE.MeshStandardMaterial({ roughness: .35 }), 'slateW'), wq = []; for (const sd of [-1, 1]) for (const wx of [-.26, .26]) for (const wy of [.3, .66]) { const q = new THREE.PlaneGeometry(.13, .2); if (sd < 0) q.rotateY(Math.PI); q.translate(wx, wy, sd * .504); wq.push(q); }
       const winGeo = mergeGeometries(wq), mk = (geo, mat, list, sh) => { const m = instanced(geo, mat, list); if (m) { m.castShadow = sh; m.raycast = () => {}; } };
       mk(new THREE.BoxGeometry(1, 1, 1), plain, bodies, true); mk(gable(1, 1, 1), roofM, roofs, true); mk(new THREE.ConeGeometry(1, 1, 4), roofM, spires, true); mk(winGeo, glowM(0xa860ff, 2.2), winP, false); mk(winGeo, glowM(0xffe2a8, 1.5), winW, false); window.__cityHouses = bodies.length; }
 
