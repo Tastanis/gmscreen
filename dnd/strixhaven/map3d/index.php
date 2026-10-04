@@ -1313,10 +1313,17 @@ function buildProps() {
       const b = i * Math.PI / 2, cb = Math.cos(b), sb = Math.sin(b); k.C(3.2, 3.7, 44, 10, stone, cb * 47.5, 25, sb * 47.5); k.C(4.2, 4.2, 1.4, 10, gold, cb * 47.5, 44, sb * 47.5); k.D(3.7, teal, cb * 47.5, 47, sb * 47.5); k.K(.7, 8, 6, gold, cb * 47.5, 54.6, sb * 47.5); }
   }, { top: 92, view: 820 });
 
-  // the Dawnbow: a star arch curving across the sky over the library, its western foot at Bow's End
-  { const dx = TAV.x - CENW[0], dz = TAV.z - CENW[1], dl = Math.hypot(dx, dz), ux = dx / dl, uz = dz / dl, RD = dl - 58, by = heightAt(CENW[0], CENW[1]) - 8;
-    const bow = new THREE.Mesh(new THREE.TorusGeometry(RD, 4.4, 8, 140, Math.PI), glowM(0xffe9b8, 1.9)); bow.position.set(CENW[0], by, CENW[1]); bow.rotation.y = -Math.atan2(uz, ux); bow.raycast = () => {}; scene.add(bow);
-    for (let i = 1; i < 60; i++) { const t = i / 60 * Math.PI; lanternPts.push([CENW[0] + ux * RD * Math.cos(t), by + RD * Math.sin(t) + 5, CENW[1] + uz * RD * Math.cos(t), { c: [2.4, 2.2, 1.5], size: 7 + (i % 3) * 3, drift: 3, speed: .8 }]); } }
+  // the Dawnbow: not a hoop but a great arc of separate slabs of pale stone hanging in the air over the library, each set like a stroke on a dial - long ones and short ones, a little out of true -
+  // with one enormous shard hanging point-down from the crown of it. Its western foot is at Bow's End. The whole of it rides very slowly up and down
+  { const dx = TAV.x - CENW[0], dz = TAV.z - CENW[1], dl = Math.hypot(dx, dz), ux = dx / dl, uz = dz / dl, RD = dl - 58, by = heightAt(CENW[0], CENW[1]) - 8, br = mulberry32(1107), geos = [], bowG = new THREE.Group();
+    const bowM = applyTex(new THREE.MeshStandardMaterial({ color: 0xe4e7ea, roughness: .8, emissive: 0x9aa0a8, emissiveIntensity: .24 }), 'rock');
+    const slab = (t, L, w, off, th) => { const ge = new THREE.CylinderGeometry(w * .62, w * .42, L, 4, 1); ge.rotateY(Math.PI / 4); ge.scale(1, 1, th); ge.rotateZ(t - Math.PI / 2 + (br() - .5) * .07); const r = RD + off; ge.translate(Math.cos(t) * r, Math.sin(t) * r, (br() - .5) * 12); geos.push(ge); };   // wider at its outer end, thin, its length along the spoke
+    for (let t = .17; t < Math.PI - .17;) { const big = br() < .3; if (Math.abs(t - Math.PI / 2) > .085) slab(t, big ? 70 + br() * 55 : 20 + br() * 26, big ? 22 + br() * 10 : 11 + br() * 9, (br() - .5) * 26 + (big ? 14 : 0), .3 + br() * .15); t += (big ? .075 : .045) + br() * .02; }
+    { const L = 200, top = RD + 74, sq = ge => { ge.scale(1, 1, .62); return ge; }; geos.push(sq(new THREE.CylinderGeometry(21, 12, L, 6, 3)).translate(0, top - L / 2, 0), sq(new THREE.ConeGeometry(12, 34, 6).rotateX(Math.PI)).translate(0, top - L - 17, 0), sq(new THREE.ConeGeometry(21, 26, 6)).translate(0, top + 13, 0));
+      for (const f of [.2, .45, .7]) geos.push(sq(new THREE.CylinderGeometry(lerp(21, 12, f) + 1.7, lerp(21, 12, f) + 1.3, 5, 6)).translate(0, top - L * f, 0)); }                                                                    // the great shard at the crown, banded, its point just clear of the library's spire
+    const bow = new THREE.Mesh(mergeGeometries(geos), bowM); bow.castShadow = true; bow.raycast = () => {}; bow.frustumCulled = false; bowG.add(bow); bowG.position.set(CENW[0], by, CENW[1]); bowG.rotation.y = -Math.atan2(uz, ux); scene.add(bowG);
+    anim.push(t => { bowG.position.y = by + 3.5 * Math.sin(t * .3); });
+    for (let i = 1; i < 20; i++) { const t = i / 20 * Math.PI; lanternPts.push([CENW[0] + ux * RD * Math.cos(t), by + RD * Math.sin(t) + 5, CENW[1] + uz * RD * Math.cos(t), { c: [2.2, 2.2, 2], size: 8 + (i % 3) * 3, drift: 3, speed: .8 }]); } }
 
   // Bow's End Tavern: 1 hex. Squat and comfortable, its walls carved with overlapping star motifs
   addThing("Bow's End Tavern", '🍺', [TAV.x, TAV.z], 1.9, 30, g => { const k = kit(g), timber = solid(0x6a4a30, .9), stoneD = solid(0x6f675c, .9), starM = new THREE.MeshStandardMaterial({ color: 0xcaa24a, emissive: 0x6a4a10, emissiveIntensity: .6, roughness: .4, metalness: .4 });
@@ -1343,20 +1350,46 @@ function buildProps() {
       for (const [x, z] of [[-13, -6], [13, -6], [-13, 14], [13, 14]]) { k.C(.5, .7, 4, 6, wood, x, 2, z); k.S(3.2, lawn, x, 6, z, { sy: .85 }); }
     }, { ry: face(p, CENW), top: 66, view: 560 }); }
 
-  // Archway Commons: 3 hexes. A lush park under a smaller star arch, just south of the Biblioplex
-  { const CK = .68, h0 = worldToHex(CENW[0], CENW[1] + 242), p = [h0.x, h0.z], gy = heightAt(p[0], p[1]);
-    addThing('Archway Commons', '🌳', p, CK, 30, g => { const k = kit(g), pathM = solid(0xb8a584, .9), hedge = solid(0x2f5a2c, 1), beds = [0x9c6876, 0xa89250, 0x77698c, 0x9c6e4c].map(c => solid(c, .9));
-      const arch = k.T(84, 2.7, glowM(0xfff0c8, 1.5), 0, -3, 0, {}, Math.PI); arch.userData.noShadow = true;
-      for (const sx of [-1, 1]) { k.C(5.5, 6.5, 9, 10, cream, sx * 84, 4.5, 0); k.S(2.4, gold, sx * 84, 10.5, 0); }
-      M(g, new THREE.RingGeometry(28, 34, 48), pathM, 0, .4, 0, { rx: -Math.PI / 2 }); for (let i = 0; i < 4; i++) k.B(52, .5, 5, pathM, Math.cos(i * 1.5708 + .78) * 60, .3, Math.sin(i * 1.5708 + .78) * 60, { ry: -(i * 1.5708 + .78) });
-      k.C(11, 12, 2.6, 20, cream, 0, 1.3, 0); k.C(9.6, 9.6, .5, 20, glassM(0x2e7f96, .85), 0, 2.5, 0); k.C(1.1, 1.6, 9, 8, cream, 0, 6, 0); k.C(3.4, 2.2, 1, 12, cream, 0, 8, 0); k.S(1.6, gold, 0, 11, 0);
-      for (let i = 0; i < 8; i++) { const a = i / 8 * 6.283 + .2; k.C(6.5, 7, 1.2, 12, beds[i % 4], Math.cos(a) * 48, .6, Math.sin(a) * 48); k.B(7, 1.6, 2, wood, Math.cos(a + .39) * 24, 1.2, Math.sin(a + .39) * 24, { ry: -(a + .39) + Math.PI / 2 }); }
-      for (let i = 0; i < 3; i++) k.T(66, 2.4, hedge, 0, 1.4, 0, { rx: Math.PI / 2, rz: i * 2.094 + .5 }, 1.2);
-      const list = []; for (let i = 0; i < 22; i++) { const a = i * 2.39996, d = 44 + (i * 17) % 44, x = Math.cos(a) * d, z = Math.sin(a) * d; if (nearWalk(p[0] + x, p[1] + z, 16)) continue; list.push({ x, y: heightAt(p[0] + x, p[1] + z) - gy - .3, z, s: 1.5 + (i % 4) * .22, ry: i, tint: [.95 + (i % 3) * .1, 1.05, .9] }); }
+  // Archway Commons: 3 hexes, just south of the Biblioplex. A formal garden on a low terrace. At its head the founder stands hooded, staff in hand, on a pedestal in a round fountain, a ring of small stone slabs hanging in the air behind -
+  // the Dawnbow in little. Pale paved walks edged in red stone cross it; a square hedge maze lies either side of the main walk, a long planted bed between them; cypresses line the walk down to the steps at the south
+  { const CK = .68, h0 = worldToHex(CENW[0], CENW[1] + 242), p = [h0.x, h0.z], gy = heightAt(p[0], p[1]), FZ = -22, lamps = [];
+    addThing('Archway Commons', '🌳', p, CK, 30, g => { const k = kit(g), pathM = solid(0xcfc5ac, .9), inlay = solid(0x9a6a52, .9), hedge = solid(0x2f5a2c, 1), hedgeL = solid(0x44783a, 1), cyp = solid(0x1d4024, 1), soil = solid(0xb7ab90, .95), beds = [0x9c6876, 0xa89250, 0x77698c, 0x9c6e4c].map(c => solid(c, .9)), ar = mulberry32(77);
+      const stat = tx(solid(0x8d9399, .8), 'rock'), shard = tx(new THREE.MeshStandardMaterial({ color: 0xe4e7ea, roughness: .8, emissive: 0x9aa0a8, emissiveIntensity: .26 }), 'rock');
+      k.C(88, 90, 1, 44, lawn, 0, .5, 0); k.T(88.4, 1, cream, 0, 1, 0, { rx: Math.PI / 2 });                                                                                              // the terrace: lawn, kerbed in stone
+      // the walks: the long one from the steps to the fountain, one across, the round before the fountain; each edged with a line of red stone, and a diamond let into the long walk
+      k.B(16, .4, 152, pathM, 0, 1.2, 8); k.B(156, .4, 12, pathM, 0, 1.2, FZ); k.C(31, 31, .4, 40, pathM, 0, 1.22, FZ); for (const sx of [-1, 1]) { k.B(.8, .14, 152, inlay, sx * 7, 1.46, 8); k.B(11, .4, 56, pathM, sx * 58, 1.2, 14); }
+      for (const sz of [-1, 1]) k.B(156, .14, .8, inlay, 0, 1.46, FZ + sz * 5.2); k.T(30, .5, inlay, 0, 1.45, FZ, { rx: Math.PI / 2 }); k.T(18.5, .4, inlay, 0, 1.45, FZ, { rx: Math.PI / 2 });
+      for (const [x, z, r] of [[5.5, 56, .785], [-5.5, 56, -.785], [5.5, 67, -.785], [-5.5, 67, .785]]) k.B(.8, .14, 15.5, inlay, x, 1.47, z, { ry: r });
+      // the fountain and the founder
+      k.C(15.5, 16.5, 2.8, 30, cream, 0, 2.5, FZ); k.T(15.6, .7, cream, 0, 3.9, FZ, { rx: Math.PI / 2 }); k.C(14, 14, .5, 30, glassM(0x2e7f96, .85), 0, 3.6, FZ); k.C(5.4, 6.4, 5, 12, cream, 0, 4.8, FZ); k.C(6.8, 6.8, .8, 12, stat, 0, 7.6, FZ); k.C(3.8, 4.6, 3.4, 10, stat, 0, 9.6, FZ);
+      statue(g, stat, 0, 11.2, FZ, 30, -Math.PI / 2, 0);
+      for (let i = 0; i < 6; i++) { const a = i / 6 * 6.283 + .5; NS(k.C(.25, .25, 2.2, 5, glassM(0xcfeaf4, .7), Math.cos(a) * 10, 4.8, FZ + Math.sin(a) * 10)); }                           // jets
+      // the halo: small slabs of the same pale stone standing in the air in a ring behind the statue, open at the foot
+      for (let i = 0; i < 26; i++) { const t = -.45 + i / 25 * (Math.PI + .9), big = i % 3 === 0, L = big ? 10 + ar() * 5 : 4.5 + ar() * 3, r = 31 + (big ? 2.5 : 0) + (ar() - .5) * 2; k.B(big ? 4 : 2.6, L, 1.3, shard, Math.cos(t) * r, 25 + Math.sin(t) * r, FZ - 5 + (ar() - .5) * 1.5, { rz: t - Math.PI / 2 + (ar() - .5) * .08 }); }
+      // curved hedges and beds either side of the fountain
+      for (const sx of [-1, 1]) { M(g, new THREE.TorusGeometry(43, 2.3, 5, 18, 1.0), hedge, 0, 2.2, FZ, { rx: Math.PI / 2, rz: sx > 0 ? -.5 : Math.PI - .5 }); M(g, new THREE.TorusGeometry(50, 5, 4, 18, .8), lawn, 0, 1.2, FZ, { rx: Math.PI / 2, rz: sx > 0 ? -.4 : Math.PI - .4, sz: .2 }); }
+      // the two hedge mazes: square within square, each ring with one gap, a block of clipped hedge at the heart
+      const maze = (cx, cz, sz) => { k.B(sz + 4, .3, sz + 4, soil, cx, 1.15, cz); const wall = (w, d, x, z, m) => k.B(w, 3.2, d, m, cx + x, 2.8, cz + z), h2 = sz / 2, m2 = h2 - 5.5;
+        wall(sz, 2.4, 0, -h2, hedge); wall(2.4, sz, -h2, 0, hedge); wall(2.4, sz, h2, 0, hedge); wall(sz * .36, 2.4, -sz * .32, h2, hedge); wall(sz * .36, 2.4, sz * .32, h2, hedge);
+        wall(m2 * 2, 2.2, 0, m2, hedgeL); wall(2.2, m2 * 2, -m2, 0, hedgeL); wall(2.2, m2 * 2, m2, 0, hedgeL); wall(m2 * .7, 2.2, -m2 * .65, -m2, hedgeL); wall(m2 * .7, 2.2, m2 * .65, -m2, hedgeL);
+        wall(h2 - 9, h2 - 9, 0, 0, hedge); k.B(h2 - 9.4, .4, h2 - 9.4, hedgeL, cx, 4.5, cz); };
+      maze(-34, 30, 34); maze(34, 30, 34);
+      // down the middle of the long walk: a long planted bed in a stone kerb, a round shrub before and after it
+      k.C(8, 8.6, 1.3, 26, cream, 0, 1.7, 30, { sz: 1.9 }); k.S(7.2, hedgeL, 0, 2.2, 30, { sz: 1.9, sy: .34 }); for (const z of [9, 51]) { k.C(3.4, 3.7, 1, 14, cream, 0, 1.6, z); k.S(3, hedge, 0, 2.6, z, { sy: .7 }); }
+      // cypresses down both sides of the walk to the steps, and the steps themselves between two low walls
+      for (const sx of [-1, 1]) { for (let i = 0; i < 6; i++) { const z = 54 + i * 5.4; k.C(.35, .45, 2.4, 5, wood, sx * 11.5, 2.2, z); k.K(2.3, 13 + (i % 2) * 1.5, 8, cyp, sx * 11.5, 9.5, z); k.S(2, cyp, sx * 11.5, 4.6, z, { sy: 1.5 }); }
+        k.B(26, 2.6, 2, stone, sx * 24, 2.3, 86.5); k.B(27, .6, 2.8, cream, sx * 24, 3.9, 86.5); k.C(1.6, 1.9, 4.6, 8, cream, sx * 10.2, 3.3, 86.5); NS(k.S(1.3, glowM(0xffd890, 3), sx * 10.2, 6.6, 86.5)); lamps.push([sx * 10.2, 6.6, 86.5]); }
+      for (let i = 0; i < 4; i++) k.B(19, .5, 2.6, cream, 0, 1.15 - i * .32, 86 + i * 2.5);
+      // flower beds, benches and lamps
+      for (let i = 0; i < 6; i++) { const a = i / 6 * 6.283, x = Math.cos(a) * 70, z = Math.sin(a) * 70; k.C(6.4, 6.9, 1.2, 14, cream, x, 1.5, z); k.S(5.6, beds[i % 4], x, 2, z, { sy: .32 }); k.S(2.4, hedgeL, x, 2.6, z, { sy: .8 }); }   // each a low mound of one colour in a stone kerb, a clipped bush at its middle
+      for (const [x, z, r] of [[-22, FZ + 26, .6], [22, FZ + 26, -.6], [-12, 44, 1.5708], [12, 44, 1.5708], [-12, 14, 1.5708], [12, 14, 1.5708]]) k.B(6.5, 1.5, 2, wood, x, 1.9, z, { ry: r });
+      for (const [x, z] of [[-10.5, -2], [10.5, -2], [-10.5, 22], [10.5, 22], [-10.5, 44], [10.5, 44], [-40, FZ - 8], [40, FZ - 8]]) { k.C(.4, .5, 11, 6, darkRoof, x, 6.5, z); NS(k.S(1.3, glowM(0xffd890, 3), x, 12.6, z)); lamps.push([x, 12.6, z]); }
+      // the trees round the edge, clear of the walks
+      const list = []; for (let i = 0; i < 30; i++) { const a = i * 2.39996, d = 60 + (i * 17) % 26, x = Math.cos(a) * d, z = Math.sin(a) * d; if (Math.abs(x) < 13 || Math.abs(z - FZ) < 10 || (Math.abs(Math.abs(x) - 34) < 22 && Math.abs(z - 30) < 22) || nearWalk(p[0] + x * CK, p[1] + z * CK, 12)) continue; list.push({ x, y: 1, z, s: 1.6 + (i % 4) * .25, ry: i, tint: [.95 + (i % 3) * .1, 1.05, .9] }); }
       g.add(fillInstanced(new THREE.InstancedMesh(broad, treeMat, list.length), list));
-      for (let i = 0; i < 6; i++) { const a = i / 6 * 6.283 + .52, x = Math.cos(a) * 40, z = Math.sin(a) * 40; k.C(.4, .5, 11, 6, darkRoof, x, 5.5, z); k.S(1.3, glowM(0xffd890, 3), x, 11.6, z); lanternPts.push([p[0] + x * CK, gy + 11.6 * CK, p[1] + z * CK, { size: 5, drift: .1, speed: .3 }]); }
     }, { y: gy, top: 100, view: 560 });
-    for (let i = 1; i < 16; i++) { const t = i / 16 * Math.PI; lanternPts.push([p[0] + 84 * CK * Math.cos(t), gy + 84 * CK * Math.sin(t), p[1], { c: [2.4, 2.2, 1.5], size: 5, drift: 1.5, speed: .9 }]); } }
+    for (const [x, y, z] of lamps) lanternPts.push([p[0] + x * CK, gy + y * CK, p[1] + z * CK, { size: 5, drift: .1, speed: .3 }]);
+    for (let i = 0; i < 9; i++) { const t = -.3 + i / 8 * (Math.PI + .6); lanternPts.push([p[0] + 31 * CK * Math.cos(t), gy + (25 + 31 * Math.sin(t)) * CK, p[1] + (FZ - 5) * CK, { c: [2.2, 2.2, 2], size: 5, drift: 1.2, speed: .9 }]); } }
 
   // Firejolt Cafe: 1 hex, on the edge of the Commons. Bright and clean, with a striped awning, a terrace of tables and a lightning-bolt sign
   { const hx = worldToHex(CENW[0] + 225 * Math.cos(.7), CENW[1] + 225 * Math.sin(.7));
