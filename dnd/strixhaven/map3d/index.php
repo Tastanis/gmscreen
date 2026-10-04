@@ -60,6 +60,7 @@ require_once '../../includes/strix-nav.php';
   #pathTotal { color: #f0d68a; margin-left: 8px; font-variant-numeric: tabular-nums; } #pathMsg { color: #cfc6b4; text-shadow: 0 1px 3px #000, 0 0 6px #000; min-height: 18px; }
   #pathNote { width: 220px; background: #0d0b08; color: #cfc6b4; border: 1px solid #3c3122; font: inherit; padding: 6px 8px; outline: none; }
   #pathDiff .sep { margin: 0 2px 0 10px; color: #8d8474; } #pathDiff button[data-diff=fast].on { color: #7dffac; } #pathDiff button[data-diff=yellow].on { color: #ffe86a; } #pathDiff button[data-diff=red].on { color: #ff7a6a; }
+  body.touring .strix-mini-nav, body.touring #pathBar, body.touring #panel, body.touring #tip { display: none !important; }
   #tip { position: fixed; left: 0; top: 0; display: none; pointer-events: none; background: rgba(14,16,20,.9); border: 1px solid #d8c48a; border-radius: 5px; padding: 3px 8px; font-size: 12px; white-space: nowrap; z-index: 5; }
   #labels { display: none; position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
   .lbl { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); text-align: center; pointer-events: auto; cursor: pointer; white-space: nowrap; transition: opacity .25s; text-shadow: 0 1px 3px #000, 0 0 6px #000; font-size: 12px; font-weight: 600; }
@@ -548,7 +549,7 @@ function sample(x, z) {
   const notch = (c, ux, uz, a0, a1, hw, F) => { const dx = x - c[0], dz = z - c[1], a = dx * ux + dz * uz, b = Math.abs(dz * ux - dx * uz); if (a < a0 - 30 || a > a1 + 4 || b > hw + 8) return; const k = sstep(hw + 6, hw, b) * sstep(a1 + 2.5, a1, a) * sstep(a0 - 30, a0, a); if (k > 0) h = lerp(h, Math.min(h, F), k); };
   notch(KEYW, .89, .45, -40, 44, 56, 132);                              // the court before the Keystone Wall, a sheer face behind it
   notch(SCRIP, .61, -.79, -50, 3, 34, 121);                             // the yard before the Scriptorium door
-  { const d = Math.hypot(x - P492[0], z - P492[1]) + 3 * fbm(x / 12, z / 12, 2); if (d < 30) { const k = sstep(28, 19, d); h -= 190 * k; cutK = Math.max(cutK, k); } }
+  { const d = Math.hypot(x - P492[0], z - P492[1]) + 3 * fbm(x / 12, z / 12, 2); if (d < 42) { const k = sstep(40, 31, d); h -= 265 * k; cutK = Math.max(cutK, k); } }
   { const e = Math.hypot((x - HEAP[0]) / 44, (z - HEAP[1]) / 36) + .12 * fbm(x / 30, z / 30, 2); if (e < 1.25) { const q = clamp((1.2 - e) / .7, 0, 1) * 3, fl = Math.floor(q), k = sstep(1.25, 1.1, e); h = lerp(h, Math.min(h, 60 - (fl + sstep(.6, 1, q - fl)) * 12), k); cutK = Math.max(cutK, k * .5); } }
   { const dx = x - COFD[0], dz = z - COFD[1], a = dx * .5 + dz * .866, b = dz * .5 - dx * .866; if (Math.abs(a) < 62 && Math.abs(b + 4) < 28) { const k = sstep(26, 21, Math.abs(b + 4)) * sstep(60, 54, Math.abs(a)); h = lerp(h, Math.min(h, 7 + 34 * sstep(18, 52, a)), k); cutK = Math.max(cutK, k * .5); } }
   { const wx = x + 14 * fbm(x / 70, z / 70, 2), wz = z + 14 * fbm(x / 70 + 5, z / 70, 2), d = polyDist(WSCAR, wx, wz); if (d < 46) { const wd = 24 + 8 * Math.sin(PD_T * 19); scarK = sstep(wd + 12, wd, d) * sstep(0, .06, PD_T) * sstep(1, .94, PD_T); h -= 8 * scarK * (.7 + .3 * sstep(wd, 0, d)) - 2.2 * scarK * ridged(x / 16, z / 16, 2); } }
@@ -2354,15 +2355,45 @@ function buildProps() {
       }, { y: y0, hexes: [[7, 26]], top: 90, view: 460 });
       for (let i = 0; i < 4; i++) { const a = i * 1.571 + .8; lanternPts.push([c[0] + Math.cos(a) * 14, y0 + 8, c[1] + Math.sin(a) * 14, warm]); } }
 
-    // Pillardrop 492 (now on hex 11,25): a shaft sunk and abandoned - a leaning headframe over it, broken rings of walkway going down, and a pale light a very long way below
-    { const c = Wp(P492); let gy = 1e9; for (let i = 0; i < 8; i++) gy = Math.min(gy, gAt(c, Math.cos(i * .785) * 48, Math.sin(i * .785) * 48)); const fy = heightAt(c[0], c[1]) - gy;
-      addThing('Pillardrop 492', '⛏️', c, 1, 30, g => { const k = kit(g);
-        for (let i = 0; i < 4; i++) { const a = i * 1.571 + .5; k.B(1.8, 56, 1.8, timber, Math.cos(a) * 34, gAt(c, Math.cos(a) * 40, Math.sin(a) * 40) - gy + 22, Math.sin(a) * 34, { rz: Math.cos(a) * .35, rx: -Math.sin(a) * .35 }); }
-        k.B(40, 1.6, 1.6, timber, 0, 46, 0, { ry: .5 }); k.B(40, 1.6, 1.6, timber, 0, 46, 0, { ry: 2.07 }); k.T(5, .8, ironM, 0, 41, 0); k.B(.5, -fy * .5, .5, ironM, 0, 41 + fy * .25, 0);
-        for (let j = 1; j <= 6; j++) { const yy = fy * j / 7, a0 = j * 1.9; M(g, new THREE.TorusGeometry(31, 1.6, 4, 12, 2.2), timber, 0, yy, 0, { rx: Math.PI / 2, rz: a0 }); for (let q = 0; q < 3; q++) { const a = a0 + q * .9; k.B(.8, 14, .8, timber, Math.cos(a) * 33, yy - 7, -Math.sin(a) * 33); } }
-      }, { y: gy, hexes: [[11, 25]], top: 70, view: 420 });
-      const m9 = mist({ n: 90, seed: 49, r0: 8, r1: 32, y0: fy + 10, y1: 10, spin: .15, rise: .04, size: 30, alpha: .12, col: [.6, .8, 1.1], add: true }); m9.position.set(c[0], gy, c[1]); scene.add(m9);
-      lanternPts.push([c[0], gy + fy + 14, c[1], { c: [1.4, 1.9, 2.6], size: 40, drift: .2, speed: .3 }]); }
+    // Pillardrop 492 (now on hex 11,25): the deepest place there is - a round shaft going down for miles, abandoned soon after it was made. Ring under ring of stone gallery runs round it, each carried on a row of
+    // columns standing on the one below, most of them broken. Dark towers hang into it point-down from great arms of rock at the rim, their windows still lit. Torches burn on the ledges, and a very long way down there is a pale green light
+    { const c = Wp(P492); let gy = 1e9; for (let i = 0; i < 8; i++) gy = Math.min(gy, gAt(c, Math.cos(i * .785) * 64, Math.sin(i * .785) * 64)); const fy = heightAt(c[0], c[1]) - gy, RW = 42, NL = 8, pr = mulberry32(492), torches = [];
+      addThing('Pillardrop 492', '⛏️', c, 1, 30, g => { const k = kit(g), st = tx(solid(0x7a6753, .9), 'rock'), stD = tx(solid(0x4a3c31, .95), 'rock'), twr = tx(solid(0x2b2522, .9), 'rock'), rk = tx(solid(0x6e4a32, .95, { flatShading: true }), 'rock'), band = new THREE.MeshStandardMaterial({ color: 0x5a4a34, roughness: .5, metalness: .6 }), win = glowM(0xff9a30, 2.6), dark = solid(0x07080b, 1), V2 = (x, y) => new THREE.Vector2(x, y);
+        const gap = (-fy - 76) / (NL - 1), lev = j => -20 - j * gap;
+        for (let j = 0; j < NL; j++) { const y = lev(j), a0 = pr() * 6.283, L = 4.3 + pr() * 1.7, nc = Math.round(L / .27), hh = (j < NL - 1 ? gap : 34) - 4.4;
+          M(g, new THREE.LatheGeometry([V2(RW - 11.5, 0), V2(RW + 2, 0), V2(RW + 2, -2.4), V2(RW - 11.5, -2.4), V2(RW - 11.5, 0)], 44, a0, L), j % 2 ? st : stD, 0, y, 0);                                    // the ledge
+          M(g, new THREE.LatheGeometry([V2(RW - 10.8, -2.4), V2(RW - 8.4, -2.4), V2(RW - 8.4, -4.4), V2(RW - 10.8, -4.4), V2(RW - 10.8, -2.4)], 44, a0, L), st, 0, y, 0);                                   // the beam its columns carry
+          M(g, new THREE.LatheGeometry([V2(RW - 11.6, 0), V2(RW - 11, 0), V2(RW - 11, 1.5), V2(RW - 11.6, 1.5), V2(RW - 11.6, 0)], 44, a0 + .05, L - .1), stD, 0, y, 0);                                      // a low kerb along its edge
+          for (let i = 0; i < nc; i++) { const ph = a0 + (i + .5) / nc * L, sx = Math.sin(ph), cz = Math.cos(ph); if (pr() < .14) continue;                                                              // a column gone here and there
+            k.C(.85, 1.05, hh, 6, st, sx * (RW - 9.6), y - 4.4 - hh / 2, cz * (RW - 9.6)); k.B(2.4, .7, 2.4, st, sx * (RW - 9.6), y - 4.4 - hh + .35, cz * (RW - 9.6), { ry: ph });
+            if (i % 3 === 1) { k.B(3.2, 7.4, 1.4, dark, sx * (RW + 1.6), y + 3.7, cz * (RW + 1.6), { ry: ph }); k.B(4.2, .8, 1.8, st, sx * (RW + 1.4), y + 7.8, cz * (RW + 1.4), { ry: ph });                 // a doorway into the rock behind,
+              if (pr() < .55) { NS(k.S(.5, win, sx * (RW - 1.5), y + 3.4, cz * (RW - 1.5))); k.C(.14, .14, 3, 4, band, sx * (RW - 1.5), y + 1.6, cz * (RW - 1.5)); torches.push([c[0] + sx * (RW - 1.5), gy + y + 3.6, c[1] + cz * (RW - 1.5)]); } } } }   // a torch still burning by some of them
+        // the hanging towers: each a great spire turned point-down, banded, windows alight. What is left of the cavern's roof is three ribs of living rock arching across the mouth of the shaft from rim to rim,
+        // and one tower hangs from the middle of each, with stalactites along the rib beside it. The south side is left open to look in by
+        const tower = (ang, dist, H, R) => { const sx = Math.sin(ang), cz = Math.cos(ang), x = sx * dist, z = cz * dist, dl = Math.acos(dist / (RW + 17)), end = a => { const ex = Math.sin(a) * (RW + 17), ez = Math.cos(a) * (RW + 17); return new THREE.Vector3(ex, gAt(c, ex, ez) - gy - 4, ez); };
+          const A = end(ang - dl), B = end(ang + dl), crv = new THREE.QuadraticBezierCurve3(A, new THREE.Vector3(x, 34, z), B), SG = 20, tg = new THREE.TubeGeometry(crv, SG, 1, 7, false), pa = tg.attributes.position, cc = new THREE.Vector3(), vv = new THREE.Vector3();
+          for (let i = 0; i <= SG; i++) { crv.getPointAt(i / SG, cc); const rr = (4 + 3.4 * Math.abs(i / SG - .5) * 2) * (.8 + .45 * pr()); for (let j = 0; j <= 7; j++) { const q = i * 8 + j; vv.fromBufferAttribute(pa, q).sub(cc).multiplyScalar(rr).add(cc); pa.setXYZ(q, vv.x, vv.y, vv.z); } }   // thick where it springs from the rim, thinner and lumpy over the drop
+          tg.computeVertexNormals(); M(g, tg, rk, 0, 0, 0); const y0 = crv.getPointAt(.5).y - 4;
+          M(g, new THREE.LatheGeometry([[.01, -H], [R * .16, -H * .93], [R * .34, -H * .78], [R * .5, -H * .6], [R * .72, -H * .38], [R * .9, -H * .16], [R, 0], [R * .8, 3], [R * .45, 6], [.01, 9]].map(p => V2(p[0], p[1])), 14), twr, x, y0, z);
+          for (const f of [.07, .26, .47, .68]) { const rr = R * (1 - f * .9) + .25; k.T(rr + .3, .5, band, x, y0 - H * f, z, { rx: Math.PI / 2 }); k.T(rr + .3, .3, band, x, y0 - H * (f + .14), z, { rx: Math.PI / 2 });
+            for (let i = 0; i < 8; i++) { const a = i * .785 + f * 3, r2 = R * (1 - (f + .07) * .9) + .3; NS(k.B(1.1, H * .05, .5, win, x + Math.sin(a) * r2, y0 - H * (f + .07), z + Math.cos(a) * r2, { ry: a })); } }
+          for (let i = 0; i < 9; i++) { const t = .1 + pr() * .8; if (Math.abs(t - .5) < .1) continue; const p = crv.getPointAt(t), hh = 6 + pr() * 18; k.K(1.1 + pr() * 1.5, hh, 5, rk, p.x, p.y - 3 - hh / 2, p.z, { rx: Math.PI }); }
+          torches.push([c[0] + x, gy + y0 - H * .3, c[1] + z]); };
+        tower(Math.PI + .2, 20, 170, 10); tower(2.0, 25, 120, 8); tower(-2.15, 24, 134, 8.5);
+        // the rim: a broken kerb of cut stone, and a slab standing out over the drop on the south-west with a pair of torches on it
+        for (let i = 0; i < 34; i++) { const a = i / 34 * 6.283, x = Math.sin(a) * (RW + 16), z = Math.cos(a) * (RW + 16), hh = 2 + pr() * 3; if (pr() < .3) continue; k.B(5.4, hh, 3.6, i % 2 ? st : stD, x, gAt(c, x, z) - gy + hh / 2 - .6, z, { ry: a, rz: (pr() - .5) * .16 }); }
+        { const a = -.62, sx = Math.sin(a), cz = Math.cos(a); const sy = gAt(c, sx * (RW + 14), cz * (RW + 14)) - gy; k.B(18, 3, 22, st, sx * (RW + 4), sy - 1, cz * (RW + 4), { ry: a }); for (const o of [-6.5, 6.5]) { const x = sx * (RW - 4) + cz * o, z = cz * (RW - 4) - sx * o; k.C(.2, .2, 4.4, 4, band, x, sy + 2.7, z); NS(k.S(.7, win, x, sy + 5.3, z)); torches.push([c[0] + x, gy + sy + 5.5, c[1] + z]); } }
+        // far below: the light, and two faint rings of it on the walls above
+        NS(k.C(24, 24, 1, 28, glowM(0xd6ffe4, 3.4), 0, fy + 5, 0)); for (const [yy, kq] of [[fy + 40, 1.2], [fy + 86, .6]]) NS(k.T(RW - 1, 1.2, glowM(0x9fffd0, kq), 0, yy, 0, { rx: Math.PI / 2 }));
+      }, { y: gy, hexes: [[11, 25]], top: 46, view: 560 });
+      for (const [n, y0, y1, al] of [[110, fy + 8, fy + 150, .16], [60, fy + 120, -30, .07]]) { const m9 = mist({ n, seed: 49 + n, r0: 6, r1: 34, y0, y1, spin: .12, rise: .035, size: 34, alpha: al, col: [.6, .95, .8], add: true }); m9.position.set(c[0], gy, c[1]); scene.add(m9); }
+      { const m = new THREE.Mesh(new THREE.CylinderGeometry(20, 9, 330, 18, 1, true), new THREE.ShaderMaterial({ transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+          vertexShader: 'varying vec2 vUv; varying vec3 vN, vV; void main(){ vUv = uv; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalMatrix * normal; vV = -mv.xyz; gl_Position = projectionMatrix * mv; }',
+          fragmentShader: 'varying vec2 vUv; varying vec3 vN, vV; void main(){ float rim = abs(dot(normalize(vN), normalize(vV))); gl_FragColor = vec4(vec3(0.35, 0.6, 1.0) * rim * rim * smoothstep(0.0, 0.5, vUv.y) * (1.0 - smoothstep(0.7, 1.0, vUv.y)) * 0.28, 1.0); }' }));
+        m.position.set(c[0], gy - 50, c[1]); m.raycast = () => {}; m.frustumCulled = false; scene.add(m); }                                                                                       // cold daylight falling in from above
+      { const pl = new THREE.PointLight(0xa8ffd6, 9000, 460, 1.5); pl.position.set(c[0], gy + fy + 70, c[1]); scene.add(pl); }                                                              // the light below reaches a long way up the walls
+      torches.forEach((p, i) => lanternPts.push([p[0], p[1], p[2], { c: [2.7, 1.3, .35], size: i % 4 ? 6 : 10, drift: .25, speed: .6 }]));
+      lanternPts.push([c[0], gy + fy + 14, c[1], { c: [1.6, 2.6, 1.9], size: 46, drift: .2, speed: .3 }]); }
 
     // Heapworks (8,34): a quarried pit heaped with clockwork gears, half-cut stone and broken timber, cranes standing over it on the rim
     { const c = Wp(HEAP), fl = 24 * S;
@@ -2436,7 +2467,7 @@ function buildProps() {
     // The Pillardrop (seven hexes): timber scaffolding climbs the chasm's ledges from the floor to the rim, with lit huts on the walkways, hoists on the rim running carts up and down, and small figures going about their work
     { const HX = [[6, 31], [6, 32], [7, 30], [7, 31], [8, 27], [9, 26], [9, 27]], a = CHASM.pts, n = a.length / 2, mi = n >> 1, mid = Wp([a[2 * mi], a[2 * mi + 1]]), BW = Wp(BR_P), decks = [], lifts = [], lit = glowM(0xffc878, 2.6);
       addThing('The Pillardrop', '🕳️', mid, 1, 30, g => {
-        for (let i = 2; i < n - 2; i += 2) { const px = a[2 * i] * S, pz = a[2 * i + 1] * S, tx0 = a[2 * i + 2] - a[2 * i - 2], tz0 = a[2 * i + 3] - a[2 * i - 1], tl = Math.hypot(tx0, tz0), tx = tx0 / tl, tz = tz0 / tl, ry = -Math.atan2(tz, tx); if (Math.hypot(px - BW[0], pz - BW[1]) < 90) continue;
+        for (let i = 2; i < n - 2; i += 1) { const px = a[2 * i] * S, pz = a[2 * i + 1] * S, tx0 = a[2 * i + 2] - a[2 * i - 2], tz0 = a[2 * i + 3] - a[2 * i - 1], tl = Math.hypot(tx0, tz0), tx = tx0 / tl, tz = tz0 / tl, ry = -Math.atan2(tz, tx); if (Math.hypot(px - BW[0], pz - BW[1]) < 90) continue;
           for (const sd of [-1, 1]) { const nx = -tz * sd, nz = tx * sd, hs = []; for (let d = 0; d <= 130; d += 2) hs.push(heightAt(px + nx * d, pz + nz * d));
             const runs = []; let st = 0; for (let j = 1; j < hs.length; j++) if (Math.abs(hs[j] - hs[j - 1]) > 5) { if (j - 1 - st >= 3) runs.push([st, j - 1]); st = j; } if (hs.length - 1 - st >= 3) runs.push([st, hs.length - 1]);   // the level runs along this line: the floor, each ledge, and the ground above
             if (runs.length < 3) continue;
@@ -2448,7 +2479,32 @@ function buildProps() {
                 NS(M(g, new THREE.BoxGeometry(2.2, 2.4, 6.3), lit, dx2 + tx * 8, yu + 3.6, dz2 + tz * 8, { ry })); decks.push([mid[0] + dx2, yu + 1, mid[1] + dz2, tx, tz]); } }
             if (sd > 0 && (i % 4) === 2) { const top = runs[runs.length - 1], dR = top[0] * 2 + 4, x = px + nx * dR - mid[0], z = pz + nz * dR - mid[1], yR = hs[top[0] + 2], wx = px + nx * (dR - 17), wz = pz + nz * (dR - 17);                          // a hoist on the rim
               M(g, new THREE.BoxGeometry(1.6, 16, 1.6), timber, x, yR + 8, z); M(g, new THREE.BoxGeometry(20, 1.4, 1.4), timber, x - nx * 8, yR + 15, z - nz * 8, { ry: -Math.atan2(nz, nx) }); lifts.push([wx, wz, heightAt(wx, wz) + 2.5, yR + 13]); } } }
+        // more on every ledge: a second stone front with its lit door, a cloth canopy over the hut, rail posts along the walkway, a ladder up to the next, a torch at each end
+        { const cloth = [solid(0xb8a888, .95), solid(0x9a3a2c, .9)], tor = glowM(0xffa040, 2.8);
+          decks.forEach(([wx, yy, wz, tx, tz], i) => { const x = wx - mid[0], z = wz - mid[1], ry = -Math.atan2(tz, tx), nx = -tz, nz = tx;
+            M(g, new THREE.BoxGeometry(6.4, 5.2, 5.6), LDK, x - tx * 8.5, yy + 2.6, z - tz * 8.5, { ry }); NS(M(g, new THREE.BoxGeometry(1.8, 3, 5.9), lit, x - tx * 8.5, yy + 1.9, z - tz * 8.5, { ry })); M(g, new THREE.BoxGeometry(7.2, .7, 6.4), LST, x - tx * 8.5, yy + 5.5, z - tz * 8.5, { ry });
+            M(g, new THREE.BoxGeometry(8.6, .3, 9.4), cloth[i % 2], x + tx * 8, yy + 7.3, z + tz * 8, { ry, rx: .12 });
+            for (let u = -12; u <= 12; u += 4) for (const sd of [-1, 1]) M(g, new THREE.BoxGeometry(.45, 3, .45), timber, x + tx * u + nx * sd * 3.8, yy + 1.5, z + tz * u + nz * sd * 3.8);
+            for (const sd of [-.5, .5]) M(g, new THREE.BoxGeometry(.3, 15, .3), timber, x + tx * (1 + sd * 2.4), yy + 7.5, z + tz * (1 + sd * 2.4)); for (let q = 0; q < 7; q++) M(g, new THREE.BoxGeometry(1.5, .25, .25), timber, x + tx, yy + 1.5 + q * 2, z + tz, { ry });
+            for (const e of [-12.5, 12.5]) { M(g, new THREE.BoxGeometry(.3, 4, .3), timber, x + tx * e, yy + 2, z + tz * e); NS(M(g, new THREE.SphereGeometry(.55, 6, 5), tor, x + tx * e, yy + 4.4, z + tz * e)); lanternPts.push([wx + tx * e, yy + 4.6, wz + tz * e, { c: [2.7, 1.4, .4], size: 6, drift: .3, speed: .6 }]); } }); }
+        // the lookout: a timber deck standing out over the drop from the rim, braced back to the cliff, railed on three sides; robed figures on it, and two ghosts - one the colour of flame, one of ice
+        { const tx0 = a[2 * mi + 2] - a[2 * mi - 2], tz0 = a[2 * mi + 3] - a[2 * mi - 1], tl = Math.hypot(tx0, tz0), tx = tx0 / tl, tz = tz0 / tl, nx = -tz, nz = tx, ry = -Math.atan2(tz, tx), hAt = d => heightAt(mid[0] + nx * d, mid[1] + nz * d), top = hAt(150); let dR = 150; while (dR > 20 && hAt(dR - 2) > top - 4) dR -= 2;
+          const px = nx * (dR - 9), pz = nz * (dR - 9), yD = top + 1; M(g, new THREE.BoxGeometry(30, .8, 22), timber, px, yD, pz, { ry });
+          for (let u = -14; u <= 14; u += 4) M(g, new THREE.BoxGeometry(.35, .2, 22), LDK, px + tx * u, yD + .5, pz + tz * u, { ry });                                                                                       // its planking
+          for (const u of [-13, 0, 13]) { M(g, new THREE.BoxGeometry(1.1, 34, 1.1), timber, px + tx * u - nx * 9, yD - 17, pz + tz * u - nz * 9); M(g, new THREE.BoxGeometry(1, 30, 1), timber, px + tx * u - nx * 1.5, yD - 12, pz + tz * u - nz * 1.5, { ry, rx: -.62 }); M(g, new THREE.BoxGeometry(1, 1, 20), timber, px + tx * u, yD - 1, pz + tz * u, { ry }); }
+          for (let u = -14; u <= 14; u += 4) { M(g, new THREE.BoxGeometry(.6, 4.2, .6), timber, px + tx * u - nx * 10.6, yD + 2.3, pz + tz * u - nz * 10.6); } for (const u of [-14.6, 14.6]) for (let v = -10; v <= 6; v += 4) M(g, new THREE.BoxGeometry(.6, 4.2, .6), timber, px + tx * u + nx * v, yD + 2.3, pz + tz * u + nz * v);
+          M(g, new THREE.BoxGeometry(30, .5, .5), timber, px - nx * 10.6, yD + 4.2, pz - nz * 10.6, { ry }); for (const u of [-14.6, 14.6]) M(g, new THREE.BoxGeometry(.5, .5, 18), timber, px + tx * u - nx * 2, yD + 4.2, pz + tz * u - nz * 2, { ry });
+          const robe = solid(0x2b2630, .9); for (let i = 0; i < 8; i++) { const u = -11 + lr() * 22, v = -6 + lr() * 12; M(g, new THREE.CylinderGeometry(.25, 1.25, 4.6, 7), robe, px + tx * u + nx * v, yD + 2.7, pz + tz * u + nz * v); M(g, new THREE.SphereGeometry(.62, 7, 5), robe, px + tx * u + nx * v, yD + 5.4, pz + tz * u + nz * v); }
+          for (const [u, v, col] of [[-3, -5, [1.7, .7, .12]], [5, -6, [.45, .85, 1.7]]]) { const gm = new THREE.MeshBasicMaterial({ color: new THREE.Color(col[0], col[1], col[2]), transparent: true, opacity: .55, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide }), gh = M(g, ghostGeo, gm, px + tx * u + nx * v, yD + .6, pz + tz * u + nz * v, { sx: .6, sy: .6, sz: .6 }); gh.userData.keepSep = 1; gh.userData.noShadow = true; gh.raycast = () => {};
+            lanternPts.push([mid[0] + px + tx * u + nx * v, yD + 6, mid[1] + pz + tz * u + nz * v, { c: col.map(q => q * 1.5), size: 16, drift: .2, speed: .5 }]); } }
       }, { y: 0, hexes: HX, top: 90, view: 900 });
+      // shafts of light slanting down into it, mist lying in the depths, and something blue glimmering a long way down
+      { const rayM = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+          vertexShader: 'varying vec2 vUv; varying vec3 vN, vV; void main(){ vUv = uv; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalMatrix * normal; vV = -mv.xyz; gl_Position = projectionMatrix * mv; }',
+          fragmentShader: 'varying vec2 vUv; varying vec3 vN, vV; void main(){ float rim = abs(dot(normalize(vN), normalize(vV))); gl_FragColor = vec4(vec3(1.0, 0.88, 0.62) * rim * rim * smoothstep(0.0, 0.25, vUv.y) * (1.0 - smoothstep(0.55, 1.0, vUv.y)) * 0.16, 1.0); }' });
+        for (let q = 1; q <= 5; q++) { const i = Math.round(n * q / 6), x = a[2 * i] * S, z = a[2 * i + 1] * S, fl = heightAt(x, z); const m = new THREE.Mesh(new THREE.CylinderGeometry(16, 34, 520, 16, 1, true), rayM); m.position.set(x - 70, fl + 230, z - 30); m.rotation.set(.12, 0, -.3); m.raycast = () => {}; m.frustumCulled = false; scene.add(m);
+          const mm = mist({ n: 90, seed: 300 + q, r0: 10, r1: 64, y0: 2, y1: 46, spin: .05, rise: .03, size: 36, alpha: .1, col: [.78, .8, .88] }); mm.position.set(x, fl, z); scene.add(mm);
+          if (q === 3) lanternPts.push([x, fl + 6, z, { c: [.5, 1.2, 2.8], size: 26, drift: 3, speed: .25 }]); } }
       const cartG = new THREE.BoxGeometry(5, 3.4, 4), carts = lifts.map(([x, z, yA, yB]) => { const m = new THREE.Mesh(cartG, timber); m.raycast = () => {}; scene.add(m); const rope = new THREE.Mesh(new THREE.BoxGeometry(.3, yB - yA, .3), ironM); rope.position.set(x, (yA + yB) / 2, z); rope.raycast = () => {}; scene.add(rope); return m; });
       anim.push(t => { lifts.forEach(([x, z, yA, yB], i) => { carts[i].position.set(x, lerp(yA, yB - 3, .5 - .5 * Math.cos(t * .35 + i * 1.7)), z); }); });
       if (decks.length) { const NF = Math.min(90, decks.length * 2), fig = new THREE.InstancedMesh(new THREE.BoxGeometry(1.1, 3, 1.1), solid(0x3a2c22, .9), NF); fig.frustumCulled = false; fig.raycast = () => {}; scene.add(fig);
@@ -2823,7 +2879,7 @@ function buildProps() {
           const a = ev.rng() * 6.283; ev.tgt.set(Math.cos(a), (ev.rng() - .5) * .5, Math.sin(a)).addScaledVector(nV, .9).normalize(); if (ev.tgt.dot(nV) < .3) ev.tgt.addScaledVector(nV, .6).normalize(); }   // ...and away on some new heading
         if (low) { ev.dir.y = Math.abs(ev.dir.y); ev.tgt.y = Math.abs(ev.tgt.y) + .15; ev.tgt.normalize(); }                                                 // it keeps above the hilltops
         ev.t += DT; };
-      anim.push((t, dt) => { const now = Date.now() / 1000 + (window.__eagleOff || 0), idx = Math.floor(now / 180), e = now - idx * 180, on = e < 13, hold = sstep(0, .9, e) * (1 - sstep(11, 13, e)), flash = Math.exp(-Math.pow((e - 1.1) / .3, 2));
+      anim.push((t, dt) => { const now = (window.__clock ? window.__clock() : Date.now() / 1000) + (window.__eagleOff || 0), idx = Math.floor(now / 180), e = now - idx * 180, on = e < 13, hold = sstep(0, .9, e) * (1 - sstep(11, 13, e)), flash = Math.exp(-Math.pow((e - 1.1) / .3, 2));
         beams.forEach((m, i) => { const sg = Math.sin(t * (.23 + .05 * (i % 5)) + i * 1.9) + Math.sin(t * (.61 + .03 * (i % 7)) + i * .7), own = sstep(.2, .45, sg), lit = Math.max(own, hold);
           const fl = lit > .02 && lit < .98 ? .45 + .55 * Math.abs(Math.sin(t * 31 + i * 2.3)) : 1, th = 1 + 2.2 * flash + .5 * hold; m.visible = lit > .02; m.material.opacity = Math.min(1, lit * fl * (.5 + .3 * hold + .5 * flash)); m.scale.set(th, 1, th); });
         tipsM.forEach((m, i) => { m.material.emissiveIntensity = 2.2 + 1.6 * hold + 6 * flash + .5 * Math.sin(t * 3 + i); m.scale.setScalar(1 + .18 * hold + .55 * flash); });
@@ -4297,11 +4353,41 @@ setTimeout(async () => {
   window.__sx = { THREE, camera, controls, flyTo, heightAt, renderer, scene, U, stats, things, movers, quality: Q, pick, targetAt, terrainMesh, ray, hexOwner, select, setHover, composer, updateLabels };
   const clock = new THREE.Clock(); let acc = 0, frames = 0;
   const fwd = new THREE.Vector3(), right = new THREE.Vector3(), mv = new THREE.Vector3();
-  (function frame() {
-    requestAnimationFrame(frame);
-    const raw = clock.getDelta(), dt = Math.min(raw, .1); U.uTime.value += dt; if (window.__times.frames.length < 60) window.__times.frames.push(Math.round(raw * 1000));
-    if (!document.hidden && raw < .25 && U.uTime.value > 7) Q.feed(raw, performance.now() / 1000);
-    if (fly) { fly.t = Math.min(1, fly.t + dt / fly.dur); const k = fly.t < .5 ? 4 * fly.t ** 3 : 1 - Math.pow(-2 * fly.t + 2, 3) / 2;
+  // ---- the tour: a slow flight past every place on the map in turn, each seen from the south as the camera swings across its front. Adding ?tour to the address plays it;
+  // ?tour=record also films it and saves the film when it ends. Esc stops it. The route goes each time to the nearest place not yet seen
+  const tour = { on: false, t: 0, i: 0, dur: 0, keys: null, order: null }; let rec = null;
+  const buildTour = () => { const left = new Set(things), order = []; let cur = things.find(t => t.name === 'Biblioplex') || things[0];
+    while (cur) { order.push(cur); left.delete(cur); let best = null, bd = 1e18; for (const t of left) { const d = (t.x - cur.x) ** 2 + (t.z - cur.z) ** 2; if (d < bd) { bd = d; best = t; } } cur = best; }
+    const K = [], el = .5, key = (time, p, g, name) => K.push({ time, p, g, name }); let time = 0; key(0, HOME_POS.clone(), HOME_TGT.clone()); time += 3.5; key(time, HOME_POS.clone().multiplyScalar(.8), HOME_TGT.clone());
+    order.forEach((t, i) => { const gy = Math.max(heightAt(t.x, t.z), 0), hgt = clamp(t.labelY - gy, 20, 260), g = new THREE.Vector3(t.x, gy + hgt * .32, t.z), ext = t.hexes.reduce((m, h) => Math.max(m, Math.hypot(h.x - t.x, h.z - t.z)), 0);
+      const d = Math.max(clamp(t.view * .6, 170, 540) + hgt * .5, ext * 1.5 + 150), dir = i % 2 ? 1 : -1, last = K[K.length - 1]; let el = /Pillardrop 492|Sinkhole/.test(t.name) ? 1.05 : .5;   // far enough back to take in a place that covers several hexes; a hole in the ground is looked into from higher up
+      const raw = az => new THREE.Vector3(g.x + Math.sin(az) * Math.cos(el) * d, g.y + Math.sin(el) * d, g.z + Math.cos(az) * Math.cos(el) * d);
+      const clear = p => { for (let q = 1; q < 12; q++) { const f = q / 14; if (lerp(p.y, g.y, f) < heightAt(lerp(p.x, g.x, f), lerp(p.z, g.z, f)) + 8) return false; } return true; };
+      while (el < 1.2 && ![-.42, 0, .42].every(a => clear(raw(a * dir)))) el += .1;                                                                                       // and lifted until no hill stands between the camera and the place
+      const at = az => { const p = raw(az); p.y = Math.max(p.y, heightAt(p.x, p.z) + 30); return p; };
+      const p0 = at(-.42 * dir), hop = last.p.distanceTo(p0);
+      if (hop > 260) { const mid = last.p.clone().lerp(p0, .5), mg = last.g.clone().lerp(g, .5), tt = clamp(hop / 680, .8, 2.4); mid.y = Math.max(last.p.y, p0.y, heightAt(mid.x, mid.z) + 60) + clamp(hop * .22, 40, 240); time += tt; key(time, mid, mg); time += tt; }   // a long hop goes up and over, not through what lies between
+      else time += clamp(hop / 340, 1.1, 4.5);
+      key(time, p0, g, t.name); time += 1.7; key(time, at(0), g); time += 1.7; key(time, at(.42 * dir), g); });
+    time += 4; key(time, HOME_POS.clone(), HOME_TGT.clone());
+    for (let i = 0; i < K.length; i++) { const a = K[Math.max(i - 1, 0)], b = K[Math.min(i + 1, K.length - 1)], dt = Math.max(b.time - a.time, 1e-3); K[i].mp = b.p.clone().sub(a.p).divideScalar(dt); K[i].mg = b.g.clone().sub(a.g).divideScalar(dt); }   // the speed through each point, so the flight never stops and starts
+    tour.keys = K; tour.dur = time; tour.order = order; };
+  const hm = (a, ma, b, mb, dt, u, out) => { const u2 = u * u, u3 = u2 * u; return out.copy(a).multiplyScalar(2 * u3 - 3 * u2 + 1).addScaledVector(ma, (u3 - 2 * u2 + u) * dt).addScaledVector(b, -2 * u3 + 3 * u2).addScaledVector(mb, (u3 - u2) * dt); };
+  const tourAt = time => { const K = tour.keys; let i = tour.i; if (i >= K.length - 1 || K[i].time > time) i = 0; while (i + 2 < K.length && K[i + 1].time <= time) i++; tour.i = i;
+    const a = K[i], b = K[i + 1], dt = b.time - a.time, u = clamp((time - a.time) / dt, 0, 1); hm(a.p, a.mp, b.p, b.mp, dt, u, camera.position); hm(a.g, a.mg, b.g, b.mg, dt, u, controls.target);
+    const fl = heightAt(camera.position.x, camera.position.z) + 24; if (camera.position.y < fl) camera.position.y = fl; camera.lookAt(controls.target); };
+  const endTour = () => { if (!tour.on) return; tour.on = false; controls.enabled = true; document.body.classList.remove('touring'); if (rec && rec.state !== 'inactive') rec.stop(); glide(HOME_POS.clone(), HOME_TGT.clone(), 2); };
+  const startTour = record => { if (!tour.keys) buildTour(); tour.t = 0; tour.i = 0; tour.on = true; fly = null; controls.enabled = false; setHover(null); document.body.classList.add('touring');
+    if (record && window.MediaRecorder) { const type = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m)), chunks = []; rec = new MediaRecorder(canvas.captureStream(60), { mimeType: type, videoBitsPerSecond: 16e6 });
+      rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); }; rec.onstop = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(chunks, { type: 'video/webm' })); a.download = 'strixhaven-flythrough.webm'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 60000); rec = null; }; rec.start(1000); } };
+  addEventListener('keydown', e => { if (e.key === 'Escape' && tour.on) endTour(); });
+  if (params.has('tour')) setTimeout(() => startTour(params.get('tour') === 'record'), 4500);   // once the map has opened
+  window.__tour = { tour, build: buildTour, at: tourAt, start: startTour, end: endTour };
+  const step = fixed => {
+    const raw = fixed ?? clock.getDelta(), dt = Math.min(raw, .1); U.uTime.value += dt; if (window.__times.frames.length < 60) window.__times.frames.push(Math.round(raw * 1000));
+    if (fixed === undefined && !tour.on && !document.hidden && raw < .25 && U.uTime.value > 7) Q.feed(raw, performance.now() / 1000);
+    if (tour.on) { tour.t += dt; tourAt(tour.t); if (tour.t >= tour.dur) endTour(); }
+    else if (fly) { fly.t = Math.min(1, fly.t + dt / fly.dur); const k = fly.t < .5 ? 4 * fly.t ** 3 : 1 - Math.pow(-2 * fly.t + 2, 3) / 2;
       camera.position.lerpVectors(fly.p0, fly.p1, k); controls.target.lerpVectors(fly.t0, fly.t1, k); camera.lookAt(controls.target);
       if (fly.t >= 1) { fly = null; controls.enabled = true; } }
     else {
@@ -4319,18 +4405,19 @@ setTimeout(async () => {
     const floor = heightAt(camera.position.x, camera.position.z) + 12; if (camera.position.y < floor) camera.position.y = floor;
     camera.updateMatrixWorld();
     // hover follows the cursor every frame, so it stays right while the camera moves under a still mouse
-    if (!mouse.inside) setHover(null); else if (!mouse.buttons && !fly) setHover(targetAt(mouse.x, mouse.y));
+    if (!mouse.inside) setHover(null); else if (!mouse.buttons && !fly && !tour.on) setHover(targetAt(mouse.x, mouse.y));
     const cd = camera.position.distanceTo(controls.target);
     scene.fog.near = cd * .9 + 1200; scene.fog.far = scene.fog.near + 15000;
     sky.position.copy(camera.position);
     for (const f of anim) f(U.uTime.value, dt);
     for (const sp of spin) { sp.o.rotation.y += sp.speed * dt; if (sp.bolt) { const t = U.uTime.value; sp.o.material.emissiveIntensity = Math.sin(t * 37) + Math.sin(t * 61.7) > .7 ? 5 : 1.8; } }
-    FXSCALE.value = innerHeight * renderer.getPixelRatio() / (2 * Math.tan(camera.fov * Math.PI / 360));
+    FXSCALE.value = renderer.domElement.height / (2 * Math.tan(camera.fov * Math.PI / 360));
     updateSmoke(dt); updateLabels(cd);
     renderer.info.reset(); composer.render();
     acc += dt; frames++;
     if (acc >= .5) { document.getElementById('fps').textContent = (frames / acc).toFixed(0) + ' fps' + (rscale < 1 ? ' @ ' + Math.round(rscale * 100) + '% res' : ''); document.getElementById('tris').textContent = (renderer.info.render.triangles / 1e6).toFixed(2) + 'M'; document.getElementById('calls').textContent = renderer.info.render.calls; acc = 0; frames = 0; }
-  })();
+  };
+  window.__step = step; (function loop() { requestAnimationFrame(loop); if (!window.__capture) step(); })();   // __capture and __step let the map be advanced a frame at a time, for filming it
 }, 60);
 </script>
 </body>
