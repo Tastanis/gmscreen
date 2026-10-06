@@ -42,7 +42,13 @@ require_once '../../includes/strix-nav.php';
   #panel button:hover, #panel .btn:hover { color: #f0d68a; background: linear-gradient(180deg, #4a4335 0%, #322a1f 45%, #1d1811 100%); box-shadow: inset 0 0 0 1px #000, inset 0 0 0 2px #a8853e; }
   #panel #pClose { position: absolute; right: 12px; top: 12px; padding: 2px 9px; font-size: 15px; }
   #pImgWrap { margin: 10px 0 8px; background: #0b0907; min-height: 96px; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 0 0 1px #000, inset 0 0 0 2px #3c3122; padding: 3px; }
-  #pImg { display: none; width: 100%; height: auto; max-height: 270px; object-fit: contain; }
+  #pImg { display: none; width: 100%; height: auto; max-height: 270px; object-fit: contain; cursor: zoom-in; }
+  #imgBig { position: fixed; inset: 0; z-index: 100000; display: none; align-items: center; justify-content: center; background: rgba(6, 5, 4, .9); cursor: zoom-out; }
+  #imgBig.on { display: flex; }
+  #imgBig img { max-width: 94vw; max-height: 92vh; object-fit: contain; box-shadow: 0 0 0 1px #000, 0 0 0 3px #6e5a33, 0 0 0 4px #000, 0 20px 80px rgba(0,0,0,.9); background: #0b0907; }
+  #imgBig .nav { position: absolute; top: 50%; transform: translateY(-50%); font: 600 44px 'Cinzel', Georgia, serif; color: #c8a95e; background: none; border: 0; padding: 20px 26px; cursor: pointer; text-shadow: 0 2px 8px #000; }
+  #imgBig .nav:hover { color: #f0d68a; } #imgBigPrev { left: 8px; } #imgBigNext { right: 8px; }
+  #imgBigCount { position: absolute; bottom: 14px; left: 0; right: 0; text-align: center; color: #b8b0a2; font: 13px 'Palatino Linotype', Georgia, serif; text-shadow: 0 1px 4px #000; }
   #pNoImg { color: #665f51; font-style: italic; padding: 28px 10px; text-align: center; }
   #panel textarea, #panel input[type=text] { width: 100%; box-sizing: border-box; background: #0d0b08; color: #cfc6b4; border: 1px solid #3c3122; font: 13px/1.5 'Palatino Linotype', 'Book Antiqua', Georgia, serif; padding: 7px 8px; resize: vertical; outline: none; }
   #panel textarea:focus, #panel input[type=text]:focus { border-color: #a8853e; }
@@ -60,7 +66,7 @@ require_once '../../includes/strix-nav.php';
   #pathTotal { color: #f0d68a; margin-left: 8px; font-variant-numeric: tabular-nums; } #pathMsg { color: #cfc6b4; text-shadow: 0 1px 3px #000, 0 0 6px #000; min-height: 18px; }
   #pathNote { width: 220px; background: #0d0b08; color: #cfc6b4; border: 1px solid #3c3122; font: inherit; padding: 6px 8px; outline: none; }
   #pathDiff .sep { margin: 0 2px 0 10px; color: #8d8474; } #pathDiff button[data-diff=fast].on { color: #7dffac; } #pathDiff button[data-diff=yellow].on { color: #ffe86a; } #pathDiff button[data-diff=red].on { color: #ff7a6a; }
-  body.touring .strix-mini-nav, body.touring #pathBar, body.touring #panel, body.touring #tip { display: none !important; }
+  body.touring .strix-mini-nav, body.touring #pathBar, body.touring #panel, body.touring #tip, body.touring #imgBig { display: none !important; }
   #tip { position: fixed; left: 0; top: 0; display: none; pointer-events: none; background: rgba(14,16,20,.9); border: 1px solid #d8c48a; border-radius: 5px; padding: 3px 8px; font-size: 12px; white-space: nowrap; z-index: 5; }
   #labels { display: none; position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
   .lbl { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); text-align: center; pointer-events: auto; cursor: pointer; white-space: nowrap; transition: opacity .25s; text-shadow: 0 1px 3px #000, 0 0 6px #000; font-size: 12px; font-weight: 600; }
@@ -129,6 +135,7 @@ require_once '../../includes/strix-nav.php';
     <button id="pathUndo">Undo</button><button id="pathClear">Clear all</button><span id="pathTotal"></span></div>
   <button id="pathToggle">Player path</button>
 </div>
+<div id="imgBig"><button class="nav" id="imgBigPrev" title="Previous image">&lsaquo;</button><img id="imgBigImg" alt=""><button class="nav" id="imgBigNext" title="Next image">&rsaquo;</button><div id="imgBigCount"></div></div>
 <div id="tip"></div>
 <div id="loading">Loading 3D engine&hellip;</div>
 
@@ -685,6 +692,7 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap; renderer.shadowMap.autoUpdate = false;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
 renderer.info.autoReset = false;
+canvas.addEventListener('webglcontextrestored', () => location.reload());   // the page lets go of its copies of the ground once the card has them, so a card that has lost everything is answered by loading again
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 5, 90000);
 const HOME_POS = new THREE.Vector3(0, 3300 * S, 3000 * S), HOME_TGT = new THREE.Vector3(0, 15 * S, -80 * S);
@@ -886,7 +894,7 @@ terrainMat.onBeforeCompile = sh => {
 };
 
 // ------------------------------------------------------------------ build terrain (world units = design units x S)
-let H, HMAX = 0, terrainMesh;   // height grid
+let H, HMAX = 0, terrainMesh;   // height grid, and the ground itself
 const SKIRT = -40 * S;
 function heightAt(x, z) {
   const fx = (x + MAP_W / 2) / DX, fz = (z + MAP_D / 2) / DZ;
@@ -897,11 +905,17 @@ function heightAt(x, z) {
 const weightsW = (x, z) => weights(x / S, z / S);
 const terrainCache = { key: null, db: null, fresh: null,
   open() { return new Promise(res => { try { const rq = indexedDB.open('strixhaven3d', 1); rq.onupgradeneeded = () => rq.result.createObjectStore('terrain'); rq.onsuccess = () => res(rq.result); rq.onerror = rq.onblocked = () => res(null); } catch (e) { res(null); } }); },
-  async get() { try { const src = [...document.scripts].map(sc => sc.textContent).join(''); let h = 2166136261; for (let i = 0; i < src.length; i++) { h ^= src.charCodeAt(i); h = Math.imul(h, 16777619); } this.key = 'v' + (h >>> 0) + '-' + src.length;      // the key is a fingerprint of the code, so any change to it throws the old terrain out
+  async get() { try { const all = [...document.scripts].map(sc => sc.textContent).join(''), sec = (a, b) => { const i = all.search(a), j = all.search(b); return i >= 0 && j > i ? all.slice(i, j) : all; };
+      // the key is a fingerprint of the parts of the code the ground is made from (the sculpting, the hex arithmetic it leans on, and the building of it here), so a change to anything else leaves the kept ground good
+      const src = sec(/\/\/ -{20,} constants/, /\/\/ -{20,} renderer \/ scene/) + sec(/\/\/ -{20,} build terrain/, /\/\/ -{20,} water/) + sec(/\/\/ -{20,} hex helpers/, /\/\/ -{20,} things:/);
+      let h = 2166136261; for (let i = 0; i < src.length; i++) { h ^= src.charCodeAt(i); h = Math.imul(h, 16777619); } this.key = 'w' + (h >>> 0) + '-' + src.length + '-' + NX;
       this.db = await this.open(); if (!this.db) return null; const hit = await new Promise(res => { const rq = this.db.transaction('terrain').objectStore('terrain').get(this.key); rq.onsuccess = () => res(rq.result || null); rq.onerror = () => res(null); }); return hit && hit.H && hit.H.length === NX * NZ ? hit : null; } catch (e) { return null; } },
   put() { try { if (!this.db || !this.fresh) return; const st = this.db.transaction('terrain', 'readwrite').objectStore('terrain'); st.clear(); st.put(this.fresh, this.key); this.fresh = null; } catch (e) {} } };
 function buildTerrain(cache) {
-  const N = NX * NZ; H = cache ? cache.H : new Float32Array(N);
+  const N = NX * NZ;
+  // a kept ground is tried against the sculpting at a scatter of points before it is trusted: if anything has moved, it is made again
+  if (cache) check: for (let j = 5; j < NZ; j += 16) for (let i = 5; i < NX; i += 16) { const x = -MAP_W / 2 + i * DX, z = -MAP_D / 2 + j * DZ; sample(x / S, z / S); if (Math.abs(O.h * S + 1.2 * O.ka * fbm(x / 22, z / 22, 2) - cache.H[j * NX + i]) > .002) { cache = null; break check; } }
+  H = cache ? cache.H : new Float32Array(N);
   const pos = new Float32Array(N * 3), col = cache ? cache.col : new Float32Array(N * 3), rock = new Float32Array(cache ? 4 : N * 4), mat = cache ? cache.mat : new Float32Array(N * 4), nor = cache ? cache.nor : new Float32Array(N * 3);
   if (cache) { HMAX = cache.hmax; for (let j = 0, k = 0; j < NZ; j++) for (let i = 0; i < NX; i++, k++) { pos[k * 3] = -MAP_W / 2 + i * DX; pos[k * 3 + 1] = H[k]; pos[k * 3 + 2] = -MAP_D / 2 + j * DZ; } } else {
   for (let j = 0, k = 0; j < NZ; j++) for (let i = 0; i < NX; i++, k++) {
@@ -922,13 +936,19 @@ function buildTerrain(cache) {
     mat[k * 4 + 2] = lerp(mat[k * 4 + 2], Math.max(mat[k * 4 + 2], .8), rk * .5);
   }
   terrainCache.fresh = { H, col, mat, nor, hmax: HMAX }; }
-  const idx = new Uint32Array((NX - 1) * (NZ - 1) * 6);
-  for (let j = 0, q = 0; j < NZ - 1; j++) for (let i = 0; i < NX - 1; i++) { const a = j * NX + i, b = a + 1, c = a + NX, d = c + 1; idx[q++] = a; idx[q++] = c; idx[q++] = b; idx[q++] = b; idx[q++] = c; idx[q++] = d; }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
-  geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.setAttribute('aMat', new THREE.BufferAttribute(mat, 4));
-  geo.setIndex(new THREE.BufferAttribute(idx, 1)); geo.computeBoundingSphere(); geo.computeBoundingBox();
-  terrainMesh = new THREE.Mesh(geo, terrainMat); terrainMesh.castShadow = true; terrainMesh.receiveShadow = true; scene.add(terrainMesh);
+  // The ground is one sheet of points cut into square tiles, so that the tiles out of sight are not drawn at all. Every tile is always drawn in full: nothing is made coarser
+  // with distance and nothing is loaded while moving about. The page's own copies are let go once the card has them (heightAt and the picking ray read the height grid, not these)
+  const CH = 160, TXN = Math.ceil((NX - 1) / CH), TZN = Math.ceil((NZ - 1) / CH), idx = new Uint32Array((NX - 1) * (NZ - 1) * 6), spans = []; let q = 0;
+  for (let tz = 0; tz < TZN; tz++) for (let tx = 0; tx < TXN; tx++) { const i0 = tx * CH, i1 = Math.min(i0 + CH, NX - 1), j0 = tz * CH, j1 = Math.min(j0 + CH, NZ - 1), start = q; let lo = 1e9, hi = -1e9;
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const h = H[j * NX + i]; if (h < lo) lo = h; if (h > hi) hi = h; }
+    for (let j = j0; j < j1; j++) for (let i = i0; i < i1; i++) { const a = j * NX + i, b = a + 1, c = a + NX, d = c + 1; idx[q++] = a; idx[q++] = c; idx[q++] = b; idx[q++] = b; idx[q++] = c; idx[q++] = d; }
+    spans.push({ start, count: q - start, box: new THREE.Box3(new THREE.Vector3(-MAP_W / 2 + i0 * DX, lo, -MAP_D / 2 + j0 * DZ), new THREE.Vector3(-MAP_W / 2 + i1 * DX, hi, -MAP_D / 2 + j1 * DZ)) }); }
+  const once = (arr, n) => new THREE.BufferAttribute(arr, n).onUpload(function () { this.array = null; }), aP = once(pos, 3), aN = once(nor, 3), aC = once(col, 3), aM = once(mat, 4), aI = once(idx, 1);
+  terrainMesh = new THREE.Group();
+  for (const sp of spans) { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', aP); geo.setAttribute('normal', aN); geo.setAttribute('color', aC); geo.setAttribute('aMat', aM); geo.setIndex(aI); geo.setDrawRange(sp.start, sp.count);
+    geo.boundingBox = sp.box; geo.boundingSphere = sp.box.getBoundingSphere(new THREE.Sphere());
+    const m = new THREE.Mesh(geo, terrainMat); m.castShadow = true; m.receiveShadow = true; m.matrixAutoUpdate = false; m.raycast = () => {}; terrainMesh.add(m); }
+  scene.add(terrainMesh);
 
   // slab sides so the map reads as a physical model sitting on a table
   const sv = []; const push = (x, z, y) => sv.push(x, y, z);
@@ -942,6 +962,7 @@ function buildTerrain(cache) {
   const hole = new THREE.Path(); hole.moveTo(-MAP_W / 2, -MAP_D / 2); hole.lineTo(-MAP_W / 2, MAP_D / 2); hole.lineTo(MAP_W / 2, MAP_D / 2); hole.lineTo(MAP_W / 2, -MAP_D / 2); hole.closePath(); shape.holes.push(hole);
   const table = new THREE.Mesh(new THREE.ShapeGeometry(shape), new THREE.MeshStandardMaterial({ color: 0x14161b, roughness: .9, side: THREE.DoubleSide }));
   table.rotation.x = -Math.PI / 2; table.position.y = SKIRT; table.receiveShadow = true; scene.add(table);
+  return !!cache;
 }
 
 // ------------------------------------------------------------------ water
@@ -4154,6 +4175,11 @@ for (const id of FIELDS) { $(id).addEventListener('focus', claim); $(id).addEven
 $('pSave').onclick = async () => { const mine = cur; if (!mine || !mine.data || mine.saving) return; if (mine.blocked) { $('pStatus').textContent = 'Somebody else is editing this'; return; } const revision = mine.editRevision || 0; mine.saving = true; mine.reloadRequest = (mine.reloadRequest || 0) + 1; $('pStatus').textContent = 'Saving…'; const f = { q: mine.q, r: mine.r, player_notes: pNotes.value }; if (role.gm) { f.gm_notes = pGm.value; f.gm_title = $('pGmTitle').value; f.player_title = $('pPlTitle').value; }
   try { const d = await hexApi('save_all', f); if (cur !== mine) return; if (d.success) { if (d.data) mine.data = d.data; if ((mine.editRevision || 0) === revision) { mine.dirty = false; release(mine); render(); $('pStatus').textContent = 'Saved'; } else $('pStatus').textContent = 'Not saved yet'; } else $('pStatus').textContent = d.error || 'Not saved'; } catch (e) { if (cur === mine) $('pStatus').textContent = 'Not saved'; } finally { mine.saving = false; } };
 $('pReveal').onclick = async () => { const mine = cur; if (!mine || !role.gm || !mine.data) return; try { await hexApi($('pReveal').dataset.shared ? 'unshare_gm_images' : 'share_gm_images', { q: mine.q, r: mine.r }); await reload(mine); } catch (e) { if (cur === mine) $('pStatus').textContent = 'Could not change that'; } };
+// the image, large: clicking the picture in the panel fills the window with it; a click anywhere or Esc puts it away. With more than one image the arrows (or the arrow keys) step through them
+const bigShow = () => { const list = imgList(), big = $('imgBig'); if (!cur || !list.length || !$('pImg').getAttribute('src')) return; $('imgBigImg').src = $('pImg').src; const many = list.length > 1; $('imgBigPrev').style.display = $('imgBigNext').style.display = many ? '' : 'none'; $('imgBigCount').textContent = many ? (cur.i + 1) + ' / ' + list.length : ''; big.classList.add('on'); };
+const bigHide = () => $('imgBig').classList.remove('on'), bigStep = d => { if (!cur) return; const n = imgList().length; if (n < 2) return; cur.i = (cur.i + d + n) % n; render(); bigShow(); };
+$('pImg').onclick = bigShow; $('imgBig').onclick = bigHide; $('imgBigPrev').onclick = e => { e.stopPropagation(); bigStep(-1); }; $('imgBigNext').onclick = e => { e.stopPropagation(); bigStep(1); };
+addEventListener('keydown', e => { if (!$('imgBig').classList.contains('on')) return; if (e.key === 'Escape') bigHide(); else if (e.key === 'ArrowLeft') bigStep(-1); else if (e.key === 'ArrowRight') bigStep(1); else return; e.stopImmediatePropagation(); e.preventDefault(); }, true);
 $('pPrev').onclick = () => { if (cur) { const n = imgList().length; cur.i = (cur.i - 1 + n) % Math.max(n, 1); render(); } };
 $('pNext').onclick = () => { if (cur) { const n = imgList().length; cur.i = (cur.i + 1) % Math.max(n, 1); render(); } };
 $('pDel').onclick = async () => { const mine = cur; if (!mine || !role.gm) return; const img = imgList()[mine.i]; if (!img || !confirm('Delete this image for good?')) return; try { const d = await hexApi('delete_image', { q: mine.q, r: mine.r, section: img.sec, filename: img.f }); if (cur !== mine) return; $('pStatus').textContent = d.success ? 'Image deleted' : (d.error || 'Not deleted'); mine.i = null; await reload(mine); } catch (e) { if (cur === mine) $('pStatus').textContent = 'Not deleted'; } };
@@ -4270,7 +4296,7 @@ const beamMat = (col, k, seed) => new THREE.ShaderMaterial({ uniforms: { uC: { v
     '  gl_FragColor = vec4(uC * (uA * uK * soft * ray * v), 1.); }'].join('\n') });
 let pingDim = 0; anim.push(() => { sun.intensity = 3.1 * (1 - .45 * pingDim); hemi.intensity = .35 * (1 - .45 * pingDim); pingDim = 0; });   // while a beam is down the daylight eases back, so the lit place stands out
 const pingLamps = [0, 1].map(() => { const l = new THREE.SpotLight(0xffffff, 0, 0, .08, .75, 0); l.userData.free = true; scene.add(l, l.target); return l; });   // always in the scene (dark until wanted), so a ping never makes the materials recompile
-function showPing(x, z, focus) { const col = focus ? 0x86c4ff : 0xffc566, T = focus ? 11 : 9, t0 = performance.now(), g = new THREE.Vector3(x, Math.max(heightAt(x, z), 0), z), grp = new THREE.Group(); grp.position.copy(g); grp.quaternion.copy(BEAM_Q);
+function showPing(x, z, focus) { const col = focus ? 0x86c4ff : 0xffc566, T = focus ? 11 : 9, t0 = performance.now(); pace.busy = t0 + (T + 1) * 1000; const g = new THREE.Vector3(x, Math.max(heightAt(x, z), 0), z), grp = new THREE.Group(); grp.position.copy(g); grp.quaternion.copy(BEAM_Q);
   const mk = (k, seed) => { const m = new THREE.Mesh(beamGeo, beamMat(col, k, seed)); m.renderOrder = 9000; m.raycast = () => {}; m.frustumCulled = false; grp.add(m); return m; }, outer = mk(.5, 0), core = mk(1.3, 2.1);
   const mp = [], mr = mulberry32((x * 13 + z * 7) | 0); for (let i = 0; i < 110; i++) { const a = mr() * 6.2832, r = Math.sqrt(mr()), y = mr(); mp.push(Math.cos(a) * r, y, Math.sin(a) * r); }
   const mg = new THREE.BufferGeometry(); mg.setAttribute('position', new THREE.Float32BufferAttribute(mp, 3)); const motes = new THREE.Points(mg, new THREE.PointsMaterial({ color: col, map: moteTex, size: 9, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, fog: false })); motes.raycast = () => {}; motes.frustumCulled = false; motes.renderOrder = 9001; grp.add(motes);
@@ -4297,6 +4323,10 @@ canvas.addEventListener('contextmenu', e => { if (e.altKey) e.preventDefault(); 
 window.__ping = { showPing, sendPing, role };
 
 const mouse = { x: 0, y: 0, inside: false, buttons: 0 }; let downAt = null;
+// how often a frame is drawn. Never more than about sixty times a second; ten while this window is not the one in use; thirty once nobody has touched it for two minutes.
+// Coming back to the window, or a ping or a pull arriving, brings full speed back at once
+const pace = { last: 0, busy: 0, touch: performance.now(), full: true };
+for (const ev of ['pointermove', 'pointerdown', 'wheel', 'keydown']) addEventListener(ev, () => { pace.touch = performance.now(); }, { capture: true, passive: true });
 canvas.addEventListener('pointermove', e => { mouse.x = e.clientX; mouse.y = e.clientY; mouse.inside = true; mouse.buttons = e.buttons; tip.style.transform = `translate(${e.clientX + 14}px,${e.clientY + 18}px)`; });
 canvas.addEventListener('pointerleave', () => { mouse.inside = false; });
 canvas.addEventListener('pointerdown', e => { mouse.buttons = e.buttons; if (e.button === 0) downAt = [e.clientX, e.clientY]; });
@@ -4369,11 +4399,11 @@ loading.textContent = 'Sculpting terrain…';
 setTimeout(async () => {
   const cache = await terrainCache.get(); if (cache) loading.textContent = 'Raising the campus…';
   const t0 = performance.now();
-  buildGrade(); buildTerrain(cache); const t1 = performance.now();
+  buildGrade(); const kept = buildTerrain(cache); const t1 = performance.now();
   buildWater(); const t1b = performance.now(); const stats = buildProps(); const t1c = performance.now(); buildFx(); buildSmoke(); buildLabels();
   const t2 = performance.now(); window.__times = { terrain: Math.round(t1 - t0), water: Math.round(t1b - t1), props: Math.round(t1c - t1b), rest: Math.round(t2 - t1c), frames: [] };
   renderer.shadowMap.needsUpdate = true;
-  document.getElementById('gen').textContent = `${NX}×${NZ} grid · ${cache ? "terrain from cache · " : ""}built in ${((t2 - t0) / 1000).toFixed(1)}s · ${stats.trees} trees · ${stats.spires} spires · ${stats.things} things`;
+  document.getElementById('gen').textContent = `${NX}×${NZ} grid · ${kept ? "terrain from cache · " : ""}built in ${((t2 - t0) / 1000).toFixed(1)}s · ${stats.trees} trees · ${stats.spires} spires · ${stats.things} things`;
   // every material's shader is compiled before the first frame is shown, off the main thread where the browser allows it, so the map does not stutter into view
   loading.textContent = 'Lighting the lamps…'; try { if (renderer.compileAsync) await renderer.compileAsync(scene, camera); } catch (e) {}
   // and it is uncovered from the middle outward, from under a bank of cloud
@@ -4383,9 +4413,13 @@ setTimeout(async () => {
     veil.rotation.x = -Math.PI / 2; veil.position.y = 40; veil.renderOrder = 9999; veil.frustumCulled = false; veil.raycast = () => {}; scene.add(veil); const lb = document.getElementById('labels'); if (lb) lb.style.opacity = 0;
     const tv = performance.now(), DUR = 3200; anim.push(() => { if (!veil.parent) return; const f = Math.min((performance.now() - tv) / DUR, 1); veil.material.uniforms.uR.value = -400 + 6400 * f * f * (3 - 2 * f); if (f >= 1) { scene.remove(veil); veil.geometry.dispose(); veil.material.dispose(); if (lb) { lb.style.transition = 'opacity .6s'; lb.style.opacity = 1; } } }); }
   loading.style.display = 'none'; terrainCache.put();
-  window.__sx = { THREE, camera, controls, flyTo, heightAt, renderer, scene, U, stats, things, movers, quality: Q, pick, targetAt, terrainMesh, ray, hexOwner, select, setHover, composer, updateLabels };
+  window.__sx = { THREE, camera, controls, flyTo, heightAt, renderer, scene, U, stats, things, movers, quality: Q, pick, targetAt, terrainMesh, pace, ray, hexOwner, select, setHover, composer, updateLabels };
   const clock = new THREE.Clock(); let acc = 0, frames = 0;
-  const fwd = new THREE.Vector3(), right = new THREE.Vector3(), mv = new THREE.Vector3();
+  const fwd = new THREE.Vector3(), right = new THREE.Vector3(), mv = new THREE.Vector3(), hvP = new THREE.Vector3(), hvQ = new THREE.Quaternion(); let hvX = -1, hvY = -1, hvAt = 0;
+  // the solid, unlit parts of things, which may be left out of a frame when too small to see. Lights and glowing things stay in always (a glint shows however small it is), and so does anything that walks or flies
+  const tiny = [], roam = new Set(); for (const mv2 of movers) mv2.o.traverse(o => roam.add(o));
+  for (const g of thingRoots) g.traverse(o => { const m = o.material; if (!o.isMesh || o.isInstancedMesh || roam.has(o) || !o.frustumCulled || !m || !m.isMeshStandardMaterial || m.transparent || (m.emissiveIntensity > 0 && m.emissive.getHex() !== 0)) return;
+    if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere(); const bs = o.geometry.boundingSphere; tiny.push({ o, c: bs.center, r2: bs.radius * bs.radius }); }); window.__sx.tiny = tiny;
   // ---- the tour: a slow flight past every place on the map in turn, each seen from the south as the camera swings across its front. Adding ?tour to the address plays it;
   // ?tour=record also films it and saves the film when it ends. Esc stops it. The route goes each time to the nearest place not yet seen
   const tour = { on: false, t: 0, i: 0, dur: 0, keys: null, order: null }; let rec = null;
@@ -4418,7 +4452,7 @@ setTimeout(async () => {
   window.__tour = { tour, build: buildTour, at: tourAt, start: startTour, end: endTour };
   const step = fixed => {
     const raw = fixed ?? clock.getDelta(), dt = Math.min(raw, .1); U.uTime.value += dt; if (window.__times.frames.length < 60) window.__times.frames.push(Math.round(raw * 1000));
-    if (fixed === undefined && !tour.on && !document.hidden && raw < .25 && U.uTime.value > 7) Q.feed(raw, performance.now() / 1000);
+    if (fixed === undefined && !tour.on && !document.hidden && raw < .25 && U.uTime.value > 7 && pace.full) Q.feed(raw, performance.now() / 1000);   // only frames drawn at full speed say anything about how the map is running
     if (tour.on) { tour.t += dt; tourAt(tour.t); if (tour.t >= tour.dur) endTour(); }
     else if (fly) { fly.t = Math.min(1, fly.t + dt / fly.dur); const k = fly.t < .5 ? 4 * fly.t ** 3 : 1 - Math.pow(-2 * fly.t + 2, 3) / 2;
       camera.position.lerpVectors(fly.p0, fly.p1, k); controls.target.lerpVectors(fly.t0, fly.t1, k); camera.lookAt(controls.target);
@@ -4438,7 +4472,8 @@ setTimeout(async () => {
     const floor = heightAt(camera.position.x, camera.position.z) + 12; if (camera.position.y < floor) camera.position.y = floor;
     camera.updateMatrixWorld();
     // hover follows the cursor every frame, so it stays right while the camera moves under a still mouse
-    if (!mouse.inside) setHover(null); else if (!mouse.buttons && !fly && !tour.on) setHover(targetAt(mouse.x, mouse.y));
+    if (!mouse.inside) { setHover(null); hvX = -1; } else if (!mouse.buttons && !fly && !tour.on) { const nowH = performance.now();
+      if (mouse.x !== hvX || mouse.y !== hvY || nowH - hvAt > 250 || !hvP.equals(camera.position) || !hvQ.equals(camera.quaternion)) { hvX = mouse.x; hvY = mouse.y; hvAt = nowH; hvP.copy(camera.position); hvQ.copy(camera.quaternion); setHover(targetAt(mouse.x, mouse.y)); } }   // looked up again when the mouse or the view has moved, and a few times a second besides for things that walk
     const cd = camera.position.distanceTo(controls.target);
     scene.fog.near = cd * .9 + 1200; scene.fog.far = scene.fog.near + 15000;
     sky.position.copy(camera.position);
@@ -4446,11 +4481,18 @@ setTimeout(async () => {
     for (const sp of spin) { sp.o.rotation.y += sp.speed * dt; if (sp.bolt) { const t = U.uTime.value; sp.o.material.emissiveIntensity = Math.sin(t * 37) + Math.sin(t * 61.7) > .7 ? 5 : 1.8; } }
     FXSCALE.value = renderer.domElement.height / (2 * Math.tan(camera.fov * Math.PI / 360));
     updateSmoke(dt); updateLabels(cd);
+    { const casting = renderer.shadowMap.needsUpdate, k2 = FXSCALE.value * FXSCALE.value, cp = camera.position;
+      // parts of things too small to see from here are left out of the frame: anything whose whole bulk would cover less than a pixel and a half (never while shadows are being cast)
+      for (const c of tiny) { const e = c.o.matrixWorld.elements, v = c.c, x = e[0] * v.x + e[4] * v.y + e[8] * v.z + e[12] - cp.x, y = e[1] * v.x + e[5] * v.y + e[9] * v.z + e[13] - cp.y, z = e[2] * v.x + e[6] * v.y + e[10] * v.z + e[14] - cp.z;
+        const sc = Math.max(e[0] * e[0] + e[1] * e[1] + e[2] * e[2], e[4] * e[4] + e[5] * e[5] + e[6] * e[6], e[8] * e[8] + e[9] * e[9] + e[10] * e[10]), m = casting || c.r2 * sc * k2 >= .5625 * (x * x + y * y + z * z) ? 1 : 2; if (c.o.layers.mask !== m) c.o.layers.mask = m; } }
     renderer.info.reset(); composer.render();
     acc += dt; frames++;
     if (acc >= .5) { document.getElementById('fps').textContent = (frames / acc).toFixed(0) + ' fps' + (rscale < 1 ? ' @ ' + Math.round(rscale * 100) + '% res' : ''); document.getElementById('tris').textContent = (renderer.info.render.triangles / 1e6).toFixed(2) + 'M'; document.getElementById('calls').textContent = renderer.info.render.calls; acc = 0; frames = 0; }
   };
-  window.__step = step; (function loop() { requestAnimationFrame(loop); if (!window.__capture) step(); })();   // __capture and __step let the map be advanced a frame at a time, for filming it
+  window.__step = step;   // __capture and __step let the map be advanced a frame at a time, for filming it
+  (function loop(now = performance.now()) { requestAnimationFrame(loop); if (window.__capture) return;
+    const active = document.hasFocus() || now < pace.busy || !!fly || tour.on, gap = !active ? 100 : now - pace.touch > 120000 ? 1000 / 30 : 1000 / 60;
+    if (now - pace.last < gap - 3) return; const full = gap < 20; if (full && !pace.full) clock.getDelta(); pace.full = full; pace.last = now; step(); })();   // the first frame back at full speed is not held against the map's running
 }, 60);
 </script>
 </body>
