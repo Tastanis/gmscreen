@@ -30,6 +30,8 @@ function sandboxPolicy(string $path): string
             return 'excluded:non-runtime';
         }
     }
+    if (preg_match('/^sess_[a-zA-Z0-9,-]+$/D', $name)) return 'excluded:session';
+    if (str_ends_with($name, '.old')) return 'excluded:non-runtime';
     if (str_contains($path, '/admin/')) return 'excluded:administration';
     if (preg_match('/(?:secret|credential|password|config\.local|\.env|\/private\/)/i', $path)) return 'excluded:private';
     if (preg_match('/(?:\.lock|\.log|\.tmp|\.part|-wal|-shm|-journal)$/i', $name)) return 'excluded:transient';

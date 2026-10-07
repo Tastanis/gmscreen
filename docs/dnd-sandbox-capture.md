@@ -16,7 +16,8 @@ being uploaded. The first production capture and gameplay comparison are pending
 - An explicit list of excluded files and unresolved coverage issues. Unknown
   file types and symbolic links are reported instead of silently ignored.
 
-Archives/backups, logs, sessions, private configuration, tooling and documentation
+Archives/backups (including retired `.old` files), logs, sessions (including loose
+PHP `sess_*` files), private configuration, tooling and documentation
 are excluded. File types are a security boundary, not a per-feature file list.
 Additional D&D-only directories can be mounted in the private configuration.
 Never mount the whole hosting account, ASL, or its shared database.
@@ -30,8 +31,13 @@ adapter is then required; do not select JSON just to bypass the check.
 Browser-only localStorage/IndexedDB, unsaved edits, third-party hosted media and
 unmapped storage outside D&D are not magically recoverable from the server.
 The map3d IndexedDB terrain cache in the current source is derived from code;
-other browser-only content still needs separate review. Explicit saved media
+other browser-only content still needs separate review. Explicit current-state media
 references are checked before preparation; external/missing images block it.
+Retired V1 board state, event/operation history, checkpoints, and completed scene
+imports are retained byte-for-byte; their missing media is listed in
+`historical_reference_warnings` instead of blocking the current board. Pending
+imports remain blocking. The unused zero-byte legacy `gm-notes.json` placeholder
+is likewise preserved and reported; active JSON stores still require valid JSON.
 Relative URLs and dynamically constructed references also require browser QA.
 
 ## Install on GoDaddy/cPanel
@@ -160,3 +166,14 @@ After installation, the remaining acceptance checks are:
 Until these pass, call it a verified file capture or a prepared sandbox, not an
 exact production-equivalent game. PHP versions, extensions, operating systems,
 Apache rules and multiplayer delivery can also differ from the hosted environment.
+
+## Desktop launcher wiring
+
+The user's test checkout uses `tools/capture-live.py` behind **Run Diagnostic Sync**
+and **Start Local VTT**. It keeps captures under ignored
+`runtime/test-data/full-capture`, reads the dedicated key from the private Desktop
+folder, and advances the sandbox pointer only after successful preparation.
+Unchanged files can be reused only after matching the fresh manifest's length and
+SHA-256; the two-manifest consistency check still applies. Deployed code can be
+recovered from local Git history only when its bytes match the deployed hash.
+The main working checkout is not modified to match an older deployment.

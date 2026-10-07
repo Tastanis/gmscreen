@@ -75,6 +75,41 @@ class CaptureTests(unittest.TestCase):
                 time.sleep(.05)
         self.output = self.root / 'captures'
 
+    def test_session_and_retired_files_are_excluded(self):
+        self.write('data/sess_example123', 'private session')
+        self.write('strixhaven/map/js/coordinate-system.old', 'retired source')
+        manifest = self.connection.manifest()
+        excluded = {item['path']: item['reason'] for item in manifest['excluded']}
+        self.assertEqual(excluded['dnd/data/sess_example123'], 'excluded:session')
+        self.assertEqual(excluded['dnd/strixhaven/map/js/coordinate-system.old'], 'excluded:non-runtime')
+        self.assertNotIn('dnd/data/sess_example123', manifest['files'])
+        self.assertNotIn('dnd/strixhaven/map/js/coordinate-system.old', manifest['files'])
+
+    def test_historical_missing_media_warns_but_active_and_pending_media_block(self):
+        self.write('strixhaven/gm/data/gm-notes.json', b'')
+        self.write('vtt/storage/board-state.json', '{"image":"/dnd/images/retired.png"}')
+        self.db.execute('CREATE TABLE vtt_events (body TEXT)')
+        self.db.execute('INSERT INTO vtt_events VALUES (?)', ('{"image":"/dnd/images/past.png"}',))
+        self.db.execute('CREATE TABLE vtt_scene_imports (pending_catalog INTEGER, catalog_json TEXT)')
+        self.db.execute('INSERT INTO vtt_scene_imports VALUES (0, ?)', ('{"image":"/dnd/images/imported.png"}',))
+        self.db.commit()
+        stage = capture.capture(self.connection, self.output)
+        app = capture.prepare(stage, self.web, self.root / 'sandboxes')
+        report = json.loads((app / 'sandbox-report.json').read_text())
+        self.assertEqual(len(report['historical_reference_warnings']), 4)
+        self.assertEqual((app / 'dnd/strixhaven/gm/data/gm-notes.json').read_bytes(), b'')
+        self.db.execute('UPDATE vtt_scene_imports SET pending_catalog = 1')
+        self.db.commit()
+        stage = capture.capture(self.connection, self.output)
+        with self.assertRaisesRegex(ValueError, 'media references'):
+            capture.prepare(stage, self.web, self.root / 'sandboxes')
+        self.db.execute('UPDATE vtt_scene_imports SET pending_catalog = 0')
+        self.db.execute('UPDATE vtt_world_state SET state_json = ?', ('{"image":"/dnd/images/active.png"}',))
+        self.db.commit()
+        stage = capture.capture(self.connection, self.output)
+        with self.assertRaisesRegex(ValueError, 'media references'):
+            capture.prepare(stage, self.web, self.root / 'sandboxes')
+
     def tearDown(self):
         if hasattr(self, 'server'):
             self.server.terminate()

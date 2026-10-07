@@ -152,38 +152,55 @@ def capture(connection, output: Path) -> Path:
         raise
 
 
-def reference_issues(capture_dir: Path, manifest: dict) -> list[dict]:
+def reference_issues(capture_dir: Path, manifest: dict, historical_report: list | None = None) -> list[dict]:
     """Check explicit saved media references; never fetch an arbitrary remote URL."""
     origin = urllib.parse.urlsplit(manifest['source_site'])
     found = set()
+    historical = set()
     media = r'\.(?:png|jpe?g|gif|webp|bmp|svg|avif|pdf|mp3|ogg|wav|mp4|webm|glb|gltf)(?:[?#][^\s\"<>]*)?'
     pattern = re.compile(r'(?:https?://|/dnd/)[^\s\"<>]+?' + media + r'(?=$|[\s\"<>])', re.I)
 
-    def inspect(text, source):
+    def inspect(text, source, archive=False):
+        target = historical if archive else found
         for match in pattern.finditer(text.replace('\\/', '/')):
             url = match.group(0)
             parsed = urllib.parse.urlsplit(url)
             if parsed.netloc and parsed.netloc != origin.netloc:
-                found.add((source, url, 'external-media-not-captured'))
+                target.add((source, url, 'external-media-not-captured'))
                 continue
             path = urllib.parse.unquote(parsed.path).lstrip('/')
             if path not in manifest['files']:
-                found.add((source, url, 'missing-media'))
+                target.add((source, url, 'missing-media'))
 
     for path, item in manifest['files'].items():
         local = capture_dir / 'data' / relative_path(path)
         if item['kind'] == 'file' and path.endswith('.json'):
             # Validate saved JSON too: partial/truncated JSON must not become a baseline.
-            value = json.loads(local.read_text(encoding='utf-8-sig'))
-            inspect(json.dumps(value, ensure_ascii=False), path)
+            raw = local.read_text(encoding='utf-8-sig')
+            # Retired GM notes placeholder: current GM notes use tabs.json.
+            # Preserve its exact zero bytes; never relax validation for active stores.
+            if path == 'dnd/strixhaven/gm/data/gm-notes.json' and raw == '':
+                historical.add((path, '', 'empty-retired-placeholder'))
+                continue
+            value = json.loads(raw)
+            inspect(json.dumps(value, ensure_ascii=False), path, path == 'dnd/vtt/storage/board-state.json')
         elif item['kind'] == 'sqlite':
             with closing(sqlite3.connect(local.as_uri() + '?mode=ro', uri=True)) as db:
                 for (table,) in db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").fetchall():
                     quoted = '"' + table.replace('"', '""') + '"'
-                    for row in db.execute('SELECT * FROM ' + quoted):
+                    cursor = db.execute('SELECT * FROM ' + quoted)
+                    columns = [column[0] for column in cursor.description]
+                    for row in cursor:
                         for cell in row:
                             if isinstance(cell, str):
-                                inspect(cell, path)
+                                # These records describe past state. Their media may
+                                # legitimately have been removed; keep records intact.
+                                archive = table in ('vtt_events', 'vtt_operations', 'vtt_snapshots')
+                                if table == 'vtt_scene_imports' and 'pending_catalog' in columns:
+                                    archive = row[columns.index('pending_catalog')] == 0
+                                inspect(cell, path + '#' + table, archive)
+    if historical_report is not None:
+        historical_report.extend({'source': source, 'reference': url, 'reason': reason} for source, url, reason in sorted(historical))
     return [{'source': source, 'reference': url, 'reason': reason} for source, url, reason in sorted(found)]
 
 
@@ -213,7 +230,8 @@ def prepare(capture_dir: Path, source: Path, output: Path) -> Path:
         report = capture_dir / 'mismatches.json'
         report.write_text(json.dumps(mismatches, indent=2), encoding='utf-8')
         raise ValueError(f'Code or capture mismatch in {len(mismatches)} files; see {report}')
-    references = reference_issues(capture_dir, manifest)
+    historical = []
+    references = reference_issues(capture_dir, manifest, historical)
     (capture_dir / 'reference-issues.json').write_text(json.dumps(references, indent=2), encoding='utf-8')
     if references:
         raise ValueError('Saved media references are missing or external; see reference-issues.json before preparing')
@@ -248,6 +266,7 @@ def prepare(capture_dir: Path, source: Path, output: Path) -> Path:
         'status': 'prepared; browser/gameplay verification required',
         'overrides': ['Pusher disabled', 'MySQL disabled (JSON storage declaration required)', 'Separate sessions', 'Loopback router; production-origin URLs localized in responses', 'Browser CSP blocks external connections except listed read-only CDNs'],
         'limitations': manifest.get('limitations', []),
+        'historical_reference_warnings': historical,
     }, indent=2), encoding='utf-8')
     (app / '.gmscreen-captured-sandbox').write_text(SCHEMA, encoding='utf-8')
     return app
