@@ -54,7 +54,9 @@ let gridState = {
     hasUnsavedChanges: false, // Track if user has made changes
     hovered: null, // the skill under the mouse
     pinned: null, // the skill Zepha has clicked
-    showLinks: false // every connection drawn at once
+    showLinks: false, // every connection drawn at once
+    viewMode: false, // the GM looking rather than editing: clicks select, as they do for Zepha
+    showAllBenefits: false // the benefits list showing every line, not only those that name a number
 };
 
 /* ------------------------------------------------------------------ small helpers */
@@ -90,19 +92,61 @@ const ICONS = {
  * This splits the two for display; the saved text itself is never altered.
  */
 function splitSkill(html) {
+    const lines = skillLines(html);
+    const title = lines.length ? lines[0].text : '';
+    const rest = lines.slice(1);
+
+    // The description is put back together from its lines: runs of bullets as a list, anything else as plain lines
+    let body = '', inList = false;
+    rest.forEach(line => {
+        if (line.bullet !== inList) { body += line.bullet ? '<ul>' : '</ul>'; inList = line.bullet; }
+        body += line.bullet ? `<li>${line.html}</li>` : `<div>${line.html}</div>`;
+    });
+    if (inList) body += '</ul>';
+
+    return { title, body, bodyText: rest.map(line => line.text).join(' '), lines: rest };
+}
+
+/**
+ * The saved text as a list of lines, however it happens to be wrapped: each bullet is a line, and so is each run of text
+ * between line breaks. Bold, italic and underline are kept; sizes and any other wrapping are dropped, so an old
+ * "make this text smaller" wrapped round a whole skill does not swallow its title and bullets into one line.
+ */
+function skillLines(html) {
     const temp = document.createElement('div');
     temp.innerHTML = html || '';
-    const nodes = Array.from(temp.childNodes);
-    let title = '', i = 0;
-    for (; i < nodes.length; i++) {
-        const n = nodes[i];
-        if (n.nodeType === Node.ELEMENT_NODE && /^(UL|OL|BR|LI|DIV|P)$/.test(n.tagName)) break;
-        title += n.textContent;
-    }
-    while (i < nodes.length && nodes[i].nodeType === Node.ELEMENT_NODE && nodes[i].tagName === 'BR') i++;
-    const rest = document.createElement('div');
-    for (; i < nodes.length; i++) rest.appendChild(nodes[i].cloneNode(true));
-    return { title: title.replace(/\s+/g, ' ').trim(), body: rest.innerHTML.trim(), bodyText: rest.textContent.trim() };
+    const lines = [];
+    let cur = null;
+    const esc = text => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    const walk = (node, bullet, open, close) => {
+        node.childNodes.forEach(n => {
+            if (n.nodeType === Node.TEXT_NODE) {
+                if (!n.textContent) return;
+                if (!cur) { cur = { bullet, html: '', text: '' }; lines.push(cur); }
+                cur.text += n.textContent;
+                cur.html += open + esc(n.textContent) + close;
+            } else if (n.nodeType === Node.ELEMENT_NODE) {
+                const tag = n.tagName;
+                if (tag === 'BR') cur = null;
+                else if (tag === 'LI') { cur = null; walk(n, true, open, close); cur = null; }
+                else if (/^(UL|OL|DIV|P)$/.test(tag)) { cur = null; walk(n, bullet, open, close); cur = null; }
+                else if (/^(B|STRONG|I|EM|U)$/.test(tag)) { const t = tag.toLowerCase(); walk(n, bullet, `${open}<${t}>`, `</${t}>${close}`); }
+                else walk(n, bullet, open, close);
+            }
+        });
+    };
+    walk(temp, false, '', '');
+
+    return lines.map(line => {
+        // a line typed with its own bullet mark counts as a bullet
+        const typed = /^\s*[•*]\s+/.test(line.text);
+        return {
+            bullet: line.bullet || typed,
+            text: line.text.replace(/^\s*[•*]\s+/, '').replace(/\s+/g, ' ').trim(),
+            html: typed ? line.html.replace(/^((?:<[^>]+>)*)\s*[•*]\s+/, '$1') : line.html
+        };
+    }).filter(line => line.text);
 }
 
 function skillInfo(id) {
@@ -116,7 +160,7 @@ function skillInfo(id) {
     return {
         id, row: p.row, col: p.col, section, tier, cost: TIER_COST[tier - 1],
         path: section.headers[p.col - section.cols[0]][1],
-        raw, title: parts.title, body: parts.body,
+        raw, title: parts.title, body: parts.body, lines: parts.lines,
         blank: !parts.title && !parts.bodyText
     };
 }
@@ -171,6 +215,7 @@ async function initializeGrid() {
 
     renderAllSkills();
     renderSectionTabs();
+    setupViewMode();
     updateModeBanner();
 
     // The board's size depends on its text, so the connections are laid out once it has settled, and again if it changes
@@ -344,7 +389,7 @@ function renderSkillCell(cell) {
     cell.appendChild(el('span', 'skill-mark'));
 
     if (info.blank) {
-        cell.appendChild(el('div', 'skill-empty', gridState.isGM ? 'Click to write a skill' : 'Nothing here yet'));
+        cell.appendChild(el('div', 'skill-empty', gridState.isGM && !gridState.viewMode ? 'Click to write a skill' : 'Nothing here yet'));
         return;
     }
 
@@ -447,19 +492,13 @@ function renderProgress() {
 }
 
 /**
- * Everything the learned skills give, gathered in one list: each line of each learned skill's description,
- * under its tree, with the skill it comes from. Clicking a line shows that skill.
+ * Everything the learned skills give, gathered in one list under each tree, with the skill each line comes from.
+ * A line that names a number (+1, -5, 10%, "max projects 5") is a bonus and is always listed. The other lines of a
+ * learned skill (what it lets you do, or just what it is) are kept one click away, since not all of them are benefits.
+ * Clicking a line shows its skill.
  */
-function benefitLines(html) {
-    const temp = document.createElement('div');
-    temp.innerHTML = html || '';
-    // each bullet is a line; so is anything written outside the bullets, one line to each line break
-    const lines = Array.from(temp.querySelectorAll('li')).map(li => li.textContent);
-    temp.querySelectorAll('ul, ol').forEach(list => list.replaceWith('\n'));
-    temp.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
-    return temp.textContent.split('\n').concat(lines)
-        .map(text => text.replace(/\s+/g, ' ').trim())
-        .filter(Boolean);
+function isBonus(text) {
+    return /\d/.test(text);
 }
 
 function renderBenefits() {
@@ -468,7 +507,7 @@ function renderBenefits() {
     box.textContent = '';
 
     const groups = [];
-    let count = 0;
+    let bonuses = 0, others = 0, learned = 0;
     SECTIONS.forEach(section => {
         const lines = [];
         for (let row = section.rows[0]; row <= section.rows[1]; row++) {
@@ -477,25 +516,37 @@ function renderBenefits() {
                 if (!gridState.learnedSkills.has(id)) continue;
                 const info = skillInfo(id);
                 if (!info || info.blank) continue;
-                benefitLines(info.body).forEach(text => lines.push({ id, text, from: info.title || info.path, tier: info.tier }));
+                learned++;
+                info.lines.forEach(line => {
+                    const bonus = isBonus(line.text);
+                    if (bonus) bonuses++; else others++;
+                    lines.push({ id, text: line.text, bonus, from: info.title || info.path, tier: info.tier });
+                });
             }
         }
-        if (lines.length) { groups.push({ section, lines }); count += lines.length; }
+        if (lines.length) groups.push({ section, lines });
     });
 
-    box.appendChild(el('h2', 'side-heading', count ? `Benefits so far (${count})` : 'Benefits so far'));
-    if (!groups.length) {
+    const showAll = gridState.showAllBenefits;
+    box.appendChild(el('h2', 'side-heading', `Benefits so far (${showAll ? bonuses + others : bonuses})`));
+
+    if (!learned) {
         box.appendChild(el('p', 'side-hint', 'Nothing yet. What each learned skill gives will be listed here.'));
         return;
     }
+    if (!bonuses && !showAll) {
+        box.appendChild(el('p', 'side-hint', 'None of the learned skills names a number.'));
+    }
 
     groups.forEach(group => {
+        const shown = group.lines.filter(line => showAll || line.bonus);
+        if (!shown.length) return;
         const block = el('div', 'benefit-group');
         block.dataset.section = group.section.key;
         block.appendChild(el('h3', 'benefit-tree', group.section.name));
         const ul = el('ul', 'benefit-list');
-        group.lines.forEach(line => {
-            const li = el('li', 'benefit-item');
+        shown.forEach(line => {
+            const li = el('li', 'benefit-item' + (line.bonus ? '' : ' plain'));
             li.appendChild(el('span', 'benefit-text', line.text));
             li.appendChild(el('span', 'benefit-from', `${line.from} · tier ${line.tier}`));
             li.title = 'Show this skill';
@@ -505,6 +556,17 @@ function renderBenefits() {
         block.appendChild(ul);
         box.appendChild(block);
     });
+
+    if (others) {
+        const more = el('button', 'benefit-more', showAll ? 'Only the numbered bonuses' : `Also show the ${others} other line${others === 1 ? '' : 's'}`);
+        more.type = 'button';
+        more.addEventListener('click', event => {
+            event.stopPropagation();
+            gridState.showAllBenefits = !gridState.showAllBenefits;
+            renderBenefits();
+        });
+        box.appendChild(more);
+    }
 }
 
 /* ------------------------------------------------------------------ what a skill needs, shown on request */
@@ -660,6 +722,12 @@ function handleGMEdit(event) {
         return;
     }
 
+    // Looking, not editing: a click does what it does for Zepha
+    if (gridState.viewMode) {
+        pinSkill(cell);
+        return;
+    }
+
     // Don't start editing if already editing
     if (cell.classList.contains('editing')) {
         return;
@@ -669,17 +737,37 @@ function handleGMEdit(event) {
 }
 
 /**
- * Handle Zepha clicking functionality with back-propagation and learning
+ * The GM's switch between editing the board and looking at it as Zepha sees it (clicks select, nothing is edited).
+ * The choice is remembered on this computer.
  */
-function handleZephaClick(event) {
-    const cell = event.currentTarget;
-    const cellId = cell.id;
+function setupViewMode() {
+    if (!gridState.isGM) return;
+    try { gridState.viewMode = localStorage.getItem('arcaneGMViewOnly') === '1'; } catch (error) { gridState.viewMode = false; }
+    const btn = document.getElementById('view-btn');
+    if (btn) btn.addEventListener('click', () => setViewMode(!gridState.viewMode));
+    setViewMode(gridState.viewMode);
+}
 
-    // If in learning mode, toggle learned skill
-    if (gridState.learningMode) {
-        toggleLearnedSkill(cell, cellId);
-        return;
+function setViewMode(on) {
+    gridState.viewMode = on;
+    try { localStorage.setItem('arcaneGMViewOnly', on ? '1' : '0'); } catch (error) { /* remembered only if the browser allows it */ }
+    const btn = document.getElementById('view-btn');
+    if (btn) {
+        btn.classList.toggle('active', on);
+        btn.textContent = on ? 'Mode: Viewing' : 'Mode: Editing';
+        btn.title = on ? 'Clicks select skills, as they do for Zepha. Nothing can be edited.' : 'Clicks open a skill for editing.';
     }
+    document.body.classList.toggle('gm-viewing', on);
+    if (!on) clearChainHighlighting();
+    renderAllSkills();
+    updateModeBanner();
+}
+
+/**
+ * Keep a skill in view: it, everything it rests on and what it opens stay lit until something else is clicked
+ */
+function pinSkill(cell) {
+    const cellId = cell.id;
 
     // Clear any existing chain highlighting
     clearChainHighlighting();
@@ -701,6 +789,22 @@ function handleZephaClick(event) {
 
     // And keep it in the side panel until something else is clicked
     setPinned(cellId);
+}
+
+/**
+ * Handle Zepha clicking functionality with back-propagation and learning
+ */
+function handleZephaClick(event) {
+    const cell = event.currentTarget;
+    const cellId = cell.id;
+
+    // If in learning mode, toggle learned skill
+    if (gridState.learningMode) {
+        toggleLearnedSkill(cell, cellId);
+        return;
+    }
+
+    pinSkill(cell);
 }
 
 /**
@@ -1141,6 +1245,8 @@ function updateModeBanner() {
             : 'Connect mode. Click the skill that is needed first, then the skill that needs it. Doing the same pair again removes the connection.';
     } else if (gridState.learningMode) {
         text = 'Learning mode. Click a skill to mark it learned; click it again to unmark it. Remember to save.';
+    } else if (gridState.viewMode) {
+        text = 'Viewing, as Zepha sees it. Click a skill to keep it in view; nothing can be edited until you switch back.';
     }
     banner.textContent = text;
     banner.classList.toggle('on', !!text);
@@ -1542,7 +1648,7 @@ function panToCell(id) {
     cell.classList.remove('flash');
     void cell.offsetWidth;
     cell.classList.add('flash');
-    if (!gridState.isGM) {
+    if (!gridState.isGM || gridState.viewMode) {
         clearChainHighlighting();
         cell.classList.add('chain-target');
     }
@@ -1678,14 +1784,14 @@ function updateZoomIndicator() {
 function setupEventListeners() {
     // Escape key to clear selections (Zepha only)
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && !gridState.isGM) {
+        if (e.key === 'Escape' && (!gridState.isGM || gridState.viewMode)) {
             clearSelections();
         }
     });
 
     // Left-click on empty areas to clear highlighting (Zepha only) - ignore right-clicks
     document.addEventListener('click', (e) => {
-        if (!gridState.isGM && e.button !== 2 && !e.target.closest('.grid-cell.clickable') && !e.target.closest('.side-panel, .arcane-header, .zoom-controls')) {
+        if ((!gridState.isGM || gridState.viewMode) && e.button !== 2 && !e.target.closest('.grid-cell.skill') && !e.target.closest('.side-panel, .arcane-header, .zoom-controls')) {
             clearChainHighlighting();
         }
     });
@@ -1710,6 +1816,7 @@ function addInstructions() {
                 <li>Point at a skill: see what it needs and what it opens</li>
                 <li>Every skill needs the one above it in its own path; anything it needs from another path is named on the skill</li>
                 <li>Click a skill: edit it. Enter saves, Esc cancels</li>
+                <li>The Editing / Viewing switch at the top right: look at skills the way Zepha does, without editing</li>
                 <li>Connect: click the skill needed first, then the skill that needs it</li>
                 <li>Save Grid keeps your text and connections</li>
             </ul>

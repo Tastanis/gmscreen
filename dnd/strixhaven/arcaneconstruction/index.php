@@ -64,6 +64,7 @@ require_once '../../version.php';
                 <button id="links-btn" class="links-btn" title="Draw every connection at once">Show all links</button>
                 <?php if ($is_gm): ?>
                 <button id="connect-btn" class="connect-btn">Connect</button>
+                <button id="view-btn" class="view-btn" title="Switch between editing skills and just looking at them">Mode: Editing</button>
                 <?php else: ?>
                 <button id="learn-skill-btn" class="learn-skill-btn">Learn Skill</button>
                 <?php endif; ?>

@@ -139,6 +139,7 @@ button {
 }
 
 .links-btn,
+.view-btn,
 .connect-btn,
 .learn-skill-btn,
 .help-btn,
@@ -155,11 +156,23 @@ button {
 }
 
 .links-btn:hover,
+.view-btn:hover,
 .connect-btn:hover,
 .learn-skill-btn:hover,
 .help-btn:hover,
 .close-btn:hover {
     filter: brightness(1.25);
+}
+
+.view-btn.active {
+    color: #0d2420;
+    background: linear-gradient(180deg, #8fe6d8 0%, #3fae9d 100%);
+    border-color: #b8f4ea;
+}
+
+/* the GM looking rather than editing: nothing on the board invites an edit */
+.gm-viewing .grid-cell.skill.blank {
+    cursor: default;
 }
 
 .links-btn.active,
@@ -926,6 +939,39 @@ button {
     color: var(--ink-faint);
 }
 
+/* a line with no number in it: something the skill lets you do, shown only on request */
+.benefit-item.plain {
+    border-left-style: dotted;
+    background: transparent;
+}
+
+.benefit-item.plain .benefit-text {
+    color: var(--ink-soft);
+}
+
+.benefit-more {
+    width: 100%;
+    margin-top: 2px;
+    padding: 6px 8px;
+    font-size: 12px;
+    color: var(--ink-soft);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px dashed var(--line-strong);
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.benefit-more:hover {
+    color: #fff;
+    border-color: var(--gold);
+}
+
+/* old saved text sometimes carries its own text size: in the editor it is shown at the editor's size */
+.rich-text-editor span[style],
+.rich-text-editor font {
+    font-size: inherit !important;
+}
+
 .side-heading {
     margin: 0 0 9px;
     font-family: var(--display);
@@ -1231,6 +1277,11 @@ button {
 
 .version-info {
     margin-right: 8px;
+}
+
+@media (max-width: 1750px) {
+    .section-tab { padding: 6px 9px; font-size: 11px; letter-spacing: 0.03em; }
+    .arcane-header { gap: 14px; }
 }
 
 @media (max-width: 1250px) {

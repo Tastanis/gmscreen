@@ -3747,6 +3747,38 @@ function buildProps() {
         k.S(2.2, solid(0x15151a, .5, { metalness: .5 }), -6, 2.2, 15, { sy: .85 }); NS(k.C(1.7, 1.7, .3, 10, bottle, -6, 3.3, 15)); for (let i = 0; i < 3; i++) rod(g, timber, [-6 + Math.cos(i * 2.1) * 3.4, 0, 15 + Math.sin(i * 2.1) * 3.4], [-6, 6.4, 15], .2, .2, 4);                                                                                     // the cauldron under its tripod
         for (let r2 = 0; r2 < 3; r2++) for (let i = 0; i < 6; i++) { const x = 14 + r2 * 3.4, z = -6 + i * 2.6; M(g, new THREE.SphereGeometry(.9 + wr() * .5, 6, 5), leaf[(i + r2) % 3], x, .8, z, { sy: .8 }); if ((i + r2) % 3 === 0) M(g, new THREE.IcosahedronGeometry(.5, 0), pinkM, x, 1.8, z); } for (let i = 0; i < 16; i++) { const t = i / 16, x = t < .5 ? 12.2 + t * 2 * 11 : 23.2, z = t < .5 ? 9 : 9 - (t - .5) * 2 * 17; k.B(.4, 3, .4, timber, x, 1.5, z); } k.B(11.4, .3, .3, timber, 17.7, 2.4, 9); k.B(.3, .3, 17, timber, 23.2, 2.4, .5);       // the herb garden
         for (let i = 0; i < 7; i++) k.C(1.7, 1.9, .4, 7, quoin, -3 - i * 4.4 + Math.sin(i) * 1.2, .2, 10 + Math.sin(i * 1.7) * 1.4); for (let i = 0; i < 9; i++) M(g, new THREE.IcosahedronGeometry(1 + wr(), 0), leaf[i % 3], -9.2 + (wr() - .5), 2 + i * 1.5, -6 + (wr() - .5) * 5, { sx: .4 });                                       // stepping stones out to the path, and ivy up the west wall
+        // Nora and Friends Goods, on the grass in front of the shop, beside the path: a painted food cart on four spoked wheels under a striped awning, its counter crowded with trays of buns and pastries,
+        // loaves in a basket, a board with its name above; and beside it a great barrel of Urzmaktok's brew on a cradle, tapped, with tankards on a crate
+        { const cart = new THREE.Group(), kc = kit(cart), paint = solid(0x2f7a78, .8), trim = solid(0xf0e6c8, .85), iron = solid(0x2a2a2e, .5, { metalness: .6 }), stripe = [solid(0xc2452e, .9, { side: THREE.DoubleSide }), solid(0xf3e9cf, .9, { side: THREE.DoubleSide })];
+          const bun = solid(0xc98b3e, .8), crust = solid(0xa9682a, .85), choc = solid(0x4a2c1a, .7), creamM = solid(0xf4e8c6, .8), berry = solid(0x9a2040, .6), tray = solid(0xd9d2c0, .5, { metalness: .3 });
+          const board = (text, sub, w, hgt, bg, fg) => new THREE.MeshStandardMaterial({ roughness: .8, map: canvasTex(512, Math.round(512 * hgt / w), (cx, W, H) => { cx.fillStyle = bg; cx.fillRect(0, 0, W, H); cx.strokeStyle = fg; cx.lineWidth = 6; cx.strokeRect(7, 7, W - 14, H - 14); cx.fillStyle = fg; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+            cx.font = 'bold ' + Math.round(H * (sub ? .4 : .5)) + 'px Georgia, serif'; cx.fillText(text, W / 2, H * (sub ? .36 : .52), W - 40); if (sub) { cx.font = 'italic ' + Math.round(H * .26) + 'px Georgia, serif'; cx.fillText(sub, W / 2, H * .74, W - 40); } }) });
+          for (const sx of [-3.4, 3.4]) for (const sz of [-2.6, 2.6]) { kc.T(1.9, .26, timber, sx, 1.9, sz); kc.T(1.9, .1, iron, sx, 1.9, sz + Math.sign(sz) * .22); kc.C(.42, .42, .8, 8, iron, sx, 1.9, sz, { rx: Math.PI / 2 }); for (let q = 0; q < 4; q++) kc.B(3.5, .22, .22, timber, sx, 1.9, sz, { rz: q * .785 }); }   // wheels: rim, tyre, hub, spokes
+          for (const sx of [-3.4, 3.4]) kc.C(.2, .2, 5.6, 6, iron, sx, 1.9, 0, { rx: Math.PI / 2 });                                                                                                                                                        // axles
+          kc.B(10.6, .5, 4.6, timber, 0, 3.3, 0); kc.B(10, 2.7, 4.2, paint, 0, 4.9, 0); for (const x of [-3.3, 0, 3.3]) kc.B(2.7, 1.9, .2, trim, x, 4.9, 2.12); kc.B(10.2, .3, 4.4, trim, 0, 3.7, 0);                                                              // the body, panelled along its front
+          kc.B(11.4, .35, 5.6, plank, 0, 6.45, .4); kc.B(11.4, .5, .3, timber, 0, 6.2, 3.1);                                                                                                                                                               // the counter, overhanging toward the customer
+          for (const sx of [-5.1, 5.1]) for (const sz of [-1.9, 2.9]) kc.B(.36, 6.2, .36, timber, sx, 9.6, sz); kc.B(10.4, 5.2, .3, plankD, 0, 9.2, -1.95); for (const y of [8.4, 10.3]) kc.B(9.8, .25, 1.3, plank, 0, y, -1.3);                                // posts, a boarded back, two shelves
+          for (let i = 0; i < 8; i++) { M(cart, new THREE.BoxGeometry(1.5, .16, 7.2), stripe[i % 2], -5.25 + i * 1.5, 12.9, .7, { rx: .2 }); M(cart, new THREE.ConeGeometry(.75, 1.1, 3), stripe[i % 2], -5.25 + i * 1.5, 11.75, 4.2, { rx: Math.PI, ry: Math.PI / 6, sz: .2 }); }      // the awning, striped, with a pointed edge
+          kc.B(9.4, 2.3, .3, board('NORA & FRIENDS', 'goods', 9.4, 2.3, '#f3e9cf', '#7a2418'), 0, 14.9, 3.4); for (const sx of [-4.2, 4.2]) kc.B(.3, 2.4, .3, timber, sx, 13.9, 3.2);                                                                         // its name, on a board above the awning
+          // the counter: trays of buns, iced and plain, a row of pies, a tiered stand, a basket of long loaves
+          for (const [tx, kind] of [[-4.2, 0], [-1.9, 1], [.5, 2]]) { kc.B(2, .12, 2.6, tray, tx, 6.7, .9); for (let i = 0; i < 6; i++) { const x = tx - .5 + (i % 2), z = .1 + Math.floor(i / 2) * .85;
+              if (kind === 0) kc.S(.42, i % 3 ? bun : crust, x, 6.98, z, { sy: .7 }); else if (kind === 1) { kc.S(.4, bun, x, 6.95, z, { sy: .6 }); kc.S(.3, i % 2 ? pinkM : creamM, x, 7.12, z, { sy: .45 }); } else { kc.C(.42, .46, .34, 10, crust, x, 6.93, z); kc.C(.32, .32, .08, 10, i % 2 ? berry : choc, x, 7.12, z); } } }
+          kc.C(.9, .9, .1, 12, tray, 3.2, 7.0, 1); kc.C(.1, .1, 1.5, 6, iron, 3.2, 7.4, 1); kc.C(.62, .62, .1, 12, tray, 3.2, 7.9, 1); for (let i = 0; i < 7; i++) { const a = i * .9, top = i > 4; kc.S(.26, i % 2 ? pinkM : choc, 3.2 + Math.cos(a) * (top ? .3 : .6), top ? 8.14 : 7.24, 1 + Math.sin(a) * (top ? .3 : .6), { sy: .8 }); }
+          kc.C(.85, .65, 1.3, 9, terra, 4.6, 7.25, -.6); for (let i = 0; i < 5; i++) rod(cart, i % 2 ? bun : crust, [4.6 + (i - 2) * .22, 7, -.6], [4.3 + (i - 2) * .5, 9.6, -.9 - (i % 2) * .3], .2, .16, 6);
+          for (let i = 0; i < 9; i++) kc.S(.45, i % 3 ? crust : bun, -4 + i, i % 2 ? 8.85 : 10.75, -1.3, { sy: .7, sx: 1.4 });                                                                                                                              // loaves along the shelves
+          NS(kc.S(.42, litO, 5.1, 11.2, 3.6)); kc.C(.06, .06, 1, 4, iron, 5.1, 11.9, 3.6); kc.C(.5, .3, .25, 6, iron, 5.1, 11.6, 3.6);                                                                                                                          // a lantern at the corner
+          // the barrel of Urzmaktok's brew, on its side in a cradle at the east end of the cart
+          { const bar = new THREE.Group(), kb = kit(bar); kb.C(2.05, 2.7, 3.3, 16, plankD, 0, 1.65, 0); kb.C(2.7, 2.05, 3.3, 16, plankD, 0, -1.65, 0); for (const y of [-2.9, -1.2, 1.2, 2.9]) kb.T(Math.abs(y) > 2 ? 2.2 : 2.62, .14, iron, 0, y, 0, { rx: Math.PI / 2 }); kb.C(1.95, 1.95, .12, 16, plank, 0, 3.3, 0);
+            kb.C(.16, .16, 1.1, 6, iron, 0, 3.7, 1.2); kb.C(.1, .1, .9, 6, iron, 0, 4.1, 1.5, { rx: Math.PI / 2 }); kb.B(.9, .12, .3, timber, 0, 4.25, 1.2);                                                                                                // the tap, low on its face
+            bar.rotation.x = Math.PI / 2; bar.position.set(10.2, 3.7, .2); fold(cart, bar); }
+          for (const sz of [-1.6, 2]) { for (const rz of [-.55, .55]) kc.B(.5, 5.4, .5, timber, 10.2, 1.9, sz, { rz }); kc.B(5.6, .4, .5, timber, 10.2, .25, sz); } kc.B(4.6, 1.5, .25, board("URZMAKTOK'S", 'brew', 4.6, 1.5, '#2c1c12', '#f0d68a'), 10.2, 7.2, .2, { rx: -.12 }); for (const sx of [-1.9, 1.9]) kc.B(.25, 1.6, .25, timber, 10.2 + sx, 6.5, .2);
+          kc.B(2.4, 1.6, 2, plank, 10.6, .8, 5.6, { ry: .3 }); for (const [x, z] of [[10.2, 5.3], [11.1, 5.9]]) { kc.C(.38, .32, .8, 8, timber, x, 2, z); kc.S(.34, creamM, x, 2.45, z, { sy: .5 }); kc.T(.24, .06, iron, x + .4, 2, z, { ry: Math.PI / 2 }); }               // tankards on a crate, heads on
+          // and round about: a board out front with the day's prices, two stools, sacks of flour
+          for (const rx of [-.28, .28]) kc.B(2.2, 3.6, .14, solid(0x1c2420, .9), -7.6, 1.75, 5.2 + rx * 2.4, { rx }); kc.B(2.4, .2, .9, timber, -7.6, 3.5, 5.2);
+          for (const [x, z] of [[-2, 6.4], [2.6, 6.8]]) { kc.C(.9, .9, .25, 10, plank, x, 2.3, z); for (let q = 0; q < 3; q++) rod(cart, timber, [x + Math.cos(q * 2.1) * .9, 0, z + Math.sin(q * 2.1) * .9], [x + Math.cos(q * 2.1) * .5, 2.2, z + Math.sin(q * 2.1) * .5], .12, .12, 5); }
+          for (const [x, z, r] of [[-7.4, -1.6, 1.2], [-8.6, .2, 1.05], [-7.8, -.4, .9]]) kc.S(r, trim, x, r * .7 + (r < 1 ? 1.3 : 0), z, { sy: .72 });
+          const cx0 = 3, cz0 = 30; cart.scale.setScalar(.8); cart.rotation.y = .16; cart.position.set(cx0, heightAt(c[0] + cx0, c[1] + cz0) - y0, cz0); fold(g, cart);
+          lanternPts.push([c[0] + cx0 + 4.5, y0 + 9.2, c[1] + cz0 + 2.2, { c: [1.7, 1.15, .5], size: 5, drift: .1, speed: .6 }]); }
       }, { y: y0, hexes: [[20, 29]], top: 40, view: 300 }); chimneys.push([c[0] + 8.4, y0 + 33, c[1] - 3.4]);
       lanternPts.push([c[0] + 9, y0 + 6.4, c[1] + 15, { c: [.9, 2.5, 1], size: 12, drift: .2, speed: .7 }]); const cm = mist({ n: 26, seed: 97, r0: .5, r1: 3, y0: 3.4, y1: 14, spin: .3, rise: .5, size: 2.6, alpha: .5, col: [.6, 2, .8], add: true }); cm.position.set(c[0] - 6, y0, c[1] + 15); scene.add(cm); }
 
@@ -4080,10 +4112,25 @@ function updateSmoke(dt) {
 
 // ------------------------------------------------------------------ controls: right-drag pans, middle-drag rotates, wheel zooms
 const controls = new MapControls(camera, canvas);
-controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: THREE.MOUSE.PAN };
+controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: null };   // the right button pans, but by the handlers below, not by the controls' own
 controls.enableDamping = true; controls.dampingFactor = .09; controls.screenSpacePanning = false; controls.zoomToCursor = true;
 controls.minDistance = 90; controls.maxDistance = 6500 * S; controls.maxPolarAngle = 1.42; controls.zoomSpeed = 1.3;
 controls.target.copy(HOME_TGT);
+// Dragging with the right button takes hold of the ground: the spot that was under the cursor when the button went down stays under it as the mouse moves, however far the view is tilted.
+// (The controls' own pan moves the same distance for a given drag whatever the tilt, so looking along the ground the map slid away under the cursor and a full drag went almost nowhere.)
+const grab = { on: false, id: -1, y: 0, p: new THREE.Vector3() }, grabRay = new THREE.Raycaster();
+const groundUnder = (cx, cy, y, out) => { grabRay.setFromCamera({ x: cx / innerWidth * 2 - 1, y: -(cy / innerHeight) * 2 + 1 }, camera); const o = grabRay.ray.origin, d = grabRay.ray.direction;
+  const t = Math.min((y - o.y) / Math.min(d.y, -.045), 60000); return out.set(o.x + d.x * t, y, o.z + d.z * t); };   // a ray at or above the horizon is taken as one just below it, so there is always a spot
+canvas.addEventListener('pointerdown', e => { if (e.button !== 2 || e.altKey || !controls.enabled) return; camera.updateMatrixWorld(); const p = pick(e.clientX, e.clientY); grab.y = p ? heightAt(p.x, p.z) : controls.target.y;
+  if (p) grab.p.set(p.x, grab.y, p.z); else groundUnder(e.clientX, e.clientY, grab.y, grab.p); grab.on = true; grab.id = e.pointerId; });
+const grabV = new THREE.Vector3();
+addEventListener('pointermove', e => { if (!grab.on || e.pointerId !== grab.id) return; if (!(e.buttons & 2) || !controls.enabled) { grab.on = false; return; }
+  groundUnder(e.clientX, e.clientY, grab.y, grabV); const far = camera.position.distanceTo(controls.target) * 4;
+  let dx = clamp(grab.p.x - grabV.x, -far, far), dz = clamp(grab.p.z - grabV.z, -far, far);
+  dx = clamp(controls.target.x + dx, -MAP_W / 2, MAP_W / 2) - controls.target.x; dz = clamp(controls.target.z + dz, -MAP_D / 2, MAP_D / 2) - controls.target.z;   // the view stops at the map's edge
+  camera.position.x += dx; camera.position.z += dz; controls.target.x += dx; controls.target.z += dz; camera.updateMatrixWorld(); });
+addEventListener('pointerup', e => { if (e.pointerId === grab.id) grab.on = false; });
+addEventListener('pointercancel', e => { if (e.pointerId === grab.id) grab.on = false; });
 canvas.addEventListener('mousedown', e => { if (e.button === 1) e.preventDefault(); });   // stop the browser's middle-click auto-scroll
 canvas.addEventListener('auxclick', e => e.preventDefault());
 
