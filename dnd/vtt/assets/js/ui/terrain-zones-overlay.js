@@ -1,6 +1,6 @@
 // Draws tagged terrain zones on the board and answers "which zones is this
 // token in". Reads the canonical scene environment; display choice is local.
-import {sceneZones, buildZoneIndex, zonesForFootprint, zoneTags, squareCostMultiplier, zoneGeometry, zoneColor, zoneSurface, summarizeRoute, zonesHiddenFromPlayers, BASE_LEVEL_ID, placeCornerControl, hasMovementType, standsOnPlate} from './terrain-zones.mjs';
+import {sceneZones, buildZoneIndex, zonesForFootprint, zoneTags, squareCostMultiplier, zoneGeometry, zoneColor, zoneSurface, summarizeRoute, zonesHiddenFromPlayers, BASE_LEVEL_ID, placeCornerControl, hasMovementType, standsOnPlate, movementWaiver, zoneCostFor, movementText} from './terrain-zones.mjs';
 import {routeSteps, groundSquare, stepCost, climbSurcharge} from './terrain-math.mjs';
 import {saveShared} from './environment-sync.mjs';
 import {floorElevations} from '../state/normalize/floor-elevation.js';
@@ -66,7 +66,9 @@ function stepMultiplier(actor, column, row, rawHeight) {
   const airborne = ['fly', 'hover'].includes(mover.movementMode);
   const feet = airborne ? standingHeight({...(actor || {}), ...mover}, c) : Number.isFinite(rawHeight) ? rawHeight : floors.get(levelId) ?? 0;
   let cost = 1;
-  for (const zone of zonesForFootprint(index, mover, feet, (id) => floors.get(id) ?? 0, {onPlate: !airborne && onPlate(mover, feet, c)})) cost = Math.max(cost, zone.cost);
+  // A swimmer, or a creature that walks on the liquid, is in the zone but pays nothing extra for it.
+  const waiver = movementWaiver(actor);
+  for (const zone of zonesForFootprint(index, mover, feet, (id) => floors.get(id) ?? 0, {onPlate: !airborne && onPlate(mover, feet, c)})) cost = Math.max(cost, zoneCostFor(zone, waiver));
   return cost;
 }
 function moverFor(c) {
@@ -101,7 +103,7 @@ function cellInfoFor(target) {
   if (!active && !state.zones.length) return null;
   const airborne = ['fly', 'hover'].includes(actor?.movementMode);
   return {
-    key: [state.key, active?.revision ?? 0, active?.key ?? '', actor?.levelId || '', actor?.width || 1, airborne ? actor.flightHeight ?? 'air' : 'ground', paysForClimb(actor) ? 'climbs' : 'climber'].join('|'),
+    key: [state.key, active?.revision ?? 0, active?.key ?? '', actor?.levelId || '', actor?.width || 1, airborne ? actor.flightHeight ?? 'air' : 'ground', paysForClimb(actor) ? 'climbs' : 'climber', movementText(actor)].join('|'),
     at(column, row) {
       const raw = active ? active.route({column, row}, {column, row}, {ignoreZones: true}).points[0].rawHeight : undefined;
       return {column, row, height: active ? groundSquare(raw) : 0, multiplier: stepMultiplier(actor, column, row, raw)};

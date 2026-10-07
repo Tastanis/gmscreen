@@ -249,18 +249,161 @@ well, and did not happen when the same steps were done without the stuck
 click. I think it is the test tool on this short-of-memory PC, not a VTT
 fault, but I have not proved that.
 
+## Climbing, swimming and decks. Built (October 7, 2026)
+
+Built and checked in the sandbox after stages 1 to 3, on the branch
+`claude/climbing`. It joins `main` together with the push you approved.
+
+### What a cliff is
+
+A cliff is a face steep enough to stop forced movement. It is the same test
+the push, pull and slide code already uses, so the two cannot disagree. A ramp
+or a staircase is never a cliff, however long.
+
+### What a climb costs
+
+One setting decides it (`CLIMB_FIRST_SQUARE_FREE` in `terrain-math.mjs`):
+
+- **As built (your first description):** the first square of the face is
+  ordinary movement and every square after it costs double. A 2-high face
+  costs 3, a 3-high costs 5, a 4-high costs 7. A 1-square ledge costs 1 and is
+  never asked about.
+- **The rulebook, if you choose it:** every climbed square costs double (4, 6,
+  8), and a 1-square ledge would cost 2 and be asked about.
+
+A climb into difficult terrain adds the two costs; it does not multiply them.
+
+### Going up
+
+When a walk or a shift goes up a cliff, a pop-up appears after you let go of
+the token and before the move is sent:
+
+> **Climbing.** Walker climbs 4 squares. This move costs 7 (3 extra for the
+> climb). Only 5 movement left this turn.
+
+- **Climb** (or Enter): the move goes through and the counter is charged.
+- **Don't climb** (or Escape): the move is never sent and the token goes back.
+- One pop-up per move, never one per square. Arrow-key moves are asked too.
+- On the ruler the climb keeps its yellow uphill line and gets a small amber
+  "x2". Red stays for difficult terrain. The range outline prices climbs too.
+- Nothing is enforced. Answer Climb without enough movement and the token
+  still moves; the counter shows it over.
+
+### Going down
+
+When a creature walks or shifts off an edge and the fall would do damage, the
+fall review you already have gains a third button:
+
+- **Apply**: take the fall damage, as before.
+- **Climbing**: no damage, not prone, and the climb's extra movement is added
+  to this turn (walking off a 4-high edge: 4 already counted, 3 more).
+- **Dismiss**: no damage and no extra movement. This is your "cancel".
+
+A creature that was pushed, pulled or slid over the edge gets the ordinary
+review with no Climbing button. Whoever made the move gets the pop-up, as
+before: a player for their own hero, the GM for a monster.
+
+### Who is not asked and not charged
+
+- A creature with "climb" in its movement ("Climb", "Burrow, Climb", "Spider
+  climb"). All the ghouls and rootgnawers in the Dead Root fight qualify.
+- A flier (fly or hover mode).
+- Forced movement and teleports.
+- Heroes are always asked.
+
+### Swimming
+
+- A zone is **liquid** when its tag is one of: water, blood, liquid, oil,
+  acid, slime, sewage. That list lives in one place (`LIQUID_TAGS` in
+  `terrain-zones.mjs`). Mud and lava are not on it. Nothing in the map format
+  changed and the Map maker's converter needs no change.
+- A creature with **"swim"** in its movement pays no extra movement in any
+  liquid zone. Everyone else pays the zone's cost (the book's double).
+- A creature whose movement says **"walks on X"** or **"walks on X and Y"**
+  pays nothing extra in zones with those tags. Kragen Thornwhisper's "Walks on
+  water and blood" works as written.
+- Only the cost is waived. The creature is still in the zone and still has its
+  tag, so "is it in blood?" still answers yes.
+- It applies to the ruler, the turn counter and the range outline alike.
+
+Exactly what the movement text understands, for whoever writes monsters:
+
+| Text | Effect |
+|---|---|
+| the word `swim` anywhere: "Swim", "Swim 4", "5 swim", "Swim, Climb" | no extra cost in any liquid zone |
+| the word `climb` anywhere: "Climb", "Burrow, Climb", "Spider climb" | never asked about climbs, never surcharged |
+| `walks on water`, `walks on water and blood`, `walk on mud or oil` | no extra cost in zones with exactly those tags |
+| anything else ("Ignores difficult stone terrain", "Hover") | no effect on zones or climbs |
+
+Separate items with commas. Join the tags after "walks on" with "and", not
+with a comma: "Walks on water, blood" is read as water only. Two words become
+one tag with a hyphen ("deep water" matches a zone tagged `deep-water`).
+
+### Decks
+
+A token standing on a deck, plank or any other floor plate is out of the
+liquid zone under it, whatever the gap. Before, a deck less than half a square
+above the liquid still counted as wading. A plate that is at or under the
+surface still counts as in the liquid. Ground that is not a plate (a rock that
+is only a bump in the terrain) still uses the half-square rule, so the map
+should either make it a plate or leave its squares out of the zone.
+
+### Checks run
+
+- 16 more tests. Full suite: 142 files, 1016 checks, 0 failures.
+- Sandbox, Dead Root Node, real mouse drags, GM: up a real 4-square cliff the
+  ruler read "Move 4 · Cost 7" with the amber mark; the pop-up showed the
+  text above; Don't climb left the token where it was; Climb put it on top.
+  Walking back off showed Dismiss / Climbing / Apply with "Climbing: no
+  damage, 3 more movement"; Climbing left Stamina at 50, not prone, and the
+  counter went from 4 to 7; Dismiss changed nothing; Apply took 8. Forced over
+  the same edge: Dismiss / Apply only. A Sluice Ghoul went straight up with
+  no pop-up and "Move 4".
+- Sandbox, player (Cal): the same pop-up for their own hero, Don't climb
+  refused the move, Climb moved it, and the fall review with Climbing came to
+  the player.
+- Sandbox, the Map maker's zoned Dead Root package (10 zones, 331 squares),
+  three squares from dry ground into blood and into water: Sluice Drowner
+  "Move 3"; Kragen Thornwhisper "Move 3"; Sluice Ghoul "Move 3 · Cost 6"; Cal
+  "Move 3 · Cost 6". All four still showed the tag of the liquid they ended
+  in.
+- Sandbox, the package's two low decks (0.283 and 0.287 above the blood): with
+  the deck squares put back into the blood zone for the test, a hero on the
+  deck had no blood tag and walked along it for "Move 1" with no extra cost.
+  The package's own zones were restored afterwards.
+
+Things you should know:
+
+- A drop that would do no damage raises no fall pop-up at all, as before. A
+  2-square drop with Agility 1 or more is one. There is then no Climbing
+  choice and nothing is charged.
+- The Climbing button is offered for any walked fall, including stepping off a
+  bridge or a deck, not only off a rock face.
+- Where the 3D view hides the top of a cliff behind its own face, the mouse
+  cannot pick the top square. That is how the map already behaved.
+- A climber who walks off an edge still gets the fall pop-up, with Climbing at
+  no cost.
+- A swimmer in water gets no "No shifting in difficult terrain" warning,
+  because for that creature the water costs nothing extra.
+- The zoned Dead Root package has one-way walls on every cliff edge (754 of
+  them), so on that map players cannot walk up a cliff at all and the climb
+  pop-up will only ever appear for the GM, who is not stopped by walls.
+  Whether those walls stay is your call.
+- Part-way up a cliff (stopping on the face) is not built. The pop-up shows
+  the cost and the movement left so the table can see it is a two-turn climb.
+
 ## Where it is now
 
-You said to put it all on `main` on this PC and wait for your word before
-pushing. That is done: `main` on this PC has the work, and it is not pushed.
+You said to put stages 1 to 3 on `main` on this PC and wait for your word
+before pushing. That is done: `main` on this PC has that work.
 
 ## Questions waiting for you
 
-1. Climbing a tall face at double cost: DND helper is confirming the exact
-   rule with you. It is not built yet. All movement pricing now goes through
-   one function, so it can be added in one place.
-2. On Dead Root, should a token standing on a low deck count as out of the
-   blood whatever the deck's height? (See "Things to know".)
+1. Climb cost: first square free (as built), or the rulebook's double for
+   every square?
+2. Should the cliff-edge walls in the Dead Root package stay?
+3. Should climbing down cost double as it does now, and should a plain fall
+   still cost its height in movement?
 
 ## Stage 4: abilities read tags. Not started
 

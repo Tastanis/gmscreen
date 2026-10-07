@@ -210,6 +210,44 @@ export function hasMovementType(placement, type) {
   return new RegExp(`\\b${String(type).replace(/[^a-z]/gi, '')}\\b`, 'i').test(movementText(placement));
 }
 
+// ---- Liquid, and who moves through it at full speed --------------------------
+// THE ONE LIST of zone tags that are liquid. A creature with a swim speed pays no extra
+// movement in a zone with one of these tags. Mud and lava are left out on purpose.
+export const LIQUID_TAGS = new Set(['water', 'blood', 'liquid', 'oil', 'acid', 'slime', 'sewage']);
+export const isLiquidTag = (tag) => LIQUID_TAGS.has(tag);
+
+const waivers = new Map();
+/**
+ * What a token's movement lets it ignore, read from its movement text:
+ *  - the word "swim" ("Swim", "Swim 4", "5 swim", "Swim, Climb"): every liquid zone;
+ *  - "walks on X", "walks on X and Y" ("Walks on water and blood"): zones with those tags.
+ * Items in the text are separated by commas, semicolons or full stops; the tags after
+ * "walks on" by "and", "or", "&" or "/". Only the movement cost is waived: the token is
+ * still in the zone, and still carries its tags.
+ */
+export function movementWaiver(placement) {
+  const text = movementText(placement).toLowerCase();
+  let waiver = waivers.get(text);
+  if (!waiver) {
+    const tags = new Set();
+    for (const item of text.split(/[,;.]/)) {
+      const list = item.match(/\bwalk(?:s|ing)?\s+on\s+(.+)$/)?.[1];
+      for (const part of (list || '').split(/\s+and\s+|\s+or\s+|\s*&\s*|\s*\/\s*/)) {
+        const tag = part.trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+        if (tag) tags.add(tag);
+      }
+    }
+    waiver = { liquids: /\bswim\b/.test(text), tags };
+    if (waivers.size > 500) waivers.clear();
+    waivers.set(text, waiver);
+  }
+  return waiver;
+}
+/** The movement multiplier this zone charges this mover: 1 when its movement waives the zone. */
+export function zoneCostFor(zone, waiver = null) {
+  return waiver && ((waiver.liquids && isLiquidTag(zone.tag)) || waiver.tags?.has(zone.tag)) ? 1 : zone.cost;
+}
+
 /**
  * True when a token with its feet at `feet` is standing on a deck, plank or other floor plate
  * rather than on the ground: a plate on its floor lies under its body at that height.

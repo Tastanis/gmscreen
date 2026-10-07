@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { CLIMB_FIRST_SQUARE_FREE, climbSurcharge, stepCost, routeSteps } from '../terrain-math.mjs';
 import { terrainContact } from '../terrain-contact.js';
-import { buildZoneIndex, normalizeZones, zonesForFootprint, summarizeRoute, movementText, hasMovementType, standsOnPlate } from '../terrain-zones.mjs';
+import { buildZoneIndex, normalizeZones, zonesForFootprint, summarizeRoute, movementText, hasMovementType, standsOnPlate, movementWaiver, zoneCostFor, isLiquidTag, LIQUID_TAGS } from '../terrain-zones.mjs';
 import { climbPromptText, askClimb } from '../climb-prompt.js';
 import { fallAllowsClimbing } from '../fall-review.js';
 
@@ -178,4 +178,54 @@ test('the fall review offers Climbing only to a creature that walked or shifted 
   assert.equal(fallAllowsClimbing({ squares: 3, movementKind: 'teleport' }), false);
   assert.equal(fallAllowsClimbing({ squares: 3 }), false, 'an older fall with no record of how it happened');
   assert.equal(fallAllowsClimbing(null), false);
+});
+
+// ---- swimming ------------------------------------------------------------------
+const zone = (tag, cost = 2) => ({ id: tag, tag, cost });
+const costs = (movement, tags) => { const waiver = movementWaiver(movement === null ? { name: 'Hero' } : { monster: { movement } }); return tags.map((tag) => zoneCostFor(zone(tag), waiver)); };
+
+test('liquid is decided by the zone tag, in one list', () => {
+  assert.deepEqual([...LIQUID_TAGS].sort(), ['acid', 'blood', 'liquid', 'oil', 'sewage', 'slime', 'water']);
+  assert.ok(isLiquidTag('water') && isLiquidTag('blood'));
+  assert.ok(!isLiquidTag('mud') && !isLiquidTag('lava') && !isLiquidTag('rubble') && !isLiquidTag(''));
+});
+
+test('a creature with a swim speed pays nothing extra in liquid, and full price everywhere else', () => {
+  const tags = ['water', 'blood', 'mud', 'rubble'];
+  assert.deepEqual(costs('Swim', tags), [1, 1, 2, 2]);
+  for (const text of ['swim', 'Swim 4', '5 swim', 'swim 6', 'Swim, Climb', 'Burrow; Swim']) assert.deepEqual(costs(text, tags), [1, 1, 2, 2], text);
+  // No swim: a ghoul that climbs, a creature with no movement text, a hero.
+  assert.deepEqual(costs('Climb', tags), [2, 2, 2, 2]);
+  assert.deepEqual(costs('', tags), [2, 2, 2, 2]);
+  assert.deepEqual(costs(null, tags), [2, 2, 2, 2]);
+  assert.deepEqual(costs('Swimwear', ['water']), [2], 'only the whole word counts');
+  // The zone keeps its own cost: x4 water is still free to a swimmer and x4 to a walker.
+  assert.equal(zoneCostFor(zone('water', 4), movementWaiver({ monster: { movement: 'Swim' } })), 1);
+  assert.equal(zoneCostFor(zone('water', 4), movementWaiver({ monster: { movement: 'Climb' } })), 4);
+  assert.equal(zoneCostFor(zone('water', 4), null), 4);
+  // The stored list of movement types is read as well as the text.
+  assert.deepEqual(movementWaiver({ monster: { movement: '', movement_modes: ['Swim'] } }).liquids, true);
+});
+
+test('"walks on X and Y" waives exactly the zones with those tags', () => {
+  const kragen = movementWaiver({ monster: { movement: 'Walks on water and blood' } });
+  assert.equal(kragen.liquids, false, 'it is not a swimmer');
+  assert.deepEqual([...kragen.tags].sort(), ['blood', 'water']);
+  assert.deepEqual(costs('Walks on water and blood', ['water', 'blood', 'oil', 'mud']), [1, 1, 2, 2], 'oil is liquid, but it was not named');
+  assert.deepEqual([...movementWaiver({ monster: { movement: 'Climb, walks on mud' } }).tags], ['mud'], 'a named tag need not be a liquid');
+  assert.deepEqual([...movementWaiver({ monster: { movement: 'Walk on water or oil / acid & slime' } }).tags].sort(), ['acid', 'oil', 'slime', 'water']);
+  assert.deepEqual([...movementWaiver({ monster: { movement: 'Walking on Deep Water' } }).tags], ['deep-water'], 'two words become one tag, as zone tags are written');
+  // Items are separated by commas, so a comma ends the list. The Monster maker should write "and".
+  assert.deepEqual([...movementWaiver({ monster: { movement: 'Walks on water, blood' } }).tags], ['water']);
+  assert.deepEqual([...movementWaiver({ monster: { movement: 'Ignores difficult stone terrain' } }).tags], [], 'a phrase it does not know changes nothing');
+  assert.deepEqual([...movementWaiver({ monster: { movement: 'Fly, Hover' } }).tags], []);
+});
+
+test('a swimmer is still in the zone: only the movement cost is waived', () => {
+  const index = buildZoneIndex(normalizeZones({ version: 1, zones: [{ id: 'canal', tag: 'blood', surfaceHeight: 0, cost: 2, squares: [[5, 5]] }] }));
+  const drowner = { column: 5, row: 5, width: 1, height: 1, monster: { movement: 'Swim' } };
+  const found = zonesForFootprint(index, drowner, -0.4, () => 0);
+  assert.deepEqual(found.map((z) => z.tag), ['blood'], 'abilities that ask "is it in blood?" still get yes');
+  assert.equal(Math.max(1, ...found.map((z) => zoneCostFor(z, movementWaiver(drowner)))), 1);
+  assert.equal(Math.max(1, ...found.map((z) => zoneCostFor(z, movementWaiver({ name: 'Cal' })))), 2);
 });

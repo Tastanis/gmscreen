@@ -121,6 +121,23 @@ The full package this comes from is the test fixture
   for that; it only has to name a floor that exists in the package.
 - Keep the first `revision` at 1 or higher. The importer refuses 0.
 
+## Tags the app reads
+
+Any tag is allowed. A few have a meaning in the app:
+
+- **Liquid tags:** `water`, `blood`, `liquid`, `oil`, `acid`, `slime`,
+  `sewage`. A creature with "swim" in its movement pays no extra movement in a
+  zone with one of these tags. Use one of them for anything a creature could
+  swim through. `mud` and `lava` are not liquid.
+- **Colour** follows the tag (red for blood, blue for water, brown for mud,
+  amber for anything else).
+- A creature whose movement says "walks on X" ignores the cost of zones tagged
+  X, whatever X is.
+
+A token standing on a floor plate (a deck, plank or barge) is out of the zone
+under it whatever the gap, so squares under a plate can stay in the zone.
+Squares under something standable that is not a plate should be left out.
+
 ## What the server checks
 
 `SceneEnvironment::validate('zones', value)` enforces everything in the table
