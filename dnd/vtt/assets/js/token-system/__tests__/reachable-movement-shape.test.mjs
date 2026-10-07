@@ -52,3 +52,18 @@ test('a large token covers its whole body, and a broken lookup never shrinks or 
   assert.deepEqual(buildReachableMovementShape({ origin, remaining: 2, bounds, cellInfo: () => ({ height: Number.NaN, multiplier: 'x' }) }), square);
   assert.equal(buildReachableMovementShape({ origin, remaining: 0, bounds, cellInfo: (column) => ({ height: 0, multiplier: column > 10 ? 2 : 1 }) }).outer.width, 1);
 });
+
+test('the board can supply the price of a step, so a new surcharge needs no change here', () => {
+  // A 2-high ledge east of column 11. Priced as usual, 4 movement gets on top and one square along it.
+  const cellInfo = (column) => ({ height: column >= 12 ? 2 : 0, multiplier: 1 });
+  const usual = buildReachableMovementShape({ origin, remaining: 4, bounds, cellInfo });
+  assert.ok(has(usual, 12, 10) && has(usual, 13, 10));
+  // The same ledge with the squares of a climb after the first charged double: 1 + 1 + 2 = 4, nothing left on top.
+  const climb = (from, to) => { const rise = to.height - from.height; return (rise >= 2 ? 1 + 2 * (rise - 1) : Math.max(1, Math.abs(rise))) + to.multiplier - 1; };
+  const surcharged = buildReachableMovementShape({ origin, remaining: 4, bounds, cellInfo, stepCost: climb });
+  assert.ok(has(surcharged, 12, 10) && !has(surcharged, 13, 10));
+  // A broken or silly price falls back to the usual one instead of opening the whole map.
+  for (const stepCost of [() => { throw new Error('no'); }, () => Number.NaN, () => 0, () => -5]) {
+    assert.deepEqual(buildReachableMovementShape({ origin, remaining: 4, bounds, cellInfo, stepCost }), usual);
+  }
+});

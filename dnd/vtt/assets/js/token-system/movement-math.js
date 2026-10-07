@@ -104,12 +104,13 @@ export function buildSquareMovementShape({ origin, remaining, blockers = [], bou
 /**
  * Reach outline that follows the real cost of each step. `cellInfo(column, row)`
  * gives, for the mover's top-left square, the rounded ground height and the
- * movement multiplier of that square. A step costs the larger of 1 and the
- * height change, plus (multiplier - 1), exactly as the ruler charges it.
+ * movement multiplier of that square. `stepCost(from, to)` prices one step
+ * between two such squares; the board passes the ruler's own pricing. Without
+ * it a step costs the larger of 1 and the height change, plus (multiplier - 1).
  * Returns the plain square shape when nothing changes the cost, so flat maps
  * without difficult terrain look as they always have.
  */
-export function buildReachableMovementShape({ origin, remaining, cellInfo = null, blockers = [], bounds = null } = {}) {
+export function buildReachableMovementShape({ origin, remaining, cellInfo = null, stepCost = null, blockers = [], bounds = null } = {}) {
   const square = buildSquareMovementShape({ origin, remaining, blockers, bounds });
   if (!square || typeof cellInfo !== 'function') {
     return square;
@@ -120,6 +121,13 @@ export function buildReachableMovementShape({ origin, remaining, cellInfo = null
   const minRow = square.outer.row;
   const maxColumn = square.outer.column + square.outer.width - footprint.width;
   const maxRow = square.outer.row + square.outer.height - footprint.height;
+  const price = (from, to) => {
+    const fallback = Math.max(1, Math.abs(to.height - from.height)) + to.multiplier - 1;
+    if (typeof stepCost !== 'function') return fallback;
+    let value = null;
+    try { value = Number(stepCost(from, to)); } catch (error) { value = null; }
+    return Number.isFinite(value) && value >= 1 ? value : fallback;
+  };
   const info = new Map();
   const read = (column, row) => {
     const key = `${column},${row}`;
@@ -153,7 +161,7 @@ export function buildReachableMovementShape({ origin, remaining, cellInfo = null
         const nextRow = row + dy;
         if (nextColumn < minColumn || nextColumn > maxColumn || nextRow < minRow || nextRow > maxRow) continue;
         const there = read(nextColumn, nextRow);
-        const next = cost + Math.max(1, Math.abs(there.height - here.height)) + there.multiplier - 1;
+        const next = cost + price(here, there);
         const key = `${nextColumn},${nextRow}`;
         if (next > movement || next >= (best.get(key) ?? Infinity)) continue;
         best.set(key, next);

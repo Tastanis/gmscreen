@@ -1,6 +1,6 @@
 // Terrain sandbox ruler integration
 const SVG_NS = 'http://www.w3.org/2000/svg';
-import { placeLegLabels, placeTotalLabel } from './ruler-label-layout.mjs';
+import { placeLegLabels, placeTotalLabel, rulerWording, WORDING_SEPARATOR } from './ruler-label-layout.mjs';
 import { claimActiveTool, publishActiveTool } from './active-tool.js';
 /** Ruler labels take their size from the grid (see ruler-label-layout.mjs); the outline scales with it. */
 function sizeLabel(text, size) {
@@ -528,28 +528,30 @@ function updateOverlay(state) {
   let totalBox = null;
 
   state.ruler.removeAttribute('hidden');
-  const distanceLabel = totalSquares === 1 ? '1 square' : `${totalSquares} squares`;
-  const baseLabel = state.mode === 'external' && state.measuring
-    ? `${state.movementLabel} - ${distanceLabel}` : distanceLabel;
-  // True movement cost sits above the plain distance only when they differ.
-  const notes = [];
-  if (shiftWarning) notes.push('No shift in difficult terrain');
-  if (totalCost !== totalSquares) notes.push(`Cost ${totalCost}`);
-  state.rulerValue.textContent = notes.length ? `${baseLabel} · ${notes.join(' · ')}` : baseLabel;
+  const wording = rulerWording({
+    movementLabel: state.mode === 'external' && state.measuring ? state.movementLabel : null,
+    squares: totalSquares,
+    cost: totalCost,
+  });
+  // The true movement cost follows the distance only when they differ.
+  const readout = [wording.distance];
+  if (shiftWarning) readout.push('No shift in difficult terrain');
+  if (wording.cost) readout.push(wording.cost);
+  state.rulerValue.textContent = readout.join(WORDING_SEPARATOR);
 
   if (shiftWarning) showShiftWarning(); else hideShiftWarning();
   if (state.overlay.total && endPoint) {
     // The shift warning has its own pop-up, so the label on the map carries the cost only.
-    const mapNotes = totalCost !== totalSquares ? [`Cost ${totalCost}`] : [];
+    const costPart = wording.cost ? `${WORDING_SEPARATOR}${wording.cost}` : null;
     const placed = placeTotalLabel({
       end: endPoint,
       previous: points[points.length - 2] ?? null,
       gridSize,
       mapHeight: Number(state.overlay.svg.getAttribute('height')) || Infinity,
-      lines: [...mapNotes, baseLabel],
+      lines: [wording.distance + (costPart ?? '')],
     });
     sizeLabel(state.overlay.total, placed.fontSize);
-    setStackedLabel(state.overlay.total, endPoint.mapX, placed.top, baseLabel, mapNotes, { stackDown: true });
+    setLabel(state.overlay.total, endPoint.mapX, placed.top, wording.distance, costPart);
     totalBox = placed.box;
     state.overlay.total.removeAttribute('hidden');
     state.overlay.total.style.display = '';
@@ -728,27 +730,23 @@ function syncSegmentLabels(group, segments, totalBox = null, gridSize = 64) {
     }
     text.setAttribute('text-anchor', label.anchor);
     sizeLabel(text, label.fontSize);
-    setStackedLabel(text, label.x, label.y, label.text);
+    setLabel(text, label.x, label.y, label.text);
   });
 }
 
-/** One label, with short notes stacked above it (the true movement cost, a warning). */
-function setStackedLabel(text, x, y, main, above = [], { stackDown = false } = {}) {
+/** One label on one line; the cost part, when there is one, follows in its own colour. */
+function setLabel(text, x, y, main, costPart = null) {
   text.setAttribute('x', x);
   text.setAttribute('y', y);
-  if (stackDown) text.setAttribute('dy', '0');
-  if (!above.length) {
+  text.setAttribute('dy', '0');
+  if (!costPart) {
     if (text.childElementCount || text.textContent !== main) text.textContent = main;
     return;
   }
-  const lines = [...above.map((line) => [line, 'vtt-measure-overlay__cost']), [main, '']];
-  const spans = lines.map(([line, className], index) => {
+  const spans = [main, costPart].map((part, index) => {
     const span = document.createElementNS(SVG_NS, 'tspan');
-    if (className) span.classList.add(className);
-    span.setAttribute('x', x);
-    // stackDown: y is the first line. Otherwise the main line stays on y and notes rise above it.
-    span.setAttribute('dy', index === 0 ? (stackDown ? '0' : `${-1.15 * above.length}em`) : '1.15em');
-    span.textContent = line;
+    if (index) span.classList.add('vtt-measure-overlay__cost');
+    span.textContent = part;
     return span;
   });
   text.replaceChildren(...spans);

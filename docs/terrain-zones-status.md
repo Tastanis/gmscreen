@@ -2,9 +2,12 @@
 
 Plain-language progress for Brandon. Updated at the end of each stage.
 
-**Where the work is:** a separate copy of the code at
-`.claude/worktrees/terrain-zones`, on the branch `claude/terrain-zones`.
-Nothing is on `main`, nothing is pushed, and the live site is untouched.
+**Where the work is:** stages 1 to 3 and the follow-up are on `main` in the
+shared folder on this PC (`C:/Users/tasta/Desktop/gmscreen`), as of October
+7, 2026. **Nothing is pushed and the live site is untouched.** It goes to
+GitHub and the live site only when you say so. The work was built in a
+separate copy at `.claude/worktrees/terrain-zones` (branch
+`claude/terrain-zones`), which is still there.
 
 ## What this feature is
 
@@ -88,9 +91,9 @@ What works now:
 - **Difficult terrain on the ruler.** Each difficult square on the route gets
   a flashing red stretch and a small "×2" or "×4". This works on flat maps
   too. The flashing stops for anyone whose device asks for reduced motion.
-- **Labels.** The distance is still shown as before. When the true cost is
-  different, "Cost 8" appears above "5 squares" in light red, on the route
-  and in the box at the bottom right ("Move - 5 squares · Cost 8").
+- **Labels.** When the true cost is different from the distance, the ruler
+  shows both: "Move 5 · Cost 8". (The wording was settled later; see
+  "Follow-up" below.)
 - **Per-turn counter.** "Moved 8 / 5" now charges the same cost as the ruler,
   through the waypoints of the drag. Arrow-key moves are counted too (they
   were not counted at all before).
@@ -124,9 +127,6 @@ Things that changed that you might notice:
 Not done, on purpose:
 
 - Nothing is blocked. The server does not check distance, speed or shifting.
-
-Wording you may want to change: the label says "Cost 8". If you would rather
-it said "8 to move" or just showed a symbol, tell me.
 
 ## Follow-up after your answers. Done (October 7, 2026)
 
@@ -179,25 +179,35 @@ map for the GM and for every player.
   map included. There is nowhere left to put the button, so it waits out of
   sight and comes back when the panel closes.
 
-**4. Labels tidied.**
+**4. Labels tidied, and the wording you chose.**
 
-- The total ("Cost 10" over "Move - 5 squares") now sits under the
-  destination square, clear of the token and its Stamina bar. When the route
-  comes up from below it goes above the bar instead, so it never lies along
-  the route.
-- A drag with a single leg shows only the total, so "squares" is no longer
-  written twice.
-- A drag with several legs labels each leg with its length only, set to the
-  side of the line so it does not sit on the "x2" numbers. The cost is on the
-  total. A leg label that would touch the total is left out.
-- Labels are now sized from the map's squares. On Dead Root, whose squares
-  are large, the label used to be too small to read.
+- The ruler now reads "Move 5", and "Move 5 · Cost 8" when the ground makes
+  the move cost more than its distance. It is one line, with the cost part in
+  light red. The same words are in the box at the bottom right. Shift,
+  forced movement and teleport read the same way ("Shift 4 · Cost 7").
+- The plain Measure tool is not a move, so it still says "5 squares".
+- The label sits under the destination square, clear of the token and its
+  Stamina bar. When the route comes up from below it goes above the bar
+  instead, so it never lies along the route.
+- A drag with several legs also labels each leg with its length ("3
+  squares"), set to the side of the line so it does not sit on the "x2"
+  numbers. I kept the word "squares" there because a bare number beside the
+  "x2" marks would be confusing. A leg label that would touch the main label
+  is left out.
+- Labels are sized from the map's squares. On Dead Root, whose squares are
+  large, the label used to be too small to read.
+- The wording lives in one place in the code (`rulerWording` in
+  `ruler-label-layout.mjs`), so it is a one-line change if you want
+  different words.
+- One limit: tokens are drawn on top of the ruler, so if another token
+  stands right where the label goes, it can cover part of it. The box at the
+  bottom right always shows the full text.
 
 Checks run:
 
-- 15 more tests (reach outline, label placement, button placement, the
-  players switch on the server). Full suite: 141 files, 997 checks, 0
-  failures.
+- 18 more tests (reach outline, label placement and wording, button
+  placement, step pricing, the players switch on the server). Full suite:
+  141 files, 1000 checks, 0 failures.
 - Sandbox, flat test scene, GM at 1600 wide: the button is at the bottom left
   with everything closed, and is on top and uncovered with each of these
   open: Scenes, Tokens, Fog, Stairs, Dice Roller, Templates, Draw, Edits,
@@ -239,10 +249,18 @@ well, and did not happen when the same steps were done without the stuck
 click. I think it is the test tool on this short-of-memory PC, not a VTT
 fault, but I have not proved that.
 
+## Where it is now
+
+You said to put it all on `main` on this PC and wait for your word before
+pushing. That is done: `main` on this PC has the work, and it is not pushed.
+
 ## Questions waiting for you
 
-1. Is "Cost 8" the wording you want on the ruler?
-2. How should this reach `main`? (See "Things to know".)
+1. Climbing a tall face at double cost: DND helper is confirming the exact
+   rule with you. It is not built yet. All movement pricing now goes through
+   one function, so it can be added in one place.
+2. On Dead Root, should a token standing on a low deck count as out of the
+   blood whatever the deck's height? (See "Things to know".)
 
 ## Stage 4: abilities read tags. Not started
 
@@ -261,9 +279,9 @@ stages 1 to 3 before starting this.
   maker worked round it by leaving those 25 squares out of the blood zones.
   If you would rather the VTT treated "standing on a deck" as out of the
   blood whatever its height, say so.
-- Your saved preference for this repository is to commit straight to `main`.
-  This work is on a branch only because three chats share one folder and the
-  feature is unfinished. How and when it goes onto `main` is your call.
+- This work was built on a branch because three chats share one folder. Your
+  instruction on October 7 was to put it on `main` locally and push only on
+  your word.
 
 ## Sandbox check
 

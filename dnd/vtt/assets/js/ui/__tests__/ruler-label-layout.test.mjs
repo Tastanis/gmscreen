@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { placeTotalLabel, placeLegLabels, totalLabelSize, legLabelSize } from '../ruler-label-layout.mjs';
+import { placeTotalLabel, placeLegLabels, totalLabelSize, legLabelSize, rulerWording, legWording } from '../ruler-label-layout.mjs';
 import { placeCornerControl } from '../terrain-zones.mjs';
 
 const at = (column, row, grid = 50) => ({ mapX: column * grid + grid / 2, mapY: row * grid + grid / 2 });
@@ -8,7 +8,7 @@ const overlap = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bott
 const leg = (from, to, squares, grid = 50) => ({ start: at(...from, grid), end: at(...to, grid), squares });
 
 test('the total sits below the destination, clear of the token and its Stamina bar', () => {
-  const end = at(10, 10), placed = placeTotalLabel({ end, previous: at(15, 10), gridSize: 50, mapHeight: 3000, lines: ['Cost 8', 'Move - 5 squares'] });
+  const end = at(10, 10), placed = placeTotalLabel({ end, previous: at(15, 10), gridSize: 50, mapHeight: 3000, lines: ['Move 5 · Cost 8'] });
   assert.equal(placed.side, 'below');
   assert.ok(placed.box.top > end.mapY + 25, 'the whole label is under the destination square');
   // The token fills its square and its Stamina bar rides just above it.
@@ -17,19 +17,19 @@ test('the total sits below the destination, clear of the token and its Stamina b
 });
 
 test('a route that comes up from below gets its total above the Stamina bar, not along the route', () => {
-  const end = at(10, 10), placed = placeTotalLabel({ end, previous: at(10, 15), gridSize: 50, mapHeight: 3000, lines: ['Cost 10', 'Move - 5 squares'] });
+  const end = at(10, 10), placed = placeTotalLabel({ end, previous: at(10, 15), gridSize: 50, mapHeight: 3000, lines: ['Move 5 · Cost 10'] });
   assert.equal(placed.side, 'above');
   assert.ok(placed.box.bottom < end.mapY - 50 * 0.75, 'the label ends above the Stamina bar, which rides three quarters of a square up');
   // One line only: still above, and the single line is the main label.
-  assert.equal(placeTotalLabel({ end, previous: at(10, 15), gridSize: 50, mapHeight: 3000, lines: ['Move - 5 squares'] }).side, 'above');
+  assert.equal(placeTotalLabel({ end, previous: at(10, 15), gridSize: 50, mapHeight: 3000, lines: ['Move 5'] }).side, 'above');
   // A diagonal that is mostly sideways still reads better below.
-  assert.equal(placeTotalLabel({ end, previous: at(20, 12), gridSize: 50, mapHeight: 3000, lines: ['Move - 10 squares'] }).side, 'below');
+  assert.equal(placeTotalLabel({ end, previous: at(20, 12), gridSize: 50, mapHeight: 3000, lines: ['Move 10'] }).side, 'below');
 });
 
 test('the total stays on the map at the top and bottom edges', () => {
-  const bottom = placeTotalLabel({ end: at(10, 59), previous: at(15, 59), gridSize: 50, mapHeight: 3000, lines: ['Cost 8', 'Move - 5 squares'] });
+  const bottom = placeTotalLabel({ end: at(10, 59), previous: at(15, 59), gridSize: 50, mapHeight: 3000, lines: ['Move 5 · Cost 8'] });
   assert.equal(bottom.side, 'above', 'no room under the last row');
-  const top = placeTotalLabel({ end: at(10, 0), previous: at(10, 5), gridSize: 50, mapHeight: 3000, lines: ['Cost 8', 'Move - 5 squares'] });
+  const top = placeTotalLabel({ end: at(10, 0), previous: at(10, 5), gridSize: 50, mapHeight: 3000, lines: ['Move 5 · Cost 8'] });
   assert.equal(top.side, 'below', 'no room over the first row, even coming from below');
 });
 
@@ -37,8 +37,8 @@ test('labels grow with the grid so they are readable on maps drawn with large sq
   assert.equal(totalLabelSize(50), 22);
   assert.equal(legLabelSize(50), 18);
   assert.ok(totalLabelSize(200) >= 80 && legLabelSize(200) >= 70, 'a 200 pixel square gets a label about 0.4 squares tall');
-  const small = placeTotalLabel({ end: at(5, 5, 50), gridSize: 50, lines: ['Move - 5 squares'] });
-  const large = placeTotalLabel({ end: at(5, 5, 200), gridSize: 200, lines: ['Move - 5 squares'] });
+  const small = placeTotalLabel({ end: at(5, 5, 50), gridSize: 50, lines: ['Move 5'] });
+  const large = placeTotalLabel({ end: at(5, 5, 200), gridSize: 200, lines: ['Move 5'] });
   assert.ok(large.fontSize > small.fontSize * 3);
   assert.ok(large.box.right - large.box.left > (small.box.right - small.box.left) * 3);
 });
@@ -62,7 +62,7 @@ test('a leg label that would touch the total is left out, and no two labels coll
   // East along a row, up two, then back west: the route ends two rows above the middle of its
   // first leg, so that leg's label would land on the total under the destination.
   const legs = [leg([2, 5], [8, 5], 6), leg([8, 5], [8, 3], 2), leg([8, 3], [5, 3], 3)];
-  const total = placeTotalLabel({ end: legs[2].end, previous: legs[2].start, gridSize: 50, mapHeight: 3000, lines: ['Cost 10', 'Move - 7 squares'] });
+  const total = placeTotalLabel({ end: legs[2].end, previous: legs[2].start, gridSize: 50, mapHeight: 3000, lines: ['Move 7 · Cost 10'] });
   const labels = placeLegLabels(legs, total.box, 50);
   assert.deepEqual(labels.map((label) => label.text), ['2 squares', '3 squares'], 'the first leg lost its label to the total');
   assert.equal(placeLegLabels(legs, null, 50).length, 3, 'with no total in the way every leg is labelled');
@@ -71,7 +71,20 @@ test('a leg label that would touch the total is left out, and no two labels coll
   // The reported Dead Root case: five squares straight north into the canal. One label, above the bar.
   const north = [leg([30, 20], [30, 15], 5, 150)];
   assert.deepEqual(placeLegLabels(north, null, 150), []);
-  assert.equal(placeTotalLabel({ end: north[0].end, previous: north[0].start, gridSize: 150, mapHeight: 6000, lines: ['Cost 10', 'Move - 5 squares'] }).side, 'above');
+  assert.equal(placeTotalLabel({ end: north[0].end, previous: north[0].start, gridSize: 150, mapHeight: 6000, lines: ['Move 5 · Cost 10'] }).side, 'above');
+});
+
+test('ruler wording: "Move 5", and "Move 5 · Cost 8" only when the cost differs', () => {
+  assert.deepEqual(rulerWording({ movementLabel: 'Move', squares: 5, cost: 8 }), { distance: 'Move 5', cost: 'Cost 8' });
+  assert.deepEqual(rulerWording({ movementLabel: 'Move', squares: 5, cost: 5 }), { distance: 'Move 5', cost: null });
+  assert.deepEqual(rulerWording({ movementLabel: 'Move', squares: 1, cost: 1 }), { distance: 'Move 1', cost: null });
+  assert.equal(rulerWording({ movementLabel: 'Shift', squares: 4, cost: 7 }).distance, 'Shift 4');
+  assert.equal(rulerWording({ movementLabel: 'Forced movement', squares: 3, cost: 3 }).distance, 'Forced movement 3');
+  // The plain Measure tool has no movement word, so it still says what the number is.
+  assert.deepEqual(rulerWording({ squares: 5, cost: 5 }), { distance: '5 squares', cost: null });
+  assert.equal(rulerWording({ squares: 1 }).distance, '1 square');
+  assert.equal(legWording(1), '1 square');
+  assert.equal(legWording(4), '4 squares');
 });
 
 // ---- the corner Zones control ------------------------------------------------

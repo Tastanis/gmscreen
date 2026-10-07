@@ -36,6 +36,10 @@ export const effectiveHeight=(ground,size)=>groundSquare(ground)+Math.floor(Math
 export const relativeScale=(ground,viewer)=>clamp(1+(heightBand(ground)-heightBand(viewer))*.1,.5,2);
 // squareCost(column,row,rawHeight) is the movement multiplier of the square being
 // entered (2 for ordinary difficult terrain); it adds multiplier-1 to that step.
+/** Movement cost of one step: the larger of the squares moved and the height change, plus
+ * (multiplier - 1) for difficult terrain. `rise` is signed (up is positive). The ruler, the turn
+ * counter and the reach outline all charge through here, so a new surcharge is added once. */
+export function stepCost({horizontal=1,rise=0,multiplier=1}={}){return Math.max(horizontal,Math.abs(rise))+multiplier-1;}
 export function routeSteps(start,end,height,squareCost=null){
  let x=start.column,y=start.row;const first=height(x,y),points=[{column:x,row:y,height:groundSquare(first),rawHeight:first}];
  const dx=end.column-x,dy=end.row-y,count=Math.ceil(Math.max(Math.abs(dx),Math.abs(dy)));
@@ -44,9 +48,9 @@ export function routeSteps(start,end,height,squareCost=null){
    const rawHeight=height(x,y);points.push({column:x,row:y,height:groundSquare(rawHeight),rawHeight});
  }
  let cost=0,extra=0,cliff=false;
- for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i],horizontal=Math.max(Math.abs(a.column-b.column),Math.abs(a.row-b.row)),vertical=Math.abs(b.height-a.height);
+ for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i],horizontal=Math.max(Math.abs(a.column-b.column),Math.abs(a.row-b.row));
    const raw=horizontal>0&&squareCost?Number(squareCost(b.column,b.row,b.rawHeight)):1,multiplier=Number.isFinite(raw)&&raw>1?Math.floor(raw):1;
-   b.multiplier=multiplier;cost+=Math.max(horizontal,vertical)+multiplier-1;extra+=multiplier-1;if(horizontal>0&&Math.abs(b.rawHeight-a.rawHeight)/horizontal>=3-1e-6)cliff=true;}
+   b.multiplier=multiplier;cost+=stepCost({horizontal,rise:b.height-a.height,multiplier});extra+=multiplier-1;if(horizontal>0&&Math.abs(b.rawHeight-a.rawHeight)/horizontal>=3-1e-6)cliff=true;}
  return {points,cost,cliff,extra};
 }
 export function barycentric(p,a,b,c){

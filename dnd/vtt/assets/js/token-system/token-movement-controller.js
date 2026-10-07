@@ -193,6 +193,7 @@ export function createTokenMovementController({
         origin: dragSession.original,
         remaining,
         cellInfo: typeof cells?.at === 'function' ? cells.at : null,
+        stepCost: typeof cells?.stepCost === 'function' ? cells.stepCost : null,
         blockers,
         bounds: {
           minColumn: 0,

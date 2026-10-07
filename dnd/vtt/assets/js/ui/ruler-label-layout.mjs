@@ -8,7 +8,21 @@ const LABEL_LINE = 1.18; // line height, as a share of the font size
 const LABEL_CHARACTER_WIDTH = 0.57; // generous average character width, as a share of the font size
 
 /**
- * The total ("Cost 10" over "Move - 5 squares") sits below the destination square, clear of the
+ * The words on the ruler. This is the one place to change the wording.
+ * A token drag reads "Move 5", and "Move 5 · Cost 8" when the true cost differs. The plain
+ * Measure tool has no movement word, so it keeps "5 squares".
+ */
+export const WORDING_SEPARATOR = ' · ';
+export const legWording = (squares) => (squares === 1 ? '1 square' : `${squares} squares`);
+export function rulerWording({ movementLabel = null, squares = 0, cost = squares } = {}) {
+  return {
+    distance: movementLabel ? `${movementLabel} ${squares}` : legWording(squares),
+    cost: cost !== squares ? `Cost ${cost}` : null,
+  };
+}
+
+/**
+ * The total ("Move 5 · Cost 8") sits below the destination square, clear of the
  * token and its Stamina bar. When the route comes up from below, or the map ends there, it goes
  * above the bar instead, so it never lies along the route it describes.
  * `lines` is the text, top line first. `top` is the centre of the first line.
@@ -45,7 +59,7 @@ export function placeLegLabels(segments = [], totalBox = null, gridSize = 64) {
     if (Math.abs(dy) < Math.abs(dx) * 0.5) y -= gridSize * 0.62;
     else if (Math.abs(dx) < Math.abs(dy) * 0.5) { x += gridSize * 0.45; anchor = 'start'; }
     else { x += gridSize * 0.5; y += (dx * dy > 0 ? -1 : 1) * gridSize * 0.5; anchor = 'start'; }
-    const text = segment.squares === 1 ? '1 square' : `${segment.squares} squares`;
+    const text = legWording(segment.squares);
     const width = text.length * fontSize * LABEL_CHARACTER_WIDTH, left = anchor === 'middle' ? x - width / 2 : x;
     return { x, y, anchor, text, fontSize, left, right: left + width, top: y - halfLine, bottom: y + halfLine };
   }).filter((label) => !totalBox

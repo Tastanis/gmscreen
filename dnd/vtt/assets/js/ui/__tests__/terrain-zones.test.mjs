@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { normalizeZones, sceneZones, buildZoneIndex, zonesAtSquare, squareCostMultiplier, zonesForFootprint, zoneTags, footprintSquares, zoneGeometry, zoneColor, summarizeRoute, zonesHiddenFromPlayers, ZONE_DEFAULT_COST } from '../terrain-zones.mjs';
-import { routeSteps, slopeColor } from '../terrain-math.mjs';
+import { routeSteps, slopeColor, stepCost } from '../terrain-math.mjs';
 import { normalizeSceneBoardState } from '../../state/normalize/scene-board-state.js';
 import { reduceCanonicalEvent } from '../../sync-v2/event-reducer.js';
 
@@ -162,4 +162,16 @@ test('zones survive the client state normaliser and live environment events', ()
   const reduced = reduceCanonicalEvent({ revision: 3, state }, event);
   const next = reduced.snapshot?.state ?? reduced.state ?? state;
   assert.equal(sceneZones(next.sceneConfig, 'scene')[0]?.tag, 'blood', 'a zone save from the GM reaches open clients through the normal event');
+});
+
+test('one step is priced in one place: distance or height, whichever is larger, plus difficult terrain', () => {
+  assert.equal(stepCost(), 1);
+  assert.equal(stepCost({ horizontal: 1, rise: 1 }), 1, 'a one-square step up is ordinary movement');
+  assert.equal(stepCost({ horizontal: 1, rise: 3 }), 3);
+  assert.equal(stepCost({ horizontal: 1, rise: -3 }), 3, 'going down is priced like going up');
+  assert.equal(stepCost({ horizontal: 1, rise: 0, multiplier: 2 }), 2);
+  assert.equal(stepCost({ horizontal: 1, rise: 2, multiplier: 4 }), 5, 'difficult terrain adds to a climb, it does not multiply it');
+  // The ruler uses it: a 3-high ledge, then two x2 squares on top.
+  const route = routeSteps({ column: 0, row: 0 }, { column: 3, row: 0 }, (x) => (x >= 1 ? 3 : 0), (x) => (x >= 2 ? 2 : 1));
+  assert.equal(route.cost, 3 + 2 + 2);
 });

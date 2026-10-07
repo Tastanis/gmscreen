@@ -1,7 +1,7 @@
 // Draws tagged terrain zones on the board and answers "which zones is this
 // token in". Reads the canonical scene environment; display choice is local.
 import {sceneZones, buildZoneIndex, zonesForFootprint, zoneTags, squareCostMultiplier, zoneGeometry, zoneColor, zoneSurface, summarizeRoute, zonesHiddenFromPlayers, BASE_LEVEL_ID, placeCornerControl} from './terrain-zones.mjs';
-import {routeSteps, groundSquare} from './terrain-math.mjs';
+import {routeSteps, groundSquare, stepCost} from './terrain-math.mjs';
 import {saveShared} from './environment-sync.mjs';
 import {floorElevations} from '../state/normalize/floor-elevation.js';
 
@@ -94,6 +94,8 @@ function cellInfoFor(target) {
       const raw = active ? active.route({column, row}, {column, row}, {ignoreZones: true}).points[0].rawHeight : undefined;
       return {height: active ? groundSquare(raw) : 0, multiplier: stepMultiplier(actor, column, row, raw)};
     },
+    // The reach outline charges each step exactly as the ruler does.
+    stepCost: (from, to) => stepCost({horizontal: 1, rise: to.height - from.height, multiplier: to.multiplier}),
   };
 }
 
