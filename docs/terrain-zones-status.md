@@ -49,9 +49,9 @@ What works now:
   for mud, amber for anything else. A GM-only zone has a dashed outline and
   "(GM)" after its name.
 - On maps with height the overlay follows the ground the same way tokens do.
-- The GM has a new **Zones** button next to Height. It hides or shows the
-  zones on the GM's own screen and remembers the choice. Players always see
-  the zones they were sent, and never the GM-only ones.
+- A **Zones** button hides or shows the zones. It started beside Height and
+  was GM-only; it is now a small button in the bottom left corner for
+  everyone (see "Follow-up" below).
 - The VTT can now answer "which zones is this token in". A token is in a zone
   when it is on the zone's floor, part of it is on a zone square, and its feet
   are less than half a square above the zone's surface. So a flier, or a token
@@ -71,10 +71,6 @@ Checks run:
 - Sandbox, Dead Root Node with a test blood zone of 99 squares: the outline
   follows the canal; a token wading at (35.5, 15.5) is in "blood" and a token
   on the B2 deck over the same square is not; a flier over the canal is not.
-
-One thing to decide later: the Zones button only changes the GM's own screen.
-If you want a switch that hides zones from the players too, say so and I will
-add it as a scene setting.
 
 ## Stage 3: movement. Done (October 7, 2026)
 
@@ -98,9 +94,9 @@ What works now:
 - **Per-turn counter.** "Moved 8 / 5" now charges the same cost as the ruler,
   through the waypoints of the drag. Arrow-key moves are counted too (they
   were not counted at all before).
-- **Shifting.** Holding Shift through or inside difficult terrain shows "No
-  shift in difficult terrain" on the ruler, and the status line says so after
-  the move. It is a warning only. The move is not blocked.
+- **Shifting.** Holding Shift through or inside difficult terrain warns. It
+  is a warning only; the move is not blocked. The warning is now a pop-up
+  (see "Follow-up" below).
 
 Checks run:
 
@@ -127,22 +123,126 @@ Things that changed that you might notice:
 
 Not done, on purpose:
 
-- **The blue "how far can I move" box is unchanged. It still ignores terrain
-  and overstates reach near zones.** Waiting for your decision (question 2).
 - Nothing is blocked. The server does not check distance, speed or shifting.
 
 Wording you may want to change: the label says "Cost 8". If you would rather
 it said "8 to move" or just showed a symbol, tell me.
 
+## Follow-up after your answers. Done (October 7, 2026)
+
+You answered three of the four questions, and asked for the labels to be
+tidied. All four are built, on the same branch.
+
+**1. Shift warning is a pop-up.** Shifting into or through difficult terrain
+shows a red box near the top of the screen: "No shifting in difficult
+terrain. The rules do not allow a shift into or inside it. The move is not
+blocked." It appears while you drag, stays for about four seconds after you
+let go, and then goes away by itself. There is only ever one, it never stacks,
+there is nothing to click, and you can click straight through it. The move is
+still allowed.
+
+**2. The "how far can I move" outline is accurate.** During a turn the outline
+now follows the real cost of every square: x2 and x4 terrain, and climbing on
+maps with height. It pulls in where the ground is expensive and it finds the
+cheap way round an obstacle. Where nothing nearby changes the cost it is the
+same plain square as before. It was not slow: the VTT only looks at the
+squares inside the old box (121 squares for speed 5), so no cheaper
+substitute was needed.
+
+- It follows the same rules as the ruler: a flier or a token on a deck over
+  the blood is not charged, and a big token is charged if any part of it
+  enters.
+- It does not know about walls. Neither did the old box.
+- The outline is also thicker on maps drawn with large squares (Dead Root),
+  where it used to be about one pixel wide.
+
+**3. Zones button in the bottom left corner.** The button beside Height is
+gone. There is now a small "Zones" button in the bottom left corner of the
+map for the GM and for every player.
+
+- Everyone can switch zones on and off on their own screen. The choice is
+  remembered per person on that browser.
+- The GM has a second button beside it, "Players". Switching it off hides the
+  zones on every player's screen. A player's own button is then greyed out
+  ("The GM has hidden terrain zones") and cannot bring them back. Switching
+  it on again gives each player back whatever they had chosen.
+- This is a scene setting, so it is remembered with the scene.
+- Hiding is display only. Movement through a hidden zone still costs extra
+  for the player, so the ruler and the counter stay honest.
+- GM-only zones are still never sent to players, whatever the switches say.
+- **It moves out of the way of panels.** When a slide-out covers the corner
+  (Scenes, Tokens, a monster's stat block, a hero's sheet with its details
+  opened), the button slides to the right of it. If a bar ran along the whole
+  bottom it would rise above it.
+- **The one case where it hides:** in a narrow window (about 700 pixels) the
+  Scenes, Tokens and hero panels and the chat fill nearly the whole window,
+  map included. There is nowhere left to put the button, so it waits out of
+  sight and comes back when the panel closes.
+
+**4. Labels tidied.**
+
+- The total ("Cost 10" over "Move - 5 squares") now sits under the
+  destination square, clear of the token and its Stamina bar. When the route
+  comes up from below it goes above the bar instead, so it never lies along
+  the route.
+- A drag with a single leg shows only the total, so "squares" is no longer
+  written twice.
+- A drag with several legs labels each leg with its length only, set to the
+  side of the line so it does not sit on the "x2" numbers. The cost is on the
+  total. A leg label that would touch the total is left out.
+- Labels are now sized from the map's squares. On Dead Root, whose squares
+  are large, the label used to be too small to read.
+
+Checks run:
+
+- 15 more tests (reach outline, label placement, button placement, the
+  players switch on the server). Full suite: see the last line of this
+  section.
+- Sandbox, flat test scene, GM at 1600 wide: the button is at the bottom left
+  with everything closed, and is on top and uncovered with each of these
+  open: Scenes, Tokens, Fog, Stairs, Dice Roller, Templates, Draw, Edits,
+  Measure, Damage/Heal, the chat drawer, a token selected. With Scenes or
+  Tokens open it moves to the right edge of the panel. With the Draw tools
+  open it moves to their right.
+- Sandbox, flat test scene, player: same corner; own button hides and shows;
+  the choice survives a reload; the player has no "Players" button; the
+  GM-only pit is not in the player's data. GM switches Players off: the
+  player's zones vanish, the player's button is greyed out and does nothing,
+  it stays that way after the player reloads, and a 5-square walk through the
+  blood still reads cost 8. GM switches it back on: the zones return.
+- Sandbox, Dead Root Node, GM: with a monster selected (stat block down the
+  left, ability buttons along the bottom) the button sits between them.
+- Sandbox, Dead Root Node, player: with the hero selected the button stays in
+  the corner (the sheet stops short of it); with "Character details" opened
+  the sheet reaches the bottom and the button moves to its right; with the
+  Tokens panel open it moves to its right.
+- Narrow window (700 wide), GM and player: in the corner with everything
+  closed; hidden while Scenes, Tokens, the hero sheet or the chat fills the
+  window.
+- Reach outline, flat scene, speed 5, standing beside the blood: checked
+  square by square against a hand count. It reaches 5 squares over dry
+  ground, stops short in the blood, leaves out the x4 mud, and reaches round
+  the canal by the dry row above it. Far from any zone it is the plain
+  square. On Dead Root it follows the canal bank.
+- Shift pop-up: not shown for a shift on dry ground; shown as soon as the
+  drag enters blood; still one pop-up after wiggling the mouse and after a
+  second shift; gone six seconds after the drop; the token moved.
+- Labels: straight walk, diagonal walk, two legs, three legs, and the Dead
+  Root "5 squares north into the canal" case. No label overlapped another,
+  and on Dead Root the total did not touch a token.
+
+Something I noticed that is not part of this work: twice the test browser's
+page crashed while my script kept trying to click a button that was hidden
+behind an open panel (once Templates after Damage/Heal, once a settings
+button in a narrow window). It happened with the current `main` scripts as
+well, and did not happen when the same steps were done without the stuck
+click. I think it is the test tool on this short-of-memory PC, not a VTT
+fault, but I have not proved that.
+
 ## Questions waiting for you
 
-1. Shifting into or inside difficult terrain is not allowed by the rules.
-   Today the VTT warns. Do you want it blocked?
-2. The blue "how far can I move" box ignores terrain cost. Should it be made
-   accurate, or hidden while a zone is nearby?
-3. The Zones button hides zones on the GM's screen only. Do you want a switch
-   that hides them from the players too?
-4. Is "Cost 8" the wording you want on the ruler?
+1. Is "Cost 8" the wording you want on the ruler?
+2. How should this reach `main`? (See "Things to know".)
 
 ## Stage 4: abilities read tags. Not started
 
@@ -151,10 +251,16 @@ stages 1 to 3 before starting this.
 
 ## Things to know
 
-- On the Dead Root Node map, a walking token is never treated as standing on
-  the fallen log or the barge (finding M4 in the sandbox test report). Once
-  zones are drawn it will count as "in blood" there. The fix belongs in the
-  map package.
+- The Map maker has built the real Dead Root Node package with zones (10
+  zones, 331 squares) and reports that it imports cleanly on this branch.
+  That package also fixes the fallen log, barge and planks (finding M4).
+  Today's `main` refuses that package, so it needs this branch on `main`.
+- A token counts as in a zone when its feet are less than half a square above
+  the zone's surface. The low decks on Dead Root are only about a quarter of a
+  square above the blood, so a token on them would count as in blood. The Map
+  maker worked round it by leaving those 25 squares out of the blood zones.
+  If you would rather the VTT treated "standing on a deck" as out of the
+  blood whatever its height, say so.
 - Your saved preference for this repository is to commit straight to `main`.
   This work is on a branch only because three chats share one folder and the
   feature is unfinished. How and when it goes onto `main` is your call.

@@ -1,5 +1,5 @@
 import {
-  buildSquareMovementShape,
+  buildReachableMovementShape,
   getGridBoundsFromView,
   measureChebyshevDistance,
   normalizeFootprint,
@@ -27,6 +27,10 @@ export function createTokenMovementController({
   isUndoSuppressed = () => false,
   // Route cost in squares for a move (terrain height and difficult terrain), or null to use straight-line distance.
   measureRoute = () => null,
+  // Per-square height and movement multiplier for the reach outline ({key, at(column,row)}), or null for a plain square.
+  getCellInfo = () => null,
+  // Optional (column,row) => {x,y} in map pixels, so the outline follows raised ground.
+  projectCorner = null,
   windowRef = typeof window === 'undefined' ? undefined : window,
   documentRef = typeof document === 'undefined' ? undefined : document,
 } = {}) {
@@ -179,19 +183,27 @@ export function createTokenMovementController({
     const remaining = Math.max(0, dragSession.speed - spent);
     const blockers = getOpposingSameLevelBlockers(dragSession.tokenId);
     const gridMetrics = getGridBoundsFromView(getViewState());
-    const shape = buildSquareMovementShape({
-      origin: dragSession.original,
-      remaining,
-      blockers,
-      bounds: {
-        minColumn: 0,
-        minRow: 0,
-        columns: gridMetrics.columns,
-        rows: gridMetrics.rows,
-      },
-    });
+    // The reach outline is rebuilt only when something that shapes it changes, not on every pointer move.
+    let cells = null;
+    try { cells = getCellInfo(dragSession.tokenId); } catch (error) { cells = null; }
+    const shapeKey = JSON.stringify([dragSession.tokenId, dragSession.original, remaining, cells?.key ?? null, blockers, gridMetrics.columns, gridMetrics.rows]);
+    if (dragSession.shapeKey !== shapeKey) {
+      dragSession.shapeKey = shapeKey;
+      dragSession.shape = buildReachableMovementShape({
+        origin: dragSession.original,
+        remaining,
+        cellInfo: typeof cells?.at === 'function' ? cells.at : null,
+        blockers,
+        bounds: {
+          minColumn: 0,
+          minRow: 0,
+          columns: gridMetrics.columns,
+          rows: gridMetrics.rows,
+        },
+      });
+    }
 
-    overlay.render(shape, gridMetrics);
+    overlay.render(dragSession.shape, projectCorner ? { ...gridMetrics, projectCorner } : gridMetrics);
     setRulerSupplement(formatMovementSummary({
       spent,
       dragCost,

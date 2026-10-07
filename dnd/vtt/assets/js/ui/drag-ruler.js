@@ -1,6 +1,12 @@
 // Terrain sandbox ruler integration
 const SVG_NS = 'http://www.w3.org/2000/svg';
+import { placeLegLabels, placeTotalLabel } from './ruler-label-layout.mjs';
 import { claimActiveTool, publishActiveTool } from './active-tool.js';
+/** Ruler labels take their size from the grid (see ruler-label-layout.mjs); the outline scales with it. */
+function sizeLabel(text, size) {
+  text.style.fontSize = `${size}px`;
+  text.style.strokeWidth = `${size * 0.27}px`;
+}
 const MAX_MEASUREMENT_POINTS = 21; // 20 segments
 
 // Arrow visual constants
@@ -473,6 +479,7 @@ function updateOverlay(state) {
     state.overlay.nodes.innerHTML = '';
     state.overlay.labels.innerHTML = '';
     state.overlay.svg.querySelector('[data-difficult-route]')?.remove();
+    hideShiftWarning();
     state.ruler.setAttribute('hidden', 'hidden');
     state.rulerValue.textContent = '0 squares';
     if (state.overlay.total) {
@@ -517,7 +524,8 @@ function updateOverlay(state) {
   }
 
   syncNodeMarkers(state.overlay.nodes, points);
-  syncSegmentLabels(state.overlay.labels, segments);
+  const endPoint = points[points.length - 1];
+  let totalBox = null;
 
   state.ruler.removeAttribute('hidden');
   const distanceLabel = totalSquares === 1 ? '1 square' : `${totalSquares} squares`;
@@ -529,12 +537,24 @@ function updateOverlay(state) {
   if (totalCost !== totalSquares) notes.push(`Cost ${totalCost}`);
   state.rulerValue.textContent = notes.length ? `${baseLabel} · ${notes.join(' · ')}` : baseLabel;
 
-  const endPoint = points[points.length - 1];
+  if (shiftWarning) showShiftWarning(); else hideShiftWarning();
   if (state.overlay.total && endPoint) {
-    setStackedLabel(state.overlay.total, endPoint.mapX, endPoint.mapY, baseLabel, notes);
+    // The shift warning has its own pop-up, so the label on the map carries the cost only.
+    const mapNotes = totalCost !== totalSquares ? [`Cost ${totalCost}`] : [];
+    const placed = placeTotalLabel({
+      end: endPoint,
+      previous: points[points.length - 2] ?? null,
+      gridSize,
+      mapHeight: Number(state.overlay.svg.getAttribute('height')) || Infinity,
+      lines: [...mapNotes, baseLabel],
+    });
+    sizeLabel(state.overlay.total, placed.fontSize);
+    setStackedLabel(state.overlay.total, endPoint.mapX, placed.top, baseLabel, mapNotes, { stackDown: true });
+    totalBox = placed.box;
     state.overlay.total.removeAttribute('hidden');
     state.overlay.total.style.display = '';
   }
+  syncSegmentLabels(state.overlay.labels, segments, totalBox, gridSize);
 }
 
 function ensureRulerDetail(ruler) {
@@ -693,39 +713,30 @@ function syncNodeMarkers(group, points) {
   }
 }
 
-function syncSegmentLabels(group, segments) {
-  const existing = Array.from(group.children);
-  if (existing.length > segments.length) {
-    existing.slice(segments.length).forEach((node) => node.remove());
-  }
+function syncSegmentLabels(group, segments, totalBox = null, gridSize = 64) {
+  const labels = placeLegLabels(segments, totalBox, gridSize);
+  Array.from(group.children).slice(labels.length).forEach((node) => node.remove());
 
   const nodes = Array.from(group.children);
-  for (let index = 0; index < segments.length; index += 1) {
-    const segment = segments[index];
+  labels.forEach((label, index) => {
     let text = nodes[index];
     if (!text) {
       text = document.createElementNS(SVG_NS, 'text');
       text.classList.add('vtt-measure-overlay__label');
-      text.setAttribute('text-anchor', 'middle');
       text.setAttribute('dominant-baseline', 'middle');
       group.appendChild(text);
-      nodes.push(text);
     }
-
-    const midpoint = {
-      x: (segment.start.mapX + segment.end.mapX) / 2,
-      y: (segment.start.mapY + segment.end.mapY) / 2,
-    };
-
-    setStackedLabel(text, midpoint.x, midpoint.y, segment.squares === 1 ? '1 square' : `${segment.squares} squares`,
-      segment.cost !== segment.squares ? [`Cost ${segment.cost}`] : []);
-  }
+    text.setAttribute('text-anchor', label.anchor);
+    sizeLabel(text, label.fontSize);
+    setStackedLabel(text, label.x, label.y, label.text);
+  });
 }
 
 /** One label, with short notes stacked above it (the true movement cost, a warning). */
-function setStackedLabel(text, x, y, main, above = []) {
+function setStackedLabel(text, x, y, main, above = [], { stackDown = false } = {}) {
   text.setAttribute('x', x);
   text.setAttribute('y', y);
+  if (stackDown) text.setAttribute('dy', '0');
   if (!above.length) {
     if (text.childElementCount || text.textContent !== main) text.textContent = main;
     return;
@@ -735,11 +746,44 @@ function setStackedLabel(text, x, y, main, above = []) {
     const span = document.createElementNS(SVG_NS, 'tspan');
     if (className) span.classList.add(className);
     span.setAttribute('x', x);
-    span.setAttribute('dy', index === 0 ? `${-1.15 * above.length}em` : '1.15em');
+    // stackDown: y is the first line. Otherwise the main line stays on y and notes rise above it.
+    span.setAttribute('dy', index === 0 ? (stackDown ? '0' : `${-1.15 * above.length}em`) : '1.15em');
     span.textContent = line;
     return span;
   });
   text.replaceChildren(...spans);
+}
+
+// ---- Shift warning ----------------------------------------------------------
+// One pop-up, reused: it appears while a shift drag crosses difficult terrain and
+// again briefly after such a move lands. It never stacks and needs no dismissing.
+let shiftWarningElement = null;
+let shiftWarningTimer = null;
+function ensureShiftWarning() {
+  if (shiftWarningElement?.isConnected) return shiftWarningElement;
+  shiftWarningElement = document.createElement('div');
+  shiftWarningElement.className = 'vtt-shift-warning';
+  shiftWarningElement.setAttribute('role', 'alert');
+  shiftWarningElement.hidden = true;
+  shiftWarningElement.innerHTML = '<strong>No shifting in difficult terrain</strong><span>The rules do not allow a shift into or inside it. The move is not blocked.</span>';
+  document.body.appendChild(shiftWarningElement);
+  return shiftWarningElement;
+}
+function showShiftWarning() {
+  const element = ensureShiftWarning();
+  if (shiftWarningTimer) { clearTimeout(shiftWarningTimer); shiftWarningTimer = null; }
+  element.hidden = false;
+}
+function hideShiftWarning() {
+  if (shiftWarningTimer || !shiftWarningElement || shiftWarningElement.hidden) return;
+  shiftWarningElement.hidden = true;
+}
+/** Shows the shift warning for a few seconds after a shift through difficult terrain has landed. */
+export function flashShiftWarning(milliseconds = 4500) {
+  const element = ensureShiftWarning();
+  element.hidden = false;
+  if (shiftWarningTimer) clearTimeout(shiftWarningTimer);
+  shiftWarningTimer = setTimeout(() => { shiftWarningTimer = null; element.hidden = true; }, milliseconds);
 }
 
 function movementKindOf(state) {
@@ -869,7 +913,7 @@ function createOverlay(container) {
   total.setAttribute('text-anchor', 'middle');
   total.setAttribute('dominant-baseline', 'middle');
   total.setAttribute('hidden', 'hidden');
-  total.setAttribute('dy', '-28');
+  total.setAttribute('dy', '0');
   svg.appendChild(total);
 
   container.appendChild(svg);

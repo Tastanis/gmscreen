@@ -1,7 +1,8 @@
 // Draws tagged terrain zones on the board and answers "which zones is this
 // token in". Reads the canonical scene environment; display choice is local.
-import {sceneZones, buildZoneIndex, zonesForFootprint, zoneTags, squareCostMultiplier, zoneGeometry, zoneColor, zoneSurface, summarizeRoute, BASE_LEVEL_ID} from './terrain-zones.mjs';
-import {routeSteps} from './terrain-math.mjs';
+import {sceneZones, buildZoneIndex, zonesForFootprint, zoneTags, squareCostMultiplier, zoneGeometry, zoneColor, zoneSurface, summarizeRoute, zonesHiddenFromPlayers, BASE_LEVEL_ID, placeCornerControl} from './terrain-zones.mjs';
+import {routeSteps, groundSquare} from './terrain-math.mjs';
+import {saveShared} from './environment-sync.mjs';
 import {floorElevations} from '../state/normalize/floor-elevation.js';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -10,8 +11,8 @@ const svg = document.createElementNS(NS, 'svg');
 svg.id = 'terrain-zone-overlay';
 svg.style.cssText = 'position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:2';
 svg.setAttribute('aria-hidden', 'true');
-let button = null, visible = true, preferenceKey = '', signature = '', builds = 0;
-let cache = {key: '', zones: [], index: new Map()};
+let visible = true, preferenceKey = '', signature = '', builds = 0, saving = false;
+let cache = {key: '', zones: [], index: new Map(), hiddenFromPlayers: false};
 
 function context() { return window.terrainContext?.() || null; }
 function terrain() { return window.terrainPrototype?.active ? window.terrainPrototype : null; }
@@ -20,7 +21,7 @@ function sceneOf(c) { return c?.state.boardState.sceneState?.[c.state.boardState
 function current(c = context()) {
   const sceneId = c?.state.boardState.activeSceneId || '', field = sceneOf(c)?.environment?.zones || null;
   const key = sceneId + ':' + (field?.revision ?? 'none') + ':' + (field?.value?.zones?.length ?? 0);
-  if (key !== cache.key) { const zones = sceneZones(c?.state.boardState.sceneState, sceneId); cache = {key, zones, index: buildZoneIndex(zones)}; }
+  if (key !== cache.key) { const zones = sceneZones(c?.state.boardState.sceneState, sceneId); cache = {key, zones, index: buildZoneIndex(zones), hiddenFromPlayers: zonesHiddenFromPlayers(field)}; }
   return cache;
 }
 function elevations(c = context()) { return floorElevations(sceneOf(c)?.mapLevels); }
@@ -78,38 +79,125 @@ function routeCost(points, {kind = 'walk', actor = undefined} = {}) {
   summary.shiftInDifficult = kind === 'shift' && (summary.difficult.length > 0 || summary.startsInDifficult);
   return summary;
 }
+/**
+ * Per-square lookup for the reach outline: the rounded ground height and the
+ * movement multiplier a mover meets on each square. Null when the scene has
+ * neither height nor zones, so the plain square outline is already exact.
+ */
+function cellInfoFor(target) {
+  const c = context(), active = terrain(), state = current(c), actor = placementOf(target, c);
+  if (!active && !state.zones.length) return null;
+  const airborne = ['fly', 'hover'].includes(actor?.movementMode);
+  return {
+    key: [state.key, active?.revision ?? 0, active?.key ?? '', actor?.levelId || '', actor?.width || 1, airborne ? actor.flightHeight ?? 'air' : 'ground'].join('|'),
+    at(column, row) {
+      const raw = active ? active.route({column, row}, {column, row}, {ignoreZones: true}).points[0].rawHeight : undefined;
+      return {height: active ? groundSquare(raw) : 0, multiplier: stepMultiplier(actor, column, row, raw)};
+    },
+  };
+}
+
+// ---- Corner toggle ---------------------------------------------------------
+// A tiny control at the bottom left of the board. Everyone can hide or show
+// zones on their own screen; the GM can also hide them from the players.
+const control = document.createElement('div');
+control.id = 'terrain-zone-toggle';
+control.hidden = true;
+const ownButton = document.createElement('button');
+ownButton.type = 'button'; ownButton.dataset.action = 'terrain-zones'; ownButton.textContent = 'Zones';
+const playersButton = document.createElement('button');
+playersButton.type = 'button'; playersButton.dataset.action = 'terrain-zones-players'; playersButton.textContent = 'Players';
+control.append(ownButton, playersButton);
+const toggleStyle = document.createElement('style');
+toggleStyle.textContent = `
+ #terrain-zone-toggle{position:fixed;z-index:2147480000;display:flex;gap:4px;pointer-events:auto}
+ #terrain-zone-toggle[hidden]{display:none}
+ #terrain-zone-toggle button{font:700 10px/1 system-ui,sans-serif;letter-spacing:.03em;text-transform:uppercase;padding:4px 6px;border-radius:5px;border:1px solid rgba(255,255,255,.35);background:rgba(17,24,39,.82);color:#fff;cursor:pointer;opacity:.9}
+ #terrain-zone-toggle button[aria-pressed="false"]{background:rgba(17,24,39,.55);color:rgba(255,255,255,.55);text-decoration:line-through}
+ #terrain-zone-toggle button[disabled]{cursor:not-allowed;opacity:.6}
+ #terrain-zone-toggle button[hidden]{display:none}
+ #terrain-zone-toggle button:hover:not([disabled]){opacity:1;border-color:#fff}
+`;
+document.head.append(toggleStyle);
+document.body.append(control);
 
 function setVisible(value) {
   visible = !!value;
   try { if (preferenceKey) localStorage.setItem(preferenceKey, String(visible)); } catch {}
   signature = '';
 }
-function ensureButton(c, hasZones) {
-  if (!c?.isGM) { button?.remove(); button = null; return; }
-  if (!button) {
-    const anchor = document.querySelector('[data-action="terrain-height"]') || document.querySelector('[data-action="measure-distance"]');
-    if (!anchor) return;
-    button = document.createElement('button');
-    button.type = 'button'; button.className = 'btn'; button.textContent = 'Zones'; button.dataset.action = 'terrain-zones';
-    button.title = 'Show or hide terrain zones (blood, water, difficult terrain) on your screen';
-    button.addEventListener('click', () => setVisible(!visible));
-    anchor.after(button);
-  }
-  button.hidden = !hasZones;
-  button.setAttribute('aria-pressed', String(visible));
+ownButton.addEventListener('click', () => setVisible(!visible));
+async function setHiddenFromPlayers(hidden) {
+  const c = context(), field = sceneOf(c)?.environment?.zones;
+  if (!c?.isGM || !field?.value || saving) return false;
+  const value = JSON.parse(JSON.stringify(field.value));
+  if (hidden) value.hiddenFromPlayers = true; else delete value.hiddenFromPlayers;
+  saving = true;
+  try { await saveShared('zones', value, field.revision, c.state.boardState.activeSceneId); return true; }
+  catch (error) { console.error('[terrain zones] could not change the players switch', error); return false; }
+  finally { saving = false; signature = ''; }
+}
+playersButton.addEventListener('click', () => setHiddenFromPlayers(!current().hiddenFromPlayers));
+
+const board = document.querySelector('#vtt-board-canvas'), mapSurface = document.querySelector('#vtt-map-surface');
+/** True when this element is ordinary board (map, tokens, the canvas itself), not a panel over it. */
+function isBoard(element) {
+  return !element || element === document.documentElement || element === document.body || element === board
+    || !!mapSurface?.contains(element) || element.contains(board) || control.contains(element);
+}
+/** The outermost box of a panel sitting over a point: its highest ancestor that does not also hold the board. */
+function panelRoot(element) {
+  let root = element;
+  while (root.parentElement && root.parentElement !== document.body && !root.parentElement.contains(board)) root = root.parentElement;
+  return root;
+}
+/** Keeps the control at the bottom left of the board, stepping aside from any panel that opens over that corner. */
+function placeControl() {
+  if (control.hidden || !board) return;
+  const width = control.offsetWidth || 60, height = control.offsetHeight || 22;
+  const place = placeCornerControl({
+    frame: board.getBoundingClientRect(),
+    viewport: {width: window.innerWidth, height: window.innerHeight},
+    size: {width, height},
+    blockerAt: (left, top) => {
+      for (const [x, y] of [[left + 2, top + 2], [left + width - 2, top + 2], [left + 2, top + height - 2], [left + width - 2, top + height - 2], [left + width / 2, top + height / 2]]) {
+        const hit = document.elementsFromPoint(x, y).find((element) => !control.contains(element));
+        if (hit && !isBoard(hit)) return panelRoot(hit).getBoundingClientRect();
+      }
+      return null;
+    },
+  });
+  if (!place) { control.style.visibility = 'hidden'; return; }
+  control.style.visibility = '';
+  const nextLeft = place.left + 'px', nextBottom = place.bottom + 'px';
+  if (control.style.left !== nextLeft) control.style.left = nextLeft;
+  if (control.style.bottom !== nextBottom) control.style.bottom = nextBottom;
+}
+function syncControl(c, state) {
+  const hasZones = state.zones.length > 0;
+  control.hidden = !hasZones;
+  if (!hasZones) return;
+  const lockedOff = !c.isGM && state.hiddenFromPlayers;
+  ownButton.setAttribute('aria-pressed', String(visible && !lockedOff));
+  ownButton.disabled = lockedOff;
+  ownButton.title = lockedOff ? 'The GM has hidden terrain zones' : visible ? 'Hide terrain zones on your screen' : 'Show terrain zones on your screen';
+  playersButton.hidden = !c.isGM;
+  playersButton.setAttribute('aria-pressed', String(!state.hiddenFromPlayers));
+  playersButton.title = state.hiddenFromPlayers ? 'Players cannot see terrain zones. Click to show them.' : 'Players can see terrain zones. Click to hide them from players.';
+  placeControl();
 }
 
 function draw() {
   const c = context();
-  if (!c?.view?.mapLoaded) { if (svg.childNodes.length) { svg.replaceChildren(); signature = ''; } return; }
+  if (!c?.view?.mapLoaded) { control.hidden = true; if (svg.childNodes.length) { svg.replaceChildren(); signature = ''; } return; }
   if (!svg.isConnected && transform) transform.insertBefore(svg, document.querySelector('#terrain-cost-markers') || document.querySelector('#vtt-grid-overlay'));
   const pref = 'terrain-zones-visible:' + String(c.userId || 'viewer');
   if (pref !== preferenceKey) { preferenceKey = pref; try { const saved = localStorage.getItem(pref); visible = saved === null ? true : saved === 'true'; } catch { visible = true; } }
-  const {zones, key} = current(c), active = terrain(), v = c.view, g = v.gridSize || 64, ox = v.gridOffsets?.left || 0, oy = v.gridOffsets?.top || 0;
-  ensureButton(c, zones.length > 0);
-  // Players always see the zones they were sent; the GM may hide them locally.
-  const show = zones.length > 0 && (visible || !c.isGM);
-  const next = JSON.stringify([key, show, c.levelId, g, ox, oy, v.mapPixelSize, !!active, active?.revision ?? 0, active?.key ?? '']);
+  const state = current(c), {zones, key} = state, active = terrain(), v = c.view, g = v.gridSize || 64, ox = v.gridOffsets?.left || 0, oy = v.gridOffsets?.top || 0;
+  syncControl(c, state);
+  // Each person chooses for their own screen; the GM can also switch zones off for every player.
+  const show = zones.length > 0 && visible && (c.isGM || !state.hiddenFromPlayers);
+  const next = JSON.stringify([key, show, state.hiddenFromPlayers, c.levelId, g, ox, oy, v.mapPixelSize, !!active, active?.revision ?? 0, active?.key ?? '']);
   if (next === signature) return;
   signature = next; builds++;
   svg.setAttribute('width', v.mapPixelSize?.width || 0); svg.setAttribute('height', v.mapPixelSize?.height || 0);
@@ -152,9 +240,13 @@ window.terrainZones = {
   costAt: (column, row, levelId = BASE_LEVEL_ID) => squareCostMultiplier(current().index, column, row, levelId),
   stepMultiplier,
   routeCost,
+  cellInfoFor,
   standingHeight: (target) => { const placement = placementOf(target); return placement ? standingHeight(placement) : null; },
   get visible() { return visible; },
   setVisible,
+  get hiddenFromPlayers() { return current().hiddenFromPlayers; },
+  setHiddenFromPlayers,
   get builds() { return builds; },
 };
 setInterval(() => { try { draw(); } catch (error) { console.error('[terrain zones]', error); } }, 200);
+window.addEventListener('resize', () => { try { placeControl(); } catch {} });

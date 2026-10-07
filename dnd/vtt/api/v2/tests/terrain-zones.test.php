@@ -47,6 +47,11 @@ try {
     for ($z = 0; $z < 3; $z++) { $squares = []; for ($i = 0; $i < SceneEnvironment::ZONE_SQUARE_LIMIT; $i++) $squares[] = [$i % 10000, $z * 3 + intdiv($i, 10000)]; $wide['zones'][] = ['id'=>'w' . $z, 'tag'=>'water', 'squares'=>$squares]; }
     zoneRejects(static fn()=>SceneEnvironment::validate('zones', $wide), 'Too many zone squares', 'The total square budget is enforced');
     zoneRejects(static fn()=>SceneEnvironment::validate('zones', $with(['squares'=>[[1, 2]], 'label'=>['__proto__'=>1]])), 'Invalid zone label', 'Labels must be text');
+    SceneEnvironment::validate('zones', [...$value, 'hiddenFromPlayers'=>true]);
+    SceneEnvironment::validate('zones', [...$value, 'hiddenFromPlayers'=>false]);
+    zoneRejects(static fn()=>SceneEnvironment::validate('zones', [...$value, 'hiddenFromPlayers'=>'yes']), 'Invalid zone display flag', 'The players-hidden switch must be true or false');
+    $hiddenForPlayers = SceneEnvironment::project(['zones'=>['revision'=>3,'value'=>[...$value, 'hiddenFromPlayers'=>true]]]);
+    zoneCheck($hiddenForPlayers['zones']['value']['hiddenFromPlayers'] === true && count($hiddenForPlayers['zones']['value']['zones']) === 4, 'Players still receive the zones (for movement cost) together with the hidden switch, minus GM-only zones');
     echo "PASS zone format validation\n";
 
     // ---- GM authority, revisions and floors through the real command path

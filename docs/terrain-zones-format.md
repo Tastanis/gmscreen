@@ -23,6 +23,14 @@ package.domains.sceneConfig.environment.zones = {
 A scene with no `zones` field has no zones. Nothing else changes for old
 scenes and old packages.
 
+### Optional display switch
+
+`value` may also carry `"hiddenFromPlayers": true`. The GM sets it from the
+"Players" button in the VTT; a package normally leaves it out. It only hides
+the drawing on players' screens. Players still receive the zones, and movement
+through them still costs extra. Any value other than `true` or `false` is
+refused.
+
 ## A zone record
 
 | Field | Required | Type | Meaning |

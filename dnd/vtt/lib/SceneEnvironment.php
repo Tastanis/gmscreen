@@ -160,7 +160,9 @@ final class SceneEnvironment
      */
     private static function validateZones(array $value): void
     {
-        if (($value['version'] ?? null)!==1 || array_diff(array_keys($value),['version','zones'])) throw new InvalidArgumentException('Invalid zone format.');
+        if (($value['version'] ?? null)!==1 || array_diff(array_keys($value),['version','zones','hiddenFromPlayers'])) throw new InvalidArgumentException('Invalid zone format.');
+        // Display switch only: players still receive the zones so movement cost stays honest.
+        if (array_key_exists('hiddenFromPlayers',$value)&&!is_bool($value['hiddenFromPlayers'])) throw new InvalidArgumentException('Invalid zone display flag.');
         $zones=$value['zones'] ?? null;
         if (!is_array($zones)||!array_is_list($zones)||count($zones)>self::ZONE_LIMIT) throw new InvalidArgumentException('Invalid zone list.');
         $ids=[];$total=0;

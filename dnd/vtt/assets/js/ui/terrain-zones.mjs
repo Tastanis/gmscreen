@@ -33,6 +33,12 @@ export function normalizeZones(field) {
   return zones;
 }
 
+/** The GM's display switch: when true, players do not see the zone overlay (they still pay for the terrain). */
+export function zonesHiddenFromPlayers(field) {
+  const value = field && typeof field === 'object' && 'value' in field ? field.value : field;
+  return value?.hiddenFromPlayers === true;
+}
+
 /** Zones of one scene from the board state (sceneState keyed by scene id). */
 export function sceneZones(sceneState, sceneId) {
   return normalizeZones(sceneState?.[sceneId]?.environment?.zones ?? null);
@@ -162,4 +168,24 @@ export function zoneGeometry(zone, corner) {
     if (distance < best) { best = distance; labelSquare = square; }
   }
   return { fill: fill.join(''), outline: outline.join(''), edges: outline.length, labelSquare };
+}
+
+/**
+ * Where the corner control goes: the bottom left of the board, stepping to the right of, or
+ * above, any panel that covers that corner. `blockerAt(left, top)` returns the rectangle of a
+ * panel lying over the control when it is placed there, or null. Returns null when there is no
+ * free place (a full-screen layer, or a narrow window the panel nearly fills): the control then
+ * waits out of sight until the panel closes.
+ */
+export function placeCornerControl({frame, viewport, size, gap = 6, blockerAt = () => null} = {}) {
+  let left = Math.max(gap, frame.left + gap), bottom = Math.max(gap, viewport.height - frame.bottom + gap);
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const rect = blockerAt(left, viewport.height - bottom - size.height);
+    if (!rect) break;
+    if (rect.width >= viewport.width * 0.9 && rect.height >= viewport.height * 0.9) return null;
+    if (rect.right + gap + size.width <= viewport.width - gap) left = rect.right + gap;
+    else { left = Math.max(gap, frame.left + gap); bottom = Math.max(bottom + size.height + gap, viewport.height - rect.top + gap); }
+  }
+  if (viewport.height - bottom - size.height < 0 || left + size.width > viewport.width) return null;
+  return {left: Math.round(left), bottom: Math.round(bottom)};
 }

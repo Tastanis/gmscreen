@@ -41,6 +41,7 @@ import {
   clearRulerSupplement,
   getCurrentMeasurementPoints,
   getCurrentMovementKind,
+  flashShiftWarning,
 } from './drag-ruler.js';
 import { buildAutomationTargetPromptHtml } from './automation-target-prompt.js';
 import { getAutomationMoveRangePresentation } from './automation-move-display.js';
@@ -1418,7 +1419,10 @@ export function mountBoardInteractions(store, routes = {}) {
           movementKind,
           source,
         });
-        if (movementKind === 'shift' && status && shiftCrossedDifficult) status.textContent += ' Shift crossed difficult terrain, which the rules do not allow.';
+        if (movementKind === 'shift' && shiftCrossedDifficult) {
+          if (status) status.textContent += ' Shift crossed difficult terrain, which the rules do not allow.';
+          flashShiftWarning();
+        }
       })
       .catch((error) => {
         reportSyncFailure(error, movementAccepted ? 'movement follow-up' : 'token movement');
@@ -1697,6 +1701,12 @@ export function mountBoardInteractions(store, routes = {}) {
     },
     setRulerSupplement: (text) => setRulerSupplement(text),
     measureRoute: (move) => measureMovementRoute(move),
+    getCellInfo: (tokenId) => window.terrainZones?.cellInfoFor?.(tokenId) ?? null,
+    projectCorner: (column, row) => {
+      const terrain = window.terrainPrototype?.active ? window.terrainPrototype : null;
+      const x = (viewState.gridOffsets?.left || 0) + column * (viewState.gridSize || 64), y = (viewState.gridOffsets?.top || 0) + row * (viewState.gridSize || 64);
+      return terrain ? terrain.project(x, y, terrain.heightAt(x, y)) : { x, y };
+    },
     clearRulerSupplement: () => clearRulerSupplement(),
     restoreMove: (move) => restoreTokenMovement(move),
     getUndoMove: () => {

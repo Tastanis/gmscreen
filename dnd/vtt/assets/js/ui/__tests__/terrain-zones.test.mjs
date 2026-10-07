@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { normalizeZones, sceneZones, buildZoneIndex, zonesAtSquare, squareCostMultiplier, zonesForFootprint, zoneTags, footprintSquares, zoneGeometry, zoneColor, summarizeRoute, ZONE_DEFAULT_COST } from '../terrain-zones.mjs';
+import { normalizeZones, sceneZones, buildZoneIndex, zonesAtSquare, squareCostMultiplier, zonesForFootprint, zoneTags, footprintSquares, zoneGeometry, zoneColor, summarizeRoute, zonesHiddenFromPlayers, ZONE_DEFAULT_COST } from '../terrain-zones.mjs';
 import { routeSteps, slopeColor } from '../terrain-math.mjs';
 import { normalizeSceneBoardState } from '../../state/normalize/scene-board-state.js';
 import { reduceCanonicalEvent } from '../../sync-v2/event-reducer.js';
@@ -92,6 +92,15 @@ test('zone outline keeps only outer edges and picks a label square inside the zo
   assert.ok(raised.fill.startsWith('M212,64'), 'the projection supplied by the board is applied to every corner');
   assert.equal(zoneColor('blood'), '#c1121f');
   assert.equal(zoneColor('something-new'), '#d4a017');
+});
+
+test('the GM switch that hides zones from players is read from the stored field', () => {
+  assert.equal(zonesHiddenFromPlayers(field), false, 'zones are shown to players unless the GM says otherwise');
+  assert.equal(zonesHiddenFromPlayers({ revision: 2, value: { ...field.value, hiddenFromPlayers: true } }), true);
+  assert.equal(zonesHiddenFromPlayers({ ...field.value, hiddenFromPlayers: true }), true, 'the bare value is accepted too');
+  assert.equal(zonesHiddenFromPlayers({ revision: 2, value: { ...field.value, hiddenFromPlayers: 'yes' } }), false, 'only a real true hides them');
+  assert.equal(zonesHiddenFromPlayers(null), false);
+  assert.equal(normalizeZones({ revision: 2, value: { ...field.value, hiddenFromPlayers: true } }).length, 5, 'hiding is display only: the zones themselves are unchanged');
 });
 
 test('a difficult square costs its multiplier; a climb is paid as well', () => {

@@ -4917,6 +4917,52 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
   }
 }
 
+/* Pop-up shown while (and just after) a shift crosses difficult terrain. */
+.vtt-shift-warning {
+  position: fixed;
+  top: 22%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2147480001;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-width: min(26rem, 86vw);
+  padding: 0.8rem 1.1rem;
+  border: 2px solid #f87171;
+  border-radius: 0.6rem;
+  background: rgba(69, 10, 10, 0.94);
+  color: #fff;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+
+.vtt-shift-warning[hidden] {
+  display: none;
+}
+
+.vtt-shift-warning strong {
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+}
+
+.vtt-shift-warning span {
+  font-size: 0.82rem;
+  opacity: 0.9;
+}
+
+/* Reach outline that follows terrain cost instead of a plain square. */
+.vtt-token-movement-overlay__reach {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.94);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.65));
+}
+
 .dice-modal-overlay--vtt {
   background: transparent;
   align-items: flex-start;

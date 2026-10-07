@@ -35,8 +35,32 @@ export function createMovementOverlay({ mapTransform } = {}) {
       element.removeChild(element.firstChild);
     }
 
-    const outer = rectToPixels(shape.outer, gridMetrics);
-    element.appendChild(createRect(outer, 'vtt-token-movement-overlay__outline'));
+    // The line is drawn in map pixels, so it is thickened on maps with large squares to stay visible.
+    const size = Math.max(8, Number.isFinite(gridMetrics?.gridSize) ? gridMetrics.gridSize : 64);
+    const strokeWidth = `${Math.max(3, size * 0.055)}px`;
+    if (Array.isArray(shape.edges) && shape.edges.length) {
+      // Terrain-aware reach: an outline along the squares that can really be reached.
+      const left = Number.isFinite(gridMetrics?.offsets?.left) ? gridMetrics.offsets.left : 0;
+      const top = Number.isFinite(gridMetrics?.offsets?.top) ? gridMetrics.offsets.top : 0;
+      const corner = typeof gridMetrics?.projectCorner === 'function'
+        ? gridMetrics.projectCorner
+        : (column, row) => ({ x: left + column * size, y: top + row * size });
+      const d = shape.edges.map(([c1, r1, c2, r2]) => {
+        const a = corner(c1, r1);
+        const b = corner(c2, r2);
+        return `M${format(a.x)} ${format(a.y)}L${format(b.x)} ${format(b.y)}`;
+      }).join('');
+      const path = document.createElementNS(SVG_NS, 'path');
+      path.classList.add('vtt-token-movement-overlay__reach');
+      path.setAttribute('d', d);
+      path.style.strokeWidth = strokeWidth;
+      element.appendChild(path);
+    } else {
+      const outer = rectToPixels(shape.outer, gridMetrics);
+      const outline = createRect(outer, 'vtt-token-movement-overlay__outline');
+      outline.style.strokeWidth = strokeWidth;
+      element.appendChild(outline);
+    }
 
     const cutouts = Array.isArray(shape.cutouts) ? shape.cutouts : [];
     cutouts.forEach((cutout) => {
