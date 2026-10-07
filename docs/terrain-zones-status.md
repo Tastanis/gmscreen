@@ -196,8 +196,8 @@ map for the GM and for every player.
 Checks run:
 
 - 15 more tests (reach outline, label placement, button placement, the
-  players switch on the server). Full suite: see the last line of this
-  section.
+  players switch on the server). Full suite: 141 files, 997 checks, 0
+  failures.
 - Sandbox, flat test scene, GM at 1600 wide: the button is at the bottom left
   with everything closed, and is on top and uncovered with each of these
   open: Scenes, Tokens, Fog, Stairs, Dice Roller, Templates, Draw, Edits,
