@@ -452,8 +452,19 @@ function updateOverlay(state) {
   const rawPoints = getRenderablePoints(state);
   const terrain=window.terrainPrototype?.active ? window.terrainPrototype : null;
   const points = terrain ? rawPoints.map(p=>({...p,...terrain.rulerPoint(p)})) : rawPoints;
-  const segments = getSegments(rawPoints).map(segment=>terrain ? {...segment,squares:terrain.route(segment.start,segment.end).cost,start:{...segment.start,...terrain.rulerPoint(segment.start)},end:{...segment.end,...terrain.rulerPoint(segment.end)}} : segment);
+  // Distance is the route as before; cost adds difficult terrain for a walk or shift.
+  const kind = state.mode === 'external' ? movementKindOf(state) : 'walk';
+  const zones = window.terrainZones?.routeCost ? window.terrainZones : null;
+  const segments = getSegments(rawPoints).map((segment) => {
+    const measured = zones ? zones.routeCost([segment.start, segment.end], { kind }) : null;
+    const squares = measured ? measured.distance : terrain ? terrain.route(segment.start, segment.end).cost : segment.squares;
+    const placed = terrain ? {...segment,start:{...segment.start,...terrain.rulerPoint(segment.start)},end:{...segment.end,...terrain.rulerPoint(segment.end)}} : segment;
+    return { ...placed, squares, cost: measured ? measured.cost : squares, difficult: measured?.difficult ?? [], shiftInDifficult: Boolean(measured?.shiftInDifficult), rawStart: segment.start };
+  });
   const totalSquares = segments.reduce((sum, segment) => sum + segment.squares, 0);
+  const totalCost = segments.reduce((sum, segment) => sum + segment.cost, 0);
+  const shiftWarning = segments.some((segment) => segment.shiftInDifficult);
+  state.lastMeasure = segments.length ? { distance: totalSquares, cost: totalCost, kind, shiftInDifficult: shiftWarning } : null;
 
   if (!segments.length) {
     state.overlay.svg.setAttribute('hidden', 'hidden');
@@ -461,6 +472,7 @@ function updateOverlay(state) {
     state.overlay.path.setAttribute('d', '');
     state.overlay.nodes.innerHTML = '';
     state.overlay.labels.innerHTML = '';
+    state.overlay.svg.querySelector('[data-difficult-route]')?.remove();
     state.ruler.setAttribute('hidden', 'hidden');
     state.rulerValue.textContent = '0 squares';
     if (state.overlay.total) {
@@ -485,6 +497,7 @@ function updateOverlay(state) {
   state.overlay.path.setAttribute('d', pathD);
   if(terrain)terrain.paintRoute(state.overlay,rawPoints,gridSize);
   else {state.overlay.path.style.opacity='';state.overlay.svg.querySelector('[data-terrain-route]')?.remove();}
+  syncDifficultSteps(state.overlay, segments, gridSize, terrain);
 
   // Stroke thickness scales with grid size so it looks consistent at any zoom.
   state.overlay.path.setAttribute(
@@ -508,14 +521,17 @@ function updateOverlay(state) {
 
   state.ruler.removeAttribute('hidden');
   const distanceLabel = totalSquares === 1 ? '1 square' : `${totalSquares} squares`;
-  state.rulerValue.textContent = state.mode === 'external' && state.measuring
+  const baseLabel = state.mode === 'external' && state.measuring
     ? `${state.movementLabel} - ${distanceLabel}` : distanceLabel;
+  // True movement cost sits above the plain distance only when they differ.
+  const notes = [];
+  if (shiftWarning) notes.push('No shift in difficult terrain');
+  if (totalCost !== totalSquares) notes.push(`Cost ${totalCost}`);
+  state.rulerValue.textContent = notes.length ? `${baseLabel} · ${notes.join(' · ')}` : baseLabel;
 
   const endPoint = points[points.length - 1];
   if (state.overlay.total && endPoint) {
-    state.overlay.total.textContent = state.rulerValue.textContent;
-    state.overlay.total.setAttribute('x', endPoint.mapX);
-    state.overlay.total.setAttribute('y', endPoint.mapY);
+    setStackedLabel(state.overlay.total, endPoint.mapX, endPoint.mapY, baseLabel, notes);
     state.overlay.total.removeAttribute('hidden');
     state.overlay.total.style.display = '';
   }
@@ -701,10 +717,73 @@ function syncSegmentLabels(group, segments) {
       y: (segment.start.mapY + segment.end.mapY) / 2,
     };
 
-    text.textContent = segment.squares === 1 ? '1 square' : `${segment.squares} squares`;
-    text.setAttribute('x', midpoint.x);
-    text.setAttribute('y', midpoint.y);
+    setStackedLabel(text, midpoint.x, midpoint.y, segment.squares === 1 ? '1 square' : `${segment.squares} squares`,
+      segment.cost !== segment.squares ? [`Cost ${segment.cost}`] : []);
   }
+}
+
+/** One label, with short notes stacked above it (the true movement cost, a warning). */
+function setStackedLabel(text, x, y, main, above = []) {
+  text.setAttribute('x', x);
+  text.setAttribute('y', y);
+  if (!above.length) {
+    if (text.childElementCount || text.textContent !== main) text.textContent = main;
+    return;
+  }
+  const lines = [...above.map((line) => [line, 'vtt-measure-overlay__cost']), [main, '']];
+  const spans = lines.map(([line, className], index) => {
+    const span = document.createElementNS(SVG_NS, 'tspan');
+    if (className) span.classList.add(className);
+    span.setAttribute('x', x);
+    span.setAttribute('dy', index === 0 ? `${-1.15 * above.length}em` : '1.15em');
+    span.textContent = line;
+    return span;
+  });
+  text.replaceChildren(...spans);
+}
+
+function movementKindOf(state) {
+  return { Teleport: 'teleport', 'Forced movement': 'forced', Shift: 'shift', Move: 'walk' }[state?.movementLabel] || 'walk';
+}
+
+/** Flashing red over each difficult square on the route, with its multiplier (x2, x4). */
+function syncDifficultSteps(overlay, segments, gridSize, terrain) {
+  let group = overlay.svg.querySelector('[data-difficult-route]');
+  const steps = segments.flatMap((segment) => segment.difficult.map((step) => ({ step, origin: segment.rawStart })));
+  if (!steps.length) {
+    group?.remove();
+    return;
+  }
+  if (!group) {
+    group = document.createElementNS(SVG_NS, 'g');
+    group.dataset.difficultRoute = '';
+    overlay.svg.insertBefore(group, overlay.nodes);
+  }
+  const cell = (origin, point) => ({
+    column: point.column,
+    row: point.row,
+    mapX: origin.mapX + (point.column - origin.column) * gridSize,
+    mapY: origin.mapY + (point.row - origin.row) * gridSize,
+  });
+  const parts = [];
+  for (const { step, origin } of steps) {
+    const from = cell(origin, step.from);
+    const to = cell(origin, step);
+    const at = terrain ? { ...to, ...terrain.rulerPoint(to) } : to;
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.classList.add('vtt-difficult-step');
+    path.setAttribute('d', terrain ? terrain.routePath([from, to]) : `M ${fmt(from.mapX)} ${fmt(from.mapY)} L ${fmt(to.mapX)} ${fmt(to.mapY)}`);
+    path.setAttribute('stroke-width', String(Math.max(3, gridSize * 0.34)));
+    const label = document.createElementNS(SVG_NS, 'text');
+    label.classList.add('vtt-difficult-step__label');
+    label.setAttribute('x', at.mapX);
+    label.setAttribute('y', at.mapY);
+    label.setAttribute('font-size', String(Math.max(10, gridSize * 0.36)));
+    label.dataset.multiplier = String(step.multiplier);
+    label.textContent = `×${step.multiplier}`;
+    parts.push(path, label);
+  }
+  group.replaceChildren(...parts);
 }
 
 function createOverlay(container) {
@@ -951,6 +1030,16 @@ export function clearRulerSupplement() {
  * `{ column, row }` points (may be empty if no measurement is active
  * or recent).
  */
+/** Distance and true cost of the measurement on screen, as last drawn ({distance, cost, kind}) or null. */
+export function getCurrentMeasurementCost() {
+  return sharedState?.lastMeasure ? { ...sharedState.lastMeasure } : null;
+}
+
+/** 'walk', 'shift', 'forced' or 'teleport', from the modifier keys held during the current drag. */
+export function getCurrentMovementKind() {
+  return movementKindOf(sharedState);
+}
+
 export function getCurrentMeasurementPoints() {
   if (!sharedState || !Array.isArray(sharedState.points)) return [];
   return sharedState.points

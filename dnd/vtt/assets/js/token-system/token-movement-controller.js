@@ -25,6 +25,8 @@ export function createTokenMovementController({
   getUndoMove = () => null,
   cancelActiveDrag = () => {},
   isUndoSuppressed = () => false,
+  // Route cost in squares for a move (terrain height and difficult terrain), or null to use straight-line distance.
+  measureRoute = () => null,
   windowRef = typeof window === 'undefined' ? undefined : window,
   documentRef = typeof document === 'undefined' ? undefined : document,
 } = {}) {
@@ -102,14 +104,17 @@ export function createTokenMovementController({
     }
   }
 
-  function handleDragCommitted({ sceneId, movedIds = [], originalPositions, preview } = {}) {
-    if (!dragSession || !movedIds.includes(dragSession.tokenId)) {
+  function moveCost(from, to, movementKind = null, tokenId = dragSession?.tokenId ?? null) {
+    let measured = null;
+    try { measured = measureRoute({ from: normalizeFootprint(from), to: normalizeFootprint(to), movementKind, tokenId }); } catch (error) { measured = null; }
+    return Number.isFinite(measured) && measured >= 0 ? Math.trunc(measured) : measureChebyshevDistance(from, to);
+  }
+
+  function recordCommittedMove(tokenId, sceneId, from, to, movementKind) {
+    if (!from || !to) {
       return;
     }
-    const tokenId = dragSession.tokenId;
-    const from = originalPositions?.get?.(tokenId) ?? dragSession.original;
-    const to = preview?.get?.(tokenId);
-    const cost = measureChebyshevDistance(from, to);
+    const cost = moveCost(from, to, movementKind, tokenId);
     if (cost <= 0) {
       return;
     }
@@ -124,6 +129,20 @@ export function createTokenMovementController({
       },
       getTurnContext()
     );
+  }
+
+  function handleDragCommitted({ sceneId, movedIds = [], originalPositions, preview, movementKind = null, source = null } = {}) {
+    if (!dragSession || !movedIds.includes(dragSession.tokenId)) {
+      // Arrow-key moves have no drag session; charge them the same route cost.
+      if (source === 'keyboard' && getTurnContext().active) {
+        movedIds.forEach((tokenId) => recordCommittedMove(tokenId, sceneId, originalPositions?.get?.(tokenId), preview?.get?.(tokenId), movementKind ?? 'walk'));
+      }
+      return;
+    }
+    const tokenId = dragSession.tokenId;
+    const from = originalPositions?.get?.(tokenId) ?? dragSession.original;
+    const to = preview?.get?.(tokenId);
+    recordCommittedMove(tokenId, sceneId, from, to, movementKind);
 
     // `vtt:token-moved` is dispatched by the universal commit paths in
     // token-interactions.js (drag commit) and board-interactions.js
@@ -213,7 +232,7 @@ export function createTokenMovementController({
     if (!position) {
       return 0;
     }
-    return measureChebyshevDistance(dragSession.original, position);
+    return moveCost(dragSession.original, position);
   }
 
   function currentDragCost() {

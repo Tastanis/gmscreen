@@ -1,6 +1,7 @@
 // Draws tagged terrain zones on the board and answers "which zones is this
 // token in". Reads the canonical scene environment; display choice is local.
-import {sceneZones, buildZoneIndex, zonesForFootprint, zoneTags, squareCostMultiplier, zoneGeometry, zoneColor, zoneSurface, BASE_LEVEL_ID} from './terrain-zones.mjs';
+import {sceneZones, buildZoneIndex, zonesForFootprint, zoneTags, squareCostMultiplier, zoneGeometry, zoneColor, zoneSurface, summarizeRoute, BASE_LEVEL_ID} from './terrain-zones.mjs';
+import {routeSteps} from './terrain-math.mjs';
 import {floorElevations} from '../state/normalize/floor-elevation.js';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -42,6 +43,40 @@ function zonesForPlacement(target) {
   if (!placement) return [];
   const floors = elevations(c);
   return zonesForFootprint(current(c).index, placement, standingHeight(placement, c), (levelId) => floors.get(levelId) ?? 0);
+}
+
+/** Movement multiplier for a mover entering this square (1 on ordinary ground, or when it is above the zone). */
+function stepMultiplier(actor, column, row, rawHeight) {
+  const c = context(), index = current(c).index;
+  if (!index.size) return 1;
+  const floors = elevations(c), levelId = actor?.levelId || c?.levelId || BASE_LEVEL_ID;
+  const mover = {column, row, width: actor?.width || 1, height: actor?.height || 1, levelId, movementMode: actor?.movementMode, flightHeight: actor?.flightHeight};
+  const airborne = ['fly', 'hover'].includes(mover.movementMode);
+  const feet = airborne ? standingHeight({...(actor || {}), ...mover}, c) : Number.isFinite(rawHeight) ? rawHeight : floors.get(levelId) ?? 0;
+  let cost = 1;
+  for (const zone of zonesForFootprint(index, mover, feet, (id) => floors.get(id) ?? 0)) cost = Math.max(cost, zone.cost);
+  return cost;
+}
+function moverFor(c) {
+  const id = c?.selectedIds?.[0] || window.visionPrototype?.viewerTokenId || c?.followId || null;
+  return id ? placementOf(id, c) : null;
+}
+/**
+ * Distance and true movement cost of a route through waypoints ({column,row} squares).
+ * kind: 'walk' or 'shift' pay for difficult terrain; 'forced' and 'teleport' do not.
+ */
+function routeCost(points, {kind = 'walk', actor = undefined} = {}) {
+  const c = context(), active = terrain(), ignoreZones = kind === 'forced' || kind === 'teleport';
+  const mover = actor === undefined ? moverFor(c) : actor;
+  const stepsBetween = (a, b) => active
+    ? active.route(a, b, {ignoreZones})
+    : routeSteps(a, b, () => 0, ignoreZones ? null : (column, row) => stepMultiplier(mover, column, row, undefined));
+  const summary = summarizeRoute(points, stepsBetween);
+  const start = points?.[0];
+  summary.startsInDifficult = !ignoreZones && !!start && stepMultiplier(mover, start.column, start.row, active ? active.heightAt((c.view.gridOffsets?.left || 0) + (start.column + .5) * (c.view.gridSize || 64), (c.view.gridOffsets?.top || 0) + (start.row + .5) * (c.view.gridSize || 64)) : undefined) > 1;
+  // The rules do not allow shifting into or within difficult terrain.
+  summary.shiftInDifficult = kind === 'shift' && (summary.difficult.length > 0 || summary.startsInDifficult);
+  return summary;
 }
 
 function setVisible(value) {
@@ -115,6 +150,8 @@ window.terrainZones = {
   zonesForPlacement,
   tagsForPlacement: (target) => zoneTags(zonesForPlacement(target)),
   costAt: (column, row, levelId = BASE_LEVEL_ID) => squareCostMultiplier(current().index, column, row, levelId),
+  stepMultiplier,
+  routeCost,
   standingHeight: (target) => { const placement = placementOf(target); return placement ? standingHeight(placement) : null; },
   get visible() { return visible; },
   setVisible,

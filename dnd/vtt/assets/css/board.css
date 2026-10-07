@@ -4876,6 +4876,47 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
   letter-spacing: 0.05em;
 }
 
+/* Difficult terrain on the movement ruler: true cost above the distance, and a
+   flashing red stretch with its multiplier on each difficult square. */
+.vtt-measure-overlay__cost {
+  fill: #fca5a5;
+}
+
+.vtt-difficult-step {
+  fill: none;
+  stroke: #ef4444;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  animation: vtt-difficult-flash 0.9s ease-in-out infinite;
+}
+
+.vtt-difficult-step__label {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 800;
+  fill: #fff;
+  stroke: #7f1d1d;
+  stroke-width: 5;
+  paint-order: stroke fill;
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+
+@keyframes vtt-difficult-flash {
+  0%,
+  100% {
+    stroke-opacity: 1;
+  }
+  50% {
+    stroke-opacity: 0.3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vtt-difficult-step {
+    animation: none;
+  }
+}
+
 .dice-modal-overlay--vtt {
   background: transparent;
   align-items: flex-start;

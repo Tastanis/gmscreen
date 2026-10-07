@@ -40,6 +40,7 @@ import {
   updateExternalMeasurement,
   clearRulerSupplement,
   getCurrentMeasurementPoints,
+  getCurrentMovementKind,
 } from './drag-ruler.js';
 import { buildAutomationTargetPromptHtml } from './automation-target-prompt.js';
 import { getAutomationMoveRangePresentation } from './automation-move-display.js';
@@ -1327,6 +1328,22 @@ export function mountBoardInteractions(store, routes = {}) {
     return chooseTeleportHeight({from,to,range,context,startHeight,combatActive,ground:(x,y)=>active?terrainPrototype.heightAt((context.view.gridOffsets.left||0)+x*context.view.gridSize,(context.view.gridOffsets.top||0)+y*context.view.gridSize):0});
   }
 
+  // Route cost for the per-turn movement counter: the same walk the ruler draws,
+  // through its waypoints, with height and difficult terrain. Null keeps straight-line distance.
+  function measureMovementRoute({ from, to, movementKind = null, tokenId = null } = {}) {
+    const zones = window.terrainZones;
+    if (!zones?.routeCost || !from || !to) return null;
+    const kind = movementKind || getCurrentMovementKind();
+    if (kind === 'teleport') return null;
+    const ruler = getCurrentMeasurementPoints();
+    const followsRuler = ruler.length > 0 && Math.abs(ruler[0].column - from.column) < 0.01 && Math.abs(ruler[0].row - from.row) < 0.01;
+    const points = followsRuler ? ruler.map((point) => ({ column: point.column, row: point.row })) : [{ column: from.column, row: from.row }];
+    const last = points[points.length - 1];
+    if (last.column !== to.column || last.row !== to.row) points.push({ column: to.column, row: to.row });
+    if (points.length < 2) return 0;
+    return zones.routeCost(points, { kind, actor: (tokenId && getPlacementFromStore(tokenId)) || undefined }).cost;
+  }
+
   async function commitCanonicalTokenMoves({ sceneId, moves, source, originalPositions = null, movementKind = 'walk' }) {
     const ruler = source === 'drag' ? getCurrentMeasurementPoints() : [];
     const canonical = tokenMovementRuntime.getConfirmedSnapshot()?.state?.placements?.[sceneId] ?? {};
@@ -1360,6 +1377,13 @@ export function mountBoardInteractions(store, routes = {}) {
       return { ...move, movementKind, path: movementKind === 'teleport' ? [] : path };
     });
     let movementAccepted = false;
+    // Warning only: nothing blocks a shift through difficult terrain.
+    const shiftCrossedDifficult = movementKind === 'shift' && intendedMoves.some((move) => {
+      const origin = canonical[move.placementId];
+      if (!origin || !window.terrainZones?.routeCost) return false;
+      const points = [{ column: origin.column, row: origin.row }, ...(move.path || []).slice(1), { column: move.column, row: move.row }];
+      return window.terrainZones.routeCost(points, { kind: 'shift', actor: origin }).shiftInDifficult;
+    });
     return tokenMovementRuntime.submitMoves(sceneId, intendedMoves)
       .then(async (results) => {
         movementAccepted = true;
@@ -1389,9 +1413,12 @@ export function mountBoardInteractions(store, routes = {}) {
         tokenMovementController?.handleDragCommitted?.({
           sceneId,
           movedIds,
-          originalPositions,
+          originalPositions: originalPositions ?? new Map(intendedMoves.map((move) => [move.placementId, canonical[move.placementId]])),
           preview: new Map(intendedMoves.map((move) => [move.placementId, move])),
+          movementKind,
+          source,
         });
+        if (movementKind === 'shift' && status && shiftCrossedDifficult) status.textContent += ' Shift crossed difficult terrain, which the rules do not allow.';
       })
       .catch((error) => {
         reportSyncFailure(error, movementAccepted ? 'movement follow-up' : 'token movement');
@@ -1669,6 +1696,7 @@ export function mountBoardInteractions(store, routes = {}) {
       return placement ? resolveTokenLevelId(placement, getActiveSceneTokenLevelState(state)) : null;
     },
     setRulerSupplement: (text) => setRulerSupplement(text),
+    measureRoute: (move) => measureMovementRoute(move),
     clearRulerSupplement: () => clearRulerSupplement(),
     restoreMove: (move) => restoreTokenMovement(move),
     getUndoMove: () => {

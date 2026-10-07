@@ -76,27 +76,73 @@ One thing to decide later: the Zones button only changes the GM's own screen.
 If you want a switch that hides zones from the players too, say so and I will
 add it as a scene setting.
 
-## Stage 3: movement. Not started
+## Stage 3: movement. Done (October 7, 2026)
 
-The drag ruler charges for difficult squares and shows it the way you
-described: black for flat ground, yellow going up, green going down, flashing
-red through difficult terrain, a small "x2" or "x4" on each difficult square,
-and the true cost above the plain distance when they differ. The per-turn
-movement counter will charge the same amount as the ruler.
+What works now:
 
-How cost is counted, unless you say otherwise: entering a difficult square
-adds (multiplier minus 1) squares. So "x2" is the rulebook's "1 extra square"
-and "x4" is 3 extra squares.
+- **Cost.** Entering a difficult square costs its multiplier instead of 1. A
+  x2 square costs 2 and a x4 square costs 4. A climb is paid as well.
+  Overlapping zones charge the highest multiplier, not the sum. A tag-only
+  zone (cost 1) is free.
+- **Who pays.** A walk or a shift pays. Forced movement and teleports do not.
+  A flier above the zone, or a token on a bridge, deck or walkway over it,
+  does not. A large token pays if any of its squares enters the zone.
+- **Ruler colours on maps with height.** Black on the flat, yellow uphill,
+  green downhill. Red is now used only for difficult terrain.
+- **Difficult terrain on the ruler.** Each difficult square on the route gets
+  a flashing red stretch and a small "×2" or "×4". This works on flat maps
+  too. The flashing stops for anyone whose device asks for reduced motion.
+- **Labels.** The distance is still shown as before. When the true cost is
+  different, "Cost 8" appears above "5 squares" in light red, on the route
+  and in the box at the bottom right ("Move - 5 squares · Cost 8").
+- **Per-turn counter.** "Moved 8 / 5" now charges the same cost as the ruler,
+  through the waypoints of the drag. Arrow-key moves are counted too (they
+  were not counted at all before).
+- **Shifting.** Holding Shift through or inside difficult terrain shows "No
+  shift in difficult terrain" on the ruler, and the status line says so after
+  the move. It is a warning only. The move is not blocked.
 
-Questions for you before stage 3 is finished:
+Checks run:
 
-1. Shifting into or inside difficult terrain is not allowed by the rules. Do
-   you want the VTT to block it, or only to warn?
-2. The blue "how far can I move" box ignores terrain cost today. Should it be
-   made accurate, or removed while a zone is nearby?
+- 9 more tests (movement cost, route summary, colours, counter), and the full
+  suite: 139 files, 982 checks, 0 failures.
+- Sandbox, real mouse drags on the flat test scene: 5 squares through 3 blood
+  squares showed "Move - 5 squares · Cost 8" with three flashing "×2"
+  stretches; 1 square into x4 mud showed "Cost 4"; dry ground showed nothing
+  extra; the same drag with Ctrl (forced) and a flier over the blood showed no
+  extra cost; with Shift the warning appeared and the move still went through.
+- Sandbox, counter during a combatant's turn: 8 while dragging through the
+  blood, then 10 on the next 2-square drag, then 15 after one arrow-key step
+  into blood (2) and a 3-square drag.
+- Sandbox, Dead Root Node with a test blood zone: 5 squares from the south
+  bank into the canal showed "Cost 10" with five "×2"; up the entrance stair
+  drew yellow, down it drew green.
 
-Nothing is enforced on movement today, and I will not add enforcement without
-asking you.
+Things that changed that you might notice:
+
+- On maps with height, the counter now includes climbing, because it uses the
+  ruler's cost. Before, it counted a straight line.
+- The counter only adds up during a combatant's turn (double-click their
+  portrait in the tracker). That was already the case.
+
+Not done, on purpose:
+
+- **The blue "how far can I move" box is unchanged. It still ignores terrain
+  and overstates reach near zones.** Waiting for your decision (question 2).
+- Nothing is blocked. The server does not check distance, speed or shifting.
+
+Wording you may want to change: the label says "Cost 8". If you would rather
+it said "8 to move" or just showed a symbol, tell me.
+
+## Questions waiting for you
+
+1. Shifting into or inside difficult terrain is not allowed by the rules.
+   Today the VTT warns. Do you want it blocked?
+2. The blue "how far can I move" box ignores terrain cost. Should it be made
+   accurate, or hidden while a zone is nearby?
+3. The Zones button hides zones on the GM's screen only. Do you want a switch
+   that hides them from the players too?
+4. Is "Cost 8" the wording you want on the ruler?
 
 ## Stage 4: abilities read tags. Not started
 

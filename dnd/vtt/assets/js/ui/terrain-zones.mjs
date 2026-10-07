@@ -106,6 +106,31 @@ export function zonesForFootprint(index, placement, standingHeight, floorElevati
 
 export const zoneTags = (zones) => [...new Set((zones || []).map((zone) => zone.tag))];
 
+// ---- Movement cost --------------------------------------------------------
+// Entering a difficult square costs its multiplier instead of 1 (x2 is the
+// rulebook's "1 additional square"). Forced movement and teleports ignore it.
+/**
+ * Totals a walked route. `stepsBetween(a, b)` returns the per-square walk
+ * from one waypoint to the next ({points, cost, extra}, as routeSteps does).
+ * distance is the route without difficult terrain; cost is what it really costs.
+ */
+export function summarizeRoute(points, stepsBetween) {
+  const summary = { distance: 0, cost: 0, extra: 0, difficult: [] };
+  for (let i = 1; i < (points?.length || 0); i++) {
+    const walked = stepsBetween(points[i - 1], points[i]);
+    if (!walked) continue;
+    const extra = Number(walked.extra) || 0;
+    summary.cost += Number(walked.cost) || 0;
+    summary.extra += extra;
+    summary.distance += (Number(walked.cost) || 0) - extra;
+    for (let k = 1; k < (walked.points?.length || 0); k++) {
+      const step = walked.points[k];
+      if (step.multiplier > 1) summary.difficult.push({ column: step.column, row: step.row, multiplier: step.multiplier, from: { column: walked.points[k - 1].column, row: walked.points[k - 1].row } });
+    }
+  }
+  return summary;
+}
+
 // ---- Drawing --------------------------------------------------------------
 const ZONE_COLORS = { blood: '#c1121f', water: '#1d6fd6', mud: '#8a5a2b', lava: '#f97316', fire: '#f97316', acid: '#65a30d', poison: '#65a30d', ice: '#7dd3fc', oil: '#6b21a8' };
 export const zoneColor = (tag) => ZONE_COLORS[tag] || '#d4a017';

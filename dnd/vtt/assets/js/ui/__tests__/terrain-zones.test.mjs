@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { normalizeZones, sceneZones, buildZoneIndex, zonesAtSquare, squareCostMultiplier, zonesForFootprint, zoneTags, footprintSquares, zoneGeometry, zoneColor, ZONE_DEFAULT_COST } from '../terrain-zones.mjs';
+import { normalizeZones, sceneZones, buildZoneIndex, zonesAtSquare, squareCostMultiplier, zonesForFootprint, zoneTags, footprintSquares, zoneGeometry, zoneColor, summarizeRoute, ZONE_DEFAULT_COST } from '../terrain-zones.mjs';
+import { routeSteps, slopeColor } from '../terrain-math.mjs';
 import { normalizeSceneBoardState } from '../../state/normalize/scene-board-state.js';
 import { reduceCanonicalEvent } from '../../sync-v2/event-reducer.js';
 
@@ -91,6 +92,55 @@ test('zone outline keeps only outer edges and picks a label square inside the zo
   assert.ok(raised.fill.startsWith('M212,64'), 'the projection supplied by the board is applied to every corner');
   assert.equal(zoneColor('blood'), '#c1121f');
   assert.equal(zoneColor('something-new'), '#d4a017');
+});
+
+test('a difficult square costs its multiplier; a climb is paid as well', () => {
+  const index = buildZoneIndex(normalizeZones(field));
+  const flat = () => 0;
+  const multiplier = (column, row) => squareCostMultiplier(index, column, row);
+  // Row 2, columns 2 to 7: columns 4, 5, 6 are blood (x2).
+  const plain = routeSteps({ column: 2, row: 2 }, { column: 7, row: 2 }, flat);
+  assert.deepEqual([plain.cost, plain.extra], [5, 0], 'with no zone lookup the route is unchanged');
+  const blood = routeSteps({ column: 2, row: 2 }, { column: 7, row: 2 }, flat, multiplier);
+  assert.deepEqual([blood.cost, blood.extra], [8, 3], '5 squares with 3 in blood cost 8');
+  assert.deepEqual(blood.points.slice(1).map((point) => point.multiplier), [1, 2, 2, 2, 1]);
+  // Deep mud is x4: entering one mud square costs 4.
+  const mud = routeSteps({ column: 8, row: 5 }, { column: 9, row: 5 }, flat, multiplier);
+  assert.deepEqual([mud.cost, mud.extra], [4, 3]);
+  // Leaving difficult terrain onto ordinary ground costs 1.
+  assert.equal(routeSteps({ column: 6, row: 2 }, { column: 7, row: 2 }, flat, multiplier).cost, 1);
+  // A tag-only zone (cost 1) is free.
+  assert.equal(routeSteps({ column: 0, row: 1 }, { column: 2, row: 1 }, flat, multiplier).cost, 2);
+  // Climbing 2 while stepping into a x2 square: 2 for the climb plus 1 extra.
+  const climb = routeSteps({ column: 3, row: 2 }, { column: 4, row: 2 }, (column) => (column === 4 ? 2 : 0), multiplier);
+  assert.deepEqual([climb.cost, climb.extra], [3, 1]);
+  assert.equal(routeSteps({ column: 2, row: 2 }, { column: 2, row: 2 }, flat, multiplier).cost, 0, 'standing still costs nothing, even in a zone');
+  assert.equal(routeSteps({ column: 3, row: 2 }, { column: 4, row: 2 }, flat, () => Number.NaN).cost, 1, 'a broken lookup never changes the cost');
+});
+
+test('route summary reports plain distance, true cost and each difficult square', () => {
+  const index = buildZoneIndex(normalizeZones(field));
+  const walk = (a, b) => routeSteps(a, b, () => 0, (column, row) => squareCostMultiplier(index, column, row));
+  const summary = summarizeRoute([{ column: 2, row: 2 }, { column: 7, row: 2 }, { column: 9, row: 5 }], walk);
+  assert.equal(summary.distance, 8, '5 squares then 3 squares');
+  assert.equal(summary.cost, 14, '3 blood squares add 3 and one mud square adds 3');
+  assert.equal(summary.extra, 6);
+  assert.deepEqual(summary.difficult.map((step) => [step.column, step.row, step.multiplier]), [[4, 2, 2], [5, 2, 2], [6, 2, 2], [9, 5, 4]]);
+  assert.deepEqual(summary.difficult[0].from, { column: 3, row: 2 });
+  const forced = summarizeRoute([{ column: 2, row: 2 }, { column: 7, row: 2 }], (a, b) => routeSteps(a, b, () => 0, null));
+  assert.deepEqual([forced.distance, forced.cost, forced.difficult.length], [5, 5, 0], 'forced movement ignores difficult terrain');
+  assert.deepEqual(summarizeRoute([{ column: 1, row: 1 }], walk), { distance: 0, cost: 0, extra: 0, difficult: [] });
+});
+
+test('ruler colours: black on the flat, yellow uphill, green downhill', () => {
+  const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  assert.equal(slopeColor(0), '#111111');
+  for (const slope of [0.5, 1, 2, 4]) {
+    const [r, g, b] = rgb(slopeColor(slope));
+    assert.ok(r > 120 && g > 90 && b < 60 && r > g, `uphill ${slope} is yellow: ${slopeColor(slope)}`);
+    const [dr, dg, db] = rgb(slopeColor(-slope));
+    assert.ok(dg > dr && dg > db && dg > 80, `downhill ${slope} is green: ${slopeColor(-slope)}`);
+  }
 });
 
 test('zones survive the client state normaliser and live environment events', () => {

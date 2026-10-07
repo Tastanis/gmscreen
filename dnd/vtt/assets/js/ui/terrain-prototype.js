@@ -184,10 +184,11 @@ function rulerGround(column,row,actor){
  if(actor&&((actor.levelId&&actor.levelId!=='level-0')||(actor.movementMode&&actor.movementMode!=='ground')))return groundFor(actor);
  return heightAt((ctx.view.gridOffsets.left||0)+(column+.5)*d.grid,(ctx.view.gridOffsets.top||0)+(row+.5)*d.grid);
 }
-function route(start,end){
+function route(start,end,options={}){
  const d=dimensions(),actor=rulerActor();
  const height=(column,row)=>rulerGround(column,row,actor);
- return routeSteps(start,end,height);
+ const zones=options.ignoreZones?null:window.terrainZones;
+ return routeSteps(start,end,height,zones?.stepMultiplier?(column,row,rawHeight)=>zones.stepMultiplier(actor,column,row,rawHeight):null);
 }
 function rulerPoint(p){const actor=rulerActor(),d=dimensions(),h=rulerGround(p.column,p.row,actor),q=project(p.mapX,p.mapY,h);return {mapX:q.x,mapY:q.y};}
 function routePath(points){
