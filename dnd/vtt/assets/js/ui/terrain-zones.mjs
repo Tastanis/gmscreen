@@ -63,3 +63,78 @@ export function squareCostMultiplier(index, column, row, levelId = BASE_LEVEL_ID
   for (const zone of zonesAtSquare(index, column, row, levelId)) cost = Math.max(cost, zone.cost);
   return cost;
 }
+
+// ---- Standing in a zone -------------------------------------------------
+// A token is in a zone when it is on the zone's floor, part of its footprint
+// is on a zone square, and its feet are not clearly above the zone's surface.
+// A flier, or a token on a bridge or deck over the zone, is therefore not in it.
+export const ZONE_HEIGHT_TOLERANCE = 0.5;
+
+export function zoneSurface(zone, floorElevation = 0) {
+  return Number.isFinite(zone?.surfaceHeight) ? zone.surfaceHeight : floorElevation;
+}
+
+export function footprintSquares(placement) {
+  const column = Number(placement?.column) || 0, row = Number(placement?.row) || 0;
+  const width = Math.max(1, Number(placement?.width) || 1), height = Math.max(1, Number(placement?.height) || 1);
+  const squares = [];
+  for (let r = Math.floor(row + 1e-6); r < Math.ceil(row + height - 1e-6); r++) {
+    for (let c = Math.floor(column + 1e-6); c < Math.ceil(column + width - 1e-6); c++) squares.push([c, r]);
+  }
+  return squares;
+}
+
+/**
+ * @param index            from buildZoneIndex
+ * @param placement        token ({column,row,width,height,levelId})
+ * @param standingHeight   absolute height of the token's feet, in squares
+ * @param floorElevationOf (levelId) => height of that floor, for zones with no surfaceHeight
+ */
+export function zonesForFootprint(index, placement, standingHeight, floorElevationOf = () => 0) {
+  if (!index?.size || !placement) return [];
+  const levelId = placement.levelId || BASE_LEVEL_ID;
+  const height = Number.isFinite(standingHeight) ? standingHeight : Number(floorElevationOf(levelId)) || 0;
+  const found = new Map();
+  for (const [column, row] of footprintSquares(placement)) {
+    for (const zone of zonesAtSquare(index, column, row, levelId)) {
+      if (found.has(zone.id)) continue;
+      if (height - zoneSurface(zone, Number(floorElevationOf(zone.levelId)) || 0) < ZONE_HEIGHT_TOLERANCE) found.set(zone.id, zone);
+    }
+  }
+  return [...found.values()];
+}
+
+export const zoneTags = (zones) => [...new Set((zones || []).map((zone) => zone.tag))];
+
+// ---- Drawing --------------------------------------------------------------
+const ZONE_COLORS = { blood: '#c1121f', water: '#1d6fd6', mud: '#8a5a2b', lava: '#f97316', fire: '#f97316', acid: '#65a30d', poison: '#65a30d', ice: '#7dd3fc', oil: '#6b21a8' };
+export const zoneColor = (tag) => ZONE_COLORS[tag] || '#d4a017';
+
+/**
+ * Outline and fill for one zone. `corner(column, row)` maps a grid corner to
+ * overlay pixels (it applies the terrain projection when the map has height).
+ * Returns SVG path data: every square as a closed quad, and only the outer
+ * edges for the outline, plus the square nearest the middle for a label.
+ */
+export function zoneGeometry(zone, corner) {
+  const inZone = new Set(zone.squares.map(([column, row]) => `${column},${row}`));
+  const fill = [], outline = [];
+  const fmt = (p) => `${Math.round(p.x * 10) / 10},${Math.round(p.y * 10) / 10}`;
+  let sumColumn = 0, sumRow = 0;
+  for (const [column, row] of zone.squares) {
+    const a = corner(column, row), b = corner(column + 1, row), c = corner(column + 1, row + 1), d = corner(column, row + 1);
+    fill.push(`M${fmt(a)}L${fmt(b)}L${fmt(c)}L${fmt(d)}Z`);
+    if (!inZone.has(`${column},${row - 1}`)) outline.push(`M${fmt(a)}L${fmt(b)}`);
+    if (!inZone.has(`${column + 1},${row}`)) outline.push(`M${fmt(b)}L${fmt(c)}`);
+    if (!inZone.has(`${column},${row + 1}`)) outline.push(`M${fmt(c)}L${fmt(d)}`);
+    if (!inZone.has(`${column - 1},${row}`)) outline.push(`M${fmt(d)}L${fmt(a)}`);
+    sumColumn += column; sumRow += row;
+  }
+  const middle = [sumColumn / zone.squares.length, sumRow / zone.squares.length];
+  let labelSquare = zone.squares[0], best = Infinity;
+  for (const square of zone.squares) {
+    const distance = (square[0] - middle[0]) ** 2 + (square[1] - middle[1]) ** 2;
+    if (distance < best) { best = distance; labelSquare = square; }
+  }
+  return { fill: fill.join(''), outline: outline.join(''), edges: outline.length, labelSquare };
+}

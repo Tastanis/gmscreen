@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { normalizeZones, sceneZones, buildZoneIndex, zonesAtSquare, squareCostMultiplier, ZONE_DEFAULT_COST } from '../terrain-zones.mjs';
+import { normalizeZones, sceneZones, buildZoneIndex, zonesAtSquare, squareCostMultiplier, zonesForFootprint, zoneTags, footprintSquares, zoneGeometry, zoneColor, ZONE_DEFAULT_COST } from '../terrain-zones.mjs';
 import { normalizeSceneBoardState } from '../../state/normalize/scene-board-state.js';
 import { reduceCanonicalEvent } from '../../sync-v2/event-reducer.js';
 
@@ -53,6 +53,44 @@ test('square lookup respects the floor and reports the highest multiplier', () =
   ] }));
   assert.equal(squareCostMultiplier(stacked, 3, 3), 4, 'overlapping zones use the highest multiplier, not the sum');
   assert.deepEqual(zonesAtSquare(stacked, 3, 3).map((zone) => zone.tag), ['water', 'mud']);
+});
+
+test('a token is in a zone only on its floor and at its surface', () => {
+  const index = buildZoneIndex(normalizeZones(field));
+  const floors = new Map([['level-0', 0], ['bridge-deck', 2]]);
+  const elevation = (levelId) => floors.get(levelId) ?? 0;
+  const tags = (placement, height) => zoneTags(zonesForFootprint(index, placement, height, elevation));
+  const inBlood = { column: 5, row: 2, width: 1, height: 1, levelId: 'level-0' };
+  assert.deepEqual(tags(inBlood, 0), ['blood'], 'wading in the canal');
+  assert.deepEqual(tags(inBlood, -1), ['blood'], 'below the surface still counts');
+  assert.deepEqual(tags(inBlood, 0.4), ['blood'], 'a shallow bank edge still counts');
+  assert.deepEqual(tags(inBlood, 0.5), [], 'half a square above the surface is out (a raised island)');
+  assert.deepEqual(tags(inBlood, 2), [], 'a token on a deck over the canal is not in it');
+  assert.deepEqual(tags(inBlood, 1), [], 'a flier one square up is not in it');
+  assert.deepEqual(tags({ ...inBlood, levelId: 'bridge-deck' }, 2), ['oil'], 'on the bridge floor only the bridge zone applies');
+  assert.deepEqual(tags({ ...inBlood, levelId: 'bridge-deck' }, 3), [], 'flying above the bridge is out of the oil');
+  assert.deepEqual(tags({ column: 7, row: 2, width: 1, height: 1 }, 0), [], 'ordinary ground');
+  assert.deepEqual(tags({ column: 3, row: 2, width: 2, height: 2 }, 0), ['blood'], 'a large token with one square in the canal is in it');
+  assert.deepEqual(tags({ column: 2, row: 0, width: 2, height: 2 }, 0), ['holy'], 'footprint overlap finds a tag-only zone');
+  assert.deepEqual(tags({ column: 0, row: 4, width: 2, height: 2 }, 0), []);
+  assert.deepEqual(footprintSquares({ column: 3, row: 2, width: 2, height: 2 }), [[3, 2], [4, 2], [3, 3], [4, 3]]);
+  assert.deepEqual(tags(inBlood, undefined), ['blood'], 'with no height known the floor height is used');
+  assert.deepEqual(zonesForFootprint(new Map(), inBlood, 0), [], 'a scene with no zones has nobody in a zone');
+  const noSurface = buildZoneIndex(normalizeZones({ version: 1, zones: [{ id: 'upper-water', tag: 'water', levelId: 'bridge-deck', squares: [[1, 1]] }] }));
+  assert.deepEqual(zoneTags(zonesForFootprint(noSurface, { column: 1, row: 1, levelId: 'bridge-deck' }, 2, elevation)), ['water'], 'a zone with no surface height sits at its floor');
+});
+
+test('zone outline keeps only outer edges and picks a label square inside the zone', () => {
+  const zone = normalizeZones(field).find((entry) => entry.id === 'blood-canal');
+  const flat = zoneGeometry(zone, (column, row) => ({ x: column * 50, y: row * 50 }));
+  assert.equal((flat.fill.match(/Z/g) || []).length, 6, 'one quad per square');
+  assert.equal(flat.edges, 10, 'a 3 by 2 block has 10 outer edges and no inner ones');
+  assert.ok(zone.squares.some(([column, row]) => column === flat.labelSquare[0] && row === flat.labelSquare[1]));
+  assert.ok(flat.fill.startsWith('M200,100L250,100L250,150L200,150Z'));
+  const raised = zoneGeometry(zone, (column, row) => ({ x: column * 50 + 12, y: row * 50 - 36 }));
+  assert.ok(raised.fill.startsWith('M212,64'), 'the projection supplied by the board is applied to every corner');
+  assert.equal(zoneColor('blood'), '#c1121f');
+  assert.equal(zoneColor('something-new'), '#d4a017');
 });
 
 test('zones survive the client state normaliser and live environment events', () => {

@@ -40,11 +40,41 @@ Checks run:
 
 The format the Map maker should write is in `docs/terrain-zones-format.md`.
 
-## Stage 2: show the zones. Not started
+## Stage 2: show the zones. Done (October 7, 2026)
 
-A tinted overlay on zone squares with a GM on/off switch, and the rule for
-"which zones is this token standing in" (a flier or a token on a bridge above
-the zone is not in it).
+What works now:
+
+- Zone squares are tinted and outlined on the map, with a short label such as
+  "Blood ×2". The colour follows the tag: red for blood, blue for water, brown
+  for mud, amber for anything else. A GM-only zone has a dashed outline and
+  "(GM)" after its name.
+- On maps with height the overlay follows the ground the same way tokens do.
+- The GM has a new **Zones** button next to Height. It hides or shows the
+  zones on the GM's own screen and remembers the choice. Players always see
+  the zones they were sent, and never the GM-only ones.
+- The VTT can now answer "which zones is this token in". A token is in a zone
+  when it is on the zone's floor, part of it is on a zone square, and its feet
+  are less than half a square above the zone's surface. So a flier, or a token
+  on a bridge, deck or walkway over the blood, is not in the blood.
+- Fog still covers zones in places a player has not seen.
+
+Checks run:
+
+- 2 more browser-code tests (6 in all for zones), all passing, and the full
+  suite again with 0 failures.
+- Sandbox, flat test scene: the GM sees four zones on the ground floor (the
+  fifth is on the bridge floor), the player sees three. The Zones button hides
+  and shows them. Token checks: wading in blood gives "blood"; on the bridge
+  floor above it gives only "oil"; a flier one square up gives nothing; deep
+  mud gives "mud"; a size 2 token with one square in the canal gives "blood";
+  the GM-only pit is "pit" for the GM and nothing for the player.
+- Sandbox, Dead Root Node with a test blood zone of 99 squares: the outline
+  follows the canal; a token wading at (35.5, 15.5) is in "blood" and a token
+  on the B2 deck over the same square is not; a flier over the canal is not.
+
+One thing to decide later: the Zones button only changes the GM's own screen.
+If you want a switch that hides zones from the players too, say so and I will
+add it as a scene setting.
 
 ## Stage 3: movement. Not started
 

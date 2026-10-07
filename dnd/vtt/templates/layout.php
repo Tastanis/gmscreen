@@ -89,5 +89,6 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
     <script type="module" src="assets/js/ui/theme-settings.js?v=<?= $assetVersion ?>"></script>
     <script type="module" src="assets/js/bootstrap.js?v=<?= $assetVersion ?>"></script>
     <script type="module" src="assets/js/ui/terrain-prototype.js?v=<?= $assetVersion ?>"></script>
+    <script type="module" src="assets/js/ui/terrain-zones-overlay.js?v=<?= $assetVersion ?>"></script>
 </body>
 </html>
