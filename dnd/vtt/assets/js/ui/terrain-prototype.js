@@ -11,6 +11,7 @@ import {claimActiveTool,publishActiveTool} from './active-tool.js';
 import {sample,paint,barycentric,clamp,groundSquare,heightBand,effectiveHeight,relativeScale,routeSteps,slopeColor,brushRate} from './terrain-math.mjs';
 import {floorElevations} from '../state/normalize/floor-elevation.js';
 import {terrainContact} from './terrain-contact.js';
+import {createRouteWalker} from './route-walker.mjs';
 const $=s=>document.querySelector(s);
 const image=$('#vtt-map-image'),transform=$('#vtt-map-transform'),surface=$('#vtt-map-surface'),board=$('#vtt-board-canvas');
 const canvas=document.createElement('canvas');canvas.id='terrain-canvas';
@@ -192,25 +193,38 @@ function climbFace(actor,a,b){
  return terrainContact(from,{column:b.column,row:b.row},ground,t=>groundFor(t))!==null;
 }
 function route(start,end,options={}){
- const d=dimensions(),actor=options.actor||rulerActor();
- const height=(column,row)=>rulerGround(column,row,actor);
+ const d=dimensions(),actor=options.actor||rulerActor(),design=importedDesign();
+ // The preview walks the route as the move itself will: it steps onto bridges and decks and stays on them.
+ // `options.carry` hands the walker from one leg of a route to the next, so a waypoint on a bridge keeps it there.
+ const walker=createRouteWalker({actor,surfaces:design?resolveSupportSurfaces(design):[],mapLevels:levelConfig(),
+  terrain:p=>heightAt((ctx.view.gridOffsets.left||0)+(p.column+(p.width||1)/2)*d.grid,(ctx.view.gridOffsets.top||0)+(p.row+(p.height||1)/2)*d.grid),
+  plainHeight:(column,row,who)=>rulerGround(column,row,who),carried:options.carry?.ghost||null});
  const zones=options.ignoreZones?null:window.terrainZones;
- return routeSteps(start,end,height,zones?.stepMultiplier?(column,row,rawHeight)=>zones.stepMultiplier(actor,column,row,rawHeight):null,options.ignoreClimb?null:(a,b)=>climbFace(actor,a,b));
+ const walked=routeSteps(start,end,(column,row)=>walker.height(column,row),zones?.stepMultiplier?(column,row,rawHeight)=>zones.stepMultiplier(actor,column,row,rawHeight):null,options.ignoreClimb?null:(a,b)=>climbFace(actor,a,b));
+ if(options.carry)options.carry.ghost=walker.ghost;
+ return walked;
+}
+// Every leg of a route, walked in order with the walker carried from leg to leg.
+function routeLegs(points){const carry={},legs=[];for(let k=1;k<points.length;k++)legs.push(route(points[k-1],points[k],{carry}).points);return legs;}
+// The drawn line through walked steps. It follows the ground as before, except where the walker
+// is on a plate above (or below) the ground: there it follows the height it actually walks at.
+function stepsPath(steps,parts=[]){
+ const d=dimensions(),actor=rulerActor();
+ for(let i=0;i<steps.length;i++){
+  const a=steps[Math.max(0,i-1)],b=steps[i],count=i?4:1;
+  for(let j=1;j<=count;j++){
+   const col=a.column+(b.column-a.column)*j/count,row=a.row+(b.row-a.row)*j/count,x=(ctx.view.gridOffsets.left||0)+(col+.5)*d.grid,y=(ctx.view.gridOffsets.top||0)+(row+.5)*d.grid;
+   const ground=rulerGround(col,row,actor),walkedAt=Number.isFinite(a.rawHeight)&&Number.isFinite(b.rawHeight)?a.rawHeight+(b.rawHeight-a.rawHeight)*j/count:ground;
+   const q=project(x,y,Math.abs(walkedAt-ground)>.3?walkedAt:ground);
+   parts.push(`${parts.length?'L':'M'} ${q.x.toFixed(2)} ${q.y.toFixed(2)}`);
+  }
+ }
+ return parts;
 }
 function rulerPoint(p){const actor=rulerActor(),d=dimensions(),h=rulerGround(p.column,p.row,actor),q=project(p.mapX,p.mapY,h);return {mapX:q.x,mapY:q.y};}
 function routePath(points){
- const d=dimensions(),parts=[];
- for(let k=1;k<points.length;k++){
-   const steps=route(points[k-1],points[k]).points;
-   for(let i=0;i<steps.length;i++){
-     const a=steps[Math.max(0,i-1)],b=steps[i],count=i?4:1;
-     for(let j=1;j<=count;j++){
-       const col=a.column+(b.column-a.column)*j/count,row=a.row+(b.row-a.row)*j/count;
-       const p={column:col,row,mapX:(ctx.view.gridOffsets.left||0)+(col+.5)*d.grid,mapY:(ctx.view.gridOffsets.top||0)+(row+.5)*d.grid},q=rulerPoint(p);
-       parts.push(`${parts.length?'L':'M'} ${q.mapX.toFixed(2)} ${q.mapY.toFixed(2)}`);
-     }
-   }
- }
+ const parts=[];
+ for(const steps of routeLegs(points))stepsPath(steps,parts);
  return parts.join(' ');
 }
 let markerCache='',markerBuilds=0,markerPreferenceKey='',markersVisible=true;
@@ -241,11 +255,10 @@ function paintRoute(overlay,points,gridSize){
  const ns='http://www.w3.org/2000/svg';let group=overlay.svg.querySelector('[data-terrain-route]');
  if(!group){group=document.createElementNS(ns,'g');group.dataset.terrainRoute='';overlay.svg.insertBefore(group,overlay.path.nextSibling);}
  const pieces=[];
- for(let k=1;k<points.length;k++){
-   const steps=route(points[k-1],points[k]).points;
+ for(const steps of routeLegs(points)){
    for(let i=1;i<steps.length;i++){
      const a=steps[i-1],b=steps[i],distance=Math.max(Math.abs(b.column-a.column),Math.abs(b.row-a.row)),slope=(b.rawHeight-a.rawHeight)/(distance||1),color=slopeColor(slope);
-     const path=routePath([a,b]);pieces.push({path,color});
+     const path=stepsPath([a,b]).join(' ');pieces.push({path,color});
    }
  }
  group.replaceChildren();

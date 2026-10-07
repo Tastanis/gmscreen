@@ -357,9 +357,22 @@ through the bridge on its next step. "Level" means within a tenth of a square.
 So a bridge end can lie over the landing square again; it does not have to
 stop exactly on a grid line.
 
+**The ruler follows bridges.** The ruler's preview now walks the route the way
+the move itself does, stepping onto a bridge or deck and staying on it. Before,
+a walk that entered a bridge from the land was priced as a drop to the ground
+under the bridge and a walk along it: four squares out onto a rope bridge read
+"Move 6", and a whole crossing would have raised a false Climbing pop-up at
+the far bank. Now a crossing costs its length and the line is drawn along the
+bridge. One limit: the range outline still does not know about bridges entered
+from the land, so near a bridge it can be drawn too small.
+
 ### Checks run
 
-- 19 more tests than `main`. Full suite: 142 files, 1019 checks, 0 failures.
+- Full suite with the scene-switch fix underneath: 144 files, 1032 checks, 0
+  failures.
+- Bridges, real drags on the package: from the land out along a rope bridge
+  "Move 4" (was 6); a whole land-to-land crossing "Move 9" with no pop-up
+  and no fall.
 - Sandbox, Dead Root Node, real mouse drags, GM: up a real 4-square cliff the
   ruler read "Move 4 · Cost 8" with the amber mark; the pop-up showed the
   text above; Don't climb left the token where it was; Climb put it on top.

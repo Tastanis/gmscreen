@@ -83,8 +83,9 @@ function routeCost(points, {kind = 'walk', actor = undefined} = {}) {
   const c = context(), active = terrain(), ignoreZones = kind === 'forced' || kind === 'teleport';
   const mover = actor === undefined ? moverFor(c) : actor;
   const ignoreClimb = !paysForClimb(mover, kind);
+  const carry = {}; // the previewed walker, handed from one leg to the next
   const stepsBetween = (a, b) => active
-    ? active.route(a, b, {ignoreZones, ignoreClimb, actor: mover || undefined})
+    ? active.route(a, b, {ignoreZones, ignoreClimb, actor: mover || undefined, carry})
     : routeSteps(a, b, () => 0, ignoreZones ? null : (column, row) => stepMultiplier(mover, column, row, undefined));
   const summary = summarizeRoute(points, stepsBetween);
   const start = points?.[0];
