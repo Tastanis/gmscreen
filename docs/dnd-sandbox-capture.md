@@ -2,8 +2,8 @@
 
 This replaces the diagnostic downloader's fixed file list with a recursive,
 authenticated D&D capture. It does **not** deploy itself or grant access merely by
-being uploaded. The first production file capture passed on October 7, 2026; the signed-in
-gameplay comparison remains pending.
+being uploaded. The first production file capture passed on October 7, 2026; basic signed-in
+board/save/reload isolation checks passed. Broader gameplay comparison remains pending.
 
 ## What is included
 
@@ -190,5 +190,9 @@ source fingerprints, recovering 57 exact deployed versions from local Git histor
 Coverage issues were zero after explicit session/retired-file exclusions. Historical
 media warnings remain recorded without deleting or rewriting the original records.
 The prepared sandbox passes SQLite integrity and serves a local login page with
-self-only connection/form restrictions. Signed-in gameplay verification still
-requires the user's current login; the old documented GM credentials were rejected.
+self-only connection/form restrictions. The user signed in with the current GM login. The captured bathhouse map, terrain,
+doors, scenes, and saved chat rendered without console errors. A local door change
+persisted across reload and was restored. A subsequent authenticated, read-only
+database download matched the original production hash, confirming that test did
+not alter production. Full multi-player/ability and later-refresh acceptance checks
+remain separate from this initial setup verification.
