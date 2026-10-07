@@ -60,6 +60,7 @@ require_once '../../includes/strix-nav.php';
   #pNav { display: none; align-items: center; gap: 8px; margin: -2px 0 8px; } #pNav button { padding: 3px 10px; font-size: 14px; } #pCount { color: #8d8474; font-size: 12px; min-width: 44px; text-align: center; } #pDel { margin-left: auto; padding: 5px 9px !important; font-size: 10px !important; }
   #pathBar { position: fixed; left: 16px; bottom: 16px; z-index: 6; max-width: calc(100vw - 420px); display: flex; flex-direction: column; gap: 6px; align-items: flex-start; font: 13px/1.4 'Palatino Linotype', 'Book Antiqua', Georgia, serif; color: #b8b0a2; }
   #pathBar button { font: 600 11px 'Cinzel', 'Palatino Linotype', serif; letter-spacing: .08em; text-transform: uppercase; color: #c8a95e; background: linear-gradient(180deg, #3a352d 0%, #262119 45%, #16120d 100%); border: 0; border-radius: 1px; box-shadow: inset 0 0 0 1px #000, inset 0 0 0 2px #6e5a33; padding: 8px 11px; cursor: pointer; }
+  #barRow { display: flex; gap: 6px; }
   #pathBar button:hover { color: #f0d68a; } #pathBar button.on { color: #f0d68a; box-shadow: inset 0 0 0 1px #000, inset 0 0 0 2px #d4b46a; background: linear-gradient(180deg, #5a4a2a 0%, #3a2e18 45%, #221a0e 100%); }
   #pathTools, #pathNoteRow, #pathDiff { display: none; flex-wrap: wrap; gap: 5px; align-items: center; }
   #pathTools, #pathNoteRow { padding: 8px 10px; background: linear-gradient(180deg, #2a251e 0%, #1b1712 40%, #100d0a 100%); box-shadow: inset 0 0 0 1px #000, inset 0 0 0 2px #6e5a33, 0 8px 24px rgba(0,0,0,.8); }
@@ -133,7 +134,7 @@ require_once '../../includes/strix-nav.php';
   <div id="pathTools"><button data-tool="marker">Destination</button><button data-tool="draw">Draw</button><button id="pathNew">New line</button><button data-tool="delete">Delete</button><button data-tool="terrain" class="gm-only">Terrain</button>
     <span id="pathDiff"><button data-diff="normal">Normal</button><button data-diff="fast">Easy</button><button data-diff="yellow">Yellow</button><button data-diff="red">Red</button><span class="sep">Brush</span><button data-brush="0">Small</button><button data-brush="1">Medium</button><button data-brush="2">Large</button></span>
     <button id="pathUndo">Undo</button><button id="pathClear">Clear all</button><span id="pathTotal"></span></div>
-  <button id="pathToggle">Player path</button>
+  <div id="barRow"><button id="pathToggle">Player path</button><button id="tpToggle" title="Show the teleportation circles">Circles</button></div>
 </div>
 <div id="imgBig"><button class="nav" id="imgBigPrev" title="Previous image">&lsaquo;</button><img id="imgBigImg" alt=""><button class="nav" id="imgBigNext" title="Next image">&rsaquo;</button><div id="imgBigCount"></div></div>
 <div id="tip"></div>
@@ -4512,6 +4513,30 @@ setInterval(pollPings, 500);
 canvas.addEventListener('pointerdown', e => { if (!e.altKey || (e.button !== 0 && e.button !== 2)) return; e.preventDefault(); e.stopImmediatePropagation(); const p = pick(e.clientX, e.clientY); if (p) sendPing(p, e.button === 2 && role.gm); }, true);
 canvas.addEventListener('contextmenu', e => { if (e.altKey) e.preventDefault(); });
 window.__ping = { showPing, sendPing, role };
+
+// The party's teleportation circles: at the Biblioplex, Kollema Hall, their own workshop and Wiltroot Hall. Nothing of them shows until the Circles button is on;
+// then over each place a magic circle floats, turning, on a beam of light. Everyone has the button, and each browser remembers how it was left
+const TP_AT = ['Biblioplex', 'Kollema Hall', "Players' Workshop", 'Wiltroot Hall'], TP_COL = 0xb59cff, tp = { on: false, grp: null, list: [] };
+const tpTex = () => { const cv = document.createElement('canvas'); cv.width = cv.height = 512; const cx = cv.getContext('2d'), r = mulberry32(77), ring = (rad, w) => { cx.lineWidth = w; cx.beginPath(); cx.arc(256, 256, rad, 0, 6.2832); cx.stroke(); };
+  cx.strokeStyle = cx.fillStyle = '#fff'; cx.shadowColor = '#fff'; cx.shadowBlur = 10; cx.lineCap = 'round'; ring(246, 5); ring(232, 2); ring(196, 3); ring(112, 3); ring(100, 1.5);
+  for (let i = 0; i < 48; i++) { const a = i / 48 * 6.2832; cx.lineWidth = i % 4 ? 1.5 : 3; cx.beginPath(); cx.moveTo(256 + Math.cos(a) * 232, 256 + Math.sin(a) * 232); cx.lineTo(256 + Math.cos(a) * (i % 4 ? 239 : 246), 256 + Math.sin(a) * (i % 4 ? 239 : 246)); cx.stroke(); }
+  for (let i = 0; i < 26; i++) { const a = i / 26 * 6.2832; cx.save(); cx.translate(256 + Math.cos(a) * 214, 256 + Math.sin(a) * 214); cx.rotate(a + Math.PI / 2); cx.lineWidth = 2.6; cx.beginPath();          // a band of made-up letters
+    for (let q = 0; q < 3; q++) { const x0 = (r() - .5) * 14, y0 = (r() - .5) * 20; cx.moveTo(x0, y0); if (r() < .4) cx.arc(x0, y0, 3 + r() * 5, r() * 6, r() * 6 + 2 + r() * 3); else cx.lineTo((r() - .5) * 14, (r() - .5) * 20); } cx.stroke(); cx.restore(); }
+  for (const off of [0, Math.PI]) { cx.lineWidth = 3; cx.beginPath(); for (let i = 0; i <= 3; i++) { const a = off + i * 2.0944 - Math.PI / 2, x = 256 + Math.cos(a) * 196, y = 256 + Math.sin(a) * 196; if (i) cx.lineTo(x, y); else cx.moveTo(x, y); } cx.stroke(); }    // two triangles, a star of six points
+  for (let i = 0; i < 6; i++) { const a = i * 1.0472; cx.lineWidth = 2; cx.beginPath(); cx.arc(256 + Math.cos(a) * 154, 256 + Math.sin(a) * 154, 20, 0, 6.2832); cx.stroke(); cx.beginPath(); cx.arc(256 + Math.cos(a) * 154, 256 + Math.sin(a) * 154, 5, 0, 6.2832); cx.fill(); }
+  for (let i = 0; i < 8; i++) { const a = i * .7854; cx.lineWidth = 2.4; cx.beginPath(); cx.moveTo(256 + Math.cos(a) * 30, 256 + Math.sin(a) * 30); cx.lineTo(256 + Math.cos(a) * 100, 256 + Math.sin(a) * 100); cx.stroke(); } ring(30, 3); cx.beginPath(); cx.arc(256, 256, 9, 0, 6.2832); cx.fill();
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; };
+function buildCircles() { const tex = tpTex(), g = tp.grp = new THREE.Group(), flat = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);
+  const disc = op => { const m = new THREE.Mesh(flat, new THREE.MeshBasicMaterial({ map: tex, color: TP_COL, transparent: true, opacity: op, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false })); m.raycast = () => {}; m.frustumCulled = false; m.renderOrder = 8990; return m; };
+  for (const name of TP_AT) { const t = things.find(q => q.name === name); if (!t) continue; const gy = Math.max(heightAt(t.x, t.z), 0), o = new THREE.Group(), big = disc(1), small = disc(.8), beams = [.45, 1.2].map((k, i) => { const m = new THREE.Mesh(beamGeo, beamMat(TP_COL, k, i * 2.1)); m.material.uniforms.uA.value = 1; m.material.uniforms.uR.value = -.2; m.raycast = () => {}; m.frustumCulled = false; m.renderOrder = 8980; o.add(m); return m; });
+    o.position.set(t.x, gy, t.z); o.add(big, small); g.add(o); tp.list.push({ o, big, small, beams, top: t.labelY - gy + 8, ph: tp.list.length * 1.7 }); }
+  g.visible = false; scene.add(g); }
+const setCircles = on => { if (on && !tp.grp) buildCircles(); tp.on = on; if (tp.grp) tp.grp.visible = on; $('tpToggle').classList.toggle('on', on); try { localStorage.setItem('sxCircles', on ? '1' : '0'); } catch (e) {} };
+$('tpToggle').onclick = () => setCircles(!tp.on);
+anim.push(t => { if (!tp.init && things.length) { tp.init = true; let was = false; try { was = localStorage.getItem('sxCircles') === '1'; } catch (e) {} if (was) setCircles(true); } if (!tp.on) return;
+  for (const c of tp.list) { const k = clamp(camera.position.distanceTo(c.o.position) / 1300, 1, 3), R = 40 * k, y = c.top + 6 * k + Math.sin(t * .8 + c.ph) * 4;       // larger from far off, so they read across the whole map
+    c.big.position.y = y; c.big.scale.setScalar(R); c.big.rotation.y = t * .35 + c.ph; c.small.position.y = y + 9 * k; c.small.scale.setScalar(R * .56); c.small.rotation.y = -t * .6;
+    c.beams[0].scale.set(R * .3, y + 520, R * .3); c.beams[1].scale.set(R * .09, y + 520, R * .09); const a = .8 + .2 * Math.sin(t * 1.7 + c.ph); c.beams[0].material.uniforms.uA.value = a; c.beams[1].material.uniforms.uA.value = a; } });
 
 const mouse = { x: 0, y: 0, inside: false, buttons: 0 }; let downAt = null;
 // how often a frame is drawn. Never more than about sixty times a second; ten while this window is not the one in use; thirty once nobody has touched it for two minutes.
