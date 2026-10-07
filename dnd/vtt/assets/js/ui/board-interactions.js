@@ -6,6 +6,7 @@ import {projectedMovementCell, movementCellContains, paintProjectedMovementCell,
 import {dragMovementKind} from './drag-ruler.js';
 import {floorElevations as teleportFloorElevations} from '../state/normalize/floor-elevation.js';
 import {mountFallReview} from './fall-review.js';
+import {createRoutingIntent, deriveRoutingCommands, createSerialQueue} from './scene-routing-commands.mjs';
 import {settleCollisionEffects} from '../services/collision-effects.js';
 import {PLAYER_CHARACTER_USER_IDS as visionOwnerProfiles} from '../state/normalize/map-levels.js';
 import {resolveForcedDrag} from './forced-drag.js';
@@ -1674,6 +1675,11 @@ export function mountBoardInteractions(store, routes = {}) {
   const dirtySceneState = new Map();
   // Track if top-level fields changed
   const dirtyTopLevel = new Set();
+  // The value each routing field was meant to be saved as, captured when the change is made.
+  // Local state can be overwritten by a server reply before the save runs; this cannot.
+  const routingIntent = createRoutingIntent();
+  // Board saves run one at a time, so one scene switch sends one scene command.
+  const enqueueBoardDomainSave = createSerialQueue();
 
   tokenMovementController = createTokenMovementController({
     mapTransform,
@@ -1796,7 +1802,9 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function markTopLevelDirty(field) {
-    if (field) dirtyTopLevel.add(field);
+    if (!field) return;
+    dirtyTopLevel.add(field);
+    routingIntent.mark(field, boardApi.getState?.()?.boardState?.[field] ?? null);
   }
 
   function clearDirtyTracking() {
@@ -1807,6 +1815,7 @@ export function mountBoardInteractions(store, routes = {}) {
     dirtyPings = false;
     dirtySceneState.clear();
     dirtyTopLevel.clear();
+    routingIntent.clear();
   }
 
   function clearDirtyEntity(map, sceneId, entryId) {
@@ -1933,6 +1942,7 @@ export function mountBoardInteractions(store, routes = {}) {
     ['activeSceneId', 'mapUrl'].forEach((field) => {
       if (Object.prototype.hasOwnProperty.call(snapshot, field)) {
         dirtyTopLevel.delete(field);
+        routingIntent.settle(field, Infinity);
       }
     });
   }
@@ -5816,32 +5826,20 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     });
 
-    if (scenesV2Enabled && dirtyTopLevel.has('activeSceneId') && boardState?.activeSceneId) {
-      put('scene:active', {
-        type: 'scene.activate',
-        sceneId: boardState.activeSceneId,
-        payload: {},
-      });
-    }
-    if (routingV2Enabled) {
-      const routing = {};
-      for (const field of [
-        'mapUrl', 'playerMapDisabled', 'playerActiveSceneId',
-        'playerMapUrl', 'playerThumbnailUrl',
-      ]) {
-        if (dirtyTopLevel.has(field)) routing[field] = boardState?.[field] ?? null;
-      }
-      if (dirtyTopLevel.has('activeSceneId') && !boardState?.activeSceneId) {
-        routing.activeSceneId = null;
-      }
-      if (Object.keys(routing).length) {
-        put('routing', { type: 'routing.set', sceneId: null, payload: { routing } });
-      }
+    // Scene and viewer routing. The values come from what the user chose, never from local state
+    // re-read now, and a scene switch carries its own map picture in the same command.
+    for (const { command, settles } of deriveRoutingCommands(routingIntent, { scenesEnabled: scenesV2Enabled, routingEnabled: routingV2Enabled })) {
+      put(command.type === 'scene.activate' ? 'scene:active' : 'routing', { ...command, settles });
     }
     return [...commands.values()];
   }
 
   function persistSyncV2BoardDomains(boardState, ops = []) {
+    // Queued: a save asked for while another is in flight waits, then sends only what is still unsaved.
+    return enqueueBoardDomainSave(() => sendSyncV2BoardDomains(boardApi.getState?.()?.boardState ?? boardState, ops));
+  }
+
+  function sendSyncV2BoardDomains(boardState, ops = []) {
     const commands = deriveSyncV2BoardDomainCommands(boardState, ops);
     if (!commands.length) return Promise.resolve({ success: true, mode: 'live' });
     return tokenMovementRuntime.submitBoardDomainCommands(commands).then((results) => {
@@ -5863,10 +5861,11 @@ export function mountBoardInteractions(store, routes = {}) {
           clearDirtySceneStateField(sceneId, 'grid');
         } else if (command.type === 'level.user.set' || command.type === 'level.activate') {
           clearDirtySceneStateField(sceneId, 'userLevelState');
-        } else if (command.type === 'scene.activate') {
-          dirtyTopLevel.delete('activeSceneId');
-        } else if (command.type === 'routing.set') {
-          Object.keys(command.payload?.routing ?? {}).forEach((field) => dirtyTopLevel.delete(field));
+        } else if (command.type === 'scene.activate' || command.type === 'routing.set') {
+          // A field stays pending if the user changed it again while this save was in flight.
+          for (const [field, stamp] of command.settles ?? []) {
+            if (routingIntent.settle(field, stamp)) dirtyTopLevel.delete(field);
+          }
         }
       }
       for (const sceneId of new Set(commands.map((command) => command.sceneId).filter(Boolean))) {

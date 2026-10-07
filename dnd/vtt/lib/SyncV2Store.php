@@ -882,6 +882,11 @@ final class SyncV2Store
                 $entityRevision = $state['routing']['_revision'];
                 if ($type === 'scene.activate') {
                     $state['routing']['activeSceneId'] = $sceneId;
+                    // The scene and its map picture change together, so no reader or later
+                    // command can ever see the new scene with the previous scene's picture.
+                    if (array_key_exists('mapUrl', $payload)) {
+                        $state['routing']['mapUrl'] = $payload['mapUrl'];
+                    }
                     $eventType = 'scene.activated';
                     $eventPayload = ['routing' => $state['routing']];
                 } else {
@@ -2674,6 +2679,18 @@ final class SyncV2Store
                 throw new InvalidArgumentException('level.activate requires levelId and userIds.');
             }
             $payload = compact('levelId', 'userIds');
+        }
+        if ($type === 'scene.activate') {
+            // Older clients send no payload and set the picture with a second command.
+            if (array_key_exists('mapUrl', $payload)) {
+                $mapUrl = $payload['mapUrl'];
+                if ($mapUrl !== null && (!is_string($mapUrl) || strlen($mapUrl) > 2048)) {
+                    throw new InvalidArgumentException('scene.activate mapUrl is invalid.');
+                }
+                $payload = ['mapUrl' => $mapUrl];
+            } else {
+                $payload = [];
+            }
         }
         if ($type === 'routing.set') {
             $routing = is_array($payload['routing'] ?? null) ? $payload['routing'] : [];

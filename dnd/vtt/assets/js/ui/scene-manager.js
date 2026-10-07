@@ -1,4 +1,5 @@
 // Sandbox relocated level controls
+import { activeSceneMapRepair } from './scene-routing-commands.mjs';
 import {
   createScene,
   createSceneFolder,
@@ -80,6 +81,41 @@ export function renderSceneList(routes, store) {
     }
   };
 
+  // Self-repair: the active scene saved with another scene's map picture (a half-finished switch
+  // from before scene and picture travelled together). The GM's browser puts the scene's own
+  // picture back. It waits first, because a switch in progress passes through this state.
+  let mapRepairKey = '';
+  let mapRepairTimer = null;
+  const mapRepairAttempts = new Map();
+  const mapRepairFor = (state) => activeSceneMapRepair({
+    isGM: Boolean(state?.user?.isGM),
+    activeSceneId: state?.boardState?.activeSceneId ?? null,
+    mapUrl: state?.boardState?.mapUrl ?? null,
+    scenes: normalizeSceneState(state?.scenes).items,
+  });
+  function watchActiveSceneMap(state) {
+    const repair = mapRepairFor(state);
+    const key = repair ? `${repair.sceneId}|${repair.mapUrl}` : '';
+    if (key === mapRepairKey) return;
+    mapRepairKey = key;
+    clearTimeout(mapRepairTimer);
+    mapRepairTimer = null;
+    if (!repair || (mapRepairAttempts.get(key) ?? 0) >= 3) return;
+    mapRepairTimer = setTimeout(() => {
+      mapRepairTimer = null;
+      mapRepairKey = '';
+      const latest = stateApi.getState?.() ?? {};
+      const still = mapRepairFor(latest);
+      if (!still || `${still.sceneId}|${still.mapUrl}` !== key) return;
+      const scene = normalizeSceneState(latest.scenes).items.find((item) => item.id === still.sceneId);
+      if (!scene) return;
+      mapRepairAttempts.set(key, (mapRepairAttempts.get(key) ?? 0) + 1);
+      console.warn('[VTT] The active scene was saved with another scene\u2019s map. Restoring its own map.');
+      activateSceneForGm(scene);
+      persistBoardStateSnapshot(null, { coalesce: false });
+    }, 3000);
+  }
+
   const setPlayerMapForScene = (scene, enabled) => {
     stateApi.updateState?.((draft) => {
       const boardDraft = ensureBoardStateDraft(draft);
@@ -142,7 +178,8 @@ export function renderSceneList(routes, store) {
   };
 
   render(stateApi.getState?.());
-  stateApi.subscribe?.((nextState) => render(nextState));
+  stateApi.subscribe?.((nextState) => { render(nextState); watchActiveSceneMap(nextState); });
+  watchActiveSceneMap(stateApi.getState?.());
   window.addEventListener('vtt:scene-levels-updated', () => render(stateApi.getState?.() ?? {}));
 
   const persistBoardStateSnapshot = (dirtySceneId = null, options = {}, opsOverride = null) => {
