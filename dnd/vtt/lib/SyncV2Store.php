@@ -791,6 +791,7 @@ final class SyncV2Store
                 $entityRevision = $config['_revision'];
                 if ($type === 'environment.set') {
                     $config['environment'] = SceneEnvironment::apply($config['environment'] ?? [], $payload);
+                    if (($payload['field'] ?? '') === 'zones') SceneEnvironment::assertZoneLevels($config['environment'], $config['mapLevels'] ?? []);
                     $eventType = 'environment.changed';
                     $eventPayload = ['field'=>$payload['field'], 'entry'=>$config['environment'][$payload['field']]];
                 } elseif ($type === 'environment.portal.set') {

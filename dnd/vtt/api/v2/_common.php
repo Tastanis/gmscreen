@@ -435,6 +435,9 @@ function vttSyncV2ProjectEventForUser(array $event, array $auth): array
     if($type==='environment.changed' && ($event['payload']['field']??'')==='walls'){
         $safe=SceneEnvironment::project(['walls'=>$event['payload']['entry']]);$event['payload']['entry']=$safe['walls'];
     }
+    if($type==='environment.changed' && ($event['payload']['field']??'')==='zones'){
+        $safe=SceneEnvironment::project(['zones'=>$event['payload']['entry']]);$event['payload']['entry']=$safe['zones'];
+    }
     if($type==='environment.portalChanged'){
         $safe=SceneEnvironment::project(['walls'=>['value'=>['segments'=>[$event['payload']['segment']]]]]);
         $event['payload']['segment']=$safe['walls']['value']['segments'][0];

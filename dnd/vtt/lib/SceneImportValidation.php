@@ -19,6 +19,7 @@ final class SceneImportValidation
             if (!is_array($entry)||!is_int($entry['revision'] ?? null)||$entry['revision']<1||!is_array($entry['value'] ?? null)) throw new InvalidArgumentException('Invalid map design revision.');
             SceneEnvironment::validate($field,$entry['value']);
         }
+        SceneEnvironment::assertZoneLevels($domains['sceneConfig']['environment'] ?? [], $domains['sceneConfig']['mapLevels'] ?? []);
         foreach ($domains['placements'] as $entry) {
             if(isset($entry['visionOwners']) && array_diff(PlayerRoster::normalize($entry['visionOwners']),PlayerRoster::playerIds()))throw new InvalidArgumentException('Unknown token vision owner.');
             if(array_key_exists('flightHeight',$entry))FlightHeight::validate($entry['flightHeight']);

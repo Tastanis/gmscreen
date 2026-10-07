@@ -95,6 +95,11 @@ final class ScenePackage
                 $config['environment']['walls']['value'][$list][$index]=$item;
             }
         }
+        foreach ($config['environment']['zones']['value']['zones'] ?? [] as $index=>$zone) {
+            $levelId = is_array($zone) ? ($zone['levelId'] ?? 'level-0') : null;
+            if (!is_string($levelId) || !isset($maps['levels'][$levelId])) throw new InvalidArgumentException('Map design references a missing floor.');
+            $config['environment']['zones']['value']['zones'][$index]['levelId'] = $maps['levels'][$levelId];
+        }
         unset($config);
         $copy['scene']['id'] = $targetSceneId;
         $copy['scene']['folderId'] = null;

@@ -14,6 +14,10 @@ final class SceneEnvironment
             unset($edge['secret']);
             $environment['walls']['value']['segments'][$i] = $edge;
         }
+        // GM-only zones never reach a player browser.
+        if (isset($environment['zones']['value']['zones']) && is_array($environment['zones']['value']['zones'])) {
+            $environment['zones']['value']['zones'] = array_values(array_filter($environment['zones']['value']['zones'], static fn($zone)=>!is_array($zone) || ($zone['gmOnly'] ?? false) !== true));
+        }
         return $environment;
     }
 
@@ -47,16 +51,23 @@ final class SceneEnvironment
 
     public static function removeLevels(array $environment, array $removed): array
     {
-        if(!$removed || !isset($environment['walls']))return $environment;
-        $before=$environment['walls']['value'];$after=$before;
-        foreach(['roofs','ramps'] as $key)if(isset($after[$key]))$after[$key]=array_values(array_filter($after[$key],static fn($item)=>!in_array($item['levelId']??null,$removed,true)&&!in_array($item['fromLevel']??null,$removed,true)&&!in_array($item['toLevel']??null,$removed,true)));
-        if($before!==$after)$environment['walls']=['revision'=>$environment['walls']['revision']+1,'value'=>$after];
+        if(!$removed)return $environment;
+        if(isset($environment['walls'])){
+            $before=$environment['walls']['value'];$after=$before;
+            foreach(['roofs','ramps'] as $key)if(isset($after[$key]))$after[$key]=array_values(array_filter($after[$key],static fn($item)=>!in_array($item['levelId']??null,$removed,true)&&!in_array($item['fromLevel']??null,$removed,true)&&!in_array($item['toLevel']??null,$removed,true)));
+            if($before!==$after)$environment['walls']=['revision'=>$environment['walls']['revision']+1,'value'=>$after];
+        }
+        if(isset($environment['zones']['value']['zones'])){
+            $before=$environment['zones']['value']['zones'];
+            $after=array_values(array_filter($before,static fn($zone)=>!in_array($zone['levelId']??'level-0',$removed,true)));
+            if($before!==$after){$environment['zones']['value']['zones']=$after;$environment['zones']['revision']=($environment['zones']['revision']??0)+1;}
+        }
         return $environment;
     }
     public static function apply(array $current, array $payload): array
     {
         $field = $payload['field'] ?? '';
-        if (!in_array($field, ['terrain', 'walls', 'exploration'], true)) throw new InvalidArgumentException('Invalid environment field.');
+        if (!in_array($field, ['terrain', 'walls', 'exploration', 'zones'], true)) throw new InvalidArgumentException('Invalid environment field.');
         $revision = (int)($current[$field]['revision'] ?? 0);
         if (($payload['expectedRevision'] ?? null) !== $revision) throw new InvalidArgumentException('Map design changed. Reload the latest design before editing.');
         $value = $payload['value'] ?? null;
@@ -88,6 +99,7 @@ final class SceneEnvironment
             }
             return;
         }
+        if ($field === 'zones') { self::validateZones($value); return; }
         if ($field !== 'walls' || ($value['version'] ?? null)!==1) throw new InvalidArgumentException('Invalid wall format.');
         $nodes=$value['nodes'] ?? null; $segments=$value['segments'] ?? null;
         if (!is_array($nodes)||!is_array($segments)||!array_is_list($nodes)||!array_is_list($segments)||count($nodes)>10000||count($segments)>20000) throw new InvalidArgumentException('Invalid wall collection.');
@@ -122,16 +134,69 @@ final class SceneEnvironment
             foreach (['left','right','top','bottom','base','height'] as $key) self::number($ramp[$key] ?? null);
             if ($ramp['right']<=$ramp['left']||$ramp['bottom']<=$ramp['top']||!in_array($ramp['direction'] ?? 'north',['north','south','east','west'],true)) throw new InvalidArgumentException('Invalid ramp.');
         }
-        // All nested coordinates and media references must remain passive data.
-        $visit=function($item, int $depth=0) use (&$visit): void {
-            if ($depth>16) throw new InvalidArgumentException('Map geometry too deeply nested.');
-            if (is_array($item)) { foreach($item as $key=>$child) {
-                if (in_array($key,['__proto__','prototype','constructor'],true)) throw new InvalidArgumentException('Unsupported map property.');
-                if ($key==='imageId' && is_string($child) && !str_starts_with($child,'/dnd/vtt/')) throw new InvalidArgumentException('Upload roof images before sharing this map.');
-                $visit($child,$depth+1);
-            }} elseif (is_int($item)||is_float($item)) self::number($item);
-            elseif (is_string($item)&&strlen($item)>2048) throw new InvalidArgumentException('Map field too long.');
-        };
-        $visit($value);
+        self::passive($value);
+    }
+
+    /** All nested coordinates and media references must remain passive data. */
+    private static function passive($item, int $depth=0): void
+    {
+        if ($depth>16) throw new InvalidArgumentException('Map geometry too deeply nested.');
+        if (is_array($item)) { foreach($item as $key=>$child) {
+            if (in_array($key,['__proto__','prototype','constructor'],true)) throw new InvalidArgumentException('Unsupported map property.');
+            if ($key==='imageId' && is_string($child) && !str_starts_with($child,'/dnd/vtt/')) throw new InvalidArgumentException('Upload roof images before sharing this map.');
+            self::passive($child,$depth+1);
+        }} elseif (is_int($item)||is_float($item)) self::number($item);
+        elseif (is_string($item)&&strlen($item)>2048) throw new InvalidArgumentException('Map field too long.');
+    }
+
+    public const ZONE_LIMIT = 200;
+    public const ZONE_SQUARE_LIMIT = 20000;
+    public const ZONE_TOTAL_SQUARE_LIMIT = 50000;
+    public const ZONE_MAX_COST = 10;
+
+    /**
+     * Tagged terrain zones: named groups of grid squares ("blood", "water")
+     * with a movement cost multiplier. Squares use token coordinates.
+     */
+    private static function validateZones(array $value): void
+    {
+        if (($value['version'] ?? null)!==1 || array_diff(array_keys($value),['version','zones'])) throw new InvalidArgumentException('Invalid zone format.');
+        $zones=$value['zones'] ?? null;
+        if (!is_array($zones)||!array_is_list($zones)||count($zones)>self::ZONE_LIMIT) throw new InvalidArgumentException('Invalid zone list.');
+        $ids=[];$total=0;
+        foreach ($zones as $zone) {
+            if (!is_array($zone)||array_is_list($zone)||array_diff(array_keys($zone),['id','tag','label','levelId','surfaceHeight','cost','gmOnly','squares'])) throw new InvalidArgumentException('Invalid zone record.');
+            $id=$zone['id'] ?? null;
+            if (!is_string($id)||$id===''||strlen($id)>128||isset($ids[$id])) throw new InvalidArgumentException('Invalid zone ID.');
+            $ids[$id]=true;
+            if (!is_string($zone['tag'] ?? null)||!preg_match('/^[a-z0-9][a-z0-9_-]{0,31}$/',$zone['tag'])) throw new InvalidArgumentException('Invalid zone tag.');
+            if (isset($zone['label'])&&(!is_string($zone['label'])||strlen($zone['label'])>80)) throw new InvalidArgumentException('Invalid zone label.');
+            if (isset($zone['levelId'])&&(!is_string($zone['levelId'])||$zone['levelId']===''||strlen($zone['levelId'])>128)) throw new InvalidArgumentException('Invalid zone floor.');
+            if (array_key_exists('surfaceHeight',$zone)) { self::number($zone['surfaceHeight']); if (abs($zone['surfaceHeight'])>1000) throw new InvalidArgumentException('Invalid zone height.'); }
+            if (array_key_exists('cost',$zone)&&(!is_int($zone['cost'])||$zone['cost']<1||$zone['cost']>self::ZONE_MAX_COST)) throw new InvalidArgumentException('Zone cost must be a whole number from 1 to '.self::ZONE_MAX_COST.'.');
+            if (array_key_exists('gmOnly',$zone)&&!is_bool($zone['gmOnly'])) throw new InvalidArgumentException('Invalid zone flag.');
+            $squares=$zone['squares'] ?? null;
+            if (!is_array($squares)||!array_is_list($squares)||!$squares||count($squares)>self::ZONE_SQUARE_LIMIT) throw new InvalidArgumentException('Invalid zone squares.');
+            $total+=count($squares);
+            if ($total>self::ZONE_TOTAL_SQUARE_LIMIT) throw new InvalidArgumentException('Too many zone squares.');
+            $seen=[];
+            foreach ($squares as $square) {
+                if (!is_array($square)||!array_is_list($square)||count($square)!==2||!is_int($square[0])||!is_int($square[1])||$square[0]<0||$square[1]<0||$square[0]>10000||$square[1]>10000) throw new InvalidArgumentException('Zone squares must be whole [column, row] pairs.');
+                $key=$square[0]*10001+$square[1];
+                if (isset($seen[$key])) throw new InvalidArgumentException('Zone repeats a square.');
+                $seen[$key]=true;
+            }
+        }
+        self::passive($value);
+    }
+
+    /** Every zone must sit on the ground floor or on a floor that exists. */
+    public static function assertZoneLevels(array $environment, array $mapLevels): void
+    {
+        $zones=$environment['zones']['value']['zones'] ?? [];
+        if (!$zones) return;
+        $levels=['level-0'=>true];
+        foreach ($mapLevels['levels'] ?? [] as $level) if (is_string($level['id'] ?? null)) $levels[$level['id']]=true;
+        foreach ($zones as $zone) if (!isset($levels[$zone['levelId'] ?? 'level-0'])) throw new InvalidArgumentException('A zone uses a missing floor.');
     }
 }

@@ -1,0 +1,80 @@
+{
+  "format": "gmscreen-scene/v1",
+  "exportedAt": "2026-10-07T00:00:00+00:00",
+  "sourceRevision": 0,
+  "scene": {
+    "id": "zones-fixture",
+    "name": "Terrain zones fixture",
+    "mapUrl": "/maps/zones-fixture.jpg",
+    "folderId": null,
+    "grid": { "size": 50 }
+  },
+  "folder": null,
+  "domains": {
+    "placements": {},
+    "drawings": {},
+    "templates": {},
+    "sceneConfig": {
+      "grid": { "size": 50, "locked": true, "visible": true, "offsetX": 0, "offsetY": 0 },
+      "mapLevels": {
+        "levels": [
+          { "id": "bridge-deck", "name": "Bridge deck", "elevationSquares": 2, "zIndex": 1, "cutouts": [], "stairs": [] }
+        ]
+      },
+      "environment": {
+        "zones": {
+          "revision": 1,
+          "value": {
+            "version": 1,
+            "zones": [
+              {
+                "id": "blood-canal",
+                "tag": "blood",
+                "label": "Blood canal",
+                "levelId": "level-0",
+                "surfaceHeight": 0,
+                "cost": 2,
+                "squares": [[4, 2], [5, 2], [6, 2], [4, 3], [5, 3], [6, 3]]
+              },
+              {
+                "id": "deep-mud",
+                "tag": "mud",
+                "label": "Deep mud",
+                "levelId": "level-0",
+                "surfaceHeight": 0,
+                "cost": 4,
+                "squares": [[9, 5], [10, 5], [9, 6], [10, 6]]
+              },
+              {
+                "id": "holy-ground",
+                "tag": "holy",
+                "label": "Consecrated ground",
+                "cost": 1,
+                "squares": [[1, 1], [2, 1]]
+              },
+              {
+                "id": "hidden-pit",
+                "tag": "pit",
+                "label": "Hidden pit",
+                "cost": 2,
+                "gmOnly": true,
+                "squares": [[12, 2]]
+              },
+              {
+                "id": "deck-oil",
+                "tag": "oil",
+                "label": "Spilled oil on the bridge",
+                "levelId": "bridge-deck",
+                "surfaceHeight": 2,
+                "cost": 2,
+                "squares": [[5, 2], [5, 3]]
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "assetReferences": ["/maps/zones-fixture.jpg"],
+  "scope": "Fixture for tagged terrain zones."
+}
