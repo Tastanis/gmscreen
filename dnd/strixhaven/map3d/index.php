@@ -4514,9 +4514,9 @@ canvas.addEventListener('pointerdown', e => { if (!e.altKey || (e.button !== 0 &
 canvas.addEventListener('contextmenu', e => { if (e.altKey) e.preventDefault(); });
 window.__ping = { showPing, sendPing, role };
 
-// The party's teleportation circles: at the Biblioplex, Kollema Hall, their own workshop and Wiltroot Hall. Nothing of them shows until the Circles button is on;
+// The party's teleportation circles: at the Biblioplex, Kollema Hall, Torus Hall, their own workshop and Wiltroot Hall. Nothing of them shows until the Circles button is on;
 // then over each place a magic circle floats, turning, on a beam of light. Everyone has the button, and each browser remembers how it was left
-const TP_AT = ['Biblioplex', 'Kollema Hall', "Players' Workshop", 'Wiltroot Hall'], TP_COL = 0xb59cff, tp = { on: false, grp: null, list: [] };
+const TP_AT = ['Biblioplex', 'Kollema Hall', 'Torus Hall', "Players' Workshop", 'Wiltroot Hall'], TP_COL = 0xb59cff, tp = { on: false, grp: null, list: [] };
 const tpTex = () => { const cv = document.createElement('canvas'); cv.width = cv.height = 512; const cx = cv.getContext('2d'), r = mulberry32(77), ring = (rad, w) => { cx.lineWidth = w; cx.beginPath(); cx.arc(256, 256, rad, 0, 6.2832); cx.stroke(); };
   cx.strokeStyle = cx.fillStyle = '#fff'; cx.shadowColor = '#fff'; cx.shadowBlur = 10; cx.lineCap = 'round'; ring(246, 5); ring(232, 2); ring(196, 3); ring(112, 3); ring(100, 1.5);
   for (let i = 0; i < 48; i++) { const a = i / 48 * 6.2832; cx.lineWidth = i % 4 ? 1.5 : 3; cx.beginPath(); cx.moveTo(256 + Math.cos(a) * 232, 256 + Math.sin(a) * 232); cx.lineTo(256 + Math.cos(a) * (i % 4 ? 239 : 246), 256 + Math.sin(a) * (i % 4 ? 239 : 246)); cx.stroke(); }
