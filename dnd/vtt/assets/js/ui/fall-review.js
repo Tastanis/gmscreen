@@ -14,8 +14,9 @@ export function nextReviewableFall(records,user,scene,placement){
 }
 /** The Climbing choice is offered only when the creature walked or shifted off the edge itself. */
 export function fallAllowsClimbing(details){return ['walk','shift'].includes(details?.movementKind);}
-// `climbing` is optional: {extra(record,faller)} gives the movement a climb down costs (0 for a
-// climber) and {charge(record,extra)} adds it to the turn. Without it the review is as before.
+// `climbing` is optional: {extra(record,faller)} gives the movement a climb down costs,
+// {charge(record,extra)} adds it to the turn, and {free(record,faller)} says the creature climbs
+// at full speed, so a walk off an edge is no fall for it. Without `climbing` the review is as before.
 export function mountFallReview({context,placement,traits,damage,prone,climbing=null,api=collisionRequest}){
  let busy=false,popup=null,disposed=false,timer=null,wakePending=false;
  const animated=new Set(),uncertainDismissals=new Set();
@@ -30,7 +31,12 @@ export function mountFallReview({context,placement,traits,damage,prone,climbing=
    const c=context();if(!c?.userId)return;
    const records=await api(),record=nextReviewableFall(records,c.userId,c.sceneId,placement);if(!record)return;
    const faller=placement(record.targetId);if(!faller)return;
-   const stats=await traits(faller),details=record.details||{},computedDamage=fallDamage(details.squares,Number(stats.agility)||0,details.forcedDown),targets=[{id:record.targetId,name:faller.name||'Token',prone:fallerLandsProne(details,Number(stats.agility)||0)}];
+   const details=record.details||{};
+   // A creature with a climb speed that walked itself off the edge climbed down. No pop-up, no damage.
+   if(climbing?.free&&fallAllowsClimbing(details)&&!details.collidedIds?.length&&!details.needsPlacementReview&&climbing.free(record,faller)){
+    try{await api({operationId:record.operationId,targetId:record.targetId,action:'finish',status:'dismissed'});wakePending=true;try{climbing.charge(record,0);}catch{}return;}catch{}
+   }
+   const stats=await traits(faller),computedDamage=fallDamage(details.squares,Number(stats.agility)||0,details.forcedDown),targets=[{id:record.targetId,name:faller.name||'Token',prone:fallerLandsProne(details,Number(stats.agility)||0)}];
    for(const id of details.collidedIds||[]){const p=placement(id);if(!p)throw Error('Fall target is unavailable; GM review is required.');const t=await traits(p);targets.push({id,name:p.name||'Creature',prone:landingTargetProne(stats.size,t.might)});}
    if(disposed||document.hidden||context()?.sceneId!==record.sceneId||String(context()?.userId).toLowerCase()!==String(c.userId).toLowerCase())return;
    const token=[...document.querySelectorAll('#vtt-token-layer [data-placement-id]')].find(e=>e.dataset.placementId===record.targetId);

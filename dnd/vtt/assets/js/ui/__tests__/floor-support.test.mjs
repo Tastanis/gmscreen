@@ -44,3 +44,23 @@ test('raised room edge contact retains support over basements without acquiring 
  assert.equal(walkFloorContact({...from,movementMode:'fly',flightHeight:3},to,[],[s],levels,()=>2),null);
  assert.equal(walkFloorContact(from,to,[],[s],levels,()=>1.8),null,'No large step');
 });
+
+test('a walker standing level with a deck it overlaps is on it, so a bridge that ends on the land can be crossed',()=>{
+ // A rope bridge at height 2 whose end is laid over the landing square; the land there is a hair higher (2.02).
+ const bridge={id:'bridge',kind:'floor',levelId:'level-0',height:2,points:[{x:2,y:1},{x:9,y:1},{x:9,y:2},{x:2,y:2}]},levels={levels:[]};
+ const land=p=>p.column<2.5?2.02:0,onLanding={column:2,row:1,width:1,height:1,levelId:'level-0'};
+ assert.equal(terrainFloorContact(onLanding,[bridge],levels,2.02),null,'standing still, the strict rule is unchanged');
+ assert.equal(terrainFloorContact(onLanding,[bridge],levels,2.02,.1),bridge);
+ // It climbed up beside the bridge and now walks out along it: it is carried, where before it dropped through.
+ assert.equal(walkFloorContact(onLanding,{column:6,row:1},[],[bridge],levels,land),bridge);
+ assert.equal(walkFloorContact(onLanding,{column:8,row:1},[{column:4,row:1}],[bridge],levels,land),bridge,'through a waypoint too');
+ // Walking back onto the land and off the bridge's footprint leaves it.
+ assert.equal(walkFloorContact({...onLanding,column:3,_supportSurfaceId:'bridge'},{column:0,row:1},[],[bridge],levels,land),null);
+ // Not level: the land is more than a tenth of a square above or below the deck.
+ assert.equal(walkFloorContact(onLanding,{column:6,row:1},[],[bridge],levels,p=>p.column<2.5?2.2:0),null,'a real step down onto the deck is not bridged');
+ assert.equal(walkFloorContact(onLanding,{column:6,row:1},[],[bridge],levels,p=>p.column<2.5?1.8:0),null,'a real step up is not bridged');
+ // Under the bridge, in the canal: never lifted onto it.
+ assert.equal(walkFloorContact({column:5,row:1,width:1,height:1,levelId:'level-0'},{column:7,row:1},[],[bridge],levels,()=>0),null);
+ // A flier is not put on it.
+ assert.equal(walkFloorContact({...onLanding,movementMode:'fly',flightHeight:2},{column:6,row:1},[],[bridge],levels,land),null);
+});

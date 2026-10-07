@@ -262,23 +262,21 @@ or a staircase is never a cliff, however long.
 
 ### What a climb costs
 
-One setting decides it (`CLIMB_FIRST_SQUARE_FREE` in `terrain-math.mjs`):
+The rulebook's rule, as you decided: each square climbed costs 2 squares of
+movement, and a one-square vertical is not a climb.
 
-- **As built (your first description):** the first square of the face is
-  ordinary movement and every square after it costs double. A 2-high face
-  costs 3, a 3-high costs 5, a 4-high costs 7. A 1-square ledge costs 1 and is
-  never asked about.
-- **The rulebook, if you choose it:** every climbed square costs double (4, 6,
-  8), and a 1-square ledge would cost 2 and be asked about.
+- A 2-high face costs 4, a 3-high costs 6, a 4-high costs 8.
+- A 1-square ledge costs 1 and is never asked about.
+- A climb into difficult terrain adds the two costs; it does not multiply.
 
-A climb into difficult terrain adds the two costs; it does not multiply them.
+The one setting is `CLIMB_MIN_HEIGHT` in `terrain-math.mjs` (2).
 
 ### Going up
 
 When a walk or a shift goes up a cliff, a pop-up appears after you let go of
 the token and before the move is sent:
 
-> **Climbing.** Walker climbs 4 squares. This move costs 7 (3 extra for the
+> **Climbing.** Walker climbs 4 squares. This move costs 8 (4 extra for the
 > climb). Only 5 movement left this turn.
 
 - **Climb** (or Enter): the move goes through and the counter is charged.
@@ -296,7 +294,7 @@ fall review you already have gains a third button:
 
 - **Apply**: take the fall damage, as before.
 - **Climbing**: no damage, not prone, and the climb's extra movement is added
-  to this turn (walking off a 4-high edge: 4 already counted, 3 more).
+  to this turn (walking off a 4-high edge: 4 already counted, 4 more).
 - **Dismiss**: no damage and no extra movement. This is your "cancel".
 
 A creature that was pushed, pulled or slid over the edge gets the ordinary
@@ -307,6 +305,9 @@ before: a player for their own hero, the GM for a monster.
 
 - A creature with "climb" in its movement ("Climb", "Burrow, Climb", "Spider
   climb"). All the ghouls and rootgnawers in the Dead Root fight qualify.
+  Going up it is never asked. Walking off an edge it simply climbs down: no
+  pop-up, no damage, no Climbing button. Pushed off an edge it falls like
+  anyone else. If it lands on another creature the fall review still opens.
 - A flier (fly or hover mode).
 - Forced movement and teleports.
 - Heroes are always asked.
@@ -348,17 +349,31 @@ surface still counts as in the liquid. Ground that is not a plate (a rock that
 is only a bump in the terrain) still uses the half-square rule, so the map
 should either make it a plate or leave its squares out of the zone.
 
+**Bridges that end on the land.** A walker standing level with a deck it
+overlaps now counts as on it when it starts to move. Before, it only got onto
+a deck by crossing the deck's edge at deck height, so a creature that climbed
+up beside a bridge and stood where the bridge meets the land could drop
+through the bridge on its next step. "Level" means within a tenth of a square.
+So a bridge end can lie over the landing square again; it does not have to
+stop exactly on a grid line.
+
 ### Checks run
 
-- 16 more tests. Full suite: 142 files, 1016 checks, 0 failures.
+- 19 more tests than `main`. Full suite: 142 files, 1019 checks, 0 failures.
 - Sandbox, Dead Root Node, real mouse drags, GM: up a real 4-square cliff the
-  ruler read "Move 4 · Cost 7" with the amber mark; the pop-up showed the
+  ruler read "Move 4 · Cost 8" with the amber mark; the pop-up showed the
   text above; Don't climb left the token where it was; Climb put it on top.
   Walking back off showed Dismiss / Climbing / Apply with "Climbing: no
-  damage, 3 more movement"; Climbing left Stamina at 50, not prone, and the
-  counter went from 4 to 7; Dismiss changed nothing; Apply took 8. Forced over
-  the same edge: Dismiss / Apply only. A Sluice Ghoul went straight up with
-  no pop-up and "Move 4".
+  damage, 4 more movement"; Climbing left Stamina at 50, not prone; Dismiss
+  changed nothing; Apply took 8. Forced over the same edge: Dismiss / Apply
+  only. A Sluice Ghoul went straight up with no pop-up and "Move 4", and
+  walked back off the same edge with no pop-up and no damage ("Climbed
+  down."); pushed off it, the ghoul got the ordinary fall review.
+- Bridge landings, checked with the server's own code against the package's
+  real geometry: the three rope bridges have six landing squares. With the old
+  rule two of them missed the bridge (the land there is one or two hundredths
+  of a square higher than the deck); now a walker on any of the six is carried
+  two squares out over the drop with no fall.
 - Sandbox, player (Cal): the same pop-up for their own hero, Don't climb
   refused the move, Climb moved it, and the fall review with Climbing came to
   the player.
@@ -381,8 +396,6 @@ Things you should know:
   bridge or a deck, not only off a rock face.
 - Where the 3D view hides the top of a cliff behind its own face, the mouse
   cannot pick the top square. That is how the map already behaved.
-- A climber who walks off an edge still gets the fall pop-up, with Climbing at
-  no cost.
 - A swimmer in water gets no "No shifting in difficult terrain" warning,
   because for that creature the water costs nothing extra.
 - The zoned Dead Root package has one-way walls on every cliff edge (754 of
@@ -399,11 +412,11 @@ before pushing. That is done: `main` on this PC has that work.
 
 ## Questions waiting for you
 
-1. Climb cost: first square free (as built), or the rulebook's double for
-   every square?
-2. Should the cliff-edge walls in the Dead Root package stay?
-3. Should climbing down cost double as it does now, and should a plain fall
+1. Should climbing down cost double as it does now, and should a plain fall
    still cost its height in movement?
+
+Answered since: the climb cost follows the rulebook, and the cliff-edge walls
+are the Map maker's to remove.
 
 ## Stage 4: abilities read tags. Not started
 

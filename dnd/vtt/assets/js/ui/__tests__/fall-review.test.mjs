@@ -152,3 +152,21 @@ test('a dismissal that cannot be confirmed does not charge the climb', async()=>
   assert.deepEqual(charges,[]);assert.match(f.panel().textContent,/Dismissal unconfirmed/);
  }finally{f.close();}
 });
+
+test('a creature with a climb speed that walks off an edge climbs down: no pop-up, no damage, no prone', async()=>{
+ const walked=(kind)=>({...record(),details:{squares:4,movementKind:kind}});
+ const charges=[];const climbing={extra:()=>4,free:()=>true,charge:(r,extra)=>charges.push(extra)};
+ let f=fixture({mount:{climbing}});
+ try{f.records=[walked('walk')];await until(()=>f.records[0].status==='dismissed');await delay(20);
+  assert.equal(f.panel(),null,'never shown the fall review or the Climbing button');assert.equal(f.damage,0);assert.equal(f.prone,0);assert.equal(f.animations,0,'it does not play the fall');assert.deepEqual(charges,[0],'nothing added to its movement');
+ }finally{f.close();}
+ // Pushed over the edge, the same creature falls like anyone else.
+ f=fixture({mount:{climbing}});
+ try{f.records=[walked('forced')];await until(f.panel);assert.deepEqual([...f.panel().querySelectorAll('button')].map(b=>b.textContent),['Dismiss','Apply']);}finally{f.close();}
+ // A creature without a climb speed still gets the review with the Climbing choice.
+ f=fixture({mount:{climbing:{...climbing,free:()=>false}}});
+ try{f.records=[walked('walk')];await until(f.panel);assert.deepEqual([...f.panel().querySelectorAll('button')].map(b=>b.textContent),['Dismiss','Climbing','Apply']);assert.match(f.panel().textContent,/Climbing: no damage, 4 more movement\./);}finally{f.close();}
+ // If the climber lands on someone, that still needs a look.
+ f=fixture({mount:{climbing}});
+ try{f.records=[{...record(),details:{squares:4,movementKind:'walk',collidedIds:['two']}}];await until(f.panel);assert.ok(f.panel());}finally{f.close();}
+});

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CLIMB_FIRST_SQUARE_FREE, climbSurcharge, stepCost, routeSteps } from '../terrain-math.mjs';
+import { CLIMB_MIN_HEIGHT, climbSurcharge, stepCost, routeSteps } from '../terrain-math.mjs';
 import { terrainContact } from '../terrain-contact.js';
 import { buildZoneIndex, normalizeZones, zonesForFootprint, summarizeRoute, movementText, hasMovementType, standsOnPlate, movementWaiver, zoneCostFor, isLiquidTag, LIQUID_TAGS } from '../terrain-zones.mjs';
 import { climbPromptText, askClimb } from '../climb-prompt.js';
@@ -11,26 +11,27 @@ const cliff = (top) => (x) => (x >= 3 ? top : 0);
 const square = (heightAt) => (column, row) => heightAt(column + 0.5, row + 0.5);
 const face = (heightAt) => (a, b) => terrainContact({ column: a.column, row: a.row, width: 1, height: 1 }, { column: b.column, row: b.row }, heightAt) !== null;
 
-test('the climb setting: first square free, every square after it double', () => {
-  assert.equal(CLIMB_FIRST_SQUARE_FREE, true, 'the build uses Brandon’s first version until he chooses');
-  assert.deepEqual([0, 1, 2, 3, 4].map(climbSurcharge), [0, 0, 1, 2, 3]);
-  assert.equal(climbSurcharge(-3), 2, 'a climb down is priced like the same climb up');
+test('the rulebook climb: a face of two or more squares costs double for every square', () => {
+  assert.equal(CLIMB_MIN_HEIGHT, 2, 'a one-square vertical is not a climb');
+  assert.deepEqual([0, 1, 2, 3, 4].map(climbSurcharge), [0, 0, 2, 3, 4]);
+  assert.equal(climbSurcharge(-3), 3, 'a climb down is priced like the same climb up');
   assert.equal(stepCost({ rise: 1, climb: true }), 1, 'a one-square block is ordinary movement');
-  assert.equal(stepCost({ rise: 2, climb: true }), 3);
-  assert.equal(stepCost({ rise: 3, climb: true }), 5);
+  assert.equal(stepCost({ rise: 2, climb: true }), 4);
+  assert.equal(stepCost({ rise: 3, climb: true }), 6);
+  assert.equal(stepCost({ rise: 4, climb: true }), 8);
   assert.equal(stepCost({ rise: 3 }), 3, 'not a climb: priced as before');
   assert.equal(stepCost({ rise: -3, climb: true }), 3, 'walking down is never surcharged on the route; the fall review decides');
-  assert.equal(stepCost({ rise: 2, multiplier: 2, climb: true }), 4, 'a climb into difficult terrain adds, it does not multiply');
+  assert.equal(stepCost({ rise: 2, multiplier: 2, climb: true }), 5, 'a climb into difficult terrain adds, it does not multiply');
 });
 
 test('a route up a cliff is charged the climb; a climber, a flier or forced movement is not', () => {
   const heightAt = cliff(3), height = square(heightAt);
   const walker = routeSteps({ column: 0, row: 0 }, { column: 4, row: 0 }, height, null, face(heightAt));
-  // 2 flat squares, the 3-high face (1 + 2 + 2 = 5), 1 along the top.
-  assert.equal(walker.cost, 2 + 5 + 1);
-  assert.equal(walker.climbExtra, 2);
-  assert.deepEqual(walker.points.map((point) => point.climb || 0), [0, 0, 0, 2, 0]);
-  assert.equal(walker.extra, 2, 'the surcharge counts as cost beyond the plain distance');
+  // 2 flat squares, the 3-high face (3 squares at double = 6), 1 along the top.
+  assert.equal(walker.cost, 2 + 6 + 1);
+  assert.equal(walker.climbExtra, 3);
+  assert.deepEqual(walker.points.map((point) => point.climb || 0), [0, 0, 0, 3, 0]);
+  assert.equal(walker.extra, 3, 'the surcharge counts as cost beyond the plain distance');
   // No face test supplied (climber, flier, forced movement): the plain cost as before.
   const climber = routeSteps({ column: 0, row: 0 }, { column: 4, row: 0 }, height, null, null);
   assert.equal(climber.cost, 2 + 3 + 1);
@@ -44,8 +45,8 @@ test('a route up a cliff is charged the climb; a climber, a flier or forced move
 test('a cliff is what stops forced movement: a ramp is not one, and a one-square ledge costs nothing extra', () => {
   // A two-high face is a climb.
   const two = cliff(2);
-  assert.equal(routeSteps({ column: 2, row: 0 }, { column: 3, row: 0 }, square(two), null, face(two)).cost, 3);
-  // A one-high ledge stops forced movement too, but the first square is free, so it is never asked about.
+  assert.equal(routeSteps({ column: 2, row: 0 }, { column: 3, row: 0 }, square(two), null, face(two)).cost, 4);
+  // A one-high ledge stops forced movement too, but it is not a climb, so it is never asked about.
   const one = cliff(1);
   let asked = 0;
   const ledge = routeSteps({ column: 2, row: 0 }, { column: 3, row: 0 }, square(one), null, (a, b) => { asked += 1; return face(one)(a, b); });
@@ -66,9 +67,9 @@ test('a cliff is what stops forced movement: a ramp is not one, and a one-square
 test('the route summary lists each climb for the ruler and the pop-up', () => {
   const heightAt = cliff(3), height = square(heightAt);
   const summary = summarizeRoute([{ column: 0, row: 0 }, { column: 4, row: 0 }], (a, b) => routeSteps(a, b, height, null, face(heightAt)));
-  assert.deepEqual(summary.climbs, [{ column: 3, row: 0, rise: 3, extra: 2, from: { column: 2, row: 0 } }]);
-  assert.equal(summary.climbExtra, 2);
-  assert.equal(summary.cost, 8);
+  assert.deepEqual(summary.climbs, [{ column: 3, row: 0, rise: 3, extra: 3, from: { column: 2, row: 0 } }]);
+  assert.equal(summary.climbExtra, 3);
+  assert.equal(summary.cost, 9);
   assert.equal(summary.distance, 6, 'the distance is the cost without surcharges');
   const flat = summarizeRoute([{ column: 0, row: 0 }, { column: 4, row: 0 }], (a, b) => routeSteps(a, b, () => 0));
   assert.deepEqual([flat.climbs, flat.climbExtra], [[], 0]);

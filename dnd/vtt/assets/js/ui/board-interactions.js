@@ -711,7 +711,9 @@ export function mountBoardInteractions(store, routes = {}) {
   };
   // A creature that walked off an edge may have climbed down instead: no damage, more movement.
   const fallClimbing = {
-    extra: (record, faller) => (window.terrainZones?.paysForClimb?.(faller, 'walk') === false ? 0 : climbSurcharge(record.details?.squares)),
+    // A creature with a climb speed climbs at full speed: walking off an edge is not a fall for it.
+    free: (record, faller) => window.terrainZones?.paysForClimb?.({ ...faller, movementMode: 'ground' }, 'walk') === false,
+    extra: (record, faller) => (fallClimbing.free(record, faller) ? 0 : climbSurcharge(record.details?.squares)),
     charge: (record, extra) => {
       const counted = extra > 0 && tokenMovementController?.addMovementCost?.(record.targetId, extra);
       updateStatus(extra > 0 ? `Climbed down ${Math.round(record.details?.squares || 0)}: ${extra} more movement${counted ? '' : ' (not counted: not this creature\u2019s turn)'}.` : 'Climbed down.');

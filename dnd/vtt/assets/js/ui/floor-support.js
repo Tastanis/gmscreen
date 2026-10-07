@@ -36,10 +36,12 @@ export function floorSupported(p,surfaces,cuts=[]){
 }
 
 // Match FloorSupport::terrainContact: a nearly flush imported surface, not a stair.
-export function terrainFloorContact(p,surfaces,mapLevels,ground){
+// `below`: how far under the ground a plate may sit and still count. Walking passes a tenth of a
+// square, so a walker standing level with a deck it overlaps is on it (paired with FloorSupport.php).
+export function terrainFloorContact(p,surfaces,mapLevels,ground,below=0){
  const levels=supportLevels(mapLevels);let best=null;
  for(const surface of surfaces){const level=levels.get(surface.levelId),height=surface.height;
-  if(surface.kind!=='floor'||!level||level.hidden||height<ground-1e-6||height>ground+FLOOR_GROUND_CLEARANCE+1e-6)continue;
+  if(surface.kind!=='floor'||!level||level.hidden||height<ground-below-1e-6||height>ground+FLOOR_GROUND_CLEARANCE+1e-6)continue;
   if(intersectsFloor(p,surface,level.cutouts||[])&&(!best||height>best.height))best=surface;
  }
  return best;
@@ -60,7 +62,7 @@ export function walkFloorContact(from,to,path,surfaces,mapLevels,terrain){
  const overlap=(p,s)=>intersectsFloor(p,s,levels.get(s.levelId).cutouts||[]);
  let support=floors.find(s=>from._supportSurfaceId&&from._supportSurfaceId===s.id&&overlap(from,s))
   ||floors.find(s=>!s.templateCube&&(from.levelId||'level-0')!=='level-0'&&from.levelId===s.levelId&&overlap(from,s))
-  ||terrainFloorContact(from,floors,mapLevels,terrain(from)),previous=from;
+  ||terrainFloorContact(from,floors,mapLevels,terrain(from),.1),previous=from;
  for(const end of [...path,to]){
   const start=previous,dx=end.column-start.column,dy=end.row-start.row,steps=Math.max(1,Math.min(8192,Math.ceil(Math.max(Math.abs(dx),Math.abs(dy))*8)));
   for(let i=1;i<=steps;i++){

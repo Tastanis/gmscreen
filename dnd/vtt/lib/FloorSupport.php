@@ -105,11 +105,14 @@ final class FloorSupport {
   return false;
  }
  /** Contact tolerance for nearly flush imported paving; never a full-square climb. */
- public static function terrainContact(array $p,array $surfaces,array $mapLevels,float $ground):?array {
+ // $below: how far under the ground a plate may sit and still count. Movement passes a tenth of a
+ // square, so a walker standing level with a deck it overlaps is on it even when the deck's end is
+ // sunk a hair into the land. Everything else keeps the strict "at or just above the ground" rule.
+ public static function terrainContact(array $p,array $surfaces,array $mapLevels,float $ground,float $below=0.):?array {
   $levels=self::levels($mapLevels);$best=null;
   foreach($surfaces as $surface){
    $level=$levels[$surface['levelId']??'']??null;$height=(float)($surface['height']??0);
-   if(($surface['kind']??'')!=='floor'||!$level||($level['hidden']??false)||$height<$ground-1e-6||$height>$ground+self::GROUND_CLEARANCE+1e-6)continue;
+   if(($surface['kind']??'')!=='floor'||!$level||($level['hidden']??false)||$height<$ground-$below-1e-6||$height>$ground+self::GROUND_CLEARANCE+1e-6)continue;
    if(self::intersects($p,$surface,$level['cutouts']??[])&&(!$best||$height>$best['height']))$best=$surface;
   }
   return $best;
@@ -144,7 +147,7 @@ final class FloorSupport {
   $support=null;
   foreach($floors as $s)if(($from['_supportSurfaceId']??null)===($s['id']??null)&&$overlap($from,$s)){$support=$s;break;}
   if(!$support)foreach($floors as $s)if(($s['kind']??'')==='floor'&&($from['levelId']??'level-0')!=='level-0'&&$from['levelId']===$s['levelId']&&$overlap($from,$s)){$support=$s;break;}
-  $support??=self::terrainContact($from,$floors,$mapLevels,$terrain($from));
+  $support??=self::terrainContact($from,$floors,$mapLevels,$terrain($from),.1);
   $previous=$from;
   foreach([...$path,$to] as $end){
    $start=$previous;$dx=$end['column']-$start['column'];$dy=$end['row']-$start['row'];

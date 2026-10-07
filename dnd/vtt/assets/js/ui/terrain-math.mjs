@@ -36,12 +36,11 @@ export const effectiveHeight=(ground,size)=>groundSquare(ground)+Math.floor(Math
 export const relativeScale=(ground,viewer)=>clamp(1+(heightBand(ground)-heightBand(viewer))*.1,.5,2);
 // squareCost(column,row,rawHeight) is the movement multiplier of the square being
 // entered (2 for ordinary difficult terrain); it adds multiplier-1 to that step.
-// Climbing a cliff costs double. THE ONE SETTING: true = the first square of a face is ordinary
-// movement and every square after it costs double (a 2-high face costs 3, a 3-high costs 5).
-// false = the rulebook: every climbed square costs double (4 and 6).
-export const CLIMB_FIRST_SQUARE_FREE=true;
-/** Extra movement for climbing (up or down) a face this many squares high. 0 means it is not a climb. */
-export function climbSurcharge(squares){const height=Math.max(0,Math.round(Math.abs(Number(squares)||0)));return CLIMB_FIRST_SQUARE_FREE?Math.max(0,height-1):height;}
+// Climbing, as the rulebook has it: each square climbed costs 2 squares of movement.
+// THE ONE SETTING: a face lower than this is not a climb. A one-square vertical is just a step.
+export const CLIMB_MIN_HEIGHT=2;
+/** Extra movement for climbing (up or down) a face this many squares high: its full height again. 0 means it is not a climb. */
+export function climbSurcharge(squares){const height=Math.max(0,Math.round(Math.abs(Number(squares)||0)));return height>=CLIMB_MIN_HEIGHT?height:0;}
 /** Movement cost of one step: the larger of the squares moved and the height change, plus
  * (multiplier - 1) for difficult terrain, plus the climb surcharge when `climb` says this step
  * goes up a cliff face. `rise` is signed (up is positive). The ruler, the turn counter and the
