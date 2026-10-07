@@ -1404,3 +1404,18 @@ not clear a different hex's draft or lock. Notes edited during a save remain dir
 Terrain saves serialize batches and acknowledge only matching submitted values; painting
 during a request, including reverting to the old server value, remains queued.
 Regression coverage lives in dnd/strixhaven/map3d/tests/save-races.test.mjs and npm test.
+
+### Read-only D&D sandbox capture - 1.19.198
+
+`dnd/admin/sandbox-export` is a standalone, disabled-by-default data capture
+endpoint. Read `docs/dnd-sandbox-capture.md` before installation or use. It must
+not bootstrap the app, initialize storage, impersonate players, or query shared
+ASL databases. Its token hash configuration belongs outside public_html.
+Recursive D&D file capture uses explicit exclusions and reports unknown types;
+SQLite uses the backup API rather than copying a live main file without its WAL.
+The desktop tool verifies two manifests and source hashes, creates fresh folders,
+and preserves the last successful capture after failure. Capture with live tabs
+closed because presence also changes SQLite. Unknown/MySQL hex storage, missing
+core stores, unresolved media and source mismatches block sandbox preparation.
+Use the isolated launcher, never a generic PHP server for these captures.
+Local fixture tests do not establish production coverage or gameplay equivalence.

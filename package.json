@@ -1,5 +1,6 @@
 {
   "scripts": {
+    "test:sandbox-capture": "python dnd/tools/test_capture_sandbox.py",
     "test": "node dnd/vtt/tools/run-regression-suite.cjs",
     "test:automation-smoke": "node --test dnd/character_sheet/ability-automation/__tests__/automation-smoke.spec.mjs"
   },
