@@ -2,7 +2,8 @@
 
 This replaces the diagnostic downloader's fixed file list with a recursive,
 authenticated D&D capture. It does **not** deploy itself or grant access merely by
-being uploaded. The first production capture and gameplay comparison are pending.
+being uploaded. The first production file capture passed on October 7, 2026; the signed-in
+gameplay comparison remains pending.
 
 ## What is included
 
@@ -177,3 +178,17 @@ Unchanged files can be reused only after matching the fresh manifest's length an
 SHA-256; the two-manifest consistency check still applies. Deployed code can be
 recovered from local Git history only when its bytes match the deployed hash.
 The main working checkout is not modified to match an older deployment.
+
+### October 7, 2026 installation verification
+
+The endpoint is installed in cPanel with its enabling configuration outside the
+public root (0600). PHP 8.3 and sqlite3 are available. The deployed local database
+configuration names `dnd_gmscreen`; the hosting account lists only `asl_users` and
+`dnd_characters`, so the documented JSON fallback applies. No ASL database was read.
+The authenticated capture verified 2,023 data/media files (about 3.17 GB) and 510
+source fingerprints, recovering 57 exact deployed versions from local Git history.
+Coverage issues were zero after explicit session/retired-file exclusions. Historical
+media warnings remain recorded without deleting or rewriting the original records.
+The prepared sandbox passes SQLite integrity and serves a local login page with
+self-only connection/form restrictions. Signed-in gameplay verification still
+requires the user's current login; the old documented GM credentials were rejected.
