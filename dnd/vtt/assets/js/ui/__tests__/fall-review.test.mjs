@@ -114,3 +114,41 @@ test('uncertain dismissal settling after scene change cannot open obsolete panel
   assert.equal(f.damage,0);assert.equal(f.prone,0);
  }finally{f.close();}
 });
+
+test('a walked fall offers Climbing: no damage, no prone, the climb is charged once; a forced fall does not', async()=>{
+ const walked=(kind,id='one')=>({...record(id),details:{squares:3,movementKind:kind}});
+ const charges=[];const climbing={extra:(r)=>r.details.squares-1,charge:(r,extra)=>charges.push([r.targetId,extra])};
+ let f=fixture({mount:{climbing}});
+ try{f.records=[walked('walk')];await until(f.panel);
+  const buttons=[...f.panel().querySelectorAll('button')].map(b=>b.textContent);assert.deepEqual(buttons,['Dismiss','Climbing','Apply']);
+  assert.match(f.panel().textContent,/Climbing: no damage, 2 more movement\./);
+  const climb=buttons.indexOf('Climbing');const button=[...f.panel().querySelectorAll('button')][climb];
+  await Promise.all([button.onclick(),button.onclick()]);await delay(20);
+  assert.deepEqual(charges,[['one',2]],'charged exactly once');assert.equal(f.damage,0);assert.equal(f.prone,0);assert.equal(f.claims,0);
+  assert.equal(f.records[0].status,'dismissed');assert.equal(f.panel(),null);
+ }finally{f.close();}
+ // Pushed over the edge: the ordinary review, with no Climbing choice.
+ f=fixture({mount:{climbing}});
+ try{f.records=[walked('forced')];await until(f.panel);
+  assert.deepEqual([...f.panel().querySelectorAll('button')].map(b=>b.textContent),['Dismiss','Apply']);assert.doesNotMatch(f.panel().textContent,/Climbing/);
+ }finally{f.close();}
+ // Dismiss on a walked fall is still "no damage, no extra movement".
+ charges.length=0;f=fixture({mount:{climbing}});
+ try{f.records=[walked('walk')];await until(f.panel);await [...f.panel().querySelectorAll('button')].find(b=>b.textContent==='Dismiss').onclick();await delay(20);
+  assert.deepEqual(charges,[]);assert.equal(f.records[0].status,'dismissed');assert.equal(f.damage,0);
+ }finally{f.close();}
+ // A climber is offered the choice at no cost; without the option the review is exactly as before.
+ f=fixture({mount:{climbing:{extra:()=>0,charge:(r,extra)=>charges.push([r.targetId,extra])}}});
+ try{f.records=[walked('walk')];await until(f.panel);assert.match(f.panel().textContent,/Climbing: no damage\./);
+  await [...f.panel().querySelectorAll('button')].find(b=>b.textContent==='Climbing').onclick();await delay(20);assert.deepEqual(charges,[['one',0]]);
+ }finally{f.close();}
+ f=fixture();
+ try{f.records=[walked('walk')];await until(f.panel);assert.deepEqual([...f.panel().querySelectorAll('button')].map(b=>b.textContent),['Dismiss','Apply']);}finally{f.close();}
+});
+test('a dismissal that cannot be confirmed does not charge the climb', async()=>{
+ const charges=[];const f=fixture({failFinish:true,mount:{climbing:{extra:()=>2,charge:(r,extra)=>charges.push(extra)}}});
+ try{f.records=[{...record(),details:{squares:3,movementKind:'walk'}}];await until(f.panel);
+  await [...f.panel().querySelectorAll('button')].find(b=>b.textContent==='Climbing').onclick();await delay(20);
+  assert.deepEqual(charges,[]);assert.match(f.panel().textContent,/Dismissal unconfirmed/);
+ }finally{f.close();}
+});

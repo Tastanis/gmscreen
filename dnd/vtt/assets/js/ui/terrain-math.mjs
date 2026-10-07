@@ -36,22 +36,33 @@ export const effectiveHeight=(ground,size)=>groundSquare(ground)+Math.floor(Math
 export const relativeScale=(ground,viewer)=>clamp(1+(heightBand(ground)-heightBand(viewer))*.1,.5,2);
 // squareCost(column,row,rawHeight) is the movement multiplier of the square being
 // entered (2 for ordinary difficult terrain); it adds multiplier-1 to that step.
+// Climbing a cliff costs double. THE ONE SETTING: true = the first square of a face is ordinary
+// movement and every square after it costs double (a 2-high face costs 3, a 3-high costs 5).
+// false = the rulebook: every climbed square costs double (4 and 6).
+export const CLIMB_FIRST_SQUARE_FREE=true;
+/** Extra movement for climbing (up or down) a face this many squares high. 0 means it is not a climb. */
+export function climbSurcharge(squares){const height=Math.max(0,Math.round(Math.abs(Number(squares)||0)));return CLIMB_FIRST_SQUARE_FREE?Math.max(0,height-1):height;}
 /** Movement cost of one step: the larger of the squares moved and the height change, plus
- * (multiplier - 1) for difficult terrain. `rise` is signed (up is positive). The ruler, the turn
- * counter and the reach outline all charge through here, so a new surcharge is added once. */
-export function stepCost({horizontal=1,rise=0,multiplier=1}={}){return Math.max(horizontal,Math.abs(rise))+multiplier-1;}
-export function routeSteps(start,end,height,squareCost=null){
+ * (multiplier - 1) for difficult terrain, plus the climb surcharge when `climb` says this step
+ * goes up a cliff face. `rise` is signed (up is positive). The ruler, the turn counter and the
+ * reach outline all charge through here. */
+export function stepCost({horizontal=1,rise=0,multiplier=1,climb=false}={}){return Math.max(horizontal,Math.abs(rise))+multiplier-1+(climb&&rise>0?climbSurcharge(rise):0);}
+/** `isFace(from,to)` says whether a rising step runs into a cliff face (the forced-movement test).
+ * It is asked only when the rise is tall enough to cost extra. Each point gets `climb`: the
+ * surcharge paid on the step into it. `extra` is everything paid beyond the plain distance. */
+export function routeSteps(start,end,height,squareCost=null,isFace=null){
  let x=start.column,y=start.row;const first=height(x,y),points=[{column:x,row:y,height:groundSquare(first),rawHeight:first}];
  const dx=end.column-x,dy=end.row-y,count=Math.ceil(Math.max(Math.abs(dx),Math.abs(dy)));
  for(let i=1;i<=count;i++){
    x=start.column+Math.sign(dx)*Math.min(i,Math.abs(dx));y=start.row+Math.sign(dy)*Math.min(i,Math.abs(dy));
    const rawHeight=height(x,y);points.push({column:x,row:y,height:groundSquare(rawHeight),rawHeight});
  }
- let cost=0,extra=0,cliff=false;
+ let cost=0,extra=0,climbExtra=0,cliff=false;
  for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i],horizontal=Math.max(Math.abs(a.column-b.column),Math.abs(a.row-b.row));
    const raw=horizontal>0&&squareCost?Number(squareCost(b.column,b.row,b.rawHeight)):1,multiplier=Number.isFinite(raw)&&raw>1?Math.floor(raw):1;
-   b.multiplier=multiplier;cost+=stepCost({horizontal,rise:b.height-a.height,multiplier});extra+=multiplier-1;if(horizontal>0&&Math.abs(b.rawHeight-a.rawHeight)/horizontal>=3-1e-6)cliff=true;}
- return {points,cost,cliff,extra};
+   const rise=b.height-a.height,climb=!!isFace&&rise>0&&climbSurcharge(rise)>0&&!!isFace(a,b);
+   b.multiplier=multiplier;b.climb=climb?climbSurcharge(rise):0;b.rise=rise;cost+=stepCost({horizontal,rise,multiplier,climb});extra+=multiplier-1+b.climb;climbExtra+=b.climb;if(horizontal>0&&Math.abs(b.rawHeight-a.rawHeight)/horizontal>=3-1e-6)cliff=true;}
+ return {points,cost,cliff,extra,climbExtra};
 }
 export function barycentric(p,a,b,c){
  const det=(b.y-c.y)*(a.x-c.x)+(c.x-b.x)*(a.y-c.y);if(Math.abs(det)<1e-8)return null;

@@ -465,7 +465,7 @@ function updateOverlay(state) {
     const measured = zones ? zones.routeCost([segment.start, segment.end], { kind }) : null;
     const squares = measured ? measured.distance : terrain ? terrain.route(segment.start, segment.end).cost : segment.squares;
     const placed = terrain ? {...segment,start:{...segment.start,...terrain.rulerPoint(segment.start)},end:{...segment.end,...terrain.rulerPoint(segment.end)}} : segment;
-    return { ...placed, squares, cost: measured ? measured.cost : squares, difficult: measured?.difficult ?? [], shiftInDifficult: Boolean(measured?.shiftInDifficult), rawStart: segment.start };
+    return { ...placed, squares, cost: measured ? measured.cost : squares, difficult: measured?.difficult ?? [], climbs: measured?.climbs ?? [], shiftInDifficult: Boolean(measured?.shiftInDifficult), rawStart: segment.start };
   });
   const totalSquares = segments.reduce((sum, segment) => sum + segment.squares, 0);
   const totalCost = segments.reduce((sum, segment) => sum + segment.cost, 0);
@@ -792,7 +792,9 @@ function movementKindOf(state) {
 function syncDifficultSteps(overlay, segments, gridSize, terrain) {
   let group = overlay.svg.querySelector('[data-difficult-route]');
   const steps = segments.flatMap((segment) => segment.difficult.map((step) => ({ step, origin: segment.rawStart })));
-  if (!steps.length) {
+  // A climb keeps the yellow uphill line and gets a small amber mark; red stays for difficult terrain.
+  const climbs = segments.flatMap((segment) => (segment.climbs || []).map((step) => ({ step, origin: segment.rawStart })));
+  if (!steps.length && !climbs.length) {
     group?.remove();
     return;
   }
@@ -824,6 +826,20 @@ function syncDifficultSteps(overlay, segments, gridSize, terrain) {
     label.dataset.multiplier = String(step.multiplier);
     label.textContent = `×${step.multiplier}`;
     parts.push(path, label);
+  }
+  for (const { step, origin } of climbs) {
+    const from = cell(origin, step.from);
+    const to = cell(origin, step);
+    const a = terrain ? { ...from, ...terrain.rulerPoint(from) } : from;
+    const b = terrain ? { ...to, ...terrain.rulerPoint(to) } : to;
+    const label = document.createElementNS(SVG_NS, 'text');
+    label.classList.add('vtt-climb-step__label');
+    label.setAttribute('x', (a.mapX + b.mapX) / 2);
+    label.setAttribute('y', (a.mapY + b.mapY) / 2);
+    label.setAttribute('font-size', String(Math.max(10, gridSize * 0.36)));
+    label.dataset.climb = String(step.extra);
+    label.textContent = '×2';
+    parts.push(label);
   }
   group.replaceChildren(...parts);
 }

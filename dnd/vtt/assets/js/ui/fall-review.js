@@ -12,7 +12,11 @@ export function nextReviewableFall(records,user,scene,placement){
  return records.find(record=>ownsFall(record,user,scene)&&
   [record.targetId,...(record.details?.collidedIds||[])].every(id=>!!placement(id)));
 }
-export function mountFallReview({context,placement,traits,damage,prone,api=collisionRequest}){
+/** The Climbing choice is offered only when the creature walked or shifted off the edge itself. */
+export function fallAllowsClimbing(details){return ['walk','shift'].includes(details?.movementKind);}
+// `climbing` is optional: {extra(record,faller)} gives the movement a climb down costs (0 for a
+// climber) and {charge(record,extra)} adds it to the turn. Without it the review is as before.
+export function mountFallReview({context,placement,traits,damage,prone,climbing=null,api=collisionRequest}){
  let busy=false,popup=null,disposed=false,timer=null,wakePending=false;
  const animated=new Set(),uncertainDismissals=new Set();
  const schedule=delay=>{clearTimeout(timer);if(!disposed)timer=setTimeout(tick,delay);};
@@ -51,21 +55,30 @@ export function mountFallReview({context,placement,traits,damage,prone,api=colli
    for(const target of targets){const row=document.createElement('div'),name=document.createElement('span');name.textContent=target.name;row.append(name);if(target.prone){const condition=document.createElement('span');condition.className='vtt-fall-review__condition';condition.textContent='Will be prone';row.append(condition);}affected.append(row);}
    const label=document.createElement('label');label.className='vtt-fall-review__damage';label.textContent='Damage';const input=document.createElement('input');input.type='number';input.min='0';input.max='1000000';input.step='1';input.value=computedDamage;label.append(input);
    const status=document.createElement('p');status.className='vtt-fall-review__status';status.setAttribute('aria-live','polite');if(details.needsPlacementReview)status.textContent='GM: choose a free landing space.';
-   const actions=document.createElement('div');actions.className='vtt-fall-review__actions';const apply=document.createElement('button'),dismiss=document.createElement('button');apply.textContent='Apply';dismiss.textContent='Dismiss';apply.type=dismiss.type='button';dismiss.className='vtt-fall-review__dismiss';actions.append(dismiss,apply);
+   const actions=document.createElement('div');actions.className='vtt-fall-review__actions';const apply=document.createElement('button'),dismiss=document.createElement('button');apply.textContent='Apply';dismiss.textContent='Dismiss';apply.type=dismiss.type='button';dismiss.className='vtt-fall-review__dismiss';
+   // Walked off the edge: it may have been a climb down. No damage, no prone, extra movement.
+   let climb=null,climbNote=null;const climbExtra=climbing&&fallAllowsClimbing(details)?Math.max(0,Math.trunc(Number(climbing.extra(record,faller))||0)):null;
+   if(climbExtra!==null){climb=document.createElement('button');climb.type='button';climb.className='vtt-fall-review__climb';climb.dataset.fallClimb='';climb.textContent='Climbing';
+    climbNote=document.createElement('p');climbNote.className='vtt-fall-review__climb-note';climbNote.textContent=climbExtra?`Climbing: no damage, ${climbExtra} more movement.`:'Climbing: no damage.';}
+   actions.append(...[dismiss,climb,apply].filter(Boolean));
    const close=()=>{panel.remove();popup=null;wake();};const key={operationId:record.operationId,targetId:record.targetId};
-   dismiss.onclick=async()=>{if(dismiss.disabled)return;apply.disabled=dismiss.disabled=true;try{await api({...key,action:'finish',status:'dismissed'});close();}catch(e){status.textContent='Dismissal unconfirmed. Reload to check the outcome.';}};
+   dismiss.onclick=async()=>{if(dismiss.disabled)return;apply.disabled=dismiss.disabled=true;if(climb)climb.disabled=true;try{await api({...key,action:'finish',status:'dismissed'});close();}catch(e){status.textContent='Dismissal unconfirmed. Reload to check the outcome.';}};
+   if(climb)climb.onclick=async()=>{if(climb.disabled)return;apply.disabled=dismiss.disabled=climb.disabled=input.disabled=true;
+    try{await api({...key,action:'finish',status:'dismissed'});}catch(e){status.textContent='Dismissal unconfirmed. Reload to check the outcome.';return;}
+    try{climbing.charge(record,climbExtra);}catch(e){console.error('Climb charge failed',e);}
+    close();};
    apply.onclick=async()=>{
     if(apply.disabled)return;
     const amount=Number(input.value);if(!Number.isInteger(amount)||amount<0||amount>1000000)return;
     if(context().sceneId!==record.sceneId){status.textContent='Return to the original scene before applying.';return;}
-    apply.disabled=dismiss.disabled=input.disabled=true;
+    apply.disabled=dismiss.disabled=input.disabled=true;if(climb)climb.disabled=true;
     try{const claim=await api({...key,action:'start'});if(!claim.granted)throw Error('This fall already needs review.');
      for(const target of targets){if(amount)await damage(target.id,amount,'');if(target.prone)await prone(target.id);}
      await api({...key,action:'finish',status:'completed'});close();
     }catch(e){try{await api({...key,action:'finish',status:'needs_review'});}catch{}status.textContent='Outcome uncertain. Check stamina and conditions in GM recovery; do not apply again.';}
    };
-   if(dismissalUnconfirmed){apply.disabled=dismiss.disabled=input.disabled=true;status.textContent='Dismissal unconfirmed. Reload to check the outcome.';}
-   panel.append(title,summary,affected,label,status,actions);document.body.append(panel);
+   if(dismissalUnconfirmed){apply.disabled=dismiss.disabled=input.disabled=true;if(climb)climb.disabled=true;status.textContent='Dismissal unconfirmed. Reload to check the outcome.';}
+   panel.append(...[title,summary,affected,label,climbNote,status,actions].filter(Boolean));document.body.append(panel);
    const bounds=token?.getBoundingClientRect(),box=panel.getBoundingClientRect();let left=(bounds?.right??20)+12;if(left+box.width>innerWidth-12)left=(bounds?.left??innerWidth)-box.width-12;
    panel.style.left=Math.max(12,Math.min(innerWidth-box.width-12,left))+'px';panel.style.top=Math.max(12,Math.min(innerHeight-box.height-12,bounds?.top??20))+'px';
   }catch(error){console.error('Fall review unavailable',error);}finally{busy=false;schedule(wakePending&&!popup?0:4000);}

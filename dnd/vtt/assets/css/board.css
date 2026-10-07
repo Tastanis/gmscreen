@@ -4901,6 +4901,17 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
   dominant-baseline: middle;
 }
 
+.vtt-climb-step__label {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 800;
+  fill: #fbbf24;
+  stroke: #451a03;
+  stroke-width: 5;
+  paint-order: stroke fill;
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+
 @keyframes vtt-difficult-flash {
   0%,
   100% {
@@ -4915,6 +4926,64 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
   .vtt-difficult-step {
     animation: none;
   }
+}
+
+/* Pop-up asked before a walk goes up a cliff. */
+.vtt-climb-prompt {
+  position: fixed;
+  top: 30%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2147480002;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: min(20rem, 86vw);
+  padding: 0.85rem 1rem;
+  border: 2px solid #fbbf24;
+  border-radius: 0.6rem;
+  background: rgba(41, 28, 8, 0.97);
+  color: #fff;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+}
+
+.vtt-climb-prompt__title {
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+  color: #fde68a;
+}
+
+.vtt-climb-prompt p {
+  margin: 0;
+  font-size: 0.86rem;
+}
+
+.vtt-climb-prompt__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+.vtt-climb-prompt button {
+  padding: 0.35rem 0.8rem;
+  border: 1px solid rgba(253, 230, 138, 0.5);
+  border-radius: 0.4rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.vtt-climb-prompt .vtt-climb-prompt__yes {
+  background: #b45309;
+  border-color: #fbbf24;
+}
+
+.vtt-fall-review__climb-note {
+  margin: 0.3rem 0 0;
+  font-size: 0.8rem;
+  opacity: 0.85;
 }
 
 /* Pop-up shown while (and just after) a shift crosses difficult terrain. */

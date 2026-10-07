@@ -137,6 +137,8 @@ export function buildReachableMovementShape({ origin, remaining, cellInfo = null
       try { raw = cellInfo(column, row); } catch (error) { raw = null; }
       const multiplier = Number(raw?.multiplier);
       value = {
+        column,
+        row,
         height: Number.isFinite(Number(raw?.height)) ? Number(raw.height) : 0,
         multiplier: Number.isFinite(multiplier) && multiplier > 1 ? Math.floor(multiplier) : 1,
       };

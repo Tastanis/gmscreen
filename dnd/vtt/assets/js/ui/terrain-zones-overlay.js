@@ -1,7 +1,7 @@
 // Draws tagged terrain zones on the board and answers "which zones is this
 // token in". Reads the canonical scene environment; display choice is local.
-import {sceneZones, buildZoneIndex, zonesForFootprint, zoneTags, squareCostMultiplier, zoneGeometry, zoneColor, zoneSurface, summarizeRoute, zonesHiddenFromPlayers, BASE_LEVEL_ID, placeCornerControl} from './terrain-zones.mjs';
-import {routeSteps, groundSquare, stepCost} from './terrain-math.mjs';
+import {sceneZones, buildZoneIndex, zonesForFootprint, zoneTags, squareCostMultiplier, zoneGeometry, zoneColor, zoneSurface, summarizeRoute, zonesHiddenFromPlayers, BASE_LEVEL_ID, placeCornerControl, hasMovementType, standsOnPlate} from './terrain-zones.mjs';
+import {routeSteps, groundSquare, stepCost, climbSurcharge} from './terrain-math.mjs';
 import {saveShared} from './environment-sync.mjs';
 import {floorElevations} from '../state/normalize/floor-elevation.js';
 
@@ -43,7 +43,18 @@ function zonesForPlacement(target) {
   const c = context(), placement = placementOf(target, c);
   if (!placement) return [];
   const floors = elevations(c);
-  return zonesForFootprint(current(c).index, placement, standingHeight(placement, c), (levelId) => floors.get(levelId) ?? 0);
+  const feet = standingHeight(placement, c);
+  return zonesForFootprint(current(c).index, placement, feet, (levelId) => floors.get(levelId) ?? 0, {onPlate: onPlate(placement, feet, c)});
+}
+/** Decks, planks and other floor plates: a token standing on one is out of the liquid under it. */
+function onPlate(mover, feet, c = context()) {
+  const active = terrain();
+  if (!active || ['fly', 'hover'].includes(mover?.movementMode)) return false;
+  return standsOnPlate(mover, feet, active.design ?? sceneOf(c)?.environment?.walls?.value, sceneOf(c)?.mapLevels);
+}
+/** Who is charged for a climb: anyone walking, except fliers and creatures with "climb" in their movement. */
+function paysForClimb(actor, kind = 'walk') {
+  return kind !== 'forced' && kind !== 'teleport' && !['fly', 'hover'].includes(actor?.movementMode) && !hasMovementType(actor, 'climb');
 }
 
 /** Movement multiplier for a mover entering this square (1 on ordinary ground, or when it is above the zone). */
@@ -55,7 +66,7 @@ function stepMultiplier(actor, column, row, rawHeight) {
   const airborne = ['fly', 'hover'].includes(mover.movementMode);
   const feet = airborne ? standingHeight({...(actor || {}), ...mover}, c) : Number.isFinite(rawHeight) ? rawHeight : floors.get(levelId) ?? 0;
   let cost = 1;
-  for (const zone of zonesForFootprint(index, mover, feet, (id) => floors.get(id) ?? 0)) cost = Math.max(cost, zone.cost);
+  for (const zone of zonesForFootprint(index, mover, feet, (id) => floors.get(id) ?? 0, {onPlate: !airborne && onPlate(mover, feet, c)})) cost = Math.max(cost, zone.cost);
   return cost;
 }
 function moverFor(c) {
@@ -69,8 +80,9 @@ function moverFor(c) {
 function routeCost(points, {kind = 'walk', actor = undefined} = {}) {
   const c = context(), active = terrain(), ignoreZones = kind === 'forced' || kind === 'teleport';
   const mover = actor === undefined ? moverFor(c) : actor;
+  const ignoreClimb = !paysForClimb(mover, kind);
   const stepsBetween = (a, b) => active
-    ? active.route(a, b, {ignoreZones})
+    ? active.route(a, b, {ignoreZones, ignoreClimb, actor: mover || undefined})
     : routeSteps(a, b, () => 0, ignoreZones ? null : (column, row) => stepMultiplier(mover, column, row, undefined));
   const summary = summarizeRoute(points, stepsBetween);
   const start = points?.[0];
@@ -89,13 +101,17 @@ function cellInfoFor(target) {
   if (!active && !state.zones.length) return null;
   const airborne = ['fly', 'hover'].includes(actor?.movementMode);
   return {
-    key: [state.key, active?.revision ?? 0, active?.key ?? '', actor?.levelId || '', actor?.width || 1, airborne ? actor.flightHeight ?? 'air' : 'ground'].join('|'),
+    key: [state.key, active?.revision ?? 0, active?.key ?? '', actor?.levelId || '', actor?.width || 1, airborne ? actor.flightHeight ?? 'air' : 'ground', paysForClimb(actor) ? 'climbs' : 'climber'].join('|'),
     at(column, row) {
       const raw = active ? active.route({column, row}, {column, row}, {ignoreZones: true}).points[0].rawHeight : undefined;
-      return {height: active ? groundSquare(raw) : 0, multiplier: stepMultiplier(actor, column, row, raw)};
+      return {column, row, height: active ? groundSquare(raw) : 0, multiplier: stepMultiplier(actor, column, row, raw)};
     },
-    // The reach outline charges each step exactly as the ruler does.
-    stepCost: (from, to) => stepCost({horizontal: 1, rise: to.height - from.height, multiplier: to.multiplier}),
+    // The reach outline charges each step exactly as the ruler does, climbs included.
+    stepCost: (from, to) => {
+      const rise = to.height - from.height;
+      const climb = !!active && rise > 0 && climbSurcharge(rise) > 0 && paysForClimb(actor) && active.climbFace(actor, from, to);
+      return stepCost({horizontal: 1, rise, multiplier: to.multiplier, climb});
+    },
   };
 }
 
@@ -242,6 +258,7 @@ window.terrainZones = {
   costAt: (column, row, levelId = BASE_LEVEL_ID) => squareCostMultiplier(current().index, column, row, levelId),
   stepMultiplier,
   routeCost,
+  paysForClimb,
   cellInfoFor,
   standingHeight: (target) => { const placement = placementOf(target); return placement ? standingHeight(placement) : null; },
   get visible() { return visible; },

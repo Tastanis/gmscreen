@@ -1,5 +1,6 @@
 // Tagged terrain zones ("blood", "water"): shared read helpers for the board.
 // A scene without zone data has no zones; nothing here invents any.
+import { intersectsFloor, resolveSupportSurfaces } from './floor-support.js';
 export const ZONE_DEFAULT_COST = 2;
 export const BASE_LEVEL_ID = 'level-0';
 
@@ -75,6 +76,7 @@ export function squareCostMultiplier(index, column, row, levelId = BASE_LEVEL_ID
 // is on a zone square, and its feet are not clearly above the zone's surface.
 // A flier, or a token on a bridge or deck over the zone, is therefore not in it.
 export const ZONE_HEIGHT_TOLERANCE = 0.5;
+const PLATE_GAP = 0.02; // a plate this little above a liquid already counts as out of it
 
 export function zoneSurface(zone, floorElevation = 0) {
   return Number.isFinite(zone?.surfaceHeight) ? zone.surfaceHeight : floorElevation;
@@ -96,7 +98,7 @@ export function footprintSquares(placement) {
  * @param standingHeight   absolute height of the token's feet, in squares
  * @param floorElevationOf (levelId) => height of that floor, for zones with no surfaceHeight
  */
-export function zonesForFootprint(index, placement, standingHeight, floorElevationOf = () => 0) {
+export function zonesForFootprint(index, placement, standingHeight, floorElevationOf = () => 0, { onPlate = false } = {}) {
   if (!index?.size || !placement) return [];
   const levelId = placement.levelId || BASE_LEVEL_ID;
   const height = Number.isFinite(standingHeight) ? standingHeight : Number(floorElevationOf(levelId)) || 0;
@@ -104,7 +106,10 @@ export function zonesForFootprint(index, placement, standingHeight, floorElevati
   for (const [column, row] of footprintSquares(placement)) {
     for (const zone of zonesAtSquare(index, column, row, levelId)) {
       if (found.has(zone.id)) continue;
-      if (height - zoneSurface(zone, Number(floorElevationOf(zone.levelId)) || 0) < ZONE_HEIGHT_TOLERANCE) found.set(zone.id, zone);
+      // On a deck, plank or other plate, any gap at all above the surface keeps the token out of
+      // the zone. On plain ground the feet must be within half a square of the surface.
+      const gap = height - zoneSurface(zone, Number(floorElevationOf(zone.levelId)) || 0);
+      if (gap < (onPlate ? PLATE_GAP : ZONE_HEIGHT_TOLERANCE)) found.set(zone.id, zone);
     }
   }
   return [...found.values()];
@@ -121,7 +126,7 @@ export const zoneTags = (zones) => [...new Set((zones || []).map((zone) => zone.
  * distance is the route without difficult terrain; cost is what it really costs.
  */
 export function summarizeRoute(points, stepsBetween) {
-  const summary = { distance: 0, cost: 0, extra: 0, difficult: [] };
+  const summary = { distance: 0, cost: 0, extra: 0, difficult: [], climbs: [], climbExtra: 0 };
   for (let i = 1; i < (points?.length || 0); i++) {
     const walked = stepsBetween(points[i - 1], points[i]);
     if (!walked) continue;
@@ -131,7 +136,9 @@ export function summarizeRoute(points, stepsBetween) {
     summary.distance += (Number(walked.cost) || 0) - extra;
     for (let k = 1; k < (walked.points?.length || 0); k++) {
       const step = walked.points[k];
-      if (step.multiplier > 1) summary.difficult.push({ column: step.column, row: step.row, multiplier: step.multiplier, from: { column: walked.points[k - 1].column, row: walked.points[k - 1].row } });
+      const from = { column: walked.points[k - 1].column, row: walked.points[k - 1].row };
+      if (step.multiplier > 1) summary.difficult.push({ column: step.column, row: step.row, multiplier: step.multiplier, from });
+      if (step.climb > 0) { summary.climbs.push({ column: step.column, row: step.row, rise: step.rise, extra: step.climb, from }); summary.climbExtra += step.climb; }
     }
   }
   return summary;
@@ -188,4 +195,31 @@ export function placeCornerControl({frame, viewport, size, gap = 6, blockerAt = 
   }
   if (viewport.height - bottom - size.height < 0 || left + size.width > viewport.width) return null;
   return {left: Math.round(left), bottom: Math.round(bottom)};
+}
+
+// ---- Who pays ---------------------------------------------------------------
+/** Everything a token's record says about how it moves ("Climb", "Burrow, Climb", "Swim"). */
+export function movementText(placement) {
+  const monster = placement?.monster && typeof placement.monster === 'object' ? placement.monster : placement?.metadata?.monster;
+  const modes = monster?.movement_modes;
+  return [placement?.movement, placement?.traits?.movement, placement?.metadata?.movement, monster?.movement, ...(Array.isArray(modes) ? modes : [modes])]
+    .filter((value) => typeof value === 'string').join(', ');
+}
+/** True when the token's movement text names this movement type as a whole word ("climb", "swim"). */
+export function hasMovementType(placement, type) {
+  return new RegExp(`\\b${String(type).replace(/[^a-z]/gi, '')}\\b`, 'i').test(movementText(placement));
+}
+
+/**
+ * True when a token with its feet at `feet` is standing on a deck, plank or other floor plate
+ * rather than on the ground: a plate on its floor lies under its body at that height.
+ * `model` is the scene's wall and floor design; `mapLevels` its floors.
+ */
+export function standsOnPlate(placement, feet, model, mapLevels = null) {
+  if (!placement || !Number.isFinite(feet) || !model) return false;
+  const levelId = placement.levelId || BASE_LEVEL_ID;
+  const cuts = (mapLevels?.levels || []).find((level) => level.id === levelId)?.cutouts || [];
+  return resolveSupportSurfaces(model).some((surface) => (surface.kind === 'floor' || surface.templateCube)
+    && (surface.levelId || BASE_LEVEL_ID) === levelId && Math.abs(surface.height - feet) <= 0.03
+    && intersectsFloor(placement, surface, cuts));
 }

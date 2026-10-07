@@ -45,6 +45,22 @@ export function createMovementState() {
     return stored;
   }
 
+  /** Adds movement to the token's last recorded move this turn (a climb decided after the move). */
+  function addToLastMove(tokenId, amount, context = {}) {
+    const extra = Math.max(0, Math.trunc(amount ?? 0));
+    if (!tokenId || extra <= 0 || syncTurn(context) === null) {
+      return null;
+    }
+    const entry = spentByToken.get(tokenId);
+    const move = entry?.moves?.[entry.moves.length - 1];
+    if (!move) {
+      return null;
+    }
+    move.cost += extra;
+    entry.spent += extra;
+    return move;
+  }
+
   function peekLastMove(tokenId, context = {}) {
     if (!tokenId || syncTurn(context) === null) {
       return null;
@@ -78,6 +94,7 @@ export function createMovementState() {
     syncTurn,
     getSpent,
     recordMove,
+    addToLastMove,
     peekLastMove,
     undoLastMove,
   };

@@ -1512,7 +1512,7 @@ final class SyncV2Store
                 if($restore===null){
                     if($action['movementKind']==='teleport')WallCubes::assertDestination($next,$movementConfig);
                     $fall=$teleport['fall']??FallOutcome::plan($current,$next,$movementConfig,$explicitFloorOnly?'teleport':$action['movementKind'],$action['path'],$floor['cause']??'');
-                    if($fall){$landing=FallOutcome::landing($next,$state['placements'][$sceneId],$movementConfig);$next=$landing['placement'];$patch['column']=$next['column'];$patch['row']=$next['row'];unset($landing['placement']);(new CollisionEffects($this->pdo,$this->worldId))->recordFall($normalized['operationId'],$sceneId,$actorId,$placementId,[...$fall,...$landing]);}
+                    if($fall){$landing=FallOutcome::landing($next,$state['placements'][$sceneId],$movementConfig);$next=$landing['placement'];$patch['column']=$next['column'];$patch['row']=$next['row'];unset($landing['placement']);(new CollisionEffects($this->pdo,$this->worldId))->recordFall($normalized['operationId'],$sceneId,$actorId,$placementId,[...$fall,...$landing,'movementKind'=>$action['movementKind']]);}
                 }
                 $next['id'] = $placementId;
                 $next['_entityRevision'] = $nextRevision;
@@ -1854,7 +1854,7 @@ final class SyncV2Store
             if($restore===null){
                 if($normalized['movementKind']==='teleport')WallCubes::assertDestination($next,$movementConfig);
                 $fall=$teleport['fall']??FallOutcome::plan($current,$next,$movementConfig,$normalized['movementKind'],$normalized['path'],$floor['cause']);
-                if($fall){$landing=FallOutcome::landing($next,$state['placements'][$sceneId],$movementConfig);$next=$landing['placement'];unset($landing['placement']);(new CollisionEffects($this->pdo,$this->worldId))->recordFall($normalized['operationId'],$sceneId,$actorId,$placementId,[...$fall,...$landing]);}
+                if($fall){$landing=FallOutcome::landing($next,$state['placements'][$sceneId],$movementConfig);$next=$landing['placement'];unset($landing['placement']);(new CollisionEffects($this->pdo,$this->worldId))->recordFall($normalized['operationId'],$sceneId,$actorId,$placementId,[...$fall,...$landing,'movementKind'=>$normalized['movementKind']]);}
             }
             if($collisionPlan!==null)(new CollisionEffects($this->pdo,$this->worldId))->record($normalized['operationId'],$sceneId,$actorId,$placementId,$collisionPlan);
             if ($restore === null) $next['_movementUndo'] = MovementUndo::record($current, $next, $actorId, $mapLevels, $normalized['operationId']);

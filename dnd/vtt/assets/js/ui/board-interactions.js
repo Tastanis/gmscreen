@@ -7,6 +7,8 @@ import {dragMovementKind} from './drag-ruler.js';
 import {floorElevations as teleportFloorElevations} from '../state/normalize/floor-elevation.js';
 import {mountFallReview} from './fall-review.js';
 import {createRoutingIntent, deriveRoutingCommands, createSerialQueue} from './scene-routing-commands.mjs';
+import {askClimb} from './climb-prompt.js';
+import {climbSurcharge} from './terrain-math.mjs';
 import {settleCollisionEffects} from '../services/collision-effects.js';
 import {PLAYER_CHARACTER_USER_IDS as visionOwnerProfiles} from '../state/normalize/map-levels.js';
 import {resolveForcedDrag} from './forced-drag.js';
@@ -707,7 +709,15 @@ export function mountBoardInteractions(store, routes = {}) {
     const linked=resolvePcTokenForUser({userId,placements:state.boardState.placements?.[sceneId],viewerAssociation:scene?.pcTokenAssociations?.[userId]});
     return {view:viewState,state,levelId:getViewerLevelIdForCurrentUser(state,sceneId),userId,isGM:isGmUser(),followId:linked?.placementId,selectedIds:[...selectedTokenIds]};
   };
-  const fallReview = mountFallReview({context:()=>({userId:getCurrentUserId(),sceneId:getActiveSceneId()}),placement:getPlacementFromStore,traits:getAutomationTraitsForPlacement,damage:applyAutomationCollisionDamage,
+  // A creature that walked off an edge may have climbed down instead: no damage, more movement.
+  const fallClimbing = {
+    extra: (record, faller) => (window.terrainZones?.paysForClimb?.(faller, 'walk') === false ? 0 : climbSurcharge(record.details?.squares)),
+    charge: (record, extra) => {
+      const counted = extra > 0 && tokenMovementController?.addMovementCost?.(record.targetId, extra);
+      updateStatus(extra > 0 ? `Climbed down ${Math.round(record.details?.squares || 0)}: ${extra} more movement${counted ? '' : ' (not counted: not this creature\u2019s turn)'}.` : 'Climbed down.');
+    },
+  };
+  const fallReview = mountFallReview({climbing:fallClimbing,context:()=>({userId:getCurrentUserId(),sceneId:getActiveSceneId()}),placement:getPlacementFromStore,traits:getAutomationTraitsForPlacement,damage:applyAutomationCollisionDamage,
     prone:async id=>{const result=applyConditionToPlacement(id,{name:'Prone'},{returnSavePromise:true});if(!result)throw Error('Prone could not be saved');await awaitSuccessfulPlacementSave(result);}});
   configureCharacterOperationJournal(getCurrentUserId());
   const syncV2Config =
@@ -1358,6 +1368,28 @@ export function mountBoardInteractions(store, routes = {}) {
         updatePlacementById(move.placementId,p=>Object.assign(p,origin),{syncBoard:false});
         const choice=await promptTeleport(origin,move);if(!choice||sceneId!==getActiveSceneId()){renderTokens(boardApi.getState?.()??{},tokenLayer,viewState);return;}
         move.teleportChoice=choice;
+      }
+    }
+    // Walking up a cliff: ask first. "Don't climb" means the move is never sent.
+    if (movementKind === 'walk' || movementKind === 'shift') {
+      const climbs = moves.map((move) => {
+        const origin = canonical[move.placementId];
+        if (!origin || !window.terrainZones?.routeCost) return null;
+        const through = hasMatchingOrigin ? ruler.slice(1, -1).map((point) => ({ column: point.column + origin.column - ruler[0].column, row: point.row + origin.row - ruler[0].row })) : [];
+        const route = window.terrainZones.routeCost([{ column: origin.column, row: origin.row }, ...through, { column: move.column, row: move.row }], { kind: movementKind, actor: origin });
+        return route.climbs?.length ? { move, origin, route } : null;
+      }).filter(Boolean);
+      if (climbs.length) {
+        const { move, origin, route } = climbs[0];
+        const left = tokenMovementController?.getMovementLeft?.(move.placementId)?.left ?? null;
+        const anchor = [...tokenLayer.querySelectorAll('[data-placement-id]')].find((element) => element.dataset.placementId === move.placementId) ?? null;
+        const climb = await askClimb({ name: origin.name || 'Token', squares: route.climbs.reduce((sum, step) => sum + step.rise, 0), cost: route.cost, extra: route.climbExtra, left, others: climbs.length - 1 }, { anchor });
+        if (!climb || sceneId !== getActiveSceneId()) {
+          for (const item of moves) { const start = canonical[item.placementId]; if (start) updatePlacementById(item.placementId, (placement) => Object.assign(placement, start), { syncBoard: false }); }
+          renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+          updateStatus('Did not climb. The token stays where it was.');
+          return;
+        }
       }
     }
     const collisions = new Map();

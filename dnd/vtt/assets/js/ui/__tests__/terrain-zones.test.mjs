@@ -138,7 +138,7 @@ test('route summary reports plain distance, true cost and each difficult square'
   assert.deepEqual(summary.difficult[0].from, { column: 3, row: 2 });
   const forced = summarizeRoute([{ column: 2, row: 2 }, { column: 7, row: 2 }], (a, b) => routeSteps(a, b, () => 0, null));
   assert.deepEqual([forced.distance, forced.cost, forced.difficult.length], [5, 5, 0], 'forced movement ignores difficult terrain');
-  assert.deepEqual(summarizeRoute([{ column: 1, row: 1 }], walk), { distance: 0, cost: 0, extra: 0, difficult: [] });
+  assert.deepEqual(summarizeRoute([{ column: 1, row: 1 }], walk), { distance: 0, cost: 0, extra: 0, difficult: [], climbs: [], climbExtra: 0 });
 });
 
 test('ruler colours: black on the flat, yellow uphill, green downhill', () => {

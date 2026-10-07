@@ -7,6 +7,7 @@ $s->migrateLegacyBoardDomains(['sceneState'=>['scene'=>['mapLevels'=>['levels'=>
 $before=$s->getSnapshot();$r=$s->acceptTokenMove(['type'=>'token.move','operationId'=>'floor-fall-review','sceneId'=>'scene','entityId'=>'falling','baseRevision'=>$before['revision'],'entityRevision'=>0,'payload'=>['column'=>2,'row'=>0,'movementKind'=>'walk']],'cal',false);
 $records=$s->collisionEffects(['operationId'=>'floor-fall-review'],'cal',false);fallCheck(count($records)===1&&$records[0]['kind']==='fall','Fall recorded atomically');
 $details=$records[0]['details'];fallCheck($details['squares']===5&&$details['collidedIds']===['landing']&&$details['relocated'],'Fall distance, target and free landing');
+fallCheck(($details['movementKind']??null)==='walk','A fall remembers that the creature walked off the edge');
 fallCheck($s->collisionEffects(['operationId'=>'floor-fall-review'],'sharon',false)===[],'Only actor and GM see review');
 $key=['operationId'=>$records[0]['operationId'],'targetId'=>'falling'];
 $claim=$s->collisionEffects([...$key,'action'=>'start'],'cal',false,true);fallCheck($claim['granted'],'Actor reserves fall');

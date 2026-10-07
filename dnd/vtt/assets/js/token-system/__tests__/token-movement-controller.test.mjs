@@ -63,3 +63,23 @@ test('a measurement that fails or returns nothing falls back to straight-line di
     assert.match(shown.at(-1), /^Moved 3 \/ /);
   }
 });
+
+test('movement left this turn, and a climb added after the move, share one undoable entry', () => {
+  const { controller } = harness({ measureRoute: () => 3 });
+  assert.deepEqual(controller.getMovementLeft('hero'), { speed: 6, spent: 0, left: 6 });
+  assert.equal(controller.getMovementLeft('someone-else'), null, 'only the creature whose turn it is');
+  assert.equal(controller.addMovementCost('hero', 2), false, 'nothing to add to before any move');
+  start(controller);
+  controller.handleDragEnd({ commit: true, moved: true });
+  controller.handleDragCommitted({ sceneId: 'scene', movedIds: ['hero'], originalPositions: new Map([['hero', { column: 2, row: 2 }]]), preview: new Map([['hero', { column: 5, row: 2 }]]), movementKind: 'walk', source: 'drag' });
+  assert.deepEqual(controller.getMovementLeft('hero'), { speed: 6, spent: 3, left: 3 });
+  // Walked off a 3-high edge and chose Climbing: 2 more movement.
+  assert.equal(controller.addMovementCost('hero', 2), true);
+  assert.deepEqual(controller.getMovementLeft('hero'), { speed: 6, spent: 5, left: 1 });
+  assert.equal(controller.addMovementCost('hero', 0), false);
+  assert.equal(controller.addMovementCost('hero', -4), false);
+  assert.equal(controller.getMovementLeft('hero').spent, 5);
+  // Spending past the speed is shown, never refused, and "left" does not go below zero.
+  controller.addMovementCost('hero', 4);
+  assert.deepEqual(controller.getMovementLeft('hero'), { speed: 6, spent: 9, left: 0 });
+});

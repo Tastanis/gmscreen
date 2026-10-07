@@ -10,6 +10,7 @@ import {slopeIndicator} from './slope-indicator.mjs';
 import {claimActiveTool,publishActiveTool} from './active-tool.js';
 import {sample,paint,barycentric,clamp,groundSquare,heightBand,effectiveHeight,relativeScale,routeSteps,slopeColor,brushRate} from './terrain-math.mjs';
 import {floorElevations} from '../state/normalize/floor-elevation.js';
+import {terrainContact} from './terrain-contact.js';
 const $=s=>document.querySelector(s);
 const image=$('#vtt-map-image'),transform=$('#vtt-map-transform'),surface=$('#vtt-map-surface'),board=$('#vtt-board-canvas');
 const canvas=document.createElement('canvas');canvas.id='terrain-canvas';
@@ -184,11 +185,17 @@ function rulerGround(column,row,actor){
  if(actor&&((actor.levelId&&actor.levelId!=='level-0')||(actor.movementMode&&actor.movementMode!=='ground')))return groundFor(actor);
  return heightAt((ctx.view.gridOffsets.left||0)+(column+.5)*d.grid,(ctx.view.gridOffsets.top||0)+(row+.5)*d.grid);
 }
+// A cliff is a face steep enough to stop forced movement, so this is that same test.
+function climbFace(actor,a,b){
+ const from={width:1,height:1,...(actor||{}),column:a.column,row:a.row};if(['fly','hover'].includes(from.movementMode))return false;
+ const d=dimensions(),ground=(x,y)=>heightAt((ctx.view.gridOffsets.left||0)+x*d.grid,(ctx.view.gridOffsets.top||0)+y*d.grid);
+ return terrainContact(from,{column:b.column,row:b.row},ground,t=>groundFor(t))!==null;
+}
 function route(start,end,options={}){
- const d=dimensions(),actor=rulerActor();
+ const d=dimensions(),actor=options.actor||rulerActor();
  const height=(column,row)=>rulerGround(column,row,actor);
  const zones=options.ignoreZones?null:window.terrainZones;
- return routeSteps(start,end,height,zones?.stepMultiplier?(column,row,rawHeight)=>zones.stepMultiplier(actor,column,row,rawHeight):null);
+ return routeSteps(start,end,height,zones?.stepMultiplier?(column,row,rawHeight)=>zones.stepMultiplier(actor,column,row,rawHeight):null,options.ignoreClimb?null:(a,b)=>climbFace(actor,a,b));
 }
 function rulerPoint(p){const actor=rulerActor(),d=dimensions(),h=rulerGround(p.column,p.row,actor),q=project(p.mapX,p.mapY,h);return {mapX:q.x,mapY:q.y};}
 function routePath(points){
@@ -247,7 +254,7 @@ function paintRoute(overlay,points,gridSize){
  overlay.path.style.opacity='0';
 }
 window.addEventListener('storage',e=>{if(e.key===key&&!drawing){key='';}});
-window.terrainPrototype={get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,heightAt,groundFor,movementGroundFor,movementPlacement,highGround,isCliff,route,rulerPoint,routePath,paintRoute,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get key(){return key;},get storageError(){return storageError;},project,get active(){return active;}};
+window.terrainPrototype={get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,heightAt,groundFor,movementGroundFor,movementPlacement,highGround,isCliff,climbFace,get design(){return importedDesign();},route,rulerPoint,routePath,paintRoute,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get key(){return key;},get storageError(){return storageError;},project,get active(){return active;}};
 requestAnimationFrame(tick);
 
 import('./wall-prototype.js');

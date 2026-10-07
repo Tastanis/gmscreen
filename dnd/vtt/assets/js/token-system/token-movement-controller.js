@@ -38,6 +38,7 @@ export function createTokenMovementController({
   const overlay = createMovementOverlay({ mapTransform });
   const speedResolver = createTokenSpeedResolver({ routes });
   let dragSession = null;
+  const knownSpeeds = new Map();
   let cancelingForTurnChange = false;
   let undoPending = false;
 
@@ -88,6 +89,7 @@ export function createTokenMovementController({
       }
       if (Number.isFinite(result?.speed)) {
         dragSession.speed = Math.max(0, Math.trunc(result.speed));
+        knownSpeeds.set(tokenId, dragSession.speed);
         renderDragSession(currentDragCost());
       }
     });
@@ -133,6 +135,22 @@ export function createTokenMovementController({
       },
       getTurnContext()
     );
+  }
+
+  /** Speed, movement spent and movement left for a token during its turn; null when no turn is being counted. */
+  function getMovementLeft(tokenId) {
+    const context = getTurnContext();
+    if (!tokenId || !context.active || context.activeCombatantId !== tokenId) {
+      return null;
+    }
+    const speed = knownSpeeds.get(tokenId) ?? speedResolver.getInitialSpeed(getPlacementById(tokenId));
+    const spent = movementState.getSpent(tokenId, context);
+    return { speed, spent, left: Math.max(0, speed - spent) };
+  }
+
+  /** Adds movement to the token's last move this turn (a climb chosen on the fall review). */
+  function addMovementCost(tokenId, amount) {
+    return Boolean(movementState.addToLastMove(tokenId, amount, getTurnContext()));
   }
 
   function handleDragCommitted({ sceneId, movedIds = [], originalPositions, preview, movementKind = null, source = null } = {}) {
@@ -320,6 +338,8 @@ export function createTokenMovementController({
     handleDragMove,
     handleDragEnd,
     handleDragCommitted,
+    getMovementLeft,
+    addMovementCost,
     undoSelectedMove: () => undoMove(getUndoMove(), getTurnContext().activeCombatantId, getTurnContext()),
     dispose,
   };
