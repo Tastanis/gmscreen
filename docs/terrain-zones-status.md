@@ -86,8 +86,9 @@ What works now:
 - **Who pays.** A walk or a shift pays. Forced movement and teleports do not.
   A flier above the zone, or a token on a bridge, deck or walkway over it,
   does not. A large token pays if any of its squares enters the zone.
-- **Ruler colours on maps with height.** Black on the flat, yellow uphill,
-  green downhill. Red is now used only for difficult terrain.
+- **Ruler colours on maps with height.** Black on the flat, green uphill,
+  yellow downhill. Red is now used only for difficult terrain. (Uphill and
+  downhill were the other way round until October 8; see "October 8" below.)
 - **Difficult terrain on the ruler.** Each difficult square on the route gets
   a flashing red stretch and a small "×2" or "×4". This works on flat maps
   too. The flashing stops for anyone whose device asks for reduced motion.
@@ -115,7 +116,7 @@ Checks run:
   into blood (2) and a 3-square drag.
 - Sandbox, Dead Root Node with a test blood zone: 5 squares from the south
   bank into the canal showed "Cost 10" with five "×2"; up the entrance stair
-  drew yellow, down it drew green.
+  drew yellow, down it drew green (the colours before the October 8 swap).
 
 Things that changed that you might notice:
 
@@ -282,7 +283,7 @@ the token and before the move is sent:
 - **Climb** (or Enter): the move goes through and the counter is charged.
 - **Don't climb** (or Escape): the move is never sent and the token goes back.
 - One pop-up per move, never one per square. Arrow-key moves are asked too.
-- On the ruler the climb keeps its yellow uphill line and gets a small amber
+- On the ruler the climb keeps its green uphill line and gets a small amber
   "x2". Red stays for difficult terrain. The range outline prices climbs too.
 - Nothing is enforced. Answer Climb without enough movement and the token
   still moves; the counter shows it over.
@@ -417,6 +418,40 @@ Things you should know:
   Whether those walls stay is your call.
 - Part-way up a cliff (stopping on the face) is not built. The pop-up shows
   the cost and the movement left so the table can see it is a two-turn climb.
+
+## October 8: ruler colours swapped, and three small fixes. Done
+
+Built straight on `main` on this PC. These replace the separate copy of this
+feature a cloud chat had built on its own branch
+(`claude/gm-screen-coding-mg17mf`). That branch is not merged and is no longer
+needed; everything worth having from it is listed here.
+
+**1. Green up, yellow down.** You changed your mind on October 8: "Green up,
+yellow down. Red difficult". The drag ruler now draws uphill green and downhill
+yellow. Flat is still black and difficult terrain is still flashing red. The
+slope arrows painted on the map are untouched, as you asked; they only show
+steepness.
+
+**2. Red covers the difficult squares exactly.** The flashing red stretch used
+to run from the middle of the square before the blood to the middle of the
+blood square, so it started half a square early and stopped half a square
+short. It now starts at the edge where the route enters a difficult square and
+stops at the edge where it leaves. The "x2" mark is still in the middle of the
+square. You did not ask for this one; the cloud chat spotted it and it is
+right.
+
+**3. The ruler on flat maps is plain black.** On a map with no height the ruler
+used to fade from red at the token to black at the far end. With red now
+meaning difficult terrain, it is black all the way. Also not asked for by
+name; it follows from "black for flat ground, red for difficult".
+
+**4. An old checkpoint no longer wipes zones.** Restoring a layout checkpoint
+that was saved before a scene had zones used to remove the scene's zones. It
+now keeps them (less any zone on a floor the checkpoint does not have).
+
+Checks run: 7 new checks. Full suite 150 files, 1081 checks, 0 failures; all
+server tests pass. Not yet looked at in a browser: the red stretch on a map
+with height (Dead Root). The flat-map drawing is covered by the new tests.
 
 ## Where it is now
 

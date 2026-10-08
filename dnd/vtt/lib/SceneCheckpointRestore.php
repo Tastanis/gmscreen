@@ -35,6 +35,15 @@ final class SceneCheckpointRestore
             unset($entry);
             // Restoring layout must not revive explored memory from before a GM reset.
             if(isset($currentConfig['environment']['exploration'])) $environment['exploration']=$currentConfig['environment']['exploration'];
+            // A checkpoint saved before the scene had terrain zones keeps the current zones, less any on a floor it does not have.
+            if(!isset($environment['zones']) && isset($currentConfig['environment']['zones'])) {
+                $zones=$currentConfig['environment']['zones'];
+                $floors=['level-0'=>true];
+                foreach($config['mapLevels']['levels'] ?? [] as $floor) if(is_array($floor) && is_string($floor['id'] ?? null)) $floors[$floor['id']]=true;
+                $kept=array_values(array_filter($zones['value']['zones'] ?? [],static fn($zone)=>isset($floors[$zone['levelId'] ?? 'level-0'])));
+                if($kept!==($zones['value']['zones'] ?? [])) { $zones['value']['zones']=$kept; $zones['revision']=(int)($zones['revision'] ?? 0)+1; }
+                $environment['zones']=$zones;
+            }
             $config['environment']=$environment;
             $configChanges[]='environment';
         }

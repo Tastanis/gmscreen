@@ -4,6 +4,7 @@ declare(strict_types=1);
 // removal, and the scene package round trip. Old scenes have no zones.
 require_once __DIR__ . '/../_common.php';
 require_once __DIR__ . '/../../../lib/SceneImportValidation.php';
+require_once __DIR__ . '/../../../lib/SceneCheckpointRestore.php';
 $path = sys_get_temp_dir() . '/vtt-terrain-zones-' . bin2hex(random_bytes(8)) . '.sqlite';
 putenv('VTT_SYNC_V2_DATABASE=' . $path);
 function zoneCheck(bool $ok, string $message): void { if (!$ok) throw new RuntimeException($message); }
@@ -118,6 +119,22 @@ try {
     SceneImportValidation::validate($old);
     zoneCheck(!isset(ScenePackage::prepareForNewScene($old, 'scn-zones-copy-0003')['package']['domains']['sceneConfig']['environment']), 'A scene with no zones gains none on copy');
     echo "PASS scene package import, copy and export with zones\n";
+
+    // ---- layout checkpoints: one saved before the scene had zones must not wipe them
+    $zonesEntry = $fixture['domains']['sceneConfig']['environment']['zones'];
+    $floors = $fixture['domains']['sceneConfig']['mapLevels'];
+    $terrain = ['revision'=>1, 'value'=>['n'=>2, 'm'=>2, 'h'=>[0, 0, 0, 0]]];
+    $checkpoint = ['id'=>'checkpoint-zones', 'name'=>'Before zones', 'sceneId'=>'scene', 'data'=>['format'=>'vtt-scene-checkpoint/v1', 'domains'=>['placements'=>[], 'sceneConfig'=>['mapLevels'=>$floors, 'environment'=>['terrain'=>$terrain]], 'drawings'=>[], 'templates'=>[]]]];
+    $snapshot = ['revision'=>5, 'state'=>['placements'=>['scene'=>[]], 'sceneConfig'=>['scene'=>['mapLevels'=>$floors, 'environment'=>['terrain'=>[...$terrain, 'revision'=>3], 'zones'=>$zonesEntry]]], 'drawings'=>['scene'=>[]], 'templates'=>['scene'=>[]]]];
+    $plan = SceneCheckpointRestore::planLayout($checkpoint, $snapshot);
+    zoneCheck(($plan['domains']['sceneConfig']['environment']['zones'] ?? null) === $zonesEntry, 'Restoring a checkpoint saved before zones existed keeps the current zones');
+    $noDeck = $checkpoint; $noDeck['data']['domains']['sceneConfig']['mapLevels'] = ['levels'=>[]];
+    $kept = SceneCheckpointRestore::planLayout($noDeck, $snapshot)['domains']['sceneConfig']['environment']['zones'];
+    zoneCheck(array_column($kept['value']['zones'], 'id') === ['blood-canal', 'deep-mud', 'holy-ground', 'hidden-pit'] && $kept['revision'] === $zonesEntry['revision'] + 1, 'A kept zone on a floor the checkpoint does not have is dropped, with a new revision');
+    $own = $checkpoint; $own['data']['domains']['sceneConfig']['environment']['zones'] = ['revision'=>1, 'value'=>['version'=>1, 'zones'=>[]]];
+    $restored = SceneCheckpointRestore::planLayout($own, $snapshot)['domains']['sceneConfig']['environment']['zones'];
+    zoneCheck($restored['value']['zones'] === [] && $restored['revision'] === $zonesEntry['revision'] + 1, 'A checkpoint that has zones of its own restores them with a new revision');
+    echo "PASS layout checkpoints keep or restore zones\n";
 } finally {
     unset($store);
     foreach ([$path, $path . '-wal', $path . '-shm'] as $file) if (is_file($file)) @unlink($file);
