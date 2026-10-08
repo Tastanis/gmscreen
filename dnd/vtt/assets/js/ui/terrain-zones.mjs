@@ -137,6 +137,7 @@ export const zoneTags = (zones) => [...new Set((zones || []).map((zone) => zone.
  */
 export function summarizeRoute(points, stepsBetween) {
   const summary = { distance: 0, cost: 0, extra: 0, difficult: [], climbs: [], climbExtra: 0 };
+  let entered = null; // the difficult square just walked into, until the route's next square is known
   for (let i = 1; i < (points?.length || 0); i++) {
     const walked = stepsBetween(points[i - 1], points[i]);
     if (!walked) continue;
@@ -147,7 +148,10 @@ export function summarizeRoute(points, stepsBetween) {
     for (let k = 1; k < (walked.points?.length || 0); k++) {
       const step = walked.points[k];
       const from = { column: walked.points[k - 1].column, row: walked.points[k - 1].row };
-      if (step.multiplier > 1) summary.difficult.push({ column: step.column, row: step.row, multiplier: step.multiplier, from });
+      // `next` is the square the route walks on to; the ruler ends its red stretch at that edge.
+      if (entered) entered.next = { column: step.column, row: step.row };
+      entered = null;
+      if (step.multiplier > 1) summary.difficult.push(entered = { column: step.column, row: step.row, multiplier: step.multiplier, from });
       if (step.climb > 0) { summary.climbs.push({ column: step.column, row: step.row, rise: step.rise, extra: step.climb, from }); summary.climbExtra += step.climb; }
     }
   }

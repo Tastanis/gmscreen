@@ -14,8 +14,9 @@ const ARROW_STROKE_RATIO = 0.32;        // stroke-width as fraction of grid size
 const ARROW_BEND_RADIUS_RATIO = 0.55;   // smooth-bend radius as fraction of grid size
 const ARROW_GRADIENT_ID = 'vtt-measure-arrow-gradient';
 const ARROW_HEAD_ID = 'vtt-measure-arrow-head';
-const ARROW_COLOR_START = '#ef4444';    // red at source
-const ARROW_COLOR_END = '#0f0f0f';      // near-black at destination
+// Flat ground is black from end to end. Red on the ruler means difficult terrain and nothing else.
+const ARROW_COLOR_START = '#111111';
+const ARROW_COLOR_END = '#0f0f0f';
 
 let sharedState = null;
 let cachedMapRect = null;
@@ -788,11 +789,19 @@ function movementKindOf(state) {
   return { Teleport: 'teleport', 'Forced movement': 'forced', Shift: 'shift', Move: 'walk' }[state?.movementLabel] || 'walk';
 }
 
+/** The first square a leg walks into, by the same king-move rule the route uses. */
+function firstStepOf(segment) {
+  if (!segment) return null;
+  const start = segment.rawStart, dx = segment.end.column - start.column, dy = segment.end.row - start.row;
+  return { column: start.column + Math.sign(dx) * Math.min(1, Math.abs(dx)), row: start.row + Math.sign(dy) * Math.min(1, Math.abs(dy)) };
+}
+
 /** Flashing red over each difficult square on the route, with its multiplier (x2, x4). */
 function syncDifficultSteps(overlay, segments, gridSize, terrain) {
   let group = overlay.svg.querySelector('[data-difficult-route]');
-  const steps = segments.flatMap((segment) => segment.difficult.map((step) => ({ step, origin: segment.rawStart })));
-  // A climb keeps the yellow uphill line and gets a small amber mark; red stays for difficult terrain.
+  // A square that ends one leg is left by the first step of the next leg.
+  const steps = segments.flatMap((segment, index) => segment.difficult.map((step) => ({ step, origin: segment.rawStart, next: step.next || firstStepOf(segments[index + 1]) })));
+  // A climb keeps the green uphill line and gets a small amber mark; red stays for difficult terrain.
   const climbs = segments.flatMap((segment) => (segment.climbs || []).map((step) => ({ step, origin: segment.rawStart })));
   if (!steps.length && !climbs.length) {
     group?.remove();
@@ -810,13 +819,16 @@ function syncDifficultSteps(overlay, segments, gridSize, terrain) {
     mapY: origin.mapY + (point.row - origin.row) * gridSize,
   });
   const parts = [];
-  for (const { step, origin } of steps) {
+  const between = (a, b) => ({ mapX: (a.mapX + b.mapX) / 2, mapY: (a.mapY + b.mapY) / 2 });
+  for (const { step, origin, next } of steps) {
     const from = cell(origin, step.from);
     const to = cell(origin, step);
+    // Red covers the difficult square and nothing else: from the edge the route enters by to the edge it leaves by.
+    const onward = next && (next.column !== step.column || next.row !== step.row) ? cell(origin, next) : null;
     const at = terrain ? { ...to, ...terrain.rulerPoint(to) } : to;
     const path = document.createElementNS(SVG_NS, 'path');
     path.classList.add('vtt-difficult-step');
-    path.setAttribute('d', terrain ? terrain.routePath([from, to]) : `M ${fmt(from.mapX)} ${fmt(from.mapY)} L ${fmt(to.mapX)} ${fmt(to.mapY)}`);
+    path.setAttribute('d', terrain ? terrain.squarePath(from, to, onward) : [between(from, to), to, ...(onward ? [between(to, onward)] : [])].map((point, i) => `${i ? 'L' : 'M'} ${fmt(point.mapX)} ${fmt(point.mapY)}`).join(' '));
     path.setAttribute('stroke-width', String(Math.max(3, gridSize * 0.34)));
     const label = document.createElementNS(SVG_NS, 'text');
     label.classList.add('vtt-difficult-step__label');
@@ -852,7 +864,7 @@ function createOverlay(container) {
   svg.setAttribute('hidden', 'hidden');
   svg.style.pointerEvents = 'none';
 
-  // <defs>: gradient (red -> black along the path) + arrowhead marker.
+  // <defs>: gradient (black along the path) + arrowhead marker.
   const defs = document.createElementNS(SVG_NS, 'defs');
 
   const gradient = document.createElementNS(SVG_NS, 'linearGradient');

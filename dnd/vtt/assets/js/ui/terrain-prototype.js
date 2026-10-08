@@ -248,6 +248,14 @@ function routePath(points){
  for(const steps of routeLegs(points))stepsPath(steps,parts);
  return parts.join(' ');
 }
+// The drawn line over one square only: from the edge the step from `from` crosses into `at`, to the
+// edge the step on to `next` leaves by (or to the middle of `at` when the route stops there).
+// stepsPath draws each one-square step as a start point and four quarter points, so the edges are the half-way ones.
+function squarePath(from,at,next){
+ const parts=[];
+ for(const steps of routeLegs(next?[from,at,next]:[from,at]))stepsPath(steps,parts);
+ return parts.slice(2,next?8:5).map((part,i)=>(i?'L':'M')+part.slice(1)).join(' ');
+}
 let markerCache='',markerBuilds=0,markerPreferenceKey='',markersVisible=true;
 function setMarkersVisible(value){markersVisible=!!value;if(markerPreferenceKey)localStorage.setItem(markerPreferenceKey,String(markersVisible));markers.style.display=active&&markersVisible?'':'none';}
 function drawCostMarkers(){
@@ -288,7 +296,7 @@ function paintRoute(overlay,points,gridSize){
  overlay.path.style.opacity='0';
 }
 window.addEventListener('storage',e=>{if(e.key===key&&!drawing){key='';}});
-window.terrainPrototype={get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,heightAt,groundFor,movementGroundFor,movementPlacement,highGround,isCliff,climbFace,walkerNear,get design(){return importedDesign();},route,rulerPoint,routePath,paintRoute,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get key(){return key;},get storageError(){return storageError;},project,get active(){return active;}};
+window.terrainPrototype={get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,heightAt,groundFor,movementGroundFor,movementPlacement,highGround,isCliff,climbFace,walkerNear,get design(){return importedDesign();},route,rulerPoint,routePath,squarePath,paintRoute,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get key(){return key;},get storageError(){return storageError;},project,get active(){return active;}};
 requestAnimationFrame(tick);
 
 import('./wall-prototype.js');

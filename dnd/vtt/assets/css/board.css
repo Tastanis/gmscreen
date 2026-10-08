@@ -4885,7 +4885,8 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
 .vtt-difficult-step {
   fill: none;
   stroke: #ef4444;
-  stroke-linecap: round;
+  /* Square ends: the red stops at the edge of the difficult square. */
+  stroke-linecap: butt;
   stroke-linejoin: round;
   animation: vtt-difficult-flash 0.9s ease-in-out infinite;
 }
