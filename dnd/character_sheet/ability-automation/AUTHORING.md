@@ -1206,6 +1206,98 @@ When the scene has no zones at all, or the ability is run outside the VTT, the u
 
 To place a forced move first and check afterwards, put the `forcedMovement` effect before the `ifZone` in the same list: effects run in order, so the check sees where the target ended up.
 
+#### Worked example: "if the target is in blood, deal extra damage"
+
+A melee strike that deals its normal damage, then 3 more corruption damage to a target standing in blood. The extra damage sits in its own `effect` card after the power roll, so it is added whichever tier was rolled.
+
+<!-- zone-example:start -->
+```json
+{
+  "schema": "ability-automation/v3",
+  "keywords": [
+    "Melee",
+    "Strike",
+    "Weapon"
+  ],
+  "cards": [
+    {
+      "type": "target",
+      "name": "primary",
+      "mode": "token",
+      "predicate": "enemy",
+      "count": {
+        "value": 1,
+        "mode": "exact"
+      },
+      "distance": {
+        "form": "melee",
+        "value": 1
+      }
+    },
+    {
+      "type": "powerRoll",
+      "flatBonus": 2,
+      "target": "primary",
+      "tiers": {
+        "tier1": {
+          "effects": [
+            {
+              "kind": "damage",
+              "amount": 4,
+              "damageType": "untyped"
+            }
+          ]
+        },
+        "tier2": {
+          "effects": [
+            {
+              "kind": "damage",
+              "amount": 6,
+              "damageType": "untyped"
+            }
+          ]
+        },
+        "tier3": {
+          "effects": [
+            {
+              "kind": "damage",
+              "amount": 8,
+              "damageType": "untyped"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "effect",
+      "target": "primary",
+      "effects": [
+        {
+          "kind": "ifZone",
+          "tag": "blood",
+          "then": [
+            {
+              "kind": "damage",
+              "amount": 3,
+              "damageType": "corruption"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+<!-- zone-example:end -->
+
+What happens at the table:
+
+- On a map with zones, nobody is asked. Chat says "Cal is in blood." and Cal takes the extra 3, or "Cal is not in blood." and takes only the strike.
+- On a map with no zones, the GM is asked "Is Cal in blood?" once.
+- The extra 3 is flat damage, so damage bonuses that apply to rolled damage (a captain's "+N damage bonus to strikes", a hero's kit) do not add to it. It is still reduced by the target's corruption immunity.
+
+To make the extra damage depend on the tier instead, put an `ifZone` inside each tier's `effects`. To check where the user of the ability stands ("while this creature stands in blood, its strikes deal 3 extra damage"), add `"who": "self"`.
+
 ### `halveTriggeringDamage` (rider - trigger blocks only)
 
 Soaks half of the damage that fired the trigger. The board has already applied the full damage by the time the trigger resolves; this effect heals back the difference so the net damage on the placement equals the rounded half.

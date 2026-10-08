@@ -94,10 +94,16 @@ Authoring implication: give every monster triggered action a `trigger` card with
 
 Full table in REGISTRY.md. Monster-relevant summary:
 
-- **Fully automatable, use freely:** `damage` (with `amountDice`, `damageType`), `condition`, `forcedMovement` (push/pull/slide), `shift`, `potency` (+ `onFail`), `heal` (flat amount), `temporaryStamina`, `teleport`, `swap`, `freeStrike` (uses the monster's `free_strike` stat), `abilityTest`, `aura` (visual + automated tick rules), `floatingText`, `note`, `ifPrompt`, `ifKeyword`, `ifDistance`, `ifScopedFlag`, `setScopedFlag`, `halveTriggeringDamage`, `usageLimit` (top level), `whenWinded` (modifier).
+- **Fully automatable, use freely:** `damage` (with `amountDice`, `damageType`), `condition`, `forcedMovement` (push/pull/slide), `shift`, `potency` (+ `onFail`), `heal` (flat amount), `temporaryStamina`, `teleport`, `swap`, `freeStrike` (uses the monster's `free_strike` stat), `abilityTest`, `aura` (visual + automated tick rules), `floatingText`, `note`, `ifPrompt`, `ifKeyword`, `ifDistance`, `ifZone`, `ifScopedFlag`, `setScopedFlag`, `halveTriggeringDamage`, `usageLimit` (top level), `whenWinded` (modifier).
 - **Works but PC-flavored — prefer `note`:** `applyMark`, `endMark`, `ifMark`, `startTurn`.
 - **Chat-reminder only on monsters:** `spend`, `resourceGain`, `surgeGain`, `cascade`, `other`.
 - **Do NOT automate (post a `note` instead):** summoning/spawning tokens, controlling another creature's actions, terrain-state changes (scree, walls, pits — describe them), effects requiring an ally's choice, faction-wide behavioral constraints. The GM adjudicates these; the note keeps them visible.
+
+### Terrain zones, winded, and squad captains
+
+- **Terrain zones (`ifZone`, and the `zone` branch condition).** "If the target is in blood, ..." can be automated: `{ "kind": "ifZone", "tag": "blood", "then": [ ... ], "else": [ ... ] }`. Each target gets the branch that fits where it stands; `"who": "self"` checks the monster instead. On a map with no zones the GM is asked yes or no, so the same ability works everywhere. A creature that swims or walks on the liquid still counts as in it. Full fields and a worked "extra damage in blood" example: AUTHORING.md, "ifZone".
+- **`whenWinded` applies by itself.** A monster is winded at half its token's Stamina or less (rounded down), read from the token at the moment the ability runs. For a minion squad that means half of the squad's pooled Stamina.
+- **Squad captains.** A minion's "With Captain" bonus is applied by the VTT while its squad has a captain with Stamina. Write it in the creature's `with_captain` field, in the monster book's own wording ("+2 damage bonus to strikes", "Gain an edge on strikes", "+2 bonus to speed", "+5 bonus to ranged distance"). Do not write it into a trait: that is only text. Do not add the bonus to the ability's numbers either, or it will count twice. The damage bonus and the edge apply to abilities with the `Strike` keyword. See `docs/minion-squads-and-captains.md`.
 
 ## Worked example 1 — action with tiers, potency, and winded override
 

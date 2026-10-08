@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 
 import { createAbilityAutomationHarness } from './support/automation-harness.mjs';
 
@@ -127,6 +128,27 @@ test('ifZone is known to the schema and reads plainly in the summary', async () 
     // Normalizing twice changes nothing.
     const again = harness.validateAutomation(normalized, { strict: false }).normalized;
     assert.deepEqual(again.cards[1].effects[1], effect);
+  } finally {
+    harness.close();
+  }
+});
+
+test('the worked example in AUTHORING.md runs exactly as written: extra damage only in blood', async () => {
+  const guide = await readFile(new URL('../AUTHORING.md', import.meta.url), 'utf8');
+  const block = guide.split('<!-- zone-example:start -->')[1].split('<!-- zone-example:end -->')[0];
+  const automation = JSON.parse(block.replace(/```json|```/g, ''));
+  const hits = async (options) => (await run({ automation, targetSelections: [{ id: 'cal', name: 'Cal' }], randomValues: [0.5, 0.5], ...options })).calls.applyDamage.map((call) => [call.amount, call.damageType]);
+  const dry = await hits({ zoneTags: { cal: [] } });
+  const inBlood = await hits({ zoneTags: { cal: ['blood'] } });
+  assert.equal(dry.length, 1, 'the strike only');
+  assert.deepEqual(inBlood, [dry[0], [3, 'corruption']], 'the strike, then 3 corruption for standing in blood');
+  // A map with no zones asks instead, and the answer decides.
+  assert.equal((await hits({ zoneTags: null, promptAnswers: [true] })).length, 2);
+  assert.equal((await hits({ zoneTags: null, promptAnswers: [false] })).length, 1);
+  // The guide's example is valid as written: the schema has nothing to say about it.
+  const harness = await createAbilityAutomationHarness();
+  try {
+    assert.deepEqual(harness.validateAutomation(automation, { strict: false }).issues, []);
   } finally {
     harness.close();
   }
