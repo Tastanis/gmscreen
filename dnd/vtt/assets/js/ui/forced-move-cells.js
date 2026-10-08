@@ -80,3 +80,16 @@ export function nearestPullCell(source, target, legalCells) {
   }
   return best;
 }
+
+/**
+ * Only the squares that are on the map. `clamp(column, row, width, height)` is the board's own
+ * rule for keeping a token on the map; a square it would move is off the map. A long teleport
+ * used to offer every square within its distance, thousands of them beyond the map's edge.
+ */
+export function cellsOnMap(cells, clamp, target) {
+  if (typeof clamp !== 'function') return cells;
+  return (cells || []).filter((cell) => {
+    const kept = clamp(cell.column, cell.row, target?.width || 1, target?.height || 1);
+    return !!kept && kept.column === cell.column && kept.row === cell.row;
+  });
+}

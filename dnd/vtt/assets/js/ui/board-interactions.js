@@ -12,7 +12,7 @@ import {climbSurcharge} from './terrain-math.mjs';
 import {settleCollisionEffects} from '../services/collision-effects.js';
 import {PLAYER_CHARACTER_USER_IDS as visionOwnerProfiles} from '../state/normalize/map-levels.js';
 import {resolveForcedDrag} from './forced-drag.js';
-import {forcedMoveLegalCells, isForcedMovePathLegal, footprintsOverlap, nearestPullCell} from './forced-move-cells.js';
+import {forcedMoveLegalCells, isForcedMovePathLegal, footprintsOverlap, nearestPullCell, cellsOnMap} from './forced-move-cells.js';
 import {configureCharacterOperationJournal} from '../services/character-operation-journal.js';
 import {confirmCharacterWrite} from '../services/character-write.js';
 import {spendCharacterRecoveries} from '../services/recovery-spend.js';
@@ -17940,7 +17940,8 @@ export function mountBoardInteractions(store, routes = {}) {
         column: targetSnapshot.column,
         row: targetSnapshot.row,
       },
-      legalCells: buildAutomationMoveLegalCells(sourceSnapshot, targetSnapshot, request.effectiveDistance, baseVerb),
+      // A square off the map is never a destination.
+      legalCells: cellsOnMap(buildAutomationMoveLegalCells(sourceSnapshot, targetSnapshot, request.effectiveDistance, baseVerb), clampPlacementToBounds, targetSnapshot),
     };
     // A pull that cannot bring the target any closer does nothing: there is no square to pick.
     if (baseVerb === 'pull' && !pendingAutomationMove.legalCells.length) {

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { forcedMoveLegalCells, nearestPullCell, footprintsOverlap } from '../forced-move-cells.js';
+import { forcedMoveLegalCells, nearestPullCell, footprintsOverlap, cellsOnMap } from '../forced-move-cells.js';
 import { resolveForcedDrag } from '../forced-drag.js';
 
 const token = (id, column, row, size = 1) => ({ id, column, row, width: size, height: size });
@@ -55,3 +55,21 @@ test('a creature in the way stops the mover on a whole square, at any angle', ()
 function pick(result) {
   return { column: result.destination.column, row: result.destination.row, damage: result.damage };
 }
+
+test('a long teleport offers only squares that are on the map', () => {
+  // A 40 by 30 map, and the board's rule for keeping a token on it.
+  const clamp = (column, row, width, height) => ({ column: Math.max(0, Math.min(40 - width, column)), row: Math.max(0, Math.min(30 - height, row)) });
+  const elowin = token('elowin', 24, 18);
+  const all = forcedMoveLegalCells(elowin, elowin, 60, 'slide');
+  assert.equal(all.length, 121 * 121 - 1, 'every square within 60, most of them off the map');
+  const onMap = cellsOnMap(all, clamp, elowin);
+  assert.equal(onMap.length, 40 * 30 - 1, 'the whole map except the square she stands on');
+  assert.ok(onMap.every((cell) => cell.column >= 0 && cell.row >= 0 && cell.column < 40 && cell.row < 30));
+  // A size 2 token cannot be put half off the far edge.
+  const big = token('warden', 10, 10, 2);
+  assert.ok(cellsOnMap(forcedMoveLegalCells(big, big, 60, 'slide'), clamp, big).every((cell) => cell.column <= 38 && cell.row <= 28));
+  // A short move in the middle of the map loses nothing, and without a rule nothing is dropped.
+  const near = forcedMoveLegalCells(elowin, elowin, 2, 'slide');
+  assert.equal(cellsOnMap(near, clamp, elowin).length, near.length);
+  assert.equal(cellsOnMap(all, null, elowin).length, all.length);
+});

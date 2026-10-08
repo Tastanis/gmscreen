@@ -2715,6 +2715,10 @@
     const subjects = zoneSubjects(state, spec, targets);
     const inside = [];
     const outside = [];
+    // Nobody was targeted (an area with no creature in it): there is nothing to check and nobody to ask about.
+    if (!subjects.length && String(spec?.who || "target").toLowerCase() !== "self") {
+      return { tags, subjects, inside, outside, asked: false, nobody: true };
+    }
     let known = subjects.length > 0 && tags.length > 0;
     if (known) {
       for (const subject of subjects) {
@@ -2746,7 +2750,7 @@
   // group follows where the user of the ability stands.
   async function applyIfZoneEffect(state, effect, targets, ctx) {
     const result = await resolveZoneCondition(state, effect, targets);
-    if (state.aborted) return;
+    if (state.aborted || result.nobody) return;
     await postChat(state.context, { message: zoneChatLine(state, effect, result) });
     const group = effect.target || state.currentGroup || "primary";
     const selfMode = String(effect.who || "target").toLowerCase() === "self";
@@ -3447,7 +3451,7 @@
       case "zone": {
         const targets = getTargetGroup(state, c.target || state.currentGroup || "primary");
         const result = await resolveZoneCondition(state, c, targets);
-        if (!state.aborted) await postChat(state.context, { message: zoneChatLine(state, c, result) });
+        if (!state.aborted && !result.nobody) await postChat(state.context, { message: zoneChatLine(state, c, result) });
         return result.inside.length > 0;
       }
       default:

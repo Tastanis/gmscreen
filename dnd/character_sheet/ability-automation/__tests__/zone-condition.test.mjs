@@ -216,3 +216,27 @@ test('a condition rider can be bound to a zone: "who starts its turn in blood ta
   const riders = applied.condition?.riders || applied.riders;
   assert.deepEqual(riders[0].zone, { tags: ['blood'] });
 });
+
+test('a zone check with nobody targeted asks nothing and does nothing', async () => {
+  // Stay in the Water With Me, with the burst placed where no creature stands.
+  const burst = (effect) => ({
+    schema: 'ability-automation/v3',
+    cards: [
+      { type: 'target', name: 'caught', mode: 'area', shape: 'burst', size: 3 },
+      { type: 'effect', target: 'caught', effects: [effect] },
+    ],
+  });
+  const ifZone = { kind: 'ifZone', tag: 'hot-spring', then: [{ kind: 'condition', name: 'slowed', duration: 'saveEnds' }], else: [{ kind: 'floatingText', text: 'Dry' }] };
+  for (const zoneTags of [{ cal: ['hot-spring'] }, null]) {
+    const result = await run({ automation: burst(ifZone), areaSelections: [{ targets: [] }], zoneTags, promptAnswers: [true] });
+    assert.ok(!chat(result).some((line) => /hot-spring|hot spring/i.test(line)), `no question and no zone line: ${chat(result).join(' | ')}`);
+    assert.equal((result.calls.applyCondition || []).length, 0);
+    assert.equal((result.calls.showFloatingText || []).length, 0);
+  }
+  // With somebody in the burst the check runs as before.
+  const hit = await run({ automation: burst(ifZone), areaSelections: [{ targets: [{ id: 'cal', name: 'Cal' }] }], zoneTags: { cal: ['hot-spring'] } });
+  assert.deepEqual(conditionsOn(hit), [['cal', 'slowed']]);
+  // A check on the user of the ability still runs with nobody targeted: it is about the user.
+  const self = await run({ automation: burst({ ...ifZone, who: 'self' }), areaSelections: [{ targets: [] }], zoneTags: { 'caster-1': ['hot-spring'] } });
+  assert.ok(chat(self).some((line) => /is in hot-spring/.test(line)), chat(self).join(' | '));
+});
