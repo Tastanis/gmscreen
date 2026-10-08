@@ -2,12 +2,11 @@
 
 Plain-language progress for Brandon. Updated at the end of each stage.
 
-**Where the work is:** stages 1 to 3 and the follow-up are on `main` in the
-shared folder on this PC (`C:/Users/tasta/Desktop/gmscreen`), as of October
-7, 2026. **Nothing is pushed and the live site is untouched.** It goes to
-GitHub and the live site only when you say so. The work was built in a
-separate copy at `.claude/worktrees/terrain-zones` (branch
-`claude/terrain-zones`), which is still there.
+**Where the work is:** everything here is on `main` in the shared folder on
+this PC (`C:/Users/tasta/Desktop/gmscreen`). Work up to the first October 8
+section is on GitHub. The second October 8 section (fixes from the final test)
+is on `main` on this PC only until it is pushed. The live site changes only
+when you deploy from cPanel.
 
 ## What this feature is
 
@@ -452,6 +451,81 @@ now keeps them (less any zone on a floor the checkpoint does not have).
 Checks run: 7 new checks. Full suite 150 files, 1081 checks, 0 failures; all
 server tests pass. Not yet looked at in a browser: the red stretch on a map
 with height (Dead Root). The flat-map drawing is covered by the new tests.
+
+## October 8, later: fixes from the final test. Done, waiting for a re-test
+
+The tester's final run (`docs/final-pass-sandbox-test-2026-10-08.md`) found
+eight faults in the app. Seven are fixed on `main` on this PC; one is not.
+Each has its own tests. Nothing is pushed.
+
+**1. A refused ability gives its Malice back.** Using Up the Taproot a second
+time in an encounter was refused but still took 3 Malice. A monster's Malice
+is taken before the ability is checked, so every refusal kept it. Now a
+refusal for "once per encounter", "once per round", "once per turn" or
+"triggered action already used" returns the Malice, and chat says
+"Up the Taproot was not used: 3 malice returned."
+
+**2. A pull never slams the target into the puller.** Drag Under on a hero
+already beside the Drowner read "pulled 0 squares, Collision, each take 1".
+Now:
+
+- A pull that cannot bring the target any closer does nothing. No square to
+  pick, no damage. Chat says "Cal is not moved: there is nowhere to pull them."
+- The puller's own square is never offered. Clicking the puller means "as
+  close as the pull allows".
+- A pull can still slam the target into a *different* creature standing in the
+  way. That is the rulebook.
+
+**A token is never left between squares.** A creature in the way of a push,
+pull or slide at a slant used to stop the moved token half-way across a square
+(row 18.5). It now stops in the last whole square before contact. The damage
+is the same as before. This also applies to a GM's Ctrl-drag.
+
+**3. The ruler does less work.** Each time the ruler redrew it walked the same
+route three times, and twice more for every red square. It now walks it once
+and reuses the answer. What is drawn and priced is the same. I cannot time it
+here; the tester will.
+
+**4. A size 2 token uses a narrow stair.** A stair is climbed by the middle
+point of the token. A size 2 token's middle runs exactly along the side of a
+one-square stair, so it counted as neither on nor off and never changed floor.
+The app now uses the part of the token that is on the stair. This was the
+app's fault, not the map's: stairs do not need to be wider. Checked against
+the real bathhouse stairs, both of them, up and down.
+
+- A token standing fully beside a stair still ignores it.
+- **This changes old scenes a little:** a big token with only part of itself
+  over a stair will now climb it. Before, it walked across.
+
+**5 and 6. One rule for how high a rock face is.** The real height, to the
+nearest whole square.
+
+- Under one and a half squares: a one-square step. Never a climb, no pop-up,
+  costs 1.
+- One and a half or more: a two-square face. Pop-up, costs 4.
+- A 3.75-high face is 4 squares going up **and** 4 coming down. Before, it
+  was "climbs 4" up and "fell 3" down.
+- The ruler, the pop-up, the range outline and the fall review all use it.
+- **This changes falls on uneven ground:** a fall used to round down. A 3.75
+  drop is now 4 squares (8 damage before Agility) where it was 3 (6). A drop of
+  1.5 to 1.99 is now a 2-square fall where it was 1.
+
+**8. Two small ability fixes.**
+
+- A zone check with nobody targeted (an area placed where nobody stands) no
+  longer asks "Is the target in hot spring water?". It does nothing.
+- A long teleport no longer lists squares off the map. Elowin's teleport 60
+  offered 14,640 squares; it now offers only the map.
+
+**7. Not fixed: the range outline beside the bridge.** From (36,24) on Dead
+Root the ruler prices (31,24) at 5 and the outline leaves it out. Reading the
+code, the ruler and the outline price each step the same way, so I could not
+find the cause without watching it run. The height rule above changed the
+outline's sums and may have moved it. It needs the tester to look again.
+
+Checks run: full suite 152 files, 1099 checks, 0 failures; every server test
+passes. Not yet seen in a browser: any of it. The tester re-runs these checks
+next.
 
 ## Where it is now
 

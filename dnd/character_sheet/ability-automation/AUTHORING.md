@@ -1223,6 +1223,8 @@ A token counts as in a zone the same way movement does: on the zone's floor, on 
 
 When the scene has no zones at all, or the ability is run outside the VTT, the user is asked the question once and the answer applies to every target, exactly like `ifPrompt`. So an ability written with `ifZone` works on every map; it just stops asking on maps that have zones.
 
+When nobody was targeted (an area placed where no creature stands), there is nothing to check: nobody is asked and neither branch runs. A check with `"who": "self"` still runs, because it is about the user of the ability.
+
 To place a forced move first and check afterwards, put the `forcedMovement` effect before the `ifZone` in the same list: effects run in order, so the check sees where the target ended up.
 
 `ifZone` checks once, when the ability resolves. For an effect that keeps going and must be re-checked every turn ("a grabbed creature who starts its turn in blood takes 3 corruption damage"), bind the condition's rider to the zone instead: see `zone` under persistent `riders` in the `condition` section.
