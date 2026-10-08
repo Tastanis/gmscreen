@@ -3,8 +3,8 @@ export const brushRate=moving=>moving?16:8;
 export function slopeColor(slope){
  if(Math.abs(slope)<.03)return '#111111';
  const up=slope>0,s=Math.abs(slope);
- // Flat is black, uphill yellow, downhill green; red is reserved for difficult terrain.
- const low=up?[202,138,4]:[22,163,74],high=up?[250,204,21]:[74,222,128];
+ // Flat is black, uphill green, downhill yellow; red is reserved for difficult terrain.
+ const low=up?[22,163,74]:[202,138,4],high=up?[74,222,128]:[250,204,21];
  const t=clamp((s-1)/3,0,1);
  return '#'+low.map((v,i)=>Math.round(v+(high[i]-v)*t).toString(16).padStart(2,'0')).join('');
 }

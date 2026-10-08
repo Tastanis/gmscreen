@@ -141,14 +141,14 @@ test('route summary reports plain distance, true cost and each difficult square'
   assert.deepEqual(summarizeRoute([{ column: 1, row: 1 }], walk), { distance: 0, cost: 0, extra: 0, difficult: [], climbs: [], climbExtra: 0 });
 });
 
-test('ruler colours: black on the flat, yellow uphill, green downhill', () => {
+test('ruler colours: black on the flat, green uphill, yellow downhill', () => {
   const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
   assert.equal(slopeColor(0), '#111111');
   for (const slope of [0.5, 1, 2, 4]) {
     const [r, g, b] = rgb(slopeColor(slope));
-    assert.ok(r > 120 && g > 90 && b < 60 && r > g, `uphill ${slope} is yellow: ${slopeColor(slope)}`);
+    assert.ok(g > r && g > b && g > 80, `uphill ${slope} is green: ${slopeColor(slope)}`);
     const [dr, dg, db] = rgb(slopeColor(-slope));
-    assert.ok(dg > dr && dg > db && dg > 80, `downhill ${slope} is green: ${slopeColor(-slope)}`);
+    assert.ok(dr > 120 && dg > 90 && db < 60 && dr > dg, `downhill ${slope} is yellow: ${slopeColor(-slope)}`);
   }
 });
 
