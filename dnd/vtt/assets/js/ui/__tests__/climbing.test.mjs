@@ -266,3 +266,34 @@ test('a gentle hill is not charged for height it gains a little at a time', () =
 function pick(walked) {
   return { cost: walked.cost, climbExtra: walked.climbExtra, rise: walked.points[1].rise };
 }
+
+// ---- The same face, up and down --------------------------------------------
+// These are the bank shapes fall-agrees-with-climb.test.php walks off. Going up, each is a climb
+// of the number of squares that test expects the fall to be.
+test('banks that are falls coming down are climbs of the same height going up', () => {
+  const profile = (points) => (x) => {
+    if (x <= points[0][0]) return points[0][1];
+    for (let i = 1; i < points.length; i++) { const [x0, z0] = points[i - 1], [x1, z1] = points[i]; if (x <= x1) return z0 + ((z1 - z0) * (x - x0)) / (x1 - x0); }
+    return points[points.length - 1][1];
+  };
+  const banks = [
+    ['a 1.9-high bank sloping over most of a square', [[2.6, 1.9], [3.4, 0]], 2],
+    ['a 1.71-high bank', [[2.6, 1.71], [3.35, 0]], 2],
+    ['a 2.0-high bank that is not a sheer drop', [[2.55, 2.0], [3.45, 0]], 2],
+    ['a 1.72-high face with a rounded top', [[2.5, 1.72], [2.9, 1.3], [3.1, 0.3], [3.5, 0]], 2],
+    ['a sheer 3.75-high cliff', [[2.95, 3.75], [3.05, 0]], 4],
+    ['a 3.42-high cliff with a raised lip at its edge', [[2.5, 3.42], [2.9, 4.15], [3.0, 4.15], [3.1, 0]], 3],
+    ['a sheer 2.4-high face', [[2.95, 2.4], [3.05, 0]], 2],
+  ];
+  for (const [name, points, squares] of banks) {
+    const heightAt = profile(points);
+    // From the foot (column 3) up to the top (column 2).
+    const up = routeSteps({ column: 3, row: 1 }, { column: 2, row: 1 }, square(heightAt), null, face(heightAt));
+    assert.deepEqual([up.points[1].rise, up.climbExtra, up.cost], [squares, squares, squares * 2], `${name}: climbs ${squares}, costs ${squares * 2}`);
+  }
+  // Under the line: a step, not a climb, and (in the PHP test) not a fall.
+  for (const points of [[[2.6, 1.4], [3.4, 0]], [[2.6, 1.2], [3.4, 0]], [[2.5, 1.0], [3.5, 0]]]) {
+    const heightAt = profile(points);
+    assert.equal(routeSteps({ column: 3, row: 1 }, { column: 2, row: 1 }, square(heightAt), null, face(heightAt)).climbExtra, 0);
+  }
+});

@@ -11,10 +11,23 @@ final class FallOutcome {
   elseif($cause==='fall'||(!empty($from['_supportSurfaceId'])&&empty($to['_supportSurfaceId'])))$top=WallMovement::height($from,$config);
   // Teleport only checks its landing support; never treat the skipped chord as a fall.
   elseif($kind!=='teleport'){
+   $terrain=fn($x,$y)=>WallMovement::terrain($x,$y,$config);$standing=fn($p)=>WallMovement::height($p,$config);
    $previous=$from;
    foreach([...$path,$to] as $point){
-    $contact=TerrainContact::first($previous,$point,fn($x,$y)=>WallMovement::terrain($x,$y,$config),fn($p)=>WallMovement::height($p,$config),-1);
-    if($contact!==null){$dx=$point['column']-$previous['column'];$dy=$point['row']-$previous['row'];$d=max(abs($dx),abs($dy));$edge=[...$previous,'column'=>$previous['column']+$dx*$contact/$d,'row'=>$previous['row']+$dy*$contact/$d];$top=max($top??-INF,WallMovement::height($edge,$config));}
+    $dx=$point['column']-$previous['column'];$dy=$point['row']-$previous['row'];$d=max(abs($dx),abs($dy));
+    $at=fn($s)=>[...$previous,'column'=>$previous['column']+$dx*$s/$d,'row'=>$previous['row']+$dy*$s/$d];
+    $contact=$d>1e-7?TerrainContact::first($previous,$point,$terrain,$standing,-1):null;
+    // The top of a fall is the middle of the square the creature left, the same place a climb up
+    // the face is measured from, so one face is the same height going up and coming down.
+    if($contact!==null)$top=max($top??-INF,$standing($at(floor($contact+1e-6))));
+    // A face gentler than the sharp drop looked for above can still be a climb of two squares or
+    // more going up (a 1.9-high bank). Coming down it is then a fall of the same height.
+    elseif($d>1e-7){
+     for($i=0;$i<ceil($d-1e-6);$i++){
+      $upper=$at($i);$lower=$at(min($d,$i+1));$high=$standing($upper);
+      if($high-$standing($lower)>=1.5-1e-6&&TerrainContact::first($lower,$upper,$terrain,$standing)!==null){$top=max($top??-INF,$high);break;}
+     }
+    }
     $previous=[...$previous,...$point];
    }
   }
