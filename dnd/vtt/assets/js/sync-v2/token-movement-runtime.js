@@ -3,6 +3,7 @@ import { createEventStream, createPusherEventTransport } from './event-stream.js
 import { createRecoveryClient } from './recovery-client.js';
 import { createCommandClient } from './command-client.js';
 import { createRecoveryPolling } from './recovery-polling.js';
+import { createSerialQueue } from './serial-queue.js';
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value ?? {}));
@@ -225,7 +226,15 @@ export function createTokenMovementRuntime({
     pusherTransport.disconnect();
   }
 
-  async function submitOne(sceneId, move, retry = true) {
+  // Token changes from this browser go out one at a time. Each reads the token's revision when its
+  // turn comes, so a change sent right after another (damage, then the push that follows it) carries
+  // the revision the first one produced instead of the one both started from.
+  const enqueueTokenChange = createSerialQueue();
+  function submitOne(sceneId, move, retry = true) {
+    return enqueueTokenChange(() => sendOne(sceneId, move, retry));
+  }
+
+  async function sendOne(sceneId, move, retry = true) {
     const placementId = String(move?.placementId ?? move?.id ?? '').trim();
     if (!sceneId || !placementId) {
       throw new TypeError('A token move requires sceneId and placementId');
@@ -270,7 +279,7 @@ export function createTokenMovementRuntime({
         store.replaceSnapshot(conflictSnapshot, { authoritative: true, source: 'conflict' });
         reconcileSnapshot(store.getConfirmedSnapshot(), { source: 'conflict' });
         pendingPreview.delete(`${sceneId}:${placementId}`);
-        return submitOne(sceneId, move, false);
+        return sendOne(sceneId, move, false);
       }
       pendingPreview.delete(`${sceneId}:${placementId}`);
       const latest = placementFromSnapshot(store.getConfirmedSnapshot(), sceneId, placementId);
@@ -377,6 +386,11 @@ export function createTokenMovementRuntime({
 
   async function submitPlacementOps(ops, retry = true) {
     if (!placementsEnabled) return null;
+    return enqueueTokenChange(() => sendPlacementOps(ops, retry));
+  }
+
+  async function sendPlacementOps(ops, retry = true) {
+    if (!placementsEnabled) return null;
     await start();
     const actions = legacyOpsToActions(ops);
     if (!actions.length) return null;
@@ -406,7 +420,7 @@ export function createTokenMovementRuntime({
           changed.cause = error;
           throw changed;
         }
-        return submitPlacementOps(ops, false);
+        return sendPlacementOps(ops, false);
       }
       reconcileSnapshot(store.getConfirmedSnapshot(), { source: 'rejected' });
       throw error;

@@ -82,16 +82,4 @@ export function activeSceneMapRepair({ isGM = false, activeSceneId = null, mapUr
   return own && own !== mapUrl ? { sceneId: activeSceneId, mapUrl: own } : null;
 }
 
-/** Runs tasks one at a time, in order. A task that hangs past `stallMs` no longer holds up the rest. */
-export function createSerialQueue({ stallMs = 20000, setTimer = setTimeout, clearTimer = clearTimeout } = {}) {
-  let tail = Promise.resolve();
-  return function enqueue(task) {
-    const run = tail.then(() => task());
-    const settled = run.then(() => {}, () => {});
-    tail = new Promise((resolve) => {
-      const timer = setTimer(resolve, stallMs);
-      settled.then(() => { clearTimer(timer); resolve(); });
-    });
-    return run;
-  };
-}
+export { createSerialQueue } from '../sync-v2/serial-queue.js';

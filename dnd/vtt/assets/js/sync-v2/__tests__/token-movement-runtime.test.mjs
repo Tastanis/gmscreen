@@ -524,3 +524,57 @@ test('group undo sends only its anchor and refreshes a conflict without semantic
   assert.equal(runtime.getRevision(), 4);
   assert.equal(reconciled.at(-1).revision, 4);
 });
+
+test('damage followed at once by a forced move on the same token: the move carries the revision the damage produced', async () => {
+  // The server as it behaves: a change must name the token's current revision, and its answer takes a moment.
+  let token = { id: 'cal', column: 5, row: 5, width: 1, height: 1, hp: { current: '30', max: '36' }, _entityRevision: 3 };
+  let revision = 10; const seen = []; let inFlight = 0, maxInFlight = 0;
+  const snapshot = () => ({ revision, state: { placements: { scene: { cal: clone(token) } } } });
+  const fetchImpl = async (url, options) => {
+    if (String(url).includes('snapshot')) return response(200, { success: true, snapshot: snapshot() });
+    if (!options?.body) return response(200, { success: true, events: [], revision });
+    const command = JSON.parse(options.body); const action = command.payload.actions[0];
+    inFlight += 1; maxInFlight = Math.max(maxInFlight, inFlight);
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    inFlight -= 1;
+    seen.push({ sentRevision: action.entityRevision, forced: !!action.forcedDestination, patch: Object.keys(action.patch) });
+    if (action.entityRevision !== token._entityRevision) return response(409, { success: false, error: 'entity_revision_mismatch', snapshot: snapshot() });
+    token = { ...token, ...action.patch, _entityRevision: token._entityRevision + 1 }; revision += 1;
+    return response(200, { success: true, event: { revision, operationId: command.operationId, type: 'placement.batchApplied', sceneId: 'scene', serverTime: revision, payload: { mutations: [{ kind: 'upsert', sceneId: 'scene', placementId: 'cal', entityRevision: token._entityRevision, placement: clone(token) }] } } });
+  };
+  const runtime = createTokenMovementRuntime({ enabled: true, placementsEnabled: true, commandsEndpoint: '/commands', snapshotEndpoint: '/snapshot', eventsEndpoint: '/sync', windowRef: {}, fetchImpl, reconcileSnapshot: () => {}, applyConfirmedPlacement: () => {}, previewPlacement: () => {} });
+  await runtime.start();
+  // No Further: 5 damage, then push 2. The ability sends both without waiting for the first to come back.
+  const damage = runtime.submitPlacementOps([{ type: 'placement.update', sceneId: 'scene', placementId: 'cal', patch: { hp: { current: '25', max: '36' } } }]);
+  const push = runtime.submitPlacementOps([{ type: 'placement.update', sceneId: 'scene', placementId: 'cal', movementKind: 'forced', forcedDestination: { column: 7, row: 5 }, patch: { column: 7, row: 5 } }]);
+  const results = await Promise.allSettled([damage, push]);
+  assert.deepEqual(results.map((result) => result.status), ['fulfilled', 'fulfilled'], 'neither is refused');
+  assert.deepEqual(seen, [{ sentRevision: 3, forced: false, patch: ['hp'] }, { sentRevision: 4, forced: true, patch: ['column', 'row'] }]);
+  assert.equal(maxInFlight, 1, 'one token change at a time');
+  assert.deepEqual([token.hp.current, token.column, token._entityRevision], ['25', 7, 5]);
+  runtime.stop?.();
+});
+
+test('a refused forced move is still never retried, and does not hold up the next change', async () => {
+  let token = { id: 'cal', column: 5, row: 5, width: 1, height: 1, _entityRevision: 3 };
+  let revision = 10, writes = 0;
+  const snapshot = () => ({ revision, state: { placements: { scene: { cal: clone(token) } } } });
+  const fetchImpl = async (url, options) => {
+    if (String(url).includes('snapshot')) return response(200, { success: true, snapshot: snapshot() });
+    if (!options?.body) return response(200, { success: true, events: [], revision });
+    const command = JSON.parse(options.body); const action = command.payload.actions[0]; writes += 1;
+    if (writes === 1) { token = { ...token, _entityRevision: 4 }; revision += 1; return response(409, { success: false, error: 'entity_revision_mismatch', snapshot: snapshot() }); } // another browser changed the token first
+    token = { ...token, ...action.patch, _entityRevision: token._entityRevision + 1 }; revision += 1;
+    return response(200, { success: true, event: { revision, operationId: command.operationId, type: 'placement.batchApplied', sceneId: 'scene', serverTime: revision, payload: { mutations: [{ kind: 'upsert', sceneId: 'scene', placementId: 'cal', entityRevision: token._entityRevision, placement: clone(token) }] } } });
+  };
+  const runtime = createTokenMovementRuntime({ enabled: true, placementsEnabled: true, commandsEndpoint: '/commands', snapshotEndpoint: '/snapshot', eventsEndpoint: '/sync', windowRef: {}, fetchImpl, reconcileSnapshot: () => {}, applyConfirmedPlacement: () => {}, previewPlacement: () => {} });
+  await runtime.start();
+  const push = runtime.submitPlacementOps([{ type: 'placement.update', sceneId: 'scene', placementId: 'cal', movementKind: 'forced', forcedDestination: { column: 7, row: 5 }, patch: { column: 7, row: 5 } }]);
+  const next = runtime.submitPlacementOps([{ type: 'placement.update', sceneId: 'scene', placementId: 'cal', patch: { hidden: true } }]);
+  await assert.rejects(push, /entity_revision_mismatch/);
+  await next;
+  assert.equal(writes, 2, 'the forced move was sent once; the next change went through after it');
+  assert.equal(token.hidden, true);
+  assert.equal(token.column, 5, 'the refused push did not move the token');
+  runtime.stop?.();
+});
