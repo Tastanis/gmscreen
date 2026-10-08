@@ -1,5 +1,6 @@
 import {savePortal} from './environment-sync.mjs';
 import {createRoofEditor} from './roof-editor.mjs';
+import {cutIntoSquares} from './wall-geometry.mjs';
 import {defaults,properties,presets,wallHeights,MATERIALS,isOneWay,isBroken} from './wall-properties.mjs';
 export function createWallEditor({panel,transform,selected,model,context,projected,groundAt,change,render,copyWalls}){
  const fields=document.createElement('div');fields.className='wall-properties';fields.hidden=true;
@@ -12,7 +13,8 @@ export function createWallEditor({panel,transform,selected,model,context,project
    if(input.type==='number'&&(!Number.isFinite(value)||Math.abs(value)>1000000||k==='height'&&(value<0||value>1000))){render();return;}
    for(const edge of edges){if(k==='preset'){if(value==='custom')continue;const old=properties(edge);Object.assign(edge,defaults,presets[value],{base:old.base,baseMode:old.baseMode,height:old.height,topMode:old.topMode});}
     // "Not breakable" takes the material away, and with it any break. A one-way wall is never breakable.
-    else if(k==='material'){if(value==='none'||isOneWay(edge)){delete edge.material;delete edge.broken;}else edge.material=value;}
+    // A long wall is cut into one-square pieces as it is marked, so a break takes one square of it.
+    else if(k==='material'){if(value==='none'||isOneWay(edge)){delete edge.material;delete edge.broken;}else{edge.material=value;cutIntoSquares(model(),edge.id,()=>crypto.randomUUID());}}
     else if(k==='broken'){if(value&&edge.material&&!isOneWay(edge))edge.broken=true;else delete edge.broken;}
     else{edge[k]=value;if(k==='open'&&value)edge.locked=false;if(k==='locked'&&value)edge.open=false;if((k==='movementDirection'||k==='sightDirection')&&isOneWay(edge)){delete edge.material;delete edge.broken;}}}change(before);
   };

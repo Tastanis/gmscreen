@@ -7,7 +7,10 @@ $assetVersion = (int) ($config['assetsVersion'] ?? 1);
 $pusherEnabled = !empty($config['pusher']) || !empty($config['chatPusher']);
 $jsonScriptFlags = JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_PRETTY_PRINT;
 require_once __DIR__ . '/../lib/ModuleAssets.php';
+require_once __DIR__ . '/../lib/RubbleImages.php';
 $moduleMap = ModuleAssets::importMap(__DIR__ . '/../assets/js', $assetVersion);
+// Pictures laid over broken walls: whatever is in the rubble folder, found by file name.
+$rubbleImages = RubbleImages::urls(__DIR__ . '/../assets/images/rubble', 'assets/images/rubble');
 
 // Include navigation bar
 require_once __DIR__ . '/../../includes/strix-nav.php';
@@ -68,6 +71,7 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
     </div>
     <script>
         window.vttConfig = <?= json_encode($config, $jsonScriptFlags) ?>;
+        window.vttRubbleImages = <?= json_encode($rubbleImages, $jsonScriptFlags) ?>;
         window.chatHandlerUrl = <?= json_encode($config['chatHandlerUrl'] ?? ($routes['chat'] ?? '/dnd/chat_handler.php'), $jsonScriptFlags) ?>;
         window.chatParticipants = <?= json_encode($config['chatParticipants'] ?? [], $jsonScriptFlags) ?>;
         // Pusher configuration is sourced from the server's enabled config.
@@ -90,5 +94,6 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
     <script type="module" src="assets/js/bootstrap.js?v=<?= $assetVersion ?>"></script>
     <script type="module" src="assets/js/ui/terrain-prototype.js?v=<?= $assetVersion ?>"></script>
     <script type="module" src="assets/js/ui/terrain-zones-overlay.js?v=<?= $assetVersion ?>"></script>
+    <script type="module" src="assets/js/ui/wall-rubble-overlay.js?v=<?= $assetVersion ?>"></script>
 </body>
 </html>

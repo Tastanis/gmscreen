@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { MATERIALS, validateProperties, restrictions, liveWalls, isBreakable, isBroken, isOneWay, movementBlocked, movementPathBlocked } from '../wall-properties.mjs';
-import { validateWalls, split } from '../wall-geometry.mjs';
+import { validateWalls, split, cutIntoSquares } from '../wall-geometry.mjs';
 import { makeSight } from '../vision-height.mjs';
 import { rubbleKind, rubblePieces, rubbleLibrary, rubblePicture, rubbleSize, pickVersion, stableHash, standInRubble, plateUnder, insideRing, RUBBLE_KINDS, RUBBLE_MAX_ACROSS, RUBBLE_MIN_ACROSS } from '../wall-rubble.mjs';
 
@@ -161,4 +161,27 @@ test('rubble on a floor plate is told apart from rubble on bare ground', () => {
   assert.equal(plateUnder({ a: { x: 12, y: 0 }, b: { x: 12, y: 1 } }, 2, [ground]), null, 'beyond the plate');
   assert.equal(plateUnder(piece, 2, []), null);
   assert.equal(insideRing({ x: 1, y: 1 }, square(0, 0, 2, 2)), true);
+});
+
+test('marking a long wall breakable cuts it into one-square pieces', () => {
+  let next = 0; const makeId = () => `new-${++next}`;
+  const model = { version: 1, nodes: [{ id: 'a', x: 2, y: 5 }, { id: 'b', x: 6, y: 5 }], segments: [{ id: 'long', a: 'a', b: 'b', material: 'stone', height: 3 }] };
+  const ids = cutIntoSquares(model, 'long', makeId);
+  assert.equal(ids.length, 4);
+  assert.equal(ids[0], 'long', 'the original is the first piece, so it stays selected');
+  validateWalls(model);
+  const node = (id) => model.nodes.find((n) => n.id === id);
+  const spans = ids.map((id) => { const edge = model.segments.find((e) => e.id === id); return [node(edge.a).x, node(edge.b).x, edge.material, edge.height]; });
+  assert.deepEqual(spans, [[2, 3, 'stone', 3], [3, 4, 'stone', 3], [4, 5, 'stone', 3], [5, 6, 'stone', 3]], 'four pieces end to end, each still stone and the same height');
+  // Breaking one of them leaves the other three standing.
+  model.segments.find((e) => e.id === ids[1]).broken = true;
+  assert.deepEqual(rubblePieces(model).map((piece) => [piece.a.x, piece.b.x]), [[3, 4]]);
+  assert.equal(liveWalls(model).segments.length, 3);
+  // A wall about one square long is left alone, and so is a slanted one of that length.
+  for (const [x, y] of [[1, 0], [1.4, 0], [0.22, 0], [1, 1]]) {
+    const short = { version: 1, nodes: [{ id: 'a', x: 0, y: 0 }, { id: 'b', x, y }], segments: [{ id: 'short', a: 'a', b: 'b', material: 'wood' }] };
+    assert.deepEqual(cutIntoSquares(short, 'short', makeId), ['short']);
+    assert.equal(short.segments.length, 1);
+  }
+  assert.deepEqual(cutIntoSquares(model, 'missing', makeId), []);
 });
