@@ -2792,6 +2792,11 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
         ? window.VTTBoardCallbacks.getDistanceBetween(idA, idB)
         : null
     ),
+    getZoneTags: (placementId) => (
+      window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.getZoneTags === 'function'
+        ? window.VTTBoardCallbacks.getZoneTags(placementId)
+        : null
+    ),
   });
 }
 

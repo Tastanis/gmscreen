@@ -781,6 +781,26 @@
         if (extras) effect._extra = extras;
         return effect;
       }
+      case "ifZone": {
+        const known = new Set(["kind", "tag", "tags", "who", "target", "question", "then", "else"]);
+        const tags = normalizeZoneTags(input);
+        const effect = {
+          kind: "ifZone",
+          tags,
+          who: pickKnown(input.who, ["target", "self"], "target"),
+          then: normalizeEffectList(input.then || [], warnings, `${path}.then`),
+          else: normalizeEffectList(input.else || [], warnings, `${path}.else`),
+        };
+        const target = asTrimmedString(input.target);
+        if (target) effect.target = target;
+        const question = asTrimmedString(input.question);
+        if (question) effect.question = question;
+        if (!tags.length) warnings.push(`${path}: ifZone has no tag; the user will be asked every time.`);
+        if (!effect.then.length && !effect.else.length) warnings.push(`${path}: ifZone has no then/else effects.`);
+        const extras = pickExtras(input, known);
+        if (extras) effect._extra = extras;
+        return effect;
+      }
       case "ifDistance": {
         const known = new Set(["kind", "from", "to", "fromGroup", "toGroup", "min", "max", "target", "then", "else"]);
         const effect = {
@@ -1557,7 +1577,18 @@
     return block;
   }
 
-  const BRANCH_CONDITION_KINDS = ["strained", "winded", "keyword", "prompt", "mark", "scopedFlag", "distance"];
+  const BRANCH_CONDITION_KINDS = ["strained", "winded", "keyword", "prompt", "mark", "scopedFlag", "distance", "zone"];
+
+  // Zone tags as the map writes them: lower case, letters, digits, "-" and "_".
+  function normalizeZoneTags(input) {
+    const raw = Array.isArray(input?.tags) ? input.tags : input?.tag != null ? [input.tag] : [];
+    const seen = new Set();
+    for (const value of raw) {
+      const tag = String(value == null ? "" : value).trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+      if (tag) seen.add(tag);
+    }
+    return [...seen];
+  }
   const DISTANCE_ENDPOINTS = ["self", "source", "eventSource", "eventTarget", "target"];
 
   // A distance endpoint is either a known keyword (self/source/eventSource/
@@ -1595,6 +1626,9 @@
       ifscopedflag: "scopedFlag",
       distance: "distance",
       ifdistance: "distance",
+      zone: "zone",
+      ifzone: "zone",
+      inzone: "zone",
     };
     const mappedKind = kindMap[rawKind];
     const kind = mappedKind || "prompt";
@@ -1639,6 +1673,15 @@
         target: pickKnown(input.target, ["target", "judgedTarget", "eventTarget"], "target"),
         mode: pickKnown(input.mode, ["set", "notSet"], "notSet"),
       };
+    }
+    if (kind === "zone") {
+      const condition = { kind, tags: normalizeZoneTags(input), who: pickKnown(input.who, ["target", "self"], "target") };
+      const target = asTrimmedString(input.target);
+      if (target) condition.target = target;
+      const question = asTrimmedString(input.question);
+      if (question) condition.question = question;
+      if (!condition.tags.length) warnings.push(`${path}: zone branch condition has no tag; the user will be asked every time.`);
+      return condition;
     }
     if (kind === "distance") {
       const condition = {

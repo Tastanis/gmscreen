@@ -12908,6 +12908,15 @@ export function mountBoardInteractions(store, routes = {}) {
       if (!a || !b) return null;
       return placementSquareDistance(a, b, getActiveSceneTokenLevelState());
     },
+    // Which tagged terrain zones a token stands in ("blood", "water"), for abilities that ask.
+    // null means the board cannot say: the scene has no zones, or the token is not on it. The
+    // ability then asks the user instead. A swimmer in blood is still in blood.
+    getZoneTags: function (placementId) {
+      const zones = window.terrainZones;
+      if (!zones || typeof zones.tagsForPlacement !== 'function' || !Array.isArray(zones.zones) || zones.zones.length === 0) return null;
+      if (!getPlacementFromStore(placementId)) return null;
+      return zones.tagsForPlacement(placementId);
+    },
   };
 
   function openMalicePanel() {

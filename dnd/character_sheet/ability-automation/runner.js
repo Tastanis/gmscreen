@@ -657,7 +657,7 @@
       if (effect.kind === kind) return true;
       if (effect.kind === "potency" && (effectListContainsKind(effect.onFail, kind) || effectListContainsKind(effect.onResist, kind))) return true;
       if (effect.kind === "spend" && effectListContainsKind(effect.effects, kind)) return true;
-      if (effect.kind === "ifKeyword" || effect.kind === "ifPrompt" || effect.kind === "ifMark" || effect.kind === "ifScopedFlag" || effect.kind === "ifDistance") {
+      if (effect.kind === "ifKeyword" || effect.kind === "ifPrompt" || effect.kind === "ifMark" || effect.kind === "ifScopedFlag" || effect.kind === "ifDistance" || effect.kind === "ifZone") {
         if (effectListContainsKind(effect.then, kind) || effectListContainsKind(effect.else, kind)) return true;
       }
     }
@@ -1788,6 +1788,8 @@
         return applyIfScopedFlagEffect(state, effect, targets, ctx);
       case "ifDistance":
         return applyIfDistanceEffect(state, effect, targets, ctx);
+      case "ifZone":
+        return applyIfZoneEffect(state, effect, targets, ctx);
       case "setScopedFlag":
         return applySetScopedFlagEffect(state, effect, targets, ctx);
       case "applyMark":
@@ -2667,6 +2669,97 @@
     await applyEffects(state, branch, branchGroup, ctx);
   }
 
+  // ---------- terrain zones ("is it in blood?") ----------
+  // The board knows which tagged zones a token stands in. `getZoneTags(id)` gives the list of
+  // tags, or null when the board cannot say (no zones on this scene, or the host has no such
+  // callback). When it cannot say, the user is asked once instead, exactly like ifPrompt.
+  async function zoneTagsFor(state, placementId) {
+    if (!placementId || typeof state.context.getZoneTags !== "function") return null;
+    try {
+      const tags = await state.context.getZoneTags(placementId);
+      return Array.isArray(tags) ? tags.map((tag) => String(tag).trim().toLowerCase()) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function zoneSpecTags(spec) {
+    const list = Array.isArray(spec?.tags) && spec.tags.length ? spec.tags : spec?.tag ? [spec.tag] : [];
+    return list.map((tag) => String(tag).trim().toLowerCase()).filter(Boolean);
+  }
+
+  function zoneSubjects(state, spec, targets) {
+    if (String(spec?.who || "target").toLowerCase() === "self") {
+      return state.sourcePlacement?.id ? [{ id: state.sourcePlacement.id, name: state.heroName }] : [];
+    }
+    const list = spec?.target ? getTargetGroup(state, spec.target) : targets;
+    return (list || []).filter((target) => target && target.id);
+  }
+
+  function zoneQuestion(spec, tags) {
+    return spec?.question || `Is {target} in ${tags.join(" or ") || "the zone"}?`;
+  }
+
+  // Sorts the subjects into those standing in one of the zones and those not.
+  async function resolveZoneCondition(state, spec, targets) {
+    const tags = zoneSpecTags(spec);
+    const subjects = zoneSubjects(state, spec, targets);
+    const inside = [];
+    const outside = [];
+    let known = subjects.length > 0 && tags.length > 0;
+    if (known) {
+      for (const subject of subjects) {
+        const found = await zoneTagsFor(state, subject.id);
+        if (found === null) { known = false; break; }
+        (tags.some((tag) => found.includes(tag)) ? inside : outside).push(subject);
+      }
+    }
+    if (known) return { tags, subjects, inside, outside, asked: false };
+    const answer = await askAutomationPrompt(state, { question: zoneQuestion(spec, tags), yesLabel: "Yes", noLabel: "No" }, subjects);
+    return { tags, subjects, inside: answer ? subjects : [], outside: answer ? [] : subjects, asked: true, answer: Boolean(answer) };
+  }
+
+  function zoneChatLine(state, spec, result) {
+    const prefix = `${state.heroName} - ${state.action.name || "Ability"}: `;
+    if (result.asked) {
+      return `${prefix}${formatPromptQuestion({ question: zoneQuestion(spec, result.tags) }, result.subjects)} ${result.answer ? "Yes" : "No"}.`;
+    }
+    const label = result.tags.join(" or ");
+    const names = (list) => list.map((subject) => subject.name || "the target").join(", ");
+    const parts = [];
+    if (result.inside.length) parts.push(`${names(result.inside)} ${result.inside.length === 1 ? "is" : "are"} in ${label}`);
+    if (result.outside.length) parts.push(`${names(result.outside)} ${result.outside.length === 1 ? "is" : "are"} not in ${label}`);
+    return `${prefix}${parts.join("; ")}.`;
+  }
+
+  // ifZone: each target gets the branch that fits where it stands. With `who: "self"` the whole
+  // group follows where the user of the ability stands.
+  async function applyIfZoneEffect(state, effect, targets, ctx) {
+    const result = await resolveZoneCondition(state, effect, targets);
+    if (state.aborted) return;
+    await postChat(state.context, { message: zoneChatLine(state, effect, result) });
+    const group = effect.target || state.currentGroup || "primary";
+    const selfMode = String(effect.who || "target").toLowerCase() === "self";
+    const runFor = async (branch, subset) => {
+      if (!Array.isArray(branch) || !branch.length) return;
+      if (selfMode || !subset) { await applyEffects(state, branch, group, ctx); return; }
+      if (!subset.length) return;
+      // A short-lived group holding just the targets this branch applies to.
+      const saved = state.currentGroup;
+      const temp = `__zone_${state.zoneGroupSeq = (state.zoneGroupSeq || 0) + 1}`;
+      state.groups[temp] = subset;
+      try { await applyEffects(state, branch, temp, ctx); }
+      finally { delete state.groups[temp]; state.currentGroup = saved; }
+    };
+    if (selfMode) {
+      await runFor(result.inside.length ? effect.then : effect.else, null);
+      return;
+    }
+    await runFor(effect.then, result.inside);
+    if (state.aborted) return;
+    await runFor(effect.else, result.outside);
+  }
+
   async function applyMarkEffect(state, effect, targets) {
     const groupName = effect.target || state.currentGroup || "primary";
     const markTargets = effect.target ? getTargetGroup(state, effect.target) : targets;
@@ -3328,6 +3421,12 @@
         if (squares == null) return false;
         return distanceWithinBand(squares, c);
       }
+      case "zone": {
+        const targets = getTargetGroup(state, c.target || state.currentGroup || "primary");
+        const result = await resolveZoneCondition(state, c, targets);
+        if (!state.aborted) await postChat(state.context, { message: zoneChatLine(state, c, result) });
+        return result.inside.length > 0;
+      }
       default:
         return false;
     }
@@ -3810,7 +3909,7 @@
         walkEffectList(effect.then || [], visit);
         walkEffectList(effect.else || [], visit);
       }
-      if (effect.kind === "ifDistance") {
+      if (effect.kind === "ifDistance" || effect.kind === "ifZone") {
         walkEffectList(effect.then || [], visit);
         walkEffectList(effect.else || [], visit);
       }

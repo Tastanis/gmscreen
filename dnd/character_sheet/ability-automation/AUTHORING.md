@@ -1176,6 +1176,36 @@ Runs one branch or another based on the square (Chebyshev) distance between two 
 
 If either token has no board placement, the condition evaluates false and the `else` branch runs. Distance uses the host's `getDistanceBetween(idA, idB)` callback; abilities run outside the VTT (no board callback) always take `else`.
 
+### `ifZone` (rider)
+
+Runs one branch or another based on the terrain zone a token stands in: "if the target is in blood, it is also bleeding". Zones are the tagged areas of a map (`blood`, `water`, `mud`, and so on).
+
+```json
+{
+  "kind": "ifZone",
+  "tag": "blood",
+  "then": [ { "kind": "condition", "name": "bleeding", "duration": "saveEnds" } ],
+  "else": [ { "kind": "note", "text": "Not in blood." } ]
+}
+```
+
+| Field | Values |
+|---|---|
+| `tag` | one zone tag, written as the map writes it (`blood`). Case and spaces are tidied: `Deep Water` becomes `deep-water`. |
+| `tags` | several tags; the condition is met by any one of them (`["blood", "water"]`). Use `tag` or `tags`. |
+| `who` | `target` (default): each target is checked. `self`: the user of the ability is checked. |
+| `target` | optional named target group to check, instead of the card's own targets |
+| `question` | optional question to ask when the board cannot answer. `{target}` is replaced by the first target's name. Default: "Is {target} in blood?" |
+| `then` / `else` | effect arrays for tokens in the zone / not in it |
+
+With `who: "target"` each target gets the branch that fits where it stands: with two targets, one in blood and one not, only the first receives `then` and only the second receives `else`. With `who: "self"` the whole group follows where the user stands.
+
+A token counts as in a zone the same way movement does: on the zone's floor, on one of its squares, and not above it. A flier over the blood or a token on a bridge or deck above it is not in the blood. A creature that swims, or walks on the liquid, is still in it.
+
+When the scene has no zones at all, or the ability is run outside the VTT, the user is asked the question once and the answer applies to every target, exactly like `ifPrompt`. So an ability written with `ifZone` works on every map; it just stops asking on maps that have zones.
+
+To place a forced move first and check afterwards, put the `forcedMovement` effect before the `ifZone` in the same list: effects run in order, so the check sees where the target ended up.
+
 ### `halveTriggeringDamage` (rider - trigger blocks only)
 
 Soaks half of the damage that fired the trigger. The board has already applied the full damage by the time the trigger resolves; this effect heals back the difference so the net damage on the placement equals the rounded half.

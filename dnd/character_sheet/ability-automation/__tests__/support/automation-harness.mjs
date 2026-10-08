@@ -375,6 +375,7 @@ function createRecorder() {
     registerTrigger: [],
     fireTriggerEvent: [],
     postChat: [],
+    getZoneTags: [],
     applyResourceGain: [],
     applySurgeGain: [],
     getSurges: [],
@@ -724,6 +725,15 @@ export async function createAbilityAutomationHarness(options = {}) {
         recorder.record('checkMark', payload);
         return clone(script.checkMarkResults.shift() || { matched: false });
       },
+      // Terrain zones: `zoneTags` maps a placement id to the tags it stands in. Leave it out for a
+      // host with no zone support; pass null for a scene that has no zone data.
+      ...((runOptions.zoneTags ?? options.zoneTags) !== undefined ? {
+        getZoneTags(placementId) {
+          recorder.record('getZoneTags', placementId);
+          const map = runOptions.zoneTags ?? options.zoneTags;
+          return map === null ? null : clone(map[placementId] || []);
+        },
+      } : {}),
       checkScopedFlag(payload) {
         recorder.record('checkScopedFlag', payload);
         return clone(script.checkScopedFlagResults.shift() || { set: false });

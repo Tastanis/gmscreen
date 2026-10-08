@@ -32,6 +32,7 @@
     "ifMark",
     "ifScopedFlag",
     "ifDistance",
+    "ifZone",
     "setScopedFlag",
     "applyMark",
     "endMark",
@@ -522,6 +523,14 @@
         if (effect.min != null) band.push(`≥${effect.min}`);
         if (effect.max != null) band.push(`≤${effect.max}`);
         const label = `${effect.from || "self"}→${effect.to || effect.target || "target"} ${band.join(" & ") || "(any)"} sq`;
+        if (elseText) return `If ${label}: ${thenText || "(no effect)"} else: ${elseText}`;
+        return `If ${label}: ${thenText || "(no effect)"}`;
+      }
+      case "ifZone": {
+        const thenText = (effect.then || []).map(describeEffect).filter(Boolean).join(", ");
+        const elseText = (effect.else || []).map(describeEffect).filter(Boolean).join(", ");
+        const tags = (Array.isArray(effect.tags) && effect.tags.length ? effect.tags : effect.tag ? [effect.tag] : []).join(" or ") || "a zone";
+        const label = `${effect.who === "self" ? "self" : "target"} in ${tags}`;
         if (elseText) return `If ${label}: ${thenText || "(no effect)"} else: ${elseText}`;
         return `If ${label}: ${thenText || "(no effect)"}`;
       }

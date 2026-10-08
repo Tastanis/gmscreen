@@ -255,7 +255,8 @@
             getPowerRollSuggestions: board.getPowerRollSuggestions,
             consumeRollRiders: board.consumeRollRiders,
             getPlacementById: board.getPlacementById,
-            getDistanceBetween: board.getDistanceBetween
+            getDistanceBetween: board.getDistanceBetween,
+            getZoneTags: board.getZoneTags
         };
     }
 
