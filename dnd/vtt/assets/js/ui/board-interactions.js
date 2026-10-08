@@ -235,6 +235,7 @@ import {
   refreshCombatantStateClasses as refreshRenderedCombatantStateClasses,
   renderCombatTracker,
 } from '../combat/combat-renderer.js';
+import { squadForPlacement, squadPool, damageSquad, pickCaptain, livingCaptain, captainBonusFor, captainFeature } from './minion-squads.mjs';
 
 let trackerOverflowResizeListenerAttached = false;
 
@@ -782,11 +783,9 @@ export function mountBoardInteractions(store, routes = {}) {
   const MAX_COMBAT_GROUP_COLORS = 7;
 
   // ---------- Minion squad state ----------
-  // squadId = `${representativeId}:${monsterId}`
-  // squad shape: { id, representativeId, monsterId, memberIds: Set<placementId>,
-  //               perMinionStamina, maxPool, initialMemberCount }
-  const minionSquads = new Map();
-  const placementSquadIndex = new Map(); // placementId -> squadId
+  // A squad lives on its member tokens (the `squad` marker and the shared Stamina each carries),
+  // so every browser works it out from the tokens it has. See minion-squads.mjs.
+  const withCaptainTextByMonster = new Map(); // monsterId -> Promise<string>
   let minionKillPopup = null;
   let lastCombatTrackerEntries = [];
   let lastCombatTrackerActiveIds = new Set();
@@ -1742,6 +1741,7 @@ export function mountBoardInteractions(store, routes = {}) {
     setRulerSupplement: (text) => setRulerSupplement(text),
     measureRoute: (move) => measureMovementRoute(move),
     getCellInfo: (tokenId) => window.terrainZones?.cellInfoFor?.(tokenId) ?? null,
+    getSpeedBonus: (tokenId) => captainBonusFor(getPlacementsForActiveScene(), tokenId)?.speed ?? 0,
     projectCorner: (column, row) => {
       const terrain = window.terrainPrototype?.active ? window.terrainPrototype : null;
       const x = (viewState.gridOffsets?.left || 0) + column * (viewState.gridSize || 64), y = (viewState.gridOffsets?.top || 0) + row * (viewState.gridSize || 64);
@@ -7195,7 +7195,6 @@ export function mountBoardInteractions(store, routes = {}) {
       }
       applyGridState(state.grid ?? {});
       syncMapLevelsForState(state, activeSceneId);
-      rebuildMinionSquadsFromPlacements();
       renderTokens(state, tokenLayer, viewState);
       scheduleActiveSceneTriggerRegistration();
       renderFog(state);
@@ -12908,6 +12907,20 @@ export function mountBoardInteractions(store, routes = {}) {
       if (!a || !b) return null;
       return placementSquareDistance(a, b, getActiveSceneTokenLevelState());
     },
+    // The minion squad a token belongs to: members, the shared Stamina pool, how many are still
+    // standing, and its captain. null when the token is not in a squad.
+    getMinionSquad: function (placementId) {
+      const squad = getMinionSquadForPlacement(placementId);
+      if (!squad) return null;
+      const pool = readSquadCurrentPool(squad);
+      return { ...squad, memberIds: [...squad.memberIds], pool, standing: Math.ceil(pool / squad.perMinionStamina), captainUp: Boolean(livingCaptain(squad, getPlacementsForActiveScene())) };
+    },
+    // What a minion is getting from its captain right now (see captainBonusFor), or null. `feature`
+    // is the part abilities can apply, in the ability runner's own form.
+    getCaptainBonus: function (placementId) {
+      const bonus = captainBonusFor(getPlacementsForActiveScene(), placementId);
+      return bonus ? { ...bonus, feature: captainFeature(bonus) } : null;
+    },
     // Which tagged terrain zones a token stands in ("blood", "water"), for abilities that ask.
     // null means the board cannot say: the scene has no zones, or the token is not on it. The
     // ability then asks the user instead. A swimmer in blood is still in blood.
@@ -14075,7 +14088,7 @@ export function mountBoardInteractions(store, routes = {}) {
       pickRepresentativeIdForGroup(uniqueSelection) ?? uniqueSelection[uniqueSelection.length - 1];
     uniqueSelection.forEach((id) => {
       // Tear down any squad these tokens were part of before regrouping.
-      const oldSquadId = placementSquadIndex.get(id);
+      const oldSquadId = getPlacementFromStore(id)?.squad?.id;
       if (oldSquadId) dismantleMinionSquadById(oldSquadId);
       removeTokenFromGroups(id);
     });
@@ -14098,8 +14111,9 @@ export function mountBoardInteractions(store, routes = {}) {
     if (status) {
       const count = members.size;
       const noun = count === 1 ? 'token' : 'tokens';
+      const captainName = newSquads[0]?.captainId ? tokenLabel(getPlacementFromStore(newSquads[0].captainId)) : '';
       const squadSuffix = newSquads.length
-        ? ` (${newSquads.length} minion squad${newSquads.length === 1 ? '' : 's'} formed)`
+        ? ` (${newSquads.length} minion squad${newSquads.length === 1 ? '' : 's'} formed${captainName ? `, captain: ${captainName}` : ''})`
         : '';
       status.textContent = `Grouped ${count} ${noun} in the combat tracker.${squadSuffix}`;
     }
@@ -14145,11 +14159,11 @@ export function mountBoardInteractions(store, routes = {}) {
     return `${representativeId}::${monsterId}`;
   }
 
+  // Worked out from the tokens every time, never remembered: a browser that loaded the page
+  // after the squad was formed (every player, and the GM after a refresh) gets the same answer.
   function getMinionSquadForPlacement(placementId) {
     if (!placementId) return null;
-    const squadId = placementSquadIndex.get(placementId);
-    if (!squadId) return null;
-    return minionSquads.get(squadId) || null;
+    return squadForPlacement(getPlacementsForActiveScene(), placementId);
   }
 
   function buildMinionSquadsForGroup(representativeId, memberIds) {
@@ -14164,10 +14178,13 @@ export function mountBoardInteractions(store, routes = {}) {
       const perMinion = getMonsterPerMinionStamina(placement);
       if (!monsterId || !perMinion) return;
       if (!buckets.has(monsterId)) {
-        buckets.set(monsterId, { perMinion, memberIds: [] });
+        buckets.set(monsterId, { perMinion, memberIds: [], withCaptain: String(placement.monster?.with_captain ?? '').trim() });
       }
       buckets.get(monsterId).memberIds.push(placementId);
     });
+
+    // A creature in the group that is not a minion leads its squads as their captain.
+    const captainId = pickCaptain(memberIds.map((placementId) => getPlacementFromStore(placementId)));
 
     const createdSquads = [];
     buckets.forEach((bucket, monsterId) => {
@@ -14178,30 +14195,49 @@ export function mountBoardInteractions(store, routes = {}) {
         id: squadId,
         representativeId,
         monsterId,
-        memberIds: new Set(bucket.memberIds),
+        memberIds: bucket.memberIds.slice(),
         perMinionStamina: bucket.perMinion,
         maxPool,
         initialMemberCount: bucket.memberIds.length,
+        captainId,
+        withCaptain: bucket.withCaptain,
       };
-      minionSquads.set(squadId, squad);
-      bucket.memberIds.forEach((pid) => placementSquadIndex.set(pid, squadId));
       // Persist squad markers + initial pool onto each member placement.
       writeSquadStateToMembers(squad, maxPool);
       createdSquads.push(squad);
+      if (captainId && !squad.withCaptain) fillInWithCaptainText(squad);
     });
 
     return createdSquads;
   }
 
+  // Tokens placed before the "With Captain" line travelled with them do not carry it. The GM's
+  // browser looks it up in the monster's record and adds it to the squad.
+  function fillInWithCaptainText(squad) {
+    const endpoint = typeof routes?.monsters === 'string' ? routes.monsters : '';
+    if (!endpoint || !squad.monsterId || !isGmUser() || typeof fetch !== 'function') return;
+    if (!withCaptainTextByMonster.has(squad.monsterId)) {
+      const url = new URL(endpoint, window.location.origin);
+      url.searchParams.set('id', squad.monsterId);
+      withCaptainTextByMonster.set(squad.monsterId, fetch(url.toString(), { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((payload) => String(payload?.data?.with_captain ?? '').trim())
+        .catch(() => ''));
+    }
+    withCaptainTextByMonster.get(squad.monsterId).then((text) => {
+      const current = text ? getMinionSquadForPlacement(squad.memberIds[0]) : null;
+      if (!current || current.id !== squad.id || current.withCaptain) return;
+      writeSquadStateToMembers({ ...current, withCaptain: text }, readSquadCurrentPool(current));
+    });
+  }
+
   function dismantleMinionSquadById(squadId) {
-    const squad = minionSquads.get(squadId);
-    if (!squad) return;
-    const perMinion = squad.perMinionStamina;
-    squad.memberIds.forEach((memberId) => {
-      placementSquadIndex.delete(memberId);
+    const members = getPlacementsForActiveScene().filter((placement) => placement?.squad?.id === squadId);
+    members.forEach((member) => {
+      const perMinion = Number.parseInt(member.squad.perMinionStamina, 10) || 1;
       // Restore each member's HP to the single-minion stamina so leftover
       // tokens make sense as individuals after ungrouping.
-      updatePlacementById(memberId, (target) => {
+      updatePlacementById(member.id, (target) => {
         if (target.squad) delete target.squad;
         target.hp = { current: String(perMinion), max: String(perMinion) };
         if (target.overlays?.hitPoints) {
@@ -14209,30 +14245,22 @@ export function mountBoardInteractions(store, routes = {}) {
         }
       });
     });
-    minionSquads.delete(squadId);
   }
 
   function dismantleMinionSquadsForRepresentative(representativeId) {
     if (!representativeId) return;
-    const toRemove = [];
-    minionSquads.forEach((squad, squadId) => {
-      if (squad.representativeId === representativeId) toRemove.push(squadId);
+    const squadIds = new Set();
+    getPlacementsForActiveScene().forEach((placement) => {
+      if (placement?.squad?.id && placement.squad.representativeId === representativeId) squadIds.add(placement.squad.id);
     });
-    toRemove.forEach(dismantleMinionSquadById);
+    squadIds.forEach(dismantleMinionSquadById);
   }
 
   function readSquadCurrentPool(squad) {
-    // Source of truth: any member's hp.current (kept in sync). Fall back to maxPool.
-    for (const memberId of squad.memberIds) {
-      const placement = getPlacementFromStore(memberId);
-      const cur = Number.parseInt(placement?.hp?.current, 10);
-      if (Number.isFinite(cur)) return Math.max(0, Math.min(squad.maxPool, cur));
-    }
-    return squad.maxPool;
+    return squadPool(squad, getPlacementsForActiveScene());
   }
 
   function writeSquadStateToMembers(squad, currentPool) {
-    const memberIds = Array.from(squad.memberIds);
     const squadMarker = {
       id: squad.id,
       monsterId: squad.monsterId,
@@ -14240,12 +14268,13 @@ export function mountBoardInteractions(store, routes = {}) {
       perMinionStamina: squad.perMinionStamina,
       maxPool: squad.maxPool,
       initialMemberCount: squad.initialMemberCount,
+      ...(squad.captainId ? { captainId: squad.captainId } : {}),
+      ...(squad.withCaptain ? { withCaptain: squad.withCaptain } : {}),
     };
-    memberIds.forEach((memberId) => {
+    Array.from(squad.memberIds).forEach((memberId) => {
       updatePlacementById(memberId, (target) => {
         target.squad = { ...squadMarker };
         target.showHp = true;
-        if (!target.hp || typeof target.hp !== 'object') target.hp = {};
         target.hp = { current: String(currentPool), max: String(squad.maxPool) };
         if (target.overlays?.hitPoints) {
           target.overlays.hitPoints.value = { current: String(currentPool), max: String(squad.maxPool) };
@@ -14254,70 +14283,36 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
-  function clearSquadMarkerOnPlacement(memberId) {
-    updatePlacementById(memberId, (target) => {
-      if (target.squad) delete target.squad;
-    });
-  }
-
-  function rebuildMinionSquadsFromPlacements() {
-    minionSquads.clear();
-    placementSquadIndex.clear();
-    const state = boardApi.getState?.() ?? {};
-    const activeSceneId = state.boardState?.activeSceneId ?? null;
-    if (!activeSceneId) return;
-    const scenePlacements = state.boardState?.placements?.[activeSceneId];
-    if (!Array.isArray(scenePlacements)) return;
-
-    scenePlacements.forEach((placement) => {
-      const marker = placement?.squad;
-      if (!marker || !marker.id) return;
-      const squad = minionSquads.get(marker.id) || {
-        id: marker.id,
-        representativeId: marker.representativeId,
-        monsterId: marker.monsterId,
-        memberIds: new Set(),
-        perMinionStamina: Number(marker.perMinionStamina) || 1,
-        maxPool: Number(marker.maxPool) || 1,
-        initialMemberCount: Number(marker.initialMemberCount) || 1,
-      };
-      squad.memberIds.add(placement.id);
-      minionSquads.set(marker.id, squad);
-      placementSquadIndex.set(placement.id, marker.id);
-    });
-  }
-
   function applyMinionSquadDamage(squad, hitPlacementId, amount) {
     if (!squad || !Number.isFinite(amount) || amount <= 0) return null;
 
-    const prevPool = readSquadCurrentPool(squad);
-    const nextPool = Math.max(0, prevPool - amount);
-    const aliveBefore = Math.ceil(prevPool / squad.perMinionStamina);
-    const aliveAfter = Math.ceil(nextPool / squad.perMinionStamina);
-    const kills = Math.max(0, aliveBefore - aliveAfter);
+    const hit = damageSquad(squad, readSquadCurrentPool(squad), amount);
+    writeSquadStateToMembers(squad, hit.current);
+    const hitName = tokenLabel(getPlacementFromStore(hitPlacementId)) || 'A minion';
 
-    writeSquadStateToMembers(squad, nextPool);
-
-    if (kills > 0) {
-      const hitPlacement = getPlacementFromStore(hitPlacementId);
-      const hitName = tokenLabel(hitPlacement) || 'A minion';
+    if (hit.kills > 0) {
       showMinionKillPopup({
         squad,
         damage: amount,
-        prevPool,
-        nextPool,
-        kills,
+        prevPool: hit.previous,
+        nextPool: hit.current,
+        kills: hit.kills,
         hitName,
       });
+      // The pop-up is seen only by whoever dealt the damage; the chat line tells the table.
+      window.dashboardChat?.sendMessage?.({
+        message: `${hitName}'s squad takes ${amount}: ${hit.kills} minion${hit.kills === 1 ? ' drops' : 's drop'} (${hit.standing} of ${squad.initialMemberCount} left, squad Stamina ${hit.current}/${squad.maxPool}).`,
+        type: 'text',
+      })?.catch?.(() => {});
     }
 
     return {
-      previous: prevPool,
-      current: nextPool,
+      previous: hit.previous,
+      current: hit.current,
       max: squad.maxPool,
       change: amount,
-      name: tokenLabel(getPlacementFromStore(hitPlacementId)) || squad.monsterId,
-      squadKills: kills,
+      name: hitName || squad.monsterId,
+      squadKills: hit.kills,
     };
   }
 
@@ -18969,6 +18964,12 @@ export function mountBoardInteractions(store, routes = {}) {
       },
       { returnSavePromise: true }
     );
+    // A squad shares one Stamina pool: a hand edit on one member is an edit to the pool.
+    const editedSquad = getMinionSquadForPlacement(activeTokenSettingsId);
+    const editedPool = Number.parseInt(nextValue, 10);
+    if (editedSquad && Number.isFinite(editedPool)) {
+      writeSquadStateToMembers(editedSquad, Math.max(0, Math.min(editedSquad.maxPool, editedPool)));
+    }
 
     const latestPlacement = getPlacementFromStore(activeTokenSettingsId);
     const latestSnapshot = latestPlacement ? ensurePlacementHitPoints(latestPlacement.hp) : null;

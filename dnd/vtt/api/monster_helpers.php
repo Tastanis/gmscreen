@@ -246,6 +246,10 @@ function normalizeMonsterSnapshot($monster, ?string $fallbackId = null): ?array
     $stability = sanitizeMonsterInt($monster['stability'] ?? null, -1000, 1000, true);
     $freeStrike = sanitizeMonsterInt($monster['free_strike'] ?? null, -1000, 1000, true);
     $types = sanitizeMonsterString($monster['types'] ?? '');
+    // Minion squads: the kind of creature ("Minion", "Horde", "Leader") and what a minion gains
+    // while its squad has a captain.
+    $organization = sanitizeMonsterString($monster['organization'] ?? '');
+    $withCaptain = sanitizeMonsterString($monster['with_captain'] ?? ($monster['withCaptain'] ?? ''));
 
     $abilities = normalizeMonsterAbilities($monster['abilities'] ?? []);
 
@@ -282,6 +286,12 @@ function normalizeMonsterSnapshot($monster, ?string $fallbackId = null): ?array
     }
     if ($types !== '') {
         $result['types'] = $types;
+    }
+    if ($organization !== '') {
+        $result['organization'] = $organization;
+    }
+    if ($withCaptain !== '') {
+        $result['with_captain'] = $withCaptain;
     }
 
     return removeNullMonsterFields($result);

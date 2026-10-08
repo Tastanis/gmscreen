@@ -24,6 +24,17 @@ export function normalizeMonsterSnapshot(entry) {
     snapshot.role = role;
   }
 
+  // Minion squads: what kind of creature it is ("Minion", "Horde", "Leader") and what a minion
+  // gains while its squad has a captain.
+  const organization = sanitizeMonsterString(entry.organization ?? '');
+  if (organization) {
+    snapshot.organization = organization;
+  }
+  const withCaptain = sanitizeMonsterString(entry.with_captain ?? entry.withCaptain ?? '');
+  if (withCaptain) {
+    snapshot.with_captain = withCaptain;
+  }
+
   const level = toOptionalNumber(entry.level);
   if (level !== null) {
     snapshot.level = level;

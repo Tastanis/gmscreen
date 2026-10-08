@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createTokenMovementController } from '../token-movement-controller.js';
 
-function harness({ measureRoute } = {}) {
+function harness({ measureRoute, getSpeedBonus } = {}) {
   const shown = [];
   const calls = [];
   const controller = createTokenMovementController({
@@ -10,6 +10,7 @@ function harness({ measureRoute } = {}) {
     getCombatContext: () => ({ active: true, sceneId: 'scene', round: 1, activeCombatantId: 'hero' }),
     getPlacementById: (id) => ({ id, column: 2, row: 2, width: 1, height: 1, speed: 6 }),
     setRulerSupplement: (text) => shown.push(text),
+    ...(getSpeedBonus ? { getSpeedBonus } : {}),
     ...(measureRoute ? { measureRoute: (move) => { calls.push(move); return measureRoute(move); } } : {}),
   });
   controller.syncCombatTurn();
@@ -82,4 +83,27 @@ test('movement left this turn, and a climb added after the move, share one undoa
   // Spending past the speed is shown, never refused, and "left" does not go below zero.
   controller.addMovementCost('hero', 4);
   assert.deepEqual(controller.getMovementLeft('hero'), { speed: 6, spent: 9, left: 0 });
+});
+
+test('a speed bonus that comes and goes (a captain leading a minion) is asked for every time, never remembered', async () => {
+  let bonus = 2;
+  const asked = [];
+  const { controller, shown } = harness({ getSpeedBonus: (tokenId) => { asked.push(tokenId); return bonus; } });
+  assert.deepEqual(controller.getMovementLeft('hero'), { speed: 8, spent: 0, left: 8 });
+  start(controller);
+  assert.equal(speedOf(shown.at(-1)), 8, 'the counter shows speed 6 + 2 while dragging');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(speedOf(shown.at(-1)), 8, 'and still does once the speed has been looked up');
+  controller.handleDragEnd({ commit: false, moved: false });
+  // The captain drops: the bonus is gone at once, on the summary and on the next drag.
+  bonus = 0;
+  assert.deepEqual(controller.getMovementLeft('hero'), { speed: 6, spent: 0, left: 6 });
+  start(controller);
+  assert.equal(speedOf(shown.at(-1)), 6);
+  assert.ok(asked.every((tokenId) => tokenId === 'hero'));
+  // A bonus that is not a number, or a lookup that throws, counts as none; speed never goes below 0.
+  for (const [value, speed] of [[NaN, 6], ['x', 6], [-9, 0], [1.9, 7]]) {
+    assert.equal(harness({ getSpeedBonus: () => value }).controller.getMovementLeft('hero').speed, speed);
+  }
+  assert.equal(harness({ getSpeedBonus: () => { throw new Error('no'); } }).controller.getMovementLeft('hero').speed, 6);
 });

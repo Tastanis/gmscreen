@@ -83,3 +83,24 @@ test('normalizeMonsterSnapshot preserves case-variant nested characteristics', (
     presence: 1,
   });
 });
+
+test('the organization and "With Captain" line of a minion travel with its token, in the browser and on the server', () => {
+  const raw = { id: 'ghoul', name: 'Sluice Ghoul', organization: ' Minion ', role: 'Minion Harrier', with_captain: ' +1 damage bonus on strikes ' };
+  const monster = normalizeMonsterSnapshot(raw);
+  assert.equal(monster.organization, 'Minion');
+  assert.equal(monster.with_captain, '+1 damage bonus on strikes');
+  assert.equal(normalizeMonsterSnapshot({ id: 'g', name: 'G', withCaptain: 'Speed +2' }).with_captain, 'Speed +2');
+  const plain = normalizeMonsterSnapshot({ id: 'wolf', name: 'Wolf', with_captain: '  ' });
+  assert.equal('with_captain' in plain, false, 'an empty line is not carried');
+  assert.equal('organization' in plain, false);
+  // Normalizing an already-normalized snapshot keeps both.
+  assert.deepEqual(normalizeMonsterSnapshot(monster), monster);
+  const helper = fileURLToPath(new URL('../../../../api/monster_helpers.php', import.meta.url));
+  const onServer = (value) => JSON.parse(execFileSync(process.env.PHP_BINARY || 'php', ['-r',
+    'require $argv[1]; echo json_encode(normalizeMonsterSnapshot(json_decode($argv[2], true)));',
+    helper, JSON.stringify(value)], { encoding: 'utf8' }));
+  const fromServer = onServer(raw);
+  assert.equal(fromServer.organization, 'Minion');
+  assert.equal(fromServer.with_captain, '+1 damage bonus on strikes');
+  assert.equal('with_captain' in onServer({ id: 'wolf', name: 'Wolf' }), false);
+});

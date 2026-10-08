@@ -5,7 +5,8 @@ import vm from 'node:vm';
 
 const source = await readFile(new URL('../monster-ability-runner-glue.js', import.meta.url), 'utf8');
 
-function createRuntime({ runnerResult, initialMalice = 10 } = {}) {
+function createRuntime({ runnerResult, initialMalice = 10, captainBonus } = {}) {
+  const chat = [];
   const spends = [];
   const refunds = [];
   const openCalls = [];
@@ -30,10 +31,12 @@ function createRuntime({ runnerResult, initialMalice = 10 } = {}) {
     },
     VTTBoardCallbacks: {
       refundTriggeredAction: async () => ({ refunded: true }),
+      ...(captainBonus !== undefined ? { getCaptainBonus: (placementId) => (typeof captainBonus === 'function' ? captainBonus(placementId) : captainBonus) } : {}),
     },
+    dashboardChat: { sendMessage: (entry) => { chat.push(entry.message); return Promise.resolve(); } },
   };
   vm.runInContext(source, vm.createContext({ window, console }));
-  return { window, spends, refunds, openCalls, getMalice: () => malice };
+  return { window, spends, refunds, openCalls, chat, getMalice: () => malice };
 }
 
 test('Malice-costed monster triggered actions spend Malice when fired', async () => {
@@ -109,5 +112,40 @@ test('monster action events use canonical action kinds and initial costs are not
     assert.equal(context.action.actionKind, kind);
     assert.equal(context.spendResource(context.action).reason, 'handled-ability-cost');
     assert.deepEqual(runtime.spends, []);
+  }
+});
+
+const bite = { name: 'Rotting Bite', keywords: 'Melee, Strike, Weapon', automation: { schema: 'ability-automation/v3', cards: [{ type: 'effect', effects: [] }] } };
+const ghoul = { name: 'Sluice Ghoul', attributes: {} };
+
+test('a minion with a living captain hands the runner its "With Captain" bonus as a feature', async () => {
+  const feature = { title: 'With Captain (Ghoul Packmaster)', automation: { modifiers: [{ match: { keywordsAny: ['Strike'] }, apply: { damageBonus: 1 } }] } };
+  const asked = [];
+  const runtime = createRuntime({ captainBonus: (placementId) => { asked.push(placementId); return { captainName: 'Ghoul Packmaster', text: '+1 damage bonus on strikes', strikeDamage: 1, manual: false, edgeOnStrikes: false, feature }; } });
+  await runtime.window.MonsterAbilityRunner.start(ghoul, bite, 'action', { id: 'g1', hp: 32, maxHp: 32 });
+  assert.deepEqual(asked, ['g1']);
+  assert.deepEqual(JSON.parse(JSON.stringify(runtime.openCalls[0].features)), [feature]);
+  assert.deepEqual(runtime.chat, [], 'a bonus the app applies needs no reminder');
+});
+
+test('the part of a "With Captain" line the app cannot apply is said in chat', async () => {
+  const edge = createRuntime({ captainBonus: { captainName: 'Ghoul Packmaster', text: 'Gain an edge on strikes', manual: true, edgeOnStrikes: true, feature: null } });
+  await edge.window.MonsterAbilityRunner.start(ghoul, bite, 'action', { id: 'g1' });
+  assert.equal(edge.openCalls[0].features, undefined);
+  assert.deepEqual(edge.chat, ['Sluice Ghoul - With Captain (Ghoul Packmaster): Gain an edge on strikes (apply by hand)']);
+  const feature = { title: 'With Captain (Ghoul Packmaster)', automation: { modifiers: [] } };
+  const mixed = createRuntime({ captainBonus: { captainName: 'Ghoul Packmaster', text: '+1 damage bonus on strikes; can use Howl', manual: true, feature } });
+  await mixed.window.MonsterAbilityRunner.start(ghoul, bite, 'action', { id: 'g1' });
+  assert.equal(mixed.openCalls[0].features.length, 1);
+  assert.match(mixed.chat[0], /can use Howl \(apply by hand what is not a number\)$/);
+});
+
+test('no captain, a board without squads, or a board that throws: the ability runs as before', async () => {
+  for (const captainBonus of [null, undefined, () => { throw new Error('board'); }]) {
+    const runtime = createRuntime({ captainBonus });
+    const result = await runtime.window.MonsterAbilityRunner.start(ghoul, bite, 'action', { id: 'g1' });
+    assert.equal(result.completed, true);
+    assert.equal(runtime.openCalls[0].features, undefined);
+    assert.deepEqual(runtime.chat, []);
   }
 });

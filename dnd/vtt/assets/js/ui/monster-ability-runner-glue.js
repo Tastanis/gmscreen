@@ -140,6 +140,15 @@
         }, { attribute: 'Might', bonus: readMonsterNumber(stats.might, 0) });
     }
 
+    // A minion whose squad has a living captain gains its "With Captain" line. The numbers the
+    // app can apply (strike damage, distance) arrive from the board as a feature, the same
+    // way a hero's kit bonus does. Speed is handled by the movement counter.
+    function captainBonusFor(placement) {
+        var board = getBoardCallbacks();
+        if (!placement || !placement.id || typeof board.getCaptainBonus !== 'function') return null;
+        try { return board.getCaptainBonus(placement.id) || null; } catch (e) { return null; }
+    }
+
     function buildMonsterContext(monster, ability, category, placement) {
         var board = getBoardCallbacks();
         var stats = getMonsterStats(monster || {});
@@ -331,6 +340,16 @@
         }
 
         var context = buildMonsterContext(monster, ability, category, placement);
+        var captainBonus = captainBonusFor(placement);
+        var feature = captainBonus && captainBonus.feature ? captainBonus.feature : null;
+        if (feature) context.features = [feature];
+        // Whatever the app cannot apply by itself (an edge, a new ability) is said out loud.
+        if (captainBonus && (captainBonus.manual || captainBonus.edgeOnStrikes)) {
+            postChat({
+                message: (monster && monster.name ? monster.name : 'Minion') + ' - With Captain (' + captainBonus.captainName + '): ' +
+                    captainBonus.text + (feature ? ' (apply by hand what is not a number)' : ' (apply by hand)')
+            });
+        }
         context.resourceReservation = {
             maliceSpent: maliceResult.spent || 0
         };

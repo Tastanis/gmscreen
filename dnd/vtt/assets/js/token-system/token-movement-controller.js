@@ -31,6 +31,9 @@ export function createTokenMovementController({
   getCellInfo = () => null,
   // Optional (column,row) => {x,y} in map pixels, so the outline follows raised ground.
   projectCorner = null,
+  // Extra squares of speed a token has right now (a minion while its captain is up). Asked every
+  // time, never remembered, so the bonus ends the moment its cause does.
+  getSpeedBonus = () => 0,
   windowRef = typeof window === 'undefined' ? undefined : window,
   documentRef = typeof document === 'undefined' ? undefined : document,
 } = {}) {
@@ -39,6 +42,11 @@ export function createTokenMovementController({
   const speedResolver = createTokenSpeedResolver({ routes });
   let dragSession = null;
   const knownSpeeds = new Map();
+  const speedBonus = (tokenId) => {
+    let bonus = 0;
+    try { bonus = Number(getSpeedBonus(tokenId)); } catch (error) { bonus = 0; }
+    return Number.isFinite(bonus) ? Math.trunc(bonus) : 0;
+  };
   let cancelingForTurnChange = false;
   let undoPending = false;
 
@@ -70,7 +78,7 @@ export function createTokenMovementController({
     const original = originalPositions?.get?.(tokenId) ?? primaryToken;
     const context = getTurnContext();
     const spent = movementState.getSpent(tokenId, context);
-    const speed = speedResolver.getInitialSpeed(placement);
+    const speed = Math.max(0, speedResolver.getInitialSpeed(placement) + speedBonus(tokenId));
 
     dragSession = {
       tokenId,
@@ -88,8 +96,9 @@ export function createTokenMovementController({
         return;
       }
       if (Number.isFinite(result?.speed)) {
-        dragSession.speed = Math.max(0, Math.trunc(result.speed));
-        knownSpeeds.set(tokenId, dragSession.speed);
+        const base = Math.max(0, Math.trunc(result.speed));
+        knownSpeeds.set(tokenId, base);
+        dragSession.speed = Math.max(0, base + speedBonus(tokenId));
         renderDragSession(currentDragCost());
       }
     });
@@ -143,7 +152,7 @@ export function createTokenMovementController({
     if (!tokenId || !context.active || context.activeCombatantId !== tokenId) {
       return null;
     }
-    const speed = knownSpeeds.get(tokenId) ?? speedResolver.getInitialSpeed(getPlacementById(tokenId));
+    const speed = Math.max(0, (knownSpeeds.get(tokenId) ?? speedResolver.getInitialSpeed(getPlacementById(tokenId))) + speedBonus(tokenId));
     const spent = movementState.getSpent(tokenId, context);
     return { speed, spent, left: Math.max(0, speed - spent) };
   }
