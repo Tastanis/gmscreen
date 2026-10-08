@@ -373,6 +373,11 @@
         context.refundAbility = async function (payload) {
             if (maliceResult.spent > 0 && window.MaliceTracker) {
                 window.MaliceTracker.add(maliceResult.spent);
+                postChat({
+                    message: (ability.name || 'Ability') + ' was not used: ' + maliceResult.spent + ' malice returned.'
+                });
+                // Returned once; a second refund for the same use must not add it again.
+                maliceResult.spent = 0;
             }
             if (payload && payload.triggeredActionSpend && payload.triggeredActionSpend.consumed && context.refundTriggeredAction) {
                 await context.refundTriggeredAction({ placementId: payload.sourcePlacementId });

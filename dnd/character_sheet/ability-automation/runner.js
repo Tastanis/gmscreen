@@ -2898,6 +2898,19 @@
     return { allowed: true };
   }
 
+  // A refused ability never ran, so what was paid for it goes back: a monster's
+  // Malice is taken before the runner opens, a hero's resource just after.
+  async function refundRefusedAbility(state) {
+    if (typeof state.context.refundAbility !== "function") return;
+    await state.context.refundAbility({
+      resourceSpend: state.abilityResourceSpend,
+      triggeredActionSpend: state.triggeredActionSpend || null,
+      action: state.action,
+      sourcePlacementId: state.sourcePlacement?.id || "",
+      refused: true,
+    });
+  }
+
   async function markUsageLimit(state) {
     const limit = state.automation?.usageLimit;
     if (!limit || !limit.key || typeof state.context.setScopedFlag !== "function") {
@@ -4066,6 +4079,7 @@
           await postChat(state.context, {
             message: `${state.heroName} - ${state.action.name || "Ability"}: ${usageLimit.message}`,
           });
+          await refundRefusedAbility(state);
           closeRunner();
           return;
         }
@@ -4103,6 +4117,7 @@
           await postChat(state.context, {
             message: `${state.heroName} - ${state.action.name || "Ability"}: triggered action already used this round.`,
           });
+          await refundRefusedAbility(state);
           return;
         }
         state.triggeredActionSpend = consumeResult || { consumed: true };

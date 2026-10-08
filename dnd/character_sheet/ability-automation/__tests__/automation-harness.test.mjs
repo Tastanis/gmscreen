@@ -1756,3 +1756,44 @@ for (const hideHitPointValues of [true, false]) {
     } finally {harness.close();}
   });
 }
+
+test('an ability refused by its usage limit gives back what was paid for it and runs nothing', async () => {
+  for (const scope of ['encounter', 'round', 'turn']) {
+    const harness = await createAbilityAutomationHarness();
+    try {
+      const result = await harness.runAutomation({
+        action: { id: 'taproot', name: 'Up the Taproot', cost: '3 Malice' },
+        automation: {
+          schema: 'ability-automation/v3',
+          usageLimit: { scope, key: 'up-the-taproot', target: 'self' },
+          cards: [{ type: 'effect', effects: [{ kind: 'note', text: 'Rootgnawers return.' }] }],
+        },
+        checkScopedFlagResults: [{ set: true }],
+      });
+      assert.equal(result.calls.refundAbility.length, 1, `${scope}: the cost taken before the runner opened is returned`);
+      assert.equal(result.calls.refundAbility[0].refused, true);
+      assert.equal((result.calls.spendResource || []).length, 0, `${scope}: nothing further is spent`);
+      assert.equal((result.calls.setScopedFlag || []).length, 0);
+    } finally {
+      harness.close();
+    }
+  }
+});
+
+test('an ability that is allowed is not refunded', async () => {
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const result = await harness.runAutomation({
+      action: { id: 'taproot', name: 'Up the Taproot', cost: '3 Malice' },
+      automation: {
+        schema: 'ability-automation/v3',
+        usageLimit: { scope: 'encounter', key: 'up-the-taproot', target: 'self' },
+        cards: [{ type: 'effect', effects: [{ kind: 'note', text: 'Rootgnawers return.' }] }],
+      },
+    });
+    assert.equal((result.calls.refundAbility || []).length, 0);
+    assert.equal(result.calls.setScopedFlag.length, 1);
+  } finally {
+    harness.close();
+  }
+});

@@ -182,3 +182,22 @@ test('a monster is winded at half its Stamina or less, read from its token on th
   await runtime.window.MonsterAbilityRunner.start(ghoul, bite, 'action', { id: 'k', hp: { current: '120', max: '120' } });
   assert.equal(runtime.openCalls.at(-1).isWinded(), true);
 });
+
+test('a refused Malice ability returns its Malice once and says so', async () => {
+  const runtime = createRuntime();
+  runtime.window.AbilityAutomationRunner.open = async (context) => {
+    // The runner refuses (already used this encounter) and refunds; a second refund must not double it.
+    await context.refundAbility({ refused: true });
+    await context.refundAbility({ refused: true });
+    return { aborted: true };
+  };
+  await runtime.window.MonsterAbilityRunner.start(
+    { name: 'Kragen Thornwhisper', attributes: {} },
+    { name: 'Up the Taproot', resource_cost: '3 Malice', automation: { schema: 'ability-automation/v3', cards: [{ type: 'effect', effects: [] }] } },
+    'malice', { id: 'kragen' },
+  );
+  assert.deepEqual(runtime.spends, [3]);
+  assert.deepEqual(runtime.refunds, [3]);
+  assert.equal(runtime.getMalice(), 10);
+  assert.ok(runtime.chat.some((line) => line === 'Up the Taproot was not used: 3 malice returned.'));
+});
