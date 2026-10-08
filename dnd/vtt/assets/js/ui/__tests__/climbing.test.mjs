@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CLIMB_MIN_HEIGHT, climbSurcharge, stepCost, routeSteps } from '../terrain-math.mjs';
+import { CLIMB_MIN_HEIGHT, climbSurcharge, stepCost, routeSteps, stepRise } from '../terrain-math.mjs';
 import { terrainContact } from '../terrain-contact.js';
 import { buildZoneIndex, normalizeZones, zonesForFootprint, summarizeRoute, movementText, hasMovementType, standsOnPlate, movementWaiver, zoneCostFor, isLiquidTag, LIQUID_TAGS } from '../terrain-zones.mjs';
 import { climbPromptText, askClimb } from '../climb-prompt.js';
@@ -230,3 +230,39 @@ test('a swimmer is still in the zone: only the movement cost is waived', () => {
   assert.equal(Math.max(1, ...found.map((z) => zoneCostFor(z, movementWaiver(drowner)))), 1);
   assert.equal(Math.max(1, ...found.map((z) => zoneCostFor(z, movementWaiver({ name: 'Cal' })))), 2);
 });
+
+// ---- in-between heights ----------------------------------------------------
+// Rock steps on a real map are not whole squares high. One rule decides: the real change in
+// height, to the nearest whole square. Under one and a half squares is a step; from there up it
+// is a two-square face. A fall counts the same way (fall-nearest-square.test.php).
+test('a step is measured by its real height, to the nearest whole square', () => {
+  for (const [from, to, rise] of [[0, 1.1, 1], [0.45, 1.8, 1], [0.1, 1.59, 1], [0.6, 2.2, 2], [0.2, 1.91, 2], [0.05, 1.95, 2], [0.1, 3.85, 4], [0, 3.5, 4], [0, 0.4, 0]]) {
+    assert.equal(stepRise(from, to), rise, `up from ${from} to ${to}`);
+    assert.equal(stepRise(to, from), -rise || 0, `down from ${to} to ${from}`);
+  }
+  assert.equal(stepRise(undefined, undefined), 0);
+});
+
+test('rock steps of 1.3 to 1.7 squares: under one and a half is a step, from there up is a climb', () => {
+  const face = () => true; // every one of these is a steep face
+  const walk = (low, high) => routeSteps({ column: 0, row: 0 }, { column: 1, row: 0 }, (column) => (column === 1 ? high : low), null, face);
+  // 1.35 high. The two ends used to round to 0 and 2, which made it a two-square climb costing 4.
+  assert.deepEqual(pick(walk(0.45, 1.8)), { cost: 1, climbExtra: 0, rise: 1 }, 'a 1.35-high step is a one-square step: no pop-up, costs 1');
+  assert.deepEqual(pick(walk(0, 1.1)), { cost: 1, climbExtra: 0, rise: 1 }, 'a 1.1-high ledge is unchanged');
+  assert.deepEqual(pick(walk(0.1, 1.55)), { cost: 1, climbExtra: 0, rise: 1 }, '1.45 is still a step');
+  // 1.6 high. The two ends used to round to 1 and 2, which made it no climb at all.
+  assert.deepEqual(pick(walk(0.6, 2.2)), { cost: 4, climbExtra: 2, rise: 2 }, 'a 1.6-high face is a two-square climb');
+  assert.deepEqual(pick(walk(0.2, 1.91)), { cost: 4, climbExtra: 2, rise: 2 }, 'a 1.71-high face is a two-square climb');
+  assert.deepEqual(pick(walk(0.05, 1.95)), { cost: 4, climbExtra: 2, rise: 2 }, 'a 1.9-high face is unchanged');
+  assert.deepEqual(pick(walk(0.1, 3.85)), { cost: 8, climbExtra: 4, rise: 4 }, 'a 3.75-high face is four squares up, as it is four squares down');
+});
+
+test('a gentle hill is not charged for height it gains a little at a time', () => {
+  // Ten steps of 0.4 each: four squares up in all, but no single step is steep.
+  const hill = routeSteps({ column: 0, row: 0 }, { column: 10, row: 0 }, (column) => column * 0.4, null, () => true);
+  assert.deepEqual([hill.cost, hill.climbExtra], [10, 0]);
+});
+
+function pick(walked) {
+  return { cost: walked.cost, climbExtra: walked.climbExtra, rise: walked.points[1].rise };
+}

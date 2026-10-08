@@ -39,6 +39,13 @@ export const relativeScale=(ground,viewer)=>clamp(1+(heightBand(ground)-heightBa
 // Climbing, as the rulebook has it: each square climbed costs 2 squares of movement.
 // THE ONE SETTING: a face lower than this is not a climb. A one-square vertical is just a step.
 export const CLIMB_MIN_HEIGHT=2;
+/** How many squares one step rises (positive) or drops: the real change in height, to the nearest
+ * whole square. So a rock step under one and a half squares is a one-square step and is never a
+ * climb, and one of a square and a half or more is a two-square face. Rounding the two ends
+ * separately, as before, made the same 1.4-high step a climb or not by where its ends happened to
+ * round. A fall counts its squares the same way (FallOutcome.php), so a face is the same height
+ * going up and coming down. */
+export const stepRise=(fromHeight,toHeight)=>{const change=(Number(toHeight)||0)-(Number(fromHeight)||0);return Math.sign(change)*Math.floor(Math.abs(change)+.5)||0;};
 /** Extra movement for climbing (up or down) a face this many squares high: its full height again. 0 means it is not a climb. */
 export function climbSurcharge(squares){const height=Math.max(0,Math.round(Math.abs(Number(squares)||0)));return height>=CLIMB_MIN_HEIGHT?height:0;}
 /** Movement cost of one step: the larger of the squares moved and the height change, plus
@@ -59,7 +66,7 @@ export function routeSteps(start,end,height,squareCost=null,isFace=null){
  let cost=0,extra=0,climbExtra=0,cliff=false;
  for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i],horizontal=Math.max(Math.abs(a.column-b.column),Math.abs(a.row-b.row));
    const raw=horizontal>0&&squareCost?Number(squareCost(b.column,b.row,b.rawHeight)):1,multiplier=Number.isFinite(raw)&&raw>1?Math.floor(raw):1;
-   const rise=b.height-a.height,climb=!!isFace&&rise>0&&climbSurcharge(rise)>0&&!!isFace(a,b);
+   const rise=stepRise(a.rawHeight,b.rawHeight),climb=!!isFace&&rise>0&&climbSurcharge(rise)>0&&!!isFace(a,b);
    b.multiplier=multiplier;b.climb=climb?climbSurcharge(rise):0;b.rise=rise;cost+=stepCost({horizontal,rise,multiplier,climb});extra+=multiplier-1+b.climb;climbExtra+=b.climb;if(horizontal>0&&Math.abs(b.rawHeight-a.rawHeight)/horizontal>=3-1e-6)cliff=true;}
  return {points,cost,cliff,extra,climbExtra};
 }

@@ -1,7 +1,7 @@
 // Draws tagged terrain zones on the board and answers "which zones is this
 // token in". Reads the canonical scene environment; display choice is local.
 import {sceneZones, buildZoneIndex, zonesForFootprint, zoneTags, squareCostMultiplier, zoneGeometry, zoneColor, zoneSurface, summarizeRoute, zonesHiddenFromPlayers, BASE_LEVEL_ID, placeCornerControl, hasMovementType, standsOnPlate, movementWaiver, zoneCostFor, movementText} from './terrain-zones.mjs';
-import {routeSteps, groundSquare, stepCost, climbSurcharge} from './terrain-math.mjs';
+import {routeSteps, groundSquare, stepCost, climbSurcharge, stepRise} from './terrain-math.mjs';
 import {saveShared} from './environment-sync.mjs';
 import {floorElevations} from '../state/normalize/floor-elevation.js';
 
@@ -108,7 +108,7 @@ function cellInfoFor(target) {
     key: [state.key, active?.revision ?? 0, active?.key ?? '', actor?.levelId || '', actor?.width || 1, airborne ? actor.flightHeight ?? 'air' : 'ground', paysForClimb(actor) ? 'climbs' : 'climber', movementText(actor)].join('|'),
     at(column, row) {
       const raw = active ? active.route({column, row}, {column, row}, {ignoreZones: true}).points[0].rawHeight : undefined;
-      return {column, row, height: active ? groundSquare(raw) : 0, multiplier: stepMultiplier(actor, column, row, raw)};
+      return {column, row, height: active ? groundSquare(raw) : 0, rawHeight: active ? raw : 0, multiplier: stepMultiplier(actor, column, row, raw)};
     },
     // Near a deck or bridge the outline walks square by square as the move will, so a square
     // reached along a bridge and the same square waded under it are told apart (`state`).
@@ -119,16 +119,17 @@ function cellInfoFor(target) {
       const multiplierAt = (column, row, raw) => { const key = `${column},${row},${Math.round(raw * 100)}`; let m = costs.get(key); if (m === undefined) { m = stepMultiplier(actor, column, row, raw); costs.set(key, m); } return m; };
       return (from, column, row) => {
         if (walker === undefined) walker = active.walkerNear(actor, column, row);
-        if (!walker) { plain ||= new Map(); const key = `${column},${row}`; let cell = plain.get(key); if (!cell) { const raw = active.route({column, row}, {column, row}, {ignoreZones: true, actor}).points[0].rawHeight; cell = {height: groundSquare(raw), multiplier: stepMultiplier(actor, column, row, raw)}; plain.set(key, cell); } return cell; }
+        if (!walker) { plain ||= new Map(); const key = `${column},${row}`; let cell = plain.get(key); if (!cell) { const raw = active.route({column, row}, {column, row}, {ignoreZones: true, actor}).points[0].rawHeight; cell = {height: groundSquare(raw), rawHeight: raw, multiplier: stepMultiplier(actor, column, row, raw)}; plain.set(key, cell); } return cell; }
         let ghost, raw;
         if (!from?.ghost) { ghost = {...actor, column, row}; raw = walker.plainHeight(column, row, actor); }
         else ({ghost, height: raw} = walker.step(from.ghost, column, row));
-        return {height: groundSquare(raw), multiplier: multiplierAt(column, row, raw), state: ghost._supportSurfaceId || '', ghost};
+        return {height: groundSquare(raw), rawHeight: raw, multiplier: multiplierAt(column, row, raw), state: ghost._supportSurfaceId || '', ghost};
       };
     })() : null,
     // The reach outline charges each step exactly as the ruler does, climbs included.
     stepCost: (from, to) => {
-      const rise = to.height - from.height;
+      // The same measure of a step's height as the ruler: the real change, to the nearest square.
+      const rise = Number.isFinite(from.rawHeight) && Number.isFinite(to.rawHeight) ? stepRise(from.rawHeight, to.rawHeight) : to.height - from.height;
       const climb = !!active && rise > 0 && climbSurcharge(rise) > 0 && paysForClimb(actor) && active.climbFace(actor, from, to);
       return stepCost({horizontal: 1, rise, multiplier: to.multiplier, climb});
     },

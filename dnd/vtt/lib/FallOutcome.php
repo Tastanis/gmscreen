@@ -19,7 +19,9 @@ final class FallOutcome {
    }
   }
   if($top===null||$top-$landing<.999999)return null;
-  return ['squares'=>max(0,(int)floor($top-$landing+1e-6)),'fromHeight'=>$top,'landingHeight'=>$landing,'forcedDown'=>false];
+  // The nearest whole square, as a climb up the same face is counted (stepRise in terrain-math.mjs):
+  // a 3.75-high face is 4 squares both ways. A drop of less than one square is still no fall.
+  return ['squares'=>max(1,(int)floor($top-$landing+.5+1e-6)),'fromHeight'=>$top,'landingHeight'=>$landing,'forcedDown'=>false];
  }
  private static function overlaps(array $a,array $b):bool {
   return ($a['levelId']??'level-0')===($b['levelId']??'level-0')&&$a['column']<$b['column']+($b['width']??1)-1e-7&&$a['column']+($a['width']??1)>$b['column']+1e-7&&$a['row']<$b['row']+($b['height']??1)-1e-7&&$a['row']+($a['height']??1)>$b['row']+1e-7;
