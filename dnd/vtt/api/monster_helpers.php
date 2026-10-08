@@ -417,6 +417,21 @@ function buildMonsterDefenses(array $monster): array
 {
     $defenses = [];
 
+    // A record that has been through here once keeps these under `defenses`. A token's monster
+    // arrives in that form when it is saved, so read them from there too: otherwise the second
+    // pass finds nothing at the top level and the token loses its immunities and weaknesses.
+    $nested = isset($monster['defenses']) && is_array($monster['defenses']) ? $monster['defenses'] : [];
+    foreach (['immunities', 'immunity', 'weaknesses', 'weakness'] as $key) {
+        if (empty($monster[$key]) && !empty($nested[$key])) {
+            $monster[$key] = $nested[$key];
+        }
+    }
+    foreach (['stability', 'free_strike'] as $key) {
+        if (!isset($monster[$key]) && isset($nested[$key])) {
+            $monster[$key] = $nested[$key];
+        }
+    }
+
     $immunityList = collectMonsterDefenseList(
         $monster['immunities'] ?? null,
         $monster['immunity'] ?? null,

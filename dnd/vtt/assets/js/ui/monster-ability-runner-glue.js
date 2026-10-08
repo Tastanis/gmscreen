@@ -63,11 +63,28 @@
         return window.VTTBoardCallbacks || {};
     }
 
+    // A token keeps its Stamina as hp: { current, max } (text). An unset value is not zero.
+    function readStamina(value) {
+        if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+        if (typeof value !== 'string' || value.trim() === '') return null;
+        var n = Number(value);
+        return Number.isFinite(n) ? n : null;
+    }
+
+    // Winded: at or below half of maximum Stamina, rounded down. Read from the token as it is on
+    // the board right now, not from the copy the tray was opened with.
     function isWindedFromPlacement(placement) {
         if (!placement) return false;
-        var cur = Number(placement.hp);
-        var max = Number(placement.maxHp);
-        if (!Number.isFinite(cur) || !Number.isFinite(max) || max <= 0) return false;
+        var board = getBoardCallbacks();
+        var live = null;
+        if (placement.id && typeof board.getPlacementById === 'function') {
+            try { live = board.getPlacementById(placement.id); } catch (e) { live = null; }
+        }
+        var source = live || placement;
+        var hp = source.hp;
+        var cur = hp && typeof hp === 'object' ? readStamina(hp.current) : readStamina(hp);
+        var max = hp && typeof hp === 'object' ? readStamina(hp.max) : readStamina(source.maxHp);
+        if (cur === null || max === null || max <= 0) return false;
         return cur <= Math.floor(max / 2);
     }
 
@@ -393,6 +410,7 @@
         start: start,
         // Test surface — handy from the console.
         _parseMaliceCost: parseMaliceCost,
-        _buildContext: buildMonsterContext
+        _buildContext: buildMonsterContext,
+        _isWinded: isWindedFromPlacement
     };
 })();

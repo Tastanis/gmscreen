@@ -149,3 +149,32 @@ test('no captain, a board without squads, or a board that throws: the ability ru
     assert.deepEqual(runtime.chat, []);
   }
 });
+
+test('a monster is winded at half its Stamina or less, read from its token on the board', async () => {
+  const runtime = createRuntime();
+  const winded = runtime.window.MonsterAbilityRunner._isWinded;
+  // Tokens keep Stamina as text in hp: { current, max }.
+  assert.equal(winded({ id: 'k', hp: { current: '60', max: '120' } }), true, 'exactly half');
+  assert.equal(winded({ id: 'k', hp: { current: '61', max: '120' } }), false);
+  assert.equal(winded({ id: 'k', hp: { current: '7', max: '15' } }), true, 'half of 15 rounds down to 7');
+  assert.equal(winded({ id: 'k', hp: { current: '8', max: '15' } }), false);
+  assert.equal(winded({ id: 'k', hp: { current: '0', max: '40' } }), true);
+  assert.equal(winded({ id: 'k', hp: { current: '-3', max: '40' } }), true);
+  // Stamina that was never set is not zero, so not winded.
+  assert.equal(winded({ id: 'k', hp: { current: '', max: '40' } }), false);
+  assert.equal(winded({ id: 'k', hp: { current: '10', max: '' } }), false);
+  assert.equal(winded({ id: 'k' }), false);
+  assert.equal(winded(null), false);
+  // The older number form still works.
+  assert.equal(winded({ id: 'k', hp: 20, maxHp: 40 }), true);
+  assert.equal(winded({ id: 'k', hp: 21, maxHp: 40 }), false);
+  // The token as it is now wins over the copy the tray was opened with.
+  runtime.window.VTTBoardCallbacks.getPlacementById = (id) => ({ id, hp: { current: '12', max: '120' } });
+  assert.equal(winded({ id: 'k', hp: { current: '120', max: '120' } }), true);
+  runtime.window.VTTBoardCallbacks.getPlacementById = () => { throw new Error('board'); };
+  assert.equal(winded({ id: 'k', hp: { current: '120', max: '120' } }), false, 'a board that throws falls back to the copy');
+  // The runner is given the same answer.
+  runtime.window.VTTBoardCallbacks.getPlacementById = (id) => ({ id, hp: { current: '30', max: '120' } });
+  await runtime.window.MonsterAbilityRunner.start(ghoul, bite, 'action', { id: 'k', hp: { current: '120', max: '120' } });
+  assert.equal(runtime.openCalls.at(-1).isWinded(), true);
+});

@@ -236,6 +236,7 @@ import {
   renderCombatTracker,
 } from '../combat/combat-renderer.js';
 import { squadForPlacement, squadPool, damageSquad, pickCaptain, livingCaptain, captainBonusFor, captainFeature } from './minion-squads.mjs';
+import { lacksDefenses, monsterIdOf, restoredDefenses } from './monster-defense-repair.mjs';
 
 let trackerOverflowResizeListenerAttached = false;
 
@@ -786,6 +787,8 @@ export function mountBoardInteractions(store, routes = {}) {
   // A squad lives on its member tokens (the `squad` marker and the shared Stamina each carries),
   // so every browser works it out from the tokens it has. See minion-squads.mjs.
   const withCaptainTextByMonster = new Map(); // monsterId -> Promise<string>
+  const monsterRecordLookups = new Map(); // monsterId -> Promise<monster record | null>
+  let monsterDefenseRepairTimer = null;
   let minionKillPopup = null;
   let lastCombatTrackerEntries = [];
   let lastCombatTrackerActiveIds = new Set();
@@ -7197,6 +7200,7 @@ export function mountBoardInteractions(store, routes = {}) {
       syncMapLevelsForState(state, activeSceneId);
       renderTokens(state, tokenLayer, viewState);
       scheduleActiveSceneTriggerRegistration();
+      scheduleMonsterDefenseRepair();
       renderFog(state);
       renderFogSelection();
       renderStairs(state);
@@ -7407,6 +7411,7 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    scheduleMonsterDefenseRepair(200);
     const monster = firstPlacement.monster;
     if (window.MonsterAbilityTray?.openFor) {
       window.MonsterAbilityTray.openFor(firstPlacement, monster);
@@ -14209,6 +14214,48 @@ export function mountBoardInteractions(store, routes = {}) {
     });
 
     return createdSquads;
+  }
+
+  // ---------- Immunities and weaknesses lost by older tokens ----------
+  // Saving a token used to drop its monster's immunities and weaknesses. The GM's browser gives
+  // them back from the monster's own record, once, to the tokens on the scene that have none.
+  // A token that has any is never touched, and a monster with none causes no change.
+  function lookUpMonsterRecord(monsterId) {
+    const endpoint = typeof routes?.monsters === 'string' ? routes.monsters : '';
+    if (!endpoint || !monsterId || typeof fetch !== 'function') return Promise.resolve(null);
+    if (!monsterRecordLookups.has(monsterId)) {
+      const url = new URL(endpoint, window.location.origin);
+      url.searchParams.set('id', monsterId);
+      monsterRecordLookups.set(monsterId, fetch(url.toString(), { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((payload) => (payload?.data && typeof payload.data === 'object' ? payload.data : null))
+        .catch(() => null));
+    }
+    return monsterRecordLookups.get(monsterId);
+  }
+
+  function scheduleMonsterDefenseRepair(delay = 2500) {
+    if (!isGmUser() || monsterDefenseRepairTimer !== null) return;
+    monsterDefenseRepairTimer = window.setTimeout(() => {
+      monsterDefenseRepairTimer = null;
+      repairMonsterDefensesOnScene();
+    }, delay);
+  }
+
+  function repairMonsterDefensesOnScene() {
+    if (!isGmUser()) return;
+    const sceneId = getActiveSceneId();
+    getPlacementsForActiveScene().filter(lacksDefenses).forEach((placement) => {
+      lookUpMonsterRecord(monsterIdOf(placement)).then((record) => {
+        if (!record || getActiveSceneId() !== sceneId) return;
+        const current = getPlacementFromStore(placement.id);
+        const defenses = restoredDefenses(current, record);
+        if (!defenses) return;
+        updatePlacementById(placement.id, (target) => {
+          if (target.monster && typeof target.monster === 'object') target.monster = { ...target.monster, defenses };
+        });
+      });
+    });
   }
 
   // Tokens placed before the "With Captain" line travelled with them do not carry it. The GM's

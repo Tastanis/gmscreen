@@ -104,3 +104,28 @@ test('the organization and "With Captain" line of a minion travel with its token
   assert.equal(fromServer.with_captain, '+1 damage bonus on strikes');
   assert.equal('with_captain' in onServer({ id: 'wolf', name: 'Wolf' }), false);
 });
+
+test('a monster keeps its immunities and weaknesses however many times the server tidies its record', () => {
+  // A token's monster is tidied when the catalog is read and again when the token is saved.
+  const helper = fileURLToPath(new URL('../../../../api/monster_helpers.php', import.meta.url));
+  const raw = { id: 'drowner', name: 'Sluice Drowner', stamina: 40, stability: 1, free_strike: 3,
+    immunities: [{ type: 'corruption', value: '4' }, { type: 'poison', value: '4' }], weaknesses: [{ type: 'fire', value: '3' }],
+    immunity_type: 'corruption', immunity_value: '4', weakness_type: '', weakness_value: '' };
+  const passes = JSON.parse(execFileSync(process.env.PHP_BINARY || 'php', ['-r',
+    'require $argv[1]; $a = normalizeMonsterSnapshot(json_decode($argv[2], true)); $b = sanitizeMonsterSnapshot($a); $c = sanitizeMonsterSnapshot($b); echo json_encode([$a, $b, $c]);',
+    helper, JSON.stringify(raw)], { encoding: 'utf8' }));
+  const expected = { immunities: [{ type: 'corruption', value: '4' }, { type: 'poison', value: '4' }], immunity: { type: 'corruption', value: '4' },
+    weaknesses: [{ type: 'fire', value: '3' }], weakness: { type: 'fire', value: '3' }, stability: 1, free_strike: 3 };
+  assert.deepEqual(passes[0].defenses, expected);
+  assert.deepEqual(passes[1].defenses, expected, 'the second pass (saving the token) used to drop them');
+  assert.deepEqual(passes[2], passes[1], 'and it is stable from then on');
+  // The browser reads the same record the same way, before and after.
+  assert.deepEqual(normalizeMonsterSnapshot(passes[1]).defenses, expected);
+  assert.deepEqual(normalizeMonsterSnapshot(normalizeMonsterSnapshot(raw)).defenses, expected);
+  // A creature with none still has none; an old single-field record still counts.
+  const plain = JSON.parse(execFileSync(process.env.PHP_BINARY || 'php', ['-r',
+    'require $argv[1]; echo json_encode(sanitizeMonsterSnapshot(normalizeMonsterSnapshot(json_decode($argv[2], true))));',
+    helper, JSON.stringify({ id: 'wolf', name: 'Wolf', immunities: [], weaknesses: [], immunity_type: '', weakness_type: 'fire', weakness_value: '2' })], { encoding: 'utf8' }));
+  assert.equal('immunities' in (plain.defenses || {}), false);
+  assert.deepEqual(plain.defenses.weaknesses, [{ type: 'fire', value: '2' }]);
+});
