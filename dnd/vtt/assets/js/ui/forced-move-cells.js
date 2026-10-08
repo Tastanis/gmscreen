@@ -32,12 +32,15 @@ export function isForcedMovePathLegal(source, target, destination, baseVerb) {
     remainingDy -= stepY;
     const cell = { column, row, width: start.width, height: start.height };
     const nextDistance = chebyshev(sourceCenter, center(cell));
-    // Push: each step must be non-decreasing distance from source.
-    // Pull: each step must be non-increasing distance from source.
-    // Plateaus are allowed (diagonal moves that traverse parallel to source).
+    // Push: each step must be non-decreasing distance from source. Plateaus are allowed
+    // (diagonal moves that traverse parallel to source).
+    // Pull: each step must bring the target closer, as the book says ("must bring the target
+    // closer to them"). A step that only runs along the puller's side is not closer, so the
+    // squares beside the puller that are reached at a slant are not offered. The straight line
+    // to one of those clips the puller's own square, which used to be scored as a collision.
     // Slide: any walk is fine.
     if (baseVerb === 'push' && nextDistance < previousDistance) return false;
-    if (baseVerb === 'pull' && nextDistance > previousDistance) return false;
+    if (baseVerb === 'pull' && nextDistance >= previousDistance) return false;
     previousDistance = nextDistance;
   }
   return true;
@@ -92,4 +95,14 @@ export function cellsOnMap(cells, clamp, target) {
     const kept = clamp(cell.column, cell.row, target?.width || 1, target?.height || 1);
     return !!kept && kept.column === cell.column && kept.row === cell.row;
   });
+}
+
+/** The offered square nearest to the one that was picked (ties go to the first offered); null when none is offered. */
+export function closestCell(cells, wanted) {
+  let best = null, bestDistance = Infinity;
+  for (const cell of cells || []) {
+    const distance = Math.hypot(cell.column - wanted.column, cell.row - wanted.row);
+    if (distance < bestDistance - 1e-9) { best = cell; bestDistance = distance; }
+  }
+  return best;
 }

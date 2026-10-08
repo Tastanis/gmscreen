@@ -31,3 +31,18 @@ wholeSquare($refused, 'A stop between squares is refused');
 $clear = ForcedMovement::resolve($cal, ['column'=>25, 'row'=>20], [$cal], []);
 wholeSquare(abs($clear['column'] - 25) < 1e-9 && abs($clear['row'] - 20) < 1e-9 && $clear['damage'] === 0, 'A clear forced move ends where it was aimed');
 echo "PASS creature collisions stop on whole squares\n";
+
+// The tester's re-check, R-1. A pull's offered squares (forced-move-cells.test.mjs) reach the
+// square beside the puller with no collision; the server agrees with the browser on each.
+$drowner = ['id'=>'drowner', 'column'=>24, 'row'=>22, 'width'=>1, 'height'=>1];
+$pulled = ['id'=>'cal', 'column'=>22, 'row'=>22, 'width'=>1, 'height'=>1];
+foreach ([[23, 21], [23, 22], [23, 23]] as [$column, $row]) {
+    $result = ForcedMovement::resolve($pulled, ['column'=>$column, 'row'=>$row], [$pulled, $drowner], []);
+    wholeSquare(abs($result['column'] - $column) < 1e-9 && abs($result['row'] - $row) < 1e-9 && $result['damage'] === 0 && $result['collidedIds'] === [], "A pull to $column,$row arrives beside the puller with no collision");
+    ForcedMovement::plan($pulled, [...$pulled, 'column'=>$column, 'row'=>$row], ['column'=>$column, 'row'=>$row], 'forced', [$pulled, $drowner], []);
+}
+// Why the squares north and south of the puller are not offered: the straight line there runs into the puller.
+foreach ([[24, 21], [24, 23]] as [$column, $row]) {
+    wholeSquare(ForcedMovement::resolve($pulled, ['column'=>$column, 'row'=>$row], [$pulled, $drowner], [])['collidedIds'] === ['drowner'], "The line to $column,$row clips the puller, so the picker does not offer it");
+}
+echo "PASS a pull's offered squares never collide with the puller\n";

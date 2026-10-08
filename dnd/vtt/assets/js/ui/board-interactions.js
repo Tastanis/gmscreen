@@ -12,7 +12,7 @@ import {climbSurcharge} from './terrain-math.mjs';
 import {settleCollisionEffects} from '../services/collision-effects.js';
 import {PLAYER_CHARACTER_USER_IDS as visionOwnerProfiles} from '../state/normalize/map-levels.js';
 import {resolveForcedDrag} from './forced-drag.js';
-import {forcedMoveLegalCells, isForcedMovePathLegal, footprintsOverlap, nearestPullCell, cellsOnMap} from './forced-move-cells.js';
+import {forcedMoveLegalCells, isForcedMovePathLegal, footprintsOverlap, nearestPullCell, cellsOnMap, closestCell} from './forced-move-cells.js';
 import {configureCharacterOperationJournal} from '../services/character-operation-journal.js';
 import {confirmCharacterWrite} from '../services/character-write.js';
 import {spendCharacterRecoveries} from '../services/recovery-spend.js';
@@ -18120,10 +18120,19 @@ export function mountBoardInteractions(store, routes = {}) {
         if(d)forcedIntent={column:Math.round(origin.column+dx/d*request.effectiveDistance),row:Math.round(origin.row+dy/d*request.effectiveDistance)};
         forcedIntent=clampPlacementToBounds(forcedIntent.column,forcedIntent.row,origin.width||1,origin.height||1);
       }
-      forcedCollision=resolveForcedDrag(origin,forcedIntent,Object.values(canonical),{
+      const dragOptions={
         wallBlocked:(from,to)=>window.wallPrototype?.forcedBlockedMove?.(from,to)||false,
         height:token=>window.terrainPrototype?.groundFor(token)??0,
-      });
+      };
+      forcedCollision=resolveForcedDrag(origin,forcedIntent,Object.values(canonical),dragOptions);
+      // A pull never collides with the puller. A square picked by hand that would drag the target
+      // across the puller becomes the nearest square the pull does offer, or no move at all.
+      if(request.baseVerb==='pull'&&forcedCollision.collidedIds.includes(request.sourceSnapshot.id)){
+        const offered=closestCell(request.legalCells,forcedIntent)||{column:origin.column,row:origin.row};
+        forcedIntent={column:offered.column,row:offered.row};
+        forcedCollision=resolveForcedDrag(origin,forcedIntent,Object.values(canonical),dragOptions);
+        if(forcedCollision.collidedIds.includes(request.sourceSnapshot.id)){forcedIntent={column:origin.column,row:origin.row};forcedCollision=resolveForcedDrag(origin,forcedIntent,Object.values(canonical),dragOptions);}
+      }
       clamped=forcedCollision.destination;
     }
     const movedDistance = automationChebyshevDistance(request.targetSnapshot, clamped);

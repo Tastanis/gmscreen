@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { forcedMoveLegalCells, nearestPullCell, footprintsOverlap, cellsOnMap } from '../forced-move-cells.js';
+import { forcedMoveLegalCells, nearestPullCell, footprintsOverlap, cellsOnMap, closestCell } from '../forced-move-cells.js';
 import { resolveForcedDrag } from '../forced-drag.js';
 
 const token = (id, column, row, size = 1) => ({ id, column, row, width: size, height: size });
@@ -72,4 +72,47 @@ test('a long teleport offers only squares that are on the map', () => {
   const near = forcedMoveLegalCells(elowin, elowin, 2, 'slide');
   assert.equal(cellsOnMap(near, clamp, elowin).length, near.length);
   assert.equal(cellsOnMap(all, null, elowin).length, all.length);
+});
+
+// ---- The tester's re-check, R-1 ---------------------------------------------
+// Sluice Drowner at (24,22), Cal two squares west at (22,22), pull 3. The squares directly
+// north and south of the puller used to be offered; the straight line to either clips the
+// puller's own square, and the leftover movement was scored as a collision with the puller.
+test('a pull offers only squares that bring the target closer, so none clips the puller', () => {
+  for (const [puller, target, pulls] of [[token('drowner', 24, 22), token('cal', 22, 22), [3]], [token('elowin', 24, 18), token('cal', 22, 18), [2, 3, 4]]]) {
+    for (const pull of pulls) {
+      const cells = forcedMoveLegalCells(puller, target, pull, 'pull');
+      const row = target.row;
+      assert.deepEqual(keys(cells), [`23,${row - 1}`, `23,${row}`, `23,${row + 1}`].sort(), `pull ${pull}: the three squares beside the puller on the target's side`);
+      for (const cell of cells) {
+        const result = resolveForcedDrag(target, cell, [puller, target]);
+        assert.deepEqual([result.destination.column, result.destination.row, result.damage, result.collidedIds], [cell.column, cell.row, 0, []], `pull ${pull} to ${cell.column},${cell.row}: arrives, no collision`);
+      }
+    }
+  }
+});
+
+test('the two squares that used to slam the target into the puller, picked by hand, end beside the puller', () => {
+  const drowner = token('drowner', 24, 22), cal = token('cal', 22, 22);
+  const cells = forcedMoveLegalCells(drowner, cal, 3, 'pull');
+  for (const [picked, lands] of [[{ column: 24, row: 21 }, { column: 23, row: 21 }], [{ column: 24, row: 23 }, { column: 23, row: 23 }]]) {
+    // Why they are no longer offered: the straight line there runs into the puller.
+    assert.deepEqual(resolveForcedDrag(cal, picked, [drowner, cal]).collidedIds, ['drowner']);
+    // What the picker does instead: the nearest offered square, which has no collision.
+    const offered = closestCell(cells, picked);
+    assert.deepEqual(offered, lands);
+    assert.equal(resolveForcedDrag(cal, offered, [drowner, cal]).damage, 0);
+  }
+  assert.equal(closestCell([], { column: 1, row: 1 }), null);
+});
+
+test('a pull along a straight line still reaches the square beside the puller from any side', () => {
+  const puller = token('puller', 10, 10);
+  for (const [from, beside] of [[[10, 6], '10,9'], [[14, 10], '11,10'], [[10, 14], '10,11'], [[6, 10], '9,10'], [[6, 6], '9,9'], [[14, 14], '11,11']]) {
+    const cells = keys(forcedMoveLegalCells(puller, token('target', ...from), 5, 'pull'));
+    assert.ok(cells.includes(beside), `from ${from}: ${beside} is offered`);
+    assert.ok(!cells.includes('10,10'), 'never the puller\'s own square');
+  }
+  // A push is unchanged: it may still run level with the pusher for a step.
+  assert.ok(keys(forcedMoveLegalCells(puller, token('target', 11, 10), 3, 'push')).includes('14,10'));
 });
