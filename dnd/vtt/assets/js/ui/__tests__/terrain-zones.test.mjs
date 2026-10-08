@@ -175,3 +175,29 @@ test('one step is priced in one place: distance or height, whichever is larger, 
   const route = routeSteps({ column: 0, row: 0 }, { column: 3, row: 0 }, (x) => (x >= 1 ? 3 : 0), (x) => (x >= 2 ? 2 : 1));
   assert.equal(route.cost, 3 + 2 + 2);
 });
+
+test('"in or next to" a zone: within one square of the token, sideways or above the surface', () => {
+  // A pool of blood two squares wide at columns 5-6, rows 5-6, its surface at height 0.
+  const index = buildZoneIndex(normalizeZones({ version: 1, zones: [{ id: 'pool', tag: 'blood', surfaceHeight: 0, squares: [[5, 5], [6, 5], [5, 6], [6, 6]] }] }));
+  const at = (column, row, extra = {}) => ({ column, row, width: 1, height: 1, levelId: 'level-0', ...extra });
+  const tags = (placement, height, options) => zoneTags(zonesForFootprint(index, placement, height, () => 0, options));
+  const near = { reach: 1 };
+  assert.deepEqual(tags(at(4, 5), 0), [], 'beside the pool is not in it');
+  assert.deepEqual(tags(at(4, 5), 0, near), ['blood'], 'but it is next to it');
+  assert.deepEqual(tags(at(4, 4), 0, near), ['blood'], 'a corner touch counts');
+  assert.deepEqual(tags(at(7, 7), 0, near), ['blood']);
+  assert.deepEqual(tags(at(3, 5), 0, near), [], 'two squares away is not adjacent');
+  assert.deepEqual(tags(at(8, 6), 0, near), []);
+  assert.deepEqual(tags(at(5, 5), 0, near), ['blood'], 'a token in the zone is also "in or next to" it');
+  // Height: the bank one square above the surface is adjacent, two above is not.
+  assert.deepEqual(tags(at(4, 5), 1, near), ['blood'], 'on a bank one square up');
+  assert.deepEqual(tags(at(4, 5), 2, near), [], 'a ledge two squares up');
+  assert.deepEqual(tags(at(5, 5), 1, { ...near, onPlate: true }), ['blood'], 'on a deck one square above the blood: not in it, but next to it');
+  assert.deepEqual(tags(at(5, 5), 1, { onPlate: true }), []);
+  // A large token reaches from each of its squares.
+  assert.deepEqual(tags(at(3, 5, { width: 2, height: 2 }), 0, near), ['blood'], 'a 2x2 token whose edge touches the pool');
+  assert.deepEqual(tags(at(2, 5, { width: 2, height: 2 }), 0, near), [], 'one empty square between it and the pool');
+  // Another floor's zones stay out of it.
+  assert.deepEqual(tags(at(4, 5, { levelId: 'bridge-deck' }), 0, near), []);
+  assert.deepEqual(tags(at(4, 5), 0, { reach: 0 }), [], 'reach 0 is plain "in"');
+});

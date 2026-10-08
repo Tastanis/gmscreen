@@ -39,12 +39,13 @@ function placementOf(target, c = context()) {
   const list = c?.state.boardState.placements?.[c.state.boardState.activeSceneId];
   return (Array.isArray(list) ? list : Object.values(list || {})).find((p) => p?.id === target) || null;
 }
-function zonesForPlacement(target) {
+/** The zones a token is in. With {adjacent: true}: the zones it is in or next to. */
+function zonesForPlacement(target, {adjacent = false} = {}) {
   const c = context(), placement = placementOf(target, c);
   if (!placement) return [];
   const floors = elevations(c);
   const feet = standingHeight(placement, c);
-  return zonesForFootprint(current(c).index, placement, feet, (levelId) => floors.get(levelId) ?? 0, {onPlate: onPlate(placement, feet, c)});
+  return zonesForFootprint(current(c).index, placement, feet, (levelId) => floors.get(levelId) ?? 0, {onPlate: onPlate(placement, feet, c), reach: adjacent ? 1 : 0});
 }
 /** Decks, planks and other floor plates: a token standing on one is out of the liquid under it. */
 function onPlate(mover, feet, c = context()) {
@@ -273,7 +274,7 @@ function draw() {
 window.terrainZones = {
   get zones() { return current().zones; },
   zonesForPlacement,
-  tagsForPlacement: (target) => zoneTags(zonesForPlacement(target)),
+  tagsForPlacement: (target, options) => zoneTags(zonesForPlacement(target, options)),
   costAt: (column, row, levelId = BASE_LEVEL_ID) => squareCostMultiplier(current().index, column, row, levelId),
   stepMultiplier,
   routeCost,

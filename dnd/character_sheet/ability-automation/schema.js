@@ -226,6 +226,14 @@
       const rider = { id, when, target, effects };
       const label = asTrimmedString(raw.label);
       if (label) rider.label = label;
+      // Optional: the bearer must be in (or next to) a terrain zone for the rider to act. Tested
+      // each time the rider comes up, so leaving the zone stops it and returning restarts it.
+      if (raw.zone != null && raw.zone !== false) {
+        const zoneInput = typeof raw.zone === "string" ? { tag: raw.zone } : raw.zone;
+        const zoneTags = normalizeZoneTags(zoneInput);
+        if (zoneTags.length) rider.zone = zoneInput.adjacent === true ? { tags: zoneTags, adjacent: true } : { tags: zoneTags };
+        else warnings.push(`${itemPath}.zone: needs a tag, for example { "tag": "blood" }.`);
+      }
       return rider;
     }).filter(Boolean);
   }
@@ -782,11 +790,12 @@
         return effect;
       }
       case "ifZone": {
-        const known = new Set(["kind", "tag", "tags", "who", "target", "question", "then", "else"]);
+        const known = new Set(["kind", "tag", "tags", "adjacent", "who", "target", "question", "then", "else"]);
         const tags = normalizeZoneTags(input);
         const effect = {
           kind: "ifZone",
           tags,
+          ...(input.adjacent === true ? { adjacent: true } : {}),
           who: pickKnown(input.who, ["target", "self"], "target"),
           then: normalizeEffectList(input.then || [], warnings, `${path}.then`),
           else: normalizeEffectList(input.else || [], warnings, `${path}.else`),
@@ -1676,6 +1685,7 @@
     }
     if (kind === "zone") {
       const condition = { kind, tags: normalizeZoneTags(input), who: pickKnown(input.who, ["target", "self"], "target") };
+      if (input.adjacent === true) condition.adjacent = true;
       const target = asTrimmedString(input.target);
       if (target) condition.target = target;
       const question = asTrimmedString(input.question);

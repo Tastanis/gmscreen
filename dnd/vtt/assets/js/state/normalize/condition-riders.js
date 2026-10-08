@@ -34,6 +34,43 @@ function stableHash(value) {
   return (hash >>> 0).toString(36);
 }
 
+// Zone tags as the map writes them: lower case, letters, digits, "-" and "_".
+function zoneTag(value) {
+  return String(value == null ? '' : value).trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+/**
+ * A rider may name a terrain zone its bearer must be in for it to do anything:
+ * { tags: ['blood'], adjacent?: true }. Accepts { tag }, { tags } or just "blood". Null when absent.
+ */
+export function normalizeRiderZone(value) {
+  if (value == null || value === false) return null;
+  const source = typeof value === 'string' ? { tag: value } : value;
+  if (!source || typeof source !== 'object') return null;
+  const raw = Array.isArray(source.tags) ? source.tags : source.tag != null ? [source.tag] : [];
+  const tags = [...new Set(raw.map(zoneTag).filter(Boolean))];
+  if (!tags.length) return null;
+  return source.adjacent === true ? { tags, adjacent: true } : { tags };
+}
+
+/**
+ * Whether a zone-bound rider acts this turn. `tags` is what the board says the bearer stands in
+ * (or in and next to, for an adjacent rider), or null when the board cannot say.
+ *   no zone on the rider      -> acts
+ *   board cannot say          -> acts, flagged `unknown` so the table is told the condition
+ *   bearer in one of the tags -> acts
+ *   otherwise                 -> `skip`
+ * `where` reads "in blood" or "in or next to blood or water".
+ */
+export function riderZoneVerdict(rider, tags) {
+  const zone = normalizeRiderZone(rider?.zone);
+  if (!zone) return { skip: false, unknown: false, where: '' };
+  const where = `${zone.adjacent ? 'in or next to' : 'in'} ${zone.tags.join(' or ')}`;
+  if (!Array.isArray(tags)) return { skip: false, unknown: true, where };
+  const have = tags.map((tag) => String(tag).trim().toLowerCase());
+  return { skip: !zone.tags.some((tag) => have.includes(tag)), unknown: false, where };
+}
+
 export function normalizeStoredConditionRiders(value) {
   if (!Array.isArray(value)) return [];
   const seen = new Set();
@@ -59,6 +96,8 @@ export function normalizeStoredConditionRiders(value) {
     seen.add(id);
     const rider = { id, when, target, effects };
     if (typeof raw.label === 'string' && raw.label.trim()) rider.label = raw.label.trim();
+    const zone = normalizeRiderZone(raw.zone);
+    if (zone) rider.zone = zone;
     output.push(rider);
   });
   return output;
@@ -148,5 +187,7 @@ export function formatConditionRider(rider) {
     if (effect?.kind === 'surgeGain') return `${amount >= 0 ? 'gains' : 'loses'} ${Math.abs(amount)} surge${Math.abs(amount) === 1 ? '' : 's'}`;
     return String(effect?.text || '').trim();
   }).filter(Boolean);
-  return parts.length ? `${parts.join(', ')} ${timing}` : '';
+  const zone = normalizeRiderZone(rider.zone);
+  const where = zone ? ` while ${zone.adjacent ? 'in or next to' : 'in'} ${zone.tags.join(' or ')}` : '';
+  return parts.length ? `${parts.join(', ')} ${timing}${where}` : '';
 }

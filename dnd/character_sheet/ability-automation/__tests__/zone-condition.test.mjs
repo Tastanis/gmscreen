@@ -153,3 +153,66 @@ test('the worked example in AUTHORING.md runs exactly as written: extra damage o
     harness.close();
   }
 });
+
+test('ifZone with adjacent: true asks the board for "in or next to", and says so', async () => {
+  const automation = dragInBlood({ adjacent: true });
+  // Cal stands beside the canal, Sharon two squares off.
+  let result = await run({ automation, targetSelections: twoTargets, zoneTags: { cal: [], sharon: [] }, zoneTagsNear: { cal: ['blood'], sharon: [] } });
+  assert.deepEqual(conditionsOn(result), [['cal', 'bleeding']]);
+  assert.ok(chat(result).some((line) => /Cal is in or next to blood; Sharon is not in or next to blood\./.test(line)), chat(result).join(' | '));
+  // Without adjacent the same positions are simply "not in blood".
+  result = await run({ automation: dragInBlood(), targetSelections: twoTargets, zoneTags: { cal: [], sharon: [] }, zoneTagsNear: { cal: ['blood'], sharon: [] } });
+  assert.deepEqual(conditionsOn(result), []);
+  // No zones on the scene: the question says "in or next to".
+  result = await run({ automation, targetSelections: twoTargets, zoneTags: null, promptAnswers: [true] });
+  assert.ok(chat(result).some((line) => /Is Cal in or next to blood\? Yes\./.test(line)), chat(result).join(' | '));
+  // The branch condition takes it too, and the schema keeps it only when it is exactly true.
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const kept = harness.validateAutomation(dragInBlood({ adjacent: true }), { strict: false });
+    assert.equal(kept.normalized.cards[1].effects[1].adjacent, true);
+    assert.deepEqual(kept.issues, []);
+    assert.equal('adjacent' in harness.validateAutomation(dragInBlood({ adjacent: 'yes' }), { strict: false }).normalized.cards[1].effects[1], false);
+    assert.equal(harness.window.AbilityAutomationPrimitives.describeEffect(kept.normalized.cards[1].effects[1]).startsWith('If target in or next to blood:'), true);
+    const branch = { schema: 'ability-automation/v3', cards: [
+      { type: 'target', name: 'primary', mode: 'token', predicate: 'creatureOrObject', count: { value: 1, mode: 'exact' } },
+      { type: 'branch', condition: { kind: 'zone', tag: 'blood', adjacent: true }, then: [{ type: 'effect', target: 'primary', effects: [{ kind: 'damage', amount: 9, damageType: 'untyped' }] }], else: [] },
+    ] };
+    assert.equal(harness.validateAutomation(branch, { strict: false }).normalized.cards[1].condition.adjacent, true);
+  } finally {
+    harness.close();
+  }
+});
+
+test('a condition rider can be bound to a zone: "who starts its turn in blood takes 3 corruption damage"', async () => {
+  const grab = (zone) => ({
+    schema: 'ability-automation/v3',
+    cards: [
+      { type: 'target', name: 'primary', mode: 'token', predicate: 'creatureOrObject', count: { value: 1, mode: 'exact' } },
+      { type: 'effect', target: 'primary', effects: [{ kind: 'condition', name: 'grabbed', duration: 'saveEnds',
+        riders: [{ id: 'blood-tick', when: 'turnStart', ...(zone === undefined ? {} : { zone }), effects: [{ kind: 'damage', amount: 3, damageType: 'corruption' }] }] }] },
+    ],
+  });
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const riderOf = (zone) => harness.validateAutomation(grab(zone), { strict: false });
+    assert.deepEqual(riderOf({ tag: 'Blood' }).normalized.cards[1].effects[0].riders[0].zone, { tags: ['blood'] });
+    assert.deepEqual(riderOf('blood').normalized.cards[1].effects[0].riders[0].zone, { tags: ['blood'] }, 'a bare tag is enough');
+    assert.deepEqual(riderOf({ tags: ['blood', 'water'], adjacent: true }).normalized.cards[1].effects[0].riders[0].zone, { tags: ['blood', 'water'], adjacent: true });
+    assert.deepEqual(riderOf({ tag: 'blood' }).issues, []);
+    assert.equal('zone' in riderOf(undefined).normalized.cards[1].effects[0].riders[0], false);
+    const bad = riderOf({});
+    assert.equal('zone' in bad.normalized.cards[1].effects[0].riders[0], false);
+    assert.ok(bad.issues.some((issue) => /zone: needs a tag/.test(issue)), bad.issues.join(' | '));
+    // Normalizing twice changes nothing.
+    const once = riderOf({ tag: 'blood', adjacent: true }).normalized;
+    assert.deepEqual(harness.validateAutomation(once, { strict: false }).normalized.cards[1].effects[0].riders, once.cards[1].effects[0].riders);
+  } finally {
+    harness.close();
+  }
+  // The runner hands the board the rider with its zone, for the board to test each turn.
+  const result = await run({ automation: grab({ tag: 'blood' }), targetSelections: [{ id: 'cal', name: 'Cal' }] });
+  const applied = result.calls.applyCondition.at(-1);
+  const riders = applied.condition?.riders || applied.riders;
+  assert.deepEqual(riders[0].zone, { tags: ['blood'] });
+});

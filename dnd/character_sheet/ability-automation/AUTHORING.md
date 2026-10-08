@@ -763,6 +763,24 @@ Ordinary conditions can instead use persistent `riders`:
 
 `when` is currently `turnStart` or `turnEnd`; `target` is `bearer` (default) or `source`. Supported rider effects are deliberately bounded to `damage`, `heal`, `temporaryStamina`, `surgeGain`, `condition`, `floatingText`, `note`, and `other`. Damage/healing amounts can be flat or dice-based, but riders cannot open interactive damage-type choices or resolve attributes, recoveries, or captured trigger values. The rider repeats at each matching boundary only while that exact condition instance remains present. The runtime persists an instance ID and last-handled turn boundary before applying the rider, preventing reload/replay duplicates. Start-of-turn riders run after the turn becomes active; end-of-turn riders run before condition cleanup. PC and monster sidebars show source, effect, amount/type, timing, and duration.
 
+A rider can be bound to a terrain zone with `zone`. The bearer's position is tested every time the rider comes up, so the effect stops when the bearer leaves the zone and starts again if it returns:
+
+```json
+{
+  "kind": "condition",
+  "name": "grabbed",
+  "duration": "saveEnds",
+  "riders": [{
+    "id": "blood-tick",
+    "when": "turnStart",
+    "zone": { "tag": "blood" },
+    "effects": [{ "kind": "damage", "amount": 3, "damageType": "corruption" }]
+  }]
+}
+```
+
+`zone` takes `tag` or `tags` (any one of them is enough) and optionally `"adjacent": true` for "in or adjacent to"; a bare `"zone": "blood"` also works. It is always the bearer of the condition who is tested, whoever the rider's `target` is. When the bearer is not in the zone the rider does nothing that turn and chat says so ("Cal is not in blood: Drag does nothing at the start of turn."). On a scene with no zones the board cannot test it, so the rider applies and its chat line adds "only if in blood" for the GM to judge. Nothing else about the rider changes.
+
 `damageWeakness` and `damageImmunity` are numeric riders. The VTT damage handler stacks `amount` on top of the sheet's own immunity/vulnerability lists when applying damage to the affected target. Example: `{ "kind": "condition", "name": "damageWeakness", "amount": 5, "damageType": "fire", "duration": "saveEnds" }` makes the target take +5 damage from every fire effect until they save out. These riders are shown in the VTT character/monster condition sidebar with readable labels such as `Fire weakness 5` and an `x` remove button.
 
 Automated conditions store the caster/source token id and name. Source-aware conditions such as `taunted`, `grabbed`, and `frightened` use that metadata for power-roll edge/bane suggestions. If an ability says a target is taunted/frightened/grabbed by a different creature than the caster, set `sourceId` / `sourceName` on the condition effect when that source is known; otherwise the caster is used.
@@ -1193,6 +1211,7 @@ Runs one branch or another based on the terrain zone a token stands in: "if the 
 |---|---|
 | `tag` | one zone tag, written as the map writes it (`blood`). Case and spaces are tidied: `Deep Water` becomes `deep-water`. |
 | `tags` | several tags; the condition is met by any one of them (`["blood", "water"]`). Use `tag` or `tags`. |
+| `adjacent` | `true` for "in or adjacent to": the token is in the zone, or within one square of it (sideways, corner to corner, or up to one square above its surface). Leave it out for plain "in". |
 | `who` | `target` (default): each target is checked. `self`: the user of the ability is checked. |
 | `target` | optional named target group to check, instead of the card's own targets |
 | `question` | optional question to ask when the board cannot answer. `{target}` is replaced by the first target's name. Default: "Is {target} in blood?" |
@@ -1205,6 +1224,8 @@ A token counts as in a zone the same way movement does: on the zone's floor, on 
 When the scene has no zones at all, or the ability is run outside the VTT, the user is asked the question once and the answer applies to every target, exactly like `ifPrompt`. So an ability written with `ifZone` works on every map; it just stops asking on maps that have zones.
 
 To place a forced move first and check afterwards, put the `forcedMovement` effect before the `ifZone` in the same list: effects run in order, so the check sees where the target ended up.
+
+`ifZone` checks once, when the ability resolves. For an effect that keeps going and must be re-checked every turn ("a grabbed creature who starts its turn in blood takes 3 corruption damage"), bind the condition's rider to the zone instead: see `zone` under persistent `riders` in the `condition` section.
 
 #### Worked example: "if the target is in blood, deal extra damage"
 

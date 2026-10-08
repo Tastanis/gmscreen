@@ -530,7 +530,7 @@
         const thenText = (effect.then || []).map(describeEffect).filter(Boolean).join(", ");
         const elseText = (effect.else || []).map(describeEffect).filter(Boolean).join(", ");
         const tags = (Array.isArray(effect.tags) && effect.tags.length ? effect.tags : effect.tag ? [effect.tag] : []).join(" or ") || "a zone";
-        const label = `${effect.who === "self" ? "self" : "target"} in ${tags}`;
+        const label = `${effect.who === "self" ? "self" : "target"} ${effect.adjacent === true ? "in or next to" : "in"} ${tags}`;
         if (elseText) return `If ${label}: ${thenText || "(no effect)"} else: ${elseText}`;
         return `If ${label}: ${thenText || "(no effect)"}`;
       }

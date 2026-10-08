@@ -97,19 +97,29 @@ export function footprintSquares(placement) {
  * @param placement        token ({column,row,width,height,levelId})
  * @param standingHeight   absolute height of the token's feet, in squares
  * @param floorElevationOf (levelId) => height of that floor, for zones with no surfaceHeight
+ * @param options.onPlate  the token stands on a deck, plank or other plate
+ * @param options.reach    0 (default): zones the token is in. 1: zones it is in or adjacent to,
+ *                         meaning within one square of its space, sideways or above the surface.
  */
-export function zonesForFootprint(index, placement, standingHeight, floorElevationOf = () => 0, { onPlate = false } = {}) {
+export function zonesForFootprint(index, placement, standingHeight, floorElevationOf = () => 0, { onPlate = false, reach = 0 } = {}) {
   if (!index?.size || !placement) return [];
   const levelId = placement.levelId || BASE_LEVEL_ID;
   const height = Number.isFinite(standingHeight) ? standingHeight : Number(floorElevationOf(levelId)) || 0;
+  const near = Math.max(0, Math.trunc(Number(reach) || 0));
+  const width = Math.max(1, Number(placement.width) || 1), depth = Math.max(1, Number(placement.height) || 1);
+  const space = near
+    ? { ...placement, column: (Number(placement.column) || 0) - near, row: (Number(placement.row) || 0) - near, width: width + near * 2, height: depth + near * 2 }
+    : placement;
   const found = new Map();
-  for (const [column, row] of footprintSquares(placement)) {
+  for (const [column, row] of footprintSquares(space)) {
     for (const zone of zonesAtSquare(index, column, row, levelId)) {
       if (found.has(zone.id)) continue;
       // On a deck, plank or other plate, any gap at all above the surface keeps the token out of
-      // the zone. On plain ground the feet must be within half a square of the surface.
+      // the zone. On plain ground the feet must be within half a square of the surface. Next to
+      // a zone is looser: a deck one square above the blood is adjacent to it.
       const gap = height - zoneSurface(zone, Number(floorElevationOf(zone.levelId)) || 0);
-      if (gap < (onPlate ? PLATE_GAP : ZONE_HEIGHT_TOLERANCE)) found.set(zone.id, zone);
+      const limit = near ? near + ZONE_HEIGHT_TOLERANCE : (onPlate ? PLATE_GAP : ZONE_HEIGHT_TOLERANCE);
+      if (gap < limit) found.set(zone.id, zone);
     }
   }
   return [...found.values()];

@@ -2673,10 +2673,11 @@
   // The board knows which tagged zones a token stands in. `getZoneTags(id)` gives the list of
   // tags, or null when the board cannot say (no zones on this scene, or the host has no such
   // callback). When it cannot say, the user is asked once instead, exactly like ifPrompt.
-  async function zoneTagsFor(state, placementId) {
+  // With `adjacent` the board answers with the zones the token is in or next to.
+  async function zoneTagsFor(state, placementId, adjacent = false) {
     if (!placementId || typeof state.context.getZoneTags !== "function") return null;
     try {
-      const tags = await state.context.getZoneTags(placementId);
+      const tags = await state.context.getZoneTags(placementId, { adjacent: Boolean(adjacent) });
       return Array.isArray(tags) ? tags.map((tag) => String(tag).trim().toLowerCase()) : null;
     } catch (_) {
       return null;
@@ -2696,8 +2697,12 @@
     return (list || []).filter((target) => target && target.id);
   }
 
+  function zoneWhere(spec) {
+    return spec?.adjacent === true ? "in or next to" : "in";
+  }
+
   function zoneQuestion(spec, tags) {
-    return spec?.question || `Is {target} in ${tags.join(" or ") || "the zone"}?`;
+    return spec?.question || `Is {target} ${zoneWhere(spec)} ${tags.join(" or ") || "the zone"}?`;
   }
 
   // Sorts the subjects into those standing in one of the zones and those not.
@@ -2709,7 +2714,7 @@
     let known = subjects.length > 0 && tags.length > 0;
     if (known) {
       for (const subject of subjects) {
-        const found = await zoneTagsFor(state, subject.id);
+        const found = await zoneTagsFor(state, subject.id, spec?.adjacent === true);
         if (found === null) { known = false; break; }
         (tags.some((tag) => found.includes(tag)) ? inside : outside).push(subject);
       }
@@ -2727,8 +2732,9 @@
     const label = result.tags.join(" or ");
     const names = (list) => list.map((subject) => subject.name || "the target").join(", ");
     const parts = [];
-    if (result.inside.length) parts.push(`${names(result.inside)} ${result.inside.length === 1 ? "is" : "are"} in ${label}`);
-    if (result.outside.length) parts.push(`${names(result.outside)} ${result.outside.length === 1 ? "is" : "are"} not in ${label}`);
+    const where = zoneWhere(spec);
+    if (result.inside.length) parts.push(`${names(result.inside)} ${result.inside.length === 1 ? "is" : "are"} ${where} ${label}`);
+    if (result.outside.length) parts.push(`${names(result.outside)} ${result.outside.length === 1 ? "is" : "are"} not ${where} ${label}`);
     return `${prefix}${parts.join("; ")}.`;
   }
 

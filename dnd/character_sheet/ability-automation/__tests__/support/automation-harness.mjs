@@ -728,10 +728,15 @@ export async function createAbilityAutomationHarness(options = {}) {
       // Terrain zones: `zoneTags` maps a placement id to the tags it stands in. Leave it out for a
       // host with no zone support; pass null for a scene that has no zone data.
       ...((runOptions.zoneTags ?? options.zoneTags) !== undefined ? {
-        getZoneTags(placementId) {
+        // `zoneTagsNear` maps a placement id to the tags it is in or next to (asked for with
+        // { adjacent: true }); without it, next to means in.
+        getZoneTags(placementId, zoneOptions) {
           recorder.record('getZoneTags', placementId);
           const map = runOptions.zoneTags ?? options.zoneTags;
-          return map === null ? null : clone(map[placementId] || []);
+          if (map === null) return null;
+          const near = runOptions.zoneTagsNear ?? options.zoneTagsNear;
+          if (zoneOptions?.adjacent && near) return clone(near[placementId] || map[placementId] || []);
+          return clone(map[placementId] || []);
         },
       } : {}),
       checkScopedFlag(payload) {

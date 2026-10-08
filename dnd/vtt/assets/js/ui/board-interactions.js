@@ -148,6 +148,7 @@ import {
   markConditionRiderExecuted,
   normalizeRiderExecutions,
   normalizeStoredConditionRiders,
+  riderZoneVerdict,
 } from '../state/normalize/condition-riders.js';
 import { createTokenMovementController } from '../token-system/token-movement-controller.js';
 import {
@@ -10344,6 +10345,13 @@ export function mountBoardInteractions(store, routes = {}) {
     };
   }
 
+  function zoneTagsForPlacement(placementId, options) {
+    const zones = window.terrainZones;
+    if (!zones || typeof zones.tagsForPlacement !== 'function' || !Array.isArray(zones.zones) || zones.zones.length === 0) return null;
+    if (!getPlacementFromStore(placementId)) return null;
+    return zones.tagsForPlacement(placementId, { adjacent: Boolean(options?.adjacent) });
+  }
+
   async function runConditionRidersForPlacement(combatantId, when, options = {}) {
     if (!combatantId || (when !== 'turnStart' && when !== 'turnEnd')) return { applied: 0 };
     const placement = getPlacementFromStore(combatantId);
@@ -10387,6 +10395,16 @@ export function mountBoardInteractions(store, routes = {}) {
         ? getPlacementFromStore(condition.sourceId)
         : getPlacementFromStore(combatantId);
       if (!target) continue;
+      const boundary = when === 'turnStart' ? 'start of turn' : 'end of turn';
+      // "...who starts its turn in blood": the zone is tested now, each turn, where the bearer is.
+      const verdict = riderZoneVerdict(rider, zoneTagsForPlacement(combatantId, { adjacent: Boolean(rider.zone?.adjacent) }));
+      if (verdict.skip) {
+        window.dashboardChat?.sendMessage?.({
+          message: `${tokenLabel(placement)} is not ${verdict.where}: ${condition.sourceAbility || condition.label || condition.name} does nothing at the ${boundary}.`,
+          type: 'text',
+        })?.catch?.(() => {});
+        continue;
+      }
       await applyOngoingAutomationEffects({
         sourceId: condition.sourceId || combatantId,
         sourceName: condition.sourceName || tokenLabel(placement),
@@ -10394,7 +10412,7 @@ export function mountBoardInteractions(store, routes = {}) {
         abilityName: condition.sourceAbility || condition.label || condition.name,
         effects: rider.effects,
         placements: [target],
-        reason: rider.label || (when === 'turnStart' ? 'start of turn' : 'end of turn'),
+        reason: `${rider.label || boundary}${verdict.unknown ? `, only if ${verdict.where}` : ''}`,
       });
       applied += 1;
     }
@@ -12938,12 +12956,10 @@ export function mountBoardInteractions(store, routes = {}) {
     },
     // Which tagged terrain zones a token stands in ("blood", "water"), for abilities that ask.
     // null means the board cannot say: the scene has no zones, or the token is not on it. The
-    // ability then asks the user instead. A swimmer in blood is still in blood.
-    getZoneTags: function (placementId) {
-      const zones = window.terrainZones;
-      if (!zones || typeof zones.tagsForPlacement !== 'function' || !Array.isArray(zones.zones) || zones.zones.length === 0) return null;
-      if (!getPlacementFromStore(placementId)) return null;
-      return zones.tagsForPlacement(placementId);
+    // ability then asks the user instead. A swimmer in blood is still in blood. With
+    // { adjacent: true } the answer is the zones the token is in or next to.
+    getZoneTags: function (placementId, options) {
+      return zoneTagsForPlacement(placementId, options);
     },
   };
 
