@@ -360,11 +360,11 @@
         var captainBonus = captainBonusFor(placement);
         var feature = captainBonus && captainBonus.feature ? captainBonus.feature : null;
         if (feature) context.features = [feature];
-        // Whatever the app cannot apply by itself (an edge, a new ability) is said out loud.
-        if (captainBonus && (captainBonus.manual || captainBonus.edgeOnStrikes)) {
+        // Whatever the app cannot apply by itself (extra Stamina, a new ability) is said out loud.
+        if (captainBonus && Array.isArray(captainBonus.byHand) && captainBonus.byHand.length) {
             postChat({
-                message: (monster && monster.name ? monster.name : 'Minion') + ' - With Captain (' + captainBonus.captainName + '): ' +
-                    captainBonus.text + (feature ? ' (apply by hand what is not a number)' : ' (apply by hand)')
+                message: (monster && monster.name ? monster.name : 'Minion') + ' - With Captain (' + captainBonus.captainName + '), apply by hand: ' +
+                    captainBonus.byHand.join('; ')
             });
         }
         context.resourceReservation = {

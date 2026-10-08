@@ -16,6 +16,34 @@ export function syncTokenTeamAffiliation(tokenElement, placement) {
   }
 }
 
+/**
+ * The squad badge in a token's bottom-left corner: "C" on a squad's captain (struck through once
+ * it is down), a small chevron on a minion whose squad has a captain who is up. See squadBadge.
+ */
+export function syncSquadBadge(tokenElement, badge) {
+  let badgeEl = tokenElement.querySelector('.vtt-token__squad-badge');
+  if (!badge) {
+    if (badgeEl) badgeEl.remove();
+    delete tokenElement.dataset.squadRole;
+    return;
+  }
+  if (!badgeEl) {
+    badgeEl = document.createElement('span');
+    badgeEl.className = 'vtt-token__squad-badge';
+    tokenElement.appendChild(badgeEl);
+  }
+  const captain = badge.kind === 'captain';
+  const role = captain ? (badge.down ? 'captain-down' : 'captain') : 'led';
+  const title = captain
+    ? (badge.down ? 'Captain, down: its squad has lost its bonus.' : `Captain of a squad of ${badge.minions} minion${badge.minions === 1 ? '' : 's'}.`)
+    : `Led by ${badge.captainName}.`;
+  tokenElement.dataset.squadRole = role;
+  badgeEl.dataset.squadBadge = role;
+  badgeEl.textContent = captain ? 'C' : '\u25B2';
+  badgeEl.title = title;
+  badgeEl.setAttribute('aria-label', title);
+}
+
 export function paintTokenMarkIndicator(tokenElement, mark, {interactive = false} = {}) {
   let markEl = tokenElement.querySelector('.vtt-token__judgment-mark');
   if (!mark) {

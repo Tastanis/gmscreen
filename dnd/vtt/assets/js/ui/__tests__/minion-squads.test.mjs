@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { squadForPlacement, squadPool, damageSquad, pickCaptain, livingCaptain, parseCaptainBonus, captainBonusFor, captainFeature } from '../minion-squads.mjs';
+import { squadForPlacement, squadPool, damageSquad, pickCaptain, livingCaptain, parseCaptainBonus, describeCaptainBonus, captainBonusFor, captainFeature, squadsOnScene, squadsLedBy, canBeCaptain, captainAction, squadBadge } from '../minion-squads.mjs';
 
 const marker = (extra = {}) => ({ id: 'rep::ghoul', monsterId: 'ghoul', representativeId: 'g1', perMinionStamina: 8, maxPool: 32, initialMemberCount: 4, ...extra });
 const ghoul = (id, hp = 32, extra = {}) => ({ id, name: 'Sluice Ghoul', hp: { current: String(hp), max: '32' }, monster: { id: 'ghoul', role: 'Minion Harrier', stamina: 8 }, squad: marker(extra) });
@@ -45,12 +45,12 @@ test('members that disagree about the pool (an older save) settle on the lowest,
   assert.equal(squadPool(squad, [hero]), 32, 'no member on the board: a full pool');
 });
 
-test('the captain is the group’s first creature that is not a minion', () => {
+test('forming a group names a captain only when exactly one creature in it is not a minion', () => {
   const placements = scene();
   assert.equal(pickCaptain(placements.filter((p) => p.id !== 'cal')), 'pm');
   assert.equal(pickCaptain(placements.filter((p) => p.squad)), null, 'a group of minions only has no captain');
   assert.equal(pickCaptain([hero, ...placements.filter((p) => p.squad)]), null, 'a hero is never a captain');
-  assert.equal(pickCaptain([{ id: 'x', monster: { organization: 'Minion' } }, { id: 'boss', monster: { organization: 'Leader' } }, packmaster()]), 'boss', 'the first non-minion wins');
+  assert.equal(pickCaptain([{ id: 'x', monster: { organization: 'Minion' } }, { id: 'boss', monster: { organization: 'Leader' } }, packmaster()]), null, 'two candidates: the GM attaches the one they mean');
 });
 
 test('a captain counts only while it is on the scene and has Stamina', () => {
@@ -62,23 +62,39 @@ test('a captain counts only while it is on the scene and has Stamina', () => {
   assert.equal(livingCaptain(squadForPlacement(scene(), 'g1'), scene()), null, 'a squad with no captain');
 });
 
-test('the "With Captain" line: what is applied, and what is left to the table', () => {
-  assert.deepEqual(parseCaptainBonus('+1 damage bonus on strikes'), { text: '+1 damage bonus on strikes', strikeDamage: 1, rangedDistance: 0, meleeDistance: 0, speed: 0, edgeOnStrikes: false, manual: false });
+test('the "With Captain" line, as the monster book writes it: what is applied, and what is left to the table', () => {
+  const none = { strikeDamage: 0, edge: 0, rangedDistance: 0, meleeDistance: 0, speed: 0, forcedMovement: 0, byHand: [], manual: false };
+  assert.deepEqual(parseCaptainBonus('+2 damage bonus to strikes'), { text: '+2 damage bonus to strikes', ...none, strikeDamage: 2 });
+  assert.equal(parseCaptainBonus('+1 damage bonus on strikes').strikeDamage, 1);
   assert.equal(parseCaptainBonus('Strike damage +2').strikeDamage, 2);
-  assert.equal(parseCaptainBonus('+4 bonus to ranged distance').rangedDistance, 4);
-  assert.equal(parseCaptainBonus('Ranged distance +5').rangedDistance, 5);
-  assert.equal(parseCaptainBonus('+1 bonus to melee distance').meleeDistance, 1);
+  assert.equal(parseCaptainBonus('+5 bonus to ranged distance').rangedDistance, 5);
+  assert.equal(parseCaptainBonus('+4 Bonus to ranged distance').rangedDistance, 4);
+  assert.equal(parseCaptainBonus('+3 bonus to melee distance').meleeDistance, 3);
   assert.equal(parseCaptainBonus('+2 bonus to speed').speed, 2);
   assert.equal(parseCaptainBonus('Speed +3').speed, 3);
-  const edge = parseCaptainBonus('Gain an edge on strikes');
-  assert.deepEqual([edge.edgeOnStrikes, edge.manual, edge.strikeDamage], [true, true, 0], 'an edge is a reminder, not applied');
+  assert.equal(parseCaptainBonus('+2 bonus to forced movement').forcedMovement, 2);
+  // An edge is applied, as one or two.
+  assert.deepEqual(parseCaptainBonus('Gain an edge on strikes'), { text: 'Gain an edge on strikes', ...none, edge: 1 });
+  assert.equal(parseCaptainBonus('Have a double edge on strikes').edge, 2);
   const both = parseCaptainBonus('+2 bonus to speed and +1 damage bonus on strikes');
   assert.deepEqual([both.speed, both.strikeDamage, both.manual], [2, 1, false]);
-  const odd = parseCaptainBonus('+1 damage bonus on strikes; can use Howl as a free maneuver');
-  assert.deepEqual([odd.strikeDamage, odd.manual], [1, true], 'the part it cannot read is flagged for the table');
-  assert.equal(parseCaptainBonus('Regains the Hurry Them villain action').manual, true);
-  assert.deepEqual(parseCaptainBonus(''), { text: '', strikeDamage: 0, rangedDistance: 0, meleeDistance: 0, speed: 0, edgeOnStrikes: false, manual: false });
+  // Extra Stamina, and anything it does not recognise, is left for the table and named.
+  const stamina = parseCaptainBonus('+2 bonus to Stamina');
+  assert.deepEqual([stamina.byHand, stamina.manual, stamina.strikeDamage], [['+2 bonus to Stamina'], true, 0]);
+  const odd = parseCaptainBonus('+1 damage bonus on strikes; Lightning spread increases by 1 square');
+  assert.deepEqual([odd.strikeDamage, odd.byHand, odd.manual], [1, ['Lightning spread increases by 1 square'], true]);
+  assert.equal(parseCaptainBonus('An edge on Might tests').edge, 0, 'only an edge on strikes is applied');
+  assert.deepEqual(parseCaptainBonus(''), { text: '', ...none });
   assert.equal(parseCaptainBonus(null).text, '');
+});
+
+test('the line in plain words, for the Monster Creator and the GM', () => {
+  assert.deepEqual(describeCaptainBonus('+2 bonus to speed and Gain an edge on strikes'), { applied: ['edge on strikes', '+2 speed'], byHand: [] });
+  assert.deepEqual(describeCaptainBonus('+4 damage bonus to strikes; +2 bonus to Stamina'), { applied: ['+4 damage on strikes'], byHand: ['+2 bonus to Stamina'] });
+  assert.deepEqual(describeCaptainBonus('Have a double edge on strikes').applied, ['double edge on strikes']);
+  assert.deepEqual(describeCaptainBonus('+5 bonus to ranged distance, +3 bonus to melee distance, +2 bonus to forced movement').applied, ['+5 ranged distance', '+3 melee distance', '+2 forced movement']);
+  assert.deepEqual(describeCaptainBonus(''), { applied: [], byHand: [] });
+  assert.deepEqual(describeCaptainBonus(parseCaptainBonus('Speed +1')).applied, ['+1 speed'], 'an already-read bonus is accepted too');
 });
 
 test('a minion gets its captain’s bonus only inside a led squad whose captain is up', () => {
@@ -101,6 +117,66 @@ test('the bonus reaches abilities as a feature the runner already understands', 
   assert.equal(feature.title, 'With Captain (Ghoul Packmaster)');
   assert.deepEqual(feature.automation.modifiers.map((m) => [m.match.keywordsAny, m.apply]), [[['Strike'], { damageBonus: 1 }], [['Ranged'], { rangeBonus: 4 }]]);
   assert.deepEqual(captainFeature({ captainName: 'X', meleeDistance: 1 }).automation.modifiers[0].match, { keywordsAny: ['Melee'], keywordsNone: ['Ranged'] });
-  assert.equal(captainFeature({ captainName: 'X', strikeDamage: 0, rangedDistance: 0, meleeDistance: 0, speed: 2 }), null, 'speed is handled by the movement counter, not by abilities');
+  assert.equal(captainFeature({ captainName: 'X', strikeDamage: 0, rangedDistance: 0, meleeDistance: 0, speed: 2, edge: 1 }), null, 'speed is handled by the movement counter and the edge by the roll, not here');
+  assert.deepEqual(captainFeature({ captainName: 'X', forcedMovement: 2 }).automation.modifiers[0].apply, { forcedMovementBonus: 2 });
   assert.equal(captainFeature(null), null);
+});
+
+// A second squad of a different minion, and a second creature that could lead.
+const rootMarker = { id: 'rep::root', monsterId: 'root', representativeId: 'r1', perMinionStamina: 7, maxPool: 14, initialMemberCount: 2 };
+const gnawer = (id, extra = {}) => ({ id, name: 'Sluice Rootgnawer', hp: { current: '14', max: '14' }, monster: { id: 'root', role: 'Minion Brute' }, squad: { ...rootMarker, ...extra } });
+const warden = { id: 'warden', name: 'Sluice Warden', hp: { current: '60', max: '60' }, monster: { id: 'warden', organization: 'Elite' } };
+const field = (ghoulExtra = {}, rootExtra = {}) => [...scene(ghoulExtra), warden, gnawer('r1', rootExtra), gnawer('r2', rootExtra)];
+
+test('squads on the scene, and who leads which', () => {
+  const placements = field({ captainId: 'pm' });
+  assert.deepEqual(squadsOnScene(placements).map((s) => [s.id, s.memberIds.length, s.captainId]), [['rep::ghoul', 4, 'pm'], ['rep::root', 2, null]]);
+  assert.deepEqual(squadsLedBy(placements, 'pm').map((s) => s.id), ['rep::ghoul']);
+  assert.deepEqual(squadsLedBy(placements, 'warden'), []);
+  assert.deepEqual(squadsLedBy(placements, null), []);
+  assert.equal(canBeCaptain(warden), true);
+  assert.equal(canBeCaptain(hero), false, 'a hero token is not made from a monster');
+  assert.equal(canBeCaptain(placements.find((p) => p.id === 'g1')), false, 'a minion cannot lead');
+  assert.equal(canBeCaptain(null), false);
+});
+
+test('the captain action: attach with one leader and one squad selected', () => {
+  const placements = field();
+  assert.deepEqual(captainAction(placements, ['g1', 'g2', 'g3', 'g4', 'pm']), { kind: 'attach', squadId: 'rep::ghoul', captainId: 'pm', captainName: 'Ghoul Packmaster', replaces: '', leaves: [] });
+  assert.equal(captainAction(placements, ['pm', 'g2']).kind, 'attach', 'one member of the squad is enough to say which squad');
+  // Replacing a captain names the one who steps down.
+  const led = field({ captainId: 'pm' });
+  assert.deepEqual(captainAction(led, ['warden', 'g1']), { kind: 'attach', squadId: 'rep::ghoul', captainId: 'warden', captainName: 'Sluice Warden', replaces: 'Ghoul Packmaster', leaves: [] });
+  // One squad per captain: attaching a captain elsewhere says which squad it leaves.
+  assert.deepEqual(captainAction(led, ['pm', 'r1']).leaves, ['rep::ghoul']);
+});
+
+test('the captain action: detach, and the selections it does not apply to', () => {
+  const led = field({ captainId: 'pm' });
+  const detach = { kind: 'detach', squadId: 'rep::ghoul', captainId: 'pm', captainName: 'Ghoul Packmaster' };
+  assert.deepEqual(captainAction(led, ['pm']), detach, 'the captain alone');
+  assert.deepEqual(captainAction(led, ['pm', 'g1', 'g2']), detach, 'the captain with its own squad');
+  assert.deepEqual(captainAction(led, ['g3']), detach, 'members of a led squad');
+  assert.equal(captainAction(led, ['r1', 'r2']), null, 'a squad with no captain and no leader selected');
+  assert.equal(captainAction(led, ['g1', 'r1', 'warden']), null, 'two squads: which one is not clear');
+  assert.equal(captainAction(led, ['warden', 'pm', 'g1']), null, 'two leaders');
+  assert.equal(captainAction(led, ['cal', 'g1']), null, 'a hero cannot be attached');
+  assert.equal(captainAction(led, ['warden']), null, 'a creature that leads nothing');
+  assert.equal(captainAction(led, []), null);
+  assert.equal(captainAction(led, ['gone']), null);
+});
+
+test('badges: the captain, its minions while it is up, and nothing once it is down or detached', () => {
+  const led = field({ captainId: 'pm' });
+  assert.deepEqual(squadBadge(led, 'pm'), { kind: 'captain', down: false, minions: 4 });
+  assert.deepEqual(squadBadge(led, 'g2'), { kind: 'led', captainName: 'Ghoul Packmaster' });
+  assert.equal(squadBadge(led, 'r1'), null, 'a squad with no captain');
+  assert.equal(squadBadge(led, 'warden'), null);
+  assert.equal(squadBadge(led, 'cal'), null);
+  const down = led.map((p) => (p.id === 'pm' ? packmaster(0) : p));
+  assert.deepEqual(squadBadge(down, 'pm'), { kind: 'captain', down: true, minions: 4 });
+  assert.equal(squadBadge(down, 'g2'), null, 'the minions lose the badge with the bonus');
+  assert.equal(squadBadge(field(), 'pm'), null, 'detached');
+  // A player whose view does not include the captain (it is hidden) sees no badge on the minions.
+  assert.equal(squadBadge(led.filter((p) => p.id !== 'pm'), 'g2'), null);
 });

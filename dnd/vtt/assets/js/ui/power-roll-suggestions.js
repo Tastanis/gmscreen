@@ -278,6 +278,8 @@ export function getPowerRollSuggestions({
   mapLevels = [],
   getTeam = null,
   context = {},
+  // What the actor's squad captain grants it right now (see minion-squads.mjs), or null.
+  captainBonus = null,
 } = {}) {
   const suggestions = [];
   const targetList = Array.isArray(targets) ? targets.filter(Boolean) : [];
@@ -351,6 +353,14 @@ export function getPowerRollSuggestions({
     }
   }
   suggestions.push(...hiddenEffectSuggestions(actor, context));
+  // A minion led by a captain: "Gain an edge on strikes" (or a double edge), already switched on.
+  const captainEdge = Math.min(2, Math.max(0, Number.parseInt(captainBonus?.edge, 10) || 0));
+  if (strike && abilityRoll && captainEdge > 0) {
+    suggestions.push(makeSuggestion('edge-captain', EDGE, 'With Captain', true, {
+      reason: `Led by ${captainBonus.captainName || 'its captain'}`,
+      ...(captainEdge > 1 ? { count: captainEdge } : {}),
+    }));
+  }
 
   return suggestions;
 }

@@ -304,3 +304,19 @@ test('high ground accounts for large targets and does not assume flying altitude
  actor.movementMode='ground';target.movementMode='hover';
  assert.equal(activeIds(run()).includes('edge-high-ground'),false);
 });
+
+test('a minion led by a captain gets its "With Captain" edge on strikes, already switched on', () => {
+  const ghoul = enemy('g1', 5, 5);
+  const cal = ally('cal', 6, 5);
+  const strike = { keywords: ['Melee', 'Strike', 'Weapon'], rollEvent: 'powerRoll' };
+  const find = (options) => getPowerRollSuggestions({ actor: ghoul, targets: [cal], placements: [ghoul, cal], ...options }).find((entry) => entry.id === 'edge-captain');
+  assert.deepEqual(find({ context: strike, captainBonus: { edge: 1, captainName: 'Ghoul Packmaster' } }), { id: 'edge-captain', kind: 'edge', label: 'With Captain', active: true, reason: 'Led by Ghoul Packmaster' });
+  assert.equal(find({ context: strike, captainBonus: { edge: 2, captainName: 'Ghoul Packmaster' } }).count, 2, 'a double edge counts twice');
+  assert.equal(find({ context: strike, captainBonus: { edge: 9 } }).count, 2, 'never more than a double edge');
+  // No captain, a bonus with no edge, or an ability that is not a strike: nothing is added.
+  assert.equal(find({ context: strike }), undefined);
+  assert.equal(find({ context: strike, captainBonus: null }), undefined);
+  assert.equal(find({ context: strike, captainBonus: { edge: 0, strikeDamage: 2 } }), undefined);
+  assert.equal(find({ context: { keywords: ['Area', 'Magic'], rollEvent: 'powerRoll' }, captainBonus: { edge: 1 } }), undefined);
+  assert.equal(find({ context: { ...strike, rollEvent: 'test' }, captainBonus: { edge: 1 } }), undefined, 'a characteristic test is not a strike roll');
+});

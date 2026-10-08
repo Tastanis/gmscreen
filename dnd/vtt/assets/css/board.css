@@ -6006,6 +6006,66 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
 .vtt-token[data-squad="true"] .vtt-token__hp-fill {
   background: linear-gradient(90deg, #b94a48 0%, #d9534f 100%);
 }
+/* Squad captain: "C" on the captain, a chevron on each minion it leads. */
+.vtt-token__squad-badge {
+  position: absolute;
+  bottom: calc(var(--tok-unit) * -5);
+  left: calc(var(--tok-unit) * -5);
+  width: calc(var(--tok-unit) * 19);
+  height: calc(var(--tok-unit) * 19);
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #7c2d12;
+  color: #fde68a;
+  font-weight: 900;
+  font-size: calc(var(--tok-unit) * 11);
+  line-height: 1;
+  border: 2px solid #fde68a;
+  box-shadow: 0 3px 8px rgba(15, 23, 42, 0.6);
+  pointer-events: auto;
+  z-index: 71;
+}
+.vtt-token__squad-badge[data-squad-badge="led"] {
+  width: calc(var(--tok-unit) * 13);
+  height: calc(var(--tok-unit) * 13);
+  font-size: calc(var(--tok-unit) * 7);
+  bottom: calc(var(--tok-unit) * -3);
+  left: calc(var(--tok-unit) * -3);
+  border-width: 1px;
+}
+.vtt-token__squad-badge[data-squad-badge="captain-down"] {
+  background: #334155;
+  color: #94a3b8;
+  border-color: #94a3b8;
+  text-decoration: line-through;
+}
+
+/* The one-click captain action, shown to the GM when the selection allows it. It sits at the
+   top of the map: the ability bars cover the bottom whenever a creature is selected. */
+.vtt-captain-action {
+  position: absolute;
+  left: 50%;
+  top: 14px;
+  transform: translateX(-50%);
+  z-index: 60;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid #fde68a;
+  background: rgba(124, 45, 18, 0.94);
+  color: #fef3c7;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.55);
+}
+.vtt-captain-action:hover {
+  filter: brightness(1.12);
+}
+.vtt-captain-action[hidden] {
+  display: none;
+}
+
 .vtt-automation-picker-prompt {
   inset: 0;
   pointer-events: none;

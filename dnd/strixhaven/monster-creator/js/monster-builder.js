@@ -1356,6 +1356,7 @@ function createFullMonsterCard(monsterId, monsterData) {
                 <div class="captain-row">
                     <span class="captain-label">With Captain:</span>
                     <input type="text" class="captain-input" data-field="with_captain" value="${(monsterData.with_captain || '').replace(/"/g, '&quot;')}" placeholder="+2 damage bonus to strikes">
+                    <span class="captain-readout" data-captain-readout>${escapeMonsterText(captainReadoutText(monsterData.with_captain))}</span>
                 </div>` : ''}
 
                 <!-- Attributes Bar -->
@@ -2034,6 +2035,38 @@ function markTabsDirty() {
         console.log('Tab structure marked as dirty');
         queueSave();
     }
+}
+
+// ---------- "With Captain" readout ----------
+// The VTT reads the line as the monster book writes it and applies what it can by itself. The
+// rules live in one place (the VTT's minion-squads.mjs); this only shows their answer beside
+// the field, so whoever writes the line sees what will happen at the table.
+let captainRules = null;
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+    import('../../../vtt/assets/js/ui/minion-squads.mjs').then((module) => {
+        captainRules = module;
+        document.querySelectorAll('.captain-input').forEach(refreshCaptainReadout);
+    }).catch(() => {});
+    document.addEventListener('input', (event) => {
+        if (event.target && event.target.classList && event.target.classList.contains('captain-input')) {
+            refreshCaptainReadout(event.target);
+        }
+    });
+}
+
+function captainReadoutText(value) {
+    const text = String(value || '').trim();
+    if (!text || !captainRules) return '';
+    const { applied, byHand } = captainRules.describeCaptainBonus(text);
+    const parts = [];
+    if (applied.length) parts.push('VTT applies: ' + applied.join(', '));
+    if (byHand.length) parts.push('By hand (chat reminder): ' + byHand.join('; '));
+    return parts.join('. ');
+}
+
+function refreshCaptainReadout(input) {
+    const readout = input && input.parentElement ? input.parentElement.querySelector('[data-captain-readout]') : null;
+    if (readout) readout.textContent = captainReadoutText(input.value);
 }
 
 // ---------- Multi-entry immunity / weakness helpers ----------

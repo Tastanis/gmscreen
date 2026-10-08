@@ -26,7 +26,7 @@ import {renderTokenAuras} from './token-aura-renderer.js';
 import {normalizeAutomationAuraId,createAutomationAuraId,cloneAutomationAuraRecord,getAutomationAuraRecords,getRenderableAurasForPlacement} from './token-aura-records.js';
 import {normalizePlacementForRender,toBoolean} from './token-render-normalize.js';
 import {normalizePlacementCondition,ensurePlacementCondition,normalizePlacementConditions,ensurePlacementConditions,buildConditionKey,normalizeConditionDurationValue} from './token-conditions.js';
-import {syncTokenTeamAffiliation,paintTokenMarkIndicator,paintTokenConditionLabel} from './token-status-presentation.js';
+import {syncTokenTeamAffiliation,syncSquadBadge,paintTokenMarkIndicator,paintTokenConditionLabel} from './token-status-presentation.js';
 import {normalizeHitPointsValue,normalizePlacementHitPoints,parseHitPointsNumber,calculateHitPointsFillPercentage,formatHitPointsDisplayParts,syncTokenHitPoints,shouldRevealPlacementHitPointValues} from './token-hit-points.js';
 import {paintWallTemplate} from './template-wall-renderer.js';
 import {wallSquareKey,nextWallElevation} from './wall-cubes.js';
@@ -235,7 +235,7 @@ import {
   refreshCombatantStateClasses as refreshRenderedCombatantStateClasses,
   renderCombatTracker,
 } from '../combat/combat-renderer.js';
-import { squadForPlacement, squadPool, damageSquad, pickCaptain, livingCaptain, captainBonusFor, captainFeature } from './minion-squads.mjs';
+import { squadForPlacement, squadPool, damageSquad, pickCaptain, livingCaptain, captainBonusFor, captainFeature, captainAction, squadBadge, describeCaptainBonus } from './minion-squads.mjs';
 import { lacksDefenses, monsterIdOf, restoredDefenses } from './monster-defense-repair.mjs';
 
 let trackerOverflowResizeListenerAttached = false;
@@ -789,6 +789,8 @@ export function mountBoardInteractions(store, routes = {}) {
   const withCaptainTextByMonster = new Map(); // monsterId -> Promise<string>
   const monsterRecordLookups = new Map(); // monsterId -> Promise<monster record | null>
   let monsterDefenseRepairTimer = null;
+  let captainActionButton = null;
+  let squadBadgeRefreshPending = false;
   let minionKillPopup = null;
   let lastCombatTrackerEntries = [];
   let lastCombatTrackerActiveIds = new Set();
@@ -6160,6 +6162,12 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    if (event.key?.toLowerCase() === 'c' && !event.ctrlKey && !event.metaKey && !event.altKey && currentCaptainAction()) {
+      event.preventDefault();
+      runCaptainAction();
+      return;
+    }
+
     if (event.key?.toLowerCase() === 'g') {
       if (selectedTokenIds.size <= 1) {
         return;
@@ -7371,6 +7379,7 @@ export function mountBoardInteractions(store, routes = {}) {
         ? 'Group selected tokens in the combat tracker'
         : 'Select at least two tokens to enable grouping';
     }
+    syncCaptainActionButton();
     refreshTokenSelectionState();
     dispatchTokenSelectionSummary();
   }
@@ -12825,6 +12834,7 @@ export function mountBoardInteractions(store, routes = {}) {
       mapLevels,
       getTeam: getCombatantTeam,
       context: payload,
+      captainBonus: actorId ? captainBonusFor(getPlacementsForActiveScene(), actorId) : null,
     });
   }
 
@@ -14076,8 +14086,9 @@ export function mountBoardInteractions(store, routes = {}) {
               combatantGroupRepresentative.delete(memberId);
             }
           });
+          const groupSquadIds = new Set(Array.from(currentGroup).map((memberId) => getPlacementFromStore(memberId)?.squad?.id).filter(Boolean));
           combatTrackerGroups.delete(candidateRep);
-          dismantleMinionSquadsForRepresentative(candidateRep);
+          groupSquadIds.forEach(dismantleMinionSquadById);
           markCombatFieldDirty('groups');
           refreshCombatTracker();
           syncCombatStateToStore();
@@ -14116,11 +14127,13 @@ export function mountBoardInteractions(store, routes = {}) {
     if (status) {
       const count = members.size;
       const noun = count === 1 ? 'token' : 'tokens';
-      const captainName = newSquads[0]?.captainId ? tokenLabel(getPlacementFromStore(newSquads[0].captainId)) : '';
+      const ledSquad = newSquads.find((squad) => squad.captainId);
+      const captainName = ledSquad ? tokenLabel(getPlacementFromStore(ledSquad.captainId)) : '';
       const squadSuffix = newSquads.length
         ? ` (${newSquads.length} minion squad${newSquads.length === 1 ? '' : 's'} formed${captainName ? `, captain: ${captainName}` : ''})`
         : '';
       status.textContent = `Grouped ${count} ${noun} in the combat tracker.${squadSuffix}`;
+      if (ledSquad) announceCaptain(ledSquad);
     }
   }
 
@@ -14188,8 +14201,9 @@ export function mountBoardInteractions(store, routes = {}) {
       buckets.get(monsterId).memberIds.push(placementId);
     });
 
-    // A creature in the group that is not a minion leads its squads as their captain.
-    const captainId = pickCaptain(memberIds.map((placementId) => getPlacementFromStore(placementId)));
+    // The group's one creature that is not a minion leads the squad as its captain. A captain
+    // leads one squad: when the group forms several, the first gets it.
+    let captainId = pickCaptain(memberIds.map((placementId) => getPlacementFromStore(placementId)));
 
     const createdSquads = [];
     buckets.forEach((bucket, monsterId) => {
@@ -14210,10 +14224,150 @@ export function mountBoardInteractions(store, routes = {}) {
       // Persist squad markers + initial pool onto each member placement.
       writeSquadStateToMembers(squad, maxPool);
       createdSquads.push(squad);
-      if (captainId && !squad.withCaptain) fillInWithCaptainText(squad);
+      if (captainId) squad.captainLine = squad.withCaptain ? Promise.resolve(squad.withCaptain) : fillInWithCaptainText(squad);
+      captainId = null;
     });
 
     return createdSquads;
+  }
+
+  // ---------- Squad captains ----------
+  // A captain is one field on its squad's markers (captainId). Everything else is worked out when
+  // it is needed, so there is nothing to tidy up when the captain drops, is deleted or detached.
+
+  function currentCaptainAction() {
+    if (!isGmUser() || selectedTokenIds.size === 0) return null;
+    return captainAction(getPlacementsForActiveScene(), Array.from(selectedTokenIds));
+  }
+
+  function captainActionLabel(action) {
+    if (action.kind === 'detach') return `Detach captain ${action.captainName} (C)`;
+    return action.replaces
+      ? `Make ${action.captainName} captain, replacing ${action.replaces} (C)`
+      : `Make ${action.captainName} captain of this squad (C)`;
+  }
+
+  function syncCaptainActionButton() {
+    const action = currentCaptainAction();
+    if (!action) {
+      if (captainActionButton) captainActionButton.hidden = true;
+      return;
+    }
+    if (!captainActionButton) {
+      captainActionButton = document.createElement('button');
+      captainActionButton.type = 'button';
+      captainActionButton.className = 'vtt-captain-action';
+      captainActionButton.setAttribute('data-action', 'squad-captain');
+      captainActionButton.addEventListener('pointerdown', (event) => event.stopPropagation());
+      captainActionButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        runCaptainAction();
+      });
+      (board?.parentElement || document.body).appendChild(captainActionButton);
+    }
+    captainActionButton.hidden = false;
+    captainActionButton.textContent = captainActionLabel(action);
+    captainActionButton.dataset.captainAction = action.kind;
+  }
+
+  function squadById(squadId) {
+    const member = getPlacementsForActiveScene().find((placement) => placement?.squad?.id === squadId);
+    return member ? getMinionSquadForPlacement(member.id) : null;
+  }
+
+  // Rewrites one squad's markers with a new captain (or none). The pool is left as it is.
+  function setSquadCaptain(squadId, captainId) {
+    const squad = squadById(squadId);
+    if (!squad) return null;
+    const next = { ...squad, captainId: captainId || null };
+    if (!next.withCaptain) {
+      const member = getPlacementFromStore(squad.memberIds[0]);
+      next.withCaptain = String(member?.monster?.with_captain ?? '').trim();
+    }
+    writeSquadStateToMembers(next, readSquadCurrentPool(squad));
+    if (captainId) next.captainLine = next.withCaptain ? Promise.resolve(next.withCaptain) : fillInWithCaptainText(next);
+    return next;
+  }
+
+  // The tracker group a squad acts in, re-formed with or without one creature. The captain acts
+  // with its squad; a detached captain acts by itself again.
+  function regroupSquad(squad, { add = null, remove = null } = {}) {
+    const representativeId = getRepresentativeIdFor(squad.memberIds[0]);
+    const members = new Set(combatTrackerGroups.get(representativeId) ?? squad.memberIds);
+    squad.memberIds.forEach((memberId) => members.add(memberId));
+    if (add) members.add(add);
+    if (remove) members.delete(remove);
+    Array.from(members).concat(add || [], remove || []).forEach((id) => removeTokenFromGroups(id));
+    const list = Array.from(members);
+    if (list.length > 1) {
+      const nextRepresentative = pickRepresentativeIdForGroup(list) ?? list[list.length - 1];
+      combatTrackerGroups.set(nextRepresentative, new Set(list));
+      list.forEach((memberId) => {
+        if (memberId !== nextRepresentative) combatantGroupRepresentative.set(memberId, nextRepresentative);
+      });
+    }
+    markCombatFieldDirty('groups');
+    refreshCombatTracker();
+    syncCombatStateToStore();
+  }
+
+  // Says in chat who leads the squad and what its minions gain, once the line is known.
+  function announceCaptain(squad) {
+    const captainName = tokenLabel(getPlacementFromStore(squad.captainId)) || 'The captain';
+    const squadName = tokenLabel(getPlacementFromStore(squad.memberIds[0])) || 'minion';
+    Promise.resolve(squad.captainLine ?? squad.withCaptain ?? '').then((text) => {
+      const { applied, byHand } = describeCaptainBonus(text);
+      const gains = applied.length
+        ? `each minion gains ${applied.join(', ')} while the captain has Stamina.`
+        : (byHand.length ? 'nothing the app applies by itself.' : 'the minions have no "With Captain" line, so nothing changes.');
+      const manual = byHand.length ? ` Apply by hand: ${byHand.join('; ')}.` : '';
+      window.dashboardChat?.sendMessage?.({
+        message: `${captainName} is now captain of the ${squadName} squad: ${gains}${manual}`,
+        type: 'text',
+      })?.catch?.(() => {});
+    });
+  }
+
+  function runCaptainAction() {
+    const action = currentCaptainAction();
+    if (!action) return false;
+    if (action.kind === 'detach') {
+      const squad = setSquadCaptain(action.squadId, null);
+      if (squad) regroupSquad(squad, { remove: action.captainId });
+      updateStatus(`${action.captainName} is no longer captain. The squad loses its "With Captain" bonus.`);
+    } else {
+      // One squad per captain: it steps away from any squad it led before.
+      (action.leaves || []).forEach((squadId) => setSquadCaptain(squadId, null));
+      const before = squadById(action.squadId);
+      const squad = setSquadCaptain(action.squadId, action.captainId);
+      if (squad) {
+        regroupSquad(squad, { add: action.captainId, remove: before?.captainId && before.captainId !== action.captainId ? before.captainId : null });
+        announceCaptain(squad);
+      }
+      updateStatus(`${action.captainName} is now captain of this squad.`);
+    }
+    syncCaptainActionButton();
+    scheduleSquadBadgeRefresh();
+    return true;
+  }
+
+  // A captain dropping changes its minions' badges too, and they are not redrawn by its change.
+  function scheduleSquadBadgeRefresh() {
+    if (squadBadgeRefreshPending || typeof window === 'undefined') return;
+    squadBadgeRefreshPending = true;
+    window.setTimeout(() => {
+      squadBadgeRefreshPending = false;
+      const placements = getPlacementsForActiveScene();
+      const captainIds = new Set(placements.map((placement) => placement?.squad?.captainId).filter(Boolean));
+      placements.forEach((placement) => {
+        const tokenElement = tokenLayer?.querySelector?.(`[data-placement-id="${placement.id}"]`);
+        if (!tokenElement) return;
+        const involved = placement.squad?.id || captainIds.has(placement.id) || tokenElement.dataset.squadRole;
+        if (involved) syncSquadBadge(tokenElement, squadBadge(placements, placement.id));
+      });
+      syncCaptainActionButton();
+    }, 0);
   }
 
   // ---------- Immunities and weaknesses lost by older tokens ----------
@@ -14262,7 +14416,7 @@ export function mountBoardInteractions(store, routes = {}) {
   // browser looks it up in the monster's record and adds it to the squad.
   function fillInWithCaptainText(squad) {
     const endpoint = typeof routes?.monsters === 'string' ? routes.monsters : '';
-    if (!endpoint || !squad.monsterId || !isGmUser() || typeof fetch !== 'function') return;
+    if (!endpoint || !squad.monsterId || !isGmUser() || typeof fetch !== 'function') return Promise.resolve('');
     if (!withCaptainTextByMonster.has(squad.monsterId)) {
       const url = new URL(endpoint, window.location.origin);
       url.searchParams.set('id', squad.monsterId);
@@ -14271,10 +14425,11 @@ export function mountBoardInteractions(store, routes = {}) {
         .then((payload) => String(payload?.data?.with_captain ?? '').trim())
         .catch(() => ''));
     }
-    withCaptainTextByMonster.get(squad.monsterId).then((text) => {
+    return withCaptainTextByMonster.get(squad.monsterId).then((text) => {
       const current = text ? getMinionSquadForPlacement(squad.memberIds[0]) : null;
-      if (!current || current.id !== squad.id || current.withCaptain) return;
-      writeSquadStateToMembers({ ...current, withCaptain: text }, readSquadCurrentPool(current));
+      if (!current || current.id !== squad.id) return '';
+      if (!current.withCaptain) writeSquadStateToMembers({ ...current, withCaptain: text }, readSquadCurrentPool(current));
+      return current.withCaptain || text;
     });
   }
 
@@ -14292,15 +14447,6 @@ export function mountBoardInteractions(store, routes = {}) {
         }
       });
     });
-  }
-
-  function dismantleMinionSquadsForRepresentative(representativeId) {
-    if (!representativeId) return;
-    const squadIds = new Set();
-    getPlacementsForActiveScene().forEach((placement) => {
-      if (placement?.squad?.id && placement.squad.representativeId === representativeId) squadIds.add(placement.squad.id);
-    });
-    squadIds.forEach(dismantleMinionSquadById);
   }
 
   function readSquadCurrentPool(squad) {
@@ -14418,6 +14564,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     syncTokenTeamAffiliation(tokenElement, placement);
+    scheduleSquadBadgeRefresh();
     syncTokenHitPoints(tokenElement, placement, {isGm:isGmUser()});
     syncTriggeredActionIndicator(tokenElement, placement);
     paintTokenMarkIndicator(tokenElement, getPlacementMark(placement, 'judgment'), {interactive:true});
