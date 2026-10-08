@@ -1,14 +1,31 @@
 export const defaults={sight:'block',movement:'block',sightDirection:'both',movementDirection:'both',baseMode:'terrain',base:0,height:2,topMode:'follow',interaction:'none',open:false,locked:false,secret:false};
 export const presets={solid:{},terrain:{sight:'limited'},transparent:{sight:'pass'},curtain:{movement:'pass'},door:{interaction:'door'},window:{interaction:'window',sight:'pass'}};
 export const properties=e=>({...defaults,...e});
+// Breakable walls. A wall with a `material` can be broken; `broken:true` means it has been.
+// A broken wall stays in the scene (so it can be repaired) but blocks nothing. Unmarked walls
+// are never breakable, and a one-way wall (a cliff edge) can never be given a material.
+export const MATERIALS=['glass','wood','stone','metal'];
+export const isOneWay=e=>(e?.movementDirection??'both')!=='both'||(e?.sightDirection??'both')!=='both';
+export const canBeBreakable=e=>!isOneWay(e);
+export const isBreakable=e=>MATERIALS.includes(e?.material)&&!isOneWay(e);
+export const isBroken=e=>e?.broken===true;
+/** The walls that are standing: everything that asks "is there a wall here?" reads these. */
+export function liveWalls(model){
+ if(!model?.segments?.some(isBroken))return model;
+ return {...model,segments:model.segments.filter(e=>!isBroken(e))};
+}
 export function validateProperties(e){
  const choices={sight:['block','pass','limited'],movement:['block','pass'],sightDirection:['both','left','right'],movementDirection:['both','left','right'],baseMode:['terrain','fixed'],topMode:['follow','level'],interaction:['none','door','window']};
  for(const [k,values] of Object.entries(choices))if(e[k]!==undefined&&!values.includes(e[k]))throw Error('Invalid wall '+k);
  for(const k of ['base','height'])if(e[k]!==undefined&&(!Number.isFinite(e[k])||Math.abs(e[k])>1000000||(k==='height'&&(e[k]<0||e[k]>1000))))throw Error('Invalid wall '+k);
  for(const k of ['open','locked','secret'])if(e[k]!==undefined&&typeof e[k]!=='boolean')throw Error('Invalid wall '+k);
  if(e.open&&e.locked)throw Error('Open walls cannot be locked');
+ if(e.material!==undefined&&!MATERIALS.includes(e.material))throw Error('Invalid wall material');
+ if(e.material!==undefined&&isOneWay(e))throw Error('One-way walls cannot be breakable');
+ if(e.broken!==undefined&&typeof e.broken!=='boolean')throw Error('Invalid wall broken');
+ if(e.broken&&e.material===undefined)throw Error('Only a wall with a material can be broken');
 }
-export function restrictions(edge){const e=properties(edge);return {...e,sight:e.open&&e.interaction==='door'?'pass':e.sight,movement:e.open&&e.interaction!=='none'?'pass':e.movement};}
+export function restrictions(edge){const e=properties(edge);if(isBroken(e))return {...e,sight:'pass',movement:'pass'};return {...e,sight:e.open&&e.interaction==='door'?'pass':e.sight,movement:e.open&&e.interaction!=='none'?'pass':e.movement};}
 export function applies(direction,a,b,p){const side=(b.x-a.x)*(p.y-a.y)-(b.y-a.y)*(p.x-a.x);return direction==='both'||Math.abs(side)<1e-8||(direction==='left'?side>0:side<0);}
 export function wallHeights(edge,a,b,p,groundAt){const e=edge.baseMode!==undefined&&edge.topMode!==undefined&&edge.base!==undefined?edge:properties(edge),base=e.baseMode==='fixed'?e.base:groundAt(p.x,p.y)+e.base;const top=e.baseMode==='fixed'||e.topMode==='follow'?base+e.height:Math.max(groundAt(a.x,a.y),groundAt(b.x,b.y))+e.base+e.height;return {base,top};}
 // Swept footprint versus a wall segment; strict overlap permits sliding along a wall.

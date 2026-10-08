@@ -1,0 +1,164 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { MATERIALS, validateProperties, restrictions, liveWalls, isBreakable, isBroken, isOneWay, movementBlocked, movementPathBlocked } from '../wall-properties.mjs';
+import { validateWalls, split } from '../wall-geometry.mjs';
+import { makeSight } from '../vision-height.mjs';
+import { rubbleKind, rubblePieces, rubbleLibrary, rubblePicture, rubbleSize, pickVersion, stableHash, standInRubble, plateUnder, insideRing, RUBBLE_KINDS, RUBBLE_MAX_ACROSS, RUBBLE_MIN_ACROSS } from '../wall-rubble.mjs';
+
+// A wall running north to south along x = 3, one square long per piece, with a door in the middle.
+const wall = (extra = {}) => ({
+  version: 1,
+  nodes: [{ id: 'n0', x: 3, y: 0 }, { id: 'n1', x: 3, y: 1 }, { id: 'n2', x: 3, y: 2 }, { id: 'n3', x: 3, y: 3 }],
+  segments: [
+    { id: 'top', a: 'n0', b: 'n1', baseMode: 'fixed', base: 0, height: 2, ...extra.top },
+    { id: 'door', a: 'n1', b: 'n2', baseMode: 'fixed', base: 0, height: 2, interaction: 'door', ...extra.door },
+    { id: 'bottom', a: 'n2', b: 'n3', baseMode: 'fixed', base: 0, height: 2, ...extra.bottom },
+  ],
+});
+const flat = () => 0;
+const walker = (column, row) => ({ column, row, width: 1, height: 1 });
+const crosses = (model, row) => movementBlocked(model, walker(2, row), walker(3, row), flat, flat);
+
+test('a wall is breakable only when it has a material, and a one-way wall never is', () => {
+  assert.deepEqual(MATERIALS, ['glass', 'wood', 'stone', 'metal']);
+  assert.equal(isBreakable({ id: 'w' }), false, 'an unmarked wall is not breakable');
+  for (const material of MATERIALS) assert.equal(isBreakable({ id: 'w', material }), true);
+  assert.equal(isBreakable({ id: 'w', material: 'paper' }), false);
+  for (const direction of ['left', 'right']) {
+    assert.equal(isOneWay({ movementDirection: direction }), true);
+    assert.throws(() => validateProperties({ material: 'stone', movementDirection: direction }), /One-way walls cannot be breakable/);
+    assert.throws(() => validateProperties({ material: 'stone', sightDirection: direction }), /One-way walls cannot be breakable/);
+    assert.equal(isBreakable({ material: 'stone', movementDirection: direction }), false);
+  }
+  assert.throws(() => validateProperties({ material: 'paper' }), /Invalid wall material/);
+  assert.throws(() => validateProperties({ broken: true }), /Only a wall with a material can be broken/);
+  assert.throws(() => validateProperties({ material: 'wood', broken: 'yes' }), /Invalid wall broken/);
+  validateProperties({ material: 'wood', broken: true });
+  validateProperties({ material: 'glass', interaction: 'window', broken: false });
+  validateProperties({ movementDirection: 'left' });
+});
+
+test('a broken wall stops neither movement nor sight, and the wall beside it still does', () => {
+  const standing = wall({ top: { material: 'stone' } });
+  assert.equal(crosses(standing, 0), true, 'a breakable wall that is not broken is still a wall');
+  const broken = validateWalls(wall({ top: { material: 'stone', broken: true } }));
+  assert.equal(crosses(broken, 0), false, 'the broken piece lets a walker through');
+  assert.equal(crosses(broken, 1), true, 'the closed door beside it still blocks');
+  assert.equal(crosses(broken, 2), true, 'the wall piece beyond still blocks');
+  assert.equal(movementPathBlocked(broken, walker(2, 0), { column: 4, row: 0, path: [{ column: 3, row: 0 }] }, flat, flat), false);
+  assert.deepEqual([restrictions(broken.segments[0]).sight, restrictions(broken.segments[0]).movement], ['pass', 'pass']);
+  // Everything except the editor reads the standing walls only.
+  const live = liveWalls(broken);
+  assert.deepEqual(live.segments.map((edge) => edge.id), ['door', 'bottom']);
+  assert.equal(live.nodes, broken.nodes, 'nodes are untouched');
+  assert.equal(liveWalls(standing), standing, 'a scene with nothing broken is handed back as it is');
+  // Sight, by the same function the board's fog uses, straight from the stored walls.
+  const sees = (model, row) => makeSight({ viewer: walker(2, row), viewerGround: 0, groundAt: flat, walls: model })({ x: 3.5, y: row + 0.5 }, 0.5);
+  assert.equal(sees(standing, 0), false);
+  assert.equal(sees(broken, 0), true, 'you can see through the gap');
+  assert.equal(sees(live, 0), true);
+  assert.equal(sees(broken, 2), false, 'but not through the wall that is left');
+});
+
+test('a broken door or window is open for good, whatever its door state', () => {
+  for (const door of [{ open: false }, { open: false, locked: true }, { interaction: 'window', sight: 'pass' }]) {
+    const model = validateWalls(wall({ door: { material: 'wood', broken: true, ...door } }));
+    assert.equal(crosses(model, 1), false, JSON.stringify(door));
+    assert.equal(isBroken(model.segments[1]), true);
+  }
+});
+
+test('repairing puts the wall back, and cutting a wall keeps what it is made of', () => {
+  const model = validateWalls(wall({ top: { material: 'stone', broken: true } }));
+  delete model.segments[0].broken;
+  assert.equal(crosses(validateWalls(model), 0), true);
+  // The editor cuts a long wall into squares by splitting it; both halves stay breakable.
+  const long = { version: 1, nodes: [{ id: 'a', x: 0, y: 0 }, { id: 'b', x: 2, y: 0 }], segments: [{ id: 'long', a: 'a', b: 'b', material: 'wood' }] };
+  split(long, 'long', { x: 1, y: 0 }, 'mid', 'second');
+  assert.deepEqual(long.segments.map((edge) => [edge.id, edge.material]), [['long', 'wood'], ['second', 'wood']]);
+  validateWalls(long);
+});
+
+test('rubble: one piece per square of broken wall, of the right kind', () => {
+  assert.deepEqual(rubblePieces(wall()), [], 'nothing broken, nothing drawn');
+  const model = wall({ top: { material: 'stone', broken: true }, door: { material: 'wood', broken: true }, bottom: { material: 'metal' } });
+  const pieces = rubblePieces(model);
+  assert.deepEqual(pieces.map((piece) => [piece.id, piece.kind]), [['top', 'stone'], ['door', 'door']]);
+  assert.deepEqual([pieces[0].a, pieces[0].b], [{ x: 3, y: 0 }, { x: 3, y: 1 }]);
+  assert.equal(rubbleKind({ material: 'glass', interaction: 'window' }), 'window');
+  assert.equal(rubbleKind({ material: 'metal' }), 'metal');
+  // A wall three squares long is three pictures end to end, not one stretched picture.
+  const long = { version: 1, nodes: [{ id: 'a', x: 0, y: 5 }, { id: 'b', x: 3, y: 5 }], segments: [{ id: 'long', a: 'a', b: 'b', material: 'stone', broken: true }] };
+  const tiles = rubblePieces(long);
+  assert.deepEqual(tiles.map((piece) => piece.id), ['long#0', 'long#1', 'long#2']);
+  assert.deepEqual(tiles.map((piece) => [piece.a.x, piece.b.x]), [[0, 1], [1, 2], [2, 3]]);
+  // A short stub of wall still gets one.
+  const stub = { version: 1, nodes: [{ id: 'a', x: 0, y: 0 }, { id: 'b', x: 0.22, y: 0 }], segments: [{ id: 'stub', a: 'a', b: 'b', material: 'stone', broken: true }] };
+  assert.equal(rubblePieces(stub).length, 1);
+});
+
+test('rubble size: a little longer than the wall piece, most of a square across', () => {
+  const one = rubbleSize(1);
+  assert.ok(one.along > 1 && one.along < 1.2, 'overlaps its neighbours a little');
+  assert.ok(Math.abs(one.across - 0.747) < 0.01, 'three long by two high');
+  assert.equal(rubbleSize(0.22).across, RUBBLE_MIN_ACROSS, 'a stub is still wide enough to hide the painted wall');
+  assert.equal(rubbleSize(1.4).across, RUBBLE_MAX_ACROSS, 'never a whole square across');
+});
+
+test('pictures are found by file name, and a wall always gets the same one', () => {
+  const library = rubbleLibrary([
+    '/dnd/vtt/assets/images/rubble/rubble-stone-2.png?v=9',
+    '/dnd/vtt/assets/images/rubble/rubble-stone-1.png?v=9',
+    '/dnd/vtt/assets/images/rubble/rubble-stone-10.webp',
+    '/dnd/vtt/assets/images/rubble/rubble-door-1.png',
+    '/dnd/vtt/assets/images/rubble/rubble-heap-1.png',
+    '/dnd/vtt/assets/images/rubble/readme.md',
+    '/dnd/vtt/assets/images/rubble/rubble-lava-1.png',
+    '/dnd/vtt/assets/images/wall-stone.png',
+  ]);
+  assert.deepEqual(Object.keys(library).sort(), ['door', 'heap', 'stone']);
+  assert.deepEqual(library.stone.map((url) => url.split('/').pop()), ['rubble-stone-1.png?v=9', 'rubble-stone-2.png?v=9', 'rubble-stone-10.webp']);
+  assert.deepEqual(rubbleLibrary(undefined), {});
+  for (const id of ['bath-wall-007013fa', 'deadroot-edge-4-20-5-20', 'long#2']) {
+    const first = rubblePicture(library, 'stone', id);
+    assert.ok(library.stone.includes(first));
+    for (let i = 0; i < 5; i++) assert.equal(rubblePicture(library, 'stone', id), first, 'the same on every redraw and every screen');
+  }
+  assert.equal(rubblePicture(library, 'wood', 'any'), null, 'a kind with no picture yet uses the stand-in');
+  assert.equal(rubblePicture(library, 'door', 'any'), library.door[0]);
+  assert.equal(pickVersion('any', 0), -1);
+  // Spread across versions: forty walls do not all land on one picture.
+  const used = new Set(Array.from({ length: 40 }, (_, i) => pickVersion(`wall-${i}`, 3)));
+  assert.equal(used.size, 3);
+  assert.equal(stableHash('wall-1'), stableHash('wall-1'));
+});
+
+test('the stand-in is the same drawing each time, fills its box, and differs by wall and by kind', () => {
+  for (const kind of RUBBLE_KINDS) {
+    const drawing = standInRubble(kind, 'wall-a');
+    assert.deepEqual(standInRubble(kind, 'wall-a'), drawing, `${kind}: same wall, same drawing`);
+    assert.notDeepEqual(standInRubble(kind, 'wall-b').bits, drawing.bits, `${kind}: another wall looks different`);
+    assert.ok(drawing.bits.length >= 20 && /^M-0\.5,/.test(drawing.band), `${kind}: the band starts at the end of the picture`);
+    assert.ok(drawing.band.includes('0.5,'), `${kind}: and reaches the other end`);
+    for (const path of [drawing.band, ...drawing.bits.map((bit) => bit.d)]) {
+      for (const [, x, y] of path.matchAll(/(-?\d*\.?\d+),(-?\d*\.?\d+)/g)) assert.ok(Math.abs(Number(x)) <= 0.5 && Math.abs(Number(y)) <= 0.5, `${kind}: stays inside its picture`);
+    }
+  }
+  assert.notEqual(standInRubble('stone', 'w').bandFill, standInRubble('wood', 'w').bandFill);
+  assert.equal(standInRubble('door', 'w').bandFill, standInRubble('wood', 'w').bandFill, 'a door breaks like wood');
+});
+
+test('rubble on a floor plate is told apart from rubble on bare ground', () => {
+  const square = (x0, y0, x1, y1) => [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
+  const ground = { id: 'ground', kind: 'floor', levelId: 'ground', height: 2, points: square(0, 0, 10, 10), holes: [square(6, 6, 8, 8)] };
+  const roof = { id: 'roof', kind: 'roof', levelId: 'ground', height: 2, points: square(0, 0, 10, 10) };
+  const balcony = { id: 'balcony', kind: 'floor', levelId: 'balcony', height: 4, points: square(0, 0, 10, 10) };
+  const piece = { a: { x: 3, y: 0 }, b: { x: 3, y: 1 } };
+  assert.equal(plateUnder(piece, 2, [roof, ground, balcony])?.id, 'ground', 'the plate at the wall\'s foot');
+  assert.equal(plateUnder(piece, 4, [roof, ground, balcony])?.id, 'balcony');
+  assert.equal(plateUnder(piece, 0, [roof, ground, balcony]), null, 'a wall on the ground below the plates is on bare ground');
+  assert.equal(plateUnder({ a: { x: 7, y: 6.5 }, b: { x: 7, y: 7.5 } }, 2, [ground]), null, 'over a hole in the plate');
+  assert.equal(plateUnder({ a: { x: 12, y: 0 }, b: { x: 12, y: 1 } }, 2, [ground]), null, 'beyond the plate');
+  assert.equal(plateUnder(piece, 2, []), null);
+  assert.equal(insideRing({ x: 1, y: 1 }, square(0, 0, 2, 2)), true);
+});

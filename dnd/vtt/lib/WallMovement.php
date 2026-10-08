@@ -93,7 +93,8 @@ final class WallMovement
         $nodes=array_column($model['nodes'],null,'id');
         foreach($model['segments'] as $edge){
             $e=[...['movement'=>'block','movementDirection'=>'both','interaction'=>'none','open'=>false,'baseMode'=>'terrain','base'=>0,'height'=>2,'topMode'=>'follow'],...$edge];
-            if($e['movement']==='pass'||($e['open']&&$e['interaction']!=='none'))continue;
+            // A broken wall is still stored, so it can be repaired, but it stops nothing.
+            if($e['movement']==='pass'||($e['open']&&$e['interaction']!=='none')||($edge['broken']??false)===true)continue;
             $a=$nodes[$e['a']];$b=$nodes[$e['b']];$vx=$b['x']-$a['x'];$vy=$b['y']-$a['y'];
             if($vx*$vx+$vy*$vy<1e-16)continue;
             $side=$vx*($oy-$a['y'])-$vy*($ox-$a['x']);

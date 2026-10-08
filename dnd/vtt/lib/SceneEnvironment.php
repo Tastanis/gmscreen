@@ -12,6 +12,9 @@ final class SceneEnvironment
                 unset($edge['open'], $edge['locked']);
             }
             unset($edge['secret']);
+            // Which walls can be broken is the GM's to know. A player's copy keeps the material
+            // only on a wall that is already broken, to draw the right rubble.
+            if (($edge['broken'] ?? false) !== true) unset($edge['material']);
             $environment['walls']['value']['segments'][$i] = $edge;
         }
         // GM-only zones never reach a player browser.
@@ -121,6 +124,16 @@ final class SceneEnvironment
             foreach (['sight'=>['block','pass','limited'],'movement'=>['block','pass'],'interaction'=>['none','door','window'],'baseMode'=>['fixed','terrain'],'topMode'=>['follow','level'],'sightDirection'=>['both','left','right'],'movementDirection'=>['both','left','right']] as $key=>$allowed) if (isset($edge[$key])&&!in_array($edge[$key],$allowed,true)) throw new InvalidArgumentException('Invalid wall property.');
             foreach (['open','locked','secret'] as $key) if (isset($edge[$key])&&!is_bool($edge[$key])) throw new InvalidArgumentException('Invalid wall flag.');
             if (($edge['open'] ?? false)&&($edge['locked'] ?? false)) throw new InvalidArgumentException('Locked wall cannot be open.');
+            // Breakable walls: a material marks a wall as breakable, `broken` says it has been broken.
+            // A one-way wall (a cliff edge) can never be given a material.
+            if (array_key_exists('material',$edge)) {
+                if (!in_array($edge['material'],self::WALL_MATERIALS,true)) throw new InvalidArgumentException('Invalid wall material.');
+                if (($edge['movementDirection'] ?? 'both')!=='both'||($edge['sightDirection'] ?? 'both')!=='both') throw new InvalidArgumentException('One-way walls cannot be breakable.');
+            }
+            if (array_key_exists('broken',$edge)) {
+                if (!is_bool($edge['broken'])) throw new InvalidArgumentException('Invalid wall flag.');
+                if ($edge['broken']&&!isset($edge['material'])) throw new InvalidArgumentException('Only a wall with a material can be broken.');
+            }
         }
         foreach ($value['roofs'] ?? [] as $roof) {
             self::number($roof['height'] ?? null);
@@ -149,6 +162,7 @@ final class SceneEnvironment
         elseif (is_string($item)&&strlen($item)>2048) throw new InvalidArgumentException('Map field too long.');
     }
 
+    public const WALL_MATERIALS = ['glass','wood','stone','metal'];
     public const ZONE_LIMIT = 200;
     public const ZONE_SQUARE_LIMIT = 20000;
     public const ZONE_TOTAL_SQUARE_LIMIT = 50000;

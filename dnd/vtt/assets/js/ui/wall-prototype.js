@@ -5,7 +5,7 @@ import {sharedField,saveShared,acknowledgedRevision} from './environment-sync.mj
 import {rampAt,rampHeight,rampPick,rampGround,rampSupports,rampLanding} from './imported-ramps.mjs';
 import './edit-tools.js';
 import {connectedWallPath} from './wall-selection.mjs';
-import {properties,movementPathBlocked,movementBlocked,wallHeights} from './wall-properties.mjs';
+import {properties,movementPathBlocked,movementBlocked,wallHeights,liveWalls,isBreakable,isBroken} from './wall-properties.mjs';
 import {createWallEditor} from './wall-editor.mjs';
 import {gmVision} from './gm-vision.js';
 import {sliceWallModel,wallHeightIntervals,inspectionPlanePoint} from './wall-height-slice.mjs';
@@ -24,6 +24,8 @@ const panel=document.createElement('aside');panel.id='wall-panel';panel.hidden=t
 const snapLabel=document.createElement('label');snapLabel.innerHTML='<input type="checkbox" data-wall-snap> Snap to grid';panel.insertBefore(snapLabel,panel.querySelector('footer'));
 const snapInput=snapLabel.querySelector('input');snapInput.checked=localStorage.getItem('wall-half-grid-snap')==='true';snapInput.onchange=()=>localStorage.setItem('wall-half-grid-snap',String(snapInput.checked));
 const snapPoint=p=>snapInput.checked?{x:Math.round(p.x*2)/2,y:Math.round(p.y*2)/2}:p;
+const repairAll=document.createElement('button');repairAll.className='btn';repairAll.type='button';repairAll.dataset.wallRepairAll='';repairAll.textContent='Repair all broken walls';repairAll.style.cssText='margin-top:8px;width:100%';repairAll.hidden=true;panel.insertBefore(repairAll,panel.querySelector('footer'));
+repairAll.onclick=()=>{if(!context?.isGM||!model.segments.some(isBroken))return;cancelDrag();const before=copyWalls(model);for(const edge of model.segments)if(isBroken(edge))delete edge.broken;change(before);};
 const editor=createWallEditor({panel,transform,selected:()=>selectedEdges(),model:()=>model,context:()=>context,projected,groundAt,change,render,copyWalls});
 const svg=document.createElementNS(ns,'svg');svg.id='wall-overlay';svg.style.cssText='position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:100003';transform.append(svg);
 let sharedRevision=-1,savingShared=false,dirtyWhileSaving=false;
@@ -147,12 +149,14 @@ function render(){
  if(selection&&(selection.kind==='segment'?!visibleIds.has(selection.id):!slice.nodeIds.has(selection.id)&&selection.id!==anchor))selection=null;
  for(const {edge:e,a,b,intervals} of slice.segments){const path=document.createElementNS(ns,'path');path.dataset.wallSegment=e.id;
   const portions=intervals.map(([lo,hi])=>[{x:a.x+(b.x-a.x)*lo,y:a.y+(b.y-a.y)*lo},{x:a.x+(b.x-a.x)*hi,y:a.y+(b.y-a.y)*hi}]);
-  path.setAttribute('d',portions.map(([a,b])=>pathBetween(a,b)).join(' '));path.setAttribute('fill','none');path.setAttribute('stroke',selectedIds.has(e.id)?'#ffeeb5':editor.color(e));path.setAttribute('stroke-width',3/scale);path.setAttribute('stroke-linecap','round');if(properties(e).sight==='pass'||e.open)path.setAttribute('stroke-dasharray',`${6/scale} ${4/scale}`);path.setAttribute('opacity',panel.hidden?'.45':'.95');fragment.append(path);if(!panel.hidden)for(const [a,b] of portions)editor.directions(fragment,e,a,b,scale);}
+  path.setAttribute('d',portions.map(([a,b])=>pathBetween(a,b)).join(' '));path.setAttribute('fill','none');path.setAttribute('stroke',selectedIds.has(e.id)?'#ffeeb5':editor.color(e));path.setAttribute('stroke-width',3/scale);path.setAttribute('stroke-linecap','round');if(properties(e).sight==='pass'||e.open||isBroken(e))path.setAttribute('stroke-dasharray',isBroken(e)?`${2/scale} ${5/scale}`:`${6/scale} ${4/scale}`);path.setAttribute('opacity',panel.hidden?'.45':'.95');if(isBroken(e))path.dataset.wallBroken='';fragment.append(path);if(!panel.hidden)for(const [a,b] of portions)editor.directions(fragment,e,a,b,scale);
+  // Only the GM has this overlay. A breakable wall carries one small diamond; nothing is shown to players.
+  if(isBreakable(e)&&portions.length){const [p0,p1]=portions[Math.floor(portions.length/2)],q=projected({x:(p0.x+p1.x)/2,y:(p0.y+p1.y)/2}),r=4/scale,mark=document.createElementNS(ns,'path');mark.dataset.wallBreakable=e.material;mark.setAttribute('d',`M${q.x},${q.y-r} L${q.x+r},${q.y} L${q.x},${q.y+r} L${q.x-r},${q.y} Z`);mark.setAttribute('fill',isBroken(e)?'none':editor.materialColor(e.material));mark.setAttribute('stroke','#1b1b1b');mark.setAttribute('stroke-width',1/scale);mark.setAttribute('opacity',panel.hidden?'.6':'1');fragment.append(mark);}}
  if(!panel.hidden){
    if(anchor&&pointNode(anchor)&&hover){const preview=document.createElementNS(ns,'path');preview.setAttribute('d',pathBetween(pointNode(anchor),hover.p));preview.setAttribute('fill','none');preview.setAttribute('stroke','#fff0ba');preview.setAttribute('stroke-width',2/scale);preview.setAttribute('stroke-dasharray',`${5/scale} ${4/scale}`);fragment.append(preview);}
    for(const n of model.nodes){if(!slice.nodeIds.has(n.id)&&n.id!==anchor)continue;const p=projected(n),circle=document.createElementNS(ns,'circle');circle.dataset.wallNode=n.id;circle.setAttribute('cx',p.x);circle.setAttribute('cy',p.y);circle.setAttribute('r',(selection?.id===n.id||hover?.id===n.id?6:4)/scale);circle.setAttribute('fill',selection?.id===n.id||hover?.id===n.id?'#ffeeb5':'#27241e');circle.setAttribute('stroke','#e7ca88');circle.setAttribute('stroke-width',1.5/scale);fragment.append(circle);}
  }
- editor.refresh(propertiesOpen);svg.replaceChildren(fragment);panel.querySelector('[data-wall-delete]').disabled=!selection&&!selectedIds.size;panel.querySelector('[data-wall-undo]').disabled=!history.length;
+ editor.refresh(propertiesOpen);svg.replaceChildren(fragment);{const broken=model.segments.filter(isBroken).length;repairAll.hidden=!broken;repairAll.textContent=broken===1?'Repair the broken wall':`Repair all ${broken} broken walls`;}panel.querySelector('[data-wall-delete]').disabled=!selection&&!selectedIds.size;panel.querySelector('[data-wall-undo]').disabled=!history.length;
  editor.portals();
 }
 function tick(){
@@ -177,9 +181,11 @@ function tick(){
 }
 window.addEventListener('storage',e=>{if(e.key===key){cancelDrag();key='';}});
 let cubeModelRevision=-1,cachedCubeModel=null;
+// Movement, sight, fog, roofs and the ruler all read walls from here, so a broken wall is left
+// out in this one place. The editor keeps reading `model`, which still holds it for repair.
 function activeModel(){
- if(!context)return model;
- if(cubeModelRevision!==revision){cachedCubeModel=wallCubeModel(model,context.state.boardState.templates?.[context.state.boardState.activeSceneId]||[],context.state.boardState.sceneState?.[context.state.boardState.activeSceneId]||{},groundAt);cubeModelRevision=revision;}
+ if(!context)return liveWalls(model);
+ if(cubeModelRevision!==revision){cachedCubeModel=wallCubeModel(liveWalls(model),context.state.boardState.templates?.[context.state.boardState.activeSceneId]||[],context.state.boardState.sceneState?.[context.state.boardState.activeSceneId]||{},groundAt);cubeModelRevision=revision;}
  return cachedCubeModel;
 }
 function groundAt(x,y){const v=context.view;return terrainPrototype.heightAt((v.gridOffsets.left||0)+x*v.gridSize,(v.gridOffsets.top||0)+y*v.gridSize);}
