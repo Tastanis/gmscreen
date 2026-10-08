@@ -456,6 +456,12 @@ function getGridMetrics(grid, mapTransform) {
 }
 
 function updateOverlay(state) {
+  // One redraw is one pass: the terrain walks each leg once and remembers ground heights for all of it.
+  const terrain = window.terrainPrototype;
+  return terrain?.active && typeof terrain.rulerPass === 'function' ? terrain.rulerPass(() => drawOverlay(state)) : drawOverlay(state);
+}
+
+function drawOverlay(state) {
   const rawPoints = getRenderablePoints(state);
   const terrain=window.terrainPrototype?.active ? window.terrainPrototype : null;
   const points = terrain ? rawPoints.map(p=>({...p,...terrain.rulerPoint(p)})) : rawPoints;
@@ -812,19 +818,20 @@ function syncDifficultSteps(overlay, segments, gridSize, terrain) {
     group.dataset.difficultRoute = '';
     overlay.svg.insertBefore(group, overlay.nodes);
   }
-  const cell = (origin, point) => ({
+  const cell = (origin, point, rawHeight) => ({
     column: point.column,
     row: point.row,
     mapX: origin.mapX + (point.column - origin.column) * gridSize,
     mapY: origin.mapY + (point.row - origin.row) * gridSize,
+    ...(Number.isFinite(rawHeight) ? { rawHeight } : {}),
   });
   const parts = [];
   const between = (a, b) => ({ mapX: (a.mapX + b.mapX) / 2, mapY: (a.mapY + b.mapY) / 2 });
   for (const { step, origin, next } of steps) {
-    const from = cell(origin, step.from);
-    const to = cell(origin, step);
+    const from = cell(origin, step.from, step.fromHeight);
+    const to = cell(origin, step, step.rawHeight);
     // Red covers the difficult square and nothing else: from the edge the route enters by to the edge it leaves by.
-    const onward = next && (next.column !== step.column || next.row !== step.row) ? cell(origin, next) : null;
+    const onward = next && (next.column !== step.column || next.row !== step.row) ? cell(origin, next, next === step.next ? step.nextHeight : undefined) : null;
     const at = terrain ? { ...to, ...terrain.rulerPoint(to) } : to;
     const path = document.createElementNS(SVG_NS, 'path');
     path.classList.add('vtt-difficult-step');

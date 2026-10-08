@@ -12,6 +12,7 @@ import {sample,paint,barycentric,clamp,groundSquare,heightBand,effectiveHeight,r
 import {floorElevations} from '../state/normalize/floor-elevation.js';
 import {terrainContact} from './terrain-contact.js';
 import {createRouteWalker,stepGhost,walksPlates} from './route-walker.mjs';
+import {createRulerPass,passActorKey} from './ruler-pass.mjs';
 const $=s=>document.querySelector(s);
 const image=$('#vtt-map-image'),transform=$('#vtt-map-transform'),surface=$('#vtt-map-surface'),board=$('#vtt-board-canvas');
 const canvas=document.createElement('canvas');canvas.id='terrain-canvas';
@@ -180,7 +181,14 @@ function movementGroundFor(from,to){return groundFor(movementPlacement(from,to))
 function highGround(actor,target){return effectiveHeight(groundFor(actor),Math.max(actor.width||1,actor.height||1))-effectiveHeight(groundFor(target),Math.max(target.width||1,target.height||1))>=1;}
 function isCliff(x,y){const g=dimensions().grid;return [[1,0],[0,1],[1,1],[1,-1]].some(([dx,dy])=>Math.abs(heightAt(x+dx*g/2,y+dy*g/2)-heightAt(x-dx*g/2,y-dy*g/2))>=3-1e-6);}
 function rulerActor(){const placements=ctx.state.boardState.placements[ctx.state.boardState.activeSceneId]||[];return placements.find(p=>p.id===(ctx.selectedIds[0]||window.visionPrototype?.viewerTokenId));}
+// One redraw of the ruler is one pass (ruler-pass.mjs): each leg is walked once and each ground
+// height looked up once, however many times the cost, the line and the red stretches ask.
+const pass=createRulerPass();
+const rulerPass=run=>pass.run(run);
 function rulerGround(column,row,actor){
+ return pass.active?pass.ground(column+','+row+'|'+passActorKey(actor),()=>rulerGroundNow(column,row,actor)):rulerGroundNow(column,row,actor);
+}
+function rulerGroundNow(column,row,actor){
  const d=dimensions();
  if(actor&&importedDesign()){const p={x:column+(actor.width||1)/2,y:row+(actor.height||1)/2};return rampLanding((importedDesign()?.ramps||[]),(resolveSupportSurfaces(importedDesign()||{})),actor,p,onSurface)??groundFor({...actor,column,row});}
  if(actor&&((actor.levelId&&actor.levelId!=='level-0')||(actor.movementMode&&actor.movementMode!=='ground')))return groundFor(actor);
@@ -193,6 +201,17 @@ function climbFace(actor,a,b){
  return terrainContact(from,{column:b.column,row:b.row},ground,t=>groundFor(t))!==null;
 }
 function route(start,end,options={}){
+ if(!pass.active)return routeNow(start,end,options);
+ const key=[start.column,start.row,end.column,end.row,options.ignoreZones?1:0,options.ignoreClimb?1:0,passActorKey(options.actor||rulerActor()),passActorKey(options.carry?.ghost)].join(';');
+ const walk=pass.route(key,()=>{
+  // Walked with its own carry, so where the walker ended up is kept with the walk.
+  const carry={ghost:options.carry?.ghost};
+  return {walked:routeNow(start,end,{...options,carry}),ghost:carry.ghost};
+ });
+ if(options.carry)options.carry.ghost=walk.ghost;
+ return walk.walked;
+}
+function routeNow(start,end,options={}){
  const d=dimensions(),actor=options.actor||rulerActor(),design=importedDesign();
  // The preview walks the route as the move itself will: it steps onto bridges and decks and stays on them.
  // `options.carry` hands the walker from one leg of a route to the next, so a waypoint on a bridge keeps it there.
@@ -251,9 +270,12 @@ function routePath(points){
 // The drawn line over one square only: from the edge the step from `from` crosses into `at`, to the
 // edge the step on to `next` leaves by (or to the middle of `at` when the route stops there).
 // stepsPath draws each one-square step as a start point and four quarter points, so the edges are the half-way ones.
+// The three squares come from the leg the ruler already walked and carry the height walked at
+// (rawHeight), so nothing is walked again here.
 function squarePath(from,at,next){
  const parts=[];
- for(const steps of routeLegs(next?[from,at,next]:[from,at]))stepsPath(steps,parts);
+ stepsPath([from,at],parts);
+ if(next)stepsPath([at,next],parts);
  return parts.slice(2,next?8:5).map((part,i)=>(i?'L':'M')+part.slice(1)).join(' ');
 }
 let markerCache='',markerBuilds=0,markerPreferenceKey='',markersVisible=true;
@@ -296,7 +318,7 @@ function paintRoute(overlay,points,gridSize){
  overlay.path.style.opacity='0';
 }
 window.addEventListener('storage',e=>{if(e.key===key&&!drawing){key='';}});
-window.terrainPrototype={get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,heightAt,groundFor,movementGroundFor,movementPlacement,highGround,isCliff,climbFace,walkerNear,get design(){return importedDesign();},route,rulerPoint,routePath,squarePath,paintRoute,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get key(){return key;},get storageError(){return storageError;},project,get active(){return active;}};
+window.terrainPrototype={get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,heightAt,groundFor,movementGroundFor,movementPlacement,highGround,isCliff,climbFace,walkerNear,get design(){return importedDesign();},route,rulerPass,rulerPoint,routePath,squarePath,paintRoute,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get key(){return key;},get storageError(){return storageError;},project,get active(){return active;}};
 requestAnimationFrame(tick);
 
 import('./wall-prototype.js');

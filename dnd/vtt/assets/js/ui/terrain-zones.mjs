@@ -149,9 +149,10 @@ export function summarizeRoute(points, stepsBetween) {
       const step = walked.points[k];
       const from = { column: walked.points[k - 1].column, row: walked.points[k - 1].row };
       // `next` is the square the route walks on to; the ruler ends its red stretch at that edge.
-      if (entered) entered.next = { column: step.column, row: step.row };
+      if (entered) { entered.next = { column: step.column, row: step.row }; entered.nextHeight = step.rawHeight; }
       entered = null;
-      if (step.multiplier > 1) summary.difficult.push(entered = { column: step.column, row: step.row, multiplier: step.multiplier, from });
+      // The heights walked at (before, on and after the square) let the ruler draw the stretch without walking again.
+      if (step.multiplier > 1) summary.difficult.push(entered = { column: step.column, row: step.row, multiplier: step.multiplier, from, rawHeight: step.rawHeight, fromHeight: walked.points[k - 1].rawHeight });
       if (step.climb > 0) { summary.climbs.push({ column: step.column, row: step.row, rise: step.rise, extra: step.climb, from }); summary.climbExtra += step.climb; }
     }
   }
