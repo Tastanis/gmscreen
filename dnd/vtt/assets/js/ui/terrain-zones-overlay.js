@@ -109,6 +109,22 @@ function cellInfoFor(target) {
       const raw = active ? active.route({column, row}, {column, row}, {ignoreZones: true}).points[0].rawHeight : undefined;
       return {column, row, height: active ? groundSquare(raw) : 0, multiplier: stepMultiplier(actor, column, row, raw)};
     },
+    // Near a deck or bridge the outline walks square by square as the move will, so a square
+    // reached along a bridge and the same square waded under it are told apart (`state`).
+    // Away from any plate it uses the plain per-square lookup above.
+    enter: active?.walkerNear && !airborne ? (() => {
+      let walker, plain = null;
+      const costs = new Map();
+      const multiplierAt = (column, row, raw) => { const key = `${column},${row},${Math.round(raw * 100)}`; let m = costs.get(key); if (m === undefined) { m = stepMultiplier(actor, column, row, raw); costs.set(key, m); } return m; };
+      return (from, column, row) => {
+        if (walker === undefined) walker = active.walkerNear(actor, column, row);
+        if (!walker) { plain ||= new Map(); const key = `${column},${row}`; let cell = plain.get(key); if (!cell) { const raw = active.route({column, row}, {column, row}, {ignoreZones: true, actor}).points[0].rawHeight; cell = {height: groundSquare(raw), multiplier: stepMultiplier(actor, column, row, raw)}; plain.set(key, cell); } return cell; }
+        let ghost, raw;
+        if (!from?.ghost) { ghost = {...actor, column, row}; raw = walker.plainHeight(column, row, actor); }
+        else ({ghost, height: raw} = walker.step(from.ghost, column, row));
+        return {height: groundSquare(raw), multiplier: multiplierAt(column, row, raw), state: ghost._supportSurfaceId || '', ghost};
+      };
+    })() : null,
     // The reach outline charges each step exactly as the ruler does, climbs included.
     stepCost: (from, to) => {
       const rise = to.height - from.height;

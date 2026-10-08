@@ -11,7 +11,7 @@ import {claimActiveTool,publishActiveTool} from './active-tool.js';
 import {sample,paint,barycentric,clamp,groundSquare,heightBand,effectiveHeight,relativeScale,routeSteps,slopeColor,brushRate} from './terrain-math.mjs';
 import {floorElevations} from '../state/normalize/floor-elevation.js';
 import {terrainContact} from './terrain-contact.js';
-import {createRouteWalker} from './route-walker.mjs';
+import {createRouteWalker,stepGhost,walksPlates} from './route-walker.mjs';
 const $=s=>document.querySelector(s);
 const image=$('#vtt-map-image'),transform=$('#vtt-map-transform'),surface=$('#vtt-map-surface'),board=$('#vtt-board-canvas');
 const canvas=document.createElement('canvas');canvas.id='terrain-canvas';
@@ -204,6 +204,27 @@ function route(start,end,options={}){
  if(options.carry)options.carry.ghost=walker.ghost;
  return walked;
 }
+// One step of a previewed walk, for the reach outline: the same contact rule, one square at a time.
+function walkTerrain(p){const d=dimensions();return heightAt((ctx.view.gridOffsets.left||0)+(p.column+(p.width||1)/2)*d.grid,(ctx.view.gridOffsets.top||0)+(p.row+(p.height||1)/2)*d.grid);}
+function walkSurfaces(){const design=importedDesign();return design?resolveSupportSurfaces(design):[];}
+// A stepper for the reach outline around one square. It looks only at the plates within `reach`
+// squares and remembers plain ground heights, because the outline asks about every square many
+// times. Null when no plate is near: the plain per-square rule is then already right.
+function walkerNear(actor,column,row,reach=15){
+ const box=s=>({s,left:Math.min(...s.points.map(p=>p.x)),right:Math.max(...s.points.map(p=>p.x)),top:Math.min(...s.points.map(p=>p.y)),bottom:Math.max(...s.points.map(p=>p.y))});
+ const near=walkSurfaces().filter(s=>(s.kind==='floor'||s.templateCube)&&s.points?.length>2).map(box).filter(b=>b.left<=column+reach+2&&b.right>=column-reach-1&&b.top<=row+reach+2&&b.bottom>=row-reach-1);
+ if(!walksPlates(actor,near))return null;
+ const mapLevels=levelConfig(),ground=new Map(),size=Math.max(actor.width||1,actor.height||1);
+ const plainHeight=(c,r,who)=>{if(who?._supportSurfaceId)return rulerGround(c,r,who);const key=c+','+r;let h=ground.get(key);if(h===undefined){h=rulerGround(c,r,who);ground.set(key,h);}return h;};
+ // Only the plates within a square of the step can matter to it. A step nowhere near a plate is plain ground.
+ const step=(ghost,c,r)=>{
+  const left=Math.min(ghost.column,c)-1,right=Math.max(ghost.column,c)+size+1,top=Math.min(ghost.row,r)-1,bottom=Math.max(ghost.row,r)+size+1;
+  const local=near.filter(b=>b.left<=right&&b.right>=left&&b.top<=bottom&&b.bottom>=top).map(b=>b.s);
+  if(!local.length)return {ghost:{...ghost,column:c,row:r,_supportSurfaceId:null},height:plainHeight(c,r,{...actor,_supportSurfaceId:null})};
+  return stepGhost({ghost,column:c,row:r,actor,surfaces:local,mapLevels,terrain:walkTerrain,plainHeight});
+ };
+ return {plainHeight,step};
+}
 // Every leg of a route, walked in order with the walker carried from leg to leg.
 function routeLegs(points){const carry={},legs=[];for(let k=1;k<points.length;k++)legs.push(route(points[k-1],points[k],{carry}).points);return legs;}
 // The drawn line through walked steps. It follows the ground as before, except where the walker
@@ -267,7 +288,7 @@ function paintRoute(overlay,points,gridSize){
  overlay.path.style.opacity='0';
 }
 window.addEventListener('storage',e=>{if(e.key===key&&!drawing){key='';}});
-window.terrainPrototype={get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,heightAt,groundFor,movementGroundFor,movementPlacement,highGround,isCliff,climbFace,get design(){return importedDesign();},route,rulerPoint,routePath,paintRoute,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get key(){return key;},get storageError(){return storageError;},project,get active(){return active;}};
+window.terrainPrototype={get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,heightAt,groundFor,movementGroundFor,movementPlacement,highGround,isCliff,climbFace,walkerNear,get design(){return importedDesign();},route,rulerPoint,routePath,paintRoute,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get key(){return key;},get storageError(){return storageError;},project,get active(){return active;}};
 requestAnimationFrame(tick);
 
 import('./wall-prototype.js');

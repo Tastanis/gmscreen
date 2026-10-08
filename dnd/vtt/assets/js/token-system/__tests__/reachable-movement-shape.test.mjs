@@ -67,3 +67,30 @@ test('the board can supply the price of a step, so a new surcharge needs no chan
     assert.deepEqual(buildReachableMovementShape({ origin, remaining: 4, bounds, cellInfo, stepCost }), usual);
   }
 });
+
+test('a bridge is followed from the land: the outline reaches along it, and the canal under it is a separate walk', () => {
+  // Bank at height 2 for rows up to 10, a canal bed at 0 below it, and a bridge at height 2 along
+  // column 10 from the bank southwards. A walker on the bank edge has 4 movement.
+  const onBridge = (column, row) => column === 10 && row >= 10 && row <= 16;
+  const ground = (row) => (row <= 10 ? 2 : 0);
+  const enter = (from, column, row) => {
+    const arrivesOnBridge = onBridge(column, row) && (!from || from.state === 'bridge' || (from.height === 2 && from.row <= 10));
+    return { height: arrivesOnBridge ? 2 : ground(row), multiplier: 1, state: arrivesOnBridge ? 'bridge' : '' };
+  };
+  const start = { column: 10, row: 10, width: 1, height: 1 };
+  const shape = buildReachableMovementShape({ origin: start, remaining: 4, bounds, enter });
+  assert.ok(shape.edges.length > 0);
+  assert.ok(has(shape, 10, 14), 'four squares out along the bridge');
+  // Stepping off the bank beside the bridge is a 2-square drop: 2 to get down, 2 left along the bed.
+  assert.ok(has(shape, 11, 11) && has(shape, 11, 13) && !has(shape, 11, 14));
+  // Without the walk, the same squares are priced as a drop from the bank: the bridge is cut short.
+  const plain = buildReachableMovementShape({ origin: start, remaining: 4, bounds, cellInfo: (column, row) => ({ height: ground(row), multiplier: 1 }) });
+  assert.ok(!has(plain, 10, 14), 'the old outline stopped at 13');
+  // The walk is told where it came from, and a broken one changes nothing.
+  const seen = [];
+  buildReachableMovementShape({ origin: start, remaining: 1, bounds, enter: (from, column, row) => { seen.push(from ? [from.column, from.row] : null); return enter(from, column, row); } });
+  assert.equal(seen[0], null, 'the starting square has no square before it');
+  assert.ok(seen.length > 1 && seen.slice(1).every((from) => from && Math.abs(from[0] - 10) <= 1 && Math.abs(from[1] - 10) <= 1), 'every other square is entered from a square already reached');
+  const square = buildSquareMovementShape({ origin: start, remaining: 2, bounds });
+  assert.deepEqual(buildReachableMovementShape({ origin: start, remaining: 2, bounds, enter: () => { throw new Error('no data'); } }), square);
+});

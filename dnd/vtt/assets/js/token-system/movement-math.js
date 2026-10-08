@@ -104,15 +104,18 @@ export function buildSquareMovementShape({ origin, remaining, blockers = [], bou
 /**
  * Reach outline that follows the real cost of each step. `cellInfo(column, row)`
  * gives, for the mover's top-left square, the rounded ground height and the
- * movement multiplier of that square. `stepCost(from, to)` prices one step
+ * movement multiplier of that square. `enter(from, column, row)` may be given
+ * in its place when how a square is reached matters (walking onto a bridge and
+ * wading under it are different). `stepCost(from, to)` prices one step
  * between two such squares; the board passes the ruler's own pricing. Without
  * it a step costs the larger of 1 and the height change, plus (multiplier - 1).
  * Returns the plain square shape when nothing changes the cost, so flat maps
  * without difficult terrain look as they always have.
  */
-export function buildReachableMovementShape({ origin, remaining, cellInfo = null, stepCost = null, blockers = [], bounds = null } = {}) {
+export function buildReachableMovementShape({ origin, remaining, cellInfo = null, stepCost = null, enter = null, blockers = [], bounds = null } = {}) {
   const square = buildSquareMovementShape({ origin, remaining, blockers, bounds });
-  if (!square || typeof cellInfo !== 'function') {
+  const walked = typeof enter === 'function';
+  if (!square || (typeof cellInfo !== 'function' && !walked)) {
     return square;
   }
   const footprint = normalizeFootprint(origin);
@@ -128,6 +131,20 @@ export function buildReachableMovementShape({ origin, remaining, cellInfo = null
     try { value = Number(stepCost(from, to)); } catch (error) { value = null; }
     return Number.isFinite(value) && value >= 1 ? value : fallback;
   };
+  // What a square is like to stand on. `enter(from, column, row)` walks there from the square
+  // before and may say the mover arrives in a different `state` (on a bridge, or under it); the
+  // plain `cellInfo(column, row)` knows one state per square.
+  const tidy = (raw, column, row) => {
+    const multiplier = Number(raw?.multiplier);
+    return {
+      ...(raw && typeof raw === 'object' ? raw : {}),
+      column,
+      row,
+      height: Number.isFinite(Number(raw?.height)) ? Number(raw.height) : 0,
+      multiplier: Number.isFinite(multiplier) && multiplier > 1 ? Math.floor(multiplier) : 1,
+      state: raw?.state === undefined || raw?.state === null ? '' : String(raw.state),
+    };
+  };
   const info = new Map();
   const read = (column, row) => {
     const key = `${column},${row}`;
@@ -135,39 +152,43 @@ export function buildReachableMovementShape({ origin, remaining, cellInfo = null
     if (!value) {
       let raw = null;
       try { raw = cellInfo(column, row); } catch (error) { raw = null; }
-      const multiplier = Number(raw?.multiplier);
-      value = {
-        column,
-        row,
-        height: Number.isFinite(Number(raw?.height)) ? Number(raw.height) : 0,
-        multiplier: Number.isFinite(multiplier) && multiplier > 1 ? Math.floor(multiplier) : 1,
-      };
+      value = tidy(raw, column, row);
       info.set(key, value);
     }
     return value;
   };
+  const step = (from, column, row) => {
+    if (!walked) return read(column, row);
+    let raw = null;
+    try { raw = enter(from, column, row); } catch (error) { raw = null; }
+    return tidy(raw, column, row);
+  };
+  const nodeKey = (cell) => `${cell.column},${cell.row}|${cell.state}`;
 
   // Cheapest cost to each top-left square (uniform-cost search; costs are small whole numbers).
+  const start = step(null, footprint.column, footprint.row);
+  const bestNode = new Map([[nodeKey(start), 0]]);
   const best = new Map([[`${footprint.column},${footprint.row}`, 0]]);
-  const frontier = [[0, footprint.column, footprint.row]];
+  const frontier = [[0, start]];
   while (frontier.length) {
     let pick = 0;
     for (let i = 1; i < frontier.length; i += 1) if (frontier[i][0] < frontier[pick][0]) pick = i;
-    const [cost, column, row] = frontier.splice(pick, 1)[0];
-    if (cost > (best.get(`${column},${row}`) ?? Infinity)) continue;
-    const here = read(column, row);
+    const [cost, here] = frontier.splice(pick, 1)[0];
+    if (cost > (bestNode.get(nodeKey(here)) ?? Infinity)) continue;
     for (let dy = -1; dy <= 1; dy += 1) {
       for (let dx = -1; dx <= 1; dx += 1) {
         if (!dx && !dy) continue;
-        const nextColumn = column + dx;
-        const nextRow = row + dy;
+        const nextColumn = here.column + dx;
+        const nextRow = here.row + dy;
         if (nextColumn < minColumn || nextColumn > maxColumn || nextRow < minRow || nextRow > maxRow) continue;
-        const there = read(nextColumn, nextRow);
+        const there = step(here, nextColumn, nextRow);
         const next = cost + price(here, there);
-        const key = `${nextColumn},${nextRow}`;
-        if (next > movement || next >= (best.get(key) ?? Infinity)) continue;
-        best.set(key, next);
-        frontier.push([next, nextColumn, nextRow]);
+        const key = nodeKey(there);
+        if (next > movement || next >= (bestNode.get(key) ?? Infinity)) continue;
+        bestNode.set(key, next);
+        const square = `${nextColumn},${nextRow}`;
+        if (next < (best.get(square) ?? Infinity)) best.set(square, next);
+        frontier.push([next, there]);
       }
     }
   }

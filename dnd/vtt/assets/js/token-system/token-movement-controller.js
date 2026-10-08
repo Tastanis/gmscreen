@@ -212,6 +212,7 @@ export function createTokenMovementController({
         remaining,
         cellInfo: typeof cells?.at === 'function' ? cells.at : null,
         stepCost: typeof cells?.stepCost === 'function' ? cells.stepCost : null,
+        enter: typeof cells?.enter === 'function' ? cells.enter : null,
         blockers,
         bounds: {
           minColumn: 0,
