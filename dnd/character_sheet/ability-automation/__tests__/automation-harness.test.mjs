@@ -1797,3 +1797,27 @@ test('an ability that is allowed is not refunded', async () => {
     harness.close();
   }
 });
+
+test('a pull that moves nobody says so, deals no collision and fires no forced-movement trigger', async () => {
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const result = await harness.runAutomation({
+      action: { id: 'drag-under', name: 'Drag Under', actionLabel: 'Main Action' },
+      automation: {
+        schema: 'ability-automation/v3',
+        cards: [
+          { type: 'target', name: 'pulled', mode: 'token', count: { value: 1, mode: 'exact' } },
+          { type: 'effect', target: 'pulled', effects: [{ kind: 'forcedMovement', verb: 'pull', distance: 2 }] },
+        ],
+      },
+      targetSelections: [{ id: 'cal', name: 'Cal' }],
+      forceMove: () => ({ skipped: false, name: 'Cal', movedDistance: 0, collision: null, noMovement: true }),
+    });
+    const chat = result.calls.postChat.map((entry) => entry.message).join('\n');
+    assert.match(chat, /Cal is not moved: there is nowhere to pull them\./);
+    assert.doesNotMatch(chat, /Collision|pulled 0 squares/);
+    assert.equal((result.calls.fireTriggerEvent || []).filter((call) => /forcedMovement/.test(call.eventType)).length, 0);
+  } finally {
+    harness.close();
+  }
+});

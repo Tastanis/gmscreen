@@ -26,6 +26,16 @@ export function resolveForcedDrag(from, to, others, { wallBlocked = () => false,
     stop=lo;wall=true;
   }
   if(wall){const travel=distance*stop,whole=Math.floor(travel+1e-6),steps=whole+(travel-whole>=.75-1e-6?1:0);stop=Math.min(1,steps/distance);}
+  // A creature stops the mover in the last whole square before contact, so no token is left between squares.
+  let cell=null;
+  if(!wall&&collidedIds.length){
+    const hit=others.filter(other=>collidedIds.includes(other.id));
+    const square=n=>({column:Math.round(from.column+dx*n/distance),row:Math.round(from.row+dy*n/distance)});
+    const overlaps=p=>hit.some(o=>p.column<o.column+(o.width||1)-1e-8&&p.column+(from.width||1)>o.column+1e-8&&p.row<o.row+(o.height||1)-1e-8&&p.row+(from.height||1)>o.row+1e-8);
+    let steps=Math.floor(distance*stop+1e-6);
+    while(steps>0&&overlaps(square(steps)))steps--;
+    cell=square(steps);stop=steps/distance;
+  }
   const remaining=Math.max(0,Math.ceil(distance*(1-stop)-1e-6));
-  return {destination:{...to,column:wall?Math.round(from.column+dx*stop):from.column+dx*stop,row:wall?Math.round(from.row+dy*stop):from.row+dy*stop},damage:remaining+(wall?2:0),collidedIds,wall};
+  return {destination:cell?{...to,...cell}:{...to,column:wall?Math.round(from.column+dx*stop):from.column+dx*stop,row:wall?Math.round(from.row+dy*stop):from.row+dy*stop},damage:remaining+(wall?2:0),collidedIds,wall};
 }

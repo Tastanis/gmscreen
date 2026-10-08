@@ -2421,6 +2421,10 @@
         continue;
       }
       const moved = result.movedDistance ?? distance;
+      if (moved <= 0 && !result.collision) {
+        lines.push(`${result.name || target.name || "Target"} is not moved: there is nowhere to ${verb.replace(/^vertical/, "").toLowerCase()} them.`);
+        continue;
+      }
       if (typeof state.context.fireTriggerEvent === "function") {
         const eventPayload = {
           placementId: target.id,

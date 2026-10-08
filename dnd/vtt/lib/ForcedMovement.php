@@ -27,7 +27,22 @@ final class ForcedMovement
   $blocked=function($point)use($from,$config){try{WallMovement::assertAllowed($from,$point,$config,'forced',[],true);return false;}catch(InvalidArgumentException $e){return true;}};
   if($blocked($at($stop))){$lo=0.;$hi=$stop;for($i=0;$i<32;$i++){$mid=($lo+$hi)/2;if($blocked($at($mid)))$hi=$mid;else $lo=$mid;}if($lo<$stop-1e-6)$ids=[];$stop=$lo;$wall=true;}
   if($wall){$travel=$distance*$stop;$whole=floor($travel+1e-6);$steps=$whole+($travel-$whole>=.75-1e-6?1:0);$stop=min(1,$steps/$distance);}
-  return ['column'=>$wall?round($from['column']+$dx*$stop):$from['column']+$dx*$stop,'row'=>$wall?round($from['row']+$dy*$stop):$from['row']+$dy*$stop,'damage'=>max(0,(int)ceil($distance*(1-$stop)-1e-6))+($wall?2:0),'collidedIds'=>array_values(array_unique($ids)),'wall'=>$wall];
+  // A creature stops the mover in the last whole square before contact, so no token is left between squares.
+  $cell=null;
+  if(!$wall&&$ids){
+   $square=fn($n)=>['column'=>round($from['column']+$dx*$n/$distance),'row'=>round($from['row']+$dy*$n/$distance)];
+   $overlaps=function($p)use($others,$ids,$from){
+    foreach($others as $o){
+     if(!in_array($o['id']??null,$ids,true))continue;
+     if($p['column']<$o['column']+($o['width']??1)-1e-8&&$p['column']+($from['width']??1)>$o['column']+1e-8&&$p['row']<$o['row']+($o['height']??1)-1e-8&&$p['row']+($from['height']??1)>$o['row']+1e-8)return true;
+    }
+    return false;
+   };
+   $steps=(int)floor($distance*$stop+1e-6);
+   while($steps>0&&$overlaps($square($steps)))$steps--;
+   $cell=$square($steps);$stop=$steps/$distance;
+  }
+  return ['column'=>$cell?$cell['column']:($wall?round($from['column']+$dx*$stop):$from['column']+$dx*$stop),'row'=>$cell?$cell['row']:($wall?round($from['row']+$dy*$stop):$from['row']+$dy*$stop),'damage'=>max(0,(int)ceil($distance*(1-$stop)-1e-6))+($wall?2:0),'collidedIds'=>array_values(array_unique($ids)),'wall'=>$wall];
  }
  public static function plan(array $from,array $to,$intent,string $kind,array $others,array $config): array {
   if($kind!=='forced'||!is_array($intent))throw new InvalidArgumentException('Invalid forced destination.');

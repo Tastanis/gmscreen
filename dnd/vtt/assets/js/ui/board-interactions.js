@@ -12,6 +12,7 @@ import {climbSurcharge} from './terrain-math.mjs';
 import {settleCollisionEffects} from '../services/collision-effects.js';
 import {PLAYER_CHARACTER_USER_IDS as visionOwnerProfiles} from '../state/normalize/map-levels.js';
 import {resolveForcedDrag} from './forced-drag.js';
+import {forcedMoveLegalCells, isForcedMovePathLegal, footprintsOverlap, nearestPullCell} from './forced-move-cells.js';
 import {configureCharacterOperationJournal} from '../services/character-operation-journal.js';
 import {confirmCharacterWrite} from '../services/character-write.js';
 import {spendCharacterRecoveries} from '../services/recovery-spend.js';
@@ -17941,6 +17942,13 @@ export function mountBoardInteractions(store, routes = {}) {
       },
       legalCells: buildAutomationMoveLegalCells(sourceSnapshot, targetSnapshot, request.effectiveDistance, baseVerb),
     };
+    // A pull that cannot bring the target any closer does nothing: there is no square to pick.
+    if (baseVerb === 'pull' && !pendingAutomationMove.legalCells.length) {
+      pendingAutomationMove = null;
+      updateStatus(`${targetSnapshot.name} cannot be pulled any closer.`);
+      request.resolve?.({ skipped: false, name: targetSnapshot.name, movedDistance: 0, collision: null, noMovement: true });
+      return;
+    }
     automationMoveOverlay = renderAutomationMoveOverlay(pendingAutomationMove);
     updateAutomationMovePreview(pendingAutomationMove.previewCell);
     const legalNote = pendingAutomationMove.legalCells.length
@@ -17949,58 +17957,21 @@ export function mountBoardInteractions(store, routes = {}) {
     updateStatus(`${verbLabel} ${targetSnapshot.name}: choose a destination or click Skip. ${legalNote}`);
   }
 
+  // The rules for which squares are legal live in forced-move-cells.js.
   function buildAutomationMoveLegalCells(source, target, distance, baseVerb) {
-    const cells = [];
-    const originDistance = automationChebyshevDistance(getPlacementCenter(source), getPlacementCenter(target));
-    for (let dy = -distance; dy <= distance; dy += 1) {
-      for (let dx = -distance; dx <= distance; dx += 1) {
-        // A fractional starting placement must not shift the visible selection grid.
-        const column = Math.floor(target.column) + dx;
-        const row = Math.floor(target.row) + dy;
-        const movedDistance = automationChebyshevDistance(target, { column, row });
-        if (movedDistance > distance || movedDistance === 0) continue;
-        if (!isAutomationMovePathLegal(source, target, { column, row }, baseVerb)) continue;
-        const candidate = { column, row, width: target.width, height: target.height };
-        const sourceDistance = automationChebyshevDistance(getPlacementCenter(source), getPlacementCenter(candidate));
-        if (baseVerb === 'push' && sourceDistance <= originDistance) continue;
-        if (baseVerb === 'pull' && sourceDistance >= originDistance) continue;
-        // slide: any cell within distance — no source-distance constraint
-        cells.push({ column, row });
-      }
-    }
-    return cells;
+    return forcedMoveLegalCells(source, target, distance, baseVerb);
+  }
+
+  function automationFootprintsOverlap(a, b) {
+    return footprintsOverlap(a, b);
+  }
+
+  function nearestAutomationPullCell(request) {
+    return nearestPullCell(request.sourceSnapshot, request.targetSnapshot, request.legalCells);
   }
 
   function isAutomationMovePathLegal(source, target, destination, baseVerb) {
-    const sourceCenter = getPlacementCenter(source);
-    const start = { column: target.column, row: target.row, width: target.width, height: target.height };
-    let remainingDx = destination.column - start.column;
-    let remainingDy = destination.row - start.row;
-    const steps = Math.max(Math.abs(remainingDx), Math.abs(remainingDy));
-    if (steps <= 0) return false;
-    let previousDistance = automationChebyshevDistance(sourceCenter, getPlacementCenter(start));
-    let column = start.column;
-    let row = start.row;
-    for (let index = 0; index < steps; index += 1) {
-      // Chebyshev walk: take a diagonal step while both axes have remaining
-      // distance, then a cardinal step for whichever axis is still off-target.
-      const stepX = Math.sign(remainingDx);
-      const stepY = Math.sign(remainingDy);
-      column += stepX;
-      row += stepY;
-      remainingDx -= stepX;
-      remainingDy -= stepY;
-      const cell = { column, row, width: start.width, height: start.height };
-      const nextDistance = automationChebyshevDistance(sourceCenter, getPlacementCenter(cell));
-      // Push: each step must be non-decreasing distance from source.
-      // Pull: each step must be non-increasing distance from source.
-      // Plateaus are allowed (diagonal moves that traverse parallel to source).
-      // Slide: any walk is fine.
-      if (baseVerb === 'push' && nextDistance < previousDistance) return false;
-      if (baseVerb === 'pull' && nextDistance > previousDistance) return false;
-      previousDistance = nextDistance;
-    }
-    return true;
+    return isForcedMovePathLegal(source, target, destination, baseVerb);
   }
 
   // Back-compat alias in case anything still calls the old name.
@@ -18110,12 +18081,19 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     const clickedPlacement = target?.closest('[data-movement-loupe]') ? null : findRenderedPlacementAtPoint(event);
     const cell = getAutomationGridCellFromEvent(event) || request.previewCell;
-    const collisionPlacement = request.movementKind!=='teleport' && clickedPlacement && clickedPlacement.id !== request.targetSnapshot.id
+    let collisionPlacement = request.movementKind!=='teleport' && clickedPlacement && clickedPlacement.id !== request.targetSnapshot.id
       ? clickedPlacement
       : null;
-    const destination = collisionPlacement
+    let destination = collisionPlacement
       ? getAutomationCollisionStopCell(request.targetSnapshot, getAutomationPlacementSnapshot(collisionPlacement))
       : cell;
+    // A pull cannot slam the target into the puller. Picking the puller, or a square under it,
+    // means "as close as the pull allows".
+    if (request.baseVerb === 'pull' && (collisionPlacement?.id === request.sourceSnapshot.id
+      || (!collisionPlacement && automationFootprintsOverlap({...destination, width: request.targetSnapshot.width, height: request.targetSnapshot.height}, request.sourceSnapshot)))) {
+      collisionPlacement = null;
+      destination = nearestAutomationPullCell(request) || {column: request.targetSnapshot.column, row: request.targetSnapshot.row};
+    }
     let clamped = clampPlacementToBounds(
       destination.column,
       destination.row,
@@ -18137,7 +18115,8 @@ export function mountBoardInteractions(store, routes = {}) {
       forcedIntent={column:clamped.column,row:clamped.row};
       if(collisionPlacement){
         const dx=collisionPlacement.column-origin.column,dy=collisionPlacement.row-origin.row,d=Math.max(Math.abs(dx),Math.abs(dy));
-        if(d)forcedIntent={column:origin.column+dx/d*request.effectiveDistance,row:origin.row+dy/d*request.effectiveDistance};
+        // Aim at a whole square, so a slam that falls short of the other token still ends on the grid.
+        if(d)forcedIntent={column:Math.round(origin.column+dx/d*request.effectiveDistance),row:Math.round(origin.row+dy/d*request.effectiveDistance)};
         forcedIntent=clampPlacementToBounds(forcedIntent.column,forcedIntent.row,origin.width||1,origin.height||1);
       }
       forcedCollision=resolveForcedDrag(origin,forcedIntent,Object.values(canonical),{

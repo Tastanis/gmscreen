@@ -604,6 +604,7 @@ export async function createAbilityAutomationHarness(options = {}) {
       },
       forceMove(payload) {
         recorder.record('forceMove', payload);
+        if (typeof runOptions.forceMove === 'function') return runOptions.forceMove(payload);
         return { name: payload.target?.name || payload.targetId, movedDistance: payload.distance };
       },
       applyTeleport(payload) {
