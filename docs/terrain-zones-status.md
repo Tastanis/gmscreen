@@ -3,9 +3,9 @@
 Plain-language progress for Brandon. Updated at the end of each stage.
 
 **Where the work is:** everything here is on `main` in the shared folder on
-this PC (`C:/Users/tasta/Desktop/gmscreen`). Work up to the first October 8
-section is on GitHub. The second October 8 section (fixes from the final test)
-is on `main` on this PC only until it is pushed. The live site changes only
+this PC (`C:/Users/tasta/Desktop/gmscreen`). Everything up to and including
+"fixes from the final test" is on GitHub. The last section, "after the
+re-check", is on this PC only until it is pushed. The live site changes only
 when you deploy from cPanel.
 
 ## What this feature is
@@ -517,15 +517,51 @@ nearest whole square.
 - A long teleport no longer lists squares off the map. Elowin's teleport 60
   offered 14,640 squares; it now offers only the map.
 
-**7. Not fixed: the range outline beside the bridge.** From (36,24) on Dead
-Root the ruler prices (31,24) at 5 and the outline leaves it out. Reading the
-code, the ruler and the outline price each step the same way, so I could not
-find the cause without watching it run. The height rule above changed the
-outline's sums and may have moved it. It needs the tester to look again.
+**7. The range outline beside the bridge: closed, nothing to fix.** The
+tester re-ran it step by step. The ruler and the outline both price (31,24)
+at 5 and the outline includes it. The earlier report was a mistake in the
+test tool's way of reading the outline.
 
 Checks run: full suite 152 files, 1099 checks, 0 failures; every server test
 passes. Not yet seen in a browser: any of it. The tester re-runs these checks
 next.
+
+## October 8, after the re-check: two more fixes. Done, waiting for a re-test
+
+The tester re-checked the seven fixes in a browser. All seven passed. It found
+two things left over.
+
+**A pull could still clip the puller.** With the target two squares away, the
+picker offered the two squares directly beside the puller that are reached at
+a slant. Picking one stopped the pull a square short and scored a collision
+with the puller.
+
+- The book says each square of a pull must bring the target closer. A step
+  that only runs along the puller's side is not closer, so those squares are
+  no longer offered. From two squares away, a pull now offers the three squares
+  on the target's side of the puller.
+- If you click one of those squares by hand anyway, the pull goes to the
+  nearest offered square. A pull never damages the puller.
+- Pushes are unchanged.
+
+**A bank that is a climb going up was not always a fall coming down.** Of 67
+two-square banks on Dead Root, walking or being pushed off 26 of them was no
+fall at all, and 5 were a fall of 1. Two causes: the fall only counted where
+the ground dropped sharply, and it was measured from the edge the creature
+went over, not from the middle of the square it left, which is where a climb
+is measured.
+
+- A fall is now measured from the middle of the square the creature left.
+- A bank that would be a climb of two squares or more going up is a fall of
+  the same number coming down.
+- **This changes falls on existing maps:** a creature pushed off a 1.9-high
+  bank now falls 2 squares (4 damage before Agility) where it took nothing. A
+  few faces change by one square to match their climb, in either direction.
+- Under the climb line nothing changed. A bank under one and a half squares is
+  still a plain step, and a long hill is still not a fall.
+
+Checks run: new tests on both sides for each. The whole suite is waiting for
+free memory on this PC.
 
 ## Where it is now
 
