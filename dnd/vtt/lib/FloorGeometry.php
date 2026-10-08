@@ -212,6 +212,38 @@ final class FloorGeometry
         return ['fired'=>false, 'entry'=>$endsInside ? $entry : null, 'endsInside'=>$endsInside];
     }
 
+    /**
+     * The path a token walks a stair by. A stair is crossed by one point of the token, its centre.
+     * A token wider than the stair, or standing to one side of it, has its centre on the stair's
+     * side line or beyond it, which is neither on the stair nor off it, so it never climbed. Such a
+     * token walks the stair with the part of it that is on the stair: across the stair's width the
+     * point is moved onto the stair's own squares. A token that fits inside the stair is unchanged.
+     */
+    public static function stairLane(array $path, array $stair, float $width, float $height): array
+    {
+        $corners = $stair['corners'] ?? [];
+        // The red and green edges lie across the direction of travel; that is the axis to adjust.
+        $across = null;
+        foreach (self::perimeter($corners) as $edge) {
+            if (!in_array($stair['edgeColors'][$edge['id']] ?? 'barrier', ['red', 'green'], true)) continue;
+            $axis = $edge['from']['y'] === $edge['to']['y'] ? 'x' : 'y';
+            if ($across !== null && $across !== $axis) return $path; // Not a straight stair: leave it alone.
+            $across = $axis;
+        }
+        if ($across === null) return $path;
+        $size = $across === 'x' ? $width : $height;
+        $values = array_map(static fn ($corner) => (float) $corner[$across === 'x' ? 'column' : 'row'], $corners);
+        $min = min($values); $max = max($values);
+        foreach ($path as &$point) {
+            $start = $point[$across] - $size / 2;
+            $lo = max($start, $min); $hi = min($start + $size, $max);
+            // At least one whole square of the token lies within the stair's width.
+            if ($hi - $lo >= 1 - self::EPSILON) $point[$across] = max($lo + 0.5, min($hi - 0.5, $point[$across]));
+        }
+        unset($point);
+        return $path;
+    }
+
     /** Derive floor and resumable stair progress from canonical geometry only. */
     public static function move(array $current, array $destination, array $mapLevels, string $kind = 'walk', array $waypoints = [], array $surfaces = [], ?callable $terrainAt = null): array
     {
@@ -241,7 +273,7 @@ final class FloorGeometry
                 if (!isset($byId[$target]) || $target === $levelId || ($byId[$target]['hidden'] ?? false) === true) continue;
                 $signature = hash('sha256', json_encode([$levelId, $width, $height, $stair]));
                 $prior = $current['_floorTraversal'] ?? [];
-                $crossing = self::crossing($path, $stair, ($prior['signature'] ?? '') === $signature ? ($prior['entry'] ?? null) : null);
+                $crossing = self::crossing(self::stairLane($path, $stair, $width, $height), $stair, ($prior['signature'] ?? '') === $signature ? ($prior['entry'] ?? null) : null);
                 if ($crossing['fired']) { $result['levelId']=$target; $result['cause']='stairs'; break; }
                 if ($crossing['endsInside']) {
                     $result['traversal']=['stairId'=>$stair['id'], 'signature'=>$signature, 'entry'=>$crossing['entry']];
