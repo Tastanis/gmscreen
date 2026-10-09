@@ -148,3 +148,16 @@ try {
     unset($store);
 } finally { @unlink($database); }
 echo "PASS through the store: asked first, broken only on the word, refused whole, repeated safely\n";
+// An ability's push sent with a stale copy of the creature is refused, and what is sent back is
+// the scene as it stands: nothing broken, by the attempt or in the answer.
+[$store, $database] = $open([[...$token(8, 8), 'team'=>'enemy']]);
+try {
+    $snap = $store->getSnapshot();
+    $stale = ['type'=>'placement.batch','operationId'=>'hurl-ability-stale','baseRevision'=>$snap['revision'],'payload'=>['actions'=>[['kind'=>'patch','sceneId'=>'scene','placementId'=>'t','entityRevision'=>7,
+        'movementKind'=>'forced','forcedDestination'=>['column'=>11, 'row'=>8, 'breakThrough'=>true],'patch'=>['column'=>10, 'row'=>8]]]]];
+    $result = $store->acceptPlacementBatch($stale, 'cal', false);
+    $sent = array_filter($result['snapshot']['state']['sceneConfig']['scene']['environment']['walls']['value']['segments'], static fn ($edge) => ($edge['broken'] ?? false) === true);
+    hurlCheck($result['status'] === 'conflict' && $sent === [] && $brokenIn($store) === [] && $store->getSnapshot()['revision'] === $snap['revision'], 'A stale push breaks nothing and reports nothing broken');
+    unset($store);
+} finally { @unlink($database); }
+echo "PASS a stale push is refused with the scene untouched\n";

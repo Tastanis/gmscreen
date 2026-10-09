@@ -1359,7 +1359,8 @@ final class SyncV2Store
             $only = count($normalized['actions']) === 1 ? $normalized['actions'][0] : null;
             if ($only !== null && $only['kind'] === 'patch' && $movementRestores === null && ($only['forcedDestination']['breakThrough'] ?? false) === true) {
                 $mover = $state['placements'][$only['sceneId']][$only['placementId']] ?? null;
-                $broke = is_array($mover) ? $this->breakThrough($only['sceneId'], $mover, $only['forcedDestination'], $state, $actorId, $normalized['operationId']) : null;
+                // Only for a mover this command is about to move: a stale one is refused below, untouched.
+                $broke = is_array($mover) && max(0, (int) ($mover['_entityRevision'] ?? 0)) === $only['entityRevision'] ? $this->breakThrough($only['sceneId'], $mover, $only['forcedDestination'], $state, $actorId, $normalized['operationId']) : null;
                 if ($broke !== null) {
                     $snapshot = $this->getSnapshot();
                     $state = $snapshot['state'];
