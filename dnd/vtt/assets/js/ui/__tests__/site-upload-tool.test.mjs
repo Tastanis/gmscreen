@@ -165,14 +165,20 @@ test('the map report, in plain words', () => {
     'Nobody was moved to it. Open it from the Scenes list.',
   ]);
   const replaced = mapReport({ action: 'replaced', scene: { name: 'The Gravity Orchard' }, folder: null, counts, onTheTable: true,
-    kept: { tokens: 7, drawings: 1, templates: 0, brokenWalls: 4, tokensMovedToGround: 1, packageTokensNotAdded: 2 } });
+    kept: { tokens: 7, drawings: 1, templates: 0, brokenWalls: 4, tokensMovedToGround: 1, packageTokensNotAdded: 2, rememberedGround: true } });
   assert.deepEqual(replaced, [
     'Replaced the scene "The Gravity Orchard" (in no folder).',
     'It has 6 floors, 456 walls (188 breakable), 19 plates, 23 ramps and 85 zones.',
-    'Kept as they were: 7 tokens, 1 drawing, 0 templates, fog memory, and 4 broken walls.',
+    'Kept as they were: 7 tokens, 1 drawing, 0 templates, what each player has explored, and 4 broken walls.',
     '1 token was on a floor the new map does not have and now stands on the ground floor.',
     'The package\'s own 2 tokens were not added, because the scene already has its tokens.',
     'This scene is the one on the table now; open browsers were sent the new map.',
+  ]);
+  // A new ground picture: the report does not claim the players' explored ground was kept.
+  assert.deepEqual(mapReport({ action: 'replaced', scene: { name: 'The Gravity Orchard' }, folder: 'Prismari', counts,
+    kept: { tokens: 1, drawings: 0, templates: 0, brokenWalls: 0, tokensMovedToGround: 0, packageTokensNotAdded: 0, rememberedGround: false } }).slice(2), [
+    'Kept as they were: 1 token, 0 drawings, 0 templates, and 0 broken walls.',
+    'The ground picture, the grid or the ground heights changed, so what each player had explored on this scene starts again.',
   ]);
 });
 

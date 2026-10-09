@@ -479,7 +479,10 @@ final class SyncV2Store
             return ['status'=>'accepted','event'=>$event,'events'=>$events,'idempotent'=>false,
                 'scene'=>array_intersect_key($prepared['scene'], array_flip(['mapUrl','thumbnailUrl','grid'])),
                 'kept'=>['tokens'=>count($domains['placements']),'drawings'=>count($domains['drawings']),'templates'=>count($domains['templates']),'brokenWalls'=>$stillBroken,
-                    'tokensMovedToGround'=>$moved,'packageTokensNotAdded'=>count($package['domains']['placements'] ?? [])]];
+                    'tokensMovedToGround'=>$moved,'packageTokensNotAdded'=>count($package['domains']['placements'] ?? []),
+                    // A browser remembers explored ground against the ground's shape and the view's tilt.
+                    'sameGround'=>($old['environment']['terrain']['value'] ?? null) == ($environment['terrain']['value'] ?? null)
+                        && ($old['environment']['walls']['value']['view'] ?? null) == ($environment['walls']['value']['view'] ?? null)]];
         } catch (Throwable $error) {
             $this->rollbackTransactionSilently();
             throw $error;

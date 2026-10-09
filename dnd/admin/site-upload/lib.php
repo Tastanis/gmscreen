@@ -184,6 +184,14 @@ function siteUploadImportMap(array $request, SyncV2Store $store, callable $load,
     if ($plan['existing'] !== null) {
         $sceneId = (string) $plan['existing']['id'];
         $done = $store->replaceSceneDesign($sceneId, $package, $operationId, 'GM', true);
+        // Each browser keeps what a player has explored against the ground picture's address, the
+        // grid and the ground's shape. Say it was kept only when none of those changed.
+        if (!$done['idempotent']) {
+            $done['kept']['rememberedGround'] = ($done['kept']['sameGround'] ?? false) === true
+                && ($plan['existing']['mapUrl'] ?? null) === ($done['scene']['mapUrl'] ?? null)
+                && ($plan['existing']['grid'] ?? null) == ($done['scene']['grid'] ?? null);
+            unset($done['kept']['sameGround']);
+        }
         $catalog = $load();
         foreach ($catalog['items'] as $i => $scene) {
             if (($scene['id'] ?? null) !== $sceneId) continue;
@@ -197,7 +205,7 @@ function siteUploadImportMap(array $request, SyncV2Store $store, callable $load,
         $folderName = $plan['folderName'];
         if ($folderName === null) foreach ($catalog['folders'] as $folder) if (($folder['id'] ?? null) === ($plan['existing']['folderId'] ?? null)) $folderName = (string) $folder['name'];
         return ['result'=>['action'=>'replaced','scene'=>['id'=>$sceneId,'name'=>$plan['name']],'folder'=>$folderName,'folderCreated'=>$plan['newFolder'] !== null,
-            'counts'=>$counts,'kept'=>$done['kept'],'onTheTable'=>count($done['events']) > 1,'idempotent'=>$done['idempotent']], 'events'=>$done['idempotent'] ? [] : $done['events']];
+            'counts'=>$counts,'kept'=>$done['idempotent'] ? null : $done['kept'],'onTheTable'=>count($done['events']) > 1,'idempotent'=>$done['idempotent']], 'events'=>$done['idempotent'] ? [] : $done['events']];
     }
 
     $done = $store->installScenePackage($package, $operationId, 'GM', true);

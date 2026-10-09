@@ -54,10 +54,12 @@ try {
         ]]);
     }
 
-    // One picture of a map package: checked and filed by the Scenes screen's own code.
+    // One picture of a map package: checked and filed by the Scenes screen's own code. The same
+    // picture sent again keeps its address, so a map replaced by a newer version of itself keeps
+    // what each player's browser remembers of it.
     if ($action === 'map-image') {
         if (!isset($_FILES['map'])) siteUploadAnswer(400, ['success'=>false, 'error'=>'No map image was provided. If the picture is large, it may be over this server\'s upload limit.']);
-        [$code, $payload] = MapImageStore::store($_FILES['map']);
+        [$code, $payload] = MapImageStore::store($_FILES['map'], true);
         siteUploadAnswer($code, $payload);
     }
 

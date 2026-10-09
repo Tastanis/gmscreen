@@ -129,12 +129,12 @@ upCheck($config['environment']['walls']['revision'] === $before['state']['sceneC
 $tokens = $after['state']['placements'][$sceneId];
 upCheck(array_keys($tokens) === ['hero','foe'] && $tokens['hero']['column'] == 4 && $tokens['hero']['levelId'] === $levelId && $tokens['foe']['row'] == 2, 'Both tokens are where they were, the hero still on the upper floor: ' . json_encode(array_map(static fn ($t) => [$t['column'], $t['row'], $t['levelId']], $tokens)));
 upCheck($config['mapLevels']['levels'][0]['id'] === $levelId, 'because a floor keeps its id from one version of the map to the next');
-upCheck($replaced['result']['kept'] === ['tokens'=>2,'drawings'=>0,'templates'=>0,'brokenWalls'=>1,'tokensMovedToGround'=>0,'packageTokensNotAdded'=>1], 'The report says what was kept, and that the package\'s own token was not added: ' . json_encode($replaced['result']['kept']));
+upCheck($replaced['result']['kept'] === ['tokens'=>2,'drawings'=>0,'templates'=>0,'brokenWalls'=>1,'tokensMovedToGround'=>0,'packageTokensNotAdded'=>1,'rememberedGround'=>false], 'The report says what was kept, that the package\'s own token was not added, and that a new ground picture means explored ground starts again: ' . json_encode($replaced['result']['kept']));
 upCheck(array_column($replaced['events'], 'type') === ['scene.layoutRestored','routing.changed'] && $replaced['result']['onTheTable'] === true, 'Open browsers are sent the whole scene, and the table its new picture: ' . json_encode(array_column($replaced['events'], 'type')));
 upCheck($after['state']['routing']['mapUrl'] === '/dnd/vtt/storage/uploads/gravity-orchard-v2.jpg' && $after['state']['routing']['activeSceneId'] === $sceneId, 'The scene on the table stays on the table');
 upCheck($after['revision'] === $before['revision'] + 2, 'Two changes, in order');
 $twice = $upload($store, ['operationId'=>'upload-orchard-0003','package'=>$two,'replace'=>true]);
-upCheck($twice['result']['idempotent'] === true && $twice['events'] === [] && $store->getSnapshot()['revision'] === $after['revision'], 'Sent twice, it is replaced once');
+upCheck($twice['result']['idempotent'] === true && $twice['events'] === [] && $store->getSnapshot()['revision'] === $after['revision'] && $twice['result']['kept'] === null, 'Sent twice, it is replaced once');
 // A version with the upper floor gone: the hero is put on the ground, not lost.
 $flat = $package('Gravity Orchard', [], [['id'=>'wall-a','a'=>'n1','b'=>'n2','material'=>'stone']]);
 $flat['scene']['mapUrl'] = '/dnd/vtt/storage/uploads/gravity-orchard-v2.jpg'; // the same picture as before
@@ -143,6 +143,11 @@ $tokens = $store->getSnapshot()['state']['placements'][$sceneId];
 upCheck($tokens['hero']['levelId'] === 'level-0' && $tokens['hero']['column'] == 4 && $third['result']['kept']['tokensMovedToGround'] === 1, 'A token on a floor the new map lacks stands on the ground floor, in its square');
 upCheck($third['result']['folder'] === 'Witherbloom' && $item('Gravity Orchard')['folderId'] === $catalog['folders'][1]['id'], 'Naming a folder when replacing moves the scene there');
 upCheck(count($third['events']) === 1, 'The picture did not change this time, so the table is not told of one');
+upCheck($third['result']['kept']['rememberedGround'] === true, 'and with the same ground picture, grid and heights, what each player has explored is reported as kept');
+// The view's tilt is part of what a browser remembers explored ground against.
+$tilted = $flat; $tilted['domains']['sceneConfig']['environment']['walls']['value']['view'] = ['slant'=>.12];
+$fourth = $upload($store, ['operationId'=>'upload-orchard-0005','package'=>$tilted,'replace'=>true]);
+upCheck($fourth['result']['kept']['rememberedGround'] === false, 'A map whose view is tilted differently is reported as starting explored ground again');
 // A player is sent the replaced scene the way a checkpoint restore sends it.
 upCheck(isset($replaced['events'][0]['payload']['domains']['sceneConfig'], $replaced['events'][0]['payload']['domains']['placements']), 'The event carries the whole scene');
 unset($store);

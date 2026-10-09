@@ -11,6 +11,11 @@ declare(strict_types=1);
  * The picture is decoded and written out again by PHP's image library under a random name, so
  * what lands in the web-readable folder is always a real image this server made, never the bytes
  * that were sent.
+ *
+ * A caller that sends the same picture again and again (the site upload, replacing a map with a
+ * newer version of itself) may ask for the name to follow from the picture: the same bytes then
+ * get the same address and are not written twice. A browser keys what a player has explored to
+ * the map's address, so an unchanged map keeps that memory.
  */
 final class MapImageStore
 {
@@ -19,9 +24,10 @@ final class MapImageStore
 
     /**
      * @param mixed $file one entry of $_FILES
+     * @param bool $sameNameForSamePicture name the file after its content, and reuse it if it is there
      * @return array{0:int,1:array} HTTP status and the JSON answer
      */
-    public static function store($file): array
+    public static function store($file, bool $sameNameForSamePicture = false): array
     {
         if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
             return [400, ['success' => false, 'error' => 'The map upload is missing or invalid.']];
@@ -64,14 +70,37 @@ final class MapImageStore
             return [500, ['success' => false, 'error' => 'Unable to prepare storage for map uploads.']];
         }
 
-        try {
-            $basename = bin2hex(random_bytes(12));
-        } catch (Throwable $exception) {
-            return [500, ['success' => false, 'error' => 'Failed to generate a safe filename for the map.']];
-        }
-
         $finalWidth = $width;
         $finalHeight = $height;
+
+        if ($sameNameForSamePicture) {
+            $digest = hash_file('sha256', $tmpPath);
+            if (!is_string($digest)) {
+                return [500, ['success' => false, 'error' => 'Failed to generate a safe filename for the map.']];
+            }
+            $basename = substr($digest, 0, 24);
+            if (is_file($destinationDir . '/' . sprintf('%s_%dx%d.%s', $basename, $width, $height, $extension))) {
+                $thumbnail = self::thumbnailSize($width, $height);
+                $thumbFilename = $thumbnail === null ? null : sprintf('%s_%dx%d_thumb.jpg', $basename, $thumbnail[0], $thumbnail[1]);
+                return [200, [
+                    'success' => true,
+                    'data' => [
+                        'url' => '/dnd/vtt/storage/uploads/' . sprintf('%s_%dx%d.%s', $basename, $width, $height, $extension),
+                        'thumbnailUrl' => $thumbFilename !== null && is_file($destinationDir . '/' . $thumbFilename) ? '/dnd/vtt/storage/uploads/' . $thumbFilename : null,
+                        'width' => $width,
+                        'height' => $height,
+                        'originalWidth' => $width,
+                        'originalHeight' => $height,
+                    ],
+                ]];
+            }
+        } else {
+            try {
+                $basename = bin2hex(random_bytes(12));
+            } catch (Throwable $exception) {
+                return [500, ['success' => false, 'error' => 'Failed to generate a safe filename for the map.']];
+            }
+        }
 
         $sourceImage = self::loadImageFromFile($tmpPath, $imageType);
         if ($sourceImage === null) {
@@ -94,12 +123,9 @@ final class MapImageStore
 
         // Generate a small thumbnail for the scene sidebar.
         $thumbnailUrl = null;
-        $thumbMaxWidth = 164;
-        $thumbMaxHeight = 124;
-        if ($finalWidth > $thumbMaxWidth || $finalHeight > $thumbMaxHeight) {
-            $scale = min($thumbMaxWidth / $finalWidth, $thumbMaxHeight / $finalHeight);
-            $thumbW = (int) round($finalWidth * $scale);
-            $thumbH = (int) round($finalHeight * $scale);
+        $thumbnail = self::thumbnailSize($finalWidth, $finalHeight);
+        if ($thumbnail !== null) {
+            [$thumbW, $thumbH] = $thumbnail;
 
             $thumb = imagecreatetruecolor($thumbW, $thumbH);
             if ($thumb instanceof GdImage) {
@@ -127,6 +153,18 @@ final class MapImageStore
                 'originalHeight' => $height,
             ],
         ]];
+    }
+
+    /** The sidebar thumbnail's size for a picture, or null when the picture is already that small. */
+    private static function thumbnailSize(int $width, int $height): ?array
+    {
+        $thumbMaxWidth = 164;
+        $thumbMaxHeight = 124;
+        if ($width <= $thumbMaxWidth && $height <= $thumbMaxHeight) {
+            return null;
+        }
+        $scale = min($thumbMaxWidth / $width, $thumbMaxHeight / $height);
+        return [(int) round($width * $scale), (int) round($height * $scale)];
     }
 
     /** Maps GD image type constants to usable extensions. */

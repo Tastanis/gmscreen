@@ -105,7 +105,7 @@ Uploading image 1 of 2…
 Uploading image 2 of 2…
 Replaced the scene "The Gravity Orchard" in the folder Prismari.
 It has 6 floors, 456 walls (188 breakable), 19 plates, 23 ramps and 85 zones.
-Kept as they were: 7 tokens, 1 drawing, 0 templates, fog memory, and 4 broken walls.
+Kept as they were: 7 tokens, 1 drawing, 0 templates, what each player has explored, and 4 broken walls.
 ```
 
 ### What replacing keeps, and what it changes
@@ -118,7 +118,11 @@ Kept exactly as they were:
 - **Every token**, where it stands. A floor keeps its identity from one version of a map to the
   next, so a token on the upper floor is still on the upper floor.
 - Drawings and templates, and a fight in progress.
-- **Each player's fog memory.** A new map does not make them forget where they have been.
+- **What each player has explored**, as long as the ground picture, the grid and the ground
+  heights are the same as before. A new version that only changes walls, plates, ramps, zones or
+  the pictures of upper floors does not make anyone forget where they have been. If the ground
+  picture itself, the grid or the heights changed, explored ground starts again on that scene,
+  and the report says so in place of "what each player has explored".
 - **Broken walls.** A wall that was broken and is still in the new map stays broken.
 - The scene's place in its folder, unless you name another folder.
 - Who is on the scene. If it is the scene on the table, open browsers are sent the new map.
@@ -129,8 +133,9 @@ Things to know:
   the report says so.
 - Tokens that come inside the package are **not** added when replacing, because the scene's own
   tokens are the ones in use. The report says how many were left out.
-- Each upload files its pictures afresh. The old pictures of a replaced map stay in the site's
-  upload folder; they are not deleted.
+- A picture that is the same as one uploaded before keeps its address and is not filed twice.
+  A picture that changed is filed as a new one, and the old one stays in the site's upload
+  folder; nothing is deleted.
 - A scene is matched by its name. If two scenes have the same name, the tool refuses to guess
   and asks you to rename or delete one.
 

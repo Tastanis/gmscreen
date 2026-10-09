@@ -175,7 +175,8 @@ export function mapReport(result) {
   lines.push(`It has ${c.floors} floor${c.floors === 1 ? '' : 's'}, ${c.walls} walls (${c.breakableWalls} breakable), ${c.plates} plates, ${c.ramps} ramps and ${c.zones} zones.`);
   if (result.action === 'replaced' && result.kept) {
     const k = result.kept;
-    lines.push(`Kept as they were: ${k.tokens} token${k.tokens === 1 ? '' : 's'}, ${k.drawings} drawing${k.drawings === 1 ? '' : 's'}, ${k.templates} template${k.templates === 1 ? '' : 's'}, fog memory, and ${k.brokenWalls} broken wall${k.brokenWalls === 1 ? '' : 's'}.`);
+    lines.push(`Kept as they were: ${k.tokens} token${k.tokens === 1 ? '' : 's'}, ${k.drawings} drawing${k.drawings === 1 ? '' : 's'}, ${k.templates} template${k.templates === 1 ? '' : 's'}, ${k.rememberedGround ? 'what each player has explored, ' : ''}and ${k.brokenWalls} broken wall${k.brokenWalls === 1 ? '' : 's'}.`);
+    if (!k.rememberedGround) lines.push('The ground picture, the grid or the ground heights changed, so what each player had explored on this scene starts again.');
     if (k.tokensMovedToGround) lines.push(`${k.tokensMovedToGround} token${k.tokensMovedToGround === 1 ? ' was' : 's were'} on a floor the new map does not have and now stand${k.tokensMovedToGround === 1 ? 's' : ''} on the ground floor.`);
     if (k.packageTokensNotAdded) lines.push(`The package's own ${k.packageTokensNotAdded} token${k.packageTokensNotAdded === 1 ? ' was' : 's were'} not added, because the scene already has its tokens.`);
     if (result.onTheTable) lines.push('This scene is the one on the table now; open browsers were sent the new map.');
