@@ -611,6 +611,42 @@ and collision tests still pass. One older test said "forced movement never
 climbs stairs"; it now says the opposite. The browser shows what the server decides here, so
 there is no separate browser rule to keep in step.
 
+## October 8, evening: the ruler on ramps between upper floors. Done, waiting for a re-test
+
+Also from the islands test. The ruler showed 12 for the last step down the arch
+and 9 for the last step down the vine, where the step costs 1 and 3. The move
+itself was charged correctly.
+
+The cause: the ruler asked "how high is the ground here?" one square at a time,
+with the token as it stood when the drag began. It did not know that a walker
+who comes off the foot of a ramp is then on the floor at its foot, so it took
+that last step to be a drop all the way to the ground under the islands. A whole
+drag showed the same fault: 20 down the arch and 21 up it, where both are 9,
+and 12 each way on the vine, where both are 6. My test reproduces all five of
+those numbers from the old code.
+
+- The ruler now walks a ramp or stair the way the move does. It is carried
+  along it, and once it walks off the far end it is on the other floor.
+- The arch costs 9 each way, in one drag or square by square. The vine costs
+  3 and 3. A size 2 token on the two-wide arch is priced the same way.
+- Stepping off the side of a ramp is still priced as the drop it is.
+- The reach outline uses the same rule, so from a ramp it now reaches the
+  island at the foot.
+- **This changes what the ruler draws on the bathhouse stairs.** The price was
+  already right there, by luck. But past the top of the stairs the ruler line
+  was drawn at ground height, as if under the upper floor; it is now drawn on
+  the upper floor, and it meets the upper floor's zones, not the ground's.
+- A walk that does not touch a ramp is priced exactly as before. Scenes with
+  no ramps are untouched.
+
+How the two sides are kept the same: the browser now has its own copy of the
+server's stair rule. A test runs 1,598 moves over stairs of five shapes, with
+tokens of size 1 to 3, and checks every answer against the answer the server's
+own code gave.
+
+Not yet seen in a browser. The part that joins this to the live board cannot be
+run outside one; the rule itself and the prices are tested.
+
 ## Where it is now
 
 You said to put stages 1 to 3 on `main` on this PC and wait for your word

@@ -11,7 +11,8 @@ import {claimActiveTool,publishActiveTool} from './active-tool.js';
 import {sample,paint,barycentric,clamp,groundSquare,heightBand,effectiveHeight,relativeScale,routeSteps,slopeColor,brushRate} from './terrain-math.mjs';
 import {floorElevations} from '../state/normalize/floor-elevation.js';
 import {terrainContact} from './terrain-contact.js';
-import {createRouteWalker,stepGhost,walksPlates} from './route-walker.mjs';
+import {createRouteWalker,stepGhost,walksPlates,hasStairs} from './route-walker.mjs';
+import {nearStair} from './stair-walk.mjs';
 import {createRulerPass,passActorKey} from './ruler-pass.mjs';
 const $=s=>document.querySelector(s);
 const image=$('#vtt-map-image'),transform=$('#vtt-map-transform'),surface=$('#vtt-map-surface'),board=$('#vtt-board-canvas');
@@ -217,12 +218,15 @@ function routeNow(start,end,options={}){
  // `options.carry` hands the walker from one leg of a route to the next, so a waypoint on a bridge keeps it there.
  const walker=createRouteWalker({actor,surfaces:design?resolveSupportSurfaces(design):[],mapLevels:levelConfig(),
   terrain:p=>heightAt((ctx.view.gridOffsets.left||0)+(p.column+(p.width||1)/2)*d.grid,(ctx.view.gridOffsets.top||0)+(p.row+(p.height||1)/2)*d.grid),
-  plainHeight:(column,row,who)=>rulerGround(column,row,who),carried:options.carry?.ghost||null});
+  plainHeight:(column,row,who)=>rulerGround(column,row,who),carried:options.carry?.ghost||null,standing:rampStanding(design)});
  const zones=options.ignoreZones?null:window.terrainZones;
  const walked=routeSteps(start,end,(column,row)=>walker.height(column,row),zones?.stepMultiplier?(column,row,rawHeight)=>zones.stepMultiplier(actor,column,row,rawHeight):null,options.ignoreClimb?null:(a,b)=>climbFace(actor,a,b));
  if(options.carry)options.carry.ghost=walker.ghost;
  return walked;
 }
+// On a scene with ramps a previewed walk follows them (route-walker.mjs): this is where a token
+// with the ghost's floor and stair progress stands. Null on a scene with none, where nothing changes.
+function rampStanding(design=importedDesign()){return design?.ramps?.length?p=>groundFor(p):null;}
 // One step of a previewed walk, for the reach outline: the same contact rule, one square at a time.
 function walkTerrain(p){const d=dimensions();return heightAt((ctx.view.gridOffsets.left||0)+(p.column+(p.width||1)/2)*d.grid,(ctx.view.gridOffsets.top||0)+(p.row+(p.height||1)/2)*d.grid);}
 function walkSurfaces(){const design=importedDesign();return design?resolveSupportSurfaces(design):[];}
@@ -232,15 +236,18 @@ function walkSurfaces(){const design=importedDesign();return design?resolveSuppo
 function walkerNear(actor,column,row,reach=15){
  const box=s=>({s,left:Math.min(...s.points.map(p=>p.x)),right:Math.max(...s.points.map(p=>p.x)),top:Math.min(...s.points.map(p=>p.y)),bottom:Math.max(...s.points.map(p=>p.y))});
  const near=walkSurfaces().filter(s=>(s.kind==='floor'||s.templateCube)&&s.points?.length>2).map(box).filter(b=>b.left<=column+reach+2&&b.right>=column-reach-1&&b.top<=row+reach+2&&b.bottom>=row-reach-1);
- if(!walksPlates(actor,near))return null;
- const mapLevels=levelConfig(),ground=new Map(),size=Math.max(actor.width||1,actor.height||1);
+ const mapLevels=levelConfig(),standing=hasStairs(mapLevels)?rampStanding():null;
+ if(!walksPlates(actor,near,!!standing))return null;
+ const ground=new Map(),size=Math.max(actor.width||1,actor.height||1);
  const plainHeight=(c,r,who)=>{if(who?._supportSurfaceId)return rulerGround(c,r,who);const key=c+','+r;let h=ground.get(key);if(h===undefined){h=rulerGround(c,r,who);ground.set(key,h);}return h;};
  // Only the plates within a square of the step can matter to it. A step nowhere near a plate is plain ground.
  const step=(ghost,c,r)=>{
   const left=Math.min(ghost.column,c)-1,right=Math.max(ghost.column,c)+size+1,top=Math.min(ghost.row,r)-1,bottom=Math.max(ghost.row,r)+size+1;
   const local=near.filter(b=>b.left<=right&&b.right>=left&&b.top<=bottom&&b.bottom>=top).map(b=>b.s);
-  if(!local.length)return {ghost:{...ghost,column:c,row:r,_supportSurfaceId:null},height:plainHeight(c,r,{...actor,_supportSurfaceId:null})};
-  return stepGhost({ghost,column:c,row:r,actor,surfaces:local,mapLevels,terrain:walkTerrain,plainHeight});
+  // A ghost on or beside a stair, or one a stair has already moved to another floor, takes the full step.
+  const stair=standing&&(ghost._floorTraversal||ghost._viaStair||nearStair(ghost,{column:c,row:r},mapLevels));
+  if(!local.length&&!stair)return {ghost:{...ghost,column:c,row:r,_supportSurfaceId:null},height:plainHeight(c,r,{...actor,_supportSurfaceId:null})};
+  return stepGhost({ghost,column:c,row:r,actor,surfaces:local,mapLevels,terrain:walkTerrain,plainHeight,standing});
  };
  return {plainHeight,step};
 }
