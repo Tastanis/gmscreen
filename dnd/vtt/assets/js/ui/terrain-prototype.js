@@ -13,7 +13,7 @@ import {floorElevations} from '../state/normalize/floor-elevation.js';
 import {terrainContact} from './terrain-contact.js';
 import {createRouteWalker,stepGhost,walksPlates,hasStairs} from './route-walker.mjs';
 import {nearStair} from './stair-walk.mjs';
-import {viewSlant,slantVector} from './height-view.mjs';
+import {viewSlant,slantVector,edgeFaces} from './height-view.mjs';
 import {createRulerPass,passActorKey} from './ruler-pass.mjs';
 const $=s=>document.querySelector(s);
 const image=$('#vtt-map-image'),transform=$('#vtt-map-transform'),surface=$('#vtt-map-surface'),board=$('#vtt-board-canvas');
@@ -106,6 +106,8 @@ function draw(){
  }
  const add=(a,b,c)=>{const t=[points[a],points[b],points[c]];triangles.push(t);for(const p of t)vertices.push(p.x+pad,p.y+pad,p.u,p.v,p.light);};
  for(let j=0;j<field.m-1;j++)for(let i=0;i<field.n-1;i++){const a=j*field.n+i;add(a,a+1,a+field.n);add(a+1,a+field.n+1,a+field.n);}
+ // Raised ground at the south or west edge of the map is drawn away from the edge; close the gap with the ground's own side (height-view.mjs).
+ for(const face of edgeFaces(points,field.n,field.m)){triangles.push(face);for(const p of face)vertices.push(p.x+pad,p.y+pad,p.u,p.v,p.light);}
  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vertices),gl.DYNAMIC_DRAW);gl.uniform2f(gl.getUniformLocation(program,'extent'),w,h);gl.uniform2f(gl.getUniformLocation(program,'imageSize'),d.width,d.height);gl.uniform2f(gl.getUniformLocation(program,'gridOrigin'),(ctx.view.gridOffsets.left||0)-d.left,(ctx.view.gridOffsets.top||0)-d.top);gl.uniform1f(gl.getUniformLocation(program,'gridSize'),d.grid);gl.uniform1f(gl.getUniformLocation(program,'showGrid'),ctx.state.grid.visible?1:0);gl.clear(gl.COLOR_BUFFER_BIT);gl.drawArrays(gl.TRIANGLES,0,vertices.length/5);drawCostMarkers();terrainRevision++;dirty=false;
 }
 function tick(now){

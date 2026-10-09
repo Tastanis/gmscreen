@@ -32,6 +32,29 @@ export function slantVector(slant = DEFAULT_SLANT) {
 /** Where a point at grid position (x, y) and height `h` is drawn, in squares. */
 export function slanted(x, y, h, slant = USUAL) { return { x: x + h * slant.x, y: y - h * slant.y }; }
 
+// ---- The cut edge of the map ----------------------------------------------
+// Height moves the ground up the screen and to the right. Raised ground at the south or west edge
+// of the map is therefore drawn away from the map's own edge, and the strip between them was left
+// empty. That strip is the side of the ground where the map ends, so it is drawn as one: the same
+// ground, darkened, from where the edge is drawn down to where the edge really is.
+
+/**
+ * The faces that close the south and west edges of the ground. `points` is the ground's grid of
+ * drawn points, `n` across and `m` down, each {x, y} where it is drawn, {gx, gy} where it lies on
+ * the flat map, and its picture position and light. Returns triangles of such points. Nothing for
+ * an edge that is not raised, and so nothing at all at a slant of zero.
+ */
+export function edgeFaces(points, n, m, shade = 0.5) {
+  const faces = [];
+  const foot = (p) => ({ ...p, x: p.gx, y: p.gy, light: p.light * shade });
+  const close = (a, b) => { const fa = foot(a), fb = foot(b); faces.push([a, b, fb], [a, fb, fa]); };
+  // South: raised ground is drawn up the screen from the edge.
+  for (let i = 0; i < n - 1; i++) { const a = points[(m - 1) * n + i], b = points[(m - 1) * n + i + 1]; if (a.gy - a.y > 0.5 || b.gy - b.y > 0.5) close(a, b); }
+  // West: raised ground is drawn to the right of the edge.
+  for (let j = 0; j < m - 1; j++) { const a = points[j * n], b = points[(j + 1) * n]; if (a.x - a.gx > 0.5 || b.x - b.gx > 0.5) close(a, b); }
+  return faces;
+}
+
 // ---- Floating plates -----------------------------------------------------
 // A floor plate's edges are drawn with a dark side face from the plate down to whatever lies
 // under the edge: the next plate, or the ground. That is right for a building. A plate marked
