@@ -54,7 +54,7 @@ the object stands in the square and is not a wall beside it.
 
 - **Without a `group`, each side of an object is its own wall.** A creature pushed into it
   breaks the near side and is stopped by the others.
-- **An object three squares wide or more** has a middle square none of its walls touch. A
-  creature falling exactly there is not seen as landing on the object. Keep breakable objects
-  one or two squares wide, or put a wall across the middle.
+- **A wide object needs its group.** The middle square of an object three squares across is
+  touched by none of its walls. The app knows a creature there is on the object only from the
+  outline of the walls that share its group name.
 - **Solid things that should never break** (bedrock, a cliff face) get neither field.

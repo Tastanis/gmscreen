@@ -182,3 +182,22 @@ try {
     unset($store);
 } finally { @unlink($database); }
 echo "PASS a fall onto open floor is unchanged\n";
+
+// ---- the middle of a wide object ------------------------------------------------------------
+// A stone slab three squares by three, one group. None of its walls touches its middle square,
+// but a creature there is on the slab. The same ring with no group name is only four walls.
+$slab = static function (array $extra): array {
+    $c = [[10.04, 10.04], [12.96, 10.04], [12.96, 12.96], [10.04, 12.96]]; $nodes = []; $segments = [];
+    foreach ($c as $k => [$x, $y]) $nodes[] = ['id'=>"slab-n$k", 'x'=>$x, 'y'=>$y];
+    foreach ([0, 1, 2, 3] as $k) $segments[] = ['id'=>"slab-w$k", 'a'=>"slab-n$k", 'b'=>'slab-n' . (($k + 1) % 4), 'baseMode'=>'fixed', 'base'=>0.0, 'height'=>2.0, 'material'=>'stone', ...$extra];
+    return ['mapLevels'=>[], 'environment'=>['walls'=>['value'=>['version'=>1, 'nodes'=>$nodes, 'segments'=>$segments]]]];
+};
+$grouped = $slab(['group'=>'slab']);
+objectCheck(count(WallObjects::under($token(11, 11), $grouped)) === 4, 'A creature on the middle square of a wide object is on the object');
+objectCheck(count(WallObjects::under($token(10, 10), $grouped)) === 2 && count(WallObjects::whole(WallObjects::under($token(10, 10), $grouped), $grouped)) === 4, 'On its corner two walls are under it, and the whole object breaks');
+objectCheck(WallObjects::under($token(13, 11), $grouped) === [] && WallObjects::under($token(11, 9), $grouped) === [], 'Beside it, nothing is');
+objectCheck(WallObjects::under([...$token(11, 11), 'movementMode'=>'fly', 'flightHeight'=>5], $grouped) === [], 'Nor for a creature well above it');
+objectCheck(WallObjects::under($token(11, 11), $slab([])) === [], 'With no group name the middle square is just a square inside four walls');
+$landing = FallOutcome::landing($token(11, 11), [], $grouped);
+objectCheck($landing['relocated'] === false && count($landing['breaks']) === 4, 'A fall onto the middle of a breakable slab breaks the slab');
+echo "PASS the middle square of a wide object counts as the object\n";

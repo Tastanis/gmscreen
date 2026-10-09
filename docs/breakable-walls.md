@@ -161,8 +161,8 @@ and a player could not walk out in any direction.
   uneven ground the app gave up and asked you to place the creature.
 - A free square is never one that a wall runs through.
 
-Limit: an object three squares wide or more has a middle square that none of its walls
-touch. A creature falling exactly there is not seen as landing on it.
+A wide object counts whole: a creature falling onto the middle square of a slab three squares
+across is on the slab, as long as the slab's walls share a group name.
 
 Checks run: 6 new groups of server checks through the real store, one new pop-up check, and
 on the islands map the Anvil push onto stone tooth T6 and the Crown push onto crystals B16
@@ -244,7 +244,7 @@ An object is a ring of walls that share a name. It is one thing:
   material. Clear the name to make them separate walls again.
 - Players are not told which walls make up an object until it is broken.
 
-Limit: an object three squares wide or more has a middle square none of its walls touch, so a
-creature falling exactly there is not seen as landing on it.
+An object of any width works. Its walls must share a group name; without one, the middle
+square of a wide object is only a square inside four separate walls.
 
 Checks run: 4 groups of server checks and 5 browser-code checks, with the heap drawn on a page.
