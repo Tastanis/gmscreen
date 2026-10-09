@@ -66,11 +66,70 @@ the outline of every floating plate above it. About half a day. It adds one soft
 pair of islands that overlap, every time the view is repainted, so it needs a speed check on the
 real map.
 
-### Still open, for Brandon to decide from pictures
+### Two viewing settings to try (built October 8, late; not yet seen in a browser)
+
+Brandon, looking at the pictures: from on top he looks down and sees all the islands; from
+below he needs to see some of the islands above, without them blocking anything important; and
+he wants to settle it by trying. So both are switches, beside "Height slant" in the Walls panel.
+They save with the map and are the same for every player. With neither set, every scene draws
+exactly as before.
+
+- **Floating plates overhead.** Not shown (as now); see-through shapes; or shapes for the
+  nearest tier only. A shape is a see-through dark outline where the island is drawn. Clicks pass
+  through it and tokens are drawn over it, so nothing under it is hidden or out of reach.
+  "Nearest tier" is the lowest floating plates overhead and any others within half a square of
+  that height: from the crater floor, the low islands only.
+- **Unseen floating plates below.** Black (as now), or the island's picture dimmed. This is the
+  simple version: it is always shown, whether or not that player has looked at it before. The
+  version that shows only what a player has already seen is not built.
+
+Floating plates only. A building's floor is never a shape and never dimmed, so the bathhouse
+cannot show a lower floor through a stairwell. Creatures are untouched by both: shown or hidden
+by line of sight as before.
+
+One thing to know when trying the shapes: an island overhead is shown whether or not the hero
+has a clear line to it. That seemed right for something that large hanging in the sky.
+
+In the map package they are two more values under `view`: `"above": "off" | "shape" | "tier"`
+and `"below": "black" | "dim"`.
+
+### The empty strip at the south edge (built October 8, late; not yet seen in a browser)
+
+With a slant, raised ground is drawn up the screen and to the right of where it lies. A rim along
+the south edge of the map left an empty strip under it, 2 squares at a slant of 0.12; the same
+happens on the west edge. That strip is the side of the ground where the map is cut off, so it is
+now drawn as one: the ground's own picture at that edge, darkened.
+
+**This also changes existing maps at their edges.** The bathhouse's west edge is 2 to 7 squares
+high and Dead Root's is up to 3, so each gets a dark face there where the board's background
+showed. It is only seen with fog off: for a player that strip was black and stays black.
+It is a separate commit, so it can be left out of a push.
+
+### The map at 30 high
+
+The islands map now tops out at 30. Nothing in the code depends on the height, so these are only
+the sums:
+
+| Slant | Top island drawn north of its place | East | Rock side on screen |
+|---|---|---|---|
+| 0.36 | 10.8 squares | 3.6 | 0.72 |
+| 0.18 | 5.4 | 1.8 | 0.36 |
+| 0.12 | 3.6 | 1.2 | 0.24 |
+| 0.09 | 2.7 | 0.9 | 0.18 |
+
+- The Map maker's band of 6 rows north and 2 columns east fits 0.18 with half a square to spare.
+  It does not fit anything steeper.
+- The shadow under the top island shows up to 5.4 squares clear of it at 0.18.
+- The ground has 15 squares of drawing room on every side at 72 pixels a square. No limit there.
+- Tokens are drawn larger or smaller by how far above or below the viewer they are, and that
+  stops at double and at half. A hero on the top island sees creatures on the crater floor at
+  half size, and it cannot go smaller. That limit is old; 30 squares reaches it.
+
+### Still open, for Brandon to decide by trying
 
 - The number for the slant on the islands map.
-- (c) lower plates dimmed instead of black: left black for now.
-- (d) plates above shown as a see-through shape: waiting.
+- Which setting for plates overhead, and which for unseen plates below.
+- Whether "dimmed" should show only what a player has already seen.
 - The shadow on lower islands (above).
 - (b) is settled: no code. The Map maker leaves a blank band sized for the chosen slant.
 
