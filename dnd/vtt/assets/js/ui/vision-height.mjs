@@ -2,6 +2,9 @@ import {restrictions,applies,wallHeights} from './wall-properties.mjs';
 import {rampsBlock} from './imported-ramps.mjs';
 import {nearestOnSegment,intersects} from './wall-geometry.mjs';
 const EPS=1e-7;
+// Filing walls by direction (see makeSight): how many directions, how near the viewer a wall is
+// looked at by every line, and when filing is worth doing at all.
+const SECTORS=256,TURN=Math.PI*2,NEAR=.25,FILE_FROM=24,FILE_AFTER=8;
 export const center=t=>({x:t.column+(t.width||1)/2,y:t.row+(t.height||1)/2});
 export const head=(t,ground)=>ground+Math.max(t.width||1,t.height||1);
 export function wallGap(t,a,b){
@@ -24,6 +27,27 @@ export function makeSight({viewer,groundAt,walls,terrain=null,viewerGround=groun
  const edges=walls.segments.map(restrictions).filter(e=>e.sight!=='pass').map(e=>{const a=nodes.get(e.a),b=nodes.get(e.b);const pad=EPS*(Math.abs(b.x-a.x)+Math.abs(b.y-a.y)+1);return {...e,a,b,gap:wallGap(viewer,a,b),left:Math.min(a.x,b.x)-pad,right:Math.max(a.x,b.x)+pad,top:Math.min(a.y,b.y)-pad,bottom:Math.max(a.y,b.y)+pad};}).filter(e=>applies(e.sightDirection,e.a,e.b,origin));
  const side=(a,b,p)=>(b.x-a.x)*(p.y-a.y)-(b.y-a.y)*(p.x-a.x);
  const contactCliffs=(terrain?.cliffs||[]).filter(e=>eye<e.high-EPS&&wallGap(viewer,e.a,e.b)<EPS&&side(e.a,e.b,origin)*side(e.a,e.b,e.lowPoint)>0);
+ // Every line of sight starts at the viewer, so a wall can only be met by a line that points into
+ // the angle the wall covers as seen from there. The walls are filed by that angle once the same
+ // viewpoint has been asked a few times; each line then looks only at the walls filed under its
+ // own direction. A wall is filed a whole sector wide of its ends, far more than the crossing
+ // test's own tolerance, and a wall that touches or passes close by the viewer is looked at by
+ // every line. Which walls are looked at never changes an answer: the order does not matter, and
+ // a wall left out is one the line cannot cross.
+ let filed=null,asked=0;
+ function file(){
+  const always=[],sectors=Array.from({length:SECTORS},()=>[]);
+  for(const e of edges){
+   const q=nearestOnSegment(origin,e.a,e.b);
+   if(e.gap<NEAR||Math.hypot(q.x-origin.x,q.y-origin.y)<NEAR){always.push(e);continue;}
+   const from=Math.atan2(e.a.y-origin.y,e.a.x-origin.x);let turn=Math.atan2(e.b.y-origin.y,e.b.x-origin.x)-from;
+   if(turn>Math.PI)turn-=TURN;else if(turn<-Math.PI)turn+=TURN;
+   const first=Math.floor((Math.min(from,from+turn)+Math.PI)/TURN*SECTORS)-1,last=Math.floor((Math.max(from,from+turn)+Math.PI)/TURN*SECTORS)+1;
+   if(last-first>=SECTORS-1){always.push(e);continue;}
+   for(let k=first;k<=last;k++)sectors[((k%SECTORS)+SECTORS)%SECTORS].push(e);
+  }
+  return sectors.map(list=>always.concat(list));
+ }
  return function visible(target,z,targetToken=null){
   const distance=Math.hypot(target.x-origin.x,target.y-origin.y);
   if(distance<EPS)return true;
@@ -32,7 +56,8 @@ export function makeSight({viewer,groundAt,walls,terrain=null,viewerGround=groun
   const pad=EPS*(Math.abs(target.x-origin.x)+Math.abs(target.y-origin.y)+1);
   const left=Math.min(origin.x,target.x)-pad,right=Math.max(origin.x,target.x)+pad,rayTop=Math.min(origin.y,target.y)-pad,rayBottom=Math.max(origin.y,target.y)+pad;
   const limitedHits=[];
-  for(const e of edges){
+  if(!filed&&edges.length>=FILE_FROM&&++asked>FILE_AFTER)filed=file();
+  for(const e of filed?filed[Math.min(SECTORS-1,Math.floor((Math.atan2(target.y-origin.y,target.x-origin.x)+Math.PI)/TURN*SECTORS))]:edges){
    // Conservative broad phase only; exact ray, direction and height rules follow.
    if(e.right<left||e.left>right||e.bottom<rayTop||e.top>rayBottom)continue;
    const t=hitParameter(origin,target,e.a,e.b);if(t===null)continue;

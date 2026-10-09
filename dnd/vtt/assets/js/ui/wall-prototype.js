@@ -53,12 +53,15 @@ let sharedRevision=-1,savingShared=false,dirtyWhileSaving=false;
 let cubeSignature='',cubeInputs=null;
 let revision=0;const selectedIds=new Set();let propertiesOpen=false,rangeStart=null,portalSignature='';
 const selectedEdges=()=>{synchronizeInspectionHeight();return model.segments.filter(e=>selectedIds.has(e.id));};
-let context=null,model=emptyWalls(),key='',history=[],selection=null,anchor=null,hover=null,drag=null,signature='',storedError=false;
+let context=null,model=emptyWalls(),key='',history=[],selection=null,anchor=null,hover=null,drag=null,frameSignature='',lookSignature='',storedError=false;
+// The GM's viewing height while one redraw is being made. Asking for it walks the board's state,
+// and a redraw places some two thousand points, so it is read once for the whole redraw.
+let drawHeight;
 let inspectionHeight=null,sliceCache=null,sliceRevision=-1,sliceTerrainRevision=-1;
 function synchronizeInspectionHeight(){
  const next=context?.isGM?gmVision.height:null;if(next===inspectionHeight)return false;
  inspectionHeight=next;
- if(drag){const old=drag;model=old.before;drag=null;if(board.hasPointerCapture(old.pointerId))board.releasePointerCapture(old.pointerId);}
+ if(drag){const old=drag;model=old.before;revision++;drag=null;if(board.hasPointerCapture(old.pointerId))board.releasePointerCapture(old.pointerId);}
  selectedIds.clear();selection=null;anchor=null;hover=null;rangeStart=null;propertiesOpen=false;sliceCache=null;
  return true;
 }
@@ -82,11 +85,11 @@ function save(){
 
 function change(before){if(JSON.stringify(before)===JSON.stringify(model))return;history.push(before);if(history.length>60)history.shift();save();render();}
 function gridPoint(event){const v=context.view,r=surface.getBoundingClientRect();let p={x:(event.clientX-r.left-v.translation.x)/v.scale,y:(event.clientY-r.top-v.translation.y)/v.scale};if(window.terrainPrototype?.active)p=context.isGM?inspectionPlanePoint(p,gmVision.height,(x,y,h)=>terrainPrototype.project(x,y,h)):terrainPrototype.unproject(p);return {x:(p.x-(v.gridOffsets.left||0))/v.gridSize,y:(p.y-(v.gridOffsets.top||0))/v.gridSize};}
-function projected(p){const v=context.view,x=(v.gridOffsets.left||0)+p.x*v.gridSize,y=(v.gridOffsets.top||0)+p.y*v.gridSize;return window.terrainPrototype?.active?terrainPrototype.project(x,y,context.isGM?gmVision.height:terrainPrototype.heightAt(x,y)):{x,y};}
+function projected(p){const v=context.view,x=(v.gridOffsets.left||0)+p.x*v.gridSize,y=(v.gridOffsets.top||0)+p.y*v.gridSize;return window.terrainPrototype?.active?terrainPrototype.project(x,y,context.isGM?(drawHeight!==undefined?drawHeight:gmVision.height):terrainPrototype.heightAt(x,y)):{x,y};}
 function pointerPixel(event){const v=context.view,r=surface.getBoundingClientRect();return {x:(event.clientX-r.left-v.translation.x)/v.scale,y:(event.clientY-r.top-v.translation.y)/v.scale};}
 function inside(p){const v=context.view,img=$('#vtt-map-image'),x=(v.gridOffsets.left||0)+p.x*v.gridSize,y=(v.gridOffsets.top||0)+p.y*v.gridSize;return x>=v.mapInsets.left&&y>=v.mapInsets.top&&x<=v.mapInsets.left+img.naturalWidth&&y<=v.mapInsets.top+img.naturalHeight;}
 function hit(event,{excludeNodes=[],excludeEdges=[]}={}){
- if(synchronizeInspectionHeight())render();
+ if(synchronizeInspectionHeight())render(true);
  const slice=visibleSlice();
  const p=pointerPixel(event),radius=10/context.view.scale;let found=null,best=6/context.view.scale;
  for(const n of model.nodes){if(excludeNodes.includes(n.id)||!slice.nodeIds.has(n.id)&&n.id!==anchor)continue;const q=projected(n),d=Math.hypot(p.x-q.x,p.y-q.y);if(d<best){best=d;found={kind:'node',id:n.id,p:{x:n.x,y:n.y}};}}
@@ -107,7 +110,7 @@ panel.querySelector('[data-wall-delete]').onclick=remove;panel.querySelector('[d
 function consume(e){e.preventDefault();e.stopImmediatePropagation();}
 board.addEventListener('pointerdown',event=>{
  if(panel.hidden||!context?.isGM||storedError)return;
- if(synchronizeInspectionHeight())render();
+ if(synchronizeInspectionHeight())render(true);
  if(event.button===2){if(anchor){anchor=null;hover=null;render();}return;}
  if(event.button!==0)return;
  consume(event);const p=snapPoint(gridPoint(event)),target=hit(event);if(!inside(p)&&!target)return;
@@ -157,17 +160,21 @@ document.addEventListener('keydown',e=>{
  // panel. Nothing is typed there, so it undoes the wall edit, as it does anywhere else on the board.
  const field=e.target.closest('input,textarea,select,[contenteditable=true]'),undoKey=(e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z';
  if(panel.hidden||!context?.isGM||(field&&!(undoKey&&panel.contains(field)&&(field.type==='checkbox'||field.tagName==='SELECT'))))return;
- if(synchronizeInspectionHeight())render();
+ if(synchronizeInspectionHeight())render(true);
  if(e.key==='Shift'&&!e.repeat&&!drag&&!anchor&&selection?.kind==='node'){consume(e);anchor=selection.id;hover={p:{...pointNode(anchor)}};propertiesOpen=false;render();return;}
  if(e.key==='Escape'){consume(e);if(propertiesOpen){propertiesOpen=false;render();}else if(drag)cancelDrag();else if(anchor){anchor=null;hover=null;render();}else setOpen(false);}
  else if(e.key==='Delete'||e.key==='Backspace'){consume(e);remove();}
  else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){consume(e);undo();}
 },true);
 function pathBetween(a,b){const steps=Math.max(1,Math.ceil(Math.hypot(b.x-a.x,b.y-a.y)*4)),parts=[];for(let i=0;i<=steps;i++){const p=projected({x:a.x+(b.x-a.x)*i/steps,y:a.y+(b.y-a.y)*i/steps});parts.push(`${i?'L':'M'}${p.x.toFixed(2)},${p.y.toFixed(2)}`);}return parts.join(' ');}
-function render(){
+// `lookOnly`: the walls are the same and only the way they are looked at changed (the zoom, or the
+// height the GM views from). The lines are drawn again, but the walls' revision stays, so sight,
+// movement and the summoned-wall model are not all worked out again for walls that did not change.
+function render(lookOnly=false){try{draw(lookOnly);}finally{drawHeight=undefined;}}
+function draw(lookOnly){
  synchronizeInspectionHeight();
- revision++;
- if(!context)return;svg.style.display=context.isGM?'':'none';svg.setAttribute('width',context.view.mapPixelSize.width);svg.setAttribute('height',context.view.mapPixelSize.height);
+ if(!lookOnly)revision++;
+ if(!context)return;drawHeight=context.isGM?inspectionHeight:undefined;svg.style.display=context.isGM?'':'none';svg.setAttribute('width',context.view.mapPixelSize.width);svg.setAttribute('height',context.view.mapPixelSize.height);
  const scale=context.view.scale||1,fragment=document.createDocumentFragment(),slice=visibleSlice(),visibleIds=new Set(slice.segments.map(s=>s.edge.id));
  for(const id of selectedIds)if(!visibleIds.has(id))selectedIds.delete(id);
  if(selection&&(selection.kind==='segment'?!visibleIds.has(selection.id):!slice.nodeIds.has(selection.id)&&selection.id!==anchor))selection=null;
@@ -195,7 +202,9 @@ function tick(){
      cubeInputs={scene:cubeScene,templates:cubeTemplates,levels:cubeLevels};
      const cubeKey=JSON.stringify([cubeScene,cubeTemplates||[],cubeLevels]);if(cubeKey!==cubeSignature){cubeSignature=cubeKey;revision++;}
    }
-   const next=JSON.stringify([c.isGM,c.isGM?gmVision.height:null,c.view.scale,c.view.gridSize,c.view.gridOffsets,c.view.mapPixelSize,terrainPrototype?.revision||0]);if(next!==signature){signature=next;render();}
+   // What the walls stand on (the grid, the map's size, the ground) against how they are looked at.
+   const frame=JSON.stringify([c.isGM,c.view.gridSize,c.view.gridOffsets,c.view.mapPixelSize,terrainPrototype?.revision||0]),look=JSON.stringify([c.isGM?gmVision.height:null,c.view.scale]);
+   if(frame!==frameSignature){frameSignature=frame;lookSignature=look;render();}else if(look!==lookSignature){lookSignature=look;render(true);}
  }else {svg.style.display='none';button.disabled=true;}
  const ps=JSON.stringify([panel.hidden,window.visionPrototype?.stats.paints,revision,context?.isGM]);if(ps!==portalSignature){portalSignature=ps;editor.portals();}
  } catch(error) {

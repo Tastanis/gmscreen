@@ -915,6 +915,52 @@ so there was nothing to change there.
 
 Tests: `ruler-label-layout.test.mjs`. Not seen in a browser yet.
 
+## October 9: moving a token was very slow on Dead Root. Fixed, waiting for a browser look
+
+You said Dead Root was "really slow" when you moved a token. Measured in your
+own browser, each move froze the board for about a third of a second.
+
+**What was wrong.** Three things, none of them the map's fault:
+
+- Every move worked out the whole sight picture **twice**. After a move the
+  GM's faint wall lines were drawn again (your viewing height follows the
+  token, and the ground on Dead Root is never quite level), and each time
+  they were drawn they told the rest of the board "the walls have changed",
+  which they had not. So sight was worked out again from nothing.
+- Drawing those wall lines was slow in itself: for each of about two thousand
+  points it asked afresh how high you were viewing from.
+- Each line of sight looked at every wall on the map (about eleven thousand
+  lines a repaint, against several hundred walls), and made and sorted a list
+  of the pieces of ground it crossed.
+
+**What happens now.**
+
+- Sight is worked out once for a move. Zooming no longer works it out at all,
+  since zooming does not change what can be seen.
+- The wall lines read your viewing height once for each redraw.
+- A line of sight looks only at the walls that lie in its own direction, and
+  walks the ground it crosses without making a list.
+
+**What you see does not change.** This is the pass mark: the same squares
+lit, the same creatures seen, pixel for pixel. Checked without a browser on
+Dead Root, the Gravity Orchard and the bathhouse: 105 standing places, the
+sight picture and 400 creature checks at each, all identical before and
+after. The sight work itself takes about half the time it did on all three
+maps (Dead Root 52 to 26 thousandths of a second for each place, the
+Orchard 132 to 76).
+
+**What I could not measure.** I have no browser, so I do not have the new
+figure for a move on your PC. From the pieces, a move should go from about
+300 thousandths of a second to roughly 100. The tester will measure it. If
+it is still not smooth, the next thing to look at is the painting itself
+(the picture is over four thousand pixels wide), which only a browser
+profile can show.
+
+**Maps.** Many small objects are fine. "Pass" walls cost sight nothing. The
+Map maker does not need to draw objects differently.
+
+Tests: `sight-speed.test.mjs`.
+
 ## Where it is now
 
 You said to put stages 1 to 3 on `main` on this PC and wait for your word

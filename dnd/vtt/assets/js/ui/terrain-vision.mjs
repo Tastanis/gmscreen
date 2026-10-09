@@ -47,20 +47,29 @@ export function compileTerrainVision(source,{left=0,top=0,width,height}){
  function blocks(origin,eye,target,z,viewer,viewerGround=null){
   const ground=Number.isFinite(viewerGround)&&z<viewerGround-EPS?viewerGround:null;
   if(ground!==null)eye=ground+(eye-ground)*5;
-  const dx=target.x-origin.x,dy=target.y-origin.y,times=[0,1];
-  for(const [start,delta,offset,pitch,count] of [[origin.x,dx,left,sx*tileSize,nx],[origin.y,dy,top,sy*tileSize,ny]]){
-   if(Math.abs(delta)<EPS)continue;
-   const first=Math.max(1,Math.ceil((Math.min(start,start+delta)-offset)/pitch)),last=Math.min(count-1,Math.floor((Math.max(start,start+delta)-offset)/pitch));
-   for(let k=first;k<=last;k++){const t=(offset+k*pitch-start)/delta;if(t>0&&t<1)times.push(t);}
+  const dx=target.x-origin.x,dy=target.y-origin.y,px=sx*tileSize,py=sy*tileSize;
+  // The line is cut where it crosses the tile lines, nearest cut first. The cuts across and the
+  // cuts down each come out in order by themselves, so the two are merged as they are read: the
+  // same cuts a sorted list gives, without building and sorting a list for every line of sight.
+  let firstX=0,lastX=-1,firstY=0,lastY=-1;
+  if(Math.abs(dx)>=EPS){firstX=Math.max(1,Math.ceil((Math.min(origin.x,origin.x+dx)-left)/px));lastX=Math.min(nx-1,Math.floor((Math.max(origin.x,origin.x+dx)-left)/px));}
+  if(Math.abs(dy)>=EPS){firstY=Math.max(1,Math.ceil((Math.min(origin.y,origin.y+dy)-top)/py));lastY=Math.min(ny-1,Math.floor((Math.max(origin.y,origin.y+dy)-top)/py));}
+  const countX=lastX-firstX+1,countY=lastY-firstY+1,NONE=2;
+  let ix=0,iy=0,x=NONE,y=NONE,a=0;
+  while(ix<countX){const t=(left+(dx>0?firstX+ix:lastX-ix)*px-origin.x)/dx;ix++;if(t>0&&t<1){x=t;break;}}
+  while(iy<countY){const t=(top+(dy>0?firstY+iy:lastY-iy)*py-origin.y)/dy;iy++;if(t>0&&t<1){y=t;break;}}
+  for(;;){
+   let b;
+   if(x<=y){b=x;x=NONE;while(ix<countX){const t=(left+(dx>0?firstX+ix:lastX-ix)*px-origin.x)/dx;ix++;if(t>0&&t<1){x=t;break;}}}
+   else{b=y;y=NONE;while(iy<countY){const t=(top+(dy>0?firstY+iy:lastY-iy)*py-origin.y)/dy;iy++;if(t>0&&t<1){y=t;break;}}}
+   const end=b===NONE;if(end)b=1;
+   if(b-a>=EPS){
+    const t=(a+b)/2;
+    const tx=Math.max(0,Math.min(nx-1,Math.floor((origin.x+dx*t-left)/px))),ty=Math.max(0,Math.min(ny-1,Math.floor((origin.y+dy*t-top)/py)));
+    if(Math.min(eye+(z-eye)*a,eye+(z-eye)*b)+EPS<sightHeight(tops[ty*nx+tx],ground)&&blocksFine(origin,eye,target,z,viewer,a,b,ground))return true;
+   }
+   a=b;if(end)return false;
   }
-  times.sort((a,b)=>a-b);
-  for(let i=1;i<times.length;i++){
-   const a=times[i-1],b=times[i];if(b-a<EPS)continue;const t=(a+b)/2;
-   const tx=Math.max(0,Math.min(nx-1,Math.floor((origin.x+dx*t-left)/(sx*tileSize)))),ty=Math.max(0,Math.min(ny-1,Math.floor((origin.y+dy*t-top)/(sy*tileSize))));
-   if(Math.min(eye+(z-eye)*a,eye+(z-eye)*b)+EPS>=sightHeight(tops[ty*nx+tx],ground))continue;
-   if(blocksFine(origin,eye,target,z,viewer,a,b,ground))return true;
-  }
-  return false;
  }
  return {heightAt,cliffs,blocks,cellCount:cells.size};
 }
