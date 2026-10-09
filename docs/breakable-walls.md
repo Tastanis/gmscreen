@@ -221,10 +221,30 @@ Checks run: 6 groups of server checks (the book's own example is one of them), 5
 checks for the pop-up, every server test file and the related browser-code tests.
 
 
-## Stage C: map packages carry the material. Not started
+## Stage C: map packages carry the material. Built (October 8, 2026, night)
 
-The package format is already able to carry it: a wall segment may have
-`"material": "glass" | "wood" | "stone" | "metal"` and `"broken": true`. Import refuses a
-material on a one-way wall. The converter and the import guide are still to do.
+A package may carry `material`, `group` and `broken` on a wall. The import checks them and
+refuses a material on a one-way wall, a group with no material, a bad group name, and two
+materials in one group. The fields and the rules for whoever writes packages are in
+`docs/breakable-walls-format.md`. The Map maker has them and is writing the import guide's line.
 
-## Stage D: free-standing objects (pillars, spires). Not started
+## Stage D: free-standing objects (pillars, crates, crystals). Built (October 8, 2026, night). Not yet seen in a browser
+
+An object is a ring of walls that share a name. It is one thing:
+
+- **It breaks whole.** Tick Broken on any one of its walls and all of them break. Untick it and
+  all are repaired. A push or a fall that breaks one side breaks the object.
+- **It costs one price.** A creature pushed into a stone pillar pays 6 squares once, not once
+  per side.
+- **One heap of rubble.** A broken object is drawn as one of your heap pictures (stone, wood,
+  glass or metal) on each square it stood on, a little larger than the square, instead of a
+  strip along each side.
+- **To make one by hand:** in the Walls panel select its walls (shift-click), set Breakable,
+  then type a name in **Object name**. Walls with the same name are one object and take one
+  material. Clear the name to make them separate walls again.
+- Players are not told which walls make up an object until it is broken.
+
+Limit: an object three squares wide or more has a middle square none of its walls touch, so a
+creature falling exactly there is not seen as landing on it.
+
+Checks run: 4 groups of server checks and 5 browser-code checks, with the heap drawn on a page.

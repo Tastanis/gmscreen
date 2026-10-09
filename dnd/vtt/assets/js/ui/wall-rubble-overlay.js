@@ -76,6 +76,13 @@ function pieceNode(entry, g, mark) {
   const group = document.createElementNS(NS, 'g');
   group.dataset.rubbleId = piece.id; group.dataset.rubbleKind = piece.kind;
   group.setAttribute('transform', `translate(${((from.x + to.x) / 2).toFixed(2)} ${((from.y + to.y) / 2).toFixed(2)}) rotate(${turn.toFixed(2)})`);
+  if (picture && piece.heap) {
+    // A heap is one whole picture over the square, a little larger than it, in its own shape.
+    group.dataset.rubbleSource = 'picture';
+    const unit = lengthPx / squares, heap = rubbleSize(squares, picture.aspect || 1), wide = heap.along * unit, high = heap.across * unit;
+    group.append(svgNode('image', { href: picture.url, x: -wide / 2, y: -high / 2, width: wide, height: high, preserveAspectRatio: 'none' }));
+    return group;
+  }
   if (picture) {
     group.dataset.rubbleSource = 'picture';
     // One scale both ways, taken from the piece as it lies on the board, so the picture keeps its shape.

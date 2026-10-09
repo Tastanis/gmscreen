@@ -1,23 +1,28 @@
 import {savePortal} from './environment-sync.mjs';
 import {createRoofEditor} from './roof-editor.mjs';
 import {cutIntoSquares} from './wall-geometry.mjs';
-import {defaults,properties,presets,wallHeights,MATERIALS,isOneWay,isBroken} from './wall-properties.mjs';
+import {defaults,properties,presets,wallHeights,MATERIALS,isOneWay,isBroken,groupName,withGroups} from './wall-properties.mjs';
 export function createWallEditor({panel,transform,selected,model,context,projected,groundAt,change,render,copyWalls}){
  const fields=document.createElement('div');fields.className='wall-properties';fields.hidden=true;
  const choices={preset:['custom','solid','terrain','transparent','curtain','door','window'],sight:['block','pass','limited'],movement:['block','pass'],sightDirection:['both','left','right'],movementDirection:['both','left','right'],baseMode:['terrain','fixed'],topMode:['follow','level'],interaction:['none','door','window'],material:['none',...MATERIALS]};
- const labels={material:'Breakable',broken:'Broken',preset:'Preset',sight:'Sight',movement:'Movement',sightDirection:'Sight direction',movementDirection:'Move direction',baseMode:'Base mode',base:'Base offset',height:'Height',topMode:'Top',interaction:'Interaction',open:'Open',locked:'Locked',secret:'Secret'};
- for(const k of ['preset','sight','sightDirection','movement','movementDirection','baseMode','base','height','topMode','interaction','open','locked','secret','material','broken']){
+ const labels={material:'Breakable',group:'Object name',broken:'Broken',preset:'Preset',sight:'Sight',movement:'Movement',sightDirection:'Sight direction',movementDirection:'Move direction',baseMode:'Base mode',base:'Base offset',height:'Height',topMode:'Top',interaction:'Interaction',open:'Open',locked:'Locked',secret:'Secret'};
+ for(const k of ['preset','sight','sightDirection','movement','movementDirection','baseMode','base','height','topMode','interaction','open','locked','secret','material','group','broken']){
   const label=document.createElement('label');label.dataset.wallLabel=k;const text=document.createElement('span');text.textContent=labels[k];const input=document.createElement(choices[k]?'select':'input');input.dataset.wallProperty=k;input.setAttribute('aria-label',labels[k]);
-  if(choices[k])for(const value of choices[k]){const option=document.createElement('option');option.value=value;option.textContent=k==='material'&&value==='none'?'No':value[0].toUpperCase()+value.slice(1);input.append(option);}else{input.type=['open','locked','secret','broken'].includes(k)?'checkbox':'number';input.step='.5';if(k==='height')input.min='0';}
-  label.append(text,input);fields.append(label);input.onchange=()=>{if(!context()?.isGM)return;const before=copyWalls(model()),edges=selected();if(!edges.length)return;const value=input.type==='checkbox'?input.checked:input.type==='number'?Number(input.value):input.value;
+  if(choices[k])for(const value of choices[k]){const option=document.createElement('option');option.value=value;option.textContent=k==='material'&&value==='none'?'No':value[0].toUpperCase()+value.slice(1);input.append(option);}else{input.type=['open','locked','secret','broken'].includes(k)?'checkbox':k==='group'?'text':'number';if(k==='group'){input.maxLength=128;input.placeholder='none';input.title='Walls with the same name are one object: they break together, with one heap of rubble.';}else input.step='.5';if(k==='height')input.min='0';}
+  label.append(text,input);fields.append(label);input.onchange=()=>{if(!context()?.isGM)return;const before=copyWalls(model()),picked=selected();if(!picked.length)return;
+   // An object is broken, repaired and re-marked whole: every wall that shares its name.
+   const edges=k==='broken'||k==='material'?withGroups(model(),picked):picked;
+   // Naming an object: its walls take one material, the one the object already has if it exists.
+   const named=k==='group'?groupName(input.value):'',shared=named?(model().segments.find(e=>e.group===named&&!picked.includes(e))?.material??picked.find(e=>e.material)?.material):null;const value=input.type==='checkbox'?input.checked:input.type==='number'?Number(input.value):input.value;
    if(input.type==='number'&&(!Number.isFinite(value)||Math.abs(value)>1000000||k==='height'&&(value<0||value>1000))){render();return;}
    for(const edge of edges){if(k==='preset'){if(value==='custom')continue;const old=properties(edge);Object.assign(edge,defaults,presets[value],{base:old.base,baseMode:old.baseMode,height:old.height,topMode:old.topMode});}
     // "Not breakable" takes the material away, and with it any break. A one-way wall is never breakable.
     // A long wall is cut into one-square pieces as it is marked, so a break takes one square of it.
     // A door or a window is left whole (cutIntoSquares), so it breaks as one thing.
-    else if(k==='material'){if(value==='none'||isOneWay(edge)){delete edge.material;delete edge.broken;}else{edge.material=value;cutIntoSquares(model(),edge.id,()=>crypto.randomUUID());}}
+    else if(k==='material'){if(value==='none'||isOneWay(edge)){delete edge.material;delete edge.broken;delete edge.group;}else{edge.material=value;cutIntoSquares(model(),edge.id,()=>crypto.randomUUID());}}
+    else if(k==='group'){if(named&&shared&&edge.material&&!isOneWay(edge)){edge.group=named;edge.material=shared;}else delete edge.group;}
     else if(k==='broken'){if(value&&edge.material&&!isOneWay(edge))edge.broken=true;else delete edge.broken;}
-    else{edge[k]=value;if(k==='open'&&value)edge.locked=false;if(k==='locked'&&value)edge.open=false;if((k==='movementDirection'||k==='sightDirection')&&isOneWay(edge)){delete edge.material;delete edge.broken;}}}change(before);
+    else{edge[k]=value;if(k==='open'&&value)edge.locked=false;if(k==='locked'&&value)edge.open=false;if((k==='movementDirection'||k==='sightDirection')&&isOneWay(edge)){delete edge.material;delete edge.broken;delete edge.group;}}}change(before);
   };
  }
  const roofEditor=createRoofEditor({fields,selected,model,context,groundAt,change,copyWalls});
@@ -28,7 +33,7 @@ export function createWallEditor({panel,transform,selected,model,context,project
  // only while the same walls are selected, and only for fields that are typed in: a tick box or a
  // list always shows the selected walls, even with the cursor still in it from the last wall.
  let shownFor='';
- function refresh(open=true){roofEditor.refresh();const chosen=selected().map(properties),showing=selected().map(e=>e.id).join('|'),sameWalls=showing===shownFor;shownFor=showing;fields.hidden=!open||!chosen.length||!context()?.isGM;for(const input of fields.querySelectorAll('[data-wall-property]')){const k=input.dataset.wallProperty,values=chosen.map(e=>e[k]),mixed=values.some(v=>v!==values[0]);input.closest('label').hidden=['open','locked','secret'].includes(k)&&chosen.every(e=>e.interaction==='none')||k==='material'&&chosen.some(isOneWay)||k==='broken'&&!chosen.every(e=>e.material&&!isOneWay(e));if(document.activeElement===input&&sameWalls&&input.type!=='checkbox'&&input.tagName!=='SELECT')continue;if(input.type==='checkbox'){input.checked=values[0]===true;input.indeterminate=mixed;}else{if(input.tagName==='SELECT'){input.querySelector('[data-mixed]')?.remove();if(mixed){const option=document.createElement('option');option.value='';option.textContent='Mixed';option.dataset.mixed='';option.disabled=true;input.prepend(option);}}input.value=k==='preset'?'custom':mixed?'':values[0]??(k==='material'?'none':'');}}
+ function refresh(open=true){roofEditor.refresh();const chosen=selected().map(properties),showing=selected().map(e=>e.id).join('|'),sameWalls=showing===shownFor;shownFor=showing;fields.hidden=!open||!chosen.length||!context()?.isGM;for(const input of fields.querySelectorAll('[data-wall-property]')){const k=input.dataset.wallProperty,values=chosen.map(e=>e[k]),mixed=values.some(v=>v!==values[0]);input.closest('label').hidden=['open','locked','secret'].includes(k)&&chosen.every(e=>e.interaction==='none')||k==='material'&&chosen.some(isOneWay)||(k==='broken'||k==='group')&&!chosen.every(e=>e.material&&!isOneWay(e));if(document.activeElement===input&&sameWalls&&input.type!=='checkbox'&&input.tagName!=='SELECT')continue;if(input.type==='checkbox'){input.checked=values[0]===true;input.indeterminate=mixed;}else{if(input.tagName==='SELECT'){input.querySelector('[data-mixed]')?.remove();if(mixed){const option=document.createElement('option');option.value='';option.textContent='Mixed';option.dataset.mixed='';option.disabled=true;input.prepend(option);}}input.value=k==='preset'?'custom':mixed?'':values[0]??(k==='material'?'none':'');}}
   fields.querySelector('[data-wall-label=base] span').textContent=chosen.length&&chosen.every(e=>e.baseMode==='fixed')?'Base elevation':'Base offset';
  }
  function portals(){portalLayer.replaceChildren();const c=context();if(!c||!panel.hidden)return;const m=model(),nodes=new Map(m.nodes.map(n=>[n.id,n]));

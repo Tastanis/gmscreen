@@ -19,9 +19,9 @@ final class SceneEnvironment
                 unset($edge['open'], $edge['locked']);
             }
             unset($edge['secret']);
-            // Which walls can be broken is the GM's to know. A player's copy keeps the material
-            // only on a wall that is already broken, to draw the right rubble.
-            if (($edge['broken'] ?? false) !== true) unset($edge['material']);
+            // Which walls can be broken is the GM's to know, and which of them make up one object.
+            // A player's copy keeps both only on a wall that is already broken, to draw its rubble.
+            if (($edge['broken'] ?? false) !== true) unset($edge['material'], $edge['group']);
             $environment['walls']['value']['segments'][$i] = $edge;
         }
         // GM-only zones never reach a player browser.
@@ -119,7 +119,7 @@ final class SceneEnvironment
             if (!is_string($id)||$id===''||strlen($id)>128||isset($ids[$id])) throw new InvalidArgumentException('Invalid wall node ID.');
             self::number($node['x'] ?? null);self::number($node['y'] ?? null);$ids[$id]=true;
         }
-        $edges=[];$pairs=[];foreach ($segments as $edge) {
+        $edges=[];$pairs=[];$groups=[];foreach ($segments as $edge) {
             $id=$edge['id'] ?? null;
             if (!is_string($id)||$id===''||strlen($id)>128||isset($edges[$id])||!isset($ids[$edge['a'] ?? ''],$ids[$edge['b'] ?? ''])||$edge['a']===$edge['b']) throw new InvalidArgumentException('Invalid wall edge.');
             $edges[$id]=true;
@@ -140,6 +140,12 @@ final class SceneEnvironment
             if (array_key_exists('broken',$edge)) {
                 if (!is_bool($edge['broken'])) throw new InvalidArgumentException('Invalid wall flag.');
                 if ($edge['broken']&&!isset($edge['material'])) throw new InvalidArgumentException('Only a wall with a material can be broken.');
+            }
+            // An object (a pillar, a crate): its walls share a group name and break as one thing.
+            if (array_key_exists('group',$edge)) {
+                if (!is_string($edge['group'])||!preg_match(self::WALL_GROUP,$edge['group'])) throw new InvalidArgumentException('Invalid wall group name.');
+                if (!isset($edge['material'])) throw new InvalidArgumentException('A wall group needs a material.');
+                if (($groups[$edge['group']] ??= $edge['material'])!==$edge['material']) throw new InvalidArgumentException('The walls of one group must share a material.');
             }
         }
         // How steeply the scene shows height: from 0 (straight overhead) to the usual 0.36.
@@ -185,6 +191,8 @@ final class SceneEnvironment
     }
 
     public const WALL_MATERIALS = ['glass','wood','stone','metal'];
+    /** A group name: 1 to 128 letters, digits, dashes, underscores, dots or colons. */
+    public const WALL_GROUP = '/^[A-Za-z0-9_.:-]{1,128}$/';
     public const ZONE_LIMIT = 200;
     public const ZONE_SQUARE_LIMIT = 20000;
     public const ZONE_TOTAL_SQUARE_LIMIT = 50000;

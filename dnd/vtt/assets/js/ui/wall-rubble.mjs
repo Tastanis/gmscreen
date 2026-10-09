@@ -124,16 +124,32 @@ export function rubblePieces(model) {
   const pieces = [];
   if (!model?.segments?.some(isBroken)) return pieces;
   const nodes = new Map((model.nodes || []).map((node) => [node.id, node]));
+  const objects = new Map();
   for (const edge of model.segments) {
     if (!isBroken(edge)) continue;
     const a = nodes.get(edge.a), b = nodes.get(edge.b);
     if (!a || !b) continue;
+    // The walls of one object (a shared group name) are not strips: the object is one heap.
+    if (typeof edge.group === 'string' && edge.group) {
+      const box = objects.get(edge.group) || { edge, left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity };
+      for (const p of [a, b]) { box.left = Math.min(box.left, p.x); box.right = Math.max(box.right, p.x); box.top = Math.min(box.top, p.y); box.bottom = Math.max(box.bottom, p.y); }
+      objects.set(edge.group, box);
+      continue;
+    }
     const length = Math.hypot(b.x - a.x, b.y - a.y);
     if (!(length > 1e-6)) continue;
     const parts = Math.max(1, Math.round(length)), kind = rubbleKind(edge);
     for (let i = 0; i < parts; i++) {
       const at = (t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
       pieces.push({ id: parts > 1 ? `${edge.id}#${i}` : edge.id, edge, kind, a: at(i / parts), b: at((i + 1) / parts) });
+    }
+  }
+  // One heap for each square the object stood on: `a` to `b` runs across the middle of the square.
+  for (const [name, box] of objects) {
+    const kind = heapKind(properties(box.edge).material);
+    const span = (low, high) => { const first = Math.floor(low + 0.25), last = Math.max(first, Math.ceil(high - 0.25) - 1); return Array.from({ length: last - first + 1 }, (_, i) => first + i); };
+    for (const row of span(box.top, box.bottom)) for (const column of span(box.left, box.right)) {
+      pieces.push({ id: `${name}@${column},${row}`, edge: box.edge, kind, heap: true, a: { x: column, y: row + 0.5 }, b: { x: column + 1, y: row + 0.5 } });
     }
   }
   return pieces;

@@ -9,6 +9,15 @@ export const isOneWay=e=>(e?.movementDirection??'both')!=='both'||(e?.sightDirec
 export const canBeBreakable=e=>!isOneWay(e);
 export const isBreakable=e=>MATERIALS.includes(e?.material)&&!isOneWay(e);
 export const isBroken=e=>e?.broken===true;
+// An object (a pillar, a crate): its walls share a `group` name and break as one thing.
+export const GROUP_NAME=/^[A-Za-z0-9_.:-]{1,128}$/;
+/** A name typed by hand, made into one the server accepts; '' when nothing usable is left. */
+export const groupName=text=>String(text??'').trim().replace(/[^A-Za-z0-9_.:-]+/g,'-').slice(0,128);
+/** These walls and every other wall of the same objects. */
+export function withGroups(model,edges){
+ const names=new Set(edges.map(e=>e?.group).filter(name=>typeof name==='string'&&name));
+ return names.size?[...new Set([...edges,...model.segments.filter(e=>names.has(e.group))])]:edges;
+}
 /** The walls that are standing: everything that asks "is there a wall here?" reads these. */
 export function liveWalls(model){
  if(!model?.segments?.some(isBroken))return model;
@@ -24,6 +33,8 @@ export function validateProperties(e){
  if(e.material!==undefined&&isOneWay(e))throw Error('One-way walls cannot be breakable');
  if(e.broken!==undefined&&typeof e.broken!=='boolean')throw Error('Invalid wall broken');
  if(e.broken&&e.material===undefined)throw Error('Only a wall with a material can be broken');
+ if(e.group!==undefined&&(typeof e.group!=='string'||!GROUP_NAME.test(e.group)))throw Error('Invalid wall group name');
+ if(e.group!==undefined&&e.material===undefined)throw Error('A wall group needs a material');
 }
 export function restrictions(edge){const e=properties(edge);if(isBroken(e))return {...e,sight:'pass',movement:'pass'};return {...e,sight:e.open&&e.interaction==='door'?'pass':e.sight,movement:e.open&&e.interaction!=='none'?'pass':e.movement};}
 export function applies(direction,a,b,p){const side=(b.x-a.x)*(p.y-a.y)-(b.y-a.y)*(p.x-a.x);return direction==='both'||Math.abs(side)<1e-8||(direction==='left'?side>0:side<0);}
