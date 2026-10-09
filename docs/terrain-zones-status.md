@@ -632,10 +632,11 @@ those numbers from the old code.
 - Stepping off the side of a ramp is still priced as the drop it is.
 - The reach outline uses the same rule, so from a ramp it now reaches the
   island at the foot.
-- **This changes what the ruler draws on the bathhouse stairs.** The price was
-  already right there, by luck. But past the top of the stairs the ruler line
-  was drawn at ground height, as if under the upper floor; it is now drawn on
-  the upper floor, and it meets the upper floor's zones, not the ground's.
+- **This changes the ruler on the bathhouse stairs.** I first wrote that the
+  price there was already right. It was not: the tester measured 5 for each
+  4-square stair, both ways (see the next section). Past the top of the stairs
+  the ruler line was also drawn at ground height, as if under the upper floor;
+  it is now drawn on the upper floor and meets the upper floor's zones.
 - A walk that does not touch a ramp is priced exactly as before. Scenes with
   no ramps are untouched.
 
@@ -646,6 +647,26 @@ own code gave.
 
 Not yet seen in a browser. The part that joins this to the live board cannot be
 run outside one; the rule itself and the prices are tested.
+
+## October 8, late: a stair over the floor it rises from. Done, waiting for a re-test
+
+The tester checked the two faults above on the bathhouse, on the build from
+before my fixes, and found the ruler charged 5 for each 4-square stair, up and
+down. Down was the fault already fixed above. Up was a second one.
+
+The lower floor of a building runs on under its stairs. A token that started on
+that floor was held at the floor's height all the way up the stair (0, 0, 0)
+and then rose the whole two squares in the last step. The server said the same
+thing about where the token stood, so the token was also drawn at floor height
+while "on" the stair.
+
+- A creature being carried by a stair now stands at the stair's height, even
+  while the floor it came from is still under it. Server and browser.
+- Both bathhouse stairs, walking and pushed, up and down, on the real package:
+  the heights now run 0, 0.33, 1, 1.67, 2 (and 2 to 4 on the upper stair), with
+  no fall. Each stair costs 4.
+- A creature standing under the stair that never came onto it, or that walked
+  in from the side, still stands on the lower floor.
 
 ## Where it is now
 

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRouteWalker, stepGhost, walksPlates, hasStairs } from '../route-walker.mjs';
 import { routeSteps } from '../terrain-math.mjs';
-import { rampGround, rampLanding } from '../imported-ramps.mjs';
+import { rampAt, rampHeight, rampCarries, rampGround, rampLanding } from '../imported-ramps.mjs';
 import { intersectsFloor, floorSupported } from '../floor-support.js';
 
 // The ruler's price for ramps between two upper floors. The scene is the shape floating islands
@@ -40,7 +40,9 @@ const cutouts = (levelId) => mapLevels.levels.find((level) => level.id === level
 // Where a token stands, given its floor, its stair progress and any plate it is known to be on:
 // the board's own rule (groundFor in terrain-prototype.js), over this scene's flat ground.
 function standing(p) {
-  const level = p.levelId || 'level-0';
+  const level = p.levelId || 'level-0', at = { x: p.column + (p.width || 1) / 2, y: p.row + (p.height || 1) / 2 };
+  // Carried by a ramp, it stands at the ramp's height even while a plate it came from is still under it.
+  if (p._floorTraversal) { const ramp = rampAt(ramps, at); if (ramp && rampCarries(ramp, p)) return rampHeight(ramp, at.x, at.y); }
   if (p._supportSurfaceId) { const held = plates.find((s) => s.id === p._supportSurfaceId); if (held && intersectsFloor(p, held, cutouts(held.levelId))) return held.height; }
   const z = rampGround(ramps, p, { x: p.column + (p.width || 1) / 2, y: p.row + (p.height || 1) / 2 });
   if (z !== null) return z;

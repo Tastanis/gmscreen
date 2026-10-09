@@ -48,7 +48,10 @@ final class WallMovement
         $base=(float)(FloorGeometry::elevations($config['mapLevels']??[])[$level]??0);
         if(FloorGeometry::isAirborne($token))return max($base,(float)($token['flightHeight']??(FlightHeight::ground($token,$config)+1)));
         $surface=FloorSupport::retained($token,FloorSupport::surfaces($config['environment']['walls']['value']??[]),$config['mapLevels']??[]);
-        if($surface)return (float)$surface['height'];
+        // A creature carried by a stair stands at the stair's height, even while the floor it came
+        // from still lies under it (the lower floor of a building runs on under its stairs).
+        // Otherwise the plate it is known to stand on decides.
+        if($surface&&!FloorGeometry::carriedByStair($token,$config['mapLevels']??[]))return (float)$surface['height'];
         $x=$token['column']+($token['width']??1)/2;$y=$token['row']+($token['height']??1)/2;
         $model=$config['environment']['walls']['value']??[];
         foreach($model['ramps']??[] as $s){
@@ -60,6 +63,8 @@ final class WallMovement
             if($supported){$length=in_array($direction,['west','east'],true)?$s['right']-$s['left']:$s['bottom']-$s['top'];return $s['base']+($s['height']-$s['base'])*$distance/$length;}
             break; // Client rampAt uses the first intersecting ramp too.
         }
+        // Carried by a stair that has no ramp here to give a height: the plate under it decides after all.
+        if($surface)return (float)$surface['height'];
         // Only maps with canonical floor plates use imported-map terrain fallback.
         if($level!=='level-0'){
             $cuts=[];foreach($config['mapLevels']['levels']??[] as $floor)if($floor['id']===$level){$cuts=$floor['cutouts']??[];break;}

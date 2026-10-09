@@ -164,3 +164,44 @@ rampCheck(!FloorGeometry::carriedByStair($on('mid', 'arch', 'barrier'), $levels)
 rampCheck(!FloorGeometry::carriedByStair($on('high', 'arch', 'red'), $levels), 'By the wrong end: not carried');
 rampCheck(!FloorGeometry::carriedByStair($on('high', 'arch', null), $levels) && !FloorGeometry::carriedByStair($on('low', 'arch', 'red'), $levels), 'Not on a ramp, or not on this floor\'s ramp: not carried');
 echo "PASS a creature is carried only by the end of the ramp that belongs to its floor\n";
+
+// ---- a stair over the floor it rises from (a building's stair, as on the bathhouse) ----------
+// The lower floor's plate runs on under the stair. A creature carried by the stair stands at the
+// stair's height, not at the height of the plate it came from; before, it was held at the plate's
+// height to the top and rose the whole way in the last step (the ruler read 5 for a 4-square stair).
+$houseStair = ['id'=>'stair','corners'=>$box(16,10,17,13),'edgeColors'=>['16,10-17,10'=>'green','16,13-17,13'=>'red']];
+$house = [
+    'mapLevels'=>['baseStairs'=>[[...$houseStair,'direction'=>'up','linkedLevelId'=>'first']],
+        'levels'=>[['id'=>'first','zIndex'=>1,'elevationSquares'=>2,'cutouts'=>[['column'=>0,'row'=>10,'width'=>30,'height'=>20]],'stairs'=>[[...$houseStair,'direction'=>'down','linkedLevelId'=>'level-0']]]]],
+    'environment'=>['walls'=>['value'=>['version'=>1,'nodes'=>[],'segments'=>[],
+        'roofs'=>[['id'=>'ground','kind'=>'floor','levelId'=>'level-0','height'=>0.0,'points'=>$ring(10,9,22,20)], ['id'=>'first','kind'=>'floor','levelId'=>'first','height'=>2.0,'points'=>$ring(10,2,22,10)]],
+        'ramps'=>[['id'=>'stair','left'=>16,'right'=>17,'top'=>10,'bottom'=>13,'base'=>0.0,'height'=>2.0,'fromLevel'=>'level-0','toLevel'=>'first','direction'=>'north']]]]],
+];
+$at = static fn (float $row, string $level, ?string $entry, ?string $plate) => ['id'=>'t','column'=>16,'row'=>$row,'width'=>1,'height'=>1,'levelId'=>$level,
+    '_floorTraversal'=>$entry === null ? null : ['stairId'=>'stair','entry'=>$entry], '_supportSurfaceId'=>$plate];
+$feet = static fn (array $token) => round(WallMovement::height($token, $house), 2);
+rampCheck([$feet($at(12, 'level-0', 'red', 'ground')), $feet($at(11, 'level-0', 'red', 'ground')), $feet($at(10, 'level-0', 'red', 'ground'))] === [0.33, 1.0, 1.67], 'Going up, it rises with the stair though the ground floor still lies under it');
+rampCheck([$feet($at(10, 'first', 'green', null)), $feet($at(11, 'first', 'green', null)), $feet($at(12, 'first', 'green', null))] === [1.67, 1.0, 0.33], 'Coming down, the same heights');
+rampCheck($feet($at(12, 'level-0', null, 'ground')) === 0.0, 'A creature under the stair that never came onto it stands on the ground floor');
+rampCheck($feet($at(12, 'level-0', 'barrier', 'ground')) === 0.0, 'So does one that walked in under it from the side');
+rampCheck($feet($at(14, 'level-0', null, 'ground')) === 0.0 && $feet($at(8, 'first', null, 'first')) === 2.0, 'Off the stair, the plate decides as before');
+// The whole way up and down, as moves: no fall either way, and the right floor at each end.
+$walkHouse = static function (array $token, array $rows, string $kind) use ($house): array {
+    $surfaces = FloorSupport::surfaces($house['environment']['walls']['value']); $out = [];
+    foreach ($rows as $row) {
+        $next = [...$token, 'row'=>$row];
+        $floor = FloorGeometry::move($token, $next, $house['mapLevels'], $kind, [], $surfaces, static fn ($p) => 0.0);
+        $next['levelId'] = $floor['levelId']; $next['_floorTraversal'] = $floor['traversal'];
+        if (array_key_exists('supportSurfaceId', $floor)) $next['_supportSurfaceId'] = $floor['supportSurfaceId'];
+        elseif (!empty($next['_supportSurfaceId']) && !TeleportLanding::retained($next, $house)) $next['_supportSurfaceId'] = null;
+        $fall = FallOutcome::plan($token, $next, $house, $kind, [], $floor['cause'] ?? '');
+        $out[] = [$next['levelId'], round(WallMovement::height($next, $house), 2), $fall['squares'] ?? null];
+        $token = $next;
+    }
+    return $out;
+};
+foreach (['walk', 'forced'] as $kind) {
+    rampCheck($walkHouse($at(13, 'level-0', null, 'ground'), [12, 11, 10, 9], $kind) === [['level-0', 0.33, null], ['level-0', 1.0, null], ['level-0', 1.67, null], ['first', 2.0, null]], "Up the house stair by $kind, square by square");
+    rampCheck($walkHouse($at(9, 'first', null, 'first'), [10, 11, 12, 13], $kind) === [['first', 1.67, null], ['first', 1.0, null], ['first', 0.33, null], ['level-0', 0.0, null]], "Down the house stair by $kind, square by square");
+}
+echo "PASS a creature on a stair stands at the stair's height, over the floor it came from\n";

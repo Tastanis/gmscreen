@@ -11,6 +11,9 @@ export function rampSupports(s,actor,p){
  const distance=s.direction==='west'?s.right-p.x:s.direction==='east'?p.x-s.left:s.direction==='south'?p.y-s.top:s.bottom-p.y;
  return traversal?.entry==='red'||(!traversal&&distance<=2+1e-7);
 }
+// True when the actor is being carried by this ramp: it came onto it by the end that belongs to its floor
+// (the head from the upper floor, the foot from the lower). Paired with FloorGeometry::carriedByStair.
+export function rampCarries(s,actor){const level=actor?.levelId||'level-0',entry=actor?._floorTraversal?.entry;return (level===s.toLevel&&entry==='green')||(level===s.fromLevel&&entry==='red');}
 export function rampGround(ramps,actor,p){const s=rampAt(ramps,p);return s&&rampSupports(s,actor,p)?rampHeight(s,p.x,p.y):null;}
 // A narrow landing cue when the observer's eyes are exactly at the floor plane.
 // This never grants sight by itself: callers must still test walls and ceilings.

@@ -1,6 +1,6 @@
 import {floorSupported,intersectsFloor,terrainFloorContact,resolveSupportSurfaces,walkFloorContact,cubeStepDown} from './floor-support.js';
 import {sharedField,saveShared,acknowledgedRevision} from './environment-sync.mjs';
-import {rampAt,rampHeight,rampPick,rampGround,rampSupports,rampLanding} from './imported-ramps.mjs';
+import {rampAt,rampHeight,rampPick,rampGround,rampSupports,rampLanding,rampCarries} from './imported-ramps.mjs';
 import './height-tethers.js';
 import {onSurface} from './stacked-surfaces.mjs';
 import {createFlightState} from './flight-height.mjs';
@@ -164,6 +164,9 @@ function groundFor(placement,point=null){
  if(!placement)return 0;
  const level=placement.levelId||'level-0',base=floorElevations(levelConfig()).get(level)??0;
  if(['fly','hover'].includes(placement.movementMode))return Math.max(base,flight.height(placement,(x,y)=>flightGround(x,y,placement)));
+ // A token carried by a stair stands at the stair's height, even while the floor it came from still
+ // lies under it (WallMovement::height has the same rule). Otherwise the plate it stands on decides.
+ if(placement._floorTraversal&&importedDesign()){const d=dimensions(),p={x:point?(point.x-(ctx.view.gridOffsets.left||0))/d.grid:placement.column+(placement.width||1)/2,y:point?(point.y-(ctx.view.gridOffsets.top||0))/d.grid:placement.row+(placement.height||1)/2},ramp=rampAt(importedDesign().ramps||[],p);if(ramp&&rampCarries(ramp,placement))return rampHeight(ramp,p.x,p.y);}
  if(placement._supportSurfaceId){const surface=resolveSupportSurfaces(importedDesign()||{}).find(s=>s.id===placement._supportSurfaceId);if(surface&&intersectsFloor(placement,surface,(levelConfig()?.levels||[]).find(l=>l.id===surface.levelId)?.cutouts||[]))return surface.height;}
  if(importedDesign()){
   const d=dimensions(),x=point?(point.x-(ctx.view.gridOffsets.left||0))/d.grid:placement.column+(placement.width||1)/2,y=point?(point.y-(ctx.view.gridOffsets.top||0))/d.grid:placement.row+(placement.height||1)/2;
