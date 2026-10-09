@@ -5,17 +5,24 @@ Written October 8, 2026 from the Map maker's Gravity Orchard test and a read of 
 
 ## Built so far (October 8, 2026, evening)
 
-Brandon said "go ahead" to three pieces. They are on `main` on this PC, not pushed, and **not
-yet seen in a browser**: another chat's browser test was using the PC's memory when they were
-written. The rules behind them are tested; the drawing itself is not. Pictures for Brandon are
-the next step.
+Brandon said "go ahead" to three pieces. They are on `main` on this PC, not pushed. They have
+been run in the real app in a browser, on a throwaway copy on this PC with the Map maker's
+islands test map: imported through the Scenes screen, islands marked, the slant changed (once
+through the Walls panel), viewed as GM and as a player. No page errors. Brandon has comparison
+pictures of today's look beside slants 0.36, 0.18, 0.12, 0.09 and 0, for the GM and for a
+player on the high island, the rim and the crater floor.
 
-1. **The floating mark.** A floor plate marked floating is drawn with a short rock side, one
-   square deep, not a wall down to the ground. An unmarked plate is drawn exactly as before.
-   The depth is one number (`FLOATING_SIDE` in `height-view.mjs`).
+1. **The floating mark.** A floor plate marked floating is drawn with a short rock side, two
+   squares deep, not a wall down to the ground. An unmarked plate is drawn exactly as before.
+   The depth is one number (`FLOATING_SIDE` in `height-view.mjs`). On screen the side is the
+   depth times the slant, so one square all but vanished at a third of the usual slant; two
+   still shows as a rim of rock.
 2. **The shadow.** Each floating plate casts a soft shadow on the ground straight under it, at
    its true place. It is drawn just above the map picture and under the fog, so a player sees it
    only where they can see that ground. It falls on the ground only, not on a lower plate.
+   With no islands drawn above a hero on the crater floor, the shadows are how that hero knows
+   where the islands are. At a flatter slant the shadow shows less from under its island (the
+   island is drawn slant times height north of it), which is one reason not to go to zero.
 3. **The slant.** A scene can carry one number for how far a square of height moves a thing up
    the screen: anything from today's 0.36 down to 0. Other scenes keep today's value untouched.
    You can change it in the **Walls** panel ("Height slant") and see it at once; it is saved
@@ -40,8 +47,7 @@ east, a third of that. At 0.36 and 18 high that is 7 and 3. At 0.12 it is 3 and 
 
 ### What happens at a slant of zero
 
-Worked out from the code, to be confirmed in a browser. The board becomes a plain view from
-straight overhead:
+Seen in the browser: nothing breaks. The board becomes a plain view from straight overhead:
 
 - Nothing is moved on screen by its height. Tokens sit on their own squares.
 - Side faces have no size, so they are simply not there: no rock side, no building walls, no

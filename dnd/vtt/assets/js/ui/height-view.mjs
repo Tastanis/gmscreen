@@ -38,8 +38,12 @@ export function slanted(x, y, h, slant = USUAL) { return { x: x + h * slant.x, y
 // `floating` (a rock in the air, a platform on chains) gets only a short side, so it reads as a
 // slab and the ground behind it is not walled off.
 
-/** How deep the side of a floating plate is drawn, in squares. */
-export const FLOATING_SIDE = 1;
+/**
+ * How deep the side of a floating plate is drawn, in squares. On screen it is this times the
+ * slant: two squares still shows as a rim of rock at a slant a third of the usual one, where one
+ * square all but disappears.
+ */
+export const FLOATING_SIDE = 2;
 
 /** True for a floor plate the map design marks as floating. */
 export const isFloating = (surface) => surface?.kind === 'floor' && surface.floating === true;

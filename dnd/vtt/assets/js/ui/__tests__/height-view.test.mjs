@@ -59,13 +59,13 @@ test('only a floor plate marked floating is floating', () => {
 });
 
 test('the side of a plate: down to what is under it, or a short slab edge when it floats', () => {
-  assert.equal(FLOATING_SIDE, 1);
+  assert.equal(FLOATING_SIDE, 2);
   // An ordinary plate, as always: a wall from the plate to the ground, or to the plate below.
   assert.equal(sideFoot(island(), 0), 0);
   assert.equal(sideFoot(island(), 12), 12);
-  // A floating one: one square deep.
-  assert.equal(sideFoot(island({ floating: true }), 0), 17);
-  assert.equal(sideFoot(island({ floating: true }), 12), 17);
+  // A floating one: two squares deep.
+  assert.equal(sideFoot(island({ floating: true }), 0), 16);
+  assert.equal(sideFoot(island({ floating: true }), 12), 16);
   // Unless something is nearer than that under the edge: it stops there, as an ordinary side would.
   assert.equal(sideFoot(island({ floating: true }), 17.6), 17.6);
   // Ground higher than the plate (a plate set into a hillside) leaves no side at all, either way.

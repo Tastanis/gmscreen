@@ -17,7 +17,7 @@ svg.id = 'floating-shadows';
 svg.style.cssText = 'position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:2';
 svg.setAttribute('aria-hidden', 'true');
 /** How dark the shadow is, and how soft its edge is, in squares. */
-const DARKNESS = 0.42, SOFT = 0.18;
+const DARKNESS = 0.55, SOFT = 0.14;
 let signature = '', builds = 0, drawn = [];
 
 function context() { return window.terrainContext?.() || null; }
