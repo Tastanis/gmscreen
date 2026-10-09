@@ -14,11 +14,22 @@ const LABEL_CHARACTER_WIDTH = 0.57; // generous average character width, as a sh
  */
 export const WORDING_SEPARATOR = ' · ';
 export const legWording = (squares) => (squares === 1 ? '1 square' : `${squares} squares`);
-export function rulerWording({ movementLabel = null, squares = 0, cost = squares } = {}) {
+export function rulerWording({ movementLabel = null, squares = 0, cost = squares, fall = 0 } = {}) {
   return {
     distance: movementLabel ? `${movementLabel} ${squares}` : legWording(squares),
     cost: cost !== squares ? `Cost ${cost}` : null,
+    fall: fall > 0 ? `Fall ${fall}` : null,
   };
+}
+
+/**
+ * A forced move reads as the squares moved and, apart from them, how far the creature then
+ * falls: "Forced movement 2 · Fall 6". The drop is never part of the count. This is the whole
+ * squares between the height it travels at and where it lands; under one square is not a fall.
+ */
+export function fallSquares(travelling, landing) {
+  const drop = Number(travelling) - Number(landing);
+  return Number.isFinite(drop) && drop >= 1 - 1e-6 ? Math.round(drop) : 0;
 }
 
 /**

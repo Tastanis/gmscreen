@@ -4,6 +4,7 @@ import {sceneZones, buildZoneIndex, zonesForFootprint, zoneTags, squareCostMulti
 import {routeSteps, groundSquare, stepCost, climbSurcharge, stepRise} from './terrain-math.mjs';
 import {saveShared} from './environment-sync.mjs';
 import {floorElevations} from '../state/normalize/floor-elevation.js';
+import {fallSquares} from './ruler-label-layout.mjs';
 
 const NS = 'http://www.w3.org/2000/svg';
 const transform = document.querySelector('#vtt-map-transform');
@@ -94,6 +95,25 @@ function routeCost(points, {kind = 'walk', actor = undefined} = {}) {
   // The rules do not allow shifting into or within difficult terrain.
   summary.shiftInDifficult = kind === 'shift' && (summary.difficult.length > 0 || summary.startsInDifficult);
   return summary;
+}
+/**
+ * How far a forced move drops at its end, in whole squares: from the height the creature
+ * travels at (travel-height.mjs) down to where it lands, a plate under it or the ground. The
+ * ruler shows it apart from the squares moved. Fliers do not fall. On a bent route it is the
+ * last leg that is read.
+ */
+function forcedFall(points, {actor = undefined} = {}) {
+  const c = context(), active = terrain(), walls = window.wallPrototype;
+  const mover = actor === undefined ? moverFor(c) : actor;
+  if (!active || !mover || !walls?.moverHeight || !(points?.length > 1) || ['fly', 'hover'].includes(mover.movementMode)) return 0;
+  const at = (p) => ({...mover, column: p.column, row: p.row});
+  const start = points[points.length - 2], end = points[points.length - 1];
+  // The mover itself where the leg starts from its own square: the board keeps one path per mover.
+  const from = start.column === mover.column && start.row === mover.row ? mover : at(start);
+  const travelling = walls.moverHeight(from, at(end), 'forced');
+  const standing = {...at(end), movementMode: 'ground'}, ground = active.groundFor(standing);
+  const caught = active.landingHeight ? active.landingHeight(standing, travelling) : null;
+  return fallSquares(travelling, caught === null ? ground : Math.max(ground, caught));
 }
 /**
  * Per-square lookup for the reach outline: the rounded ground height and the
@@ -279,6 +299,7 @@ window.terrainZones = {
   costAt: (column, row, levelId = BASE_LEVEL_ID) => squareCostMultiplier(current().index, column, row, levelId),
   stepMultiplier,
   routeCost,
+  forcedFall,
   paysForClimb,
   cellInfoFor,
   standingHeight: (target) => { const placement = placementOf(target); return placement ? standingHeight(placement) : null; },

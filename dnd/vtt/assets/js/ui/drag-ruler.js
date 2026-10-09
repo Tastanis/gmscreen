@@ -468,12 +468,16 @@ function drawOverlay(state) {
   // Distance is the route as before; cost adds difficult terrain for a walk or shift.
   const kind = state.mode === 'external' ? movementKindOf(state) : 'walk';
   const zones = window.terrainZones?.routeCost ? window.terrainZones : null;
+  // A forced move counts the squares it is moved across the map. How far it then drops is not
+  // part of that count; it is shown beside it ("Forced movement 2 · Fall 6").
+  const forced = kind === 'forced';
   const segments = getSegments(rawPoints).map((segment) => {
     const measured = zones ? zones.routeCost([segment.start, segment.end], { kind }) : null;
-    const squares = measured ? measured.distance : terrain ? terrain.route(segment.start, segment.end).cost : segment.squares;
+    const squares = forced ? segment.squares : measured ? measured.distance : terrain ? terrain.route(segment.start, segment.end).cost : segment.squares;
     const placed = terrain ? {...segment,start:{...segment.start,...terrain.rulerPoint(segment.start)},end:{...segment.end,...terrain.rulerPoint(segment.end)}} : segment;
-    return { ...placed, squares, cost: measured ? measured.cost : squares, difficult: measured?.difficult ?? [], climbs: measured?.climbs ?? [], shiftInDifficult: Boolean(measured?.shiftInDifficult), rawStart: segment.start };
+    return { ...placed, squares, cost: forced ? squares : measured ? measured.cost : squares, difficult: measured?.difficult ?? [], climbs: measured?.climbs ?? [], shiftInDifficult: Boolean(measured?.shiftInDifficult), rawStart: segment.start };
   });
+  const fall = forced && segments.length && zones?.forcedFall ? zones.forcedFall(rawPoints.map((point) => ({ column: point.column, row: point.row }))) : 0;
   const totalSquares = segments.reduce((sum, segment) => sum + segment.squares, 0);
   const totalCost = segments.reduce((sum, segment) => sum + segment.cost, 0);
   const shiftWarning = segments.some((segment) => segment.shiftInDifficult);
@@ -539,9 +543,11 @@ function drawOverlay(state) {
     movementLabel: state.mode === 'external' && state.measuring ? state.movementLabel : null,
     squares: totalSquares,
     cost: totalCost,
+    fall,
   });
   // The true movement cost follows the distance only when they differ.
   const readout = [wording.distance];
+  if (wording.fall) readout.push(wording.fall);
   if (shiftWarning) readout.push('No shift in difficult terrain');
   if (wording.cost) readout.push(wording.cost);
   state.rulerValue.textContent = readout.join(WORDING_SEPARATOR);
@@ -555,10 +561,10 @@ function drawOverlay(state) {
       previous: points[points.length - 2] ?? null,
       gridSize,
       mapHeight: Number(state.overlay.svg.getAttribute('height')) || Infinity,
-      lines: [wording.distance + (costPart ?? '')],
+      lines: [wording.distance + (wording.fall ? WORDING_SEPARATOR + wording.fall : '') + (costPart ?? '')],
     });
     sizeLabel(state.overlay.total, placed.fontSize);
-    setLabel(state.overlay.total, endPoint.mapX, placed.top, wording.distance, costPart);
+    setLabel(state.overlay.total, endPoint.mapX, placed.top, wording.distance + (wording.fall ? WORDING_SEPARATOR + wording.fall : ''), costPart);
     totalBox = placed.box;
     state.overlay.total.removeAttribute('hidden');
     state.overlay.total.style.display = '';

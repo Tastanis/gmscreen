@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { placeTotalLabel, placeLegLabels, totalLabelSize, legLabelSize, rulerWording, legWording } from '../ruler-label-layout.mjs';
+import { readFileSync } from 'node:fs';
+import { placeTotalLabel, placeLegLabels, totalLabelSize, legLabelSize, rulerWording, legWording, fallSquares } from '../ruler-label-layout.mjs';
+import { travelPath } from '../travel-height.mjs';
 import { placeCornerControl } from '../terrain-zones.mjs';
 
 const at = (column, row, grid = 50) => ({ mapX: column * grid + grid / 2, mapY: row * grid + grid / 2 });
@@ -75,16 +77,54 @@ test('a leg label that would touch the total is left out, and no two labels coll
 });
 
 test('ruler wording: "Move 5", and "Move 5 · Cost 8" only when the cost differs', () => {
-  assert.deepEqual(rulerWording({ movementLabel: 'Move', squares: 5, cost: 8 }), { distance: 'Move 5', cost: 'Cost 8' });
-  assert.deepEqual(rulerWording({ movementLabel: 'Move', squares: 5, cost: 5 }), { distance: 'Move 5', cost: null });
-  assert.deepEqual(rulerWording({ movementLabel: 'Move', squares: 1, cost: 1 }), { distance: 'Move 1', cost: null });
+  assert.deepEqual(rulerWording({ movementLabel: 'Move', squares: 5, cost: 8 }), { distance: 'Move 5', cost: 'Cost 8', fall: null });
+  assert.deepEqual(rulerWording({ movementLabel: 'Move', squares: 5, cost: 5 }), { distance: 'Move 5', cost: null, fall: null });
+  assert.deepEqual(rulerWording({ movementLabel: 'Move', squares: 1, cost: 1 }), { distance: 'Move 1', cost: null, fall: null });
   assert.equal(rulerWording({ movementLabel: 'Shift', squares: 4, cost: 7 }).distance, 'Shift 4');
   assert.equal(rulerWording({ movementLabel: 'Forced movement', squares: 3, cost: 3 }).distance, 'Forced movement 3');
   // The plain Measure tool has no movement word, so it still says what the number is.
-  assert.deepEqual(rulerWording({ squares: 5, cost: 5 }), { distance: '5 squares', cost: null });
+  assert.deepEqual(rulerWording({ squares: 5, cost: 5 }), { distance: '5 squares', cost: null, fall: null });
   assert.equal(rulerWording({ squares: 1 }).distance, '1 square');
   assert.equal(legWording(1), '1 square');
   assert.equal(legWording(4), '4 squares');
+});
+
+// "Push and fall should be separate." A creature pushed 2 squares off an island 6 squares up
+// reads "Forced movement 2 · Fall 6", not 8.
+test('a forced move says the squares moved and, apart from them, the fall', () => {
+  assert.deepEqual(rulerWording({ movementLabel: 'Forced movement', squares: 2, cost: 2, fall: 6 }), { distance: 'Forced movement 2', cost: null, fall: 'Fall 6' });
+  assert.equal(rulerWording({ movementLabel: 'Forced movement', squares: 2, cost: 2, fall: 0 }).fall, null, 'no drop, no Fall part');
+  assert.equal(fallSquares(6, 0), 6);
+  assert.equal(fallSquares(18, 12), 6);
+  assert.equal(fallSquares(6, 5.5), 0, 'under one square is not a fall');
+  assert.equal(fallSquares(6, 5), 1);
+  assert.equal(fallSquares(6, 4.4), 2, 'to the nearest whole square');
+  assert.equal(fallSquares(3, 6), 0, 'landing higher is not a fall');
+  assert.equal(fallSquares(undefined, 0), 0);
+  assert.equal(fallSquares(6, null), 6);
+});
+
+test('the fall is from the height the creature travels at to where it lands', () => {
+  // An island 6 high over columns 20 to 29, a ledge 3 high over columns 32 to 35, flat ground elsewhere.
+  const footing = (p) => { const x = p.column + 0.5; return x >= 20 && x <= 30 ? 6 : x >= 32 && x <= 36 ? 3 : 0; };
+  const hero = { column: 28, row: 12, width: 1, height: 1 }, path = travelPath(hero, footing, { kind: 'forced' });
+  const fall = (column) => fallSquares(path.heightAt({ ...hero, column }), footing({ ...hero, column }));
+  assert.equal(fall(29), 0, 'still on the island');
+  assert.equal(fall(30), 6, 'one square off the edge: over the crater floor');
+  assert.equal(fall(31), 6);
+  assert.equal(fall(33), 3, 'over the ledge: it lands on the ledge');
+});
+
+test('the ruler counts a forced move flat and asks the board for the fall', () => {
+  const ruler = readFileSync(new URL('../drag-ruler.js', import.meta.url), 'utf8');
+  assert.match(ruler, /const squares = forced \? segment\.squares : measured \? measured\.distance/);
+  assert.match(ruler, /cost: forced \? squares : measured \? measured\.cost : squares/);
+  assert.match(ruler, /const fall = forced && segments\.length && zones\?\.forcedFall \? zones\.forcedFall\(/);
+  assert.match(ruler, /if \(wording\.fall\) readout\.push\(wording\.fall\);/);
+  const zones = readFileSync(new URL('../terrain-zones-overlay.js', import.meta.url), 'utf8');
+  assert.match(zones, /const travelling = walls\.moverHeight\(from, at\(end\), 'forced'\);/);
+  assert.match(zones, /return fallSquares\(travelling, caught === null \? ground : Math\.max\(ground, caught\)\);/);
+  assert.match(zones, /routeCost,\s+forcedFall,/);
 });
 
 // ---- the corner Zones control ------------------------------------------------

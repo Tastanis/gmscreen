@@ -892,6 +892,29 @@ between two lower islands only where their own island's edge does not cut
 the view, as with the lower islands themselves; the unseen part of such a
 stair is not drawn dimmed the way the unseen part of a lower island is.
 
+## October 9: the ruler says the push and the fall apart. Done, waiting for a browser look
+
+You said: "Push and fall should be separate."
+
+When a token is dragged as forced movement (Ctrl held) off an edge, the ruler
+used to add the drop to the count: two squares off an island six squares up
+read "Forced movement 8". It now reads **"Forced movement 2 · Fall 6"**.
+
+- The first number is the squares moved across the map, and nothing else.
+- "Fall" is how far the creature drops when the move ends, in whole squares:
+  from the height it travels at down to the island, ledge or ground it lands
+  on. A drop of less than one square is not shown. With no drop the label is
+  the squares alone, as before.
+- A flier shows no fall. On a route with a bend, the fall is read from the
+  last leg.
+- Walks, shifts and the plain Measure tool are not changed.
+
+The drag has no push, pull or slide of its own, so its word stays "Forced
+movement". An ability's push offers squares to click and has no count label,
+so there was nothing to change there.
+
+Tests: `ruler-label-layout.test.mjs`. Not seen in a browser yet.
+
 ## Where it is now
 
 You said to put stages 1 to 3 on `main` on this PC and wait for your word
