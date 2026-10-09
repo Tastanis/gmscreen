@@ -2,7 +2,7 @@ import {savePortal} from './environment-sync.mjs';
 import {createRoofEditor} from './roof-editor.mjs';
 import {cutIntoSquares} from './wall-geometry.mjs';
 import {defaults,properties,presets,wallHeights,MATERIALS,isOneWay,isBroken,groupName,withGroups} from './wall-properties.mjs';
-export function createWallEditor({panel,transform,selected,model,context,projected,groundAt,change,render,copyWalls}){
+export function createWallEditor({panel,transform,selected,model,revision=()=>NaN,context,projected,groundAt,change,render,copyWalls}){
  const fields=document.createElement('div');fields.className='wall-properties';fields.hidden=true;
  const choices={preset:['custom','solid','terrain','transparent','curtain','door','window'],sight:['block','pass','limited'],movement:['block','pass'],sightDirection:['both','left','right'],movementDirection:['both','left','right'],baseMode:['terrain','fixed'],topMode:['follow','level'],interaction:['none','door','window'],material:['none',...MATERIALS]};
  const labels={material:'Breakable',group:'Object name',broken:'Broken',preset:'Preset',sight:'Sight',movement:'Movement',sightDirection:'Sight direction',movementDirection:'Move direction',baseMode:'Base mode',base:'Base offset',height:'Height',topMode:'Top',interaction:'Interaction',open:'Open',locked:'Locked',secret:'Secret'};
@@ -36,8 +36,15 @@ export function createWallEditor({panel,transform,selected,model,context,project
  function refresh(open=true){roofEditor.refresh();const chosen=selected().map(properties),showing=selected().map(e=>e.id).join('|'),sameWalls=showing===shownFor;shownFor=showing;fields.hidden=!open||!chosen.length||!context()?.isGM;for(const input of fields.querySelectorAll('[data-wall-property]')){const k=input.dataset.wallProperty,values=chosen.map(e=>e[k]),mixed=values.some(v=>v!==values[0]);input.closest('label').hidden=['open','locked','secret'].includes(k)&&chosen.every(e=>e.interaction==='none')||k==='material'&&chosen.some(isOneWay)||(k==='broken'||k==='group')&&!chosen.every(e=>e.material&&!isOneWay(e));if(document.activeElement===input&&sameWalls&&input.type!=='checkbox'&&input.tagName!=='SELECT')continue;if(input.type==='checkbox'){input.checked=values[0]===true;input.indeterminate=mixed;}else{if(input.tagName==='SELECT'){input.querySelector('[data-mixed]')?.remove();if(mixed){const option=document.createElement('option');option.value='';option.textContent='Mixed';option.dataset.mixed='';option.disabled=true;input.prepend(option);}}input.value=k==='preset'?'custom':mixed?'':values[0]??(k==='material'?'none':'');}}
   fields.querySelector('[data-wall-label=base] span').textContent=chosen.length&&chosen.every(e=>e.baseMode==='fixed')?'Base elevation':'Base offset';
  }
- function portals(){portalLayer.replaceChildren();const c=context();if(!c||!panel.hidden)return;const m=model(),nodes=new Map(m.nodes.map(n=>[n.id,n]));
-  for(const raw of m.segments){const e=properties(raw);if(e.interaction==='none'||e.secret&&!c.isGM||isBroken(e))continue;const a=nodes.get(e.a),b=nodes.get(e.b),mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
+ // The door and window buttons are put back after every sight repaint. Doors and windows are few,
+ // and most maps have none, so they are picked out once for each change to the walls (`revision`),
+ // not by reading every wall on the map each time.
+ let doorsAt=NaN,doors=[];
+ function portals(){portalLayer.replaceChildren();const c=context();if(!c||!panel.hidden)return;const m=model();
+  if(doorsAt!==revision()){doorsAt=revision();doors=m.segments.filter(raw=>properties(raw).interaction!=='none');}
+  if(!doors.length)return;
+  const nodes=new Map(m.nodes.map(n=>[n.id,n]));
+  for(const raw of doors){const e=properties(raw);if(e.interaction==='none'||e.secret&&!c.isGM||isBroken(e))continue;const a=nodes.get(e.a),b=nodes.get(e.b),mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
    const heights=wallHeights(e,a,b,mid,groundAt);
    if((!c.isGM||document.documentElement.classList.contains('height-vision-active'))&&!window.visionPrototype?.portalVisible({a,b,...heights}))continue;
 

@@ -89,13 +89,30 @@ test('the wall layer does not mark the walls as changed when only the view chang
   assert.match(source, /function render\(lookOnly=false\)\{try\{draw\(lookOnly\);\}finally\{drawHeight=undefined;\}\}/);
   assert.match(source, /synchronizeInspectionHeight\(\);\s+if\(!lookOnly\)revision\+\+;/);
   assert.match(source, /if\(frame!==frameSignature\)\{frameSignature=frame;lookSignature=look;render\(\);\}else if\(look!==lookSignature\)\{lookSignature=look;render\(true\);\}/);
-  assert.match(source, /look=JSON\.stringify\(\[c\.isGM\?gmVision\.height:null,c\.view\.scale\]\)/);
+  assert.match(source, /look=JSON\.stringify\(\[heightToShow\(\),c\.view\.scale\]\)/);
   assert.equal((source.match(/if\(synchronizeInspectionHeight\(\)\)render\(true\);/g) || []).length, 3);
+  assert.equal((source.match(/if\(synchronizeInspectionHeight\(\)\)\{render\(true\);return;\}/g) || []).length, 3);
+  assert.equal((source.match(/[^.\w]render\(\)/g) || []).length > 5, true, 'changes to the walls themselves still redraw and say so');
   // Undoing a half-made wall drag does change the walls, and says so.
   assert.match(source, /if\(drag\)\{const old=drag;model=old\.before;revision\+\+;drag=null;/);
   // The GM's viewing height is read once for a redraw, not once for each point of each wall.
   assert.match(source, /drawHeight=context\.isGM\?inspectionHeight:undefined;/);
   assert.match(source, /context\.isGM\?\(drawHeight!==undefined\?drawHeight:gmVision\.height\):terrainPrototype\.heightAt\(x,y\)/);
+  // "It could just check for only doors and windows instead of redrawing everything." With the
+  // Walls panel closed the faint lines keep the height they were drawn for until the GM's viewing
+  // height has moved an eighth of a square, so a token crossing uneven ground redraws nothing.
+  assert.match(source, /const HEIGHT_HOLD=\.125;/);
+  assert.match(source, /return panel\.hidden&&next!==null&&inspectionHeight!==null&&Math\.abs\(next-inspectionHeight\)<HEIGHT_HOLD\?inspectionHeight:next;/);
+  assert.match(source, /function synchronizeInspectionHeight\(\)\{\s+const next=heightToShow\(\);if\(next===inspectionHeight\)return false;/);
+  // The door and window buttons are picked out once for each change to the walls.
+  const editor = readFileSync(new URL('../wall-editor.mjs', import.meta.url), 'utf8');
+  assert.match(editor, /if\(doorsAt!==revision\(\)\)\{doorsAt=revision\(\);doors=m\.segments\.filter\(raw=>properties\(raw\)\.interaction!=='none'\);\}\s+if\(!doors\.length\)return;/);
+  assert.match(source, /createWallEditor\(\{panel,transform,selected:\(\)=>selectedEdges\(\),model:\(\)=>model,revision:\(\)=>revision,/);
+  // Explored ground is saved when the board has been still for a moment, and at the latest after twenty seconds.
+  const explored = readFileSync(new URL('../explored-fog.mjs', import.meta.url), 'utf8');
+  assert.match(explored, /const SAVE_QUIET=2500,SAVE_LATEST=20000;/);
+  assert.match(explored, /clearTimeout\(timer\);timer=setTimeout\(persist,Math\.max\(0,Math\.min\(SAVE_QUIET,dirtySince\+SAVE_LATEST-now\)\)\);/);
+  assert.match(explored, /document\.addEventListener\('visibilitychange',\(\)=>\{if\(document\.hidden\)persist\(\);\}\);/);
   // The sight layer repaints on the walls' revision, and on its own record of the viewer's height.
   const vision = readFileSync(new URL('../vision-prototype.js', import.meta.url), 'utf8');
   assert.match(vision, /const next=JSON\.stringify\(\[c\.state\.boardState\.activeSceneId,c\.levelId,viewerGround,inspectionHeight,/);

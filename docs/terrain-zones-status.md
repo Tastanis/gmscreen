@@ -959,6 +959,39 @@ profile can show.
 **Maps.** Many small objects are fine. "Pass" walls cost sight nothing. The
 Map maker does not need to draw objects differently.
 
+**Later the same day, from your two requests.**
+
+- "It could just check for only doors and windows instead of redrawing
+  everything." Done. With the Walls panel closed, the faint wall lines are
+  no longer drawn again when a token moves. They are drawn again only when
+  your viewing height has moved an eighth of a square from where they were
+  drawn (stepping onto a deck, going up a floor), when you zoom, or when a
+  wall changes. The door and window buttons are still put back after each
+  move, and that now costs nothing on a map with no doors. With the Walls
+  panel open the lines follow your height exactly, as before.
+  *What this changes:* as GM with a token selected, the faint lines can sit
+  up to three pixels off where they were drawn before, because they wait for
+  that eighth of a square. Nothing a player sees changes.
+- What each viewer has explored was saved a third of a second after every
+  move, and saving read back a picture half the size of the map (about 70
+  thousandths of a second each time on your PC). It is now saved once the
+  board has been still for two and a half seconds, never later than twenty
+  seconds, and when the page is hidden or closed.
+- "Make the sight calculations faster while minimally reducing accuracy."
+  Not built yet; here is what it would buy, measured on the packages:
+
+  | | Sight work left | What it costs |
+  |---|---|---|
+  | As it is now | 100% | nothing |
+  | No half-square detail beyond 12 squares from the viewer | about 60% | about 3% of the lit area wrong on Dead Root (2% on the Orchard): far shadow edges go blocky, up to three quarters of a square out |
+  | Skip the "middle of the square" check beyond 12 squares | about 77% | under 1% of the lit area, but a small far object's shadow can vanish |
+  | Work sight out in the background | none of it felt | no loss of accuracy; the fog follows a fraction of a second after the token |
+
+  The last one is what I would do, but it has to be built with a browser to
+  hand, because it touches the part that keeps the map hidden from players
+  until their fog is ready. Say which you want once the new build has been
+  measured on your PC.
+
 Tests: `sight-speed.test.mjs`.
 
 ## Where it is now

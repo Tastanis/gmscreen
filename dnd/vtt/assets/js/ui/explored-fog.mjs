@@ -2,7 +2,12 @@
 // Only terrain silhouettes are remembered; token visibility never reads this mask.
 export function createExploredFog(){
  const mask=document.createElement('canvas'),m=mask.getContext('2d');
- let key='',generation=0,timer=null,dirty=false,ready=false,revision=0;
+ let key='',generation=0,timer=null,dirty=false,ready=false,revision=0,dirtySince=0;
+ // What a viewer has explored is saved once the board has been still for a moment, not a third of
+ // a second after every move: saving reads back a picture half the size of the map, which is
+ // felt as a stutter in the middle of play. It is never left unsaved for longer than SAVE_LATEST,
+ // and it is saved when the page is hidden or closed.
+ const SAVE_QUIET=2500,SAVE_LATEST=20000;
  const epochs=new Map();let resetBarrier=Promise.resolve();
  function sceneOf(value){try{return JSON.parse(String(value).slice(0,String(value).lastIndexOf(']')+1))[1];}catch{return null;}}
  const db=new Promise((resolve,reject)=>{const request=indexedDB.open('terrain-exploration-v1',1);request.onupgradeneeded=()=>request.result.createObjectStore('masks');request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
@@ -38,11 +43,11 @@ export function createExploredFog(){
   // A very narrow rounded border closes tiny notches in the cosmetic terrain
   // mask. It never participates in the separate token line-of-sight check.
   function soften(context){if(!smoothing)return;context.save();context.lineWidth=smoothing;context.lineJoin='round';context.lineCap='round';context.strokeStyle=context.fillStyle;context.stroke(path);context.restore();}
-  if(ready&&remember){m.save();m.scale(.5,.5);m.fillStyle='#202020';m.fill(path);soften(m);m.restore();dirty=true;if(timer===null)timer=setTimeout(persist,350);}
+  if(ready&&remember){m.save();m.scale(.5,.5);m.fillStyle='#202020';m.fill(path);soften(m);m.restore();const now=Date.now();if(!dirty){dirty=true;dirtySince=now;}clearTimeout(timer);timer=setTimeout(persist,Math.max(0,Math.min(SAVE_QUIET,dirtySince+SAVE_LATEST-now)));}
   ctx.globalCompositeOperation='destination-out';ctx.drawImage(mask,0,0,ctx.canvas.width,ctx.canvas.height);
   ctx.globalCompositeOperation='source-over';ctx.globalAlpha=.72;ctx.drawImage(mask,0,0,ctx.canvas.width,ctx.canvas.height);ctx.globalAlpha=1;
   ctx.globalCompositeOperation='destination-out';ctx.fill(path);soften(ctx);ctx.globalCompositeOperation='source-over';
  }
- window.addEventListener('pagehide',persist);
+ window.addEventListener('pagehide',persist);document.addEventListener('visibilitychange',()=>{if(document.hidden)persist();});
  return {select,paint,resetScene,get revision(){return revision;}};
 }
