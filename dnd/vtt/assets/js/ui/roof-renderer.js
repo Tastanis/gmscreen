@@ -9,7 +9,7 @@ import {nearestOnSegment} from './wall-geometry.mjs';
 import {makeSight,head} from './vision-height.mjs';
 import {insideRoom,roofSurfaces,ceilingBlocks} from './roof-geometry.mjs';import {getRoofImage} from './roof-images.mjs';import {adaptiveFog} from './adaptive-fog.mjs';
 import {createRoofImageCache} from './roof-image-cache.mjs';
-import {sideFoot} from './height-view.mjs';
+import {sideFoot,viewAbove,shapesAbove,dimsBelow,SHAPE_FILL,SHAPE_EDGE,DIM_FILL} from './height-view.mjs';
 const canvas=document.createElement('canvas');canvas.id='roof-prototype';canvas.style.cssText='position:absolute;inset:0;pointer-events:none;z-index:100001';document.querySelector('#vtt-map-transform').append(canvas);
 const roofLayer=document.createElement('canvas');
 let revision=0,cutawayKey='',buildingCutaway=null;
@@ -30,11 +30,18 @@ export const roofRenderer={get revision(){return revision;},surfaces:roofSurface
   const rampList=importedRamps;
   const rampLayers=rampList.map(s=>{const corners=[[s.left,s.top],[s.right,s.top],[s.right,s.bottom],[s.left,s.bottom]].map(([x,y])=>window.terrainPrototype.project(ox+x*g,oy+y*g,rampHeight(s,x,y))),x=Math.floor(Math.min(...corners.map(p=>p.x))-2),y=Math.floor(Math.min(...corners.map(p=>p.y))-2),mask=document.createElement('canvas');mask.width=Math.ceil(Math.max(...corners.map(p=>p.x))-x+4);mask.height=Math.ceil(Math.max(...corners.map(p=>p.y))-y+4);return {s,x,y,mask};});
   const target=ctx;
+  // Floating plates over the viewer's head are not drawn. A scene may ask for them to be shown as
+  // see-through shapes (height-view.mjs): a hero looking up knows something is there, and can still
+  // read and click what lies under it. Only when looking through a token's eyes.
+  const overhead=new Set(inspectionHeight===null?shapesAbove(surfaces,head(token,viewerGround),viewAbove(model)).map(s=>s.id):[]);
   for(const roof of surfaces){
    if(interiorHidden.has(roof.id))continue;
    const edgeOn=inspectionHeight===null&&roof.kind==='floor'&&head(token,viewerGround)<=roof.height+1e-6;
    const peek=edgeOn?landingPeekRamps(importedRamps,token,viewerGround,roof.height):[];
-   if(edgeOn&&!peek.length)continue;
+   if(edgeOn&&!peek.length){
+    if(overhead.has(roof.id)){const shape=surfacePath(roof,p=>window.terrainPrototype.project(ox+p.x*g,oy+p.y*g,roof.height));target.save();target.fillStyle=SHAPE_FILL;target.fill(shape,'evenodd');target.strokeStyle=SHAPE_EDGE;target.lineWidth=Math.max(1.5,g*.035);target.lineJoin='round';target.stroke(shape);target.restore();}
+    continue;
+   }
    if(inspectionHeight!==null&&roof.height>inspectionHeight+.001)continue;
    if(!roof.imageId)continue;
    requestImage(roof.imageId);const image=cache.get(roof.imageId);
@@ -73,7 +80,10 @@ export const roofRenderer={get revision(){return revision;},surfaces:roofSurface
    // A hidden solid floor is opaque; only its authored holes expose below.
    // Loading/failed artwork must not remove physical cover over the base map.
    // The normal interior/doorway cutaways below still apply to this layer.
-   if(roof.kind==='floor'||!image){ctx.save();ctx.fillStyle='#000';if(edgeOn)ctx.clip(path);ctx.fill(outline,'evenodd');ctx.restore();}
+   // A scene may ask for the unseen part of a floating plate below the viewer to be its picture,
+   // dimmed, in place of black (height-view.mjs). The seen part is painted over it at full strength below.
+   if(image&&!edgeOn&&lighting&&inspectionHeight===null&&dimsBelow(roof,model)){ctx.save();ctx.clip(outline,'evenodd');const at=window.terrainPrototype.project(v.mapInsets.left,v.mapInsets.top,roof.height);ctx.drawImage(image,at.x,at.y);ctx.fillStyle=DIM_FILL;ctx.fill(outline,'evenodd');ctx.restore();}
+   else if(roof.kind==='floor'||!image){ctx.save();ctx.fillStyle='#000';if(edgeOn)ctx.clip(path);ctx.fill(outline,'evenodd');ctx.restore();}
    if(image){ctx.save();ctx.clip(outline,'evenodd');ctx.clip(path);const at=window.terrainPrototype.project(v.mapInsets.left,v.mapInsets.top,roof.height);ctx.drawImage(image,at.x,at.y);ctx.restore();}
    // Cut at the displayed interior's height, not at the roof height. Erase only
    // this roof layer so the lower floor remains intact under the same pixels.

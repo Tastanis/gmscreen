@@ -7,7 +7,7 @@ import './edit-tools.js';
 import {connectedWallPath} from './wall-selection.mjs';
 import {properties,movementPathBlocked,movementBlocked,wallHeights,liveWalls,isBreakable,isBroken} from './wall-properties.mjs';
 import {createWallEditor} from './wall-editor.mjs';
-import {DEFAULT_SLANT,validSlant,viewSlant} from './height-view.mjs';
+import {DEFAULT_SLANT,validSlant,viewSlant,viewAbove,viewBelow} from './height-view.mjs';
 import {gmVision} from './gm-vision.js';
 import {sliceWallModel,wallHeightIntervals,inspectionPlanePoint} from './wall-height-slice.mjs';
 import './vision-prototype.js';
@@ -32,6 +32,19 @@ slantLabel.innerHTML='Height slant <input type="number" data-wall-slant min="0" 
 const slantInput=slantLabel.querySelector('input');
 slantInput.onchange=()=>{if(!context?.isGM)return;const value=Math.round(Number(slantInput.value)*100)/100;if(!validSlant(value)||slantInput.value===''){slantInput.value=String(viewSlant(model));return;}
  cancelDrag();const before=copyWalls(model);if(value===DEFAULT_SLANT){if(model.view){delete model.view.slant;if(!Object.keys(model.view).length)delete model.view;}}else model.view={...(model.view||{}),slant:value};change(before);};
+// What a viewer is shown of floating plates over and under them (height-view.mjs). Saved with the map design too.
+const viewChoice=(key,title,help,options,current,usual)=>{
+ const label=document.createElement('label');label.style.cssText='display:block;margin-top:8px';label.title=help;label.append(title+' ');
+ const select=document.createElement('select');select.dataset.wallView=key;select.style.cssText='width:100%;margin-top:3px';
+ for(const [value,text] of options){const option=document.createElement('option');option.value=value;option.textContent=text;select.append(option);}
+ label.append(select);panel.insertBefore(label,panel.querySelector('footer'));
+ select.onchange=()=>{if(!context?.isGM)return;cancelDrag();const before=copyWalls(model);if(select.value===usual){if(model.view){delete model.view[key];if(!Object.keys(model.view).length)delete model.view;}}else model.view={...(model.view||{}),[key]:select.value};change(before);};
+ return {select,current};
+};
+const viewChoices=[
+ viewChoice('above','Floating plates overhead','A hero under a floating plate: is the plate shown? A shape is see-through and never hides a creature.',[['off','Not shown'],['shape','See-through shapes'],['tier','Shapes, nearest tier only']],viewAbove,'off'),
+ viewChoice('below','Unseen floating plates below','A hero above a floating plate they have no clear line to: black, or its picture dimmed. Creatures on it stay hidden either way.',[['black','Black'],['dim','Dimmed picture']],viewBelow,'black'),
+];
 repairAll.onclick=()=>{if(!context?.isGM||!model.segments.some(isBroken))return;cancelDrag();const before=copyWalls(model);for(const edge of model.segments)if(isBroken(edge))delete edge.broken;change(before);};
 const editor=createWallEditor({panel,transform,selected:()=>selectedEdges(),model:()=>model,context:()=>context,projected,groundAt,change,render,copyWalls});
 const svg=document.createElementNS(ns,'svg');svg.id='wall-overlay';svg.style.cssText='position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:100003';transform.append(svg);
@@ -166,7 +179,7 @@ function render(){
    if(anchor&&pointNode(anchor)&&hover){const preview=document.createElementNS(ns,'path');preview.setAttribute('d',pathBetween(pointNode(anchor),hover.p));preview.setAttribute('fill','none');preview.setAttribute('stroke','#fff0ba');preview.setAttribute('stroke-width',2/scale);preview.setAttribute('stroke-dasharray',`${5/scale} ${4/scale}`);fragment.append(preview);}
    for(const n of model.nodes){if(!slice.nodeIds.has(n.id)&&n.id!==anchor)continue;const p=projected(n),circle=document.createElementNS(ns,'circle');circle.dataset.wallNode=n.id;circle.setAttribute('cx',p.x);circle.setAttribute('cy',p.y);circle.setAttribute('r',(selection?.id===n.id||hover?.id===n.id?6:4)/scale);circle.setAttribute('fill',selection?.id===n.id||hover?.id===n.id?'#ffeeb5':'#27241e');circle.setAttribute('stroke','#e7ca88');circle.setAttribute('stroke-width',1.5/scale);fragment.append(circle);}
  }
- editor.refresh(propertiesOpen);svg.replaceChildren(fragment);if(document.activeElement!==slantInput)slantInput.value=String(viewSlant(model));{const broken=model.segments.filter(isBroken).length;repairAll.hidden=!broken;repairAll.textContent=broken===1?'Repair the broken wall':`Repair all ${broken} broken walls`;}panel.querySelector('[data-wall-delete]').disabled=!selection&&!selectedIds.size;panel.querySelector('[data-wall-undo]').disabled=!history.length;
+ editor.refresh(propertiesOpen);svg.replaceChildren(fragment);if(document.activeElement!==slantInput)slantInput.value=String(viewSlant(model));for(const {select,current} of viewChoices)if(document.activeElement!==select)select.value=current(model);{const broken=model.segments.filter(isBroken).length;repairAll.hidden=!broken;repairAll.textContent=broken===1?'Repair the broken wall':`Repair all ${broken} broken walls`;}panel.querySelector('[data-wall-delete]').disabled=!selection&&!selectedIds.size;panel.querySelector('[data-wall-undo]').disabled=!history.length;
  editor.portals();
 }
 function tick(){

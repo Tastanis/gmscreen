@@ -81,5 +81,45 @@ export function shadowRings(surface, groundAt, perSquare = 4) {
   });
 }
 
+// ---- What a viewer is shown of floating plates above and below ------------
+// Two settings a scene's map design may carry beside the slant, `view.above` and `view.below`.
+// Both are about floating plates only, and both leave creatures alone: a creature is shown or
+// hidden by line of sight, whatever is done with the plate it stands on.
+
+/**
+ * Floating plates above the viewer's head. 'off' (as always): not drawn. 'shape': each is drawn
+ * as a see-through dark shape where the plate is. 'tier': the same, for the nearest ones only.
+ */
+export const VIEW_ABOVE = ['off', 'shape', 'tier'];
+/**
+ * The part of a floating plate below the viewer that the viewer has no line of sight to.
+ * 'black' (as always): blacked out. 'dim': its picture, dimmed.
+ */
+export const VIEW_BELOW = ['black', 'dim'];
+export const viewAbove = (design) => (VIEW_ABOVE.includes(design?.view?.above) ? design.view.above : 'off');
+export const viewBelow = (design) => (VIEW_BELOW.includes(design?.view?.below) ? design.view.below : 'black');
+
+/** Plates within this many squares of the lowest one overhead count as the same tier. */
+export const TIER_BAND = 0.5;
+
+/**
+ * The floating plates to draw as shapes for a viewer whose head is at height `eye`: those at or
+ * above it, lowest first. With mode 'tier', only the lowest of them and any others level with it.
+ */
+export function shapesAbove(surfaces, eye, mode) {
+  if (mode !== 'shape' && mode !== 'tier') return [];
+  const above = (surfaces || []).filter((surface) => isFloating(surface) && surface.points?.length > 2 && eye <= Number(surface.height) + 1e-6)
+    .sort((a, b) => a.height - b.height);
+  return mode === 'tier' && above.length ? above.filter((surface) => surface.height <= above[0].height + TIER_BAND) : above;
+}
+
+/** True when the unseen part of this plate is shown dimmed and not black. */
+export const dimsBelow = (surface, design) => isFloating(surface) && viewBelow(design) === 'dim';
+
+/** How a shape overhead is painted: dark enough to read as "something is up there", light enough to see through. */
+export const SHAPE_FILL = 'rgba(8,10,20,0.32)', SHAPE_EDGE = 'rgba(8,10,20,0.72)';
+/** How dark the unseen part of a dimmed plate is. */
+export const DIM_FILL = 'rgba(0,0,0,0.62)';
+
 /** True when any of the plate's shadow lies below it: there is open air under some of its outline. */
 export const castsShadow = (rings, surface) => rings.some((ring) => ring.some((point) => point.z < (Number(surface.height) || 0) - 0.05));

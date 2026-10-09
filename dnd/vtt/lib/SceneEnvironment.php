@@ -6,6 +6,10 @@ final class SceneEnvironment
 {
     /** The usual height slant of the board, and the steepest a scene may ask for (height-view.mjs). */
     public const MAX_VIEW_SLANT = 0.36;
+    /** Floating plates over the viewer: not drawn, see-through shapes, or shapes for the nearest tier only. */
+    public const VIEW_ABOVE = ['off','shape','tier'];
+    /** The unseen part of a floating plate below the viewer: black, or its picture dimmed. */
+    public const VIEW_BELOW = ['black','dim'];
 
     public static function project(array $environment): array
     {
@@ -142,7 +146,10 @@ final class SceneEnvironment
         // It changes only the drawing; sight, movement and falls use the real heights.
         if (array_key_exists('view',$value)) {
             $view=$value['view'];
-            if (!is_array($view)||array_diff(array_keys($view),['slant'])) throw new InvalidArgumentException('Invalid view settings.');
+            if (!is_array($view)||array_diff(array_keys($view),['slant','above','below'])) throw new InvalidArgumentException('Invalid view settings.');
+            // What a viewer is shown of floating plates over and under them (height-view.mjs).
+            if (array_key_exists('above',$view)&&!in_array($view['above'],self::VIEW_ABOVE,true)) throw new InvalidArgumentException('Invalid view setting for plates above.');
+            if (array_key_exists('below',$view)&&!in_array($view['below'],self::VIEW_BELOW,true)) throw new InvalidArgumentException('Invalid view setting for plates below.');
             if (array_key_exists('slant',$view)) {
                 $slant=$view['slant'];
                 if ((!is_int($slant)&&!is_float($slant))||!is_finite((float)$slant)||$slant<0||$slant>self::MAX_VIEW_SLANT) throw new InvalidArgumentException('Height slant must be a number from 0 to '.self::MAX_VIEW_SLANT.'.');
