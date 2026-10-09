@@ -1,5 +1,5 @@
 import {floorElevations} from '../state/normalize/floor-elevation.js';
-import {groundSquare} from './terrain-math.mjs';
+import {groundSquare,stepViewHeight} from './terrain-math.mjs';
 // Inspection height stays local; automatic fog is a canonical GM scene setting.
 const state={height:0,revision:0};let scene=null,controls=null,selection=null,override=false,level=null,automatic=null,togglePending=false;
 function fogEnabled(c){return c?.state.boardState.sceneState?.[c.state.boardState.activeSceneId]?.fogOfWar?.automaticEnabled !== false;}
@@ -59,7 +59,7 @@ export const gmVision={
  get lighting(){const c=context();return fogEnabled(c)&&(!c?.isGM||(!override&&c.selectedIds?.length===1));},
  get manual(){const c=context();return !!c?.isGM&&(override||c.selectedIds?.length!==1);},
  get height(){return currentHeight(context());},get revision(){context();return state.revision;},
- step(direction){const c=context();if(!c?.isGM)return;const height=currentHeight(c)+(direction==='down'?-1:1);if(!Number.isFinite(height))return;state.height=height;override=true;state.revision++;try{localStorage.setItem('gm-inspection-height:'+scene,JSON.stringify({height}));}catch{}this.syncNavigation();},
+ step(direction){const c=context();if(!c?.isGM)return;const height=stepViewHeight(currentHeight(c),direction);if(!Number.isFinite(height))return;state.height=height;override=true;state.revision++;try{localStorage.setItem('gm-inspection-height:'+scene,JSON.stringify({height}));}catch{}this.syncNavigation();},
  // Show players remains an explicit canonical floor command. Intermediate heights
  // resolve to the supporting floor below; below all floors uses the lowest floor.
  get playerFloorId(){const c=context();if(!c?.isGM)return null;const floors=[...floorElevations(c.state.boardState.sceneState?.[scene]?.mapLevels)].sort((a,b)=>a[1]-b[1]);return floors.filter(([,h])=>h<=this.height).at(-1)?.[0]??floors[0]?.[0]??'level-0';},

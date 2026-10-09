@@ -16,8 +16,8 @@ test('GM inspection crosses floor gaps and zero without mutating shared state',(
  assert.equal(JSON.stringify(c.state),before);assert.equal(label.textContent,'Height 8');assert.ok(buttons.every(b=>!b.disabled));
 });
 test('height control leaves a selected token viewpoint locally and a new selection restores token vision',()=>{
- c.selectedIds=['pc'];assert.equal(gmVision.manual,false);assert.equal(gmVision.height,3.5);gmVision.step('down');assert.equal(gmVision.height,2.5);assert.equal(gmVision.manual,true);assert.equal(gmVision.lighting,false);assert.deepEqual(c.selectedIds,['pc']);
- c.selectedIds=[];assert.equal(gmVision.height,2.5);c.selectedIds=['pc'];assert.equal(gmVision.lighting,true);assert.equal(gmVision.height,3.5);
+ c.selectedIds=['pc'];assert.equal(gmVision.manual,false);assert.equal(gmVision.height,3.5);gmVision.step('down');/* a whole square down from the height shown (4), not 2.5 */assert.equal(gmVision.height,3);assert.equal(gmVision.manual,true);assert.equal(gmVision.lighting,false);assert.deepEqual(c.selectedIds,['pc']);
+ c.selectedIds=[];assert.equal(gmVision.height,3);c.selectedIds=['pc'];assert.equal(gmVision.lighting,true);assert.equal(gmVision.height,3.5);
 });
 test('player cannot enable GM inspection or change the saved preference',()=>{
  const saved=localStorage.getItem('gm-inspection-height:a');c.isGM=false;gmVision.step('down');assert.equal(gmVision.manual,false);assert.equal(gmVision.lighting,true);assert.equal(gmVision.playerFloorId,null);assert.equal(localStorage.getItem('gm-inspection-height:a'),saved);

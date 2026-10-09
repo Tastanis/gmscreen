@@ -31,6 +31,9 @@ export function paint(field,{x,y,width,height,radius,amount,mode,target,stopAtTa
  }
 }
 export const groundSquare=h=>Math.floor(h+.5);
+/** One press of the GM's height arrows: a whole square up or down from the height shown. With a token
+ * selected the view sits at that token's exact height (3.95 on a slope); the next press goes to 5 or 3, not 4.95 or 2.95. */
+export const stepViewHeight=(height,direction)=>groundSquare(height)+(direction==='down'?-1:1);
 export const heightBand=h=>Math.floor(groundSquare(h)/2);
 export const effectiveHeight=(ground,size)=>groundSquare(ground)+Math.floor(Math.max(1,size)/2)+1;
 export const relativeScale=(ground,viewer)=>clamp(1+(heightBand(ground)-heightBand(viewer))*.1,.5,2);

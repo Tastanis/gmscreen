@@ -703,9 +703,13 @@ token's tier the Director uses the floor arrows; a hero walks the vine or arch, 
 Checks run: 17 new tests, with the tester's two cases as tests and heroes on tiers at 6, 18 and
 30 at slants of 0.12, 0.18 and 0.36. Not yet seen in a browser.
 
-Still to do from that look, small: with a token selected the floor arrows step from the token's
-exact height (2.95, 4.95) and should step in whole squares; the selected token's card covers the
-Edits menu; a sliver of painted door and window shows beside their rubble.
+Also fixed from that look: the GM's height arrows step in whole squares. With a token selected
+the view sits at that token's exact height (3.95 on a stair), and the arrows went to 4.95 and
+2.95. They now go to 5 and 3. Since the Director moves heroes between tiers with these arrows,
+this mattered more than it looked.
+
+Still to do from that look, small: the selected token's card covers the Edits menu; a sliver of
+painted door and window shows beside their rubble.
 
 ## Where it is now
 
