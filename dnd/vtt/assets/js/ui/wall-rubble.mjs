@@ -7,10 +7,16 @@
 // every player's screen.
 import { isBroken, properties } from './wall-properties.mjs';
 
-export const RUBBLE_KINDS = ['stone', 'wood', 'glass', 'metal', 'door', 'window', 'heap'];
+// Strips lie along a broken wall, door or window. Heaps cover a broken free-standing object (a
+// pillar, a spire) and come per material: heap-stone, heap-wood, heap-glass, heap-metal.
+export const RUBBLE_KINDS = ['stone', 'wood', 'glass', 'metal', 'door', 'window', 'heap-stone', 'heap-wood', 'heap-glass', 'heap-metal'];
+/** The heap for an object of this material. */
+export const heapKind = (material) => (RUBBLE_KINDS.includes(`heap-${material}`) ? `heap-${material}` : 'heap-stone');
+// Until a kind has pictures of its own it borrows these: a door breaks like wood, a window like glass.
+const BORROWS = { door: 'wood', window: 'glass' };
 /** A picture's long side covers the wall piece plus this much, so neighbouring pieces join. */
 export const RUBBLE_OVERLAP = 1.12;
-/** Pictures are three long by two high. */
+/** The stand-in drawing is three long by two high. A picture file keeps its own shape. */
 export const RUBBLE_ASPECT = 2 / 3;
 /** How far across the wall the rubble may spread, in squares: wide enough to hide a painted wall, never a whole square. */
 export const RUBBLE_MIN_ACROSS = 0.35;
@@ -35,30 +41,44 @@ export function stableHash(text) {
 export const pickVersion = (id, count) => (count > 0 ? stableHash(id) % count : -1);
 
 /**
- * Sorts picture addresses into kinds by file name: ".../rubble-stone-2.png" is stone, version 2.
- * Anything not named that way is ignored. Versions are in number order.
+ * Sorts pictures into kinds by file name: ".../rubble-stone-2.webp" is stone, version 2, and
+ * ".../rubble-heap-wood-1.png" is heap-wood, version 1. Anything not named that way is ignored.
+ * Each entry is an address, or {url, width, height} as the page lists them. Versions are in
+ * number order. The result holds {url, aspect} per picture; aspect is height over width, or null
+ * when the size is not known.
  */
-export function rubbleLibrary(urls) {
+export function rubbleLibrary(pictures) {
   const found = [];
-  for (const url of Array.isArray(urls) ? urls : []) {
-    const match = /(?:^|\/)rubble-([a-z]+)-(\d+)\.(?:png|webp)(?:\?.*)?$/i.exec(String(url));
-    if (match && RUBBLE_KINDS.includes(match[1].toLowerCase())) found.push({ kind: match[1].toLowerCase(), number: Number(match[2]), url: String(url) });
+  for (const picture of Array.isArray(pictures) ? pictures : []) {
+    const url = String(typeof picture === 'string' ? picture : picture?.url ?? '');
+    const match = /(?:^|\/)rubble-((?:heap-)?[a-z]+)-(\d+)\.(?:png|webp)(?:\?.*)?$/i.exec(url);
+    if (!match || !RUBBLE_KINDS.includes(match[1].toLowerCase())) continue;
+    const width = Number(picture?.width), height = Number(picture?.height);
+    found.push({ kind: match[1].toLowerCase(), number: Number(match[2]), url, aspect: width > 0 && height > 0 ? height / width : null });
   }
   found.sort((a, b) => a.number - b.number || a.url.localeCompare(b.url));
   const library = {};
-  for (const { kind, url } of found) (library[kind] ||= []).push(url);
+  for (const { kind, url, aspect } of found) (library[kind] ||= []).push({ url, aspect });
   return library;
 }
 
-/** The picture for one piece, or null when its kind has none yet (the stand-in is drawn instead). */
+/**
+ * The picture for one piece as {url, aspect}, or null when there is none yet (the stand-in is
+ * drawn instead). A door with no door pictures uses a wood one, a window a glass one.
+ */
 export function rubblePicture(library, kind, id) {
-  const versions = library?.[kind] || [];
+  const versions = library?.[kind]?.length ? library[kind] : library?.[BORROWS[kind]] || [];
   return versions.length ? versions[pickVersion(id, versions.length)] : null;
 }
 
-/** Long and short side of one piece's rubble, in squares. */
-export function rubbleSize(length) {
+/**
+ * Long and short side of one piece's rubble, in squares. The long side is the wall piece plus a
+ * little. A picture keeps its own shape (`aspect`, height over width), so nothing is stretched;
+ * the stand-in is kept wide enough to hide a painted wall and never a whole square across.
+ */
+export function rubbleSize(length, aspect = null) {
   const along = length * RUBBLE_OVERLAP;
+  if (aspect > 0) return { along, across: along * aspect };
   return { along, across: Math.max(RUBBLE_MIN_ACROSS, Math.min(RUBBLE_MAX_ACROSS, along * RUBBLE_ASPECT)) };
 }
 
@@ -98,9 +118,9 @@ const PALETTES = {
 };
 PALETTES.door = PALETTES.wood;
 PALETTES.window = { ...PALETTES.glass, band: PALETTES.wood.band };
-PALETTES.heap = PALETTES.stone;
 // How long and thin the bits are: splinters for wood, shards for glass, lumps for stone.
-const STRETCH = { stone: 1.25, heap: 1.25, wood: 3.2, door: 3.2, glass: 2.2, window: 2.2, metal: 1.8 };
+const STRETCH = { stone: 1.25, wood: 3.2, door: 3.2, glass: 2.2, window: 2.2, metal: 1.8 };
+for (const material of ['stone', 'wood', 'glass', 'metal']) { PALETTES[`heap-${material}`] = PALETTES[material]; STRETCH[`heap-${material}`] = STRETCH[material]; }
 
 function generator(seed) {
   let state = seed >>> 0;

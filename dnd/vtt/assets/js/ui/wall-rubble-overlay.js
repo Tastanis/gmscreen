@@ -21,7 +21,7 @@ function layer(id, zIndex) {
   return svg;
 }
 const ground = layer('wall-rubble-ground', 2), floors = layer('wall-rubble-floors', 100001);
-// The page lists whatever picture files are in assets/images/rubble; a kind with none is drawn.
+// The page lists whatever picture files are in assets/images/rubble, with their sizes; a kind with none is drawn.
 const library = rubbleLibrary(window.vttRubbleImages);
 let signature = '', builds = 0, drawn = [];
 
@@ -39,17 +39,17 @@ function clear(mark) {
 function pieceNode(entry, g) {
   const { piece, from, to } = entry;
   const lengthPx = Math.hypot(to.x - from.x, to.y - from.y), squares = Math.hypot(piece.b.x - piece.a.x, piece.b.y - piece.a.y);
-  const size = rubbleSize(squares), along = lengthPx * (size.along / squares), across = size.across * g;
+  const picture = rubblePicture(library, piece.kind, piece.id);
+  const size = rubbleSize(squares, picture?.aspect), along = lengthPx * (size.along / squares), across = size.across * g;
   // Half the pieces are turned end for end, so a run of them does not repeat.
   const turn = (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI + (stableHash(piece.id) & 1 ? 180 : 0);
   const group = document.createElementNS(NS, 'g');
   group.dataset.rubbleId = piece.id; group.dataset.rubbleKind = piece.kind;
   group.setAttribute('transform', `translate(${((from.x + to.x) / 2).toFixed(2)} ${((from.y + to.y) / 2).toFixed(2)}) rotate(${turn.toFixed(2)})`);
-  const picture = rubblePicture(library, piece.kind, piece.id);
   if (picture) {
     group.dataset.rubbleSource = 'picture';
     const image = document.createElementNS(NS, 'image');
-    image.setAttribute('href', picture);
+    image.setAttribute('href', picture.url);
     image.setAttribute('x', String(-along / 2)); image.setAttribute('y', String(-across / 2));
     image.setAttribute('width', String(along)); image.setAttribute('height', String(across));
     image.setAttribute('preserveAspectRatio', 'none');

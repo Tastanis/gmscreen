@@ -52,10 +52,14 @@ Shift-click selects several wall pieces, so several can be marked or broken toge
   fog opens the way it does when a door is opened.
 - It is saved with the scene. It is still broken after a reload.
 - Doors and windows can be marked and broken the same way. A broken door has no door button.
-- Rubble: a stand-in drawn by the app, different for stone, wood, glass, metal, doors and
-  windows. Each wall piece always shows the same rubble, on every screen.
-- When a picture file is put in `dnd/vtt/assets/images/rubble/`, the app uses it in place of the
-  stand-in for that kind. No code change. The names and shape are in the README in that folder.
+- Rubble: your pictures for stone, wood, glass and metal walls (first set, October 8). A
+  broken door uses the wood picture and a broken window the glass one until they have their own.
+  Each wall piece always shows the same rubble, on every screen.
+- A kind with no picture is drawn by the app as a stand-in. When a picture file is put in
+  `dnd/vtt/assets/images/rubble/`, the app uses it. No code change. The names and shape are in
+  the README in that folder.
+- Your four heap pictures (stone, wood, glass, metal) are in the app, ready for free-standing
+  objects in Stage D. Nothing draws them yet.
 - A wall longer than a square and a half is covered by several rubble pictures end to end.
 
 ### What you can rely on
@@ -69,6 +73,11 @@ Shift-click selects several wall pieces, so several can be marked or broken toge
 
 ### Limits to know about
 
+- **The wall strips are thin.** Each picture is three to one. Scaled to one wall square and kept
+  in its own shape, its band of rubble is about as thick as the wall painted on the bathhouse
+  map, so a sliver of painted wall shows beside it. The app does not stretch pictures. This is
+  waiting on your choice: draw each picture larger so it spills over the neighbouring squares, lay
+  one picture across a whole breach, or make strips with a thicker band.
 - **Long walls.** A break removes one wall piece. Your map packages cut walls into one-square
   pieces already. A long wall you drew by hand is cut into one-square pieces at the moment you
   mark it breakable, so you can then break one square of it. Only the first piece stays

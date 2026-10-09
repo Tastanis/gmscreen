@@ -5,7 +5,12 @@ import { JSDOM } from 'jsdom';
 // The rubble layer on a page: what a GM and a player actually get drawn.
 const dom = new JSDOM('<div id="vtt-map-transform"><canvas id="roof-prototype"></canvas><div id="vtt-grid-overlay"></div></div>');
 globalThis.window = dom.window; globalThis.document = dom.window.document;
-window.vttRubbleImages = ['assets/images/rubble/rubble-door-1.png?v=5', 'assets/images/rubble/rubble-door-2.png?v=5'];
+// As the page lists them: address and size. A window has no pictures here, so it borrows glass.
+window.vttRubbleImages = [
+  { url: 'assets/images/rubble/rubble-door-1.png?v=5', width: 600, height: 200 },
+  { url: 'assets/images/rubble/rubble-door-2.png?v=5', width: 600, height: 200 },
+  { url: 'assets/images/rubble/rubble-heap-stone-1.webp?v=5', width: 512, height: 442 },
+];
 
 const square = (x0, y0, x1, y1) => [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
 const scene = {
@@ -50,14 +55,16 @@ test('a kind with a picture file uses it; a kind without is drawn', () => {
   const door = byId('door'), image = door.querySelector('image');
   assert.equal(door.dataset.rubbleSource, 'picture');
   assert.match(image.getAttribute('href'), /^assets\/images\/rubble\/rubble-door-[12]\.png\?v=5$/);
-  // A little longer than the one-square wall piece, most of a square across, centred on the wall.
+  // A little longer than the one-square wall piece, centred on the wall, and the picture's own
+  // three-to-one shape: it is never stretched.
   const width = Number(image.getAttribute('width')), height = Number(image.getAttribute('height'));
-  assert.ok(width > 64 && width < 77 && height > 44 && height < 52, `${width} by ${height}`);
+  assert.ok(width > 64 && width < 77, `${width} long`);
+  assert.ok(Math.abs(height - width / 3) < 0.01, `${width} by ${height} is three to one`);
   assert.equal(Number(image.getAttribute('x')), -width / 2);
   const stone = byId('stone-wall');
   assert.equal(stone.dataset.rubbleSource, 'drawn');
   assert.ok(stone.querySelectorAll('path').length > 20);
-  assert.deepEqual(window.wallRubble.pictures, { door: 2 });
+  assert.deepEqual(window.wallRubble.pictures, { door: 2, 'heap-stone': 1 });
   // The same picture again on the next redraw.
   const first = image.getAttribute('href');
   scene.walls = { ...scene.walls, revision: 2 }; redraw();

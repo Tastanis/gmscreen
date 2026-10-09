@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { MATERIALS, validateProperties, restrictions, liveWalls, isBreakable, isBroken, isOneWay, movementBlocked, movementPathBlocked } from '../wall-properties.mjs';
 import { validateWalls, split, cutIntoSquares } from '../wall-geometry.mjs';
 import { makeSight } from '../vision-height.mjs';
-import { rubbleKind, rubblePieces, rubbleLibrary, rubblePicture, rubbleSize, pickVersion, stableHash, standInRubble, plateUnder, insideRing, RUBBLE_KINDS, RUBBLE_MAX_ACROSS, RUBBLE_MIN_ACROSS } from '../wall-rubble.mjs';
+import { rubbleKind, rubblePieces, rubbleLibrary, rubblePicture, rubbleSize, pickVersion, stableHash, standInRubble, plateUnder, insideRing, heapKind, RUBBLE_KINDS, RUBBLE_MAX_ACROSS, RUBBLE_MIN_ACROSS } from '../wall-rubble.mjs';
 
 // A wall running north to south along x = 3, one square long per piece, with a door in the middle.
 const wall = (extra = {}) => ({
@@ -97,40 +97,70 @@ test('rubble: one piece per square of broken wall, of the right kind', () => {
   assert.equal(rubblePieces(stub).length, 1);
 });
 
-test('rubble size: a little longer than the wall piece, most of a square across', () => {
+test('rubble size: a little longer than the wall piece; a picture keeps its own shape', () => {
   const one = rubbleSize(1);
   assert.ok(one.along > 1 && one.along < 1.2, 'overlaps its neighbours a little');
-  assert.ok(Math.abs(one.across - 0.747) < 0.01, 'three long by two high');
+  // The stand-in: three long by two high, kept between a third of a square and most of one.
+  assert.ok(Math.abs(one.across - 0.747) < 0.01);
   assert.equal(rubbleSize(0.22).across, RUBBLE_MIN_ACROSS, 'a stub is still wide enough to hide the painted wall');
   assert.equal(rubbleSize(1.4).across, RUBBLE_MAX_ACROSS, 'never a whole square across');
+  // A picture file: scaled by its long side, its height follows from its own shape. Never stretched.
+  const strip = rubbleSize(1, 200 / 600);
+  assert.equal(strip.along, one.along);
+  assert.ok(Math.abs(strip.across - strip.along / 3) < 1e-9, 'a three-to-one strip stays three to one');
+  assert.ok(Math.abs(rubbleSize(2, 475 / 512).across - 2 * 1.12 * 475 / 512) < 1e-9, 'a heap stays nearly square');
 });
 
 test('pictures are found by file name, and a wall always gets the same one', () => {
+  const at = (name, width, height) => ({ url: `assets/images/rubble/${name}?v=9`, width, height });
   const library = rubbleLibrary([
-    '/dnd/vtt/assets/images/rubble/rubble-stone-2.png?v=9',
-    '/dnd/vtt/assets/images/rubble/rubble-stone-1.png?v=9',
-    '/dnd/vtt/assets/images/rubble/rubble-stone-10.webp',
-    '/dnd/vtt/assets/images/rubble/rubble-door-1.png',
-    '/dnd/vtt/assets/images/rubble/rubble-heap-1.png',
-    '/dnd/vtt/assets/images/rubble/readme.md',
-    '/dnd/vtt/assets/images/rubble/rubble-lava-1.png',
+    at('rubble-stone-2.webp', 600, 200),
+    at('rubble-stone-1.webp', 600, 200),
+    at('rubble-stone-10.webp', 600, 220),
+    at('rubble-wood-1.webp', 600, 200),
+    at('rubble-heap-stone-1.webp', 512, 442),
+    at('rubble-heap-wood-1.webp', 512, 468),
+    'assets/images/rubble/rubble-glass-1.png',
+    at('readme.md', 0, 0),
+    at('rubble-lava-1.png', 10, 10),
+    at('rubble-heap-1.webp', 10, 10),
     '/dnd/vtt/assets/images/wall-stone.png',
   ]);
-  assert.deepEqual(Object.keys(library).sort(), ['door', 'heap', 'stone']);
-  assert.deepEqual(library.stone.map((url) => url.split('/').pop()), ['rubble-stone-1.png?v=9', 'rubble-stone-2.png?v=9', 'rubble-stone-10.webp']);
+  assert.deepEqual(Object.keys(library).sort(), ['glass', 'heap-stone', 'heap-wood', 'stone', 'wood']);
+  assert.deepEqual(library.stone.map((picture) => picture.url.split('/').pop()), ['rubble-stone-1.webp?v=9', 'rubble-stone-2.webp?v=9', 'rubble-stone-10.webp?v=9'], 'in number order');
+  assert.ok(Math.abs(library.stone[0].aspect - 1 / 3) < 1e-9, 'each picture keeps its own shape');
+  assert.ok(Math.abs(library['heap-stone'][0].aspect - 442 / 512) < 1e-9);
+  assert.equal(library.glass[0].aspect, null, 'a bare address has no known shape');
   assert.deepEqual(rubbleLibrary(undefined), {});
   for (const id of ['bath-wall-007013fa', 'deadroot-edge-4-20-5-20', 'long#2']) {
     const first = rubblePicture(library, 'stone', id);
     assert.ok(library.stone.includes(first));
     for (let i = 0; i < 5; i++) assert.equal(rubblePicture(library, 'stone', id), first, 'the same on every redraw and every screen');
   }
-  assert.equal(rubblePicture(library, 'wood', 'any'), null, 'a kind with no picture yet uses the stand-in');
-  assert.equal(rubblePicture(library, 'door', 'any'), library.door[0]);
+  assert.equal(rubblePicture(library, 'metal', 'any'), null, 'a kind with no picture yet uses the stand-in');
   assert.equal(pickVersion('any', 0), -1);
   // Spread across versions: forty walls do not all land on one picture.
   const used = new Set(Array.from({ length: 40 }, (_, i) => pickVersion(`wall-${i}`, 3)));
   assert.equal(used.size, 3);
   assert.equal(stableHash('wall-1'), stableHash('wall-1'));
+});
+
+test('a door uses wood rubble and a window glass rubble until they have pictures of their own', () => {
+  const at = (name) => ({ url: `assets/images/rubble/${name}`, width: 600, height: 200 });
+  const library = rubbleLibrary([at('rubble-wood-1.webp'), at('rubble-glass-1.webp')]);
+  assert.equal(rubblePicture(library, 'door', 'front-door').url, 'assets/images/rubble/rubble-wood-1.webp');
+  assert.equal(rubblePicture(library, 'window', 'east-window').url, 'assets/images/rubble/rubble-glass-1.webp');
+  // Once a door picture exists it is used instead.
+  const withDoor = rubbleLibrary([at('rubble-wood-1.webp'), at('rubble-door-1.webp')]);
+  assert.equal(rubblePicture(withDoor, 'door', 'front-door').url, 'assets/images/rubble/rubble-door-1.webp');
+  assert.equal(rubblePicture(rubbleLibrary([]), 'door', 'front-door'), null, 'with no pictures at all the stand-in is drawn');
+});
+
+test('a broken object uses the heap of its own material', () => {
+  assert.deepEqual(['stone', 'wood', 'glass', 'metal'].map(heapKind), ['heap-stone', 'heap-wood', 'heap-glass', 'heap-metal']);
+  assert.equal(heapKind('paper'), 'heap-stone');
+  for (const kind of ['heap-stone', 'heap-wood', 'heap-glass', 'heap-metal']) assert.ok(RUBBLE_KINDS.includes(kind));
+  assert.ok(!RUBBLE_KINDS.includes('heap'), 'there is no plain heap any more');
 });
 
 test('the stand-in is the same drawing each time, fills its box, and differs by wall and by kind', () => {
