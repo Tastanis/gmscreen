@@ -139,7 +139,10 @@ board.addEventListener('dblclick',event=>{
 board.addEventListener('pointercancel',cancelDrag,true);board.addEventListener('lostpointercapture',cancelDrag,true);window.addEventListener('blur',cancelDrag);
 board.addEventListener('contextmenu',e=>{if(!panel.hidden)consume(e);},true);
 document.addEventListener('keydown',e=>{
- if(panel.hidden||!context?.isGM||e.target.closest('input,textarea,select,[contenteditable=true]'))return;
+ // Keys typed into a field belong to the field. One exception: Ctrl+Z in a tick box or a list of this
+ // panel. Nothing is typed there, so it undoes the wall edit, as it does anywhere else on the board.
+ const field=e.target.closest('input,textarea,select,[contenteditable=true]'),undoKey=(e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z';
+ if(panel.hidden||!context?.isGM||(field&&!(undoKey&&panel.contains(field)&&(field.type==='checkbox'||field.tagName==='SELECT'))))return;
  if(synchronizeInspectionHeight())render();
  if(e.key==='Shift'&&!e.repeat&&!drag&&!anchor&&selection?.kind==='node'){consume(e);anchor=selection.id;hover={p:{...pointNode(anchor)}};propertiesOpen=false;render();return;}
  if(e.key==='Escape'){consume(e);if(propertiesOpen){propertiesOpen=false;render();}else if(drag)cancelDrag();else if(anchor){anchor=null;hover=null;render();}else setOpen(false);}

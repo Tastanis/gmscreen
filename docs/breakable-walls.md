@@ -37,7 +37,7 @@ browser over the bathhouse map. The whole feature has not yet been tried in the 
 
 ### How to try it
 
-1. Open a scene that has walls, as the GM. Click **Walls**.
+1. Open a scene that has walls, as the GM. Click **Edits**, then **Walls**.
 2. Double-click a wall piece. Its properties open.
 3. At the bottom, set **Breakable** to Stone (or Glass, Wood, Metal). A small diamond appears
    on that wall. Only you see it.
@@ -99,6 +99,26 @@ Shift-click selects several wall pieces, so several can be marked or broken toge
   an upper level may be drawn under that level's picture. None of the current maps is built that
   way.
 - **Undo** in the Walls panel undoes a break like any other wall edit.
+
+### Fixed after the tester's browser run (October 8, evening)
+
+The tester ran Stage A in a browser on the bathhouse and Dead Root. Marking, breaking,
+repairing, movement, sight, fog, what players are told and Dead Root's one-way walls all
+passed. It found these, now fixed and waiting for its re-test:
+
+- **A player saw no rubble on the bathhouse.** The bathhouse floors have their own pictures,
+  and the rubble was being drawn underneath them. It is now kept above the floor pictures.
+- **The GM never saw rubble on those floors.** The GM looks down from a chosen height, not from
+  a floor, and the rubble was waiting for the GM to be "on" the floor. The GM is now shown the
+  rubble on every floor at or below the viewing height that no higher floor in view covers.
+- **Ctrl+Z did nothing straight after ticking Broken**, because the cursor was still in the tick
+  box. It now undoes the break from a tick box or a list in the Walls panel.
+- **The Broken box could show the last wall's state** when you went from one wall to another
+  with the cursor still in the box. It now always shows the selected wall.
+
+Still for you to decide, from the same run: a door or window two squares long is cut into two
+one-square halves when marked, and ticking Broken breaks one half. The other half still stands,
+with its own door button. Should a door or window break as one thing?
 
 ### Checks run
 

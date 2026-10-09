@@ -7,7 +7,9 @@
 //  - rubble on a floor plate (an upper floor, or any floor that has its own picture) sits just
 //    above the plates, which are painted over the fog. It is drawn only while that floor is being
 //    viewed and, for a player, only while the spot is in sight, the test door markers already use.
-import { rubblePieces, rubbleLibrary, rubblePicture, rubbleSize, rubbleStrip, standInRubble, plateUnder, stableHash } from './wall-rubble.mjs';
+//    The GM looks from a chosen height, not from a floor: the GM is shown the rubble on every floor
+//    at or below that height that no higher floor in view covers.
+import { rubblePieces, rubbleLibrary, rubblePicture, rubbleSize, rubbleStrip, standInRubble, plateUnder, coveredAbove, stableHash } from './wall-rubble.mjs';
 import { wallHeights } from './wall-properties.mjs';
 import { resolveSupportSurfaces } from './floor-support.js';
 
@@ -29,7 +31,11 @@ function context() { return window.terrainContext?.() || null; }
 function terrain() { return window.terrainPrototype?.active ? window.terrainPrototype : null; }
 function mount() {
   if (!ground.isConnected) transform.insertBefore(ground, document.querySelector('#terrain-cost-markers') || document.querySelector('#vtt-grid-overlay'));
-  if (!floors.isConnected) { const plates = document.querySelector('#roof-prototype'); if (plates) plates.after(floors); else transform.append(floors); }
+  // The layer the floor pictures are painted on is made by another part of the page and may arrive
+  // after this one. Both have the same height in the stack, so the later one in the page is on top:
+  // the rubble has to come straight after it, every time, or the floor picture covers the rubble.
+  const plates = document.querySelector('#roof-prototype');
+  if (plates ? plates.nextElementSibling !== floors : !floors.isConnected) { if (plates) plates.after(floors); else transform.append(floors); }
 }
 function clear(mark) {
   if (signature === mark) return;
@@ -105,12 +111,18 @@ function draw() {
   const surfaces = resolveSupportSurfaces(model);
   // A player, or the GM looking through a token's eyes, sees floor rubble only where they can see the spot.
   const bySight = !c.isGM || document.documentElement.classList.contains('height-vision-active');
-  const viewed = c.levelId || 'level-0';
+  // The GM with no single token selected looks down from a chosen height. Otherwise the view is a
+  // token's: a player's own floor, or the floor of the token the GM is looking through.
+  const fromHeight = c.isGM && window.gmVision?.manual ? Number(window.gmVision.height) : null;
+  const placements = c.state.boardState.placements?.[sceneId], throughToken = c.isGM && fromHeight === null
+    ? (Array.isArray(placements) ? placements : Object.values(placements || {})).find((placement) => placement.id === window.visionPrototype?.viewerTokenId) : null;
+  const viewed = throughToken?.levelId || c.levelId || 'level-0';
   const entries = pieces.map((piece) => {
     const middle = { x: (piece.a.x + piece.b.x) / 2, y: (piece.a.y + piece.b.y) / 2 };
     const heights = wallHeights(piece.edge, piece.a, piece.b, middle, groundAt), plate = plateUnder(piece, heights.base, surfaces);
     let shown = true;
-    if (plate) shown = (plate.levelId || 'level-0') === viewed && (!bySight || !!window.visionPrototype?.portalVisible({ a: piece.a, b: piece.b, base: heights.base, top: heights.top }));
+    if (plate && fromHeight !== null) shown = Number(plate.height) <= fromHeight + 0.001 && !coveredAbove(piece, plate, surfaces, fromHeight);
+    else if (plate) shown = (plate.levelId || 'level-0') === viewed && (!bySight || !!window.visionPrototype?.portalVisible({ a: piece.a, b: piece.b, base: heights.base, top: heights.top }));
     return {
       piece, onPlate: !!plate, shown,
       from: project(piece.a, wallHeights(piece.edge, piece.a, piece.b, piece.a, groundAt).base),

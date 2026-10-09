@@ -111,3 +111,52 @@ test('repairing clears the rubble', () => {
   assert.deepEqual([groundLayer().length, floorLayer().length], [0, 0]);
   assert.deepEqual(window.wallRubble.pieces, []);
 });
+
+// ---- found by the tester on the bathhouse (October 8)
+const breakAgain = (extraPlates = []) => {
+  const value = JSON.parse(JSON.stringify(scene.walls.value));
+  for (const edge of value.segments) if (edge.id !== 'standing') edge.broken = true;
+  value.roofs = [value.roofs[0], ...extraPlates];
+  scene.walls = { revision: scene.walls.revision + 1, value };
+};
+
+test('the rubble layer is put back above the floor pictures when that layer arrives later', () => {
+  view.isGM = false; view.levelId = 'upper'; window.visionPrototype = { portalVisible: () => true };
+  breakAgain(); redraw();
+  // The page makes the floor-picture layer after the rubble layer: it lands on top and covers the rubble.
+  const transform = document.querySelector('#vtt-map-transform'), plates = document.querySelector('#roof-prototype');
+  transform.append(plates);
+  assert.notEqual(plates.nextElementSibling?.id, 'wall-rubble-floors', 'the floor pictures are now over the rubble');
+  redraw();
+  assert.equal(plates.nextElementSibling.id, 'wall-rubble-floors', 'the next redraw puts the rubble straight after them again');
+  assert.deepEqual(floorLayer().map((node) => node.dataset.rubbleId), ['upstairs'], 'and nothing drawn was lost');
+  // Even when nothing about the scene has changed since the last redraw.
+  transform.append(plates); redraw();
+  assert.equal(plates.nextElementSibling.id, 'wall-rubble-floors');
+});
+
+test('the GM, looking down from a chosen height, is shown rubble on the floors in view', () => {
+  view.isGM = true; view.levelId = 'level-0'; window.visionPrototype = { portalVisible: () => false };
+  const shownAt = (height) => { window.gmVision = { manual: true, height }; redraw(); return floorLayer().map((node) => node.dataset.rubbleId); };
+  // The upper floor is 2 high. Below it the GM does not see that floor, or its rubble.
+  assert.deepEqual(shownAt(0), []);
+  assert.deepEqual(shownAt(1.5), []);
+  assert.deepEqual(shownAt(2), ['upstairs'], 'at the floor\'s own height it is in view, whatever floor the GM is "on"');
+  assert.deepEqual(shownAt(5), ['upstairs']);
+  assert.deepEqual(groundLayer().map((node) => node.dataset.rubbleId), ['stone-wall', 'door'], 'ground rubble is unchanged throughout');
+  // A second floor over the same spot, 4 high: once the GM's height takes it in, its picture covers the rubble below.
+  breakAgain([{ id: 'top-floor', kind: 'floor', levelId: 'top', height: 4, points: square(4, 3, 8, 6) }]);
+  assert.deepEqual(shownAt(3), ['upstairs']);
+  assert.deepEqual(shownAt(4), [], 'covered by the floor above');
+  // A hole in that floor over the spot lets the rubble show again.
+  breakAgain([{ id: 'top-floor', kind: 'floor', levelId: 'top', height: 4, points: square(4, 3, 8, 6), holes: [square(5, 3.5, 6, 4.5)] }]);
+  assert.deepEqual(shownAt(4), ['upstairs']);
+  // With one token selected the GM looks through its eyes: the token's floor, and what it can see.
+  window.gmVision = { manual: false, height: 0 };
+  window.terrainContext = ((inner) => () => { const c = inner(); c.state.boardState.placements = { scene: [{ id: 'hero', levelId: 'upper' }] }; return c; })(window.terrainContext);
+  window.visionPrototype = { viewerTokenId: 'hero', portalVisible: () => true }; redraw();
+  assert.deepEqual(floorLayer().map((node) => node.dataset.rubbleId), ['upstairs'], 'the selected token stands on that floor and sees the spot');
+  window.visionPrototype = { viewerTokenId: 'hero', portalVisible: () => false }; document.documentElement.classList.add('height-vision-active'); redraw();
+  assert.deepEqual(floorLayer(), [], 'out of the token\'s sight');
+  document.documentElement.classList.remove('height-vision-active'); delete window.gmVision;
+});

@@ -214,6 +214,17 @@ export function insideRing(point, ring) {
 }
 
 /**
+ * True when another floor plate lies over the middle of the piece, above the plate it is on and no
+ * higher than `upTo`: that floor's picture is drawn over the spot, so rubble there is out of view.
+ */
+export function coveredAbove(piece, plate, surfaces, upTo = Infinity) {
+  const middle = { x: (piece.a.x + piece.b.x) / 2, y: (piece.a.y + piece.b.y) / 2 }, floor = Number(plate?.height) || 0;
+  return (surfaces || []).some((surface) => surface?.kind === 'floor' && surface.points?.length > 2
+    && Number(surface.height) > floor + 0.01 && Number(surface.height) <= upTo + 0.001
+    && insideRing(middle, surface.points) && !(surface.holes || []).some((hole) => insideRing(middle, hole)));
+}
+
+/**
  * The floor plate a piece of rubble lies on, if any: a plate at the wall's foot (within half a
  * square in height) that covers the middle of the piece. Rubble on a plate has to be drawn above
  * the plate's own picture; rubble on bare ground is drawn straight on the map.
