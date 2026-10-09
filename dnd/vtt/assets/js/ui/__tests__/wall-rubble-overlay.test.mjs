@@ -55,10 +55,11 @@ test('a kind with a picture file uses it; a kind without is drawn', () => {
   const door = byId('door'), image = door.querySelector('image');
   assert.equal(door.dataset.rubbleSource, 'picture');
   assert.match(image.getAttribute('href'), /^assets\/images\/rubble\/rubble-door-[12]\.png\?v=5$/);
-  // Drawn three quarters of a square high (48 of this board's 64 pixels), so its band is thicker
-  // than a painted wall, centred on the wall line, in its own three-to-one shape: never stretched.
+  // A door is painted thicker than a wall and off the wall line, so its strip is drawn 1.4 squares
+  // high (89.6 of this board's 64 pixels; a plain wall's is three quarters of a square). Centred
+  // on the wall line, in its own three-to-one shape: never stretched.
   const width = Number(image.getAttribute('width')), height = Number(image.getAttribute('height'));
-  assert.ok(Math.abs(height - 48) < 0.01, `${height} high`);
+  assert.ok(Math.abs(height - 89.6) < 0.01, `${height} high`);
   assert.ok(Math.abs(width - height * 3) < 0.01, `${width} by ${height} is three to one`);
   assert.equal(Number(image.getAttribute('y')), -height / 2);
   // Only the stretch over the piece is shown: the whole square, fading out just past each end.

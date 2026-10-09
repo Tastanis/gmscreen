@@ -9,7 +9,7 @@
 //    viewed and, for a player, only while the spot is in sight, the test door markers already use.
 //    The GM looks from a chosen height, not from a floor: the GM is shown the rubble on every floor
 //    at or below that height that no higher floor in view covers.
-import { rubblePieces, rubbleLibrary, rubblePicture, rubbleSize, rubbleStrip, standInRubble, plateUnder, coveredAbove, stableHash } from './wall-rubble.mjs';
+import { rubblePieces, rubbleLibrary, rubblePicture, rubbleSize, rubbleStrip, stripAcross, standInRubble, plateUnder, coveredAbove, stableHash } from './wall-rubble.mjs';
 import { wallHeights } from './wall-properties.mjs';
 import { resolveSupportSurfaces } from './floor-support.js';
 
@@ -55,7 +55,7 @@ const svgNode = (name, attributes = {}) => {
  * `unit` is one square in pixels; `mark` makes the fade's name its own.
  */
 function stripNodes(picture, piece, squares, unit, mark) {
-  const strip = rubbleStrip(squares, picture.aspect, piece.id);
+  const strip = rubbleStrip(squares, picture.aspect, piece.id, stripAcross(piece.kind));
   const along = strip.along * unit, across = strip.across * unit, shown = strip.shown * unit;
   const ramp = svgNode('linearGradient', { id: `wall-rubble-ramp-${mark}`, gradientUnits: 'userSpaceOnUse', x1: -shown / 2, y1: 0, x2: shown / 2, y2: 0 });
   const edge = strip.fade / strip.shown;

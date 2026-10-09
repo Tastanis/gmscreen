@@ -708,8 +708,15 @@ the view sits at that token's exact height (3.95 on a stair), and the arrows wen
 2.95. They now go to 5 and 3. Since the Director moves heroes between tiers with these arrows,
 this mattered more than it looked.
 
-Still to do from that look, small: the selected token's card covers the Edits menu; a sliver of
-painted door and window shows beside their rubble.
+The two small ones from that look, done on October 8 (night), waiting for a browser look:
+
+- **The selected token's card covered the Edits menu**, so "Walls" could not be clicked without
+  deselecting first. The Edits, Walls and Height panels now move to just right of the card while
+  a card is open, and back when it closes.
+- **A sliver of painted door and window showed beside their rubble.** Doors and windows are
+  painted thicker than walls and to one side of the wall line. Their rubble strip is now drawn
+  1.4 squares high instead of 0.75, so its band covers about a fifth of a square either side.
+  Walls are unchanged. If a sliver still shows, it is one number to raise.
 
 ## October 8, night: pushed or walking off an edge. Done, not yet seen in a browser
 

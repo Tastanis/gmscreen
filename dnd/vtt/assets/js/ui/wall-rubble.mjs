@@ -22,6 +22,13 @@ export const RUBBLE_OVERLAP = 1.12;
  * a square thick with nothing of it showing along either side.
  */
 export const RUBBLE_STRIP_ACROSS = 0.75;
+/**
+ * A door or a window is painted thicker than a wall and to one side of the wall line, so its strip
+ * is drawn higher: its band then hides paint up to about a fifth of a square either side.
+ */
+export const RUBBLE_PORTAL_ACROSS = 1.4;
+/** How high the strip of this kind of rubble is drawn. */
+export const stripAcross = (kind) => (kind === 'door' || kind === 'window' ? RUBBLE_PORTAL_ACROSS : RUBBLE_STRIP_ACROSS);
 /** A strip covers its wall piece fully and fades out over this much past each end, in squares. */
 export const RUBBLE_FADE = 0.12;
 /** The middle share of a strip picture's length where its band is whole. Toward the ends it thins out. */
@@ -94,10 +101,10 @@ export function rubblePicture(library, kind, id) {
  *    stretches of it. What is seen always stays inside the part of the picture where the band is whole.
  * The same id always gives the same result.
  */
-export function rubbleStrip(length, aspect, id) {
+export function rubbleStrip(length, aspect, id, least = RUBBLE_STRIP_ACROSS) {
   const shape = aspect > 0 ? aspect : RUBBLE_STRIP_ASPECT;
   const shown = length + 2 * RUBBLE_FADE;
-  const across = Math.max(RUBBLE_STRIP_ACROSS, (shown / RUBBLE_SOLID) * shape);
+  const across = Math.max(least, (shown / RUBBLE_SOLID) * shape);
   const along = across / shape;
   const slack = Math.max(0, (RUBBLE_SOLID * along - shown) / 2);
   const shift = (((stableHash(`${id}:along`) % 1000) / 999) * 2 - 1) * slack;

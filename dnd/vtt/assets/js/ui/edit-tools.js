@@ -1,3 +1,4 @@
+import {panelLeft} from './edits-place.mjs';
 const $=s=>document.querySelector(s);
 function mount(){
  const height=$('[data-action="terrain-height"]'),walls=$('[data-action="terrain-walls"]'),board=$('#vtt-board-canvas');
@@ -29,6 +30,10 @@ function mount(){
   const c=window.terrainContext?.();button.hidden=!c?.isGM;if(!c?.isGM)close();
   const source=$('.scene-item.is-active .scene-item__levels');if(source){content.replaceChildren(source);current=c?.state.boardState.activeSceneId;}
   else if(current&&current!==c?.state.boardState.activeSceneId){content.replaceChildren();current=null;}
+  // A selected token's card slides in over these panels; one it would cover moves beside it.
+  const card=$('.vtt-character-summary--open,.vtt-monster-summary--open')?.getBoundingClientRect()??null,host=board.parentElement.getBoundingClientRect();
+  for(const id of ['edits-panel','wall-panel','terrain-panel']){const el=document.getElementById(id);if(!el||el.hidden)continue;
+   const left=panelLeft({card,host,width:el.offsetWidth||300}),value=left===null?'':left+'px';if(el.style.left!==value)el.style.left=value;}
   const app=$('#vtt-app');if(app){const top=app.getBoundingClientRect().top+window.scrollY;document.documentElement.style.setProperty('--sandbox-nav-height',Math.max(0,top)+'px');}
   requestAnimationFrame(update);
  }

@@ -262,3 +262,18 @@ test('a door or a window is never cut: it breaks as one thing, whatever its leng
   const plain = { version: 1, nodes: [{ id: 'a', x: 0, y: 0 }, { id: 'b', x: 3, y: 0 }], segments: [{ id: 'wall', a: 'a', b: 'b', interaction: 'none', material: 'stone' }] };
   assert.equal(cutIntoSquares(plain, 'wall', makeId).length, 3);
 });
+
+test('a door or a window gets a wider strip than a wall; nothing else changes', async () => {
+  const { stripAcross, RUBBLE_PORTAL_ACROSS } = await import('../wall-rubble.mjs');
+  assert.deepEqual(['stone', 'wood', 'glass', 'metal'].map(stripAcross), [0.75, 0.75, 0.75, 0.75]);
+  assert.deepEqual(['door', 'window'].map(stripAcross), [RUBBLE_PORTAL_ACROSS, RUBBLE_PORTAL_ACROSS]);
+  assert.equal(RUBBLE_PORTAL_ACROSS, 1.4);
+  // The band through the middle of a strip is about a third of its height: 0.47 of a square for a
+  // door, which hides paint up to 0.23 either side of the wall line.
+  const door = rubbleStrip(2, 1 / 3, 'door', stripAcross('door')), wall = rubbleStrip(1, 1 / 3, 'wall-1');
+  assert.equal(door.across, 1.4);
+  assert.ok(Math.abs(door.along - 4.2) < 1e-9, 'scaled evenly: three long for one high');
+  assert.ok(Math.abs(door.shown - 2.24) < 1e-9, 'still shown only over the door itself');
+  assert.equal(wall.across, 0.75, 'a wall is as it was');
+  assert.deepEqual(rubbleStrip(1, 1 / 3, 'wall-1', 0.75), wall);
+});
