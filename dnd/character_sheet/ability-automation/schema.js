@@ -1000,7 +1000,7 @@
       "type", "id", "name", "mode", "predicate", "creature", "count", "optional",
       "distance", "range", "selectionGuide", "shape", "size", "width", "height", "length", "note",
       "promptTitle", "promptText", "excludeGroups", "excludeGroup",
-      "rangeOrigin", "structure", "wallColor",
+      "rangeOrigin", "structure", "wallColor", "wallType", "wallStamina",
     ]);
     const mode = pickKnown(input.mode, P.TARGET_MODES, "token");
     const predicateRaw = input.predicate || input.creature || "creature";
@@ -1073,6 +1073,15 @@
         if (asBool(input.structure)) block.structure = true;
         const wallColor = asTrimmedString(input.wallColor);
         if (wallColor) block.wallColor = wallColor;
+        // What it takes to break the wall, when the ability's text says: "a wall of stone" is
+        // wallType "stone" (glass, wood, stone or metal); "each square has 15 Stamina" is
+        // wallStamina 15. Used only by a wall with structure: true. Neither means not breakable.
+        const wallType = asTrimmedString(input.wallType).toLowerCase();
+        if (["glass", "wood", "stone", "metal"].includes(wallType)) block.wallType = wallType;
+        else if (wallType) warnings.push(`${path}: wallType "${wallType}" is not glass, wood, stone or metal; ignored.`);
+        const wallStamina = Number(input.wallStamina);
+        if (Number.isInteger(wallStamina) && wallStamina >= 1 && wallStamina <= 999) block.wallStamina = wallStamina;
+        else if (input.wallStamina !== undefined && input.wallStamina !== null && input.wallStamina !== "") warnings.push(`${path}: wallStamina must be a whole number from 1 to 999; ignored.`);
       }
     }
     if (input.note) block.note = asTrimmedString(input.note);

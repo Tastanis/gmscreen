@@ -729,7 +729,7 @@ final class SyncV2Store
                     $eventType = $domain === 'templates' ? 'template.removed' : 'drawing.removed';
                 } else {
                     $entry = $payload[$payloadKey];
-                    if ($domain === 'templates') WallCubes::validate($entry);
+                    if ($domain === 'templates') { WallCubes::validate($entry); $entry = WallCubes::settle($entry, $current, $isGm); }
                     // Authenticated ownership cannot be supplied or reassigned by a player.
                     $entry['authorId'] = $current['authorId']
                         ?? ($isGm ? ($entry['authorId'] ?? strtolower($actorId)) : strtolower($actorId));
@@ -2012,26 +2012,44 @@ final class SyncV2Store
     private function breakWalls(string $sceneId,array $ids,string $actorId,string $operationId,string $cause='fall'): ?array
     {
         if($this->findEventByOperationId($operationId)!==null)return null;
-        $snapshot=$this->getSnapshot();$state=$snapshot['state'];
+        $snapshot=$this->getSnapshot();$state=$snapshot['state'];$revision=$snapshot['revision'];$serverTime=$this->nowMilliseconds();$events=[];
+        // Walls of the map's own design.
         $config=$state['sceneConfig'][$sceneId]??null;$walls=$config['environment']['walls']??null;
-        if(!is_array($walls)||!is_array($walls['value']['segments']??null))return null;
-        $changed=false;
-        foreach($walls['value']['segments'] as $i=>$edge){
-            if(!in_array($edge['id']??null,$ids,true)||!WallObjects::breakable($edge))continue;
-            $walls['value']['segments'][$i]['broken']=true;$changed=true;
+        if(is_array($walls)&&is_array($walls['value']['segments']??null)){
+            $changed=false;
+            foreach($walls['value']['segments'] as $i=>$edge){
+                if(!in_array($edge['id']??null,$ids,true)||!WallObjects::breakable($edge))continue;
+                $walls['value']['segments'][$i]['broken']=true;$changed=true;
+            }
+            if($changed){
+                $walls['revision']=(int)($walls['revision']??0)+1;
+                $config['environment']['walls']=$walls;$config['_revision']=max(0,(int)($config['_revision']??0))+1;
+                $state['sceneConfig'][$sceneId]=$config;
+                $events[]=['revision'=>++$revision,'operationId'=>$operationId,'type'=>'environment.changed','actorId'=>$actorId,'sceneId'=>$sceneId,'entityId'=>null,
+                    'entityRevision'=>$config['_revision'],'payload'=>['field'=>'walls','entry'=>$walls,'cause'=>$cause],'serverTime'=>$serverTime];
+            }
         }
-        if(!$changed)return null;
-        $walls['revision']=(int)($walls['revision']??0)+1;
-        $config['environment']['walls']=$walls;$config['_revision']=max(0,(int)($config['_revision']??0))+1;
-        $state['sceneConfig'][$sceneId]=$config;
-        $revision=$snapshot['revision']+1;$serverTime=$this->nowMilliseconds();
-        $event=['revision'=>$revision,'operationId'=>$operationId,'type'=>'environment.changed','actorId'=>$actorId,'sceneId'=>$sceneId,'entityId'=>null,
-            'entityRevision'=>$config['_revision'],'payload'=>['field'=>'walls','entry'=>$walls,'cause'=>$cause],'serverTime'=>$serverTime];
-        $this->insertEvent($event);
+        // Cubes of summoned walls: the cube is marked broken in its template, which is kept.
+        $cubes=[];
+        foreach($ids as $id){$cube=is_string($id)?WallCubes::cubeOf($id):null;if($cube!==null)$cubes[$cube[0]][$cube[1]]=true;}
+        foreach($cubes as $templateId=>$keys){
+            $templateId=(string)$templateId;$template=$state['templates'][$sceneId][$templateId]??null;
+            if(!is_array($template)||WallCubes::stamina($template)===null)continue;
+            $broken=WallCubes::breakCubes($template,array_map('strval',array_keys($keys)));
+            if($broken===null)continue;
+            $broken['_entityRevision']=max(0,(int)($template['_entityRevision']??0))+1;
+            $state['templates'][$sceneId][$templateId]=$broken;
+            $events[]=['revision'=>++$revision,'operationId'=>$operationId.':cube:'.count($events),'type'=>'template.updated','actorId'=>$actorId,'sceneId'=>$sceneId,'entityId'=>$templateId,
+                'entityRevision'=>$broken['_entityRevision'],'payload'=>['template'=>$broken,'cause'=>$cause],'serverTime'=>$serverTime];
+        }
+        if(!$events)return null;
+        foreach($events as $event){
+            $this->insertEvent($event);
+            if($event['revision'] % $this->snapshotInterval===0)$this->insertSnapshot($event['revision'],$state,$serverTime);
+        }
         $this->updateWorldState($revision,$state,$serverTime);
-        if($revision % $this->snapshotInterval===0)$this->insertSnapshot($revision,$state,$serverTime);
         $this->pruneEvents($revision);
-        return $event;
+        return $events[0];
     }
 
     public function unresolvedZoneEntries(string $actorId,bool $isGm): array

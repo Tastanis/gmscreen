@@ -11,6 +11,7 @@
 //    at or below that height that no higher floor in view covers.
 import { rubblePieces, rubbleLibrary, rubblePicture, rubbleSize, rubbleStrip, stripAcross, standInRubble, plateUnder, coveredAbove, stableHash } from './wall-rubble.mjs';
 import { wallHeights } from './wall-properties.mjs';
+import { cubeRubble } from './wall-break.mjs';
 import { resolveSupportSurfaces } from './floor-support.js';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -109,7 +110,9 @@ function draw() {
   const c = context();
   if (!c?.view?.mapLoaded || !transform) { clear('no-map'); return; }
   const sceneId = c.state.boardState.activeSceneId, walls = c.state.boardState.sceneState?.[sceneId]?.environment?.walls;
-  const model = walls?.value, pieces = model ? rubblePieces(model) : [];
+  // Broken walls of the map's own design, and broken cubes of walls made during play.
+  const cubes = cubeRubble(c.state.boardState.templates?.[sceneId]);
+  const model = walls?.value || (cubes.length ? { nodes: [], segments: [] } : null), pieces = model ? [...rubblePieces(model), ...cubes] : [];
   if (!pieces.length) { clear('none:' + sceneId); return; }
   mount();
   const active = terrain(), v = c.view, g = v.gridSize || 64, ox = v.gridOffsets?.left || 0, oy = v.gridOffsets?.top || 0;
@@ -136,7 +139,7 @@ function draw() {
       to: project(piece.b, wallHeights(piece.edge, piece.a, piece.b, piece.b, groundAt).base),
     };
   });
-  const next = JSON.stringify([sceneId, walls.revision, viewed, g, ox, oy, v.mapPixelSize, !!active, active?.revision ?? 0, active?.key ?? '', entries.map((entry) => (entry.onPlate ? 'p' : 'g') + (entry.shown ? 1 : 0)).join('')]);
+  const next = JSON.stringify([sceneId, walls?.revision ?? 0, cubes.map((cube) => cube.id + cube.kind).join('|'), viewed, g, ox, oy, v.mapPixelSize, !!active, active?.revision ?? 0, active?.key ?? '', entries.map((entry) => (entry.onPlate ? 'p' : 'g') + (entry.shown ? 1 : 0)).join('')]);
   if (next === signature) return;
   signature = next; builds++;
   for (const svg of [ground, floors]) { svg.setAttribute('width', v.mapPixelSize?.width || 0); svg.setAttribute('height', v.mapPixelSize?.height || 0); }

@@ -1,5 +1,6 @@
 import {BASE_MAP_LEVEL_ID} from '../state/normalize/map-levels.js';
 import {templateAuthority} from './template-edits.js';
+import {wallBreakFields,squareMarks} from './wall-break.mjs';
 
 export const TEMPLATE_COLORS = Object.freeze([
   'rgba(59, 130, 246, 0.95)', 'rgba(14, 165, 233, 0.95)',
@@ -131,7 +132,7 @@ export function createTemplateGeometry(getView = () => ({})) {
           if (!Number.isFinite(column) || !Number.isFinite(row)) {
             return null;
           }
-          return { column: Math.max(0, column), row: Math.max(0, row), ...(Number.isInteger(square.elevation) && square.elevation >= 0 ? {elevation:square.elevation} : {}) };
+          return { column: Math.max(0, column), row: Math.max(0, row), ...(Number.isInteger(square.elevation) && square.elevation >= 0 ? {elevation:square.elevation} : {}), ...squareMarks(square) };
         })
         .filter(Boolean);
 
@@ -147,6 +148,7 @@ export function createTemplateGeometry(getView = () => ({})) {
       if (typeof entry.wallColor === 'string' && entry.wallColor.trim()) {
         normalized.wallColor = entry.wallColor.trim();
       }
+      Object.assign(normalized, wallBreakFields(entry));
       return normalized;
     }
 
@@ -206,7 +208,7 @@ export function createTemplateGeometry(getView = () => ({})) {
         return;
       }
       seen.add(key);
-      result.push({ column, row, ...(elevation ? {elevation} : {}) });
+      result.push({ column, row, ...(elevation ? {elevation} : {}), ...squareMarks(square) });
     });
     return result;
   }
@@ -479,6 +481,7 @@ export function createTemplateGeometry(getView = () => ({})) {
       if (typeof data.wallColor === 'string' && data.wallColor.trim()) {
         shape.wallColor = data.wallColor.trim();
       }
+      Object.assign(shape, wallBreakFields(data));
     }
 
     return shape;

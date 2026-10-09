@@ -67,9 +67,23 @@ final class WallObjects
         return $found;
     }
 
+    /** The book's materials, as Stamina for each square of wall (Hurling Through Objects). */
+    public const STAMINA = ['glass'=>1, 'wood'=>3, 'stone'=>6, 'metal'=>9];
+
+    /**
+     * A wall's Stamina for each square, or null when it cannot be broken. A wall may state the
+     * number itself (a summoned wall given "15 Stamina a square"); otherwise its material says it.
+     * Breaking a square costs that many squares of forced movement and does that much plus 2.
+     */
+    public static function stamina(array $edge): ?int
+    {
+        if (isset($edge['stamina']) && is_int($edge['stamina']) && $edge['stamina'] > 0) return $edge['stamina'];
+        return self::STAMINA[$edge['material'] ?? ''] ?? null;
+    }
+
     public static function breakable(array $edge): bool
     {
-        return isset($edge['material']) && ($edge['broken'] ?? false) !== true;
+        return self::stamina($edge) !== null && ($edge['broken'] ?? false) !== true;
     }
 
     /**
@@ -84,7 +98,7 @@ final class WallObjects
         $ids = array_column($walls, 'id'); $out = [];
         foreach ($config['environment']['walls']['value']['segments'] ?? [] as $edge) {
             if (!self::breakable($edge)) continue;
-            if (in_array($edge['id'], $ids, true) || (isset($edge['group']) && in_array($edge['group'], $groups, true))) $out[] = ['id'=>$edge['id'], 'material'=>$edge['material']];
+            if (in_array($edge['id'], $ids, true) || (isset($edge['group']) && in_array($edge['group'], $groups, true))) $out[] = ['id'=>$edge['id'], 'material'=>$edge['material'] ?? 'stone'];
         }
         return $out;
     }

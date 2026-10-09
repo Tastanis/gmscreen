@@ -341,6 +341,9 @@ function vttSyncV2ProjectSnapshotForUser(array $snapshot, array $auth): array
                 foreach ($entries as $id => $entry) {
                     if (isset($hiddenLevels[$entry['levelId'] ?? 'level-0'])) {
                         unset($snapshot['state'][$domain][$sceneId][$id]);
+                    } elseif ($domain === 'templates' && is_array($entry)) {
+                        // What it takes to break a summoned wall is the GM's to know.
+                        $snapshot['state'][$domain][$sceneId][$id] = WallCubes::forPlayer($entry);
                     }
                 }
             }
@@ -478,6 +481,7 @@ function vttSyncV2ProjectEventForUser(array $event, array $auth): array
         if (isset($hiddenLevels[$event['payload'][$key]['levelId'] ?? 'level-0'])) {
             return vttSyncV2RedactedEvent($event);
         }
+        if ($key === 'template' && is_array($event['payload']['template'] ?? null)) $event['payload']['template'] = WallCubes::forPlayer($event['payload']['template']);
     }
     if ($type === 'levels.replaced' && is_array($event['payload']['mapLevels'] ?? null)) {
         foreach (($event['payload']['visibilityChanges'] ?? []) as $visibility) {
@@ -492,7 +496,7 @@ function vttSyncV2ProjectEventForUser(array $event, array $auth): array
             foreach (['drawings', 'templates'] as $domain) {
                 foreach (($visibility[$domain] ?? []) as $id => $entry) {
                     if ($visibility['hidden']) $event['payload']['removedContent'][] = ['domain'=>$domain, 'id'=>(string) $id, 'playerVisible'=>true];
-                    else $event['payload']['revealedContent'][] = ['domain'=>$domain, 'id'=>(string) $id, 'entry'=>$entry];
+                    else $event['payload']['revealedContent'][] = ['domain'=>$domain, 'id'=>(string) $id, 'entry'=>$domain === 'templates' && is_array($entry) ? WallCubes::forPlayer($entry) : $entry];
                 }
             }
         }

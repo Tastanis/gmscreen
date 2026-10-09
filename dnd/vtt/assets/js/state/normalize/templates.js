@@ -1,6 +1,7 @@
 import { clampToFinite } from './helpers.js';
 import { BASE_MAP_LEVEL_ID } from './map-levels.js';
 import { templateAuthority } from '../../ui/template-edits.js';
+import { wallBreakFields, squareMarks } from '../../ui/wall-break.mjs';
 
 export function normalizeTemplates(raw = {}) {
   if (!raw || typeof raw !== 'object') {
@@ -105,7 +106,7 @@ export function normalizeTemplateEntry(entry) {
         if (!Number.isFinite(column) || !Number.isFinite(row)) {
           return null;
         }
-        return { column: Math.max(0, column), row: Math.max(0, row), ...(Number.isInteger(square.elevation) && square.elevation >= 0 ? {elevation:square.elevation} : {}) };
+        return { column: Math.max(0, column), row: Math.max(0, row), ...(Number.isInteger(square.elevation) && square.elevation >= 0 ? {elevation:square.elevation} : {}), ...squareMarks(square) };
       })
       .filter(Boolean);
     const normalized = {
@@ -124,6 +125,8 @@ export function normalizeTemplateEntry(entry) {
     if (typeof entry.wallColor === 'string' && entry.wallColor.trim()) {
       normalized.wallColor = entry.wallColor.trim();
     }
+    // What it takes to break the wall. A player's copy has neither.
+    Object.assign(normalized, wallBreakFields(entry));
     return normalized;
   }
 

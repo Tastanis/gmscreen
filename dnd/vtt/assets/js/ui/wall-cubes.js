@@ -17,7 +17,8 @@ export function wallCubeBase(template,square,config={},groundAt=()=>0){
 export function wallCubeModel(model={},templates=[],config={},groundAt=()=>0){
  const out={...model,nodes:[...(model.nodes||[])],segments:[...(model.segments||[])],roofs:[...(model.roofs||[])]};
  for(const t of Object.values(templates)){if(t.type!=='wall')continue;
-  for(const s of t.squares||[]){const id=`template-cube:${t.id}:${wallSquareKey(s)}`,base=wallCubeBase(t,s,config,groundAt);
+  // A broken cube is kept in its wall, to draw its rubble, but it stops nothing and holds nothing up.
+  for(const s of t.squares||[]){if(s.broken===true)continue;const id=`template-cube:${t.id}:${wallSquareKey(s)}`,base=wallCubeBase(t,s,config,groundAt);
    const points=[[s.column,s.row],[s.column+1,s.row],[s.column+1,s.row+1],[s.column,s.row+1]].map(([x,y],i)=>({id:`${id}:${i}`,x,y}));
    out.nodes.push(...points);
    for(let i=0;i<4;i++)out.segments.push({id:`${id}:edge:${i}`,a:points[i].id,b:points[(i+1)%4].id,baseMode:'fixed',base,height:1,topMode:'follow',sight:'block',movement:'block',interaction:'none',sightDirection:'both',movementDirection:'both'});

@@ -8,10 +8,12 @@ let patternSequence=0;
 export function paintWallTemplate(shape,view={},options={}) {
  const squares=clampWallSquares(shape.squares,view),bounds=getMapGridBounds(view);
  const root=shape.elements.root;
- if(!view.mapLoaded||!bounds||(!squares.length&&!shape.hoverSquare)){root.hidden=true;root.setAttribute('aria-hidden','true');return;}
+ // Broken cubes stay in the wall but are not drawn as cubes: the rubble layer draws their heaps.
+ const standing=squares.filter(square=>square.broken!==true);
+ if(!view.mapLoaded||!bounds||(!standing.length&&!shape.hoverSquare)){root.hidden=true;root.setAttribute('aria-hidden','true');if(view.mapLoaded&&bounds)shape.squares=squares;return;}
  shape.squares=squares;
  const config=options.config||{},groundAt=options.groundAt||((x,y)=>wallTerrainAt(config,view,x,y));
- const cubes=[...squares.map(square=>({square,ghost:false})),...(shape.hoverSquare?[{square:shape.hoverSquare,ghost:true}]:[])].map(cube=>({...cube,faces:projectWallCube(cube.square,wallCubeBase(shape,cube.square,config,groundAt),bounds.gridSize,bounds.offsetLeft,bounds.offsetTop,window.terrainPrototype?.slant)}));
+ const cubes=[...standing.map(square=>({square,ghost:false})),...(shape.hoverSquare?[{square:shape.hoverSquare,ghost:true}]:[])].map(cube=>({...cube,faces:projectWallCube(cube.square,wallCubeBase(shape,cube.square,config,groundAt),bounds.gridSize,bounds.offsetLeft,bounds.offsetTop,window.terrainPrototype?.slant)}));
  const points=cubes.flatMap(c=>Object.values(c.faces).flat());
  const left=Math.min(...points.map(p=>p.x)),top=Math.min(...points.map(p=>p.y));
  const width=Math.max(...points.map(p=>p.x))-left,height=Math.max(...points.map(p=>p.y))-top;
@@ -41,5 +43,5 @@ export function paintWallTemplate(shape,view={},options={}) {
  }
  for(const [key,tile] of tiles)if(!keys.has(key)){tile.remove();tiles.delete(key);}
  for(const connector of shape.elements.connectors?.values()||[])connector.remove();shape.elements.connectors?.clear();
- if(shape.elements.label)shape.elements.label.textContent=`${squares.length} square${squares.length===1?'':'s'}`;
+ if(shape.elements.label)shape.elements.label.textContent=`${standing.length} square${standing.length===1?'':'s'}`;
 }

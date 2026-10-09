@@ -49,9 +49,10 @@ final class ForcedMovement
   return ['column'=>$cell?$cell['column']:($wall?round($from['column']+$dx*$stop):$from['column']+$dx*$stop),'row'=>$cell?$cell['row']:($wall?round($from['row']+$dy*$stop):$from['row']+$dy*$stop),'damage'=>max(0,(int)ceil($distance*(1-$stop)-1e-6))+($wall?2:0),'collidedIds'=>array_values(array_unique($ids)),'wall'=>$wall];
  }
  /** The book's Hurling Through Objects: forced movement a square of each material costs to break. */
- public const BREAK_COST=['glass'=>1,'wood'=>3,'stone'=>6,'metal'=>9];
- /** And the damage the creature hurled through it takes. */
+ public const BREAK_COST=WallObjects::STAMINA;
+ /** And the damage the creature hurled through it takes: in every row of the book's table, the cost plus 2. */
  public const BREAK_DAMAGE=['glass'=>3,'wood'=>5,'stone'=>8,'metal'=>11];
+ public const BREAK_EXTRA=2;
 
  /**
   * The same push, breaking through what it can on the way.
@@ -82,8 +83,10 @@ final class ForcedMovement
    $need=0;$hurt=0;$materials=[];
    foreach($struck['walls'] as $wall){
     if(!WallObjects::breakable($wall['edge'])){$need=null;break;}
-    $need+=self::BREAK_COST[$wall['edge']['material']]*$wall['squares'];$hurt+=self::BREAK_DAMAGE[$wall['edge']['material']]*$wall['squares'];
-    $materials[$wall['edge']['material']]=($materials[$wall['edge']['material']]??0)+$wall['squares'];
+    // A wall with a stated Stamina is priced the way the book prices its four materials.
+    $stamina=WallObjects::stamina($wall['edge']);$name=$wall['edge']['breakLabel']??$wall['edge']['material'];
+    $need+=$stamina*$wall['squares'];$hurt+=($stamina+self::BREAK_EXTRA)*$wall['squares'];
+    $materials[$name]=($materials[$name]??0)+$wall['squares'];
    }
    $left=(int)round(max(abs($intent['column']-$from['column']),abs($intent['row']-$from['row']))-$travelled);
    if($need===null||$left<$need-1e-6)break;

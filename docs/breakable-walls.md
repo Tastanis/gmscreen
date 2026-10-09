@@ -248,3 +248,82 @@ An object of any width works. Its walls must share a group name; without one, th
 square of a wide object is only a square inside four separate walls.
 
 Checks run: 4 groups of server checks and 5 browser-code checks, with the heap drawn on a page.
+
+## Summoned walls: a type or a Stamina. Built (October 8, 2026, late night). Not yet seen in a browser
+
+Your ruling: "We can just add a stamina choice to walls that are manually summoned and yeah if
+an ability description gives a wall type or stamina it should have a way to give that attribute
+to that wall."
+
+A wall made during play (the template tool, or an ability) is a row of cubes. It can now be
+given what it takes to break it. Left alone, it does not break, as before.
+
+### One rule for every wall
+
+The book's four materials already read as Stamina for each square: glass 1, wood 3, stone 6,
+metal 9. In every row of its table the damage is that number plus 2 (3, 5, 8, 11). So:
+
+- A wall with Stamina N a square costs N squares of the push to break and does N plus 2 damage.
+- A type is shorthand for its number. Stone is Stamina 6.
+- The book gives only the four rows. A stated number such as 15 is the same rule carried on:
+  15 squares of push, 17 damage. That step is ours, not the book's.
+
+Map walls, objects and summoned walls all use it. Each cube is one object: the push pop-up
+you already have asks before it breaks, a large creature pays for each cube it strikes, and
+what is left of the push carries on.
+
+### Placing a wall by hand
+
+In the template menu, with Wall chosen, there is a new list for you only, **Breaks at (GM
+only)**: Not breakable, Glass, Wood, Stone, Metal, or Stamina per square with a number box.
+
+### Afterwards
+
+Select a wall. A small bar opens at the top of the board, for you only:
+
+- the same list and number, to change what it takes to break it;
+- what that means in words, such as "Stone: 6 squares of push, 8 damage", so you can judge
+  when an attack should destroy it;
+- **Break this cube** (click a cube first) or **Break the whole wall**;
+- **Repair broken cubes**.
+
+Double-click still removes a cube outright, for you or the wall's owner.
+
+### From an ability
+
+An ability that makes a real wall (`"structure": true`) may say what it is made of, on the
+same target block as `wallColor`:
+
+```json
+{ "type": "target", "mode": "area", "shape": "wall", "length": 5, "structure": true,
+  "wallColor": "stone", "wallType": "stone" }
+```
+
+- `"wallType"`: `glass`, `wood`, `stone` or `metal`, for text like "a wall of stone".
+- `"wallStamina"`: a whole number from 1 to 999, for text like "each square has 15 Stamina".
+- Neither: the wall does not break.
+
+### What a broken cube does
+
+- It is kept in its wall, marked broken, and not deleted. It stops nothing and nothing can
+  stand on it.
+- One heap of rubble is drawn on its square: the heap of the wall's type, or, for a wall given
+  only a number, of what its colour says it is (stone is stone, metal is metal, ice is glass,
+  dirt is wood).
+- Repairing it puts the cube back.
+
+### Things to know
+
+- **Fire never breaks**, whatever it is given. A creature goes through fire.
+- **Players are not shown the setting.** A player learns it when their own push could break
+  the wall, from the pop-up. A player who moves their own wall cannot change the setting.
+- **No damage counter.** Attacks do not wear a wall down. You break it by hand when an attack
+  would destroy it; the bar shows the number.
+- **A creature that falls onto a cube still stands on top of it**, as before. Falls do not
+  break summoned walls.
+- **A wall with every cube broken is not drawn**, so it cannot be selected to repair. Its
+  rubble stays. Place a new wall if you want it back.
+- Rubble for a broken cube on an upper floor is drawn at ground level. Small; say if it matters.
+
+Checks run: 4 groups of server checks through the real store, 10 browser-code checks, every
+server test file and the related browser-code tests.

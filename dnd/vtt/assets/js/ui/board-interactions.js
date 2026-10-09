@@ -32,6 +32,7 @@ import {syncTokenTeamAffiliation,syncSquadBadge,paintTokenMarkIndicator,paintTok
 import {normalizeHitPointsValue,normalizePlacementHitPoints,parseHitPointsNumber,calculateHitPointsFillPercentage,formatHitPointsDisplayParts,syncTokenHitPoints,shouldRevealPlacementHitPointValues} from './token-hit-points.js';
 import {paintWallTemplate} from './template-wall-renderer.js';
 import {wallSquareKey,nextWallElevation} from './wall-cubes.js';
+import {BREAK_TYPES,BREAK_STAMINA,MAX_WALL_STAMINA,wallBreakFields,squareMarks,wallKind,breakChoice,breakSetting,breakSummary,markCubes} from './wall-break.mjs';
 import {createTemplateGeometry, TEMPLATE_COLORS} from './template-geometry.js';
 import {paintTemplateArea} from './template-area-renderer.js';
 import {resolveTemplateLevelPresentation, applyTemplateVisibilityMask, clearTemplateVisibilityMask} from './template-presentation.js';
@@ -16455,6 +16456,7 @@ export function mountBoardInteractions(store, routes = {}) {
       );
       const request = pendingAutomationArea;
       const wallColor = request.targetConfig?.wallColor;
+      const wallBreak = wallBreakFields(request.targetConfig);
       // `structure: true` opts this wall into creating a real, permanent wall
       // template (textured, selectable, lives in scene state) instead of only a
       // transient persistent-zone overlay. Used by terrain abilities like
@@ -16466,7 +16468,7 @@ export function mountBoardInteractions(store, routes = {}) {
         updateStatus('Wall placement is not available (template tool missing).');
         return;
       }
-      templateTool.startWallPlacementForAutomation(length, { wallColor, persistStructure }).then((result) => {
+      templateTool.startWallPlacementForAutomation(length, { wallColor, persistStructure, ...wallBreak }).then((result) => {
         if (!result || result.canceled) {
           request.resolve?.({ canceled: true });
           updateStatus('Wall placement canceled.');
@@ -23412,13 +23414,15 @@ function createTemplateTool() {
           if (!Number.isFinite(column) || !Number.isFinite(row)) {
             return null;
           }
-          return { column: Math.max(0, column), row: Math.max(0, row), ...(Number.isInteger(square.elevation) && square.elevation >= 0 ? {elevation:square.elevation} : {}) };
+          return { column: Math.max(0, column), row: Math.max(0, row), ...(Number.isInteger(square.elevation) && square.elevation >= 0 ? {elevation:square.elevation} : {}), ...squareMarks(square) };
         })
         .filter(Boolean);
       // Include wall color if set
       if (typeof shape.wallColor === 'string' && shape.wallColor.trim()) {
         base.wallColor = shape.wallColor.trim();
       }
+      // What it takes to break the wall (a type or a Stamina a square), when it has been given one.
+      Object.assign(base, wallBreakFields(shape));
       return base;
     }
 
@@ -23454,6 +23458,7 @@ function createTemplateTool() {
     colorIndex = shapes.length;
     templateBaseline = serializeShapesList();
     selectedId = null;
+    refreshWallBreakPanel();
     updateLayerVisibility();
   }
 
@@ -23574,7 +23579,7 @@ function createTemplateTool() {
   // Used by ability automation (persistent-zone walls) to drive the same
   // wall-placement UI the GM uses for templates, but capture the result
   // through a callback instead of writing a permanent template shape.
-  function startWallPlacementForAutomation(squareCount, { wallColor, persistStructure } = {}) {
+  function startWallPlacementForAutomation(squareCount, { wallColor, persistStructure, wallType, wallStamina } = {}) {
     return new Promise((resolve) => {
       claimActiveTool('template', cancelPlacement);
       board.focus({ preventScroll: true });
@@ -23582,7 +23587,7 @@ function createTemplateTool() {
       cancelPlacement();
       placementState = {
         type: 'wall',
-        values: { squares: total, wallColor: wallColor || undefined, persistStructure: Boolean(persistStructure) },
+        values: { squares: total, wallColor: wallColor || undefined, persistStructure: Boolean(persistStructure), ...wallBreakFields({ wallType, wallStamina }) },
         stage: 'wall-select',
         pointerId: null,
         start: null,
@@ -24042,7 +24047,7 @@ function createTemplateTool() {
         render(viewState);
         return;
       }
-      const shape = createShape('wall', { squares, wallColor: config.wallColor, levelId: templateLevelId });
+      const shape = createShape('wall', { squares, wallColor: config.wallColor, ...wallBreakFields(config), levelId: templateLevelId });
       addShape(shape);
       return;
     }
@@ -24094,11 +24099,11 @@ function createTemplateTool() {
   // board instead of a transient persistent-zone overlay. Unlike addShape this
   // does NOT select/activate the new shape, so it won't hijack the board's
   // selection or open the template editor mid-automation.
-  function createPermanentWallFromSquares(squares, wallColor) {
+  function createPermanentWallFromSquares(squares, wallColor, wallBreak = {}) {
     const clamped = clampWallSquares(squares, viewState);
     if (!clamped.length) return null;
     const levelId = getActiveTokenPlacementLevelId() ?? BASE_MAP_LEVEL_ID;
-    const shape = createShape('wall', { squares: clamped, wallColor, levelId, persistent: true });
+    const shape = createShape('wall', { squares: clamped, wallColor, ...wallBreakFields(wallBreak), levelId, persistent: true });
     shapes.push(shape);
     layer.appendChild(shape.elements.root);
     render(viewState);
@@ -24230,6 +24235,100 @@ function createTemplateTool() {
     return shape;
   }
 
+  /**
+   * The two fields for what it takes to break a wall: a list (not breakable, the book's four
+   * materials, or a stated Stamina) and the number. `value()` gives the settings chosen.
+   */
+  function buildWallBreakFields() {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'vtt-template-menu__field';
+    wrapper.dataset.wallBreakField = '';
+    const label = document.createElement('label');
+    label.textContent = 'Breaks at (GM only)';
+    const select = document.createElement('select');
+    select.dataset.wallBreakChoice = '';
+    for (const [value, text] of [['none', 'Not breakable'], ...BREAK_TYPES.map((type) => [type, `${type[0].toUpperCase()}${type.slice(1)} (Stamina ${BREAK_STAMINA[type]})`]), ['stamina', 'Stamina per square…']]) {
+      const option = document.createElement('option');
+      option.value = value; option.textContent = text;
+      select.appendChild(option);
+    }
+    const number = document.createElement('input');
+    number.type = 'number'; number.min = '1'; number.max = String(MAX_WALL_STAMINA); number.step = '1'; number.value = '6';
+    number.dataset.wallBreakStamina = '';
+    number.setAttribute('aria-label', 'Stamina per square');
+    number.style.width = '72px';
+    const sync = () => { number.hidden = select.value !== 'stamina'; };
+    select.addEventListener('change', sync);
+    sync();
+    wrapper.append(label, select, number);
+    return {
+      wrapper, select, number, sync,
+      value: () => breakSetting(select.value, number.value),
+      show: (template) => { select.value = breakChoice(template); if (template?.wallStamina) number.value = String(template.wallStamina); sync(); },
+    };
+  }
+
+  // Shown to the GM while a wall is selected: what it takes to break it, and breaking or repairing
+  // its cubes by hand. Players are never shown it.
+  let wallBreakPanel = null;
+  function ensureWallBreakPanel() {
+    if (wallBreakPanel) return wallBreakPanel;
+    const root = document.createElement('aside');
+    root.id = 'vtt-wall-break-panel';
+    root.hidden = true;
+    root.setAttribute('aria-label', 'Wall breaking');
+    root.style.cssText = 'position:fixed;left:50%;top:64px;transform:translateX(-50%);z-index:1300;display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:min(680px,calc(100vw - 24px));padding:8px 12px;border:1px solid #777;border-radius:8px;background:var(--panel-bg,#24252b);color:var(--text-color,#eee);box-shadow:0 6px 24px #0007;font-size:12px';
+    const fields = buildWallBreakFields();
+    fields.wrapper.style.cssText = 'display:flex;gap:6px;align-items:center;margin:0';
+    const summary = document.createElement('span');
+    summary.dataset.wallBreakSummary = '';
+    const breakButton = document.createElement('button'), repairButton = document.createElement('button');
+    breakButton.type = repairButton.type = 'button';
+    breakButton.className = repairButton.className = 'btn';
+    breakButton.dataset.wallBreakCube = ''; repairButton.dataset.wallRepairCubes = '';
+    repairButton.textContent = 'Repair broken cubes';
+    root.append(fields.wrapper, summary, breakButton, repairButton);
+    const selectedWall = () => { const shape = shapes.find((item) => item.id === selectedId); return shape?.type === 'wall' && !shape.isPreview && isGmUser() && canManageShape(shape) ? shape : null; };
+    const save = () => { render(viewState); commitShapes(); refreshWallBreakPanel(); };
+    const setting = () => {
+      const shape = selectedWall(); if (!shape) return;
+      delete shape.wallType; delete shape.wallStamina;
+      Object.assign(shape, fields.value());
+      save();
+    };
+    fields.select.addEventListener('change', setting);
+    fields.number.addEventListener('change', setting);
+    breakButton.addEventListener('click', () => {
+      const shape = selectedWall(); if (!shape) return;
+      // The cube picked, or the whole wall when none is.
+      const keys = selectedWallSquareKey ? [selectedWallSquareKey] : shape.squares.map(wallSquareKey);
+      shape.squares = markCubes(shape, keys, true);
+      shape.selectedSquareKey = selectedWallSquareKey = null;
+      save();
+    });
+    repairButton.addEventListener('click', () => {
+      const shape = selectedWall(); if (!shape) return;
+      shape.squares = markCubes(shape, shape.squares.map(wallSquareKey), false);
+      save();
+    });
+    document.body.appendChild(root);
+    wallBreakPanel = { root, fields, summary, breakButton, repairButton, selectedWall };
+    return wallBreakPanel;
+  }
+  function refreshWallBreakPanel() {
+    if (!isGmUser()) return;
+    const panel = ensureWallBreakPanel(), shape = panel.selectedWall();
+    panel.root.hidden = !shape;
+    if (!shape) return;
+    const fire = wallKind(shape.wallColor) === 'fire';
+    if (document.activeElement !== panel.fields.number) panel.fields.show(shape);
+    panel.fields.select.disabled = fire;
+    panel.summary.textContent = breakSummary(shape);
+    panel.breakButton.textContent = selectedWallSquareKey ? 'Break this cube' : 'Break the whole wall';
+    panel.breakButton.disabled = !shape.squares.some((square) => square.broken !== true);
+    panel.repairButton.hidden = !shape.squares.some((square) => square.broken === true);
+  }
+
   function clearPreview() {
     if (previewShape) {
       previewShape.elements.root.remove();
@@ -24263,6 +24362,7 @@ function createTemplateTool() {
     } else {
       restoreTemplateStatus();
     }
+    refreshWallBreakPanel();
   }
 
   function clearSelection() {
@@ -24273,6 +24373,7 @@ function createTemplateTool() {
       shape.elements.root.classList.remove('is-selected');
     });
     restoreTemplateStatus();
+    refreshWallBreakPanel();
   }
 
   async function removeSelectedTemplate() {
@@ -24317,6 +24418,7 @@ function createTemplateTool() {
     shape.elements.root.querySelectorAll('[data-wall-square]').forEach(tile => {
       tile.classList.toggle('is-selected-cube', tile.dataset.wallSquare === selectedWallSquareKey);
     });
+    refreshWallBreakPanel();
   }
 
   function removeShape(id) {
@@ -24918,6 +25020,10 @@ function createTemplateTool() {
       wallColorRow.appendChild(swatch);
     });
 
+    // What it takes to break the wall. Only the GM is offered it; left at "Not breakable" the
+    // wall is as walls always were.
+    const wallBreakPicker = buildWallBreakFields();
+
     form.appendChild(lengthField.wrapper);
     form.appendChild(widthField.wrapper);
     form.appendChild(templateColorPicker);
@@ -24949,7 +25055,7 @@ function createTemplateTool() {
       } else if (nextType === 'rectangle') {
         form.replaceChildren(lengthField.wrapper, widthField.wrapper, templateColorPicker, actions);
       } else {
-        form.replaceChildren(wallField.wrapper, wallColorPicker, actions);
+        form.replaceChildren(wallField.wrapper, wallColorPicker, ...(isGmUser() ? [wallBreakPicker.wrapper] : []), actions);
       }
     }
 
@@ -24970,6 +25076,7 @@ function createTemplateTool() {
         squares: parseSquareCount(wallField.input.value),
         color: activeType === 'wall' ? null : selectedTemplateColor,
         wallColor: activeType === 'wall' ? selectedWallColor : null,
+        ...(activeType === 'wall' && isGmUser() ? wallBreakPicker.value() : {}),
       };
       controller.hide();
       beginPlacement(activeType, values);
@@ -25070,7 +25177,7 @@ function createTemplateTool() {
 
       placementState = {
         type: 'wall',
-        values: { squares: totalSquares, wallColor: values?.wallColor },
+        values: { squares: totalSquares, wallColor: values?.wallColor, ...wallBreakFields(values) },
         stage: 'wall-select',
         pointerId: null,
         start: null,
@@ -25352,6 +25459,7 @@ function createTemplateTool() {
     if (remaining <= 0) {
       const finalSquares = placementState.squares.slice();
       const wallColor = placementState.values?.wallColor;
+      const placementValues = wallBreakFields(placementState.values);
       const persistStructure = Boolean(placementState.values?.persistStructure);
       // If this placement was started for an ability automation, deliver
       // the squares to the callback INSTEAD of adding a permanent template
@@ -25367,7 +25475,7 @@ function createTemplateTool() {
         restoreTemplateStatus();
         updateLayerVisibility();
         if (persistStructure) {
-          createPermanentWallFromSquares(finalSquares, wallColor);
+          createPermanentWallFromSquares(finalSquares, wallColor, placementValues);
         }
         try {
           cb({ squares: finalSquares, wallColor });
@@ -25376,7 +25484,7 @@ function createTemplateTool() {
         }
         return;
       }
-      finalizePlacement({ type: 'wall', squares: finalSquares, wallColor });
+      finalizePlacement({ type: 'wall', squares: finalSquares, wallColor, ...placementValues });
       return;
     }
 
