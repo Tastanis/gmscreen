@@ -668,6 +668,45 @@ while "on" the stair.
 - A creature standing under the stair that never came onto it, or that walked
   in from the side, still stands on the lower floor.
 
+## October 8, night: dragging tokens on raised floors. Done, waiting for a browser look
+
+Two things from the tester's last look. Both were in how the app works out which square is
+under the pointer on a board drawn with a slant.
+
+**The first drag of a token that was not selected could land a row off.** Pressing on the token
+selected it and read the start of the drag in the same instant, and the two did not agree about
+height. The error was the floor's height times the slant: a row and a half on the bathhouse
+balcony, five rows on an island 30 high.
+
+- A drag now starts from the grabbed token's own place, at the height it stands at.
+
+**The pointer was read against the wrong floor.** Only floors at or below the selected token's
+feet were considered.
+
+- The pointer is now read against whatever is drawn under it for that viewer: the highest floor
+  first, then a ramp, then the ground. For the GM that is every floor up to the viewing height;
+  through a token's eyes, every floor below its head.
+- An arch or stair can be pointed at along its whole length.
+- **This changes the bathhouse a little.** With nothing selected, the GM's clicks, pings,
+  templates and tokens dropped from the tray on an upper floor used to be read as points on the
+  ground under it, so they landed off by the floor's height times the slant. They now land on the
+  floor under the pointer.
+
+**Dragging a hero onto a higher tier: decided, and closed.** When the GM picks up one token with
+fog on, the board is drawn through that token's eyes, so tiers over its head are not on the
+screen to point at. Making a drag put a hero on another tier would have meant keeping the GM's
+own view during the drag and treating the drop as a placement. Brandon, October 8: "I dont want
+to change code just for this because I'd have to change it back to make other maps work. So we
+will leave it up to me to do." So a drag stays a walk, for the GM and for players. To change a
+token's tier the Director uses the floor arrows; a hero walks the vine or arch, or teleports.
+
+Checks run: 17 new tests, with the tester's two cases as tests and heroes on tiers at 6, 18 and
+30 at slants of 0.12, 0.18 and 0.36. Not yet seen in a browser.
+
+Still to do from that look, small: with a token selected the floor arrows step from the token's
+exact height (2.95, 4.95) and should step in whole squares; the selected token's card covers the
+Edits menu; a sliver of painted door and window shows beside their rubble.
+
 ## Where it is now
 
 You said to put stages 1 to 3 on `main` on this PC and wait for your word
