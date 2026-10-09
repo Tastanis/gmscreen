@@ -39,6 +39,14 @@ export function slanted(x, y, h, slant = USUAL) { return { x: x + h * slant.x, y
 // ground, darkened, from where the edge is drawn down to where the edge really is.
 
 /**
+ * True for a scene that has asked for any of this file's ways of drawing: a `view` setting, or a
+ * floor plate marked floating. The cut edge is drawn only for such a scene, so a map made before
+ * these existed is drawn exactly as it always was, edge gaps included.
+ */
+export const usesHeightView = (design) => Object.keys(design?.view && typeof design.view === 'object' ? design.view : {}).length > 0
+  || (design?.roofs || []).some((surface) => surface?.floating === true);
+
+/**
  * The faces that close the south and west edges of the ground. `points` is the ground's grid of
  * drawn points, `n` across and `m` down, each {x, y} where it is drawn, {gx, gy} where it lies on
  * the flat map, and its picture position and light. Returns triangles of such points. Nothing for

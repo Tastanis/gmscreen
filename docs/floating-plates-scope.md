@@ -100,10 +100,13 @@ the south edge of the map left an empty strip under it, 2 squares at a slant of 
 happens on the west edge. That strip is the side of the ground where the map is cut off, so it is
 now drawn as one: the ground's own picture at that edge, darkened.
 
-**This also changes existing maps at their edges.** The bathhouse's west edge is 2 to 7 squares
-high and Dead Root's is up to 3, so each gets a dark face there where the board's background
-showed. It is only seen with fog off: for a player that strip was black and stays black.
-It is a separate commit, so it can be left out of a push.
+**It does not touch existing maps.** As first built it did: the bathhouse's west edge is 2 to 7
+squares high and Dead Root's up to 3, so each got a dark face where the board's background
+showed. Brandon's rule that day was not to change code in a way that would have to be changed
+back for other maps, so the edge is now drawn only on a scene that has asked for the newer ways
+of showing height: one that carries any `view` setting, or has at least one floating plate. The
+bathhouse and Dead Root have neither and are drawn exactly as before. Setting a slant on an old
+map in the Walls panel would turn its edges on, which is the Director's own doing.
 
 ### The map at 30 high
 
