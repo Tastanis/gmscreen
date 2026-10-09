@@ -29,6 +29,32 @@ export function movementCellContains(shape, point) {
   return inside;
 }
 
+/**
+ * The offered square that is drawn under a point on the screen, read from the squares as they
+ * were painted: the last painted one whose outline holds the point wins, as it is the one on top.
+ * `nodes` are the painted cells (paintProjectedMovementCell); the point is in screen pixels.
+ *
+ * What is drawn is what is picked. Working the outlines out again at the moment of the click can
+ * disagree with what was painted, and a click on a square hanging over a drop then fell through
+ * to "the ground under the pointer": a square or two away, the height times the slant.
+ */
+export function paintedCellAt(nodes, clientX, clientY) {
+  const list = Array.from(nodes || []);
+  for (let i = list.length - 1; i >= 0; i--) {
+    const node = list[i], box = node.getBoundingClientRect?.();
+    if (!box || !(box.width > 0 && box.height > 0) || clientX < box.left || clientX > box.right || clientY < box.top || clientY > box.bottom) continue;
+    const polygon = node.querySelector?.('polygon'), view = node.querySelector?.('svg')?.getAttribute('viewBox')?.trim().split(/\s+/).map(Number);
+    if (polygon && view?.length === 4 && view[2] > 0 && view[3] > 0) {
+      const point = {x: (clientX - box.left) / box.width * view[2], y: (clientY - box.top) / box.height * view[3]};
+      const points = (polygon.getAttribute('points') || '').trim().split(/\s+/).map(pair => { const [x, y] = pair.split(',').map(Number); return {x, y}; });
+      if (points.length >= 3 && !movementCellContains({points}, point)) continue;
+    }
+    const column = Number(node.dataset?.column), row = Number(node.dataset?.row);
+    if (Number.isFinite(column) && Number.isFinite(row)) return {column, row};
+  }
+  return null;
+}
+
 export function paintProjectedMovementCell(node, cell, shape) {
   node.dataset.column = cell.column;
   node.dataset.row = cell.row;

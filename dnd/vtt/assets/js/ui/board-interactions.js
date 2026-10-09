@@ -2,7 +2,7 @@ import {chooseTeleportHeight} from './teleport-choice.js';
 import {groundSquare} from './terrain-math.mjs';
 import {beginPlayerVisibility} from './player-visibility-ready.js';
 import {createKeyboardMovementQueue} from './keyboard-movement-queue.js';
-import {projectedMovementCell, movementCellContains, paintProjectedMovementCell, updateMovementLoupe} from './movement-cell-projection.js';
+import {projectedMovementCell, movementCellContains, paintProjectedMovementCell, updateMovementLoupe,paintedCellAt} from './movement-cell-projection.js';
 import {dragMovementKind} from './drag-ruler.js';
 import {floorElevations as teleportFloorElevations} from '../state/normalize/floor-elevation.js';
 import {mountFallReview} from './fall-review.js';
@@ -18276,6 +18276,11 @@ export function mountBoardInteractions(store, routes = {}) {
         return button.disabled ? pendingAutomationMove.previewCell : {column: Number(button.dataset.column), row: Number(button.dataset.row)};
       }
       if (event.target instanceof Element && event.target.closest('[data-movement-loupe]')) return pendingAutomationMove.previewCell;
+      // An offered square is picked as it is drawn on the screen: the pointer is tested against
+      // the painted squares themselves, so a square hanging over a drop is the one that is clicked.
+      const painted = Number.isFinite(event.clientX) && Number.isFinite(event.clientY)
+        ? paintedCellAt(automationMoveOverlay?.querySelectorAll('[data-automation-move-legal] > .vtt-automation-move__cell'), event.clientX, event.clientY) : null;
+      if (painted) return pendingAutomationMove.legalCells.find(cell => cell.column === painted.column && cell.row === painted.row) || painted;
       const point = getLocalMapPoint(event, {terrain: false});
       // Pick the same shapes we paint, including upper-floor supports. Later
       // cells win overlaps, matching the guide's visual stacking order.

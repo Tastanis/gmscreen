@@ -805,6 +805,21 @@ Checks run: 2 new browser-code checks, a new server check (a push under sixty is
 five seconds; it takes a fraction of one), every server test file, and the 35 browser-code test
 files that touch floors, stairs and walls.
 
+## October 9: an ability's push picker over a drop. Fixed, waiting for a re-test
+
+Found by the tester on the islands map. When an ability pushes or slides a creature, the app
+offers the squares it may go to. Clicking an offered square that hung over a drop sent the
+creature to a different square: the one whose ground was under the pointer. A push of 3 off a
+ledge 18 up moved the hero 4 and past the catch ledge; a push of 2 off the Anvil dropped him
+onto the stone tooth instead of past it. On flat ground the picker was exact.
+
+- A click is now tested against the offered squares as they are painted on the screen. The
+  square you click is the square that is picked, whatever height it is drawn at.
+- A click outside every offered square is read as before: the ground under the pointer.
+
+Checks run: 4 new browser-code checks (squares drawn 6, 8 and 18 up, zoomed and panned, and
+overlapping). Not yet seen in a browser.
+
 ## Where it is now
 
 You said to put stages 1 to 3 on `main` on this PC and wait for your word
