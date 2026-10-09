@@ -20,6 +20,7 @@ if (!$is_gm) {
 
 // Include backup and lock systems
 require_once 'includes/monster-backup-helper.php';
+require_once 'includes/monster-store.php';
 require_once '../gm/includes/file-lock-manager.php';
 
 // Set JSON response header
@@ -78,73 +79,11 @@ function saveMonsterData($data, $dataFile, $lockFile, $backupType = 'pre-save') 
     // Use file lock manager
     $lockManager = new FileLockManager($dataDir);
     
+    // The write itself is shared with the key-guarded site upload (includes/monster-store.php).
     $result = $lockManager->withLock($dataFile, function() use ($data, $dataFile, $dataDir, $backupType) {
-        try {
-            // Create backup before saving
-            $backupHelper = new MonsterBackupHelper($dataDir);
-            if (file_exists($dataFile)) {
-                $backupResult = $backupHelper->createBackup($dataFile, $backupType);
-                if (!$backupResult['success']) {
-                    error_log('Monster Creator: Failed to create backup: ' . $backupResult['error']);
-                }
-            }
-            
-            // Add metadata
-            $data['metadata'] = [
-                'lastSaved' => date('Y-m-d H:i:s'),
-                'version' => '1.0',
-                'user' => $_SESSION['user'] ?? 'unknown'
-            ];
-            
-            // Validate data structure
-            if (!validateMonsterData($data)) {
-                throw new Exception('Invalid monster data structure');
-            }
-            
-            // Encode data
-            $jsonData = json_encode($data, JSON_PRETTY_PRINT);
-            if ($jsonData === false) {
-                throw new Exception('Failed to encode data: ' . json_last_error_msg());
-            }
-            
-            // Atomic write: write to temp file first
-            $tempFile = $dataFile . '.tmp.' . uniqid();
-            
-            // Write to temp file
-            $bytesWritten = file_put_contents($tempFile, $jsonData, LOCK_EX);
-            if ($bytesWritten === false) {
-                throw new Exception('Failed to write temporary file');
-            }
-            
-            // Verify the temp file is valid JSON
-            $verifyContent = file_get_contents($tempFile);
-            $verifyData = json_decode($verifyContent, true);
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                unlink($tempFile);
-                throw new Exception('Written data is not valid JSON');
-            }
-            
-            // Atomic rename (this is atomic on most filesystems)
-            if (!rename($tempFile, $dataFile)) {
-                unlink($tempFile);
-                throw new Exception('Failed to rename temporary file');
-            }
-            
-            return true;
-            
-        } catch (Exception $e) {
-            error_log('Monster Creator: Save error - ' . $e->getMessage());
-            
-            // Try to restore from backup if save failed
-            if (isset($backupResult) && $backupResult['success']) {
-                error_log('Monster Creator: Attempting to restore from backup after failed save');
-                $backupHelper->restoreBackup($backupResult['backup_path'], $dataFile);
-            }
-            
-            throw $e; // Re-throw to be handled by lock manager
-        }
+        return monsterStoreWriteLocked($data, $dataFile, $dataDir, $backupType, $_SESSION['user'] ?? 'unknown');
     });
-    
+
     if ($result['success']) {
         echo json_encode(['success' => true, 'message' => 'Data saved successfully']);
     } else {
@@ -156,25 +95,7 @@ function saveMonsterData($data, $dataFile, $lockFile, $backupType = 'pre-save') 
  * Validate monster data structure
  */
 function validateMonsterData($data) {
-    if (!is_array($data)) {
-        return false;
-    }
-    
-    // Required fields
-    if (!isset($data['tabs']) || !isset($data['monsters'])) {
-        return false;
-    }
-    
-    // Tabs and monsters should be objects or arrays
-    if (!is_array($data['tabs']) && !is_object($data['tabs'])) {
-        return false;
-    }
-    
-    if (!is_array($data['monsters']) && !is_object($data['monsters'])) {
-        return false;
-    }
-    
-    return true;
+    return monsterStoreValidate($data);
 }
 
 /**
