@@ -157,7 +157,16 @@ final class FloorSupport {
     $height=$support['height']??$terrain($previous);
     if(!$support||!$overlap($p,$support)){
      $priorSupport=$support;$support=null;
-     foreach($floors as $s)if((!$overlap($previous,$s)||($priorSupport&&(!empty($priorSupport['templateCube'])||!empty($s['templateCube']))&&self::cubeTouches($priorSupport,$s)))&&$overlap($p,$s)&&abs($s['height']-$height)<=.1+1e-6&&$s['height']>=$terrain($p)-.1-1e-6&&(!$support||$s['height']>$support['height']))$support=$s;
+     // The same test as ever, cheapest part first: a plate at another height is ruled out by its
+     // number, before its outline (and every cut-out of its floor) is laid over the token's square.
+     // On a map of many plates that outline work, done for every plate at every step, was nearly
+     // all the time a push took.
+     $ground=null;
+     foreach($floors as $s){
+      if(abs($s['height']-$height)>.1+1e-6||($support&&$s['height']<=$support['height']))continue;
+      if($s['height']<($ground??=$terrain($p))-.1-1e-6||!$overlap($p,$s))continue;
+      if(!$overlap($previous,$s)||($priorSupport&&(!empty($priorSupport['templateCube'])||!empty($s['templateCube']))&&self::cubeTouches($priorSupport,$s)))$support=$s;
+     }
     }
     $previous=$p;
    }

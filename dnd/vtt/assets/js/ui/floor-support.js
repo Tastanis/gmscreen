@@ -70,7 +70,14 @@ export function walkFloorContact(from,to,path,surfaces,mapLevels,terrain){
    if(!support||!overlap(p,support)){
     const prior=support;
     support=null;
-    for(const s of floors)if((!overlap(previous,s)||(prior&&(prior.templateCube||s.templateCube)&&touchingSurfaces(prior,s)))&&overlap(p,s)&&Math.abs(s.height-height)<=.1+1e-6&&s.height>=terrain(p)-.1-1e-6&&(!support||s.height>support.height))support=s;
+    // The same test as ever, cheapest part first: a plate at another height is ruled out by its
+    // number before its outline is laid over the token's square. Paired with FloorSupport::walkContact.
+    let ground=null;
+    for(const s of floors){
+     if(Math.abs(s.height-height)>.1+1e-6||(support&&s.height<=support.height))continue;
+     if(s.height<(ground??=terrain(p))-.1-1e-6||!overlap(p,s))continue;
+     if(!overlap(previous,s)||(prior&&(prior.templateCube||s.templateCube)&&touchingSurfaces(prior,s)))support=s;
+    }
    }
    previous=p;
   }

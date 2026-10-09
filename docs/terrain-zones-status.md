@@ -782,6 +782,29 @@ Checks run: 2 new test files (10 browser-side checks, 5 groups on the server thr
 store), the 26 related browser-side test files and every server test file. The whole suite has
 not been run on this, and it has not been seen in a browser.
 
+## October 9: pushes were very slow on a map of many floors. Fixed, waiting for a re-test
+
+Found by the tester on the islands map: a push along the crater floor sometimes showed no
+"Break through?" pop-up, and once did nothing at all.
+
+**The cause was time, not the rule.** One push took the server 13 to 30 seconds on that map.
+The pop-up did arrive, far too late, and other requests gave up waiting meanwhile. Every eighth
+of a square, the app laid the token's square over the outline of every floor plate on the map,
+the islands 6 to 30 squares overhead included, to ask "has it stepped onto this one?".
+
+- A plate at a different height from the walker is now ruled out by its height first, before
+  its outline is looked at. The same check, cheapest part first.
+- Measured on the islands map: the slow part of one push went from 13.8 seconds to 0.03.
+  The tester's two cases now answer in well under a second, with the same offer as before.
+- The answers do not change. I compared the old and new check on 4,000 random walks: the same
+  result every time. The same change is in the browser's copy, which drag previews use.
+- This slowness was there before today's work, on any map with many plates. It only showed
+  once a push had to ask the server a question first.
+
+Checks run: 2 new browser-code checks, a new server check (a push under sixty islands in under
+five seconds; it takes a fraction of one), every server test file, and the 35 browser-code test
+files that touch floors, stairs and walls.
+
 ## Where it is now
 
 You said to put stages 1 to 3 on `main` on this PC and wait for your word

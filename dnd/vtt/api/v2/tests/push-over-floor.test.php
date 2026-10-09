@@ -165,3 +165,24 @@ overCheck(TravelPath::step(6, false, 5.7, .125) === [6.0, true], 'Steeper than a
 overCheck(TravelPath::step(1, false, 0, .125) === [1.0, true] && TravelPath::step(1, false, 0, .125, 'walk') === [0.0, false], 'A one-square bank: a pushed creature leaves it; a walker steps down it');
 overCheck(TravelPath::step(2, false, 0, .125, 'walk') === [2.0, true], 'A two-square drop: a walker has left its footing too');
 echo "PASS when a mover has left its footing\n";
+
+// ---- a push on a map of many plates is quick ------------------------------------------------
+// Found on the islands map: one push along the crater floor took 13 to 30 seconds, because every
+// eighth of a square the token's square was laid over the outline of every plate on the map. A
+// plate at another height is now ruled out by its height first. Sixty islands overhead, each with
+// a hundred-sided outline and forty cut-outs on its floor, and a 12-square push along the floor:
+// before, minutes; now, well under a second. The bound is loose so a slow machine does not trip it.
+$many = ['mapLevels'=>['levels'=>[]], 'environment'=>['walls'=>['value'=>['version'=>1,'nodes'=>$scene['walls']['nodes'],'segments'=>$scene['walls']['segments'],'roofs'=>[],'ramps'=>[]]]]];
+for ($i = 0; $i < 60; $i++) {
+    $outline = []; for ($k = 0; $k < 100; $k++) $outline[] = ['x'=>20 + 18 * cos($k * M_PI / 50), 'y'=>15 + 12 * sin($k * M_PI / 50)];
+    $cuts = []; for ($k = 0; $k < 40; $k++) $cuts[] = ['column'=>$k, 'row'=>($k * 7) % 30, 'width'=>1, 'height'=>1];
+    $many['mapLevels']['levels'][] = ['id'=>"tier$i", 'name'=>"Tier $i", 'elevationSquares'=>6 + $i, 'zIndex'=>$i + 1, 'cutouts'=>$cuts, 'stairs'=>[]];
+    $many['environment']['walls']['value']['roofs'][] = ['id'=>"plate$i", 'kind'=>'floor', 'levelId'=>"tier$i", 'height'=>6.0 + $i, 'points'=>$outline, 'holes'=>[], 'nodes'=>[]];
+}
+$walker = ['id'=>'t','column'=>10,'row'=>20,'width'=>1,'height'=>1,'levelId'=>'level-0'];
+$began = microtime(true);
+$plan = ForcedMovement::through($walker, ['column'=>22, 'row'=>20], [$walker], $many);
+$took = microtime(true) - $began;
+overCheck($plan['wall'] === true && $plan['column'] == 20, 'The push along the floor still stops at the spire: ' . json_encode([$plan['column'], $plan['wall']]));
+overCheck($took < 5.0, sprintf('A push under sixty islands took %.1f seconds', $took));
+echo "PASS a push on a map of many plates is quick\n";
