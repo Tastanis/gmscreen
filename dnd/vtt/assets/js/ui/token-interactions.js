@@ -270,7 +270,10 @@ export function createTokenInteractions({
       return;
     }
 
-    const pointer = getLocalMapPoint(event);
+    // The drag moves the token by how far the pointer travels on the map. Its start is the grabbed
+    // token's own place, read at the height that token stands at, and not at the height of whatever
+    // token happened to be selected when the press began.
+    const pointer = getLocalMapPoint(event, { standingOn: placement.id });
     if (!pointer) {
       return;
     }

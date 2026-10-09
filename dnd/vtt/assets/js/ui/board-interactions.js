@@ -1483,7 +1483,7 @@ export function mountBoardInteractions(store, routes = {}) {
     boardApi,
     dragActivationDistance: DRAG_ACTIVATION_DISTANCE,
     isDeltaSavesEnabled: () => USE_DELTA_SAVES,
-    getLocalMapPoint: (event) => getLocalMapPoint(event),
+    getLocalMapPoint: (event, options) => getLocalMapPoint(event, options),
     getPointerPosition: (event, element) => getPointerPosition(event, element),
     normalizePlacementForRender: (placement) => normalizePlacementForRender(placement),
     getActiveScenePlacements: (state) => getActiveScenePlacements(state),
@@ -7568,7 +7568,8 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
 
-  function getLocalMapPoint(event, { terrain = true } = {}) {
+  // `standingOn` (a token id) reads the pointer at the height that token stands at: see unproject in terrain-prototype.js.
+  function getLocalMapPoint(event, { terrain = true, standingOn = null } = {}) {
     const pointer = getPointerPosition(event, mapSurface);
     const scale = Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
     const translation = viewState.translation ?? { x: 0, y: 0 };
@@ -7579,7 +7580,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!Number.isFinite(localX) || !Number.isFinite(localY)) {
       return null;
     }
-    return terrain ? (window.terrainPrototype?.unproject({x:localX,y:localY}) ?? {x:localX,y:localY}) : {x:localX,y:localY};
+    return terrain ? (window.terrainPrototype?.unproject({x:localX,y:localY}, standingOn ? { standingOn } : undefined) ?? {x:localX,y:localY}) : {x:localX,y:localY};
   }
 
   function getMapImagePoint(localPoint) {

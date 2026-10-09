@@ -14,6 +14,7 @@ import {terrainContact} from './terrain-contact.js';
 import {createRouteWalker,stepGhost,walksPlates,hasStairs} from './route-walker.mjs';
 import {nearStair} from './stair-walk.mjs';
 import {viewSlant,slantVector,edgeFaces} from './height-view.mjs';
+import {pointAtHeight,pickDrawn,pickView} from './pointer-pick.mjs';
 import {createRulerPass,passActorKey} from './ruler-pass.mjs';
 const $=s=>document.querySelector(s);
 const image=$('#vtt-map-image'),transform=$('#vtt-map-transform'),surface=$('#vtt-map-surface'),board=$('#vtt-board-canvas');
@@ -61,15 +62,34 @@ function heightAt(x,y){if(!field||!active)return 0;const d=dimensions();return s
 // How far a square of height moves a thing on screen. The scene's map design may ask for a flatter slant (height-view.mjs).
 function slant(){return slantVector(viewSlant(importedDesign()));}
 function project(x,y,h){const g=dimensions().grid,s=slant();return {x:x+h*g*s.x,y:y-h*g*s.y};}
-function unproject(p){
+// The board as it is this instant, not as it was at the last frame: a press that selects a token
+// and starts dragging it has to see that selection at once.
+function liveBoard(){return window.terrainContext?.()||ctx;}
+function livePlacement(who){const board=liveBoard(),id=typeof who==='string'?who:who?.id,found=id?(board.state.boardState.placements[board.state.boardState.activeSceneId]||[]).find(p=>p.id===id):null;return found||(who&&typeof who==='object'?who:null);}
+// How the board is being viewed, for reading the pointer (pointer-pick.mjs). The same choice the
+// drawing makes in vision-prototype.js: the GM looks down from a chosen height unless exactly one
+// token is selected and the fog is on, in which case the view is that token's; a player's view is
+// their own token's.
+function pointerView(){
+ const board=liveBoard(),gm=window.gmVision;
+ const token=board.isGM?(gm?.manual?null:livePlacement(board.selectedIds?.[0])):(livePlacement(window.visionPrototype?.viewerTokenId)||livePlacement(board.followId));
+ if(board.isGM&&(!token||(gm&&!gm.lighting)))return pickView({gmHeight:token?groundFor(token):Number(gm?.height)||0});
+ if(token)return pickView({token,ground:groundFor(token)});
+ return pickView({token:{column:0,row:0,width:1,height:1},ground:floorElevations(levelConfig()).get(board.levelId)||0});
+}
+// Turns a point on the screen into a point on the flat map. `options.standingOn` (a token or its
+// id) reads the point at the height that token stands at: the start of a drag is the dragged
+// token's own place, whatever else is drawn over it. Otherwise the point is whatever is drawn
+// there for this viewer, the highest floor first, then a ramp, then the ground.
+function unproject(p,options={}){
  if(!active||!field)return p;
  if(importedDesign()&&panel.hidden){
-  const g=dimensions().grid,ox=ctx.view.gridOffsets.left||0,oy=ctx.view.gridOffsets.top||0,actor=rulerActor(),s=slant();
-  const raw={x:(p.x-ox)/g,y:(p.y-oy)/g};
-  for(const r of (importedDesign()?.ramps||[])){const q=rampPick(r,raw,s);if(q&&actor&&rampSupports(r,actor,q))return {x:ox+q.x*g,y:oy+q.y*g};}
-  if(actor){const h=groundFor(actor);for(const f of (resolveSupportSurfaces(importedDesign()||{})).filter(f=>f.kind==='floor'&&f.height<=h+.7).sort((a,b)=>b.height-a.height)){
-   const q={x:raw.x-f.height*s.x,y:raw.y+f.height*s.y};if(onSurface(f,q))return {x:ox+q.x*g,y:oy+q.y*g};
-  }}
+  const g=dimensions().grid,ox=ctx.view.gridOffsets.left||0,oy=ctx.view.gridOffsets.top||0,s=slant();
+  const raw={x:(p.x-ox)/g,y:(p.y-oy)/g},back=q=>({x:ox+q.x*g,y:oy+q.y*g});
+  const own=options.standingOn?livePlacement(options.standingOn):null;
+  if(own)return back(pointAtHeight(raw,groundFor(own),s));
+  const hit=pickDrawn(raw,{slant:s,surfaces:resolveSupportSurfaces(importedDesign()||{}),ramps:importedDesign()?.ramps||[],view:pointerView()});
+  if(hit)return back(hit);
  }
 
  for(let i=triangles.length-1;i>=0;i--){const t=triangles[i],b=barycentric(p,...t);if(b)return {x:t.reduce((s,v,k)=>s+v.gx*b[k],0),y:t.reduce((s,v,k)=>s+v.gy*b[k],0)};}
