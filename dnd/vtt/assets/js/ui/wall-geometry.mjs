@@ -11,9 +11,12 @@ export function connect(m,a,b,id){if(a!==b&&!m.segments.some(e=>(e.a===a&&e.b===
 export function split(m,edgeId,p,nodeId,edgeNewId){const e=m.segments.find(e=>e.id===edgeId);if(!e)return null;m.nodes.push({id:nodeId,x:p.x,y:p.y});const old=e.b;for(const roof of m.roofs||[]){for(let i=0;i<roof.nodes.length;i++){const j=(i+1)%roof.nodes.length;if((roof.nodes[i]===e.a&&roof.nodes[j]===old)||(roof.nodes[i]===old&&roof.nodes[j]===e.a)){roof.nodes.splice(i+1,0,nodeId);break;}}}e.b=nodeId;connect(m,nodeId,old,edgeNewId);const added=m.segments.find(x=>x.id===edgeNewId);if(added)Object.assign(added,{...e,id:edgeNewId,a:nodeId,b:old});return nodeId;}
 /** Cuts a wall longer than a square and a half into pieces about one square long, so that
  * breaking it later takes one square and not the whole wall. Every piece keeps the wall's
- * properties. Returns the ids of all the pieces, the original first. */
+ * properties. Returns the ids of all the pieces, the original first.
+ * A door or a window is never cut: it is one thing whatever its length. It breaks whole, loses
+ * its button whole, and its rubble runs its whole length. */
 export function cutIntoSquares(m,edgeId,makeId){
  const e=m.segments.find(e=>e.id===edgeId);if(!e)return [];
+ if((e.interaction??'none')!=='none')return [edgeId];
  const a=m.nodes.find(n=>n.id===e.a),b=m.nodes.find(n=>n.id===e.b);if(!a||!b)return [edgeId];
  const end={x:b.x,y:b.y},parts=Math.round(Math.hypot(end.x-a.x,end.y-a.y)),ids=[];
  // Each cut takes the far end off the original, so work back from the far end.

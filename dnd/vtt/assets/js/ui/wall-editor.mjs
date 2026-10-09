@@ -14,6 +14,7 @@ export function createWallEditor({panel,transform,selected,model,context,project
    for(const edge of edges){if(k==='preset'){if(value==='custom')continue;const old=properties(edge);Object.assign(edge,defaults,presets[value],{base:old.base,baseMode:old.baseMode,height:old.height,topMode:old.topMode});}
     // "Not breakable" takes the material away, and with it any break. A one-way wall is never breakable.
     // A long wall is cut into one-square pieces as it is marked, so a break takes one square of it.
+    // A door or a window is left whole (cutIntoSquares), so it breaks as one thing.
     else if(k==='material'){if(value==='none'||isOneWay(edge)){delete edge.material;delete edge.broken;}else{edge.material=value;cutIntoSquares(model(),edge.id,()=>crypto.randomUUID());}}
     else if(k==='broken'){if(value&&edge.material&&!isOneWay(edge))edge.broken=true;else delete edge.broken;}
     else{edge[k]=value;if(k==='open'&&value)edge.locked=false;if(k==='locked'&&value)edge.open=false;if((k==='movementDirection'||k==='sightDirection')&&isOneWay(edge)){delete edge.material;delete edge.broken;}}}change(before);

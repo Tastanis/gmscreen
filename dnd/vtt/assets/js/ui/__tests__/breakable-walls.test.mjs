@@ -235,3 +235,30 @@ test('marking a long wall breakable cuts it into one-square pieces', () => {
   }
   assert.deepEqual(cutIntoSquares(model, 'missing', makeId), []);
 });
+
+test('a door or a window is never cut: it breaks as one thing, whatever its length', () => {
+  let next = 0; const makeId = () => `new-${++next}`;
+  for (const [interaction, material, kind] of [['door', 'wood', 'door'], ['window', 'glass', 'window']]) {
+    // Two squares long, as the bathhouse doors and windows are; and one three squares long.
+    for (const length of [2, 3]) {
+      const model = { version: 1, nodes: [{ id: 'a', x: 18, y: 18 }, { id: 'b', x: 18, y: 18 + length }], segments: [{ id: 'opening', a: 'a', b: 'b', interaction, material, height: 2 }] };
+      assert.deepEqual(cutIntoSquares(model, 'opening', makeId), ['opening'], `a ${length}-square ${interaction} stays one piece`);
+      assert.equal(model.segments.length, 1); assert.equal(model.nodes.length, 2);
+      validateWalls(model);
+      // Broken, the whole of it stops nothing: both squares can be walked through, not one of them.
+      model.segments[0].broken = true;
+      assert.equal(liveWalls(model).segments.length, 0, 'no half of it is left standing');
+      // And its rubble runs its whole length, a square at a time.
+      const pieces = rubblePieces(model);
+      assert.equal(pieces.length, length);
+      assert.ok(pieces.every((piece) => piece.kind === kind));
+      assert.deepEqual([pieces[0].a.y, pieces[pieces.length - 1].b.y], [18, 18 + length]);
+    }
+  }
+  // An ordinary wall of the same length is still cut, so a break takes one square of it.
+  const wall = { version: 1, nodes: [{ id: 'a', x: 18, y: 18 }, { id: 'b', x: 18, y: 20 }], segments: [{ id: 'wall', a: 'a', b: 'b', material: 'stone' }] };
+  assert.equal(cutIntoSquares(wall, 'wall', makeId).length, 2);
+  // A wall that says outright it is not a door or window is a wall.
+  const plain = { version: 1, nodes: [{ id: 'a', x: 0, y: 0 }, { id: 'b', x: 3, y: 0 }], segments: [{ id: 'wall', a: 'a', b: 'b', interaction: 'none', material: 'stone' }] };
+  assert.equal(cutIntoSquares(plain, 'wall', makeId).length, 3);
+});

@@ -116,9 +116,11 @@ passed. It found these, now fixed and waiting for its re-test:
 - **The Broken box could show the last wall's state** when you went from one wall to another
   with the cursor still in the box. It now always shows the selected wall.
 
-Still for you to decide, from the same run: a door or window two squares long is cut into two
-one-square halves when marked, and ticking Broken breaks one half. The other half still stands,
-with its own door button. Should a door or window break as one thing?
+Also from that run, and decided since: **a door or window breaks as one thing.** A door two
+squares long used to be cut into two halves when marked, and ticking Broken broke one half; the
+other still stood, with its own door button. Doors and windows are no longer cut. One breaks
+whole, loses its button whole, and its rubble runs its whole length. Walls are still cut into
+one-square pieces. A door that was already cut in two by the old rule stays in two pieces.
 
 ### Checks run
 
