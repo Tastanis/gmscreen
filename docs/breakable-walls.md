@@ -32,7 +32,8 @@ If the wall does not break, the creature stops and takes 2 plus 1 per square lef
 
 ## Stage A: break and repair by hand. Built (October 8, 2026)
 
-Not yet seen in a browser. It is on `main` on this PC and not pushed.
+It is on `main` on this PC and not pushed. The rubble drawing has been looked at in a real
+browser over the bathhouse map. The whole feature has not yet been tried in the running app.
 
 ### How to try it
 
@@ -101,10 +102,11 @@ Shift-click selects several wall pieces, so several can be marked or broken toge
 
 ### Checks run
 
-- New tests: 15 browser-code checks and 5 server checks (what may be stored, what a player is
+- New tests: 18 browser-code checks and 5 server checks (what may be stored, what a player is
   told, movement and sight through a broken wall, the rubble's place, size and picture choice).
-- Not run yet: the whole suite (waiting for the tester's browser run to finish) and any look in
-  a real browser.
+- The whole suite, October 8 after the rubble sizing change: 154 browser-code files, 1121
+  checks, none failing; all 40 server test files pass.
+- Not done yet: trying break and repair in the running app.
 
 ## Stage B: forced movement breaks walls by the book. Not started
 
