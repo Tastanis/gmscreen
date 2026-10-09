@@ -376,6 +376,116 @@ final class SyncV2Store
         }
     }
 
+    /**
+     * Puts a newer version of a map into a scene that already exists, in place.
+     *
+     * The map itself is replaced by the package's: floors, grid, terrain, walls, plates, ramps
+     * and zones. What has happened on the scene is kept: every token where it stands, drawings,
+     * templates, the fight in progress, each player's fog memory, and which breakable walls are
+     * broken (matched by wall id). Tokens, drawings and templates in the package are not added,
+     * because the scene's own are the ones in use.
+     *
+     * A package's floors keep their ids from one version to the next (ScenePackage derives them
+     * from the scene id and the package's own floor ids), so a token stays on its floor. A token
+     * on a floor the new version no longer has is put on the ground floor.
+     *
+     * The same validation as a first import. Sent to every browser as the whole-scene event a
+     * checkpoint restore uses, so nothing new has to be understood on the receiving side.
+     *
+     * @return array{status:string,event:array,events:list<array>,idempotent:bool,kept:array}
+     */
+    public function replaceSceneDesign(string $sceneId, array $package, string $operationId, string $actorId, bool $isGm): array
+    {
+        if (!$isGm || trim($actorId) === '') throw new InvalidArgumentException('Scene import is GM-only.');
+        if (!preg_match('/^[A-Za-z0-9._:-]{8,128}$/', $operationId)) throw new InvalidArgumentException('Invalid import operation ID.');
+        $this->pdo->exec('BEGIN IMMEDIATE');
+        try {
+            $existing = $this->findEventByOperationId($operationId);
+            if ($existing !== null) {
+                if ($existing['actorId'] !== $actorId || $existing['type'] !== 'scene.layoutRestored' || $existing['sceneId'] !== $sceneId) throw new InvalidArgumentException('Operation ID is already in use.');
+                $this->pdo->exec('COMMIT');
+                return ['status'=>'accepted','event'=>$existing,'events'=>[$existing],'idempotent'=>true,'scene'=>[],'kept'=>[]];
+            }
+            SceneImportValidation::validate($package);
+            $snapshot = $this->getSnapshot(); $state = $snapshot['state'];
+            $old = $state['sceneConfig'][$sceneId] ?? null;
+            if (!is_array($old)) throw new InvalidArgumentException('That scene no longer exists.');
+            // A package exported from this very scene carries its id; the copy step needs them to differ.
+            if (($package['scene']['id'] ?? null) === $sceneId) $package['scene']['id'] = 'scn-source-' . substr(hash('sha256', $sceneId), 0, 32);
+            $prepared = ScenePackage::prepareForNewScene($package, $sceneId)['package'];
+            $config = $prepared['domains']['sceneConfig'];
+            $levelIds = ['level-0'=>true];
+            foreach ($config['mapLevels']['levels'] ?? [] as $level) $levelIds[$level['id']] = true;
+
+            // The map's own design, each part with a revision past the one browsers hold.
+            $environment = [];
+            foreach ($config['environment'] ?? [] as $field=>$entry) {
+                $environment[$field] = ['revision'=>max(0, (int) ($old['environment'][$field]['revision'] ?? 0)) + 1, 'value'=>$entry['value']];
+            }
+            // Fog memory is reset only by its own switch, never by a new map.
+            if (!isset($environment['exploration']) && isset($old['environment']['exploration'])) $environment['exploration'] = $old['environment']['exploration'];
+            $stillBroken = 0; $wasBroken = [];
+            foreach ($old['environment']['walls']['value']['segments'] ?? [] as $edge) if (($edge['broken'] ?? false) === true) $wasBroken[$edge['id']] = true;
+            foreach ($environment['walls']['value']['segments'] ?? [] as $i=>$edge) {
+                if (!isset($wasBroken[$edge['id']]) || !WallObjects::breakable($edge)) continue;
+                $environment['walls']['value']['segments'][$i]['broken'] = true; $stillBroken++;
+            }
+            $next = $config;
+            $next['environment'] = $environment;
+            $fog = $old['fogOfWar'] ?? ($config['fogOfWar'] ?? null);
+            if (is_array($fog) && is_array($fog['byLevel'] ?? null)) $fog['byLevel'] = array_intersect_key($fog['byLevel'], $levelIds);
+            if ($fog !== null) $next['fogOfWar'] = $fog; else unset($next['fogOfWar']);
+            $next['userLevelState'] = array_filter($old['userLevelState'] ?? [], static fn($entry) => is_array($entry) && isset($levelIds[$entry['levelId'] ?? 'level-0']));
+            $revision = $snapshot['revision'] + 1; $now = $this->nowMilliseconds();
+            $next['_revision'] = max($revision, (int) ($old['_revision'] ?? 0) + 1);
+
+            $domains = ['sceneConfig'=>$next]; $moved = 0;
+            foreach (['placements','drawings','templates'] as $domain) {
+                $domains[$domain] = [];
+                foreach ($state[$domain][$sceneId] ?? [] as $id=>$entry) {
+                    if (!isset($levelIds[$entry['levelId'] ?? 'level-0'])) {
+                        $entry['levelId'] = 'level-0';
+                        if ($domain === 'placements') { unset($entry['_floorTraversal'], $entry['_supportSurfaceId']); $moved++; }
+                    }
+                    $entry['_entityRevision'] = max($revision, (int) ($entry['_entityRevision'] ?? 0) + 1);
+                    $domains[$domain][$id] = $entry;
+                }
+            }
+            foreach ($domains as $domain=>$entries) $state[$domain][$sceneId] = $entries;
+            $event = ['revision'=>$revision,'operationId'=>$operationId,'actorId'=>$actorId,'type'=>'scene.layoutRestored',
+                'sceneId'=>$sceneId,'entityId'=>null,'entityRevision'=>$next['_revision'],
+                'payload'=>['domains'=>$domains,'cause'=>'replace'],'serverTime'=>$now];
+            $events = [$event];
+            // If this scene is the one on the table, the table is told its new picture.
+            $routing = is_array($state['routing'] ?? null) ? $state['routing'] : []; $before = $routing;
+            if (($routing['activeSceneId'] ?? null) === $sceneId && array_key_exists('mapUrl', $routing)) $routing['mapUrl'] = $prepared['scene']['mapUrl'] ?? null;
+            if (($routing['playerActiveSceneId'] ?? null) === $sceneId) {
+                if (array_key_exists('playerMapUrl', $routing)) $routing['playerMapUrl'] = $prepared['scene']['mapUrl'] ?? null;
+                if (array_key_exists('playerThumbnailUrl', $routing)) $routing['playerThumbnailUrl'] = $prepared['scene']['thumbnailUrl'] ?? null;
+            }
+            if ($routing !== $before) {
+                $routing['_revision'] = max(0, (int) ($routing['_revision'] ?? 0)) + 1;
+                $state['routing'] = $routing;
+                $events[] = ['revision'=>++$revision,'operationId'=>$operationId . ':routing','actorId'=>$actorId,'type'=>'routing.changed',
+                    'sceneId'=>null,'entityId'=>null,'entityRevision'=>$routing['_revision'],'payload'=>['routing'=>$routing],'serverTime'=>$now];
+            }
+            foreach ($events as $each) {
+                $this->insertEvent($each);
+                if ($each['revision'] % $this->snapshotInterval === 0) $this->insertSnapshot($each['revision'], $state, $now);
+            }
+            $this->updateWorldState($revision, $state, $now);
+            $this->pruneEvents($revision);
+            $this->pdo->exec('COMMIT');
+            return ['status'=>'accepted','event'=>$event,'events'=>$events,'idempotent'=>false,
+                'scene'=>array_intersect_key($prepared['scene'], array_flip(['mapUrl','thumbnailUrl','grid'])),
+                'kept'=>['tokens'=>count($domains['placements']),'drawings'=>count($domains['drawings']),'templates'=>count($domains['templates']),'brokenWalls'=>$stillBroken,
+                    'tokensMovedToGround'=>$moved,'packageTokensNotAdded'=>count($package['domains']['placements'] ?? [])]];
+        } catch (Throwable $error) {
+            $this->rollbackTransactionSilently();
+            throw $error;
+        }
+    }
+
     /** Durable catalog outbox. Only acknowledge after the locked atomic catalog save. */
     public function pendingSceneImports(): array
     {
