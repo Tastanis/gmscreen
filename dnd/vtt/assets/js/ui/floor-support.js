@@ -87,6 +87,21 @@ export function walkFloorContact(from,to,path,surfaces,mapLevels,terrain){
 
 // A retained cube can step down to a touching cube; terrain never grants a climb.
 // Paired with FloorSupport::cubeStepDown; fall consequences remain server-owned.
+/**
+ * The height a creature coming down over this square from `altitude` would land at: the highest
+ * surface under it that is not above it, on any floor a viewer may see, or `ground` when there is
+ * none. Used to draw an offered square on the ledge or island a pushed creature would land on,
+ * not on the ground far beneath it. Paired with the plates part of FloorSupport::landing.
+ */
+export function landingSurfaceHeight(p,surfaces,mapLevels,altitude,ground){
+ const levels=supportLevels(mapLevels);let best=ground;
+ for(const s of surfaces){
+  const level=levels.get(s.levelId||'level-0');
+  if(!level||level.hidden||!(s.height<=altitude+1e-6)||s.height<best-1e-6)continue;
+  if(intersectsFloor(p,s,level.cutouts||[]))best=s.height;
+ }
+ return best;
+}
 export function cubeStepDown(from,to,surfaces,mapLevels){
  const levels=supportLevels(mapLevels),overlap=(p,s)=>intersectsFloor(p,s,levels.get(s.levelId)?.cutouts||[]);
  const old=surfaces.find(s=>s.id===from._supportSurfaceId&&s.templateCube&&overlap(from,s));

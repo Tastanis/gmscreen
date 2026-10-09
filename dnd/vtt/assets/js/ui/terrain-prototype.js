@@ -1,4 +1,4 @@
-import {floorSupported,intersectsFloor,terrainFloorContact,resolveSupportSurfaces,walkFloorContact,cubeStepDown} from './floor-support.js';
+import {floorSupported,intersectsFloor,terrainFloorContact,resolveSupportSurfaces,walkFloorContact,cubeStepDown,landingSurfaceHeight} from './floor-support.js';
 import {sharedField,saveShared,acknowledgedRevision} from './environment-sync.mjs';
 import {rampAt,rampHeight,rampPick,rampGround,rampSupports,rampLanding,rampCarries} from './imported-ramps.mjs';
 import './height-tethers.js';
@@ -203,6 +203,15 @@ function groundFor(placement,point=null){
  const contact=!placement._floorTraversal?terrainFloorContact(p,resolveSupportSurfaces(importedDesign()||{}),levelConfig(),ground):null;
  return contact?.height??ground;
 }
+// Where a creature coming down over a square would land, for drawing the squares a push offers:
+// the highest plate under that square that is not above `altitude`, or else the ground there
+// (`placement` stands for the creature in that square; see landingSurfaceHeight in floor-support.js).
+// Null when no plate would catch it. The ground at each corner of the square is still groundFor's.
+function landingHeight(placement,altitude){
+ const design=importedDesign();if(!design||!Number.isFinite(altitude))return null;
+ const caught=landingSurfaceHeight(placement,resolveSupportSurfaces(design),levelConfig(),altitude,-Infinity);
+ return Number.isFinite(caught)?caught:null;
+}
 function movementPlacement(from,to){
  const d=dimensions(),terrain=p=>heightAt((ctx.view.gridOffsets.left||0)+(p.column+(p.width||1)/2)*d.grid,(ctx.view.gridOffsets.top||0)+(p.row+(p.height||1)/2)*d.grid);
  const surfaces=resolveSupportSurfaces(importedDesign()||{}),surface=walkFloorContact(from,to,[],surfaces,levelConfig(),terrain)||cubeStepDown(from,to,surfaces,levelConfig());
@@ -355,7 +364,7 @@ function paintRoute(overlay,points,gridSize){
  overlay.path.style.opacity='0';
 }
 window.addEventListener('storage',e=>{if(e.key===key&&!drawing){key='';}});
-window.terrainPrototype={get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,heightAt,groundFor,movementGroundFor,movementPlacement,highGround,isCliff,climbFace,walkerNear,get design(){return importedDesign();},route,rulerPass,rulerPoint,routePath,squarePath,paintRoute,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get key(){return key;},get storageError(){return storageError;},project,get slant(){return slant();},get active(){return active;}};
+window.terrainPrototype={get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,heightAt,groundFor,landingHeight,movementGroundFor,movementPlacement,highGround,isCliff,climbFace,walkerNear,get design(){return importedDesign();},route,rulerPass,rulerPoint,routePath,squarePath,paintRoute,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get key(){return key;},get storageError(){return storageError;},project,get slant(){return slant();},get active(){return active;}};
 requestAnimationFrame(tick);
 
 import('./wall-prototype.js');

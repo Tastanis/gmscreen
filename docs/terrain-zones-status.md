@@ -820,6 +820,26 @@ onto the stone tooth instead of past it. On flat ground the picker was exact.
 Checks run: 4 new browser-code checks (squares drawn 6, 8 and 18 up, zoomed and panned, and
 overlapping). Not yet seen in a browser.
 
+The tester then found what was really wrong, in two parts.
+
+**The offered squares over a drop were painted in the wrong place.** A square a pushed hero
+could reach off a ledge was painted on the ground far below, not on the ledge or island under
+it where he would land. Two of them lay nearly on top of each other on the screen, so a click
+on one took the other, and you could not tell which square was the ledge.
+
+- An offered square is now painted on the highest floor under it that is not above the
+  creature: the catch ledge, the island below, a roof, or the ground when nothing is under it.
+  That is the same choice the server makes for where a falling creature lands.
+- Squares on the creature's own floor, and all squares on flat ground, are painted as before.
+- A teleport's squares are unchanged; its height is chosen afterwards.
+- **This changes the bathhouse a little:** a push off the balcony now paints its offered
+  squares on the bath floor's own plate or a roof under them, where they used to be painted on
+  the bare ground beneath. On that map the two are nearly the same height.
+
+**A click outside the offered squares is acted on, at any distance.** With a slide of 2, a
+click three squares away slides the hero 3. That is how the picker was written: its own status
+line says "you can still choose a destination". It is put to you as a ruling, not changed.
+
 ## Where it is now
 
 You said to put stages 1 to 3 on `main` on this PC and wait for your word

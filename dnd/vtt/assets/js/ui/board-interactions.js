@@ -18307,7 +18307,20 @@ export function mountBoardInteractions(store, routes = {}) {
     const target = {...pendingAutomationMove.targetSnapshot, ...cell, ...(singleSquare ? {width: 1, height: 1} : {})};
     // Destination squares follow ground, not a flying token's altitude.
     const standing = {...target, movementMode: 'ground'};
-    const project = terrain?.active ? point => terrain.project(point.x, point.y, terrain.groundFor(standing, point)) : point => point;
+    // A square over a drop is drawn where the creature would land: on the ledge or island under
+    // it, not on the ground far beneath. Its height comes from the creature's own height now.
+    // A teleport picks its height afterwards, so its squares stay on the creature's own footing.
+    // The plate under each square is looked up once and kept while the picker is open.
+    const request = pendingAutomationMove, key = `${target.column},${target.row},${target.width},${target.height}`;
+    request.landings ??= new Map();
+    if (!request.landings.has(key)) {
+      const mover = request.movementKind === 'teleport' ? null : (getPlacementFromStore(request.targetSnapshot.id) || null);
+      const altitude = mover && terrain?.active && terrain.landingHeight ? (request.altitude ??= terrain.groundFor(mover)) : null;
+      request.landings.set(key, altitude === null ? null : terrain.landingHeight(standing, altitude));
+    }
+    const caught = request.landings.get(key);
+    const heightAt = point => { const ground = terrain.groundFor(standing, point); return caught === null ? ground : Math.max(ground, caught); };
+    const project = terrain?.active ? point => terrain.project(point.x, point.y, heightAt(point)) : point => point;
     return projectedMovementCell(target, {left: offsets.left || 0, top: offsets.top || 0, size: viewState.gridSize || 64}, project);
   }
 
