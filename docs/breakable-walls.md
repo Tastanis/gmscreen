@@ -168,7 +168,58 @@ Checks run: 6 new groups of server checks through the real store, one new pop-up
 on the islands map the Anvil push onto stone tooth T6 and the Crown push onto crystals B16
 (both break on confirming; the hero then walks out).
 
-## Stage B: forced movement breaks walls by the book. Not started
+## Stage B: forced movement breaks walls by the book. Built (October 8, 2026, night). Not yet seen in a browser
+
+### What you see
+
+Push a creature into a breakable wall, by Ctrl-dragging it or with an ability. If enough of the
+push is left to break the wall, a pop-up opens beside the token before anything happens:
+
+> **Break through?**
+> War dog hits a wood wall with 4 squares of the push left. Breaking it uses 3 and does 5 damage.
+> Break through: 5 damage, then moves on 1 square.
+> Stop at the wall: 6 damage.
+
+- **Break through**: the wall breaks, rubble is drawn, the creature takes the breaking damage
+  and is moved on by what is left of the push.
+- **Stop at the wall** (or Escape): the ordinary slam, as before. Nothing breaks.
+- Enter does nothing, so a wall is never broken by a stray key.
+- If not enough of the push is left, or the wall has no material, there is no pop-up and it is
+  the ordinary slam.
+
+### The rule, as built
+
+- Cost and damage per square of wall are the book's: glass 1 and 3, wood 3 and 5, stone 6 and
+  8, metal 9 and 11.
+- A large creature that strikes two squares of wall pays for both, and both break. If one of
+  them cannot be broken, or the push cannot pay for both, neither breaks.
+- What is left of the push after paying carries the creature on. If it then meets another
+  creature or wall, that is an ordinary collision, or another break if it can pay again. The
+  pop-up lists all of it before you answer.
+- The breaking damage is for the pushed creature alone. A creature it then runs into takes
+  only the collision damage.
+- An object's walls (one group name, Stage D) all break for the price of the side struck.
+- A slope or cliff that stops a push is never "broken through".
+
+### Who is asked
+
+Whoever makes the push: you for a Ctrl-drag or a monster's ability, a player for their hero's
+ability. A player's screen does not know which walls are breakable. It asks the server only
+when their push actually ends at a wall, and is told the material only if that push can break
+it. So a player learns a wall is breakable at the moment they could break it, not before.
+
+### Things to know
+
+- **Undo** puts the creature back. The wall stays broken; repair it by hand in the Walls panel.
+- The server decides everything. The browser asks it what the push would break, shows that,
+  and sends the push with the word "break through". The server works it out again and refuses
+  the move if the board has changed since the pop-up opened.
+- This changes nothing on a map with no breakable walls, and nothing for a push that is not
+  told to break through.
+
+Checks run: 6 groups of server checks (the book's own example is one of them), 5 browser-code
+checks for the pop-up, every server test file and the related browser-code tests.
+
 
 ## Stage C: map packages carry the material. Not started
 

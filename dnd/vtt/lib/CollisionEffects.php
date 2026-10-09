@@ -13,10 +13,14 @@ final class CollisionEffects {
   $q->execute([$this->world,$key,$mover,$scene,$actor,min(50,2*$fall['squares']),'pending','fall',json_encode($fall,JSON_THROW_ON_ERROR),$op]);
  }
 
- public function record(string $op,string $scene,string $actor,string $mover,array $plan,string $damageType=''):void {
-  if($plan['damage']<=0)return;
+ /** `$moverExtra` is damage for the moved creature alone: what it was hurled through. */
+ public function record(string $op,string $scene,string $actor,string $mover,array $plan,string $damageType='',int $moverExtra=0):void {
+  if($plan['damage']<=0&&$moverExtra<=0)return;
   $q=$this->pdo->prepare('INSERT INTO vtt_collision_effects(world_id,operation_id,target_id,scene_id,actor_id,amount,status,damage_type) VALUES(?,?,?,?,?,?,?,?)');
-  foreach(array_unique([$mover,...$plan['collidedIds']]) as $id)$q->execute([$this->world,$op,$id,$scene,$actor,$plan['damage'],'pending',$damageType]);
+  foreach(array_unique([$mover,...$plan['collidedIds']]) as $id){
+   $amount=$plan['damage']+($id===$mover?$moverExtra:0);
+   if($amount>0)$q->execute([$this->world,$op,$id,$scene,$actor,$amount,'pending',$damageType]);
+  }
  }
  public function list(string $actor,bool $gm,?string $op=null):array {
   $this->ensureFallColumns();

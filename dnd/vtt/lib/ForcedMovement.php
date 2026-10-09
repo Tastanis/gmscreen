@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__.'/WallMovement.php';
+require_once __DIR__.'/WallObjects.php';
 /** Pure collision planning against the current canonical scene. */
 final class ForcedMovement
 {
@@ -47,9 +48,63 @@ final class ForcedMovement
   }
   return ['column'=>$cell?$cell['column']:($wall?round($from['column']+$dx*$stop):$from['column']+$dx*$stop),'row'=>$cell?$cell['row']:($wall?round($from['row']+$dy*$stop):$from['row']+$dy*$stop),'damage'=>max(0,(int)ceil($distance*(1-$stop)-1e-6))+($wall?2:0),'collidedIds'=>array_values(array_unique($ids)),'wall'=>$wall];
  }
- public static function plan(array $from,array $to,$intent,string $kind,array $others,array $config): array {
-  if($kind!=='forced'||!is_array($intent))throw new InvalidArgumentException('Invalid forced destination.');
+ /** The book's Hurling Through Objects: forced movement a square of each material costs to break. */
+ public const BREAK_COST=['glass'=>1,'wood'=>3,'stone'=>6,'metal'=>9];
+ /** And the damage the creature hurled through it takes. */
+ public const BREAK_DAMAGE=['glass'=>3,'wood'=>5,'stone'=>8,'metal'=>11];
+
+ /**
+  * The same push, breaking through what it can on the way.
+  *
+  * At each wall that stops it: if every wall it strikes can be broken and enough of the push is
+  * left to pay for them, they break, the push is shorter by what they cost, and it carries on.
+  * A large creature that strikes two squares of wall pays for both. An object's walls (one
+  * `group`) all go for the price of the side that was struck. Otherwise the push ends there as
+  * an ordinary slam.
+  *
+  * Returns the plan `resolve` would give for the shortened push through the broken walls, plus:
+  * breaks (the walls to mark broken), breakDamage (for the pushed creature alone), intent (where
+  * the shortened push aims), steps (one line per break, for the pop-up) and stopped (the plain
+  * plan, as if nothing could be broken). `breaks` is empty when nothing breaks.
+  */
+ public static function through(array $from,array $to,array $others,array $config): array {
+  $stopped=self::resolve($from,$to,$others,$config);
+  $dx=$to['column']-$from['column'];$dy=$to['row']-$from['row'];$distance=max(abs($dx),abs($dy));
+  $plan=$stopped;$intent=['column'=>$to['column'],'row'=>$to['row']];$spent=0;$damage=0;$breaks=[];$steps=[];$open=$config;
+  for($n=0;$n<8&&$distance&&$plan['wall'];$n++){
+   $model=$open['environment']['walls']['value']??[];
+   if(empty($model['segments']))break;
+   $aim=[...$from,...$intent];
+   $struck=WallMovement::struck($model,$from,$aim,$open,'forced');
+   $travelled=max(abs($plan['column']-$from['column']),abs($plan['row']-$from['row']));
+   // The wall must be what stopped it; a slope or a cliff ahead of the wall is not broken through.
+   if($struck===null||$struck['distance']>$travelled+.75+1e-6)break;
+   $need=0;$hurt=0;$materials=[];
+   foreach($struck['walls'] as $wall){
+    if(!WallObjects::breakable($wall['edge'])){$need=null;break;}
+    $need+=self::BREAK_COST[$wall['edge']['material']]*$wall['squares'];$hurt+=self::BREAK_DAMAGE[$wall['edge']['material']]*$wall['squares'];
+    $materials[$wall['edge']['material']]=($materials[$wall['edge']['material']]??0)+$wall['squares'];
+   }
+   $left=(int)round(max(abs($intent['column']-$from['column']),abs($intent['row']-$from['row']))-$travelled);
+   if($need===null||$left<$need-1e-6)break;
+   $whole=WallObjects::whole(array_column($struck['walls'],'edge'),$open);$ids=array_column($whole,'id');
+   foreach($open['environment']['walls']['value']['segments'] as $i=>$edge)if(in_array($edge['id'],$ids,true))$open['environment']['walls']['value']['segments'][$i]['broken']=true;
+   $breaks=[...$breaks,...$whole];$spent+=$need;$damage+=$hurt;
+   $steps[]=['materials'=>$materials,'cost'=>$need,'damage'=>$hurt,'left'=>$left];
+   // What is left of the push carries the creature on from where it would have ended, less the cost.
+   $reach=$distance-$spent;
+   $intent=['column'=>(int)round($from['column']+$dx*$reach/$distance),'row'=>(int)round($from['row']+$dy*$reach/$distance)];
+   $plan=self::resolve($from,[...$from,...$intent],$others,$open);
+  }
+  return [...$plan,'breaks'=>$breaks,'breakDamage'=>$damage,'breakCost'=>$spent,'intent'=>$intent,'steps'=>$steps,'stopped'=>$stopped];
+ }
+ public static function assertIntent($intent): void {
+  if(!is_array($intent))throw new InvalidArgumentException('Invalid forced destination.');
   foreach(['column','row'] as $axis)if(!isset($intent[$axis])||!is_numeric($intent[$axis])||!is_finite((float)$intent[$axis])||$intent[$axis]<0||$intent[$axis]>100000)throw new InvalidArgumentException('Invalid forced destination coordinates.');
+ }
+ public static function plan(array $from,array $to,$intent,string $kind,array $others,array $config): array {
+  if($kind!=='forced')throw new InvalidArgumentException('Invalid forced destination.');
+  self::assertIntent($intent);
   $plan=self::resolve($from,$intent,$others,$config);
   if(abs($plan['column']-$to['column'])>1e-6||abs($plan['row']-$to['row'])>1e-6)throw new InvalidArgumentException('Collision changed. Recalculate the forced move.');
   return $plan;

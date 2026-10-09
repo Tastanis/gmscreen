@@ -8,6 +8,7 @@ import {floorElevations as teleportFloorElevations} from '../state/normalize/flo
 import {mountFallReview} from './fall-review.js';
 import {createRoutingIntent, deriveRoutingCommands, createSerialQueue} from './scene-routing-commands.mjs';
 import {askClimb} from './climb-prompt.js';
+import {offerBreakThrough} from './break-through-prompt.js';
 import {climbSurcharge} from './terrain-math.mjs';
 import {settleCollisionEffects} from '../services/collision-effects.js';
 import {PLAYER_CHARACTER_USER_IDS as visionOwnerProfiles} from '../state/normalize/map-levels.js';
@@ -1402,6 +1403,13 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     const collisions = new Map();
     if (movementKind === 'forced' && moves.length !== 1) {updateStatus('Force move one token at a time.');renderTokens(boardApi.getState?.() ?? {},tokenLayer,viewState);return;}
+    // A push that ends at a wall it could break: ask before anything is sent. Nothing breaks on "no".
+    let breakThrough = null;
+    if (movementKind === 'forced' && canonical[moves[0].placementId]) {
+      const origin = canonical[moves[0].placementId];
+      breakThrough = await askForcedBreakThrough(sceneId, origin, moves[0], Object.values(canonical));
+      if (sceneId !== getActiveSceneId()) return;
+    }
     const intendedMoves = moves.map((move) => {
       const origin = canonical[move.placementId];
       const path = hasMatchingOrigin && origin ? ruler.map((point) => clampPlacementToBounds(
@@ -1415,6 +1423,7 @@ export function mountBoardInteractions(store, routes = {}) {
           moverHeight:(from,at)=>window.wallPrototype?.moverHeight?.(from,at,'forced')??window.terrainPrototype?.groundFor(at)??0,
         });
         collisions.set(move.placementId,collision);
+        if (breakThrough) return {...move,...breakThrough.destination,movementKind,path:[],forcedDestination:{column:move.column,row:move.row,breakThrough:true}};
         return {...collision.destination,movementKind,path:[],forcedDestination:{column:move.column,row:move.row}};
       }
       return { ...move, movementKind, path: movementKind === 'teleport' ? [] : path };
@@ -18137,6 +18146,13 @@ export function mountBoardInteractions(store, routes = {}) {
         if(forcedCollision.collidedIds.includes(request.sourceSnapshot.id)){forcedIntent={column:origin.column,row:origin.row};forcedCollision=resolveForcedDrag(origin,forcedIntent,Object.values(canonical),dragOptions);}
       }
       clamped=forcedCollision.destination;
+      // The push ends at a wall it could break: ask before anything is sent.
+      const through=await askForcedBreakThrough(request.sceneId,origin,forcedIntent,Object.values(canonical),forcedCollision);
+      if(request.sceneId!==getActiveSceneId()){clearAutomationMoveOverlay();request.resolve?.({skipped:true,reason:'user-cancel'});return true;}
+      if(through){
+        clamped={...clamped,...through.destination};forcedIntent={...forcedIntent,breakThrough:true};
+        forcedCollision={...forcedCollision,destination:clamped,damage:through.damage+through.breakDamage,collidedIds:through.collidedIds||[],wall:through.wall,brokeThrough:true};
+      }
     }
     const movedDistance = automationChebyshevDistance(request.targetSnapshot, clamped);
     request.committing=true;
@@ -18173,7 +18189,7 @@ export function mountBoardInteractions(store, routes = {}) {
       try {
         const saved=await moveResult.savePromise;
         await settleCollisionEffects(saved?.event?.operationId,applyAutomationCollisionDamage);
-        if(forcedCollision.damage>0)collision={targetName:request.targetSnapshot.name,collidedName:forcedCollision.collidedIds.map(id=>tokenLabel(getPlacementFromStore(id))).join(', ')||'Obstacle',damage:forcedCollision.damage};
+        if(forcedCollision.damage>0)collision={targetName:request.targetSnapshot.name,collidedName:forcedCollision.collidedIds.map(id=>tokenLabel(getPlacementFromStore(id))).join(', ')||(forcedCollision.brokeThrough?'a wall, and broke through':'Obstacle'),damage:forcedCollision.damage};
       } catch(error){
         renderTokens(boardApi.getState?.() ?? {},tokenLayer,viewState,{skipTracker:true});
         clearAutomationMoveOverlay();request.reject?.(error);return true;
@@ -19043,6 +19059,23 @@ export function mountBoardInteractions(store, routes = {}) {
       return [];
     }
     return scenePlacements.slice();
+  }
+
+  /**
+   * For a push the browser has found ends at a wall: asks the server what it could break and, if
+   * anything, asks the person. Resolves the server's offer on "break through", otherwise null.
+   */
+  async function askForcedBreakThrough(sceneId, origin, intent, others, known = null) {
+    const stopped = known || resolveForcedDrag(origin, intent, others, {
+      wallBlocked:(from,to)=>window.wallPrototype?.forcedBlockedMove?.(from,to)||false,
+      height:token=>window.terrainPrototype?.groundFor(token)??0,
+      moverHeight:(from,at)=>window.wallPrototype?.moverHeight?.(from,at,'forced')??window.terrainPrototype?.groundFor(at)??0,
+    });
+    if (!stopped.wall) return null;
+    const anchor = [...tokenLayer.querySelectorAll('[data-placement-id]')].find((element) => element.dataset.placementId === origin.id) ?? null;
+    try {
+      return await offerBreakThrough({ sceneId, placement: origin, intent: { column: intent.column, row: intent.row }, nameOf: (id) => tokenLabel(getPlacementFromStore(id)), anchor });
+    } catch (error) { console.warn('[VTT] break-through offer failed', error); return null; }
   }
 
   function tokenLabel(placement) {

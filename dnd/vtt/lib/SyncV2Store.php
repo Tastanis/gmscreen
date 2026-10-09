@@ -1353,6 +1353,21 @@ final class SyncV2Store
             $zoneEntryReceipts = [];
             $levelChangedPlacements = [];
 
+            // A push that was told to break through: break what it breaks first, as its own change,
+            // then make the rest of the push through the opening.
+            $breakDamage = 0;
+            $only = count($normalized['actions']) === 1 ? $normalized['actions'][0] : null;
+            if ($only !== null && $only['kind'] === 'patch' && $movementRestores === null && ($only['forcedDestination']['breakThrough'] ?? false) === true) {
+                $mover = $state['placements'][$only['sceneId']][$only['placementId']] ?? null;
+                $broke = is_array($mover) ? $this->breakThrough($only['sceneId'], $mover, $only['forcedDestination'], $state, $actorId, $normalized['operationId']) : null;
+                if ($broke !== null) {
+                    $snapshot = $this->getSnapshot();
+                    $state = $snapshot['state'];
+                    $normalized['actions'][0]['forcedDestination'] = $broke['intent'];
+                    $breakDamage = $broke['damage'];
+                }
+            }
+
             $groupMove = count(array_filter($normalized['actions'], static fn(array $action): bool =>
                 $action['kind'] === 'patch' && (array_key_exists('column', $action['patch']) || array_key_exists('row', $action['patch']))
             )) > 1;
@@ -1473,7 +1488,7 @@ final class SyncV2Store
                 }
                 if($restore===null && $action['forcedDestination']!==null){
                     $plan=ForcedMovement::plan($current,$next,$action['forcedDestination'],$action['movementKind'],$state['placements'][$sceneId],$movementConfig);
-                    (new CollisionEffects($this->pdo,$this->worldId))->record($normalized['operationId'],$sceneId,$actorId,$placementId,$plan,$action['collisionDamageType']);
+                    (new CollisionEffects($this->pdo,$this->worldId))->record($normalized['operationId'],$sceneId,$actorId,$placementId,$plan,$action['collisionDamageType'],$breakDamage);
                 }
                 if ($restore === null && $action['forcedDestination']===null && (array_key_exists('column',$patch)||array_key_exists('row',$patch))) {
                     if($action['movementKind']==='forced') ForcedMovement::assertClear($current,$next,$state['placements'][$sceneId],$movementConfig);
@@ -1796,6 +1811,19 @@ final class SyncV2Store
                 ];
             }
 
+            // A push that was told to break through: break what it breaks first, as its own change,
+            // then make the rest of the push through the opening.
+            $breakDamage = 0;
+            if ($normalized['movementKind'] === 'forced' && $normalized['undoRevision'] === null && ($normalized['forcedDestination']['breakThrough'] ?? false) === true) {
+                $broke = $this->breakThrough($normalized['sceneId'], $current, $normalized['forcedDestination'], $state, $actorId, $normalized['operationId']);
+                if ($broke !== null) {
+                    $snapshot = $this->getSnapshot();
+                    $state = $snapshot['state'];
+                    $normalized['forcedDestination'] = $broke['intent'];
+                    $breakDamage = $broke['damage'];
+                }
+            }
+
             $revision = $snapshot['revision'] + 1;
             $entityRevision = $currentEntityRevision + 1;
             $serverTime = $this->nowMilliseconds();
@@ -1856,7 +1884,7 @@ final class SyncV2Store
                 $fall=$teleport['fall']??FallOutcome::plan($current,$next,$movementConfig,$normalized['movementKind'],$normalized['path'],$floor['cause']);
                 if($fall){$landing=FallOutcome::landing($next,$state['placements'][$sceneId],$movementConfig);$next=$landing['placement'];unset($landing['placement']);(new CollisionEffects($this->pdo,$this->worldId))->recordFall($normalized['operationId'],$sceneId,$actorId,$placementId,[...$fall,...$landing,'movementKind'=>$normalized['movementKind']]);}
             }
-            if($collisionPlan!==null)(new CollisionEffects($this->pdo,$this->worldId))->record($normalized['operationId'],$sceneId,$actorId,$placementId,$collisionPlan);
+            if($collisionPlan!==null)(new CollisionEffects($this->pdo,$this->worldId))->record($normalized['operationId'],$sceneId,$actorId,$placementId,$collisionPlan,'',$breakDamage);
             if ($restore === null) $next['_movementUndo'] = MovementUndo::record($current, $next, $actorId, $mapLevels, $normalized['operationId']);
             $state['placements'][$sceneId][$placementId] = $next;
             $event['payload']['column'] = $next['column'];
@@ -1935,11 +1963,52 @@ final class SyncV2Store
     }
 
     /**
+     * What a push would break if it were told to break through, for the pop-up that asks first.
+     * Null when it would break nothing. The material of a standing wall is the GM's to know; a
+     * player is told it here only for walls their own push is able to break.
+     */
+    public function forcedBreakOffer(string $sceneId, string $placementId, $intent, bool $isGm): ?array
+    {
+        ForcedMovement::assertIntent($intent);
+        $state = $this->getSnapshot()['state'];
+        $current = $state['placements'][$sceneId][$placementId] ?? null;
+        if (!is_array($current) || (!$isGm && $this->placementIsHidden($current))) throw new InvalidArgumentException('That creature is unavailable.');
+        $config = WallCubes::withTemplates($state['sceneConfig'][$sceneId] ?? [], $state['templates'][$sceneId] ?? []);
+        $through = ForcedMovement::through($current, $intent, $state['placements'][$sceneId] ?? [], $config);
+        if (!$through['breaks']) return null;
+        return [
+            'destination' => ['column' => $through['column'], 'row' => $through['row']],
+            'steps' => $through['steps'],
+            'breakDamage' => $through['breakDamage'],
+            'damage' => $through['damage'],
+            'collidedIds' => $through['collidedIds'],
+            'wall' => $through['wall'],
+            'walls' => count($through['breaks']),
+            'stopped' => ['column' => $through['stopped']['column'], 'row' => $through['stopped']['row'], 'damage' => $through['stopped']['damage']],
+        ];
+    }
+
+    /**
+     * Breaks what a push breaks, inside the caller's transaction, before the push itself is made.
+     * Returns where the rest of the push aims and the damage for the pushed creature, or null when
+     * the push breaks nothing (it is then made as an ordinary push).
+     */
+    private function breakThrough(string $sceneId, array $current, $intent, array $state, string $actorId, string $operationId): ?array
+    {
+        ForcedMovement::assertIntent($intent);
+        $config = WallCubes::withTemplates($state['sceneConfig'][$sceneId] ?? [], $state['templates'][$sceneId] ?? []);
+        $through = ForcedMovement::through($current, $intent, $state['placements'][$sceneId] ?? [], $config);
+        if (!$through['breaks']) return null;
+        if ($this->breakWalls($sceneId, array_column($through['breaks'], 'id'), $actorId, $operationId . ':break', 'forced') === null) return null;
+        return ['intent' => $through['intent'], 'damage' => $through['breakDamage']];
+    }
+
+    /**
      * Marks standing breakable walls as broken, inside the caller's transaction, and tells every
      * browser the way a GM's wall save does. Walls that are gone, already broken or not breakable
      * are left alone. Returns the event, or null when nothing changed.
      */
-    private function breakWalls(string $sceneId,array $ids,string $actorId,string $operationId): ?array
+    private function breakWalls(string $sceneId,array $ids,string $actorId,string $operationId,string $cause='fall'): ?array
     {
         if($this->findEventByOperationId($operationId)!==null)return null;
         $snapshot=$this->getSnapshot();$state=$snapshot['state'];
@@ -1956,7 +2025,7 @@ final class SyncV2Store
         $state['sceneConfig'][$sceneId]=$config;
         $revision=$snapshot['revision']+1;$serverTime=$this->nowMilliseconds();
         $event=['revision'=>$revision,'operationId'=>$operationId,'type'=>'environment.changed','actorId'=>$actorId,'sceneId'=>$sceneId,'entityId'=>null,
-            'entityRevision'=>$config['_revision'],'payload'=>['field'=>'walls','entry'=>$walls,'cause'=>'fall'],'serverTime'=>$serverTime];
+            'entityRevision'=>$config['_revision'],'payload'=>['field'=>'walls','entry'=>$walls,'cause'=>$cause],'serverTime'=>$serverTime];
         $this->insertEvent($event);
         $this->updateWorldState($revision,$state,$serverTime);
         if($revision % $this->snapshotInterval===0)$this->insertSnapshot($revision,$state,$serverTime);

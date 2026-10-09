@@ -139,5 +139,5 @@ test('the board measures movers at their travelling height', () => {
   const walls = read('wall-prototype.js'), board = read('board-interactions.js');
   assert.match(walls, /forcedBlockedMove:\(from,to\)=>[^\n]*moverHeight\(from,t,'forced',true\)[^\n]*pathFor\(from,'forced'\)\.slams\(to\)[^\n]*moverHeight\(origin,t,'forced'\)/, 'pushes: slopes, slams and walls');
   assert.match(walls, /blockedMove:\(from,to\)=>[^\n]*moverHeight\(origin,t,'walk'\)/, 'walks');
-  assert.equal(board.split("moverHeight:(from,at)=>window.wallPrototype?.moverHeight?.(from,at,'forced')").length - 1, 2, 'both places a push is resolved pass the mover height on');
+  assert.equal(board.split("moverHeight:(from,at)=>window.wallPrototype?.moverHeight?.(from,at,'forced')").length - 1, 3, 'every place a push is resolved passes the mover height on: a drag, an ability, and the break-through question');
 });

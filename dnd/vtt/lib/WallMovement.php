@@ -105,43 +105,89 @@ $length=in_array($direction,['west','east'],true)?$s['right']-$s['left']:$s['bot
 
     public static function blocked(array $model,array $from,array $to,array $config,string $kind='walk',?TravelPath $travel=null): bool
     {
+        if($to['column']==$from['column']&&$to['row']==$from['row'])return false;
+        $nodes=array_column($model['nodes'],null,'id');
+        foreach($model['segments'] as $edge)if(self::entry($edge,$nodes,$from,$to,$config,$kind,$travel)!==null)return true;
+        return false;
+    }
+
+    /**
+     * The walls a move strikes first, for a push that may break them (ForcedMovement::through).
+     * Returns null when no wall is in the way, or
+     * ['distance'=>squares travelled when it strikes, 'walls'=>[['edge'=>wall, 'squares'=>n], ...]].
+     * `squares` is how many squares of that wall the creature's side meets: one for an ordinary
+     * creature, two for a large one against a long wall.
+     */
+    public static function struck(array $model,array $from,array $to,array $config,string $kind='forced',?TravelPath $travel=null): ?array
+    {
+        $dx=$to['column']-$from['column'];$dy=$to['row']-$from['row'];$d=max(abs($dx),abs($dy));
+        if($d<1e-9)return null;
+        $nodes=array_column($model['nodes'],null,'id');$hits=[];$first=INF;
+        foreach($model['segments'] as $edge){
+            $t=self::entry($edge,$nodes,$from,$to,$config,$kind,$travel);
+            if($t===null)continue;
+            $hits[]=[$t,$edge];$first=min($first,$t);
+        }
+        if(!$hits)return null;
+        $w=max(1,(float)($from['width']??1));$h=max(1,(float)($from['height']??1));
+        // The creature's square at the moment it strikes, a little larger so a wall it touches counts.
+        $left=$from['column']+$dx*$first-.06;$top=$from['row']+$dy*$first-.06;$right=$left+$w+.12;$bottom=$top+$h+.12;
+        $walls=[];
+        foreach($hits as [$t,$edge]){
+            if(($t-$first)*$d>.05)continue;
+            $a=$nodes[$edge['a']];$b=$nodes[$edge['b']];$vx=$b['x']-$a['x'];$vy=$b['y']-$a['y'];$lo=0.;$hi=1.;
+            foreach([[-$vx,$a['x']-$left],[$vx,$right-$a['x']],[-$vy,$a['y']-$top],[$vy,$bottom-$a['y']]] as [$p,$q]){
+                if(abs($p)<1e-12){if($q<0){$hi=-1;break;}continue;}
+                $u=$q/$p;if($p<0)$lo=max($lo,$u);else $hi=min($hi,$u);
+            }
+            $walls[]=['edge'=>$edge,'squares'=>max(1,(int)ceil(hypot($vx,$vy)*max(0,$hi-$lo)-.25)),'met'=>hypot($vx,$vy)*max(0,$hi-$lo)];
+        }
+        // A wall met end-on beside one met face-on is that one's corner, not a second wall struck:
+        // the sides of a crate, when the creature hits its front.
+        if(array_filter($walls,fn($wall)=>$wall['met']>=.25))$walls=array_values(array_filter($walls,fn($wall)=>$wall['met']>=.25));
+        return ['distance'=>$first*$d,'walls'=>array_map(fn($wall)=>['edge'=>$wall['edge'],'squares'=>$wall['squares']],$walls)];
+    }
+
+    /**
+     * Where along the move (0 at the start, 1 at the end) the mover's square first meets this
+     * wall, or null when the wall does not stop it: it is open, broken, passable, one-way from the
+     * other side, off the path, or does not reach the height the mover is travelling at.
+     */
+    private static function entry(array $edge,array $nodes,array $from,array $to,array $config,string $kind,?TravelPath &$travel): ?float
+    {
         $w=max(1,(float)($from['width']??1));$h=max(1,(float)($from['height']??1));
         $ox=$from['column']+$w/2;$oy=$from['row']+$h/2;$dx=$to['column']-$from['column'];$dy=$to['row']-$from['row'];
-        if(!$dx&&!$dy)return false;
-        $nodes=array_column($model['nodes'],null,'id');
-        foreach($model['segments'] as $edge){
-            $e=[...['movement'=>'block','movementDirection'=>'both','interaction'=>'none','open'=>false,'baseMode'=>'terrain','base'=>0,'height'=>2,'topMode'=>'follow'],...$edge];
-            // A broken wall is still stored, so it can be repaired, but it stops nothing.
-            if($e['movement']==='pass'||($e['open']&&$e['interaction']!=='none')||($edge['broken']??false)===true)continue;
-            $a=$nodes[$e['a']];$b=$nodes[$e['b']];$vx=$b['x']-$a['x'];$vy=$b['y']-$a['y'];
-            if($vx*$vx+$vy*$vy<1e-16)continue;
-            $side=$vx*($oy-$a['y'])-$vy*($ox-$a['x']);
-            if($e['movementDirection']!=='both'&&abs($side)>=1e-8&&($e['movementDirection']==='left'?$side<=0:$side>=0))continue;
-            $lo=0.;$hi=1.;
-            foreach([[1,0],[0,1],[-$vy,$vx]] as [$ax,$ay]){
-                $length=hypot($ax,$ay);if(!$length)continue;$nx=$ax/$length;$ny=$ay/$length;
-                $r=abs($nx)*$w/2+abs($ny)*$h/2;$c=$ox*$nx+$oy*$ny;$d=$dx*$nx+$dy*$ny;
-                $min=min($a['x']*$nx+$a['y']*$ny,$b['x']*$nx+$b['y']*$ny)-$r+1e-7;
-                $max=max($a['x']*$nx+$a['y']*$ny,$b['x']*$nx+$b['y']*$ny)+$r-1e-7;
-                if(abs($d)<1e-9){if($c<=$min||$c>=$max){$hi=-1;break;}}
-                else{$q=($min-$c)/$d;$s=($max-$c)/$d;$lo=max($lo,min($q,$s));$hi=min($hi,max($q,$s));}
-            }
-            if($lo>=$hi||$hi<0||$lo>1)continue;
-            $steps=max(1,min(8192,(int)ceil(hypot($dx,$dy)*($hi-$lo)*8)));
-            for($i=0;$i<=$steps;$i++){
-                $t=$lo+($hi-$lo)*($i+.5)/($steps+1);
-                $token=[...$from,'column'=>$from['column']+$dx*$t,'row'=>$from['row']+$dy*$t];
-                $px=$token['column']+$w/2;$py=$token['row']+$h/2;
-                $u=max(0,min(1,(($px-$a['x'])*$vx+($py-$a['y'])*$vy)/($vx*$vx+$vy*$vy)));
-                $base=$e['baseMode']==='fixed'?$e['base']:self::terrain($a['x']+$vx*$u,$a['y']+$vy*$u,$config)+$e['base'];
-                $top=$e['baseMode']==='fixed'||$e['topMode']==='follow'?$base+$e['height']:max(self::terrain($a['x'],$a['y'],$config),self::terrain($b['x'],$b['y'],$config))+$e['base']+$e['height'];
-// The height the mover is travelling at here, not the height of the ground under it:
-                // a wall on the floor does not stop a creature going over it six squares up.
-                $travel??=new TravelPath($from,$config,$kind);
-                $z=$travel->heightAt($token);
-                if($z<$top-1e-7&&$z+max($w,$h)>$base+1e-7)return true;
-            }
+        $e=[...['movement'=>'block','movementDirection'=>'both','interaction'=>'none','open'=>false,'baseMode'=>'terrain','base'=>0,'height'=>2,'topMode'=>'follow'],...$edge];
+        // A broken wall is still stored, so it can be repaired, but it stops nothing.
+        if($e['movement']==='pass'||($e['open']&&$e['interaction']!=='none')||($edge['broken']??false)===true)return null;
+        $a=$nodes[$e['a']];$b=$nodes[$e['b']];$vx=$b['x']-$a['x'];$vy=$b['y']-$a['y'];
+        if($vx*$vx+$vy*$vy<1e-16)return null;
+        $side=$vx*($oy-$a['y'])-$vy*($ox-$a['x']);
+        if($e['movementDirection']!=='both'&&abs($side)>=1e-8&&($e['movementDirection']==='left'?$side<=0:$side>=0))return null;
+        $lo=0.;$hi=1.;
+        foreach([[1,0],[0,1],[-$vy,$vx]] as [$ax,$ay]){
+            $length=hypot($ax,$ay);if(!$length)continue;$nx=$ax/$length;$ny=$ay/$length;
+            $r=abs($nx)*$w/2+abs($ny)*$h/2;$c=$ox*$nx+$oy*$ny;$d=$dx*$nx+$dy*$ny;
+            $min=min($a['x']*$nx+$a['y']*$ny,$b['x']*$nx+$b['y']*$ny)-$r+1e-7;
+            $max=max($a['x']*$nx+$a['y']*$ny,$b['x']*$nx+$b['y']*$ny)+$r-1e-7;
+            if(abs($d)<1e-9){if($c<=$min||$c>=$max){$hi=-1;break;}}
+            else{$q=($min-$c)/$d;$s=($max-$c)/$d;$lo=max($lo,min($q,$s));$hi=min($hi,max($q,$s));}
         }
-        return false;
+        if($lo>=$hi||$hi<0||$lo>1)return null;
+        $steps=max(1,min(8192,(int)ceil(hypot($dx,$dy)*($hi-$lo)*8)));
+        for($i=0;$i<=$steps;$i++){
+            $t=$lo+($hi-$lo)*($i+.5)/($steps+1);
+            $token=[...$from,'column'=>$from['column']+$dx*$t,'row'=>$from['row']+$dy*$t];
+            $px=$token['column']+$w/2;$py=$token['row']+$h/2;
+            $u=max(0,min(1,(($px-$a['x'])*$vx+($py-$a['y'])*$vy)/($vx*$vx+$vy*$vy)));
+            $base=$e['baseMode']==='fixed'?$e['base']:self::terrain($a['x']+$vx*$u,$a['y']+$vy*$u,$config)+$e['base'];
+            $top=$e['baseMode']==='fixed'||$e['topMode']==='follow'?$base+$e['height']:max(self::terrain($a['x'],$a['y'],$config),self::terrain($b['x'],$b['y'],$config))+$e['base']+$e['height'];
+            // The height the mover is travelling at here, not the height of the ground under it:
+            // a wall on the floor does not stop a creature going over it six squares up.
+            $travel??=new TravelPath($from,$config,$kind);
+            $z=$travel->heightAt($token);
+            if($z<$top-1e-7&&$z+max($w,$h)>$base+1e-7)return max(0.,$lo);
+        }
+        return null;
     }
 }
