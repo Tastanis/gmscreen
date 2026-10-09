@@ -21,10 +21,12 @@ A kind with no picture here, and nothing to borrow, is drawn by the app as a sta
 
 - See-through background, viewed from straight overhead, even light with no shadow cast to one
   side: the app turns the picture to match the wall.
-- Strips: the rubble runs left to right through the exact middle. The app scales a strip by its
-  long side to a little more than one wall piece and keeps the picture's own shape, so nothing is
-  stretched. The band in the middle has to be wider than the wall painted on the map, or the
-  painted wall shows beside it.
+- Strips: about three times as long as high, the rubble running left to right through the exact
+  middle in a band about a third of the picture's height, unbroken from end to end. The app
+  draws a strip three quarters of a square high, scaled evenly (never stretched), so that band
+  is thicker than the wall painted on the map and hides it. Only the stretch of the picture
+  lying over the broken wall piece is shown, fading out just past each end; the outer twelfth
+  of the picture at each end is never used, so a taper there is fine but is not seen.
 - Heaps: roughly square, a round heap in the middle with clear corners.
 - Keep a few clear pixels all round the outer edge.
 

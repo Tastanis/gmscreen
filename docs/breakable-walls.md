@@ -61,6 +61,13 @@ Shift-click selects several wall pieces, so several can be marked or broken toge
 - Your four heap pictures (stone, wood, glass, metal) are in the app, ready for free-standing
   objects in Stage D. Nothing draws them yet.
 - A wall longer than a square and a half is covered by several rubble pictures end to end.
+- The rubble hides the whole painted wall (your instruction, October 8). Each strip picture is
+  drawn three quarters of a square high, scaled evenly, never stretched. That makes its band of
+  rubble thicker than the painted wall. Only the stretch of the picture lying over the broken
+  piece is shown; it fades out about a tenth of a square past each end, so rubble does not run
+  on over wall that still stands. Neighbouring pieces show different stretches of the picture.
+  Measured on every one-square wall of the bathhouse ground floor: none of the painted wall
+  shows through, for all four materials.
 
 ### What you can rely on
 
@@ -73,11 +80,11 @@ Shift-click selects several wall pieces, so several can be marked or broken toge
 
 ### Limits to know about
 
-- **The wall strips are thin.** Each picture is three to one. Scaled to one wall square and kept
-  in its own shape, its band of rubble is about as thick as the wall painted on the bathhouse
-  map, so a sliver of painted wall shows beside it. The app does not stretch pictures. This is
-  waiting on your choice: draw each picture larger so it spills over the neighbouring squares, lay
-  one picture across a whole breach, or make strips with a thicker band.
+- **Very thick painted walls.** The rubble hides a painted wall up to about a fifth of a square
+  thick (the bathhouse walls are about an eighth). A map painted with thicker walls would show
+  an edge of wall beside the rubble; the size is one number in the code if that ever comes up.
+- **Only the middle of each strip picture is used.** The tapered ends you drew are not shown,
+  because the picture is drawn larger than one wall piece. The ends of a breach fade out instead.
 - **Long walls.** A break removes one wall piece. Your map packages cut walls into one-square
   pieces already. A long wall you drew by hand is cut into one-square pieces at the moment you
   mark it breakable, so you can then break one square of it. Only the first piece stays

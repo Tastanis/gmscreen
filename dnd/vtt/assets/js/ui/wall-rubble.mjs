@@ -14,8 +14,20 @@ export const RUBBLE_KINDS = ['stone', 'wood', 'glass', 'metal', 'door', 'window'
 export const heapKind = (material) => (RUBBLE_KINDS.includes(`heap-${material}`) ? `heap-${material}` : 'heap-stone');
 // Until a kind has pictures of its own it borrows these: a door breaks like wood, a window like glass.
 const BORROWS = { door: 'wood', window: 'glass' };
-/** A picture's long side covers the wall piece plus this much, so neighbouring pieces join. */
+/** A heap or the stand-in covers its piece plus this much, so neighbouring pieces join. */
 export const RUBBLE_OVERLAP = 1.12;
+/**
+ * How high a strip picture is drawn, across the wall, in squares. The band of rubble through the
+ * middle of a strip is about a third of its height, so this hides a painted wall up to a fifth of
+ * a square thick with nothing of it showing along either side.
+ */
+export const RUBBLE_STRIP_ACROSS = 0.75;
+/** A strip covers its wall piece fully and fades out over this much past each end, in squares. */
+export const RUBBLE_FADE = 0.12;
+/** The middle share of a strip picture's length where its band is whole. Toward the ends it thins out. */
+export const RUBBLE_SOLID = 0.84;
+/** A strip picture whose size is not known is taken to be three long by one high. */
+export const RUBBLE_STRIP_ASPECT = 1 / 3;
 /** The stand-in drawing is three long by two high. A picture file keeps its own shape. */
 export const RUBBLE_ASPECT = 2 / 3;
 /** How far across the wall the rubble may spread, in squares: wide enough to hide a painted wall, never a whole square. */
@@ -72,9 +84,30 @@ export function rubblePicture(library, kind, id) {
 }
 
 /**
- * Long and short side of one piece's rubble, in squares. The long side is the wall piece plus a
- * little. A picture keeps its own shape (`aspect`, height over width), so nothing is stretched;
- * the stand-in is kept wide enough to hide a painted wall and never a whole square across.
+ * How a strip picture is laid over one wall piece `length` squares long, all in squares:
+ *  - `along` by `across`: the size the whole picture is drawn at. It is scaled evenly, never
+ *    stretched, and big enough that its band is thicker than the wall painted on the map;
+ *  - `shown`: how much of that length is seen, centred on the piece: the piece itself plus a
+ *    `fade` past each end. The rest of the picture is not drawn, so rubble does not spill along
+ *    the wall over pieces that still stand;
+ *  - `shift`: how far the picture is slid along the wall, so neighbouring pieces show different
+ *    stretches of it. What is seen always stays inside the part of the picture where the band is whole.
+ * The same id always gives the same result.
+ */
+export function rubbleStrip(length, aspect, id) {
+  const shape = aspect > 0 ? aspect : RUBBLE_STRIP_ASPECT;
+  const shown = length + 2 * RUBBLE_FADE;
+  const across = Math.max(RUBBLE_STRIP_ACROSS, (shown / RUBBLE_SOLID) * shape);
+  const along = across / shape;
+  const slack = Math.max(0, (RUBBLE_SOLID * along - shown) / 2);
+  const shift = (((stableHash(`${id}:along`) % 1000) / 999) * 2 - 1) * slack;
+  return { along, across, shown, fade: RUBBLE_FADE, shift };
+}
+
+/**
+ * Long and short side of a heap's or the stand-in's rubble, in squares. The long side is the
+ * piece plus a little. A picture keeps its own shape (`aspect`, height over width), so nothing is
+ * stretched; the stand-in is kept wide enough to hide a painted wall and never a whole square across.
  */
 export function rubbleSize(length, aspect = null) {
   const along = length * RUBBLE_OVERLAP;
@@ -84,7 +117,7 @@ export function rubbleSize(length, aspect = null) {
 
 /**
  * One entry per square's worth of broken wall. A wall piece longer than a square and a half is
- * covered by several pictures end to end, so no picture is stretched.
+ * covered by several pictures end to end, so the rubble is the same scale on every piece.
  * Each entry: {id, edge, kind, a, b} with a and b in grid squares.
  */
 export function rubblePieces(model) {

@@ -55,12 +55,27 @@ test('a kind with a picture file uses it; a kind without is drawn', () => {
   const door = byId('door'), image = door.querySelector('image');
   assert.equal(door.dataset.rubbleSource, 'picture');
   assert.match(image.getAttribute('href'), /^assets\/images\/rubble\/rubble-door-[12]\.png\?v=5$/);
-  // A little longer than the one-square wall piece, centred on the wall, and the picture's own
-  // three-to-one shape: it is never stretched.
+  // Drawn three quarters of a square high (48 of this board's 64 pixels), so its band is thicker
+  // than a painted wall, centred on the wall line, in its own three-to-one shape: never stretched.
   const width = Number(image.getAttribute('width')), height = Number(image.getAttribute('height'));
-  assert.ok(width > 64 && width < 77, `${width} long`);
-  assert.ok(Math.abs(height - width / 3) < 0.01, `${width} by ${height} is three to one`);
-  assert.equal(Number(image.getAttribute('x')), -width / 2);
+  assert.ok(Math.abs(height - 48) < 0.01, `${height} high`);
+  assert.ok(Math.abs(width - height * 3) < 0.01, `${width} by ${height} is three to one`);
+  assert.equal(Number(image.getAttribute('y')), -height / 2);
+  // Only the stretch over the piece is shown: the whole square, fading out just past each end.
+  const fade = door.querySelector('mask'), cover = fade.querySelector('rect'), ramp = door.querySelector('linearGradient');
+  assert.equal(image.getAttribute('mask'), `url(#${fade.id})`);
+  assert.equal(cover.getAttribute('fill'), `url(#${ramp.id})`);
+  const shown = Number(cover.getAttribute('width')), left = Number(cover.getAttribute('x'));
+  assert.ok(shown > 64 && shown < 84, `${shown} shown for a 64 pixel piece`);
+  assert.ok(Math.abs(left + shown / 2) < 0.01, 'centred on the piece');
+  assert.equal(Number(cover.getAttribute('height')), height);
+  const stops = [...ramp.querySelectorAll('stop')].map((stop) => [Number(stop.getAttribute('offset')) * shown + left, Number(stop.getAttribute('stop-opacity'))]);
+  assert.deepEqual(stops.map(([, opacity]) => opacity), [0, 1, 1, 0]);
+  assert.ok(stops[1][0] <= -32 + 0.01 && stops[2][0] >= 32 - 0.01, `solid from one end of the piece to the other: ${stops[1][0]} to ${stops[2][0]}`);
+  // What is shown comes from the middle of the picture, where its band is whole.
+  const x = Number(image.getAttribute('x'));
+  assert.ok(left >= x + width * 0.08 - 0.01 && left + shown <= x + width * 0.92 + 0.01, `shown ${left} to ${left + shown} of a picture from ${x} to ${x + width}`);
+  assert.equal(new Set([...document.querySelectorAll('[id^="wall-rubble-"]')].map((node) => node.id)).size, document.querySelectorAll('[id^="wall-rubble-"]').length, 'every name is used once');
   const stone = byId('stone-wall');
   assert.equal(stone.dataset.rubbleSource, 'drawn');
   assert.ok(stone.querySelectorAll('path').length > 20);

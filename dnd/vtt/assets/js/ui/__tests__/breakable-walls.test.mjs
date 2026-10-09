@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { MATERIALS, validateProperties, restrictions, liveWalls, isBreakable, isBroken, isOneWay, movementBlocked, movementPathBlocked } from '../wall-properties.mjs';
 import { validateWalls, split, cutIntoSquares } from '../wall-geometry.mjs';
 import { makeSight } from '../vision-height.mjs';
-import { rubbleKind, rubblePieces, rubbleLibrary, rubblePicture, rubbleSize, pickVersion, stableHash, standInRubble, plateUnder, insideRing, heapKind, RUBBLE_KINDS, RUBBLE_MAX_ACROSS, RUBBLE_MIN_ACROSS } from '../wall-rubble.mjs';
+import { rubbleKind, rubblePieces, rubbleLibrary, rubblePicture, rubbleSize, rubbleStrip, RUBBLE_STRIP_ACROSS, RUBBLE_SOLID, pickVersion, stableHash, standInRubble, plateUnder, insideRing, heapKind, RUBBLE_KINDS, RUBBLE_MAX_ACROSS, RUBBLE_MIN_ACROSS } from '../wall-rubble.mjs';
 
 // A wall running north to south along x = 3, one square long per piece, with a door in the middle.
 const wall = (extra = {}) => ({
@@ -104,11 +104,31 @@ test('rubble size: a little longer than the wall piece; a picture keeps its own 
   assert.ok(Math.abs(one.across - 0.747) < 0.01);
   assert.equal(rubbleSize(0.22).across, RUBBLE_MIN_ACROSS, 'a stub is still wide enough to hide the painted wall');
   assert.equal(rubbleSize(1.4).across, RUBBLE_MAX_ACROSS, 'never a whole square across');
-  // A picture file: scaled by its long side, its height follows from its own shape. Never stretched.
-  const strip = rubbleSize(1, 200 / 600);
-  assert.equal(strip.along, one.along);
-  assert.ok(Math.abs(strip.across - strip.along / 3) < 1e-9, 'a three-to-one strip stays three to one');
+  // A heap picture: scaled by its long side, its height follows from its own shape. Never stretched.
   assert.ok(Math.abs(rubbleSize(2, 475 / 512).across - 2 * 1.12 * 475 / 512) < 1e-9, 'a heap stays nearly square');
+});
+
+test('a strip picture is drawn big enough to hide the painted wall, and shown only over its piece', () => {
+  const shape = 200 / 600;
+  for (const [length, id] of [[1, 'wall-1'], [1, 'wall-2'], [0.22, 'stub'], [Math.SQRT2, 'slant'], [1.49, 'long'], [1, 'wall-7#3']]) {
+    const strip = rubbleStrip(length, shape, id);
+    // The band through the middle of a strip is about a third of its height. Three quarters of a
+    // square high makes that band thicker than a wall painted a fifth of a square thick.
+    assert.ok(strip.across >= RUBBLE_STRIP_ACROSS, `${id}: ${strip.across} squares across`);
+    assert.ok(strip.across < 1, `${id}: never a whole square across`);
+    assert.ok(Math.abs(strip.across / strip.along - shape) < 1e-9, `${id}: the picture keeps its own shape`);
+    // Seen: the whole piece, and a short fade past each end. Never a neighbouring square.
+    assert.ok(Math.abs(strip.shown - (length + 2 * strip.fade)) < 1e-9);
+    assert.ok(strip.fade > 0 && strip.fade <= 0.15, `${id}: the fade past each end is short`);
+    // What is seen lies inside the middle of the picture, where its band is whole.
+    const reach = Math.abs(strip.shift) + strip.shown / 2;
+    assert.ok(reach <= (RUBBLE_SOLID * strip.along) / 2 + 1e-9, `${id}: reaches ${reach} of ${strip.along / 2}`);
+    assert.deepEqual(rubbleStrip(length, shape, id), strip, 'the same on every redraw and every screen');
+  }
+  assert.equal(rubbleStrip(1, shape, 'wall-1').across, RUBBLE_STRIP_ACROSS, 'a one-square piece is three quarters of a square across');
+  assert.notEqual(rubbleStrip(1, shape, 'wall-1').shift, rubbleStrip(1, shape, 'wall-2').shift, 'neighbours show different stretches of the picture');
+  // A picture whose size could not be read is taken as three to one, not stretched to fit.
+  assert.deepEqual(rubbleStrip(1, null, 'wall-1'), rubbleStrip(1, 1 / 3, 'wall-1'));
 });
 
 test('pictures are found by file name, and a wall always gets the same one', () => {

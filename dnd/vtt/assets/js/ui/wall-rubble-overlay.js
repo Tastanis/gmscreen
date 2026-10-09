@@ -7,7 +7,7 @@
 //  - rubble on a floor plate (an upper floor, or any floor that has its own picture) sits just
 //    above the plates, which are painted over the fog. It is drawn only while that floor is being
 //    viewed and, for a player, only while the spot is in sight, the test door markers already use.
-import { rubblePieces, rubbleLibrary, rubblePicture, rubbleSize, standInRubble, plateUnder, stableHash } from './wall-rubble.mjs';
+import { rubblePieces, rubbleLibrary, rubblePicture, rubbleSize, rubbleStrip, standInRubble, plateUnder, stableHash } from './wall-rubble.mjs';
 import { wallHeights } from './wall-properties.mjs';
 import { resolveSupportSurfaces } from './floor-support.js';
 
@@ -36,11 +36,35 @@ function clear(mark) {
   ground.replaceChildren(); floors.replaceChildren(); signature = mark; drawn = [];
 }
 
-function pieceNode(entry, g) {
+const svgNode = (name, attributes = {}) => {
+  const node = document.createElementNS(NS, name);
+  for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, String(value));
+  return node;
+};
+
+/**
+ * A strip picture over one piece. The whole picture is scaled evenly until its band of rubble is
+ * thicker than the painted wall; only the stretch over this piece is shown, fading out just past
+ * each end, so the wall is hidden from end to end and nothing spills over pieces still standing.
+ * `unit` is one square in pixels; `mark` makes the fade's name its own.
+ */
+function stripNodes(picture, piece, squares, unit, mark) {
+  const strip = rubbleStrip(squares, picture.aspect, piece.id);
+  const along = strip.along * unit, across = strip.across * unit, shown = strip.shown * unit;
+  const ramp = svgNode('linearGradient', { id: `wall-rubble-ramp-${mark}`, gradientUnits: 'userSpaceOnUse', x1: -shown / 2, y1: 0, x2: shown / 2, y2: 0 });
+  const edge = strip.fade / strip.shown;
+  for (const [offset, opacity] of [[0, 0], [edge, 1], [1 - edge, 1], [1, 0]]) ramp.append(svgNode('stop', { offset, 'stop-color': '#fff', 'stop-opacity': opacity }));
+  const fade = svgNode('mask', { id: `wall-rubble-fade-${mark}`, maskUnits: 'userSpaceOnUse', x: -shown / 2, y: -across / 2, width: shown, height: across });
+  fade.append(svgNode('rect', { x: -shown / 2, y: -across / 2, width: shown, height: across, fill: `url(#wall-rubble-ramp-${mark})` }));
+  const image = svgNode('image', { href: picture.url, x: -along / 2 + strip.shift * unit, y: -across / 2, width: along, height: across, preserveAspectRatio: 'none', mask: `url(#wall-rubble-fade-${mark})` });
+  return [ramp, fade, image];
+}
+
+function pieceNode(entry, g, mark) {
   const { piece, from, to } = entry;
   const lengthPx = Math.hypot(to.x - from.x, to.y - from.y), squares = Math.hypot(piece.b.x - piece.a.x, piece.b.y - piece.a.y);
   const picture = rubblePicture(library, piece.kind, piece.id);
-  const size = rubbleSize(squares, picture?.aspect), along = lengthPx * (size.along / squares), across = size.across * g;
+  const size = rubbleSize(squares), along = lengthPx * (size.along / squares), across = size.across * g;
   // Half the pieces are turned end for end, so a run of them does not repeat.
   const turn = (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI + (stableHash(piece.id) & 1 ? 180 : 0);
   const group = document.createElementNS(NS, 'g');
@@ -48,12 +72,8 @@ function pieceNode(entry, g) {
   group.setAttribute('transform', `translate(${((from.x + to.x) / 2).toFixed(2)} ${((from.y + to.y) / 2).toFixed(2)}) rotate(${turn.toFixed(2)})`);
   if (picture) {
     group.dataset.rubbleSource = 'picture';
-    const image = document.createElementNS(NS, 'image');
-    image.setAttribute('href', picture.url);
-    image.setAttribute('x', String(-along / 2)); image.setAttribute('y', String(-across / 2));
-    image.setAttribute('width', String(along)); image.setAttribute('height', String(across));
-    image.setAttribute('preserveAspectRatio', 'none');
-    group.append(image);
+    // One scale both ways, taken from the piece as it lies on the board, so the picture keeps its shape.
+    group.append(...stripNodes(picture, piece, squares, lengthPx / squares, mark));
     return group;
   }
   group.dataset.rubbleSource = 'drawn';
@@ -102,7 +122,7 @@ function draw() {
   signature = next; builds++;
   for (const svg of [ground, floors]) { svg.setAttribute('width', v.mapPixelSize?.width || 0); svg.setAttribute('height', v.mapPixelSize?.height || 0); }
   const low = [], high = [];
-  for (const entry of entries) if (entry.shown) (entry.onPlate ? high : low).push(pieceNode(entry, g));
+  entries.forEach((entry, index) => { if (entry.shown) (entry.onPlate ? high : low).push(pieceNode(entry, g, index)); });
   ground.replaceChildren(...low); floors.replaceChildren(...high);
   drawn = entries.map((entry) => ({ id: entry.piece.id, kind: entry.piece.kind, layer: entry.onPlate ? 'floor' : 'ground', shown: entry.shown }));
 }
