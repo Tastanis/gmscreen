@@ -55,7 +55,7 @@ export function makeSight({viewer,groundAt,walls,terrain=null,viewerGround=groun
   if(contactCliffs.some(e=>hitParameter(origin,target,e.a,e.b)!==null))return false;
   const pad=EPS*(Math.abs(target.x-origin.x)+Math.abs(target.y-origin.y)+1);
   const left=Math.min(origin.x,target.x)-pad,right=Math.max(origin.x,target.x)+pad,rayTop=Math.min(origin.y,target.y)-pad,rayBottom=Math.max(origin.y,target.y)+pad;
-  const limitedHits=[];
+  let limitedHits=null;
   if(!filed&&edges.length>=FILE_FROM&&++asked>FILE_AFTER)filed=file();
   for(const e of filed?filed[Math.min(SECTORS-1,Math.floor((Math.atan2(target.y-origin.y,target.x-origin.x)+Math.PI)/TURN*SECTORS))]:edges){
    // Conservative broad phase only; exact ray, direction and height rules follow.
@@ -63,15 +63,15 @@ export function makeSight({viewer,groundAt,walls,terrain=null,viewerGround=groun
    const t=hitParameter(origin,target,e.a,e.b);if(t===null)continue;
    const crossing={x:origin.x+(target.x-origin.x)*t,y:origin.y+(target.y-origin.y)*t};
    const {base,top}=wallHeights(e,e.a,e.b,crossing,groundAt);
-   if(e.gap<EPS&&eye<top-EPS&&eye>=base-EPS){if(e.sight==='limited'){limitedHits.push(t);continue;}return false;}
+   if(e.gap<EPS&&eye<top-EPS&&eye>=base-EPS){if(e.sight==='limited'){(limitedHits||=[]).push(t);continue;}return false;}
    // Agreed roof-edge exception: a full gap reveals an occupant at that edge.
    if(targetToken&&e.gap>=1-EPS&&wallGap(targetToken,e.a,e.b)<EPS&&z-Math.max(targetToken.width||1,targetToken.height||1)>=top-EPS)continue;
    const behind=distance*(1-t),den=e.gap+behind;
    const atWall=den>EPS?eye+(z-eye)*e.gap/den:Math.max(eye,z);
-   if(atWall>=base-EPS&&atWall<=top+EPS){if(e.sight==='limited')limitedHits.push(t);else return false;}
+   if(atWall>=base-EPS&&atWall<=top+EPS){if(e.sight==='limited')(limitedHits||=[]).push(t);else return false;}
   }
   // Shared endpoints count once; adjoining editable pieces are not extra walls.
-  limitedHits.sort((a,b)=>a-b);let crossings=0,last=-Infinity;for(const t of limitedHits){if(t-last>EPS){crossings++;last=t;}if(crossings>=2)return false;}
+  if(limitedHits){limitedHits.sort((a,b)=>a-b);let crossings=0,last=-Infinity;for(const t of limitedHits){if(t-last>EPS){crossings++;last=t;}if(crossings>=2)return false;}}
   if(terrain)return !terrain.blocks(origin,eye,target,z,viewer,viewerGround);
   // Fallback for analytic test surfaces without a rendered terrain mesh.
   const steps=Math.max(1,Math.ceil(distance*2));

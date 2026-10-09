@@ -4,7 +4,10 @@
 export function* adaptiveFogSteps({left,top,right,bottom,visible,emit,maxDepth=1,edgeSteps=2,pause=16}){
  const samples=new Map(),edges=new Map();let checks=0,leaves=0,polygons=0;
  const key=p=>p.x+','+p.y;
- const seen=p=>{const k=key(p);if(!samples.has(k)){checks++;samples.set(k,!!visible(p));}return samples.get(k);};
+ // Each point is looked at once. The answers are kept by the point's own two numbers (a list for
+ // each x, then y within it), not by a text made from them: some twelve thousand texts a picture
+ // were made only to be thrown away.
+ const seen=p=>{let column=samples.get(p.x);if(column===undefined){column=new Map();samples.set(p.x,column);}let answer=column.get(p.y);if(answer===undefined){checks++;answer=!!visible(p);column.set(p.y,answer);}return answer;};
  function crossing(a,b){
   if(key(a)>key(b))[a,b]=[b,a];const k=key(a)+'/'+key(b);
   if(edges.has(k))return edges.get(k);

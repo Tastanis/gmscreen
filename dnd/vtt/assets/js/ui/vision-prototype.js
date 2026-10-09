@@ -109,7 +109,9 @@ function tick(){
    else if(queue.current?.key!==key){
     const image=document.querySelector('#vtt-map-image'),g=v.gridSize,ox=v.gridOffsets.left||0,oy=v.gridOffsets.top||0;
     const left=(v.mapInsets.left-ox)/g,top=(v.mapInsets.top-oy)/g,right=left+image.naturalWidth/g,bottom=top+image.naturalHeight/g;
-    const projected=(x,y)=>{const px=ox+x*g,py=oy+y*g;return terrain.active?terrain.project(px,py,groundAt(x,y)):{x:px,y:py};};
+    // One projector for the whole picture (terrain-prototype.js): the grid and slant are read once.
+    const place=terrain.active?(terrain.projector?.()??terrain.project):null;
+    const projected=(x,y)=>{const px=ox+x*g,py=oy+y*g;return place?place(px,py,groundAt(x,y)):{x:px,y:py};};
     const path=new Path2D(),seen=sight;
     // Consistent projected winding prevents overlapping parallax polygons from
     // subtracting from one another and leaving sharp black triangular slivers.

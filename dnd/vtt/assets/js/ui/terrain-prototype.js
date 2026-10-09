@@ -62,6 +62,10 @@ function heightAt(x,y){if(!field||!active)return 0;const d=dimensions();return s
 // How far a square of height moves a thing on screen. The scene's map design may ask for a flatter slant (height-view.mjs).
 function slant(){return slantVector(viewSlant(importedDesign()));}
 function project(x,y,h){const g=dimensions().grid,s=slant();return {x:x+h*g*s.x,y:y-h*g*s.y};}
+// The same sum for a caller with thousands of points to place at once (the sight picture): the
+// grid and the slant are looked up once, not for every point. Good only for the piece of work it
+// was asked for; a new slant arrives with a new revision of the walls.
+function projector(){const g=dimensions().grid,s=slant();return (x,y,h)=>({x:x+h*g*s.x,y:y-h*g*s.y});}
 // The board as it is this instant, not as it was at the last frame: a press that selects a token
 // and starts dragging it has to see that selection at once.
 function liveBoard(){return window.terrainContext?.()||ctx;}
@@ -364,7 +368,7 @@ function paintRoute(overlay,points,gridSize){
  overlay.path.style.opacity='0';
 }
 window.addEventListener('storage',e=>{if(e.key===key&&!drawing){key='';}});
-window.terrainPrototype={get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,heightAt,groundFor,landingHeight,movementGroundFor,movementPlacement,highGround,isCliff,climbFace,walkerNear,get design(){return importedDesign();},route,rulerPass,rulerPoint,routePath,squarePath,paintRoute,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get key(){return key;},get storageError(){return storageError;},project,get slant(){return slant();},get active(){return active;}};
+window.terrainPrototype={get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,projector,heightAt,groundFor,landingHeight,movementGroundFor,movementPlacement,highGround,isCliff,climbFace,walkerNear,get design(){return importedDesign();},route,rulerPass,rulerPoint,routePath,squarePath,paintRoute,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get key(){return key;},get storageError(){return storageError;},project,get slant(){return slant();},get active(){return active;}};
 requestAnimationFrame(tick);
 
 import('./wall-prototype.js');
