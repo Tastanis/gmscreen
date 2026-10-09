@@ -1,5 +1,5 @@
 import {roofTopOccluders,roofTopRamps,wallUnderRoof,roofRevealHeight} from './roof-top-occlusion.mjs';
-import {rampPlane,rampAt,rampHeight,rampPick,rampGround,rampSupports,rampLanding,landingPeekRamps,inLandingPeek} from './imported-ramps.mjs';
+import {rampPlane,rampAt,rampHeight,rampPick,rampGround,rampSupports,rampLanding,landingPeekRamps,inLandingPeek,standingFloor,rampSightHeight} from './imported-ramps.mjs';
 import {seesFlatTop,seesRampTop} from './surface-facing.mjs';
 import {compileBuildingCutaway} from './building-cutaway.mjs';
 import {doorwayCutaways} from './doorway-cutaway.mjs';
@@ -113,16 +113,20 @@ export const roofRenderer={get revision(){return revision;},surfaces:roofSurface
   }
   // Draw the actual stair artwork on its own incline. The terrain underneath
   // the landing remains ground level and must never supply the stair texture.
+  // The floor a hero stands on does not hide a stair joined to it: a line down to a stair
+  // that leaves your own floor crosses that floor, and would leave the stair undrawn.
+  const ownFloor=inspectionHeight===null?standingFloor(surfaces,viewer,viewerGround,onSurface):null;
   for(const layer of rampLayers){
    const s=layer.s,art=document.createElement('canvas');art.width=layer.mask.width;art.height=layer.mask.height;const ctx=art.getContext('2d');ctx.translate(-layer.x,-layer.y);
    requestImage(s.imageId);const image=cache.get(s.imageId);if(!image)continue;
    const plane=rampPlane(s),horizontal=Math.abs(plane.a)>0,gradient={x:plane.a,y:plane.b},slant=window.terrainPrototype.slant;
+   const level=rampSightHeight(s,ownFloor,-Infinity,onSurface),see=(p,z)=>sight(p,Math.max(z,level));
    const start=horizontal?s.left:s.top,end=horizontal?s.right:s.bottom;
    for(let t=start;t<end-1e-7;t+=1/16){
     const x=horizontal?t:s.left,y=horizontal?s.top:t,w=horizontal?Math.min(1/16,end-t):s.right-s.left,h=horizontal?s.bottom-s.top:Math.min(1/16,end-t),mid={x:x+w/2,y:y+h/2},z=rampHeight(s,mid.x,mid.y);
     if(inspectionHeight!==null&&z>inspectionHeight)continue;
-    if(inspectionHeight===null&&!seesRampTop(viewer,head(token,viewerGround),mid,z,gradient))continue;
-    if(lighting&&!sight(mid,z))continue;
+    if(inspectionHeight===null&&!seesRampTop(viewer,head(token,viewerGround),mid,z,gradient,s.height))continue;
+    if(lighting&&!see(mid,z))continue;
     const origin=window.terrainPrototype.project(ox+x*g,oy+y*g,rampHeight(s,x,y));
     ctx.save();ctx.transform(1+slant.x*plane.a,-slant.y*plane.a,slant.x*plane.b,1-slant.y*plane.b,origin.x,origin.y);
     ctx.drawImage(image,ox+x*g-v.mapInsets.left,oy+y*g-v.mapInsets.top,w*g,h*g,0,0,w*g+.2,h*g+.2);ctx.restore();
@@ -132,8 +136,8 @@ export const roofRenderer={get revision(){return revision;},surfaces:roofSurface
     for(let t=start+.5;t<end;t++){
      const p={x:horizontal?t:(s.left+s.right)/2,y:horizontal?(s.top+s.bottom)/2:t},z=rampHeight(s,p.x,p.y);
      if(inspectionHeight!==null&&z>inspectionHeight)continue;
-     if(inspectionHeight===null&&!seesRampTop(viewer,head(token,viewerGround),p,z,gradient))continue;
-     if(lighting&&!sight(p,z))continue;
+     if(inspectionHeight===null&&!seesRampTop(viewer,head(token,viewerGround),p,z,gradient,s.height))continue;
+     if(lighting&&!see(p,z))continue;
      const q=window.terrainPrototype.project(ox+p.x*g,oy+p.y*g,z),tip={x:q.x+ux*g*.06,y:q.y+uy*g*.06};
      ctx.beginPath();ctx.moveTo(q.x-ux*g*.05,q.y-uy*g*.05);ctx.lineTo(tip.x,tip.y);ctx.moveTo(tip.x-ux*g*.045-uy*g*.04,tip.y-uy*g*.045+ux*g*.04);ctx.lineTo(tip.x,tip.y);ctx.lineTo(tip.x-ux*g*.045+uy*g*.04,tip.y-uy*g*.045-ux*g*.04);ctx.strokeStyle='#559e5f';ctx.lineWidth=g*.026;ctx.lineCap='round';ctx.stroke();
     }

@@ -840,6 +840,58 @@ on one took the other, and you could not tell which square was the ledge.
 click three squares away slides the hero 3. That is how the picker was written: its own status
 line says "you can still choose a destination". It is put to you as a ruling, not changed.
 
+## October 9: a stair could not be seen from the floor at its top. Fixed, waiting for a browser look
+
+You said that on an island of the Gravity Orchard you could not see the
+stairs and vines that hang off it, and saw the crater floor in their place.
+
+**What was wrong.** It was the board, not the map, and it was the island at
+the *top* of a stair. From the foot a stair was drawn. From the floor it
+leads up to it was not: an arch disappeared once the hero stood more than one
+square back from its top step, and a vine never showed at all. Two rules did
+it:
+
+- A stair's picture was drawn only for an eye above the stair's slope
+  *carried on past its top*. Anyone standing on the upper floor is below that
+  imagined slope, so they were treated as if they were under the stair.
+- A line of sight to anything lower than your own floor is stopped by your
+  own floor. That was applied to the stair hanging off that same floor.
+
+On the bathhouse the same thing happened from an upper floor, but nobody
+noticed: its stairs stand in a hole in the floor above, and the picture of
+the floor below has the stair painted on it. The Orchard has nothing under
+its arches but the crater.
+
+**What happens now**, on every map:
+
+- A hero whose eyes are at or above a stair's top sees its upper face, the
+  same rule a flat floor already uses.
+- A stair joined to the floor a hero stands on is looked for at that floor's
+  height. It shows wherever that spot would show if the floor went on. A wall
+  or a rock on the floor between the hero and the stair still hides it, and
+  so does another floor in the way.
+- Clicks follow the drawing: a click on a stair that is now drawn lands on
+  the stair.
+
+**What it changes on maps you already have.** Views through a token standing
+on the floor at the top of a stair, or higher than the stair: the stair is
+now drawn on its slope. On the bathhouse that is the upper floors looking at
+a stair down from more than a square and a half back. Views from the foot,
+the GM's height views and creatures are not changed: tokens are hidden or
+shown by their own test, which was not touched.
+
+**Checked without a browser**, by running the board's own sight code on the
+two map packages: on the Orchard, 53 standing places on the islands at the
+top of an arch or vine went from "not drawn" to "all of it drawn", none went
+the other way, and every place at a foot is as before. Two places still do
+not see a vine because rocks stand between. Tests:
+`ramp-from-above.test.mjs`.
+
+**Not changed, to know about:** a hero on a third, higher island sees a stair
+between two lower islands only where their own island's edge does not cut
+the view, as with the lower islands themselves; the unseen part of such a
+stair is not drawn dimmed the way the unseen part of a lower island is.
+
 ## Where it is now
 
 You said to put stages 1 to 3 on `main` on this PC and wait for your word

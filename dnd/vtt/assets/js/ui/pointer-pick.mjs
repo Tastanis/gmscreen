@@ -23,14 +23,14 @@ export const pointAtHeight = (raw, height, slant) => ({ x: raw.x - height * slan
  *    below it are drawn.
  *  - `{eye, viewer}`: looking through a token's eyes. `eye` is the height of its head and `viewer`
  *    its place {x, y}. Floors below its head are drawn; a floor at or above it is not. A ramp is
- *    drawn where the viewer is above its slope.
+ *    drawn where the viewer is above its slope, or has its head at or above the ramp's top.
  * The floor drawing in roof-renderer.js uses the same two tests.
  */
 const floorDrawn = (height, view) => (view.upTo !== undefined ? height <= view.upTo + 0.001 : view.eye > height + 1e-6);
 function rampDrawn(ramp, point, height, view) {
   if (view.upTo !== undefined) return height <= view.upTo + 1e-9;
   const plane = rampPlane(ramp);
-  return !!view.viewer && seesRampTop(view.viewer, view.eye, point, height, { x: plane.a, y: plane.b });
+  return !!view.viewer && seesRampTop(view.viewer, view.eye, point, height, { x: plane.a, y: plane.b }, ramp.height);
 }
 
 /**

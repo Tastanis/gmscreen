@@ -29,6 +29,17 @@ export function rampLanding(ramps,surfaces,actor,p,onSurface){
  const at={x:actor.column+(actor.width||1)/2,y:actor.row+(actor.height||1)/2},s=rampAt(ramps,at);
  return s&&rampSupports(s,actor,at)&&surfaces.some(f=>f.kind==='floor'&&f.levelId===s.toLevel&&onSurface(f,p))?s.height:null;
 }
+// The floor plate someone stands on, if any; and whether a ramp is joined to a floor: the strip
+// one square beyond the ramp's top end (or its foot) lies on that floor, at that end's height.
+// A stair that leaves the floor you stand on is never hidden by that floor: each part of it that
+// is lower than the floor is looked for at the floor's own height (rampSightHeight), so it shows
+// wherever that spot would show if the floor went on, and walls on the floor still hide it.
+export const rampSightHeight=(s,floor,z,onSurface)=>floor&&rampJoins(s,floor,onSurface)?Math.max(z,floor.height):z;
+export function standingFloor(surfaces,p,ground,onSurface){return surfaces.find(f=>f.kind==='floor'&&Math.abs(f.height-ground)<1e-6&&onSurface(f,p))||null;}
+export function rampJoins(s,floor,onSurface){
+ const d=s.direction||'north',beyond=(head,u)=>d==='east'||d==='west'?{x:(d==='east')===head?s.right+.5:s.left-.5,y:s.top+(s.bottom-s.top)*u}:{x:s.left+(s.right-s.left)*u,y:(d==='south')===head?s.bottom+.5:s.top-.5};
+ return [[true,s.height],[false,s.base]].some(([head,height])=>Math.abs(floor.height-height)<1e-6&&[.25,.5,.75].some(u=>onSurface(floor,beyond(head,u))));
+}
 export function rampsBlock(ramps,origin,eye,target,z){
  for(const s of ramps){
   const {a,b,c}=rampPlane(s);
