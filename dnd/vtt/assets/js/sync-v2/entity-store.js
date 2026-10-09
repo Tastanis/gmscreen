@@ -1,3 +1,5 @@
+import { copySharingDesigns, SNAPSHOT_DESIGNS } from '../state/shared-designs.js';
+
 function clone(value) {
   return JSON.parse(JSON.stringify(value ?? {}));
 }
@@ -22,8 +24,11 @@ export function createEntityStore(initialSnapshot = {}) {
   let confirmed = normalizeEntitySnapshot(initialSnapshot);
   const listeners = new Set();
 
+  // A copy nothing outside can change the confirmed state through. Scene designs in it are shared
+  // between copies while unchanged (shared-designs.js): this is asked for on every token move, by
+  // code that only wants to read where a token stands.
   function getSnapshot() {
-    return clone(confirmed);
+    return copySharingDesigns(confirmed, SNAPSHOT_DESIGNS);
   }
 
   function getConfirmedSnapshot() {

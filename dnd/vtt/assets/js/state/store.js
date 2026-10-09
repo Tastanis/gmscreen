@@ -19,6 +19,7 @@ import {
   restrictTokensToPlayerView,
 } from './normalize/tokens.js';
 import { normalizeSceneBoardState } from './normalize/scene-board-state.js';
+import { copySharingDesigns, BOARD_DESIGNS } from './shared-designs.js';
 
 export {
   normalizeMonsterSnapshot,
@@ -114,7 +115,10 @@ function invalidateStateSnapshot() {
 
 export function getState() {
   if (cachedStateSnapshot === null) {
-    cachedStateSnapshot = JSON.parse(JSON.stringify(state));
+    // The same copy as writing the state out and reading it back, except that a scene's map
+    // design is not copied again while it is unchanged (shared-designs.js): a token move made
+    // this copy two or three times, each time with every scene's ground heights in it.
+    cachedStateSnapshot = copySharingDesigns(state, BOARD_DESIGNS);
   }
   return cachedStateSnapshot;
 }

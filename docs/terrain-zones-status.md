@@ -1067,6 +1067,50 @@ browser profile.
 
 Tests: `sight-job.test.mjs`, `vision-tick.test.mjs`.
 
+## October 9, night: what the rest of the freeze was. Fixed, waiting for a browser look
+
+Sight was only about a quarter of the freeze you measured on Build 452. I
+found the rest.
+
+**What it was.** The board keeps one record of everything: every scene, its
+walls, its floors, and its ground heights. Whenever anything changes, the
+next part of the app that asks to read that record is handed a fresh copy of
+all of it, so that nothing can damage the original. One token move changes
+the record two or three times (when you let go, and again when the server
+answers), so two or three whole copies were made for every move.
+
+A map with painted ground heights is about a megabyte in that record. With
+Dead Root, the Gravity Orchard and the bathhouse in the campaign, one copy
+took about 45 thousandths of a second on your PC; with six such maps, 80.
+That is the 39 to 55 thousandths you measured when the server answers, the
+45 when you let go of the mouse, and most of what was left in the sight step
+that was not sight. It grew with every new map with heights you added, which
+is why the board felt slower this week than last, on every map, not just the
+new ones.
+
+**What happens now.** The copy is still a whole copy and still equal to the
+old one in every part. But a scene's design is no longer copied again while
+it has not changed: the copy already made of it is handed out again. A token
+move now copies the tokens and the small things, not the maps.
+
+| Maps with heights in the campaign | One copy before | Now |
+|---|---|---|
+| Dead Root alone | 23 | 0.5 |
+| Dead Root, Orchard, bathhouse | 46 | 2 |
+| Six | 80 | 4 |
+
+(thousandths of a second, measured on your PC outside the browser)
+
+A design that does change (a wall broken, a door opened, the ground
+repainted) arrives as a new object with a new number, and is copied afresh.
+
+**What I could not check.** Like the sight change, this has not been seen
+in a browser. It sits under everything on the board, so the tester should
+give it a wide look: moving, fighting, breaking walls, doors, changing
+scene, a second player's page.
+
+Tests: `shared-designs.test.mjs`.
+
 ## Where it is now
 
 You said to put stages 1 to 3 on `main` on this PC and wait for your word

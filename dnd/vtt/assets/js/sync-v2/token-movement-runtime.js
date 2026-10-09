@@ -4,6 +4,7 @@ import { createRecoveryClient } from './recovery-client.js';
 import { createCommandClient } from './command-client.js';
 import { createRecoveryPolling } from './recovery-polling.js';
 import { createSerialQueue } from './serial-queue.js';
+import { copyDesigns } from '../state/shared-designs.js';
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value ?? {}));
@@ -635,7 +636,11 @@ export function createTokenMovementRuntime({
           : {};
       for (const field of ['grid', 'fogOfWar', 'mapLevels', 'userLevelState', 'pcTokenAssociations', 'environment']) {
         if (Object.prototype.hasOwnProperty.call(config ?? {}, field)) {
-          boardState.sceneState[sceneId][field] = clone(config[field]);
+          // A scene's design is handed over as the copy already made of it while it is unchanged,
+          // so that laying the confirmed state over the board does not copy every map again.
+          // It is a copy of that copy, so the board's own state never holds the object a reader of the
+          // confirmed snapshot is given.
+          boardState.sceneState[sceneId][field] = field === 'environment' ? copyDesigns(copyDesigns(config[field] ?? {})) : clone(config[field]);
         }
       }
     }
