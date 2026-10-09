@@ -38,6 +38,18 @@ export function movementCellContains(shape, point) {
  * disagree with what was painted, and a click on a square hanging over a drop then fell through
  * to "the ground under the pointer": a square or two away, the height times the slant.
  */
+/**
+ * The height one corner of an offered square is painted at. `caught` is the plate the creature
+ * would land on in that square (null when none would catch it: the ground decides), `footing`
+ * the ground under the middle of the square and `ground` the ground at this corner. A square
+ * that lies on the plate that catches the creature is flat at that plate's height: a corner
+ * that touches the edge of a higher ledge beside it must not be lifted by that ledge.
+ */
+export function offeredCornerHeight(caught, footing, ground) {
+  if (caught === null || caught === undefined) return ground;
+  return footing > caught + 1e-6 ? Math.max(ground, caught) : caught;
+}
+
 export function paintedCellAt(nodes, clientX, clientY) {
   const list = Array.from(nodes || []);
   for (let i = list.length - 1; i >= 0; i--) {

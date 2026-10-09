@@ -2,7 +2,7 @@ import {chooseTeleportHeight} from './teleport-choice.js';
 import {groundSquare} from './terrain-math.mjs';
 import {beginPlayerVisibility} from './player-visibility-ready.js';
 import {createKeyboardMovementQueue} from './keyboard-movement-queue.js';
-import {projectedMovementCell, movementCellContains, paintProjectedMovementCell, updateMovementLoupe,paintedCellAt} from './movement-cell-projection.js';
+import {projectedMovementCell, movementCellContains, paintProjectedMovementCell, updateMovementLoupe,paintedCellAt,offeredCornerHeight} from './movement-cell-projection.js';
 import {dragMovementKind} from './drag-ruler.js';
 import {floorElevations as teleportFloorElevations} from '../state/normalize/floor-elevation.js';
 import {mountFallReview} from './fall-review.js';
@@ -18320,7 +18320,9 @@ export function mountBoardInteractions(store, routes = {}) {
       request.landings.set(key, altitude === null ? null : terrain.landingHeight(standing, altitude));
     }
     const caught = request.landings.get(key);
-    const heightAt = point => { const ground = terrain.groundFor(standing, point); return caught === null ? ground : Math.max(ground, caught); };
+    // On the plate that catches it the square is flat; a corner on the edge of the ledge above does not lift it.
+    const footing = caught === null ? null : terrain.groundFor(standing);
+    const heightAt = point => offeredCornerHeight(caught, footing, terrain.groundFor(standing, point));
     const project = terrain?.active ? point => terrain.project(point.x, point.y, heightAt(point)) : point => point;
     return projectedMovementCell(target, {left: offsets.left || 0, top: offsets.top || 0, size: viewState.gridSize || 64}, project);
   }

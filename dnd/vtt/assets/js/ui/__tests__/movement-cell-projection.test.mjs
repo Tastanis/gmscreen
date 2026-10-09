@@ -71,6 +71,25 @@ test('compression responds to projected thickness, not elevation or stretched sl
     assertStrict.equal(paintedCellAt(null, 10, 10), null);
   });
 
+  check('an offered square on the plate that catches the creature is painted flat', async () => {
+    const { offeredCornerHeight } = await import('../movement-cell-projection.js');
+    // Found on the islands map at (22,47): the square lies on a tier 6 high, and one of its corners
+    // touches the rim of the ledge the creature stands on, 12 high. That corner was drawn at 12.
+    assertStrict.equal(offeredCornerHeight(6, 0, 12), 6, 'the corner on the ledge above');
+    assertStrict.equal(offeredCornerHeight(6, 0, 0), 6, 'a corner over open ground');
+    assertStrict.equal(offeredCornerHeight(6, 6, 6), 6);
+    // No plate catches it: each corner follows the ground, as before.
+    assertStrict.equal(offeredCornerHeight(null, null, 0), 0);
+    assertStrict.equal(offeredCornerHeight(null, null, 2.5), 2.5);
+    // The square's own footing is higher than the plate found under it: corners as before.
+    assertStrict.equal(offeredCornerHeight(6, 9, 9), 9);
+    assertStrict.equal(offeredCornerHeight(6, 9, 4), 6);
+    const { readFileSync } = await import('node:fs');
+    const board = readFileSync(new URL('../board-interactions.js', import.meta.url), 'utf8');
+    assertStrict.match(board, /const footing = caught === null \? null : terrain\.groundFor\(standing\);/);
+    assertStrict.match(board, /const heightAt = point => offeredCornerHeight\(caught, footing, terrain\.groundFor\(standing, point\)\);/);
+  });
+
   check('the ability move picker asks what is painted before anything else', async () => {
     const { readFileSync } = await import('node:fs');
     const board = readFileSync(new URL('../board-interactions.js', import.meta.url), 'utf8');
