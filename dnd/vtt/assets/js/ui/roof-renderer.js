@@ -9,6 +9,7 @@ import {nearestOnSegment} from './wall-geometry.mjs';
 import {makeSight,head} from './vision-height.mjs';
 import {insideRoom,roofSurfaces,ceilingBlocks} from './roof-geometry.mjs';import {getRoofImage} from './roof-images.mjs';import {adaptiveFog} from './adaptive-fog.mjs';
 import {createRoofImageCache} from './roof-image-cache.mjs';
+import {sideFoot} from './height-view.mjs';
 const canvas=document.createElement('canvas');canvas.id='roof-prototype';canvas.style.cssText='position:absolute;inset:0;pointer-events:none;z-index:100001';document.querySelector('#vtt-map-transform').append(canvas);
 const roofLayer=document.createElement('canvas');
 let revision=0,cutawayKey='',buildingCutaway=null;
@@ -62,7 +63,8 @@ export const roofRenderer={get revision(){return revision;},surfaces:roofSurface
      const at=t=>({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t}),u=at(k/steps),w=at((k+1)/steps),mid=at((k+.5)/steps),dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy)||1;
      const probes=[{x:mid.x-dy/len*.02,y:mid.y+dx/len*.02},{x:mid.x+dy/len*.02,y:mid.y-dx/len*.02}];
      if(!probes.some(visible))continue;
-     const base=p=>{const ramp=rampAt(importedRamps,p),step=ramp?rampHeight(ramp,p.x,p.y):null;return Math.min(roof.height,step??(ringIndex?roof.height-.15:interiorHeight(p)));};
+     // A floating plate's side is a short slab edge, not a wall down to the ground (height-view.mjs).
+     const base=p=>{const ramp=rampAt(importedRamps,p),step=ramp?rampHeight(ramp,p.x,p.y):null;return Math.min(roof.height,step??(ringIndex?roof.height-.15:sideFoot(roof,interiorHeight(p))));};
      const quad=[project(u),project(w),window.terrainPrototype.project(ox+w.x*g,oy+w.y*g,base(w)),window.terrainPrototype.project(ox+u.x*g,oy+u.y*g,base(u))];
      ctx.beginPath();quad.forEach((p,j)=>j?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.closePath();ctx.fillStyle='#292820';ctx.fill();
     }
@@ -104,7 +106,7 @@ export const roofRenderer={get revision(){return revision;},surfaces:roofSurface
   for(const layer of rampLayers){
    const s=layer.s,art=document.createElement('canvas');art.width=layer.mask.width;art.height=layer.mask.height;const ctx=art.getContext('2d');ctx.translate(-layer.x,-layer.y);
    requestImage(s.imageId);const image=cache.get(s.imageId);if(!image)continue;
-   const plane=rampPlane(s),horizontal=Math.abs(plane.a)>0,gradient={x:plane.a,y:plane.b};
+   const plane=rampPlane(s),horizontal=Math.abs(plane.a)>0,gradient={x:plane.a,y:plane.b},slant=window.terrainPrototype.slant;
    const start=horizontal?s.left:s.top,end=horizontal?s.right:s.bottom;
    for(let t=start;t<end-1e-7;t+=1/16){
     const x=horizontal?t:s.left,y=horizontal?s.top:t,w=horizontal?Math.min(1/16,end-t):s.right-s.left,h=horizontal?s.bottom-s.top:Math.min(1/16,end-t),mid={x:x+w/2,y:y+h/2},z=rampHeight(s,mid.x,mid.y);
@@ -112,7 +114,7 @@ export const roofRenderer={get revision(){return revision;},surfaces:roofSurface
     if(inspectionHeight===null&&!seesRampTop(viewer,head(token,viewerGround),mid,z,gradient))continue;
     if(lighting&&!sight(mid,z))continue;
     const origin=window.terrainPrototype.project(ox+x*g,oy+y*g,rampHeight(s,x,y));
-    ctx.save();ctx.transform(1+.12*plane.a,-.36*plane.a,.12*plane.b,1-.36*plane.b,origin.x,origin.y);
+    ctx.save();ctx.transform(1+slant.x*plane.a,-slant.y*plane.a,slant.x*plane.b,1-slant.y*plane.b,origin.x,origin.y);
     ctx.drawImage(image,ox+x*g-v.mapInsets.left,oy+y*g-v.mapInsets.top,w*g,h*g,0,0,w*g+.2,h*g+.2);ctx.restore();
    }
    if(window.terrainPrototype.markersVisible&&Math.hypot(plane.a,plane.b)>=.3){

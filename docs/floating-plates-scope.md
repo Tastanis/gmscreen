@@ -1,8 +1,76 @@
-# Floating plates: what it would take
+# Floating plates
 
-Scoping only. Nothing here is built. Written October 8, 2026 for Brandon to decide, from the
-Map maker's Gravity Orchard test and a read of the drawing code. Times are for the coder; each
-also needs a look in a browser by the tester.
+The record for this feature: what was scoped, what Brandon chose, what is built, what is open.
+Written October 8, 2026 from the Map maker's Gravity Orchard test and a read of the drawing code.
+
+## Built so far (October 8, 2026, evening)
+
+Brandon said "go ahead" to three pieces. They are on `main` on this PC, not pushed, and **not
+yet seen in a browser**: another chat's browser test was using the PC's memory when they were
+written. The rules behind them are tested; the drawing itself is not. Pictures for Brandon are
+the next step.
+
+1. **The floating mark.** A floor plate marked floating is drawn with a short rock side, one
+   square deep, not a wall down to the ground. An unmarked plate is drawn exactly as before.
+   The depth is one number (`FLOATING_SIDE` in `height-view.mjs`).
+2. **The shadow.** Each floating plate casts a soft shadow on the ground straight under it, at
+   its true place. It is drawn just above the map picture and under the fog, so a player sees it
+   only where they can see that ground. It falls on the ground only, not on a lower plate.
+3. **The slant.** A scene can carry one number for how far a square of height moves a thing up
+   the screen: anything from today's 0.36 down to 0. Other scenes keep today's value untouched.
+   You can change it in the **Walls** panel ("Height slant") and see it at once; it is saved
+   with the map and is the same for every player.
+
+None of the three changes a rule. Sight, movement, falls and climbing use the real heights.
+
+### What the map package carries
+
+In the scene's map design (`environment.walls.value`), which packages already carry:
+
+- On each island's plate, in `roofs`: `"floating": true`. Only floor plates. Leave it off
+  buildings.
+- For the scene: `"view": {"slant": 0.12}`. A number from 0 to 0.36. Leave `view` out for the
+  usual slant.
+
+The server refuses a floating mark that is not true or false, a slant outside 0 to 0.36, and
+any other setting under `view`.
+
+The blank band on the picture has to match the slant: north, `slant x tallest height` squares;
+east, a third of that. At 0.36 and 18 high that is 7 and 3. At 0.12 it is 3 and 1.
+
+### What happens at a slant of zero
+
+Worked out from the code, to be confirmed in a browser. The board becomes a plain view from
+straight overhead:
+
+- Nothing is moved on screen by its height. Tokens sit on their own squares.
+- Side faces have no size, so they are simply not there: no rock side, no building walls, no
+  cliff faces. A higher plate covers whatever is under it.
+- A shadow lies exactly under its island, so only its soft edge shows round the island.
+- Clicks land where they point. The click rule is the drawing rule run backwards, and a test
+  checks that it lands on a ramp at five slants, zero included.
+- What you lose is any sign of height except the picture itself and the height badges on tokens.
+
+### The shadow on a lower island
+
+Not built. On the islands map the low and mid islands sit under the high ones in places, and
+there the shadow falls on the ground beneath them all, where the lower island's picture covers
+it. To have it fall on the lower island too, the floor-drawing code would paint, on each plate,
+the outline of every floating plate above it. About half a day. It adds one soft fill for each
+pair of islands that overlap, every time the view is repainted, so it needs a speed check on the
+real map.
+
+### Still open, for Brandon to decide from pictures
+
+- The number for the slant on the islands map.
+- (c) lower plates dimmed instead of black: left black for now.
+- (d) plates above shown as a see-through shape: waiting.
+- The shadow on lower islands (above).
+- (b) is settled: no code. The Map maker leaves a blank band sized for the chosen slant.
+
+## The scoping note as first written
+
+Times are for the coder; each also needs a look in a browser by the tester.
 
 ## The problem in one paragraph
 

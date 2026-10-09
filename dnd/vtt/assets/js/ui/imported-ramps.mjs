@@ -2,7 +2,8 @@
 export function rampPlane(s){const rise=s.height-s.base,d=s.direction||'north';const a=d==='east'?rise/(s.right-s.left):d==='west'?-rise/(s.right-s.left):0,b=d==='south'?rise/(s.bottom-s.top):d==='north'?-rise/(s.bottom-s.top):0;return {a,b,c:s.base-a*(d==='west'?s.right:s.left)-b*(d==='north'?s.bottom:s.top)};}
 export function rampHeight(s,x,y){const {a,b,c}=rampPlane(s);return x>=s.left-1e-7&&x<=s.right+1e-7&&y>=s.top-1e-7&&y<=s.bottom+1e-7?a*x+b*y+c:null;}
 export function rampAt(ramps,p){return ramps.find(s=>rampHeight(s,p.x,p.y)!==null)||null;}
-export function rampPick(s,p){const {a,b,c}=rampPlane(s),den=1+.12*a-.36*b;if(Math.abs(den)<1e-8)return null;const z=(a*p.x+b*p.y+c)/den,x=p.x-.12*z,y=p.y+.36*z;return rampHeight(s,x,y)!==null?{x,y}:null;}
+// `slant` is how far a square of height moves a thing on screen (height-view.mjs); the usual one unless the scene asks for another.
+export function rampPick(s,p,slant={x:.12,y:.36}){const {a,b,c}=rampPlane(s),den=1+slant.x*a-slant.y*b;if(Math.abs(den)<1e-8)return null;const z=(a*p.x+b*p.y+c)/den,x=p.x-slant.x*z,y=p.y+slant.y*z;return rampHeight(s,x,y)!==null?{x,y}:null;}
 export function rampSupports(s,actor,p){
  const level=actor.levelId||'level-0',traversal=actor._floorTraversal;
  if(level===s.toLevel)return true;

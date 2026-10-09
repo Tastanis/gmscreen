@@ -7,6 +7,7 @@ import './edit-tools.js';
 import {connectedWallPath} from './wall-selection.mjs';
 import {properties,movementPathBlocked,movementBlocked,wallHeights,liveWalls,isBreakable,isBroken} from './wall-properties.mjs';
 import {createWallEditor} from './wall-editor.mjs';
+import {DEFAULT_SLANT,validSlant,viewSlant} from './height-view.mjs';
 import {gmVision} from './gm-vision.js';
 import {sliceWallModel,wallHeightIntervals,inspectionPlanePoint} from './wall-height-slice.mjs';
 import './vision-prototype.js';
@@ -25,6 +26,12 @@ const snapLabel=document.createElement('label');snapLabel.innerHTML='<input type
 const snapInput=snapLabel.querySelector('input');snapInput.checked=localStorage.getItem('wall-half-grid-snap')==='true';snapInput.onchange=()=>localStorage.setItem('wall-half-grid-snap',String(snapInput.checked));
 const snapPoint=p=>snapInput.checked?{x:Math.round(p.x*2)/2,y:Math.round(p.y*2)/2}:p;
 const repairAll=document.createElement('button');repairAll.className='btn';repairAll.type='button';repairAll.dataset.wallRepairAll='';repairAll.textContent='Repair all broken walls';repairAll.style.cssText='margin-top:8px;width:100%';repairAll.hidden=true;panel.insertBefore(repairAll,panel.querySelector('footer'));
+// How steeply this scene shows height (height-view.mjs). Saved with the map design, so it is the same for everyone.
+const slantLabel=document.createElement('label');slantLabel.style.cssText='display:block;margin-top:8px';slantLabel.title='How far a square of height moves a thing up the screen. 0.36 is the usual view; 0 is straight overhead.';
+slantLabel.innerHTML='Height slant <input type="number" data-wall-slant min="0" max="'+DEFAULT_SLANT+'" step="0.01" style="width:64px;margin-left:6px">';panel.insertBefore(slantLabel,panel.querySelector('footer'));
+const slantInput=slantLabel.querySelector('input');
+slantInput.onchange=()=>{if(!context?.isGM)return;const value=Math.round(Number(slantInput.value)*100)/100;if(!validSlant(value)||slantInput.value===''){slantInput.value=String(viewSlant(model));return;}
+ cancelDrag();const before=copyWalls(model);if(value===DEFAULT_SLANT){if(model.view){delete model.view.slant;if(!Object.keys(model.view).length)delete model.view;}}else model.view={...(model.view||{}),slant:value};change(before);};
 repairAll.onclick=()=>{if(!context?.isGM||!model.segments.some(isBroken))return;cancelDrag();const before=copyWalls(model);for(const edge of model.segments)if(isBroken(edge))delete edge.broken;change(before);};
 const editor=createWallEditor({panel,transform,selected:()=>selectedEdges(),model:()=>model,context:()=>context,projected,groundAt,change,render,copyWalls});
 const svg=document.createElementNS(ns,'svg');svg.id='wall-overlay';svg.style.cssText='position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:100003';transform.append(svg);
@@ -156,7 +163,7 @@ function render(){
    if(anchor&&pointNode(anchor)&&hover){const preview=document.createElementNS(ns,'path');preview.setAttribute('d',pathBetween(pointNode(anchor),hover.p));preview.setAttribute('fill','none');preview.setAttribute('stroke','#fff0ba');preview.setAttribute('stroke-width',2/scale);preview.setAttribute('stroke-dasharray',`${5/scale} ${4/scale}`);fragment.append(preview);}
    for(const n of model.nodes){if(!slice.nodeIds.has(n.id)&&n.id!==anchor)continue;const p=projected(n),circle=document.createElementNS(ns,'circle');circle.dataset.wallNode=n.id;circle.setAttribute('cx',p.x);circle.setAttribute('cy',p.y);circle.setAttribute('r',(selection?.id===n.id||hover?.id===n.id?6:4)/scale);circle.setAttribute('fill',selection?.id===n.id||hover?.id===n.id?'#ffeeb5':'#27241e');circle.setAttribute('stroke','#e7ca88');circle.setAttribute('stroke-width',1.5/scale);fragment.append(circle);}
  }
- editor.refresh(propertiesOpen);svg.replaceChildren(fragment);{const broken=model.segments.filter(isBroken).length;repairAll.hidden=!broken;repairAll.textContent=broken===1?'Repair the broken wall':`Repair all ${broken} broken walls`;}panel.querySelector('[data-wall-delete]').disabled=!selection&&!selectedIds.size;panel.querySelector('[data-wall-undo]').disabled=!history.length;
+ editor.refresh(propertiesOpen);svg.replaceChildren(fragment);if(document.activeElement!==slantInput)slantInput.value=String(viewSlant(model));{const broken=model.segments.filter(isBroken).length;repairAll.hidden=!broken;repairAll.textContent=broken===1?'Repair the broken wall':`Repair all ${broken} broken walls`;}panel.querySelector('[data-wall-delete]').disabled=!selection&&!selectedIds.size;panel.querySelector('[data-wall-undo]').disabled=!history.length;
  editor.portals();
 }
 function tick(){

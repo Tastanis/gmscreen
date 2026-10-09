@@ -11,7 +11,7 @@ export function paintWallTemplate(shape,view={},options={}) {
  if(!view.mapLoaded||!bounds||(!squares.length&&!shape.hoverSquare)){root.hidden=true;root.setAttribute('aria-hidden','true');return;}
  shape.squares=squares;
  const config=options.config||{},groundAt=options.groundAt||((x,y)=>wallTerrainAt(config,view,x,y));
- const cubes=[...squares.map(square=>({square,ghost:false})),...(shape.hoverSquare?[{square:shape.hoverSquare,ghost:true}]:[])].map(cube=>({...cube,faces:projectWallCube(cube.square,wallCubeBase(shape,cube.square,config,groundAt),bounds.gridSize,bounds.offsetLeft,bounds.offsetTop)}));
+ const cubes=[...squares.map(square=>({square,ghost:false})),...(shape.hoverSquare?[{square:shape.hoverSquare,ghost:true}]:[])].map(cube=>({...cube,faces:projectWallCube(cube.square,wallCubeBase(shape,cube.square,config,groundAt),bounds.gridSize,bounds.offsetLeft,bounds.offsetTop,window.terrainPrototype?.slant)}));
  const points=cubes.flatMap(c=>Object.values(c.faces).flat());
  const left=Math.min(...points.map(p=>p.x)),top=Math.min(...points.map(p=>p.y));
  const width=Math.max(...points.map(p=>p.x))-left,height=Math.max(...points.map(p=>p.y))-top;

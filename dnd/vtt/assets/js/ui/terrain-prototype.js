@@ -13,6 +13,7 @@ import {floorElevations} from '../state/normalize/floor-elevation.js';
 import {terrainContact} from './terrain-contact.js';
 import {createRouteWalker,stepGhost,walksPlates,hasStairs} from './route-walker.mjs';
 import {nearStair} from './stair-walk.mjs';
+import {viewSlant,slantVector} from './height-view.mjs';
 import {createRulerPass,passActorKey} from './ruler-pass.mjs';
 const $=s=>document.querySelector(s);
 const image=$('#vtt-map-image'),transform=$('#vtt-map-transform'),surface=$('#vtt-map-surface'),board=$('#vtt-board-canvas');
@@ -57,15 +58,17 @@ for(const [name,size,offset] of [['position',2,0],['uv',2,8],['light',1,16]]){co
 const texture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,texture);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
 function dimensions(){return {width:image.naturalWidth,height:image.naturalHeight,left:ctx.view.mapInsets.left||0,top:ctx.view.mapInsets.top||0,grid:ctx.view.gridSize||64};}
 function heightAt(x,y){if(!field||!active)return 0;const d=dimensions();return sample(field,(x-d.left)/d.width,(y-d.top)/d.height);}
-function project(x,y,h){const g=dimensions().grid;return {x:x+h*g*.12,y:y-h*g*.36};}
+// How far a square of height moves a thing on screen. The scene's map design may ask for a flatter slant (height-view.mjs).
+function slant(){return slantVector(viewSlant(importedDesign()));}
+function project(x,y,h){const g=dimensions().grid,s=slant();return {x:x+h*g*s.x,y:y-h*g*s.y};}
 function unproject(p){
  if(!active||!field)return p;
  if(importedDesign()&&panel.hidden){
-  const g=dimensions().grid,ox=ctx.view.gridOffsets.left||0,oy=ctx.view.gridOffsets.top||0,actor=rulerActor();
+  const g=dimensions().grid,ox=ctx.view.gridOffsets.left||0,oy=ctx.view.gridOffsets.top||0,actor=rulerActor(),s=slant();
   const raw={x:(p.x-ox)/g,y:(p.y-oy)/g};
-  for(const r of (importedDesign()?.ramps||[])){const q=rampPick(r,raw);if(q&&actor&&rampSupports(r,actor,q))return {x:ox+q.x*g,y:oy+q.y*g};}
+  for(const r of (importedDesign()?.ramps||[])){const q=rampPick(r,raw,s);if(q&&actor&&rampSupports(r,actor,q))return {x:ox+q.x*g,y:oy+q.y*g};}
   if(actor){const h=groundFor(actor);for(const f of (resolveSupportSurfaces(importedDesign()||{})).filter(f=>f.kind==='floor'&&f.height<=h+.7).sort((a,b)=>b.height-a.height)){
-   const q={x:raw.x-f.height*.12,y:raw.y+f.height*.36};if(onSurface(f,q))return {x:ox+q.x*g,y:oy+q.y*g};
+   const q={x:raw.x-f.height*s.x,y:raw.y+f.height*s.y};if(onSurface(f,q))return {x:ox+q.x*g,y:oy+q.y*g};
   }}
  }
 
@@ -114,7 +117,7 @@ function tick(now){
    const nextKey='terrain-prototype:v1:'+ctx.state.boardState.activeSceneId+':'+image.getAttribute('src');
    if(key!==nextKey){finish();key=nextKey;sharedTerrainRevision=-1;storageError=false;undo=[];$('#terrain-undo').disabled=true;const n=Math.min(201,Math.max(17,Math.ceil(image.naturalWidth/ctx.view.gridSize*4)+1)),m=Math.min(201,Math.max(17,Math.ceil(image.naturalHeight/ctx.view.gridSize*4)+1));field={n,m,h:new Float32Array(n*m)};dirty=true;}
    const shared=sharedField('terrain');if(!savingTerrain&&!drawing&&!storageError&&shared&&shared.revision!==sharedTerrainRevision){field={...shared.value,h:Float32Array.from(shared.value.h)};sharedTerrainRevision=shared.revision;dirty=true;undo=[];$('#terrain-undo').disabled=true;}
-   const nextSignature=JSON.stringify([ctx.view.mapPixelSize,ctx.view.mapInsets,ctx.view.gridSize,ctx.view.gridOffsets,ctx.state.grid.visible,ctx.isGM&&document.querySelector('#wall-panel')?.hidden===false]);if(nextSignature!==signature){signature=nextSignature;dirty=true;}
+   const nextSignature=JSON.stringify([ctx.view.mapPixelSize,ctx.view.mapInsets,ctx.view.gridSize,ctx.view.gridOffsets,ctx.state.grid.visible,ctx.isGM&&document.querySelector('#wall-panel')?.hidden===false,viewSlant(importedDesign())]);if(nextSignature!==signature){signature=nextSignature;dirty=true;}
    if(drawing&&last&&now-stampTime>=32){
      const amount=Math.min(.15,(now-stampTime)/1000)*brushRate(now-lastBrushMotion<100);stampTime=now;
      const distance=Math.hypot(last.x-stampPosition.x,last.y-stampPosition.y),steps=Math.max(1,Math.ceil(distance/(dimensions().grid*.15)));
@@ -134,13 +137,14 @@ function tick(now){
  }
  // Read token geometry together before writing styles to avoid per-token layout flushes.
  const placementById=new Map((ctx?.state.boardState.placements[ctx.state.boardState.activeSceneId]||[]).map(p=>[p.id,p]));
+ const tokenSlant=active?slant():null;
  const tokenGeometry=Array.from(document.querySelectorAll('#vtt-token-layer [data-placement-id],#vtt-token-layer [data-vtt-drag-ghost]'),token=>{const matrix=active?new DOMMatrix(token.style.transform):null;return {token,matrix,x:active?matrix.m41+token.offsetWidth/2:0,y:active?matrix.m42+token.offsetHeight/2:0};});
  for(const {token,matrix,x,y} of tokenGeometry){
    if(!active){if(token.style.translate)token.style.translate='';if(token.style.scale)token.style.scale='';continue;}
    const placement=placementById.get(token.dataset.placementId||token.dataset.terrainSourceId);
    if(placement&&token.dataset.placementId&&token.dataset.terrainSourceId!==placement.id)token.dataset.terrainSourceId=placement.id;
    const z=placement?Math.max(groundFor(placement,{x,y}),token.dataset.vttDragGhost&&['fly','hover'].includes(placement.movementMode)?heightAt(x,y):-Infinity):heightAt(x,y),g=dimensions().grid;
-   const value=`${z*g*.12}px ${-z*g*.36}px`;if(token.style.translate!==value)token.style.translate=value;const heightText=z.toFixed(2);if(token.dataset.terrainHeight!==heightText)token.dataset.terrainHeight=heightText;
+   const value=`${z*g*tokenSlant.x}px ${-z*g*tokenSlant.y}px`;if(token.style.translate!==value)token.style.translate=value;const heightText=z.toFixed(2);if(token.dataset.terrainHeight!==heightText)token.dataset.terrainHeight=heightText;
    const targetScale=relativeScale(z,viewerHeight),oldHeight=tokenHeights.get(token.dataset.placementId),whole=groundSquare(z);
    if(token.style.transition)token.style.transition='';if(token.style.scale)token.style.scale='';const placed=`translate3d(${matrix.m41}px, ${matrix.m42}px, 0px)`;const scaled=`${placed} scale(${targetScale})`;if(token.style.transform!==scaled)token.style.transform=scaled;
    if(oldHeight!==undefined&&whole>oldHeight&&heightBand(whole)===heightBand(oldHeight)&&!matchMedia('(prefers-reduced-motion: reduce)').matches)token.animate([{transform:scaled},{transform:`${placed} scale(${targetScale*1.045})`},{transform:scaled}],{duration:220});
@@ -325,7 +329,7 @@ function paintRoute(overlay,points,gridSize){
  overlay.path.style.opacity='0';
 }
 window.addEventListener('storage',e=>{if(e.key===key&&!drawing){key='';}});
-window.terrainPrototype={get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,heightAt,groundFor,movementGroundFor,movementPlacement,highGround,isCliff,climbFace,walkerNear,get design(){return importedDesign();},route,rulerPass,rulerPoint,routePath,squarePath,paintRoute,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get key(){return key;},get storageError(){return storageError;},project,get active(){return active;}};
+window.terrainPrototype={get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,heightAt,groundFor,movementGroundFor,movementPlacement,highGround,isCliff,climbFace,walkerNear,get design(){return importedDesign();},route,rulerPass,rulerPoint,routePath,squarePath,paintRoute,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get key(){return key;},get storageError(){return storageError;},project,get slant(){return slant();},get active(){return active;}};
 requestAnimationFrame(tick);
 
 import('./wall-prototype.js');

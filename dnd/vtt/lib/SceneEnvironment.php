@@ -4,6 +4,9 @@ declare(strict_types=1);
 /** Shared map design. Revisions belong to each independently editable field. */
 final class SceneEnvironment
 {
+    /** The usual height slant of the board, and the steepest a scene may ask for (height-view.mjs). */
+    public const MAX_VIEW_SLANT = 0.36;
+
     public static function project(array $environment): array
     {
         foreach ($environment['walls']['value']['segments'] ?? [] as $i => $edge) {
@@ -135,8 +138,20 @@ final class SceneEnvironment
                 if ($edge['broken']&&!isset($edge['material'])) throw new InvalidArgumentException('Only a wall with a material can be broken.');
             }
         }
+        // How steeply the scene shows height: from 0 (straight overhead) to the usual 0.36.
+        // It changes only the drawing; sight, movement and falls use the real heights.
+        if (array_key_exists('view',$value)) {
+            $view=$value['view'];
+            if (!is_array($view)||array_diff(array_keys($view),['slant'])) throw new InvalidArgumentException('Invalid view settings.');
+            if (array_key_exists('slant',$view)) {
+                $slant=$view['slant'];
+                if ((!is_int($slant)&&!is_float($slant))||!is_finite((float)$slant)||$slant<0||$slant>self::MAX_VIEW_SLANT) throw new InvalidArgumentException('Height slant must be a number from 0 to '.self::MAX_VIEW_SLANT.'.');
+            }
+        }
         foreach ($value['roofs'] ?? [] as $roof) {
             self::number($roof['height'] ?? null);
+            // A floating plate (a rock in the air) is drawn with a short side, not a wall to the ground.
+            if (array_key_exists('floating',$roof)&&!is_bool($roof['floating'])) throw new InvalidArgumentException('Invalid floating flag.');
             foreach ($roof['nodes'] ?? [] as $nodeId) if (!isset($ids[$nodeId])) throw new InvalidArgumentException('Roof references missing node.');
             foreach ([$roof['points'] ?? [], ...($roof['holes'] ?? [])] as $ring) {
                 if (!is_array($ring)||count($ring)>20000) throw new InvalidArgumentException('Invalid roof ring.');

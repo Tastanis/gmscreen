@@ -27,8 +27,8 @@ export function wallCubeModel(model={},templates=[],config={},groundAt=()=>0){
  return out;
 }
 export function nextWallElevation(square,squares=[]){return squares.reduce((top,s)=>s.column===square.column&&s.row===square.row?Math.max(top,(s.elevation??0)+1):top,0);}
-export function projectWallCube(square,base,gridSize,offsetLeft=0,offsetTop=0){
- const project=(x,y,z)=>({x:offsetLeft+(x+z*.12)*gridSize,y:offsetTop+(y-z*.36)*gridSize});
+export function projectWallCube(square,base,gridSize,offsetLeft=0,offsetTop=0,slant={x:.12,y:.36}){
+ const project=(x,y,z)=>({x:offsetLeft+(x+z*slant.x)*gridSize,y:offsetTop+(y-z*slant.y)*gridSize});
  const bottom=[[0,0],[1,0],[1,1],[0,1]].map(([x,y])=>project(square.column+x,square.row+y,base));
  const top=[[0,0],[1,0],[1,1],[0,1]].map(([x,y])=>project(square.column+x,square.row+y,base+1));
  // Height projects toward the upper right, exposing the west and south faces.
