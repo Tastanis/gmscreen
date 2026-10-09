@@ -15,7 +15,8 @@ $first = FloorGeometry::move($from, ['column'=>2,'row'=>2], $map);
 same($first['levelId'], 'level-0', 'Halfway remains on current floor');
 $saved = json_decode(json_encode([...$from, 'row'=>2, '_floorTraversal'=>$first['traversal']]), true);
 same(FloorGeometry::move($saved, $end, $map)['levelId'], 'upper', 'Traversal survives serialization/reload');
-same(FloorGeometry::move($from, $end, $map, 'forced')['levelId'], 'level-0', 'Forced movement never climbs stairs');
+// A push along a stair is carried by it like a walk (forced-on-ramps.test.php has the full rule).
+same(FloorGeometry::move($from, $end, $map, 'forced')['levelId'], 'upper', 'A push the length of a stair carries the creature up it');
 same(FloorGeometry::move($from, $end, $map, 'teleport')['levelId'], 'upper', 'Teleport resolves the same stair landing as shift');
 same(FloorGeometry::move($from, ['column'=>2,'row'=>2], $map, 'teleport'), $first, 'Teleport partway retains stair progress instead of jumping to the top');
 same(FloorGeometry::move($saved, $end, $map, 'teleport')['levelId'], 'upper', 'Teleport resumes canonical stair progress');

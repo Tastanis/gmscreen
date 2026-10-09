@@ -8,7 +8,9 @@ final class FallOutcome {
   if(in_array($kind,['undo','teleport'],true)||FloorGeometry::isAirborne($to))return null;
   $landing=WallMovement::height($to,$config);$top=null;
   if(FloorGeometry::isAirborne($from))$top=(float)($from['flightHeight']??WallMovement::height($from,$config));
-  elseif($cause==='fall'||(!empty($from['_supportSurfaceId'])&&empty($to['_supportSurfaceId'])))$top=WallMovement::height($from,$config);
+  // Leaving a floor plate for no plate is a drop from the plate, unless the creature left it onto
+  // a stair or ramp that now carries it: going down a ramp is not a fall, however far in one move.
+  elseif($cause==='fall'||(!empty($from['_supportSurfaceId'])&&empty($to['_supportSurfaceId'])&&!FloorGeometry::carriedByStair($to,$config['mapLevels']??[])))$top=WallMovement::height($from,$config);
   // Teleport only checks its landing support; never treat the skipped chord as a fall.
   elseif($kind!=='teleport'){
    $terrain=fn($x,$y)=>WallMovement::terrain($x,$y,$config);$standing=fn($p)=>WallMovement::height($p,$config);

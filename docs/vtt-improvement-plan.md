@@ -112,8 +112,9 @@ synthetic drawing fixture. Template number-field labels now identify their input
 Single moves and placement batches resolve floor changes in the same transaction
 as position changes. Linked-player view changes share that event; players do not
 need permission to submit a separate floor patch. Stair entry progress survives
-reload and is invalidated when its stair geometry changes. Forced/teleport command
-intent skips stair traversal while still checking destination support. Hidden
+reload and is invalidated when its stair geometry changes. Forced movement is
+carried by a stair or ramp like a walk unless the ramp is a climb (a rise of one and
+a half squares per square or more), in which case it only checks destination support. Hidden
 floors are disabled geometry. Cutout union coverage supports fractional positions,
 adjacent holes, and large tokens with partial support.
 

@@ -560,8 +560,56 @@ is measured.
 - Under the climb line nothing changed. A bank under one and a half squares is
   still a plain step, and a long hill is still not a fall.
 
-Checks run: new tests on both sides for each. The whole suite is waiting for
-free memory on this PC.
+Checks run: new tests on both sides for each. The whole suite was run later
+the same day and passed.
+
+## October 8, evening: pushed along a ramp. Done, waiting for a re-test
+
+From the Map maker's test of the floating islands map. A creature pushed along
+a sloping arch between two islands dropped through it to the ground ("fell
+17"). Walking the same arch worked.
+
+The cause: only a walking creature was ever treated as being on a stair or
+ramp. A pushed one was treated as standing over the hole in the floor that the
+ramp crosses. That was a rule from September, written before ramps had real
+heights.
+
+- A creature pushed, pulled or slid along a ramp or stair now stays on it and
+  changes height with it, the same as one that walks it. Pushed past the end,
+  it is on the floor at that end. Both directions.
+- Pushed off the side, it falls from the height the ramp has at that point.
+  That part already worked.
+- A size 2 creature half off the side of a two-wide ramp stays on. All the way
+  off, it falls.
+- **A ramp too steep to be a slope does not carry a pushed creature.** The
+  line is a rise of one and a half squares per square, the same line at which
+  a step up becomes a climb. The vines on the islands map (a whole floor in
+  one square) are over it: a creature shoved off an island where a vine hangs
+  falls, the same as over any other edge. Walking a vine is unchanged.
+- **This changes the bathhouse.** Its two stairs rise two thirds of a square
+  per square, so they carry. Before, a creature pushed up the stairs stayed on
+  the lower floor and ended up underneath the upper one, and one pushed down
+  from the top was put straight onto the lower floor. Now a push takes it up
+  or down the stairs as a walk would, and it arrives on the right floor.
+  Checked on the real bathhouse package, both stairs, both directions. Dead
+  Root has no stairs or ramps, so nothing changes there.
+- A second fault found on the way, also fixed: moving two or more squares from
+  a floor plate onto a ramp in one move was recorded as a short fall even
+  though the creature was standing on the ramp. This happened to walking too:
+  two squares down either bathhouse stair from the top was "fell 1", four
+  squares down the islands arch was "fell 2", and one step onto a vine was
+  "fell 3". Going down a ramp is no longer a fall, however far one move goes.
+
+One limit left as it was: two creatures on the same ramp that came onto it from
+opposite ends are on different floors as far as the app knows, so a push does
+not make them collide. A creature pushed up a ramp from the floor at its foot
+is also not checked against creatures more than two squares up the ramp.
+
+Checks run: a new server test on a small islands scene (arch, vine, three
+islands), every move run through the real server; the floor, fall, stair, wall
+and collision tests still pass. One older test said "forced movement never
+climbs stairs"; it now says the opposite. The browser shows what the server decides here, so
+there is no separate browser rule to keep in step.
 
 ## Where it is now
 

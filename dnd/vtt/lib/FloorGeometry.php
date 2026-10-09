@@ -7,6 +7,11 @@ final class FloorGeometry
 {
     public const BASE = 'level-0';
     private const EPSILON = 0.000001;
+    /**
+     * A ramp that rises this much or more per square is a climb (a vine, a ladder), not a slope: a
+     * step that high counts as two squares of climbing. Forced movement is carried only by slopes.
+     */
+    public const CLIMB_GRADE = 1.5;
 
     public static function isAirborne(array $placement): bool
     {
@@ -212,6 +217,53 @@ final class FloorGeometry
         return ['fired'=>false, 'entry'=>$endsInside ? $entry : null, 'endsInside'=>$endsInside];
     }
 
+    /** The stairs of one floor. */
+    private static function stairsOn(string $levelId, array $mapLevels): array
+    {
+        if ($levelId === self::BASE) return $mapLevels['baseStairs'] ?? [];
+        foreach (($mapLevels['levels'] ?? []) as $level) if (is_array($level) && ($level['id'] ?? null) === $levelId) return $level['stairs'] ?? [];
+        return [];
+    }
+
+    /**
+     * How many squares a stair rises for each square travelled along it: the height between the
+     * two floors it joins, over its length from foot (red) to head (green). 0 when that cannot be read.
+     */
+    public static function stairGrade(array $stair, string $levelId, array $mapLevels): float
+    {
+        $corners = $stair['corners'] ?? [];
+        $axis = null;
+        foreach (self::perimeter($corners) as $edge) {
+            if (!in_array($stair['edgeColors'][$edge['id']] ?? 'barrier', ['red', 'green'], true)) continue;
+            $travel = $edge['from']['y'] === $edge['to']['y'] ? 'row' : 'column';
+            if ($axis !== null && $axis !== $travel) return 0.0;
+            $axis = $travel;
+        }
+        if ($axis === null) return 0.0;
+        $values = array_map(static fn ($corner) => (float) $corner[$axis], $corners);
+        $run = max($values) - min($values);
+        $heights = self::elevations($mapLevels);
+        $rise = abs(($heights[$stair['linkedLevelId'] ?? ''] ?? 0) - ($heights[$levelId] ?? 0));
+        return $run > self::EPSILON ? $rise / $run : 0.0;
+    }
+
+    /**
+     * True while a creature is being carried by a stair or ramp: it came onto it by the end that
+     * belongs to its floor (the foot of a stair going up, the head of one going down) and has not
+     * left it. A creature carried by a ramp is standing on it, not falling past it.
+     */
+    public static function carriedByStair(array $placement, array $mapLevels): bool
+    {
+        $traversal = $placement['_floorTraversal'] ?? null;
+        if (!is_array($traversal) || empty($traversal['stairId'])) return false;
+        foreach (self::stairsOn((string) ($placement['levelId'] ?? self::BASE), $mapLevels) as $stair) {
+            if (($stair['id'] ?? null) !== $traversal['stairId']) continue;
+            $entry = $traversal['entry'] ?? null; $direction = $stair['direction'] ?? '';
+            return ($direction === 'up' && $entry === 'red') || ($direction === 'down' && $entry === 'green');
+        }
+        return false;
+    }
+
     /**
      * The path a token walks a stair by. A stair is crossed by one point of the token, its centre.
      * A token wider than the stair, or standing to one side of it, has its centre on the stair's
@@ -266,11 +318,15 @@ final class FloorGeometry
         if (self::isAirborne($current)) return $result;
         $retained=FloorSupport::retained([...$current,...$destination],$surfaces,$mapLevels);
         if($retained&&($retained['kind']??'roof')!=='floor')return $result;
-        if (in_array($kind, ['walk','shift','teleport'], true) && ($byId[$levelId]['hidden'] ?? false) !== true) {
+        // A stair or ramp carries a creature that is pushed, pulled or slid along it, the same as one
+        // that walks it: it stays on the ramp, changes height with it, and changes floor at its end.
+        // A ramp too steep to be a slope carries walkers only; shoved along it, a creature falls.
+        if (in_array($kind, ['walk','shift','teleport','forced'], true) && ($byId[$levelId]['hidden'] ?? false) !== true) {
             $stairs = $levelId === self::BASE ? ($mapLevels['baseStairs'] ?? []) : ($byId[$levelId]['stairs'] ?? []);
             foreach ($stairs as $stair) {
                 $target = $stair['linkedLevelId'] ?? '';
                 if (!isset($byId[$target]) || $target === $levelId || ($byId[$target]['hidden'] ?? false) === true) continue;
+                if ($kind === 'forced' && self::stairGrade($stair, $levelId, $mapLevels) >= self::CLIMB_GRADE - self::EPSILON) continue;
                 $signature = hash('sha256', json_encode([$levelId, $width, $height, $stair]));
                 $prior = $current['_floorTraversal'] ?? [];
                 $crossing = self::crossing(self::stairLane($path, $stair, $width, $height), $stair, ($prior['signature'] ?? '') === $signature ? ($prior['entry'] ?? null) : null);
