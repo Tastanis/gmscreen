@@ -25,6 +25,13 @@ final class CollisionEffects {
   if($op!==null){$sql.=' AND (operation_id=? OR parent_operation=?)';$args[]=$op;$args[]=$op;}else $sql.=" AND status NOT IN ('completed','dismissed')";
   $q=$this->pdo->prepare($sql.' ORDER BY operation_id,target_id LIMIT 200');$q->execute($args);$rows=$q->fetchAll(PDO::FETCH_ASSOC);foreach($rows as &$row)$row['details']=json_decode($row['details'],true);return $rows;
  }
+ /** The walls a confirmed fall breaks, with the scene they are in; null when it breaks none. */
+ public function breaks(string $op,string $id):?array {
+  $this->ensureFallColumns();
+  $q=$this->pdo->prepare("SELECT scene_id,details FROM vtt_collision_effects WHERE world_id=? AND operation_id=? AND target_id=? AND kind='fall'");$q->execute([$this->world,$op,$id]);$r=$q->fetch(PDO::FETCH_ASSOC);
+  $ids=$r?array_values(array_filter(array_column(json_decode($r['details'],true)['breaks']??[],'id'),'is_string')):[];
+  return $ids?['sceneId'=>$r['scene_id'],'ids'=>$ids]:null;
+ }
  public function update(array $request,string $actor,bool $gm):array {
   $this->ensureFallColumns();
   $op=$request['operationId']??'';$id=$request['targetId']??'';$action=$request['action']??'';

@@ -14,6 +14,15 @@ export function nextReviewableFall(records,user,scene,placement){
 }
 /** The Climbing choice is offered only when the creature walked or shifted off the edge itself. */
 export function fallAllowsClimbing(details){return ['walk','shift'].includes(details?.movementKind);}
+/**
+ * What a fall breaks by landing on it, in words for the review: "stone", "wood and glass", or ''.
+ * The walls themselves are broken by the server when the fall is confirmed (FallOutcome::landing).
+ */
+export function fallBreaks(details){
+ const materials=[...new Set((details?.breaks||[]).map(wall=>wall?.material).filter(material=>typeof material==='string'&&material))];
+ if(!details?.breaks?.length)return '';
+ return materials.length?materials.join(' and '):'an object';
+}
 // `climbing` is optional: {extra(record,faller)} gives the movement a climb down costs,
 // {charge(record,extra)} adds it to the turn, and {free(record,faller)} says the creature climbs
 // at full speed, so a walk off an edge is no fall for it. Without `climbing` the review is as before.
@@ -33,7 +42,8 @@ export function mountFallReview({context,placement,traits,damage,prone,climbing=
    const faller=placement(record.targetId);if(!faller)return;
    const details=record.details||{};
    // A creature with a climb speed that walked itself off the edge climbed down. No pop-up, no damage.
-   if(climbing?.free&&fallAllowsClimbing(details)&&!details.collidedIds?.length&&!details.needsPlacementReview&&climbing.free(record,faller)){
+   const breaks=fallBreaks(details);
+   if(climbing?.free&&fallAllowsClimbing(details)&&!details.collidedIds?.length&&!details.needsPlacementReview&&!breaks&&climbing.free(record,faller)){
     try{await api({operationId:record.operationId,targetId:record.targetId,action:'finish',status:'dismissed'});wakePending=true;try{climbing.charge(record,0);}catch{}return;}catch{}
    }
    const stats=await traits(faller),computedDamage=fallDamage(details.squares,Number(stats.agility)||0,details.forcedDown),targets=[{id:record.targetId,name:faller.name||'Token',prone:fallerLandsProne(details,Number(stats.agility)||0)}];
@@ -45,7 +55,8 @@ export function mountFallReview({context,placement,traits,damage,prone,climbing=
    let dismissalUnconfirmed=uncertainDismissals.has(animationKey);
    // A ground landing without damage, conditions or placement work needs no
    // approval. Finalize its actor-owned receipt before advancing the queue.
-   if(!dismissalUnconfirmed&&computedDamage===0&&!details.collidedIds?.length&&!details.needsPlacementReview&&targets.every(t=>!t.prone)){
+   // Nor does a fall that breaks what it lands on: that is confirmed like any other outcome.
+   if(!dismissalUnconfirmed&&computedDamage===0&&!details.collidedIds?.length&&!details.needsPlacementReview&&!breaks&&targets.every(t=>!t.prone)){
     try{await api({operationId:record.operationId,targetId:record.targetId,action:'finish',status:'dismissed'});wakePending=true;return;}
     catch{uncertainDismissals.add(animationKey);dismissalUnconfirmed=true;}
    }
@@ -54,7 +65,7 @@ export function mountFallReview({context,placement,traits,damage,prone,climbing=
    panel.className='vtt-fall-review';
    const title=document.createElement('strong');title.className='vtt-fall-review__title';title.textContent='Fall';
    const summary=document.createElement('div');summary.className='vtt-fall-review__summary';
-   for(const [name,value] of [['Fell',`${Math.round(details.squares)} squares`],['Agility',`${details.forcedDown?0:Math.max(0,Number(stats.agility)||0)}`]]){
+   for(const [name,value] of [['Fell',`${Math.round(details.squares)} squares`],['Agility',`${details.forcedDown?0:Math.max(0,Number(stats.agility)||0)}`],...(breaks?[['Lands on and breaks',breaks]]:[])]){
     const row=document.createElement('div'),key=document.createElement('span'),amount=document.createElement('strong');key.textContent=name;amount.textContent=value;row.append(key,amount);summary.append(row);
    }
    const affected=document.createElement('div');affected.className='vtt-fall-review__targets';

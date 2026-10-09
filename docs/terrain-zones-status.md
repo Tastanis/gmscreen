@@ -767,12 +767,9 @@ squares per square) holds only a creature that climbed onto it.
 - No stair on the bathhouse is steep enough to be a climb, so nothing changes on its stairs. Of
   the map packages on this PC only the islands map has climbs.
 
-**Not built, a ruling for the Director:** what happens when a creature falls onto a square that
-holds a solid object on the floor (a stone tooth, a crystal). Today it lands inside the object's
-square, at floor height, and a player then cannot walk out in any direction because the object's
-walls ring the square. The Director can drag it out. Choices: land in the nearest free square
-(the app already does this when the landing square holds another creature), land on top of the
-object, or leave it to the Director as now.
+**Falling onto an object** (a stone tooth, a crystal) was put to you as a ruling, and you gave
+it: a breakable object breaks. That is built; see "Falling onto an object" in
+`docs/breakable-walls.md`.
 
 Checks run: 2 new test files (10 browser-side checks, 5 groups on the server through the real
 store), the 26 related browser-side test files and every server test file. The whole suite has

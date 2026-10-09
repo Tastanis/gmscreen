@@ -1921,8 +1921,47 @@ final class SyncV2Store
         $ledger=new CollisionEffects($this->pdo,$this->worldId);
         if(!$write)return $ledger->list($actor,$gm,$request['operationId']??null);
         $this->pdo->exec('BEGIN IMMEDIATE');
-        try{$result=$ledger->update($request,$actor,$gm);$this->pdo->exec('COMMIT');return $result;}
+        try{
+            $result=$ledger->update($request,$actor,$gm);
+            // Confirming a fall onto something breakable breaks it, in the same step as the claim, so
+            // the outcome is applied once or not at all. A player may confirm their own fall.
+            if(($result['granted']??false)&&($breaks=$ledger->breaks((string)$request['operationId'],(string)$request['targetId']))!==null){
+                $event=$this->breakWalls($breaks['sceneId'],$breaks['ids'],$actor,$request['operationId'].':break');
+                if($event!==null)$result['brokenWalls']=count($breaks['ids']);
+            }
+            $this->pdo->exec('COMMIT');return $result;
+        }
         catch(Throwable $e){$this->rollbackTransactionSilently();throw $e;}
+    }
+
+    /**
+     * Marks standing breakable walls as broken, inside the caller's transaction, and tells every
+     * browser the way a GM's wall save does. Walls that are gone, already broken or not breakable
+     * are left alone. Returns the event, or null when nothing changed.
+     */
+    private function breakWalls(string $sceneId,array $ids,string $actorId,string $operationId): ?array
+    {
+        if($this->findEventByOperationId($operationId)!==null)return null;
+        $snapshot=$this->getSnapshot();$state=$snapshot['state'];
+        $config=$state['sceneConfig'][$sceneId]??null;$walls=$config['environment']['walls']??null;
+        if(!is_array($walls)||!is_array($walls['value']['segments']??null))return null;
+        $changed=false;
+        foreach($walls['value']['segments'] as $i=>$edge){
+            if(!in_array($edge['id']??null,$ids,true)||!WallObjects::breakable($edge))continue;
+            $walls['value']['segments'][$i]['broken']=true;$changed=true;
+        }
+        if(!$changed)return null;
+        $walls['revision']=(int)($walls['revision']??0)+1;
+        $config['environment']['walls']=$walls;$config['_revision']=max(0,(int)($config['_revision']??0))+1;
+        $state['sceneConfig'][$sceneId]=$config;
+        $revision=$snapshot['revision']+1;$serverTime=$this->nowMilliseconds();
+        $event=['revision'=>$revision,'operationId'=>$operationId,'type'=>'environment.changed','actorId'=>$actorId,'sceneId'=>$sceneId,'entityId'=>null,
+            'entityRevision'=>$config['_revision'],'payload'=>['field'=>'walls','entry'=>$walls,'cause'=>'fall'],'serverTime'=>$serverTime];
+        $this->insertEvent($event);
+        $this->updateWorldState($revision,$state,$serverTime);
+        if($revision % $this->snapshotInterval===0)$this->insertSnapshot($revision,$state,$serverTime);
+        $this->pruneEvents($revision);
+        return $event;
     }
 
     public function unresolvedZoneEntries(string $actorId,bool $isGm): array

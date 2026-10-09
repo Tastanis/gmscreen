@@ -130,6 +130,44 @@ one-square pieces. A door that was already cut in two by the old rule stays in t
   checks, none failing; all 40 server test files pass.
 - Not done yet: trying break and repair in the running app.
 
+## Falling onto an object. Built (October 8, 2026, night). Not yet seen in a browser
+
+Your ruling: "if it is breakable, it should break the object like a wall or pillar or box or
+something."
+
+An object here means walls that run through a square instead of along its edge: a pillar, a
+crate, a crystal, a stone tooth. Before this, a creature that fell onto one was left inside it,
+and a player could not walk out in any direction.
+
+- **Onto something breakable.** The creature lands in that square. The Fall pop-up has a new
+  line, "Lands on and breaks: stone". When the fall is applied, the object's walls break and
+  its rubble is drawn. Dismiss the fall and nothing breaks.
+- **Onto something that cannot be broken.** The creature lands in the nearest free square
+  beside it, the same way it does when another creature is in the way.
+- **Damage is the fall's own.** Nothing is added for the object. The book has a falling rule
+  and a rule for landing on a creature, and none for landing on an object. Its breaking damage
+  (3, 5, 8, 11) is for forced movement that is still going, which a fall is not.
+- **Who confirms.** Whoever owns the fall's pop-up: you for a push you made, a player for
+  their own walk off an edge or their own ability's push. That is how fall damage already
+  works. The player's pop-up names the material of the thing about to break.
+- Walls that share a group name break together (see Stage D).
+
+**This changes existing maps a little.**
+
+- A fall onto a square with a wall running through it now lands beside the wall instead of
+  astride it. A wall along a grid line is not affected.
+- When a falling creature has to be put in a free square, a square counts as level with the
+  landing if it is within half a square of it. It used to need to be exactly level, so on
+  uneven ground the app gave up and asked you to place the creature.
+- A free square is never one that a wall runs through.
+
+Limit: an object three squares wide or more has a middle square that none of its walls
+touch. A creature falling exactly there is not seen as landing on it.
+
+Checks run: 6 new groups of server checks through the real store, one new pop-up check, and
+on the islands map the Anvil push onto stone tooth T6 and the Crown push onto crystals B16
+(both break on confirming; the hero then walks out).
+
 ## Stage B: forced movement breaks walls by the book. Not started
 
 ## Stage C: map packages carry the material. Not started

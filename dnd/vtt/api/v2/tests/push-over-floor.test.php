@@ -81,10 +81,13 @@ $is = static function ($row, $expected, string $message): void { overCheck($row 
 
 // ---- over a thing on the floor --------------------------------------------
 // The island's south edge is row 19. The tooth is on the floor at (24,20), two squares tall.
-foreach ([1, 2, 3] as $squares) {
+foreach ([2, 3] as $squares) {
     $rows = $run([[24, 18, 'low']], [[24, 19, 'walk'], [24, 19 + $squares, 'forced']]);
     $is($last($rows), [24.0, 19.0 + $squares, 'level-0', 0.0, 6, []], "Pushed $squares off the island over the tooth: it goes its whole distance and falls 6");
 }
+// A push that ends over the tooth is made too. This tooth cannot be broken, so the creature comes
+// down in the free square beside it (fall-onto-objects.test.php).
+$is($last($run([[24, 18, 'low']], [[24, 19, 'walk'], [24, 20, 'forced']])), [23.0, 20.0, 'level-0', 0.0, 6, []], 'Pushed 1 off the island to end over the tooth: it falls 6 and lands beside it');
 $is($last($run([[24, 17, 'low']], [[24, 18, 'walk'], [24, 21, 'push']])), [24.0, 21.0, 'level-0', 0.0, 6, []], 'With the app working out the stop: nothing on the floor stops it');
 // However long the push: a second tooth stands on the floor seven squares out from the island, and
 // a creature two squares beyond it. A creature that has left the island does not come back down to
@@ -94,7 +97,7 @@ $is($last($run([[24, 18, 'low'], [24, 28, 'level-0']], [[24, 19, 'walk'], [24, 2
 // A creature standing on the floor under the path is not hit either.
 $is($last($run([[24, 18, 'low'], [24, 21, 'level-0']], [[24, 19, 'walk'], [24, 22, 'push']])), [24.0, 22.0, 'level-0', 0.0, 6, []], 'A creature on the floor under a push 6 squares up is not in its way');
 // A player who walks off the edge takes that step at the island's height, then falls.
-$is($last($run([[24, 18, 'low']], [[24, 19, 'walk'], [24, 20, 'player']])), [24.0, 20.0, 'level-0', 0.0, 6, []], 'A walk off the edge over the tooth is made, and is a fall of 6');
+$is($last($run([[24, 18, 'low']], [[24, 19, 'walk'], [24, 20, 'player']])), [23.0, 20.0, 'level-0', 0.0, 6, []], 'A walk off the edge over the tooth is made, and is a fall of 6 to the square beside it');
 echo "PASS a creature that leaves a plate passes over what stands on the floor below\n";
 
 // ---- what really is in the way still stops it --------------------------------

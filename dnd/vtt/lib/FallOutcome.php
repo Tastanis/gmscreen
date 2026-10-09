@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__.'/WallMovement.php';
+require_once __DIR__.'/WallObjects.php';
 /** Server-owned fall geometry; damage remains an explicitly reviewed outcome. */
 final class FallOutcome {
  public static function plan(array $from,array $to,array $config,string $kind,array $path=[],?string $cause=null):?array {
@@ -41,10 +42,24 @@ final class FallOutcome {
  private static function overlaps(array $a,array $b):bool {
   return ($a['levelId']??'level-0')===($b['levelId']??'level-0')&&$a['column']<$b['column']+($b['width']??1)-1e-7&&$a['column']+($a['width']??1)>$b['column']+1e-7&&$a['row']<$b['row']+($b['height']??1)-1e-7&&$a['row']+($a['height']??1)>$b['row']+1e-7;
  }
+ /** A landing this close in height to the one fallen to is the same fall. */
+ public const LANDING_STEP=.5;
+ /**
+  * Where a falling creature ends up, and what it lands on.
+  * - On another creature: both are hit and the faller is put in the nearest free square.
+  * - On a thing that can be broken (a wall with a material running through the square): it stays
+  *   there and `breaks` lists that thing's walls. They are broken when the fall is confirmed.
+  * - On a thing that cannot be broken: the nearest free square, so no creature is left walled in.
+  */
  public static function landing(array $to,array $others,array $config):array {
   $others=array_values(array_filter($others,fn($p)=>($p['id']??'')!==($to['id']??'')&&!FloorGeometry::isAirborne($p)));
   $hit=array_values(array_filter($others,fn($p)=>self::overlaps($to,$p)));
-  if(!$hit)return ['placement'=>$to,'collidedIds'=>[],'relocated'=>false];
+  $under=WallObjects::under($to,$config);
+  $solid=array_filter($under,fn($edge)=>!WallObjects::breakable($edge));
+  if(!$hit&&!$solid)return ['placement'=>$to,'collidedIds'=>[],'relocated'=>false,...($under?['breaks'=>WallObjects::whole($under,$config)]:[])];
+  // The walls under the faller are what it is leaving; they do not bar the way off them.
+  $model=$config['environment']['walls']['value']??['nodes'=>[],'segments'=>[]];
+  if($under){$leaving=array_column($under,'id');$model['segments']=array_values(array_filter($model['segments']??[],fn($edge)=>!in_array($edge['id'],$leaving,true)));}
   $candidates=[];for($r=1;$r<=20;$r++){
    for($x=-$r;$x<=$r;$x++)for($y=-$r;$y<=$r;$y++)if(max(abs($x),abs($y))===$r)$candidates[]=[$x,$y];
    usort($candidates,fn($a,$b)=>($a[0]**2+$a[1]**2)<=>($b[0]**2+$b[1]**2));
@@ -52,8 +67,9 @@ final class FallOutcome {
     $p=[...$to,'column'=>round($to['column'])+$x,'row'=>round($to['row'])+$y];
     if($p['column']<0||$p['row']<0||array_filter($others,fn($other)=>self::overlaps($p,$other)))continue;
     if(FloorGeometry::fallingDestination($p,$config['mapLevels']??[],FloorSupport::surfaces($config['environment']['walls']['value']??[]))!==null)continue;
-    if(abs(WallMovement::height($p,$config)-WallMovement::height($to,$config))>.03)continue;
-    if(WallMovement::blocked($config['environment']['walls']['value']??['nodes'=>[],'segments'=>[]],$to,$p,$config))continue;
+    if(abs(WallMovement::height($p,$config)-WallMovement::height($to,$config))>=self::LANDING_STEP)continue;
+    if(WallObjects::under($p,$config))continue;
+    if(!empty($model['segments'])&&WallMovement::blocked($model,$to,$p,$config))continue;
     return ['placement'=>$p,'collidedIds'=>array_column($hit,'id'),'relocated'=>true];
    }$candidates=[];
   }

@@ -170,3 +170,27 @@ test('a creature with a climb speed that walks off an edge climbs down: no pop-u
  f=fixture({mount:{climbing}});
  try{f.records=[{...record(),details:{squares:4,movementKind:'walk',collidedIds:['two']}}];await until(f.panel);assert.ok(f.panel());}finally{f.close();}
 });
+
+test('a fall that breaks what it lands on is always put to the reviewer, and says what breaks',async()=>{
+ const {fallBreaks}=await import('../fall-review.js');
+ assert.equal(fallBreaks({squares:3}),'');
+ assert.equal(fallBreaks({breaks:[]}),'');
+ assert.equal(fallBreaks({breaks:[{id:'a',material:'stone'},{id:'b',material:'stone'}]}),'stone');
+ assert.equal(fallBreaks({breaks:[{id:'a',material:'wood'},{id:'b',material:'glass'}]}),'wood and glass');
+ assert.equal(fallBreaks({breaks:[{id:'a'}]}),'an object');
+ // A one-square fall does no damage and is normally closed without asking.
+ const quiet=fixture();
+ try{quiet.records=[{...record(),details:{squares:1}}];quiet.handle.wake();
+  await until(()=>quiet.writes.some(w=>w.action==='finish'&&w.status==='dismissed'));assert.equal(quiet.panel(),null);
+ }finally{quiet.close();}
+ // The same fall onto a stone object is shown, with what it breaks, and waits for Apply.
+ const f=fixture();
+ try{f.records=[{...record(),details:{squares:1,breaks:[{id:'a',material:'stone'},{id:'b',material:'stone'}]}}];f.handle.wake();await until(f.panel);
+  assert.match(f.panel().textContent,/Lands on and breaks\s*stone/);
+  assert.equal(f.writes.length,0,'nothing is confirmed until the reviewer says so');
+  f.panel().querySelectorAll('button').find(b=>b.textContent==='Apply').onclick();
+  await until(()=>f.writes.some(w=>w.action==='finish'&&w.status==='completed'));
+  assert.equal(f.claims,1,'Apply claims the fall once: the server breaks the walls with that claim');
+  assert.equal(f.damage,0,'the fall\'s own damage only, and a one-square fall has none');
+ }finally{f.close();}
+});
