@@ -71,7 +71,9 @@ test('before: the ruler priced the last step off a ramp as a drop to the ground'
   assert.equal(price(token(10, 18, 'high'), [[10, 18], [10, 9]], { follow: false }).cost, 20, 'arch down: 8 steps and a 12-square drop');
   assert.equal(price(token(10, 9, 'mid'), [[10, 9], [10, 18]], { follow: false }).cost, 21, 'arch up');
   assert.equal(price(token(14, 7, 'mid'), [[14, 7], [16, 7]], { follow: false }).cost, 12, 'vine down');
-  assert.equal(price(token(16, 7, 'low'), [[16, 7], [14, 7]], { follow: false }).cost, 12, 'vine up');
+  // The Map maker also recorded 12 for the vine going up. The old ruler got that by the rule that a
+  // creature beside the foot of any ramp was standing on it. A vine no longer holds a creature that
+  // has not climbed onto it (travel-height.test.mjs), so that old reading cannot be made any more.
   // The single step the Map maker measured: on the foot of the arch, one square onto the mid island.
   const onFoot = token(10, 10, 'high', { _floorTraversal: { stairId: 'arch', entry: 'green' } });
   assert.equal(price(onFoot, [[10, 10], [10, 9]], { follow: false }).cost, 12);

@@ -1,6 +1,8 @@
 // A Ctrl-drag supplies the final distance, after Stability and ability adjustments.
 // Obstacles are stationary; breaking objects and vertical throws remain manual.
-export function resolveForcedDrag(from, to, others, { wallBlocked = () => false, height = () => 0 } = {}) {
+// `moverHeight(from, at)` is the height the pushed creature is at when it reaches `at`; it defaults to the
+// height of the ground there. Paired with ForcedMovement::resolve.
+export function resolveForcedDrag(from, to, others, { wallBlocked = () => false, height = () => 0, moverHeight = (origin, at) => height(at) } = {}) {
   const dx=to.column-from.column,dy=to.row-from.row,distance=Math.max(Math.abs(dx),Math.abs(dy));
   if (!distance) return {destination:to,damage:0,collidedIds:[],wall:false};
   let stop=1,wall=false,collidedIds=[];
@@ -14,7 +16,7 @@ export function resolveForcedDrag(from, to, others, { wallBlocked = () => false,
       else {const a=(min-p)/d,b=(max-p)/d;lo=Math.max(lo,Math.min(a,b));hi=Math.min(hi,Math.max(a,b));}
     }
     if (lo>=hi-1e-8 || lo>stop+1e-8) continue;
-    const z=height(at(lo)),oz=height(other);
+    const z=moverHeight(from,at(lo)),oz=height(other);
     if (z>=oz+Math.max(other.width||1,other.height||1)-1e-8 || oz>=z+Math.max(from.width||1,from.height||1)-1e-8) continue;
     if(lo<stop-1e-8){stop=lo;collidedIds=[];}
     collidedIds.push(other.id);

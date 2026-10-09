@@ -711,6 +711,73 @@ this mattered more than it looked.
 Still to do from that look, small: the selected token's card covers the Edits menu; a sliver of
 painted door and window shows beside their rubble.
 
+## October 8, night: pushed or walking off an edge. Done, not yet seen in a browser
+
+Found by the Map maker on the islands map. Not in the push that was cut at build 444.
+
+**The fault.** A creature was measured at the height of the ground under it at every point of a
+move. So a creature pushed off an island 18 squares up was "on the crater floor" the moment it
+cleared the edge, and a crystal or stone tooth on the floor under its path stopped it. Pushes off
+island tips were refused.
+
+**The rule now**, the same for the server and the browser:
+
+- While a mover has footing (ground, a floor, a ramp) it is at the height of that footing.
+- When the footing drops away under it faster than a slope could, it has left its footing. From
+  there it travels level, at the height it left from, for the rest of the move, however long.
+  It falls when the move ends.
+- So a wall, an object or a creature on the ground far below is not in its way. Anything that
+  reaches its own height still is: a wall on its own floor, a spire that rises past it, a
+  creature beside it, a cliff that stands above it.
+- A pushed creature leaves its footing at any drop steeper than a slope (one and a half squares
+  down per square along). A walker steps down small banks as before and leaves its footing only
+  at a real fall (a square and a half or more), so walking off an edge is a step at the walker's
+  height, then the fall.
+- If the ground comes back up to it (another island at the same height across a gap), it has
+  footing again.
+
+**Vines and ladders.** A creature standing within two squares of the foot of any ramp, with no
+record of how it got there, was taken to be standing on the ramp. That was meant for stairs. On
+a vine it put a shoved creature half-way up the vine: a fall of 5 at the Taproot where it should
+be 9. That allowance now applies only to slopes. A climb (anything steeper than one and a half
+squares per square) holds only a creature that climbed onto it.
+
+**On the real islands map (v15b), before and after:**
+
+| Case | Before | Now |
+|---|---|---|
+| Crown (18 up), pushed 2 or 3 west over the floor crystals | 3 refused | lands on the floor, fell 16 |
+| Anvil (6 up), pushed 1, 2 or 3 south over the stone tooth | all refused | lands on the floor, fell 6 |
+| A low island, pushed 12 west | stopped after 4 at something on the floor | goes the 12, fell 4 |
+| Shoved into the square of a vine that reaches the floor | half-way up the vine, fell 5 | on the floor, fell 9 |
+| Pushed off the side of an arch | 2 of 5 refused | lands on the floor, fell 11 to 21 |
+| A creature on the floor pushed into the stone tooth | stopped | stopped |
+| A player on the floor walking into the tooth | blocked | blocked |
+| A player walking off the Anvil's edge over the tooth | (not tried) | allowed, fell 6 |
+
+**This changes existing maps**, in these ways only:
+
+- A creature pushed off a balcony, a stair's side or a cliff is no longer stopped by a low wall
+  or a creature on the ground under it. It was before, wrongly. It goes its distance and falls.
+  A wall that reaches up to the balcony's height still stops it.
+- A creature pushed over a sheer drop in the ground itself stays level and falls at the end
+  instead of following the ground down. Where it ends and how far it falls are the same; what
+  it can hit on the way is not.
+- A player who walks off an edge a square and a half or more high is treated the same way.
+- No stair on the bathhouse is steep enough to be a climb, so nothing changes on its stairs. Of
+  the map packages on this PC only the islands map has climbs.
+
+**Not built, a ruling for the Director:** what happens when a creature falls onto a square that
+holds a solid object on the floor (a stone tooth, a crystal). Today it lands inside the object's
+square, at floor height, and a player then cannot walk out in any direction because the object's
+walls ring the square. The Director can drag it out. Choices: land in the nearest free square
+(the app already does this when the landing square holds another creature), land on top of the
+object, or leave it to the Director as now.
+
+Checks run: 2 new test files (10 browser-side checks, 5 groups on the server through the real
+store), the 26 related browser-side test files and every server test file. The whole suite has
+not been run on this, and it has not been seen in a browser.
+
 ## Where it is now
 
 You said to put stages 1 to 3 on `main` on this PC and wait for your word

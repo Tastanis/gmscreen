@@ -2,18 +2,26 @@
 declare(strict_types=1);
 require_once __DIR__.'/FlightHeight.php';
 require_once __DIR__.'/TerrainContact.php';
+require_once __DIR__.'/TravelPath.php';
 
 /** Canonical counterpart of wall-properties.mjs. No mutation or damage side effects. */
 final class WallMovement
 {
-    public static function assertAllowed(array $from, array $to, array $config, string $kind, array $path, bool $isGm): void
+    /**
+     * `$travel` is the mover's path from `$from`, when the caller already has one: a push that is
+     * looking for where it stops asks about many points on one line.
+     */
+    public static function assertAllowed(array $from, array $to, array $config, string $kind, array $path, bool $isGm, ?TravelPath $travel=null): void
     {
         // Preserve the GM's ordinary placement override; forced movement still collides.
         if ($kind==='teleport' || ($isGm && in_array($kind,['walk','shift'],true))) return;
         if($kind==='forced'){
             $previous=$from;
             foreach([...$path,$to] as $point){
-                if(TerrainContact::first($previous,$point,fn($x,$y)=>self::terrain($x,$y,$config),fn($p)=>self::height($p,$config))!==null)throw new InvalidArgumentException('Forced movement blocked by a steep uphill slope.');
+// A pushed creature that leaves its footing travels on level (TravelPath), so a rise
+                // in the ground far below it is not in its way. Ground that rises above it is.
+                $leg=$travel!==null&&$previous===$from?$travel:new TravelPath($previous,$config,'forced');
+                if(TerrainContact::first($previous,$point,fn($x,$y)=>self::terrain($x,$y,$config),fn($p)=>$leg->heightAt($p,true))!==null||$leg->slams($point))throw new InvalidArgumentException('Forced movement blocked by a steep uphill slope.');
                 $previous=[...$previous,...$point];
             }
         }
@@ -22,7 +30,7 @@ final class WallMovement
         $previous=$from;
         foreach ([...$path,$to] as $point) {
             $next=[...$previous,'column'=>$point['column'],'row'=>$point['row']];
-            if (self::blocked($model,$previous,$next,$config)) throw new InvalidArgumentException('Movement blocked by a wall or closed door/window.');
+            if (self::blocked($model,$previous,$next,$config,$kind,$previous===$from?$travel:null)) throw new InvalidArgumentException('Movement blocked by a wall or closed door/window.');
             $previous=self::movementPlacement($previous,$next,$config);
         }
     }
@@ -59,8 +67,13 @@ final class WallMovement
             $direction=$s['direction']??'north';
             $distance=match($direction){'west'=>$s['right']-$x,'east'=>$x-$s['left'],'south'=>$y-$s['top'],default=>$s['bottom']-$y};
             $entry=$token['_floorTraversal']['entry']??null;
-            $supported=$level===($s['toLevel']??null)||($level===($s['fromLevel']??null)&&$entry!=='barrier'&&($entry==='red'||(!isset($token['_floorTraversal'])&&$distance<=2+1e-7)));
-            if($supported){$length=in_array($direction,['west','east'],true)?$s['right']-$s['left']:$s['bottom']-$s['top'];return $s['base']+($s['height']-$s['base'])*$distance/$length;}
+$length=in_array($direction,['west','east'],true)?$s['right']-$s['left']:$s['bottom']-$s['top'];
+            // A creature near the foot of a stair with no record of how it got there is taken to be on
+            // the stair. Not on a climb (a vine, a ladder): nothing stands part-way up one by accident,
+            // so a creature shoved into a vine's square is on the ground under it and has fallen that far.
+            $slope=$length>0&&abs($s['height']-$s['base'])/$length<FloorGeometry::CLIMB_GRADE-1e-6;
+            $supported=$level===($s['toLevel']??null)||($level===($s['fromLevel']??null)&&$entry!=='barrier'&&($entry==='red'||($slope&&!isset($token['_floorTraversal'])&&$distance<=2+1e-7)));
+            if($supported)return $s['base']+($s['height']-$s['base'])*$distance/$length;
             break; // Client rampAt uses the first intersecting ramp too.
         }
         // Carried by a stair that has no ramp here to give a height: the plate under it decides after all.
@@ -90,7 +103,7 @@ final class WallMovement
         return $surface?[...$to,'levelId'=>$surface['levelId'],'_supportSurfaceId'=>$surface['id']??null]:$to;
     }
 
-    public static function blocked(array $model,array $from,array $to,array $config): bool
+    public static function blocked(array $model,array $from,array $to,array $config,string $kind='walk',?TravelPath $travel=null): bool
     {
         $w=max(1,(float)($from['width']??1));$h=max(1,(float)($from['height']??1));
         $ox=$from['column']+$w/2;$oy=$from['row']+$h/2;$dx=$to['column']-$from['column'];$dy=$to['row']-$from['row'];
@@ -122,7 +135,10 @@ final class WallMovement
                 $u=max(0,min(1,(($px-$a['x'])*$vx+($py-$a['y'])*$vy)/($vx*$vx+$vy*$vy)));
                 $base=$e['baseMode']==='fixed'?$e['base']:self::terrain($a['x']+$vx*$u,$a['y']+$vy*$u,$config)+$e['base'];
                 $top=$e['baseMode']==='fixed'||$e['topMode']==='follow'?$base+$e['height']:max(self::terrain($a['x'],$a['y'],$config),self::terrain($b['x'],$b['y'],$config))+$e['base']+$e['height'];
-                $z=self::movementHeight($from,$token,$config);
+// The height the mover is travelling at here, not the height of the ground under it:
+                // a wall on the floor does not stop a creature going over it six squares up.
+                $travel??=new TravelPath($from,$config,$kind);
+                $z=$travel->heightAt($token);
                 if($z<$top-1e-7&&$z+max($w,$h)>$base+1e-7)return true;
             }
         }

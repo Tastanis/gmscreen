@@ -9,6 +9,7 @@ final class ForcedMovement
   if(!$distance)return ['column'=>$to['column'],'row'=>$to['row'],'damage'=>0,'collidedIds'=>[],'wall'=>false];
   $stop=1.;$ids=[];$wall=false;
   $at=fn($t)=>[...$from,'column'=>$from['column']+$dx*$t,'row'=>$from['row']+$dy*$t];
+  $travel=new TravelPath($from,$config,'forced');
   foreach($others as $other){
    if(($other['id']??null)===($from['id']??null))continue;
    // Different floor labels may still contain fliers at the same absolute height.
@@ -20,11 +21,13 @@ final class ForcedMovement
    }
    if($lo>=$hi-1e-8||$lo>$stop+1e-8)continue;
    if($from['column']<$other['column']+($other['width']??1)-1e-8&&$from['column']+($from['width']??1)>$other['column']+1e-8&&$from['row']<$other['row']+($other['height']??1)-1e-8&&$from['row']+($from['height']??1)>$other['row']+1e-8)continue;
-   $z=WallMovement::height($at($lo),$config);$oz=WallMovement::height($other,$config);
+   // The mover's height where it would meet the other creature is the height it is travelling
+   // at, so a creature pushed off an island does not hit one standing on the ground under it.
+   $z=$travel->heightAt($at($lo));$oz=WallMovement::height($other,$config);
    if($z>=$oz+max($other['width']??1,$other['height']??1)-1e-8||$oz>=$z+max($from['width']??1,$from['height']??1)-1e-8)continue;
    if($lo<$stop-1e-8){$stop=$lo;$ids=[];}$ids[]=$other['id'];
   }
-  $blocked=function($point)use($from,$config){try{WallMovement::assertAllowed($from,$point,$config,'forced',[],true);return false;}catch(InvalidArgumentException $e){return true;}};
+  $blocked=function($point)use($from,$config,$travel){try{WallMovement::assertAllowed($from,$point,$config,'forced',[],true,$travel);return false;}catch(InvalidArgumentException $e){return true;}};
   if($blocked($at($stop))){$lo=0.;$hi=$stop;for($i=0;$i<32;$i++){$mid=($lo+$hi)/2;if($blocked($at($mid)))$hi=$mid;else $lo=$mid;}if($lo<$stop-1e-6)$ids=[];$stop=$lo;$wall=true;}
   if($wall){$travel=$distance*$stop;$whole=floor($travel+1e-6);$steps=$whole+($travel-$whole>=.75-1e-6?1:0);$stop=min(1,$steps/$distance);}
   // A creature stops the mover in the last whole square before contact, so no token is left between squares.

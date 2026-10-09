@@ -9,7 +9,10 @@ export function rampSupports(s,actor,p){
  if(level===s.toLevel)return true;
  if(level!==s.fromLevel||traversal?.entry==='barrier')return false;
  const distance=s.direction==='west'?s.right-p.x:s.direction==='east'?p.x-s.left:s.direction==='south'?p.y-s.top:s.bottom-p.y;
- return traversal?.entry==='red'||(!traversal&&distance<=2+1e-7);
+ // A climb (a vine, a ladder: steeper than a slope) is never stood on by accident, so a creature
+ // shoved into a vine's square is on the ground under it. Paired with WallMovement::height.
+ const length=s.direction==='west'||s.direction==='east'?s.right-s.left:s.bottom-s.top,slope=length>0&&Math.abs(s.height-s.base)/length<1.5-1e-6;
+ return traversal?.entry==='red'||(slope&&!traversal&&distance<=2+1e-7);
 }
 // True when the actor is being carried by this ramp: it came onto it by the end that belongs to its floor
 // (the head from the upper floor, the foot from the lower). Paired with FloorGeometry::carriedByStair.

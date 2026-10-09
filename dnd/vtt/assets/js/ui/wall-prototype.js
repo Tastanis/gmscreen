@@ -1,5 +1,6 @@
 import {wallCubeModel} from './wall-cubes.js';
 import {forcedTerrainBlocked} from './forced-flight-terrain.js';
+import {travelPath} from './travel-height.mjs';
 import {shareRoofImages} from './roof-images.mjs';
 import {sharedField,saveShared,acknowledgedRevision} from './environment-sync.mjs';
 import {rampAt,rampHeight,rampPick,rampGround,rampSupports,rampLanding} from './imported-ramps.mjs';
@@ -217,5 +218,19 @@ window.wallPrototype={refreshPortals:()=>editor.portals(),get selectedTopHeight(
  const edge=model.segments.find(e=>e.id===selection.id);if(!edge)return null;
  const a=pointNode(edge.a),b=pointNode(edge.b);
  return wallHeights(edge,a,b,{x:(a.x+b.x)/2,y:(a.y+b.y)/2},groundAt).top;
-},forcedBlockedMove:(from,to)=>!!context&&(forcedTerrainBlocked(from,to,groundAt,t=>terrainPrototype.groundFor(t))||movementBlocked(activeModel(),from,to,(t,origin)=>terrainPrototype.movementGroundFor(origin,t),groundAt)),blockedMove:(from,to)=>!!context&&!context.isGM&&(from.levelId||'level-0')===(context.levelId||'level-0')&&movementPathBlocked(activeModel(),from,to,(t,origin)=>terrainPrototype.movementGroundFor(origin,t),groundAt,(a,b)=>terrainPrototype.movementPlacement(a,b)),get saving(){return savingShared;},get revision(){return revision;},get model(){return activeModel();},get key(){return key;},blocksSight:(a,b)=>blocksSight(activeModel(),a,b)};
+},forcedBlockedMove:(from,to)=>!!context&&(forcedTerrainBlocked(from,to,groundAt,t=>moverHeight(from,t,'forced',true))||pathFor(from,'forced').slams(to)||movementBlocked(activeModel(),from,to,(t,origin)=>moverHeight(origin,t,'forced'),groundAt)),moverHeight:(from,at,kind='forced')=>moverHeight(from,at,kind),blockedMove:(from,to)=>!!context&&!context.isGM&&(from.levelId||'level-0')===(context.levelId||'level-0')&&movementPathBlocked(activeModel(),from,to,(t,origin)=>moverHeight(origin,t,'walk'),groundAt,(a,b)=>terrainPrototype.movementPlacement(a,b)),get saving(){return savingShared;},get revision(){return revision;},get model(){return activeModel();},get key(){return key;},blocksSight:(a,b)=>blocksSight(activeModel(),a,b)};
+// The height a mover is at part-way through a move (travel-height.mjs): the height of its footing
+// while it has one, and the height it left from once it has gone over an edge. Walls, slopes and
+// other creatures are tested against this, so what stands on the ground far below a push is not in
+// its way. `plain` reads the footing without looking for a plate to step onto on the way.
+function moverHeight(from,at,kind,plain=false){return pathFor(from,kind).heightAt(at,plain?undefined:terrainPrototype.movementGroundFor(from,at));}
+// One path per mover for as long as the board cannot change under it: until this turn of the page's
+// work is over. A push looking for where it stops asks about the same line some forty times.
+let travelPaths=null;
+function pathFor(from,kind){
+ if(!travelPaths){travelPaths=[];queueMicrotask(()=>{travelPaths=null;});}
+ let hit=travelPaths.find(p=>p.from===from&&p.kind===kind);
+ if(!hit){hit={from,kind,path:travelPath(from,t=>terrainPrototype.groundFor(t),{kind})};travelPaths.push(hit);}
+ return hit.path;
+}
 requestAnimationFrame(tick);

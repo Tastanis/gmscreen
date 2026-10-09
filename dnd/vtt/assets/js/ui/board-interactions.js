@@ -1412,6 +1412,7 @@ export function mountBoardInteractions(store, routes = {}) {
         const collision=resolveForcedDrag(origin,move,Object.values(canonical),{
           wallBlocked:(from,to)=>window.wallPrototype?.forcedBlockedMove?.(from,to)||false,
           height:token=>window.terrainPrototype?.groundFor(token)??0,
+          moverHeight:(from,at)=>window.wallPrototype?.moverHeight?.(from,at,'forced')??window.terrainPrototype?.groundFor(at)??0,
         });
         collisions.set(move.placementId,collision);
         return {...collision.destination,movementKind,path:[],forcedDestination:{column:move.column,row:move.row}};
@@ -18124,6 +18125,7 @@ export function mountBoardInteractions(store, routes = {}) {
       const dragOptions={
         wallBlocked:(from,to)=>window.wallPrototype?.forcedBlockedMove?.(from,to)||false,
         height:token=>window.terrainPrototype?.groundFor(token)??0,
+        moverHeight:(from,at)=>window.wallPrototype?.moverHeight?.(from,at,'forced')??window.terrainPrototype?.groundFor(at)??0,
       };
       forcedCollision=resolveForcedDrag(origin,forcedIntent,Object.values(canonical),dragOptions);
       // A pull never collides with the puller. A square picked by hand that would drag the target
