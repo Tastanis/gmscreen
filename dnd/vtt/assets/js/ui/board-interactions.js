@@ -33,6 +33,7 @@ import {normalizeHitPointsValue,normalizePlacementHitPoints,parseHitPointsNumber
 import {paintWallTemplate} from './template-wall-renderer.js';
 import {wallSquareKey,nextWallElevation} from './wall-cubes.js';
 import {BREAK_TYPES,BREAK_STAMINA,MAX_WALL_STAMINA,wallBreakFields,squareMarks,wallKind,breakChoice,breakSetting,breakSummary,markCubes} from './wall-break.mjs';
+import {WALL_BAR_STYLE,showBar,placeBar} from './wall-break-bar.js';
 import {createTemplateGeometry, TEMPLATE_COLORS} from './template-geometry.js';
 import {paintTemplateArea} from './template-area-renderer.js';
 import {resolveTemplateLevelPresentation, applyTemplateVisibilityMask, clearTemplateVisibilityMask} from './template-presentation.js';
@@ -24275,7 +24276,7 @@ function createTemplateTool() {
     number.dataset.wallBreakStamina = '';
     number.setAttribute('aria-label', 'Stamina per square');
     number.style.width = '72px';
-    const sync = () => { number.hidden = select.value !== 'stamina'; };
+    const sync = () => showBar(number, select.value === 'stamina', '');
     select.addEventListener('change', sync);
     sync();
     wrapper.append(label, select, number);
@@ -24289,13 +24290,20 @@ function createTemplateTool() {
   // Shown to the GM while a wall is selected: what it takes to break it, and breaking or repairing
   // its cubes by hand. Players are never shown it.
   let wallBreakPanel = null;
+  // The wall the bar is for: the selected one, when it is a wall this GM may change. Null otherwise.
+  function selectedWallForBar() {
+    if (!isGmUser()) return null;
+    const shape = shapes.find((item) => item.id === selectedId);
+    return shape?.type === 'wall' && !shape.isPreview && canManageShape(shape) ? shape : null;
+  }
   function ensureWallBreakPanel() {
     if (wallBreakPanel) return wallBreakPanel;
     const root = document.createElement('aside');
     root.id = 'vtt-wall-break-panel';
     root.hidden = true;
     root.setAttribute('aria-label', 'Wall breaking');
-    root.style.cssText = 'position:fixed;left:50%;top:64px;transform:translateX(-50%);z-index:1300;display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:min(680px,calc(100vw - 24px));padding:8px 12px;border:1px solid #777;border-radius:8px;background:var(--panel-bg,#24252b);color:var(--text-color,#eee);box-shadow:0 6px 24px #0007;font-size:12px';
+    root.style.cssText = WALL_BAR_STYLE;
+    showBar(root, false);
     const fields = buildWallBreakFields();
     fields.wrapper.style.cssText = 'display:flex;gap:6px;align-items:center;margin:0';
     const summary = document.createElement('span');
@@ -24306,7 +24314,7 @@ function createTemplateTool() {
     breakButton.dataset.wallBreakCube = ''; repairButton.dataset.wallRepairCubes = '';
     repairButton.textContent = 'Repair broken cubes';
     root.append(fields.wrapper, summary, breakButton, repairButton);
-    const selectedWall = () => { const shape = shapes.find((item) => item.id === selectedId); return shape?.type === 'wall' && !shape.isPreview && isGmUser() && canManageShape(shape) ? shape : null; };
+    const selectedWall = selectedWallForBar;
     const save = () => { render(viewState); commitShapes(); refreshWallBreakPanel(); };
     const setting = () => {
       const shape = selectedWall(); if (!shape) return;
@@ -24334,17 +24342,22 @@ function createTemplateTool() {
     return wallBreakPanel;
   }
   function refreshWallBreakPanel() {
-    if (!isGmUser()) return;
-    const panel = ensureWallBreakPanel(), shape = panel.selectedWall();
-    panel.root.hidden = !shape;
-    if (!shape) return;
+    // Nothing is made, and nothing is shown, until the GM has a wall selected.
+    const shape = selectedWallForBar();
+    if (!shape) { if (wallBreakPanel) showBar(wallBreakPanel.root, false); return; }
+    const panel = ensureWallBreakPanel();
     const fire = wallKind(shape.wallColor) === 'fire';
     if (document.activeElement !== panel.fields.number) panel.fields.show(shape);
     panel.fields.select.disabled = fire;
     panel.summary.textContent = breakSummary(shape);
     panel.breakButton.textContent = selectedWallSquareKey ? 'Break this cube' : 'Break the whole wall';
     panel.breakButton.disabled = !shape.squares.some((square) => square.broken !== true);
-    panel.repairButton.hidden = !shape.squares.some((square) => square.broken === true);
+    showBar(panel.repairButton, shape.squares.some((square) => square.broken === true), '');
+    // Beside the wall it belongs to, clear of the turn tracker and the panels along the top.
+    showBar(panel.root, true);
+    const place = placeBar({ wall: shape.elements.root.getBoundingClientRect(), bar: panel.root.getBoundingClientRect(), viewport: { width: window.innerWidth, height: window.innerHeight } });
+    panel.root.style.left = `${place.left}px`;
+    panel.root.style.top = `${place.top}px`;
   }
 
   function clearPreview() {

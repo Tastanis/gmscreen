@@ -165,5 +165,5 @@ test('the board passes the settings from an ability and from the GM, and offers 
   assert.match(board, /Object\.assign\(base, wallBreakFields\(shape\)\);/, 'they are saved with the wall');
   assert.match(board, /\.\.\.\(isGmUser\(\) \? \[wallBreakPicker\.wrapper\] : \[\]\)/, 'only the GM is offered the choice when placing');
   assert.match(board, /\.\.\.\(activeType === 'wall' && isGmUser\(\) \? wallBreakPicker\.value\(\) : \{\}\)/);
-  assert.match(board, /function refreshWallBreakPanel\(\) \{\s*if \(!isGmUser\(\)\) return;/, 'and only the GM gets the panel for a wall that stands');
+  assert.match(board, /function selectedWallForBar\(\) \{\s*if \(!isGmUser\(\)\) return null;/, 'and only the GM gets the bar for a wall that stands (wall-break-bar.test.mjs)');
 });

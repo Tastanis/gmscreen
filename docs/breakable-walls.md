@@ -279,7 +279,8 @@ only)**: Not breakable, Glass, Wood, Stone, Metal, or Stamina per square with a 
 
 ### Afterwards
 
-Select a wall. A small bar opens at the top of the board, for you only:
+Select a wall. A small bar opens just under it (or just over it, near the bottom of the screen),
+for you only:
 
 - the same list and number, to change what it takes to break it;
 - what that means in words, such as "Stone: 6 squares of push, 8 damage", so you can judge
@@ -327,3 +328,18 @@ same target block as `wallColor`:
 
 Checks run: 4 groups of server checks through the real store, 10 browser-code checks, every
 server test file and the related browser-code tests.
+
+### Fixed after the tester's run (October 9)
+
+**The bar was on screen all the time.** Every GM saw it at the top centre of every map, with
+nothing selected and no summoned wall on the scene, lying over the turn tracker. It was found
+by comparing 27 fixed views with the last pushed build: all 12 player views unchanged, all 15
+GM views different in exactly that box. My mistake: the bar was marked hidden, but its own
+style said "lay me out", and that wins.
+
+- The bar is now made only when you first select a summoned wall, and it is hidden properly
+  whenever no wall is selected. Players never get it.
+- It no longer sits at the top of the screen. It opens beside the wall it belongs to: just
+  under it, or just over it near the bottom of the screen, and never off the screen. That
+  keeps it clear of the turn tracker and the panels along the top.
+- The number box and the Repair button are hidden the same safe way.
