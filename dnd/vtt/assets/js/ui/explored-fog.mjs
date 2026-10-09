@@ -44,10 +44,22 @@ export function createExploredFog(){
   // mask. It never participates in the separate token line-of-sight check.
   function soften(context){if(!smoothing)return;context.save();context.lineWidth=smoothing;context.lineJoin='round';context.lineCap='round';context.strokeStyle=context.fillStyle;context.stroke(path);context.restore();}
   if(ready&&remember){m.save();m.scale(.5,.5);m.fillStyle='#202020';m.fill(path);soften(m);m.restore();const now=Date.now();if(!dirty){dirty=true;dirtySince=now;}clearTimeout(timer);timer=setTimeout(persist,Math.max(0,Math.min(SAVE_QUIET,dirtySince+SAVE_LATEST-now)));}
+  drawOver(ctx,path,soften);
+ }
+ // Adds what was seen from a place to what is remembered, without drawing anything: for a place a
+ // viewer passed through too quickly for its picture to be put on the screen. True when it was kept.
+ function remember(path,smoothing=0){
+  if(!ready)return false;
+  m.save();m.scale(.5,.5);m.fillStyle='#202020';m.fill(path);
+  if(smoothing){m.lineWidth=smoothing;m.lineJoin='round';m.lineCap='round';m.strokeStyle=m.fillStyle;m.stroke(path);}
+  m.restore();const now=Date.now();if(!dirty){dirty=true;dirtySince=now;}clearTimeout(timer);timer=setTimeout(persist,Math.max(0,Math.min(SAVE_QUIET,dirtySince+SAVE_LATEST-now)));
+  return true;
+ }
+ function drawOver(ctx,path,soften){
   ctx.globalCompositeOperation='destination-out';ctx.drawImage(mask,0,0,ctx.canvas.width,ctx.canvas.height);
   ctx.globalCompositeOperation='source-over';ctx.globalAlpha=.72;ctx.drawImage(mask,0,0,ctx.canvas.width,ctx.canvas.height);ctx.globalAlpha=1;
   ctx.globalCompositeOperation='destination-out';ctx.fill(path);soften(ctx);ctx.globalCompositeOperation='source-over';
  }
  window.addEventListener('pagehide',persist);document.addEventListener('visibilitychange',()=>{if(document.hidden)persist();});
- return {select,paint,resetScene,get revision(){return revision;}};
+ return {select,paint,remember,resetScene,get revision(){return revision;},get ready(){return ready;},get key(){return key;}};
 }

@@ -8,11 +8,10 @@ import {seesRampTop} from './surface-facing.mjs';
 import {gmVision} from './gm-vision.js';
 import {onSurface} from './stacked-surfaces.mjs';
 import {roofRenderer} from './roof-renderer.js';
-import {obstacleReveal} from './obstacle-reveal.mjs';
 import {createExploredFog} from './explored-fog.mjs';
-import {adaptiveFog} from './adaptive-fog.mjs';
 import {compileTerrainVision} from './terrain-vision.mjs';
 import {makeSight,center,head} from './vision-height.mjs';
+import {groundShapeSteps,createJob,advance,finish,createSightQueue} from './sight-job.mjs';
 // Height-aware sight paints from confirmed scene geometry and token state.
 const transform=document.querySelector('#vtt-map-transform'),originalTokens=document.querySelector('#vtt-token-layer');
 const canvas=document.createElement('canvas');canvas.id='vision-prototype';canvas.style.cssText='position:absolute;inset:0;pointer-events:none;z-index:100000';transform.append(canvas);
@@ -21,6 +20,47 @@ const style=document.createElement('style');style.textContent='.height-vision-ac
 const exploration=createExploredFog();
 const ctx=canvas.getContext('2d');let portalView=null;let signature='',paints=0,lastMs=0,observer=null,viewerTokenId=null,wallRevision=-1,walls=null,sight=null,tokenDirty=true,terrainCache=null,terrainKey='',terrainBuilds=0,groundChecks=0,visiblePolygons=0,tokenMarkup='';
 new MutationObserver(()=>{tokenDirty=true;}).observe(originalTokens,{subtree:true,childList:true,attributes:true});
+// The ground picture (black, what is remembered, what is lit from here) is worked out a few
+// milliseconds a frame (sight-job.mjs), so a token that moves does not stop the board while its
+// new view is found. Creatures, doors and floor plates do not wait: they are tested the moment
+// the token arrives, as before. Only the lit ground follows.
+//  - Only the newest place is worked out for the screen. A place already left is set aside.
+//  - While the new picture is being found the old one stays, and only when it shows nothing the
+//    finished picture would hide: the same viewer on the same scene, floor and walls, with what
+//    was lit before already in that viewer's memory of the map (so it is ground the new picture
+//    shows too, lit or remembered). In every other case the picture is found at once, as before.
+//  - What was seen from a place passed through is still remembered: its picture is finished once
+//    nothing is waiting for the screen, and added to memory without being shown as lit.
+const GROUND_SLICE=10,GROUND_LEAST=3,MEMORY_SLICE=5;
+const queue=createSightQueue({limit:32});
+let wanted=null,shown=null,groundPainted='',roofPainted='',groundRuns=0,memoryCatchUps=0,lastGroundMs=0,lastGroundLagMs=0,lastGroundSlices=0,memoryGrew=false;
+const groundStamp=()=>JSON.stringify([wanted?.mode==='lit'?shown?.key:wanted?.mode,exploration.revision,wanted?.remember,canvas.width,canvas.height]);
+function paintGround(){
+ ctx.globalCompositeOperation='source-over';
+ if(wanted.mode==='unlit')ctx.clearRect(0,0,canvas.width,canvas.height);
+ else{
+  ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height);
+  // Shared edge crossings and a single fill prevent cracks between cells.
+  if(wanted.mode==='lit'&&shown){exploration.paint(ctx,shown.path,wanted.remember,wanted.smoothing);shown.remembered=wanted.remember&&exploration.ready;}
+ }
+ groundPainted=groundStamp();memoryGrew=false;
+}
+function showGround(job){
+ queue.clear();shown={key:job.key,family:job.family,path:job.path,remembered:false};
+ groundChecks=job.result.checks;visiblePolygons=job.result.polygons;groundRuns++;lastGroundMs=job.spent;lastGroundSlices=job.slices;lastGroundLagMs=performance.now()-job.asked;
+ paintGround();
+}
+const keptForMemory=job=>!!wanted&&wanted.mode==='lit'&&wanted.remember&&job.family===wanted.family;
+function catchUpMemory(){
+ const job=queue.passed[0];
+ if(!wanted||wanted.mode!=='lit'||!wanted.remember||job.family!==wanted.family||!exploration.ready){queue.forget();return;}
+ if(job.key===shown?.key){queue.passed.shift();return;}
+ if(!advance(job,MEMORY_SLICE))return;
+ queue.passed.shift();memoryCatchUps++;
+ // The screen is drawn again from memory once, when the last of them is in.
+ if(exploration.remember(job.path,wanted.smoothing))memoryGrew=true;
+ if(memoryGrew&&!queue.passed.length)paintGround();
+}
 function tokenVisible(id){
  if(!document.documentElement.classList.contains('height-vision-active'))return true;
  const c=window.terrainContext?.(),p=c?.state.boardState.placements[c.state.boardState.activeSceneId]?.find(p=>p.id===id);
@@ -52,19 +92,25 @@ function tick(){
   if(terrainCache.explorationHash===undefined){let hash=2166136261;for(const h of terrain.field.h){hash=Math.imul(hash^Math.round(h*10000),16777619);}terrainCache.explorationHash=hash>>>0;}
   exploration.select(JSON.stringify([c.userId,c.state.boardState.activeSceneId,c.state.boardState.mapUrl,c.isGM?'stacked-view-v2':'player-view-v3',sharedField('exploration')?.value.resetId||'initial',c.isGM?token?.id:'personal',v.gridSize,v.gridOffsets,v.mapInsets,v.mapPixelSize,terrainCache.explorationHash,...(terrain.slant.y===.36?[]:['slant',terrain.slant.y])]),v.mapPixelSize.width,v.mapPixelSize.height);
   const next=JSON.stringify([c.state.boardState.activeSceneId,c.levelId,viewerGround,inspectionHeight,terrain.markersVisible,gmVision.manual,gmVision.lighting,gmVision.revision,exploration.revision,editing,token,placements.map(p=>[p.id,p.column,p.row,p.width,p.height,p.levelId,p.movementMode,p.visionOwners,p.team,p.combatTeam]),wallRevision,roofRenderer.revision,terrain.flightRevision,terrain.revision,v.mapPixelSize,v.mapInsets,v.gridOffsets,v.gridSize]);
-  const changed=next!==signature;
+  const changed=next!==signature,tickStart=performance.now();
   if(changed){
    signature=next;const start=performance.now();
-   if(canvas.width!==v.mapPixelSize.width||canvas.height!==v.mapPixelSize.height){canvas.width=v.mapPixelSize.width;canvas.height=v.mapPixelSize.height;}
-   ctx.globalCompositeOperation='source-over';ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height);
+   if(canvas.width!==v.mapPixelSize.width||canvas.height!==v.mapPixelSize.height){canvas.width=v.mapPixelSize.width;canvas.height=v.mapPixelSize.height;groundPainted='';}
    viewerTokenId=gmVision.manual?null:selectedToken?.id||null;observer=token?center(token):null;sight=!gmVision.fogEnabled?()=>true:token?makeSight({viewer:token,viewerGround,groundAt,walls,terrain:terrainCache}):null;
    if(sight)sight=gmVision.lighting&&!wallInspection?roofRenderer.blockSight(observer,head(token,viewerGround),sight,walls):()=>true;
    portalView={viewer:observer,ground:viewerGround,eye:token?head(token,viewerGround):0,sight};
-   if(sight&&gmVision.lighting){
+   // What the ground picture is to be: `family` is everything but the viewer's own place, `key` the whole of it.
+   const mode=!gmVision.lighting?'unlit':sight?'lit':'dark',remember=!editing&&!gmVision.manual;
+   const family=JSON.stringify([c.state.boardState.activeSceneId,c.levelId,token?.id,token?.levelId,wallRevision,terrainKey,gmVision.fogEnabled,wallInspection,inspectionHeight,canvas.width,canvas.height,exploration.key]);
+   const key=mode==='lit'?JSON.stringify([family,token?.column,token?.row,token?.width,token?.height,viewerGround]):mode;
+   wanted={mode,key,family,remember,smoothing:v.gridSize*.10};
+   if(mode!=='lit'){queue.setAside();queue.forget();shown=null;paintGround();}
+   else if(shown?.key===key){queue.setAside(keptForMemory);if(groundPainted!==groundStamp())paintGround();}
+   else if(queue.current?.key!==key){
     const image=document.querySelector('#vtt-map-image'),g=v.gridSize,ox=v.gridOffsets.left||0,oy=v.gridOffsets.top||0;
     const left=(v.mapInsets.left-ox)/g,top=(v.mapInsets.top-oy)/g,right=left+image.naturalWidth/g,bottom=top+image.naturalHeight/g;
     const projected=(x,y)=>{const px=ox+x*g,py=oy+y*g;return terrain.active?terrain.project(px,py,groundAt(x,y)):{x:px,y:py};};
-    const path=new Path2D(),polygons=[];groundChecks=0;visiblePolygons=0;
+    const path=new Path2D(),seen=sight;
     // Consistent projected winding prevents overlapping parallax polygons from
     // subtracting from one another and leaving sharp black triangular slivers.
     const appendProjected=polygon=>{
@@ -72,19 +118,24 @@ function tick(){
      if(points.reduce((sum,p,i)=>{const q=points[(i+1)%points.length];return sum+p.x*q.y-q.x*p.y;},0)<0)points.reverse();
      points.forEach((p,i)=>i?path.lineTo(p.x,p.y):path.moveTo(p.x,p.y));path.closePath();
     };
-    const visibleGround=(p,z=groundAt(p.x,p.y))=>sight(p,z);
-    const fogStats=adaptiveFog({left,top,right,bottom,visible:visibleGround,emit:polygon=>{polygons.push(polygon);appendProjected(polygon);}});groundChecks=fogStats.checks;visiblePolygons=fogStats.polygons;
-    const revealStats=obstacleReveal({polygons,walls,origin:observer,groundAt,visible:visibleGround,emit:appendProjected});groundChecks+=revealStats.checks;
-    // Shared edge crossings and a single fill prevent cracks between cells.
-    exploration.paint(ctx,path,!editing&&!gmVision.manual,g*.10);
+    const visibleGround=(p,z=groundAt(p.x,p.y))=>seen(p,z);
+    const job=queue.ask(createJob(key,groundShapeSteps({left,top,right,bottom,visible:visibleGround,walls,origin:observer,groundAt,emit:appendProjected}),{family,path,asked:start}),keptForMemory);
+    // The old picture may stay up meanwhile only when it shows nothing this one would hide (see above).
+    if(!(shown&&shown.family===family&&shown.remembered&&remember&&exploration.ready)){finish(job);showGround(job);}
    }
-   if(!gmVision.lighting)ctx.clearRect(0,0,canvas.width,canvas.height);
-   roofRenderer.paint({inspectionHeight,lighting:gmVision.lighting&&!wallInspection,context:c,viewer:observer,token,terrain:terrainCache,viewerGround,sight,groundAt,model:walls,editing:editing&&!wallInspection,enabled});
+   // Floor plates are tested and drawn at once. They depend on the viewer and the map, not on where
+   // other tokens stand, so another token's move does not draw them again.
+   const roofKey=JSON.stringify([c.state.boardState.activeSceneId,c.levelId,viewerGround,inspectionHeight,terrain.markersVisible,gmVision.manual,gmVision.lighting,gmVision.fogEnabled,gmVision.revision,editing,wallInspection,token,wallRevision,roofRenderer.revision,terrain.flightRevision,terrain.revision,terrainKey,v.mapPixelSize,v.mapInsets,v.gridOffsets,v.gridSize]);
+   if(roofKey!==roofPainted){roofPainted=roofKey;roofRenderer.paint({inspectionHeight,lighting:gmVision.lighting&&!wallInspection,context:c,viewer:observer,token,terrain:terrainCache,viewerGround,sight,groundAt,model:walls,editing:editing&&!wallInspection,enabled});}
    wallApi.refreshPortals?.();
-   confirmPlayerHeightPaint(c.state,c.view,c.isGM,c.levelId);
    lastMs=performance.now()-start;paints++;
   }
-  if(!changed)confirmPlayerHeightPaint(c.state,c.view,c.isGM,c.levelId);
+  // A little more of the ground picture each frame; then, with nothing waiting for the screen, of
+  // the pictures from places passed through, for memory only.
+  if(queue.current){const job=queue.current;if(advance(job,Math.max(GROUND_LEAST,GROUND_SLICE-(performance.now()-tickStart))))showGround(job);}
+  else if(queue.passed.length)catchUpMemory();
+  // A player's map is uncovered only by a finished picture of where they are now.
+  if(!queue.current)confirmPlayerHeightPaint(c.state,c.view,c.isGM,c.levelId);
   if(changed){for(const node of originalTokens.querySelectorAll('[data-placement-id]')){const next=tokenVisible(node.dataset.placementId)?'':'none';if(node.style.pointerEvents!==next)node.style.pointerEvents=next;}}
   if(changed||tokenDirty){
    tokenDirty=false;const markup=originalTokens.outerHTML;if(changed||markup!==tokenMarkup){tokenMarkup=markup;tokenView.replaceChildren();
@@ -98,10 +149,10 @@ function tick(){
    }
    }
   }
- }else{portalView=null;roofRenderer.hide();signature='';tokenMarkup='';sight=null;observer=null;tokenView.replaceChildren();
+ }else{portalView=null;roofRenderer.hide();signature='';tokenMarkup='';sight=null;observer=null;tokenView.replaceChildren();queue.setAside();queue.forget();wanted=null;shown=null;groundPainted='';roofPainted='';
   if(c?.view.mapLoaded&&wallApi&&window.terrainPrototype&&!sharedField('terrain')&&!sharedField('walls')&&!(c.state.boardState.templates?.[c.state.boardState.activeSceneId]||[]).some(t=>t.type==='wall'))confirmPlayerNoHeightPaint(c.state,c.view,c.isGM,c.levelId);
  }
  requestAnimationFrame(tick);
 }
-window.visionPrototype={tokenVisible,portalVisible:geometry=>portalView?portalVisible({...geometry,...portalView}):false,async resetExplored(){const c=window.terrainContext?.();if(!c?.isGM)return;await saveShared('exploration',{resetId:crypto.randomUUID()},sharedField('exploration')?.revision||0);await exploration.resetScene(c.state.boardState.activeSceneId);},get viewerTokenId(){return viewerTokenId;},get observer(){return observer;},get stats(){return {paints,lastMs,terrainBuilds,groundChecks,visiblePolygons,cliffs:terrainCache?.cliffs.length||0};},visible:(point,z,token)=>sight?.(point,z,token)??false};
+window.visionPrototype={tokenVisible,portalVisible:geometry=>portalView?portalVisible({...geometry,...portalView}):false,async resetExplored(){const c=window.terrainContext?.();if(!c?.isGM)return;await saveShared('exploration',{resetId:crypto.randomUUID()},sharedField('exploration')?.revision||0);await exploration.resetScene(c.state.boardState.activeSceneId);},get viewerTokenId(){return viewerTokenId;},get observer(){return observer;},get stats(){return {paints,lastMs,terrainBuilds,groundChecks,visiblePolygons,cliffs:terrainCache?.cliffs.length||0,groundRuns,groundPending:!!queue.current,groundSetAside:queue.superseded,memoryWaiting:queue.passed.length,memoryCatchUps,lastGroundMs,lastGroundSlices,lastGroundLagMs};},visible:(point,z,token)=>sight?.(point,z,token)??false};
 requestAnimationFrame(tick);

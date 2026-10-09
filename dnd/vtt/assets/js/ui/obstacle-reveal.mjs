@@ -1,10 +1,12 @@
 // Cosmetic terrain-only strips. Never used for token sight or movement.
-export function obstacleReveal({polygons,walls,origin,groundAt,visible,emit}){
- let checks=0,strips=0;const seen=new Map(),candidates=[];
+// `obstacleRevealSteps` is the work itself, with pauses so that a caller may spread it over several
+// frames (sight-job.mjs). `obstacleReveal` runs those same steps to the end in one go.
+export function* obstacleRevealSteps({polygons,walls,origin,groundAt,visible,emit}){
+ let checks=0,strips=0,turns=0;const seen=new Map(),candidates=[];
  const canSee=p=>{const k=p.x.toFixed(5)+','+p.y.toFixed(5);if(!seen.has(k)){checks++;seen.set(k,visible(p,groundAt(p.x,p.y)));}return seen.get(k);};
  // A fog contour on descending terrain gets up to half a square of artwork.
  // Check both sides so internal polygon edges cannot expand the reveal.
- for(const polygon of polygons)for(let i=0;i<polygon.length;i++){
+ for(const polygon of polygons){if(++turns%128===0)yield;for(let i=0;i<polygon.length;i++){
   const a=polygon[i],b=polygon[(i+1)%polygon.length],dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy);if(len<.01)continue;
   const mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2},normal={x:-dy/len,y:dx/len};
   for(const sign of [-1,1]){
@@ -13,7 +15,8 @@ export function obstacleReveal({polygons,walls,origin,groundAt,visible,emit}){
    if(groundAt(inside.x,inside.y)-groundAt(end.x,end.y)<.5)continue;
    if(canSee(inside)&&!canSee(outside)){candidates.push({a,b,n,len,t:{x:dx/len,y:dy/len}});break;}
   }
- }
+ }}
+ yield;
  // Index the OLD reveal footprint. Every new piece stays inside one of these
  // rectangles: smoothing may remove artwork, but cannot expose new artwork.
  const bins=new Map();
@@ -29,6 +32,7 @@ export function obstacleReveal({polygons,walls,origin,groundAt,visible,emit}){
   return u>=-1e-6&&u<=c.len+1e-6&&v>=-1e-6&&v<=.500001;
  });
  for(const c of candidates){
+  if(++turns%16===0)yield;
   const count=Math.max(1,Math.ceil(c.len*16)),widths=[];
   // An extension must be supported to either side. Isolated fingers taper
   // back to the actual sight contour; neighboring segments support one another.
@@ -51,3 +55,4 @@ export function obstacleReveal({polygons,walls,origin,groundAt,visible,emit}){
  }
  return {checks,strips};
 }
+export function obstacleReveal(options){const run=obstacleRevealSteps(options);for(;;){const step=run.next();if(step.done)return step.value;}}

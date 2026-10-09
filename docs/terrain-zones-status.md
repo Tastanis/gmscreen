@@ -994,6 +994,79 @@ Map maker does not need to draw objects differently.
 
 Tests: `sight-speed.test.mjs`.
 
+## October 9, evening: sight is worked out in the background. Built, waiting for a browser look
+
+Build 452 halved the freeze on a token move but you still felt it. You chose
+working sight out in the background: "okay lets do that."
+
+**What happens now when a token moves.**
+
+- The token moves at once. Nothing waits on sight.
+- Creatures are shown or hidden in the very frame the token arrives, exactly
+  as before. So are doors, windows and the tops of decks and upper floors.
+  None of these wait.
+- The lit ground follows a moment later. It is worked out a few thousandths
+  of a second at a time between frames, so the board keeps answering the
+  mouse and the keys while it is done.
+- The finished picture is the same picture as before, piece for piece.
+  Nothing is approximated.
+
+**Nothing that should be hidden stays up.** While the new picture is being
+worked out, the old lit ground stays on the screen. That is allowed only
+when it shows nothing the new picture would hide: the same viewer, on the
+same scene, floor and walls, and with the old lit ground already in that
+viewer's memory of the map. Then the only thing "late" is brightness: ground
+the viewer was looking at an instant ago is bright for a moment before it
+drops to the dimmer "remembered" look. No creature, door or deck waits.
+In every other case (first look at a scene, a change of floor, a wall
+changing, a different token, memory switched off or just reset) the picture
+is made at once, as it always was, and a player's map stays covered until it
+is finished.
+
+**Four quick arrow presses.** Your question: does it work out four moves or
+just the last?
+
+- *Before:* four. Each press was held in a queue and made in turn, and each
+  one froze the board while its sight was worked out, which also held up the
+  next press. That is why a run of arrows crawled.
+- *Now:* the token makes its four moves promptly, and sight is worked out for
+  where the token is. If a newer position arrives while one is being worked
+  out, the older one is set aside and never shown. The same for any run of
+  moves.
+- *Explored ground is not lost.* The squares passed through are kept in a
+  list (up to 32). Once nothing is waiting for the screen, each is finished
+  quietly and added to what that viewer remembers, without being shown as
+  lit. Walk four squares fast and you still remember what you saw from all
+  four.
+
+**Other savings in the same change.**
+
+- Another token moving no longer works your ground out again, or redraws the
+  decks: your view does not depend on where an ogre stands. Only the
+  creature checks run.
+- Going back to the square whose picture is already up costs nothing.
+
+**What I could and could not check.** The answers are identical on Dead
+Root, the Orchard and the bathhouse (105 standing places, as before). The
+sight layer itself was run frame by frame on a stand-in page: the creature
+is hidden in the arriving frame, the ground follows over several frames, one
+picture is shown for four fast moves, the three squares passed are added to
+memory afterwards, and a player's map stays covered until a finished
+picture. What I cannot know without a browser is how long the frames are on
+your PC. On your machine the sight sums themselves take about 35
+thousandths of a second; the rest of the 142 you measured is something I
+could not time, and if it is drawing rather than sums, this change will not
+remove it. The page now reports the split itself (`visionPrototype.stats`:
+`lastMs` for the arriving frame, `lastGroundMs` for the sums, how many
+slices, and the delay before the ground appeared), so one move in the
+browser will tell us.
+
+**Not changed:** the second, shorter hitch when the server answers a move
+(about 39 thousandths of a second). I could not find its cause without a
+browser profile.
+
+Tests: `sight-job.test.mjs`, `vision-tick.test.mjs`.
+
 ## Where it is now
 
 You said to put stages 1 to 3 on `main` on this PC and wait for your word

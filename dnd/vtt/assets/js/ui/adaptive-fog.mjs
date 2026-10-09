@@ -1,5 +1,7 @@
 // Keep broad uniform regions cheap; spend detail where visibility changes.
-export function adaptiveFog({left,top,right,bottom,visible,emit,maxDepth=1,edgeSteps=2}){
+// `adaptiveFogSteps` is the work itself, pausing every `pause` squares so that a caller may spread
+// it over several frames (sight-job.mjs). `adaptiveFog` runs those same steps to the end in one go.
+export function* adaptiveFogSteps({left,top,right,bottom,visible,emit,maxDepth=1,edgeSteps=2,pause=16}){
  const samples=new Map(),edges=new Map();let checks=0,leaves=0,polygons=0;
  const key=p=>p.x+','+p.y;
  const seen=p=>{const k=key(p);if(!samples.has(k)){checks++;samples.set(k,!!visible(p));}return samples.get(k);};
@@ -23,6 +25,8 @@ export function adaptiveFog({left,top,right,bottom,visible,emit,maxDepth=1,edgeS
   if(count===2&&v[0]===v[2]&&!center){c.forEach((p,i)=>{if(v[i])send([p,crossing(p,c[(i+1)%4]),crossing(c[(i+3)%4],p)]);});return;}
   const polygon=[];c.forEach((p,i)=>{const n=(i+1)%4;if(v[i])polygon.push(p);if(v[i]!==v[n])polygon.push(crossing(p,c[n]));});send(polygon);
  }
- for(let y=Math.floor(top);y<bottom;y++)for(let x=Math.floor(left);x<right;x++)cell(Math.max(left,x),Math.max(top,y),Math.min(right,x+1),Math.min(bottom,y+1),0);
+ let squares=0;
+ for(let y=Math.floor(top);y<bottom;y++)for(let x=Math.floor(left);x<right;x++){cell(Math.max(left,x),Math.max(top,y),Math.min(right,x+1),Math.min(bottom,y+1),0);if(++squares%pause===0)yield;}
  return {checks,leaves,polygons};
 }
+export function adaptiveFog(options){const run=adaptiveFogSteps(options);for(;;){const step=run.next();if(step.done)return step.value;}}
