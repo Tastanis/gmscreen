@@ -2,6 +2,7 @@ import {chooseTeleportHeight} from './teleport-choice.js';
 import {groundSquare} from './terrain-math.mjs';
 import {beginPlayerVisibility} from './player-visibility-ready.js';
 import {createKeyboardMovementQueue} from './keyboard-movement-queue.js';
+import {openQuestion,callAttention,heldMessage} from './open-question.mjs';
 import {projectedMovementCell, movementCellContains, paintProjectedMovementCell, updateMovementLoupe,paintedCellAt,offeredCornerHeight} from './movement-cell-projection.js';
 import {dragMovementKind} from './drag-ruler.js';
 import {floorElevations as teleportFloorElevations} from '../state/normalize/floor-elevation.js';
@@ -1401,6 +1402,12 @@ export function mountBoardInteractions(store, routes = {}) {
     // server has it by the time the drag's turn comes.
     if (source !== 'keyboard' && !inTurn) {
       const waiting = keyboardMovementQueue.busy();
+      // A move before this one is waiting on a question nobody has answered. This one is not made:
+      // the question is brought back to the front and flashed, and the status line says so.
+      if (waiting && holdForOpenQuestion()) {
+        renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+        return false;
+      }
       if (waiting) holdKeyboardAhead(sceneId, moves, movementKind === 'walk' || movementKind === 'shift');
       return keyboardMovementQueue.follow(() => commitCanonicalTokenMoves({
         sceneId, moves, source, movementKind, originalPositions, inTurn: true,
@@ -6240,6 +6247,10 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     event.preventDefault();
+    // An arrow press behind an unanswered question is not kept waiting unseen: the question is shown again.
+    if (keyboardMovementQueue.busy() && holdForOpenQuestion()) {
+      return;
+    }
     keyboardMovementQueue.enqueue(movement);
   });
 
@@ -7908,6 +7919,20 @@ export function mountBoardInteractions(store, routes = {}) {
       column: clamp(Math.round(column), 0, maxColumn),
       row: clamp(Math.round(row), 0, maxRow),
     };
+  }
+
+  /**
+   * A move is being held behind a question that is still open (the climbing question, the
+   * break-through question, the fall panel, the teleport choice): the question is brought back
+   * where it can be seen and flashed, and the status line says it needs an answer. The question
+   * is not answered or cancelled. False when no question is open.
+   */
+  function holdForOpenQuestion() {
+    const question = openQuestion();
+    if (!question) return false;
+    callAttention(question.element);
+    updateStatus(heldMessage(question.name));
+    return true;
   }
 
   /**
