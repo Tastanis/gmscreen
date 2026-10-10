@@ -1207,6 +1207,31 @@ is drawn at full sharpness exactly as before.
 Tests: `sight-outline.test.mjs`. Seen by me in a browser for speed and for
 the edge pictures; the tester has not looked yet.
 
+## October 9, night: a lit patch left dark on a cliff face. Fixed in Build 456
+
+The tester found it on Build 455 before anything was pushed: with a hero on
+Dead Root's rope bridge, a quarter of a square of lit ground on a steep face
+(a purple mushroom shows there) was dark. Build 454 shows it lit, and 454 is
+right. This was not a "soft edge" difference; it was my mistake.
+
+**Why.** The board is drawn at a slant. On a cliff the slant lays the ground
+over itself, so a piece of lit ground there lands on the screen turned over,
+on top of its neighbours. Such pieces have to be drawn by themselves, as
+every piece used to be. Build 455 did keep them out of the outline, but it
+judged "turned over" by a piece's corners, and on real ground a piece's
+corners can say "level" while the rest of it says "turned over". A few such
+pieces went into the outline the wrong way round and were taken away from
+the ground they lay over.
+
+**Now.** A piece joins the outline only if it passes the very test the old
+drawing used to turn it. Any other piece is drawn by itself, exactly as on
+Build 454. On the bridge view the lit area now differs from 454 only along
+the thin edge: no patch larger than 16 pixels, out of 6.6 million lit.
+
+Build 455 was never pushed. Build 456 has the fix; it has not been seen in a
+browser yet (your own Chrome was open, and I did not want to close it or
+measure beside it). The tester has a short list to re-check.
+
 ## Where it is now
 
 You said to put stages 1 to 3 on `main` on this PC and wait for your word
