@@ -812,8 +812,15 @@ export function mountBoardInteractions(store, routes = {}) {
   let mapLoadSequence = 0;
   let mapLoadWatchdogId = null;
   let lastActiveSceneId = null;
+  // Arrow presses are drawn before the server has answered them. Where a token is drawn ahead of
+  // the board's own record, and how many moves still to be answered put it there. The record
+  // itself (and so sight, rules and everything else that reads it) changes only on the answer.
+  const keyboardAhead = new Map();
   const keyboardMovementQueue = createKeyboardMovementQueue({
     move: applyMovementDelta,
+    show: showKeyboardStep,
+    dropped: dropKeyboardSteps,
+    keepShown: step => step.sceneId === (boardApi.getState?.()?.boardState?.activeSceneId ?? null),
     getContext: () => JSON.stringify([boardApi.getState?.()?.boardState?.activeSceneId, [...selectedTokenIds].sort()]),
     schedule: callback => (window.requestAnimationFrame?.bind(window) ?? (fn => window.setTimeout(fn, 16)))(callback),
     onError: error => reportSyncFailure(error, 'token movement'),
@@ -861,14 +868,16 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     if (!node) return;
     const gridSize = Math.max(8, Number(viewState.gridSize) || 64);
-    const left = (Number(viewState.gridOffsets?.left) || 0) + Number(placement.column) * gridSize;
-    const top = (Number(viewState.gridOffsets?.top) || 0) + Number(placement.row) * gridSize;
+    // An answer to an earlier arrow press must not pull the token back from where later ones put it.
+    const drawn = keyboardAhead.get(placementId) ?? placement;
+    const left = (Number(viewState.gridOffsets?.left) || 0) + Number(drawn.column) * gridSize;
+    const top = (Number(viewState.gridOffsets?.top) || 0) + Number(drawn.row) * gridSize;
     const scale = Number.isFinite(rendered?.scale) && rendered.scale > 0 ? rendered.scale : 1;
     node.style.transform = buildTokenLevelTransform(left, top, scale);
     node.dataset.entityRevision = String(placement._entityRevision ?? '');
     if (rendered) {
-      rendered.column = Number(placement.column);
-      rendered.row = Number(placement.row);
+      rendered.column = Number(drawn.column);
+      rendered.row = Number(drawn.row);
     }
     recordSyncDiagnostic('syncV2TokenPatches', { sceneId, placementId });
   }
@@ -1376,8 +1385,21 @@ export function mountBoardInteractions(store, routes = {}) {
     return zones.routeCost(points, { kind, actor: (tokenId && getPlacementFromStore(tokenId)) || undefined }).cost;
   }
 
-  async function commitCanonicalTokenMoves({ sceneId, moves, source, originalPositions = null, movementKind = 'walk' }) {
-    const ruler = source === 'drag' ? getCurrentMeasurementPoints() : [];
+  async function commitCanonicalTokenMoves({ sceneId, moves, source, originalPositions = null, movementKind = 'walk', drawnRuler = null, inTurn = false }) {
+    const ruler = drawnRuler ?? (source === 'drag' ? getCurrentMeasurementPoints() : []);
+    // A move made another way takes its turn among arrow presses (keyboard-movement-queue.js), so
+    // this browser's moves reach the server in the order they were made. With no press waiting it
+    // is made at once, as it always was. With presses waiting, the token is drawn where it was
+    // dropped meanwhile; the drag began from where the presses had drawn it, which is where the
+    // server has it by the time the drag's turn comes.
+    if (source !== 'keyboard' && !inTurn) {
+      const waiting = keyboardMovementQueue.busy();
+      if (waiting) holdKeyboardAhead(sceneId, moves);
+      return keyboardMovementQueue.follow(() => commitCanonicalTokenMoves({
+        sceneId, moves, source, movementKind, originalPositions, inTurn: true,
+        drawnRuler: waiting && Array.isArray(ruler) ? [...ruler] : ruler,
+      })).finally(() => { if (waiting) releaseKeyboardAhead(sceneId, moves); });
+    }
     const canonical = tokenMovementRuntime.getConfirmedSnapshot()?.state?.placements?.[sceneId] ?? {};
     const hasMatchingOrigin = Array.isArray(ruler) && ruler.length > 1 && moves.some((move) => {
       const origin = canonical[move.placementId];
@@ -1526,6 +1548,7 @@ export function mountBoardInteractions(store, routes = {}) {
     commitCanonicalMoves: tokenMovementV2Enabled
       ? commitCanonicalTokenMoves
       : null,
+    getDrawnSquare: (placementId) => keyboardAhead.get(placementId) ?? null,
     canDragPlacement: (placement) => canCurrentUserMovePlacement(placement),
     onTokenDragStart: (payload) => tokenMovementController?.handleDragStart(payload),
     onTokenDragMove: (payload) => tokenMovementController?.handleDragMove(payload),
@@ -6710,10 +6733,12 @@ export function mountBoardInteractions(store, routes = {}) {
 
     // If the canonical token moved or resized after this rendered hit list was
     // produced, consume the old visual hit and rerender before allowing any
-    // selection or drag to begin at the wrong location.
+    // selection or drag to begin at the wrong location. A token that arrow
+    // presses have drawn ahead of its record is meant to be where it is drawn.
+    const drawnAt = keyboardAhead.get(normalized.id) ?? normalized;
     if (
-      normalized.column !== renderedPlacement.column ||
-      normalized.row !== renderedPlacement.row ||
+      drawnAt.column !== renderedPlacement.column ||
+      drawnAt.row !== renderedPlacement.row ||
       normalized.width !== renderedPlacement.width ||
       normalized.height !== renderedPlacement.height
     ) {
@@ -7878,7 +7903,86 @@ export function mountBoardInteractions(store, routes = {}) {
     };
   }
 
-  function applyMovementDelta(delta) {
+  /**
+   * An arrow press drawn at once: the squares it takes each selected token to, counted from where
+   * each is drawn now. Null when it cannot be drawn ahead, and then it waits its turn unseen.
+   */
+  function showKeyboardStep(delta) {
+    if (!tokenMovementV2Enabled || !tokenMovementRuntime) return null;
+    const step = applyMovementDelta(delta, null, true);
+    if (!step?.moves?.length) return null;
+    // A square that raises the climb question is asked when its turn comes, as it always was.
+    try {
+      for (const move of step.moves) {
+        const record = tokenMovementRuntime.getEffectivePlacement(step.sceneId, move.placementId);
+        const from = keyboardAhead.get(move.placementId) ?? record;
+        if (!record || !from) return null;
+        const route = window.terrainZones?.routeCost?.(
+          [{ column: Number(from.column), row: Number(from.row) }, { column: move.column, row: move.row }],
+          { kind: 'walk', actor: { ...record, column: Number(from.column), row: Number(from.row) } }
+        );
+        if (route?.climbs?.length) return null;
+      }
+    } catch (error) {
+      return null;
+    }
+    holdKeyboardAhead(step.sceneId, step.moves);
+    return step;
+  }
+
+  function holdKeyboardAhead(sceneId, moves) {
+    for (const move of moves) {
+      const held = keyboardAhead.get(move.placementId);
+      keyboardAhead.set(move.placementId, { column: Number(move.column), row: Number(move.row), moves: (held?.moves ?? 0) + 1 });
+      const record = tokenMovementRuntime?.getEffectivePlacement(sceneId, move.placementId);
+      if (record) patchTokenMovementNode(sceneId, move.placementId, record);
+    }
+  }
+
+  /** One move that put tokens ahead has been answered. The last one leaves a token where the server has it. */
+  function releaseKeyboardAhead(sceneId, moves) {
+    for (const move of moves) {
+      const held = keyboardAhead.get(move.placementId);
+      if (!held) continue;
+      if (held.moves > 1) { held.moves -= 1; continue; }
+      keyboardAhead.delete(move.placementId);
+      const record = tokenMovementRuntime?.getEffectivePlacement(sceneId, move.placementId);
+      if (record && (Number(record.column) !== held.column || Number(record.row) !== held.row)) patchTokenMovementNode(sceneId, move.placementId, record);
+    }
+  }
+
+  /** Presses that were drawn will not be sent after all: every token goes back to where the server has it. */
+  function dropKeyboardSteps() {
+    const sceneId = getActiveSceneId(), ids = [...keyboardAhead.keys()];
+    keyboardAhead.clear();
+    for (const placementId of ids) {
+      const record = tokenMovementRuntime?.getEffectivePlacement(sceneId, placementId);
+      if (record) patchTokenMovementNode(sceneId, placementId, record);
+    }
+  }
+
+  /** Sends one press that was drawn ahead: the very squares that were drawn. */
+  async function commitKeyboardStep(step) {
+    try {
+      if (step.sceneId !== getActiveSceneId()) return false;
+      const result = await commitCanonicalTokenMoves({ sceneId: step.sceneId, moves: step.moves.map(move => ({ ...move })), source: 'keyboard' });
+      if (result === false) return false;
+      // Not where it was drawn (a climb turned down, or the server put it elsewhere): the squares
+      // drawn after it were counted from a square the token is not on, so they are not sent.
+      const landed = step.moves.every((move) => {
+        const record = tokenMovementRuntime.getEffectivePlacement(step.sceneId, move.placementId);
+        return record && Number(record.column) === move.column && Number(record.row) === move.row;
+      });
+      return landed ? undefined : false;
+    } finally {
+      releaseKeyboardAhead(step.sceneId, step.moves);
+    }
+  }
+
+  function applyMovementDelta(delta, shownStep = null, showOnly = false) {
+    if (shownStep) {
+      return commitKeyboardStep(shownStep);
+    }
     if (!viewState.mapLoaded) {
       return;
     }
@@ -7940,7 +8044,8 @@ export function mountBoardInteractions(store, routes = {}) {
         const placement = scenePlacements.find((entry) => entry?.id === placementId);
         if (!placement || !canCurrentUserMovePlacement(placement)) continue;
         const effective =
-          tokenMovementRuntime.getEffectivePlacement(activeSceneId, placementId)
+          (showOnly ? keyboardAhead.get(placementId) : null)
+          ?? tokenMovementRuntime.getEffectivePlacement(activeSceneId, placementId)
           ?? placement;
         const width = Math.max(1, Number(placement.width) || 1);
         const height = Math.max(1, Number(placement.height) || 1);
@@ -7958,6 +8063,9 @@ export function mountBoardInteractions(store, routes = {}) {
           });
         }
       }
+      if (showOnly) {
+        return moves.length ? { sceneId: activeSceneId, moves } : null;
+      }
       if (moves.length) {
         return commitCanonicalTokenMoves({
           sceneId: activeSceneId,
@@ -7966,6 +8074,9 @@ export function mountBoardInteractions(store, routes = {}) {
         });
       }
       return;
+    }
+    if (showOnly) {
+      return null;
     }
 
     let moved = false;
@@ -8084,27 +8195,31 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     if (tokenMovementV2Enabled) {
-      const current = tokenMovementRuntime.getConfirmedSnapshot()?.state?.placements?.[sceneId]?.[placementId];
-      const receipt = current?._movementUndo;
-      const last = receipt?.history?.at(-1);
-      if (!last || last.from.column !== from.column || last.from.row !== from.row) {
-        updateStatus('This movement can no longer be undone: the token changed.');
-        return false;
-      }
-      try {
-        if (last.groupMove) {
-          await tokenMovementRuntime.undoMovementGroup(sceneId, placementId, receipt.revision);
-        } else {
-          await tokenMovementRuntime.submitMoves(sceneId, [{ placementId,
-            column: last.from.column, row: last.from.row, undoRevision: receipt.revision }]);
+      // An undo takes its turn after arrow presses still waiting to be sent, like any other move
+      // (keyboard-movement-queue.js): it is judged against where the server has the token then.
+      return keyboardMovementQueue.follow(async () => {
+        const current = tokenMovementRuntime.getConfirmedSnapshot()?.state?.placements?.[sceneId]?.[placementId];
+        const receipt = current?._movementUndo;
+        const last = receipt?.history?.at(-1);
+        if (!last || last.from.column !== from.column || last.from.row !== from.row) {
+          updateStatus('This movement can no longer be undone: the token changed.');
+          return false;
         }
-        updateStatus(last.groupMove ? 'Group movement undone, including all floor changes.' : 'Movement undone, including its floor change.');
-        return true;
-      } catch (error) {
-        reportSyncFailure(error, 'movement undo');
-        updateStatus(error?.message || 'Movement undo was rejected.');
-        return false;
-      }
+        try {
+          if (last.groupMove) {
+            await tokenMovementRuntime.undoMovementGroup(sceneId, placementId, receipt.revision);
+          } else {
+            await tokenMovementRuntime.submitMoves(sceneId, [{ placementId,
+              column: last.from.column, row: last.from.row, undoRevision: receipt.revision }]);
+          }
+          updateStatus(last.groupMove ? 'Group movement undone, including all floor changes.' : 'Movement undone, including its floor change.');
+          return true;
+        } catch (error) {
+          reportSyncFailure(error, 'movement undo');
+          updateStatus(error?.message || 'Movement undo was rejected.');
+          return false;
+        }
+      });
     }
 
     const nextColumn = toNonNegativeNumber(from.column ?? from.col ?? 0, 0);
@@ -9113,6 +9228,12 @@ export function mountBoardInteractions(store, routes = {}) {
         return;
       }
       const levelId = presentation.levelId ?? resolveTokenLevelId(levelPlacement, tokenLevelState);
+      // Arrow presses not yet answered: drawn where they put the token (see keyboardAhead).
+      const ahead = keyboardAhead.get(normalized.id);
+      if (ahead) {
+        column = ahead.column;
+        row = ahead.row;
+      }
 
       trackerEntries.push(normalized);
       renderedIds.add(normalized.id);

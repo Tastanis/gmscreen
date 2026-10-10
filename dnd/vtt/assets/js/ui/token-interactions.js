@@ -45,6 +45,7 @@ export function createTokenInteractions({
   toNonNegativeNumber,
   persistBoardStateSnapshot,
   commitCanonicalMoves = null,
+  getDrawnSquare = null,
   canDragPlacement = () => true,
   onTokenDragStart = null,
   onTokenDragMove = null,
@@ -296,7 +297,10 @@ export function createTokenInteractions({
     placements.forEach((entry) => {
       const normalized = normalizePlacementForRender(entry);
       if (normalized) {
-        placementMap.set(normalized.id, normalized);
+        // A token that arrow presses have drawn ahead of the board's record is grabbed where it is
+        // drawn: the drag starts, measures and ends from that square.
+        const drawn = typeof getDrawnSquare === 'function' ? getDrawnSquare(normalized.id) : null;
+        placementMap.set(normalized.id, drawn ? { ...normalized, column: drawn.column, row: drawn.row } : normalized);
       }
     });
 
