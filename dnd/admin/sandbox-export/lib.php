@@ -89,7 +89,19 @@ function sandboxInventory(array $roots): array
     return ['files'=>$files, 'excluded'=>$excluded, 'unreviewed'=>$unreviewed];
 }
 
-function sandboxResolve(array $roots, string $path): ?array
+/** A request that asks for more than one answer may carry. Answered 413 with its message. */
+final class SandboxTooMuch extends RuntimeException
+{
+}
+
+const SANDBOX_CHECKSUM_PATHS = 200;
+const SANDBOX_CHECKSUM_BYTES = 300 * 1048576;
+
+/**
+ * `$kinds` are the kinds of file the caller may be given. Code is never downloadable, so the
+ * default leaves it out; a checksum of it may still be asked for (sandboxChecksums).
+ */
+function sandboxResolve(array $roots, string $path, array $kinds = ['file', 'sqlite']): ?array
 {
     sandboxPath($path);
     $found = null;
@@ -106,7 +118,7 @@ function sandboxResolve(array $roots, string $path): ?array
         if (!is_file($absolute)) continue;
         if ($found !== null) throw new RuntimeException('Overlapping mounts.');
         $kind = sandboxPolicy($path);
-        if (!in_array($kind, ['file', 'sqlite'], true)) continue;
+        if (!in_array($kind, $kinds, true)) continue;
         $found = ['absolute'=>$absolute, 'kind'=>$kind];
     }
     return $found;
@@ -149,10 +161,53 @@ function sandboxFingerprint(array $entry): array
     }
 }
 
-function sandboxManifest(array $roots, array $config): array
+/** Size on disk and last-changed time, without opening the file. For a database: of its main file as it stands. */
+function sandboxStat(array $entry): array
+{
+    clearstatcache(true, $entry['absolute']);
+    $size = filesize($entry['absolute']); $mtime = filemtime($entry['absolute']);
+    if ($size === false || $mtime === false) throw new RuntimeException('Unable to read a file\'s size or time.');
+    return ['kind'=>$entry['kind'], 'size'=>$size, 'mtime'=>$mtime];
+}
+
+/**
+ * Checksums for a named set of paths, so a large site can be checked in parts and only where it
+ * changed. Code may be named (fingerprint only; it is still never downloadable). A path that is
+ * gone, left out by the rules or of an unknown kind is reported as missing, not as an error.
+ * For a database the checksum and size are of its backup copy, exactly as the whole list gives
+ * them, so a download by that checksum still matches; a database must be asked for alone.
+ */
+function sandboxChecksums(array $roots, array $paths): array
+{
+    if (count($paths) > SANDBOX_CHECKSUM_PATHS) throw new SandboxTooMuch('Too many paths in one request: at most ' . SANDBOX_CHECKSUM_PATHS . '.');
+    $found = []; $missing = []; $bytes = 0; $databases = 0;
+    foreach ($paths as $path) {
+        if (!is_string($path)) throw new RuntimeException('Invalid path.');
+        $path = sandboxPath($path);
+        if (isset($found[$path]) || in_array($path, $missing, true)) continue;
+        $entry = sandboxResolve($roots, $path, ['file', 'sqlite', 'code']);
+        if ($entry === null || !is_readable($entry['absolute'])) { $missing[] = $path; continue; }
+        $stat = sandboxStat($entry);
+        $bytes += $stat['size'];
+        if ($entry['kind'] === 'sqlite') $databases++;
+        $found[$path] = [$entry, $stat];
+    }
+    if ($databases > 0 && count($found) > 1) throw new SandboxTooMuch('A database must be asked for alone in its request.');
+    if ($bytes > SANDBOX_CHECKSUM_BYTES) throw new SandboxTooMuch('Too much to checksum in one request: at most ' . intdiv(SANDBOX_CHECKSUM_BYTES, 1048576) . ' MB of listed size.');
+    $files = [];
+    foreach ($found as $path => [$entry, $stat]) $files[$path] = sandboxFingerprint($entry) + ['mtime'=>$stat['mtime']];
+    return ['schema'=>'gmscreen-sandbox-capture/v1', 'generated_at'=>gmdate('c'), 'files'=>$files, 'missing'=>$missing];
+}
+
+/**
+ * The list of the site. With `$checksums` false nothing is opened: each file is given by kind,
+ * size and last-changed time, which takes seconds however large the site is, and the list says
+ * so with "checksums": false. With it true (the first form of this request) every file is read.
+ */
+function sandboxManifest(array $roots, array $config, bool $checksums = true): array
 {
     $inventory = sandboxInventory($roots); $entries = [];
-    foreach ($inventory['files'] as $path => $entry) $entries[$path] = sandboxFingerprint($entry);
+    foreach ($inventory['files'] as $path => $entry) $entries[$path] = $checksums ? sandboxFingerprint($entry) : sandboxStat($entry);
     $issues = $inventory['unreviewed'];
     foreach (['dnd/data/characters.json', 'dnd/character_sheet/data/character_sheets.json', 'dnd/vtt/storage/sync-v2.sqlite', 'dnd/vtt/storage/scenes.json', 'dnd/vtt/storage/tokens.json'] as $required) {
         if (!isset($entries[$required])) $issues[] = ['path'=>$required, 'reason'=>'required-runtime-store-missing'];
@@ -164,7 +219,7 @@ function sandboxManifest(array $roots, array $config): array
     if (getenv('VTT_PLAYER_ROSTER_PATH')) {
         $issues[] = ['path'=>'dnd/vtt/config/player-roster.json', 'reason'=>'external-player-roster-override: must be mapped before sandbox use'];
     }
-    return [
+    return ($checksums ? [] : ['checksums'=>false]) + [
         'schema'=>'gmscreen-sandbox-capture/v1', 'generated_at'=>gmdate('c'),
         'files'=>$entries, 'excluded'=>$inventory['excluded'], 'issues'=>$issues,
         'environment'=>['php'=>PHP_VERSION, 'world_id'=>getenv('VTT_SYNC_V2_WORLD_ID') ?: 'default'],

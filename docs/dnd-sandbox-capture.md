@@ -129,6 +129,16 @@ Stop with Ctrl+C. Changes made in the sandbox stay there. To refresh, capture an
 prepare again. Every run gets a new folder; previous captures and sandbox work
 remain intact. A failed capture does not replace `latest-capture.json`.
 
+## The quick list (Build 470)
+
+The whole list (`action=manifest`) reads every file of the site to checksum it, on every request. By October 10, 2026 that was about 3.2 GB plus a copy of the database, and the request passed the host's 100-second limit. Two more requests let a capture tool work in parts. Both are read-only on the host and sit behind the same key check; the whole list and `action=file` are unchanged.
+
+- `GET index.php?action=manifest&checksums=0`: the same list with `"checksums": false` at its top. Each file is `{"kind", "size", "mtime"}`: size on disk and last-changed time in whole seconds. Nothing is opened, so it takes seconds. For a database these are of its main file as it stands; a change still waiting in its `-wal` file does not show in them, so a tool should always ask for a database's checksum.
+- `POST index.php?action=checksums` with a JSON body `{"paths": ["dnd/...", ...]}`: answers `{"schema", "generated_at", "files": {path: {"kind", "sha256", "size", "mtime"}}, "missing": [...]}`. Code may be named here (fingerprint only; it is still never downloadable). A path that is gone or left out by the rules is listed under `missing`. For a database the checksum and size are of its backup copy, exactly as the whole list gives them, so `action=file` still matches.
+- Refused with HTTP 413 and a plain message rather than run long: more than 200 paths, or more than 300 MB of listed size, in one request; a database with anything else in its request.
+
+The dated copies the store writes beside the database before a change of layout (`sync-v2.before-split-...sqlite`) are left out of every list.
+
 ## What verification means
 
 Each downloaded file must match its declared length and SHA-256. SQLite copies

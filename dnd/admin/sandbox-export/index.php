@@ -17,16 +17,31 @@ try { $config = require $private; } catch (Throwable $e) { captureError(503, 'Ca
 if (!is_array($config)) captureError(503, 'Capture is not configured.');
 $loopback = in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true);
 if (($_SERVER['HTTPS'] ?? '') !== 'on' && !(($config['allow_loopback_http'] ?? false) === true && $loopback)) captureError(403, 'HTTPS required.');
-if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') captureError(405, 'GET required.');
+// Read-only on the host whatever the method. POST carries the list of paths for action=checksums and nothing else.
+$method = $_SERVER['REQUEST_METHOD'] ?? '';
+$action = is_string($_GET['action'] ?? null) ? $_GET['action'] : 'manifest';
+if ($method !== 'GET' && !($method === 'POST' && $action === 'checksums')) captureError(405, $action === 'checksums' ? 'POST required.' : 'GET required.');
+if ($action === 'checksums' && $method !== 'POST') captureError(405, 'POST required.');
 $token = $_SERVER['HTTP_X_DND_CAPTURE_TOKEN'] ?? '';
 $expected = $config['token_sha256'] ?? '';
 if (!is_string($expected) || !preg_match('/^[a-f0-9]{64}$/D', $expected) || strlen($token) < 32 || !hash_equals($expected, hash('sha256', $token))) captureError(403, 'Access denied.');
 
 try {
     $roots = sandboxRoots(dirname(__DIR__, 2), $config);
-    $action = $_GET['action'] ?? 'manifest';
     if ($action === 'manifest') {
-        header('Content-Type: application/json'); echo sandboxJson(sandboxManifest($roots, $config)); exit;
+        // checksums=0: the quick list, with sizes and times and nothing read.
+        $quick = ($_GET['checksums'] ?? '1') === '0';
+        header('Content-Type: application/json'); echo sandboxJson(sandboxManifest($roots, $config, !$quick)); exit;
+    }
+    if ($action === 'checksums') {
+        $raw = file_get_contents('php://input', false, null, 0, 262145);
+        $body = is_string($raw) && strlen($raw) <= 262144 ? json_decode($raw, true) : null;
+        if (!is_array($body) || !is_array($body['paths'] ?? null) || !array_is_list($body['paths'])) captureError(400, 'A JSON body with a list of paths is required.');
+        foreach ($body['paths'] as $named) {
+            try { if (!is_string($named)) throw new RuntimeException('Invalid path.'); sandboxPath($named); } catch (Throwable $e) { captureError(400, 'Invalid path in the list.'); }
+        }
+        try { $answer = sandboxChecksums($roots, $body['paths']); } catch (SandboxTooMuch $e) { captureError(413, $e->getMessage()); }
+        header('Content-Type: application/json'); echo sandboxJson($answer); exit;
     }
     if ($action !== 'file') captureError(400, 'Unknown action.');
     $path = sandboxPath((string)($_GET['path'] ?? ''));
