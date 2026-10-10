@@ -148,6 +148,23 @@ Reference build: `.playwright-mcp/terrain-prototype/gravity-orchard/` (`build-or
 7. A small landing preview is cosmetic: the one-square strip appears when eyes are level with the landing and still passes wall/ceiling sight checks. It must not grant arbitrary vision from lower stairs.
 8. Test a real token at the landing separately. Token visibility uses head height; the token may be visible while the floor underneath is not.
 
+### 5a. Where plain ground meets a floor plate (stairs, banks, bridge heads; Build 459, October 9, 2026)
+
+A stair may be plain ground in the height picture with no stair object, as on Dead Root. The app then decides footing by these two rules, the same in the browser and on the server:
+
+- A walker gets ONTO a floor plate when its square is over any of the plate and the plate's top is within **half a square** of the ground under the walker's centre.
+- Walking OFF a plate is a fall only if the ground where the walker's square leaves the plate is **a square or more** below it. Level land at the plate's end is walked onto, and the rest of the move is judged as ground.
+
+What that asks of a map:
+
+1. Where a stair, bank or pier meets a plate, make the ground at the meeting edge the plate's height. Exact is best (the Dead Root stair is 2.00 on both sides); up to a quarter of a square off is tolerated.
+2. Give the ground a level landing at the plate's end at least as deep as half the biggest token expected. 0.7 of a square serves size 1 and size 2. No landing still works for size 1.
+3. The plate may stop exactly at the land's edge. It does not need to overlap it; overlapping by up to a square does no harm.
+4. Under a walkway or bridge the ground must be a full square or more below it, or a walker underneath is treated as standing on it. A deck less than a square above what is under it (planks over shallow liquid) is stood on, which is usually what is wanted.
+5. A bridge lane two thirds of a square wide centred on a grid line works, but every token on it hangs half off. A lane a whole square wide on whole squares is safer where there is a choice.
+6. A gap between two plates with no land under it is a real gap: stepping off either end is a fall. Leave it only when it is meant (Dead Root's broken bridge B2).
+7. A picture's edge showing a sliver of ground between a stair and a walkway is not a footing fault. Check the heights and the plate outline before changing a map.
+
 **Accepted limitation:** complete exports bake stair artwork into the background. The separately raised ramp image can expose a duplicate underneath. The user chose to leave this cosmetic issue rather than risk damaging the map. Do not remove native stairs, erase the background, or change movement heights to disguise it. A clean-background workflow would be a separate change.
 
 ## 6. Rendering rules to preserve

@@ -1232,6 +1232,89 @@ Build 455 was never pushed. Build 456 has the fix; it has not been seen in a
 browser yet (your own Chrome was open, and I did not want to close it or
 measure beside it). The tester has a short list to re-check.
 
+## October 9, late night: arrow keys, and sight after a run of them. Builds 457 and 458, live
+
+**Arrow keys (457).** "After every single arrow movement it freezes for a
+second." The page never froze. Each press waited for the server's answer to
+the press before it, about a second on the live host, and presses that had
+waited three seconds were thrown away: ten quick presses moved a token three
+squares. Now a press is drawn on its square as the key goes down. The moves
+still go to the server one square at a time, in order, so every rule is
+judged as before. A refused square puts the token back and drops the squares
+drawn after it. Up to 12 squares can be drawn ahead of the server.
+
+**Sight after a run (458).** With the token drawn ahead, the lit ground then
+stepped through every square behind it as the answers came in. Now the view
+is from where the token is drawn: one picture, where the run ends. Memory is
+only of squares the server has agreed; squares passed through go into memory
+as they are agreed, without being shown as lit. A square is drawn ahead, and
+seen from, only when the browser's own wall check finds the way clear, so a
+player cannot see round a wall by pressing into it.
+
+**Still open from these two.**
+- A player's arrow press into a wall or a shut door: the token is drawn on
+  the far square for the second and a half the server takes to refuse it,
+  then put back. Nothing beyond the wall is shown (the tester checked every
+  frame). That is the ordinary drawing of a move while its answer is awaited,
+  the same as a drag dropped through a wall, and older than 457. A fix is
+  written (send the move, do not draw it) and is not in any build.
+- The tester counted 6 to 8 "repaints" for a player's five fast presses. I
+  believe its counter counts sight checks, not ground pictures, but I have not
+  looked as a player in a browser.
+- The server still takes one answer per square, so the board's record, other
+  players' screens and zone outlines trail a long arrow run by a second a
+  square. The cure is server work and is waiting on your word.
+
+## October 9, late night: stairs and bridges. Build 459, built, waiting for the tester
+
+"Those tiny little 1 pixel gaps ... causing moving up the stairs to sometimes
+fall through. And even when it is done right the 'preview' token location
+shows up on the ground below."
+
+**There is no gap in the map. Do not rebuild a map for this.** On the Dead
+Root stair (squares 45,22 up to the walkway from 45,18) the stair is plain
+ground in the height picture. It tops out at exactly the walkway's height
+(2.00), with a landing 0.7 of a square deep, and the walkway plate starts
+exactly where the landing ends. The sliver that shows is the two pictures'
+edges. The faults were three rules in the app.
+
+| What happened on 458 | Why | Now |
+|---|---|---|
+| One drag from the walkway down the stair: "Fell 2 squares, will be prone". | Leaving a plate for no plate was a drop measured from the plate to wherever the move ended. | It is a drop only where the ground the token's square leaves the plate for is a square or more below. Onto level land, the rest of the move is judged as ground. |
+| A size 2 token dragged up the stair ended on the ground under the walkway, with a fall of 2. A diagonal step onto a bridge from the bank beside its lane ended on the canal bed under it. | Stepping onto a plate needed the ground under the token's centre to be within a tenth of a square of the plate, at the moment they first touched. A big token's centre is still on the slope; the bank beside a bridge lane is a quarter of a square lower. | Any part of the token's square over the plate, and the plate within half a square of where the token stands. A plate less than a square above a walker's feet cannot be walked under, so "on it" is the only true answer. A step of that size is free on plain ground too (a climb starts at two squares). |
+| Coming down the Orchard's vine from a mid island to the ground in one move: a fall of 12. | The foot of that vine has no plate, so it counted as leaving a plate for nothing. | A stair, ramp or vine walked from end to end is never a fall. |
+| The drag ghost was drawn on the ground under a walkway while the drop put the token on it, and floated at the walkway's height over the foot of the stair going down. | The ghost used the footing the token had where it was picked up. | The ghost is drawn where the ruler's own walk of the move ends: same floor, same plate, same height. The drop sends the same points. |
+
+**Unchanged, on purpose.** Off the side of a walkway or a bridge over open
+air, walked or shoved, is the same fall as before. Half off a plain ground
+ledge with no plate involved is as before. Template cubes keep their own
+stepping rule. Dead Root's two middle bridges have a 2-square gap between
+them with no land under it: that is a broken bridge on purpose (the Map maker
+confirmed), and stepping off either broken end is a fall of 3.
+
+**The pointer.** While dragging, the square is the one the pointer is on in
+the picture, highest drawn floor first. With the token selected and the view
+raised so the walkway is drawn (as in your two pictures), pointing at a
+walkway square puts the ghost and the drop on that square. One case differs:
+if the view is raised with NOTHING selected and you then press a token, the
+press selects it, the raised view is dropped for that token's own view (as it
+always has been when a token is selected), and the pointer is read in that
+view. Selecting the token first avoids it.
+
+**Seen in a browser by me:** the stair, 25 drags and five rounds of arrow
+keys each way, the ghost matching the drop every time; the west bridge
+across, onto it diagonally, and off its side (falls 2). One drag up an
+Orchard vine. **Not seen:** coming down an Orchard vine or arch in a browser
+(checked in the server's rule only), east to west arches, anything as a
+player, a size 2 token off a ledge. A drag leg that is neither straight nor
+an exact diagonal is walked square by square by the ruler and in a straight
+line by the server; next to a plate's edge those two could still disagree.
+
+Tests: `stair-meets-walkway.test.php` and `stair-meets-walkway.test.mjs`
+(the stair's real numbers, the same shapes through the server's rule and the
+browser's). Six older test lines said a step of a fifth of a square is not
+bridged; they now say a fifth is and six tenths is not.
+
 ## Where it is now
 
 You said to put stages 1 to 3 on `main` on this PC and wait for your word
