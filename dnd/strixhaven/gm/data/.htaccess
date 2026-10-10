@@ -1,0 +1,4 @@
+# The GM's notes, their saved copies and the backup log. Only the site's own code reads them, and nothing a browser needs is kept here.
+# The same two lines as the top of dnd/data/.htaccess, which this host accepts.
+Order deny,allow
+Deny from all

@@ -1,4 +1,4 @@
-# No visitor may download the database, its side files or its dated copies, the scene list, the token list or the old board file.
+# No visitor may download the database, its side files or its dated copies, the scene list, the token list, the old board file or its lock.
 # Only the site's own code reads them. Pictures in uploads/ and tokens/ are not affected.
 # Written the same way as the <Files> blocks in dnd/data/.htaccess, which this host accepts.
 <Files *.sqlite*>
@@ -14,6 +14,10 @@
     Deny from all
 </Files>
 <Files board-state.json>
+    Order deny,allow
+    Deny from all
+</Files>
+<Files board-state.lock>
     Order deny,allow
     Deny from all
 </Files>

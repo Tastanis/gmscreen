@@ -20,18 +20,18 @@ const refused = (patterns, name) => patterns.some((pattern) => matches(pattern, 
 
 // folder: [patterns, names that must be refused, names that must still be served]
 const RULES = {
-  'dnd/vtt/storage': [['*.sqlite*', 'scenes.json', 'tokens.json', 'board-state.json'],
+  'dnd/vtt/storage': [['*.sqlite*', 'scenes.json', 'tokens.json', 'board-state.json', 'board-state.lock'],
     ['sync-v2.sqlite', 'sync-v2.sqlite-wal', 'sync-v2.sqlite-shm', 'sync-v2.sqlite-journal', 'sync-v2.before-split-20261011-101500.sqlite',
-      'sync-v2.before-split-20261011-101500.sqlite.part', 'sync-v2.sqlite.split.lock', 'scenes.json', 'tokens.json', 'board-state.json'],
+      'sync-v2.before-split-20261011-101500.sqlite.part', 'sync-v2.sqlite.split.lock', 'scenes.json', 'tokens.json', 'board-state.json', 'board-state.lock'],
     ['map.png', 'bundled-image-0.jpg', 'token.webp', '.gitkeep']],
   'dnd/vtt/config': [['*.json', '*.lock'], ['player-roster.json', 'player-roster.json.lock'], ['sync-v2.php']],
   'dnd/character_sheet/data': [['*.json', '*.lock'], ['character_sheets.json', 'character_sheets.lock', 'hero_tokens.json', 'character_sheets_latest.json', 'character_sheets_20260706_000945.json'], ['hireling.png', 'portrait.webp']],
-  'dnd/strixhaven/students': [['*.json', 'error_log'], ['students.json', 'error_log'], ['index.php', 'students.js', 'students.css', 'portrait.png', 'thumb.webp']],
-  'dnd/strixhaven/staff': [['*.json', 'error_log'], ['staff.json', 'error_log'], ['index.php', 'staff.js', 'staff.css', 'portrait.png', 'thumb.webp']],
+  'dnd/strixhaven/students': [['*.json', '*.lock', 'error_log'], ['students.json', 'students_backup_20261001.json', 'students.lock', 'error_log'], ['index.php', 'students.js', 'students.css', 'portrait.png', 'thumb.webp']],
+  'dnd/strixhaven/staff': [['*.json', '*.lock', 'error_log'], ['staff.json', 'staff_backup_20261001.json', 'staff.lock', 'error_log'], ['index.php', 'staff.js', 'staff.css', 'portrait.png', 'thumb.webp']],
   'dnd/strixhaven/locations': [['*.json'], ['locations.json'], ['index.php', 'locations.js', 'place.png']],
   'dnd/strixhaven/othernpcs': [['*.json', '*.lock'], ['othernpcs.json', 'othernpcs.lock', 'othernpcs_backup_20261001.json'], ['index.php', 'othernpcs.js', 'othernpcs.css']],
-  'dnd/strixhaven/arcaneconstruction/data': [['*.json'], ['gm_data.json', 'zepha_data.json'], ['picture.png']],
-  'dnd/strixhaven/monster-creator/data': [['*.json'], ['gm-monsters.json', 'gm-monsters_backup_latest.json'], ['picture.png']],
+  'dnd/strixhaven/arcaneconstruction/data': [['*.json', '*.backup'], ['gm_data.json', 'zepha_data.json', 'gm_data.json.backup', 'grid_data.json.backup', 'zepha_data.json.backup'], ['picture.png']],
+  'dnd/strixhaven/monster-creator/data': [['*.json', '*.log'], ['gm-monsters.json', 'gm-monsters_backup_latest.json', 'backup.log'], ['picture.png']],
   'dnd/strixhaven/templates/data': [['*.json'], ['templates.json'], ['picture.png']],
   'dnd/strixhaven/map/data': [['*.json', '*.lock'], ['pings.json', 'player-path-overlay.json', 'player-path-overlay.lock'], ['picture.png']],
   'dnd/strixhaven/map/hex-data': [['*.json', '*.lock'], ['hex-26-19.json', 'hex-26-19.lock'], ['picture.png']],
@@ -39,6 +39,8 @@ const RULES = {
   'dnd/strixhaven/gm': [['error_log'], ['error_log'], ['index.php', 'gm.js', 'gm.css', 'picture.png']],
   'dnd/strixhaven/inventory': [['error_log'], ['error_log'], ['index.php', 'inventory.js', 'item.png']],
   'dnd/schedule': [['error_log'], ['error_log'], ['index.php', 'schedule.js', 'schedule.css']],
+  'dnd/combat/data': [['*.json'], ['combat.json', 'pcs.json'], ['picture.png']],
+  'dnd/vtt/combat-tracker/storage': [['*.json'], ['combat-state.json'], ['.gitkeep']],
 };
 
 for (const [folder, [patterns, mustRefuse, mustServe]] of Object.entries(RULES)) {
@@ -49,9 +51,12 @@ for (const [folder, [patterns, mustRefuse, mustServe]] of Object.entries(RULES))
   });
 }
 
-test('the folder of old saved VTT copies refuses every visitor', async () => {
-  assert.deepEqual(lines(await rule('dnd/vtt/storage/backups/.htaccess')), ['Order deny,allow', 'Deny from all']);
-});
+// Folders that hold saved data only, and nothing a browser needs: the whole folder is refused.
+for (const folder of ['dnd/vtt/storage/backups', 'dnd/strixhaven/gm/data']) {
+  test(`${folder}: refuses every visitor`, async () => {
+    assert.deepEqual(lines(await rule(`${folder}/.htaccess`)), ['Order deny,allow', 'Deny from all']);
+  });
+}
 
 test('the rules are written as the ones this host already accepts', async () => {
   const model = lines(await rule('dnd/data/.htaccess'));
