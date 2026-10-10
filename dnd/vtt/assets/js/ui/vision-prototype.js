@@ -12,7 +12,7 @@ import {createExploredFog} from './explored-fog.mjs';
 import {compileTerrainVision} from './terrain-vision.mjs';
 import {makeSight,center,head} from './vision-height.mjs';
 import {groundShapeSteps,createJob,advance,finish,createSightQueue} from './sight-job.mjs';
-import {outlineOf,stepped} from './sight-outline.mjs';
+import {outlineOf,stepped,sortPieces} from './sight-outline.mjs';
 // Height-aware sight paints from confirmed scene geometry and token state.
 const transform=document.querySelector('#vtt-map-transform'),originalTokens=document.querySelector('#vtt-token-layer');
 const canvas=document.createElement('canvas');canvas.id='vision-prototype';canvas.style.cssText='position:absolute;inset:0;pointer-events:none;z-index:100000';transform.append(canvas);
@@ -114,14 +114,6 @@ function tick(){
     const place=terrain.active?(terrain.projector?.()??terrain.project):null;
     const projected=(x,y)=>{const px=ox+x*g,py=oy+y*g;return place?place(px,py,groundAt(x,y)):{x:px,y:py};};
     const path=new Path2D(),seen=sight,pieces=[];
-    const turn=points=>points.reduce((sum,p,i)=>{const q=points[(i+1)%points.length];return sum+p.x*q.y-q.x*p.y;},0);
-    // Consistent projected winding prevents overlapping parallax polygons from
-    // subtracting from one another and leaving sharp black triangular slivers.
-    const appendProjected=polygon=>{
-     const points=[];polygon.forEach((p,i)=>{const end=polygon[(i+1)%polygon.length],steps=Math.max(1,Math.ceil(Math.hypot(end.x-p.x,end.y-p.y)*8));for(let k=0;k<steps;k++)points.push(projected(p.x+(end.x-p.x)*k/steps,p.y+(end.y-p.y)*k/steps));});
-     if(turn(points)<0)points.reverse();
-     addRing(points);
-    };
     // Each ring is closed on a small path of its own and then added to the picture. Closing a
     // ring on the picture itself costs the browser more the longer the picture already is: with
     // some 2,800 pieces that was about 200 ms a picture.
@@ -129,11 +121,12 @@ function tick(){
     // The picture is the outline of the lit ground, not its three thousand pieces (sight-outline.mjs):
     // the browser fills and outlines about a seventh of the points for the same ground. A piece on
     // ground so steep that the slant folds it over is still drawn by itself, turned the right way,
-    // as every piece used to be. The outline's loops keep the way they go round: the loop round an
-    // unlit island goes the other way, and must, or the island would be filled.
+    // as every piece used to be (consistent winding keeps pieces that lie over one another on the
+    // screen from subtracting from one another). The outline's loops keep the way they go round:
+    // the loop round an unlit island goes the other way, and must, or the island would be filled.
     const seal=()=>{
-     const whole=[];
-     for(const piece of pieces.splice(0)){const here=turn(piece),drawn=turn(piece.map(p=>projected(p.x,p.y)));if(here>0&&drawn>0||here<0&&drawn<0)whole.push(piece);else appendProjected(piece);}
+     const {whole,alone}=sortPieces(pieces.splice(0),projected);
+     for(const points of alone)addRing(points);
      for(const loop of outlineOf(whole))addRing(stepped(loop).map(p=>projected(p.x,p.y)));
     };
     const steps=function*(){const result=yield* groundShapeSteps({left,top,right,bottom,visible:visibleGround,walls,origin:observer,groundAt,emit:polygon=>pieces.push(polygon)});yield;seal();return result;};

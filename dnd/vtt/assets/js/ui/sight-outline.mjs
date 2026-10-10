@@ -83,6 +83,37 @@ export function stepped(loop, per = 8) {
   return out;
 }
 
+/** The points one piece is placed by: `per` to a square along each edge, each put on the screen by `place`. */
+export function placedPoints(polygon, place, per = 8) {
+  const points = [];
+  polygon.forEach((p, i) => { const end = polygon[(i + 1) % polygon.length], steps = Math.max(1, Math.ceil(Math.hypot(end.x - p.x, end.y - p.y) * per)); for (let k = 0; k < steps; k++) points.push(place(p.x + (end.x - p.x) * k / steps, p.y + (end.y - p.y) * k / steps)); });
+  return points;
+}
+
+/**
+ * Which pieces may share the outline, and which must be drawn by themselves.
+ *
+ * The board is drawn at a slant, and on a cliff face the slant folds the ground over: a piece
+ * there lands on the screen turned the other way, on top of its neighbours. Every piece used to be
+ * drawn by itself, turned so that its area on the screen counted as lit; pieces lying over one
+ * another then both counted. A folded piece in the outline would instead be taken away from the
+ * ground it lies over, and leave lit ground dark (found by the tester on Dead Root: a quarter of a
+ * square by the rope bridge).
+ *
+ * So a piece joins the outline only when it goes the same way round on the screen as on the grid,
+ * judged on all the points it is placed by, the very test that used to turn it. Any other piece is
+ * handed back as its own screen points, turned the way it always was.
+ */
+export function sortPieces(pieces, place, per = 8) {
+  const whole = [], alone = [];
+  for (const piece of pieces) {
+    const here = twiceArea(piece), points = placedPoints(piece, place, per), drawn = twiceArea(points);
+    if ((here > 0 && drawn > 0) || (here < 0 && drawn < 0)) whole.push(piece);
+    else { if (drawn < 0) points.reverse(); alone.push(points); }
+  }
+  return { whole, alone };
+}
+
 /** How many times rings wind round a point: the test that two sets of rings cover the same ground. */
 export function windingAt(rings, p) {
   let total = 0;

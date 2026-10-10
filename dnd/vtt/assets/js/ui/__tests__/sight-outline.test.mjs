@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { outlineOf, stepped, windingAt } from '../sight-outline.mjs';
+import { outlineOf, stepped, windingAt, sortPieces, placedPoints } from '../sight-outline.mjs';
 import { adaptiveFog } from '../adaptive-fog.mjs';
 import { obstacleReveal } from '../obstacle-reveal.mjs';
 import { makeSight } from '../vision-height.mjs';
@@ -88,10 +88,42 @@ test('in-between points stand where a single square\'s edge has them', () => {
   assert.equal(slant.filter((p) => p.x > 0 && p.x < 1 && p.y > 0 && p.y < 0.5).length, 8);
 });
 
+test('a piece the slant folds over is kept out of the outline and drawn as it always was', () => {
+  // Found by the tester on Dead Root (Build 455, the rope bridge): a quarter of a square of lit
+  // ground on a steep face was left dark. On a cliff the slanted view lays the ground over itself.
+  // Ground rising two and a half squares in a tenth of a square going south, drawn at the usual slant.
+  const g = 72, groundAt = (x, y) => (y < 5.2 ? 0 : y < 5.3 ? (y - 5.2) * 25 : 2.5);
+  const place = (x, y) => ({ x: x * g + groundAt(x, y) * g * 0.12, y: y * g - groundAt(x, y) * g * 0.36 });
+  const square = (x, y, size = 1) => [{ x, y }, { x: x + size, y }, { x: x + size, y: y + size }, { x, y: y + size }];
+  const twiceArea = (r) => r.reduce((sum, p, i) => { const q = r[(i + 1) % r.length]; return sum + p.x * q.y - q.x * p.y; }, 0);
+  const flat = square(3, 3), top = square(3, 6), face = [{ x: 3, y: 5.2 }, { x: 4, y: 5.2 }, { x: 4, y: 5.3 }, { x: 3, y: 5.3 }];
+  // Its corners alone would not show it: the long way round, with every point it is placed by, does.
+  const straddling = [{ x: 3, y: 5 }, { x: 3.5, y: 5 }, { x: 3.5, y: 5.5 }, { x: 3, y: 5.5 }];
+  assert.ok(twiceArea(face.map((p) => place(p.x, p.y))) < 0, 'the cliff face lands on the screen turned over');
+  const { whole, alone } = sortPieces([flat, top, face, straddling], place);
+  assert.deepEqual(whole, [flat, top], 'level ground shares the outline');
+  assert.equal(alone.length, 2, 'the face, and the piece across its foot, are drawn by themselves');
+  for (const points of alone) assert.ok(twiceArea(points) > 0, 'turned so that their area on the screen counts as lit');
+  assert.deepEqual(alone[0].length, placedPoints(face, place).length);
+  // The test is the one that used to turn each piece: on all the points it is placed by, not on its
+  // corners. Build 455 judged by corners, and on real ground the two can disagree (on Dead Root: a
+  // piece whose corners said "level" and whose points said "turned over"). Here, a placing that puts
+  // the corners where they belong and everything between them mirrored.
+  const mirrored = (x, y) => (Number.isInteger(x * 2) && Number.isInteger(y * 2) ? { x: x * g, y: y * g } : { x: -x * g, y: y * g });
+  const odd = square(10, 10), byCorners = twiceArea(odd.map((p) => mirrored(p.x, p.y))), byAllPoints = twiceArea(placedPoints(odd, mirrored));
+  assert.ok(byCorners > 0 && byAllPoints < 0, `corners say ${byCorners.toFixed(0)}, every point says ${byAllPoints.toFixed(0)}`);
+  const judged = sortPieces([odd], mirrored);
+  assert.deepEqual(judged.whole, [], 'so it is not in the outline');
+  assert.equal(judged.alone.length, 1); assert.ok(twiceArea(judged.alone[0]) > 0);
+  // A piece listed the other way round on the grid, on level ground, is not "folded": it joins the outline.
+  const backwards = [...square(8, 3)].reverse();
+  assert.deepEqual(sortPieces([backwards], place), { whole: [backwards], alone: [] });
+});
+
 test('the sight layer draws the outline, and still draws by itself a piece the slant folds over', () => {
   const source = readFileSync(new URL('../vision-prototype.js', import.meta.url), 'utf8');
   assert.match(source, /for\(const loop of outlineOf\(whole\)\)addRing\(stepped\(loop\)\.map\(p=>projected\(p\.x,p\.y\)\)\);/);
-  assert.match(source, /if\(here>0&&drawn>0\|\|here<0&&drawn<0\)whole\.push\(piece\);else appendProjected\(piece\);/);
+  assert.match(source, /const \{whole,alone\}=sortPieces\(pieces\.splice\(0\),projected\);\s+for\(const points of alone\)addRing\(points\);/);
   // The outline is made as the job's last step, in a slice of its own, before the picture is shown.
   assert.match(source, /emit:polygon=>pieces\.push\(polygon\)\}\);yield;seal\(\);return result;\};/);
   assert.match(source, /const job=queue\.ask\(createJob\(key,steps\(\),\{family,path,asked:start\}\),keptForMemory\);/);
