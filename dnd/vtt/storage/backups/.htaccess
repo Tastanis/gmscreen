@@ -1,0 +1,4 @@
+# Old saved copies of the board, the scene list and the token list. Only the site's own code reads them.
+# The same two lines as the top of dnd/data/.htaccess, which this host accepts.
+Order deny,allow
+Deny from all

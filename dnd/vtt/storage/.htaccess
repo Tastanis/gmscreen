@@ -1,0 +1,7 @@
+# No visitor may download the database, its side files or its dated copies.
+# Only the site's own code reads them. Pictures in uploads/ and tokens/ are not affected.
+# Written the same way as the <Files> blocks in dnd/data/.htaccess, which this host accepts.
+<Files *.sqlite*>
+    Order deny,allow
+    Deny from all
+</Files>
