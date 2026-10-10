@@ -213,3 +213,15 @@ test('a square is drawn ahead, and seen from, only when the browser itself finds
   // A drag held at its drop square is seen from only if it was a walk or a shift, and the way is clear.
   assert.match(source, /if \(waiting\) holdKeyboardAhead\(sceneId, moves, movementKind === 'walk' \|\| movementKind === 'shift'\);/);
 });
+
+test('a player\'s press into a wall is sent without the token being drawn through the wall', async () => {
+  const { readFileSync } = await import('node:fs');
+  const source = readFileSync(new URL('../board-interactions.js', import.meta.url), 'utf8');
+  // Found by the tester on Build 458: such a press was not drawn ahead, but when its turn came the
+  // move was drawn while the server's refusal was awaited, as every move sent is.
+  assert.match(source, /function wallStopsStep\(record, to\) \{\s+if \(isGmUser\(\)\) return false;\s+try \{\s+return Boolean\(window\.wallPrototype\?\.blockedMove\?\.\(record, \{ column: Number\(to\.column\), row: Number\(to\.row\) \}\)\);/);
+  assert.match(source, /\.\.\.\(!showOnly && wallStopsStep\(effective, \{ column: nextColumn, row: nextRow \}\) \? \{ unseen: true \} : \{\}\),/);
+  const runtime = readFileSync(new URL('../../sync-v2/token-movement-runtime.js', import.meta.url), 'utf8');
+  assert.match(runtime, /if \(!move\.unseen\) paintPendingPreview\(sceneId, placementId, preview\);/);
+  assert.match(runtime, /if \(move\.unseen\) continue;/);
+});

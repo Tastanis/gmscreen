@@ -7957,6 +7957,20 @@ export function mountBoardInteractions(store, routes = {}) {
     return !walls.blockedMove({ ...record, column: Number(from.column), row: Number(from.row) }, { column: Number(to.column), row: Number(to.row) });
   }
 
+  /**
+   * A step this browser's own wall check says the server will refuse (never so for the Director).
+   * Such a press is still sent, because the server decides, but the token is not drawn on the far
+   * square while it does: before, it stood through the wall for as long as the refusal took.
+   */
+  function wallStopsStep(record, to) {
+    if (isGmUser()) return false;
+    try {
+      return Boolean(window.wallPrototype?.blockedMove?.(record, { column: Number(to.column), row: Number(to.row) }));
+    } catch (error) {
+      return false;
+    }
+  }
+
   /** Draws tokens ahead on the squares of `moves`. `walked`: the squares may be seen from if the way to them is clear. */
   function holdKeyboardAhead(sceneId, moves, walked = false) {
     for (const move of moves) {
@@ -8091,6 +8105,7 @@ export function mountBoardInteractions(store, routes = {}) {
             row: nextRow,
             width,
             height,
+            ...(!showOnly && wallStopsStep(effective, { column: nextColumn, row: nextRow }) ? { unseen: true } : {}),
           });
         }
       }

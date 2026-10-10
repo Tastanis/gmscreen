@@ -253,7 +253,9 @@ export function createTokenMovementRuntime({
       column: Number(move.column),
       row: Number(move.row),
     };
-    paintPendingPreview(sceneId, placementId, preview);
+    // `unseen`: a move this browser expects the server to refuse (a player's step into a wall).
+    // It is sent, the server decides, and the token is not drawn on the new square meanwhile.
+    if (!move.unseen) paintPendingPreview(sceneId, placementId, preview);
 
     try {
       return await commandClient.submit(
@@ -295,6 +297,7 @@ export function createTokenMovementRuntime({
     for (const move of moves ?? []) {
       const placementId = String(move?.placementId ?? move?.id ?? '').trim();
       if (!placementId) continue;
+      if (move.unseen) continue;
       const current = getEffectivePlacement(sceneId, placementId) ?? {};
       const preview = { ...current, ...move, id: placementId };
       paintPendingPreview(sceneId, placementId, preview);

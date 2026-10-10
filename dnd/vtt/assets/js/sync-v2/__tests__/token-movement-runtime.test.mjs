@@ -578,3 +578,28 @@ test('a refused forced move is still never retried, and does not hold up the nex
   assert.equal(token.column, 5, 'the refused push did not move the token');
   runtime.stop?.();
 });
+
+test('a move the browser expects the server to refuse is sent, and the token is not drawn on the new square meanwhile', async () => {
+  // A player's arrow press into a wall (tester, Build 458): the token stood through the wall for
+  // the second and a half the refusal took. The server still decides; the browser no longer draws it.
+  const token = { id: 'token-1', column: 1, row: 1, width: 1, height: 1, _entityRevision: 0 };
+  let writes = 0;
+  const refused = createClient({ fetchImpl: async url => {
+    if (String(url).includes('snapshot')) return response(200, { success: true, snapshot: { revision: 0, state: { placements: { 'scene-1': { 'token-1': token } } } } });
+    writes++; return response(422, { success: false, error: 'Movement blocked by a wall or closed door/window.' });
+  } }, 'player');
+  await refused.runtime.start();
+  const sent = refused.runtime.submitMoves('scene-1', [{ placementId: 'token-1', column: 0, row: 1, unseen: true }]);
+  assert.equal(refused.runtime.getEffectivePlacement('scene-1', 'token-1').column, 1, 'the token is where the server has it while the answer is awaited');
+  await assert.rejects(sent, /wall/);
+  assert.equal(writes, 1, 'the move was sent: the server decides');
+  assert.equal(refused.previews.length, 0, 'never drawn on the far square');
+  assert.equal(refused.patches.at(-1).placement.column, 1);
+  assert.equal(refused.runtime.__testing.pendingPreview.size, 0);
+  // If the browser was wrong and the server lets it through, the token moves on the answer.
+  const allowed = createClient(createCanonicalServer(), 'player');
+  await allowed.runtime.start();
+  await allowed.runtime.submitMoves('scene-1', [{ placementId: 'token-1', column: 4, row: 3, unseen: true }]);
+  assert.equal(allowed.previews.length, 0);
+  assert.equal(allowed.patches.at(-1).placement.column, 4);
+});
