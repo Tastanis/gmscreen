@@ -32,17 +32,39 @@ new MutationObserver(()=>{tokenDirty=true;}).observe(originalTokens,{subtree:tru
 //    shows too, lit or remembered). In every other case the picture is found at once, as before.
 //  - What was seen from a place passed through is still remembered: its picture is finished once
 //    nothing is waiting for the screen, and added to memory without being shown as lit.
-const GROUND_SLICE=10,GROUND_LEAST=3,MEMORY_SLICE=5;
+//
+// A token moved by arrow keys is drawn ahead of the server's answers (board-interactions.js), and
+// the view is from where it is drawn: a run of presses is seen from once, where it ends, instead of
+// from every square as the answers come in, one after another.
+//  - Memory is only of squares the server has agreed. The picture from a square not yet agreed is
+//    shown and not remembered; it is remembered when the answer comes. If the server refuses, the
+//    token goes back, the view is from where it went back to, and nothing seen meanwhile is kept.
+//  - A square the run passed through is added to memory when the server agrees it, without being
+//    shown as lit, and the screen is drawn again from memory once, when the run has been answered.
+//  - A picture from a square not yet agreed may stay up while the next is found: it was on the
+//    screen already, so it shows the viewer nothing new.
+//  - The picture from a square not yet agreed is begun when the token has rested there for
+//    AHEAD_REST milliseconds. A square left sooner than that, in the middle of a run of presses,
+//    costs no ground work at all. Creatures, doors and floor plates are still tested at once.
+const GROUND_SLICE=10,GROUND_LEAST=3,MEMORY_SLICE=5,AHEAD_REST=150;
 const queue=createSightQueue({limit:32});
-let wanted=null,shown=null,groundPainted='',roofPainted='',groundRuns=0,memoryCatchUps=0,lastGroundMs=0,lastGroundLagMs=0,lastGroundSlices=0,memoryGrew=false;
-const groundStamp=()=>JSON.stringify([wanted?.mode==='lit'?shown?.key:wanted?.mode,exploration.revision,wanted?.remember,canvas.width,canvas.height]);
+let wanted=null,shown=null,groundPainted='',roofPainted='',groundRuns=0,memoryCatchUps=0,lastGroundMs=0,lastGroundLagMs=0,lastGroundSlices=0,memoryGrew=false,agreedKey='',roofPaints=0;
+// A token as far as sight is concerned: the server's bookkeeping on it changes with every answer and nothing seen does.
+const steady=token=>token&&{...token,_movementUndo:undefined,_syncV2EntityRevision:undefined};
+/** Where sight takes each token to be: where it is drawn, for a token drawn ahead of the server's answers. */
+function seenPlacements(c){
+ const stored=Object.values(c.state.boardState.placements[c.state.boardState.activeSceneId]||[]),square=c.sightSquare;
+ if(!square)return {stored,placements:stored};
+ return {stored,placements:stored.map(p=>{const at=square(p.id);return at&&(at.column!==p.column||at.row!==p.row)?{...p,column:at.column,row:at.row}:p;})};
+}
+const groundStamp=(remember=wanted?.remember)=>JSON.stringify([wanted?.mode==='lit'?shown?.key:wanted?.mode,exploration.revision,remember,canvas.width,canvas.height]);
 function paintGround(){
  ctx.globalCompositeOperation='source-over';
  if(wanted.mode==='unlit')ctx.clearRect(0,0,canvas.width,canvas.height);
  else{
   ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height);
   // Shared edge crossings and a single fill prevent cracks between cells.
-  if(wanted.mode==='lit'&&shown){exploration.paint(ctx,shown.path,wanted.remember,wanted.smoothing);shown.remembered=wanted.remember&&exploration.ready;}
+  if(wanted.mode==='lit'&&shown){exploration.paint(ctx,shown.path,wanted.remember,wanted.smoothing);shown.remembered=wanted.remember&&exploration.ready;shown.ahead=wanted.ahead;}
  }
  groundPainted=groundStamp();memoryGrew=false;
 }
@@ -51,20 +73,24 @@ function showGround(job){
  groundChecks=job.result.checks;visiblePolygons=job.result.polygons;groundRuns++;lastGroundMs=job.spent;lastGroundSlices=job.slices;lastGroundLagMs=performance.now()-job.asked;
  paintGround();
 }
-const keptForMemory=job=>!!wanted&&wanted.mode==='lit'&&wanted.remember&&job.family===wanted.family;
+// A job set aside is kept for memory only if it was for a square the server had agreed.
+const keptForMemory=job=>!!wanted&&wanted.mode==='lit'&&wanted.memory&&job.remember&&job.family===wanted.family;
 function catchUpMemory(){
  const job=queue.passed[0];
- if(!wanted||wanted.mode!=='lit'||!wanted.remember||job.family!==wanted.family||!exploration.ready){queue.forget();return;}
- if(job.key===shown?.key){queue.passed.shift();return;}
- if(!advance(job,MEMORY_SLICE))return;
- queue.passed.shift();memoryCatchUps++;
- // The screen is drawn again from memory once, when the last of them is in.
- if(exploration.remember(job.path,wanted.smoothing))memoryGrew=true;
- if(memoryGrew&&!queue.passed.length)paintGround();
+ if(!wanted||wanted.mode!=='lit'||!wanted.memory||job.family!==wanted.family||!exploration.ready)queue.forget();
+ else if(job.key===shown?.key)queue.passed.shift();
+ else{
+  if(!advance(job,MEMORY_SLICE))return;
+  queue.passed.shift();memoryCatchUps++;
+  if(exploration.remember(job.path,wanted.smoothing))memoryGrew=true;
+ }
+ // The screen is drawn again from memory once: when the last of them is in, and not while the
+ // viewer's token is still ahead of the server's answers (more squares are on their way).
+ if(wanted?.mode==='lit'&&!queue.passed.length&&!wanted.ahead&&(memoryGrew||groundPainted!==groundStamp()))paintGround();
 }
 function tokenVisible(id){
  if(!document.documentElement.classList.contains('height-vision-active'))return true;
- const c=window.terrainContext?.(),p=c?.state.boardState.placements[c.state.boardState.activeSceneId]?.find(p=>p.id===id);
+ const c=window.terrainContext?.(),p=c&&seenPlacements(c).placements.find(p=>p.id===id);
  if(!p)return false;if(gmVision.manual||!gmVision.fogEnabled)return true;
  return isAlwaysVisibleAlly(p)||Boolean(sight?.(center(p),head(p,window.terrainPrototype.groundFor(p)),p));
 }
@@ -78,7 +104,7 @@ function tick(){
  const editing=['#wall-panel','#terrain-panel'].some(id=>document.querySelector(id)?.hidden===false);
  canvas.hidden=tokenView.hidden=!enabled||editing;document.documentElement.classList.toggle('height-vision-active',enabled&&!editing);
  if(enabled){
-  const placements=Object.values(c.state.boardState.placements[c.state.boardState.activeSceneId]||[]),v=c.view,terrain=window.terrainPrototype;
+  const {stored,placements}=seenPlacements(c),v=c.view,terrain=window.terrainPrototype;
   const viewKey='last-owned-view:'+c.userId+':'+c.state.boardState.activeSceneId;
   let lastId=null;try{lastId=localStorage.getItem(viewKey);}catch{}
   const selectedToken=resolveVisionToken(placements,{...c,lastId});
@@ -86,13 +112,15 @@ function tick(){
   const image=document.querySelector('#vtt-map-image');
   const token=(wallInspection||gmVision.manual||(!gmVision.fogEnabled&&!selectedToken))?{id:'map-inspection',levelId:c.levelId,column:(v.mapInsets.left-v.gridOffsets.left+image.naturalWidth/2)/v.gridSize-.5,row:(v.mapInsets.top-v.gridOffsets.top+image.naturalHeight/2)/v.gridSize-.5,width:1,height:1}:selectedToken;
   const viewerGround=(wallInspection||gmVision.manual)?gmVision.height:terrain.groundFor(token),inspectionHeight=wallInspection||c.isGM&&(gmVision.manual||!gmVision.lighting)?viewerGround:null;
+  // The viewer's token as the server has it, and whether it is drawn (and seen from) ahead of that.
+  const agreed=token&&token===selectedToken?stored.find(p=>p.id===token.id)||null:null,ahead=!!agreed&&(agreed.column!==token.column||agreed.row!==token.row),seenToken=steady(token);
   const nextTerrainKey=JSON.stringify([terrain.key,terrain.revision,v.gridSize,v.gridOffsets,v.mapInsets,image.naturalWidth,image.naturalHeight]);
   if(terrainKey!==nextTerrainKey){terrainKey=nextTerrainKey;terrainCache=compileTerrainVision(terrain.field,{left:((v.mapInsets.left||0)-(v.gridOffsets.left||0))/v.gridSize,top:((v.mapInsets.top||0)-(v.gridOffsets.top||0))/v.gridSize,width:image.naturalWidth/v.gridSize,height:image.naturalHeight/v.gridSize});terrainBuilds++;}
   const groundAt=terrainCache.heightAt;
   // Terrain edits change projection; avoid applying an old silhouette to changed geometry.
   if(terrainCache.explorationHash===undefined){let hash=2166136261;for(const h of terrain.field.h){hash=Math.imul(hash^Math.round(h*10000),16777619);}terrainCache.explorationHash=hash>>>0;}
   exploration.select(JSON.stringify([c.userId,c.state.boardState.activeSceneId,c.state.boardState.mapUrl,c.isGM?'stacked-view-v2':'player-view-v3',sharedField('exploration')?.value.resetId||'initial',c.isGM?token?.id:'personal',v.gridSize,v.gridOffsets,v.mapInsets,v.mapPixelSize,terrainCache.explorationHash,...(terrain.slant.y===.36?[]:['slant',terrain.slant.y])]),v.mapPixelSize.width,v.mapPixelSize.height);
-  const next=JSON.stringify([c.state.boardState.activeSceneId,c.levelId,viewerGround,inspectionHeight,terrain.markersVisible,gmVision.manual,gmVision.lighting,gmVision.revision,exploration.revision,editing,token,placements.map(p=>[p.id,p.column,p.row,p.width,p.height,p.levelId,p.movementMode,p.visionOwners,p.team,p.combatTeam]),wallRevision,roofRenderer.revision,terrain.flightRevision,terrain.revision,v.mapPixelSize,v.mapInsets,v.gridOffsets,v.gridSize]);
+  const next=JSON.stringify([c.state.boardState.activeSceneId,c.levelId,viewerGround,inspectionHeight,terrain.markersVisible,gmVision.manual,gmVision.lighting,gmVision.revision,exploration.revision,editing,seenToken,ahead&&[agreed.column,agreed.row],placements.map(p=>[p.id,p.column,p.row,p.width,p.height,p.levelId,p.movementMode,p.visionOwners,p.team,p.combatTeam]),wallRevision,roofRenderer.revision,terrain.flightRevision,terrain.revision,v.mapPixelSize,v.mapInsets,v.gridOffsets,v.gridSize]);
   const changed=next!==signature,tickStart=performance.now();
   if(changed){
    signature=next;const start=performance.now();
@@ -101,19 +129,18 @@ function tick(){
    if(sight)sight=gmVision.lighting&&!wallInspection?roofRenderer.blockSight(observer,head(token,viewerGround),sight,walls):()=>true;
    portalView={viewer:observer,ground:viewerGround,eye:token?head(token,viewerGround):0,sight};
    // What the ground picture is to be: `family` is everything but the viewer's own place, `key` the whole of it.
-   const mode=!gmVision.lighting?'unlit':sight?'lit':'dark',remember=!editing&&!gmVision.manual;
+   const mode=!gmVision.lighting?'unlit':sight?'lit':'dark',memory=!editing&&!gmVision.manual,remember=memory&&!ahead;
    const family=JSON.stringify([c.state.boardState.activeSceneId,c.levelId,token?.id,token?.levelId,wallRevision,terrainKey,gmVision.fogEnabled,wallInspection,inspectionHeight,canvas.width,canvas.height,exploration.key]);
    const key=mode==='lit'?JSON.stringify([family,token?.column,token?.row,token?.width,token?.height,viewerGround]):mode;
-   wanted={mode,key,family,remember,smoothing:v.gridSize*.10};
-   if(mode!=='lit'){queue.setAside();queue.forget();shown=null;paintGround();}
-   else if(shown?.key===key){queue.setAside(keptForMemory);if(groundPainted!==groundStamp())paintGround();}
-   else if(queue.current?.key!==key){
+   wanted={mode,key,family,remember,memory,ahead,smoothing:v.gridSize*.10};
+   // The lit ground as seen from one place, as a job (sight-job.mjs). `agreedPlace`: the server has the viewer there.
+   const groundJob=(jobKey,seen,origin,agreedPlace)=>{
     const image=document.querySelector('#vtt-map-image'),g=v.gridSize,ox=v.gridOffsets.left||0,oy=v.gridOffsets.top||0;
     const left=(v.mapInsets.left-ox)/g,top=(v.mapInsets.top-oy)/g,right=left+image.naturalWidth/g,bottom=top+image.naturalHeight/g;
     // One projector for the whole picture (terrain-prototype.js): the grid and slant are read once.
     const place=terrain.active?(terrain.projector?.()??terrain.project):null;
     const projected=(x,y)=>{const px=ox+x*g,py=oy+y*g;return place?place(px,py,groundAt(x,y)):{x:px,y:py};};
-    const path=new Path2D(),seen=sight,pieces=[];
+    const path=new Path2D(),pieces=[];
     // Each ring is closed on a small path of its own and then added to the picture. Closing a
     // ring on the picture itself costs the browser more the longer the picture already is: with
     // some 2,800 pieces that was about 200 ms a picture.
@@ -129,22 +156,43 @@ function tick(){
      for(const points of alone)addRing(points);
      for(const loop of outlineOf(whole))addRing(stepped(loop).map(p=>projected(p.x,p.y)));
     };
-    const steps=function*(){const result=yield* groundShapeSteps({left,top,right,bottom,visible:visibleGround,walls,origin:observer,groundAt,emit:polygon=>pieces.push(polygon)});yield;seal();return result;};
+    const steps=function*(){const result=yield* groundShapeSteps({left,top,right,bottom,visible:visibleGround,walls,origin,groundAt,emit:polygon=>pieces.push(polygon)});yield;seal();return result;};
     const visibleGround=(p,z=groundAt(p.x,p.y))=>seen(p,z);
-    const job=queue.ask(createJob(key,steps(),{family,path,asked:start}),keptForMemory);
+    return createJob(jobKey,steps(),{family,path,asked:start,remember:memory&&agreedPlace});
+   };
+   if(mode!=='lit'){queue.setAside();queue.forget();shown=null;paintGround();}
+   // A picture already up is drawn again when what it is drawn from has changed. Its square being
+   // agreed by the server is such a change (it is now remembered), and waits for the squares passed
+   // on the way to be in memory too, so that the screen is drawn again once and not twice.
+   else if(shown?.key===key){queue.setAside(keptForMemory);if(groundPainted!==groundStamp()&&!(queue.passed.length&&groundPainted===groundStamp(false)))paintGround();}
+   else if(queue.current?.key!==key){
+    const job=queue.ask(groundJob(key,sight,observer,!ahead),keptForMemory);
     // The old picture may stay up meanwhile only when it shows nothing this one would hide (see above).
-    if(!(shown&&shown.family===family&&shown.remembered&&remember&&exploration.ready)){finish(job);showGround(job);}
+    if(!(shown&&shown.family===family&&exploration.ready&&memory&&(shown.remembered||shown.ahead))){finish(job);showGround(job);}
    }
+   // A square the server has now agreed, which the viewer's token is already drawn beyond: what is
+   // seen from it goes into memory without being shown.
+   if(mode==='lit'&&memory&&agreed){
+    const ground=terrain.groundFor(agreed),agreedNow=JSON.stringify([family,agreed.column,agreed.row,agreed.width,agreed.height,ground]);
+    if(ahead&&agreedKey&&agreedNow!==agreedKey&&agreedNow!==key){
+     const from=center(agreed),plain=!gmVision.fogEnabled?()=>true:makeSight({viewer:agreed,viewerGround:ground,groundAt,walls,terrain:terrainCache});
+     queue.keep(groundJob(agreedNow,gmVision.lighting&&!wallInspection?roofRenderer.blockSight(from,head(agreed,ground),plain,walls):()=>true,from,true));
+    }
+    // The picture on the screen is of the agreed square, was put up before the answer came, and is
+    // being left before it was drawn again as remembered: it is kept for memory as it is.
+    if(ahead&&shown&&!shown.remembered&&!shown.kept&&shown.family===family&&shown.key===agreedNow){shown.kept=true;queue.keep({key:shown.key+':kept',family,path:shown.path,done:true,remember:true});}
+    agreedKey=agreedNow;
+   }else agreedKey='';
    // Floor plates are tested and drawn at once. They depend on the viewer and the map, not on where
    // other tokens stand, so another token's move does not draw them again.
-   const roofKey=JSON.stringify([c.state.boardState.activeSceneId,c.levelId,viewerGround,inspectionHeight,terrain.markersVisible,gmVision.manual,gmVision.lighting,gmVision.fogEnabled,gmVision.revision,editing,wallInspection,token,wallRevision,roofRenderer.revision,terrain.flightRevision,terrain.revision,terrainKey,v.mapPixelSize,v.mapInsets,v.gridOffsets,v.gridSize]);
-   if(roofKey!==roofPainted){roofPainted=roofKey;roofRenderer.paint({inspectionHeight,lighting:gmVision.lighting&&!wallInspection,context:c,viewer:observer,token,terrain:terrainCache,viewerGround,sight,groundAt,model:walls,editing:editing&&!wallInspection,enabled});}
+   const roofKey=JSON.stringify([c.state.boardState.activeSceneId,c.levelId,viewerGround,inspectionHeight,terrain.markersVisible,gmVision.manual,gmVision.lighting,gmVision.fogEnabled,gmVision.revision,editing,wallInspection,seenToken,wallRevision,roofRenderer.revision,terrain.flightRevision,terrain.revision,terrainKey,v.mapPixelSize,v.mapInsets,v.gridOffsets,v.gridSize]);
+   if(roofKey!==roofPainted){roofPainted=roofKey;roofPaints++;roofRenderer.paint({inspectionHeight,lighting:gmVision.lighting&&!wallInspection,context:c,viewer:observer,token,terrain:terrainCache,viewerGround,sight,groundAt,model:walls,editing:editing&&!wallInspection,enabled});}
    wallApi.refreshPortals?.();
    lastMs=performance.now()-start;paints++;
   }
   // A little more of the ground picture each frame; then, with nothing waiting for the screen, of
   // the pictures from places passed through, for memory only.
-  if(queue.current){const job=queue.current;if(advance(job,Math.max(GROUND_LEAST,GROUND_SLICE-(performance.now()-tickStart))))showGround(job);}
+  if(queue.current){const job=queue.current;if(!(wanted.ahead&&tickStart-job.asked<AHEAD_REST)&&advance(job,Math.max(GROUND_LEAST,GROUND_SLICE-(performance.now()-tickStart))))showGround(job);}
   else if(queue.passed.length)catchUpMemory();
   // A player's map is uncovered only by a finished picture of where they are now.
   if(!queue.current)confirmPlayerHeightPaint(c.state,c.view,c.isGM,c.levelId);
@@ -166,5 +214,5 @@ function tick(){
  }
  requestAnimationFrame(tick);
 }
-window.visionPrototype={tokenVisible,portalVisible:geometry=>portalView?portalVisible({...geometry,...portalView}):false,async resetExplored(){const c=window.terrainContext?.();if(!c?.isGM)return;await saveShared('exploration',{resetId:crypto.randomUUID()},sharedField('exploration')?.revision||0);await exploration.resetScene(c.state.boardState.activeSceneId);},get viewerTokenId(){return viewerTokenId;},get observer(){return observer;},get stats(){return {paints,lastMs,terrainBuilds,groundChecks,visiblePolygons,cliffs:terrainCache?.cliffs.length||0,groundRuns,groundPending:!!queue.current,groundSetAside:queue.superseded,memoryWaiting:queue.passed.length,memoryCatchUps,lastGroundMs,lastGroundSlices,lastGroundLagMs};},visible:(point,z,token)=>sight?.(point,z,token)??false};
+window.visionPrototype={tokenVisible,portalVisible:geometry=>portalView?portalVisible({...geometry,...portalView}):false,async resetExplored(){const c=window.terrainContext?.();if(!c?.isGM)return;await saveShared('exploration',{resetId:crypto.randomUUID()},sharedField('exploration')?.revision||0);await exploration.resetScene(c.state.boardState.activeSceneId);},get viewerTokenId(){return viewerTokenId;},get observer(){return observer;},get stats(){return {paints,lastMs,terrainBuilds,groundChecks,visiblePolygons,cliffs:terrainCache?.cliffs.length||0,groundRuns,groundPending:!!queue.current,groundSetAside:queue.superseded,memoryWaiting:queue.passed.length,memoryCatchUps,roofPaints,lastGroundMs,lastGroundSlices,lastGroundLagMs};},visible:(point,z,token)=>sight?.(point,z,token)??false};
 requestAnimationFrame(tick);

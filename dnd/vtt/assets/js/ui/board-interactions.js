@@ -716,6 +716,17 @@ export function mountBoardInteractions(store, routes = {}) {
   // they are worked out once for each copy of the state and each user, not once for each asking.
   // The state is handed out as the same copy until something changes it (store.getState).
   let terrainContextFor = null;
+  // Arrow presses are drawn before the server has answered them. Where a token is drawn ahead of
+  // the board's own record, and how many moves still to be answered put it there. The record
+  // itself (and so rules and everything else that reads it) changes only on the answer.
+  //
+  // Sight is the one thing that looks from where a token is drawn, so a run of presses is seen
+  // from once, where it ends, and not from every square as the answers come in. `see` is the
+  // square a token may be seen from: the square it is drawn on when this browser's own check
+  // found nothing in the way of getting there, and otherwise the last such square. A player must
+  // not see round a wall by pressing into it.
+  const keyboardAhead = new Map();
+  const sightSquareOf = (placementId) => keyboardAhead.get(placementId)?.see ?? null;
   window.terrainContext = () => {
     const state=store.getState(),userId=getCurrentUserId();
     if(!terrainContextFor||terrainContextFor.state!==state||terrainContextFor.userId!==userId){
@@ -723,7 +734,7 @@ export function mountBoardInteractions(store, routes = {}) {
       const linked=resolvePcTokenForUser({userId,placements:state.boardState.placements?.[sceneId],viewerAssociation:scene?.pcTokenAssociations?.[userId]});
       terrainContextFor={state,userId,levelId:getViewerLevelIdForCurrentUser(state,sceneId),followId:linked?.placementId};
     }
-    return {view:viewState,state,levelId:terrainContextFor.levelId,userId,isGM:isGmUser(),followId:terrainContextFor.followId,selectedIds:[...selectedTokenIds]};
+    return {view:viewState,state,levelId:terrainContextFor.levelId,userId,isGM:isGmUser(),followId:terrainContextFor.followId,selectedIds:[...selectedTokenIds],sightSquare:keyboardAhead.size?sightSquareOf:null};
   };
   // A creature that walked off an edge may have climbed down instead: no damage, more movement.
   const fallClimbing = {
@@ -812,10 +823,6 @@ export function mountBoardInteractions(store, routes = {}) {
   let mapLoadSequence = 0;
   let mapLoadWatchdogId = null;
   let lastActiveSceneId = null;
-  // Arrow presses are drawn before the server has answered them. Where a token is drawn ahead of
-  // the board's own record, and how many moves still to be answered put it there. The record
-  // itself (and so sight, rules and everything else that reads it) changes only on the answer.
-  const keyboardAhead = new Map();
   const keyboardMovementQueue = createKeyboardMovementQueue({
     move: applyMovementDelta,
     show: showKeyboardStep,
@@ -1394,7 +1401,7 @@ export function mountBoardInteractions(store, routes = {}) {
     // server has it by the time the drag's turn comes.
     if (source !== 'keyboard' && !inTurn) {
       const waiting = keyboardMovementQueue.busy();
-      if (waiting) holdKeyboardAhead(sceneId, moves);
+      if (waiting) holdKeyboardAhead(sceneId, moves, movementKind === 'walk' || movementKind === 'shift');
       return keyboardMovementQueue.follow(() => commitCanonicalTokenMoves({
         sceneId, moves, source, movementKind, originalPositions, inTurn: true,
         drawnRuler: waiting && Array.isArray(ruler) ? [...ruler] : ruler,
@@ -7917,6 +7924,9 @@ export function mountBoardInteractions(store, routes = {}) {
         const record = tokenMovementRuntime.getEffectivePlacement(step.sceneId, move.placementId);
         const from = keyboardAhead.get(move.placementId) ?? record;
         if (!record || !from) return null;
+        // A square the server would refuse for a wall or a shut door is not drawn ahead either:
+        // the press waits its turn and is refused, as it always was.
+        if (!clearToSeeFrom(record, from, move)) return null;
         const route = window.terrainZones?.routeCost?.(
           [{ column: Number(from.column), row: Number(from.row) }, { column: move.column, row: move.row }],
           { kind: 'walk', actor: { ...record, column: Number(from.column), row: Number(from.row) } }
@@ -7926,15 +7936,36 @@ export function mountBoardInteractions(store, routes = {}) {
     } catch (error) {
       return null;
     }
-    holdKeyboardAhead(step.sceneId, step.moves);
+    holdKeyboardAhead(step.sceneId, step.moves, true);
     return step;
   }
 
-  function holdKeyboardAhead(sceneId, moves) {
+  /**
+   * Whether this browser's own wall check finds the way from where a token is drawn to a square
+   * clear, so that the square may be drawn ahead and seen from before the server has agreed.
+   * The Director's moves are not stopped by walls (the server lets them through). For anyone else
+   * the check is the browser's copy of the server's (wallPrototype.blockedMove); where it cannot
+   * be made (another floor than the one being looked at) the answer is no.
+   */
+  function clearToSeeFrom(record, from, to) {
+    if (isGmUser()) return true;
+    const walls = window.wallPrototype;
+    if (typeof walls?.blockedMove !== 'function') return false;
+    const sceneId = getActiveSceneId();
+    const viewerLevelId = sceneId ? getViewerLevelIdForCurrentUser(boardApi.getState?.() ?? {}, sceneId) : null;
+    if ((record.levelId || BASE_MAP_LEVEL_ID) !== (viewerLevelId || BASE_MAP_LEVEL_ID)) return false;
+    return !walls.blockedMove({ ...record, column: Number(from.column), row: Number(from.row) }, { column: Number(to.column), row: Number(to.row) });
+  }
+
+  /** Draws tokens ahead on the squares of `moves`. `walked`: the squares may be seen from if the way to them is clear. */
+  function holdKeyboardAhead(sceneId, moves, walked = false) {
     for (const move of moves) {
       const held = keyboardAhead.get(move.placementId);
-      keyboardAhead.set(move.placementId, { column: Number(move.column), row: Number(move.row), moves: (held?.moves ?? 0) + 1 });
       const record = tokenMovementRuntime?.getEffectivePlacement(sceneId, move.placementId);
+      const square = { column: Number(move.column), row: Number(move.row) };
+      let clear = false;
+      try { clear = walked && Boolean(record) && clearToSeeFrom(record, held ?? record, square); } catch (error) { clear = false; }
+      keyboardAhead.set(move.placementId, { ...square, moves: (held?.moves ?? 0) + 1, see: clear ? square : held?.see ?? null });
       if (record) patchTokenMovementNode(sceneId, move.placementId, record);
     }
   }

@@ -56,6 +56,8 @@ export function createSightQueue({limit=32}={}){
    const old=current;current=null;superseded++;
    if(keep(old)){passed.push(old);if(passed.length>limit)passed.shift();}
   },
+  /** A job that is for memory only: a place the viewer has been, whose picture was never asked for the screen. */
+  keep(job){passed.push(job);if(passed.length>limit)passed.shift();return job;},
   /** The job for the screen is done with (shown, or no longer wanted). */
   clear(){const old=current;current=null;return old;},
   /** Forgets every job set aside: the scene, the walls or the viewer changed, and they no longer apply. */

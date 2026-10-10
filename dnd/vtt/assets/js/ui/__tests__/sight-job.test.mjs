@@ -115,23 +115,32 @@ test('a job set aside is kept only when its ground should be remembered, and onl
 test('the sight layer keeps the old picture up only when it hides nothing, and never uncovers early', () => {
   const source = readFileSync(new URL('../vision-prototype.js', import.meta.url), 'utf8');
   // The old picture stays while the new one is found only for the same viewer on the same scene,
-  // floor, walls and ground, and only when what was lit is already in that viewer's memory.
-  assert.match(source, /if\(!\(shown&&shown\.family===family&&shown\.remembered&&remember&&exploration\.ready\)\)\{finish\(job\);showGround\(job\);\}/);
+  // floor, walls and ground, and only when what was lit is already in that viewer's memory, or was
+  // put up from a square the server had not yet agreed (it was on the screen already: nothing new).
+  assert.match(source, /if\(!\(shown&&shown\.family===family&&exploration\.ready&&memory&&\(shown\.remembered\|\|shown\.ahead\)\)\)\{finish\(job\);showGround\(job\);\}/);
+  // What is seen from a square the server has not agreed is shown and not remembered.
+  assert.match(source, /memory=!editing&&!gmVision\.manual,remember=memory&&!ahead;/);
   assert.match(source, /const family=JSON\.stringify\(\[c\.state\.boardState\.activeSceneId,c\.levelId,token\?\.id,token\?\.levelId,wallRevision,terrainKey,gmVision\.fogEnabled,wallInspection,inspectionHeight,canvas\.width,canvas\.height,exploration\.key\]\);/);
   assert.match(source, /shown\.remembered=wanted\.remember&&exploration\.ready;/);
   // Creatures and floor plates are tested with the new sight in the frame the token arrives.
   assert.match(source, /sight=!gmVision\.fogEnabled\?\(\)=>true:token\?makeSight\(\{viewer:token,viewerGround,groundAt,walls,terrain:terrainCache\}\):null;/);
-  assert.match(source, /if\(roofKey!==roofPainted\)\{roofPainted=roofKey;roofRenderer\.paint\(/);
+  assert.match(source, /if\(roofKey!==roofPainted\)\{roofPainted=roofKey;roofPaints\+\+;roofRenderer\.paint\(/);
   assert.match(source, /if\(changed\)\{for\(const node of originalTokens\.querySelectorAll\('\[data-placement-id\]'\)\)\{const next=tokenVisible\(/);
   // A player's map is uncovered only by a finished picture of where they are.
   assert.match(source, /if\(!queue\.current\)confirmPlayerHeightPaint\(c\.state,c\.view,c\.isGM,c\.levelId\);/);
   assert.equal((source.match(/confirmPlayerHeightPaint\(/g) || []).length, 1);
   // Only the newest place is asked for; the one it replaces is kept for memory when it should be.
-  assert.match(source, /const job=queue\.ask\(createJob\(key,steps\(\),\{family,path,asked:start\}\),keptForMemory\);/);
-  assert.match(source, /const keptForMemory=job=>!!wanted&&wanted\.mode==='lit'&&wanted\.remember&&job\.family===wanted\.family;/);
+  assert.match(source, /const job=queue\.ask\(groundJob\(key,sight,observer,!ahead\),keptForMemory\);/);
+  assert.match(source, /return createJob\(jobKey,steps\(\),\{family,path,asked:start,remember:memory&&agreedPlace\}\);/);
+  // And only when it was for a square the server had agreed.
+  assert.match(source, /const keptForMemory=job=>!!wanted&&wanted\.mode==='lit'&&wanted\.memory&&job\.remember&&job\.family===wanted\.family;/);
+  // A square the token is drawn on ahead of the server is not worked on until the token has rested there.
+  assert.match(source, /if\(!\(wanted\.ahead&&tickStart-job\.asked<AHEAD_REST\)&&advance\(job,/);
   // Memory catches up when nothing is waiting for the screen, without lighting anything.
   assert.match(source, /else if\(queue\.passed\.length\)catchUpMemory\(\);/);
-  assert.match(source, /if\(exploration\.remember\(job\.path,wanted\.smoothing\)\)memoryGrew=true;\s+if\(memoryGrew&&!queue\.passed\.length\)paintGround\(\);/);
+  assert.match(source, /if\(exploration\.remember\(job\.path,wanted\.smoothing\)\)memoryGrew=true;/);
+  // The screen is drawn again from memory once, and not while the viewer's token is ahead of the server.
+  assert.match(source, /if\(wanted\?\.mode==='lit'&&!queue\.passed\.length&&!wanted\.ahead&&\(memoryGrew\|\|groundPainted!==groundStamp\(\)\)\)paintGround\(\);/);
   const explored = readFileSync(new URL('../explored-fog.mjs', import.meta.url), 'utf8');
   assert.match(explored, /function remember\(path,smoothing=0\)\{\s+if\(!ready\)return false;/);
 });

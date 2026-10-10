@@ -153,5 +153,6 @@ test('the sight layer draws the outline, and still draws by itself a piece the s
   assert.match(source, /const \{whole,alone\}=sortPieces\(pieces\.splice\(0\),projected\);\s+for\(const points of alone\)addRing\(points\);/);
   // The outline is made as the job's last step, in a slice of its own, before the picture is shown.
   assert.match(source, /emit:polygon=>pieces\.push\(polygon\)\}\);yield;seal\(\);return result;\};/);
-  assert.match(source, /const job=queue\.ask\(createJob\(key,steps\(\),\{family,path,asked:start\}\),keptForMemory\);/);
+  assert.match(source, /return createJob\(jobKey,steps\(\),\{family,path,asked:start,remember:memory&&agreedPlace\}\);/);
+  assert.match(source, /const job=queue\.ask\(groundJob\(key,sight,observer,!ahead\),keptForMemory\);/);
 });

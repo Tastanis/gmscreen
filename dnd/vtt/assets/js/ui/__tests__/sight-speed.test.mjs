@@ -94,7 +94,8 @@ test('two things a browser profile found (October 9): how the lit shape is built
   const board = readFileSync(new URL('../board-interactions.js', import.meta.url), 'utf8');
   assert.match(board, /if\(!terrainContextFor\|\|terrainContextFor\.state!==state\|\|terrainContextFor\.userId!==userId\)\{/);
   assert.match(board, /terrainContextFor=\{state,userId,levelId:getViewerLevelIdForCurrentUser\(state,sceneId\),followId:linked\?\.placementId\};/);
-  assert.match(board, /return \{view:viewState,state,levelId:terrainContextFor\.levelId,userId,isGM:isGmUser\(\),followId:terrainContextFor\.followId,selectedIds:\[\.\.\.selectedTokenIds\]\};/);
+  // The square a token drawn ahead by arrow keys may be seen from is handed over only while there is one.
+  assert.match(board, /return \{view:viewState,state,levelId:terrainContextFor\.levelId,userId,isGM:isGmUser\(\),followId:terrainContextFor\.followId,selectedIds:\[\.\.\.selectedTokenIds\],sightSquare:keyboardAhead\.size\?sightSquareOf:null\};/);
 });
 
 test('the wall layer does not mark the walls as changed when only the view changed', () => {

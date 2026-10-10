@@ -197,3 +197,19 @@ test('a drag made while presses wait takes its turn after them; with nothing wai
   g.calls[0].resolve(false); await running;
   assert.equal(await waiting, false); assert.equal(made, false); assert.equal(g.dropped, 1);
 });
+
+test('a square is drawn ahead, and seen from, only when the browser itself finds the way to it clear', async () => {
+  const { readFileSync } = await import('node:fs');
+  const source = readFileSync(new URL('../board-interactions.js', import.meta.url), 'utf8');
+  // A press into a wall or a shut door is not drawn ahead: it waits its turn and the server refuses it.
+  assert.match(source, /if \(!clearToSeeFrom\(record, from, move\)\) return null;/);
+  // The Director's moves are not stopped by walls. Anyone else's are checked with the browser's copy
+  // of the server's wall check; where that cannot be made the answer is no.
+  assert.match(source, /function clearToSeeFrom\(record, from, to\) \{\s+if \(isGmUser\(\)\) return true;\s+const walls = window\.wallPrototype;\s+if \(typeof walls\?\.blockedMove !== 'function'\) return false;/);
+  assert.match(source, /if \(\(record\.levelId \|\| BASE_MAP_LEVEL_ID\) !== \(viewerLevelId \|\| BASE_MAP_LEVEL_ID\)\) return false;\s+return !walls\.blockedMove\(/);
+  // Sight is handed the square a token may be seen from, never simply where it is drawn.
+  assert.match(source, /const sightSquareOf = \(placementId\) => keyboardAhead\.get\(placementId\)\?\.see \?\? null;/);
+  assert.match(source, /see: clear \? square : held\?\.see \?\? null \}\);/);
+  // A drag held at its drop square is seen from only if it was a walk or a shift, and the way is clear.
+  assert.match(source, /if \(waiting\) holdKeyboardAhead\(sceneId, moves, movementKind === 'walk' \|\| movementKind === 'shift'\);/);
+});

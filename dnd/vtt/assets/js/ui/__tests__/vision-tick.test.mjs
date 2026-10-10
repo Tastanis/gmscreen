@@ -159,3 +159,79 @@ test('a change of floor covers the player\'s map until the new floor\'s picture 
   assert.equal(covered(), false);
   assert.ok(portalRefreshes > 5, 'door buttons were put back with each repaint');
 });
+
+// Arrow keys draw a token ahead of the server's answers (board-interactions.js hands sight the
+// square it is drawn on). The store's record still moves one square with each answer.
+test('five arrow presses: one picture, from where the run ends; no repaint as each answer comes; the squares passed are remembered', async () => {
+  // Build 457 on the live host: the token stood on its last square at once, and the lit ground then
+  // stepped through every square behind it, one a second, as the server's answers came in.
+  await untilStill(); drawing();
+  const before = stats();
+  let drawnOn = null; context.sightSquare = (id) => (id === 'hero' ? drawnOn : null);
+  for (const column of [13, 14, 15, 16, 17]) { drawnOn = { column, row: 11 }; await frame(); }
+  assert.deepEqual(window.visionPrototype.observer, { x: 17.5, y: 11.5 }, 'the view is from where the token is drawn');
+  assert.deepEqual(drawing().sight, [], 'no picture for a square the token has already left');
+  assert.equal(stats().memoryWaiting, 0, 'squares the server has not agreed are not kept for memory');
+  while (stats().groundPending) await frame();
+  const shown = drawing();
+  assert.equal(stats().groundRuns, before.groundRuns + 1, 'one picture for the screen');
+  assert.equal(shown.sight.filter((call) => call === 'fillRect').length, 1);
+  assert.equal(shown.memory, 0, 'shown, and not remembered: the server has not agreed the square');
+  // The server's answers, one square at a time. The token is still drawn on (17,11).
+  for (const [index, column] of [13, 14, 15, 16].entries()) {
+    moveHero(column, 11);
+    await frame();
+    assert.equal(stats().groundPending, false, 'an answer for a square already left asks for no picture');
+    await untilStill();
+    const answered = drawing();
+    assert.deepEqual(answered.sight, [], `answer ${index + 1}: the screen is not drawn again`);
+    assert.equal(answered.memory, 1, 'what is seen from the agreed square goes into memory');
+    assert.equal(stats().memoryCatchUps, before.memoryCatchUps + index + 1);
+  }
+  assert.equal(stats().groundRuns, before.groundRuns + 1, 'still the one picture');
+  // The last answer: the square the token stands on is agreed.
+  moveHero(17, 11); context.sightSquare = null;
+  await frame(); await untilStill();
+  const last = drawing();
+  assert.equal(last.sight.filter((call) => call === 'fillRect').length, 1, 'drawn again once, from memory');
+  assert.equal(last.memory, 1, 'and the square stood on is remembered now');
+  assert.equal(stats().groundRuns, before.groundRuns + 1, 'without being worked out again');
+});
+
+test('a refused square: the view goes back with the token, and nothing seen from it is remembered', async () => {
+  await untilStill(); drawing();
+  const before = stats();
+  let drawnOn = { column: 18, row: 11 }; context.sightSquare = (id) => (id === 'hero' ? drawnOn : null);
+  await frame(); drawnOn = { column: 19, row: 11 }; await frame();
+  await untilStill();
+  const ahead = drawing();
+  assert.equal(stats().groundRuns, before.groundRuns + 1);
+  assert.equal(ahead.memory, 0);
+  // The server refuses (18,11): the token is drawn back on (17,11), where the server still has it.
+  context.sightSquare = null;
+  await frame();
+  assert.deepEqual(window.visionPrototype.observer, { x: 17.5, y: 11.5 });
+  assert.equal(stats().groundPending, true, 'the picture from (17,11) is worked out over the next frames, the old one staying meanwhile');
+  assert.deepEqual(drawing().sight, [], 'nothing is drawn in the frame the token goes back');
+  await untilStill();
+  const back = drawing();
+  assert.equal(stats().memoryCatchUps, before.memoryCatchUps, 'no square of the refused run was added to memory');
+  assert.equal(back.memory, 1, 'only the square gone back to, which the server has, is remembered (as it is shown)');
+});
+
+test('a second run begun before the first is answered keeps the board moving, and loses no agreed square', async () => {
+  await untilStill(); drawing();
+  const before = stats();
+  let drawnOn = { column: 18, row: 11 }; context.sightSquare = (id) => (id === 'hero' ? drawnOn : null);
+  await frame(); await untilStill(); drawing();
+  // The answer for (18,11) comes; one frame later, before the screen has been drawn again, the next press.
+  moveHero(18, 11); await frame();
+  drawnOn = { column: 19, row: 11 };
+  let longest = 0; do { const start = clock; await frame(); longest = Math.max(longest, clock - start); } while (stats().groundPending);
+  assert.ok(longest < 40, `the picture from (19,11) was found a slice at a time (longest frame ${longest} readings)`);
+  await untilStill();
+  moveHero(19, 11); context.sightSquare = null; await frame(); await untilStill();
+  const all = drawing();
+  assert.equal(stats().groundRuns, before.groundRuns + 2, 'one picture for each place stopped at');
+  assert.ok(all.memory >= 2, `both agreed squares are in memory (${all.memory} additions)`);
+});
