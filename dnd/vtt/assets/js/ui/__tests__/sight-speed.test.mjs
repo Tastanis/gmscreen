@@ -82,6 +82,21 @@ test('a viewpoint beside, on and inside walls still sees what it saw', () => {
   assert.equal(used({ x: 13, y: 10.5 }, 0), false, 'the ring the viewer stands in still stops sight');
 });
 
+test('two things a browser profile found (October 9): how the lit shape is built, and what every frame asked for', () => {
+  // Closing each piece of the lit shape on the picture itself cost Chrome more the longer the
+  // picture already was: about 200 ms a picture for some 2,800 pieces, against 40 ms for all the
+  // lines of sight. Each piece is closed on a path of its own and added; the pixels are the same.
+  const vision = readFileSync(new URL('../vision-prototype.js', import.meta.url), 'utf8');
+  assert.match(vision, /const piece=new Path2D\(\);points\.forEach\(\(p,i\)=>i\?piece\.lineTo\(p\.x,p\.y\):piece\.moveTo\(p\.x,p\.y\)\);piece\.closePath\(\);path\.addPath\(piece\);/);
+  assert.equal((vision.match(/path\.closePath\(\)/g) || []).length, 0, 'nothing is closed on the whole picture');
+  // Every layer asks for the board's context every frame. The viewer's floor (which checks every
+  // floor's cut-out squares) and their own token are worked out once for each copy of the state.
+  const board = readFileSync(new URL('../board-interactions.js', import.meta.url), 'utf8');
+  assert.match(board, /if\(!terrainContextFor\|\|terrainContextFor\.state!==state\|\|terrainContextFor\.userId!==userId\)\{/);
+  assert.match(board, /terrainContextFor=\{state,userId,levelId:getViewerLevelIdForCurrentUser\(state,sceneId\),followId:linked\?\.placementId\};/);
+  assert.match(board, /return \{view:viewState,state,levelId:terrainContextFor\.levelId,userId,isGM:isGmUser\(\),followId:terrainContextFor\.followId,selectedIds:\[\.\.\.selectedTokenIds\]\};/);
+});
+
 test('the wall layer does not mark the walls as changed when only the view changed', () => {
   const source = readFileSync(new URL('../wall-prototype.js', import.meta.url), 'utf8');
   // A redraw for a new zoom or a new GM viewing height keeps the walls' revision, so the sight

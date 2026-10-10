@@ -26,7 +26,7 @@ window.HTMLCanvasElement.prototype.getContext = function getContext() {
   return this.recorder;
 };
 window.HTMLCanvasElement.prototype.toBlob = function toBlob(callback) { callback(null); };
-globalThis.Path2D = class Path2D { constructor() { this.points = 0; } moveTo() { this.points++; } lineTo() { this.points++; } closePath() {} };
+globalThis.Path2D = class Path2D { constructor() { this.points = 0; this.pieces = 0; } moveTo() { this.points++; } lineTo() { this.points++; } closePath() { this.closed = true; } addPath(piece) { if (!piece.closed) throw new Error('a piece was added before it was closed'); this.points += piece.points; this.pieces++; } };
 // A viewer's memory of the map, with nothing saved yet.
 const request = (result) => { const r = { result }; queueMicrotask(() => r.onsuccess?.()); return r; };
 const store = { get: () => request(undefined), put: () => request(undefined), openCursor: () => request(null) };

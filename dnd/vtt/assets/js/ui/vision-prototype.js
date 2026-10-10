@@ -118,7 +118,11 @@ function tick(){
     const appendProjected=polygon=>{
      const points=[];polygon.forEach((p,i)=>{const end=polygon[(i+1)%polygon.length],steps=Math.max(1,Math.ceil(Math.hypot(end.x-p.x,end.y-p.y)*8));for(let k=0;k<steps;k++)points.push(projected(p.x+(end.x-p.x)*k/steps,p.y+(end.y-p.y)*k/steps));});
      if(points.reduce((sum,p,i)=>{const q=points[(i+1)%points.length];return sum+p.x*q.y-q.x*p.y;},0)<0)points.reverse();
-     points.forEach((p,i)=>i?path.lineTo(p.x,p.y):path.moveTo(p.x,p.y));path.closePath();
+     // Each piece is closed on a small path of its own and then added to the picture. Closing a
+     // piece on the picture itself costs the browser more the longer the picture already is: with
+     // some 2,800 pieces that was about 200 ms a picture, four fifths of the whole repaint. The
+     // shape, and every pixel filled and stroked from it, is the same.
+     const piece=new Path2D();points.forEach((p,i)=>i?piece.lineTo(p.x,p.y):piece.moveTo(p.x,p.y));piece.closePath();path.addPath(piece);
     };
     const visibleGround=(p,z=groundAt(p.x,p.y))=>seen(p,z);
     const job=queue.ask(createJob(key,groundShapeSteps({left,top,right,bottom,visible:visibleGround,walls,origin:observer,groundAt,emit:appendProjected}),{family,path,asked:start}),keptForMemory);

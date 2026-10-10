@@ -711,10 +711,19 @@ export function mountBoardInteractions(store, routes = {}) {
   const boardApi = store ?? {};
   window.submitEnvironmentCommand = descriptor => tokenMovementRuntime.submitBoardDomainCommands([descriptor], true);
   window.submitFlightHeight = (token,flightHeight) => tokenMovementRuntime.submitPlacementOps([{type:'placement.update',sceneId:getActiveSceneId(),placementId:token.id,patch:{flightHeight}}]);
+  // Every layer of the board asks for this every frame. The viewer's floor and their own token are
+  // worked out from the state (checking every floor's cut-out squares, and every token's name), so
+  // they are worked out once for each copy of the state and each user, not once for each asking.
+  // The state is handed out as the same copy until something changes it (store.getState).
+  let terrainContextFor = null;
   window.terrainContext = () => {
-    const state=store.getState(),sceneId=state.boardState.activeSceneId,scene=state.boardState.sceneState?.[sceneId],userId=getCurrentUserId();
-    const linked=resolvePcTokenForUser({userId,placements:state.boardState.placements?.[sceneId],viewerAssociation:scene?.pcTokenAssociations?.[userId]});
-    return {view:viewState,state,levelId:getViewerLevelIdForCurrentUser(state,sceneId),userId,isGM:isGmUser(),followId:linked?.placementId,selectedIds:[...selectedTokenIds]};
+    const state=store.getState(),userId=getCurrentUserId();
+    if(!terrainContextFor||terrainContextFor.state!==state||terrainContextFor.userId!==userId){
+      const sceneId=state.boardState.activeSceneId,scene=state.boardState.sceneState?.[sceneId];
+      const linked=resolvePcTokenForUser({userId,placements:state.boardState.placements?.[sceneId],viewerAssociation:scene?.pcTokenAssociations?.[userId]});
+      terrainContextFor={state,userId,levelId:getViewerLevelIdForCurrentUser(state,sceneId),followId:linked?.placementId};
+    }
+    return {view:viewState,state,levelId:terrainContextFor.levelId,userId,isGM:isGmUser(),followId:terrainContextFor.followId,selectedIds:[...selectedTokenIds]};
   };
   // A creature that walked off an edge may have climbed down instead: no damage, more movement.
   const fallClimbing = {
