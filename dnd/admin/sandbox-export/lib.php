@@ -36,6 +36,9 @@ function sandboxPolicy(string $path): string
     if (preg_match('/(?:secret|credential|password|config\.local|\.env|\/private\/)/i', $path)) return 'excluded:private';
     if (preg_match('/(?:\.lock|\.log|\.tmp|\.part|-wal|-shm|-journal)$/i', $name)) return 'excluded:transient';
     if (preg_match('/(?:backup|_log\.)/i', $name)) return 'excluded:non-runtime';
+    // The dated copy the store writes beside the database before it changes layout (SyncV2Layout). A safety copy,
+    // not part of the running site: never listed, checksummed or downloaded.
+    if (str_contains($name, '.before-split-')) return 'excluded:non-runtime';
     $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
     if (in_array($ext, ['md', 'map'], true)) return 'excluded:documentation';
     if (in_array($ext, ['php', 'js', 'mjs', 'css', 'html', 'htm'], true)) return 'code';

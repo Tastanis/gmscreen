@@ -243,6 +243,13 @@ try {
     $told = vttStorageNotice(['layout' => 'single', 'keptSingleOnRequest' => false, 'lastFailure' => ['at' => 1, 'reason' => 'Not enough room on the disk for the safety copy: 40 MB free, about 276 MB needed.']]);
     layoutCheck(str_contains($told, 'Not enough room on the disk') && str_contains($told, 'nothing is lost') && vttStorageNotice() === $told, 'The Director is told plainly why the world stayed the old way.');
 
+    // ---- The site's export leaves the dated copies and the lock out, and still takes the database ---------
+    require_once __DIR__ . '/../../../../admin/sandbox-export/lib.php';
+    layoutCheck(sandboxPolicy('dnd/vtt/storage/sync-v2.sqlite') === 'sqlite', 'The export still takes the live database.');
+    foreach (['sync-v2.before-split-20261011-101500.sqlite', 'sync-v2.before-split-20261011-101500-2.sqlite', 'sync-v2.before-split-20261011-101500.sqlite.part', 'sync-v2.sqlite.split.lock'] as $name) {
+        layoutCheck(str_starts_with(sandboxPolicy('dnd/vtt/storage/' . $name), 'excluded:'), "The export leaves out {$name}.");
+    }
+
     echo "Storage layout: carry-over, identical read-back, dated copy, frozen old row, changed parts only, rollback, missing part, turn back, split again and a stopped carry-over passed.\n";
 } finally {
     $store = null; $again = null; $fresh = null; $reopened = null; $look = null; $seed = null; $copy = null; $stopped = null; $soon = null; $later = null; $new = null; $memory = null;

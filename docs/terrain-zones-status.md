@@ -1355,7 +1355,7 @@ Tried on the copy of your real data: all 13 scenes compared before and after (to
 - Every command's full record is still kept forever (38 MB of your file, never trimmed).
 - A hit point change still runs the fall check, which reads the map.
 
-**The copies.** Each carry-over leaves one dated copy in `dnd/vtt/storage`. They are refused to visitors by the rule file in that folder (anything with `.sqlite` in its name). Once you are happy with the new layout they can be deleted from the host by hand; nothing reads them.
+**The copies, and how to delete them.** Each carry-over leaves one dated copy in `dnd/vtt/storage` on the host, named `sync-v2.before-split-(date)-(time).sqlite`, about the size of the database (130 MB today). Turning back and splitting again leaves another each time. Nothing reads them: they are refused to visitors by the rule file in that folder (anything with `.sqlite` in its name), and the site's own export for the test sandbox leaves them out. They are there only so the database can be put back by hand if the new layout ever had to be abandoned. To delete them: in cPanel's File Manager open `public_html/dnd/vtt/storage`, select the files whose names start with `sync-v2.before-split-`, and delete. Leave `sync-v2.sqlite` itself and the files beside it ending `-wal` and `-shm` alone. I would keep the newest copy until you have played a session or two on the new layout, then delete it too. The small empty file `sync-v2.sqlite.split.lock` can stay.
 
 ## Where it is now
 
