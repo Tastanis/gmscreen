@@ -127,7 +127,7 @@ test('the sight layer keeps the old picture up only when it hides nothing, and n
   assert.match(source, /if\(!queue\.current\)confirmPlayerHeightPaint\(c\.state,c\.view,c\.isGM,c\.levelId\);/);
   assert.equal((source.match(/confirmPlayerHeightPaint\(/g) || []).length, 1);
   // Only the newest place is asked for; the one it replaces is kept for memory when it should be.
-  assert.match(source, /const job=queue\.ask\(createJob\(key,groundShapeSteps\(\{left,top,right,bottom,visible:visibleGround,walls,origin:observer,groundAt,emit:appendProjected\}\),\{family,path,asked:start\}\),keptForMemory\);/);
+  assert.match(source, /const job=queue\.ask\(createJob\(key,steps\(\),\{family,path,asked:start\}\),keptForMemory\);/);
   assert.match(source, /const keptForMemory=job=>!!wanted&&wanted\.mode==='lit'&&wanted\.remember&&job\.family===wanted\.family;/);
   // Memory catches up when nothing is waiting for the screen, without lighting anything.
   assert.match(source, /else if\(queue\.passed\.length\)catchUpMemory\(\);/);

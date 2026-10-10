@@ -1162,6 +1162,51 @@ passed. One oddity seen once and not repeated: the map picture drawn about
 2% smaller in one GM session on Dead Root. Cause unknown; not from today's
 changes as far as I can tell.
 
+## October 9, night: the last pause on a token move. Built, waiting for the tester
+
+After Build 454 one pause was left on every move, about a tenth of a second,
+in the browser's own drawing of the lit ground. You approved a change there
+that might alter a few pixels on the fog's soft edge: "I approve the
+recommended change."
+
+**What was slow.** The lit ground is found as about three thousand small
+closed pieces: whole squares, halves, the cut squares along every shadow, and
+thin strips. All of them were handed to the browser to fill and outline,
+some 48,000 points on Dead Root (134,000 on the Orchard), and nearly every
+edge it drew lay between two lit pieces, where it shows nothing.
+
+**What happens now.** The browser is handed the outline of the lit ground:
+the same ground, with every stretch of edge that two pieces share taken out.
+About a seventh of the points. Which squares are lit does not change at all:
+at every standing place tried on Dead Root and the Orchard, the outline
+covers exactly what the pieces covered.
+
+**Measured on your PC, your graphics card, the same moves on both builds**
+(Dead Root, with the Orchard and bathhouse loaded; drags and arrow keys,
+zoomed in and out):
+
+| For each token move | Build 454 | With the outline |
+|---|---|---|
+| Long frames | one, 90 to 126 | none |
+| Longest gap between two frames | 117 | 17 to 20 |
+| Lit ground appears after the move | 59 to 85 | 58 to 74 |
+
+(thousandths of a second). Seventeen is one frame at sixty a second: the
+board no longer misses a frame when a token moves.
+
+**What differs to the eye.** I could not find a difference. A picture of the
+fog's edge from each build, enlarged three times, looks the same; the count
+of lit pixels differs by one part in ten thousand. In a test page that draws
+only the lit shape, the differences are tiny teeth on the fog's edge where
+steep ground meets it: today's edge has them, the outline's is smooth.
+
+**Not needed after all:** drawing the lit shape at half size, or once for
+both memory and screen. The outline alone reaches the aim, so the fog's edge
+is drawn at full sharpness exactly as before.
+
+Tests: `sight-outline.test.mjs`. Seen by me in a browser for speed and for
+the edge pictures; the tester has not looked yet.
+
 ## Where it is now
 
 You said to put stages 1 to 3 on `main` on this PC and wait for your word
