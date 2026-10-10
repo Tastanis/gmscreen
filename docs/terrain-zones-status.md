@@ -1111,6 +1111,57 @@ scene, a second player's page.
 
 Tests: `shared-designs.test.mjs`.
 
+## October 9, late: measured in a real browser. Build 454, with the tester
+
+With your Chrome closed I could at last run the board in a browser of my own
+(a throwaway copy on this PC, never the live site), on your graphics card,
+with Dead Root to play on and the Orchard and bathhouse also loaded.
+
+**Why sight took four times longer in the browser than the same sums
+outside it.** One call. Each piece of the lit ground, about 2,800 a picture,
+was "closed" on the one growing picture, and the browser's close costs more
+the longer the picture already is: about 200 thousandths of a second a
+picture, against 40 for every line of sight put together. Each piece is now
+closed on a small picture of its own and then added. Not one pixel differs.
+
+**Also found:** every layer of the board asks "what floor is this viewer on,
+and which token is theirs" every frame, and each asking re-checked every
+floor's cut-out squares and every token's name. Now worked out once for each
+change to the board.
+
+**The same moves on both builds** (real mouse drags and arrow keys, zoomed
+in and out):
+
+| For each token move | Build 452 (live) | Build 454 |
+|---|---|---|
+| Sight code in the frame the token lands | 200 to 235 | 5 to 8 |
+| Long frames | two: about 145 and about 240 | one: 80 to 160, none of it our code |
+| Lit ground appears | in the frozen frame | 70 to 100 later |
+| Four fast arrow presses | one still outstanding when the board settled | all four made |
+
+(thousandths of a second)
+
+**What is left, plainly.** One pause of about a tenth of a second for each
+move, in the browser's own drawing of the lit shape (about 2,800 pieces,
+30,000 points, filled and outlined twice: once for memory, once for the
+screen). None of our code is running during it. So a move is much lighter
+than it was, but not yet under the 50 thousandths we aimed for.
+
+I tried one way to cut it: giving the browser the same lit area as a few
+dozen rectangles in place of a thousand squares. On real moves it sometimes
+halved the pause and sometimes hardly changed it, and it altered about 220
+pixels on the fog's soft edge by a level or two. Not a clean enough gain to
+change what is drawn, so it is not in the build. If 454 still does not feel
+right when you play, the next step is a choice about how the fog's edge is
+drawn, and I will bring you options with pictures.
+
+**Seen by the tester on Build 452 (the live one):** stairs and vines from
+the island at their top, the ruler's "Forced movement 2 · Fall 6", the
+upload's explored-ground fix, the wall lines, doors, explored ground. All
+passed. One oddity seen once and not repeated: the map picture drawn about
+2% smaller in one GM session on Dead Root. Cause unknown; not from today's
+changes as far as I can tell.
+
 ## Where it is now
 
 You said to put stages 1 to 3 on `main` on this PC and wait for your word
