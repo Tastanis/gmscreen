@@ -120,6 +120,33 @@ test('a piece the slant folds over is kept out of the outline and drawn as it al
   assert.deepEqual(sortPieces([backwards], place), { whole: [backwards], alone: [] });
 });
 
+test('the real place: Dead Root\'s walkway cliff at square (54,14), where Build 455 left lit ground dark', async () => {
+  // The ground itself, cut out of the Dead Root map round that square: the mesh's own points (seven
+  // to a square), columns 376 to 384 and rows 96 to 104, heights in squares. It climbs from 0.2 to
+  // 4 across half a square. The tester's picture was of the same fault by the rope bridge.
+  const { sample } = await import('../terrain-math.mjs');
+  const h = [0, 0, 0.217, 0.217, 0.217, 0.233, 0.511, 1.322, 2.44, 0, 0, 0.217, 0.217, 0.239, 0.553, 1.473, 2.661, 3.626, 0, 0, 0.217, 0.233, 0.547, 1.573, 2.824, 3.747, 3.99, 0, 0, 0.222, 0.528, 1.588, 2.865, 3.751, 3.993, 4, 0, 0, 0.393, 1.429, 2.777, 3.72, 3.993, 4, 4, 0, 0, 1.058, 2.491, 3.615, 3.984, 4, 4, 4, 0, 0, 1.915, 3.329, 3.95, 4, 4, 4, 4, 0, 0, 2.667, 3.808, 4, 4, 4, 4, 4, 0, 0, 3.183, 1.95, 1.964, 1.964, 1.964, 1.964, 1.964];
+  const ground = { n: 9, m: 9, h: Float32Array.from(h) }, x0 = 376 / 7, y0 = 96 / 7, span = 8 / 7, g = 72;
+  const groundAt = (x, y) => sample(ground, (x - x0) / span, (y - y0) / span);
+  const place = (x, y) => ({ x: x * g + groundAt(x, y) * g * 0.12, y: y * g - groundAt(x, y) * g * 0.36 });
+  const twiceArea = (r) => r.reduce((sum, p, i) => { const q = r[(i + 1) % r.length]; return sum + p.x * q.y - q.x * p.y; }, 0);
+  // The lit half-square on the cliff, and the level one beside it at its foot.
+  const onTheFace = [{ x: 54, y: 14 }, { x: 54.5, y: 14 }, { x: 54.5, y: 14.5 }, { x: 54, y: 14.5 }], atTheFoot = [{ x: 53.75, y: 14 }, { x: 54, y: 14 }, { x: 54, y: 14.25 }, { x: 53.75, y: 14.25 }];
+  const corners = twiceArea(onTheFace.map((p) => place(p.x, p.y))), everyPoint = twiceArea(placedPoints(onTheFace, place));
+  assert.ok(corners > 1000 && everyPoint < -150, `its corners say it lies the right way up (${corners.toFixed(0)}); the points it is placed by say it is turned over (${everyPoint.toFixed(0)})`);
+  const { whole, alone } = sortPieces([onTheFace, atTheFoot], place);
+  assert.deepEqual(whole, [atTheFoot], 'the level piece shares the outline');
+  assert.equal(alone.length, 1, 'the piece on the face is drawn by itself');
+  assert.ok(twiceArea(alone[0]) > 0, 'turned so that its screen area counts as lit, as it always was');
+  // Drawn so, the ground it covers on the screen is lit: a point inside its larger lobe is wound round.
+  const lobe = alone[0].reduce((c, p) => ({ x: c.x + p.x / alone[0].length, y: c.y + p.y / alone[0].length }), { x: 0, y: 0 });
+  const drawn = [alone[0], ...outlineOf(whole).map((loop) => stepped(loop).map((p) => place(p.x, p.y)))];
+  const lit = (rings) => { let inside = 0; for (let dx = -6; dx <= 6; dx += 3) for (let dy = -6; dy <= 6; dy += 3) if (windingAt(rings, { x: lobe.x + dx + 0.13, y: lobe.y + dy + 0.29 }) !== 0) inside++; return inside; };
+  const before = [placedPoints(onTheFace, place), placedPoints(atTheFoot, place)].map((points) => (twiceArea(points) < 0 ? points.reverse() : points));
+  assert.equal(lit(drawn), lit(before), 'as much of it lit as when every piece was drawn by itself');
+  assert.ok(lit(before) > 10);
+});
+
 test('the sight layer draws the outline, and still draws by itself a piece the slant folds over', () => {
   const source = readFileSync(new URL('../vision-prototype.js', import.meta.url), 'utf8');
   assert.match(source, /for\(const loop of outlineOf\(whole\)\)addRing\(stepped\(loop\)\.map\(p=>projected\(p\.x,p\.y\)\)\);/);
