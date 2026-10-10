@@ -42,7 +42,9 @@ test('raised room edge contact retains support over basements without acquiring 
  assert.equal(walkFloorContact(from,to,[],[s],levels,()=>0),null,'No ceiling acquisition');
  assert.equal(walkFloorContact(from,to,[],[s],{levels:[{id:'room',hidden:true}]},()=>2),null);
  assert.equal(walkFloorContact({...from,movementMode:'fly',flightHeight:3},to,[],[s],levels,()=>2),null);
- assert.equal(walkFloorContact(from,to,[],[s],levels,()=>1.8),null,'No large step');
+ // A plate within half a square of where the walker stands is stepped onto (it cannot be walked under); beyond that it is not.
+ assert.equal(walkFloorContact(from,to,[],[s],levels,()=>1.8),s,'a fifth of a square up is a step, not a gap to fall through');
+ assert.equal(walkFloorContact(from,to,[],[s],levels,()=>1.4),null,'No large step');
 });
 
 test('a walker standing level with a deck it overlaps is on it, so a bridge that ends on the land can be crossed',()=>{
@@ -56,9 +58,12 @@ test('a walker standing level with a deck it overlaps is on it, so a bridge that
  assert.equal(walkFloorContact(onLanding,{column:8,row:1},[{column:4,row:1}],[bridge],levels,land),bridge,'through a waypoint too');
  // Walking back onto the land and off the bridge's footprint leaves it.
  assert.equal(walkFloorContact({...onLanding,column:3,_supportSurfaceId:'bridge'},{column:0,row:1},[],[bridge],levels,land),null);
- // Not level: the land is more than a tenth of a square above or below the deck.
- assert.equal(walkFloorContact(onLanding,{column:6,row:1},[],[bridge],levels,p=>p.column<2.5?2.2:0),null,'a real step down onto the deck is not bridged');
- assert.equal(walkFloorContact(onLanding,{column:6,row:1},[],[bridge],levels,p=>p.column<2.5?1.8:0),null,'a real step up is not bridged');
+ // Land a little above or below the deck is still the deck's landing: within half a square the walker is carried.
+ assert.equal(walkFloorContact(onLanding,{column:6,row:1},[],[bridge],levels,p=>p.column<2.5?2.2:0),bridge,'a bank a fifth of a square higher');
+ assert.equal(walkFloorContact(onLanding,{column:6,row:1},[],[bridge],levels,p=>p.column<2.5?1.8:0),bridge,'a bank a fifth of a square lower');
+ // Not level: the land is more than half a square above or below the deck.
+ assert.equal(walkFloorContact(onLanding,{column:6,row:1},[],[bridge],levels,p=>p.column<2.5?2.6:0),null,'a real step down onto the deck is not bridged');
+ assert.equal(walkFloorContact(onLanding,{column:6,row:1},[],[bridge],levels,p=>p.column<2.5?1.4:0),null,'a real step up is not bridged');
  // Under the bridge, in the canal: never lifted onto it.
  assert.equal(walkFloorContact({column:5,row:1,width:1,height:1,levelId:'level-0'},{column:7,row:1},[],[bridge],levels,()=>0),null);
  // A flier is not put on it.

@@ -134,10 +134,24 @@ final class FloorSupport {
   return $best;
  }
 
- /** Follow nearly flush floor edges, retaining support over excavated terrain.
-  * Contact is acquired at an edge, never by comparing a distant endpoint with
-  * the starting height. Teleports and stair traversal do not use this path.
+ /**
+  * Stepping onto a floor plate (a walkway, a deck, a bridge). A walker with no plate under it is
+  * on a plate as soon as its square is over any of the plate and the plate's top is within
+  * PLATE_REACH of where the walker stands, up or down.
+  *
+  * It used to be within a tenth of a square, and only at the moment the two first touched. Where
+  * the walker stands is the ground under its centre: at a bridge head the bank a square to the
+  * side is often a quarter of a square lower than the deck, and a big token's centre is still on
+  * the stair below the landing. So a diagonal step onto a bridge, or a size 2 walker at the top of
+  * a stair, missed the plate and went on along the ground UNDER it. A plate less than a square
+  * above a walker's feet cannot be walked under, so within half a square the only true answer is
+  * "on it"; and a walker that somehow stands with a plate at its feet is put on it by its next
+  * step. Once on a plate a walker keeps it while any of its square is still over it, as before.
+  * Template cubes keep their own rule (first touch, a tenth of a square, or a touching cube).
+  * Teleports and stair traversal do not use this path. Paired with walkFloorContact in
+  * floor-support.js.
   */
+ public const PLATE_REACH=.5;
  public static function walkContact(array $from,array $to,array $path,array $surfaces,array $mapLevels,callable $terrain):?array {
   if(FloorGeometry::isAirborne($from)||!empty($from['_floorTraversal']))return null;
   $levels=self::levels($mapLevels);
@@ -163,9 +177,10 @@ final class FloorSupport {
      // all the time a push took.
      $ground=null;
      foreach($floors as $s){
-      if(abs($s['height']-$height)>.1+1e-6||($support&&$s['height']<=$support['height']))continue;
+      $cube=!empty($s['templateCube'])||!empty($priorSupport['templateCube']);
+      if(abs($s['height']-$height)>($cube?.1:self::PLATE_REACH)+1e-6||($support&&$s['height']<=$support['height']))continue;
       if($s['height']<($ground??=$terrain($p))-.1-1e-6||!$overlap($p,$s))continue;
-      if(!$overlap($previous,$s)||($priorSupport&&(!empty($priorSupport['templateCube'])||!empty($s['templateCube']))&&self::cubeTouches($priorSupport,$s)))$support=$s;
+      if(!$cube||!$overlap($previous,$s)||($priorSupport&&self::cubeTouches($priorSupport,$s)))$support=$s;
      }
     }
     $previous=$p;

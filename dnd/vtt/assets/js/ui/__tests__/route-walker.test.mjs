@@ -68,9 +68,10 @@ test('what must not change: wading under the bridge, a real climb, fliers, a tok
   const wader = walk(hero(4, 5), [4, 5], [6, 5]);
   assert.deepEqual(wader.heights, [0, 0, 0]);
   assert.equal(wader.ghost._supportSurfaceId, null);
-  // Along the canal bed under the bridge and up the far bank: still a real two-square climb.
+  // Along the canal bed under the bridge and up the far bank: still a real two-square climb. At the
+  // top it stands on the bank where the bridge's end lies over it, so it is on the bridge's end.
   const climber = walk(hero(5, 6), [5, 6], [5, 9]);
-  assert.deepEqual(climber.heights, [0, 0, 0, 2.01]);
+  assert.deepEqual(climber.heights, [0, 0, 0, 2]);
   assert.equal(climber.climbExtra, 2);
   assert.equal(climber.cost, 2 + 4);
   // A flier is not put on the bridge by the preview.
@@ -88,12 +89,17 @@ test('what must not change: wading under the bridge, a real climb, fliers, a tok
   assert.equal(walker.ghost, null);
 });
 
-test('stepping off the side of a bridge drops to the ground below, and a step up of more than a tenth is not bridged', () => {
+test('stepping off the side of a bridge drops to the ground below, and a step up of more than half a square is not bridged', () => {
   const side = walk(hero(5, 5, { _supportSurfaceId: 'bridge' }), [5, 5], [7, 5]);
   assert.deepEqual(side.heights, [2, 0, 0], 'the preview shows the drop the move will make');
-  // A bank a quarter of a square lower than the bridge: not level, so the walker is not carried.
-  const lowBank = (x, y) => (y >= 3 && y < 9 ? 0 : 1.7);
-  const walker = createRouteWalker({ actor: hero(5, 1), surfaces: [bridge], mapLevels: { levels: [] }, terrain: (p) => lowBank(p.column + .5, p.row + .5), plainHeight: (c, r) => lowBank(c + .5, r + .5) });
-  const steps = routeSteps({ column: 5, row: 1 }, { column: 5, row: 5 }, (c, r) => walker.height(c, r));
-  assert.deepEqual(steps.points.map((p) => p.rawHeight), [1.7, 1.7, 0, 0, 0]);
+  const over = (bank) => {
+    const ground = (x, y) => (y >= 3 && y < 9 ? 0 : bank);
+    const walker = createRouteWalker({ actor: hero(5, 1), surfaces: [bridge], mapLevels: { levels: [] }, terrain: (p) => ground(p.column + .5, p.row + .5), plainHeight: (c, r) => ground(c + .5, r + .5) });
+    return routeSteps({ column: 5, row: 1 }, { column: 5, row: 5 }, (c, r) => walker.height(c, r)).points.map((p) => p.rawHeight);
+  };
+  // A bank a quarter of a square lower than the bridge (the bridge heads on Dead Root, a square to
+  // the side of the lane): the walker used to miss the bridge and walk on along the canal bed under it.
+  assert.deepEqual(over(1.7), [1.7, 2, 2, 2, 2], 'stepped up onto the bridge where its end lies over the bank');
+  // More than half a square lower is not the bridge's landing: the walker is not carried.
+  assert.deepEqual(over(1.4), [1.4, 1.4, 0, 0, 0]);
 });

@@ -16,6 +16,7 @@ import {nearStair} from './stair-walk.mjs';
 import {viewSlant,slantVector,edgeFaces,usesHeightView} from './height-view.mjs';
 import {pointAtHeight,pickDrawn,pickView} from './pointer-pick.mjs';
 import {createRulerPass,passActorKey} from './ruler-pass.mjs';
+import {getCurrentMeasurementPoints} from './drag-ruler.js';
 const $=s=>document.querySelector(s);
 const image=$('#vtt-map-image'),transform=$('#vtt-map-transform'),surface=$('#vtt-map-surface'),board=$('#vtt-board-canvas');
 const canvas=document.createElement('canvas');canvas.id='terrain-canvas';
@@ -170,7 +171,10 @@ function tick(now){
    if(!active){if(token.style.translate)token.style.translate='';if(token.style.scale)token.style.scale='';continue;}
    const placement=placementById.get(token.dataset.placementId||token.dataset.terrainSourceId);
    if(placement&&token.dataset.placementId&&token.dataset.terrainSourceId!==placement.id)token.dataset.terrainSourceId=placement.id;
-   const z=placement?Math.max(groundFor(placement,{x,y}),token.dataset.vttDragGhost&&['fly','hover'].includes(placement.movementMode)?heightAt(x,y):-Infinity):heightAt(x,y),g=dimensions().grid;
+   const g=dimensions().grid;
+   // The ghost of a dragged token is drawn where letting go would put the token (dropHeight below).
+   const dropped=placement&&token.dataset.vttDragGhost?dropHeight(placement,Math.round((matrix.m41-(ctx.view.gridOffsets.left||0))/g),Math.round((matrix.m42-(ctx.view.gridOffsets.top||0))/g)):null;
+   const z=dropped??(placement?Math.max(groundFor(placement,{x,y}),token.dataset.vttDragGhost&&['fly','hover'].includes(placement.movementMode)?heightAt(x,y):-Infinity):heightAt(x,y));
    const value=`${z*g*tokenSlant.x}px ${-z*g*tokenSlant.y}px`;if(token.style.translate!==value)token.style.translate=value;const heightText=z.toFixed(2);if(token.dataset.terrainHeight!==heightText)token.dataset.terrainHeight=heightText;
    const targetScale=relativeScale(z,viewerHeight),oldHeight=tokenHeights.get(token.dataset.placementId),whole=groundSquare(z);
    if(token.style.transition)token.style.transition='';if(token.style.scale)token.style.scale='';const placed=`translate3d(${matrix.m41}px, ${matrix.m42}px, 0px)`;const scaled=`${placed} scale(${targetScale})`;if(token.style.transform!==scaled)token.style.transform=scaled;
@@ -266,6 +270,28 @@ function routeNow(start,end,options={}){
  const walked=routeSteps(start,end,(column,row)=>walker.height(column,row),zones?.stepMultiplier?(column,row,rawHeight)=>zones.stepMultiplier(actor,column,row,rawHeight):null,options.ignoreClimb?null:(a,b)=>climbFace(actor,a,b));
  if(options.carry)options.carry.ghost=walker.ghost;
  return walked;
+}
+// Where a dragged token would stand if it were let go on a square: the end of the ruler's own walk
+// of the move (routeNow above: onto plates and bridges, along stairs and ramps, as the move itself
+// goes). The walk is along the ruler's points when the ruler is this drag's, and straight
+// otherwise, which are the very points the drop sends to the server.
+//
+// The ghost used to be drawn at the ground under its square with the footing the token had where it
+// was picked up: under a walkway while the drop would put the token on it, and floating at a
+// walkway's height over the foot of the stair it was being dragged down. Null for a flier, and on
+// a scene with no imported design: the ghost is then drawn as it always was.
+let dropMemo=null;
+function dropHeight(placement,column,row){
+ if(!importedDesign()||['fly','hover'].includes(placement.movementMode))return null;
+ const ruler=getCurrentMeasurementPoints(),dx=ruler.length>1?placement.column-ruler[0].column:0,dy=ruler.length>1?placement.row-ruler[0].row:0,last=ruler[ruler.length-1];
+ const own=ruler.length>1&&Math.abs(last.column+dx-column)<.01&&Math.abs(last.row+dy-row)<.01;
+ const points=own?ruler.map(p=>({column:p.column+dx,row:p.row+dy})):[{column:placement.column,row:placement.row},{column,row}];
+ const key=JSON.stringify([passActorKey(placement),points,window.wallPrototype?.revision,sharedTerrainRevision]);
+ if(dropMemo?.key===key)return dropMemo.height;
+ const carry={};let height=null;
+ for(let i=1;i<points.length;i++){const walked=routeNow(points[i-1],points[i],{actor:placement,ignoreZones:true,ignoreClimb:true,carry});height=walked.points[walked.points.length-1].rawHeight;}
+ dropMemo={key,height:Number.isFinite(height)?height:null};
+ return dropMemo.height;
 }
 // On a scene with ramps a previewed walk follows them (route-walker.mjs): this is where a token
 // with the ghost's floor and stair progress stands. Null on a scene with none, where nothing changes.

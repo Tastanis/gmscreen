@@ -101,7 +101,8 @@ foreach ([['flush',2.,2.,2.],['slope',2.,0.,2.],['pit',2.,0.,2.],['lower plate',
  same($land['id'],'paving',"$label flier lands on plate");
 }
 same(FloorSupport::walkContact($walker,['column'=>8,'row'=>1],[],[$plate],$contactLevels,fn($p)=>$p['column']<.5?2.:0.),null,'Distant starting height cannot bridge a pit before the entrance');
-same(FloorSupport::walkContact($walker,$at,[],[$plate],$contactLevels,fn($p)=>1.8),null,'A real step over tolerance is not acquired');
+same(FloorSupport::walkContact($walker,$at,[],[$plate],$contactLevels,fn($p)=>1.8)['id']??null,$plate['id'],'A plate a fifth of a square above the walker is stepped onto');
+same(FloorSupport::walkContact($walker,$at,[],[$plate],$contactLevels,fn($p)=>1.4),null,'A real step over tolerance is not acquired');
 same(FloorSupport::landing([...$walker,...$at],[$plate],$contactLevels,1.,0.)['levelId'],'level-0','Flier below ceiling never lands above it');
 same(FloorSupport::landing([...$walker,...$at],[$plate],$hidden,3.,0.)['levelId'],'level-0','Hidden floor is not a landing');
 same(FloorSupport::landing([...$walker,...$at],[$holed],$contactLevels,3.,0.)['levelId'],'level-0','Landing respects holes');

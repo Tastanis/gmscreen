@@ -12,8 +12,11 @@ deckCheck((FloorSupport::terrainContact($onLanding, [$bridge], $levels, 2.02, .1
 deckCheck((FloorSupport::walkContact($onLanding, ['column' => 6, 'row' => 1], [], [$bridge], $levels, $land)['id'] ?? null) === 'bridge', 'A walker level with the bridge it overlaps is carried along it');
 deckCheck((FloorSupport::walkContact($onLanding, ['column' => 8, 'row' => 1], [['column' => 4, 'row' => 1]], [$bridge], $levels, $land)['id'] ?? null) === 'bridge', 'Through a waypoint too');
 deckCheck(FloorSupport::walkContact([...$onLanding, 'column' => 3, '_supportSurfaceId' => 'bridge'], ['column' => 0, 'row' => 1], [], [$bridge], $levels, $land) === null, 'Walking back onto the land leaves the bridge');
-deckCheck(FloorSupport::walkContact($onLanding, ['column' => 6, 'row' => 1], [], [$bridge], $levels, fn($p) => $p['column'] < 2.5 ? 2.2 : 0.0) === null, 'A real step down is not bridged');
-deckCheck(FloorSupport::walkContact($onLanding, ['column' => 6, 'row' => 1], [], [$bridge], $levels, fn($p) => $p['column'] < 2.5 ? 1.8 : 0.0) === null, 'A real step up is not bridged');
+// Land a little above or below the deck is still its landing: within half a square the walker is carried.
+deckCheck((FloorSupport::walkContact($onLanding, ['column' => 6, 'row' => 1], [], [$bridge], $levels, fn($p) => $p['column'] < 2.5 ? 2.2 : 0.0)['id'] ?? null) === 'bridge', 'A bank a fifth of a square higher is the landing');
+deckCheck((FloorSupport::walkContact($onLanding, ['column' => 6, 'row' => 1], [], [$bridge], $levels, fn($p) => $p['column'] < 2.5 ? 1.8 : 0.0)['id'] ?? null) === 'bridge', 'A bank a fifth of a square lower is the landing');
+deckCheck(FloorSupport::walkContact($onLanding, ['column' => 6, 'row' => 1], [], [$bridge], $levels, fn($p) => $p['column'] < 2.5 ? 2.6 : 0.0) === null, 'A real step down is not bridged');
+deckCheck(FloorSupport::walkContact($onLanding, ['column' => 6, 'row' => 1], [], [$bridge], $levels, fn($p) => $p['column'] < 2.5 ? 1.4 : 0.0) === null, 'A real step up is not bridged');
 deckCheck(FloorSupport::walkContact(['column' => 5, 'row' => 1, 'width' => 1, 'height' => 1, 'levelId' => 'level-0'], ['column' => 7, 'row' => 1], [], [$bridge], $levels, fn($p) => 0.0) === null, 'A walker under the bridge is never lifted onto it');
 deckCheck(FloorSupport::walkContact([...$onLanding, 'movementMode' => 'fly', 'flightHeight' => 2.0], ['column' => 6, 'row' => 1], [], [$bridge], $levels, $land) === null, 'A flier is not put on it');
 echo "A walker level with a deck it overlaps is on it; steps, underpasses and fliers are unchanged.\n";
