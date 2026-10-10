@@ -5,10 +5,12 @@ is in `dnd/vtt/`; native `.dam`, exported images and map-specific conversion inp
 remain separate local artifacts. The older workflow below explains map preparation,
 alignment and regression scenarios, but its prototype source paths are historical.
 
-For existing sandbox code updates, use the repository's
-`tools/build-map-runtime-package.py` and `tools/install-local-map-runtime.py` under
-`dnd/vtt/`. The old local `update-sandbox.py` delegates to those tools. Do not run
-setup/build scripts that install scene data merely to update code.
+The prototype sandbox this guide was first written against (port 18769,
+`.playwright-mcp/terrain-prototype/runtime/`) was removed on October 9, 2026, so
+`update-sandbox.py` and the `runtime/current-vtt-app.json` pointer no longer lead
+anywhere. To test a map now, use a throwaway local copy of `main` or ask the tester
+for a slot: see "Where to test now" in section 1. Do not run setup/build scripts
+that install scene data merely to update code.
 
 Install terrain, nodes/segments, surfaces and ramps into canonical scene environment
 through authenticated GM commands/import. Do not store a map design only in browser
@@ -41,20 +43,24 @@ Paths below are relative to the repository root unless linked otherwise.
 | Matched exported images | `.playwright-mcp/terrain-prototype/observatory-test/observatory_00.jpg` through `observatory_03.jpg` |
 | Coordinate conversion and import generation | [prepare.py](../.playwright-mcp/terrain-prototype/observatory-test/prepare.py) → `import.json` and `observatory-test.mjs` |
 | Example canonical scene installation | [setup.cjs](../.playwright-mcp/terrain-prototype/observatory-test/setup.cjs); inspect before running—it writes configuration and token positions |
-| Active sandbox root | `.playwright-mcp/terrain-prototype/runtime/current-vtt-app.json` |
-| Refresh existing sandbox code | [update-sandbox.py](../.playwright-mcp/terrain-prototype/update-sandbox.py) |
+| Where to test now | A throwaway local copy of `main`, or a slot with the tester (below). The old sandbox root `runtime/current-vtt-app.json` and `update-sandbox.py` are retired |
 
 **The prototype directory is ignored by Git.** These links refer to local working artifacts, not files guaranteed to exist in a fresh checkout. For another machine or future handoff, preserve the native map, complete exports, conversion inputs, prototype modules, scripts, tests, and HANDOFF together. If absent, recover that bundle; do not invent missing metadata or treat production code as the tested prototype.
 
-The current example URL is `http://127.0.0.1:18769/dnd/vtt/`. Verify the runtime pointer and loopback fixture manifest rather than assuming that port still identifies the same sandbox. The `?observatory=446` URL suffix is not the installed build number.
+**Where to test now (October 9, 2026).** The sandbox at `http://127.0.0.1:18769/dnd/vtt/` no longer exists. Do one of two things, and never test on the live site:
+
+- **Ask the tester for a slot.** The tester owns the browser on this PC and keeps its own sandbox; send it the package and the squares to check.
+- **Make a throwaway local copy of `main`.** `git archive main dnd | tar -x` into a new folder under `.playwright-mcp/`, run `git init` and one commit there, build a fixture, and serve it with PHP on a loopback port. `terrain-prototype/gravity-orchard/create-fixture.py` and `start-server.sh` do exactly this (port 18833). Send the folder to the Recycle Bin when the result is written down.
+
+The `?observatory=446` URL suffix in older notes is not an installed build number.
 
 ## 2. Preservation rules
 
 1. Keep the user's original `.dam` and the latest Dungeon Alchemist-saved revision. Work in a separately named copy when generating or experimenting.
 2. Do not replace the authoritative map with `background export.dam`. That experiment removed stairs and was rejected. The complete v3 map is the approved example.
 3. Do not rerun `build-native.py` over the saved map during maintenance: it regenerates identifiers and can overwrite application edits.
-4. Do not run `build.py` to refresh an existing sandbox: it rebuilds/reset its state. Use `update-sandbox.py`, which preserves database and uploads.
-5. Do not edit only the runtime copy; it will be overwritten on the next update. Change the prototype source, then update the sandbox.
+4. Do not run `build.py` or `update-sandbox.py`: both served the prototype sandbox, which was removed on October 9, 2026. A test copy is made fresh from `main` each time (section 1).
+5. Do not edit code inside a test copy; it is thrown away. Code changes go to `main` through the coder, map changes into the map's converter.
 6. `setup.cjs` is installation/setup, not a routine refresh. Inspect its scene IDs, map URL, levels, cutouts, and placements before adapting it for another map.
 7. Keep shared scene writes on authenticated Sync V2 commands. No direct SQLite snapshot edits, whole-board replacement, player impersonation, or bypassing entity revisions.
 8. A prototype fix is not a production release. Keep code deployment, map installation, multiplayer verification, and publication claims separate.
@@ -201,17 +207,11 @@ All filenames in this table live under `.playwright-mcp/terrain-prototype/`. The
 5. **Persistence/multiplayer pass:** explicitly Show Players the test scene, verify actual player rendering plus accepted canonical positions/floors, and reload both clients. Receipt of events alone does not prove the player is looking at the correct map.
 6. **Regression pass:** rerun the relevant older scenario after a fix. Check the user's existing tab as well as a fresh browser context when results differ. Compare saved geometry, token height/traversal, viewer settings, and source images before blaming caching.
 
-Before any fixture writes, verify `/diagnostic-manifest.json` identifies `terrain-prototype`. Use only the intended loopback test scene. Update the sandbox using:
-
-```powershell
-python .playwright-mcp/terrain-prototype/update-sandbox.py
-```
-
-Hard-refresh the browser and confirm the actual installed version. Do not rebuild the database to solve a cache problem.
+Run these passes on a throwaway local copy of `main` or in a slot with the tester (section 1, "Where to test now"); the prototype sandbox and its `update-sandbox.py` are gone. Before any fixture writes, confirm the page is served from a loopback address and from the copy you just made. Use only the intended test scene. Confirm the build number the page shows is the one you archived. Do not rebuild a database to solve a cache problem: hard-refresh, or make a fresh copy.
 
 ### Regression entry points
 
-Read the scripts before running them: several mutate fixture positions, activate scenes, or depend on current state. Browser tests use Playwright and may require local process-launch approval. Do not run tests that move the same token concurrently with each other or the user.
+Read the scripts before running them: several mutate fixture positions, activate scenes, or depend on current state. The browser scripts in this table were written against the removed prototype sandbox (port 18769) and need their address and scene changed before they run on a fresh copy. Browser tests use Playwright and may require local process-launch approval. Do not run tests that move the same token concurrently with each other or the user.
 
 | Scenario | Test under prototype root |
 |---|---|
