@@ -10,7 +10,7 @@
 // the start of the drag before the selection had caught up, so the start and the rest of the drag
 // used different heights and the token landed off by the floor's height times the slant. And a
 // pointer over any floor higher than the token was read as a point on the token's own floor.
-import { rampPick, rampHeight, rampPlane } from './imported-ramps.mjs';
+import { rampPick, rampHeight, rampPlane, inLandingPeek } from './imported-ramps.mjs';
 import { onSurface } from './stacked-surfaces.mjs';
 import { seesRampTop } from './surface-facing.mjs';
 
@@ -56,7 +56,35 @@ export function pickDrawn(raw, { slant, surfaces = [], ramps = [], view = null }
     if (height === null || (best && height <= best.height) || !rampDrawn(ramp, point, height, view)) continue;
     best = { ...point, height, ramp };
   }
+  // The landing at the head of a stair, arch or vine the viewer can see. A viewer on the ramp, or
+  // at its foot, has the floor at its top above their eyes: that floor is not drawn for them, so a
+  // pointer just past the end of the ramp used to be read as the ground far beneath it, and a hero
+  // dragged "to the top of the arch" walked off its end and fell (the tester, Gravity Orchard,
+  // Build 460). The one square of that floor beyond the ramp's head, as wide as the ramp, is
+  // picked whenever the ramp's own head is. Nothing more is drawn; only the pointer's meaning changes.
+  for (const ramp of ramps) {
+    const head = rampHead(ramp);
+    if (!head || !rampDrawn(ramp, head, ramp.height, view)) continue;
+    for (const floor of surfaces) {
+      if (floor?.kind !== 'floor' || !(floor.points?.length > 2)) continue;
+      const height = Number(floor.height) || 0;
+      if (Math.abs(height - ramp.height) > 1e-6 || (best && height <= best.height)) continue;
+      const point = pointAtHeight(raw, height, slant);
+      if (inLandingPeek([ramp], point) && onSurface(floor, point)) best = { ...point, height, floor, landing: ramp };
+    }
+  }
   return best;
+}
+
+/** The middle of a ramp's top edge, just inside it: where it meets the floor it climbs to. */
+function rampHead(ramp) {
+  const x = (ramp.left + ramp.right) / 2, y = (ramp.top + ramp.bottom) / 2, inside = 1e-3;
+  switch (ramp.direction || 'north') {
+    case 'south': return { x, y: ramp.bottom - inside };
+    case 'east': return { x: ramp.right - inside, y };
+    case 'west': return { x: ramp.left + inside, y };
+    default: return { x, y: ramp.top + inside };
+  }
 }
 
 /**

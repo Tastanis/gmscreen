@@ -158,3 +158,34 @@ test('reading a point at a height undoes the slant exactly', () => {
     assert.ok(Math.abs(back.x - 12.25) < 1e-9 && Math.abs(back.y - 40.75) < 1e-9, `${amount} at ${h}`);
   }
 });
+
+test('the landing at the head of a stair the viewer can see is picked, though the floor there is above their eyes', () => {
+  // The tester, Gravity Orchard, Build 460. Arch A3: columns 17 to 19, rows 46 to 52, from the mid
+  // island (12) up to the high island (18), rising to the south. A hero at its foot, or on it,
+  // dragged to the island square at its head (18,52): the island is above the hero's eyes, so it
+  // is not drawn and was not picked; the pointer was read as the ground far beneath and the hero
+  // walked off the end of the arch for a fall of 12 to 14.
+  const slant = { x: 0.04, y: 0.12 };
+  const arch = { id: 'arch', left: 17, right: 19, top: 46, bottom: 52, base: 12, height: 18, direction: 'south', fromLevel: 'mid', toLevel: 'high' };
+  const island = { id: 'island', kind: 'floor', levelId: 'high', height: 18, points: [{ x: 16, y: 52 }, { x: 21, y: 52 }, { x: 21, y: 57 }, { x: 16, y: 57 }] };
+  const elsewhere = { id: 'far', kind: 'floor', levelId: 'high', height: 18, points: [{ x: 30, y: 52 }, { x: 34, y: 52 }, { x: 34, y: 56 }, { x: 30, y: 56 }] };
+  const drawnAt = (column, row, height) => ({ x: column + 0.5 + height * slant.x, y: row + 0.5 - height * slant.y });
+  const pick = (viewer, ground, column, row, height) => pickDrawn(drawnAt(column, row, height), { slant, surfaces: [island, elsewhere], ramps: [arch], view: pickView({ token: { column: viewer[0], row: viewer[1], width: 1, height: 1 }, ground }) });
+  for (const [where, viewer, ground] of [['at the foot', [18, 45], 12], ['on the arch', [18, 48], 14.5]]) {
+    const head = pick(viewer, ground, 18, 52, 18);
+    assert.equal(head?.floor?.id, 'island', `${where}: the island square at the head is picked`);
+    assert.deepEqual([Math.floor(head.x), Math.floor(head.y), head.height], [18, 52, 18]);
+    assert.equal(pick(viewer, ground, 17, 52, 18)?.floor?.id, 'island', `${where}: across the arch's whole width`);
+    // Only the one square beyond the head, and only as wide as the arch: the rest of the island stays unpicked from below.
+    assert.equal(pick(viewer, ground, 18, 53, 18), null, `${where}: not the second square in`);
+    assert.equal(pick(viewer, ground, 20, 52, 18), null, `${where}: not beside the arch`);
+    assert.equal(pick(viewer, ground, 31, 53, 18), null, `${where}: not another floor at that height`);
+    // The arch itself is picked as before.
+    assert.equal(pick(viewer, ground, 18, 49, 15.5)?.ramp?.id, 'arch');
+  }
+  // From the island, and from the last square of the arch, the island is drawn and picked as before, anywhere on it.
+  assert.equal(pick([18, 53], 18, 18, 55, 18)?.floor?.id, 'island');
+  assert.equal(pick([18, 51], 17.5, 18, 54, 18)?.floor?.id, 'island');
+  // Looking down from a chosen height below the island (the Director's height view): nothing above that height is picked.
+  assert.equal(pickDrawn(drawnAt(18, 52, 18), { slant, surfaces: [island], ramps: [arch], view: pickView({ gmHeight: 12 }) }), null);
+});
