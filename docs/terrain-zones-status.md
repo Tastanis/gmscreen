@@ -1315,6 +1315,48 @@ Tests: `stair-meets-walkway.test.php` and `stair-meets-walkway.test.mjs`
 browser's). Six older test lines said a step of a fifth of a square is not
 bridged; they now say a fifth is and six tenths is not.
 
+## October 10: the server no longer rewrites every map on every command. Built, waiting for the tester
+
+**What was wrong.** The whole campaign was kept as one piece of text in one row of the database: every scene's tokens, fog, settings, walls, floors and ground heights together. Every command of every kind (a token moved one square, a hit point changed, a door opened) read that whole row, unpacked it, changed one thing, packed it all again and wrote it all back. On your data that row is 3.8 MB across 13 scenes. On this PC one token move took 183 ms, and 147 ms of that was the unpacking and packing. About 100 ms of the packing was the ground heights of the two big maps alone: hundreds of thousands of numbers written out again because a token somewhere moved.
+
+**What changed.** The same world is now kept in smaller sections. Each part of a scene's map design has its own row: the ground, the walls and floors, the zones. Everything else is one lighter row. A command still reads all of it, exactly as before, and writes back the light row plus only the parts it changed. Opening a door rewrites that map's walls and nothing else. Painting ground rewrites that map's ground. Moving a token rewrites no map at all.
+
+**What did not change.** Nothing a browser sends or receives. Every rule about movement, walls, falls, floors and sight reads the same world it read before; none of that code was touched. Only the reading and the saving inside the store changed (`dnd/vtt/lib/SyncV2Layout.php`, and the store's read and write in `SyncV2Store.php`).
+
+**Measured on a copy of your real data (the capture of October 7), on this PC.**
+
+| | Before | After |
+|---|---|---|
+| The Director moves one token | 183 ms | 60 ms |
+| A change to a token that is not a move | 162 ms | 56 ms |
+| The reply to that command reading the world again | about 36 ms more | nothing (it keeps what it just saved) |
+| A page asking for everything | 39 ms | 39 ms |
+
+Loading a page is as slow as before: a browser is still sent every scene. Making that faster is a change to what browsers receive, and is a separate decision.
+
+**The carry-over.** The first time the new code opens your database it moves the world to the new layout by itself. In this order:
+
+1. It checks there is room on the disk, then writes a full copy of the database beside it, named `sync-v2.before-split-(date and time).sqlite`. On the host that copy will be about the size of the database, 130 MB. If the copy cannot be written, nothing is moved, the site keeps saving the old way, and a line at the top of the Director's page says why.
+2. In one all-or-nothing step it writes the new rows, reads them back, and compares them with the original. Only if they are identical does it mark the database as moved. A crash, a full disk or any difference leaves the old layout whole.
+3. The old row is kept exactly as it was and locked: any write to it is refused.
+
+Tried on the copy of your real data: all 13 scenes compared before and after (tokens, fog, settings, walls, heights, zones, plates, ramps, floors, drawings) with no difference; the whole world packs to the very same text as before; a second open does nothing; and with the process killed at the last moment, with every new row written and nothing committed, the old layout was whole and the next open carried it over cleanly. It took under a second here, copy included.
+
+**An older copy of the site's code still running during a deploy** reads the old row, which is whole as of the carry-over, and cannot write: its command is refused, the browser tries again, and the retry reaches the new code. Tried with the previous build's store code against a carried-over copy of your data: it read the world correctly, both its commands were refused, and nothing in the live world changed.
+
+**Turning it back.** Director only, at `/dnd/vtt/api/v2/storage-layout.php`: send `{"layout":"single"}` and the world is put back into one row, in place, and stays that way; `{"layout":"split"}` carries it over again with a fresh copy first. The world reads back identical either way.
+
+> **Before going back to an older build of the site, turn it back first.** An older build on a database that is still in the new layout shows the world as it was on the day of the carry-over and refuses every change. Nothing is lost if that happens: deploy the newer build again, or turn back and then deploy the older one.
+
+**Not changed in this step, on purpose.**
+
+- A command still unpacks every map (36 ms here). Unpacking only the map it needs is the next step and touches more code, so it gets its own check.
+- The full safety copy written every hundredth change is still written (that one command in a hundred costs what every command used to). Nothing ever reads those copies; they take 27 MB of your file.
+- Every command's full record is still kept forever (38 MB of your file, never trimmed).
+- A hit point change still runs the fall check, which reads the map.
+
+**The copies.** Each carry-over leaves one dated copy in `dnd/vtt/storage`. They are refused to visitors by the rule file in that folder (anything with `.sqlite` in its name). Once you are happy with the new layout they can be deleted from the host by hand; nothing reads them.
+
 ## Where it is now
 
 You said to put stages 1 to 3 on `main` on this PC and wait for your word

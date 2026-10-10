@@ -24,6 +24,7 @@ require_once __DIR__ . '/SceneImportValidation.php';
  */
 require_once __DIR__ . '/ZoneEntryReceipt.php';
 require_once __DIR__ . '/ZoneEntryClaims.php';
+require_once __DIR__ . '/SyncV2Layout.php';
 
 final class SyncV2Store
 {
@@ -36,6 +37,10 @@ final class SyncV2Store
     private int $snapshotRetention;
     private ?array $snapshotCache = null;
     private ?int $snapshotDataVersion = null;
+    /** Where the world is kept in the file, and how it is read and written (SyncV2Layout). */
+    private SyncV2Layout $storage;
+    /** True once this request has saved the world: a rollback after that must drop what is remembered. */
+    private bool $savedInRequest = false;
 
     public function __construct(
         string $databasePath,
@@ -70,6 +75,7 @@ final class SyncV2Store
         $this->pdo->exec('PRAGMA busy_timeout = 5000');
 
         $this->worldId = $worldId;
+        $this->storage = new SyncV2Layout($this->pdo, $worldId, $databasePath);
         $this->eventRetention = max(1, $eventRetention);
         $this->snapshotInterval = max(1, $snapshotInterval);
         $this->snapshotRetention = max(2, min(200, $snapshotRetention));
@@ -83,27 +89,18 @@ final class SyncV2Store
             $metadata=$this->worldMetadata(false);
             if($dataVersion===$this->snapshotDataVersion&&$metadata['revision']===$this->snapshotCache['revision'])return $this->snapshotCache;
         }
-        $statement = $this->pdo->prepare(
-            'SELECT revision, state_json, updated_at
-             FROM vtt_world_state
-             WHERE world_id = :world_id'
-        );
-        $statement->execute(['world_id' => $this->worldId]);
-        $row = $statement->fetch();
-        if (!is_array($row)) {
-            throw new RuntimeException('Sync V2 world state is unavailable.');
-        }
-
-        $state = $this->decodeObject((string) $row['state_json']);
+        // The same array whichever way the world is kept in the file.
+        $row = $this->storage->read();
+        $state = $row['state'];
         // Token claims were removed in favor of the ally/enemy model. Ignore
         // any stale claim domain left by an older deployment; the next
         // canonical write permanently drops it.
         unset($state['claims']);
         $this->snapshotDataVersion=$dataVersion;
         return $this->snapshotCache = [
-            'revision' => max(0, (int) $row['revision']),
+            'revision' => $row['revision'],
             'state' => $state,
-            'serverTime' => (int) $row['updated_at'],
+            'serverTime' => $row['serverTime'],
         ];
     }
 
@@ -1451,6 +1448,7 @@ final class SyncV2Store
             }
             if ($normalized['baseRevision'] > $snapshot['revision']) {
                 $this->pdo->exec('ROLLBACK');
+                $this->rolledBack();
                 return [
                     'status' => 'conflict',
                     'error' => 'base_revision_ahead',
@@ -1797,6 +1795,7 @@ final class SyncV2Store
             $snapshot = $this->getSnapshot();
             if ($normalized['baseRevision'] !== $snapshot['revision']) {
                 $this->pdo->exec('ROLLBACK');
+                $this->rolledBack();
                 return [
                     'status' => 'conflict',
                     'error' => 'base_revision_mismatch',
@@ -1890,6 +1889,7 @@ final class SyncV2Store
             $snapshot = $this->getSnapshot();
             if ($normalized['baseRevision'] > $snapshot['revision']) {
                 $this->pdo->exec('ROLLBACK');
+                $this->rolledBack();
                 return [
                     'status' => 'conflict',
                     'error' => 'base_revision_ahead',
@@ -1918,6 +1918,7 @@ final class SyncV2Store
             $currentEntityRevision = max(0, (int) ($current['_entityRevision'] ?? 0));
             if ($normalized['entityRevision'] !== $currentEntityRevision) {
                 $this->pdo->exec('ROLLBACK');
+                $this->rolledBack();
                 return [
                     'status' => 'conflict',
                     'error' => 'entity_revision_mismatch',
@@ -2330,17 +2331,13 @@ final class SyncV2Store
             'eventRetention' => $this->eventRetention,
             'snapshotInterval' => $this->snapshotInterval,
             'snapshotRetention' => $this->snapshotRetention,
+            'storage' => $this->storage->status(),
         ];
     }
 
     private function worldMetadata(bool $includeTimestamp = true): array
     {
-        // updated_at follows the large JSON column in the SQLite record. Asking
-        // for it forces overflow-page reads even without decoding that JSON.
-        $statement=$this->pdo->prepare($includeTimestamp?'SELECT revision,updated_at FROM vtt_world_state WHERE world_id = :world_id':'SELECT revision FROM vtt_world_state WHERE world_id = :world_id');
-        $statement->execute(['world_id'=>$this->worldId]);$row=$statement->fetch();
-        if(!is_array($row))throw new RuntimeException('Sync V2 world state is unavailable.');
-        return ['revision'=>max(0,(int)$row['revision']),'serverTime'=>(int)($row['updated_at']??0)];
+        return $this->storage->revision($includeTimestamp);
     }
 
     private function initializeSchema(): void
@@ -2410,6 +2407,8 @@ final class SyncV2Store
              ON vtt_presence (world_id, last_seen)'
         );
 
+        $this->storage->createTables();
+
         $now = $this->nowMilliseconds();
         $initialState = $this->encodeJson([
             'shadow' => [
@@ -2437,6 +2436,31 @@ final class SyncV2Store
             'state_json' => $initialState,
             'created_at' => $now,
         ]);
+        // Last, because a world that has not been decided for is carried over from the row made above.
+        $this->storage->settle();
+    }
+
+    /** Where the world is kept in the file, for the Director. */
+    public function storageStatus(): array
+    {
+        return $this->storage->status();
+    }
+
+    /** Director only: put the world back into the first layout, or carry it over to the split one. */
+    public function changeStorageLayout(string $layout, bool $isGm): array
+    {
+        if (!$isGm) {
+            throw new InvalidArgumentException('Only the GM may change where the world is kept.');
+        }
+        if (!in_array($layout, [SyncV2Layout::SINGLE, SyncV2Layout::SPLIT], true)) {
+            throw new InvalidArgumentException('Unknown storage layout.');
+        }
+        $this->snapshotCache = null;
+        try {
+            return $layout === SyncV2Layout::SINGLE ? $this->storage->makeSingle() : $this->storage->makeSplit();
+        } finally {
+            $this->snapshotCache = null;
+        }
     }
 
     private function normalizeShadowCommand(array $command): array
@@ -3425,6 +3449,7 @@ final class SyncV2Store
     private function rollbackConflict(string $error, array $snapshot): array
     {
         $this->pdo->exec('ROLLBACK');
+        $this->rolledBack();
         return ['status' => 'conflict', 'error' => $error, 'snapshot' => $snapshot];
     }
 
@@ -3433,13 +3458,16 @@ final class SyncV2Store
         try {
             if ($this->pdo->inTransaction()) {
                 $this->pdo->rollBack();
+                $this->rolledBack();
                 return;
             }
             // BEGIN IMMEDIATE issued through exec() is not reported by
             // PDO::inTransaction() on every Windows SQLite build.
             $this->pdo->exec('ROLLBACK');
+            $this->rolledBack();
         } catch (Throwable $ignored) {
             // Preserve the original validation or persistence failure.
+            $this->rolledBack();
         }
     }
 
@@ -3643,17 +3671,35 @@ final class SyncV2Store
     private function updateWorldState(int $revision, array $state, int $serverTime): void
     {
         $this->snapshotCache = null;
-        $statement = $this->pdo->prepare(
-            'UPDATE vtt_world_state
-             SET revision = :revision, state_json = :state_json, updated_at = :updated_at
-             WHERE world_id = :world_id'
-        );
-        $statement->execute([
-            'revision' => $revision,
-            'state_json' => $this->encodeJson($state),
-            'updated_at' => $serverTime,
-            'world_id' => $this->worldId,
-        ]);
+        $this->savedInRequest = true;
+        $saved = $this->storage->write($revision, $state, $serverTime);
+        if ($saved === null) {
+            return;
+        }
+        if (getenv('VTT_SYNC_V2_VERIFY_WRITES') === '1') {
+            // Tests run with this on: what was just saved must read back identical from the file.
+            $check = new SyncV2Layout($this->pdo, $this->worldId, '');
+            $check->settle();
+            $back = $check->read();
+            if ($back['revision'] !== $revision || $back['serverTime'] !== $serverTime || $back['state'] !== $saved || $saved != $state) {
+                throw new LogicException('The saved world does not read back the same.');
+            }
+        }
+        // $saved is the world exactly as a read would return it now, so the reply does not unpack it all again.
+        // A rollback drops it (rolledBack). Our own writes do not change data_version; another connection's do.
+        $this->snapshotDataVersion = (int) $this->pdo->query('PRAGMA data_version')->fetchColumn();
+        $this->snapshotCache = ['revision' => $revision, 'state' => $saved, 'serverTime' => $serverTime];
+    }
+
+    /** After any rollback: what this request saved was not kept, so nothing remembered from it may be used. */
+    private function rolledBack(): void
+    {
+        if (!$this->savedInRequest) {
+            return;
+        }
+        $this->savedInRequest = false;
+        $this->snapshotCache = null;
+        $this->storage->forget();
     }
 
     private function insertSnapshot(int $revision, array $state, int $serverTime): void

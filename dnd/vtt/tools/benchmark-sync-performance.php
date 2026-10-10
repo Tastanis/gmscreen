@@ -8,11 +8,13 @@ function medianMs(callable $call,int $iterations=25):float{$values=[];for($i=0;$
 try{
  $store=new SyncV2Store($path);$property=new ReflectionProperty(SyncV2Store::class,'pdo');$pdo=$property->getValue($store);
  $state=['sceneConfig'=>[]];for($i=0;$i<8;$i++)$state['sceneConfig']['benchmark-scene-'.$i]=$config;
- $json=json_encode($state,JSON_THROW_ON_ERROR);$update=$pdo->prepare('UPDATE vtt_world_state SET state_json=? WHERE world_id=?');$update->execute([$json,'default']);
- $uncached=static function(PDO $db):array{$q=$db->query("SELECT revision,state_json,updated_at FROM vtt_world_state WHERE world_id='default'");$r=$q->fetch(PDO::FETCH_ASSOC);return ['revision'=>(int)$r['revision'],'state'=>json_decode($r['state_json'],true,512,JSON_THROW_ON_ERROR),'serverTime'=>(int)$r['updated_at']];};
+ // Saved through the store itself, so it lands wherever the store keeps the world (SyncV2Layout).
+ $json=json_encode($state,JSON_THROW_ON_ERROR);$save=new ReflectionMethod(SyncV2Store::class,'updateWorldState');$save->invoke($store,0,$state,(int)floor(microtime(true)*1000));
+ // Every read unpacking the whole world from the file, as it was before the request cache: a new store each time.
+ $uncached=static function(PDO $db)use($path):array{return (new SyncV2Store($path))->getSnapshot();};
  $legacyIdle=medianMs(fn()=>$uncached($pdo));$idle=medianMs(fn()=>$store->replayAfter(0));
  $store->getSnapshot();$cached=medianMs(fn()=>$store->getSnapshot());
  $legacyRequest=medianMs(function()use($path,$property,$uncached){$s=new SyncV2Store($path);$uncached($property->getValue($s));},10);
  $request=medianMs(function()use($path){$s=new SyncV2Store($path);$s->replayAfter(0);},10);
  echo json_encode(['worldJsonBytes'=>strlen($json),'scenes'=>8,'legacyIdleDecodeMedianMs'=>$legacyIdle,'revisionOnlyIdleMedianMs'=>$idle,'cachedProjectionSnapshotMedianMs'=>$cached,'legacyRequestStoreAndIdleMedianMs'=>$legacyRequest,'requestStoreAndIdleMedianMs'=>$request],JSON_PRETTY_PRINT)."\n";
-}finally{unset($update,$pdo,$store);foreach(['','-wal','-shm'] as $suffix)if(is_file($path.$suffix))unlink($path.$suffix);}
+}finally{unset($save,$pdo,$store);foreach(['','-wal','-shm'] as $suffix)if(is_file($path.$suffix))unlink($path.$suffix);}

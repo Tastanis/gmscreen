@@ -60,6 +60,9 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
 </head>
 <body class="vtt-body">
     <?php renderStrixNav('vtt'); ?>
+    <?php if (!empty($config['isGM']) && function_exists('vttStorageNotice') && vttStorageNotice() !== ''): ?>
+    <p class="vtt-storage-notice" role="status" style="margin:0;padding:6px 12px;background:#5a3a00;color:#fff;font:14px/1.4 system-ui,sans-serif"><?= htmlspecialchars(vttStorageNotice(), ENT_QUOTES) ?></p>
+    <?php endif; ?>
     <div id="vtt-app" class="vtt-app" data-routes='<?= json_encode($routes, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>'>
         <?= $sections['characterSummaryPanel'] ?? '' ?>
         <?= $sections['monsterSummaryPanel'] ?? '' ?>

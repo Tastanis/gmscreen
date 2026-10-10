@@ -248,6 +248,24 @@ function withVttBoardStateLock(callable $callback)
 }
 
 /**
+ * A line for the Director alone, when the world could not be moved to the split way of saving
+ * (SyncV2Layout) and the site is still saving the first way. Empty when there is nothing to say.
+ */
+function vttStorageNotice(?array $status = null): string
+{
+    static $notice = '';
+    if ($status !== null) {
+        $failure = $status['lastFailure'] ?? null;
+        $stayed = ($status['layout'] ?? '') === 'single' && ($status['keptSingleOnRequest'] ?? false) !== true;
+        $notice = $stayed && is_array($failure)
+            ? 'The world could not be moved to the faster way of saving. Reason: ' . rtrim((string) ($failure['reason'] ?? 'not known'), '. ')
+                . '. The site is saving the old way and nothing is lost. It will try again by itself.'
+            : '';
+    }
+    return $notice;
+}
+
+/**
  * Build the browser's compatibility-shaped board projection exclusively from
  * canonical Sync V2 state.
  */
@@ -271,6 +289,9 @@ function overlaySyncV2Placements(array $boardState, ?array $authContext = null):
             (int) ($config['snapshot_interval'] ?? 100),
             (int) ($config['snapshot_retention'] ?? 20)
         );
+        if ($authContext !== null && ($authContext['isGM'] ?? false) === true) {
+            vttStorageNotice($store->storageStatus());
+        }
         $boardDomainsEnabled = false;
         foreach ([
             'templates', 'drawings', 'pings', 'fog',

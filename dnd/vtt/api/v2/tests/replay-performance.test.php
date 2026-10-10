@@ -15,8 +15,8 @@ try{
  $other=new SyncV2Store($path,'replay-test',100,1,2);$accept($other,4);
  replayCheck($store->getSnapshot()['revision']===4,'Foreign canonical writer invalidates request cache.');
  $pdo=new PDO('sqlite:'.$path);$pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);
- // Migration metadata can write at the same revision and within one millisecond.
- $state=$store->getSnapshot()['state'];$state['migrationProbe']='fresh';$update=$pdo->prepare('UPDATE vtt_world_state SET state_json=? WHERE world_id=?');$update->execute([json_encode($state),'replay-test']);
+ // Migration metadata can write at the same revision and within one millisecond. The world's light row is vtt_state_main (SyncV2Layout).
+ $state=$store->getSnapshot()['state'];$state['migrationProbe']='fresh';$update=$pdo->prepare('UPDATE vtt_state_main SET state_json=? WHERE world_id=?');$update->execute([json_encode($state),'replay-test']);
  replayCheck(($store->getSnapshot()['state']['migrationProbe']??null)==='fresh','Foreign same-revision write invalidates cache.');
  $pdo->exec("DELETE FROM vtt_events WHERE world_id='replay-test' AND revision=2");
  $gap=$store->replayAfter(1);replayCheck($gap['mode']==='snapshot'&&$gap['snapshot']['revision']===4,'Missing internal revision never masquerades as complete events.');
