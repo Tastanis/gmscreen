@@ -1,0 +1,6 @@
+# An old copy of a code file must not be handed out as plain text.
+# Written the same way as the <Files> blocks in dnd/data/.htaccess, which this host accepts.
+<Files *.bak>
+    Order deny,allow
+    Deny from all
+</Files>

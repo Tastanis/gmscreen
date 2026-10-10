@@ -1,0 +1,6 @@
+# The location list. Only the site's own code reads it. Pages, scripts and pictures are not affected.
+# Written the same way as the <Files> blocks in dnd/data/.htaccess, which this host accepts.
+<Files *.json>
+    Order deny,allow
+    Deny from all
+</Files>

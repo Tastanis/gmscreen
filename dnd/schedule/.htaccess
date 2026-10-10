@@ -1,0 +1,6 @@
+# The error log must not be handed out.
+# Written the same way as the <Files> blocks in dnd/data/.htaccess, which this host accepts.
+<Files error_log>
+    Order deny,allow
+    Deny from all
+</Files>

@@ -1,0 +1,10 @@
+# The staff list and the error log. Only the site's own code reads them. Pages, scripts and portraits are not affected.
+# Written the same way as the <Files> blocks in dnd/data/.htaccess, which this host accepts.
+<Files *.json>
+    Order deny,allow
+    Deny from all
+</Files>
+<Files error_log>
+    Order deny,allow
+    Deny from all
+</Files>

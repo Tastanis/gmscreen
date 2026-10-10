@@ -1,0 +1,10 @@
+# Character sheets and their saved copies. Only the site's own code reads them. Pictures in hireling_images/ are not affected.
+# Written the same way as the <Files> blocks in dnd/data/.htaccess, which this host accepts.
+<Files *.json>
+    Order deny,allow
+    Deny from all
+</Files>
+<Files *.lock>
+    Order deny,allow
+    Deny from all
+</Files>

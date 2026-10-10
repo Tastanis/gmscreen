@@ -1,0 +1,10 @@
+# The player roster. Only the site's own code reads it.
+# Written the same way as the <Files> blocks in dnd/data/.htaccess, which this host accepts.
+<Files *.json>
+    Order deny,allow
+    Deny from all
+</Files>
+<Files *.lock>
+    Order deny,allow
+    Deny from all
+</Files>
