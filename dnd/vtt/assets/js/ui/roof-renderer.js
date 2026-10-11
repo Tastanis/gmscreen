@@ -9,7 +9,7 @@ import {nearestOnSegment} from './wall-geometry.mjs';
 import {makeSight,head} from './vision-height.mjs';
 import {insideRoom,roofSurfaces,ceilingBlocks,floorBlocks} from './roof-geometry.mjs';import {getRoofImage} from './roof-images.mjs';import {adaptiveFog} from './adaptive-fog.mjs';
 import {createRoofImageCache} from './roof-image-cache.mjs';
-import {sideFoot,viewAbove,shapesAbove,dimsBelow,SHAPE_FILL,SHAPE_EDGE,DIM_FILL,inLip,RAISED_REACH,lipInSight,ladderHeads,LADDER_TOP,OUTLINE_LIGHT,OUTLINE_DARK,edgeLooks,ownFloorHides,sceneStairs,climbMarkers,CLIMB_FOOT,CLIMB_HEAD,CLIMB_UNDER,hasOwnPicture} from './height-view.mjs';import {buildStairPerimeter,resolveSegmentColor} from './stairs-geometry.js';import {CLIMB_GRADE} from './travel-height.mjs';
+import {sideFoot,viewAbove,shapesAbove,dimsBelow,SHAPE_FILL,SHAPE_EDGE,DIM_FILL,inLip,RAISED_REACH,lipInSight,openEdgePieces,wallUnderEdge,ladderHeads,LADDER_TOP,OUTLINE_LIGHT,OUTLINE_DARK,edgeLooks,ownFloorHides,sceneStairs,climbMarkers,CLIMB_FOOT,CLIMB_HEAD,CLIMB_UNDER,hasOwnPicture} from './height-view.mjs';import {buildStairPerimeter,resolveSegmentColor} from './stairs-geometry.js';import {CLIMB_GRADE} from './travel-height.mjs';
 const canvas=document.createElement('canvas');canvas.id='roof-prototype';canvas.style.cssText='position:absolute;inset:0;pointer-events:none;z-index:100001';document.querySelector('#vtt-map-transform').append(canvas);
 const roofLayer=document.createElement('canvas');
 let revision=0,cutawayKey='',buildingCutaway=null;
@@ -50,14 +50,31 @@ export const roofRenderer={get revision(){return revision;},surfaces:roofSurface
   // see-through shapes (height-view.mjs): a hero looking up knows something is there, and can still
   // read and click what lies under it. Only when looking through a token's eyes.
   const overhead=new Set(inspectionHeight===null?shapesAbove(surfaces,head(token,viewerGround),viewAbove(model)).map(s=>s.id):[]);
+  // Indoors: the open edges of a floor above that the hero has a line to (height-view.mjs). The building's walls,
+  // flattened once for this picture, say which edges are held up by a wall and so are not open.
+  let underWalls=null;
+  const wallsUnder=()=>underWalls??=model.segments.filter(e=>e.broken!==true).map(e=>{const a=nodes.get(e.a),b=nodes.get(e.b);if(!a||!b)return null;const span=wallHeights(e,a,b,{x:(a.x+b.x)/2,y:(a.y+b.y)/2},groundAt);return {a,b,base:span.base,top:span.top};}).filter(Boolean);
+  // Brandon chose the open edges only ("A for now", October 11, 2026, from pictures of both). The other form he saw
+  // drew the floor's whole outline within RAISED_REACH whenever one open edge was in sight: to go back to it, stroke
+  // surfacePath(roof,at) clipped to that reach here instead of the pieces. A stair follows the same rule as the room.
+  const indoorOutline=roof=>{
+   const at=p=>window.terrainPrototype.project(ox+p.x*g,oy+p.y*g,roof.height),on=q=>onSurface(roof,q);
+   const pieces=openEdgePieces(viewer,[roof.points,...roof.holes||[]],on,(p,along)=>wallUnderEdge(p,along,roof.height,wallsUnder()),q=>sight(q,roof.height-.01));
+   if(!pieces.length)return;
+   const shape=new Path2D();target.save();
+   for(const [from,to] of pieces){const p=at(from),q=at(to);shape.moveTo(p.x,p.y);shape.lineTo(q.x,q.y);}
+   target.lineJoin='round';target.lineCap='round';target.strokeStyle=OUTLINE_DARK;target.lineWidth=Math.max(3,g*.07);target.stroke(shape);target.strokeStyle=OUTLINE_LIGHT;target.lineWidth=Math.max(1.5,g*.03);target.lineCap='butt';target.setLineDash([g*.22,g*.16]);target.stroke(shape);target.restore();
+  };
+  const outlinedIndoors=roof=>inspectionHeight===null&&lighting&&sight&&viewer&&roof.kind==='floor'&&hasOwnPicture(roof)&&head(token,viewerGround)<=roof.height+1e-6;
   for(const roof of surfaces){
-   if(interiorHidden.has(roof.id))continue;
+   if(interiorHidden.has(roof.id)){if(outlinedIndoors(roof))indoorOutline(roof);continue;}
    const edgeOn=inspectionHeight===null&&roof.kind==='floor'&&head(token,viewerGround)<=roof.height+1e-6;
    const peek=edgeOn?landingPeekRamps(importedRamps,token,viewerGround,roof.height):[];
    if(edgeOn&&!peek.length){
     if(overhead.has(roof.id)){const shape=surfacePath(roof,p=>window.terrainPrototype.project(ox+p.x*g,oy+p.y*g,roof.height));target.save();target.fillStyle=SHAPE_FILL;target.fill(shape,'evenodd');target.strokeStyle=SHAPE_EDGE;target.lineWidth=Math.max(1.5,g*.035);target.lineJoin='round';target.stroke(shape);target.restore();}
     // A floor with no picture of its own (a deck whose planks are on the ground picture) hides nothing and is
     // already seen: it gets no outline.
+    else if(interiorHidden.inside?.has(roof.id)&&outlinedIndoors(roof))indoorOutline(roof);
     else if(lighting&&sight&&viewer&&hasOwnPicture(roof)){
      // "Something is above": the floor's outline, drawn only near the hero, when the hero has a line to
      // its lip (as a roof's lip shows from outside), and round the head of a climb the hero stands at the
@@ -74,7 +91,8 @@ export const roofRenderer={get revision(){return revision;},surfaces:roofSurface
    if(inspectionHeight!==null&&roof.height>inspectionHeight+.001)continue;
    if(!roof.imageId)continue;
    requestImage(roof.imageId);const image=cache.get(roof.imageId);
-   const underneath=viewerGround<roof.height-.01;if(inspectionHeight===null&&underneath&&insideRoom(viewer,roof.points))continue;
+   // Under a floor it is not drawn. In an opening of it (a pool in the room's own floor) he is not under it: a hole is a hole.
+   const underneath=viewerGround<roof.height-.01;if(inspectionHeight===null&&underneath&&onSurface(roof,viewer))continue;
    if(roofLayer.width!==canvas.width||roofLayer.height!==canvas.height){roofLayer.width=canvas.width;roofLayer.height=canvas.height;}
    const ctx=roofLayer.getContext('2d');ctx.clearRect(0,0,roofLayer.width,roofLayer.height);
    const path=new Path2D(),left=Math.min(...roof.points.map(p=>p.x)),right=Math.max(...roof.points.map(p=>p.x)),top=Math.min(...roof.points.map(p=>p.y)),bottom=Math.max(...roof.points.map(p=>p.y));

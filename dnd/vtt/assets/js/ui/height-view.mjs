@@ -179,6 +179,56 @@ export function lipInSight(viewer, rings, on, seen, reach = RAISED_REACH) {
   return false;
 }
 
+/** An edge is judged in pieces this long, and looked at this far out from the floor on its open side. */
+export const EDGE_PIECE = 0.5, EDGE_OUT = 0.1;
+/** A wall is under an edge when it lies this close to it, starts at least WALL_BELOW under the floor and comes up to it. */
+export const WALL_AT = 0.03, WALL_BELOW = 0.5;
+
+/**
+ * True when a wall stands under a floor's edge at `point`: one of the building's own walls, holding that edge up.
+ * `along` is the edge's direction (a unit vector). `walls` are [{ a, b, base, top }] in squares. An object's
+ * walls inside a square (a rock at the rim of a pool) are not on the edge and do not count.
+ */
+export function wallUnderEdge(point, along, floorHeight, walls) {
+  for (const wall of walls) {
+    if (!(wall.base <= floorHeight - WALL_BELOW + 1e-6) || !(wall.top >= floorHeight - 0.1 - 1e-6)) continue;
+    const vx = wall.b.x - wall.a.x, vy = wall.b.y - wall.a.y, length = Math.hypot(vx, vy);
+    if (!(length > 0) || Math.abs(along.x * vy - along.y * vx) / length > 0.1) continue;
+    const t = ((point.x - wall.a.x) * vx + (point.y - wall.a.y) * vy) / (length * length);
+    if (t < -1e-6 || t > 1 + 1e-6) continue;
+    if (Math.hypot(wall.a.x + vx * t - point.x, wall.a.y + vy * t - point.y) <= WALL_AT) return true;
+  }
+  return false;
+}
+
+/**
+ * Indoors, a floor above the hero is never drawn. What he is shown of it is its open edges that he has a line to
+ * from where he stands: the edge of a hole in it (a well, a stairwell), and a free edge with no wall under it (the
+ * open side of a balcony). An edge that runs along one of the building's walls is not one. Returns the pieces to
+ * outline, [[from, to], ...]. `rings` are the floor's outline and holes, `on(point)` says whether a point is on the
+ * floor, `walled(point, along)` whether a wall stands under the edge there, `seen(point)` whether the viewer has a
+ * line to a point just off the edge on its open side.
+ */
+export function openEdgePieces(viewer, rings, on, walled, seen, reach = RAISED_REACH) {
+  const pieces = [];
+  for (const ring of rings) {
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i], b = ring[(i + 1) % ring.length], dx = b.x - a.x, dy = b.y - a.y, length = Math.hypot(dx, dy);
+      if (!(length > 0)) continue;
+      const count = Math.max(1, Math.ceil(length / EDGE_PIECE - 1e-9)), along = { x: dx / length, y: dy / length };
+      for (let k = 0; k < count; k++) {
+        const t0 = k / count, t1 = (k + 1) / count, mid = { x: a.x + dx * (t0 + t1) / 2, y: a.y + dy * (t0 + t1) / 2 };
+        if (Math.hypot(mid.x - viewer.x, mid.y - viewer.y) > reach) continue;
+        if (walled(mid, along)) continue;
+        const out = [1, -1].map((side) => ({ x: mid.x - along.y * EDGE_OUT * side, y: mid.y + along.x * EDGE_OUT * side })).find((p) => !on(p));
+        if (!out || !seen(out)) continue;
+        pieces.push([{ x: a.x + dx * t0, y: a.y + dy * t0 }, { x: a.x + dx * t1, y: a.y + dy * t1 }]);
+      }
+    }
+  }
+  return pieces;
+}
+
 /**
  * True when a floor has a picture of its own. One that has none (a deck whose planks are painted on the
  * ground picture) hides nothing and is already seen from below: it gets no outline.

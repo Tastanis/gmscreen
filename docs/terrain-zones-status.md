@@ -1402,6 +1402,20 @@ You tried this over seven rounds in a sandbox on your PC and said "Seems like it
 
 **Not in these builds, waiting for your word.** Seeing out of a pool in a building's floor, and the outline of an opening in the floor above from inside a room. Stopping part of the way up a climb in combat.
 
+## October 11: indoors, a hole is a hole. Build 475, built, waiting for the tester
+
+Your words: "if I'm standing in the pool, I cannot see outside of the pool. I also cannot see the outline ... if it's got an opening in the room, then I need to be able to see up to it." And: "the question will be can we see the outline of the floor above since it has a hole in it." You looked at pictures of two ways to draw it and said "A for now."
+
+- **A hole is a hole.** Standing in an opening of a floor is not standing under that floor. From a shallow square of the bathhouse pool the room round it is drawn again; before, the whole floor of the room was dropped and only the pool showed.
+- **The floor above, through its opening.** Indoors a floor above the hero is still never drawn. What he gets is a dashed line along its open edges that he has a line to from where he stands: the edge of a hole in it (the well over the pool, a stairwell), and a free edge with no wall under it. An edge that runs along one of the building's walls gets none, so the room is not boxed in.
+- **The same on a stair.** From the stair he used to get the balcony's whole outline, and one square off the stair none at all. Now both show the same thing.
+- **Unchanged.** Outdoors (islands, bridges, walkways) is the same to the pixel. Nothing on the floor above is shown. What a hero has line of sight to is the same.
+- **Still as it was.** From the deepest squares of the pool (more than a square down) he sees the pool only, because his eyes are below the floor. He still gets the outlines.
+
+**If you want the other way back.** The way you did not pick ("B") drew the floor's whole outline within 10 squares whenever one open edge was in sight. The choice is one place in the code: `indoorOutline` in `dnd/vtt/assets/js/ui/roof-renderer.js`, where the note says how to go back. The pictures of both are kept with the coder's notes (`round8-indoors`).
+
+**Not built.** Seeing out of a hollow deeper than a square. A mark on the up arrow when there is a floor above with an opening.
+
 ## Where it is now
 
 You said to put stages 1 to 3 on `main` on this PC and wait for your word
