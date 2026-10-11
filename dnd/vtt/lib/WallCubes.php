@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__.'/WallMovement.php';
 require_once __DIR__.'/WallObjects.php';
+require_once __DIR__.'/WallBoxes.php';
 /** Pure template-to-obstacle derivation; never persists a second wall document. */
 final class WallCubes {
  public static function validate(array $template):void {
@@ -71,7 +72,8 @@ final class WallCubes {
   return $changed?$template:null;
  }
  public static function withTemplates(array $config,array $templates):array {
-  $model=$config['environment']['walls']['value']??[];
+  // Low boxes first (WallBoxes): their walls are marked and their tops become plates to stand on.
+  $model=WallBoxes::with($config['environment']['walls']['value']??[]);
   // Cube tops never become the base for another template; stacking is explicit.
   $floors=FloorSupport::surfaces($model);usort($floors,fn($a,$b)=>($b['height']??0)<=>($a['height']??0));
   $derived=[...$model,'nodes'=>$model['nodes']??[],'segments'=>$model['segments']??[],'roofs'=>$model['roofs']??[]];

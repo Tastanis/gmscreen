@@ -95,7 +95,7 @@ final class FloorSupport {
   },$surfaces);
  }
  public static function supported(array $p,array $surfaces,array $cuts=[]):?bool {
-  $matching=array_values(array_filter($surfaces,fn($s)=>($s['levelId']??'level-0')===($p['levelId']??'level-0')&&empty($s['templateCube'])));
+  $matching=array_values(array_filter($surfaces,fn($s)=>($s['levelId']??'level-0')===($p['levelId']??'level-0')&&empty($s['templateCube'])&&empty($s['boxTop'])));
   $floors=array_values(array_filter($matching,fn($s)=>($s['kind']??'')==='floor'));
   // A roof-only level is bounded by its authored roof, not an infinite legacy plane.
   // Where a real floor exists, its support remains independent of the roof above it.
@@ -152,7 +152,15 @@ final class FloorSupport {
   * floor-support.js.
   */
  public const PLATE_REACH=.5;
- public static function walkContact(array $from,array $to,array $path,array $surfaces,array $mapLevels,callable $terrain):?array {
+ /**
+  * The top of a low box (WallBoxes) is stepped up onto, and down off, from a square and a half away: a box a
+  * square high whose base is up to half a square above his feet (WallMovement::BOX_FOOT). Leaving a box he
+  * steps up onto a plate no further than onto any plate.
+  * `$enter` false asks where a mover is while its move is still being judged: it is not up on a box until the
+  * box's walls have let it in, so it steps onto no box top that stands above it (one it starts on, it keeps).
+  */
+ public const BOX_REACH=1.5;
+ public static function walkContact(array $from,array $to,array $path,array $surfaces,array $mapLevels,callable $terrain,bool $enter=true):?array {
   if(FloorGeometry::isAirborne($from)||!empty($from['_floorTraversal']))return null;
   $levels=self::levels($mapLevels);
   $floors=array_values(array_filter($surfaces,fn($s)=>(($s['kind']??'')==='floor'||!empty($s['templateCube']))&&isset($levels[$s['levelId']??''])&&!($levels[$s['levelId']]['hidden']??false)));
@@ -160,7 +168,8 @@ final class FloorSupport {
   $overlap=fn($p,$s)=>self::intersects($p,$s,$levels[$s['levelId']]['cutouts']??[]);
   $support=null;
   foreach($floors as $s)if(($from['_supportSurfaceId']??null)===($s['id']??null)&&$overlap($from,$s)){$support=$s;break;}
-  if(!$support)foreach($floors as $s)if(($s['kind']??'')==='floor'&&($from['levelId']??'level-0')!=='level-0'&&$from['levelId']===$s['levelId']&&$overlap($from,$s)){$support=$s;break;}
+  if(!$support)foreach($floors as $s)if(($s['kind']??'')==='floor'&&empty($s['boxTop'])&&($from['levelId']??'level-0')!=='level-0'&&$from['levelId']===$s['levelId']&&$overlap($from,$s)){$support=$s;break;}
+  $boxes=array_values(array_filter($floors,fn($s)=>!empty($s['boxTop'])));
   $support??=self::terrainContact($from,$floors,$mapLevels,$terrain($from),.1);
   $previous=$from;
   foreach([...$path,$to] as $end){
@@ -169,6 +178,8 @@ final class FloorSupport {
    for($i=1;$i<=$steps;$i++){
     $p=[...$from,'column'=>$start['column']+$dx*$i/$steps,'row'=>$start['row']+$dy*$i/$steps];
     $height=$support['height']??$terrain($previous);
+    // A low box is stepped up onto from whatever he stands on, plate or ground: its walls have let him in.
+    if($enter)foreach($boxes as $box)if(($support['id']??null)!==$box['id']&&$box['height']>$height+1e-6&&$box['height']-$height<=self::BOX_REACH+1e-6&&$overlap($p,$box)){$support=$box;$previous=$p;continue 2;}
     if(!$support||!$overlap($p,$support)){
      $priorSupport=$support;$support=null;
      // The same test as ever, cheapest part first: a plate at another height is ruled out by its
@@ -178,7 +189,7 @@ final class FloorSupport {
      $ground=null;
      foreach($floors as $s){
       $cube=!empty($s['templateCube'])||!empty($priorSupport['templateCube']);
-      if(abs($s['height']-$height)>($cube?.1:self::PLATE_REACH)+1e-6||($support&&$s['height']<=$support['height']))continue;
+      if((!empty($priorSupport['boxTop'])&&empty($s['boxTop'])?$s['height']-$height>self::PLATE_REACH+1e-6||$height-$s['height']>self::BOX_REACH+1e-6:abs($s['height']-$height)>(!empty($s['boxTop'])?self::BOX_REACH:($cube?.1:self::PLATE_REACH))+1e-6)||($support&&$s['height']<=$support['height'])||(!$enter&&!empty($s['boxTop'])&&$s['height']>$height+1e-6))continue;
       if($s['height']<($ground??=$terrain($p))-.1-1e-6||!$overlap($p,$s))continue;
       if(!$cube||!$overlap($previous,$s)||($priorSupport&&self::cubeTouches($priorSupport,$s)))$support=$s;
      }

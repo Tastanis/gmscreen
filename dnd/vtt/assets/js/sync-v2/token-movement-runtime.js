@@ -268,6 +268,7 @@ export function createTokenMovementRuntime({
           path: move.path || [],
           ...(move.teleportChoice ? {teleportChoice:move.teleportChoice} : {}),
           ...(move.forcedDestination ? {forcedDestination:move.forcedDestination} : {}),
+          ...(move.climbLow === true ? {climbLow:true} : {}),
           ...(move.undoRevision !== undefined ? { undoRevision: move.undoRevision } : {}),
         },
         {

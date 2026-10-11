@@ -66,7 +66,8 @@ test('the ruler\'s walk, which the drag ghost is now drawn from, ends on the wal
   // The ghost is drawn from that walk, along the ruler's points when the ruler is this drag's.
   const source = readFileSync(new URL('../terrain-prototype.js', import.meta.url), 'utf8');
   assert.match(source, /const dropped=placement&&token\.dataset\.vttDragGhost\?dropHeight\(placement,Math\.round\(\(matrix\.m41-\(ctx\.view\.gridOffsets\.left\|\|0\)\)\/g\),Math\.round\(\(matrix\.m42-\(ctx\.view\.gridOffsets\.top\|\|0\)\)\/g\)\):null;/);
-  assert.match(source, /const points=own\?ruler\.map\(p=>\(\{column:p\.column\+dx,row:p\.row\+dy\}\)\):\[\{column:placement\.column,row:placement\.row\},\{column,row\}\];/);
+  // Through his own corners when he has dropped any, else the app's at a stair's end (stair-assume.mjs), else straight.
+  assert.match(source, /const points=dragPoints\(placement,column,row\);/);
   // Its height is where the move ends: each leg asked in one step from its start to its end, as the server
   // carries it (walkEnd), not the end of the square-by-square walk, which can take a stair by a slanted step
   // that the straight line misses (the bathhouse, October 10: the ghost on the balcony, the hero under it).

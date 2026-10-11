@@ -16,7 +16,7 @@ import {nearStair} from './stair-walk.mjs';
 import {viewSlant,slantVector,edgeFaces,usesHeightView} from './height-view.mjs';
 import {pointAtHeight,pickDrawn,pickView,pickWalked} from './pointer-pick.mjs';
 import {createRulerPass,passActorKey} from './ruler-pass.mjs';
-import {getCurrentMeasurementPoints,getCurrentMovementKind} from './drag-ruler.js';import {straightLine} from './forced-line.mjs';
+import {getCurrentMeasurementPoints,getDroppedMeasurementPoints,getCurrentMovementKind} from './drag-ruler.js';import {straightLine} from './forced-line.mjs';import {stairEnds,stairAssume} from './stair-assume.mjs';import {buildStairPerimeter,resolveSegmentColor} from './stairs-geometry.js';
 const $=s=>document.querySelector(s);
 const image=$('#vtt-map-image'),transform=$('#vtt-map-transform'),surface=$('#vtt-map-surface'),board=$('#vtt-board-canvas');
 const canvas=document.createElement('canvas');canvas.id='terrain-canvas';
@@ -232,12 +232,13 @@ function landingHeight(placement,altitude){
  const caught=landingSurfaceHeight(placement,resolveSupportSurfaces(design),levelConfig(),altitude,-Infinity);
  return Number.isFinite(caught)?caught:null;
 }
-function movementPlacement(from,to){
+function movementPlacement(from,to,enter=true){
  const d=dimensions(),terrain=p=>heightAt((ctx.view.gridOffsets.left||0)+(p.column+(p.width||1)/2)*d.grid,(ctx.view.gridOffsets.top||0)+(p.row+(p.height||1)/2)*d.grid);
- const surfaces=resolveSupportSurfaces(importedDesign()||{}),surface=walkFloorContact(from,to,[],surfaces,levelConfig(),terrain)||cubeStepDown(from,to,surfaces,levelConfig());
+ const surfaces=resolveSupportSurfaces(importedDesign()||{}),surface=walkFloorContact(from,to,[],surfaces,levelConfig(),terrain,enter)||cubeStepDown(from,to,surfaces,levelConfig());
  return surface?{...to,levelId:surface.levelId,_supportSurfaceId:surface.id}:to;
 }
-function movementGroundFor(from,to){return groundFor(movementPlacement(from,to));}
+// The height a mover is at part-way through a move, for judging walls: not yet up on a low box (low-boxes.mjs).
+function movementGroundFor(from,to){return groundFor(movementPlacement(from,to,false));}
 function highGround(actor,target){return effectiveHeight(groundFor(actor),Math.max(actor.width||1,actor.height||1))-effectiveHeight(groundFor(target),Math.max(target.width||1,target.height||1))>=1;}
 function isCliff(x,y){const g=dimensions().grid;return [[1,0],[0,1],[1,1],[1,-1]].some(([dx,dy])=>Math.abs(heightAt(x+dx*g/2,y+dy*g/2)-heightAt(x-dx*g/2,y-dy*g/2))>=3-1e-6);}
 function rulerActor(){const placements=ctx.state.boardState.placements[ctx.state.boardState.activeSceneId]||[];return placements.find(p=>p.id===(ctx.selectedIds[0]||window.visionPrototype?.viewerTokenId));}
@@ -301,11 +302,13 @@ function routeNow(start,end,options={}){
 // each leg is asked the same way, in one step. The square-by-square walk (routeNow) is for what the route costs
 // and how its line is drawn; it goes slanted squares first, and can take a stair by a slanted step that the
 // straight line misses, which drew the ghost on a balcony the move never reached.
-function walkEnd(placement,points){
+function walkEnd(placement,points){return walkEnding(placement,points).height;}
+// The same, with how he stands there: on which floor, on which plate, and by which end he came onto a stair.
+function walkEnding(placement,points){
  const d=dimensions(),design=importedDesign(),surfaces=design?resolveSupportSurfaces(design):[],mapLevels=levelConfig();
  const standing=rampStanding(design),follow=standing&&hasStairs(mapLevels)?standing:null;
  const last=points[points.length-1];
- if(!walksPlates(placement,surfaces,!!follow))return rulerGround(last.column,last.row,placement);
+ if(!walksPlates(placement,surfaces,!!follow))return {height:rulerGround(last.column,last.row,placement),how:''};
  const terrain=p=>heightAt((ctx.view.gridOffsets.left||0)+(p.column+(p.width||1)/2)*d.grid,(ctx.view.gridOffsets.top||0)+(p.row+(p.height||1)/2)*d.grid);
  let ghost={...placement,column:points[0].column,row:points[0].row},height=null;
  for(let i=1;i<points.length;i++){
@@ -313,15 +316,49 @@ function walkEnd(placement,points){
   const stepped=stepGhost({ghost,column:points[i].column,row:points[i].row,actor:placement,surfaces,mapLevels,terrain,plainHeight:(column,row,who)=>rulerGround(column,row,who),standing:follow});
   ghost=stepped.ghost;height=stepped.height;
  }
- return Number.isFinite(height)?height:null;
+ return {height:Number.isFinite(height)?height:null,how:[ghost.levelId||'level-0',ghost._supportSurfaceId||'',ghost._floorTraversal?.entry||''].join('|')};
+}
+// The corners the app puts in for a hero who stands at a stair's end and is held over that stair or where it leads
+// (stair-assume.mjs): only when the straight line would not bring him out at the stair's height, and the way by the
+// stair is free of walls. In the token's own squares. Null when nothing is assumed.
+function stairCorners(placement,column,row){
+ const mapLevels=levelConfig();
+ if(!placement||!hasStairs(mapLevels)||['fly','hover'].includes(placement.movementMode)||!importedDesign())return null;
+ const kind=getCurrentMovementKind();if(kind!=='walk'&&kind!=='shift')return null;
+ const levelId=placement.levelId||'level-0',stairs=levelId==='level-0'?mapLevels.baseStairs:(mapLevels.levels||[]).find(level=>level?.id===levelId)?.stairs;
+ const hero={column:placement.column,row:placement.row},target={column,row},size=Math.max(placement.width||1,placement.height||1);
+ for(const stair of stairs||[]){
+  const ends=stairEnds(stair.corners,buildStairPerimeter(stair.corners).map(s=>({...s,colour:resolveSegmentColor(stair.edgeColors,s.id)})));
+  const corners=ends?stairAssume(ends,stair.direction==='down',hero,target,size):null;
+  if(!corners)continue;
+  // The straight line does as well when it leaves him at the same height, on the same floor, come onto the stair by the same end.
+  const plain=walkEnding(placement,[hero,target]),byStair=walkEnding(placement,[hero,...corners,target]);
+  if(!Number.isFinite(byStair.height)||(Number.isFinite(plain.height)&&Math.abs(byStair.height-plain.height)<.05&&plain.how===byStair.how))continue;
+  if(window.wallPrototype?.blockedMove?.(placement,{column,row,path:corners}))continue;
+  return corners;
+ }
+ return null;
+}
+// The same for the ruler, in the ruler's own squares: `start` is where the route starts, `hover` where the token is held.
+function stairRoute(start,hover){
+ const drag=window.vttDragTarget?.(),placement=drag?livePlacement(drag.id):null;if(!placement)return null;
+ const dx=placement.column-start.column,dy=placement.row-start.row,corners=stairCorners(placement,hover.column+dx,hover.row+dy);
+ return corners?corners.map(c=>({column:c.column-dx,row:c.row-dy})):null;
+}
+// The squares a drag of this token to a square goes through: his own corners when he has dropped any, else the
+// app's (stairCorners), else none.
+function dragPoints(placement,column,row){
+ const ruler=getDroppedMeasurementPoints(),dx=ruler.length?placement.column-ruler[0].column:0,dy=ruler.length?placement.row-ruler[0].row:0;
+ const own=ruler.slice(1).map(p=>({column:p.column+dx,row:p.row+dy})).filter(p=>!(p.column===column&&p.row===row));
+ const corners=own.length?own:getCurrentMovementKind()==='forced'?[]:(stairCorners(placement,column,row)||[]);
+ return [{column:placement.column,row:placement.row},...corners,{column,row}];
 }
 let walkMemo=null;
 function walkHeights(placement,column,row){
  if(!importedDesign())return null;
  // A forced move is not walked: the creature is where the straight line has carried it, at the height it travels at.
  if(getCurrentMovementKind()==='forced'){const z=forcedHeight(forcedFrom(placement),column,row);return z===null?null:{end:z,top:z};}
- const ruler=getCurrentMeasurementPoints(),dx=ruler.length>1?placement.column-ruler[0].column:0,dy=ruler.length>1?placement.row-ruler[0].row:0;
- const points=[{column:placement.column,row:placement.row},...(ruler.length>2?ruler.slice(1,-1).map(p=>({column:p.column+dx,row:p.row+dy})):[]),{column,row}];
+ const points=dragPoints(placement,column,row);
  const key=JSON.stringify([passActorKey(placement),points,window.wallPrototype?.revision,sharedTerrainRevision]);
  if(walkMemo?.key===key)return walkMemo.heights;
  const carry={};let end=null,top=-Infinity;
@@ -336,9 +373,7 @@ function dropHeight(placement,column,row){
  if(!importedDesign()||['fly','hover'].includes(placement.movementMode))return null;
  // Held in a forced move, the ghost is where the straight line has carried the creature; the fall, if any, is in the ruler's words.
  if(getCurrentMovementKind()==='forced')return forcedHeight(forcedFrom(placement),column,row);
- const ruler=getCurrentMeasurementPoints(),dx=ruler.length>1?placement.column-ruler[0].column:0,dy=ruler.length>1?placement.row-ruler[0].row:0,last=ruler[ruler.length-1];
- const own=ruler.length>1&&Math.abs(last.column+dx-column)<.01&&Math.abs(last.row+dy-row)<.01;
- const points=own?ruler.map(p=>({column:p.column+dx,row:p.row+dy})):[{column:placement.column,row:placement.row},{column,row}];
+ const points=dragPoints(placement,column,row);
  const key=JSON.stringify([passActorKey(placement),points,window.wallPrototype?.revision,sharedTerrainRevision]);
  if(dropMemo?.key===key)return dropMemo.height;
  const height=walkEnd(placement,points);
@@ -465,7 +500,7 @@ function paintRoute(overlay,points,gridSize,forced=false){
  overlay.path.style.opacity='0';
 }
 window.addEventListener('storage',e=>{if(e.key===key&&!drawing){key='';}});
-window.terrainPrototype={get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,projector,heightAt,groundFor,landingHeight,movementGroundFor,movementPlacement,highGround,isCliff,climbFace,walkerNear,get design(){return importedDesign();},route,rulerPass,rulerPoint,routePath,squarePath,paintRoute,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get key(){return key;},get storageError(){return storageError;},project,get slant(){return slant();},get active(){return active;}};
+window.terrainPrototype={get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,projector,stairRoute,heightAt,groundFor,landingHeight,movementGroundFor,movementPlacement,highGround,isCliff,climbFace,walkerNear,get design(){return importedDesign();},route,rulerPass,rulerPoint,routePath,squarePath,paintRoute,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get key(){return key;},get storageError(){return storageError;},project,get slant(){return slant();},get active(){return active;}};
 requestAnimationFrame(tick);
 
 import('./wall-prototype.js');

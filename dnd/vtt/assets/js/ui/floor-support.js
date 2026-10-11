@@ -28,7 +28,7 @@ export function intersectsFloor(p,surface,cuts=[]){
  return false;
 }
 export function floorSupported(p,surfaces,cuts=[]){
- const matching=surfaces.filter(s=>!s.templateCube&&(s.levelId||'level-0')===(p.levelId||'level-0'));
+ const matching=surfaces.filter(s=>!s.templateCube&&!s.boxTop&&(s.levelId||'level-0')===(p.levelId||'level-0'));
  let floors=matching.filter(s=>s.kind==='floor');
  if(!floors.length)floors=matching.filter(s=>(s.kind||'roof')==='roof');
  if(!floors.length)return null;
@@ -68,20 +68,29 @@ export function resolveSupportSurfaces(model={}){
 // Once on a plate a walker keeps it while any of its square is still over it, as before.
 // Template cubes keep their own rule (first touch, a tenth of a square, or a touching cube).
 export const PLATE_REACH=.5;
+// The top of a low box (low-boxes.mjs) is stepped up onto, and down off, from a square and a half away: a box a
+// square high whose base is up to half a square above his feet (BOX_FOOT in wall-properties.mjs). Leaving a box he
+// steps up onto a plate no further than onto any plate.
+// `enter` false asks where a mover is while its move is still being judged: it is not up on a box until the
+// box's walls have let it in, so it steps onto no box top that stands above it (one it starts on, it keeps).
+export const BOX_REACH=1.5;
 // Paired with FloorSupport::walkContact.
-export function walkFloorContact(from,to,path,surfaces,mapLevels,terrain){
+export function walkFloorContact(from,to,path,surfaces,mapLevels,terrain,enter=true){
  if(['fly','hover'].includes(from.movementMode)||from._floorTraversal)return null;
  const levels=supportLevels(mapLevels);
  const floors=surfaces.filter(s=>(s.kind==='floor'||s.templateCube)&&levels.has(s.levelId)&&!levels.get(s.levelId).hidden);
  if(!floors.length)return null;
- const overlap=(p,s)=>intersectsFloor(p,s,levels.get(s.levelId).cutouts||[]);
+ const overlap=(p,s)=>intersectsFloor(p,s,levels.get(s.levelId).cutouts||[]),boxes=floors.filter(s=>s.boxTop);
  let support=floors.find(s=>from._supportSurfaceId&&from._supportSurfaceId===s.id&&overlap(from,s))
-  ||floors.find(s=>!s.templateCube&&(from.levelId||'level-0')!=='level-0'&&from.levelId===s.levelId&&overlap(from,s))
+  ||floors.find(s=>!s.templateCube&&!s.boxTop&&(from.levelId||'level-0')!=='level-0'&&from.levelId===s.levelId&&overlap(from,s))
   ||terrainFloorContact(from,floors,mapLevels,terrain(from),.1),previous=from;
  for(const end of [...path,to]){
   const start=previous,dx=end.column-start.column,dy=end.row-start.row,steps=Math.max(1,Math.min(8192,Math.ceil(Math.max(Math.abs(dx),Math.abs(dy))*8)));
   for(let i=1;i<=steps;i++){
    const p={...from,column:start.column+dx*i/steps,row:start.row+dy*i/steps},height=support?.height??terrain(previous);
+   // A low box is stepped up onto from whatever he stands on, plate or ground: its walls have let him in.
+   const box=enter&&boxes.length?boxes.find(s=>s!==support&&s.height>height+1e-6&&s.height-height<=BOX_REACH+1e-6&&overlap(p,s)):null;
+   if(box){support=box;previous=p;continue;}
    if(!support||!overlap(p,support)){
     const prior=support;
     support=null;
@@ -90,7 +99,7 @@ export function walkFloorContact(from,to,path,surfaces,mapLevels,terrain){
     let ground=null;
     for(const s of floors){
      const cube=Boolean(s.templateCube||prior?.templateCube);
-     if(Math.abs(s.height-height)>(cube?.1:PLATE_REACH)+1e-6||(support&&s.height<=support.height))continue;
+     if((prior?.boxTop&&!s.boxTop?s.height-height>PLATE_REACH+1e-6||height-s.height>BOX_REACH+1e-6:Math.abs(s.height-height)>(s.boxTop?BOX_REACH:cube?.1:PLATE_REACH)+1e-6)||(support&&s.height<=support.height)||(!enter&&s.boxTop&&s.height>height+1e-6))continue;
      if(s.height<(ground??=terrain(p))-.1-1e-6||!overlap(p,s))continue;
      if(!cube||!overlap(previous,s)||(prior&&touchingSurfaces(prior,s)))support=s;
     }

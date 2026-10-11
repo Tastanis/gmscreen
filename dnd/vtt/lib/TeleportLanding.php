@@ -25,6 +25,9 @@ final class TeleportLanding {
   $ground=WallMovement::terrain($to['column']+($to['width']??1)/2,$to['row']+($to['height']??1)/2,$config);
   $contact=FloorSupport::terrainContact($to,FloorSupport::surfaces($config['environment']['walls']['value']??[]),$config['mapLevels']??[],$ground);
   if($contact&&$height>=$ground-1e-6&&$height<$contact['height'])$height=$contact['height'];
+  // A low box (WallBoxes) fills its square: a landing chosen on the floor it stands on is a landing on its top.
+  $levels=array_column($config['mapLevels']['levels']??[],null,'id');
+  foreach(FloorSupport::surfaces($config['environment']['walls']['value']??[]) as $box)if(!empty($box['boxTop'])&&$height>=$box['base']-FloorSupport::GROUND_CLEARANCE-1e-6&&$height<$box['height']&&FloorSupport::intersects($to,$box,$levels[$box['levelId']??'']['cutouts']??[]))$height=(float)$box['height'];
   $distance=max(abs($to['column']-$from['column']),abs($to['row']-$from['row']),abs($height-WallMovement::height($from,$config)));
   if(array_key_exists('allowOutOfRange',$choice)&&!is_bool($choice['allowOutOfRange']))throw new InvalidArgumentException('Invalid teleport range override.');
   if($range!==null&&((!is_int($range)&&!is_float($range))||!is_finite((float)$range)||$range<0))throw new InvalidArgumentException('Invalid teleport range.');

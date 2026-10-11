@@ -269,6 +269,7 @@ function clearMeasurement(state) {
   if (state.pointerId !== null) {
     state.mapSurface.releasePointerCapture?.(state.pointerId);
   }
+  state.assumed = null;
   state.measuring = false;
   state.pointerId = null;
   state.points = [];
@@ -595,23 +596,40 @@ function ensureRulerDetail(ruler) {
   return detail;
 }
 
+// The app's own corners for the drag in hand: by a stair the hero stands at the end of (stair-assume.mjs, asked
+// of terrain-prototype.js). Only while he has dropped no corner of his own, and never for a forced move.
+function assumedCorners(state) {
+  if (state.mode !== 'external' || !state.measuring || state.points.length !== 1 || !state.hoverPoint) return null;
+  let corners = null;
+  try { corners = window.terrainPrototype?.stairRoute?.(state.points[0], state.hoverPoint) || null; } catch (error) { corners = null; }
+  if (!corners?.length) return null;
+  const start = state.points[0], metrics = getGridMetrics(state.grid, state.mapTransform), grid = metrics && metrics.size > 0 ? metrics.size : 64;
+  return corners.map((corner) => ({ ...start, column: corner.column, row: corner.row, mapX: start.mapX + (corner.column - start.column) * grid, mapY: start.mapY + (corner.row - start.row) * grid }));
+}
+
+/** The route's fixed points: where it starts and its corners, his own or the app's. */
+function routePoints(state) {
+  return state.assumed?.length && state.points.length === 1 ? [state.points[0], ...state.assumed] : state.points;
+}
+
 function getRenderablePoints(state) {
   if (!state.points.length) {
     return [];
   }
+  const points = routePoints(state);
 
   if (state.measuring && state.hoverPoint) {
-    const lastPoint = state.points[state.points.length - 1];
+    const lastPoint = points[points.length - 1];
     if (
       !lastPoint ||
       lastPoint.column !== state.hoverPoint.column ||
       lastPoint.row !== state.hoverPoint.row
     ) {
-      return [...state.points, state.hoverPoint];
+      return [...points, state.hoverPoint];
     }
   }
 
-  return state.points.slice();
+  return points.slice();
 }
 
 function getSegments(points) {
@@ -1055,6 +1073,7 @@ export function updateExternalMeasurement(point) {
     return;
   }
   sharedState.hoverPoint = snapshot;
+  sharedState.assumed = assumedCorners(sharedState);
   updateOverlay(sharedState);
 }
 
@@ -1141,6 +1160,14 @@ export function getCurrentMovementKind() {
 }
 
 export function getCurrentMeasurementPoints() {
+  if (!sharedState || !Array.isArray(sharedState.points)) return [];
+  return routePoints(sharedState)
+    .filter((p) => p && Number.isFinite(p.column) && Number.isFinite(p.row))
+    .map((p) => ({ column: p.column, row: p.row }));
+}
+
+/** The same without the app's own corners: where the route starts and the corners he dropped himself. */
+export function getDroppedMeasurementPoints() {
   if (!sharedState || !Array.isArray(sharedState.points)) return [];
   return sharedState.points
     .filter((p) => p && Number.isFinite(p.column) && Number.isFinite(p.row))

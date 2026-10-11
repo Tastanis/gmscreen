@@ -11,7 +11,16 @@ final class WallMovement
      * `$travel` is the mover's path from `$from`, when the caller already has one: a push that is
      * looking for where it stops asks about many points on one line.
      */
-    public static function assertAllowed(array $from, array $to, array $config, string $kind, array $path, bool $isGm, ?TravelPath $travel=null): void
+    /** A barrier this many squares high or less (a rail, a fence, a parapet) can be climbed over. Paired with LOW_BARRIER in wall-properties.mjs. */
+    public const LOW_BARRIER=1.0;
+    /** A low box (WallBoxes) stands on rough ground: its wall is still low when its base is no more than this above the walker's feet. */
+    public const BOX_FOOT=.5;
+
+    /**
+     * `$climb`: the mover has said yes to climbing over low barriers (the climb pop-up), so a walk or a
+     * shift is stopped only by something else.
+     */
+    public static function assertAllowed(array $from, array $to, array $config, string $kind, array $path, bool $isGm, ?TravelPath $travel=null, bool $climb=false): void
     {
         // Preserve the GM's ordinary placement override; forced movement still collides.
         if ($kind==='teleport' || ($isGm && in_array($kind,['walk','shift'],true))) return;
@@ -30,7 +39,7 @@ final class WallMovement
         $previous=$from;
         foreach ([...$path,$to] as $point) {
             $next=[...$previous,'column'=>$point['column'],'row'=>$point['row']];
-            if (self::blocked($model,$previous,$next,$config,$kind,$previous===$from?$travel:null)) throw new InvalidArgumentException('Movement blocked by a wall or closed door/window.');
+            if (self::blocked($model,$previous,$next,$config,$kind,$previous===$from?$travel:null,$climb&&in_array($kind,['walk','shift'],true))) throw new InvalidArgumentException('Movement blocked by a wall or closed door/window.');
             $previous=self::movementPlacement($previous,$next,$config);
         }
     }
@@ -93,22 +102,43 @@ $length=in_array($direction,['west','east'],true)?$s['right']-$s['left']:$s['bot
 
     public static function movementHeight(array $from,array $to,array $config): float
     {
-        return self::height(self::movementPlacement($from,$to,$config),$config);
+        // Part-way through a move he is not yet up on a low box (WallBoxes): its walls are judged from where he stands.
+        return self::height(self::movementPlacement($from,$to,$config,false),$config);
     }
 
-    private static function movementPlacement(array $from,array $to,array $config): array
+    private static function movementPlacement(array $from,array $to,array $config,bool $enter=true): array
     {
-        $surface=FloorSupport::walkContact($from,$to,[],FloorSupport::surfaces($config['environment']['walls']['value']??[]),$config['mapLevels']??[],fn($p)=>self::terrain($p['column']+($p['width']??1)/2,$p['row']+($p['height']??1)/2,$config));
+        $surface=FloorSupport::walkContact($from,$to,[],FloorSupport::surfaces($config['environment']['walls']['value']??[]),$config['mapLevels']??[],fn($p)=>self::terrain($p['column']+($p['width']??1)/2,$p['row']+($p['height']??1)/2,$config),$enter);
          $surface??=FloorSupport::cubeStepDown($from,$to,FloorSupport::surfaces($config['environment']['walls']['value']??[]),$config['mapLevels']??[]);
         return $surface?[...$to,'levelId'=>$surface['levelId'],'_supportSurfaceId'=>$surface['id']??null]:$to;
     }
 
-    public static function blocked(array $model,array $from,array $to,array $config,string $kind='walk',?TravelPath $travel=null): bool
+    public static function blocked(array $model,array $from,array $to,array $config,string $kind='walk',?TravelPath $travel=null,bool $climb=false): bool
     {
         if($to['column']==$from['column']&&$to['row']==$from['row'])return false;
         $nodes=array_column($model['nodes'],null,'id');
-        foreach($model['segments'] as $edge)if(self::entry($edge,$nodes,$from,$to,$config,$kind,$travel)!==null)return true;
+        if(!$climb){
+            foreach($model['segments'] as $edge)if(self::entry($edge,$nodes,$from,$to,$config,$kind,$travel)!==null)return true;
+            return false;
+        }
+        // Low barriers are climbed over; anything else that is met stops the move.
+        $met=[];
+        foreach($model['segments'] as $i=>$edge){
+            $detail=null;
+            if(self::entry($edge,$nodes,$from,$to,$config,$kind,$travel,null,true,$detail)===null)continue;
+            if(!$detail['low'])return true;
+            $met[$i]=$detail;
+        }
+        if(!$met)return false;
+        // Over a low barrier the mover is at its top: a wall above it there (a window over a sill) still stops him.
+        foreach($model['segments'] as $i=>$edge)if(!isset($met[$i])&&self::entry($edge,$nodes,$from,$to,$config,$kind,$travel,array_values($met))!==null)return true;
         return false;
+    }
+
+    /** True when a wall runs along the edge between squares (a rail, a fence), not through or inside one. */
+    private static function onGridLine(array $a,array $b): bool
+    {
+        return (abs($a['x']-$b['x'])<1e-6&&abs($a['x']-round($a['x']))<1e-6)||(abs($a['y']-$b['y'])<1e-6&&abs($a['y']-round($a['y']))<1e-6);
     }
 
     /**
@@ -153,7 +183,13 @@ $length=in_array($direction,['west','east'],true)?$s['right']-$s['left']:$s['bot
      * wall, or null when the wall does not stop it: it is open, broken, passable, one-way from the
      * other side, off the path, or does not reach the height the mover is travelling at.
      */
-    private static function entry(array $edge,array $nodes,array $from,array $to,array $config,string $kind,?TravelPath &$travel): ?float
+    /**
+     * `$lifts` are low barriers already found on this move: while the mover is over one he is at its top.
+     * `$describe` fills `$detail` for a wall that is met: where along the move (lo, hi), its top, the most
+     * it stands above the mover's feet (rise), and `low` when it is a low barrier all the way: a plain wall
+     * along a square's edge or one of a low box's own (WallBoxes), standing on his floor, no more than LOW_BARRIER above his feet.
+     */
+    private static function entry(array $edge,array $nodes,array $from,array $to,array $config,string $kind,?TravelPath &$travel,?array $lifts=null,bool $describe=false,?array &$detail=null): ?float
     {
         $w=max(1,(float)($from['width']??1));$h=max(1,(float)($from['height']??1));
         $ox=$from['column']+$w/2;$oy=$from['row']+$h/2;$dx=$to['column']-$from['column'];$dy=$to['row']-$from['row'];
@@ -175,6 +211,7 @@ $length=in_array($direction,['west','east'],true)?$s['right']-$s['left']:$s['bot
         }
         if($lo>=$hi||$hi<0||$lo>1)return null;
         $steps=max(1,min(8192,(int)ceil(hypot($dx,$dy)*($hi-$lo)*8)));
+        $hit=false;$low=$e['interaction']==='none'&&(self::onGridLine($a,$b)||!empty($edge['boxWall']));$highest=-INF;$rise=0.;
         for($i=0;$i<=$steps;$i++){
             $t=$lo+($hi-$lo)*($i+.5)/($steps+1);
             $token=[...$from,'column'=>$from['column']+$dx*$t,'row'=>$from['row']+$dy*$t];
@@ -186,8 +223,14 @@ $length=in_array($direction,['west','east'],true)?$s['right']-$s['left']:$s['bot
             // a wall on the floor does not stop a creature going over it six squares up.
             $travel??=new TravelPath($from,$config,$kind);
             $z=$travel->heightAt($token);
-            if($z<$top-1e-7&&$z+max($w,$h)>$base+1e-7)return max(0.,$lo);
+            if($lifts)foreach($lifts as $lift)if($t>=$lift['lo']-1e-9&&$t<=$lift['hi']+1e-9&&$lift['top']>$z)$z=$lift['top'];
+            if($z<$top-1e-7&&$z+max($w,$h)>$base+1e-7){
+                if(!$describe)return max(0.,$lo);
+                $hit=true;$foot=!empty($edge['boxWall'])?min(self::BOX_FOOT,max(0.,$base-$z)):0.;if($top-$z-$foot>self::LOW_BARRIER+1e-6||$base>$z+$foot+1e-6)$low=false;
+                $highest=max($highest,$top);$rise=max($rise,$top-$z);
+            }
         }
+        if($hit){$detail=['lo'=>max(0.,$lo),'hi'=>min(1.,$hi),'low'=>$low,'top'=>$highest,'rise'=>$rise];return max(0.,$lo);}
         return null;
     }
 }

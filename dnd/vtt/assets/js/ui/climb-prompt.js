@@ -1,16 +1,19 @@
 // The pop-up asked when a walk goes up a cliff: climb (and pay for it), or do not move.
 // A cliff is a face steep enough to stop forced movement; see terrain-prototype's climbFace.
 
-/** The words on the pop-up. Pure, so the wording is tested without a page. */
-export function climbPromptText({ name = 'Token', squares = 0, cost = 0, extra = 0, left = null, others = 0 } = {}) {
-  const lines = [
-    `${name} climbs ${squares} ${squares === 1 ? 'square' : 'squares'}${others > 0 ? `, and ${others} more ${others === 1 ? 'token climbs' : 'tokens climb'}` : ''}.`,
-    `This move costs ${cost} (${extra} extra for the climb).`,
-  ];
-  if (Number.isFinite(left)) {
-    lines.push(cost > left ? `Only ${left} movement left this turn.` : `${left} movement left this turn.`);
-  }
-  return { title: 'Climbing', lines, yes: 'Climb', no: 'Don’t climb' };
+/**
+ * The words on the pop-up: the fact and the cost, no reasons (Brandon, October 10, 2026: "I dont need an
+ * explanation. just say like Climb railing cost 1."). Pure, so the wording is tested without a page.
+ * `over` (a height) is a low barrier, a rail or fence one square high or less; with `onto`, a low object
+ * that fills a square, which he climbs onto. Otherwise it is a cliff, `squares` high. `cost` is the move's
+ * cost as the ruler counts it. What is left this turn is said only when it is not enough.
+ */
+export function climbPromptText({ squares = 0, cost = 0, left = null, others = 0, over = null, onto = false } = {}) {
+  const lines = Number.isFinite(cost) && cost > 0 ? [`Cost ${cost}.`] : [];
+  if (Number.isFinite(left) && Number.isFinite(cost) && cost > left) lines.push(`Only ${left} movement left.`);
+  const title = over !== null ? (onto ? 'Climb onto it?' : 'Climb over railing?')
+    : `Climb ${squares} ${squares === 1 ? 'square' : 'squares'}${others > 0 ? `, with ${others} more` : ''}?`;
+  return { title, lines, yes: 'Climb', no: 'Don’t climb' };
 }
 
 let open = null;

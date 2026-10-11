@@ -1,4 +1,4 @@
-import {wallCubeModel} from './wall-cubes.js';
+import {wallCubeModel} from './wall-cubes.js';import {withLowBoxes} from './low-boxes.mjs';
 import {forcedTerrainBlocked} from './forced-flight-terrain.js';
 import {travelPath} from './travel-height.mjs';
 import {shareRoofImages} from './roof-images.mjs';
@@ -6,7 +6,7 @@ import {sharedField,saveShared,acknowledgedRevision} from './environment-sync.mj
 import {rampAt,rampHeight,rampPick,rampGround,rampSupports,rampLanding} from './imported-ramps.mjs';
 import './edit-tools.js';
 import {connectedWallPath} from './wall-selection.mjs';
-import {properties,movementPathBlocked,movementBlocked,wallHeights,liveWalls,isBreakable,isBroken} from './wall-properties.mjs';
+import {properties,movementPathBlocked,movementBlocked,lowBarrierOnPath,firstWallMet,wallHeights,liveWalls,isBreakable,isBroken} from './wall-properties.mjs';
 import {createWallEditor} from './wall-editor.mjs';
 import {DEFAULT_SLANT,validSlant,viewSlant,viewAbove,viewBelow} from './height-view.mjs';
 import {gmVision} from './gm-vision.js';
@@ -227,7 +227,7 @@ let cubeModelRevision=-1,cachedCubeModel=null;
 // out in this one place. The editor keeps reading `model`, which still holds it for repair.
 function activeModel(){
  if(!context)return liveWalls(model);
- if(cubeModelRevision!==revision){cachedCubeModel=wallCubeModel(liveWalls(model),context.state.boardState.templates?.[context.state.boardState.activeSceneId]||[],context.state.boardState.sceneState?.[context.state.boardState.activeSceneId]||{},groundAt);cubeModelRevision=revision;}
+ if(cubeModelRevision!==revision){cachedCubeModel=wallCubeModel(withLowBoxes(liveWalls(model)),context.state.boardState.templates?.[context.state.boardState.activeSceneId]||[],context.state.boardState.sceneState?.[context.state.boardState.activeSceneId]||{},groundAt);cubeModelRevision=revision;}
  return cachedCubeModel;
 }
 function groundAt(x,y){const v=context.view;return terrainPrototype.heightAt((v.gridOffsets.left||0)+x*v.gridSize,(v.gridOffsets.top||0)+y*v.gridSize);}
@@ -236,7 +236,11 @@ window.wallPrototype={refreshPortals:()=>editor.portals(),get selectedTopHeight(
  const edge=model.segments.find(e=>e.id===selection.id);if(!edge)return null;
  const a=pointNode(edge.a),b=pointNode(edge.b);
  return wallHeights(edge,a,b,{x:(a.x+b.x)/2,y:(a.y+b.y)/2},groundAt).top;
-},forcedBlockedMove:(from,to)=>!!context&&(forcedTerrainBlocked(from,to,groundAt,t=>moverHeight(from,t,'forced',true))||pathFor(from,'forced').slams(to)||movementBlocked(activeModel(),from,to,(t,origin)=>moverHeight(origin,t,'forced'),groundAt)),moverHeight:(from,at,kind='forced')=>moverHeight(from,at,kind),blockedMove:(from,to)=>!!context&&!context.isGM&&(from.levelId||'level-0')===(context.levelId||'level-0')&&movementPathBlocked(activeModel(),from,to,(t,origin)=>moverHeight(origin,t,'walk'),groundAt,(a,b)=>terrainPrototype.movementPlacement(a,b)),get saving(){return savingShared;},get revision(){return revision;},get model(){return activeModel();},get key(){return key;},blocksSight:(a,b)=>blocksSight(activeModel(),a,b)};
+},forcedBlockedMove:(from,to)=>!!context&&(forcedTerrainBlocked(from,to,groundAt,t=>moverHeight(from,t,'forced',true))||pathFor(from,'forced').slams(to)||movementBlocked(activeModel(),from,to,(t,origin)=>moverHeight(origin,t,'forced'),groundAt)),moverHeight:(from,at,kind='forced')=>moverHeight(from,at,kind),blockedMove:(from,to)=>!!context&&!context.isGM&&(from.levelId||'level-0')===(context.levelId||'level-0')&&movementPathBlocked(activeModel(),from,to,(t,origin)=>moverHeight(origin,t,'walk'),groundAt,(a,b)=>terrainPrototype.movementPlacement(a,b)),
+// The wall piece this walk meets first ({a,b,base,top} in squares), for showing a refused walker which it was. Null when none.
+wallMet:(from,to)=>!context?null:firstWallMet(activeModel(),from,to,(t,origin)=>moverHeight(origin,t,'walk'),groundAt,(a,b)=>terrainPrototype.movementPlacement(a,b)),
+// When low barriers (a rail, a fence) are all that stop this walk: {rise}, how high the tallest stands above the walker's feet. Null otherwise.
+lowBarrier:(from,to)=>!context||context.isGM||(from.levelId||'level-0')!==(context.levelId||'level-0')?null:lowBarrierOnPath(activeModel(),from,to,(t,origin)=>moverHeight(origin,t,'walk'),groundAt,(a,b)=>terrainPrototype.movementPlacement(a,b)),get saving(){return savingShared;},get revision(){return revision;},get model(){return activeModel();},get key(){return key;},blocksSight:(a,b)=>blocksSight(activeModel(),a,b)};
 // The height a mover is at part-way through a move (travel-height.mjs): the height of its footing
 // while it has one, and the height it left from once it has gone over an edge. Walls, slopes and
 // other creatures are tested against this, so what stands on the ground far below a push is not in

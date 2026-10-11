@@ -118,14 +118,16 @@ test('a token on a deck, plank or other plate is out of the liquid under it, wha
   assert.equal(standsOnPlate(token, Number.NaN, model), false);
 });
 
-test('the climb pop-up says how far, what it costs, and what is left', () => {
-  const enough = climbPromptText({ name: 'Cal', squares: 3, cost: 6, extra: 2, left: 7 });
-  assert.equal(enough.title, 'Climbing');
-  assert.deepEqual(enough.lines, ['Cal climbs 3 squares.', 'This move costs 6 (2 extra for the climb).', '7 movement left this turn.']);
+test('the climb pop-up says the fact and the cost, and what is left only when it is not enough', () => {
+  const enough = climbPromptText({ squares: 3, cost: 6, left: 7 });
+  assert.equal(enough.title, 'Climb 3 squares?');
+  assert.deepEqual(enough.lines, ['Cost 6.']);
   assert.deepEqual([enough.yes, enough.no], ['Climb', 'Don’t climb']);
-  assert.equal(climbPromptText({ name: 'Cal', squares: 3, cost: 6, extra: 2, left: 4 }).lines[2], 'Only 4 movement left this turn.');
-  assert.equal(climbPromptText({ name: 'Warden', squares: 2, cost: 3, extra: 1 }).lines.length, 2, 'outside a turn there is no movement line');
-  assert.match(climbPromptText({ name: 'Cal', squares: 1, cost: 2, extra: 1, others: 2 }).lines[0], /^Cal climbs 1 square, and 2 more tokens climb\.$/);
+  assert.deepEqual(climbPromptText({ squares: 3, cost: 6, left: 4 }).lines, ['Cost 6.', 'Only 4 movement left.']);
+  assert.deepEqual(climbPromptText({ squares: 2, cost: 3 }).lines, ['Cost 3.'], 'outside a turn there is no movement line');
+  assert.equal(climbPromptText({ squares: 1, cost: 2, others: 2 }).title, 'Climb 1 square, with 2 more?');
+  // No reasons: nothing about why it costs what it costs.
+  for (const text of [enough, climbPromptText({ over: 0.67, cost: 2, left: 5 })]) assert.doesNotMatch([text.title, ...text.lines].join(' '), /extra|because|high\b|jump/i);
 });
 
 function fakeDocument() {

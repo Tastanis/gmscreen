@@ -54,6 +54,7 @@ import {
 } from './drag-ruler.js';
 import { rightPressAt, rightPressPulls, rightPressClicked } from './right-press.mjs';
 import { slideLegs } from './forced-line.mjs';
+import { flashWall, blockedByWallText, isWallRefusal } from './wall-flash.mjs';
 import { buildAutomationTargetPromptHtml } from './automation-target-prompt.js';
 import { getAutomationMoveRangePresentation } from './automation-move-display.js';
 import {
@@ -1396,6 +1397,19 @@ export function mountBoardInteractions(store, routes = {}) {
     return zones.routeCost(points, { kind, actor: (tokenId && getPlacementFromStore(tokenId)) || undefined }).cost;
   }
 
+  // Marks, for a moment, the wall piece that a refused walk met. True when a piece was found and drawn.
+  function markWallMet(move, canonical) {
+    try {
+      const origin = move ? canonical?.[move.placementId] : null, mapLayer = document.getElementById('vtt-map-transform');
+      const met = origin ? window.wallPrototype?.wallMet?.(origin, { column: move.column, row: move.row, path: (move.path || []).slice(1, -1) }) : null;
+      if (!met || !mapLayer) return false;
+      const grid = viewState.gridSize, left = viewState.gridOffsets?.left || 0, top = viewState.gridOffsets?.top || 0, terrain = window.terrainPrototype?.active ? window.terrainPrototype : null;
+      const at = (q) => (terrain?.project ? terrain.project(left + q.x * grid, top + q.y * grid, met.base) : { x: left + q.x * grid, y: top + q.y * grid });
+      return Boolean(flashWall([at(met.a), at(met.b)], { layer: mapLayer, size: viewState.mapPixelSize, grid }));
+    } catch (error) {
+      return false;
+    }
+  }
   // What the last move made here came to, for a slide to read between its legs.
   let lastMoveOutcome = null;
   async function commitCanonicalTokenMoves({ sceneId, moves, source, originalPositions = null, movementKind = 'walk', drawnRuler = null, inTurn = false, slideBeyond = 0 }) {
@@ -1437,7 +1451,7 @@ export function mountBoardInteractions(store, routes = {}) {
         const now = tokenMovementRuntime.getConfirmedSnapshot()?.state?.placements?.[sceneId]?.[id];
         const arrived = made !== false && lastMoveOutcome && !lastMoveOutcome.fell && now && now.column === leg.to.column && now.row === leg.to.row;
         if (!arrived || sceneId !== getActiveSceneId()) {
-          if (index < legs.length - 1 && made !== false) updateStatus('The slide ended there: it did not reach its next corner.');
+          if (index < legs.length - 1 && made !== false) updateStatus('Slide stopped short.');
           break;
         }
       }
@@ -1467,9 +1481,33 @@ export function mountBoardInteractions(store, routes = {}) {
         if (!climb || sceneId !== getActiveSceneId()) {
           for (const item of moves) { const start = canonical[item.placementId]; if (start) updatePlacementById(item.placementId, (placement) => Object.assign(placement, start), { syncBoard: false }); }
           renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
-          updateStatus('Did not climb. The token stays where it was.');
+          updateStatus('Did not climb.');
           return;
         }
+      }
+    }
+    // A walk that only a low barrier stops (a rail, a fence, a parapet: LOW_BARRIER in wall-properties.mjs): ask,
+    // with the climb pop-up. On yes the move is sent with the answer and the server lets it over; on no the token
+    // stays. What lies beyond is walked onto like any square, so a drop there is today's fall, asked after this.
+    // The Director's own walks are stopped by no wall, so he is asked nothing.
+    let climbLow = false;
+    if ((movementKind === 'walk' || movementKind === 'shift') && moves.length === 1 && !isGmUser() && typeof window.wallPrototype?.lowBarrier === 'function') {
+      const move = moves[0], origin = canonical[move.placementId];
+      const through = origin && hasMatchingOrigin ? ruler.slice(1, -1).map((point) => ({ column: point.column + origin.column - ruler[0].column, row: point.row + origin.row - ruler[0].row })) : [];
+      let low = null;
+      try { low = origin ? window.wallPrototype.lowBarrier(origin, { column: move.column, row: move.row, path: through }) : null; } catch (error) { low = null; }
+      if (low) {
+        const left = tokenMovementController?.getMovementLeft?.(move.placementId)?.left ?? null;
+        const anchor = [...tokenLayer.querySelectorAll('[data-placement-id]')].find((element) => element.dataset.placementId === move.placementId) ?? null;
+        const cost = window.terrainZones?.routeCost ? window.terrainZones.routeCost([{ column: origin.column, row: origin.row }, ...through, { column: move.column, row: move.row }], { kind: movementKind, actor: origin }).cost : null;
+        const yes = await askClimb({ name: origin.name || 'Token', over: low.rise, onto: low.onto === true, cost, left }, { anchor });
+        if (!yes || sceneId !== getActiveSceneId()) {
+          updatePlacementById(move.placementId, (placement) => Object.assign(placement, origin), { syncBoard: false });
+          renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+          updateStatus('Did not climb.');
+          return;
+        }
+        climbLow = true;
       }
     }
     const collisions = new Map();
@@ -1499,7 +1537,7 @@ export function mountBoardInteractions(store, routes = {}) {
         if (breakThrough) return {...move,...breakThrough.destination,movementKind,path:[],forcedDestination:{column:move.column,row:move.row,breakThrough:true,...beyond}};
         return {...collision.destination,movementKind,path:[],forcedDestination:{column:move.column,row:move.row,...beyond}};
       }
-      return { ...move, movementKind, path: movementKind === 'teleport' ? [] : path };
+      return { ...move, movementKind, path: movementKind === 'teleport' ? [] : path, ...(climbLow ? { climbLow: true } : {}) };
     });
     let movementAccepted = false;
     // Warning only: nothing blocks a shift through difficult terrain.
@@ -1550,6 +1588,15 @@ export function mountBoardInteractions(store, routes = {}) {
         }
       })
       .catch((error) => {
+        // A walk refused by a wall is not a fault of the connection: show which wall piece it met and say how
+        // to go round (wall-flash.mjs), in the line and in a plain notice, and raise no error.
+        if (!movementAccepted && isWallRefusal(error?.message)) {
+          markWallMet(intendedMoves[0], canonical);
+          const hint = blockedByWallText(source === 'drag');
+          updateStatus(hint);
+          window.UIKit?.toast?.(hint, 'warning');
+          return false;
+        }
         reportSyncFailure(error, movementAccepted ? 'movement follow-up' : 'token movement');
         updateStatus(movementAccepted ? 'Movement saved; a follow-up effect needs review. Do not repeat the move to retry damage.' : (error?.message || 'Token movement was rejected.'));
         return false;

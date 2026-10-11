@@ -1975,7 +1975,7 @@ final class SyncV2Store
                 $collisionPlan=ForcedMovement::plan($current,$next,$normalized['forcedDestination'],$normalized['movementKind'],$state['placements'][$sceneId],$movementConfig);
             }
             if ($restore === null && $collisionPlan===null && $normalized['movementKind']==='forced') ForcedMovement::assertClear($current,$next,$state['placements'][$sceneId],$movementConfig);
-            if ($restore === null && $collisionPlan===null) WallMovement::assertAllowed($current,$next,$movementConfig,$normalized['movementKind'],$normalized['path'],$isGm);
+            if ($restore === null && $collisionPlan===null) WallMovement::assertAllowed($current,$next,$movementConfig,$normalized['movementKind'],$normalized['path'],$isGm,null,$normalized['climbLow']);
             $floor = $restore !== null
                 ? ['levelId'=>$restore['levelId'], 'traversal'=>$restore['_floorTraversal'], 'cause'=>'undo']
                 : FloorGeometry::move($current, $next, $mapLevels, $normalized['movementKind'], $normalized['path'], FloorSupport::surfaces($movementConfig['environment']['walls']['value']??[]), fn($p)=>WallMovement::terrain($p['column']+($p['width']??1)/2,$p['row']+($p['height']??1)/2,$movementConfig));
@@ -2575,6 +2575,8 @@ final class SyncV2Store
             'forcedDestination' => $command['payload']['forcedDestination'] ?? null,
             'teleportChoice' => $command['payload']['teleportChoice'] ?? null,
             'undoRevision' => isset($command['payload']['undoRevision']) ? (int) $command['payload']['undoRevision'] : null,
+            // The mover said yes to climbing over a low barrier (a rail, a fence): WallMovement::LOW_BARRIER.
+            'climbLow' => ($command['payload']['climbLow'] ?? false) === true,
         ];
     }
 
