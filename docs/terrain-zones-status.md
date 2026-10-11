@@ -1357,6 +1357,51 @@ Tried on the copy of your real data: all 13 scenes compared before and after (to
 
 **The copies, and how to delete them.** Each carry-over leaves one dated copy in `dnd/vtt/storage` on the host, named `sync-v2.before-split-(date)-(time).sqlite`, about the size of the database (130 MB today). Turning back and splitting again leaves another each time. Nothing reads them: they are refused to visitors by the rule file in that folder (anything with `.sqlite` in its name), and the site's own export for the test sandbox leaves them out. They are there only so the database can be put back by hand if the new layout ever had to be abandoned. To delete them: in cPanel's File Manager open `public_html/dnd/vtt/storage`, select the files whose names start with `sync-v2.before-split-`, and delete. Leave `sync-v2.sqlite` itself and the files beside it ending `-wal` and `-shm` alone. I would keep the newest copy until you have played a session or two on the new layout, then delete it too. The small empty file `sync-v2.sqlite.split.lock` can stay.
 
+## October 10 and 11: floors above, and what can be climbed. Builds 471 to 474, built, waiting for the tester
+
+You tried this over seven rounds in a sandbox on your PC and said "Seems like it's all working good." It is four builds, each of which works by itself.
+
+**Build 471: floors above.**
+
+- Dragging a hero onto a stair, a walkway or an upper floor picks the square he would walk to, at the height the walk ends at. The ghost you hold is drawn where the move will really end.
+- Players have the height arrows. Looking up, a floor above the eyes is a dark shape with only its lip in picture.
+- In the usual view a floor above the hero is outlined with a dashed line near him when he can see its lip, and round the head of a climb he stands at the foot of. Nothing on that floor is shown.
+- From the last square before a drop a hero sees straight down over the edge.
+- Players see the foot of a climb in red and its head in green, each only while it is in sight.
+- A bridge can be drawn with a thin edge, so a rope bridge is not a wall down to the ground.
+
+**Build 472: how a drag is carried.**
+
+- A quick right click while dragging drops a corner. Holding the right button still pans. Shift no longer drops a corner while you move a token; it still does while you measure.
+- The corners you draw travel with the move, so the hero walks the route you drew.
+- A push or a pull is one straight line. A slide may bend, one straight leg at a time.
+
+**Build 473: low barriers, stairs and standing.**
+
+- A rail, fence or parapet a square high or less lets sight through and is climbed over on a yes: "Climb over railing? Cost 2." A push still hits it or breaks it.
+- A low thing that fills a square (a crate, a low rock) is climbed onto on a yes and stood on. He steps off with no question.
+- When a wall refuses a walk, the page says so and marks the wall piece that refused it.
+- A hero beside the end of a stair, held over the stair or where it leads, is taken by the stair.
+
+**Build 474: the "climbable" setting.**
+
+- Your words: "we need a wall type called climbable ... any thing outside like a large rock or something. Those should all be climbable. We can just make that a setting instead of trying to make sure every block is the right height."
+- A wall piece can be ticked "Climbable" in the Walls panel, or by the Map maker in a package. Only what is ticked.
+- A walk onto or over a ticked thing is asked once for the whole drag, whatever its height. He stands on top of a thing that fills its square, and crosses a fence.
+- The cost is the cliff's, as it already was: a rise under a square and a half is a step; from there up it costs double.
+- Coming down is the fall rule as it was: more than a square and a half is a drop, and the fall panel has its "Climbing" button.
+
+**What you will notice on your live scenes after the deploy.**
+
+- The old bathhouse's low rail pieces (18 of them) and one piece in "silverquill gothic" now ask to be climbed where they used to refuse.
+- Players have the height arrows, and see dashed outlines of floors above them.
+- A right click while dragging drops a corner. Shift does not, while moving a token.
+- Nothing is climbable by the new setting until a wall is ticked or a new package is uploaded.
+
+**The maps.** The Map maker's Dead Root package can be uploaded once Build 471 is live (its bridges need it). All three packages show everything once Build 474 is live.
+
+**Not in these builds, waiting for your word.** Seeing out of a pool in a building's floor, and the outline of an opening in the floor above from inside a room. Stopping part of the way up a climb in combat.
+
 ## Where it is now
 
 You said to put stages 1 to 3 on `main` on this PC and wait for your word
