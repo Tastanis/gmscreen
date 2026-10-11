@@ -181,8 +181,13 @@ export function lipInSight(viewer, rings, on, seen, reach = RAISED_REACH) {
 
 /** An edge is judged in pieces this long, and looked at this far out from the floor on its open side. */
 export const EDGE_PIECE = 0.5, EDGE_OUT = 0.1;
-/** A wall is under an edge when it lies this close to it, starts at least WALL_BELOW under the floor and comes up to it. */
-export const WALL_AT = 0.03, WALL_BELOW = 0.5;
+/**
+ * A wall is under an edge when it lies this close to it, starts at least WALL_BELOW under the floor and ends no more
+ * than WALL_SHORT under it. Brandon's older buildings (the live bathhouse, Silverquill) have walls a square and a half
+ * tall under floors two squares apart, so their tops stop half a square short of the floor they hold up; a counter or
+ * a half-wall a square high does not count.
+ */
+export const WALL_AT = 0.03, WALL_BELOW = 0.5, WALL_SHORT = 0.75;
 
 /**
  * True when a wall stands under a floor's edge at `point`: one of the building's own walls, holding that edge up.
@@ -191,7 +196,7 @@ export const WALL_AT = 0.03, WALL_BELOW = 0.5;
  */
 export function wallUnderEdge(point, along, floorHeight, walls) {
   for (const wall of walls) {
-    if (!(wall.base <= floorHeight - WALL_BELOW + 1e-6) || !(wall.top >= floorHeight - 0.1 - 1e-6)) continue;
+    if (!(wall.base <= floorHeight - WALL_BELOW + 1e-6) || !(wall.top >= floorHeight - WALL_SHORT - 1e-6)) continue;
     const vx = wall.b.x - wall.a.x, vy = wall.b.y - wall.a.y, length = Math.hypot(vx, vy);
     if (!(length > 0) || Math.abs(along.x * vy - along.y * vx) / length > 0.1) continue;
     const t = ((point.x - wall.a.x) * vx + (point.y - wall.a.y) * vy) / (length * length);

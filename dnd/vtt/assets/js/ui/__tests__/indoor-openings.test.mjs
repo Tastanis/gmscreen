@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { compileBuildingCutaway, PIT } from '../building-cutaway.mjs';
-import { openEdgePieces, wallUnderEdge, EDGE_PIECE, WALL_AT, WALL_BELOW, RAISED_REACH } from '../height-view.mjs';
+import { openEdgePieces, wallUnderEdge, EDGE_PIECE, WALL_AT, WALL_BELOW, WALL_SHORT, RAISED_REACH } from '../height-view.mjs';
 import { onSurface } from '../stacked-surfaces.mjs';
 
 // Brandon, October 10, 2026, of the bathhouse (a pool in the ground floor, a balcony over it with a well): "if I'm
@@ -48,7 +48,12 @@ test('a wall under an edge: the building\'s own wall on that line, not an object
   assert.equal(wallUnderEdge({ x: 4, y: 5 }, along, 4, [wall(4, 2, 4)]), true, 'from the floor below up to this one');
   assert.equal(wallUnderEdge({ x: 4, y: 5 }, along, 4, [wall(4, 0, 6)]), true, 'a wall that runs on past it');
   assert.equal(wallUnderEdge({ x: 4, y: 5 }, along, 4, [wall(4, 4, 4.67)]), false, 'a rail standing ON the floor is not under it');
-  assert.equal(wallUnderEdge({ x: 4, y: 5 }, along, 4, [wall(4, 2, 3)]), false, 'a low wall that does not come up to it');
+  assert.equal(wallUnderEdge({ x: 4, y: 5 }, along, 4, [wall(4, 2, 3)]), false, 'a half-wall a square high does not come up to it');
+  // The tester, on Brandon's live bathhouse under Build 475 as first made: its walls are 1.5 tall under floors 2 apart,
+  // the test asked for a wall within a tenth of the floor, and every outer wall of the building was outlined.
+  assert.equal(wallUnderEdge({ x: 4, y: 5 }, along, 4, [wall(4, 2, 3.5)]), true, 'a wall that stops half a square short of the floor still holds that edge up');
+  assert.equal(wallUnderEdge({ x: 4, y: 5 }, along, 2, [wall(4, 0, 1.5)]), true); assert.equal(wallUnderEdge({ x: 4, y: 5 }, along, 6, [wall(4, 4, 5.5)]), true);
+  assert.equal(WALL_SHORT, 0.75);
   assert.equal(wallUnderEdge({ x: 4, y: 5 }, along, 4, [wall(4 + WALL_AT + 0.01, 2, 4)]), false, 'a rock\'s side four hundredths in from the edge');
   assert.equal(wallUnderEdge({ x: 4, y: 12 }, along, 4, [wall(4, 2, 4)]), false, 'beyond the wall\'s end');
   assert.equal(wallUnderEdge({ x: 4, y: 5 }, along, 4, [{ a: { x: 0, y: 5 }, b: { x: 8, y: 5 }, base: 2, top: 4 }]), false, 'a wall that only crosses the edge');
