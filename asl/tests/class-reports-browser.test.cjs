@@ -34,7 +34,7 @@ for(const mark of await reports.locator('.report-progress-chart line, .report-pr
  assert.equal(await mark.evaluate(e=>getComputedStyle(e).stroke),'rgb(0, 0, 0)','monochrome chart marks');
 }
 assert.equal(await reports.locator('.report-progress-chart polyline[stroke-dasharray="7 5"]').count(),2,'grade reference dash patterns retained');
-assert.equal(await reports.getByText('Projected year-end skills:',{exact:false}).count(),2);
+assert.equal(await reports.getByText('Projected year-end skills',{exact:false}).count(),2);
 assert.equal(await reports.locator('.report-participation-chart').count(),2);
 assert.equal(await reports.locator('.report-estimate').count(),2);
 assert(await reports.locator('.report-participation-chart polyline').count() >= 2);

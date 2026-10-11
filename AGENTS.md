@@ -1349,6 +1349,8 @@ Use `asl/scripts/add_student.php` and `asl/scripts/ADD-STUDENT.md` for additive 
 
 Report monochrome styling stays scoped to `asl/css/report.css`; retain grade labels and dashed reference lines, all skill changes, and one student per printed page. Verify with `asl/tests/class-reports-browser.test.cjs` using the disposable report fixture. Do not publish code or enroll production students without the specifically authorized destination/details.
 
+Report layout - October 11, 2026 (user-approved): a ruled band of four figures leads (estimated grade largest, then pacing, completion, participation); attendance is its own ruled strip of three figures; both graphs follow; skills improved sits below the graphs in three columns; comments last. Keep every fact and both graphs. The progress graph is 240px with tighter margins and names its newest point (`labelLatest`, report only; the dashboard is unchanged). `report.js` tightens the skills list before omitting any row; eight improved skills fit without tightening. The two report browser tests assume block 2 is current, so freeze the disposable copy's clock (as `--semester-boundary` does) to `2026-10-02 12:00:00` before running them.
+
 
 ### Skyward number privacy
 

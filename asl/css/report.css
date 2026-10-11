@@ -10,19 +10,27 @@ h2 { font-size: 11pt; margin-bottom: 5px; }
 h3 { font-size: 9.5pt; margin-bottom: 3px; }
 .report-header { display: flex; justify-content: space-between; gap: 16px; border-bottom: 2px solid #333; padding-bottom: 5px; }
 .report-header > p { text-align: right; font-size: 10pt; }
-.report-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; padding: 7px 0; border-bottom: 1px solid #aaa; }
-.report-summary h2 { color: black; margin-bottom: 3px; }
-.report-summary > div:first-child > strong { font-size: 16pt; }
-.report-summary p { font-size: 10pt; }
-.report-improvements { margin-top: 12px; }
-.improvement-columns { columns: 2; column-gap: 22px; font-size: 9pt; }
-.improvement-group { margin-bottom: 8px; }
-.improvement-group h3 { break-after: avoid; }
-.improvement-row { break-inside: avoid; margin-bottom: 4px; }
-.improvement-row > span { display: block; }
-.score-changes { color: black; font-variant-numeric: tabular-nums; }
-.improvement-row.compact > span { display: inline; }
-.improvement-row.compact .score-changes { white-space: nowrap; margin-left: 4px; }
+.report-summary { padding-top: 9px; }
+.report-summary h2 { color: black; margin: 0; font-size: 8pt; letter-spacing: .07em; text-transform: uppercase; }
+.report-summary p { font-size: 9pt; }
+/* The grade leads: one ruled strip, largest figure first. */
+.report-band { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; border: 2.5px solid black; }
+.report-band > div { display: flex; flex-direction: column; gap: 3px; padding: 6px 9px; border-left: 1px solid black; }
+.report-band > div:first-child { border-left: 0; }
+.report-band strong { font-size: 25pt; line-height: 1; font-variant-numeric: tabular-nums; }
+.report-band .report-estimate strong { font-size: 38pt; }
+.report-attendance { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 34px; margin-top: 8px; padding: 6px 9px; border: 2.5px solid black; }
+.report-attendance h2 { font-size: 10pt; }
+.report-attendance p { white-space: nowrap; }
+.report-attendance strong { font-size: 20pt; line-height: 1; margin-right: 3px; font-variant-numeric: tabular-nums; }
+.report-improvements { margin-top: 10px; }
+.improvement-columns { columns: 3; column-gap: 20px; font-size: 9.5pt; }
+.improvement-group { margin-bottom: 7px; }
+.improvement-group h3 { break-after: avoid; break-inside: avoid; border-bottom: 1px solid black; padding-bottom: 1px; }
+/* Skill left, scores right; a long pair wraps the scores onto their own line. */
+.improvement-row { break-inside: avoid; margin-bottom: 2px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 8px; }
+.score-changes { color: black; font-weight: bold; font-variant-numeric: tabular-nums; }
+.improvement-row.compact .score-changes { white-space: nowrap; }
 .dense .improvement-columns { columns: 3; column-gap: 14px; font-size: 8.5pt; line-height: 1.15; }
 .dense .improvement-group { margin-bottom: 6px; }
 .dense .improvement-group h3 { font-size: 8.5pt; }
@@ -34,6 +42,8 @@ h3 { font-size: 9.5pt; margin-bottom: 3px; }
 .chart-axis { stroke: black; stroke-width: 1.5; }
 .chart-line { stroke: black; stroke-width: 2.5; }
 .chart-dot { stroke: black; stroke-width: 2; fill: white; }
+.chart-dot-latest { fill: black; }
+.chart-latest-label { font-weight: bold; font-size: 12px; }
 /* Scope monochrome overrides to reports; the interactive dashboard keeps its palette.
    Percentage references retain their solid/dashed patterns. */
 .report-progress-chart polygon { fill: none; }
@@ -51,7 +61,7 @@ h3 { font-size: 9.5pt; margin-bottom: 3px; }
 }
 
 .report-content [hidden] { display:none !important; }
-.report-progress-chart { height:300px; }
+.report-progress-chart { height:240px; }
 
 .report-participation { margin-top:8px; break-inside:avoid; }
-.report-participation-chart { width:100%; height:150px; display:block; }
+.report-participation-chart { width:100%; height:120px; display:block; }

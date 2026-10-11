@@ -7,7 +7,7 @@
             // baseline marker; do not change the calculation or invent a grade.
             samples = samples.map(s => s.noExpectation ? {...s, percent:0} : s);
             const width = Math.max(280, svg.clientWidth), height = options.height || 510;
-            const left=58, right=76, top=40, bottom=52, w=width-left-right, h=height-top-bottom;
+            const left=58, right=76, top=options.top ?? 40, bottom=options.bottom ?? 52, w=width-left-right, h=height-top-bottom;
             const finite=samples.filter(s=>s.percent!==null);
             const upper=Math.max(140,...finite.map(s=>Math.ceil(s.percent/20)*20));
             const y=p=>top+h*(1-ASLChartMath.focusedPosition(p,upper));
@@ -30,6 +30,8 @@
                 lastLabel=label;lastX=x(s);
                 markup+=`<text x="${x(s)}" y="${height-18}" text-anchor="${s.fraction>.95?'end':'middle'}" class="chart-label">${esc(label)}</text>`;
             });
+            // Printed reports name the newest measured point so it reads without tracing the axis.
+            const latest=options.labelLatest ? finite.filter(s=>!s.baseline&&!s.noExpectation).pop() : null;
             let previous=null;
             samples.forEach(s=>{
                 if(s.percent===null){previous=null;return;}
@@ -41,7 +43,8 @@
                     markup+=`<polyline points="${[previous,...cuts,s].map(p=>`${x(p)},${y(p.percent)}`).join(' ')}" class="chart-line" fill="none"/>`;
                 }
                 const label=s.noExpectation ? `${s.date}: No growth required; ${s.points} growth points earned; shown at baseline, no pace percentage` : s.baseline ? `${s.date}: School-year starting point; 0 growth points` : `${s.date}: ${s.percent.toFixed(1)}% of expected progress; ${s.points} growth points earned`;
-                markup+=`<circle cx="${x(s)}" cy="${y(s.percent)}" r="4" class="chart-dot"/><circle cx="${x(s)}" cy="${y(s.percent)}" r="12" fill="transparent" aria-label="${esc(label)}"><title>${esc(label)}</title></circle>`;
+                markup+=`<circle cx="${x(s)}" cy="${y(s.percent)}" r="4" class="chart-dot${s===latest?' chart-dot-latest':''}"/><circle cx="${x(s)}" cy="${y(s.percent)}" r="12" fill="transparent" aria-label="${esc(label)}"><title>${esc(label)}</title></circle>`;
+                if(s===latest) markup+=`<text x="${x(s)+(s.fraction>.9?-9:9)}" y="${y(s.percent)+(y(s.percent)<top+16?16:-7)}" text-anchor="${s.fraction>.9?'end':'start'}" class="chart-label chart-latest-label">${Number(s.percent.toFixed(1))}%</text>`;
                 if(s.noExpectation) markup+=`<text x="${x(s)}" y="${y(0)-10}" text-anchor="${s.fraction>.95?'end':'middle'}" class="chart-label">No growth required</text>`;
                 previous=s;
             });

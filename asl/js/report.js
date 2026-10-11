@@ -28,7 +28,7 @@
 
         const svg = sheet.querySelector('.report-participation-chart');
 
-        const width = 720, height = 150, left = 55, right = 40, top = 14, bottom = 34;
+        const width = 720, height = 120, left = 55, right = 40, top = 14, bottom = 34;
 
         const percentages = data.participation.percent;
         const indexes = blocks.map((b,i)=>i).filter(i=>blocks[i].instructional_days_elapsed > 0);
@@ -52,9 +52,13 @@
 
     const content = sheet.querySelector('.report-content');
 
+    const dense = content.classList.contains('dense');
+
     const fit = () => {
 
         content.style.zoom = 1;
+
+        content.classList.toggle('dense', dense);
 
         renderParticipation();
 
@@ -62,9 +66,12 @@
 
         sheet.querySelector('.report-omitted')?.remove();
 
-        ASLPaceChart.render(sheet.querySelector('.report-progress-chart'), samples, {height: 300});
+        ASLPaceChart.render(sheet.querySelector('.report-progress-chart'), samples, {height: 240, top: 30, bottom: 34, labelLatest: true});
 
         const available = 10.2 * 96 - 2;
+
+        // Tighten the skills list before dropping any of it.
+        if (content.scrollHeight > available) content.classList.add('dense');
 
         const rows = [...content.querySelectorAll('.improvement-row')];
 

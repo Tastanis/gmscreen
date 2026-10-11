@@ -54,7 +54,7 @@ const assert=require('node:assert/strict');
   assert.match(await page.locator('.report-header').innerText(),/Sep 21.*Oct 2/);
   assert.match(await page.locator('.report-summary').innerText(),/6.*of class/s);
   assert.doesNotMatch(await page.locator('.report-improvements').innerText(),/0 → 1|— →/);
-  assert.equal(await page.locator('.report-progress-chart').evaluate(e=>e.getBoundingClientRect().height),300);
+  assert.equal(await page.locator('.report-progress-chart').evaluate(e=>e.getBoundingClientRect().height),240);
   assert.equal(await page.locator('.report-content').evaluate(e=>Number(getComputedStyle(e).zoom)),1);
   assert.doesNotMatch(await page.locator('.report-progress-chart').textContent(),/[ABCD] ·/);
   assert.deepEqual(errors,[]);
