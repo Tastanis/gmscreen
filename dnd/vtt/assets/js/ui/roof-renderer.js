@@ -4,12 +4,12 @@ import {seesFlatTop,seesRampTop} from './surface-facing.mjs';
 import {compileBuildingCutaway} from './building-cutaway.mjs';
 import {doorwayCutaways} from './doorway-cutaway.mjs';
 import {onSurface,surfacePath,supportAt} from './stacked-surfaces.mjs';
-import {wallHeights} from './wall-properties.mjs';
+import {wallHeights,restrictions} from './wall-properties.mjs';
 import {nearestOnSegment} from './wall-geometry.mjs';
 import {makeSight,head} from './vision-height.mjs';
 import {insideRoom,roofSurfaces,ceilingBlocks,floorBlocks} from './roof-geometry.mjs';import {getRoofImage} from './roof-images.mjs';import {adaptiveFog} from './adaptive-fog.mjs';
 import {createRoofImageCache} from './roof-image-cache.mjs';
-import {sideFoot,viewAbove,shapesAbove,dimsBelow,SHAPE_FILL,SHAPE_EDGE,DIM_FILL,inLip,RAISED_REACH,lipInSight,openEdgePieces,wallUnderEdge,ladderHeads,LADDER_TOP,OUTLINE_LIGHT,OUTLINE_DARK,edgeLooks,ownFloorHides,sceneStairs,climbMarkers,CLIMB_FOOT,CLIMB_HEAD,CLIMB_UNDER,hasOwnPicture} from './height-view.mjs';import {buildStairPerimeter,resolveSegmentColor} from './stairs-geometry.js';import {CLIMB_GRADE} from './travel-height.mjs';
+import {sideFoot,viewAbove,shapesAbove,dimsBelow,SHAPE_FILL,SHAPE_EDGE,DIM_FILL,inLip,RAISED_REACH,lipInSight,openEdgePieces,wallUnderEdge,fullWallBetween,ladderHeads,LADDER_TOP,OUTLINE_LIGHT,OUTLINE_DARK,edgeLooks,ownFloorHides,sceneStairs,climbMarkers,CLIMB_FOOT,CLIMB_HEAD,CLIMB_UNDER,hasOwnPicture} from './height-view.mjs';import {buildStairPerimeter,resolveSegmentColor} from './stairs-geometry.js';import {CLIMB_GRADE} from './travel-height.mjs';
 const canvas=document.createElement('canvas');canvas.id='roof-prototype';canvas.style.cssText='position:absolute;inset:0;pointer-events:none;z-index:100001';document.querySelector('#vtt-map-transform').append(canvas);
 const roofLayer=document.createElement('canvas');
 let revision=0,cutawayKey='',buildingCutaway=null;
@@ -53,13 +53,13 @@ export const roofRenderer={get revision(){return revision;},surfaces:roofSurface
   // Indoors: the open edges of a floor above that the hero has a line to (height-view.mjs). The building's walls,
   // flattened once for this picture, say which edges are held up by a wall and so are not open.
   let underWalls=null;
-  const wallsUnder=()=>underWalls??=model.segments.filter(e=>e.broken!==true).map(e=>{const a=nodes.get(e.a),b=nodes.get(e.b);if(!a||!b)return null;const span=wallHeights(e,a,b,{x:(a.x+b.x)/2,y:(a.y+b.y)/2},groundAt);return {a,b,base:span.base,top:span.top};}).filter(Boolean);
+  const wallsUnder=()=>underWalls??=model.segments.filter(e=>e.broken!==true).map(e=>{const a=nodes.get(e.a),b=nodes.get(e.b);if(!a||!b)return null;const span=wallHeights(e,a,b,{x:(a.x+b.x)/2,y:(a.y+b.y)/2},groundAt);return {a,b,base:span.base,top:span.top,blocks:restrictions(e).sight!=='pass'};}).filter(Boolean);
   // Brandon chose the open edges only ("A for now", October 11, 2026, from pictures of both). The other form he saw
   // drew the floor's whole outline within RAISED_REACH whenever one open edge was in sight: to go back to it, stroke
   // surfacePath(roof,at) clipped to that reach here instead of the pieces. A stair follows the same rule as the room.
   const indoorOutline=roof=>{
    const at=p=>window.terrainPrototype.project(ox+p.x*g,oy+p.y*g,roof.height),on=q=>onSurface(roof,q);
-   const pieces=openEdgePieces(viewer,[roof.points,...roof.holes||[]],on,(p,along)=>wallUnderEdge(p,along,roof.height,wallsUnder()),q=>sight(q,roof.height-.01));
+   const pieces=openEdgePieces(viewer,[roof.points,...roof.holes||[]],on,(p,along)=>wallUnderEdge(p,along,roof.height,wallsUnder()),q=>sight(q,roof.height-.01)&&!fullWallBetween(viewer,q,head(token,viewerGround),roof.height,wallsUnder()));
    if(!pieces.length)return;
    const shape=new Path2D();target.save();
    for(const [from,to] of pieces){const p=at(from),q=at(to);shape.moveTo(p.x,p.y);shape.lineTo(q.x,q.y);}

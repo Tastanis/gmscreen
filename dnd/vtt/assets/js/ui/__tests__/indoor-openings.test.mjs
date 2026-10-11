@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { compileBuildingCutaway, PIT } from '../building-cutaway.mjs';
-import { openEdgePieces, wallUnderEdge, EDGE_PIECE, WALL_AT, WALL_BELOW, WALL_SHORT, RAISED_REACH } from '../height-view.mjs';
+import { openEdgePieces, wallUnderEdge, fullWall, fullWallBetween, FULL_WALL, EDGE_PIECE, WALL_AT, WALL_BELOW, WALL_SHORT, RAISED_REACH } from '../height-view.mjs';
 import { onSurface } from '../stacked-surfaces.mjs';
 
 // Brandon, October 10, 2026, of the bathhouse (a pool in the ground floor, a balcony over it with a well): "if I'm
@@ -60,6 +60,37 @@ test('a wall under an edge: the building\'s own wall on that line, not an object
   assert.equal(WALL_BELOW, 0.5);
 });
 
+test('a full wall: two squares tall by its height alone, or ending no more than three quarters under the floor', () => {
+  // Brandon, October 11, 2026: "A wall that is like two squares high. Even if it doesn't connect to something should
+  // block too. It's just the one or like 1.x square high walls don't block but there should be a height where it does block."
+  assert.equal(FULL_WALL, 2);
+  assert.equal(fullWall({ base: 2, top: 4 }, 8), true, 'two squares tall under a ceiling far above: full by its height');
+  assert.equal(fullWall({ base: 2, top: 3.5 }, 4), true, 'a square and a half under a floor two up (his older buildings): full by the small gap');
+  assert.equal(fullWall({ base: 2, top: 3.5 }, 6), false, 'the same wall in a hall four squares high is a half-wall');
+  assert.equal(fullWall({ base: 2, top: 3.2 }, 4), false, 'between one and one and a half under a floor two up: a low wall');
+  assert.equal(fullWall({ base: 2, top: 3 }, 4), false, 'a square high: a low wall');
+  // It holds the edge above it, whether or not it reaches that floor.
+  const along = { x: 0, y: 1 }, at = { x: 4, y: 5 }, wall = (base, top) => [{ a: { x: 4, y: 0 }, b: { x: 4, y: 10 }, base, top }];
+  assert.equal(wallUnderEdge(at, along, 8, wall(2, 4)), true);
+  assert.equal(wallUnderEdge(at, along, 6, wall(2, 3.5)), false);
+});
+
+test('the line of sight of the outline does not pass over the top of a full wall', () => {
+  // The tester on Brandon's live bathhouse, Build 476: a piece of the balcony's edge beyond the room's south wall was
+  // still outlined, seen through the half-square slit between that wall's top (3.5) and the balcony (4).
+  const viewer = { x: 5, y: 5 }, beyond = { x: 5, y: 12 }, eye = 3;
+  const south = (base, top, extra = {}) => [{ a: { x: 0, y: 10 }, b: { x: 10, y: 10 }, base, top, blocks: true, ...extra }];
+  assert.equal(fullWallBetween(viewer, beyond, eye, 4, south(2, 3.5)), true, 'his older wall, half a square short of the floor');
+  assert.equal(fullWallBetween(viewer, beyond, eye, 8, south(2, 4)), true, 'a wall two squares tall under a high ceiling');
+  assert.equal(fullWallBetween(viewer, beyond, eye, 4, south(2, 3)), false, 'a low wall a square high is seen over');
+  assert.equal(fullWallBetween(viewer, beyond, eye, 6, south(2, 3.5)), false, 'a half-wall in a tall hall is seen over');
+  assert.equal(fullWallBetween(viewer, beyond, eye, 4, south(2, 4, { blocks: false })), false, 'a window or an open door');
+  assert.equal(fullWallBetween(viewer, beyond, eye, 4, south(4, 4.67)), false, 'a rail standing on the floor above');
+  assert.equal(fullWallBetween(viewer, beyond, eye, 4, south(0, 2)), false, 'a wall wholly under his eyes, on the floor below');
+  assert.equal(fullWallBetween(viewer, { x: 5, y: 8 }, eye, 4, south(2, 4)), false, 'a point on his own side of the wall');
+  assert.equal(fullWallBetween(viewer, { x: 15, y: 12 }, eye, 4, south(2, 4)), false, 'a line that goes round the end of the wall');
+});
+
 test('the open edges of a floor above: a hole\'s edge and a free edge he has a line to, never an edge on a wall', () => {
   const on = (p) => onSurface(balcony, p), rings = [balcony.points, ...balcony.holes];
   // The building's walls stand under the balcony's outer edges on three sides; its south side is a free edge.
@@ -91,5 +122,7 @@ test('the drawing: in a hole he is not under the floor, and a floor of his own b
   assert.match(renderer, /for\(const \[from,to\] of pieces\)\{const p=at\(from\),q=at\(to\);shape\.moveTo\(p\.x,p\.y\);shape\.lineTo\(q\.x,q\.y\);\}/);
   assert.doesNotMatch(renderer, /__vttIndoorOutline|indoorForm/);
   // Asked just under the floor's top, from below.
-  assert.match(renderer, /openEdgePieces\(viewer,\[roof\.points,\.\.\.roof\.holes\|\|\[\]\],on,\(p,along\)=>wallUnderEdge\(p,along,roof\.height,wallsUnder\(\)\),q=>sight\(q,roof\.height-\.01\)\)/);
+  assert.match(renderer, /openEdgePieces\(viewer,\[roof\.points,\.\.\.roof\.holes\|\|\[\]\],on,\(p,along\)=>wallUnderEdge\(p,along,roof\.height,wallsUnder\(\)\),q=>sight\(q,roof\.height-\.01\)&&!fullWallBetween\(viewer,q,head\(token,viewerGround\),roof\.height,wallsUnder\(\)\)\)/);
+  // A wall sight passes (a window, an open door, a rail) is not in the way of that line.
+  assert.match(renderer, /blocks:restrictions\(e\)\.sight!=='pass'/);
 });

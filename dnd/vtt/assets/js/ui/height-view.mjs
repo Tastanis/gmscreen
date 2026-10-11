@@ -188,6 +188,18 @@ export const EDGE_PIECE = 0.5, EDGE_OUT = 0.1;
  * a half-wall a square high does not count.
  */
 export const WALL_AT = 0.03, WALL_BELOW = 0.5, WALL_SHORT = 0.75;
+/**
+ * A wall this tall is a full wall by its height alone (Brandon, October 11, 2026: "A wall that is like two squares
+ * high. Even if it doesn't connect to something should block too. It's just the one or like 1.x square high walls
+ * don't block but there should be a height where it does block.").
+ */
+export const FULL_WALL = 2;
+/**
+ * True when a wall ({ base, top }) is a full wall under a floor at `floorHeight`: it is FULL_WALL tall or more, or
+ * it ends no more than WALL_SHORT under that floor (his older buildings: a square and a half under floors two
+ * apart). Anything else is a low wall or a half-wall: the edge above it is open, and it is seen over.
+ */
+export const fullWall = (wall, floorHeight) => wall.top - wall.base >= FULL_WALL - 1e-6 || wall.top >= floorHeight - WALL_SHORT - 1e-6;
 
 /**
  * True when a wall stands under a floor's edge at `point`: one of the building's own walls, holding that edge up.
@@ -196,12 +208,29 @@ export const WALL_AT = 0.03, WALL_BELOW = 0.5, WALL_SHORT = 0.75;
  */
 export function wallUnderEdge(point, along, floorHeight, walls) {
   for (const wall of walls) {
-    if (!(wall.base <= floorHeight - WALL_BELOW + 1e-6) || !(wall.top >= floorHeight - WALL_SHORT - 1e-6)) continue;
+    if (!(wall.base <= floorHeight - WALL_BELOW + 1e-6) || !fullWall(wall, floorHeight)) continue;
     const vx = wall.b.x - wall.a.x, vy = wall.b.y - wall.a.y, length = Math.hypot(vx, vy);
     if (!(length > 0) || Math.abs(along.x * vy - along.y * vx) / length > 0.1) continue;
     const t = ((point.x - wall.a.x) * vx + (point.y - wall.a.y) * vy) / (length * length);
     if (t < -1e-6 || t > 1 + 1e-6) continue;
     if (Math.hypot(wall.a.x + vx * t - point.x, wall.a.y + vy * t - point.y) <= WALL_AT) return true;
+  }
+  return false;
+}
+
+/**
+ * True when a full wall stands between a viewer and a point on the edge of a floor above him: the outline's line of
+ * sight does not pass over a full wall's top, however much room is left between that top and the floor (a slit over
+ * a wall that stops short showed him an edge on the far side of it). `walls` are [{ a, b, base, top, blocks }], where
+ * `blocks` is false for a wall sight passes (a window, an open door, a rail). A wall wholly under his eyes, or
+ * standing on the floor above, is not in the way.
+ */
+export function fullWallBetween(viewer, point, eye, floorHeight, walls) {
+  const side = (a, b, p) => (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+  for (const wall of walls) {
+    if (wall.blocks === false || !(wall.base < floorHeight - 0.1) || !(wall.top > eye + 1e-6) || !fullWall(wall, floorHeight)) continue;
+    const s1 = side(viewer, point, wall.a), s2 = side(viewer, point, wall.b), s3 = side(wall.a, wall.b, viewer), s4 = side(wall.a, wall.b, point);
+    if (s1 * s2 < -1e-12 && s3 * s4 < -1e-12) return true;
   }
   return false;
 }
