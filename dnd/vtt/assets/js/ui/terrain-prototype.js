@@ -16,7 +16,7 @@ import {nearStair} from './stair-walk.mjs';
 import {viewSlant,slantVector,edgeFaces,usesHeightView} from './height-view.mjs';
 import {pointAtHeight,pickDrawn,pickView,pickWalked} from './pointer-pick.mjs';
 import {createRulerPass,passActorKey} from './ruler-pass.mjs';
-import {getCurrentMeasurementPoints} from './drag-ruler.js';
+import {getCurrentMeasurementPoints,getCurrentMovementKind} from './drag-ruler.js';import {straightLine} from './forced-line.mjs';
 const $=s=>document.querySelector(s);
 const image=$('#vtt-map-image'),transform=$('#vtt-map-transform'),surface=$('#vtt-map-surface'),board=$('#vtt-board-canvas');
 const canvas=document.createElement('canvas');canvas.id='terrain-canvas';
@@ -318,6 +318,8 @@ function walkEnd(placement,points){
 let walkMemo=null;
 function walkHeights(placement,column,row){
  if(!importedDesign())return null;
+ // A forced move is not walked: the creature is where the straight line has carried it, at the height it travels at.
+ if(getCurrentMovementKind()==='forced'){const z=forcedHeight(forcedFrom(placement),column,row);return z===null?null:{end:z,top:z};}
  const ruler=getCurrentMeasurementPoints(),dx=ruler.length>1?placement.column-ruler[0].column:0,dy=ruler.length>1?placement.row-ruler[0].row:0;
  const points=[{column:placement.column,row:placement.row},...(ruler.length>2?ruler.slice(1,-1).map(p=>({column:p.column+dx,row:p.row+dy})):[]),{column,row}];
  const key=JSON.stringify([passActorKey(placement),points,window.wallPrototype?.revision,sharedTerrainRevision]);
@@ -332,6 +334,8 @@ function walkHeights(placement,column,row){
 let dropMemo=null;
 function dropHeight(placement,column,row){
  if(!importedDesign()||['fly','hover'].includes(placement.movementMode))return null;
+ // Held in a forced move, the ghost is where the straight line has carried the creature; the fall, if any, is in the ruler's words.
+ if(getCurrentMovementKind()==='forced')return forcedHeight(forcedFrom(placement),column,row);
  const ruler=getCurrentMeasurementPoints(),dx=ruler.length>1?placement.column-ruler[0].column:0,dy=ruler.length>1?placement.row-ruler[0].row:0,last=ruler[ruler.length-1];
  const own=ruler.length>1&&Math.abs(last.column+dx-column)<.01&&Math.abs(last.row+dy-row)<.01;
  const points=own?ruler.map(p=>({column:p.column+dx,row:p.row+dy})):[{column:placement.column,row:placement.row},{column,row}];
@@ -386,11 +390,30 @@ function stepsPath(steps,parts=[]){
  return parts;
 }
 function rulerPoint(p){const actor=rulerActor(),d=dimensions(),h=rulerGround(p.column,p.row,actor),q=project(p.mapX,p.mapY,h);return {mapX:q.x,mapY:q.y};}
-function routePath(points){
+function routePath(points,forced=false){
  const parts=[];
- for(const steps of routeLegs(points))stepsPath(steps,parts);
+ for(const steps of forced?forcedLegs(points):routeLegs(points))stepsPath(steps,parts);
  return parts.join(' ');
 }
+// A forced move goes straight (forced-line.mjs): each leg is the true line from where it starts to where it ends
+// (one leg for a push or a pull; a slide has a leg to each corner), at the height the creature travels at, which is
+// the line the move itself takes. No walk: it steps onto nothing.
+function forcedLegs(points){
+ const actor=rulerActor(),legs=[];
+ for(let k=1;k<points.length;k++){
+  const start=points[k-1],end=points[k];
+  const from=actor?(start.column===actor.column&&start.row===actor.row?actor:{...actor,column:start.column,row:start.row}):null;
+  legs.push(straightLine(start,end).map(p=>{const z=from?forcedHeight(from,p.column,p.row):null;return {...p,rawHeight:z??rulerGround(Math.round(p.column),Math.round(p.row),actor)};}));
+ }
+ return legs;
+}
+// Where the leg being held starts: the creature's own square, or the last corner dropped in this drag.
+function forcedFrom(placement){
+ const ruler=getCurrentMeasurementPoints();if(ruler.length<2)return placement;
+ const last=ruler[ruler.length-1];return {...placement,column:last.column+placement.column-ruler[0].column,row:last.row+placement.row-ruler[0].row};
+}
+// The height a creature is at when a forced move has carried it to a square (travel-height.mjs, by way of the walls).
+function forcedHeight(from,column,row){const z=window.wallPrototype?.moverHeight?.(from,{...from,column,row},'forced');return Number.isFinite(z)?z:null;}
 // The drawn line over one square only: from the edge the step from `from` crosses into `at`, to the
 // edge the step on to `next` leaves by (or to the middle of `at` when the route stops there).
 // stepsPath draws each one-square step as a start point and four quarter points, so the edges are the half-way ones.
@@ -426,11 +449,11 @@ function drawCostMarkers(){
  }
  markers.setAttribute('width',ctx.view.mapPixelSize.width);markers.setAttribute('height',ctx.view.mapPixelSize.height);markers.innerHTML=parts.join('');
 }
-function paintRoute(overlay,points,gridSize){
+function paintRoute(overlay,points,gridSize,forced=false){
  const ns='http://www.w3.org/2000/svg';let group=overlay.svg.querySelector('[data-terrain-route]');
  if(!group){group=document.createElementNS(ns,'g');group.dataset.terrainRoute='';overlay.svg.insertBefore(group,overlay.path.nextSibling);}
  const pieces=[];
- for(const steps of routeLegs(points)){
+ for(const steps of forced?forcedLegs(points):routeLegs(points)){
    for(let i=1;i<steps.length;i++){
      const a=steps[i-1],b=steps[i],distance=Math.max(Math.abs(b.column-a.column),Math.abs(b.row-a.row)),slope=(b.rawHeight-a.rawHeight)/(distance||1),color=slopeColor(slope);
      const path=stepsPath([a,b]).join(' ');pieces.push({path,color});

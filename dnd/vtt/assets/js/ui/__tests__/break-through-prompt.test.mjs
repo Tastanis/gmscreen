@@ -75,7 +75,7 @@ test('the pop-up: Escape stops at the wall, Enter breaks nothing, and a second o
 test('both places a push is made ask first, and send the word only on yes', () => {
   const board = readFileSync(new URL('../board-interactions.js', import.meta.url), 'utf8');
   assert.equal(board.split('await askForcedBreakThrough(').length - 1, 2, 'a Ctrl-drag and an ability\'s push');
-  assert.match(board, /if \(breakThrough\) return \{\.\.\.move,\.\.\.breakThrough\.destination,movementKind,path:\[\],forcedDestination:\{column:move\.column,row:move\.row,breakThrough:true\}\};/);
+  assert.match(board, /if \(breakThrough\) return \{\.\.\.move,\.\.\.breakThrough\.destination,movementKind,path:\[\],forcedDestination:\{column:move\.column,row:move\.row,breakThrough:true,\.\.\.beyond\}\};/);
   assert.match(board, /if\(through\)\{\s*clamped=\{\.\.\.clamped,\.\.\.through\.destination\};forcedIntent=\{\.\.\.forcedIntent,breakThrough:true\};/);
   assert.match(board, /if \(!stopped\.wall\) return null;/, 'the server is asked only when the push ends at a wall');
 });

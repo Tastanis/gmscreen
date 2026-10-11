@@ -50,7 +50,10 @@ import {
   getCurrentMeasurementPoints,
   getCurrentMovementKind,
   flashShiftWarning,
+  addExternalMeasurementNode,
 } from './drag-ruler.js';
+import { rightPressAt, rightPressPulls, rightPressClicked } from './right-press.mjs';
+import { slideLegs } from './forced-line.mjs';
 import { buildAutomationTargetPromptHtml } from './automation-target-prompt.js';
 import { getAutomationMoveRangePresentation } from './automation-move-display.js';
 import {
@@ -1393,7 +1396,9 @@ export function mountBoardInteractions(store, routes = {}) {
     return zones.routeCost(points, { kind, actor: (tokenId && getPlacementFromStore(tokenId)) || undefined }).cost;
   }
 
-  async function commitCanonicalTokenMoves({ sceneId, moves, source, originalPositions = null, movementKind = 'walk', drawnRuler = null, inTurn = false }) {
+  // What the last move made here came to, for a slide to read between its legs.
+  let lastMoveOutcome = null;
+  async function commitCanonicalTokenMoves({ sceneId, moves, source, originalPositions = null, movementKind = 'walk', drawnRuler = null, inTurn = false, slideBeyond = 0 }) {
     const ruler = drawnRuler ?? (source === 'drag' ? getCurrentMeasurementPoints() : []);
     // A move made another way takes its turn among arrow presses (keyboard-movement-queue.js), so
     // this browser's moves reach the server in the order they were made. With no press waiting it
@@ -1419,6 +1424,25 @@ export function mountBoardInteractions(store, routes = {}) {
       const origin = canonical[move.placementId];
       return origin && Math.abs(origin.column - ruler[0].column) < 0.01 && Math.abs(origin.row - ruler[0].row) < 0.01;
     });
+    // A forced drag with a corner in it is a slide (forced-line.mjs). Each leg is its own straight forced
+    // move, made in order with everything a forced move has: what the leg meets is met on that leg, with its
+    // own pop-ups. A leg that does not end on its corner, or ends in a fall, ends the slide there.
+    if (movementKind === 'forced' && source === 'drag' && hasMatchingOrigin && ruler.length > 2 && moves.length === 1 && canonical[moves[0].placementId]) {
+      const start = canonical[moves[0].placementId], id = moves[0].placementId;
+      const legs = slideLegs(ruler.map((point) => clampPlacementToBounds(point.column + start.column - ruler[0].column, point.row + start.row - ruler[0].row, start.width || 1, start.height || 1)));
+      let made = false;
+      for (const [index, leg] of legs.entries()) {
+        lastMoveOutcome = null;
+        made = await commitCanonicalTokenMoves({ sceneId, moves: [{ ...moves[0], column: leg.to.column, row: leg.to.row }], source, movementKind, originalPositions: index ? null : originalPositions, drawnRuler: [], inTurn: true, slideBeyond: leg.beyond });
+        const now = tokenMovementRuntime.getConfirmedSnapshot()?.state?.placements?.[sceneId]?.[id];
+        const arrived = made !== false && lastMoveOutcome && !lastMoveOutcome.fell && now && now.column === leg.to.column && now.row === leg.to.row;
+        if (!arrived || sceneId !== getActiveSceneId()) {
+          if (index < legs.length - 1 && made !== false) updateStatus('The slide ended there: it did not reach its next corner.');
+          break;
+        }
+      }
+      return made;
+    }
     if(movementKind==='teleport'){
       for(const move of moves){const origin=canonical[move.placementId];if(!origin)return;
         updatePlacementById(move.placementId,p=>Object.assign(p,origin),{syncBoard:false});
@@ -1470,8 +1494,10 @@ export function mountBoardInteractions(store, routes = {}) {
           moverHeight:(from,at)=>window.wallPrototype?.moverHeight?.(from,at,'forced')??window.terrainPrototype?.groundFor(at)??0,
         });
         collisions.set(move.placementId,collision);
-        if (breakThrough) return {...move,...breakThrough.destination,movementKind,path:[],forcedDestination:{column:move.column,row:move.row,breakThrough:true}};
-        return {...collision.destination,movementKind,path:[],forcedDestination:{column:move.column,row:move.row}};
+        // `beyond`: the squares of a slide still to come after this leg, which count if the leg is stopped short.
+        const beyond = slideBeyond > 0 ? { beyond: slideBeyond } : {};
+        if (breakThrough) return {...move,...breakThrough.destination,movementKind,path:[],forcedDestination:{column:move.column,row:move.row,breakThrough:true,...beyond}};
+        return {...collision.destination,movementKind,path:[],forcedDestination:{column:move.column,row:move.row,...beyond}};
       }
       return { ...move, movementKind, path: movementKind === 'teleport' ? [] : path };
     });
@@ -1503,6 +1529,7 @@ export function mountBoardInteractions(store, routes = {}) {
         if (fallenIds.length) {
           triggerTokenFallAnimations(fallenIds);
         }
+        lastMoveOutcome = { fell: fallenIds.length > 0 };
         if (status) {
           const noun = moves.length === 1 ? 'token' : 'tokens';
           status.textContent = fallenIds.length
@@ -1551,6 +1578,7 @@ export function mountBoardInteractions(store, routes = {}) {
     isMeasureModeActive: () => isMeasureModeActive(),
     beginExternalMeasurement: (point, options) => beginExternalMeasurement(point, options),
     updateExternalMeasurement: (point) => updateExternalMeasurement(point),
+    getCurrentMeasurementPoints: () => getCurrentMeasurementPoints(),
     finalizeExternalMeasurement: (point) => finalizeExternalMeasurement(point),
     cancelExternalMeasurement: () => cancelExternalMeasurement(),
     measurementPointFromToken: (position) => measurementPointFromToken(position),
@@ -6379,6 +6407,7 @@ export function mountBoardInteractions(store, routes = {}) {
   // A mouse chord changes `buttons` through pointermove, not another
   // pointerdown/up. Route camera gestures before either movement picker.
   let movementPanActive = false;
+  let movementRightPress = null;
   const hasHeldMovement = () => !!(viewState.dragState || viewState.dragCandidate || pendingAutomationMove);
   function startMovementPan(event) {
     movementPanActive = true;
@@ -6398,10 +6427,24 @@ export function mountBoardInteractions(store, routes = {}) {
     if (event.pointerType !== 'mouse' || (!movementPanActive && !hasHeldMovement())) return;
     if (movementPanActive && event.pointerId !== viewState.pointerId) return;
     if (!(event.buttons & 2)) {
+      // The right button has come up. A quick click made while a token is held drops a path node
+      // where the token is held; a press that pulled the map never does (right-press.mjs).
+      const clicked = rightPressClicked(movementRightPress, event.clientX, event.clientY, performance.now());
+      movementRightPress = null;
+      if (clicked && viewState.dragState) addExternalMeasurementNode();
       if (movementPanActive) endPan(event);
       return;
     }
-    if (!movementPanActive) startMovementPan(event);
+    if (!movementPanActive) {
+      if ((event.buttons & 1) && (viewState.dragState || viewState.dragCandidate)) {
+        // A right press with a token held: neither a node nor a pull of the map until it moves or lifts.
+        // The token goes on following the pointer meanwhile, so this move is left to the drag.
+        if (!movementRightPress) movementRightPress = rightPressAt(event.clientX, event.clientY, performance.now());
+        if (!rightPressPulls(movementRightPress, event.clientX, event.clientY)) return;
+        movementRightPress = null;
+      }
+      startMovementPan(event);
+    }
     const dx = event.clientX - viewState.lastPointer.x;
     const dy = event.clientY - viewState.lastPointer.y;
     viewState.translation.x += dx;

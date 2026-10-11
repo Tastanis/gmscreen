@@ -2,6 +2,7 @@
 const SVG_NS = 'http://www.w3.org/2000/svg';
 import { placeLegLabels, placeTotalLabel, rulerWording, WORDING_SEPARATOR } from './ruler-label-layout.mjs';
 import { claimActiveTool, publishActiveTool } from './active-tool.js';
+import { forcedLabel } from './forced-line.mjs';
 /** Ruler labels take their size from the grid (see ruler-label-layout.mjs); the outline scales with it. */
 function sizeLabel(text, size) {
   text.style.fontSize = `${size}px`;
@@ -178,8 +179,11 @@ export function mountDragRuler() {
       return;
     }
 
-    if (event.key === 'Shift' && !event.repeat) {
-      handleShiftKey(state);
+    // Shift drops a corner on the Measure tool's own ruler, where it means nothing else. While a
+    // token is held Shift is the shift move, and a corner there is a quick right click
+    // (addExternalMeasurementNode, right-press.mjs).
+    if (event.key === 'Shift' && !event.repeat && state.mode === 'pointer') {
+      addMeasurementNode(state);
     }
   });
 
@@ -273,7 +277,7 @@ function clearMeasurement(state) {
   updateOverlay(state);
 }
 
-function handleShiftKey(state) {
+function addMeasurementNode(state) {
   if (
     !state.measuring ||
     (state.mode !== 'pointer' && state.mode !== 'external')
@@ -292,7 +296,9 @@ function handleShiftKey(state) {
   if (!duplicate && state.points.length < MAX_MEASUREMENT_POINTS) {
     state.points.push({ ...snapshot });
     updateOverlay(state);
+    return true;
   }
+  return false;
 }
 
 function canExtendExistingMeasurement(state, snapPoint) {
@@ -462,15 +468,17 @@ function updateOverlay(state) {
 }
 
 function drawOverlay(state) {
+  // Distance is the route as before; cost adds difficult terrain for a walk or shift.
+  const kind = state.mode === 'external' ? movementKindOf(state) : 'walk';
+  // A forced move counts the squares it is moved across the map. How far it then drops is not
+  // part of that count; it is shown beside it ("Forced movement 2 · Fall 6"). It goes straight from
+  // where the token is to where it is held; with a corner in it, it is a slide, and each leg goes
+  // straight (forced-line.mjs).
+  const forced = kind === 'forced';
   const rawPoints = getRenderablePoints(state);
   const terrain=window.terrainPrototype?.active ? window.terrainPrototype : null;
   const points = terrain ? rawPoints.map(p=>({...p,...terrain.rulerPoint(p)})) : rawPoints;
-  // Distance is the route as before; cost adds difficult terrain for a walk or shift.
-  const kind = state.mode === 'external' ? movementKindOf(state) : 'walk';
   const zones = window.terrainZones?.routeCost ? window.terrainZones : null;
-  // A forced move counts the squares it is moved across the map. How far it then drops is not
-  // part of that count; it is shown beside it ("Forced movement 2 · Fall 6").
-  const forced = kind === 'forced';
   const segments = getSegments(rawPoints).map((segment) => {
     const measured = zones ? zones.routeCost([segment.start, segment.end], { kind }) : null;
     const squares = forced ? segment.squares : measured ? measured.distance : terrain ? terrain.route(segment.start, segment.end).cost : segment.squares;
@@ -511,9 +519,10 @@ function drawOverlay(state) {
   // Build a king-move SVG path: diagonal segment from source, smooth bend,
   // cardinal segment into destination. Pure cardinal/diagonal collapses to
   // a straight line.
-  const pathD = terrain ? terrain.routePath(rawPoints) : buildArrowPathD(points, gridSize);
+  // A forced move is drawn as the straight lines it travels, with no diagonal-first bend.
+  const pathD = terrain ? terrain.routePath(rawPoints, forced) : forced ? points.map((p, i) => `${i ? 'L' : 'M'} ${p.mapX} ${p.mapY}`).join(' ') : buildArrowPathD(points, gridSize);
   state.overlay.path.setAttribute('d', pathD);
-  if(terrain)terrain.paintRoute(state.overlay,rawPoints,gridSize);
+  if(terrain)terrain.paintRoute(state.overlay,rawPoints,gridSize,forced);
   else {state.overlay.path.style.opacity='';state.overlay.svg.querySelector('[data-terrain-route]')?.remove();}
   syncDifficultSteps(state.overlay, segments, gridSize, terrain);
 
@@ -540,7 +549,7 @@ function drawOverlay(state) {
 
   state.ruler.removeAttribute('hidden');
   const wording = rulerWording({
-    movementLabel: state.mode === 'external' && state.measuring ? state.movementLabel : null,
+    movementLabel: state.mode === 'external' && state.measuring ? (forced ? forcedLabel(rawPoints) : state.movementLabel) : null,
     squares: totalSquares,
     cost: totalCost,
     fall,
@@ -1027,6 +1036,14 @@ export function beginExternalMeasurement(point, options = {}) {
   sharedState.pointerId = null;
   updateOverlay(sharedState);
   return true;
+}
+
+/**
+ * Drops a path node where a held token is being held (a quick right click, right-press.mjs).
+ * True when one was added: not when no token is held, when a node is there already, or at the most.
+ */
+export function addExternalMeasurementNode() {
+  return Boolean(sharedState && sharedState.mode === 'external' && addMeasurementNode(sharedState));
 }
 
 export function updateExternalMeasurement(point) {

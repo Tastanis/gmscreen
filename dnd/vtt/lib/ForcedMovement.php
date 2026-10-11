@@ -104,12 +104,18 @@ final class ForcedMovement
  public static function assertIntent($intent): void {
   if(!is_array($intent))throw new InvalidArgumentException('Invalid forced destination.');
   foreach(['column','row'] as $axis)if(!isset($intent[$axis])||!is_numeric($intent[$axis])||!is_finite((float)$intent[$axis])||$intent[$axis]<0||$intent[$axis]>100000)throw new InvalidArgumentException('Invalid forced destination coordinates.');
+  if(array_key_exists('beyond',$intent)&&(!is_int($intent['beyond'])||$intent['beyond']<0||$intent['beyond']>self::MAX_BEYOND))throw new InvalidArgumentException('Invalid forced movement remaining.');
  }
+ /** The most squares a slide may still have to come after one of its legs. */
+ public const MAX_BEYOND=1000;
  public static function plan(array $from,array $to,$intent,string $kind,array $others,array $config): array {
   if($kind!=='forced')throw new InvalidArgumentException('Invalid forced destination.');
   self::assertIntent($intent);
   $plan=self::resolve($from,$intent,$others,$config);
   if(abs($plan['column']-$to['column'])>1e-6||abs($plan['row']-$to['row'])>1e-6)throw new InvalidArgumentException('Collision changed. Recalculate the forced move.');
+  // A slide is made leg by leg (forced-line.mjs). `beyond` is what was still to come after this leg: when
+  // the leg is stopped short by a creature or a wall, the slide ends there and those squares are left over too.
+  if(($intent['beyond']??0)>0&&($plan['wall']||$plan['collidedIds']))$plan['damage']+=$intent['beyond'];
   return $plan;
  }
  public static function assertClear(array $from,array $to,array $others,array $config): void {

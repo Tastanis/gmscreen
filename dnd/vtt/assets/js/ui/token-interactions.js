@@ -12,6 +12,8 @@
  * design history.
  */
 
+import { drawnRoute } from './drag-route.mjs';
+
 export function createTokenInteractions({
   // DOM references
   mapSurface,
@@ -39,6 +41,7 @@ export function createTokenInteractions({
   updateExternalMeasurement,
   finalizeExternalMeasurement,
   cancelExternalMeasurement,
+  getCurrentMeasurementPoints,
   measurementPointFromToken,
   markPlacementDirty,
   ensureScenePlacementDraft,
@@ -695,6 +698,13 @@ export function createTokenInteractions({
     const deferredUpdates = dragState.deferredUpdates ?? null;
     const originalPositions = dragState.originalPositions ?? null;
 
+    // The route this drag drew, corners included, read before the ruler is put away (drag-route.mjs).
+    let drawnRuler = null;
+    if (measurement && commit && moved && preview && preview.size && measurement.tokenId) {
+      const heldAt = preview instanceof Map ? preview.get(measurement.tokenId) : null;
+      drawnRuler = typeof getCurrentMeasurementPoints === 'function' ? drawnRoute(getCurrentMeasurementPoints(), heldAt ? measurementPointFromToken(heldAt) : null) : null;
+    }
+
     if (measurement) {
       if (measurement.temporary || !isMeasureModeActive()) {
         cancelExternalMeasurement();
@@ -739,7 +749,7 @@ export function createTokenInteractions({
     }
 
     if (commit && moved && preview && preview.size) {
-      commitDragPreview(preview, { startTime, deferredUpdates, originalPositions, movementKind });
+      commitDragPreview(preview, { startTime, deferredUpdates, originalPositions, movementKind, drawnRuler });
     } else {
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
     }
@@ -797,7 +807,7 @@ export function createTokenInteractions({
 
   function commitDragPreview(
     preview,
-    { startTime = 0, deferredUpdates = null, originalPositions = null, movementKind = 'walk' } = {}
+    { startTime = 0, deferredUpdates = null, originalPositions = null, movementKind = 'walk', drawnRuler = null } = {}
   ) {
     if (typeof boardApi.updateState !== 'function') {
       renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
@@ -871,6 +881,7 @@ export function createTokenInteractions({
         originalPositions,
         source: 'drag',
         movementKind,
+        ...(drawnRuler ? { drawnRuler } : {}),
       });
       return;
     }

@@ -46,3 +46,20 @@ foreach ([[24, 21], [24, 23]] as [$column, $row]) {
     wholeSquare(ForcedMovement::resolve($pulled, ['column'=>$column, 'row'=>$row], [$pulled, $drowner], [])['collidedIds'] === ['drowner'], "The line to $column,$row clips the puller, so the picker does not offer it");
 }
 echo "PASS a pull's offered squares never collide with the puller\n";
+
+// ---- a slide is made leg by leg; what was still to come after a leg counts when that leg is stopped short
+$slider = ['id'=>'s', 'column'=>0, 'row'=>0, 'width'=>1, 'height'=>1];
+$guard = ['id'=>'g', 'column'=>3, 'row'=>0, 'width'=>1, 'height'=>1];
+$plain = ForcedMovement::plan($slider, [...$slider, 'column'=>2, 'row'=>0], ['column'=>6, 'row'=>0], 'forced', [$slider, $guard], []);
+$leg = ForcedMovement::plan($slider, [...$slider, 'column'=>2, 'row'=>0], ['column'=>6, 'row'=>0, 'beyond'=>3], 'forced', [$slider, $guard], []);
+if ($plain['damage'] !== 4 || $leg['damage'] !== 7) throw new RuntimeException('A stopped leg must count the rest of the slide: ' . json_encode([$plain['damage'], $leg['damage']]));
+$clearLeg = ForcedMovement::plan($slider, [...$slider, 'column'=>2, 'row'=>2], ['column'=>2, 'row'=>2, 'beyond'=>3], 'forced', [$slider, $guard], []);
+if ($clearLeg['damage'] !== 0) throw new RuntimeException('A leg that reaches its corner hurts nobody: ' . json_encode($clearLeg));
+foreach ([-1, 1001, '3', 2.5, null, true] as $bad) {
+    try { ForcedMovement::assertIntent(['column'=>6, 'row'=>0, 'beyond'=>$bad]); }
+    catch (InvalidArgumentException $error) { continue; }
+    throw new RuntimeException('A bad "beyond" was accepted: ' . json_encode($bad));
+}
+ForcedMovement::assertIntent(['column'=>6, 'row'=>0, 'beyond'=>0]);
+ForcedMovement::assertIntent(['column'=>6, 'row'=>0]);
+echo "PASS a stopped leg of a slide counts what was still to come\n";
