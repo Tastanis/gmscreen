@@ -1402,7 +1402,7 @@ You tried this over seven rounds in a sandbox on your PC and said "Seems like it
 
 **Not in these builds, waiting for your word.** Seeing out of a pool in a building's floor, and the outline of an opening in the floor above from inside a room. Stopping part of the way up a climb in combat.
 
-## October 11: indoors, a hole is a hole. Builds 475 and 476, built, waiting for the tester
+## October 11: indoors, a hole is a hole. Builds 475 to 477
 
 Your words: "if I'm standing in the pool, I cannot see outside of the pool. I also cannot see the outline ... if it's got an opening in the room, then I need to be able to see up to it." And: "the question will be can we see the outline of the floor above since it has a hole in it." You looked at pictures of two ways to draw it and said "A for now."
 
@@ -1413,6 +1413,8 @@ Your words: "if I'm standing in the pool, I cannot see outside of the pool. I al
 - **Still as it was.** From the deepest squares of the pool (more than a square down) he sees the pool only, because his eyes are below the floor. He still gets the outlines.
 
 **Build 476 mends 475 before it went anywhere.** On your live bathhouse the tester saw a dashed line along every outer wall. The walls of your older buildings stop half a square short of the floor above them, and the first version did not count those as walls under an edge. Now it does. Build 475 is never deployed by itself.
+
+**Build 477: which walls are full walls.** Your words: "A wall that is like two squares high. Even if it doesn't connect to something should block too. It's just the one or like 1.x square high walls don't block but there should be a height where it does block." For the outline of a floor above, a wall is a full wall when it is two squares tall or more, or when it ends no more than three quarters of a square under that floor (your older buildings: a square and a half under floors two apart). A full wall holds the edge above it, so no dashed line runs along it, and the outline is not seen over its top. A wall of one square, or one and a bit with open space above it, is a low wall: the edge above it is open and it is seen over. This took away the last stray piece of dashed line on the live bathhouse. It changes only the outline; ordinary sight is as it was.
 
 **If you want the other way back.** The way you did not pick ("B") drew the floor's whole outline within 10 squares whenever one open edge was in sight. The choice is one place in the code: `indoorOutline` in `dnd/vtt/assets/js/ui/roof-renderer.js`, where the note says how to go back. The pictures of both are kept with the coder's notes (`round8-indoors`).
 
