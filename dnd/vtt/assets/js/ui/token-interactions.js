@@ -490,6 +490,33 @@ export function createTokenInteractions({
     return true;
   }
 
+  // While a token is dragged: which token, and the square a point on the map would put it on. The
+  // terrain module reads the pointer through this, so that the square is the one on the floor the
+  // drag's path walks to (pickWalked in pointer-pick.mjs), for the token and for the ruler alike.
+  let dragTargetSource = null;
+  if (windowRef) {
+    windowRef.vttDragTarget = () => {
+      const source = dragTargetSource;
+      const token = source?.tokens?.find((entry) => entry?.id && source.originalPositions?.get(entry.id));
+      if (!token || !source.startPointer) {
+        return null;
+      }
+      const origin = source.originalPositions.get(token.id);
+      const gridSize = Math.max(8, Number.isFinite(viewState.gridSize) ? viewState.gridSize : 64);
+      const baseColumn = toNonNegativeNumber(origin.column ?? token.column ?? 0, 0);
+      const baseRow = toNonNegativeNumber(origin.row ?? token.row ?? 0, 0);
+      return {
+        id: token.id,
+        target: (point) => (point && Number.isFinite(point.x) && Number.isFinite(point.y)
+          ? {
+              column: Math.round(baseColumn + (point.x - source.startPointer.x) / gridSize),
+              row: Math.round(baseRow + (point.y - source.startPointer.y) / gridSize),
+            }
+          : null),
+      };
+    };
+  }
+
   // Translate a pointer event into a cursor-aligned preview map keyed by
   // token id. Pulls token + original-position data from a candidate or
   // dragState (both expose the same shape: tokens[], originalPositions,
@@ -499,6 +526,8 @@ export function createTokenInteractions({
     if (!event || !source || !source.startPointer || !Array.isArray(source.tokens)) {
       return null;
     }
+    // From here until the drag ends, a pointer on the map means a square for this token (vttDragTarget above).
+    dragTargetSource = source;
     const pointer = getLocalMapPoint(event);
     if (!pointer) {
       return null;
@@ -627,6 +656,7 @@ export function createTokenInteractions({
   }
 
   function endTokenDrag({ commit = false, pointerId = null, movementKind = 'walk' } = {}) {
+    dragTargetSource = null;
     // Cancel any pending drag render so the final render below is immediate
     if (dragRenderRafId != null) {
       cancelFrame(dragRenderRafId);

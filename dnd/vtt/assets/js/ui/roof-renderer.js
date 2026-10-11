@@ -7,17 +7,32 @@ import {onSurface,surfacePath,supportAt} from './stacked-surfaces.mjs';
 import {wallHeights} from './wall-properties.mjs';
 import {nearestOnSegment} from './wall-geometry.mjs';
 import {makeSight,head} from './vision-height.mjs';
-import {insideRoom,roofSurfaces,ceilingBlocks} from './roof-geometry.mjs';import {getRoofImage} from './roof-images.mjs';import {adaptiveFog} from './adaptive-fog.mjs';
+import {insideRoom,roofSurfaces,ceilingBlocks,floorBlocks} from './roof-geometry.mjs';import {getRoofImage} from './roof-images.mjs';import {adaptiveFog} from './adaptive-fog.mjs';
 import {createRoofImageCache} from './roof-image-cache.mjs';
-import {sideFoot,viewAbove,shapesAbove,dimsBelow,SHAPE_FILL,SHAPE_EDGE,DIM_FILL} from './height-view.mjs';
+import {sideFoot,viewAbove,shapesAbove,dimsBelow,SHAPE_FILL,SHAPE_EDGE,DIM_FILL,inLip,RAISED_REACH,lipInSight,ladderHeads,LADDER_TOP,OUTLINE_LIGHT,OUTLINE_DARK,edgeLooks,ownFloorHides,sceneStairs,climbMarkers,CLIMB_FOOT,CLIMB_HEAD,CLIMB_UNDER,hasOwnPicture} from './height-view.mjs';import {buildStairPerimeter,resolveSegmentColor} from './stairs-geometry.js';import {CLIMB_GRADE} from './travel-height.mjs';
 const canvas=document.createElement('canvas');canvas.id='roof-prototype';canvas.style.cssText='position:absolute;inset:0;pointer-events:none;z-index:100001';document.querySelector('#vtt-map-transform').append(canvas);
 const roofLayer=document.createElement('canvas');
 let revision=0,cutawayKey='',buildingCutaway=null;
 const cache=createRoofImageCache({load:id=>(id.startsWith('/dnd/vtt/')?fetch(id).then(r=>{if(!r.ok)throw Error('Roof image failed ('+r.status+')');return r.blob();}):getRoofImage(id)).then(blob=>blob?createImageBitmap(blob):null),onLoaded:()=>revision++,onError:e=>console.error('Roof image could not be loaded',e)});
 function requestImage(id){cache.request(id);}
+// The floor a token stands on, and where it can look down over that floor's edge from (height-view.mjs):
+// a hero on the last square before a drop sees straight down, and the floor hides only what is under it.
+function standingOn(roofs,viewer,token,viewerGround){
+ const roof=token&&Number.isFinite(viewerGround)?roofs.find(r=>Math.abs(r.height-viewerGround)<=.05&&onSurface(r,viewer)):null;
+ const looks=roof?edgeLooks(viewer,Math.max(token.width||1,token.height||1),[roof.points,...roof.holes||[]]):[];
+ return looks.length?{roof,looks,on:p=>onSurface(roof,p)}:null;
+}
+// Floors in the way of a line of sight from `viewer`. `own` (from standingOn) is asked from the edge as well.
+function floorsBlock(own,viewer,eye,p,z,roofs){
+ if(!own||!(z<own.roof.height-1e-6))return ceilingBlocks(viewer,eye,p,z,roofs);
+ for(const roof of roofs)if(roof.id===own.roof.id?ownFloorHides(viewer,eye,roof.height,p,z,own.on,own.looks):floorBlocks(viewer,eye,p,z,roof))return true;
+ return false;
+}
 export const roofRenderer={get revision(){return revision;},surfaces:roofSurfaces,
- blockSight(viewer,eye,sight,model){const roofs=roofSurfaces(model);return (p,z,t)=>!ceilingBlocks(viewer,eye,p,z,roofs)&&sight(p,z,t);},
+ blockSight(viewer,eye,sight,model,token=null,viewerGround=null){const roofs=roofSurfaces(model),own=standingOn(roofs,viewer,token,viewerGround);return (p,z,t)=>!floorsBlock(own,viewer,eye,p,z,roofs)&&sight(p,z,t);},
  paint({inspectionHeight=null,lighting=true,context,viewer,token,viewerGround,sight,groundAt,terrain,model,editing,enabled}){
+  // A player's climb markers are drawn here at their true heights; the flat lines under this picture are the Director's (stairs.css).
+  document.documentElement.classList.toggle('vtt-climb-markers-drawn',!!enabled&&!editing&&!context?.isGM);
   canvas.hidden=!enabled||editing;if(!enabled||editing)return;const v=context.view,g=v.gridSize,ox=v.gridOffsets.left||0,oy=v.gridOffsets.top||0;
   if(canvas.width!==v.mapPixelSize.width||canvas.height!==v.mapPixelSize.height){canvas.width=v.mapPixelSize.width;canvas.height=v.mapPixelSize.height;}
   const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);if(!viewer||!sight)return;
@@ -27,6 +42,7 @@ export const roofRenderer={get revision(){return revision;},surfaces:roofSurface
   const interiorHidden=inspectionHeight===null?buildingCutaway(viewer,head(token,viewerGround),viewerGround):new Set();
   const openRooms=inspectionHeight===null&&lighting?doorwayCutaways(model,head(token,viewerGround),groundAt,sight):[];
   const importedRamps=model.ramps||[];
+  const edgeFloor=lighting&&token?.id!=='map-inspection'?standingOn(surfaces,viewer,token,viewerGround):null;
   const rampList=importedRamps;
   const rampLayers=rampList.map(s=>{const corners=[[s.left,s.top],[s.right,s.top],[s.right,s.bottom],[s.left,s.bottom]].map(([x,y])=>window.terrainPrototype.project(ox+x*g,oy+y*g,rampHeight(s,x,y))),x=Math.floor(Math.min(...corners.map(p=>p.x))-2),y=Math.floor(Math.min(...corners.map(p=>p.y))-2),mask=document.createElement('canvas');mask.width=Math.ceil(Math.max(...corners.map(p=>p.x))-x+4);mask.height=Math.ceil(Math.max(...corners.map(p=>p.y))-y+4);return {s,x,y,mask};});
   const target=ctx;
@@ -40,6 +56,19 @@ export const roofRenderer={get revision(){return revision;},surfaces:roofSurface
    const peek=edgeOn?landingPeekRamps(importedRamps,token,viewerGround,roof.height):[];
    if(edgeOn&&!peek.length){
     if(overhead.has(roof.id)){const shape=surfacePath(roof,p=>window.terrainPrototype.project(ox+p.x*g,oy+p.y*g,roof.height));target.save();target.fillStyle=SHAPE_FILL;target.fill(shape,'evenodd');target.strokeStyle=SHAPE_EDGE;target.lineWidth=Math.max(1.5,g*.035);target.lineJoin='round';target.stroke(shape);target.restore();}
+    // A floor with no picture of its own (a deck whose planks are on the ground picture) hides nothing and is
+    // already seen: it gets no outline.
+    else if(lighting&&sight&&viewer&&hasOwnPicture(roof)){
+     // "Something is above": the floor's outline, drawn only near the hero, when the hero has a line to
+     // its lip (as a roof's lip shows from outside), and round the head of a climb the hero stands at the
+     // foot of. Nothing on the floor is shown, and what the hero sees is not changed (height-view.mjs).
+     const at=p=>window.terrainPrototype.project(ox+p.x*g,oy+p.y*g,roof.height),on=q=>onSurface(roof,q);
+     const circle=(centre,radius)=>{const c=new Path2D();for(let k=0;k<48;k++){const a=k/48*Math.PI*2,q=at({x:centre.x+Math.cos(a)*radius,y:centre.y+Math.sin(a)*radius});if(k)c.lineTo(q.x,q.y);else c.moveTo(q.x,q.y);}c.closePath();return c;};
+     const edge=clip=>{const shape=surfacePath(roof,at);target.save();target.clip(clip);target.lineJoin='round';target.strokeStyle=OUTLINE_DARK;target.lineWidth=Math.max(3,g*.07);target.stroke(shape);target.strokeStyle=OUTLINE_LIGHT;target.lineWidth=Math.max(1.5,g*.03);target.setLineDash([g*.22,g*.16]);target.stroke(shape);target.restore();};
+     // Asked just under the floor's top: a line from below to its edge, which the floor itself does not stand in the way of.
+     if(lipInSight(viewer,[roof.points,...roof.holes||[]],on,q=>sight(q,roof.height-.01)))edge(circle(viewer,RAISED_REACH));
+     for(const headPoint of ladderHeads(importedRamps,viewer,viewerGround,roof.height,CLIMB_GRADE))edge(circle(headPoint,LADDER_TOP));
+    }
     continue;
    }
    if(inspectionHeight!==null&&roof.height>inspectionHeight+.001)continue;
@@ -58,7 +87,11 @@ export const roofRenderer={get revision(){return revision;},surfaces:roofSurface
    })}});
    const interiorHeight=p=>supportAt(surfaces.filter(s=>s.id!==roof.id),p,roof.height-.01)?.height??groundAt(p.x,p.y);
    const topOccluders=roofTopOccluders(roof,surfaces.filter(s=>!interiorHidden.has(s.id)));
-   const visible=p=>onSurface(roof,p)&&(!edgeOn||inLandingPeek(peek,p))&&(!lighting||(!ceilingBlocks(viewer,head(token,viewerGround),p,roof.height+.01,topOccluders(p))&&roofSight(p,roof.height+.01)));
+   // A player looking up (a raised view with sight on): a floor above the eyes is dark, and only its lip is
+   // in picture, as far as the hero truly has a line to it and no further than the reach (height-view.mjs).
+   const aboveEyes=inspectionHeight!==null&&lighting&&roof.kind==='floor'&&head(token,viewerGround)<=roof.height+1e-6;
+   const lip=p=>!aboveEyes||(Math.hypot(p.x-viewer.x,p.y-viewer.y)<=RAISED_REACH&&inLip(viewer,p,q=>onSurface(roof,q)));
+   const visible=p=>onSurface(roof,p)&&(!edgeOn||inLandingPeek(peek,p))&&lip(p)&&(!lighting||(!floorsBlock(edgeFloor,viewer,head(token,viewerGround),p,roof.height+.01,topOccluders(p))&&roofSight(p,roof.height+.01)));
 
    const project=p=>window.terrainPrototype.project(ox+p.x*g,oy+p.y*g,roof.height);
    adaptiveFog({left,top,right,bottom,maxDepth:2,edgeSteps:4,visible,emit:polygon=>{polygon.forEach((p,i)=>{const q=project(p);if(i)path.lineTo(q.x,q.y);else path.moveTo(q.x,q.y);});path.closePath();}});
@@ -70,7 +103,8 @@ export const roofRenderer={get revision(){return revision;},surfaces:roofSurface
      const at=t=>({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t}),u=at(k/steps),w=at((k+1)/steps),mid=at((k+.5)/steps),dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy)||1;
      const probes=[{x:mid.x-dy/len*.02,y:mid.y+dx/len*.02},{x:mid.x+dy/len*.02,y:mid.y-dx/len*.02}];
      if(!probes.some(visible))continue;
-     // A floating plate's side is a short slab edge, not a wall down to the ground (height-view.mjs).
+     // A floating plate's side is a short slab edge, not a wall down to the ground, and a plate may say how
+     // deep its own side is (a rope bridge: a thin edge, or none): sideFoot in height-view.mjs.
      const base=p=>{const ramp=rampAt(importedRamps,p),step=ramp?rampHeight(ramp,p.x,p.y):null;return Math.min(roof.height,step??(ringIndex?roof.height-.15:sideFoot(roof,interiorHeight(p))));};
      const quad=[project(u),project(w),window.terrainPrototype.project(ox+w.x*g,oy+w.y*g,base(w)),window.terrainPrototype.project(ox+u.x*g,oy+u.y*g,base(u))];
      ctx.beginPath();quad.forEach((p,j)=>j?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.closePath();ctx.fillStyle='#292820';ctx.fill();
@@ -83,11 +117,15 @@ export const roofRenderer={get revision(){return revision;},surfaces:roofSurface
    // A scene may ask for the unseen part of a floating plate below the viewer to be its picture,
    // dimmed, in place of black (height-view.mjs). The seen part is painted over it at full strength below.
    if(image&&!edgeOn&&lighting&&inspectionHeight===null&&dimsBelow(roof,model)){ctx.save();ctx.clip(outline,'evenodd');const at=window.terrainPrototype.project(v.mapInsets.left,v.mapInsets.top,roof.height);ctx.drawImage(image,at.x,at.y);ctx.fillStyle=DIM_FILL;ctx.fill(outline,'evenodd');ctx.restore();}
-   else if(roof.kind==='floor'||!image){ctx.save();ctx.fillStyle='#000';if(edgeOn)ctx.clip(path);ctx.fill(outline,'evenodd');ctx.restore();}
+   else if(roof.kind==='floor'||!image){ctx.save();ctx.fillStyle='#000';if(edgeOn)ctx.clip(path);
+    // Its dark shape is shown near the hero only, not across the whole map.
+    if(aboveEyes){const reach=new Path2D();for(let k=0;k<48;k++){const a=k/48*Math.PI*2,q=project({x:viewer.x+Math.cos(a)*RAISED_REACH,y:viewer.y+Math.sin(a)*RAISED_REACH});if(k)reach.lineTo(q.x,q.y);else reach.moveTo(q.x,q.y);}reach.closePath();ctx.clip(reach);}
+    ctx.fill(outline,'evenodd');ctx.restore();}
    if(image){ctx.save();ctx.clip(outline,'evenodd');ctx.clip(path);const at=window.terrainPrototype.project(v.mapInsets.left,v.mapInsets.top,roof.height);ctx.drawImage(image,at.x,at.y);ctx.restore();}
    // Cut at the displayed interior's height, not at the roof height. Erase only
    // this roof layer so the lower floor remains intact under the same pixels.
-   if(lighting&&underneath&&(roof.kind!=='floor'||head(token,viewerGround)<roof.height-.01)){
+   // Not in a raised view (a player looking up): there the floor above stays whole and dark, and is not cut open to what lies under it.
+   if(lighting&&inspectionHeight===null&&underneath&&(roof.kind!=='floor'||head(token,viewerGround)<roof.height-.01)){
     const reveal=new Path2D();
     const revealHeight=p=>roofRevealHeight(roof,surfaces,p,head(token,viewerGround),groundAt);
     const revealInterior=p=>onSurface(roof,p)&&seesFlatTop(head(token,viewerGround),revealHeight(p))&&sight(p,revealHeight(p));
@@ -143,6 +181,22 @@ export const roofRenderer={get revision(){return revision;},surfaces:roofSurface
     }
    }
    ctx.setTransform(1,0,0,1,0,0);ctx.globalCompositeOperation='destination-out';ctx.drawImage(layer.mask,0,0);target.drawImage(art,layer.x,layer.y);
+  }
+  // Climb markers for a player (height-view.mjs): the red foot and green head of every stair object, each
+  // drawn when the hero has a line to it. Nothing of a part of the map he has no line to is given away.
+  if(!context.isGM){
+   const mapLevels=context.state.boardState.sceneState?.[context.state.boardState.activeSceneId]?.mapLevels;
+   for(const stair of sceneStairs(mapLevels)){
+    const ramp=importedRamps.find(s=>s.id===stair.id)||null,level=ramp?rampSightHeight(ramp,ownFloor,-Infinity,onSurface):-Infinity;
+    const lines=climbMarkers(buildStairPerimeter(stair.corners).map(s=>({...s,colour:resolveSegmentColor(stair.edgeColors,s.id)})),(x,y)=>ramp?rampHeight(ramp,x,y):null,groundAt).filter(l=>!lighting||sight(l.mid,Math.max(l.z,level)));
+    if(!lines.length)continue;
+    target.save();target.lineCap='round';
+    for(const [width,colour] of [[Math.max(5,g*.11),()=>CLIMB_UNDER],[Math.max(3,g*.06),l=>l.colour==='red'?CLIMB_FOOT:CLIMB_HEAD]])for(const l of lines){
+     const a=window.terrainPrototype.project(ox+l.a.x*g,oy+l.a.y*g,l.z),b=window.terrainPrototype.project(ox+l.b.x*g,oy+l.b.y*g,l.z);
+     target.beginPath();target.moveTo(a.x,a.y);target.lineTo(b.x,b.y);target.lineWidth=width;target.strokeStyle=colour(l);target.stroke();
+    }
+    target.restore();
+   }
   }
 
  },hide(){canvas.hidden=true;}

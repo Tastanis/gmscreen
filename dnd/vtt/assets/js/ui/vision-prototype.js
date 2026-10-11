@@ -111,7 +111,7 @@ function tick(){
   if(!c.isGM&&selectedToken&&selectedToken.id!==lastId)try{localStorage.setItem(viewKey,selectedToken.id);}catch{}
   const image=document.querySelector('#vtt-map-image');
   const token=(wallInspection||gmVision.manual||(!gmVision.fogEnabled&&!selectedToken))?{id:'map-inspection',levelId:c.levelId,column:(v.mapInsets.left-v.gridOffsets.left+image.naturalWidth/2)/v.gridSize-.5,row:(v.mapInsets.top-v.gridOffsets.top+image.naturalHeight/2)/v.gridSize-.5,width:1,height:1}:selectedToken;
-  const viewerGround=(wallInspection||gmVision.manual)?gmVision.height:terrain.groundFor(token),inspectionHeight=wallInspection||c.isGM&&(gmVision.manual||!gmVision.lighting)?viewerGround:null;
+  const viewerGround=(wallInspection||gmVision.manual)?gmVision.height:terrain.groundFor(token),inspectionHeight=wallInspection||c.isGM&&(gmVision.manual||!gmVision.lighting)?viewerGround:(!c.isGM&&token===selectedToken?gmVision.raised:null);
   // The viewer's token as the server has it, and whether it is drawn (and seen from) ahead of that.
   const agreed=token&&token===selectedToken?stored.find(p=>p.id===token.id)||null:null,ahead=!!agreed&&(agreed.column!==token.column||agreed.row!==token.row),seenToken=steady(token);
   const nextTerrainKey=JSON.stringify([terrain.key,terrain.revision,v.gridSize,v.gridOffsets,v.mapInsets,image.naturalWidth,image.naturalHeight]);
@@ -126,7 +126,7 @@ function tick(){
    signature=next;const start=performance.now();
    if(canvas.width!==v.mapPixelSize.width||canvas.height!==v.mapPixelSize.height){canvas.width=v.mapPixelSize.width;canvas.height=v.mapPixelSize.height;groundPainted='';}
    viewerTokenId=gmVision.manual?null:selectedToken?.id||null;observer=token?center(token):null;sight=!gmVision.fogEnabled?()=>true:token?makeSight({viewer:token,viewerGround,groundAt,walls,terrain:terrainCache}):null;
-   if(sight)sight=gmVision.lighting&&!wallInspection?roofRenderer.blockSight(observer,head(token,viewerGround),sight,walls):()=>true;
+   if(sight)sight=gmVision.lighting&&!wallInspection?roofRenderer.blockSight(observer,head(token,viewerGround),sight,walls,token===selectedToken?token:null,viewerGround):()=>true;
    portalView={viewer:observer,ground:viewerGround,eye:token?head(token,viewerGround):0,sight};
    // What the ground picture is to be: `family` is everything but the viewer's own place, `key` the whole of it.
    const mode=!gmVision.lighting?'unlit':sight?'lit':'dark',memory=!editing&&!gmVision.manual,remember=memory&&!ahead;
@@ -176,7 +176,7 @@ function tick(){
     const ground=terrain.groundFor(agreed),agreedNow=JSON.stringify([family,agreed.column,agreed.row,agreed.width,agreed.height,ground]);
     if(ahead&&agreedKey&&agreedNow!==agreedKey&&agreedNow!==key){
      const from=center(agreed),plain=!gmVision.fogEnabled?()=>true:makeSight({viewer:agreed,viewerGround:ground,groundAt,walls,terrain:terrainCache});
-     queue.keep(groundJob(agreedNow,gmVision.lighting&&!wallInspection?roofRenderer.blockSight(from,head(agreed,ground),plain,walls):()=>true,from,true));
+     queue.keep(groundJob(agreedNow,gmVision.lighting&&!wallInspection?roofRenderer.blockSight(from,head(agreed,ground),plain,walls,agreed,ground):()=>true,from,true));
     }
     // The picture on the screen is of the agreed square, was put up before the answer came, and is
     // being left before it was drawn again as remembered: it is kept for memory as it is.

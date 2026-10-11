@@ -82,11 +82,24 @@ export const isFloating = (surface) => surface?.kind === 'floor' && surface.floa
 /**
  * The height at which a plate's side face ends. `below` is what lies under that edge (the next
  * plate down, or the ground). An ordinary plate's side runs all the way down to it; a floating
- * plate's side stops a short way under the plate, or at `below` if that comes first.
+ * plate's side stops a short way under the plate, or at `below` if that comes first. A plate may
+ * say how deep its own side is (sideDepthOf): that many squares, or `below` if that comes first.
  */
 export function sideFoot(surface, below) {
-  const top = Number(surface?.height) || 0, floor = Math.min(top, below);
+  const top = Number(surface?.height) || 0, floor = Math.min(top, below), own = sideDepthOf(surface);
+  if (own !== null) return Math.max(floor, top - own);
   return isFloating(surface) ? Math.max(floor, top - FLOATING_SIDE) : floor;
+}
+
+/**
+ * How deep a plate says its own side is drawn, in squares (`sideDepth` in the map design), or
+ * null when it does not say: then it is drawn as it always was. A rope bridge or a plank deck is
+ * a thin thing in the air: with a side a fifth of a square deep it reads as planks, and with 0 it
+ * has no side at all, where the ordinary side would be a dark wall from the deck down to the ground.
+ */
+export function sideDepthOf(surface) {
+  const depth = surface?.sideDepth;
+  return typeof depth === 'number' && Number.isFinite(depth) && depth >= 0 ? depth : null;
 }
 
 /**
@@ -111,6 +124,102 @@ export function shadowRings(surface, groundAt, perSquare = 4) {
     return out;
   });
 }
+
+// ---- The lip of a floor above the eyes ------------------------------------------
+// From below, a floor is seen only at its near edge: the lip. Half a square of it up close, and
+// more the further back the viewer stands. These are the numbers to change if the look is wrong.
+
+/** For every this many squares a viewer stands back, one more square of lip is made out. */
+export const LIP_BACK = 6;
+/** The least and the most lip, in squares. */
+export const LIP_LEAST = 0.5, LIP_MOST = 2;
+/** How far from the hero, in squares, a floor above is shown at all in a raised view. */
+export const RAISED_REACH = 10;
+
+/** How deep a lip a viewer `distance` squares away makes out. */
+export const lipDepth = (distance) => Math.min(LIP_MOST, Math.max(LIP_LEAST, distance / LIP_BACK));
+
+/**
+ * True when `point`, on a floor above the viewer's eyes, is part of the lip that viewer makes
+ * out: going from the point straight back toward the viewer, the floor's edge (its outline or a
+ * hole in it) is no further away than the lip is deep. `on(point)` says whether a point is on
+ * the floor. A viewer standing under the floor sees no lip there: there is no edge between.
+ */
+export function inLip(viewer, point, on, step = 0.1) {
+  const dx = viewer.x - point.x, dy = viewer.y - point.y, distance = Math.hypot(dx, dy);
+  if (!(distance > 0)) return false;
+  const depth = Math.min(lipDepth(distance), distance);
+  for (let travelled = step; travelled <= depth + 1e-9; travelled += step) {
+    if (!on({ x: point.x + dx / distance * travelled, y: point.y + dy / distance * travelled })) return true;
+  }
+  return false;
+}
+
+/**
+ * True when some of a floor's lip can be made out by a viewer within reach of it: the sign that
+ * "something is above" is drawn (its outline). `rings` are the floor's outline and holes, `on`
+ * says whether a point is on the floor, `seen(point)` whether the viewer has a line to it there.
+ */
+export function lipInSight(viewer, rings, on, seen, reach = RAISED_REACH) {
+  for (const ring of rings) {
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i], b = ring[(i + 1) % ring.length], dx = b.x - a.x, dy = b.y - a.y, length = Math.hypot(dx, dy) || 1;
+      const samples = Math.max(1, Math.ceil(length * 2));
+      for (let k = 0; k < samples; k++) {
+        const t = (k + 0.5) / samples, mid = { x: a.x + dx * t, y: a.y + dy * t };
+        if (Math.hypot(mid.x - viewer.x, mid.y - viewer.y) > reach) continue;
+        // Just inside the edge, whichever side the floor is on.
+        for (const side of [1, -1]) {
+          const point = { x: mid.x - dy / length * 0.2 * side, y: mid.y + dx / length * 0.2 * side };
+          if (on(point) && inLip(viewer, point, on) && seen(point)) return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * True when a floor has a picture of its own. One that has none (a deck whose planks are painted on the
+ * ground picture) hides nothing and is already seen from below: it gets no outline.
+ */
+export const hasOwnPicture = (surface) => Boolean(surface?.imageId);
+
+// ---- Ladder points -----------------------------------------------------------------
+// A climb (a vine, a ladder: any way up steeper than a slope) leads somewhere the hero cannot see
+// from its foot. A hero near the foot is shown the edges of what is at its top.
+
+/** How near the foot of a climb, in squares, a hero is shown its top. */
+export const LADDER_NEAR = 3;
+/** How far round the head of a climb, in squares, the floor at its top is outlined. */
+export const LADDER_TOP = 2;
+
+/** The middles of a ramp's low end (its foot) and high end (its head), and how steep it is in squares up per square along. */
+export function rampEnds(ramp) {
+  const x = (ramp.left + ramp.right) / 2, y = (ramp.top + ramp.bottom) / 2;
+  const along = ramp.direction === 'east' || ramp.direction === 'west' ? ramp.right - ramp.left : ramp.bottom - ramp.top;
+  const ends = { north: [{ x, y: ramp.bottom }, { x, y: ramp.top }], south: [{ x, y: ramp.top }, { x, y: ramp.bottom }], east: [{ x: ramp.left, y }, { x: ramp.right, y }], west: [{ x: ramp.right, y }, { x: ramp.left, y }] }[ramp.direction || 'north'];
+  return { foot: ends[0], head: ends[1], grade: along > 0 ? (ramp.height - ramp.base) / along : Infinity };
+}
+
+/**
+ * The heads of the climbs to a floor `height` high whose top a viewer is shown: ramps at least
+ * `climbGrade` steep, whose foot is within LADDER_NEAR squares of the viewer and about as high as
+ * the viewer stands (so not a climb the viewer is far above or below).
+ */
+export function ladderHeads(ramps, viewer, ground, height, climbGrade, near = LADDER_NEAR) {
+  const heads = [];
+  for (const ramp of ramps || []) {
+    if (Math.abs(ramp.height - height) > 1e-6) continue;
+    const { foot, head, grade } = rampEnds(ramp);
+    if (!(grade >= climbGrade - 1e-9) || Math.abs(ramp.base - ground) > 1) continue;
+    if (Math.hypot(foot.x - viewer.x, foot.y - viewer.y) <= near) heads.push(head);
+  }
+  return heads;
+}
+
+/** How the edge of a floor above is drawn at the usual view: a pale dashed line over a dark one, to read on any ground. */
+export const OUTLINE_LIGHT = 'rgba(235,240,255,0.85)', OUTLINE_DARK = 'rgba(8,10,20,0.7)';
 
 // ---- What a viewer is shown of floating plates above and below ------------
 // Two settings a scene's map design may carry beside the slant, `view.above` and `view.below`.
@@ -154,3 +263,81 @@ export const DIM_FILL = 'rgba(0,0,0,0.62)';
 
 /** True when any of the plate's shadow lies below it: there is open air under some of its outline. */
 export const castsShadow = (rings, surface) => rings.some((ring) => ring.some((point) => point.z < (Number(surface.height) || 0) - 0.05));
+
+// ---- Looking down over an edge ---------------------------------------------------
+// A viewer's own floor is in the way of everything below it, measured from the middle of his
+// square: from the rim of a floor twelve up, the ground is hidden for six squares out, and on the
+// screen the drop beside him is a black hole that reads as a wall. A hero on the last square
+// before a drop leans out over it instead: he sees straight down, and a little way in under the
+// rim he stands on (the lean times the drop), which is what the screen shows beside that rim.
+
+/** How far past his own square, in squares, the edge of a hero's floor may be for him to look over it. */
+export const EDGE_REACH = 0.5;
+/** How far out past the edge he leans to look, in squares. A hair (0.01) would show nothing under his own floor. */
+export const EDGE_LEAN = 0.5;
+
+/**
+ * The places a viewer standing on a floor can look down from: for every stretch of the floor's
+ * edge (its outline or a hole) no further from the middle of his square than half his size plus
+ * the reach, the point the lean beyond its nearest point. None when he is not on the last square
+ * before a drop. `rings` are the floor's outline and holes.
+ */
+export function edgeLooks(centre, size, rings, reach = EDGE_REACH, lean = EDGE_LEAN) {
+  const within = (Number(size) || 1) / 2 + reach, looks = [];
+  for (const ring of rings) {
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i], b = ring[(i + 1) % ring.length], dx = b.x - a.x, dy = b.y - a.y, length = dx * dx + dy * dy;
+      const t = length ? Math.max(0, Math.min(1, ((centre.x - a.x) * dx + (centre.y - a.y) * dy) / length)) : 0;
+      const x = a.x + dx * t, y = a.y + dy * t, distance = Math.hypot(x - centre.x, y - centre.y);
+      if (distance > within + 1e-9 || distance < 1e-9) continue;
+      looks.push({ x: x + (x - centre.x) / distance * lean, y: y + (y - centre.y) / distance * lean });
+    }
+  }
+  return looks;
+}
+
+/**
+ * True when the floor a viewer stands on hides `target`, at height `z` below that floor, from the
+ * middle of his square and from every place he can look down from (`looks`, from edgeLooks).
+ * `eye` is the height of his eyes, `on(point)` says whether a point is on the floor.
+ */
+export function ownFloorHides(centre, eye, floorHeight, target, z, on, looks) {
+  if (!(z < floorHeight && floorHeight < eye)) return false;
+  const t = (floorHeight - eye) / (z - eye);
+  const hides = (from) => on({ x: from.x + (target.x - from.x) * t, y: from.y + (target.y - from.y) * t });
+  return hides(centre) && looks.every(hides);
+}
+
+// ---- Climb markers ---------------------------------------------------------------
+// The Director is shown the red foot and green head of every stair object as flat lines on the map.
+// A player is shown the same two ends where they truly are: the foot at the height it starts from,
+// the head at the height it reaches, so a vine reads as "this goes all the way up there".
+
+/** The colours of a climb's foot and head, the same the Director's lines use (stairs.css). */
+export const CLIMB_FOOT = '#e74c3c', CLIMB_HEAD = '#2ecc71', CLIMB_UNDER = 'rgba(8,10,20,0.85)';
+
+/** Every stair object of a scene once: the ground's and each floor's copies of a stair share an id. */
+export function sceneStairs(mapLevels) {
+  const seen = new Set(), out = [];
+  for (const stair of [...(mapLevels?.baseStairs || []), ...(mapLevels?.levels || []).flatMap((level) => level?.stairs || [])]) {
+    if (!stair || seen.has(stair.id)) continue;
+    seen.add(stair.id); out.push(stair);
+  }
+  return out;
+}
+
+/**
+ * The lines to draw for one stair: each red or green stretch of its outline, with the height it
+ * lies at. `segments` are the stretches ({from, to} in grid corners, and `colour`); `heightAt(x, y)`
+ * gives the stair's own height there (its ramp), or null where it has none; `groundAt` the ground's.
+ */
+export function climbMarkers(segments, heightAt, groundAt) {
+  const out = [];
+  for (const segment of segments) {
+    if (segment.colour !== 'red' && segment.colour !== 'green') continue;
+    const a = { x: segment.from.column, y: segment.from.row }, b = { x: segment.to.column, y: segment.to.row };
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, own = heightAt(mid.x, mid.y);
+    out.push({ a, b, mid, z: Number.isFinite(own) ? own : Number(groundAt(mid.x, mid.y)) || 0, colour: segment.colour });
+  }
+  return out;
+}

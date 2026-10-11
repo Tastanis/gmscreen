@@ -8,6 +8,8 @@ final class SceneEnvironment
     public const MAX_VIEW_SLANT = 0.36;
     /** Floating plates over the viewer: not drawn, see-through shapes, or shapes for the nearest tier only. */
     public const VIEW_ABOVE = ['off','shape','tier'];
+    /** The deepest side a plate may ask for, in squares. Anything deeper is the ordinary side, which needs no value. */
+    public const MAX_SIDE_DEPTH = 1000;
     /** The unseen part of a floating plate below the viewer: black, or its picture dimmed. */
     public const VIEW_BELOW = ['black','dim'];
 
@@ -165,6 +167,11 @@ final class SceneEnvironment
             self::number($roof['height'] ?? null);
             // A floating plate (a rock in the air) is drawn with a short side, not a wall to the ground.
             if (array_key_exists('floating',$roof)&&!is_bool($roof['floating'])) throw new InvalidArgumentException('Invalid floating flag.');
+            // A plate may say how deep its own side is drawn, in squares (a rope bridge: a thin edge, or none).
+            if (array_key_exists('sideDepth',$roof)) {
+                $depth=$roof['sideDepth'];
+                if ((!is_int($depth)&&!is_float($depth))||!is_finite((float)$depth)||$depth<0||$depth>self::MAX_SIDE_DEPTH) throw new InvalidArgumentException('Side depth must be a number from 0 to '.self::MAX_SIDE_DEPTH.'.');
+            }
             foreach ($roof['nodes'] ?? [] as $nodeId) if (!isset($ids[$nodeId])) throw new InvalidArgumentException('Roof references missing node.');
             foreach ([$roof['points'] ?? [], ...($roof['holes'] ?? [])] as $ring) {
                 if (!is_array($ring)||count($ring)>20000) throw new InvalidArgumentException('Invalid roof ring.');

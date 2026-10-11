@@ -8792,7 +8792,8 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     const gmUser = isGmUser();
-    if (gmUser && window.gmVision?.syncNavigation()) return;
+    // The Director's viewing height, or a player's raised view (gm-vision.js): either way the module owns the control.
+    if (window.gmVision?.syncNavigation()) return;
     const controls = getMapLevelNavigationControlState(mapLevelsState, options);
     const visible = gmUser && controls.hasLevels;
     mapLevelNav.hidden = !visible;
@@ -8851,7 +8852,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function handleMapLevelNavigationClick(direction = 'up') {
-    if (isGmUser()) window.gmVision?.step(direction);
+    window.gmVision?.step(direction);
   }
 
   // Explicit Show players resolves the inspection height to a real floor.

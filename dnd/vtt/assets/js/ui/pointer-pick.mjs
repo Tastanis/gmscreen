@@ -76,6 +76,48 @@ export function pickDrawn(raw, { slant, surfaces = [], ramps = [], view = null }
   return best;
 }
 
+/** Two heights this close are the same floor. */
+const SAME_HEIGHT = 0.05;
+
+/**
+ * Where a dragged token is aimed: the square under the pointer on the floor the drag's path walks
+ * to, so that the token ends up drawn under the pointer when it is let go.
+ *
+ * `picked` is the pointer read against what is drawn (pickDrawn, or the ground). That is wrong
+ * when the path climbs to a floor the viewer is not shown: the board is drawn leaning, so a floor
+ * that is not drawn is read as whatever is drawn beneath it, a square or more away. In a building
+ * the hero then lands a square too far; on a floating island the pointer is read as the ground far
+ * below, beside the arch, and the hero walks off its side.
+ *
+ * `walk(point)` walks the drag's own path to the square that point names and returns the height
+ * the walk ends at (`end`) and the highest it rose to (`top`), or null when it cannot say. The
+ * pointer is read at each height a walk rose to or ended at, the highest first; the first reading
+ * whose walk ends at the height it was read at wins. If none does, `picked` stands: the pointer
+ * means what it meant before.
+ */
+export function pickWalked(raw, picked, { slant, walk } = {}) {
+  if (!picked || typeof walk !== 'function' || !slant || (!slant.x && !slant.y)) return picked;
+  const first = walk(picked);
+  if (!first) return picked;
+  const heights = [first.top, first.end];
+  const tried = new Set();
+  let reads = 0;
+  while (reads < 4 && heights.length) {
+    // The highest height not yet tried: a floor the walk can stand on is preferred to the ground under it.
+    const height = heights.splice(heights.indexOf(Math.max(...heights.filter(Number.isFinite), -Infinity)), 1)[0];
+    const key = Math.round(height / SAME_HEIGHT);
+    if (!Number.isFinite(height) || tried.has(key)) continue;
+    tried.add(key);
+    reads += 1;
+    const point = pointAtHeight(raw, height, slant);
+    const walked = walk(point);
+    if (!walked) continue;
+    if (Math.abs(walked.end - height) <= SAME_HEIGHT) return { ...point, height, walked: true };
+    heights.push(walked.top, walked.end);
+  }
+  return picked;
+}
+
 /** The middle of a ramp's top edge, just inside it: where it meets the floor it climbs to. */
 function rampHead(ramp) {
   const x = (ramp.left + ramp.right) / 2, y = (ramp.top + ramp.bottom) / 2, inside = 1e-3;

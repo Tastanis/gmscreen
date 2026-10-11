@@ -19,14 +19,13 @@ function renderVttSceneBoard(bool $isGm = false): string
                     <span class="vtt-board__level-indicator-label">Viewing:</span>
                     <span class="vtt-board__level-indicator-value" data-map-level-indicator-value>&mdash;</span>
                 </p>
-                <?php if ($isGm): ?>
                 <div
                     class="vtt-board__level-nav"
                     data-map-level-nav
                     hidden
                     aria-hidden="true"
                     role="group"
-                    aria-label="GM viewing height"
+                    aria-label="<?= $isGm ? 'GM viewing height' : 'Viewing height' ?>"
                 >
                     <button
                         class="vtt-board__level-button"
@@ -47,6 +46,7 @@ function renderVttSceneBoard(bool $isGm = false): string
                     >
                         <span aria-hidden="true">&#9650;</span>
                     </button>
+                    <?php if ($isGm): ?>
                     <button
                         class="vtt-board__level-activate"
                         type="button"
@@ -54,8 +54,9 @@ function renderVttSceneBoard(bool $isGm = false): string
                         aria-label="Show players this floor"
                         title="Show this floor to players without moving their tokens"
                     >Show players</button>
+                    <?php endif; ?>
                 </div>
-                <?php else: ?>
+                <?php if (!$isGm): ?>
                 <select aria-label="Floor following" data-floor-follow-mode title="For this scene: Browse keeps your floor when your token moves. The GM can still show everyone a floor.">
                     <option value="follow">Follow token</option>
                     <option value="browse">Browse floors</option>

@@ -14,7 +14,7 @@ import {terrainContact} from './terrain-contact.js';
 import {createRouteWalker,stepGhost,walksPlates,hasStairs} from './route-walker.mjs';
 import {nearStair} from './stair-walk.mjs';
 import {viewSlant,slantVector,edgeFaces,usesHeightView} from './height-view.mjs';
-import {pointAtHeight,pickDrawn,pickView} from './pointer-pick.mjs';
+import {pointAtHeight,pickDrawn,pickView,pickWalked} from './pointer-pick.mjs';
 import {createRulerPass,passActorKey} from './ruler-pass.mjs';
 import {getCurrentMeasurementPoints} from './drag-ruler.js';
 const $=s=>document.querySelector(s);
@@ -94,12 +94,24 @@ function unproject(p,options={}){
   const own=options.standingOn?livePlacement(options.standingOn):null;
   if(own)return back(pointAtHeight(raw,groundFor(own),s));
   const hit=pickDrawn(raw,{slant:s,surfaces:resolveSupportSurfaces(importedDesign()||{}),ramps:importedDesign()?.ramps||[],view:pointerView()});
+  // A token being dragged: the pointer means the square on the floor the drag's path walks to (pickWalked).
+  const drag=window.vttDragTarget?.(),dragged=drag?livePlacement(drag.id):null;
+  if(dragged&&!['fly','hover'].includes(dragged.movementMode)){
+   const walked=pickWalked(raw,hit||groundPick(p,g,ox,oy),{slant:s,walk:q=>{const square=drag.target(back(q));return square?walkHeights(dragged,square.column,square.row):null;}});
+   if(walked?.walked)return back(walked);
+  }
   if(hit)return back(hit);
  }
 
+ return meshPoint(p);
+}
+// The ground under a point on the screen, on the flat map: the drawn ground's own triangles.
+function meshPoint(p){
  for(let i=triangles.length-1;i>=0;i--){const t=triangles[i],b=barycentric(p,...t);if(b)return {x:t.reduce((s,v,k)=>s+v.gx*b[k],0),y:t.reduce((s,v,k)=>s+v.gy*b[k],0)};}
  return p;
 }
+// The same in squares, with the height of the ground there, for pickWalked.
+function groundPick(p,g,ox,oy){const q=meshPoint(p),height=heightAt(q.x,q.y);return {x:(q.x-ox)/g,y:(q.y-oy)/g,height:Number.isFinite(height)?height:0};}
 function rawPoint(e){const rect=surface.getBoundingClientRect(),v=ctx.view;return {x:(e.clientX-rect.left-v.translation.x)/v.scale,y:(e.clientY-rect.top-v.translation.y)/v.scale};}
 let sharedTerrainRevision=-1,savingTerrain=false,dirtyWhileSaving=false;
 function save(){if(storageError)return;if(savingTerrain){dirtyWhileSaving=true;return;}dirtyWhileSaving=false;const savingKey=key;savingTerrain=true;saveShared('terrain',{n:field.n,m:field.m,h:Array.from(field.h),bounds:field.bounds||{left:(dimensions().left-(ctx.view.gridOffsets.left||0))/dimensions().grid,top:(dimensions().top-(ctx.view.gridOffsets.top||0))/dimensions().grid,width:dimensions().width/dimensions().grid,height:dimensions().height/dimensions().grid}},Math.max(0,sharedTerrainRevision),ctx.state.boardState.activeSceneId).then(result=>{if(key===savingKey)sharedTerrainRevision=acknowledgedRevision(result,'terrain')??sharedTerrainRevision;}).catch(e=>{if(key!==savingKey)return;storageError=true;console.error(e);alert('Terrain save was not confirmed. Keep this draft open; reload to recover shared terrain.');}).finally(()=>{savingTerrain=false;if(key===savingKey&&dirtyWhileSaving&&!storageError&&!drawing)save();});}
@@ -280,6 +292,43 @@ function routeNow(start,end,options={}){
 // was picked up: under a walkway while the drop would put the token on it, and floating at a
 // walkway's height over the foot of the stair it was being dragged down. Null for a flier, and on
 // a scene with no imported design: the ghost is then drawn as it always was.
+// The heights a walk of the drag's path to a square ends at and rises to, for pickWalked: from the
+// token's own square, through the ruler's points when it has any between its ends, to that square.
+// The same walk as the ghost's (dropHeight below), asked of squares the pointer has not been read at yet.
+// Where a walk through these squares ends, as the move itself decides it. The server carries each leg as one
+// straight line from its start to its end (FloorGeometry::move, FloorSupport::walkContact): a stair is climbed
+// when that line runs along it from its foot, and a plate is stepped onto when that line meets it. So the end of
+// each leg is asked the same way, in one step. The square-by-square walk (routeNow) is for what the route costs
+// and how its line is drawn; it goes slanted squares first, and can take a stair by a slanted step that the
+// straight line misses, which drew the ghost on a balcony the move never reached.
+function walkEnd(placement,points){
+ const d=dimensions(),design=importedDesign(),surfaces=design?resolveSupportSurfaces(design):[],mapLevels=levelConfig();
+ const standing=rampStanding(design),follow=standing&&hasStairs(mapLevels)?standing:null;
+ const last=points[points.length-1];
+ if(!walksPlates(placement,surfaces,!!follow))return rulerGround(last.column,last.row,placement);
+ const terrain=p=>heightAt((ctx.view.gridOffsets.left||0)+(p.column+(p.width||1)/2)*d.grid,(ctx.view.gridOffsets.top||0)+(p.row+(p.height||1)/2)*d.grid);
+ let ghost={...placement,column:points[0].column,row:points[0].row},height=null;
+ for(let i=1;i<points.length;i++){
+  if(points[i].column===ghost.column&&points[i].row===ghost.row)continue;
+  const stepped=stepGhost({ghost,column:points[i].column,row:points[i].row,actor:placement,surfaces,mapLevels,terrain,plainHeight:(column,row,who)=>rulerGround(column,row,who),standing:follow});
+  ghost=stepped.ghost;height=stepped.height;
+ }
+ return Number.isFinite(height)?height:null;
+}
+let walkMemo=null;
+function walkHeights(placement,column,row){
+ if(!importedDesign())return null;
+ const ruler=getCurrentMeasurementPoints(),dx=ruler.length>1?placement.column-ruler[0].column:0,dy=ruler.length>1?placement.row-ruler[0].row:0;
+ const points=[{column:placement.column,row:placement.row},...(ruler.length>2?ruler.slice(1,-1).map(p=>({column:p.column+dx,row:p.row+dy})):[]),{column,row}];
+ const key=JSON.stringify([passActorKey(placement),points,window.wallPrototype?.revision,sharedTerrainRevision]);
+ if(walkMemo?.key===key)return walkMemo.heights;
+ const carry={};let end=null,top=-Infinity;
+ for(let i=1;i<points.length;i++){const walked=routeNow(points[i-1],points[i],{actor:placement,ignoreZones:true,ignoreClimb:true,carry});for(const step of walked.points){if(Number.isFinite(step.rawHeight)){end=step.rawHeight;if(end>top)top=end;}}}
+ // It ends where the move ends (walkEnd); the highest it passes is still the walk's.
+ const ends=walkEnd(placement,points);if(Number.isFinite(ends)){end=ends;if(end>top)top=end;}
+ walkMemo={key,heights:Number.isFinite(end)?{end,top}:null};
+ return walkMemo.heights;
+}
 let dropMemo=null;
 function dropHeight(placement,column,row){
  if(!importedDesign()||['fly','hover'].includes(placement.movementMode))return null;
@@ -288,8 +337,7 @@ function dropHeight(placement,column,row){
  const points=own?ruler.map(p=>({column:p.column+dx,row:p.row+dy})):[{column:placement.column,row:placement.row},{column,row}];
  const key=JSON.stringify([passActorKey(placement),points,window.wallPrototype?.revision,sharedTerrainRevision]);
  if(dropMemo?.key===key)return dropMemo.height;
- const carry={};let height=null;
- for(let i=1;i<points.length;i++){const walked=routeNow(points[i-1],points[i],{actor:placement,ignoreZones:true,ignoreClimb:true,carry});height=walked.points[walked.points.length-1].rawHeight;}
+ const height=walkEnd(placement,points);
  dropMemo={key,height:Number.isFinite(height)?height:null};
  return dropMemo.height;
 }

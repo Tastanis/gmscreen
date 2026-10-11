@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { walkFloorContact, PLATE_REACH } from '../floor-support.js';
-import { createRouteWalker } from '../route-walker.mjs';
+import { createRouteWalker, stepGhost } from '../route-walker.mjs';
 import { routeSteps } from '../terrain-math.mjs';
 
 // A stair of plain ground that climbs to a walkway plate, with the numbers of the stone stair on
@@ -67,5 +67,15 @@ test('the ruler\'s walk, which the drag ghost is now drawn from, ends on the wal
   const source = readFileSync(new URL('../terrain-prototype.js', import.meta.url), 'utf8');
   assert.match(source, /const dropped=placement&&token\.dataset\.vttDragGhost\?dropHeight\(placement,Math\.round\(\(matrix\.m41-\(ctx\.view\.gridOffsets\.left\|\|0\)\)\/g\),Math\.round\(\(matrix\.m42-\(ctx\.view\.gridOffsets\.top\|\|0\)\)\/g\)\):null;/);
   assert.match(source, /const points=own\?ruler\.map\(p=>\(\{column:p\.column\+dx,row:p\.row\+dy\}\)\):\[\{column:placement\.column,row:placement\.row\},\{column,row\}\];/);
-  assert.match(source, /const walked=routeNow\(points\[i-1\],points\[i\],\{actor:placement,ignoreZones:true,ignoreClimb:true,carry\}\);height=walked\.points\[walked\.points\.length-1\]\.rawHeight;/);
+  // Its height is where the move ends: each leg asked in one step from its start to its end, as the server
+  // carries it (walkEnd), not the end of the square-by-square walk, which can take a stair by a slanted step
+  // that the straight line misses (the bathhouse, October 10: the ghost on the balcony, the hero under it).
+  assert.match(source, /const height=walkEnd\(placement,points\);/);
+  assert.match(source, /const stepped=stepGhost\(\{ghost,column:points\[i\]\.column,row:points\[i\]\.row,actor:placement,surfaces,mapLevels,terrain,plainHeight:\(column,row,who\)=>rulerGround\(column,row,who\),standing:follow\}\);/);
+  // On this stair the one step and the walk agree: up onto the walkway, down onto the ground.
+  const end = (actor, to) => stepGhost({ ghost: actor, column: to, row: 1, actor, surfaces: [walkway], mapLevels: levels, terrain: under(stair), plainHeight: (column) => stair(column + (actor.width || 1) / 2) });
+  const upEnd = end(walker(8), 2);
+  assert.equal(upEnd.height, 2); assert.equal(upEnd.ghost._supportSurfaceId, 'walkway');
+  const downEnd = end(walker(2, 1, 1, { levelId: 'up', _supportSurfaceId: 'walkway' }), 8);
+  assert.equal(downEnd.height, 0); assert.equal(downEnd.ghost._supportSurfaceId, null);
 });

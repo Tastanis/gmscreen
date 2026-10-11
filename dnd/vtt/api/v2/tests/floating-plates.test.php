@@ -22,6 +22,15 @@ SceneEnvironment::validate('walls', $design(['floating'=>false]));
 foreach (['yes', 1, 0, null, [], 'true'] as $bad) floatRefuses($design(['floating'=>$bad]), 'floating', 'The floating mark is true or false, not ' . json_encode($bad));
 echo "PASS a plate may be marked floating\n";
 
+// ---- how deep a plate's own side is drawn (a rope bridge: a thin edge, or none)
+foreach ([0, 0.0, 0.2, 2, 1000] as $depth) SceneEnvironment::validate('walls', $design(['sideDepth'=>$depth]));
+SceneEnvironment::validate('walls', $design(['sideDepth'=>0.2, 'floating'=>true]));
+foreach ([-0.1, 1000.5, '0.2', null, true, [0.2], NAN, INF] as $bad) floatRefuses($design(['sideDepth'=>$bad]), 'Side depth', 'A side depth of ' . json_encode(is_float($bad) && !is_finite($bad) ? (string) $bad : $bad) . ' is refused');
+$deck = SceneEnvironment::apply([], ['field'=>'walls', 'expectedRevision'=>0, 'value'=>$design(['sideDepth'=>0.2, 'imageId'=>'/dnd/vtt/storage/uploads/planks.jpg'])]);
+floatCheck($deck['walls']['value']['roofs'][0]['sideDepth'] === 0.2 && SceneEnvironment::project($deck)['walls']['value']['roofs'][0]['sideDepth'] === 0.2, 'The side depth is stored with the design and sent to players');
+floatCheck(!array_key_exists('sideDepth', SceneEnvironment::apply([], ['field'=>'walls', 'expectedRevision'=>0, 'value'=>$design()])['walls']['value']['roofs'][0]), 'A plate that says nothing is given no side depth');
+echo "PASS a plate may say how deep its side is drawn\n";
+
 // ---- the height slant
 SceneEnvironment::validate('walls', $design([], ['view'=>['slant'=>0.12]]));
 SceneEnvironment::validate('walls', $design([], ['view'=>['slant'=>0]]));

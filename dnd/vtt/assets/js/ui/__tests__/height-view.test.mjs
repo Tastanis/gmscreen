@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_SLANT, validSlant, viewSlant, slantVector, slanted, FLOATING_SIDE, isFloating, sideFoot, shadowRings, castsShadow } from '../height-view.mjs';
+import { DEFAULT_SLANT, validSlant, viewSlant, slantVector, slanted, FLOATING_SIDE, isFloating, sideFoot, sideDepthOf, shadowRings, castsShadow } from '../height-view.mjs';
 import { rampPick, rampHeight } from '../imported-ramps.mjs';
 
 const ring = (l, t, r, b) => [{ x: l, y: t }, { x: r, y: t }, { x: r, y: b }, { x: l, y: b }];
@@ -71,6 +71,23 @@ test('the side of a plate: down to what is under it, or a short slab edge when i
   // Ground higher than the plate (a plate set into a hillside) leaves no side at all, either way.
   assert.equal(sideFoot(island(), 20), 18);
   assert.equal(sideFoot(island({ floating: true }), 20), 18);
+});
+
+test('a plate may say how deep its own side is drawn; one that does not is drawn as always', () => {
+  // A rope bridge three up over ground at 0.3: an ordinary plate would get a side three squares high.
+  const deck = (extra = {}) => ({ id: 'deck', kind: 'floor', height: 3, ...extra });
+  assert.equal(sideFoot(deck(), 0.3), 0.3);
+  assert.equal(sideFoot(deck({ sideDepth: 0.2 }), 0.3), 2.8, 'a thin edge');
+  assert.equal(sideFoot(deck({ sideDepth: 0 }), 0.3), 3, 'no side at all');
+  // Never deeper than what is under the edge.
+  assert.equal(sideFoot(deck({ sideDepth: 5 }), 0.3), 0.3);
+  assert.equal(sideFoot(deck({ sideDepth: 0.2 }), 2.9), 2.9);
+  // It wins over floating; and a value that is not a plain number from 0 up is as if none was given.
+  assert.equal(sideFoot(deck({ floating: true, sideDepth: 0.2 }), 0), 2.8);
+  for (const bad of [-1, '0.2', null, NaN, Infinity, true]) assert.equal(sideFoot(deck({ sideDepth: bad }), 0.3), 0.3, String(bad));
+  assert.equal(sideDepthOf(deck()), null);
+  assert.equal(sideDepthOf(deck({ sideDepth: 0 })), 0);
+  assert.equal(sideDepthOf(null), null);
 });
 
 test('a floating plate casts a shadow straight down, following the ground', () => {

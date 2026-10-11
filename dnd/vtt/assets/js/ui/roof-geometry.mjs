@@ -17,8 +17,11 @@ export function wallRooms(model,edges){
 }
 export function insideRoom(p,points){let inside=false;for(let i=0,j=points.length-1;i<points.length;j=i++){const a=points[i],b=points[j];if((a.y>p.y)!==(b.y>p.y)&&p.x<(b.x-a.x)*(p.y-a.y)/(b.y-a.y)+a.x)inside=!inside;}return inside;}
 export function roofSurfaces(model){const nodes=new Map(model.nodes.map(n=>[n.id,n]));return (model.roofs||[]).map(r=>({...r,points:r.points||r.nodes.map(id=>nodes.get(id))})).filter(r=>r.points.length>=3&&r.points.every(Boolean)&&Number.isFinite(r.height));}
+export function floorBlocks(origin,eye,target,z,roof){
+ if(Math.abs(z-eye)<1e-7)return false;const t=(roof.height-eye)/(z-eye);if(t<=1e-6||t>=1-1e-6)return false;
+ const p={x:origin.x+(target.x-origin.x)*t,y:origin.y+(target.y-origin.y)*t};return insideRoom(p,roof.points)&&!(roof.holes||[]).some(h=>insideRoom(p,h));
+}
 export function ceilingBlocks(origin,eye,target,z,roofs){
- for(const roof of roofs){if(Math.abs(z-eye)<1e-7)continue;const t=(roof.height-eye)/(z-eye);if(t<=1e-6||t>=1-1e-6)continue;
-  const p={x:origin.x+(target.x-origin.x)*t,y:origin.y+(target.y-origin.y)*t};if(insideRoom(p,roof.points)&&!(roof.holes||[]).some(h=>insideRoom(p,h)))return true;
- }return false;
+ for(const roof of roofs)if(floorBlocks(origin,eye,target,z,roof))return true;
+ return false;
 }

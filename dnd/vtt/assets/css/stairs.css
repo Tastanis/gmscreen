@@ -184,6 +184,12 @@
 
 /* ── Stair polygon rendering layer ──────────────────────────────── */
 
+/* On a player's page of a map with heights the climb markers are drawn at their true heights
+   (roof-renderer.js); the flat lines would show a second time, in the wrong place. */
+.vtt-climb-markers-drawn .vtt-board__stairs:not(.is-edit-mode) {
+  visibility: hidden;
+}
+
 .vtt-board__stairs {
   position: absolute;
   inset: 0;
