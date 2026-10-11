@@ -74,6 +74,9 @@ export const PLATE_REACH=.5;
 // `enter` false asks where a mover is while its move is still being judged: it is not up on a box until the
 // box's walls have let it in, so it steps onto no box top that stands above it (one it starts on, it keeps).
 export const BOX_REACH=1.5;
+// A box set climbable (wall-properties.mjs) is of any height: it is stepped onto when its base is no more than this
+// above his feet. Stepping off one that is taller than BOX_REACH is a drop, and the fall rule lands him.
+export const BOX_FOOT=.5;
 // Paired with FloorSupport::walkContact.
 export function walkFloorContact(from,to,path,surfaces,mapLevels,terrain,enter=true){
  if(['fly','hover'].includes(from.movementMode)||from._floorTraversal)return null;
@@ -89,7 +92,7 @@ export function walkFloorContact(from,to,path,surfaces,mapLevels,terrain,enter=t
   for(let i=1;i<=steps;i++){
    const p={...from,column:start.column+dx*i/steps,row:start.row+dy*i/steps},height=support?.height??terrain(previous);
    // A low box is stepped up onto from whatever he stands on, plate or ground: its walls have let him in.
-   const box=enter&&boxes.length?boxes.find(s=>s!==support&&s.height>height+1e-6&&s.height-height<=BOX_REACH+1e-6&&overlap(p,s)):null;
+   const box=enter&&boxes.length?boxes.find(s=>s!==support&&s.height>height+1e-6&&(s.climbable?s.base-height<=BOX_FOOT+1e-6:s.height-height<=BOX_REACH+1e-6)&&overlap(p,s)):null;
    if(box){support=box;previous=p;continue;}
    if(!support||!overlap(p,support)){
     const prior=support;
@@ -99,7 +102,8 @@ export function walkFloorContact(from,to,path,surfaces,mapLevels,terrain,enter=t
     let ground=null;
     for(const s of floors){
      const cube=Boolean(s.templateCube||prior?.templateCube);
-     if((prior?.boxTop&&!s.boxTop?s.height-height>PLATE_REACH+1e-6||height-s.height>BOX_REACH+1e-6:Math.abs(s.height-height)>(s.boxTop?BOX_REACH:cube?.1:PLATE_REACH)+1e-6)||(support&&s.height<=support.height)||(!enter&&s.boxTop&&s.height>height+1e-6))continue;
+     const down=BOX_REACH;
+     if((s.boxTop?(s.height>height?(s.climbable?s.base-height>BOX_FOOT+1e-6:s.height-height>BOX_REACH+1e-6):height-s.height>down+1e-6):prior?.boxTop?s.height-height>PLATE_REACH+1e-6||height-s.height>down+1e-6:Math.abs(s.height-height)>(cube?.1:PLATE_REACH)+1e-6)||(support&&s.height<=support.height)||(!enter&&s.boxTop&&s.height>height+1e-6))continue;
      if(s.height<(ground??=terrain(p))-.1-1e-6||!overlap(p,s))continue;
      if(!cube||!overlap(previous,s)||(prior&&touchingSurfaces(prior,s)))support=s;
     }

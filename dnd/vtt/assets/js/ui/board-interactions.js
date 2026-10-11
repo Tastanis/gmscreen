@@ -1465,6 +1465,8 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }
     // Walking up a cliff: ask first. "Don't climb" means the move is never sent.
+    // One question for the whole drag: a yes here is also the yes to any low or climbable wall on the way.
+    let climbAnswered = false;
     if (movementKind === 'walk' || movementKind === 'shift') {
       const climbs = moves.map((move) => {
         const origin = canonical[move.placementId];
@@ -1478,6 +1480,7 @@ export function mountBoardInteractions(store, routes = {}) {
         const left = tokenMovementController?.getMovementLeft?.(move.placementId)?.left ?? null;
         const anchor = [...tokenLayer.querySelectorAll('[data-placement-id]')].find((element) => element.dataset.placementId === move.placementId) ?? null;
         const climb = await askClimb({ name: origin.name || 'Token', squares: route.climbs.reduce((sum, step) => sum + step.rise, 0), cost: route.cost, extra: route.climbExtra, left, others: climbs.length - 1 }, { anchor });
+        climbAnswered = climb === true;
         if (!climb || sceneId !== getActiveSceneId()) {
           for (const item of moves) { const start = canonical[item.placementId]; if (start) updatePlacementById(item.placementId, (placement) => Object.assign(placement, start), { syncBoard: false }); }
           renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
@@ -1500,7 +1503,7 @@ export function mountBoardInteractions(store, routes = {}) {
         const left = tokenMovementController?.getMovementLeft?.(move.placementId)?.left ?? null;
         const anchor = [...tokenLayer.querySelectorAll('[data-placement-id]')].find((element) => element.dataset.placementId === move.placementId) ?? null;
         const cost = window.terrainZones?.routeCost ? window.terrainZones.routeCost([{ column: origin.column, row: origin.row }, ...through, { column: move.column, row: move.row }], { kind: movementKind, actor: origin }).cost : null;
-        const yes = await askClimb({ name: origin.name || 'Token', over: low.rise, onto: low.onto === true, cost, left }, { anchor });
+        const yes = climbAnswered || await askClimb({ name: origin.name || 'Token', over: low.rise, onto: low.onto === true, tall: low.tall === true, cost, left }, { anchor });
         if (!yes || sceneId !== getActiveSceneId()) {
           updatePlacementById(move.placementId, (placement) => Object.assign(placement, origin), { syncBoard: false });
           renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);

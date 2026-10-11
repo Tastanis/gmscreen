@@ -104,7 +104,7 @@ test('the pop-up is one short line: the fact and the cost', () => {
 test('the board asks before it sends, the answer travels with the move, and a push is not asked', () => {
   const board = readFileSync(new URL('../board-interactions.js', import.meta.url), 'utf8');
   assert.match(board, /\(movementKind === 'walk' \|\| movementKind === 'shift'\) && moves\.length === 1 && !isGmUser\(\) && typeof window\.wallPrototype\?\.lowBarrier === 'function'/);
-  assert.match(board, /const yes = await askClimb\(\{ name: origin\.name \|\| 'Token', over: low\.rise, onto: low\.onto === true, cost, left \}, \{ anchor \}\);/);
+  assert.match(board, /const yes = climbAnswered \|\| await askClimb\(\{ name: origin\.name \|\| 'Token', over: low\.rise, onto: low\.onto === true, tall: low\.tall === true, cost, left \}, \{ anchor \}\);/);
   assert.match(board, /updateStatus\('Did not climb\.'\);\s*return;\s*\}\s*climbLow = true;/);
   assert.match(board, /\.\.\.\(climbLow \? \{ climbLow: true \} : \{\}\) \};/);
   const runtime = readFileSync(new URL('../../sync-v2/token-movement-runtime.js', import.meta.url), 'utf8');

@@ -259,7 +259,10 @@ function rulerGroundNow(column,row,actor){
 function climbFace(actor,a,b){
  const from={width:1,height:1,...(actor||{}),column:a.column,row:a.row};if(['fly','hover'].includes(from.movementMode))return false;
  const d=dimensions(),ground=(x,y)=>heightAt((ctx.view.gridOffsets.left||0)+x*d.grid,(ctx.view.gridOffsets.top||0)+y*d.grid);
- return terrainContact(from,{column:b.column,row:b.row},ground,t=>groundFor(t))!==null;
+ if(terrainContact(from,{column:b.column,row:b.row},ground,t=>groundFor(t))!==null)return true;
+ // Or up onto a thing set climbable that he will stand on (low-boxes.mjs): charged as a cliff of its height is.
+ const to={...from,column:b.column,row:b.row};
+ return resolveSupportSurfaces(importedDesign()||{}).some(s=>s.boxTop&&s.climbable&&Math.abs(s.height-b.rawHeight)<.01&&intersectsFloor(to,s,[]));
 }
 function route(start,end,options={}){
  if(!pass.active)return routeNow(start,end,options);

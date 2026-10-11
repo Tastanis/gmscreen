@@ -5,13 +5,14 @@
  * The words on the pop-up: the fact and the cost, no reasons (Brandon, October 10, 2026: "I dont need an
  * explanation. just say like Climb railing cost 1."). Pure, so the wording is tested without a page.
  * `over` (a height) is a low barrier, a rail or fence one square high or less; with `onto`, a low object
- * that fills a square, which he climbs onto. Otherwise it is a cliff, `squares` high. `cost` is the move's
+ * that fills a square, which he climbs onto; `tall` is a thing set climbable that is more than a square high.
+ * Otherwise it is a cliff, `squares` high. `cost` is the move's
  * cost as the ruler counts it. What is left this turn is said only when it is not enough.
  */
-export function climbPromptText({ squares = 0, cost = 0, left = null, others = 0, over = null, onto = false } = {}) {
+export function climbPromptText({ squares = 0, cost = 0, left = null, others = 0, over = null, onto = false, tall = false } = {}) {
   const lines = Number.isFinite(cost) && cost > 0 ? [`Cost ${cost}.`] : [];
   if (Number.isFinite(left) && Number.isFinite(cost) && cost > left) lines.push(`Only ${left} movement left.`);
-  const title = over !== null ? (onto ? 'Climb onto it?' : 'Climb over railing?')
+  const title = over !== null ? (onto ? 'Climb onto it?' : tall ? 'Climb over it?' : 'Climb over railing?')
     : `Climb ${squares} ${squares === 1 ? 'square' : 'squares'}${others > 0 ? `, with ${others} more` : ''}?`;
   return { title, lines, yes: 'Climb', no: 'Don’t climb' };
 }

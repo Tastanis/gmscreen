@@ -17,6 +17,17 @@ final class WallMovement
     public const BOX_FOOT=.5;
 
     /**
+     * The setting `climbable` (Brandon, October 10, 2026: "we need a wall type called climbable ... We can just make
+     * that a setting instead of trying to make sure every block is the right height"): a wall that says so is climbed
+     * on a yes whatever its height, and a closed ring of them is stood on at its real top (WallBoxes). A door or a
+     * window is opened, not climbed. Paired with `climbable` in wall-properties.mjs.
+     */
+    public static function climbable(array $edge): bool
+    {
+        return ($edge['climbable'] ?? false) === true && ($edge['interaction'] ?? 'none') === 'none';
+    }
+
+    /**
      * `$climb`: the mover has said yes to climbing over low barriers (the climb pop-up), so a walk or a
      * shift is stopped only by something else.
      */
@@ -211,7 +222,7 @@ $length=in_array($direction,['west','east'],true)?$s['right']-$s['left']:$s['bot
         }
         if($lo>=$hi||$hi<0||$lo>1)return null;
         $steps=max(1,min(8192,(int)ceil(hypot($dx,$dy)*($hi-$lo)*8)));
-        $hit=false;$low=$e['interaction']==='none'&&(self::onGridLine($a,$b)||!empty($edge['boxWall']));$highest=-INF;$rise=0.;
+        $hit=false;$can=self::climbable($e);$low=$can||($e['interaction']==='none'&&(self::onGridLine($a,$b)||!empty($edge['boxWall'])));$highest=-INF;$rise=0.;
         for($i=0;$i<=$steps;$i++){
             $t=$lo+($hi-$lo)*($i+.5)/($steps+1);
             $token=[...$from,'column'=>$from['column']+$dx*$t,'row'=>$from['row']+$dy*$t];
@@ -226,7 +237,7 @@ $length=in_array($direction,['west','east'],true)?$s['right']-$s['left']:$s['bot
             if($lifts)foreach($lifts as $lift)if($t>=$lift['lo']-1e-9&&$t<=$lift['hi']+1e-9&&$lift['top']>$z)$z=$lift['top'];
             if($z<$top-1e-7&&$z+max($w,$h)>$base+1e-7){
                 if(!$describe)return max(0.,$lo);
-                $hit=true;$foot=!empty($edge['boxWall'])?min(self::BOX_FOOT,max(0.,$base-$z)):0.;if($top-$z-$foot>self::LOW_BARRIER+1e-6||$base>$z+$foot+1e-6)$low=false;
+                $hit=true;$foot=!empty($edge['boxWall'])||$can?min(self::BOX_FOOT,max(0.,$base-$z)):0.;if((!$can&&$top-$z-$foot>self::LOW_BARRIER+1e-6)||$base>$z+$foot+1e-6)$low=false;
                 $highest=max($highest,$top);$rise=max($rise,$top-$z);
             }
         }

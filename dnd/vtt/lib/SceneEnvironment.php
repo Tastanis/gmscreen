@@ -131,7 +131,7 @@ final class SceneEnvironment
             foreach (['base','height'] as $key) if (isset($edge[$key])) self::number($edge[$key]);
             if (isset($edge['height'])&&($edge['height']<0||$edge['height']>1000)) throw new InvalidArgumentException('Invalid wall height.');
             foreach (['sight'=>['block','pass','limited'],'movement'=>['block','pass'],'interaction'=>['none','door','window'],'baseMode'=>['fixed','terrain'],'topMode'=>['follow','level'],'sightDirection'=>['both','left','right'],'movementDirection'=>['both','left','right']] as $key=>$allowed) if (isset($edge[$key])&&!in_array($edge[$key],$allowed,true)) throw new InvalidArgumentException('Invalid wall property.');
-            foreach (['open','locked','secret'] as $key) if (isset($edge[$key])&&!is_bool($edge[$key])) throw new InvalidArgumentException('Invalid wall flag.');
+            foreach (['open','locked','secret','climbable'] as $key) if (isset($edge[$key])&&!is_bool($edge[$key])) throw new InvalidArgumentException('Invalid wall flag.');
             if (($edge['open'] ?? false)&&($edge['locked'] ?? false)) throw new InvalidArgumentException('Locked wall cannot be open.');
             // Breakable walls: a material marks a wall as breakable, `broken` says it has been broken.
             // A one-way wall (a cliff edge) can never be given a material.

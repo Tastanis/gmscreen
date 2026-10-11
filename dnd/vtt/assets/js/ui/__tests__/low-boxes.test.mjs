@@ -138,5 +138,5 @@ test('the page works the boxes into the walls it reads, before the summoned cube
   const walls = readFileSync(new URL('../wall-prototype.js', import.meta.url), 'utf8');
   assert.match(walls, /cachedCubeModel=wallCubeModel\(withLowBoxes\(liveWalls\(model\)\),/);
   const rules = readFileSync(new URL('../wall-properties.mjs', import.meta.url), 'utf8');
-  assert.match(rules, /plain=e\.interaction==='none'&&\(onGridLine\(a,b\)\|\|edge\.boxWall===true\)/);
+  assert.match(rules, /plain=can\|\|e\.interaction==='none'&&\(onGridLine\(a,b\)\|\|edge\.boxWall===true\)/);
 });

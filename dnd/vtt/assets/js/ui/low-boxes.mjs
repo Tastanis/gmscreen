@@ -8,7 +8,8 @@
 // packages already use for an object on a square). Its walls then count as low barriers, so a walk into it is
 // asked the climb question like a rail (wall-properties.mjs); and it gets a top to stand on, at base plus
 // height, as a small floor plate on the floor the box stands on. A ring that is taller, broken, not closed or of
-// mixed heights is no box, and everything about it is as before. Paired with WallBoxes.php.
+// mixed heights is no box, and everything about it is as before. A ring whose walls are all set `climbable`
+// (wall-properties.mjs) is a box whatever its height. Paired with WallBoxes.php.
 
 /** The tallest a box may be, in squares. The same number as LOW_BARRIER in wall-properties.mjs. */
 export const BOX_HEIGHT = 1;
@@ -27,12 +28,12 @@ export function lowBoxes(model) {
   for (const edge of model?.segments || []) {
     if ((edge.interaction ?? 'none') !== 'none' || (edge.movement ?? 'block') !== 'block' || edge.broken === true || (edge.movementDirection ?? 'both') !== 'both') continue;
     const tall = Number(edge.height), base = Number(edge.base);
-    if ((edge.baseMode ?? 'terrain') !== 'fixed' || !Number.isFinite(base) || !(tall > 0) || tall > BOX_HEIGHT + 1e-6 || String(edge.id).startsWith('template-cube:')) continue;
+    if ((edge.baseMode ?? 'terrain') !== 'fixed' || !Number.isFinite(base) || !(tall > 0) || (tall > BOX_HEIGHT + 1e-6 && edge.climbable !== true) || String(edge.id).startsWith('template-cube:')) continue;
     const a = nodes.get(edge.a), b = nodes.get(edge.b);
     if (!a || !b) continue;
     const flat = Math.abs(a.y - b.y) < 1e-6 && Math.abs(a.x - b.x) > 1e-6, upright = Math.abs(a.x - b.x) < 1e-6 && Math.abs(a.y - b.y) > 1e-6;
     if (!flat && !upright) continue;
-    const size = `${Math.round(base * 1e4)}|${Math.round(tall * 1e4)}`, first = flat ? (a.x < b.x ? a : b) : (a.y < b.y ? a : b), last = first === a ? b : a;
+    const size = `${Math.round(base * 1e4)}|${Math.round(tall * 1e4)}${edge.climbable === true ? '|c' : ''}`, first = flat ? (a.x < b.x ? a : b) : (a.y < b.y ? a : b), last = first === a ? b : a;
     const side = { edge, first, last, flat, size, base, tall };
     sides.set(`${place(first.x, first.y)}>${place(last.x, last.y)}|${size}`, side);
     if (flat) tops.push(side);
@@ -49,7 +50,7 @@ export function lowBoxes(model) {
       if (!east || !south || used.has(east.edge.id) || used.has(south.edge.id)) continue;
       const edges = [north, east, south, west].map((side) => side.edge.id);
       edges.forEach((id) => used.add(id));
-      boxes.push({ id: BOX_TOP + [...edges].sort()[0], left: x0, right: x1, top: y0, bottom: y1, base: north.base, height: north.base + north.tall, edges });
+      boxes.push({ id: BOX_TOP + [...edges].sort()[0], left: x0, right: x1, top: y0, bottom: y1, base: north.base, height: north.base + north.tall, edges, ...(north.edge.climbable === true ? { climbable: true } : {}) });
       break;
     }
   }
@@ -73,7 +74,7 @@ export function withLowBoxes(model) {
   return {
     ...model,
     segments: model.segments.map((edge) => (walls.has(edge.id) ? { ...edge, boxWall: true } : edge)),
-    roofs: [...(model.roofs || []), ...boxes.map((box) => ({ id: box.id, kind: 'floor', boxTop: true, levelId: levelOf(box), base: box.base, height: box.height,
+    roofs: [...(model.roofs || []), ...boxes.map((box) => ({ id: box.id, kind: 'floor', boxTop: true, ...(box.climbable ? { climbable: true } : {}), levelId: levelOf(box), base: box.base, height: box.height,
       points: [{ x: box.left, y: box.top }, { x: box.right, y: box.top }, { x: box.right, y: box.bottom }, { x: box.left, y: box.bottom }], holes: [] }))],
   };
 }

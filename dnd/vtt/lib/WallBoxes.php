@@ -8,7 +8,8 @@ declare(strict_types=1);
  * A box is worked out from the walls: a closed rectangle of four plain wall pieces, all with the same fixed
  * base and the same height, one square high or less. Its walls then count as low barriers (WallMovement), and
  * it gets a top to stand on, at base plus height, as a small floor plate on the floor the box stands on.
- * A ring that is taller, broken, not closed or of mixed heights is no box. Paired with low-boxes.mjs.
+ * A ring that is taller, broken, not closed or of mixed heights is no box. A ring whose walls are all set
+ * `climbable` (WallMovement::climbable) is a box whatever its height. Paired with low-boxes.mjs.
  */
 final class WallBoxes
 {
@@ -30,16 +31,17 @@ final class WallBoxes
             if (($edge['interaction'] ?? 'none') !== 'none' || ($edge['movement'] ?? 'block') !== 'block' || ($edge['broken'] ?? false) === true || ($edge['movementDirection'] ?? 'both') !== 'both') continue;
             if (($edge['baseMode'] ?? 'terrain') !== 'fixed' || !is_numeric($edge['base'] ?? null) || !is_numeric($edge['height'] ?? null)) continue;
             $tall = (float) $edge['height']; $base = (float) $edge['base'];
-            if (!($tall > 0) || $tall > self::BOX_HEIGHT + 1e-6 || str_starts_with((string) ($edge['id'] ?? ''), 'template-cube:')) continue;
+            $can = ($edge['climbable'] ?? false) === true;
+            if (!($tall > 0) || ($tall > self::BOX_HEIGHT + 1e-6 && !$can) || str_starts_with((string) ($edge['id'] ?? ''), 'template-cube:')) continue;
             $a = $nodes[$edge['a'] ?? ''] ?? null; $b = $nodes[$edge['b'] ?? ''] ?? null;
             if (!$a || !$b) continue;
             $flat = abs($a['y'] - $b['y']) < 1e-6 && abs($a['x'] - $b['x']) > 1e-6;
             $upright = abs($a['x'] - $b['x']) < 1e-6 && abs($a['y'] - $b['y']) > 1e-6;
             if (!$flat && !$upright) continue;
-            $size = round($base * 1e4) . '|' . round($tall * 1e4);
+            $size = round($base * 1e4) . '|' . round($tall * 1e4) . ($can ? '|c' : '');
             $aFirst = $flat ? $a['x'] < $b['x'] : $a['y'] < $b['y'];
             $first = $aFirst ? $a : $b; $last = $aFirst ? $b : $a;
-            $side = ['id' => $edge['id'], 'first' => $first, 'last' => $last, 'flat' => $flat, 'size' => $size, 'base' => $base, 'tall' => $tall];
+            $side = ['id' => $edge['id'], 'first' => $first, 'last' => $last, 'flat' => $flat, 'size' => $size, 'base' => $base, 'tall' => $tall, 'can' => $can];
             $sides[self::place((float) $first['x'], (float) $first['y']) . '>' . self::place((float) $last['x'], (float) $last['y']) . '|' . $size] = $side;
             if ($flat) $tops[] = $side;
         }
@@ -57,7 +59,7 @@ final class WallBoxes
                 $edges = [$north['id'], $east['id'], $south['id'], $west['id']];
                 foreach ($edges as $id) $used[$id] = true;
                 $sorted = $edges; sort($sorted, SORT_STRING);
-                $boxes[] = ['id' => self::BOX_TOP . $sorted[0], 'left' => $x0, 'right' => $x1, 'top' => $y0, 'bottom' => $y1, 'base' => $north['base'], 'height' => $north['base'] + $north['tall'], 'edges' => $edges];
+                $boxes[] = ['id' => self::BOX_TOP . $sorted[0], 'left' => $x0, 'right' => $x1, 'top' => $y0, 'bottom' => $y1, 'base' => $north['base'], 'height' => $north['base'] + $north['tall'], 'edges' => $edges, ...($north['can'] ? ['climbable' => true] : [])];
                 break;
             }
         }
@@ -85,7 +87,7 @@ final class WallBoxes
                 foreach ($roof['holes'] ?? [] as $hole) if (FloorSupport::contains($hole, $x, $y)) continue 2;
                 $level = $roof['levelId'] ?? 'level-0'; break;
             }
-            $model['roofs'][] = ['id' => $box['id'], 'kind' => 'floor', 'boxTop' => true, 'levelId' => $level, 'base' => $box['base'], 'height' => $box['height'],
+            $model['roofs'][] = ['id' => $box['id'], 'kind' => 'floor', 'boxTop' => true, ...(!empty($box['climbable']) ? ['climbable' => true] : []), 'levelId' => $level, 'base' => $box['base'], 'height' => $box['height'],
                 'points' => [['x' => $box['left'], 'y' => $box['top']], ['x' => $box['right'], 'y' => $box['top']], ['x' => $box['right'], 'y' => $box['bottom']], ['x' => $box['left'], 'y' => $box['bottom']]], 'holes' => []];
         }
         return $model;
