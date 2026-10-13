@@ -66,12 +66,15 @@ export function mountDrawingTool(options = {}) {
     syncTimeout: null,
     sceneId: options.getContext?.()?.sceneId || '_default',
     levelId: options.getContext?.()?.levelId || 'level-0',
+    currentHeight: null,
+    shownKey: '',
     confirmedDrawings: [],
     pendingEdits: null,
     editBefore: null,
   };
 
   sharedState = state;
+  watchWhoIsShownWhat(state);
 
   drawButton.setAttribute('aria-pressed', 'false');
 
@@ -298,6 +301,8 @@ function beginDrawing(state, event) {
   state.drawing = true;
   state.pointerId = event.pointerId;
   state.currentPoints = [point];
+  // The floor that is under the pointer where the stroke begins: the stroke is that floor's.
+  state.currentHeight = floorHeightUnder(point);
 
   const path = document.createElementNS(SVG_NS, 'path');
   path.setAttribute('stroke', state.color);
@@ -335,6 +340,7 @@ function endDrawing(state, event) {
       color: state.color,
       strokeWidth: state.strokeWidth,
       levelId: state.levelId,
+      ...(state.currentHeight !== null ? { z: state.currentHeight } : {}),
     };
     if (authorId) {
       drawing.authorId = authorId;
@@ -475,6 +481,7 @@ function eraseAtPoint(state, point) {
               color: drawing.color,
               strokeWidth: drawing.strokeWidth,
               levelId: drawing.levelId || 'level-0',
+              ...(Number.isFinite(drawing.z) ? { z: drawing.z } : {}),
             };
             if (drawing.authorId) {
               frag.authorId = drawing.authorId;
@@ -496,6 +503,7 @@ function eraseAtPoint(state, point) {
           color: drawing.color,
           strokeWidth: drawing.strokeWidth,
           levelId: drawing.levelId || 'level-0',
+          ...(Number.isFinite(drawing.z) ? { z: drawing.z } : {}),
         };
         if (drawing.authorId) {
           frag.authorId = drawing.authorId;
@@ -559,9 +567,47 @@ function adjustStrokeSize(state, delta) {
 
 function isEditable(state, drawing) {
   return canEditDrawing(drawing, {
-    userId: getCurrentUserId?.(), isGM: getIsGM(), levelId: state.levelId,
+    userId: getCurrentUserId?.(), isGM: getIsGM(), levelId: state.levelId, shown: shownByHeight(drawing),
   });
 }
+
+// Brandon, October 12, 2026: "Drawings need to be drawn on the level i click on or am looking at."
+//
+// A stroke used to be given the floor its page was on, and each page showed only the strokes given its own
+// floor. The Director, looking down on a map from the ground floor, drew on a raised platform: the stroke was
+// the ground floor's, and the player standing on that platform never saw it.
+//
+// On a map with built floors a stroke now keeps the height of the floor that was under the pointer where it
+// began (`z`; 0 is the ground), and is shown to whoever is shown that floor: the same test the picture uses, so
+// a stroke is seen exactly when the thing it was drawn on is seen. A stroke with no height (a map with no built
+// floors, or one drawn before this) keeps the old rule.
+function floorHeightUnder(point) {
+  const height = Number(globalThis.terrainPrototype?.floorUnder?.(point) ?? NaN);
+  return Number.isFinite(height) ? Math.round(height * 100) / 100 : null;
+}
+
+/** True or false where the stroke's height decides; null where the floor it was given does. */
+function shownByHeight(drawing) {
+  if (!Number.isFinite(drawing?.z)) return null;
+  const shown = globalThis.terrainPrototype?.heightShown?.(drawing.z);
+  return typeof shown === 'boolean' ? shown : null;
+}
+
+function shownOnThisPage(state, drawing) {
+  return shownByHeight(drawing) ?? ((drawing.levelId || 'level-0') === state.levelId);
+}
+
+// Which strokes are shown changes when the viewer does (another hero selected, a hero climbing a stair), and
+// nothing tells this layer. Looked at a few times a second, and only while there is a stroke with a height.
+const SHOWN_CHECK_MS = 400;
+function watchWhoIsShownWhat(state) {
+  if (typeof setInterval !== 'function') return;
+  setInterval(() => {
+    if (state.drawing || state.erasing || !state.drawings.some((drawing) => Number.isFinite(drawing?.z))) return;
+    if (shownKey(state) !== state.shownKey) renderDrawings(state);
+  }, SHOWN_CHECK_MS);
+}
+const shownKey = (state) => state.drawings.map((drawing) => (shownOnThisPage(state, drawing) ? '1' : '0')).join('');
 
 function clearAllDrawings(state) {
   if (state.pendingSync || !state.drawings.some((drawing) => isEditable(state, drawing))) return;
@@ -868,8 +914,9 @@ export function renderDrawings(state) {
     }
   }
 
+  targetState.shownKey = shownKey(targetState);
   for (const drawing of targetState.drawings) {
-    if ((drawing.levelId || 'level-0') !== targetState.levelId || !drawing.points || drawing.points.length < 2) {
+    if (!shownOnThisPage(targetState, drawing) || !drawing.points || drawing.points.length < 2) {
       continue;
     }
 

@@ -35,7 +35,9 @@ export function drawingCommands(sceneId, edits) {
   });
 }
 
-export function canEditDrawing(drawing, { userId, isGM = false, levelId = 'level-0' }) {
-  return (drawing.levelId || 'level-0') === levelId
+// `shown` says whether the stroke is shown on this page, where that is known by its height (drawing-tool.js);
+// otherwise a stroke is this page's when it is on the floor the page is on.
+export function canEditDrawing(drawing, { userId, isGM = false, levelId = 'level-0', shown = null }) {
+  return (typeof shown === 'boolean' ? shown : (drawing.levelId || 'level-0') === levelId)
     && (isGM || (Boolean(userId) && drawing.authorId === userId));
 }

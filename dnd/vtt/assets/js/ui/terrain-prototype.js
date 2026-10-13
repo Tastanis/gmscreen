@@ -14,7 +14,7 @@ import {terrainContact} from './terrain-contact.js';
 import {createRouteWalker,stepGhost,walksPlates,hasStairs} from './route-walker.mjs';
 import {nearStair} from './stair-walk.mjs';
 import {viewSlant,slantVector,edgeFaces,usesHeightView} from './height-view.mjs';
-import {pointAtHeight,pickDrawn,pickView,pickWalked} from './pointer-pick.mjs';
+import {pointAtHeight,pickDrawn,pickView,pickWalked,floorDrawn} from './pointer-pick.mjs';
 import {createRulerPass,passActorKey} from './ruler-pass.mjs';
 import {getCurrentMeasurementPoints,getDroppedMeasurementPoints,getCurrentMovementKind} from './drag-ruler.js';import {straightLine} from './forced-line.mjs';import {stairEnds,stairAssume} from './stair-assume.mjs';import {buildStairPerimeter,resolveSegmentColor} from './stairs-geometry.js';
 const $=s=>document.querySelector(s);
@@ -520,7 +520,21 @@ function paintRoute(overlay,points,gridSize,forced=false){
  overlay.path.style.opacity='0';
 }
 window.addEventListener('storage',e=>{if(e.key===key&&!drawing){key='';}});
-window.terrainPrototype={get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,unprojectAt,projector,stairRoute,heightAt,groundFor,landingHeight,movementGroundFor,movementPlacement,highGround,isCliff,climbFace,walkerNear,get design(){return importedDesign();},route,rulerPass,rulerPoint,routePath,squarePath,paintRoute,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get key(){return key;},get storageError(){return storageError;},project,get slant(){return slant();},get active(){return active;}};
+// For what is drawn by hand on the map (drawing-tool.js). floorUnder: the height of the floor drawn under a point
+// of the board, 0 for the ground or a stair, null on a map with no built floors. heightShown: whether a floor of
+// that height is drawn for whoever is looking at this page (the same test the picture itself uses).
+function floorUnder(p){
+ if(!active||!field||!importedDesign())return null;
+ const g=dimensions().grid,ox=ctx.view.gridOffsets.left||0,oy=ctx.view.gridOffsets.top||0;
+ const hit=pickDrawn({x:(p.x-ox)/g,y:(p.y-oy)/g},{slant:slant(),surfaces:resolveSupportSurfaces(importedDesign()||{}),ramps:importedDesign()?.ramps||[],view:pointerView()});
+ return hit?.floor?Number(hit.height)||0:0;
+}
+function heightShown(z){
+ if(!active||!field||!importedDesign())return null;
+ const height=Number(z)||0,view=pointerView();
+ return height<=0||!view||floorDrawn(height,view);
+}
+window.terrainPrototype={floorUnder,heightShown,get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,unprojectAt,projector,stairRoute,heightAt,groundFor,landingHeight,movementGroundFor,movementPlacement,highGround,isCliff,climbFace,walkerNear,get design(){return importedDesign();},route,rulerPass,rulerPoint,routePath,squarePath,paintRoute,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get key(){return key;},get storageError(){return storageError;},project,get slant(){return slant();},get active(){return active;}};
 requestAnimationFrame(tick);
 
 import('./wall-prototype.js');

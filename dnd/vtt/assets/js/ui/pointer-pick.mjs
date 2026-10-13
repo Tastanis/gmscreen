@@ -26,7 +26,7 @@ export const pointAtHeight = (raw, height, slant) => ({ x: raw.x - height * slan
  *    drawn where the viewer is above its slope, or has its head at or above the ramp's top.
  * The floor drawing in roof-renderer.js uses the same two tests.
  */
-const floorDrawn = (height, view) => (view.upTo !== undefined ? height <= view.upTo + 0.001 : view.eye > height + 1e-6);
+export const floorDrawn = (height, view) => (view.upTo !== undefined ? height <= view.upTo + 0.001 : view.eye > height + 1e-6);
 function rampDrawn(ramp, point, height, view) {
   if (view.upTo !== undefined) return height <= view.upTo + 1e-9;
   const plane = rampPlane(ramp);
