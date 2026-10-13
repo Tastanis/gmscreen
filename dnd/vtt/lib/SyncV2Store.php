@@ -1420,7 +1420,7 @@ final class SyncV2Store
             if (!$current || (!$isGm && ($this->placementIsHidden($current) || !$this->playerMayMovePlacement($current)))) throw new InvalidArgumentException('A member of this group move is no longer available.');
             $latest=$current['_movementUndo']['history'] ?? [];
             if ((end($latest)['operationId'] ?? null)!==$sourceId) throw new InvalidArgumentException('A member moved again after this group move.');
-            $restore=MovementUndo::restore($current,$actorId,(int)$current['_entityRevision'],$snapshot['state']['sceneConfig'][$memberScene]['mapLevels'] ?? []);
+            $restore=MovementUndo::restore($current,$actorId,(int)($current['_movementUndo']['revision'] ?? -1),$snapshot['state']['sceneConfig'][$memberScene]['mapLevels'] ?? []);
             $restores[$memberScene.'::'.$id]=$restore;
             $actions[]=['kind'=>'patch','sceneId'=>$memberScene,'placementId'=>$id,'entityRevision'=>$current['_entityRevision'],
                 'patch'=>['column'=>$restore['column'],'row'=>$restore['row']]];

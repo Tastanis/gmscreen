@@ -173,13 +173,25 @@ try {
     $t = $store->getSnapshot()['state']['placements']['scene']['t'];
     hurlCheck($brokenIn($store) === ['piece-5'] && (float) $t['column'] === (float) $lands['column'] && $lands['column'] > 9, 'The push broke the wooden piece and went through');
     hurlCheck(MovementUndo::lastBroke($t) === ['piece-5'], 'and its receipt says which wall it broke: ' . json_encode($t['_movementUndo']['history'] ?? null));
+    // What happens next in play, and what this test left out when it was first written (the tester, Build 483):
+    // breaking through hurts the pushed creature, and the page applies that at once as a change of its own.
+    // The push is still its last move, and can still be undone.
+    $snap = $store->getSnapshot();
+    $hurt = $store->acceptPlacementBatch(['type'=>'placement.batch','operationId'=>'undo-break-damage','baseRevision'=>$snap['revision'],'payload'=>['actions'=>[
+        ['kind'=>'patch','sceneId'=>'scene','placementId'=>'t','entityRevision'=>$t['_entityRevision'],'patch'=>['hp'=>['current'=>45, 'max'=>50]]]]]], 'gm', true);
+    $moved = $t;
+    $t = $store->getSnapshot()['state']['placements']['scene']['t'];
+    hurlCheck($hurt['status'] === 'accepted' && $t['_entityRevision'] === $moved['_entityRevision'] + 1 && $t['_movementUndo'] === $moved['_movementUndo'] && $t['hp']['current'] === 45,
+        'The break\'s damage is a later change to the token; the receipt is as the push wrote it: ' . json_encode([$t['_entityRevision'], $t['_movementUndo']['revision']]));
+    hurlCheck(MovementUndo::standsWhereLeft($t) && MovementUndo::lastBroke($t) === ['piece-5'], 'It still stands where the push left it, so the push is still undoable');
     // Somebody else may not undo it, and their try mends nothing.
-    try { $send($store, 'undo-break-other', ['column'=>0, 'row'=>0, 'undoRevision'=>$t['_entityRevision']], 'cal'); hurlCheck(false, 'Another player undid the Director\'s push'); }
+    try { $send($store, 'undo-break-other', ['column'=>0, 'row'=>0, 'undoRevision'=>$t['_movementUndo']['revision']], 'cal'); hurlCheck(false, 'Another player undid the Director\'s push'); }
     catch (InvalidArgumentException $error) { hurlCheck($brokenIn($store) === ['piece-5'], 'A refused undo leaves the wall broken'); }
     $revision = $store->getSnapshot()['revision'];
-    $result = $send($store, 'undo-break-undo', ['column'=>0, 'row'=>0, 'undoRevision'=>$t['_entityRevision']]);
+    $result = $send($store, 'undo-break-undo', ['column'=>0, 'row'=>0, 'undoRevision'=>$t['_movementUndo']['revision']]);
     $back = $store->getSnapshot()['state']['placements']['scene']['t'];
     hurlCheck($result['status'] === 'accepted' && [(float) $back['column'], (float) $back['row']] === [8.0, 5.0], 'Undo puts the creature back where it was pushed from');
+    hurlCheck($back['hp']['current'] === 45, 'Its Stamina is left as it is: the Director sets that by hand');
     hurlCheck($brokenIn($store) === [], 'and the wall it broke is whole again');
     $events = $store->replayAfter($revision)['events'];
     hurlCheck(array_column($events, 'type') === ['environment.changed', 'token.moved'] && $events[0]['payload']['cause'] === 'undo', 'Every browser hears the wall mended, then the move back: ' . json_encode(array_column($events, 'type')));

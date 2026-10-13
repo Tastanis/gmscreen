@@ -1896,12 +1896,20 @@ export function mountBoardInteractions(store, routes = {}) {
     restoreMove: (move) => restoreTokenMovement(move),
     getUndoMove: () => {
       if (!tokenMovementV2Enabled || selectedTokenIds.size === 0) return null;
+      const movementReceiptStands = (token) => {
+        const to = token?._movementUndo?.history?.at(-1)?.to;
+        return Boolean(to) && Number(to.column) === Number(token.column) && Number(to.row) === Number(token.row)
+          && (to.levelId ?? 'level-0') === (token.levelId ?? 'level-0');
+      };
       const tokenId = [...selectedTokenIds][0];
       const sceneId = boardApi.getState?.()?.boardState?.activeSceneId;
       const current = tokenMovementRuntime.getConfirmedSnapshot()?.state?.placements?.[sceneId]?.[tokenId];
       const receipt = current?._movementUndo;
       const last = receipt?.history?.at(-1);
-      if (!last || receipt.revision !== current._entityRevision
+      // Undoable while the token still stands where that move left it (MovementUndo::standsWhereLeft). Its
+      // Stamina or conditions may have changed since: a push through a wall hurts it at once, as a change of
+      // its own, and asking for "nothing changed at all" made every such push impossible to take back.
+      if (!last || !movementReceiptStands(current)
         || String(receipt.actorId).toLowerCase() !== String(getCurrentUserId()).toLowerCase()) return null;
       if (selectedTokenIds.size > 1 && (!last.groupMove || [...selectedTokenIds].some(id => {
         const member = tokenMovementRuntime.getConfirmedSnapshot()?.state?.placements?.[sceneId]?.[id];
@@ -8513,7 +8521,7 @@ export function mountBoardInteractions(store, routes = {}) {
         }
         try {
           if (last.groupMove) {
-            await tokenMovementRuntime.undoMovementGroup(sceneId, placementId, receipt.revision);
+            await tokenMovementRuntime.undoMovementGroup(sceneId, placementId, current._entityRevision);
           } else {
             await tokenMovementRuntime.submitMoves(sceneId, [{ placementId,
               column: last.from.column, row: last.from.row, undoRevision: receipt.revision }]);

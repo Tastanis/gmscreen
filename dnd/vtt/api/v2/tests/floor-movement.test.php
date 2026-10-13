@@ -105,11 +105,22 @@ try {
     $pc = $store->getSnapshot()['state']['placements']['scene']['pc'];
     verifyFloor($pc['levelId'] === 'level-0' && $pc['_floorTraversal']['entry'] === 'red', 'Repeated undo restores interrupted stair progress.');
     $receipt = $pc['_movementUndo'];
-    $stale = [...$pc, '_entityRevision'=>$pc['_entityRevision'] + 1];
+    // Changed on purpose in Build 492. The rule was "any change to the token since the move makes it impossible
+    // to undo". A push into a wall hurts the token at once, as a change of its own, so no such push could ever
+    // be taken back. The rule is now "the token still stands where the move left it".
+    $hurt = [...$pc, '_entityRevision'=>$pc['_entityRevision'] + 1, 'hp'=>['current'=>1, 'max'=>9]];
+    $again = MovementUndo::restore($hurt, 'cal', $receipt['revision'], $board['sceneState']['scene']['mapLevels']);
+    verifyFloor(is_numeric($again['column'] ?? null), 'A token hurt since its move can still have the move undone.');
+    foreach ([['column'=>$pc['column'] + 1], ['row'=>$pc['row'] + 1], ['levelId'=>$pc['levelId'] === 'upper' ? 'level-0' : 'upper']] as $elsewhere) {
+        $rejected = false;
+        try { MovementUndo::restore([...$pc, ...$elsewhere, '_entityRevision'=>$pc['_entityRevision'] + 1], 'cal', $receipt['revision'], $board['sceneState']['scene']['mapLevels']); }
+        catch (InvalidArgumentException $error) { $rejected = true; }
+        verifyFloor($rejected, 'A token that no longer stands where the move left it cannot have it undone: ' . json_encode($elsewhere));
+    }
     $rejected = false;
-    try { MovementUndo::restore($stale, 'cal', $receipt['revision'], $board['sceneState']['scene']['mapLevels']); }
+    try { MovementUndo::restore($pc, 'cal', $receipt['revision'] + 1, $board['sceneState']['scene']['mapLevels']); }
     catch (InvalidArgumentException $error) { $rejected = true; }
-    verifyFloor($rejected, 'Intervening token edits invalidate stale undo.');
+    verifyFloor($rejected, 'An undo that names another receipt than the token holds is refused.');
     $levels = $store->getSnapshot()['state']['sceneConfig']['scene']['mapLevels'];
     $levels['levels'][0]['hidden'] = false;
     $rejected = false;

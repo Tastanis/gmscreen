@@ -44,7 +44,9 @@ foreach (['success','edit','move','delete','geometry','permission','later-undone
         $wrong=false;
         try { $store->undoMovementGroup($command,'GM',true); } catch (InvalidArgumentException $e) { $wrong=true; }
         checkGroup($wrong && $store->getSnapshot()===$before,'Another actor cannot undo even as GM.');
-        if (!in_array($scenario,['success','later-undone'],true)) {
+        // 'edit' changed sides on purpose in Build 492: a member renamed (or hurt) since the group move still stands
+        // where the move left it, so the move can still be undone. A member that moved, left or changed side cannot.
+        if (!in_array($scenario,['success','later-undone','edit'],true)) {
             $rejected=false;
             try { $store->undoMovementGroup($command,'cal',false); } catch (InvalidArgumentException $e) { $rejected=true; }
             checkGroup($rejected && $store->getSnapshot()===$before,'Invalid member must leave every member unchanged: '.$scenario);
@@ -61,6 +63,7 @@ foreach (['success','edit','move','delete','geometry','permission','later-undone
             checkGroup($token['_movementUndo']['history']===[],'Receipt popped, not recorded as a new move.');
         }
         checkGroup($after['state']['sceneConfig']['scene']['userLevelState']['cal']['levelId']==='upper','Linked player follows the restored floor atomically.');
+        if ($scenario==='edit') checkGroup($after['state']['placements']['scene']['ally']['name']==='Changed','The undo moves a member back and leaves what else changed on it alone.');
         unset($store); $store=new SyncV2Store($database);
         checkGroup($store->undoMovementGroup($command,'cal',false)['idempotent']===true && $store->getSnapshot()===$after,'Retry survives database reopening without another undo.');
     } finally {
