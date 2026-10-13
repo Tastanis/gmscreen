@@ -593,7 +593,14 @@ function vttSyncV2ProjectRequestedTestEventForUser(array $event, array $auth): a
         static fn ($value): string => strtolower(trim((string) $value)),
         is_array($event['payload']['visibleTo'] ?? null) ? $event['payload']['visibleTo'] : []
     );
-    if ($userId === '' || !in_array($userId, $visibleTo, true)) {
+    // No user at all: this is the copy for the channel every player shares. It is blanked, as it must be, but it
+    // says "ask": one of the players has more to hear, and only the server can tell each of them which. A page
+    // that took the blank as the whole of it never asked, and a test sent to a player never reached him while
+    // live push was on (the page had already moved past the event when its own copy could have been fetched).
+    if ($userId === '') {
+        return [...vttSyncV2RedactedEvent($event), 'payload' => ['ask' => true]];
+    }
+    if (!in_array($userId, $visibleTo, true)) {
         return vttSyncV2RedactedEvent($event);
     }
     $request = is_array($event['payload']['request'] ?? null)

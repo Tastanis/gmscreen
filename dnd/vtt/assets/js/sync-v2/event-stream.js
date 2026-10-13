@@ -146,6 +146,15 @@ export function createEventStream({
     if (revision === null) {
       return { status: 'invalid', reason: 'invalid_revision' };
     }
+    // A blank that says "ask" came over the channel all players share: something happened that is for one of them,
+    // and the server will tell each which. This page asks for its own copy of what it has missed, in place of
+    // taking the blank as the whole of it. (Taking it moved the page past the event, so its own copy was never
+    // fetched: a test sent to a player never popped up while live push was on.) If asking brings nothing, the
+    // blank is applied as it always was, so the page is never left waiting on it.
+    if (event?.type === 'sync.redacted' && event?.payload?.ask === true && revision > store.getRevision() && recoveryClient) {
+      try { await runRecovery(); } catch (error) { /* reported by runRecovery; the blank below still moves the page on */ }
+      if (revision <= store.getRevision()) return { status: 'recovered', revision: store.getRevision() };
+    }
     if (revision <= store.getRevision()) {
       return applyOne(event, source);
     }

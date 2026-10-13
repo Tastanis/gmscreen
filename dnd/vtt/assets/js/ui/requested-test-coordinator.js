@@ -96,6 +96,16 @@ export function createRequestedTestCoordinator({
           <button type="button" data-requested-test-cancel>Cancel</button>
         </div>
       </section>`;
+    // Who was meant to roll and was not on the VTT page (a sheet-only player, a tab in the background): the server
+    // sent theirs to the Director. Said here in a line, so "0 of 2 accepted" is not a mystery.
+    const skipped = records().filter((record) => record?.test?.batchId === batchId && record.wantedRecipientId && record.wantedRecipientId !== record.recipientId)
+      .map((record) => (Array.isArray(record.targetNames) && record.targetNames.length ? record.targetNames.join(', ') : String(record.wantedRecipientId)));
+    if (skipped.length) {
+      const line = document.createElement('span');
+      line.dataset.requestedTestSkipped = '';
+      line.textContent = `Not on the VTT page, so it came to you: ${[...new Set(skipped)].join(', ')}`;
+      host.querySelector('section')?.insertBefore(line, host.querySelector('section > div'));
+    }
     document.body.appendChild(host);
     waitingHost = host;
     host.dataset.batchId = batchId;

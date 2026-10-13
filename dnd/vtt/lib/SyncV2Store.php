@@ -173,10 +173,8 @@ final class SyncV2Store
                     return $this->rollbackConflict('requested_test_exists', $snapshot);
                 }
                 $requestInput = is_array($payload['request'] ?? null) ? $payload['request'] : [];
-                $recipient = $this->resolveRequestedTestRecipient(
-                    strtolower(trim((string) ($requestInput['recipientId'] ?? ''))),
-                    $actorId
-                );
+                $wanted = strtolower(trim((string) ($requestInput['recipientId'] ?? '')));
+                $recipient = $this->resolveRequestedTestRecipient($wanted, $actorId);
                 $request = $this->normalizeRequestedTestRecord([
                     ...$requestInput,
                     'id' => $requestId,
@@ -184,6 +182,9 @@ final class SyncV2Store
                     'initiatorId' => $actorId,
                     'recipientId' => $recipient,
                     'originalRecipientId' => $recipient,
+                    // The player it was meant for, when he was not on the VTT page and it went to someone else: the
+                    // Director's waiting panel says so, so "0 of 2 accepted" is not a mystery.
+                    'wantedRecipientId' => $wanted !== '' && $wanted !== '__gm__' && $wanted !== $recipient ? $wanted : '',
                     'status' => 'pending',
                     'createdAt' => $this->nowMilliseconds(),
                     'updatedAt' => $this->nowMilliseconds(),
@@ -3337,6 +3338,7 @@ final class SyncV2Store
             'initiatorId' => $initiatorId,
             'recipientId' => $recipientId,
             'originalRecipientId' => strtolower(trim((string) ($raw['originalRecipientId'] ?? $recipientId))) ?: $recipientId,
+            'wantedRecipientId' => substr(strtolower(trim((string) ($raw['wantedRecipientId'] ?? ''))), 0, 120),
             'status' => 'pending',
             'abilityName' => substr(trim((string) ($raw['abilityName'] ?? 'Ability')), 0, 160),
             'sourcePlacementId' => $this->normalizeOptionalId($raw['sourcePlacementId'] ?? null),
