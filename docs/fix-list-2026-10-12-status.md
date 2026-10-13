@@ -204,3 +204,29 @@ the same to the first.
 
 **To know:** a Director page left open from before this build still sends the old "set to N" until it is
 reloaded. The server still takes that, so reload your pages after the deploy.
+
+## Build 489: a test asked of a player reaches him (item 5)
+
+Your words: "Popup tests for others, liike for other people to roll a test. those arent working. does it have
+the code for it to make it happen already and it just didnt work? or does that functionality not exist yet?"
+
+**The answer.** The code exists and is complete, but only as part of an ability: a creature's ability that
+asks heroes for a test (the Orchard Tender's Gravity Turns is one) sends each player a roll window. There is
+no Director tool yet to ask for a test by itself; you have said yes to one, and its design comes to you as a
+picture first.
+
+**Why it did not work at the table.** The request is for one player and you, so the copy sent over the channel
+all players share is blanked. Every player's page, the one meant to roll included, took that blank as the
+whole of it, and never fetched its own copy. You were left on "Waiting for requested tests, 0 of 2 accepted".
+It worked in the test sandbox because the sandbox has no live push, which is why it passed earlier.
+
+**What is different now.**
+- The blank says "ask", and a page that hears it asks the server for its own copy. The player meant to roll
+  gets the roll window; the others get nothing, as before.
+- The same fix lets a player who starts a test see it resolved.
+- When a player is not on the VTT page (only the character sheet open, or the VTT tab in the background) the
+  server sends that test to you, as it did before. The waiting panel now says so in a line: "Not on the VTT
+  page, so it came to you: Sharon".
+
+**Not proven from here:** live push itself. The test sandbox does not have it, so this is proven in the page's
+own modules and on the server, not at a live table. The first session after the deploy is the real check.
