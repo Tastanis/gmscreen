@@ -14,6 +14,7 @@ import {climbSurcharge} from './terrain-math.mjs';
 import {settleCollisionEffects} from '../services/collision-effects.js';
 import {PLAYER_CHARACTER_USER_IDS as visionOwnerProfiles} from '../state/normalize/map-levels.js';
 import {resolveForcedDrag} from './forced-drag.js';
+import {createMaliceChanges} from './malice-changes.mjs';
 import {forcedMoveLegalCells, forcedLineCells, isForcedMovePathLegal, footprintsOverlap, nearestPullCell, cellsOnMap, closestCell} from './forced-move-cells.js';
 import {configureCharacterOperationJournal} from '../services/character-operation-journal.js';
 import {confirmCharacterWrite} from '../services/character-write.js';
@@ -2343,6 +2344,21 @@ export function mountBoardInteractions(store, routes = {}) {
   let allyTurnTimerWarnings = { yellow: false, red: false };
   let currentTurnTimerStage = null;
   let maliceCount = 0;
+  // The Director's Malice changes on their way to the server, one amount at a time (malice-changes.mjs).
+  const maliceChanges = createMaliceChanges({
+    submit: (amount) => {
+      const { activeSceneId } = getActiveSceneCombatState(boardApi.getState?.() ?? {});
+      if (!activeSceneId || !combatActive) return null;
+      return tokenMovementRuntime.submitCombatCommand('combat.patch', activeSceneId, { patch: { maliceDelta: amount } })
+        .then((result) => { clearSyncFailure(); return result?.event?.payload?.combat ?? null; });
+    },
+    show: (value) => { maliceCount = value; updateMaliceDisplay(); if (malicePanelOpen) renderMalicePanel(); },
+    failed: (error) => {
+      const reason = error?.response?.error || error?.message || 'rejected';
+      if (typeof window !== 'undefined' && window.UIKit?.toast) window.UIKit.toast(`Malice change rejected by the server (${reason}).`, 'warning');
+      reportSyncFailure(error, 'malice change');
+    },
+  });
   let malicePanelOpen = false;
   let malicePanelRemoved = new Set();
   let malicePanelAddCount = 0;
@@ -12301,9 +12317,14 @@ export function mountBoardInteractions(store, routes = {}) {
       roundTurnCount = normalized.roundTurnCount;
       if (!combatActive) {
         maliceCount = 0;
+        maliceChanges.reset();
       } else if (hasMaliceValue) {
-        maliceCount = normalized.malice;
+        // While a change of ours is on its way the pips keep the number we mean; the newest stored number is
+        // kept aside and shown when the last of our changes has been answered (see maliceChanges).
+        const settled = maliceChanges.heard(normalized.malice, Number(normalized.sequence) || 0);
+        if (settled !== null) maliceCount = settled;
       }
+      updateMaliceDisplay();
       completedCombatants.clear();
       normalized.completedCombatantIds.forEach((id) => completedCombatants.add(id));
       applyCombatGroupsFromState(normalized.groups);
@@ -12608,7 +12629,10 @@ export function mountBoardInteractions(store, routes = {}) {
       return Promise.resolve(null);
     }
     if (pendingCombatStateSave?.promise) {
-      return pendingCombatStateSave.promise;
+      // Asked for while another combat change is still being saved: it waits its turn. It used to be dropped, with
+      // the earlier change's answer handed back in its place, so an End Round pressed in that moment did nothing.
+      const earlier = pendingCombatStateSave.promise;
+      return Promise.resolve(earlier).catch(() => {}).then(() => (pendingCombatStateSave?.promise === earlier ? null : submitCanonicalCombatIntent(type, details)));
     }
     const state = boardApi.getState?.() ?? {};
     const { activeSceneId } = getActiveSceneCombatState(state);
@@ -12837,7 +12861,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function advanceCombatRound() {
-    if (combatV2Enabled) return submitCanonicalCombatIntent('round.advance');
+    if (combatV2Enabled) return submitCanonicalCombatIntent('round.advance', { expectedRound: combatRound });
     if (combatActive && activeCombatantId) {
       completeActiveCombatant({
         forceReleaseLock: true,
@@ -13097,6 +13121,8 @@ export function mountBoardInteractions(store, routes = {}) {
     maliceContainer.hidden = !combatActive;
 
     if (!combatActive) {
+      // Out of combat there is no Malice: the pips go, not only the box round them.
+      renderMalicePips(malicePips, 0, 'vtt-malice__pip');
       return;
     }
 
@@ -13129,8 +13155,15 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    const change = normalized - maliceCount;
     maliceCount = normalized;
-    markCombatFieldDirty('malice');
+    // The Director's change goes to the server as "add" or "take", by itself, and never rides along on another
+    // combat change. A set that is only this page catching up (sync: false) sends nothing.
+    if (combatV2Enabled) {
+      if (isGmUser() && options.sync !== false) maliceChanges.send(change);
+    } else {
+      markCombatFieldDirty('malice');
+    }
     updateMaliceDisplay();
 
     if (malicePanelOpen) {

@@ -1296,6 +1296,11 @@ final class SyncV2Store
                 if (!$combat['active']) {
                     return $this->rollbackConflict('combat_not_active', $snapshot);
                 }
+                // The page says which round it is ending. A second End Round for a round that has already ended (a
+                // second Director page, a double click) is refused, so the round's Malice is gained once.
+                if (array_key_exists('expectedRound', $payload) && (!is_int($payload['expectedRound']) || $payload['expectedRound'] !== (int) $combat['round'])) {
+                    return $this->rollbackConflict('round_mismatch', $snapshot);
+                }
                 if ($combat['activeCombatantId'] !== null) {
                     $finishedId = $this->resolveCombatRepresentative($combat, $combat['activeCombatantId']);
                     if ($finishedId !== null && !in_array($finishedId, $combat['completedCombatantIds'], true)) {
@@ -1325,7 +1330,7 @@ final class SyncV2Store
                 }
                 $combat = $this->endCombatState($combat);
             } else {
-                $allowed = ['malice', 'groups', 'lastEffect', 'lastEffects', 'intentHistory'];
+                $allowed = ['malice', 'maliceDelta', 'groups', 'lastEffect', 'lastEffects', 'intentHistory'];
                 $patch = is_array($payload['patch'] ?? null) ? $payload['patch'] : [];
                 if (!$isGm) {
                     $allowed = ['lastEffect', 'lastEffects'];
@@ -1333,6 +1338,15 @@ final class SyncV2Store
                 foreach ($patch as $field => $value) {
                     if (!in_array((string) $field, $allowed, true)) {
                         throw new InvalidArgumentException('Combat patch field is not permitted: ' . $field);
+                    }
+                    // Malice is changed by "add this much" or "take this much", worked out here against the stored
+                    // number. A page that sent "set Malice to N" sent N as that page last knew it: an old page, a
+                    // second Director page, or two changes arriving out of order put an old number back (Brandon,
+                    // October 12, 2026: "Malice sometimes pops back"). Never below nought.
+                    if ($field === 'maliceDelta') {
+                        if (!is_int($value) || abs($value) > 1000) throw new InvalidArgumentException('A Malice change must be a whole number.');
+                        $combat['malice'] = max(0, (int) ($combat['malice'] ?? 0) + $value);
+                        continue;
                     }
                     $combat[$field] = $value;
                 }
