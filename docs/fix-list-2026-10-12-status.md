@@ -702,3 +702,23 @@ Seen in a page: Cal and a goblin done, your page reloaded, both still done from 
 kobold's turn under way, reloaded, still its turn with End Turn showing.
 
 No map is touched; the Gravity Orchard plays as it does now.
+
+## Build 510: the old hex map and the old inventory page are gone
+
+Your words: "Let's get rid of the old hex map and the old inventory page. Make sure they're fully dead."
+
+**What was done.** Both were checked first: nothing on the site links to them or uses them. The 3D map, the main
+page and the character sheet's inventory do not touch them. Their addresses now answer "not found" for everyone:
+you, a player, or a stranger. (A deploy never deletes a file on the host, so each address was replaced by an empty
+one rather than removed.)
+
+**What you will notice.** Nothing. The 3D map and the sheet's inventory work as before.
+
+**Left on the host, yours to delete by hand in cPanel if you want them gone** (nothing else uses them):
+- `dnd/strixhaven/inventory/images/` : the old inventory page's item pictures.
+- `dnd/strixhaven/data/inventory.json` : the old inventory page's saved list. Have a look before deleting: on my
+  copy of October 7 it held 13 items, 6 with pictures. They are not in the character sheet's inventory.
+- `dnd/strixhaven/map/images/hexes/` : the old hex API's picture folder, if it exists at all.
+
+**Do NOT delete** (the 3D map lives on them): `dnd/strixhaven/map/hex-data/`, `hex-images/`, `data/`,
+`hex-data-handler.php`, `index.php`, and `api/ping-api.php` and `api/player-path-api.php`.
