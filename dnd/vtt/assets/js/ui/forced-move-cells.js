@@ -82,14 +82,29 @@ export function forcedMoveLegalCells(source, target, distance, baseVerb) {
 // The one straight line a push or a pull goes along. Brandon, October 12, 2026: "Ability pushes go in a straight
 // line, yes." Until then the picker offered a fan: every square that was further from the pusher.
 //
-// The line runs from the pusher's middle through the target's middle and on (for a pull, from the target's middle
-// toward the puller's). Its k-th square is k squares along it from where the target stands, rounded to a square,
+// The line runs from the pusher's nearest square through the target's nearest square and on (for a pull, from the
+// target toward the puller). Its k-th square is k squares along it from where the target stands, rounded to a square,
 // a half going outward. Straight ahead, straight to the side and a true diagonal are the plain rows of squares;
 // at any other angle the line steps over as it goes. A slide has no line: it may go round things.
 // Paired with ForcedMovement::lineCell, which refuses a push or a pull that is not on it.
 const outward = (value) => Math.sign(value) * Math.floor(Math.abs(value) + 0.5);
+// A creature larger than a square is measured from the square of it nearest the other, not from its middle: a
+// two-by-two pusher beside the target's upper half pushes straight, where its middle would tilt the line a row.
+const squaresOf = (placement) => {
+  const out = [], w = Math.max(1, Math.round(placement?.width || 1)), h = Math.max(1, Math.round(placement?.height || 1));
+  for (let r = 0; r < h; r += 1) for (let c = 0; c < w; c += 1) out.push({ column: (placement?.column || 0) + c + 0.5, row: (placement?.row || 0) + r + 0.5 });
+  return out;
+};
+function nearestSquares(source, target) {
+  let best = [center(source), center(target)], least = Infinity;
+  for (const a of squaresOf(source)) for (const b of squaresOf(target)) {
+    const d = Math.hypot(b.column - a.column, b.row - a.row);
+    if (d < least - 1e-9) { least = d; best = [a, b]; }
+  }
+  return best;
+}
 export function forcedLineCell(source, target, squares, baseVerb) {
-  const from = center(source), through = center(target), sign = baseVerb === 'pull' ? -1 : 1;
+  const [from, through] = nearestSquares(source, target), sign = baseVerb === 'pull' ? -1 : 1;
   const dx = (through.column - from.column) * sign, dy = (through.row - from.row) * sign, reach = Math.max(Math.abs(dx), Math.abs(dy));
   if (reach < 1e-9) return null;
   return { column: Math.floor(target.column) + outward(squares * dx / reach), row: Math.floor(target.row) + outward(squares * dy / reach) };

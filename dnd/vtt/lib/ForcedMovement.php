@@ -30,7 +30,16 @@ final class ForcedMovement
   }
   $blocked=function($point)use($from,$config,$travel){try{WallMovement::assertAllowed($from,$point,$config,'forced',[],true,$travel);return false;}catch(InvalidArgumentException $e){return true;}};
   if($blocked($at($stop))){$lo=0.;$hi=$stop;for($i=0;$i<32;$i++){$mid=($lo+$hi)/2;if($blocked($at($mid)))$hi=$mid;else $lo=$mid;}if($lo<$stop-1e-6)$ids=[];$stop=$lo;$wall=true;}
-  if($wall){$travel=$distance*$stop;$whole=floor($travel+1e-6);$steps=$whole+($travel-$whole>=.75-1e-6?1:0);$stop=min(1,$steps/$distance);}
+  if($wall){
+   $went=$distance*$stop;$whole=floor($went+1e-6);$steps=(int)($whole+($went-$whole>=.75-1e-6?1:0));
+   // A push stopped by rising ground is not left standing part-way up it. Rounding to a whole square could put
+   // the creature ON the face that stopped it: pushed off a platform 12 up into a crater wall, it ended on the
+   // wall at 17 with no fall. It ends in the last square whose footing is less than a face above the height it
+   // came in at, and falls from there if there is a drop. Against a wall on level ground nothing changes.
+   $spot=fn($n)=>[...$from,'column'=>round($from['column']+$dx*$n/$distance),'row'=>round($from['row']+$dy*$n/$distance)];
+   while($steps>0&&WallMovement::height($spot($steps),$config)>=$travel->heightAt($spot($steps-1))+TerrainContact::FACE_RISE-1e-6)$steps--;
+   $stop=min(1,$steps/$distance);
+  }
   // A creature stops the mover in the last whole square before contact, so no token is left between squares.
   $cell=null;
   if(!$wall&&$ids){
@@ -109,14 +118,18 @@ final class ForcedMovement
  }
  /**
   * The one straight line a push or a pull goes along. Brandon, October 12, 2026: "Ability pushes go in a straight
-  * line, yes." The line runs from the pusher's middle through the target's middle and on (for a pull, from the
+  * line, yes." The line runs from the pusher's nearest square through the target's nearest square and on (for a pull, from the
   * target's middle toward the puller's). This is its square `$squares` along from where the target stands,
   * rounded to a square, a half going outward; null when the two share a middle. Paired with forcedLineCell in
   * forced-move-cells.js, which is what the picker offers.
   */
  public static function lineCell(array $source,array $target,int $squares,string $verb): ?array {
-  $middle=static fn(array $p):array=>[($p['column']??0)+max(1,$p['width']??1)/2,($p['row']??0)+max(1,$p['height']??1)/2];
-  [$ax,$ay]=$middle($source);[$bx,$by]=$middle($target);$sign=$verb==='pull'?-1:1;
+  // A creature larger than a square is measured from the square of it nearest the other, not from its middle:
+  // a two-by-two pusher beside the target's upper half pushes straight, where its middle would tilt the line a row.
+  $cells=static function(array $p):array{$out=[];$w=max(1,(int)round($p['width']??1));$h=max(1,(int)round($p['height']??1));for($r=0;$r<$h;$r++)for($c=0;$c<$w;$c++)$out[]=[($p['column']??0)+$c+.5,($p['row']??0)+$r+.5];return $out;};
+  $least=INF;$ax=$ay=$bx=$by=0.;
+  foreach($cells($source) as [$sx,$sy])foreach($cells($target) as [$tx,$ty]){$d=hypot($tx-$sx,$ty-$sy);if($d<$least-1e-9){$least=$d;$ax=$sx;$ay=$sy;$bx=$tx;$by=$ty;}}
+  $sign=$verb==='pull'?-1:1;
   $dx=($bx-$ax)*$sign;$dy=($by-$ay)*$sign;$reach=max(abs($dx),abs($dy));
   if($reach<1e-9)return null;
   $outward=static fn(float $v):int=>($v<=>0)*(int)floor(abs($v)+.5);

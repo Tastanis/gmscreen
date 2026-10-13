@@ -1,5 +1,5 @@
 {
- "about": "The one straight line of a push or a pull: for a pusher and a target ([column, row, size]), the square that many squares along it. Read by forced-move-cells.test.mjs and forced-line.test.php, so the page and the server are held to the same answers.",
+ "about": "The one straight line of a push or a pull: for a pusher and a target (a large one measured from its square nearest the other) ([column, row, size]), the square that many squares along it. Read by forced-move-cells.test.mjs and forced-line.test.php, so the page and the server are held to the same answers.",
  "cases": [
   {
    "pusher": [
@@ -214,7 +214,7 @@
    "squares": 2,
    "square": [
     14,
-    9
+    10
    ]
   },
   {
@@ -232,7 +232,7 @@
    "squares": 2,
    "square": [
     14,
-    12
+    11
    ]
   },
   {
@@ -322,6 +322,114 @@
    "squares": 3,
    "square": [
     11,
+    10
+   ]
+  },
+  {
+   "pusher": [
+    14,
+    16,
+    2
+   ],
+   "target": [
+    16,
+    16,
+    1
+   ],
+   "verb": "push",
+   "squares": 4,
+   "square": [
+    20,
+    16
+   ]
+  },
+  {
+   "pusher": [
+    14,
+    16,
+    2
+   ],
+   "target": [
+    16,
+    17,
+    1
+   ],
+   "verb": "push",
+   "squares": 3,
+   "square": [
+    19,
+    17
+   ]
+  },
+  {
+   "pusher": [
+    14,
+    16,
+    2
+   ],
+   "target": [
+    16,
+    15,
+    1
+   ],
+   "verb": "push",
+   "squares": 2,
+   "square": [
+    18,
+    13
+   ]
+  },
+  {
+   "pusher": [
+    14,
+    16,
+    2
+   ],
+   "target": [
+    19,
+    16,
+    1
+   ],
+   "verb": "pull",
+   "squares": 2,
+   "square": [
+    17,
+    16
+   ]
+  },
+  {
+   "pusher": [
+    10,
+    10,
+    1
+   ],
+   "target": [
+    11,
+    9,
+    2
+   ],
+   "verb": "push",
+   "squares": 2,
+   "square": [
+    13,
+    9
+   ]
+  },
+  {
+   "pusher": [
+    10,
+    10,
+    3
+   ],
+   "target": [
+    13,
+    10,
+    1
+   ],
+   "verb": "push",
+   "squares": 3,
+   "square": [
+    16,
     10
    ]
   }

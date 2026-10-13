@@ -2,6 +2,7 @@
 // Obstacles are stationary; breaking objects and vertical throws remain manual.
 // `moverHeight(from, at)` is the height the pushed creature is at when it reaches `at`; it defaults to the
 // height of the ground there. Paired with ForcedMovement::resolve.
+import {TERRAIN_FACE_RISE} from './terrain-contact.js';
 export function resolveForcedDrag(from, to, others, { wallBlocked = () => false, height = () => 0, moverHeight = (origin, at) => height(at) } = {}) {
   const dx=to.column-from.column,dy=to.row-from.row,distance=Math.max(Math.abs(dx),Math.abs(dy));
   if (!distance) return {destination:to,damage:0,collidedIds:[],wall:false};
@@ -27,7 +28,16 @@ export function resolveForcedDrag(from, to, others, { wallBlocked = () => false,
     if(lo<stop-1e-6)collidedIds=[];
     stop=lo;wall=true;
   }
-  if(wall){const travel=distance*stop,whole=Math.floor(travel+1e-6),steps=whole+(travel-whole>=.75-1e-6?1:0);stop=Math.min(1,steps/distance);}
+  if(wall){
+    const travel=distance*stop,whole=Math.floor(travel+1e-6);let steps=whole+(travel-whole>=.75-1e-6?1:0);
+    // A push stopped by rising ground is not left standing part-way up it. Rounding to a whole square could put
+    // the creature ON the face that stopped it: pushed off a platform 12 up into a crater wall, it ended on the
+    // wall at 17 with no fall. It ends in the last square whose footing is less than a face above the height it
+    // came in at, and falls from there if there is a drop. Against a wall on level ground nothing changes.
+    const spot=n=>({...from,column:Math.round(from.column+dx*n/distance),row:Math.round(from.row+dy*n/distance)});
+    while(steps>0&&height(spot(steps))>=moverHeight(from,spot(steps-1))+TERRAIN_FACE_RISE-1e-6)steps--;
+    stop=Math.min(1,steps/distance);
+  }
   // A creature stops the mover in the last whole square before contact, so no token is left between squares.
   let cell=null;
   if(!wall&&collidedIds.length){
