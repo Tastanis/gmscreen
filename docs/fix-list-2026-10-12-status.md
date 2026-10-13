@@ -599,3 +599,25 @@ comes up empty without any error is caught as well. I put Build 491's fault back
 
 It is part of the ordinary test run from now on. Nothing in the app itself changes with this build except the
 two small marks the pages set when they have started.
+
+## Build 505: three small things from the tester's pass
+
+The tester passed everything from Build 491 to 504 and found six small things on the way. Three were small,
+certain and inside your list, so they are mended here. The other three are yours to rule on (below).
+
+**Mended.**
+- **A gain offer showed old numbers.** Zepha was offered "0 -> 2" Essence when she had 1. The gain itself was
+  right (she ended on 3); only the box was reading an old copy. It now reads the sheet first.
+- **Use Recovery at full Stamina** said "heal 31 Stamina", spent the Recovery and healed nothing. The question
+  now says what it will really heal, and at full Stamina it says so and asks if you want to spend one anyway.
+- **The eraser missed a quick swipe** across a thin line. It now rubs out along the whole sweep.
+
+**Yours to rule on.**
+- **A hit you deal by hand with the Damage tool, with a type chosen, does not count as "damage" for the heroes'
+  resource rules.** So a Fire hit from you never offers Zepha her Essence; only damage dealt through an ability
+  does. Say if hand-dealt typed damage should count.
+- **If a sheet's Stamina maximum is cleared, the hero's token keeps its old numbers** rather than showing a
+  dash. Hits still land. A dash would lose the running total on the map; I left it.
+- **The map's log sometimes notes a refused change ("409") when a player hits their own hero many times
+  quickly.** Nothing is lost or shown wrong: two pages touched the same number at the same instant and the page
+  took the server's answer. Left as it is unless you see something odd.
