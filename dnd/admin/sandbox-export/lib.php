@@ -149,6 +149,41 @@ function sandboxSqliteCopy(string $source): string
     }
 }
 
+/**
+ * Sends a file a piece at a time, straight out, and returns how many bytes went.
+ *
+ * It used to be readfile(). With an output buffer open (the host's own setting, or compression's) readfile puts
+ * the WHOLE file into that buffer before anything is sent, so a file larger than PHP's memory limit ended the
+ * request with "Allowed memory size exhausted": a fatal error, which no try/catch sees and the server reports as
+ * a bare HTTP 500. The store's database passed that size when its layout was split (the old row is kept beside
+ * the new ones), and the site could no longer be downloaded, or backed up, at all.
+ *
+ * Every buffer that can be closed is closed first, compression is turned off for this answer, and what cannot be
+ * closed is flushed after every piece, so no more than one piece is ever held.
+ */
+const SANDBOX_SEND_PIECE = 1048576;
+function sandboxSend(string $source): int
+{
+    $handle = @fopen($source, 'rb');
+    if ($handle === false) throw new RuntimeException('Unable to open a file for sending.');
+    @set_time_limit(0);
+    @ini_set('zlib.output_compression', '0');
+    while (ob_get_level() > 0) { if (!@ob_end_clean()) break; }
+    $sent = 0;
+    try {
+        while (!feof($handle)) {
+            $piece = fread($handle, SANDBOX_SEND_PIECE);
+            if ($piece === false) throw new RuntimeException('Unable to read a file while sending it.');
+            if ($piece === '') continue;
+            echo $piece; $sent += strlen($piece);
+            if (ob_get_level() > 0) @ob_flush();
+            flush();
+            if (connection_aborted()) break;
+        }
+    } finally { fclose($handle); }
+    return $sent;
+}
+
 function sandboxFingerprint(array $entry): array
 {
     $path = $entry['kind'] === 'sqlite' ? sandboxSqliteCopy($entry['absolute']) : $entry['absolute'];

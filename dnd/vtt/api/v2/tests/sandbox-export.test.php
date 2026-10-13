@@ -101,7 +101,40 @@ try {
     try { sandboxChecksums($roots, ['dnd/../secret']); } catch (SandboxTooMuch $error) { } catch (RuntimeException $error) { $invalid = true; }
     exportCheck($invalid, 'A path that climbs out of the site is an error, not a "missing" entry.');
 
-    echo "Sandbox export: whole list unchanged, quick list without reading, named checksums, limits and refusals passed.\n";
+    // ---- sending a file larger than PHP's memory limit --------------------------------------
+    // October 12, 2026: the first download of the store's database after its layout was split answered HTTP 500.
+    // The checksum of the same database, asked a moment before, had worked. The download differed in one thing:
+    // readfile(). With an output buffer open, readfile holds the whole file in memory first; past the memory
+    // limit that is a fatal error no try/catch sees, and the server reports a bare 500. The file is sent in
+    // pieces now. Each case below is its own PHP with 24 MB of memory and a 64 MB file.
+    $big = $root . '/big.bin'; $handle = fopen($big, 'w');
+    for ($k = 0; $k < 64; $k++) fwrite($handle, str_repeat(chr(65 + $k % 26), 1048576));
+    fclose($handle);
+    $libPath = var_export(realpath(__DIR__ . '/../../../../admin/sandbox-export/lib.php'), true); $bigPath = var_export($big, true);
+    $child = static function (string $body) use ($root, $libPath, $bigPath): array {
+        $script = $root . '/send-' . bin2hex(random_bytes(4)) . '.php'; $out = $script . '.out';
+        file_put_contents($script, "<?php\nrequire_once $libPath;\n\$big = $bigPath;\n$body\n");
+        $code = 1; exec(escapeshellarg(PHP_BINARY) . ' -d memory_limit=24M -d display_errors=0 -d log_errors=0 ' . escapeshellarg($script) . ' > ' . escapeshellarg($out) . ' 2>&1', $lines, $code);
+        $result = [$code, is_file($out) ? filesize($out) : -1, is_file($out) ? hash_file('sha256', $out) : null];
+        @unlink($script); @unlink($out);
+        return $result;
+    };
+    $wantHash = hash_file('sha256', $big); $wantSize = 64 * 1048576;
+    // What it was: a buffer open, then readfile. The request dies and the file does not arrive.
+    [$code, $size] = $child('ob_start(); readfile($big);');
+    exportCheck($code !== 0 && $size < $wantSize, "The old way must fail here, or this test proves nothing: exit $code, $size bytes");
+    // What it is: the same buffer open, the file arrives whole.
+    exportCheck($child('ob_start(); sandboxSend($big);') === [0, $wantSize, $wantHash], 'With an output buffer open the file is still sent whole, a piece at a time');
+    exportCheck($child('ob_start(); ob_start(); ob_start(); sandboxSend($big);') === [0, $wantSize, $wantHash], 'and with several buffers open');
+    exportCheck($child('ob_start(null, 0, PHP_OUTPUT_HANDLER_FLUSHABLE); sandboxSend($big);') === [0, $wantSize, $wantHash], 'and with a buffer that may be flushed but not closed: it is flushed after every piece');
+    exportCheck($child('sandboxSend($big);') === [0, $wantSize, $wantHash], 'and with none');
+    $missing = false; try { sandboxSend($root . '/not-there.bin'); } catch (RuntimeException $error) { $missing = true; }
+    exportCheck($missing, 'A file that cannot be opened is an error the caller hears, not a silent empty answer');
+    @unlink($big);
+    $index = file_get_contents(__DIR__ . '/../../../../admin/sandbox-export/index.php');
+    exportCheck(str_contains($index, 'sandboxSend($source);') && !str_contains($index, 'readfile('), 'The export sends its files with sandboxSend and never with readfile');
+
+    echo "Sandbox export: whole list unchanged, quick list without reading, named checksums, limits, refusals and sending in pieces passed.\n";
 } finally {
     $database = null;
     $remove($root);

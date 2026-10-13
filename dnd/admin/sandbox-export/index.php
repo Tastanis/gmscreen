@@ -28,6 +28,8 @@ if (!is_string($expected) || !preg_match('/^[a-f0-9]{64}$/D', $expected) || strl
 
 try {
     $roots = sandboxRoots(dirname(__DIR__, 2), $config);
+    // Copying and checksumming a large database is slow work, not a hung request.
+    @set_time_limit(300);
     if ($action === 'manifest') {
         // checksums=0: the quick list, with sizes and times and nothing read.
         $quick = ($_GET['checksums'] ?? '1') === '0';
@@ -59,7 +61,8 @@ try {
         header('Content-Type: application/octet-stream');
         header('Content-Length: ' . filesize($source));
         header('ETag: "' . $wanted . '"');
-        readfile($source);
+        // In pieces, never through a buffer: see sandboxSend.
+        sandboxSend($source);
     } finally { if ($entry['kind'] === 'sqlite') @unlink($source); }
 } catch (Throwable $e) {
     // Never leak paths, credentials, or PHP/SQL details through an error response.
