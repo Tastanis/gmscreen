@@ -564,3 +564,27 @@ itself, the monsters' too.
 `"autoResolve": true`, Thorn In Foot lights the "!" and waits for his player to press the ability again.
 
 **Seen in a browser:** not yet. I look at this one with two pages open before it counts as handed over.
+
+## Build 503: the character sheet page was blank since Build 491. Mended before it reached you
+
+**What was wrong.** From Build 491 on, the character sheet page loaded its frame and tabs and nothing else:
+no characteristics, no Stamina, no abilities. For every hero, on every device. My mistake in 491: I made the
+page's script wait for a second file, and by the time it had, the browser had already given the signal the
+sheet starts on. It never started. Nothing after Build 490 was deployed, so no player met it.
+
+**How it was found.** Not by a test: none of them opens the page. By opening it myself, in the second look the
+helper asked for. Mended, and seen working. There is now a test that fails if the sheet's script ever waits at
+its top again.
+
+**Seen on the sheet page with this build, as Cal:**
+- The sheet fills in.
+- A surge up, then down: each saves just that one number, as "one more" and "one fewer".
+- Edit mode on and off with nothing typed: nothing is written. (It used to write the Stamina history; mended.)
+- Use Recovery: the server worked it out. Stamina up by the recovery value, one Recovery fewer.
+
+**Seen on the map with Build 502 (Thorn In Foot):** three arrow presses on a watched enemy cost it 1 each;
+two watches on two enemies both fire; taking one off stops only that one.
+
+**Two faults of this kind in one night** (your page in 493, the sheet page in 491). Both were in what a page
+does as it starts, and both passed every test. From now on a build that touches how a page starts is opened in
+a browser, as you and as a player, before it is handed over.
