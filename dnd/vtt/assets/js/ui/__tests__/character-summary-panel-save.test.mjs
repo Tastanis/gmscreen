@@ -53,65 +53,6 @@ function withFakeSaveEnvironment(fn, fetchImpl = null) {
     });
 }
 
-test('saveCharacterSummarySheet broadcasts the requested change type', async () => {
-  await withFakeSaveEnvironment(async ({ broadcasts, requests }) => {
-    const saved = await __testing.saveCharacterSummarySheet(
-      { hero: { name: 'Cal' } },
-      { characterId: 'cal', change: 'resource' }
-    );
-
-    assert.equal(saved, true);
-    assert.equal(requests.length, 1);
-    assert.deepEqual(broadcasts, [
-      {
-        channel: 'vtt-character-sheet-sync',
-        message: {
-          type: 'character-sheet-sync',
-          source: 'vtt',
-          character: 'cal',
-          change: 'resource',
-        },
-      },
-    ]);
-  });
-});
-
-test('saveCharacterSummarySheet can skip broadcasting for callers that broadcast centrally', async () => {
-  await withFakeSaveEnvironment(async ({ broadcasts }) => {
-    const saved = await __testing.saveCharacterSummarySheet(
-      { hero: { name: 'Indigo' } },
-      { characterId: 'indigo', broadcast: false }
-    );
-
-    assert.equal(saved, true);
-    assert.deepEqual(broadcasts, []);
-  });
-});
-
-test('saveCharacterSummarySheet requires explicit success true before broadcasting', async () => {
-  const requests = [];
-  const fetchImpl = async (endpoint, options = {}) => {
-    requests.push({ endpoint, options });
-    return {
-      ok: true,
-      async json() {
-        return null;
-      },
-    };
-  };
-
-  await withFakeSaveEnvironment(async ({ broadcasts }) => {
-    const saved = await __testing.saveCharacterSummarySheet(
-      { hero: { name: 'Sharon' } },
-      { characterId: 'sharon', change: 'resource' }
-    );
-
-    assert.equal(saved, false);
-    assert.equal(requests.length, 1);
-    assert.deepEqual(broadcasts, []);
-  }, fetchImpl);
-});
-
 test('saveCharacterHeroicResource uses the narrow authenticated VTT resource route', async () => {
   await withFakeSaveEnvironment(async ({ broadcasts, requests }) => {
     const saved = await __testing.saveCharacterHeroicResource(
@@ -139,41 +80,40 @@ test('saveCharacterHeroicResource uses the narrow authenticated VTT resource rou
   });
 });
 
-test('summary resource controls use narrow mutations instead of stale whole-sheet saves', async () => {
+// Changed on purpose in Build 493. The panel used to send "the number is now N" from its own copy of the sheet,
+// and a copy that was behind wrote the sheet back (Brandon, October 12, 2026: "Some weird things seem to not be
+// syncing or staying correctly sometimes"). It now says how much it changed the number by, and the server adds
+// that to the number it holds (api/v2/tests/sheet-counters.test.php). The whole-sheet save is gone from the panel.
+test('the panel sends amounts, never the numbers it holds', async () => {
   const cases = [
-    ['stamina', 'sync-vitals', { currentStamina: '17' }],
-    ['recovery', 'sync-vitals', { currentStamina: '17', currentRecoveries: '3' }],
-    ['surges', 'sync-surges', { value: '2' }],
-    ['resource', 'sync-resource', { value: '4' }],
-    ['victories', 'sync-victories', { value: '5' }],
+    ['stamina', -7, 'sync-vitals', { staminaDelta: '-7' }],
+    ['recovery', 0, 'sync-vitals', { useRecovery: '1' }],
+    ['surges', 1, 'sync-surges', { delta: '1' }],
+    ['resource', -2, 'sync-resource', { delta: '-2' }],
+    ['victories', 1, 'sync-victories', { delta: '1' }],
   ];
-  const sheet = {
-    hero: {
-      vitals: { currentStamina: 17, currentRecoveries: 3 },
-      surges: 2,
-      resource: { value: 4 },
-      victories: 5,
-    },
-  };
+  const sheet = { hero: { vitals: { currentStamina: 17, currentRecoveries: 3 }, surges: 2, resource: { value: 4 }, victories: 5 } };
 
-  for (const [change, action, expectedFields] of cases) {
+  for (const [change, amount, action, expectedFields] of cases) {
     await withFakeSaveEnvironment(async ({ requests }) => {
-      const saved = await __testing.saveCharacterSummaryResources(sheet, {
-        characterId: 'sharon',
-        change,
-        broadcast: false,
-      });
-
+      const saved = await __testing.saveCharacterSummaryResources(sheet, { characterId: 'sharon', change, amount, broadcast: false });
       assert.equal(saved, true);
       assert.equal(requests.length, 1);
       const body = requests[0].options.body;
       assert.equal(body.get('action'), action);
       assert.equal(body.get('character'), 'sharon');
       assert.equal(body.get('source'), 'vtt');
-      assert.equal(body.has('data'), false);
       Object.entries(expectedFields).forEach(([key, value]) => assert.equal(body.get(key), value));
+      for (const held of ['data', 'value', 'currentStamina', 'currentRecoveries']) assert.equal(body.has(held), false, `${change} sends no ${held}`);
     });
   }
+  // A change of nothing asks nothing; an unknown kind of change saves nothing (there is no whole-sheet save to fall to).
+  await withFakeSaveEnvironment(async ({ requests }) => {
+    assert.equal(await __testing.saveCharacterSummaryResources(sheet, { characterId: 'sharon', change: 'surges', amount: 0 }), true);
+    assert.equal(await __testing.saveCharacterSummaryResources(sheet, { characterId: 'sharon', change: 'sheet', amount: 3 }), false);
+    assert.equal(requests.length, 0);
+    assert.equal(__testing.saveCharacterSummarySheet, undefined);
+  });
 });
 
 test('resourceFloor clamps only allowNegative resources', () => {

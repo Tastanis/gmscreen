@@ -27,7 +27,16 @@ test('a page that changed nothing sends nothing', () => {
 
 test('only the fields that differ are sent, each by its place in the sheet', () => {
   const now = sheet(); now.hero.wealth = '3'; now.hero.vitals.currentRecoveries = 0;
-  assert.deepEqual(diffSheet(sheet(), now), [{ path: ['hero', 'wealth'], value: '3' }, { path: ['hero', 'vitals', 'currentRecoveries'], value: 0 }]);
+  assert.deepEqual(diffSheet(sheet(), now), [{ path: ['hero', 'wealth'], value: '3' }, { path: ['hero', 'vitals', 'currentRecoveries'], value: 0, from: 1 }]);
+  // A counter says what this page believed it was, so the server can move its own number by the difference;
+  // the server's half is api/v2/tests/sheet-counters.test.php.
+  const counted = sheet(); counted.hero.victories = 4; counted.hero.surges = 1; counted.hero.vitals.currentStamina = '30'; counted.hero.resource = { value: 2 };
+  assert.deepEqual(diffSheet(sheet(), counted).map((change) => [change.path.join('.'), change.value, change.from]),
+    [['hero.vitals.currentStamina', '30', 33], ['hero.victories', 4, 3], ['hero.surges', 1, null], ['hero.resource', { value: 2 }, undefined]]);
+  // A number typed in Edit mode is the number meant: no "from".
+  assert.deepEqual(diffSheet(sheet(), counted, [], false).filter((change) => 'from' in change), []);
+  const withResource = sheet(); withResource.hero.resource = { value: 2 }; const spent = JSON.parse(JSON.stringify(withResource)); spent.hero.resource.value = 1;
+  assert.deepEqual(diffSheet(withResource, spent), [{ path: ['hero', 'resource', 'value'], value: 1, from: 2 }]);
 });
 
 test('THE FAULT: an old copy of the sheet that changes one field cannot roll back or blank the others', () => {
@@ -72,7 +81,11 @@ test('what was sent becomes the baseline, and a refused save can be taken back o
 
 test('the sheet page saves what it changed, asks the server for a respite, and says when a save failed', () => {
   const page = readFileSync(new URL('../../../../../character_sheet/sheet.js', import.meta.url), 'utf8');
-  assert.match(page, /const changes = diffSheet\(sheetBaseline, sheetState\);\s*if \(!changes\.length\) return Promise\.resolve\(true\);/, 'nothing changed, nothing sent: turning Edit off or a tab going into the background writes nothing');
+  assert.match(page, /const changes = diffSheet\(sheetBaseline, sheetState, \[\], !\(typed \|\| document\.body\.classList\.contains\("edit-mode"\)\)\);\s*if \(!changes\.length\) return Promise\.resolve\(true\);/, 'nothing changed, nothing sent: turning Edit off or a tab going into the background writes nothing');
+  assert.match(page, /captureAllSections\(\);\s*renderAll\(\);\s*saveSheet\(\{ typed: true \}\);/, 'what was typed in Edit mode is sent as typed');
+  assert.match(page, /payload\.append\("operationId", operationId\);/, 'a save names itself');
+  assert.match(page, /const stored = await sheetSaveWasStored\(operationId, character\);\s*if \(stored === true\) \{/, 'a save that got no answer is asked after before anything is sent again');
+  assert.match(page, /applyChanges\(sheetBaseline, stored === false \? held : held\.filter\(\(_, index\) => !\("from" in changes\[index\]\)\)\);/, 'and an amount whose fate is unknown is not sent twice');
   assert.match(page, /payload\.append\("action", "save-fields"\);[\s\S]{0,200}payload\.append\("changes", JSON\.stringify\(changes\)\);/);
   assert.doesNotMatch(page, /payload\.append\("action", "save"\);/, 'the whole-sheet save is gone from the page');
   assert.doesNotMatch(page, /payload\.append\("data", JSON\.stringify\(sheetState\)\)/);
@@ -81,6 +94,8 @@ test('the sheet page saves what it changed, asks the server for a respite, and s
   }
   assert.match(page, /renderAll\(\);[\s\S]{0,330}captureAllSections\(\);\s*sheetBaseline = deepClone\(sheetState\);/, 'Edit mode begins from the form as it reads untouched');
   assert.match(page, /rested = await askSheetServer\("respite"\);/, 'a respite is asked of the server');
+  assert.match(page, /used = await askSheetServer\("sync-vitals", \{ useRecovery: 1 \}\);/, 'and so is a Recovery');
+  assert.doesNotMatch(page, /Math\.min\(currentStamina \+ recoveryVal, staminaMax\)/, 'which the page no longer works out (it set Stamina to none on a sheet with no maximum)');
   assert.doesNotMatch(page, /vitals\.currentRecoveries = recoveriesMax;/, 'and no longer worked out on the page');
   assert.match(page, /applyChanges\(sheetBaseline, held\);\s*showSheetSaveProblem\(result\.error \|\| "The server did not take the change\."\);/, 'a save the server refuses is shown on the page and tried again with the next change');
   assert.match(page, /bar\.setAttribute\("role", "alert"\);/);

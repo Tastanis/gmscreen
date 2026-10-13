@@ -44,6 +44,11 @@ final class CharacterWriteReceipts
     {
         if ($id === null) return $response;
         $response = [...$response, 'operationId'=>$id, 'replayed'=>false];
+        // A receipt answers a retry made moments later. They were never cleared, so the sheets file grew with
+        // every hit on a hero's token. Kept two days, and no more than the newest four hundred.
+        $kept = array_filter(is_array($data['_vttOperations'] ?? null) ? $data['_vttOperations'] : [],
+            static fn ($entry) => is_array($entry) && (int) ($entry['createdAt'] ?? 0) >= time() - 172800);
+        $data['_vttOperations'] = count($kept) >= 400 ? array_slice($kept, -399, null, true) : $kept;
         $data['_vttOperations'][$id] = ['fingerprint'=>self::fingerprint($actor, $character, $action, $input),
             'actor'=>$actor, 'character'=>$character, 'action'=>$action, 'createdAt'=>time(), 'response'=>$response];
         return $response;

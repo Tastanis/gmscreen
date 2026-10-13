@@ -111,7 +111,9 @@ export function fetchSheetStamina(routes, tokenName) {
         return null;
       }
 
-      if (data.success === false) {
+      // No such sheet, or a sheet with no Stamina maximum: there is no Stamina to give a token. It keeps a dash,
+      // never 0 of 0.
+      if (data.success === false || data.hasStamina === false) {
         sheetStaminaCache.set(key, { currentStamina: null, staminaMax: null, missing: true });
         return null;
       }
@@ -130,7 +132,12 @@ export function fetchSheetStamina(routes, tokenName) {
   return request;
 }
 
-/** Confirm one write, including its JSON body. An uncertain write must not be replayed. */
+/**
+ * Confirm one write, including its JSON body. An uncertain write must not be replayed.
+ * The write is an amount (`delta`: how much the token's Stamina changed by), added by the server to the sheet's
+ * own number, or, for a token that had no number before, the number it now reads (`currentStamina`). A token's
+ * maximum is a copy of the sheet's and is never sent.
+ */
 export async function writeSheetStamina(endpoint, payload = {}, {
   fetchImpl = globalThis.fetch,
   timeoutMs = 15000,
@@ -139,7 +146,7 @@ export async function writeSheetStamina(endpoint, payload = {}, {
   recoveryTimeoutMs = 3000,
 } = {}) {
   const body = new URLSearchParams({ action: 'sync-stamina', source: 'vtt', operationId });
-  for (const field of ['character', 'currentStamina', 'staminaMax']) {
+  for (const field of ['character', 'currentStamina', 'delta']) {
     if (payload[field] !== undefined && payload[field] !== null) body.set(field, payload[field]);
   }
   const journal = journalOverride ?? getCharacterOperationJournal();
@@ -200,8 +207,8 @@ async function inspectStaminaReceipt(endpoint, body, fetchImpl, timeoutMs) {
         const result=await response.json(),receipt=result?.receipt,saved=receipt?.response;
         if(result.success!==true || result.recorded!==true || receipt?.action!=='sync-stamina'
           || receipt.operationId!==body.get('operationId') || saved?.operationId!==body.get('operationId')
-          || saved.success!==true || !Number.isFinite(saved.currentStamina) || saved.currentStamina!==Number(body.get('currentStamina'))
-          || (body.has('staminaMax') && Number(saved.staminaMax)!==Number(body.get('staminaMax'))))return null;
+          || saved.success!==true || !Number.isFinite(Number(saved.currentStamina))
+          || (!body.has('delta') && Number(saved.currentStamina)!==Number(body.get('currentStamina'))))return null;
         return saved;
       })(),
     ]);

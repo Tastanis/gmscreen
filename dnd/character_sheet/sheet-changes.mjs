@@ -11,6 +11,11 @@
 // and a save sends only the fields that differ: {path, value} for each. A field the page never touched is not in
 // the list, however old the page is. The server sets only the fields named (SheetChanges.php).
 
+// The counters: numbers that go up and down in play and are changed from the map as well as from here. A change
+// to one says what this page believed it was ("from"), and the server moves its own number by the difference
+// (SheetChanges::COUNTERS). A plus pressed on a page that is behind adds one to the true number.
+export const COUNTERS = new Set(['hero.surges', 'hero.victories', 'hero.vitals.currentRecoveries', 'hero.vitals.currentStamina', 'hero.resource.value']);
+
 const isMap = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const isNothing = (value) => value === undefined || value === null || value === '';
 
@@ -36,20 +41,23 @@ export function sameValue(a, b) {
  * Never the party's hero tokens (they have their own request), and never an emptied characteristic: an empty
  * Might is how a blank input reads, not a score.
  */
-export function diffSheet(baseline, now, path = []) {
+export function diffSheet(baseline, now, path = [], amounts = true) {
   const changes = [];
   if (isMap(baseline) && isMap(now)) {
     for (const key of new Set([...Object.keys(baseline), ...Object.keys(now)])) {
       if (!(key in now)) continue;                                  // a page does not delete what it does not hold
       if (path.length === 1 && path[0] === 'hero' && key === 'heroTokens') continue;
-      changes.push(...diffSheet(baseline[key], now[key], [...path, key]));
+      changes.push(...diffSheet(baseline[key], now[key], [...path, key], amounts));
     }
     return changes;
   }
   if (sameValue(baseline, now)) return changes;
   if (path.length === 3 && path[0] === 'hero' && path[1] === 'stats' && isNothing(now) && Number.isFinite(Number(baseline)) && !isNothing(baseline)) return changes;
   if (!path.length) return changes;
-  changes.push({ path, value: now === undefined ? null : JSON.parse(JSON.stringify(now)) });
+  const change = { path, value: now === undefined ? null : JSON.parse(JSON.stringify(now)) };
+  // Not for what is typed in Edit mode (amounts false): a number typed there is the number meant.
+  if (amounts && COUNTERS.has(path.join('.'))) change.from = baseline === undefined ? null : baseline;
+  changes.push(change);
   return changes;
 }
 

@@ -19183,6 +19183,7 @@ export function mountBoardInteractions(store, routes = {}) {
       { current: String(result.current), max: result.max },
       {
         savePromise: updateResult.savePromise,
+        before: result.previous,
       }
     );
 
@@ -19723,7 +19724,7 @@ export function mountBoardInteractions(store, routes = {}) {
       syncPlacementHitPointsToSheet(
         activeTokenSettingsId,
         latestSnapshot,
-        { savePromise: updateResult.savePromise }
+        { savePromise: updateResult.savePromise, before: baseSnapshot.current }
       );
       fireManualStaminaTriggers({
         placementId: activeTokenSettingsId,
@@ -19772,12 +19773,16 @@ export function mountBoardInteractions(store, routes = {}) {
 
     try {
       const response = await writeSheetStamina(endpoint, payload);
-
-      broadcastStaminaSync({
-        character: payload?.character,
-        currentStamina: payload?.currentStamina,
-        staminaMax: payload?.staminaMax,
-      });
+      // The answer is where the sheet now stands. Sheet pages open in this browser are told that, not the copy
+      // this token held.
+      const stands = await response.clone().json().catch(() => null);
+      if (stands?.success === true && stands.hasStamina !== false) {
+        broadcastStaminaSync({
+          character: payload?.character,
+          currentStamina: stands.currentStamina,
+          staminaMax: stands.staminaMax,
+        });
+      }
 
       return response;
     } catch (error) {
@@ -19793,9 +19798,16 @@ export function mountBoardInteractions(store, routes = {}) {
     const key = `${sceneId || ''}::${name.toLowerCase()}`;
     const existing = sheetSyncQueue.get(key);
     if (existing?.timerId) clearTimeout(existing.timerId);
+    // What is sent is how much the token's Stamina changed by (sheetStaminaWrite, below): the server adds it to
+    // the sheet's own number. Changes not yet sent are added together; a change after one that was not confirmed
+    // sends the token's number instead, so the two cannot drift apart for good.
+    const waiting = existing && !existing.promise ? existing.write : null;
+    const write = sheetStaminaWrite(waiting, { now: payload.currentStamina, before: payload.before }, existing?.failed === true);
+    if (!write) return;
     const entry = {
-      payload: {character:name,currentStamina:normalizeHitPointsValue(payload.currentStamina),staminaMax:normalizeHitPointsValue(payload.staminaMax)},
-      promise:null,timerId:null,
+      write,
+      payload: { character: name, ...write },
+      promise:null,timerId:null,failed:false,
       dispatch:()=>{
         if (entry.promise) return entry.promise;
         clearTimeout(entry.timerId);
@@ -19803,8 +19815,14 @@ export function mountBoardInteractions(store, routes = {}) {
           const saved=await (savePromise ?? existing?.savePromise);
           if(saved?.success===false) return null;
           return postHitPointsToSheet(entry.payload);
-        }).then(response=>{
-          if(response?.ok && sheetSyncQueue.get(key)===entry)sheetSyncQueue.delete(key);
+        }).then(async response=>{
+          if(!response?.ok){ entry.failed=true; return response; }
+          if(sheetSyncQueue.get(key)===entry){
+            sheetSyncQueue.delete(key);
+            // Nothing newer is waiting: the token takes where the sheet now stands.
+            const stands=await response.clone().json().catch(()=>null);
+            if(stands?.success===true && stands.hasStamina!==false) applySheetStaminaToTokens(name,stands.currentStamina,stands.staminaMax);
+          }
           return response;
         });
         return entry.promise;
@@ -19828,7 +19846,22 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
-  function syncPlacementHitPointsToSheet(placementId, hitPoints, { savePromise = null } = {}) {
+  /**
+   * What a token's change of Stamina sends to its sheet. `change` is {now, before}: what the token reads and what
+   * it read before the change. `waiting` is a write of the same token not yet sent. The result is {delta} (an
+   * amount for the server to add), {currentStamina} (a token that had no number before, or one whose last write
+   * was not confirmed), or null (nothing to say: no number now, or no change). Never a maximum: a token's is a
+   * copy of the sheet's.
+   */
+  function sheetStaminaWrite(waiting, change, lastFailed = false) {
+    const now = parseHitPointsNumber(change?.now), before = parseHitPointsNumber(change?.before);
+    if (now === null) return waiting ?? null;
+    if (before === null || lastFailed || Number.isFinite(waiting?.currentStamina)) return { currentStamina: now };
+    const delta = (waiting?.delta ?? 0) + (now - before);
+    return delta === 0 && !waiting ? null : { delta };
+  }
+
+  function syncPlacementHitPointsToSheet(placementId, hitPoints, { savePromise = null, before = null } = {}) {
     if (!placementId) {
       return;
     }
@@ -19857,7 +19890,7 @@ export function mountBoardInteractions(store, routes = {}) {
       {
         character: profileId,
         currentStamina: snapshot.current,
-        staminaMax: snapshot.max,
+        before,
       },
       { savePromise, sceneId: activeSceneId }
     );
@@ -19912,7 +19945,8 @@ export function mountBoardInteractions(store, routes = {}) {
       }
 
       const data = await response.json();
-      if (!data || typeof data !== 'object' || data.success === false) {
+      // No sheet, or a sheet with no Stamina maximum: the token keeps what it has (a dash, if new), never 0 of 0.
+      if (!data || typeof data !== 'object' || data.success === false || data.hasStamina === false) {
         return;
       }
 
@@ -20017,9 +20051,17 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    const currentStamina = payload.currentStamina;
-    const staminaMax = payload.staminaMax;
-    if (currentStamina === undefined && staminaMax === undefined) {
+    applySheetStaminaToTokens(characterId, payload.currentStamina, payload.staminaMax);
+  }
+
+  /**
+   * Puts a sheet's Stamina on its hero's tokens in the scene on show, without sending it back to the sheet.
+   * From a sheet page or the side panel in this browser (the broadcast), from the sheet's answer to a token's own
+   * write, and, on the Director's page, from the party read that catches changes made on other devices.
+   */
+  function applySheetStaminaToTokens(character, currentStamina, staminaMax) {
+    const characterId = normalizeProfileId(character);
+    if (!characterId || (currentStamina === undefined && staminaMax === undefined)) {
       return;
     }
 
@@ -20078,8 +20120,45 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+
+  // A sheet changed on another device (a player's phone) reaches no page here by itself: the broadcast above
+  // stays inside one browser. So the Director's page asks for the party's Stamina every few seconds. While no
+  // sheet has been written the answer is one word. A hero with a write of this page's still on its way is left
+  // alone until it is answered.
+  const PARTY_VITALS_INTERVAL_MS = 4000;
+  let partyVitalsStamp = '', partyVitalsBusy = false;
+  async function readPartyVitals() {
+    const endpoint = typeof routes?.sheet === 'string' ? routes.sheet : null;
+    if (!endpoint || !isGmUser() || partyVitalsBusy || document.visibilityState === 'hidden') return;
+    partyVitalsBusy = true;
+    try {
+      const url = new URL(endpoint, window.location.href);
+      url.searchParams.set('action', 'party-vitals');
+      if (partyVitalsStamp) url.searchParams.set('since', partyVitalsStamp);
+      const response = await fetch(url.toString(), { method: 'GET', credentials: 'same-origin', cache: 'no-store' });
+      const answer = response.ok ? await response.json() : null;
+      if (answer?.success !== true || answer.unchanged === true || !answer.party) return;
+      const sending = new Set([...sheetSyncQueue.keys()].map((key) => key.slice(key.indexOf('::') + 2)));
+      let held = false;
+      for (const [character, vitals] of Object.entries(answer.party)) {
+        if (vitals?.hasStamina !== true) continue;
+        if (sending.has(character.toLowerCase())) { held = true; continue; }
+        applySheetStaminaToTokens(character, vitals.currentStamina, vitals.staminaMax);
+      }
+      // A hero that was held is read again next time, whether or not a sheet is written in between.
+      partyVitalsStamp = held ? '' : String(answer.stamp || '');
+    } catch (error) {
+      console.warn('[VTT] Failed to read the party\'s Stamina', error);
+    } finally {
+      partyVitalsBusy = false;
+    }
+  }
+
   function startListeningForSheetSync() {
     subscribeToStaminaSync(handleSheetStaminaBroadcast);
+    if (isGmUser() && typeof window !== 'undefined' && typeof window.setInterval === 'function') {
+      window.setInterval(readPartyVitals, PARTY_VITALS_INTERVAL_MS);
+    }
   }
 
 

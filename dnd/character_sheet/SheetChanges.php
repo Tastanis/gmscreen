@@ -22,6 +22,14 @@ final class SheetChanges
     public const MAX_CHANGES = 400;
     public const MAX_DEPTH = 8;
 
+    /**
+     * The counters: numbers that go up and down in play, changed from the sheet page, the map's side panel, a
+     * token and ability automation alike. Each of those holds a copy, and a copy can be behind. So a counter is
+     * never told "be 7": it is told "one more" or "five fewer", and that is added to the number stored here.
+     * Two pages that each take one off take two off, whichever of them was behind.
+     */
+    public const COUNTERS = ['hero.surges', 'hero.victories', 'hero.vitals.currentRecoveries', 'hero.vitals.currentStamina', 'hero.resource.value'];
+
     /** A list of {path: [..], value} as a page sends it, checked. Throws on anything else. */
     public static function read($raw): array
     {
@@ -42,7 +50,10 @@ final class SheetChanges
             $top = (string) $path[0];
             if (preg_match('/^[A-Za-z][A-Za-z0-9]{0,60}$/', $top) !== 1) throw new InvalidArgumentException('That part of a sheet cannot be changed from a page.');
             if ($top === 'hero' && ($path[1] ?? null) === 'heroTokens') continue;   // the party's own, never a sheet's
-            $changes[] = ['path' => $path, 'value' => $change['value']];
+            $read = ['path' => $path, 'value' => $change['value']];
+            // What the page believed the number was before it changed it. Kept for a counter only.
+            if (array_key_exists('from', $change) && in_array(implode('.', $path), self::COUNTERS, true)) $read['from'] = $change['from'];
+            $changes[] = $read;
         }
         return $changes;
     }
@@ -59,6 +70,11 @@ final class SheetChanges
                 $stored = $sheet['hero']['stats'][$path[2]] ?? null;
                 if (is_int($stored) || is_float($stored) || (is_string($stored) && is_numeric($stored))) continue;
             }
+            // A counter the page moved from one whole number to another moves the stored number by as much.
+            if (array_key_exists('from', $change) && ($was = self::whole($change['from'])) !== null && ($now = self::whole($value)) !== null) {
+                $sheet = self::move($sheet, implode('.', $path), $now - $was);
+                continue;
+            }
             $at = &$sheet;
             $last = count($path) - 1;
             foreach ($path as $index => $step) {
@@ -69,6 +85,84 @@ final class SheetChanges
             unset($at);
         }
         return $sheet;
+    }
+
+    /** A whole number, or null: 3, 3.0 and "3" are; "", null, "3 or so" and 3.5 are not. */
+    public static function whole($value): ?int
+    {
+        if (is_int($value)) return $value;
+        if (is_float($value)) return is_finite($value) && floor($value) === $value && abs($value) < 1e12 ? (int) $value : null;
+        if (is_string($value) && preg_match('/^\s*-?\d{1,12}\s*$/', $value) === 1) return (int) trim($value);
+        return null;
+    }
+
+    /** The least a counter may be: nothing for most; a heroic resource that may go negative, as far as the sheet's own rule. */
+    public static function floorOf(array $sheet, string $counter): ?int
+    {
+        if ($counter === 'hero.vitals.currentStamina') return null;                 // a dying hero is below nought
+        if ($counter !== 'hero.resource.value') return 0;
+        $resource = is_array($sheet['hero']['resource'] ?? null) ? $sheet['hero']['resource'] : [];
+        if (empty($resource['allowNegative'])) return 0;
+        return -(1 + (self::whole($sheet['hero']['stats']['reason'] ?? null) ?? 0));
+    }
+
+    /** Where a counter stands on the stored sheet (nothing stored counts as nought). */
+    public static function counter(array $sheet, string $counter): int
+    {
+        $at = $sheet;
+        foreach (explode('.', $counter) as $step) $at = is_array($at) ? ($at[$step] ?? null) : null;
+        return self::whole($at) ?? 0;
+    }
+
+    /** Moves a counter by an amount from where it stands on the stored sheet, never below its least. */
+    public static function move(array $sheet, string $counter, int $amount): array
+    {
+        if (!in_array($counter, self::COUNTERS, true)) throw new InvalidArgumentException('Not a counter: ' . $counter);
+        $next = self::counter($sheet, $counter) + $amount;
+        $least = self::floorOf($sheet, $counter);
+        if ($least !== null && $amount < 0) $next = max($least, $next);
+        $at = &$sheet;
+        $steps = explode('.', $counter);
+        $last = array_pop($steps);
+        foreach ($steps as $step) {
+            if (!isset($at[$step]) || !is_array($at[$step])) $at[$step] = [];
+            $at = &$at[$step];
+        }
+        $at[$last] = $next;
+        unset($at);
+        if ($counter === 'hero.surges') $sheet['hero']['surgesUsed'] = 0;
+        return $sheet;
+    }
+
+    /** What one Recovery heals: the sheet's own number when it has one, else a third of the Stamina maximum. */
+    public static function recoveryValue(array $vitals): int
+    {
+        $own = self::whole(is_float($vitals['recoveryValue'] ?? null) ? floor($vitals['recoveryValue']) : ($vitals['recoveryValue'] ?? null));
+        if ($own !== null && $own !== 0) return max(0, $own);
+        $max = self::whole($vitals['staminaMax'] ?? null) ?? 0;
+        return $max > 0 ? intdiv($max, 3) : 0;
+    }
+
+    /**
+     * Spends one Recovery, from the stored record: one fewer Recovery, and Stamina up by the recovery value, as
+     * far as the maximum. Stamina already above the maximum (temporary Stamina) is left alone, never lowered, and
+     * a sheet with no maximum heals the full value. With no Recovery left, or nothing to heal by, nothing changes.
+     */
+    public static function useRecovery(array $sheet): array
+    {
+        $vitals = is_array($sheet['hero']['vitals'] ?? null) ? $sheet['hero']['vitals'] : [];
+        $left = max(0, self::whole($vitals['currentRecoveries'] ?? null) ?? 0);
+        $heals = self::recoveryValue($vitals);
+        $stamina = self::whole($vitals['currentStamina'] ?? null) ?? 0;
+        $answer = static fn (array $sheet, int $spent, int $stamina, int $left, string $reason = ''): array => ['sheet' => $sheet, 'spent' => $spent,
+            'currentStamina' => $stamina, 'currentRecoveries' => $left, 'recoveryValue' => $heals, ...($reason !== '' ? ['reason' => $reason] : [])];
+        if ($left < 1) return $answer($sheet, 0, $stamina, $left, 'No Recoveries left.');
+        if ($heals < 1) return $answer($sheet, 0, $stamina, $left, 'This sheet has no recovery value and no Stamina maximum to work one out from.');
+        $max = self::whole($vitals['staminaMax'] ?? null) ?? 0;
+        $healed = $max > 0 ? max($stamina, min($max, $stamina + $heals)) : $stamina + $heals;
+        $sheet['hero']['vitals']['currentRecoveries'] = $left - 1;
+        $sheet['hero']['vitals']['currentStamina'] = $healed;
+        return $answer($sheet, 1, $healed, $left - 1);
     }
 
     /**

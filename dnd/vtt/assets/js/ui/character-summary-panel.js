@@ -351,7 +351,9 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     }));
   };
 
-  const saveActiveSheet = async (change) => {
+  // `amount` is how much this panel changed the number by. The server adds it to the number it holds: the panel's
+  // copy of a sheet can be behind, and "the number is now N" from a copy that was behind wrote the sheet back.
+  const saveActiveSheet = async (change, amount = 0) => {
     if (!activeCharacterId || !activeSheet || pendingResourceSave) {
       return false;
     }
@@ -364,7 +366,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     try {
       let rejection = 'The server did not accept this change.';
       const saved = await saveCharacterSummaryResources(sheet, {
-        characterId, routes, change, broadcast: false,
+        characterId, routes, change, amount, broadcast: false,
         onError: message => { rejection = message; },
       });
       if (!saved) throw new Error(rejection);
@@ -523,6 +525,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     let vitals = activeSheet?.hero?.vitals;
     if (!vitals) return;
     const current = numberLike(vitals.currentStamina, 0);
+    let before = current;
     const max = numberLike(vitals.staminaMax, 0);
     if (action === 'damage') {
       vitals.currentStamina = current - amount;
@@ -537,7 +540,8 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
         if (pendingResourceSave || activeCharacterId !== actionCharacterId) return;
         vitals = activeSheet?.hero?.vitals;
         if (!vitals) return;
-        const latestHealed = numberLike(vitals.currentStamina, 0) + amount;
+        before = numberLike(vitals.currentStamina, 0);
+        const latestHealed = before + amount;
         const latestMax = numberLike(vitals.staminaMax, 0);
         vitals.currentStamina = useTemp || latestMax <= 0 ? latestHealed : Math.max(numberLike(vitals.currentStamina, 0), Math.min(latestMax, latestHealed));
       } else {
@@ -546,7 +550,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     }
     appendStaminaHistory(vitals, vitals.currentStamina);
     renderActiveSheet();
-    await saveActiveSheet('stamina');
+    await saveActiveSheet('stamina', numberLike(vitals.currentStamina, 0) - before);
   }
 
   async function handleRecoveryClick() {
@@ -590,7 +594,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     if (!updateCharacterPanelCounter(panel, 'surges', hero.surges)) {
       renderActiveSheet();
     }
-    await saveActiveSheet('surges');
+    await saveActiveSheet('surges', hero.surges - current);
   }
 
   async function handleResourceDelta(delta) {
@@ -602,7 +606,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     if (!updateCharacterPanelCounter(panel, 'resource', resource.value)) {
       renderActiveSheet();
     }
-    await saveActiveSheet('resource');
+    await saveActiveSheet('resource', resource.value - current);
   }
 
   async function handleResourceRoll() {
@@ -623,7 +627,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     if (!updateCharacterPanelCounter(panel, 'resource', resource.value)) {
       renderActiveSheet();
     }
-    if (!await saveActiveSheet('resource')) return;
+    if (!await saveActiveSheet('resource', autoGain.amount)) return;
     const gainSummary = `${resource.title || 'Resource'} ${autoGain.label}: +${autoGain.amount} (${current} -> ${resource.value}).`;
     if (window.UIKit) {
       window.UIKit.toast(gainSummary, 'success');
@@ -647,7 +651,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     if (!hero) return;
     hero.victories = (Number.parseInt(hero.victories ?? 0, 10) || 0) + 1;
     renderActiveSheet();
-    await saveActiveSheet('victories');
+    await saveActiveSheet('victories', 1);
   }
 
   function handleConditionAdd(conditionName) {
@@ -3511,47 +3515,15 @@ function parseAbilityResourceCost(value) {
   return { amount: 0, name: '' };
 }
 
-async function saveCharacterSummarySheet(sheet, options = {}) {
-  const characterId = typeof options.characterId === 'string' ? options.characterId : '';
-  if (!characterId || !sheet) return false;
-  const change = typeof options.change === 'string' && options.change ? options.change : 'sheet';
-  const shouldBroadcast = options.broadcast !== false;
-  const routeConfig = options.routes && typeof options.routes === 'object' ? options.routes : {};
-  const endpoint = typeof routeConfig.sheet === 'string' && routeConfig.sheet ? routeConfig.sheet : '/dnd/character_sheet/handler.php';
-  const body = new URLSearchParams();
-  body.set('action', 'save');
-  body.set('character', characterId);
-  body.set('data', JSON.stringify(sheet));
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  });
-  const payload = await response.json().catch(() => null);
-  const saved = Boolean(response.ok && payload?.success === true);
-  if (!saved) {
-    console.warn('[VTT] Character summary save failed', payload?.error || response.status);
-  }
-  if (saved && shouldBroadcast && typeof BroadcastChannel === 'function') {
-    const channel = new BroadcastChannel(CHARACTER_SHEET_SYNC_CHANNEL);
-    channel.postMessage({
-      type: 'character-sheet-sync',
-      source: 'vtt',
-      character: characterId,
-      change,
-    });
-    channel.close();
-  }
-  return saved;
-}
-
 async function saveCharacterSummaryResources(sheet, options = {}) {
   const characterId = typeof options.characterId === 'string' ? options.characterId : '';
   const change = typeof options.change === 'string' ? options.change : '';
   if (!characterId || !sheet || !['stamina', 'recovery', 'surges', 'resource', 'victories'].includes(change)) {
-    return saveCharacterSummarySheet(sheet, options);
+    return false;
   }
+  // How much the panel changed the number by; a Recovery is worked out by the server from the stored record.
+  const amount = Math.trunc(Number(options.amount) || 0);
+  if (change !== 'recovery' && amount === 0) return true;
 
   const routeConfig = options.routes && typeof options.routes === 'object' ? options.routes : {};
   const endpoint = typeof routeConfig.sheet === 'string' && routeConfig.sheet
@@ -3561,22 +3533,15 @@ async function saveCharacterSummaryResources(sheet, options = {}) {
   body.set('character', characterId);
   body.set('source', 'vtt');
 
-  if (change === 'stamina' || change === 'recovery') {
-    const vitals = sheet?.hero?.vitals || {};
+  if (change === 'recovery') {
     body.set('action', 'sync-vitals');
-    body.set('currentStamina', String(Number.parseInt(vitals.currentStamina ?? 0, 10) || 0));
-    if (change === 'recovery') {
-      body.set('currentRecoveries', String(Math.max(0, Number.parseInt(vitals.currentRecoveries ?? 0, 10) || 0)));
-    }
-  } else if (change === 'surges') {
-    body.set('action', 'sync-surges');
-    body.set('value', String(Math.max(0, Number.parseInt(sheet?.hero?.surges ?? 0, 10) || 0)));
-  } else if (change === 'resource') {
-    body.set('action', 'sync-resource');
-    body.set('value', String(Number.parseInt(sheet?.hero?.resource?.value ?? 0, 10) || 0));
+    body.set('useRecovery', '1');
+  } else if (change === 'stamina') {
+    body.set('action', 'sync-vitals');
+    body.set('staminaDelta', String(amount));
   } else {
-    body.set('action', 'sync-victories');
-    body.set('value', String(Math.max(0, Number.parseInt(sheet?.hero?.victories ?? 0, 10) || 0)));
+    body.set('action', { surges: 'sync-surges', resource: 'sync-resource', victories: 'sync-victories' }[change]);
+    body.set('delta', String(amount));
   }
 
   const response = await fetch(endpoint, {
@@ -3795,7 +3760,6 @@ export const __testing = {
   resourceFloor,
   saveCharacterHeroicResource,
   saveCharacterSummaryResources,
-  saveCharacterSummarySheet,
   spendHeroicResource,
   startAbilityAutomation,
 };

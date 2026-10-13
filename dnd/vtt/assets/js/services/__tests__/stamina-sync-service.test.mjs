@@ -134,7 +134,9 @@ describe('stamina write confirmation', () => {
     });
     assert.equal(response.ok,true);
     assert.equal(posted.get('currentStamina'),'-2');
-    assert.equal(posted.get('staminaMax'),'0');
+    // Changed on purpose in Build 493: a token's maximum is a copy of the sheet's and is never written back
+    // (this very case, a 0, is how a sheet lost its maximum).
+    assert.equal(posted.has('staminaMax'),false);
     assert.ok(posted.get('operationId'));
     for (const value of [{success:false,error:'Rejected'}, {}, null]) {
       await assert.rejects(writeSheetStamina('/sheet', {}, {
@@ -225,5 +227,38 @@ describe('stamina write confirmation', () => {
       }),/Lost response/);
       assert.deepEqual(methods,['POST','GET']);
     }
+  });
+});
+
+describe('a token says how much its Stamina changed by', () => {
+  test('the amount is sent, with no number the token holds; a lost answer is confirmed by its receipt alone', async () => {
+    const {writeSheetStamina}=await import(SERVICE_PATH);
+    let posted;
+    await writeSheetStamina('/sheet',{character:'cal',delta:-5,staminaMax:30},{
+      fetchImpl:async(url,options)=>{posted=new URLSearchParams(options.body);return new Response(JSON.stringify({success:true,operationId:posted.get('operationId'),currentStamina:35,staminaMax:60}));},
+    });
+    assert.deepEqual([posted.get('delta'),posted.has('currentStamina'),posted.has('staminaMax')],['-5',false,false]);
+    const methods=[];
+    const response=await writeSheetStamina('/sheet',{character:'cal',delta:-5},{
+      operationId:'delta-recovered',
+      journalOverride:{begin(){},complete(){},fail(){throw Error('Should confirm');}},
+      fetchImpl:async(url,options)=>{
+        methods.push(options.method);
+        if(options.method==='POST')throw Error('Response lost');
+        return new Response(JSON.stringify({success:true,recorded:true,receipt:{operationId:'delta-recovered',action:'sync-stamina',response:{success:true,operationId:'delta-recovered',currentStamina:35}}}));
+      },
+    });
+    assert.equal((await response.json()).currentStamina,35);
+    assert.deepEqual(methods,['POST','GET']);
+  });
+
+  test('a sheet with no Stamina maximum gives a token nothing, not 0 of 0', async () => {
+    const originalFetch=globalThis.fetch;
+    globalThis.fetch=async()=>({ok:true,json:async()=>({success:true,currentStamina:0,staminaMax:0,hasStamina:false})});
+    try {
+      const service=await import(`${SERVICE_PATH}?blank=${Date.now()}-${Math.random()}`);
+      assert.equal(await service.fetchSheetStamina({sheet:'http://localhost/sheet'},'Zepha'),null);
+      assert.deepEqual(service.getCachedSheetStamina('zepha'),{currentStamina:null,staminaMax:null,missing:true});
+    } finally { globalThis.fetch=originalFetch; }
   });
 });

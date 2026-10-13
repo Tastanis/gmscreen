@@ -495,8 +495,36 @@ if ($requestMethod !== 'POST' && $requestMethod !== 'GET') {
 $requestData = $requestMethod === 'POST' ? $_POST : $_GET;
 $action = isset($requestData['action']) ? $requestData['action'] : '';
 
-if (!in_array($action, array('operation-status', 'summary', 'load', 'sync-stamina', 'sync-surges', 'sync-token-traits', 'sync-hero-tokens', 'fetch-victories'), true) && $requestMethod !== 'POST') {
+if (!in_array($action, array('operation-status', 'summary', 'load', 'sync-stamina', 'sync-surges', 'sync-token-traits', 'sync-hero-tokens', 'fetch-victories', 'party-vitals'), true) && $requestMethod !== 'POST') {
     sendJsonResponse(array('success' => false, 'error' => 'Invalid request method'));
+}
+
+if ($action === 'party-vitals') {
+    // Every hero's Stamina in one read, for the Director's map page, which asks every few seconds so that a
+    // change made on a sheet on another device reaches the hero's token. "since" is the stamp of the answer the
+    // page already has: while the sheets have not been written, nothing is read and nothing is sent.
+    if ($requestMethod !== 'GET' || !$is_gm) sendJsonResponse(array('success' => false, 'error' => 'Permission denied'));
+    try {
+        clearstatcache(true, $dataFile);
+        $stamp = is_file($dataFile) ? filemtime($dataFile) . '-' . filesize($dataFile) : 'none';
+        header('Cache-Control: no-store');
+        if (isset($requestData['since']) && (string) $requestData['since'] === $stamp) sendJsonResponse(array('success' => true, 'unchanged' => true, 'stamp' => $stamp));
+        $allSheets = loadCharacterSheetData($dataDir, $dataFile, $characters);
+        clearstatcache(true, $dataFile);
+        $party = array();
+        foreach ($characters as $character) {
+            $vitals = isset($allSheets[$character]['hero']['vitals']) && is_array($allSheets[$character]['hero']['vitals']) ? $allSheets[$character]['hero']['vitals'] : array();
+            $max = SheetChanges::whole($vitals['staminaMax'] ?? null);
+            // A sheet with no Stamina maximum has no Stamina to show: the map shows a dash for it, never 0.
+            $party[$character] = $max !== null && $max > 0
+                ? array('hasStamina' => true, 'currentStamina' => SheetChanges::whole($vitals['currentStamina'] ?? null) ?? 0, 'staminaMax' => $max)
+                : array('hasStamina' => false);
+        }
+        sendJsonResponse(array('success' => true, 'stamp' => is_file($dataFile) ? filemtime($dataFile) . '-' . filesize($dataFile) : 'none', 'party' => $party));
+    } catch (Throwable $error) {
+        http_response_code(500);
+        sendJsonResponse(array('success' => false, 'error' => 'Character sheets could not be read.'));
+    }
 }
 
 $requestedCharacter = isset($requestData['character']) ? strtolower(trim($requestData['character'])) : '';
@@ -607,6 +635,12 @@ switch ($action) {
         // What the page changed, field by field. Only those fields are set on the stored record.
         $changes = SheetChanges::read(isset($_POST['changes']) ? json_decode((string) $_POST['changes'], true) : null);
         $allSheets = loadCharacterSheetData($dataDir, $dataFile, $characters);
+        // A save names itself. One whose answer was lost can be asked after (operation-status) and, if sent
+        // again, is answered from its receipt: an amount is never added twice.
+        $saveOperationId = CharacterWriteReceipts::operationId($_POST['operationId'] ?? null);
+        $saveInput = ['changes'=>hash('sha256', (string) ($_POST['changes'] ?? ''))];
+        $replayed = CharacterWriteReceipts::lookup($allSheets, $saveOperationId, $currentUser, $requestedCharacter, $action, $saveInput);
+        if ($replayed !== null) sendJsonResponse($replayed);
         $existingSheet = isset($allSheets[$requestedCharacter]) && is_array($allSheets[$requestedCharacter])
             ? $allSheets[$requestedCharacter]
             : getDefaultCharacterEntry();
@@ -628,8 +662,9 @@ switch ($action) {
             ));
         }
         $allSheets[$requestedCharacter] = $normalizedSheet;
+        $saveResponse = CharacterWriteReceipts::record($allSheets, $saveOperationId, $currentUser, $requestedCharacter, $action, $saveInput, array('success' => true, 'applied' => count($changes)));
         if (saveCharacterSheetData($dataDir, $dataFile, $allSheets)) {
-            sendJsonResponse(array('success' => true, 'applied' => count($changes)));
+            sendJsonResponse($saveResponse);
         } else {
             sendJsonResponse(array('success' => false, 'error' => 'Failed to save sheet'));
         }
@@ -669,26 +704,32 @@ switch ($action) {
         $sheet = $allSheets[$requestedCharacter];
 
         if ($requestMethod === 'POST') {
-            $staminaMax = isset($requestData['staminaMax']) && $requestData['staminaMax'] !== ''
-                ? (int)$requestData['staminaMax']
-                : null;
-            $currentStamina = isset($requestData['currentStamina']) && $requestData['currentStamina'] !== ''
+            // A token holds a copy of the sheet's Stamina, and a copy can be behind. So the map says how much a
+            // token's Stamina changed by ("delta") and that is added to what is stored here; it used to say what
+            // the token now read, and a token that was behind wrote the sheet back to it. The maximum on a token
+            // is a copy too and cannot be typed there (it is shown only), so it is never taken from the map: a
+            // page sending back the copy it held is how an empty or old maximum reached a sheet. The maximum is
+            // set on the sheet.
+            $staminaDelta = isset($requestData['delta']) && $requestData['delta'] !== '' ? SheetChanges::whole($requestData['delta']) : null;
+            $currentStamina = $staminaDelta === null && isset($requestData['currentStamina']) && $requestData['currentStamina'] !== ''
                 ? (int)$requestData['currentStamina']
                 : null;
 
-            if ($currentStamina === null) {
+            if ($currentStamina === null && $staminaDelta === null) {
                 sendJsonResponse(array('success' => false, 'error' => 'Missing stamina values'));
             }
 
             $staminaOperationId = CharacterWriteReceipts::operationId($requestData['operationId'] ?? null);
-            $staminaInput = ['currentStamina'=>$currentStamina, 'staminaMax'=>$staminaMax];
+            $staminaInput = ['currentStamina'=>$currentStamina, 'delta'=>$staminaDelta];
             $replayed = CharacterWriteReceipts::lookup($allSheets, $staminaOperationId, $currentUser, $requestedCharacter, $action, $staminaInput);
             if ($replayed !== null) sendJsonResponse($replayed);
 
-            if ($staminaMax !== null) {
-                $sheet['hero']['vitals']['staminaMax'] = $staminaMax;
+            if ($staminaDelta !== null) {
+                $sheet = SheetChanges::move($sheet, 'hero.vitals.currentStamina', $staminaDelta);
+            } elseif ($currentStamina !== null) {
+                // A token that had no number before has no amount to give: what it now reads is set.
+                $sheet['hero']['vitals']['currentStamina'] = $currentStamina;
             }
-            $sheet['hero']['vitals']['currentStamina'] = $currentStamina;
 
             $allSheets[$requestedCharacter] = $sheet;
 
@@ -699,6 +740,8 @@ switch ($action) {
             'name' => isset($sheet['hero']['name']) && $sheet['hero']['name'] !== '' ? $sheet['hero']['name'] : $requestedCharacter,
             'staminaMax' => isset($sheet['hero']['vitals']['staminaMax']) ? $sheet['hero']['vitals']['staminaMax'] : 0,
             'currentStamina' => isset($sheet['hero']['vitals']['currentStamina']) ? $sheet['hero']['vitals']['currentStamina'] : 0,
+            // False for a sheet with no Stamina maximum: the map then shows a dash on its token, never 0.
+            'hasStamina' => (SheetChanges::whole($sheet['hero']['vitals']['staminaMax'] ?? null) ?? 0) > 0,
         );
 
         if ($requestMethod === 'POST') {
@@ -765,6 +808,11 @@ switch ($action) {
             if ($cost === false || $cost < 1 || $cost > 1000000) throw new InvalidArgumentException('Invalid upkeep cost');
             $asked = trim((string)($requestData['resourceName'] ?? ''));
             $resourceInput = ['spend'=>$cost, 'resourceName'=>strtolower($asked)];
+        } elseif (isset($requestData['delta']) && $requestData['delta'] !== '') {
+            // "Two more" or "one fewer", added to the stored number (never below the sheet's own least).
+            $amount = SheetChanges::whole($requestData['delta']);
+            if ($amount === null || abs($amount) > 1000000) throw new InvalidArgumentException('Invalid resource amount');
+            $resourceInput = ['delta'=>$amount];
         } else {
             if (!isset($requestData['value']) || $requestData['value'] === '') throw new InvalidArgumentException('Missing resource value');
             $resourceInput = ['value'=>(int)$requestData['value']];
@@ -789,6 +837,8 @@ switch ($action) {
             if ($asked !== '' && strcasecmp($asked, $title) !== 0) $finishResource(['success'=>false, 'error'=>'Upkeep resource does not match the character resource.']);
             if ($current < $cost) $finishResource(['success'=>true, 'paid'=>false, 'reason'=>'insufficient resource', 'resource'=>$current]);
             $sheet['hero']['resource']['value'] = $current - $cost;
+        } elseif (isset($resourceInput['delta'])) {
+            $sheet = SheetChanges::move($sheet, 'hero.resource.value', $resourceInput['delta']);
         } else {
             if (isset($resourceInput['expectedValue']) && $resourceInput['expectedValue'] !== $current) {
                 $finishResource(['success'=>false, 'error'=>'Resource changed; review its current value before applying this change.']);
@@ -829,6 +879,43 @@ switch ($action) {
             if ($spent > 0 || $recoveryOperationId !== null) saveCharacterSheetData($dataDir, $dataFile, $allSheets);
             sendJsonResponse($response);
         }
+        if (!empty($requestData['useRecovery'])) {
+            // One Recovery spent to heal, worked out from the stored record (SheetChanges::useRecovery). A page
+            // used to work it out from its own copy and send the two numbers: one that was behind wrote old
+            // Stamina back, and the sheet page set Stamina to none on a sheet with no maximum.
+            $useOperationId = CharacterWriteReceipts::operationId($requestData['operationId'] ?? null);
+            $useInput = ['useRecovery'=>1];
+            $replayed = CharacterWriteReceipts::lookup($allSheets, $useOperationId, $currentUser, $requestedCharacter, $action, $useInput);
+            if ($replayed !== null) sendJsonResponse($replayed);
+            $used = SheetChanges::useRecovery($sheet);
+            if ($used['spent'] > 0) $allSheets[$requestedCharacter] = $used['sheet'];
+            unset($used['sheet']);
+            $response = CharacterWriteReceipts::record($allSheets, $useOperationId, $currentUser, $requestedCharacter, $action, $useInput, ['success'=>true, ...$used]);
+            if (($used['spent'] > 0 || $useOperationId !== null) && !saveCharacterSheetData($dataDir, $dataFile, $allSheets)) {
+                sendJsonResponse(array('success' => false, 'error' => 'Failed to save the recovery'));
+            }
+            sendJsonResponse($response);
+        }
+        if (isset($requestData['staminaDelta']) && $requestData['staminaDelta'] !== '') {
+            // Damage or healing from the map's side panel, as an amount added to the stored Stamina.
+            $amount = SheetChanges::whole($requestData['staminaDelta']);
+            if ($amount === null || abs($amount) > 1000000) throw new InvalidArgumentException('Invalid Stamina amount');
+            $deltaOperationId = CharacterWriteReceipts::operationId($requestData['operationId'] ?? null);
+            $deltaInput = ['staminaDelta'=>$amount];
+            $replayed = CharacterWriteReceipts::lookup($allSheets, $deltaOperationId, $currentUser, $requestedCharacter, $action, $deltaInput);
+            if ($replayed !== null) sendJsonResponse($replayed);
+            $sheet = SheetChanges::move($sheet, 'hero.vitals.currentStamina', $amount);
+            $allSheets[$requestedCharacter] = $sheet;
+            $response = CharacterWriteReceipts::record($allSheets, $deltaOperationId, $currentUser, $requestedCharacter, $action, $deltaInput, [
+                'success'=>true,
+                'currentStamina'=>SheetChanges::counter($sheet, 'hero.vitals.currentStamina'),
+                'currentRecoveries'=>SheetChanges::counter($sheet, 'hero.vitals.currentRecoveries'),
+            ]);
+            if (!saveCharacterSheetData($dataDir, $dataFile, $allSheets)) {
+                sendJsonResponse(array('success' => false, 'error' => 'Failed to save vital values'));
+            }
+            sendJsonResponse($response);
+        }
         $hasStamina = isset($requestData['currentStamina']) && $requestData['currentStamina'] !== '';
         $hasRecoveries = isset($requestData['currentRecoveries']) && $requestData['currentRecoveries'] !== '';
         if (!$hasStamina && !$hasRecoveries) {
@@ -855,10 +942,17 @@ switch ($action) {
     case 'sync-victories':
         $allSheets = loadCharacterSheetData($dataDir, $dataFile, $characters);
         $sheet = $allSheets[$requestedCharacter];
-        if (!isset($requestData['value']) || $requestData['value'] === '') {
-            sendJsonResponse(array('success' => false, 'error' => 'Missing victory value'));
+        if (isset($requestData['delta']) && $requestData['delta'] !== '') {
+            // "One more", added to the stored number: two pages that each add one add two.
+            $amount = SheetChanges::whole($requestData['delta']);
+            if ($amount === null || abs($amount) > 1000) throw new InvalidArgumentException('Invalid victory amount');
+            $sheet = SheetChanges::move($sheet, 'hero.victories', $amount);
+        } else {
+            if (!isset($requestData['value']) || $requestData['value'] === '') {
+                sendJsonResponse(array('success' => false, 'error' => 'Missing victory value'));
+            }
+            $sheet['hero']['victories'] = max(0, (int)$requestData['value']);
         }
-        $sheet['hero']['victories'] = max(0, (int)$requestData['value']);
         $allSheets[$requestedCharacter] = $sheet;
 
         if (!saveCharacterSheetData($dataDir, $dataFile, $allSheets)) {

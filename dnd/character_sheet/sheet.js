@@ -2283,7 +2283,7 @@ function renderBars() {
   });
 
   container.querySelectorAll("[data-use-recovery]").forEach((btn) => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", async () => {
       const vitals = sheetState.hero.vitals;
       const currentRecoveries = Number(vitals.currentRecoveries) || 0;
       if (currentRecoveries <= 0) return;
@@ -2294,16 +2294,23 @@ function renderBars() {
         return;
       }
 
-      const currentStamina = Number(vitals.currentStamina) || 0;
-      const staminaMax = Number(vitals.staminaMax) || 0;
-      const newStamina = Math.min(currentStamina + recoveryVal, staminaMax);
-
-      vitals.currentStamina = newStamina;
-      vitals.currentRecoveries = currentRecoveries - 1;
-
-      updateStaminaHistory(newStamina);
+      // The server works it out from the record it holds: one Recovery fewer, Stamina up by the recovery value
+      // as far as the maximum. This page used to work it out from its own copy, so one that was behind wrote old
+      // Stamina back, Stamina above the maximum was lowered to it, and a sheet with no maximum was set to none.
+      await saveSheet();
+      pendingSheetWrites++;
+      sheetWriteEpoch++;
+      let used = null;
+      try { used = await askSheetServer("sync-vitals", { useRecovery: 1 }); }
+      finally { pendingSheetWrites--; sheetWriteEpoch++; }
+      if (!used) return;
+      for (const held of [sheetState, sheetBaseline]) {
+        held.hero.vitals = { ...held.hero.vitals, currentStamina: used.currentStamina, currentRecoveries: used.currentRecoveries };
+      }
+      if (!used.spent && used.reason) showSheetNotice(used.reason);
+      updateStaminaHistory(Number(used.currentStamina) || 0);
       renderBars();
-      saveSheet();
+      broadcastSheetSync("sheet");
       broadcastStaminaToVtt();
     });
   });
@@ -3850,7 +3857,7 @@ function bindEditToggle() {
     if (!enabled) {
       captureAllSections();
       renderAll();
-      saveSheet();
+      saveSheet({ typed: true });
     }
   });
 }
@@ -3889,17 +3896,22 @@ async function loadSheet() {
   toggleEditMode(false);
 }
 
-function saveSheet({ keepalive = false } = {}) {
+function saveSheet({ keepalive = false, typed = false } = {}) {
   if (sheetLoadBlocked) return Promise.resolve(false);
 
   // Only what this page changed. Nothing changed (turning Edit off, a tab going into the background): nothing sent.
-  const changes = diffSheet(sheetBaseline, sheetState);
+  // A counter pressed up or down outside Edit mode is sent as an amount (sheet-changes.mjs); a number typed in
+  // Edit mode is sent as typed.
+  const changes = diffSheet(sheetBaseline, sheetState, [], !(typed || document.body.classList.contains("edit-mode")));
   if (!changes.length) return Promise.resolve(true);
   const payload = new URLSearchParams();
+  const operationId = globalThis.crypto?.randomUUID?.() || `sheet-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+  const character = activeCharacter;
   payload.append("action", "save-fields");
   if (activeCharacter) {
     payload.append("character", activeCharacter);
   }
+  payload.append("operationId", operationId);
   payload.append("changes", JSON.stringify(changes));
   // They are on their way: a second save started before this one is answered does not send them again. If the
   // server does not take them, the baseline goes back, so the next save sends them again.
@@ -3929,7 +3941,16 @@ function saveSheet({ keepalive = false } = {}) {
       return true;
     } catch (error) {
       console.error("Error saving sheet", error);
-      applyChanges(sheetBaseline, held);
+      // No answer is not "no": the save may have been stored. Ask once. Stored: done. Not stored: the next save
+      // sends it again. Cannot tell: what was an amount is not sent again (twice "one more" is two more; the
+      // page takes the server's number at its next read), the rest is.
+      const stored = await sheetSaveWasStored(operationId, character);
+      if (stored === true) {
+        clearSheetSaveProblem();
+        broadcastSheetSync("sheet");
+        return true;
+      }
+      applyChanges(sheetBaseline, stored === false ? held : held.filter((_, index) => !("from" in changes[index])));
       showSheetSaveProblem("No answer from the server.");
       return false;
     }
@@ -3939,6 +3960,20 @@ function saveSheet({ keepalive = false } = {}) {
   // including a stale victory count while a respite save is queued.
   const saving = keepalive ? send() : (sheetSaveQueue = sheetSaveQueue.catch(() => false).then(send));
   return saving.finally(() => { pendingSheetWrites--; sheetWriteEpoch++; });
+}
+
+// Whether a save that got no answer was stored after all: true, false, or null when that cannot be learned either.
+async function sheetSaveWasStored(operationId, character) {
+  try {
+    const response = await fetch(
+      `handler.php?action=operation-status&character=${encodeURIComponent(character || "")}&operationId=${encodeURIComponent(operationId)}`,
+      { credentials: "same-origin", cache: "no-store" }
+    );
+    const result = await response.json();
+    return result?.success === true ? result.recorded === true : null;
+  } catch (error) {
+    return null;
+  }
 }
 
 // A save that did not happen is said on the page, where the player can see it. It used to go to the console only:
@@ -3964,12 +3999,13 @@ function clearSheetSaveProblem() {
 }
 
 // A request the server works out from the record it holds (a respite). Returns its answer, or null.
-async function askSheetServer(action) {
+async function askSheetServer(action, fields = {}) {
   const payload = new URLSearchParams();
   payload.append("action", action);
   if (activeCharacter) {
     payload.append("character", activeCharacter);
   }
+  Object.entries(fields).forEach(([key, value]) => payload.append(key, String(value)));
   try {
     const response = await fetch("handler.php", { method: "POST", body: payload, credentials: "same-origin" });
     const result = await response.json();
