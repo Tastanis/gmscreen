@@ -69,7 +69,8 @@ export function mountDrawingTool(options = {}) {
     currentHeight: null,
     shownKey: '',
     confirmedDrawings: [],
-    pendingEdits: null,
+    pendingList: [],
+    sendChain: Promise.resolve(),
     editBefore: null,
   };
 
@@ -133,7 +134,7 @@ export function mountDrawingTool(options = {}) {
   mapSurface.addEventListener(
     'pointerdown',
     (event) => {
-      if (!state.active || state.pendingSync || event.button !== 0) {
+      if (!state.active || event.button !== 0) {
         return;
       }
 
@@ -318,9 +319,15 @@ function continueDrawing(state, event) {
     return;
   }
 
+  // A point for every pixel the pointer crossed made strokes of many hundreds of points: slow to send, to keep and
+  // to draw on every page. One every two map pixels reads the same.
+  const last = state.currentPoints[state.currentPoints.length - 1];
+  if (last && Math.hypot(point.x - last.x, point.y - last.y) < MIN_POINT_STEP) return;
   state.currentPoints.push(point);
   updatePathFromPoints(state.currentPath, state.currentPoints);
 }
+
+const MIN_POINT_STEP = 2;
 
 function endDrawing(state, event) {
   const point = getMapCoordinates(state.mapTransform, event);
@@ -746,26 +753,37 @@ function scheduleSyncDrawings(state, remember = true) {
     state.undoStack.push(edits);
     if (state.undoStack.length > MAX_UNDO_STACK_SIZE) state.undoStack.shift();
   }
+  // Sent one after another, in the order made, and the tool is free meanwhile. It used to refuse the next press
+  // until the server had answered the last stroke, so the second and third strokes of anything drawn quickly
+  // (a word, an arrow) were simply not there. What is on its way is shown on top of what the server has confirmed.
   const pending = { sceneId: state.sceneId, edits };
-  state.pendingEdits = pending;
+  state.pendingList.push(pending);
   state.pendingSync = true;
   state.drawingLayer.setAttribute('aria-busy', 'true');
-  Promise.resolve().then(() => {
+  state.sendChain = state.sendChain.then(() => {
     if (!onDrawingChange) throw new Error('Drawing command connection is unavailable.');
     return onDrawingChange(edits, { sceneId: pending.sceneId });
   }).catch((error) => {
     // The command adapter reports the precise server reason. Keep only the
     // accepted canonical portion if a multi-entity edit failed partway.
     console.warn('[VTT] Drawing edit was not fully accepted', error);
-    if (state.pendingEdits === pending) state.undoStack = [];
+    if (state.pendingList.includes(pending)) state.undoStack = [];
   }).finally(() => {
-    if (state.pendingEdits !== pending) return;
-    state.pendingEdits = null;
-    state.pendingSync = false;
-    state.drawings = state.confirmedDrawings.slice();
-    state.drawingLayer.setAttribute('aria-busy', 'false');
+    const at = state.pendingList.indexOf(pending);
+    if (at < 0) return;                                              // the scene changed meanwhile
+    state.pendingList.splice(at, 1);
+    state.pendingSync = state.pendingList.length > 0;
+    state.drawingLayer.setAttribute('aria-busy', String(state.pendingSync));
+    // A stroke or an erasure in hand is finished first; it is brought up to date when it ends.
+    if (state.drawing || state.erasing) return;
+    state.drawings = withPending(state);
     renderDrawings(state);
   });
+}
+
+/** What the server has confirmed, with every change of this page's that is still on its way. */
+function withPending(state) {
+  return state.pendingList.reduce((drawings, pending) => applyDrawingEdits(drawings, pending.edits), state.confirmedDrawings);
 }
 
 function generateDrawingId() {
@@ -872,10 +890,10 @@ export function setDrawingContext({ sceneId = '_default', levelId = 'level-0' } 
     cancelDrawing(state);
     state.erasing = false;
     state.editBefore = null;
-    state.drawings = applyDrawingEdits(state.confirmedDrawings, state.pendingEdits?.edits || []);
+    state.drawings = withPending(state);
     state.undoStack = [];
     if (sceneId !== state.sceneId) {
-      state.pendingEdits = null;
+      state.pendingList = [];
       state.pendingSync = false;
       state.drawingLayer.setAttribute('aria-busy', 'false');
       state.drawings = [];
@@ -891,12 +909,12 @@ export function setDrawings(drawings) {
   if (!sharedState) return;
   const state = sharedState;
   state.confirmedDrawings = Array.isArray(drawings) ? drawings.slice() : [];
-  let edits = state.pendingEdits?.edits || [];
-  if (state.editBefore) {
-    edits = diffDrawings(state.editBefore, state.drawings);
-    state.editBefore = state.confirmedDrawings.slice();
-  }
-  state.drawings = applyDrawingEdits(state.confirmedDrawings, edits);
+  // On top of what is confirmed: this page's changes still on their way, then any change in hand (an erasure
+  // part-way) made over again.
+  const base = withPending(state);
+  const inHand = state.editBefore ? diffDrawings(state.editBefore, state.drawings) : [];
+  if (state.editBefore) state.editBefore = base.slice();
+  state.drawings = applyDrawingEdits(base, inHand);
   if (!state.drawing) renderDrawings(state);
 }
 

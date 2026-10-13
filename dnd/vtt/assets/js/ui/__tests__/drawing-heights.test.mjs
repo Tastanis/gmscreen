@@ -69,3 +69,28 @@ test('a stroke takes its height where it begins, keeps it through the eraser, an
   assert.match(terrain, /return height<=0\|\|!view\|\|floorDrawn\(height,view\);/, 'the ground is always shown; a floor by the picture\'s own test');
   assert.match(terrain, /window\.terrainPrototype=\{floorUnder,heightShown,/);
 });
+
+// Brandon called the drawing tool "pretty janky". The worst of it: the tool refused the next press until the
+// server had answered the last stroke, so the second and third strokes of anything drawn quickly were not there.
+test('the tool is free while a stroke is on its way, and strokes are sent in the order made', async () => {
+  const { applyDrawingEdits } = await import('../drawing-edits.js');
+  const tool = readFileSync(new URL('../drawing-tool.js', import.meta.url), 'utf8');
+  assert.match(tool, /if \(!state\.active \|\| event\.button !== 0\) \{/, 'a press is not refused for a save in flight');
+  assert.doesNotMatch(tool, /!state\.active \|\| state\.pendingSync/);
+  assert.match(tool, /state\.sendChain = state\.sendChain\.then\(\(\) => \{/, 'one after another');
+  assert.match(tool, /if \(state\.drawing \|\| state\.erasing\) return;\s*state\.drawings = withPending\(state\);/, 'a stroke in hand is not redrawn from under the pointer');
+  // What is shown: the confirmed strokes with everything of this page's still on its way, in order.
+  const source = tool.match(/function withPending\(state\) \{[\s\S]*?\n\}/);
+  const withPending = new Function('applyDrawingEdits', `${source[0]}; return withPending;`)(applyDrawingEdits);
+  const a = { id: 'a' }, b = { id: 'b' }, c = { id: 'c' }, remote = { id: 'remote' };
+  const state = { confirmedDrawings: [remote], pendingList: [{ edits: [{ id: 'a', before: null, after: a }] }, { edits: [{ id: 'b', before: null, after: b }] }, { edits: [{ id: 'c', before: null, after: c }] }] };
+  assert.deepEqual(withPending(state).map((drawing) => drawing.id), ['remote', 'a', 'b', 'c'], 'three quick strokes all stand while the first is still being saved');
+  state.confirmedDrawings = [remote, a]; state.pendingList.shift();
+  assert.deepEqual(withPending(state).map((drawing) => drawing.id), ['remote', 'a', 'b', 'c'], 'and nothing flickers as each is confirmed');
+  // An erasure on its way: the stroke stays gone.
+  state.pendingList.push({ edits: [{ id: 'remote', before: remote, after: null }] });
+  assert.deepEqual(withPending(state).map((drawing) => drawing.id), ['a', 'b', 'c']);
+  // Fewer points: one every two map pixels, and always the last.
+  assert.match(tool, /if \(last && Math\.hypot\(point\.x - last\.x, point\.y - last\.y\) < MIN_POINT_STEP\) return;/);
+  assert.match(tool, /const MIN_POINT_STEP = 2;/);
+});
