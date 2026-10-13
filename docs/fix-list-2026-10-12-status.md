@@ -722,3 +722,23 @@ one rather than removed.)
 
 **Do NOT delete** (the 3D map lives on them): `dnd/strixhaven/map/hex-data/`, `hex-images/`, `data/`,
 `hex-data-handler.php`, `index.php`, and `api/ping-api.php` and `api/player-path-api.php`.
+
+## Build 511: a page only needs the scene it is showing (first half, the server)
+
+Your words: "it only needs the scene that they're on. It doesn't need the rest."
+
+**What was wrong.** Every map page, yours and each player's, downloaded every scene in full when it opened. Four
+fifths of that download is one thing: every scene's ground heights and walls.
+
+**What this build does.** It teaches the server to answer the lighter way: everything for the scene a page is
+showing, and for the other scenes only the light things (tokens, floors, fights, drawings). It also adds the
+address a page will use to fetch one scene's heights and walls when it switches to it.
+
+**What you will notice.** Nothing yet. No page asks the lighter way until the second half (the next build of
+this piece) is on the site. This half goes first so the page's half lands on a server already proven live.
+
+**What cannot go wrong.** A page that asks the old way is answered exactly as before, byte for byte. Nothing
+that is stored is changed, and no save is changed. A test holds, for you and for each of the four players, that
+the lighter answer with each scene's heights and walls put back is the whole answer.
+
+No map is touched; the Gravity Orchard plays as it does now.
