@@ -82,3 +82,26 @@ wall) it broke is whole again. Everyone's page hears the wall mended, then the m
 - A summoned wall (a wall an ability made) is repaired from its own small panel, with its Repair button.
 
 **Not in this build:** a reset button anywhere outside the Walls panel. Say if you want one, and where.
+
+## Build 484: the site download no longer fails on the database
+
+Not on your list: found on October 12 when a fresh copy of the live site was asked for and the download stopped
+with "HTTP Error 500" at the store's database, twice.
+
+**What happened.** The export checked the database (that worked) and then sent it with a command that, when
+the server holds output in a buffer, puts the WHOLE file in memory before sending any of it. Past PHP's memory
+limit that is a fatal error, and the server answers with a bare 500. The database grew when its layout was
+split (the old row is kept beside the new ones), which is the likely reason it worked on October 10 and not
+now. Nothing on the site was harmed: the export only reads.
+
+**What is different now.** The export sends every file a megabyte at a time, straight out, closing or
+flushing any buffer first, so the size of a file no longer matters. It also allows itself five minutes for
+the slow part (copying and checking a large database).
+
+**How sure this is the cause.** The mechanism is proven on this PC, by the tester on a real database of 148 MB
+and by a test that sends a file larger than PHP's memory both ways (the old way dies, the new way arrives
+whole). That it is what happened on the host is not proven from here. One line in the host's PHP error log
+would settle it: "Allowed memory size ... exhausted" in sandbox-export/index.php. The fix is right either way.
+
+**It needs a deploy.** The export is part of the site, so the download works again only after this build is
+deployed from cPanel.
