@@ -26,6 +26,21 @@ final class MovementUndo
         return ['actorId'=>$actorId, 'revision'=>$next['_entityRevision'], 'history'=>array_slice($history, -20)];
     }
 
+    /** Notes on the newest entry of a receipt which walls that move broke through, so undoing it can mend them. */
+    public static function broke(array $receipt, array $wallIds): array
+    {
+        if ($wallIds && !empty($receipt['history'])) $receipt['history'][array_key_last($receipt['history'])]['broke'] = array_values($wallIds);
+        return $receipt;
+    }
+
+    /** The walls the move that would be undone next broke through. */
+    public static function lastBroke(array $placement): array
+    {
+        $history = $placement['_movementUndo']['history'] ?? [];
+        $broke = $history ? ($history[array_key_last($history)]['broke'] ?? []) : [];
+        return is_array($broke) ? array_values(array_filter($broke, 'is_string')) : [];
+    }
+
     public static function restore(array $current, string $actorId, int $receiptRevision, array $mapLevels): array
     {
         $receipt = $current['_movementUndo'] ?? [];

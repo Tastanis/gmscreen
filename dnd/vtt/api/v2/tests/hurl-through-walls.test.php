@@ -161,3 +161,44 @@ try {
     unset($store);
 } finally { @unlink($database); }
 echo "PASS a stale push is refused with the scene untouched\n";
+
+// ---- undoing the push mends what it broke ----------------------------------------------------
+// Brandon, October 12, 2026: "I need a way to undo a breakthrough or to reset the broken walls on a map."
+// The same Undo that takes the move back makes the wall whole again. (Resetting a map is "Repair all broken
+// walls" in the Walls panel, which was there already.)
+[$store, $database] = $open([[...$token(8, 5), 'team'=>'enemy']]);
+try {
+    $lands = $store->forcedBreakOffer('scene', 't', ['column'=>14, 'row'=>5], false)['destination'];
+    $send($store, 'undo-break-push', ['column'=>$lands['column'], 'row'=>$lands['row'], 'movementKind'=>'forced', 'forcedDestination'=>['column'=>14, 'row'=>5, 'breakThrough'=>true]]);
+    $t = $store->getSnapshot()['state']['placements']['scene']['t'];
+    hurlCheck($brokenIn($store) === ['piece-5'] && (float) $t['column'] === (float) $lands['column'] && $lands['column'] > 9, 'The push broke the wooden piece and went through');
+    hurlCheck(MovementUndo::lastBroke($t) === ['piece-5'], 'and its receipt says which wall it broke: ' . json_encode($t['_movementUndo']['history'] ?? null));
+    // Somebody else may not undo it, and their try mends nothing.
+    try { $send($store, 'undo-break-other', ['column'=>0, 'row'=>0, 'undoRevision'=>$t['_entityRevision']], 'cal'); hurlCheck(false, 'Another player undid the Director\'s push'); }
+    catch (InvalidArgumentException $error) { hurlCheck($brokenIn($store) === ['piece-5'], 'A refused undo leaves the wall broken'); }
+    $revision = $store->getSnapshot()['revision'];
+    $result = $send($store, 'undo-break-undo', ['column'=>0, 'row'=>0, 'undoRevision'=>$t['_entityRevision']]);
+    $back = $store->getSnapshot()['state']['placements']['scene']['t'];
+    hurlCheck($result['status'] === 'accepted' && [(float) $back['column'], (float) $back['row']] === [8.0, 5.0], 'Undo puts the creature back where it was pushed from');
+    hurlCheck($brokenIn($store) === [], 'and the wall it broke is whole again');
+    $events = $store->replayAfter($revision)['events'];
+    hurlCheck(array_column($events, 'type') === ['environment.changed', 'token.moved'] && $events[0]['payload']['cause'] === 'undo', 'Every browser hears the wall mended, then the move back: ' . json_encode(array_column($events, 'type')));
+    // The mended wall stops the next push again.
+    $send($store, 'undo-break-again', ['column'=>9, 'row'=>5, 'movementKind'=>'forced', 'forcedDestination'=>['column'=>10, 'row'=>5]]);
+    hurlCheck((float) $store->getSnapshot()['state']['placements']['scene']['t']['column'] === 9.0 && $brokenIn($store) === [], 'A push without the word stops at the mended wall');
+    unset($store);
+} finally { @unlink($database); }
+// A wall the Director broke by hand in the meantime is not this move's to mend, and an ordinary undo mends nothing.
+[$store, $database] = $open([[...$token(8, 5), 'team'=>'enemy']]);
+try {
+    $send($store, 'undo-plain-push', ['column'=>9, 'row'=>5, 'movementKind'=>'forced', 'forcedDestination'=>['column'=>9, 'row'=>5]]);
+    $t = $store->getSnapshot()['state']['placements']['scene']['t'];
+    hurlCheck(MovementUndo::lastBroke($t) === [], 'A push that broke nothing has nothing on its receipt');
+    $revision = $store->getSnapshot()['revision'];
+    $send($store, 'undo-plain-undo', ['column'=>0, 'row'=>0, 'undoRevision'=>$t['_entityRevision']]);
+    hurlCheck(array_column($store->replayAfter($revision)['events'], 'type') === ['token.moved'], 'and undoing it is only the move back');
+    unset($store);
+} finally { @unlink($database); }
+hurlCheck(WallCubes::mendCubes(['squares'=>[['column'=>1,'row'=>2,'broken'=>true,'rubble'=>'stone'],['column'=>2,'row'=>2]]], ['1,2,0']) === ['squares'=>[['column'=>1,'row'=>2],['column'=>2,'row'=>2]]], 'A summoned wall\'s cube is made whole, rubble and all');
+hurlCheck(WallCubes::mendCubes(['squares'=>[['column'=>2,'row'=>2]]], ['2,2,0']) === null, 'and a whole one is left alone');
+echo "PASS undoing a push that broke through mends the wall\n";

@@ -1466,7 +1466,7 @@ final class SyncV2Store
 
             // A push that was told to break through: break what it breaks first, as its own change,
             // then make the rest of the push through the opening.
-            $breakDamage = 0;
+            $breakDamage = 0; $brokeWalls = [];
             $only = count($normalized['actions']) === 1 ? $normalized['actions'][0] : null;
             if ($only !== null && $only['kind'] === 'patch' && $movementRestores === null && ($only['forcedDestination']['breakThrough'] ?? false) === true) {
                 $mover = $state['placements'][$only['sceneId']][$only['placementId']] ?? null;
@@ -1477,6 +1477,7 @@ final class SyncV2Store
                     $state = $snapshot['state'];
                     $normalized['actions'][0]['forcedDestination'] = $broke['intent'];
                     $breakDamage = $broke['damage'];
+                    $brokeWalls = $broke['broke'];
                 }
             }
 
@@ -1645,7 +1646,7 @@ final class SyncV2Store
                 $next['_entityRevision'] = $nextRevision;
                 if ($restore !== null) { $next = [...$next, ...$restore]; $patch = [...$patch, ...$restore]; }
                 if ($restore === null && (array_key_exists('column', $patch) || array_key_exists('row', $patch))) {
-                    $next['_movementUndo'] = MovementUndo::record($current, $next, $actorId, $movementConfig['mapLevels'] ?? [], $normalized['operationId'], $groupMove);
+                    $next['_movementUndo'] = MovementUndo::broke(MovementUndo::record($current, $next, $actorId, $movementConfig['mapLevels'] ?? [], $normalized['operationId'], $groupMove), $brokeWalls);
                     $patch['_movementUndo'] = $next['_movementUndo'];
                 }
                 if ($restore === null && (array_key_exists('column', $patch) || array_key_exists('row', $patch) || array_key_exists('levelId', $patch))) {
@@ -1928,7 +1929,7 @@ final class SyncV2Store
 
             // A push that was told to break through: break what it breaks first, as its own change,
             // then make the rest of the push through the opening.
-            $breakDamage = 0;
+            $breakDamage = 0; $brokeWalls = [];
             if ($normalized['movementKind'] === 'forced' && $normalized['undoRevision'] === null && ($normalized['forcedDestination']['breakThrough'] ?? false) === true) {
                 $broke = $this->breakThrough($normalized['sceneId'], $current, $normalized['forcedDestination'], $state, $actorId, $normalized['operationId']);
                 if ($broke !== null) {
@@ -1936,6 +1937,17 @@ final class SyncV2Store
                     $state = $snapshot['state'];
                     $normalized['forcedDestination'] = $broke['intent'];
                     $breakDamage = $broke['damage'];
+                    $brokeWalls = $broke['broke'];
+                }
+            }
+            // Undoing a push that broke through: what it broke is made whole again first, as its own change
+            // (Brandon, October 12, 2026: "I need a way to undo a breakthrough"). The receipt is tried before
+            // anything is mended, so a move that can no longer be undone mends nothing.
+            if ($normalized['undoRevision'] !== null && ($mend = MovementUndo::lastBroke($current))) {
+                MovementUndo::restore($current, $actorId, $normalized['undoRevision'], WallCubes::withTemplates($state['sceneConfig'][$normalized['sceneId']] ?? [], $state['templates'][$normalized['sceneId']] ?? [])['mapLevels'] ?? []);
+                if ($this->mendWalls($normalized['sceneId'], $mend, $actorId, $normalized['operationId'] . ':mend') !== null) {
+                    $snapshot = $this->getSnapshot();
+                    $state = $snapshot['state'];
                 }
             }
 
@@ -2000,7 +2012,7 @@ final class SyncV2Store
                 if($fall){$landing=FallOutcome::landing($next,$state['placements'][$sceneId],$movementConfig);$next=$landing['placement'];unset($landing['placement']);(new CollisionEffects($this->pdo,$this->worldId))->recordFall($normalized['operationId'],$sceneId,$actorId,$placementId,[...$fall,...$landing,'movementKind'=>$normalized['movementKind']]);}
             }
             if($collisionPlan!==null)(new CollisionEffects($this->pdo,$this->worldId))->record($normalized['operationId'],$sceneId,$actorId,$placementId,$collisionPlan,'',$breakDamage);
-            if ($restore === null) $next['_movementUndo'] = MovementUndo::record($current, $next, $actorId, $mapLevels, $normalized['operationId']);
+            if ($restore === null) $next['_movementUndo'] = MovementUndo::broke(MovementUndo::record($current, $next, $actorId, $mapLevels, $normalized['operationId']), $brokeWalls);
             $state['placements'][$sceneId][$placementId] = $next;
             $event['payload']['column'] = $next['column'];
             $event['payload']['row'] = $next['row'];
@@ -2118,7 +2130,7 @@ final class SyncV2Store
         $through = ForcedMovement::through($current, $intent, $state['placements'][$sceneId] ?? [], $config);
         if (!$through['breaks']) return null;
         if ($this->breakWalls($sceneId, array_column($through['breaks'], 'id'), $actorId, $operationId . ':break', 'forced') === null) return null;
-        return ['intent' => $through['intent'], 'damage' => $through['breakDamage']];
+        return ['intent' => $through['intent'], 'damage' => $through['breakDamage'], 'broke' => array_values(array_column($through['breaks'], 'id'))];
     }
 
     /**
@@ -2158,6 +2170,52 @@ final class SyncV2Store
             $state['templates'][$sceneId][$templateId]=$broken;
             $events[]=['revision'=>++$revision,'operationId'=>$operationId.':cube:'.count($events),'type'=>'template.updated','actorId'=>$actorId,'sceneId'=>$sceneId,'entityId'=>$templateId,
                 'entityRevision'=>$broken['_entityRevision'],'payload'=>['template'=>$broken,'cause'=>$cause],'serverTime'=>$serverTime];
+        }
+        if(!$events)return null;
+        foreach($events as $event){
+            $this->insertEvent($event);
+            if($event['revision'] % $this->snapshotInterval===0)$this->insertSnapshot($event['revision'],$state,$serverTime);
+        }
+        $this->updateWorldState($revision,$state,$serverTime);
+        $this->pruneEvents($revision);
+        return $events[0];
+    }
+
+    /**
+     * Makes broken walls whole again, inside the caller's transaction, and tells every browser: the walls of
+     * the map's own design by id, and the cubes of summoned walls. Walls that are gone or already whole are
+     * left alone. Returns the first event, or null when nothing changed. The other half of breakWalls.
+     */
+    private function mendWalls(string $sceneId,array $ids,string $actorId,string $operationId): ?array
+    {
+        if($this->findEventByOperationId($operationId)!==null)return null;
+        $snapshot=$this->getSnapshot();$state=$snapshot['state'];$revision=$snapshot['revision'];$serverTime=$this->nowMilliseconds();$events=[];
+        $config=$state['sceneConfig'][$sceneId]??null;$walls=$config['environment']['walls']??null;
+        if(is_array($walls)&&is_array($walls['value']['segments']??null)){
+            $changed=false;
+            foreach($walls['value']['segments'] as $i=>$edge){
+                if(!in_array($edge['id']??null,$ids,true)||($edge['broken']??false)!==true)continue;
+                unset($walls['value']['segments'][$i]['broken']);$changed=true;
+            }
+            if($changed){
+                $walls['revision']=(int)($walls['revision']??0)+1;
+                $config['environment']['walls']=$walls;$config['_revision']=max(0,(int)($config['_revision']??0))+1;
+                $state['sceneConfig'][$sceneId]=$config;
+                $events[]=['revision'=>++$revision,'operationId'=>$operationId,'type'=>'environment.changed','actorId'=>$actorId,'sceneId'=>$sceneId,'entityId'=>null,
+                    'entityRevision'=>$config['_revision'],'payload'=>['field'=>'walls','entry'=>$walls,'cause'=>'undo'],'serverTime'=>$serverTime];
+            }
+        }
+        $cubes=[];
+        foreach($ids as $id){$cube=is_string($id)?WallCubes::cubeOf($id):null;if($cube!==null)$cubes[$cube[0]][$cube[1]]=true;}
+        foreach($cubes as $templateId=>$keys){
+            $templateId=(string)$templateId;$template=$state['templates'][$sceneId][$templateId]??null;
+            if(!is_array($template))continue;
+            $mended=WallCubes::mendCubes($template,array_map('strval',array_keys($keys)));
+            if($mended===null)continue;
+            $mended['_entityRevision']=max(0,(int)($template['_entityRevision']??0))+1;
+            $state['templates'][$sceneId][$templateId]=$mended;
+            $events[]=['revision'=>++$revision,'operationId'=>$operationId.':cube:'.count($events),'type'=>'template.updated','actorId'=>$actorId,'sceneId'=>$sceneId,'entityId'=>$templateId,
+                'entityRevision'=>$mended['_entityRevision'],'payload'=>['template'=>$mended,'cause'=>'undo'],'serverTime'=>$serverTime];
         }
         if(!$events)return null;
         foreach($events as $event){

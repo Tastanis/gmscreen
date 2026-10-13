@@ -71,6 +71,15 @@ final class WallCubes {
   }
   return $changed?$template:null;
  }
+ /** Makes cubes whole again. `$keys` are 'column,row,elevation'. Returns the template, or null when nothing changed. */
+ public static function mendCubes(array $template,array $keys):?array {
+  $changed=false;
+  foreach($template['squares']??[] as $i=>$s){
+   if(($s['broken']??false)!==true||!in_array($s['column'].','.$s['row'].','.($s['elevation']??0),$keys,true))continue;
+   unset($template['squares'][$i]['broken'],$template['squares'][$i]['rubble']);$changed=true;
+  }
+  return $changed?$template:null;
+ }
  public static function withTemplates(array $config,array $templates):array {
   // Low boxes first (WallBoxes): their walls are marked and their tops become plates to stand on.
   $model=WallBoxes::with($config['environment']['walls']['value']??[]);
