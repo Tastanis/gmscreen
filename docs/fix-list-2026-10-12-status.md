@@ -463,3 +463,28 @@ broke through, to the creature pushed and to any it struck. Never above a creatu
 - A move can still be undone after later changes to the creature. Only the push's own damage is given back.
 
 **The site export** now checks the key before anything else.
+
+## Build 497: the drawing tool, beyond the floor fault (item 3)
+
+You called the drawing system "pretty janky". Read end to end. What I found, mended or left:
+
+**Mended.**
+- **Strokes went missing when drawing quickly.** After each stroke the tool refused the next press until the
+  server had answered. Write a word or draw an arrow in three strokes and the second and third were simply not
+  there. The tool is now free at once; strokes are sent in the order made and all stay on screen meanwhile.
+- **Strokes were heavy.** A point was kept for every pixel the pointer crossed: hundreds for one line, slow to
+  send, to keep and to draw on every page. One every two map pixels now; it reads the same.
+- With Build 495: a stroke belongs to the floor under the pointer; the eraser and "clear" reach the strokes
+  shown on your page.
+
+**Left, for you to say.**
+- **Others see a stroke only when it is finished**, not while it is being drawn.
+- **You cannot start a stroke on top of a token.** A press on a token is left to the token, so it can still be
+  dragged in draw mode. On a crowded map that leaves holes you cannot draw in.
+- **Undo is this page's last ten changes**, and is cleared when the page changes floor or scene.
+- **A stroke that starts on a platform and runs off its edge stays at the platform's height**: the part past
+  the edge hangs in the air. It reads as drawn at that level.
+- **Drawings made before Build 495 have no height.** They still show where they were, to whoever saw them
+  before (by the floor the page was on).
+- Colour and width are kept with each stroke and are the same on every page. Width is in map pixels, so it
+  grows and shrinks with the zoom.
