@@ -1,10 +1,55 @@
 <?php
+/**
+ * The picture a monster is given in the Monster Creator, which is the Director's page.
+ *
+ * This handler used to ask only that somebody was logged in, so a player's login could upload and delete here.
+ * And it saved a file under the ENDING of the name the uploader gave it, having checked only that the content
+ * began like a picture: a file called x.php with a picture's first bytes was saved as monster_..._.php in a
+ * folder the web server would run it from. The monster's id went into the file's path as it came, too.
+ *
+ * Now: the Director only (as the page and save-monster-data.php are); the stored name is built here, its
+ * ending taken from the kind of picture the content was found to be and never from the uploader; the id is
+ * letters, digits, "_" and "-" only; and images/.htaccess runs nothing in that folder.
+ */
+
+/** The file ending for a checked picture type, or null for anything that is not one of the four kinds taken. */
+function monsterImageExtension(string $mimeType): ?string
+{
+    return ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif', 'image/webp' => 'webp'][$mimeType] ?? null;
+}
+
+/** The name a monster's picture is stored under, or null when the id or the picture's kind is not acceptable. */
+function monsterImageName($monsterId, string $mimeType, int $time): ?string
+{
+    $extension = monsterImageExtension($mimeType);
+    if ($extension === null || !is_string($monsterId) || preg_match('/^[A-Za-z0-9_-]{1,100}$/D', $monsterId) !== 1) return null;
+    return 'monster_' . $monsterId . '_' . $time . '.' . $extension;
+}
+
+/** Whether a name is one this handler could have stored: nothing else is ever deleted. */
+function monsterImageNameIsOurs($filename): bool
+{
+    return is_string($filename) && preg_match('/^monster_[A-Za-z0-9_-]+\.(jpg|jpeg|png|gif|webp)$/D', $filename) === 1;
+}
+
+if (defined('MONSTER_IMAGE_INCLUDE_ONLY') && MONSTER_IMAGE_INCLUDE_ONLY) {
+    return;
+}
+
 session_start();
 
 // Check if user is logged in
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     http_response_code(401);
     echo json_encode(['success' => false, 'error' => 'Unauthorized']);
+    exit;
+}
+
+// The Monster Creator is the Director's.
+if (($_SESSION['user'] ?? '') !== 'GM') {
+    http_response_code(403);
+    header('Content-Type: application/json');
+    echo json_encode(['success' => false, 'error' => 'GM access required']);
     exit;
 }
 
@@ -68,6 +113,12 @@ function handleImageUpload() {
         echo json_encode(['success' => false, 'error' => 'Invalid file type']);
         return;
     }
+    // The name is ours from end to end: nothing of the uploader's file name is kept.
+    $filename = monsterImageName($monsterId, (string) $mimeType, time());
+    if ($filename === null) {
+        echo json_encode(['success' => false, 'error' => 'Invalid monster']);
+        return;
+    }
     
     // Create images directory if it doesn't exist
     $uploadDir = __DIR__ . '/images/';
@@ -75,9 +126,6 @@ function handleImageUpload() {
         mkdir($uploadDir, 0755, true);
     }
     
-    // Generate unique filename
-    $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
-    $filename = 'monster_' . $monsterId . '_' . time() . '.' . $extension;
     $targetPath = $uploadDir . $filename;
     
     // Move uploaded file
@@ -108,8 +156,8 @@ function handleImageDelete() {
         return;
     }
     
-    // Validate filename format (prevent directory traversal)
-    if (!preg_match('/^monster_[a-zA-Z0-9_]+\.(jpg|jpeg|png|gif|webp)$/', $filename)) {
+    // Only a name this handler could have stored: no folders, no other kind of file.
+    if (!monsterImageNameIsOurs($filename)) {
         echo json_encode(['success' => false, 'error' => 'Invalid filename']);
         return;
     }

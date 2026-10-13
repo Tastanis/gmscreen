@@ -1,0 +1,7 @@
+# Monsters' pictures, put here by upload-image.php. Static images only: nothing in this folder is ever run.
+# Written the same way as dnd/portraits/.htaccess, which this host accepts.
+Options -ExecCGI -Indexes
+<FilesMatch "(?i)\.(php[0-9]?|phtml|phar|cgi|pl|py|sh|shtml)(\.|$)">
+    Require all denied
+</FilesMatch>
+RemoveHandler .png .jpg .jpeg .gif .bmp .webp
