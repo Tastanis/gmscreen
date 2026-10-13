@@ -1073,6 +1073,13 @@ export function mountBoardInteractions(store, routes = {}) {
       // does it for remote casts or removals.
       renderPersistentZoneOverlays();
     }
+    // A heroic resource gain that is another player's to accept is left on the hero's token for that player's
+    // page. A page read its tokens for such offers only when it loaded or changed scene, so a page that was
+    // already open never showed one, and the offer was cleared at the end of the round.
+    if (activeMutations.some((mutation) => mutation?.kind === 'upsert'
+      && (mutation.changedFields?.includes('pendingHeroResourcePrompts') || mutation.changedFields?.includes('*')))) {
+      processPendingHeroResourcePrompts(boardApi.getState?.() ?? {});
+    }
     if (context?.source === 'conflict' || context?.source === 'recovery') {
       recordSyncDiagnostic('recoverySnapshotsApplied', {
         source: `sync-v2-placement-${context.source}`,
@@ -1210,6 +1217,14 @@ export function mountBoardInteractions(store, routes = {}) {
       closeTurnPrompt();
     }
     applyCombatStateFromBoardState(boardApi.getState?.() ?? {});
+    // Each page keeps its own marks for "already this round" and "already this fight" (heroic resource rules,
+    // ability limits). Only the one Director's page that runs the fight's effects cleared them, so on every
+    // other page they lasted into the next fight, where round 1's "first time this round" gain was never offered.
+    // A fight that begins begins clean on every page; one that ends is cleared on every page that does not run
+    // its effects (the page that does clears after the end-of-fight rules have run).
+    const clearsOwnMarks = transition?.type === 'combat.start'
+      || (transition?.type === 'combat.end' && !isGmUser());
+    if (clearsOwnMarks) resetAutomationScopedFlags('all');
     const operationId = String(context?.event?.operationId ?? '').trim();
     const currentUserId = normalizeProfileId(getCurrentUserId());
     const claimBoundary = (boundary) => {
@@ -1218,6 +1233,8 @@ export function mountBoardInteractions(store, routes = {}) {
         .then((result) => {
           if (result?.idempotent !== true) {
             runAcceptedCombatTransitionEffects(transition, combat, { boundary });
+          } else if (boundary === 'transition' && transition?.type === 'combat.end') {
+            resetAutomationScopedFlags('all');                    // a second Director's page
           }
         })
         .catch((error) => {
@@ -1367,8 +1384,7 @@ export function mountBoardInteractions(store, routes = {}) {
       const sheet = await getAutomationSheetForPlacement(sourcePlacementId);
       const resource = sheet?.hero?.resource;
       if (profileId && resource && typeof resource === 'object') {
-        resource.value = (Number.parseInt(resource.value ?? 0, 10) || 0) + spent;
-        await saveAutomationSheetForProfile(profileId, sheet, 'resource');
+        await syncHeroResourceValueForProfile(profileId, { delta: spent }, sheet);
       }
     }
     if (reservation.triggeredActionSpend?.consumed && sourcePlacementId) {
@@ -3825,12 +3841,12 @@ export function mountBoardInteractions(store, routes = {}) {
       applyDamageHealToPlacement(placement.id, 'damage', amount);
       return;
     }
-    const hero = sheet.hero && typeof sheet.hero === 'object' ? sheet.hero : {};
-    const nextResource = hero.resource && typeof hero.resource === 'object' ? hero.resource : {};
-    nextResource.value = change.next;
-    hero.resource = nextResource;
-    sheet.hero = hero;
-    const saved = await syncHeroResourceValueForProfile(profileId, change.next, sheet, change.current);
+    // A gain or a loss is sent as an amount, which the server adds to the number it holds. It used to be sent as
+    // "the number is now N, and was M", worked out from this page's copy of the sheet, and was refused whenever
+    // that copy was behind: a turn's gain or the reset at the end of a fight was then simply lost. "Set to N"
+    // (the start and the end of a fight) is a set whatever the number was.
+    const saved = await syncHeroResourceValueForProfile(profileId,
+      rule.effect.kind === 'set' ? { value: change.next } : { delta: rule.effect.kind === 'lose' ? -amount : amount }, sheet);
     if (!saved) {
       characterSummaryCache.delete(profileId);
       updateStatus('Resource save was not confirmed. Review the current character resource before trying again.');
@@ -3840,24 +3856,30 @@ export function mountBoardInteractions(store, routes = {}) {
       markHeroicResourceRuleLimit(rule, placement.id, eventTargetId);
     }
     const subject = tokenLabel(placement) || sheet?.hero?.name || 'Hero';
-    updateStatus(`${subject}: ${action.toLowerCase()} ${amount} ${resourceName} (${change.current} -> ${change.next}).`);
+    updateStatus(`${subject}: ${action.toLowerCase()} ${amount} ${resourceName} (now ${saved.resource ?? change.next}).`);
   }
 
   // Narrow cross-character write: sets hero.resource.value only, via the
   // sheet handler's VTT sync carve-out (any authenticated user). Mirrors
   // saveAutomationSheetForProfile's cache + broadcast behavior so panels
   // refresh the same way.
-  async function syncHeroResourceValueForProfile(profileId, value, sheetForCache = null, expectedValue = null) {
+  // `write` is {delta: n} (an amount the server adds to its own number) or {value: n} (a set). The answer is where
+  // the sheet now stands, and that is what the copy kept here is given. Returns {resource} or false.
+  async function syncHeroResourceValueForProfile(profileId, write, sheetForCache = null) {
     if (!profileId) return false;
     const endpoint = typeof routes?.sheet === 'string' && routes.sheet ? routes.sheet : '/dnd/character_sheet/handler.php';
     try {
-      await confirmResourceWrite(endpoint, {
+      const answer = await confirmResourceWrite(endpoint, {
         character: profileId,
-        value: String(Math.trunc(Number(value) || 0)),
-        ...(expectedValue !== null ? {expectedValue:String(expectedValue)} : {}),
+        ...(write && write.value === undefined && Number.isFinite(Number(write.delta))
+          ? { delta: String(Math.trunc(Number(write.delta))) }
+          : { value: String(Math.trunc(Number(write?.value) || 0)) }),
       });
-      const saved = true;
+      const saved = { resource: Number.isFinite(Number(answer?.resource)) ? Number(answer.resource) : null };
       if (saved) {
+        if (saved.resource !== null && sheetForCache?.hero?.resource && typeof sheetForCache.hero.resource === 'object') {
+          sheetForCache.hero.resource.value = saved.resource;
+        }
         if (sheetForCache && characterSummaryCache instanceof Map) {
           characterSummaryCache.set(profileId, sheetForCache);
         }
@@ -17754,7 +17776,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
   async function saveAutomationSheetForProfile(profileId, sheet, change = 'recovery') {
     if (!profileId || !sheet) return false;
-    if (change === 'resource') return syncHeroResourceValueForProfile(profileId, sheet.hero?.resource?.value, sheet);
+    if (change === 'resource') return syncHeroResourceValueForProfile(profileId, { value: sheet.hero?.resource?.value }, sheet);
     const endpoint = typeof routes?.sheet === 'string' && routes.sheet ? routes.sheet : '/dnd/character_sheet/handler.php';
     const body = new URLSearchParams();
     body.set('action', 'save');

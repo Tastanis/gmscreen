@@ -3365,7 +3365,7 @@ async function applyAbilityResourceGain(sheet, payload = {}, options = {}) {
   resource.value = next;
   hero.resource = resource;
   if (sheet) sheet.hero = hero;
-  const saved = await saveCharacterHeroicResource(sheet, options);
+  const saved = await saveCharacterHeroicResource(sheet, { ...options, before: current });
   if (!saved) {
     resource.value = current;
     return { skipped: true, reason: 'save-failed', resource: title, current };
@@ -3419,7 +3419,7 @@ async function spendHeroicResource(sheet, payload = {}, options = {}) {
   resource.value = next;
   hero.resource = resource;
   if (sheet) sheet.hero = hero;
-  const saved = await saveCharacterHeroicResource(sheet, options);
+  const saved = await saveCharacterHeroicResource(sheet, { ...options, before: current });
   if (!saved) {
     resource.value = current;
     return { canceled: true, reason: 'save-failed', resource: title, current };
@@ -3463,7 +3463,7 @@ async function spendAbilityResource(sheet, ability, options = {}) {
   resource.value = Math.max(floor, current - cost.amount);
   hero.resource = resource;
   if (sheet) sheet.hero = hero;
-  const saved = await saveCharacterHeroicResource(sheet, options);
+  const saved = await saveCharacterHeroicResource(sheet, { ...options, before: current });
   if (!saved) {
     resource.value = current;
     return { canceled: true, reason: 'save-failed', resource: title, current };
@@ -3578,6 +3578,10 @@ function requestAutomationClearScopedFlag(payload) {
   });
 }
 
+// An ability's cost, a rider's spend, a gain or a refund. With `options.before` (the number this copy of the sheet
+// held before the change) what is sent is the amount of the change, which the server adds to the number it holds;
+// the answer is put back on this copy. An ability keeps the copy of the sheet it was started with for its whole
+// run, and "the number is now N" from that copy erased whatever the hero had gained in the meantime.
 async function saveCharacterHeroicResource(sheet, options = {}) {
   const characterId = typeof options.characterId === 'string' ? options.characterId : '';
   const resource = sheet?.hero?.resource;
@@ -3590,7 +3594,9 @@ async function saveCharacterHeroicResource(sheet, options = {}) {
   body.set('action', 'sync-resource');
   body.set('character', characterId);
   body.set('source', 'vtt');
-  body.set('value', String(Number.parseInt(resource.value ?? 0, 10) || 0));
+  const held = Number.parseInt(resource.value ?? 0, 10) || 0;
+  if (Number.isFinite(options.before)) body.set('delta', String(held - options.before));
+  else body.set('value', String(held));
   const response = await fetch(endpoint, {
     method: 'POST',
     credentials: 'same-origin',
