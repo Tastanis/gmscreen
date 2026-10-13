@@ -14,7 +14,7 @@ import {climbSurcharge} from './terrain-math.mjs';
 import {settleCollisionEffects} from '../services/collision-effects.js';
 import {PLAYER_CHARACTER_USER_IDS as visionOwnerProfiles} from '../state/normalize/map-levels.js';
 import {resolveForcedDrag} from './forced-drag.js';
-import {forcedMoveLegalCells, isForcedMovePathLegal, footprintsOverlap, nearestPullCell, cellsOnMap, closestCell} from './forced-move-cells.js';
+import {forcedMoveLegalCells, forcedLineCells, isForcedMovePathLegal, footprintsOverlap, nearestPullCell, cellsOnMap, closestCell} from './forced-move-cells.js';
 import {configureCharacterOperationJournal} from '../services/character-operation-journal.js';
 import {confirmCharacterWrite} from '../services/character-write.js';
 import {spendCharacterRecoveries} from '../services/recovery-spend.js';
@@ -18404,6 +18404,17 @@ export function mountBoardInteractions(store, routes = {}) {
       collisionPlacement = null;
       destination = nearestAutomationPullCell(request) || {column: request.targetSnapshot.column, row: request.targetSnapshot.row};
     }
+    // A push or a pull goes along its one straight line (forced-move-cells.js). Whatever is picked is taken as
+    // the offered square nearest to it. A creature picked on the line is slammed into with the whole distance; one
+    // that is off the line is only a place to aim at.
+    const lined = (request.movementKind||'forced')==='forced' && (request.baseVerb==='push'||request.baseVerb==='pull') && request.legalCells.length>0;
+    let wholeLine = null;
+    if (lined) {
+      wholeLine = cellsOnMap(forcedLineCells(request.sourceSnapshot, request.targetSnapshot, request.effectiveDistance, request.baseVerb), clampPlacementToBounds, request.targetSnapshot);
+      const struck = collisionPlacement ? getAutomationPlacementSnapshot(collisionPlacement) : null;
+      if (struck && !wholeLine.some((square) => automationFootprintsOverlap({...square, width: request.targetSnapshot.width, height: request.targetSnapshot.height}, struck))) collisionPlacement = null;
+      if (!collisionPlacement) destination = closestCell(request.legalCells, clickedPlacement && clickedPlacement.id !== request.targetSnapshot.id ? cell : destination) || destination;
+    }
     let clamped = clampPlacementToBounds(
       destination.column,
       destination.row,
@@ -18423,7 +18434,9 @@ export function mountBoardInteractions(store, routes = {}) {
       const origin=canonical[request.targetSnapshot.id];
       if(!origin){clearAutomationMoveOverlay();request.reject?.(new Error('Movement target is unavailable.'));return true;}
       forcedIntent={column:clamped.column,row:clamped.row};
-      if(collisionPlacement){
+      if(collisionPlacement&&lined&&wholeLine.length){
+        const last=wholeLine[wholeLine.length-1];forcedIntent={column:last.column,row:last.row};
+      }else if(collisionPlacement){
         const dx=collisionPlacement.column-origin.column,dy=collisionPlacement.row-origin.row,d=Math.max(Math.abs(dx),Math.abs(dy));
         // Aim at a whole square, so a slam that falls short of the other token still ends on the grid.
         if(d)forcedIntent={column:Math.round(origin.column+dx/d*request.effectiveDistance),row:Math.round(origin.row+dy/d*request.effectiveDistance)};
@@ -18443,6 +18456,8 @@ export function mountBoardInteractions(store, routes = {}) {
         forcedCollision=resolveForcedDrag(origin,forcedIntent,Object.values(canonical),dragOptions);
         if(forcedCollision.collidedIds.includes(request.sourceSnapshot.id)){forcedIntent={column:origin.column,row:origin.row};forcedCollision=resolveForcedDrag(origin,forcedIntent,Object.values(canonical),dragOptions);}
       }
+      // Say whose push or pull this is, so the server holds it to that creature's line (ForcedMovement::assertLine).
+      if(lined&&canonical[request.sourceSnapshot.id]&&request.sourceSnapshot.id!==origin.id)forcedIntent={...forcedIntent,by:{id:request.sourceSnapshot.id,verb:request.baseVerb}};
       clamped=forcedCollision.destination;
       // The push ends at a wall it could break: ask before anything is sent.
       const through=await askForcedBreakThrough(request.sceneId,origin,forcedIntent,Object.values(canonical),forcedCollision);

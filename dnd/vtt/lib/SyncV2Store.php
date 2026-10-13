@@ -2111,6 +2111,9 @@ final class SyncV2Store
     private function breakThrough(string $sceneId, array $current, $intent, array $state, string $actorId, string $operationId): ?array
     {
         ForcedMovement::assertIntent($intent);
+        // An ability's push or pull is held to its line here, before anything is broken: what is left of the push
+        // after a wall carries on from where it stopped, and names no pusher.
+        ForcedMovement::assertLine($current, $intent, $state['placements'][$sceneId] ?? []);
         $config = WallCubes::withTemplates($state['sceneConfig'][$sceneId] ?? [], $state['templates'][$sceneId] ?? []);
         $through = ForcedMovement::through($current, $intent, $state['placements'][$sceneId] ?? [], $config);
         if (!$through['breaks']) return null;

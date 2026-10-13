@@ -67,6 +67,42 @@ export function forcedMoveLegalCells(source, target, distance, baseVerb) {
       cells.push({ column, row });
     }
   }
+  if (baseVerb !== 'push' && baseVerb !== 'pull') return cells;
+  // A push or a pull goes along its one straight line, out to the first square on it that is not a legal one.
+  const line = forcedLineCells(source, target, distance, baseVerb);
+  if (!line.length) return cells;
+  const offered = [];
+  for (const cell of line) {
+    if (!cells.some((legal) => legal.column === cell.column && legal.row === cell.row)) break;
+    offered.push(cell);
+  }
+  return offered;
+}
+
+// The one straight line a push or a pull goes along. Brandon, October 12, 2026: "Ability pushes go in a straight
+// line, yes." Until then the picker offered a fan: every square that was further from the pusher.
+//
+// The line runs from the pusher's middle through the target's middle and on (for a pull, from the target's middle
+// toward the puller's). Its k-th square is k squares along it from where the target stands, rounded to a square,
+// a half going outward. Straight ahead, straight to the side and a true diagonal are the plain rows of squares;
+// at any other angle the line steps over as it goes. A slide has no line: it may go round things.
+// Paired with ForcedMovement::lineCell, which refuses a push or a pull that is not on it.
+const outward = (value) => Math.sign(value) * Math.floor(Math.abs(value) + 0.5);
+export function forcedLineCell(source, target, squares, baseVerb) {
+  const from = center(source), through = center(target), sign = baseVerb === 'pull' ? -1 : 1;
+  const dx = (through.column - from.column) * sign, dy = (through.row - from.row) * sign, reach = Math.max(Math.abs(dx), Math.abs(dy));
+  if (reach < 1e-9) return null;
+  return { column: Math.floor(target.column) + outward(squares * dx / reach), row: Math.floor(target.row) + outward(squares * dy / reach) };
+}
+
+/** The squares of that line, nearest first, for a move of `distance`. None when pusher and target share a middle. */
+export function forcedLineCells(source, target, distance, baseVerb) {
+  const cells = [];
+  for (let squares = 1; squares <= distance; squares += 1) {
+    const cell = forcedLineCell(source, target, squares, baseVerb);
+    if (!cell) break;
+    cells.push(cell);
+  }
   return cells;
 }
 

@@ -105,12 +105,43 @@ final class ForcedMovement
   if(!is_array($intent))throw new InvalidArgumentException('Invalid forced destination.');
   foreach(['column','row'] as $axis)if(!isset($intent[$axis])||!is_numeric($intent[$axis])||!is_finite((float)$intent[$axis])||$intent[$axis]<0||$intent[$axis]>100000)throw new InvalidArgumentException('Invalid forced destination coordinates.');
   if(array_key_exists('beyond',$intent)&&(!is_int($intent['beyond'])||$intent['beyond']<0||$intent['beyond']>self::MAX_BEYOND))throw new InvalidArgumentException('Invalid forced movement remaining.');
+  if(array_key_exists('by',$intent)){$by=$intent['by'];if(!is_array($by)||array_diff(array_keys($by),['id','verb'])||!is_string($by['id']??null)||$by['id']===''||strlen($by['id'])>128||!in_array($by['verb']??null,['push','pull'],true))throw new InvalidArgumentException('Invalid forced movement source.');}
+ }
+ /**
+  * The one straight line a push or a pull goes along. Brandon, October 12, 2026: "Ability pushes go in a straight
+  * line, yes." The line runs from the pusher's middle through the target's middle and on (for a pull, from the
+  * target's middle toward the puller's). This is its square `$squares` along from where the target stands,
+  * rounded to a square, a half going outward; null when the two share a middle. Paired with forcedLineCell in
+  * forced-move-cells.js, which is what the picker offers.
+  */
+ public static function lineCell(array $source,array $target,int $squares,string $verb): ?array {
+  $middle=static fn(array $p):array=>[($p['column']??0)+max(1,$p['width']??1)/2,($p['row']??0)+max(1,$p['height']??1)/2];
+  [$ax,$ay]=$middle($source);[$bx,$by]=$middle($target);$sign=$verb==='pull'?-1:1;
+  $dx=($bx-$ax)*$sign;$dy=($by-$ay)*$sign;$reach=max(abs($dx),abs($dy));
+  if($reach<1e-9)return null;
+  $outward=static fn(float $v):int=>($v<=>0)*(int)floor(abs($v)+.5);
+  return ['column'=>(int)floor($target['column'])+$outward($squares*$dx/$reach),'row'=>(int)floor($target['row'])+$outward($squares*$dy/$reach)];
+ }
+ /**
+  * A forced move that says which creature's push or pull it is (`by`: its id and the verb) must aim along that
+  * creature's line. One that names nobody is the Director's own forced drag, or a slide, and goes where it is put.
+  * A pusher that is no longer on the map has no line to check against.
+  */
+ public static function assertLine(array $from,array $intent,array $others): void {
+  $by=$intent['by']??null;if(!is_array($by))return;
+  $source=null;foreach($others as $other)if(($other['id']??null)===$by['id']){$source=$other;break;}
+  if($source===null||($source['id']??null)===($from['id']??null))return;
+  $squares=(int)round(max(abs($intent['column']-floor($from['column'])),abs($intent['row']-floor($from['row']))));
+  if($squares<1)return;
+  $cell=self::lineCell($source,$from,$squares,$by['verb']);
+  if($cell!==null&&(abs($cell['column']-$intent['column'])>1e-6||abs($cell['row']-$intent['row'])>1e-6))throw new InvalidArgumentException($by['verb']==='pull'?'A pull goes in a straight line toward the puller.':'A push goes in a straight line away from the pusher.');
  }
  /** The most squares a slide may still have to come after one of its legs. */
  public const MAX_BEYOND=1000;
  public static function plan(array $from,array $to,$intent,string $kind,array $others,array $config): array {
   if($kind!=='forced')throw new InvalidArgumentException('Invalid forced destination.');
   self::assertIntent($intent);
+  self::assertLine($from,$intent,$others);
   $plan=self::resolve($from,$intent,$others,$config);
   if(abs($plan['column']-$to['column'])>1e-6||abs($plan['row']-$to['row'])>1e-6)throw new InvalidArgumentException('Collision changed. Recalculate the forced move.');
   // A slide is made leg by leg (forced-line.mjs). `beyond` is what was still to come after this leg: when

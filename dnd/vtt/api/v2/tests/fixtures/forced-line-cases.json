@@ -1,0 +1,329 @@
+{
+ "about": "The one straight line of a push or a pull: for a pusher and a target ([column, row, size]), the square that many squares along it. Read by forced-move-cells.test.mjs and forced-line.test.php, so the page and the server are held to the same answers.",
+ "cases": [
+  {
+   "pusher": [
+    10,
+    10,
+    1
+   ],
+   "target": [
+    11,
+    10,
+    1
+   ],
+   "verb": "push",
+   "squares": 1,
+   "square": [
+    12,
+    10
+   ]
+  },
+  {
+   "pusher": [
+    10,
+    10,
+    1
+   ],
+   "target": [
+    11,
+    10,
+    1
+   ],
+   "verb": "push",
+   "squares": 4,
+   "square": [
+    15,
+    10
+   ]
+  },
+  {
+   "pusher": [
+    10,
+    10,
+    1
+   ],
+   "target": [
+    10,
+    9,
+    1
+   ],
+   "verb": "push",
+   "squares": 3,
+   "square": [
+    10,
+    6
+   ]
+  },
+  {
+   "pusher": [
+    10,
+    10,
+    1
+   ],
+   "target": [
+    9,
+    11,
+    1
+   ],
+   "verb": "push",
+   "squares": 3,
+   "square": [
+    6,
+    14
+   ]
+  },
+  {
+   "pusher": [
+    10,
+    10,
+    1
+   ],
+   "target": [
+    11,
+    11,
+    1
+   ],
+   "verb": "push",
+   "squares": 5,
+   "square": [
+    16,
+    16
+   ]
+  },
+  {
+   "pusher": [
+    10,
+    10,
+    1
+   ],
+   "target": [
+    12,
+    9,
+    1
+   ],
+   "verb": "push",
+   "squares": 1,
+   "square": [
+    13,
+    8
+   ]
+  },
+  {
+   "pusher": [
+    10,
+    10,
+    1
+   ],
+   "target": [
+    12,
+    9,
+    1
+   ],
+   "verb": "push",
+   "squares": 2,
+   "square": [
+    14,
+    8
+   ]
+  },
+  {
+   "pusher": [
+    10,
+    10,
+    1
+   ],
+   "target": [
+    12,
+    9,
+    1
+   ],
+   "verb": "push",
+   "squares": 3,
+   "square": [
+    15,
+    7
+   ]
+  },
+  {
+   "pusher": [
+    10,
+    10,
+    1
+   ],
+   "target": [
+    12,
+    9,
+    1
+   ],
+   "verb": "push",
+   "squares": 4,
+   "square": [
+    16,
+    7
+   ]
+  },
+  {
+   "pusher": [
+    10,
+    10,
+    1
+   ],
+   "target": [
+    15,
+    12,
+    1
+   ],
+   "verb": "push",
+   "squares": 5,
+   "square": [
+    20,
+    14
+   ]
+  },
+  {
+   "pusher": [
+    10,
+    10,
+    1
+   ],
+   "target": [
+    7,
+    4,
+    1
+   ],
+   "verb": "push",
+   "squares": 4,
+   "square": [
+    5,
+    0
+   ]
+  },
+  {
+   "pusher": [
+    10,
+    10,
+    2
+   ],
+   "target": [
+    12,
+    10,
+    1
+   ],
+   "verb": "push",
+   "squares": 2,
+   "square": [
+    14,
+    9
+   ]
+  },
+  {
+   "pusher": [
+    10,
+    10,
+    2
+   ],
+   "target": [
+    12,
+    11,
+    1
+   ],
+   "verb": "push",
+   "squares": 2,
+   "square": [
+    14,
+    12
+   ]
+  },
+  {
+   "pusher": [
+    10,
+    10,
+    3
+   ],
+   "target": [
+    13,
+    11,
+    1
+   ],
+   "verb": "push",
+   "squares": 3,
+   "square": [
+    16,
+    11
+   ]
+  },
+  {
+   "pusher": [
+    24,
+    18,
+    1
+   ],
+   "target": [
+    20,
+    18,
+    1
+   ],
+   "verb": "pull",
+   "squares": 3,
+   "square": [
+    23,
+    18
+   ]
+  },
+  {
+   "pusher": [
+    10,
+    10,
+    1
+   ],
+   "target": [
+    14,
+    14,
+    1
+   ],
+   "verb": "pull",
+   "squares": 2,
+   "square": [
+    12,
+    12
+   ]
+  },
+  {
+   "pusher": [
+    10,
+    10,
+    1
+   ],
+   "target": [
+    14,
+    12,
+    1
+   ],
+   "verb": "pull",
+   "squares": 2,
+   "square": [
+    12,
+    11
+   ]
+  },
+  {
+   "pusher": [
+    10,
+    10,
+    1
+   ],
+   "target": [
+    14,
+    12,
+    1
+   ],
+   "verb": "pull",
+   "squares": 3,
+   "square": [
+    11,
+    10
+   ]
+  }
+ ]
+}
