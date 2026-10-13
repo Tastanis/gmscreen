@@ -30,7 +30,10 @@ test('player sees closed door near face, but not a window occluded behind it', (
   editor.portals();
   const marker = document.querySelector('[data-portal-id="near-door"]');
   assert.ok(marker);
-  assert.equal(marker.disabled, true, 'Player symbol grants no portal command control.');
+  // Until October 12, 2026 a player's door symbol was dead ("grants no portal command control"). Brandon then
+  // let players open ordinary doors by clicking them: the symbol is live, and the server decides whether the
+  // door opens (player-doors.test.php). A window's symbol is still the Director's.
+  assert.equal(marker.disabled, false, 'A player may click a door he can see.');
   assert.equal(marker.dataset.portalType, 'door');
   assert.equal(marker.querySelector('svg').getAttribute('viewBox'), '0 0 16 16');
   assert.equal(document.querySelector('[data-portal-id="far-window"]'), null);

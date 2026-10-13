@@ -7054,7 +7054,8 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const isPrimaryButton = event.button === 0 || event.button === -1;
     if (isPrimaryButton && viewState.dragState && event.pointerId === viewState.dragState.pointerId) {
-      endTokenDrag({ commit: true, pointerId: event.pointerId, movementKind: dragMovementKind(event) });
+      // Let go anywhere but over the map (the side sheet, the top bar, a panel): the move is taken back.
+      endTokenDrag({ commit: releasedOverMap(event), pointerId: event.pointerId, movementKind: dragMovementKind(event) });
     } else if (isPrimaryButton && viewState.dragCandidate && event.pointerId === viewState.dragCandidate.pointerId) {
       clearDragCandidate(event.pointerId);
     }
@@ -7104,6 +7105,22 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   };
 
+  // Brandon, October 12, 2026: Escape cancels a token drag in progress, and so does dropping the token over the
+  // side character sheet or the top bar. The token goes back where it was, nothing is sent, and the corners
+  // dropped during the drag go with it (endTokenDrag puts the ruler away). One token, several, or a forced drag:
+  // they are all the one drag. A right click still drops a corner and a right-button pan is its own thing.
+  function releasedOverMap(event) {
+    if (!Number.isFinite(event?.clientX) || !Number.isFinite(event?.clientY) || typeof document.elementFromPoint !== 'function') return true;
+    const under = document.elementFromPoint(event.clientX, event.clientY);
+    return !!under && mapSurface.contains(under);
+  }
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || !viewState.dragState) return;
+    endTokenDrag({ commit: false });
+    // This Escape was for the drag: it does not also close a panel or clear a selection underneath.
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }, true);
   mapSurface.addEventListener('pointerup', handlePointerUp);
   mapSurface.addEventListener('pointercancel', handlePointerCancel);
   mapSurface.addEventListener('pointerleave', handlePointerLeave);

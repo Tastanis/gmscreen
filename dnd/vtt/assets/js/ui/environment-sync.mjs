@@ -21,8 +21,10 @@ export async function saveShared(field,value,expectedRevision,sceneId=null){
  queue=queue.catch(()=>{}).then(()=>window.submitEnvironmentCommand(descriptor));return queue;
 }
 export function savePortal(segmentId,open){
- const c=window.terrainContext?.(),sceneId=c.state.boardState.activeSceneId;
- if(!c?.isGM)throw Error('Only the GM can change doors.');
+ // A player may work an ordinary door his hero stands at; the server decides (SyncV2Store::assertPlayerDoor).
+ // With no board to speak for, the answer is a refusal like any other, not an error thrown at the click.
+ const c=window.terrainContext?.();if(!c)return Promise.reject(Error('The map is not ready.'));
+ const sceneId=c.state.boardState.activeSceneId;
  queue=queue.catch(()=>{}).then(()=>{
    if(window.terrainContext?.()?.state.boardState.activeSceneId!==sceneId)throw Error('Scene changed before door action.');
    return window.submitEnvironmentCommand({type:'environment.portal.set',sceneId,payload:{segmentId,open,expectedRevision:sharedField('walls')?.revision??0}});

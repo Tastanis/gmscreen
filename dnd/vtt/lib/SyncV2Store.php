@@ -781,7 +781,8 @@ final class SyncV2Store
         bool $isGm
     ): array {
         $normalized = $this->normalizeBoardDomainCommand($command);
-        if (in_array($normalized['type'], ['environment.set','environment.portal.set','environment.terrain.patch'], true) && !$isGm) throw new InvalidArgumentException('Map design is GM-only.');
+        // A door is the one piece of the map a player may work, and only an ordinary one his hero stands at (assertPlayerDoor).
+        if (in_array($normalized['type'], ['environment.set','environment.terrain.patch'], true) && !$isGm) throw new InvalidArgumentException('Map design is GM-only.');
         $actorId = trim($actorId);
         if ($actorId === '') {
             throw new InvalidArgumentException('An authenticated actor ID is required.');
@@ -905,6 +906,7 @@ final class SyncV2Store
                     $eventType = 'environment.changed';
                     $eventPayload = ['field'=>$payload['field'], 'entry'=>$config['environment'][$payload['field']]];
                 } elseif ($type === 'environment.portal.set') {
+                    if (!$isGm) $this->assertPlayerDoor($state, $sceneId, $config, $payload);
                     $config['environment'] = SceneEnvironment::portal($config['environment'] ?? [], $payload);
                     $eventType='environment.portalChanged';
                     $segments=$config['environment']['walls']['value']['segments'];
@@ -2296,6 +2298,56 @@ final class SyncV2Store
         }
     }
 
+    /** How near a hero must stand to a door to work it, in squares from his own square to the door. */
+    public const DOOR_REACH = 1.0;
+
+    /**
+     * A player may open or close an ordinary door that a hero stands next to, on the door's own floor.
+     * Brandon, October 12, 2026: players open ordinary doors by clicking them; secret doors are still only
+     * revealed by the Director. So: a door, not a window; not broken; not secret (a secret door answers exactly
+     * as a wall piece that is not there would, open or shut, so asking tells nothing); a locked door says so and
+     * does not move; and one of the heroes the players move must be within a square of it, with his feet between
+     * a square below its foot and its top. Whether he can see it is the page's part: it only offers the doors
+     * his own sight shows. The Director is never asked any of this.
+     */
+    private function assertPlayerDoor(array $state, string $sceneId, array $config, array $payload): void
+    {
+        $model = $config['environment']['walls']['value'] ?? [];
+        $edge = null;
+        foreach ($model['segments'] ?? [] as $candidate) if (($candidate['id'] ?? null) === ($payload['segmentId'] ?? null)) { $edge = $candidate; break; }
+        if ($edge === null || ($edge['secret'] ?? false) === true) throw new InvalidArgumentException('Portal does not exist.');
+        if (($edge['interaction'] ?? 'none') !== 'door' || ($edge['broken'] ?? false) === true) throw new InvalidArgumentException('Only the GM can change that.');
+        if (($edge['locked'] ?? false) === true) throw new InvalidArgumentException('That door is locked.');
+        $nodes = array_column($model['nodes'] ?? [], null, 'id'); $a = $nodes[$edge['a']] ?? null; $b = $nodes[$edge['b']] ?? null;
+        if ($a === null || $b === null) throw new InvalidArgumentException('Portal does not exist.');
+        $movementConfig = WallCubes::withTemplates($config, $state['templates'][$sceneId] ?? []);
+        $foot = ($edge['baseMode'] ?? 'terrain') === 'fixed' ? (float) ($edge['base'] ?? 0)
+            : WallMovement::terrain(($a['x'] + $b['x']) / 2, ($a['y'] + $b['y']) / 2, $movementConfig) + (float) ($edge['base'] ?? 0);
+        $top = $foot + (float) ($edge['height'] ?? 2);
+        foreach ($state['placements'][$sceneId] ?? [] as $placement) {
+            if (!is_array($placement) || !$this->playerMayMovePlacement($placement)) continue;
+            if (self::squareToSegment($placement, $a, $b) > self::DOOR_REACH + 1e-6) continue;
+            $feet = WallMovement::height($placement, $movementConfig);
+            if ($feet >= $foot - 1 - 1e-6 && $feet < $top - 1e-6) return;
+        }
+        throw new InvalidArgumentException('Stand next to the door to use it.');
+    }
+
+    /** The shortest distance, in squares, from a token's own square to a wall piece: nought when the piece touches or crosses it. */
+    private static function squareToSegment(array $token, array $a, array $b): float
+    {
+        $left = (float) $token['column']; $top = (float) $token['row']; $right = $left + max(1, (float) ($token['width'] ?? 1)); $bottom = $top + max(1, (float) ($token['height'] ?? 1));
+        $toSquare = static fn (float $x, float $y): float => hypot(max($left - $x, 0, $x - $right), max($top - $y, 0, $y - $bottom));
+        $toPiece = static function (float $x, float $y) use ($a, $b): float {
+            $dx = $b['x'] - $a['x']; $dy = $b['y'] - $a['y']; $length = $dx * $dx + $dy * $dy;
+            $t = $length > 0 ? max(0, min(1, (($x - $a['x']) * $dx + ($y - $a['y']) * $dy) / $length)) : 0;
+            return hypot($x - ($a['x'] + $dx * $t), $y - ($a['y'] + $dy * $t));
+        };
+        // A piece that passes through the square is inside it at some point of its own length.
+        for ($k = 0; $k <= 16; $k++) { $x = $a['x'] + ($b['x'] - $a['x']) * $k / 16; $y = $a['y'] + ($b['y'] - $a['y']) * $k / 16; if ($toSquare($x, $y) < 1e-9) return 0.; }
+        return min($toSquare((float) $a['x'], (float) $a['y']), $toSquare((float) $b['x'], (float) $b['y']), $toPiece($left, $top), $toPiece($right, $top), $toPiece($right, $bottom), $toPiece($left, $bottom));
+    }
+
     public function playerMayMovePlacement(array $placement): bool
     {
         return !$this->placementIsHidden($placement)
@@ -3060,6 +3112,10 @@ final class SyncV2Store
         if (in_array($type, [
             'template.upsert', 'template.remove', 'drawing.upsert', 'drawing.remove', 'ping.add',
         ], true)) {
+            return;
+        }
+        // A door: which door, and whether a hero stands at it, is judged where the scene is in hand (assertPlayerDoor).
+        if ($type === 'environment.portal.set') {
             return;
         }
         if ($type === 'level.user.set') {
