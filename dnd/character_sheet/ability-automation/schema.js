@@ -1528,7 +1528,10 @@
       if (effect?.target) {
         warnings.push(`${effectPath}.target: per-effect target routing is not supported by trigger autoResolve; use the trigger block's effectTarget.`);
       }
-      if ((effect?.kind === "heal" && effect?.recoveries) || effect?.amountFrom) {
+      // An amount taken from the squares of the move that set the trigger off IS worked out when it resolves by
+      // itself (Thorn In Foot: 1 damage for each square moved). Other amountFrom sources are not.
+      const fromTheMove = ["triggeringForcedMovement", "triggeringMovement", "movedDistance"].includes(effect?.amountFrom?.source);
+      if ((effect?.kind === "heal" && effect?.recoveries) || (effect?.amountFrom && !fromTheMove)) {
         warnings.push(`${effectPath}: recovery and amountFrom calculations are not supported by trigger autoResolve; resolve this trigger manually.`);
       }
       if (effect?.kind === "ifMark") {

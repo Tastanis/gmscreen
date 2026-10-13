@@ -3056,7 +3056,7 @@ export function mountBoardInteractions(store, routes = {}) {
         }
       }
     }
-    if (entry.expires || entry.lifetime) {
+    if ((entry.expires || entry.lifetime) && !entry.lifetimeState) {
       entry.lifetimeState = createTriggerLifetimeState(entry.expires || entry.lifetime, {
         round: combatRound,
         activeCombatantId,
@@ -3132,7 +3132,78 @@ export function mountBoardInteractions(store, routes = {}) {
     return (triggerRegistry.byToken.get(tokenId) || []).some((entry) => entry?.authored);
   }
 
+  // ---- Watches every page knows --------------------------------------------------------------
+  // Brandon, October 12, 2026: "Thorn in foot, isnt triggering the damage when things move. is this a json or code
+  // issue". Code. A watch an ability sets ("when the target moves ...") lived only in the memory of the browser
+  // tab that used the ability, and a move is announced only in the tab that makes it. So when the Director moved
+  // the creature, the player's page, which alone knew of the watch, never heard of the move.
+  //
+  // The watch is now also kept on the token of the creature that set it (`runtimeTriggers`), which every page
+  // holds. Each page takes the scene's watches into its own registry before anything fires, so the page that
+  // makes the move is the one page that answers for it. The Director's page keeps the shared record in step as
+  // the watch runs out, and a page that loads later picks it up where it stands.
+  const SHARED_WATCH = 'shared';
+  function watchRecordOf(entry) {
+    return JSON.parse(JSON.stringify({
+      abilityId: entry.abilityId, abilityName: entry.abilityName || '', match: entry.match, targetIds: entry.targetIds || [],
+      effects: entry.effects || [], autoResolve: Boolean(entry.autoResolve), effectTarget: entry.effectTarget || '',
+      expires: entry.expires || null, usageLimit: entry.usageLimit || null, condition: entry.condition || '',
+      freeTriggered: Boolean(entry.freeTriggered), lifetimeState: entry.lifetimeState || null,
+    }));
+  }
+  function shareRuntimeWatch(entry) {
+    if (!entry?.tokenId || !entry.abilityId) return;
+    const record = watchRecordOf(entry);
+    updatePlacementById(entry.tokenId, (target) => {
+      const others = Array.isArray(target.runtimeTriggers) ? target.runtimeTriggers.filter((kept) => kept?.abilityId !== record.abilityId) : [];
+      target.runtimeTriggers = [...others, record];
+    });
+  }
+  function unshareRuntimeWatch(tokenId, abilityId) {
+    const held = getPlacementFromStore(tokenId)?.runtimeTriggers;
+    if (!Array.isArray(held) || !held.some((kept) => kept?.abilityId === abilityId)) return;
+    updatePlacementById(tokenId, (target) => {
+      const left = (Array.isArray(target.runtimeTriggers) ? target.runtimeTriggers : []).filter((kept) => kept?.abilityId !== abilityId);
+      if (left.length) target.runtimeTriggers = left; else delete target.runtimeTriggers;
+    });
+  }
+  // A watch from an ability's card as this page's registry holds it. One that lands by itself is not the caster
+  // spending a triggered action, so it does not wait on one. A teleport is not moving through squares: it counts
+  // only for a watch that says so (match.filter.teleport).
+  function runtimeWatchEntry(tokenId, record, registrationSource) {
+    const entry = {
+      tokenId, eventType: record.match.event, casterId: tokenId, casterTeam: getTeamForPlacementId(tokenId), match: record.match,
+      targetIds: Array.isArray(record.targetIds) ? [...record.targetIds] : [], abilityId: record.abilityId, abilityName: record.abilityName || '',
+      freeTriggered: Boolean(record.freeTriggered || record.autoResolve), authored: true, registrationSource,
+      condition: record.condition || '', autoResolve: Boolean(record.autoResolve), effectTarget: record.effectTarget || '',
+      effects: Array.isArray(record.effects) ? JSON.parse(JSON.stringify(record.effects)) : [],
+      usageLimit: record.usageLimit && typeof record.usageLimit === 'object' && record.usageLimit.key ? record.usageLimit : null,
+      expires: record.expires || null, lifetimeState: record.lifetimeState ? { ...record.lifetimeState } : null,
+    };
+    const matches = buildAuthoredTriggerPredicate(entry);
+    entry.predicate = (payload, self) => (entry.eventType === 'move' && payload?.kind === 'teleport' && entry.match?.filter?.teleport !== true ? false : matches(payload, self));
+    return entry;
+  }
+  function syncSharedWatches() {
+    const placements = getActiveScenePlacements(boardApi.getState?.() ?? {}) || [];
+    const held = new Set();
+    for (const placement of placements) {
+      if (!placement?.id || !Array.isArray(placement.runtimeTriggers)) continue;
+      for (const record of placement.runtimeTriggers) {
+        if (!record?.abilityId || !record.match?.event) continue;
+        held.add(`${placement.id}|${record.abilityId}`);
+        const mine = (triggerRegistry.byToken.get(placement.id) || []).some((entry) => entry.abilityId === record.abilityId && ['runtime', SHARED_WATCH].includes(entry.registrationSource));
+        if (!mine && triggerRegister(runtimeWatchEntry(placement.id, record, SHARED_WATCH))) authoredTriggerTokenIds.add(placement.id);
+      }
+    }
+    // One this page took from the scene and the scene no longer holds has run out or been replaced.
+    for (const entries of [...triggerRegistry.byToken.values()]) {
+      for (const entry of [...entries]) if (entry?.registrationSource === SHARED_WATCH && !held.has(`${entry.tokenId}|${entry.abilityId}`)) triggerUnregisterEntry(entry);
+    }
+  }
+
   function triggerFire(eventType, payload) {
+    try { syncSharedWatches(); } catch (err) { console.warn('[VTT] shared watches could not be read', err); }
     const list = [...(triggerRegistry.byEvent.get(eventType) || [])];
     for (const entry of list) {
       try {
@@ -3203,12 +3274,20 @@ export function mountBoardInteractions(store, routes = {}) {
     const effects = Array.isArray(entry?.effects) ? entry.effects : [];
     if (!effects.length) return;
     const sourcePlacement = getPlacementFromStore(entry.tokenId);
+    // "1 damage for each square they move": the amount is the squares of the move that set the watch off.
+    const moved = Math.max(0, Math.trunc(Number(payload?.movedDistance ?? payload?.distance) || 0));
+    const resolved = effects.map((effect) => {
+      const from = effect?.amountFrom && typeof effect.amountFrom === 'object' ? effect.amountFrom.source : effect?.amountFrom;
+      if (!['triggeringForcedMovement', 'triggeringMovement', 'movedDistance'].includes(from)) return effect;
+      const { amountFrom: _from, ...rest } = effect;
+      return { ...rest, amount: moved * (Number(effect.amountFrom?.multiplier) || 1) };
+    });
     const result = await applyOngoingAutomationEffects({
       sourceId: entry.tokenId || '',
       sourceName: tokenLabel(sourcePlacement),
       abilityId: entry.abilityId || '',
       abilityName: entry.abilityName || 'Triggered Ability',
-      effects,
+      effects: resolved,
       placements: resolveAutoTriggerPlacements(entry, payload),
       reason: eventType || 'trigger',
     });
@@ -3271,11 +3350,24 @@ export function mountBoardInteractions(store, routes = {}) {
       for (const entry of list) entries.push(entry);
     }
     for (const entry of [...new Set(entries)]) {
+      const shared = ['runtime', SHARED_WATCH].includes(entry?.registrationSource);
+      const before = shared && entry.lifetimeState ? JSON.stringify(entry.lifetimeState) : null;
       if (shouldExpireTriggerEntry(entry, boundaryPayload, {
         activeCombatantId,
         getTeamForPlacementId,
       })) {
         triggerUnregisterEntry(entry);
+        if (shared && isGmUser()) unshareRuntimeWatch(entry.tokenId, entry.abilityId);
+      } else if (shared && isGmUser() && before !== null && before !== JSON.stringify(entry.lifetimeState)
+        && (getPlacementFromStore(entry.tokenId)?.runtimeTriggers || []).some((kept) => kept?.abilityId === entry.abilityId)) {
+        // Part of its time has gone (the caster's own turn end that does not count, say): the shared record says so.
+        shareRuntimeWatch(entry);
+      }
+    }
+    // Combat over: no watch outlives it.
+    if (eventType === 'combatEnd' && isGmUser()) {
+      for (const placement of getActiveScenePlacements(boardApi.getState?.() ?? {}) || []) {
+        for (const record of Array.isArray(placement?.runtimeTriggers) ? [...placement.runtimeTriggers] : []) unshareRuntimeWatch(placement.id, record?.abilityId);
       }
     }
   }
@@ -5731,9 +5823,13 @@ export function mountBoardInteractions(store, routes = {}) {
         : null,
       expires: payload.expires || payload.lifetime || null,
     };
-    entry.predicate = buildAuthoredTriggerPredicate(entry);
-    const registered = triggerRegister(entry);
-    if (registered) authoredTriggerTokenIds.add(casterId);
+    const watch = runtimeWatchEntry(casterId, { ...entry, usageLimit: entry.usageLimit, lifetimeState: null }, 'runtime');
+    const registered = triggerRegister(watch);
+    if (registered) {
+      authoredTriggerTokenIds.add(casterId);
+      // And on the caster's token, for every other page (see "Watches every page knows").
+      shareRuntimeWatch(registered);
+    }
     resolve?.({ registered: Boolean(registered), abilityId: entry.abilityId, eventType: entry.eventType });
   }
 

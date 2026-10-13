@@ -69,6 +69,7 @@ Rules source: Your Allies Cannot Save You!
                                          "id":  "trigger-thorn-move",
                                          "target":  "primary",
                                          "condition":  "Before the end of your next turn, the target willingly moves.",
+                                         "autoResolve":  true,
                                          "match":  {
                                                        "event":  "move",
                                                        "filter":  {
@@ -93,7 +94,7 @@ Rules source: Your Allies Cannot Save You!
                                                          "count":  1,
                                                          "skipCurrent":  true
                                                      },
-                                         "note":  "The VTT cannot distinguish willing movement from all normal movement; use only when the movement is willing."
+                                         "note":  "Lands by itself: 1 psychic for each square of the target's own move (a walk, a shift, a climb, a fly). A push, pull or slide does not count, and a teleport does not count."
                                      }
                                  ]
                    }
