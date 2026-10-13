@@ -486,7 +486,10 @@ let sheetState = deepClone(defaultSheet);
 // from it (sheet-changes.mjs), so a page that is behind cannot roll back or blank a field it never touched.
 // It is brought up to date wherever server data is taken in, when Edit mode begins, and after each save.
 let sheetBaseline = deepClone(defaultSheet);
-const { diffSheet, applyChanges } = await import("./sheet-changes.mjs" + new URL(import.meta.url).search);
+// Loaded by its own script tag just before this one (index.php), which puts it on the window. It must NOT be
+// waited for here: a wait at this level makes the rest of this file run after the browser has already said the
+// page is ready, and the sheet starts on that signal. Build 491 waited, and the sheet page came up blank.
+const { diffSheet, applyChanges } = window.SheetChanges;
 let activeCharacter = "";
 let sheetLoadBlocked = false;
 const expandedActionCards = new Set();
@@ -734,6 +737,9 @@ function updateStaminaHistory(newValue) {
     : [];
   const numericValue = Number(newValue);
   if (!Number.isFinite(numericValue)) return;
+  // Stamina that did not change is not a new point in its history. (Turning Edit mode off used to add the same
+  // number again, which made the page write the sheet when nothing had been changed.)
+  if (history.length && Number(history[history.length - 1]) === numericValue) return;
   history.push(numericValue);
   sheetState.hero.vitals.staminaHistory = history.slice(-4);
 }
@@ -5159,4 +5165,6 @@ async function ready() {
   });
 }
 
-document.addEventListener("DOMContentLoaded", ready);
+// Start now if the page is already ready (it is, whenever anything above made this file finish late).
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", ready);
+else ready();

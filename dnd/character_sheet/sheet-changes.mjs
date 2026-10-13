@@ -73,3 +73,7 @@ export function applyChanges(target, changes) {
   }
   return target;
 }
+
+// For the sheet page, which loads this file by its own script tag before sheet.js and reads it from the window
+// (sheet.js must not wait for an import: see the note there).
+if (typeof window !== 'undefined') window.SheetChanges = { COUNTERS, sameValue, diffSheet, applyChanges };

@@ -64,6 +64,7 @@ require_once '../includes/strix-nav.php';
   <script src="ability-automation/paste.js?v=<?php echo (int) $assetVersion; ?>"></script>
   <script src="ability-automation/inspector.js?v=<?php echo (int) $assetVersion; ?>"></script>
   <script src="ability-automation/runner.js?v=<?php echo (int) $assetVersion; ?>"></script>
+  <script type="module" src="sheet-changes.mjs?v=<?php echo (int) $assetVersion; ?>"></script>
   <script type="module" src="sheet.js?v=<?php echo (int) $assetVersion; ?>"></script>
   <script src="inventory-tab.js?v=<?php echo (int) $assetVersion; ?>" defer></script>
   <script src="../dice-roller/dice-roller.js?v=<?php echo (int) $assetVersion; ?>" defer></script>
