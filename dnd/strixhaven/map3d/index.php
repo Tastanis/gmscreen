@@ -1012,6 +1012,65 @@ function buildWater() {
     const m = new THREE.Mesh(g, pm); m.receiveShadow = true; scene.add(m); });
 }
 
+// ------------------------------------------------------------------ the board: a carved wooden frame the map is let down into, like the playing field of a fine chess board
+// (kept apart from the building of the ground, so that changing the frame never makes anyone's browser raise the ground again)
+function buildFrame() {
+  const FT = 40, HW = MAP_W / 2, HD = MAP_D / 2, IN = 1.5, LU = 300, LV = 150;   // FT: the height of the frame's flat top. LU, LV: the stretch of wood one picture of grain covers
+  let sd = 9157; const rnd = () => (sd = sd * 16807 % 2147483647) / 2147483647;
+  const wood = (inlay, tone) => { const w = 1024, h = 512, cv = document.createElement('canvas'); cv.width = w; cv.height = h; const c = cv.getContext('2d');
+    const g = c.createLinearGradient(0, 0, 0, h); g.addColorStop(0, tone[0]); g.addColorStop(.5, tone[1]); g.addColorStop(1, tone[2]); c.fillStyle = g; c.fillRect(0, 0, w, h);
+    for (let i = 0; i < 340; i++) { const y0 = rnd() * h, a = 1 + rnd() * 5, k = 1 + Math.floor(rnd() * 3), ph = rnd() * 6.2832, dk = rnd() < .62;   // the grain: fine wavering lines that meet themselves at the picture's edges
+      c.strokeStyle = dk ? 'rgba(30,14,5,' + (.1 + rnd() * .28) + ')' : 'rgba(196,124,62,' + (.05 + rnd() * .15) + ')'; c.lineWidth = .6 + rnd() * 2.2;
+      for (const off of [-h, 0, h]) { c.beginPath(); for (let x = 0; x <= w; x += 8) { const y = y0 + off + a * Math.sin(x / w * 6.2832 * k + ph) + a * .4 * Math.sin(x / w * 6.2832 * (k + 3) + ph * 2); if (x) c.lineTo(x, y); else c.moveTo(x, y); } c.stroke(); } }
+    if (inlay) inlay(c, w, h);
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy()); return t; };
+  const walnut = ['#4e2c15', '#5a341a', '#47270f'];
+  // the flat top carries a band of marquetry down its middle: maple lozenges on ebony between two brass lines, and a fine light string near each edge
+  const topT = wood((c, w, h) => { const y0 = h * .36, y1 = h * .64, n = 6, lw = w / n;
+    c.fillStyle = '#170e08'; c.fillRect(0, y0, w, y1 - y0);
+    for (let i = 0; i < n; i++) { const cx = (i + .5) * lw, cy = h / 2, hw = lw * .44, hh = (y1 - y0) * .42; c.beginPath(); c.moveTo(cx - hw, cy); c.lineTo(cx, cy - hh); c.lineTo(cx + hw, cy); c.lineTo(cx, cy + hh); c.closePath(); c.fillStyle = '#c99a58'; c.fill();
+      c.beginPath(); c.moveTo(cx - hw * .4, cy); c.lineTo(cx, cy - hh * .4); c.lineTo(cx + hw * .4, cy); c.lineTo(cx, cy + hh * .4); c.closePath(); c.fillStyle = '#6e2f18'; c.fill();
+      c.beginPath(); c.arc(i * lw, cy, 9, 0, 6.2832); c.arc(i * lw + lw, cy, 9, 0, 6.2832); c.fillStyle = '#c9a24a'; c.fill(); }
+    c.fillStyle = '#c9a24a'; c.fillRect(0, y0 - 12, w, 12); c.fillRect(0, y1, w, 12);
+    c.fillStyle = '#d9b47a'; c.fillRect(0, h * .07, w, 5); c.fillRect(0, h * .93 - 5, w, 5); c.fillStyle = '#170e08'; c.fillRect(0, h * .07 + 5, w, 4); c.fillRect(0, h * .93 - 9, w, 4); }, walnut);
+  const sideT = wood(null, walnut), cutT = wood(null, ['#3c2110', '#46280f', '#35190b']);
+  const mk = (map, o) => new THREE.MeshStandardMaterial(Object.assign({ map, roughness: .42, metalness: 0, envMapIntensity: .9 }, o));
+  const put = (geo, mat) => { const m = new THREE.Mesh(geo, mat); m.castShadow = true; m.receiveShadow = true; m.matrixAutoUpdate = false; m.raycast = () => {}; scene.add(m); return m; };
+  const geoOf = (v, uv) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.computeVertexNormals(); return g; };
+
+  // the frame itself: one outline (how far out from the map's edge, how high) carried round all four sides and mitred at the corners.
+  // From the inside: the wall the map sits against, a small bead, the broad flat top, a raised outer rim, and a moulded outside going down to the table
+  const P = [[IN, -14], [IN, FT - 9], [9, FT - 1.5], [9, FT + 3], [15, FT + 3], [15, FT], [165, FT], [165, FT + 3], [180, FT + 3], [192, FT - 9], [192, FT - 22], [204, FT - 34], [204, SKIRT]], TOP = 5;
+  const SG = [[-1, -1], [1, -1], [1, 1], [-1, 1]], cnr = (k, d) => [SG[k & 3][0] * (HW + d), SG[k & 3][1] * (HD + d)];
+  const fv = [], fu = [], tv = [], tu = []; let len = 0;
+  for (let i = 0; i < P.length - 1; i++) { const a = P[i], b = P[i + 1], l = Math.hypot(b[0] - a[0], b[1] - a[1]), top = i === TOP, v = top ? tv : fv, u = top ? tu : fu, va = top ? 0 : len / LV, vb = top ? 1 : (len + l) / LV;
+    for (let k = 0; k < 4; k++) { const A0 = cnr(k, a[0]), A1 = cnr(k + 1, a[0]), B0 = cnr(k, b[0]), B1 = cnr(k + 1, b[0]), al = k % 2 ? 1 : 0;   // along a side the grain runs with the side, so the corners come out mitred like a picture frame's
+      v.push(A0[0], a[1], A0[1], A1[0], a[1], A1[1], B0[0], b[1], B0[1], A1[0], a[1], A1[1], B1[0], b[1], B1[1], B0[0], b[1], B0[1]);
+      u.push(A0[al] / LU, va, A1[al] / LU, va, B0[al] / LU, vb, A1[al] / LU, va, B1[al] / LU, vb, B0[al] / LU, vb); }
+    len += l; }
+  put(geoOf(fv, fu), mk(sideT)); put(geoOf(tv, tu), mk(topT, { roughness: .34 }));
+
+  // where the land stands higher than the frame at the map's edge, its cut face is shown as the same block of wood, carved; and a narrow lip closes the join between ground and frame all the way round
+  const cv2 = [], cu2 = [], vx = i => -HW + i * DX, vz = j => -HD + j * DZ, LOW_Y = FT - 9;
+  const edge = (n, at) => { for (let q = 0; q < n - 1; q++) { const a = at(q), b = at(q + 1);   // each: [x, z, height, x pushed out, z pushed out, how far along]
+      cv2.push(a[0], a[2], a[1], b[0], b[2], b[1], a[3], a[2], a[4], b[0], b[2], b[1], b[3], b[2], b[4], a[3], a[2], a[4]); cu2.push(a[5] / LU, a[2] / LV, b[5] / LU, b[2] / LV, a[5] / LU, a[2] / LV, b[5] / LU, b[2] / LV, b[5] / LU, b[2] / LV, a[5] / LU, a[2] / LV);
+      if (a[2] > LOW_Y || b[2] > LOW_Y) { const ya = Math.max(a[2], LOW_Y), yb = Math.max(b[2], LOW_Y); cv2.push(a[3], LOW_Y, a[4], b[3], LOW_Y, b[4], a[3], ya, a[4], b[3], LOW_Y, b[4], b[3], yb, b[4], a[3], ya, a[4]); cu2.push(a[5] / LU, LOW_Y / LV, b[5] / LU, LOW_Y / LV, a[5] / LU, ya / LV, b[5] / LU, LOW_Y / LV, b[5] / LU, yb / LV, a[5] / LU, ya / LV); } } };
+  edge(NX, i => [vx(i), -HD, H[i], vx(i), -HD - IN, vx(i)]); edge(NX, i => [vx(i), HD, H[(NZ - 1) * NX + i], vx(i), HD + IN, vx(i)]);
+  edge(NZ, j => [-HW, vz(j), H[j * NX], -HW - IN, vz(j), vz(j)]); edge(NZ, j => [HW, vz(j), H[j * NX + NX - 1], HW + IN, vz(j), vz(j)]);
+  put(geoOf(cv2, cu2), mk(cutT, { roughness: .6, side: THREE.DoubleSide }));
+
+  // the four corners: a square block standing a little proud of the frame, a dark plate let into its top, and on that a brass roundel engraved with a star
+  const starT = (() => { const w = 512, cv = document.createElement('canvas'); cv.width = cv.height = w; const c = cv.getContext('2d'); c.fillStyle = '#b8923f'; c.fillRect(0, 0, w, w); c.translate(w / 2, w / 2); c.strokeStyle = '#4a3410'; c.lineWidth = 7;
+    for (const r of [240, 222, 96]) { c.beginPath(); c.arc(0, 0, r, 0, 6.2832); c.stroke(); }
+    for (let i = 0; i < 16; i++) { const a = i * .3927, L = i % 4 === 0 ? 214 : i % 2 === 0 ? 160 : 108; c.beginPath(); c.moveTo(0, 0); c.lineTo(Math.cos(a - .19) * 44, Math.sin(a - .19) * 44); c.lineTo(Math.cos(a) * L, Math.sin(a) * L); c.lineTo(Math.cos(a + .19) * 44, Math.sin(a + .19) * 44); c.closePath(); c.fillStyle = i % 2 ? '#8a6a24' : '#e0bf6a'; c.fill(); c.lineWidth = 3; c.stroke(); }
+    c.beginPath(); c.arc(0, 0, 24, 0, 6.2832); c.fillStyle = '#e8cc80'; c.fill(); c.stroke(); const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; })();
+  const brass = new THREE.MeshStandardMaterial({ color: 0xb08a3a, roughness: .34, metalness: .8 }), brassTop = new THREE.MeshStandardMaterial({ map: starT, roughness: .36, metalness: .7 }), ebony = new THREE.MeshStandardMaterial({ color: 0x1c110a, roughness: .3 }), blockM = mk(sideT);
+  const OUT = 193, BW = OUT - IN, mid = IN + BW / 2;
+  for (let k = 0; k < 4; k++) { const x = SG[k][0] * (HW + mid), z = SG[k][1] * (HD + mid);
+    put(new THREE.BoxGeometry(BW, 28, BW).translate(x, FT - 8, z), blockM); put(new THREE.BoxGeometry(BW - 22, 2.5, BW - 22).translate(x, FT + 7.25, z), ebony);
+    put(new THREE.CylinderGeometry(60, 60, 1.6, 48).translate(x, FT + 9.3, z), [brass, brassTop, brass]); put(new THREE.TorusGeometry(62, 2.4, 8, 48).rotateX(Math.PI / 2).translate(x, FT + 9.6, z), brass); }
+}
+
 // ------------------------------------------------------------------ hex helpers (same axial maths + ids as the live map)
 function worldToHex(x, z) {
   const px = x + OFFX, py = z + OFFZ; const q = (2 / 3 * px) / HEX_R, r = (-1 / 3 * px + SQ3 / 3 * py) / HEX_R, s = -q - r;
@@ -4683,7 +4742,7 @@ setTimeout(async () => {
   const cache = await terrainCache.get(); if (cache) loading.textContent = 'Raising the campus…';
   const t0 = performance.now();
   buildGrade(); const kept = buildTerrain(cache); const t1 = performance.now();
-  buildWater(); const t1b = performance.now(); const stats = buildProps(); const t1c = performance.now(); buildFx(); buildSmoke(); buildLabels();
+  buildWater(); buildFrame(); const t1b = performance.now(); const stats = buildProps(); const t1c = performance.now(); buildFx(); buildSmoke(); buildLabels();
   const t2 = performance.now(); window.__times = { terrain: Math.round(t1 - t0), water: Math.round(t1b - t1), props: Math.round(t1c - t1b), rest: Math.round(t2 - t1c), frames: [] };
   renderer.shadowMap.needsUpdate = true;
   document.getElementById('gen').textContent = `${NX}×${NZ} grid · ${kept ? "terrain from cache · " : ""}built in ${((t2 - t0) / 1000).toFixed(1)}s · ${stats.trees} trees · ${stats.spires} spires · ${stats.things} things`;
