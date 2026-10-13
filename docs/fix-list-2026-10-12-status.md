@@ -664,3 +664,24 @@ portraits folder has had since September.
 
 Nothing was found to have been misused; this closes the door. The maps, the Gravity Orchard among them, are
 not touched by this build.
+
+## Build 508: a creature's own shift is a move, not a push
+
+**What was wrong.** When an ability let a creature shift or move itself and you picked where it went, the app
+treated that like a push. If another creature was on the square you picked, or on the way, your creature
+slammed into it and both took collision damage.
+
+**What is different now.**
+- A creature moved by its own ability moves the way it does when you drag it with a shift: it never collides and
+  never deals or takes collision damage.
+- Squares with a creature in them are not highlighted. If you pick one anyway, the status line says who is
+  there and you pick again. (A hidden creature is not given away to a player this way.)
+- If the move is stopped by a wall, or you say no to a climb, the picker stays open for another square.
+- Skip still skips. Watches on "when it moves" (Thorn in Foot) still count it, once.
+- Passing through other creatures is not checked: that is the ability's own matter, as before.
+- Pushes, pulls and slides of somebody ELSE are unchanged.
+
+**With it:** Algis's Ride Them Down and Gintaras's Footwork and Stand at the Bier have their move step back in
+the Medpilis files. Upload those two files only after this build is on the live site.
+
+No map is touched; the Gravity Orchard plays as it does now.
