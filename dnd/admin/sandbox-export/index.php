@@ -17,14 +17,15 @@ try { $config = require $private; } catch (Throwable $e) { captureError(503, 'Ca
 if (!is_array($config)) captureError(503, 'Capture is not configured.');
 $loopback = in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true);
 if (($_SERVER['HTTPS'] ?? '') !== 'on' && !(($config['allow_loopback_http'] ?? false) === true && $loopback)) captureError(403, 'HTTPS required.');
+// The key first: a caller without it learns nothing, not even which methods or actions exist.
+$token = $_SERVER['HTTP_X_DND_CAPTURE_TOKEN'] ?? '';
+$expected = $config['token_sha256'] ?? '';
+if (!is_string($expected) || !preg_match('/^[a-f0-9]{64}$/D', $expected) || strlen($token) < 32 || !hash_equals($expected, hash('sha256', $token))) captureError(403, 'Access denied.');
 // Read-only on the host whatever the method. POST carries the list of paths for action=checksums and nothing else.
 $method = $_SERVER['REQUEST_METHOD'] ?? '';
 $action = is_string($_GET['action'] ?? null) ? $_GET['action'] : 'manifest';
 if ($method !== 'GET' && !($method === 'POST' && $action === 'checksums')) captureError(405, $action === 'checksums' ? 'POST required.' : 'GET required.');
 if ($action === 'checksums' && $method !== 'POST') captureError(405, 'POST required.');
-$token = $_SERVER['HTTP_X_DND_CAPTURE_TOKEN'] ?? '';
-$expected = $config['token_sha256'] ?? '';
-if (!is_string($expected) || !preg_match('/^[a-f0-9]{64}$/D', $expected) || strlen($token) < 32 || !hash_equals($expected, hash('sha256', $token))) captureError(403, 'Access denied.');
 
 try {
     $roots = sandboxRoots(dirname(__DIR__, 2), $config);

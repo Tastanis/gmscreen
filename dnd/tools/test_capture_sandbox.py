@@ -129,6 +129,20 @@ class CaptureTests(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as caught:
             wrong.manifest()
         self.assertEqual(caught.exception.code, 403)
+        # The key is judged before anything else: without it a caller is told nothing about which methods or
+        # actions exist (a wrong method used to answer 405 to anybody). With it, a wrong method is still refused.
+        def ask(connection, action, method):
+            url = connection.site + '/admin/sandbox-export/index.php?' + urllib.parse.urlencode({'action': action})
+            request = urllib.request.Request(url, data=b'{}' if method == 'POST' else None, method=method,
+                headers={'X-DND-Capture-Token': connection.token, 'Content-Type': 'application/json'})
+            try:
+                with connection.opener.open(request, timeout=30) as response:
+                    return response.status
+            except urllib.error.HTTPError as error:
+                return error.code
+        for action, method in (('manifest', 'POST'), ('checksums', 'GET'), ('file', 'DELETE'), ('nonsense', 'GET')):
+            self.assertEqual(ask(wrong, action, method), 403, (action, method))
+        self.assertEqual([ask(self.connection, 'manifest', 'POST'), ask(self.connection, 'checksums', 'GET'), ask(self.connection, 'file', 'DELETE')], [405, 405, 405])
         manifest = self.connection.manifest()
         self.assertIn('dnd/strixhaven/monster-creator/data/new-monster.json', manifest['files'])
         self.assertNotIn('dnd/private/credentials.json', manifest['files'])
