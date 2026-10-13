@@ -393,6 +393,83 @@ function vttSyncV2ProjectSnapshotForUser(array $snapshot, array $auth): array
     return $snapshot;
 }
 
+// ---- a page only needs the scene it is showing ---------------------------------------------------------------
+// Brandon, October 13, 2026, on every map page downloading every scene: "it only needs the scene that they're on.
+// It doesn't need the rest." Four fifths of a snapshot is one thing: every scene's design (ground heights, walls,
+// zones, what has been explored). A page that asks with ?designs= is sent that for one scene only, and fetches
+// another scene's (scene-design.php) when it comes to show it. Everything light is still sent for every scene:
+// tokens, floors, fights, drawings. A page that does not ask is answered exactly as before, so a page still open
+// from before a deploy goes on working. Nothing here changes what is stored or what a command does.
+
+/**
+ * Which scene's design a page asked to be sent whole: "own" (the scene this viewer is shown) or a scene id.
+ * Null when the page asked the old way.
+ */
+function vttSyncV2DesignsAsked(): ?string
+{
+    $asked = $_GET['designs'] ?? null;
+    if ($asked === null || $asked === '') {
+        return null;
+    }
+    if (!is_string($asked) || ($asked !== 'own' && preg_match('/^[A-Za-z0-9_-]{1,120}$/D', $asked) !== 1)) {
+        vttSyncV2Respond(422, [
+            'success' => false,
+            'error' => 'designs must be "own" or a scene id.',
+        ]);
+    }
+    return $asked;
+}
+
+/**
+ * A snapshot ALREADY made for its viewer (vttSyncV2ProjectSnapshotForUser), with every scene's design but one
+ * left out. `designs.scene` names the scene whose design is in it (null: none); `designs.held` lists each scene
+ * whose design was left out, with the version of each of its parts, so a page knows a design exists that it has
+ * not been sent. Nothing else in the snapshot is touched. With $asked null the snapshot is returned as it came.
+ */
+function vttSyncV2ScopeDesigns(array $snapshot, ?string $asked): array
+{
+    if ($asked === null) {
+        return $snapshot;
+    }
+    $scene = $asked === 'own' ? ($snapshot['state']['routing']['activeSceneId'] ?? null) : $asked;
+    if (!is_string($scene) || $scene === '') {
+        $scene = null;
+    }
+    $held = [];
+    $configs = $snapshot['state']['sceneConfig'] ?? [];
+    foreach (is_array($configs) ? $configs : [] as $sceneId => $config) {
+        if ((string) $sceneId === $scene || !is_array($config) || !array_key_exists('environment', $config)) {
+            continue;
+        }
+        $versions = [];
+        foreach (is_array($config['environment']) ? $config['environment'] : [] as $part => $entry) {
+            $versions[(string) $part] = is_array($entry) ? max(0, (int) ($entry['revision'] ?? 0)) : 0;
+        }
+        unset($snapshot['state']['sceneConfig'][$sceneId]['environment']);
+        $held[(string) $sceneId] = (object) $versions;
+    }
+    $snapshot['designs'] = ['scene' => $scene, 'held' => (object) $held];
+    return $snapshot;
+}
+
+/**
+ * One scene's design out of a snapshot already made for its viewer: exactly what vttSyncV2ScopeDesigns left out
+ * for that scene, so that a page which puts it back has what the whole snapshot would have given it.
+ * @return array{sceneId:string, revision:int, configRevision:?int, hasDesign:bool, environment:mixed}
+ */
+function vttSyncV2SceneDesign(array $snapshot, string $sceneId): array
+{
+    $config = $snapshot['state']['sceneConfig'][$sceneId] ?? null;
+    $has = is_array($config) && array_key_exists('environment', $config);
+    return [
+        'sceneId' => $sceneId,
+        'revision' => max(0, (int) ($snapshot['revision'] ?? 0)),
+        'configRevision' => is_array($config) && isset($config['_revision']) ? (int) $config['_revision'] : null,
+        'hasDesign' => $has,
+        'environment' => $has ? $config['environment'] : null,
+    ];
+}
+
 function vttSyncV2ProjectRecoveryForUser(array $recovery, array $auth): array
 {
     if (($recovery['mode'] ?? '') === 'snapshot' && is_array($recovery['snapshot'] ?? null)) {
@@ -803,9 +880,26 @@ function vttSyncV2PlacementEventIsPublicSafe(array $event): bool
     return true;
 }
 
-function vttSyncV2Store(): SyncV2Store
+/** Where the one store of a request is kept. (Apart from vttSyncV2Store so that vttSyncV2ForgetStore can reach it.) */
+function &vttSyncV2StoreHolder(): ?SyncV2Store
 {
     static $store = null;
+    return $store;
+}
+
+/**
+ * Lets go of the store, which closes its database file. For tests: on Windows a test cannot remove its temporary
+ * database while this is held, and they were being left behind in the temporary folder. A request never calls it.
+ */
+function vttSyncV2ForgetStore(): void
+{
+    $store = &vttSyncV2StoreHolder();
+    $store = null;
+}
+
+function vttSyncV2Store(): SyncV2Store
+{
+    $store = &vttSyncV2StoreHolder();
     if ($store instanceof SyncV2Store) {
         return $store;
     }

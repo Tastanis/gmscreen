@@ -13,6 +13,8 @@ try {
     $auth = vttSyncV2DomainEnabled('token_movement')
         ? vttSyncV2RequireAuthenticated()
         : vttSyncV2RequireShadowGm();
+    // A page that asks with ?designs= is sent one scene's design; one that does not is answered as it always was.
+    $designs = vttSyncV2DesignsAsked();
     vttSyncV2Store()->touchPresence(
         (string) ($auth['user'] ?? ''),
         (bool) ($auth['isGM'] ?? false)
@@ -21,7 +23,7 @@ try {
     vttSyncV2Respond(200, [
         'success' => true,
         'mode' => vttSyncV2DomainEnabled('token_movement') ? 'live' : 'shadow',
-        'snapshot' => vttSyncV2ProjectSnapshotForUser(vttSyncV2Store()->getSnapshot(), $auth),
+        'snapshot' => vttSyncV2ScopeDesigns(vttSyncV2ProjectSnapshotForUser(vttSyncV2Store()->getSnapshot(), $auth), $designs),
     ]);
 } catch (Throwable $error) {
     vttSyncV2HandleFailure($error);

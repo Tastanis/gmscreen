@@ -111,7 +111,8 @@ try {
             )
             && is_array($conflictSnapshot)
         ) {
-            $conflictSnapshot = vttSyncV2ProjectSnapshotForUser($conflictSnapshot, $auth);
+            // The snapshot that comes back with a refused command: one scene's design for a page that asks so.
+            $conflictSnapshot = vttSyncV2ScopeDesigns(vttSyncV2ProjectSnapshotForUser($conflictSnapshot, $auth), vttSyncV2DesignsAsked());
         }
         vttSyncV2Respond(409, [
             'success' => false,
