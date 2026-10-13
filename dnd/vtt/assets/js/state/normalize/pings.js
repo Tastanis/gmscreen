@@ -75,6 +75,12 @@ export function normalizePingEntry(entry) {
   if (authorId) {
     normalized.authorId = authorId;
   }
+  // The height of what was clicked, in squares (map-pings.js). It was dropped here, so every page but the
+  // clicker's own drew the ping on the ground beneath the floor that was clicked.
+  const z = Number(entry.z);
+  if (entry.z !== null && entry.z !== undefined && Number.isFinite(z) && z !== 0) {
+    normalized.z = z;
+  }
   return normalized;
 }
 

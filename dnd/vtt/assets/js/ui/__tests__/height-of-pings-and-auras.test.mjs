@@ -81,3 +81,31 @@ test('the page reads the height under a click, lifts an aura with its token, and
   const markup = readFileSync(new URL('../../../../components/SceneBoard.php', import.meta.url), 'utf8');
   assert.match(markup, /aria-label="Center on the selected token">Find token<\/button>/, 'the Director has the button too');
 });
+
+// Found by the tester on Build 485, on three pages: the ping was right on the page that made it and 0.76 of a
+// square off on every other. The height was kept by map-pings.js and by the server, and dropped in between by
+// the store's own tidying of pings, which every page but the clicker's reads them through. The tests above went
+// straight to map-pings.js and never took that path.
+test('a ping\'s height survives the store, which is how every other page receives it', async () => {
+  const { normalizePingEntry, normalizePings } = await import('../../state/normalize/pings.js');
+  const arrived = { id: 'cal:1', sceneId: 'scene', x: 0.25, y: 0.5, z: 6, type: 'ping', createdAt: Date.now(), authorId: 'Cal' };
+  assert.equal(normalizePingEntry(arrived).z, 6);
+  assert.equal(normalizePings([arrived])[0].z, 6);
+  assert.equal(normalizePingEntry({ ...arrived, z: -8.5 }).z, -8.5, 'down a pit too');
+  for (const none of [0, null, undefined, 'high', NaN]) assert.equal('z' in normalizePingEntry({ ...arrived, z: none }), false, `no height for ${none}`);
+  // And through the whole of another page: the store's entry is drawn at its height.
+  const b = board({ pointer: null });
+  b.pings.processIncomingPings(normalizePings([arrived]), 'scene');
+  const flat = board({ pointer: null });
+  flat.pings.processIncomingPings(normalizePings([{ ...arrived, z: 0 }]), 'scene');
+  assert.notDeepEqual(b.pulses[0], flat.pulses[0], 'not where the same ping on the ground is drawn');
+});
+
+// Also the tester's, older than 485: an aura stayed where it was when its token was moved, on every page, until
+// a reload. A confirmed move moved the token alone.
+test('an aura is redrawn when its token moves', () => {
+  const page = readFileSync(new URL('../board-interactions.js', import.meta.url), 'utf8');
+  assert.match(page, /patchTokenMovementNode\(sceneId, placementId, placement\);\s*redrawAurasAfterMove\(placementId\);/, 'on every confirmed move');
+  assert.match(page, /if \(activeSceneId\) redrawAurasAfterMove\(null\);/, 'and when a page catches up after a gap');
+  assert.match(page, /if \(!auraLayer\.childElementCount && !\(Array\.isArray\(moved\?\.automationAuras\) && moved\.automationAuras\.length\)\) return;\s*renderAuras\(/, 'only when there is an aura to draw');
+});

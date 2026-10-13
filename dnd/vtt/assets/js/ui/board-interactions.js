@@ -11,7 +11,7 @@ import {createRoutingIntent, deriveRoutingCommands, createSerialQueue} from './s
 import {askClimb} from './climb-prompt.js';
 import {offerBreakThrough} from './break-through-prompt.js';
 import {climbSurcharge} from './terrain-math.mjs';
-import {settleCollisionEffects} from '../services/collision-effects.js';
+import {settleCollisionEffects,collisionDamageDealt} from '../services/collision-effects.js';
 import {PLAYER_CHARACTER_USER_IDS as visionOwnerProfiles} from '../state/normalize/map-levels.js';
 import {resolveForcedDrag} from './forced-drag.js';
 import {createMaliceChanges} from './malice-changes.mjs';
@@ -918,6 +918,7 @@ export function mountBoardInteractions(store, routes = {}) {
       target._syncV2EntityRevision = Number(placement._entityRevision) || 0;
     });
     patchTokenMovementNode(sceneId, placementId, placement);
+    redrawAurasAfterMove(placementId);
     fallReview.wake();
     if (activeTokenSettingsId === placementId) syncTokenLevelControls(getPlacementFromStore(placementId));
 
@@ -935,6 +936,17 @@ export function mountBoardInteractions(store, routes = {}) {
         detail: movementDetail,
       }));
     }
+  }
+
+  // An aura is drawn around where its token stood when the auras were last drawn. A confirmed move moved the
+  // token alone, so the aura stayed where it was, two squares behind, on every page until a reload (the tester,
+  // Build 485: "it is what 'tied to a token' means at the table"). Redrawn when a token with an aura moves, or
+  // any token while an aura is on show (one may now be nearer or farther from a floor's edge).
+  function redrawAurasAfterMove(placementId) {
+    if (!auraLayer) return;
+    const moved = placementId ? getPlacementFromStore(placementId) : null;
+    if (!auraLayer.childElementCount && !(Array.isArray(moved?.automationAuras) && moved.automationAuras.length)) return;
+    renderAuras(boardApi.getState?.() ?? {}, auraLayer, viewState);
   }
 
   function syncConfirmedSceneGrid(draft, snapshot) {
@@ -990,6 +1002,7 @@ export function mountBoardInteractions(store, routes = {}) {
     )) {
       patchTokenMovementNode(activeSceneId, placementId, placement);
     }
+    if (activeSceneId) redrawAurasAfterMove(null);
     if (context?.source === 'conflict' || context?.source === 'recovery') {
       recordSyncDiagnostic('recoverySnapshotsApplied', {
         source: `sync-v2-${context.source}`,
@@ -8548,7 +8561,11 @@ export function mountBoardInteractions(store, routes = {}) {
             await tokenMovementRuntime.submitMoves(sceneId, [{ placementId,
               column: last.from.column, row: last.from.row, undoRevision: receipt.revision }]);
           }
-          updateStatus(last.groupMove ? 'Group movement undone, including all floor changes.' : 'Movement undone, including its floor change.');
+          // Undoing a push takes back what the push itself did: the wall it broke (mended by the server with the
+          // move) and the damage its collisions dealt. What happened to the creature afterwards is left alone.
+          const givenBack = last.groupMove ? 0 : await giveBackCollisionDamage(last.operationId);
+          updateStatus(last.groupMove ? 'Group movement undone, including all floor changes.'
+            : `Movement undone, including its floor change.${givenBack ? ` ${givenBack} Stamina given back.` : ''}`);
           return true;
         } catch (error) {
           reportSyncFailure(error, 'movement undo');
@@ -18732,6 +18749,29 @@ export function mountBoardInteractions(store, routes = {}) {
       floatStaminaDelta(placementId, adjustedAmount, 'damage');
     }
     return result;
+  }
+
+  // Brandon, October 12, 2026: "I need a way to undo a breakthrough". The damage a push dealt by what it hit or
+  // broke through is healed again when the push is undone: to the creature pushed and to any it struck, by the
+  // amounts the server recorded for that move, with the same weakness and immunity as when they were dealt.
+  // Never more than the creature's maximum. A fall's damage and conditions are not touched. Returns the total.
+  async function giveBackCollisionDamage(operationId) {
+    let total = 0;
+    try {
+      for (const dealt of await collisionDamageDealt(operationId)) {
+        if (!getPlacementFromStore(dealt.targetId)) continue;
+        const adjustment = await getAutomationDamageAdjustment(dealt.targetId, dealt.damageType);
+        const amount = Math.max(0, dealt.amount + adjustment.vulnerability - adjustment.immunity);
+        const result = amount > 0 ? applyDamageHealToPlacement(dealt.targetId, 'heal', amount) : null;
+        if (!result) continue;
+        await awaitSuccessfulPlacementSave(result);
+        floatStaminaDelta(dealt.targetId, amount, 'heal');
+        total += amount;
+      }
+    } catch (error) {
+      console.warn('[VTT] A push was undone but its damage could not all be given back', error);
+    }
+    return total;
   }
 
   function getAutomationCollisionStopCell(target, collided) {
