@@ -64,9 +64,21 @@ test('a sheet with no Stamina gives a token nothing; the Director\'s page hears 
   assert.match(board, /data\.success === false \|\| data\.hasStamina === false\) \{\s*return;/);
   assert.match(board, /url\.searchParams\.set\('action', 'party-vitals'\);\s*if \(partyVitalsStamp\) url\.searchParams\.set\('since', partyVitalsStamp\);/);
   assert.match(board, /if \(!endpoint \|\| !isGmUser\(\) \|\| partyVitalsBusy \|\| document\.visibilityState === 'hidden'\) return;/, 'the Director\'s page only, and not while its tab is hidden');
-  assert.match(board, /if \(vitals\?\.hasStamina !== true\) continue;\s*if \(sending\.has\(character\.toLowerCase\(\)\)\) \{ held = true; continue; \}\s*applySheetStaminaToTokens\(character, vitals\.currentStamina, vitals\.staminaMax\);/, 'a hero with a write of this page\'s on its way is left alone');
+  assert.match(board, /if \(vitals\?\.hasStamina !== true\) continue;\s*if \(sending\.has\(character\.toLowerCase\(\)\) \|\| heroTokenJustChanged\(character\)\) \{ held = true; continue; \}\s*applySheetStaminaToTokens\(character, vitals\.currentStamina, vitals\.staminaMax\);/, 'a hero with a write of this page\'s on its way is left alone');
   assert.match(board, /window\.setInterval\(readPartyVitals, PARTY_VITALS_INTERVAL_MS\);/);
   // Putting a sheet's Stamina on a token does not send it back to the sheet.
   const apply = board.slice(board.indexOf('function applySheetStaminaToTokens('), board.indexOf('const PARTY_VITALS_INTERVAL_MS'));
   assert.ok(apply.length > 200 && !/syncPlacementHitPointsToSheet|scheduleSheetHitPointSync/.test(apply));
+});
+
+// A timing fault found by reading Build 493 again: a hit made on a player's page reaches the Director's token at
+// once and the sheet a moment later. The Director's read of the sheets, in that gap, would have put the token
+// back to the sheet's older number and forward again when the write landed.
+test('the party read leaves alone a hero whose token has just changed, on any page', () => {
+  assert.match(board, /if \(mutation\?\.placementId && mutation\.changedFields\?\.some\(\(field\) => field === 'hp' \|\| field === '\*'\)\) \{\s*tokenStaminaChangedAt\.set\(mutation\.placementId, Date\.now\(\)\);/);
+  assert.match(board, /if \(sending\.has\(character\.toLowerCase\(\)\) \|\| heroTokenJustChanged\(character\)\) \{ held = true; continue; \}/);
+  assert.match(board, /partyVitalsStamp = held \? '' : String\(answer\.stamp \|\| ''\);/, 'and reads that hero again next time');
+  assert.match(board, /const PARTY_VITALS_SETTLE_MS = 3000;/);
+  // The map of times exists before anything that can run while the page starts up.
+  assert.ok(board.indexOf('const tokenStaminaChangedAt = new Map();') < board.indexOf('function applyConfirmedPlacementBatch('));
 });

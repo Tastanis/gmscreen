@@ -1011,8 +1011,14 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  // Declared here, before anything that can be called while the page is still starting up.
+  const tokenStaminaChangedAt = new Map();
   function applyConfirmedPlacementBatch(snapshot, mutations, context = {}) {
     for (const mutation of mutations) {
+      // When a token's Stamina last changed, from any page: readPartyVitals leaves such a hero alone for a moment.
+      if (mutation?.placementId && mutation.changedFields?.some((field) => field === 'hp' || field === '*')) {
+        tokenStaminaChangedAt.set(mutation.placementId, Date.now());
+      }
       if (mutation.kind === 'upsert' && !mutation.projectionOnly && mutation.entityRevision === 1
         && mutation.changedFields?.includes('*') && mutation.placement?.tokenId) {
         document.dispatchEvent(new CustomEvent('vtt:token-library-used', { detail: { tokenId: mutation.placement.tokenId } }));
@@ -20188,6 +20194,11 @@ export function mountBoardInteractions(store, routes = {}) {
   // sheet has been written the answer is one word. A hero with a write of this page's still on its way is left
   // alone until it is answered.
   const PARTY_VITALS_INTERVAL_MS = 4000;
+  // A hit made on another page reaches this page's token at once, and the sheet a moment later (that page holds
+  // its write for a few tenths of a second, then the request). A read of the sheets in that gap would put the
+  // token back to the sheet's older number, and forward again when the write landed. So a hero whose token
+  // changed this recently is read again next time instead.
+  const PARTY_VITALS_SETTLE_MS = 3000;
   let partyVitalsStamp = '', partyVitalsBusy = false;
   async function readPartyVitals() {
     const endpoint = typeof routes?.sheet === 'string' ? routes.sheet : null;
@@ -20204,7 +20215,7 @@ export function mountBoardInteractions(store, routes = {}) {
       let held = false;
       for (const [character, vitals] of Object.entries(answer.party)) {
         if (vitals?.hasStamina !== true) continue;
-        if (sending.has(character.toLowerCase())) { held = true; continue; }
+        if (sending.has(character.toLowerCase()) || heroTokenJustChanged(character)) { held = true; continue; }
         applySheetStaminaToTokens(character, vitals.currentStamina, vitals.staminaMax);
       }
       // A hero that was held is read again next time, whether or not a sheet is written in between.
@@ -20214,6 +20225,13 @@ export function mountBoardInteractions(store, routes = {}) {
     } finally {
       partyVitalsBusy = false;
     }
+  }
+
+  function heroTokenJustChanged(character) {
+    const characterId = normalizeProfileId(character);
+    const now = Date.now();
+    return getPlacementsForActiveScene().some((placement) => now - (tokenStaminaChangedAt.get(placement?.id) || 0) < PARTY_VITALS_SETTLE_MS
+      && getCharacterSheetProfileIdForPlacement(placement) === characterId);
   }
 
   function startListeningForSheetSync() {
