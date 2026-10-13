@@ -153,3 +153,24 @@ panel, and it is the same as Escape. Only letting go over the map itself makes t
 
 **An old rule changed on purpose:** one test said a player's door symbol "grants no portal command control".
 It now says a player may click a door he can see.
+
+## Build 487: two things the tester found in forced moves
+
+**A push into a cliff no longer leaves the creature up on the cliff.** On your own Gravity Orchard a creature on
+a platform 12 up, pushed 10 west, ended standing about 17 up on the crater wall, higher than it started, and no
+fall was offered. The wall was right to stop the push. But a stopped push is rounded to a whole square, and it
+rounded up into the wall's own face. Now a push stopped by rising ground ends in the last square whose ground
+is less than a square above the height the creature came in at: the foot of the cliff. From there the usual
+fall applies. One more square of the push is left over, so the slam is one higher.
+- A push stopped by a wall standing on level ground ends where it always did.
+- A push up a gentle slope goes the whole way, as before.
+- On the Gravity Orchard package, 7 of the 503 test pushes change, each ending one square earlier.
+
+**A large creature pushes straight.** In Build 482 the line of a push was measured from the pusher's middle. For
+a two-by-two creature beside the upper half of its target that tilted the line: the push drifted up a row.
+The line is now measured from the pusher's square nearest the target, to the target's square nearest the
+pusher. Beside it is straight; off its corner is the diagonal. Creatures of one square are unchanged.
+
+**Still open from the same check:** on two of your four Orchard platforms a forced drag still pauses the page
+for a second or so at a time (it was eight seconds before Build 481). That needs a measurement from a real
+browser, which the tester is taking; it is the next forced-move work.
