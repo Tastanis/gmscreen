@@ -494,3 +494,10 @@ You called the drawing system "pretty janky". Read end to end. What I found, men
 After the ping fault of Build 496 I read my other builds for the same mistake, and found one: a page that
 loads tidies the drawings it is given and kept a fixed list of details, so a stroke's floor (Build 495) was
 dropped on a reload. Mended, with a test of that path.
+
+## Build 499: a hero's Stamina does not flicker back (items 2 and 4)
+
+Found by reading Build 493 again, not seen in play. When a player's page hurt a hero, your token changed at
+once and the sheet a moment later. If your page's four-second read of the sheets fell in that moment, the
+token would have jumped back to the old number and forward again. Your page now leaves a hero alone for three
+seconds after its token changes, and reads it the next time round.
