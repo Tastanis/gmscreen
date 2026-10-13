@@ -314,3 +314,25 @@ The next time a sheet "changes by itself", the record says which page did it and
 server works out; a token never writing a sheet's Stamina maximum from an empty number; the map showing a dash,
 never 0, for a sheet it cannot load; sheet changes reaching tokens on other devices; the heroic resource traced
 end to end for every class.
+
+## Build 492: Undo Move works on a push that broke through (item 1, mended)
+
+Your words: "I need a way to undo a breakthrough or to reset the broken walls on a map."
+
+**Build 483 did not do what it said.** The server could mend the walls, but the Undo Move button refused the
+push: "Select a token or group with an unchanged movement of yours to undo." The tester found it.
+
+**Why.** A move could be undone only while nothing at all had changed on the token since. Breaking through a
+wall hurts the pushed creature at once, and that damage counted as a change. So no push that broke through
+could ever be taken back. My own test went straight from the push to the undo and left the damage out.
+
+**What is different now.**
+- A move can be undone while the token still stands where that move left it: same square, same floor.
+- Still only by whoever made the move.
+- This holds for every move, not only pushes: a token that was hurt, healed, renamed or given a condition
+  after it moved can still have the move undone.
+- Undoing a push that broke through puts the creature back and makes the wall whole, as 483 meant.
+- Stamina is not given back by the undo. You set that by hand.
+
+**Still refused, as before:** a move somebody else made; a token that has since been moved or put on another
+floor; a map whose floors changed since.
