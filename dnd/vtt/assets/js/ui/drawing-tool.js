@@ -409,6 +409,7 @@ function beginErasing(state, event) {
   pushToUndoStack(state);
 
   eraseAtPoint(state, point);
+  state.lastErasePoint = point;
 }
 
 function continueErasing(state, event) {
@@ -417,7 +418,16 @@ function continueErasing(state, event) {
     return;
   }
 
+  // The eraser rubs out along the line it was swept, not only at the spots the pointer happened to be reported.
+  // A quick swipe is reported every 20 pixels or so, and a thin stroke crossed between two reports was missed.
+  const from = state.lastErasePoint || point;
+  const reach = Math.max(1, state.strokeWidth / 2);
+  const steps = Math.min(200, Math.ceil(Math.hypot(point.x - from.x, point.y - from.y) / reach));
+  for (let step = 1; step < steps; step += 1) {
+    eraseAtPoint(state, { x: from.x + (point.x - from.x) * step / steps, y: from.y + (point.y - from.y) * step / steps });
+  }
   eraseAtPoint(state, point);
+  state.lastErasePoint = point;
 }
 
 function endErasing(state) {

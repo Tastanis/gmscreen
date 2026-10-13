@@ -566,7 +566,10 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     if (currentRecoveries <= 0 || recoveryValue <= 0) {
       return;
     }
-    const spendRecovery = await confirmSummaryAction(`Spend 1 recovery to heal ${recoveryValue} Stamina?`, {
+    // Say what it will really do: a Recovery heals as far as the maximum, and at the maximum heals nothing.
+    const staminaRoom = numberLike(vitals.staminaMax, 0) > 0 ? Math.max(0, numberLike(vitals.staminaMax, 0) - numberLike(vitals.currentStamina, 0)) : recoveryValue;
+    const willHeal = Math.min(recoveryValue, staminaRoom);
+    const spendRecovery = await confirmSummaryAction(willHeal > 0 ? `Spend 1 recovery to heal ${willHeal} Stamina?` : 'Stamina is already at its maximum. Spend 1 recovery anyway?', {
       title: 'Spend Recovery',
       confirmText: 'Spend',
     });

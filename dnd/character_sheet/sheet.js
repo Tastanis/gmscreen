@@ -2296,7 +2296,10 @@ function renderBars() {
 
       const recoveryVal = Number(computeRecoveryValue(vitals)) || 0;
       if (recoveryVal <= 0) return;
-      if (!window.confirm(`Spend 1 recovery to heal ${recoveryVal} Stamina?`)) {
+      // Say what it will really do: a Recovery heals as far as the maximum, and at the maximum heals nothing.
+      const staminaRoom = (Number(vitals.staminaMax) || 0) > 0 ? Math.max(0, Number(vitals.staminaMax) - (Number(vitals.currentStamina) || 0)) : recoveryVal;
+      const willHeal = Math.min(recoveryVal, staminaRoom);
+      if (!window.confirm(willHeal > 0 ? `Spend 1 recovery to heal ${willHeal} Stamina?` : "Stamina is already at its maximum. Spend 1 recovery anyway?")) {
         return;
       }
 

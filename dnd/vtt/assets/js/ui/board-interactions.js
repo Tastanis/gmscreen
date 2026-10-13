@@ -3867,6 +3867,15 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   async function offerHeroicResourceRule({ eventType, payload, placement, profileId, sheet, resource, rule, eventTargetId }) {
+    // The offer says where the number stands and where it would go, so the sheet is read now: this page's copy
+    // is kept from whenever it last happened to see a change (the tester was offered "0 -> 2" on a stored 1;
+    // the gain itself was right, being an amount).
+    characterSummaryCache.delete(profileId);
+    const latest = await getAutomationSheetForPlacement(placement.id).catch(() => null);
+    if (latest?.hero?.resource && typeof latest.hero.resource === 'object') {
+      sheet = latest;
+      resource = latest.hero.resource;
+    }
     const context = getSheetHeroicResourceContext(sheet, resource);
     const preview = previewHeroicResourceAmount(rule.effect.amount, context);
     const shouldRollAfterPrompt = !rule.autoApply && preview.hasDice;
