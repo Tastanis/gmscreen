@@ -336,3 +336,40 @@ could ever be taken back. My own test went straight from the push to the undo an
 
 **Still refused, as before:** a move somebody else made; a token that has since been moved or put on another
 floor; a map whose floors changed since.
+
+## Build 493: the sheet and the map no longer write over each other (items 2 and 4, second half, part one)
+
+Your words: "Some weird things seem to not be syncing or staying correctly sometimes." And: "I also want to make
+sure that the VTT character sheet is working correctly and everything is syncing there right."
+
+**The cause.** Stamina, Recoveries, surges, Victories and the heroic resource are changed from four places: the
+sheet page, the map's side panel, a hero's token, and abilities. Each holds its own copy of the number, and each
+wrote "the number is now N" from its copy. A copy that was behind wrote the sheet back to where it had been.
+The clearest case: a player heals on the sheet on a phone; your map never hears of it; you hit the token; the
+token's old number minus the hit is written to the sheet and the healing is gone.
+
+**What is different now.**
+- Each place says how much it changed the number by. The server adds that to the number it holds. Two pages
+  that each take one off take two off, whichever was behind.
+- A token never writes a Stamina maximum to a sheet. The maximum is set on the sheet. (A token showing 0 of 0
+  used to be able to write that 0.)
+- After a token's change, the token takes the sheet's answer, so the two agree again at once.
+- A sheet with no Stamina maximum gives its token nothing: the token shows a dash, never 0 of 0.
+- Your map page reads the party's Stamina every four seconds, so a change made on a sheet on another device
+  reaches the hero's token. It costs one word of traffic while nothing has changed, and stops while the tab is
+  hidden.
+- Use Recovery, on the sheet and in the side panel, is worked out by the server: one Recovery fewer, Stamina up
+  by the recovery value as far as the maximum. On the sheet page it used to lower Stamina that was above the
+  maximum, and set Stamina to 0 on a sheet with no maximum.
+- A sheet save that gets no answer is asked after before anything is sent again, so "one more" is never added
+  twice.
+- A number typed in Edit mode is still set as typed.
+
+**Also found and mended.** Every hit on a hero's token left a small receipt in the sheets file, and they were
+never cleared, so the file only grew. They are now kept two days.
+
+**Map pages open from before the update** still send numbers the old way until reloaded (their maximum is
+ignored by the server from now on). Reload the map once after the update, as with the sheets.
+
+**Not in this build:** the heroic resource rules (start of combat, start of turn, costs). Traced, with real
+faults found; next build.
