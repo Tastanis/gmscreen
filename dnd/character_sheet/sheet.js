@@ -482,6 +482,11 @@ function normalizeCommonThings(list) {
 }
 
 let sheetState = deepClone(defaultSheet);
+// The sheet as this page last knew the server to hold it. A save sends only the fields in which sheetState differs
+// from it (sheet-changes.mjs), so a page that is behind cannot roll back or blank a field it never touched.
+// It is brought up to date wherever server data is taken in, when Edit mode begins, and after each save.
+let sheetBaseline = deepClone(defaultSheet);
+const { diffSheet, applyChanges } = await import("./sheet-changes.mjs" + new URL(import.meta.url).search);
 let activeCharacter = "";
 let sheetLoadBlocked = false;
 const expandedActionCards = new Set();
@@ -774,6 +779,8 @@ function applyStaminaSync({ currentStamina, staminaMax }) {
     currentStamina: nextCurrent,
     staminaMax: nextMax,
   };
+  // These came from the server (or the board): they are not a change of this page's to send back.
+  sheetBaseline.hero.vitals = { ...sheetBaseline.hero.vitals, currentStamina: nextCurrent, staminaMax: nextMax };
 
   if (Number.isFinite(nextCurrent)) {
     updateStaminaHistory(nextCurrent);
@@ -984,6 +991,7 @@ function applyRemoteSheetSync(data) {
   const nextState = mergeWithDefaults(data);
   if (JSON.stringify(sheetState) === JSON.stringify(nextState)) return;
   sheetState = nextState;
+  sheetBaseline = deepClone(sheetState);
   renderAll();
 }
 
@@ -3205,29 +3213,24 @@ function bindRespiteButton() {
       confirm.querySelector("[data-confirm-respite]")?.addEventListener("click", async () => {
         confirm.remove();
 
-        const currentXp = Number(sheetState.hero.xp) || 0;
-        const victories = Number(sheetState.hero.victories) || 0;
-        sheetState.hero.xp = currentXp + victories;
-        sheetState.hero.victories = 0;
-
-        const vitals = sheetState.hero.vitals;
-        const recoveriesMax = Number(vitals.recoveriesMax) || 0;
-        vitals.currentRecoveries = recoveriesMax;
-        const staminaMax = Number(vitals.staminaMax) || 0;
-        vitals.currentStamina = staminaMax;
-        updateStaminaHistory(staminaMax);
-
-        renderHeroPane();
-        renderBars();
-        bindSurgeButtons();
-        bindVictoryButtons();
-        bindRespiteButton();
-        bindTokenButtons();
-        bindResourceControls();
-        const saved = await saveSheet();
-        if (saved) {
-          broadcastStaminaToVtt();
-        }
+        // The server works the respite out from the record it holds: Victories to XP, Recoveries and Stamina to
+        // their maximums. This page used to work it out from its own copy and save the whole sheet with it, so a
+        // page that was behind wrote old values back, and one with a blank Recoveries maximum set Recoveries to
+        // none. Anything this page has changed and not yet saved goes first.
+        await saveSheet();
+        pendingSheetWrites++;
+        sheetWriteEpoch++;
+        let rested = null;
+        try { rested = await askSheetServer("respite"); }
+        finally { pendingSheetWrites--; sheetWriteEpoch++; }
+        if (!rested?.data) return;
+        sheetState = mergeWithDefaults(rested.data);
+        sheetBaseline = deepClone(sheetState);
+        updateStaminaHistory(Number(sheetState.hero.vitals.currentStamina) || 0);
+        renderAll();
+        if (Array.isArray(rested.notes) && rested.notes.length) showSheetNotice(rested.notes.join(" "));
+        broadcastSheetSync("sheet");
+        broadcastStaminaToVtt();
       });
     });
   });
@@ -3839,6 +3842,10 @@ function bindEditToggle() {
     toggleEditMode(enabled);
     if (enabled) {
       renderAll();
+      // The form as it reads before anything is typed. Reading it tidies some values (a list is rebuilt from its
+      // rows); taken now, that tidying is never mistaken for an edit, and an untouched list is never sent.
+      captureAllSections();
+      sheetBaseline = deepClone(sheetState);
     }
     if (!enabled) {
       captureAllSections();
@@ -3866,6 +3873,7 @@ async function loadSheet() {
     if (result.success && result.data) {
       sheetLoadBlocked = false;
       sheetState = mergeWithDefaults(result.data);
+      sheetBaseline = deepClone(sheetState);
     } else {
       console.warn("Failed to load sheet", result.error);
       showSheetLoadError(result.error || "Failed to load sheet.");
@@ -3884,12 +3892,19 @@ async function loadSheet() {
 function saveSheet({ keepalive = false } = {}) {
   if (sheetLoadBlocked) return Promise.resolve(false);
 
+  // Only what this page changed. Nothing changed (turning Edit off, a tab going into the background): nothing sent.
+  const changes = diffSheet(sheetBaseline, sheetState);
+  if (!changes.length) return Promise.resolve(true);
   const payload = new URLSearchParams();
-  payload.append("action", "save");
+  payload.append("action", "save-fields");
   if (activeCharacter) {
     payload.append("character", activeCharacter);
   }
-  payload.append("data", JSON.stringify(sheetState));
+  payload.append("changes", JSON.stringify(changes));
+  // They are on their way: a second save started before this one is answered does not send them again. If the
+  // server does not take them, the baseline goes back, so the next save sends them again.
+  const held = changes.map(({ path }) => ({ path, value: path.reduce((at, step) => (at == null ? undefined : at[step]), sheetBaseline) }));
+  applyChanges(sheetBaseline, changes);
   pendingSheetWrites++;
   sheetWriteEpoch++;
 
@@ -3905,12 +3920,17 @@ function saveSheet({ keepalive = false } = {}) {
       const result = await response.json();
       if (!result.success) {
         console.warn("Failed to save sheet", result.error);
+        applyChanges(sheetBaseline, held);
+        showSheetSaveProblem(result.error || "The server did not take the change.");
         return false;
       }
+      clearSheetSaveProblem();
       broadcastSheetSync("sheet");
       return true;
     } catch (error) {
       console.error("Error saving sheet", error);
+      applyChanges(sheetBaseline, held);
+      showSheetSaveProblem("No answer from the server.");
       return false;
     }
   };
@@ -3919,6 +3939,51 @@ function saveSheet({ keepalive = false } = {}) {
   // including a stale victory count while a respite save is queued.
   const saving = keepalive ? send() : (sheetSaveQueue = sheetSaveQueue.catch(() => false).then(send));
   return saving.finally(() => { pendingSheetWrites--; sheetWriteEpoch++; });
+}
+
+// A save that did not happen is said on the page, where the player can see it. It used to go to the console only:
+// a respite or an edit could fail (signed out, no connection) and the page looked as if it had worked.
+function showSheetSaveProblem(reason) {
+  showSheetNotice(`NOT SAVED: ${reason} Your next change will try again. If this message stays, reload the page.`);
+}
+
+function showSheetNotice(text) {
+  let bar = document.getElementById("sheet-save-problem");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "sheet-save-problem";
+    bar.setAttribute("role", "alert");
+    bar.style.cssText = "position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:9999;max-width:min(92vw,560px);padding:10px 14px;border:1px solid #b3261e;border-radius:6px;background:#2b1513;color:#ffd9d5;font:14px/1.4 system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.45)";
+    document.body.appendChild(bar);
+  }
+  bar.textContent = text;
+}
+
+function clearSheetSaveProblem() {
+  document.getElementById("sheet-save-problem")?.remove();
+}
+
+// A request the server works out from the record it holds (a respite). Returns its answer, or null.
+async function askSheetServer(action) {
+  const payload = new URLSearchParams();
+  payload.append("action", action);
+  if (activeCharacter) {
+    payload.append("character", activeCharacter);
+  }
+  try {
+    const response = await fetch("handler.php", { method: "POST", body: payload, credentials: "same-origin" });
+    const result = await response.json();
+    if (!result?.success) {
+      showSheetSaveProblem(result?.error || "The server did not take the change.");
+      return null;
+    }
+    clearSheetSaveProblem();
+    return result;
+  } catch (error) {
+    console.error(`Error asking the server for ${action}`, error);
+    showSheetSaveProblem("No answer from the server.");
+    return null;
+  }
 }
 
 /* ─── Post-to-Chat System ─── */

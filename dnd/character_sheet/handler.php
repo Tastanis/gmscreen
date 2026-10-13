@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . "/AtomicJsonFile.php";
 require_once __DIR__ . "/CharacterWriteReceipts.php";
+require_once __DIR__ . "/SheetChanges.php";
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -447,8 +448,15 @@ function saveCharacterSheetData($dataDir, $dataFile, $data) {
     }
 
     backupCharacterSheetData($dataDir, $dataFile);
-
-    return AtomicJsonFile::write($dataFile, $data);
+    // One copy a day beside the per-write ones, and a line in the change record for every field that differs
+    // from what the file holds now: when, who, which request, old value, new value (SheetChanges).
+    SheetChanges::dailyCopy($dataDir, $dataFile);
+    $before = is_readable($dataFile) ? json_decode((string) file_get_contents($dataFile), true) : null;
+    $written = AtomicJsonFile::write($dataFile, $data);
+    if ($written && is_array($before)) {
+        SheetChanges::record($dataDir, (string) ($GLOBALS['currentUser'] ?? ''), (string) ($GLOBALS['action'] ?? ''), $before, $data, array_keys($data));
+    }
+    return $written;
 }
 
 function acquireCharacterSheetWriteLock($dataDir) {
@@ -543,7 +551,7 @@ try {
 $characterSheetWriteLock = null;
 if (
     $requestMethod === 'POST'
-    && in_array($action, array('save', 'sync-stamina', 'sync-surges', 'sync-resource', 'sync-vitals', 'sync-victories', 'sync-hero-tokens'), true)
+    && in_array($action, array('save-fields', 'respite', 'sync-stamina', 'sync-surges', 'sync-resource', 'sync-vitals', 'sync-victories', 'sync-hero-tokens'), true)
 ) {
     // Every mutation below is a read-modify-write of shared JSON. Hold one
     // request-wide lock so simultaneous player autosaves and VTT resource
@@ -583,22 +591,32 @@ switch ($action) {
         break;
 
     case 'save':
-        $sheetData = isset($_POST['data']) ? json_decode($_POST['data'], true) : null;
-        if ($sheetData === null) {
-            sendJsonResponse(array('success' => false, 'error' => 'Invalid sheet data'));
-        }
+        // The whole-sheet save. It replaced the stored record with whatever copy of the sheet the page held, old
+        // or half-loaded, and that is how fields were rolled back and blanked (Brandon, October 12, 2026:
+        // "Character sheets seem to be changing without permission"). A page from before the change still sends
+        // it, and it cannot say what it changed, so nothing of it is taken. Nothing is changed and it is told to
+        // reload. A page of today sends save-fields.
+        sendJsonResponse(array(
+            'success' => false,
+            'reload' => true,
+            'error' => 'This page is from before an update and can no longer save. Reload the page; nothing was changed.'
+        ));
+        break;
 
+    case 'save-fields':
+        // What the page changed, field by field. Only those fields are set on the stored record.
+        $changes = SheetChanges::read(isset($_POST['changes']) ? json_decode((string) $_POST['changes'], true) : null);
         $allSheets = loadCharacterSheetData($dataDir, $dataFile, $characters);
-        $heroTokens = loadHeroTokens($dataDir, $heroTokenFile);
-        if (!isset($sheetData['hero']) || !is_array($sheetData['hero'])) {
-            $sheetData['hero'] = array();
-        }
-        $sheetData['hero']['heroTokens'] = $heroTokens;
         $existingSheet = isset($allSheets[$requestedCharacter]) && is_array($allSheets[$requestedCharacter])
             ? $allSheets[$requestedCharacter]
             : getDefaultCharacterEntry();
-        $normalizedSheet = mergeCharacterDefaults($sheetData, getDefaultCharacterEntry());
-
+        if (!$changes) {
+            sendJsonResponse(array('success' => true, 'applied' => 0));
+        }
+        $changedSheet = SheetChanges::apply($existingSheet, $changes);
+        $receipts = $existingSheet['_vttOperations'] ?? null;
+        $normalizedSheet = mergeCharacterDefaults($changedSheet, getDefaultCharacterEntry());
+        if ($receipts !== null) $normalizedSheet['_vttOperations'] = $receipts;
         if (
             sheet_has_meaningful_content($existingSheet)
             && !sheet_has_meaningful_content($normalizedSheet)
@@ -609,14 +627,27 @@ switch ($action) {
                 'error' => 'Refusing to replace a populated character sheet with a blank sheet. Reload before saving.'
             ));
         }
-
         $allSheets[$requestedCharacter] = $normalizedSheet;
-
         if (saveCharacterSheetData($dataDir, $dataFile, $allSheets)) {
-            sendJsonResponse(array('success' => true));
+            sendJsonResponse(array('success' => true, 'applied' => count($changes)));
         } else {
             sendJsonResponse(array('success' => false, 'error' => 'Failed to save sheet'));
         }
+        break;
+
+    case 'respite':
+        // Worked out from the stored record, not from numbers a page worked out: a page that was behind used to
+        // write its old values back with the respite, and one whose Recoveries maximum was blank set them to none.
+        $allSheets = loadCharacterSheetData($dataDir, $dataFile, $characters);
+        $rested = SheetChanges::respite($allSheets[$requestedCharacter]);
+        $allSheets[$requestedCharacter] = $rested['sheet'];
+        if (!saveCharacterSheetData($dataDir, $dataFile, $allSheets)) {
+            sendJsonResponse(array('success' => false, 'error' => 'Failed to save the respite'));
+        }
+        $sheet = $rested['sheet'];
+        $sheet['hero']['heroTokens'] = loadHeroTokens($dataDir, $heroTokenFile);
+        unset($sheet['_vttOperations']);
+        sendJsonResponse(array('success' => true, 'data' => $sheet, 'victories' => $rested['victories'], 'notes' => $rested['notes']));
         break;
 
     case 'sync-token-traits':

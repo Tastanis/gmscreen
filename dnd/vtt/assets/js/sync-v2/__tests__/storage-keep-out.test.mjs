@@ -25,7 +25,9 @@ const RULES = {
       'sync-v2.before-split-20261011-101500.sqlite.part', 'sync-v2.sqlite.split.lock', 'scenes.json', 'tokens.json', 'board-state.json', 'board-state.lock'],
     ['map.png', 'bundled-image-0.jpg', 'token.webp', '.gitkeep']],
   'dnd/vtt/config': [['*.json', '*.lock'], ['player-roster.json', 'player-roster.json.lock'], ['sync-v2.php']],
-  'dnd/character_sheet/data': [['*.json', '*.lock'], ['character_sheets.json', 'character_sheets.lock', 'hero_tokens.json', 'character_sheets_latest.json', 'character_sheets_20260706_000945.json'], ['hireling.png', 'portrait.webp']],
+  'dnd/character_sheet/data': [['*.json', '*.lock'], ['character_sheets.json', 'character_sheets.lock', 'hero_tokens.json', 'character_sheets_latest.json', 'character_sheets_20260706_000945.json',
+      // The record of what changed on a sheet and the one copy a day (SheetChanges.php): named .json so they are kept out too.
+      'sheet_changes.json', 'sheet_changes_previous.json', 'daily_character_sheets_20261013.json'], ['hireling.png', 'portrait.webp']],
   'dnd/strixhaven/students': [['*.json', '*.lock', 'error_log'], ['students.json', 'students_backup_20261001.json', 'students.lock', 'error_log'], ['index.php', 'students.js', 'students.css', 'portrait.png', 'thumb.webp']],
   'dnd/strixhaven/staff': [['*.json', '*.lock', 'error_log'], ['staff.json', 'staff_backup_20261001.json', 'staff.lock', 'error_log'], ['index.php', 'staff.js', 'staff.css', 'portrait.png', 'thumb.webp']],
   'dnd/strixhaven/locations': [['*.json'], ['locations.json'], ['index.php', 'locations.js', 'place.png']],
