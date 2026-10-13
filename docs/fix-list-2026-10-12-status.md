@@ -515,3 +515,22 @@ pull, a teleport, a change of floor.
 the part that draws; on a real page the ping passes through a tidying step first, and that step threw the
 height away. For auras, I had tested only an aura round a token standing still, never one that moved. Both now
 have tests of the path a page takes.
+
+## Build 501: a fault of mine in Build 493, found before it reached you
+
+**What was wrong.** From Build 493 on, your page (the Director's) hit an error as it started up, and part of
+its start-up never ran. Players' pages were not affected. It was my mistake in 493: two settings written lower
+in the file than the line that needed them. None of Builds 493 to 500 was pushed, so it never reached the site.
+
+**How it was found.** Not by a test. By opening your page myself, as the helper told me to before handing
+anything over. Mended, and a test now guards that line.
+
+**Seen with two pages open (yours and Cal's), on Medpilis, with this build:**
+- A ping made on Cal's page at height lands on the same spot on your page.
+- An aura stays on its token on both pages when the token is moved, with no reload.
+- Three strokes drawn one straight after another all stay, and all reach the other page.
+- A stroke drawn on the wall-walk is the wall-walk's: Cal sees it standing there and not from the courtyard.
+  Strokes on the ground are seen from both.
+- Your page reads the party's Stamina every four seconds without error.
+
+**Not yet seen by me:** an aura during a drag, the eraser, a reload with strokes on the map, the sheets.
