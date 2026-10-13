@@ -38,3 +38,27 @@ page's own rule):
 
 **Not in this build:** ability pushes offered in a straight line only (you said yes to that on the same day);
 it changes what the picker offers, so it is the next build and not mixed into this one.
+
+## Build 482: an ability's push or pull goes in one straight line
+
+Your words: "Ability pushes go in a straight line, yes."
+
+**Before:** when an ability pushed a creature, the picker lit up a fan: every square that was further from the
+pusher. A push could go off at an angle.
+
+**Now:**
+- A push lights up one line of squares: from the pusher, through the target, and on, as far as the push goes.
+  A pull lights up the line from the target toward the puller, ending beside the puller.
+- Straight ahead, straight to the side and a true diagonal are plain rows of squares. At any other angle (a
+  pusher two across and one up from the target, say) the line steps over as it goes.
+- You may still stop short: any square on the line can be picked.
+- A click anywhere else is taken as the nearest square on the line, so aiming is forgiving.
+- Clicking a creature that stands on the line slams the target into it with the whole distance, as before.
+  A creature off the line is only a place to aim at.
+- The server holds an ability's push or pull to that line and refuses one that is off it ("A push goes in a
+  straight line away from the pusher.").
+
+**Not changed:**
+- A slide. It may go round things and is offered any square, as before.
+- Your own forced drag by hand (Ctrl-drag). It goes where you put it; that is how you overrule the line.
+- What stops a push: walls, creatures, slopes, breaking through, the fall at the end.
