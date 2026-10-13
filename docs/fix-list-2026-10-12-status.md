@@ -105,3 +105,27 @@ would settle it: "Allowed memory size ... exhausted" in sandbox-export/index.php
 
 **It needs a deploy.** The export is part of the site, so the download works again only after this build is
 deployed from cPanel.
+
+## Build 485: pings and auras at the right height, and a find-my-token button (items 11, 7, 10)
+
+Your words: "The pings have the same issue, being drawn on the lowest part of the map instead of the level you
+click on." "Auras appear on the ground instead of tied to a token. so if a token is in the air... the aura is on
+the ground way under them." "There needs to be a tiny button in the top right that causes a ping to emit from
+your token so you can find where it is on the map and it centers your screen on your token."
+
+**Why it happened.** The board leans, so a floor above is drawn up and across from the ground under it. A ping
+kept only its place on the flat map, and an aura was placed by its token's square and never lifted with it.
+Both were drawn on the ground however high the thing they belonged to.
+
+**Pings.** A ping now keeps the height of what was clicked (a floor, a stair, the ground, the bottom of a pit)
+and every page draws it there. A focus ping (the one that moves everyone's view) centres on that spot as drawn.
+
+**Auras.** An aura is drawn lifted exactly as its token is: on a floor above, in the air, on a stair.
+
+**Find my token.** The button was already in the top right for players ("My token": it centres the view on
+your hero and goes to its floor). It now also sends a ping out from the token it finds, on your page only, so
+the eye lands on it. The Director has the same button now, labelled "Find token": select one token, press it,
+and the view centres on that token with a ping. With none or several selected it says "Select one token to
+find it."
+
+**Not in this build:** drawings (item 3). They are next, as a build of their own.
