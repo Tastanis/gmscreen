@@ -263,3 +263,54 @@ now for whoever moves the target.
 - The app cannot tell a willing move from one a creature was ordered into; it counts every walk or shift of
   the target while the watch lasts.
 - Moves made with the arrow keys count a square at a time: 1 damage each.
+
+## Build 491: a sheet page saves only what it changed (items 2 and 4, first half)
+
+Your words: "Character sheets seem to be changing without permission ... zepha's might and agility were just
+randomly reset to zero. and when they did a respite, i think it didnt give him back any of his recoveries or
+something. Some weird things seem to not be syncing or staying correctly sometimes."
+
+**The cause was one thing.** Every save from the sheet page sent the whole character as that page held it, and
+the server replaced the whole stored character with it. It never checked that the page was up to date. A page
+left open in Edit mode, a phone tab that woke up, a second device: any old copy that saved wrote its old values
+over newer ones, and a field that was blank on that copy was stored blank. A respite was worked out on the page
+from its own copy, so a page with a blank Recoveries maximum set Recoveries to none.
+
+**What is different now.**
+- A sheet page sends only the fields it changed. A field nobody touched on that page cannot be rolled back or
+  blanked by it, however old the page is. Two people on one sheet: the last one to change a field wins that
+  field, and nothing else moves.
+- A page that changed nothing sends nothing. Turning Edit off, or a tab going into the background, no longer
+  writes the sheet.
+- An emptied Might, Agility, Reason, Intuition or Presence is never stored over a number. A blank input is not
+  a score.
+- Respite is worked out by the server from the record it holds: Victories to XP, Recoveries and Stamina to
+  their maximums. A sheet with no Recoveries maximum is left as it is and the page says so.
+- A save that did not happen is said on the page ("NOT SAVED ... Reload the page"). It used to go only to the
+  browser's hidden log, so a failed respite looked as if it had worked.
+
+**Pages still open from before the update.** The server no longer takes a whole-character save at all. A page
+loaded before this build that tries one is refused, nothing is changed, and the answer tells it to reload.
+That old page shows no message (its script only writes to the hidden log): its player's edits do not stick
+until they reload. Worth telling the table to reload their sheets once after the update.
+
+**The stored file keeps its shape.** Nothing is converted.
+
+**A record of every change, and one copy a day.** Both are in the sheets' own data folder, which the web
+server refuses to hand out (every .json there):
+- `dnd/character_sheet/data/sheet_changes.json`: one line a write: when, who, which request, each field's old
+  and new value. Past two megabytes it is kept once as `sheet_changes_previous.json` and a new one begun.
+- `dnd/character_sheet/data/backups/daily_character_sheets_YYYYMMDD.json`: the sheets as they stood before the
+  day's first write, kept sixty days.
+The next time a sheet "changes by itself", the record says which page did it and when.
+
+**Limits to know.**
+- A list (abilities, features, skills, inventory) is one field and is saved whole. Two pages editing the same
+  list at once: the last one wins that list.
+- The small plus and minus buttons outside Edit mode still send the new number for their one field, not
+  "one more". That, Use Recovery, and what the map's side panel writes are the second half.
+
+**Still to come (second half):** Use Recovery, surges, victories and the map side panel's writes as amounts the
+server works out; a token never writing a sheet's Stamina maximum from an empty number; the map showing a dash,
+never 0, for a sheet it cannot load; sheet changes reaching tokens on other devices; the heroic resource traced
+end to end for every class.
