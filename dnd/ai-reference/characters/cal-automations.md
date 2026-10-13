@@ -1,6 +1,7 @@
 ﻿Cal Ability Automations - Copy/Paste Blocks
 
 Copy exactly one JSON block at a time and paste it into the ability automation popup for the matching live sheet card.
+Each block's "fields" are Cal's cards as saved on October 7, 2026, so a block pasted onto a new, empty card fills in the whole card (name, action, keywords, distance, target, cost, text and the power roll's three tiers), and pasted onto the old card changes nothing that was right.
 
 ========================================================================
 01. Thorn In Foot
@@ -8,9 +9,22 @@ Section: mains
 Live action id: action_1779503651502_1d50c961da0fc
 Rules source: Your Allies Cannot Save You!
 {
-    "fields":  {
-
-               },
+    "fields": {
+        "name": "Thorn In Foot",
+        "actionLabel": "Main Action",
+        "keywords": "Magic, Ranged, Strike",
+        "range": "Ranged 10",
+        "target": "One creature",
+        "cost": "None",
+        "description": "Each time the target willingly moves before the end of your next turn, they take 1 psychic damage for each square they move.",
+        "testLabel": "Power Roll + Presence",
+        "tier1Damage": "5 + P",
+        "tier1DamageType": "psychic",
+        "tier2Damage": "7 + P",
+        "tier2DamageType": "psychic",
+        "tier3Damage": "10 + P",
+        "tier3DamageType": "psychic"
+    },
     "automation":  {
                        "schema":  "ability-automation/v3",
                        "cards":  [
@@ -70,6 +84,7 @@ Rules source: Your Allies Cannot Save You!
                                          "target":  "primary",
                                          "condition":  "Before the end of your next turn, the target willingly moves.",
                                          "autoResolve":  true,
+                                         "effectTarget":  "eventActor",
                                          "match":  {
                                                        "event":  "move",
                                                        "filter":  {
@@ -81,7 +96,6 @@ Rules source: Your Allies Cannot Save You!
                                          "effects":  [
                                                          {
                                                              "kind":  "damage",
-                                                             "target":  "eventActor",
                                                              "amountFrom":  {
                                                                                 "source":  "triggeringForcedMovement"
                                                                             },
@@ -105,9 +119,22 @@ Rules source: Your Allies Cannot Save You!
 Section: mains
 Live action id: action_1779503891513_bf1a1797a9b1b8
 {
-    "fields":  {
-
-               },
+    "fields": {
+        "name": "Protective Attack",
+        "actionLabel": "Main Action",
+        "keywords": "Melee, Strike, Weapon",
+        "range": "Melee 1",
+        "target": "One creature",
+        "cost": "None",
+        "description": "The target is taunted until the end of their next turn.",
+        "testLabel": "Power Roll + Might or Agility",
+        "tier1Damage": "5 + M or A",
+        "tier1Notes": "taunted until end of next turn",
+        "tier2Damage": "8 + M or A",
+        "tier2Notes": "taunted until end of next turn",
+        "tier3Damage": "11 + M or A",
+        "tier3Notes": "taunted until end of next turn"
+    },
     "automation":  {
                        "schema":  "ability-automation/v3",
                        "cards":  [
@@ -190,7 +217,22 @@ Section: mains
 Live action id: action_1779504025064_ccd0f5e53d3ac
 Rules source: The Gods Punish and Defend
 {
-    "fields": { "cost": "3 Wrath" },
+    "fields": {
+        "name": "Morelia Punish and Defend",
+        "actionLabel": "Main Action",
+        "keywords": "Magic, Melee, Strike, Weapon",
+        "range": "Melee 1",
+        "target": "One creature or object",
+        "cost": "3 Wrath",
+        "description": "You channel holy energy to smite a foe and heal an ally. Effect: You can spend a Recovery to allow yourself or one ally within 10 squares to regain Stamina equal to your recovery value.",
+        "testLabel": "Power Roll + Might",
+        "tier1Damage": "5 + M",
+        "tier1DamageType": "holy",
+        "tier2Damage": "8 + M",
+        "tier2DamageType": "holy",
+        "tier3Damage": "11 + M",
+        "tier3DamageType": "holy"
+    },
     "automation": {
         "schema": "ability-automation/v3",
         "cards": [
@@ -259,9 +301,25 @@ Rules source: The Gods Punish and Defend
 Section: mains
 Live action id: action_1779504169845_50d8080f3a0c4
 {
-    "fields":  {
-                   "cost":  "5 Wrath"
-               },
+    "fields": {
+        "name": "Purifying Fire",
+        "actionLabel": "Main Action",
+        "keywords": "Magic, Melee, Ranged, Strike, Weapon",
+        "range": "Melee 1 or Ranged 5",
+        "target": "One creature",
+        "cost": "5 Wrath",
+        "description": "Effect: While the target has fire weakness from this ability, you can choose to have your abilities deal fire damage to the target instead of holy damage.",
+        "testLabel": "Power Roll + Might",
+        "tier1Damage": "7 + M",
+        "tier1DamageType": "holy",
+        "tier1Notes": "M < weak: fire weakness 3 (save ends)",
+        "tier2Damage": "11 + M",
+        "tier2DamageType": "holy",
+        "tier2Notes": "M < average: fire weakness 5 (save ends)",
+        "tier3Damage": "14 + M",
+        "tier3DamageType": "holy",
+        "tier3Notes": "M < strong: fire weakness 7 (save ends)"
+    },
     "automation":  {
                        "schema":  "ability-automation/v3",
                        "cards":  [
@@ -377,9 +435,14 @@ Live action id: action_1779504169845_50d8080f3a0c4
 Section: maneuvers
 Live action id: action_1779504368699_863547a261abf
 {
-    "fields":  {
-
-               },
+    "fields": {
+        "name": "Judgment",
+        "actionLabel": "Maneuver",
+        "keywords": "Magic, Ranged",
+        "range": "Ranged 10",
+        "target": "One enemy",
+        "description": "Effect: The target is judged by you until the end of the encounter, you use this ability again, you willingly end this effect (no action required), or another censor judges the target.<br>&nbsp;<br>Judgment Order Benefit - Paragon: The first time on a turn that you use your Judgment ability to judge a creature, you can vertical pull the judged creature up to a number of squares equal to twice your Presence score."
+    },
     "automation":  {
                        "schema":  "ability-automation/v3",
                        "cards":  [
@@ -466,9 +529,15 @@ Live action id: action_1779504368699_863547a261abf
 Section: maneuvers
 Live action id: action_1779504433990_6195cd85bddf28
 {
-    "fields":  {
-                   "cost":  "5 Wrath"
-               },
+    "fields": {
+        "name": "Blessing of the Faithful",
+        "actionLabel": "Maneuver",
+        "keywords": "Area, Magic",
+        "range": "Aura 3",
+        "target": "Self and each ally in the area",
+        "cost": "5 Wrath",
+        "description": "<span>Until the end of the encounter or until you are dying, each target in the aura gains 1 surge at the end of each of your turns</span>"
+    },
     "automation":  {
                        "schema":  "ability-automation/v3",
                        "cards":  [
@@ -511,9 +580,15 @@ Live action id: action_1779504433990_6195cd85bddf28
 Section: maneuvers
 Live action id: action_1779504555719_67ae7d677ba59
 {
-    "fields":  {
-                   "cost":  "7 Wrath"
-               },
+    "fields": {
+        "name": "Edict of Purifying Pacifism",
+        "actionLabel": "Maneuver",
+        "keywords": "Area Magic",
+        "range": "Aura 2",
+        "target": "Each enemy in the area",
+        "cost": "7 Wrath",
+        "description": "<span>Until the end of the encounter or until you are dying, whenever a target makes a strike, they take holy damage equal to 6. A target judged by you takes an extra 2d6 holy damage.</span>"
+    },
     "automation":  {
                        "schema":  "ability-automation/v3",
                        "cards":  [
@@ -577,7 +652,16 @@ Live action id: action_1779504555719_67ae7d677ba59
 Section: triggers
 Live action id: action_1779504610833_235d3bc58cbe48
 {
-    "fields": {},
+    "fields": {
+        "name": "My Life for Yours",
+        "actionLabel": "Triggered Action",
+        "keywords": "Magic, Ranged",
+        "range": "Ranged 10",
+        "target": "Self or one ally",
+        "trigger": "The target starts their turn or takes damage",
+        "cost": "None",
+        "description": "<div><p>You spend a Recovery and the target regains Stamina equal to 34.</p><p><br></p><p>Spend 1 Wrath--You can end one effect on the target that is ended by a saving throw or that ends at the end of their turn, or a prone target can stand up.</p></div>"
+    },
     "automation": {
         "schema": "ability-automation/v3",
         "cards": [
@@ -658,9 +742,15 @@ Live action id: action_1779504610833_235d3bc58cbe48
 Section: triggers
 Live action id: action_1779504726512_71f4fd668ac0c8
 {
-    "fields":  {
-
-               },
+    "fields": {
+        "name": "Resist the Unnatural",
+        "actionLabel": "Triggered Action",
+        "useWhen": "When you take damage that isn't untyped",
+        "range": "Self",
+        "target": "Self",
+        "trigger": "You take damage that isn’t untyped.",
+        "description": "Your instinctive resilience protects you from injuries beyond the routine.<div><br></div><div>Trigger: Whenever you take damage that isn’t untyped.</div><div>Effect: You can use a triggered action to take half the damage.</div>"
+    },
     "automation":  {
                        "schema":  "ability-automation/v3",
                        "cards":  [
@@ -700,9 +790,13 @@ Live action id: action_1779504726512_71f4fd668ac0c8
 Section: triggers
 Live action id: action_1780273102615_aa1a74f2473bb
 {
-    "fields":  {
-
-               },
+    "fields": {
+        "name": "Judgment - Main Action Rebuke",
+        "actionLabel": "Free Triggered Action",
+        "keywords": "Magic, FreeTriggered",
+        "trigger": "A creature judged by you uses a main action and is within your line of effect.",
+        "description": "Whenever a creature judged by you uses a main action and is within your line of effect, you can use a free triggered action to deal holy damage equal to twice your Presence score to them."
+    },
     "automation":  {
                        "schema":  "ability-automation/v3",
                        "cards":  [
@@ -747,9 +841,15 @@ Live action id: action_1780273102615_aa1a74f2473bb
 Section: triggers
 Live action id: action_1780273114468_6607d1542407
 {
-    "fields":  {
-
-               },
+    "fields": {
+        "name": "Judgment - New Target",
+        "actionLabel": "Free Triggered Action",
+        "keywords": "Magic, Ranged, FreeTriggered",
+        "range": "Ranged 10",
+        "target": "One enemy",
+        "trigger": "A creature judged by you is reduced to 0 Stamina.",
+        "description": "When a creature judged by you is reduced to 0 Stamina, you can use a free triggered action to use Judgment against a new target."
+    },
     "automation":  {
                        "schema":  "ability-automation/v3",
                        "cards":  [
@@ -833,9 +933,14 @@ Live action id: action_1780273114468_6607d1542407
 Section: triggers
 Live action id: action_1780274930123_b34653314140c
 {
-    "fields":  {
-                   "cost":  "1 Wrath"
-               },
+    "fields": {
+        "name": "Judgment - Wrath: Stop Shift",
+        "actionLabel": "Free Triggered Action",
+        "keywords": "FreeTriggered",
+        "trigger": "An adjacent creature judged by you starts to shift.",
+        "cost": "1 Wrath",
+        "description": "When an adjacent creature judged by you starts to shift, you make a melee free strike against them and their speed becomes 0 until the end of the current turn, preventing them from shifting."
+    },
     "automation":  {
                        "schema":  "ability-automation/v3",
                        "cards":  [
@@ -878,9 +983,14 @@ Live action id: action_1780274930123_b34653314140c
 Section: triggers
 Live action id: action_1780274938055_d303cfb0781e78
 {
-    "fields":  {
-                   "cost":  "1 Wrath"
-               },
+    "fields": {
+        "name": "Judgment - Wrath: Bane Power Roll",
+        "actionLabel": "Free Triggered Action",
+        "keywords": "FreeTriggered",
+        "trigger": "A creature judged by you within 10 squares makes a power roll.",
+        "cost": "1 Wrath",
+        "description": "When a creature judged by you within 10 squares makes a power roll, you cause them to take a bane on the roll."
+    },
     "automation":  {
                        "schema":  "ability-automation/v3",
                        "cards":  [
@@ -911,9 +1021,14 @@ Live action id: action_1780274938055_d303cfb0781e78
 Section: triggers
 Live action id: action_1780274946089_ff06f53d9a2e1
 {
-    "fields":  {
-                   "cost":  "1 Wrath"
-               },
+    "fields": {
+        "name": "Judgment - Wrath: Reduce Potency",
+        "actionLabel": "Free Triggered Action",
+        "keywords": "FreeTriggered",
+        "trigger": "A creature judged by you within 10 squares uses an ability with a potency that targets only one creature.",
+        "cost": "1 Wrath",
+        "description": "When a creature judged by you within 10 squares uses an ability with a potency that targets only one creature, the potency is reduced by 1 for that creature."
+    },
     "automation":  {
                        "schema":  "ability-automation/v3",
                        "cards":  [
@@ -945,9 +1060,14 @@ Live action id: action_1780274946089_ff06f53d9a2e1
 Section: triggers
 Live action id: action_1780274956221_e53656897d4a6
 {
-    "fields":  {
-                   "cost":  "1 Wrath"
-               },
+    "fields": {
+        "name": "Judgment - Wrath: Melee Damage Taunt",
+        "actionLabel": "Free Triggered Action",
+        "keywords": "FreeTriggered",
+        "trigger": "You damage a creature judged by you with a melee ability.",
+        "cost": "1 Wrath",
+        "description": "If you damage a creature judged by you with a melee ability, the creature is taunted by you until the end of their next turn."
+    },
     "automation":  {
                        "schema":  "ability-automation/v3",
                        "cards":  [
