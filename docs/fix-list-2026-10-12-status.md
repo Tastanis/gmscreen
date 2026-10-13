@@ -444,3 +444,22 @@ ground floor, the stroke was the ground floor's, and the player standing on the 
 page was on).
 
 **Not checked by eye.** I have no browser; the tester will draw on a platform and look from above and below.
+
+## Build 496: what the tester found on 485 and 483
+
+**Pings (item 11) were right only on the page that made them.** On every other page the ping was still drawn
+on the ground under the floor that was clicked. The height was kept by the page and by the server, and thrown
+away in between by a tidying step every other page reads pings through. Mended. My first test never took that
+path; it does now.
+
+**An aura stayed behind when its token moved (item 7).** Older than these builds: a move redrew the token and
+not its aura, on every page, until a reload. Auras are now redrawn when a token moves.
+
+**Undoing a push gives back its damage (item 1).** Your words: "I need a way to undo a breakthrough". Undo Move
+on a push now takes back what the push itself did: the wall it broke, and the damage dealt by what it hit or
+broke through, to the creature pushed and to any it struck. Never above a creature's maximum.
+- Left as they are: a fall's damage and being knocked prone; anything that happened to the creature after the
+  push; a minion squad's shared pool (the rules do not let minions regain Stamina).
+- A move can still be undone after later changes to the creature. Only the push's own damage is given back.
+
+**The site export** now checks the key before anything else.
