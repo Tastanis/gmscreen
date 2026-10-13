@@ -588,3 +588,14 @@ two watches on two enemies both fire; taking one off stops only that one.
 **Two faults of this kind in one night** (your page in 493, the sheet page in 491). Both were in what a page
 does as it starts, and both passed every test. From now on a build that touches how a page starts is opened in
 a browser, as you and as a player, before it is handed over.
+
+## Build 504: a test that opens every page
+
+After two pages failed to start in one night with every test passing, there is now a test that starts each
+page in a real browser (with no window) and fails if it does not start: the map as you and as a player, the
+character sheet, and the main page. It waits for each page to say it has finished starting, so a page that
+comes up empty without any error is caught as well. I put Build 491's fault back on purpose to see it caught:
+"the character sheet: DID NOT START."
+
+It is part of the ordinary test run from now on. Nothing in the app itself changes with this build except the
+two small marks the pages set when they have started.
