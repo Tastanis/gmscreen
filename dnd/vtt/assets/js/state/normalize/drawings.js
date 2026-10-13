@@ -69,5 +69,10 @@ export function normalizeDrawingEntry(entry) {
   if (typeof entry.authorId === 'string' && entry.authorId.trim()) {
     normalized.authorId = entry.authorId.trim().toLowerCase();
   }
+  // The height of the floor the stroke was drawn on (drawing-tool.js); 0 is the ground, and is kept: it is what
+  // tells a stroke drawn on a map with built floors from an older one with no height at all.
+  if (typeof entry.z === 'number' && Number.isFinite(entry.z)) {
+    normalized.z = entry.z;
+  }
   return normalized;
 }

@@ -94,3 +94,12 @@ test('the tool is free while a stroke is on its way, and strokes are sent in the
   assert.match(tool, /if \(last && Math\.hypot\(point\.x - last\.x, point\.y - last\.y\) < MIN_POINT_STEP\) return;/);
   assert.match(tool, /const MIN_POINT_STEP = 2;/);
 });
+
+// The same path the ping fault took (Build 496): a page that loads tidies the drawings it is given, and the
+// tidying kept a fixed list of fields.
+test('a stroke\'s height survives a page load', async () => {
+  const { normalizeDrawings } = await import('../../state/normalize/drawings.js');
+  const given = { scene: [stroke('on-the-platform', { z: 5 }), stroke('on-the-ground', { z: 0 }), stroke('old'), stroke('odd', { z: 'high' })] };
+  const kept = normalizeDrawings(given).scene;
+  assert.deepEqual(kept.map((drawing) => [drawing.id, drawing.z]), [['on-the-platform', 5], ['on-the-ground', 0], ['old', undefined], ['odd', undefined]]);
+});
