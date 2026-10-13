@@ -252,6 +252,82 @@ describe('renderCombatTracker', () => {
     assert.deepEqual(cleared, []);
   });
 
+  // The Director's page, reloaded in mid-round: the saved fight is applied before the tokens are drawn, and the
+  // tracker is redrawn from the list it remembers, which is still empty (board-interactions.js,
+  // applyCombatStateFromBoardState -> refreshCombatTracker). The tester, Build 505: "his turn-order strip shows
+  // nobody as done... the Director double-clicks Gintaras in the waiting row and the server starts his turn again".
+  test('a tracker with nobody on it yet does not forget who has acted, or whose turn it is', () => {
+    const { documentRef, root, waiting, completed } = createTrackerDom();
+    const done = new Set(['cal', 'gintaras']);
+    const calls = { completed: [], groups: [], active: [] };
+    const draw = (combatants, options) => renderCombatTracker({
+      elements: { root, waiting, completed },
+      combatants,
+      options,
+      state: { combatantTeams: new Map(), completedCombatants: done, trackerHoverTokenIds: new Set() },
+      callbacks: createCallbacks({
+        activeCombatantId: 'ogre',
+        hooks: {
+          // The Director's own tidy-up, as board-interactions.js has it: whoever is not on the tracker is dropped.
+          pruneCompletedCombatants: (activeIds) => { calls.completed.push(activeIds.size); [...done].forEach((id) => { if (!activeIds.has(id)) done.delete(id); }); },
+          pruneCombatGroups: (activeIds) => { calls.groups.push(activeIds.size); return false; },
+          setActiveCombatantId: (id) => calls.active.push(id),
+        },
+      }),
+      documentRef,
+      HTMLElementCtor: FakeElement,
+    });
+
+    // The redraw from the remembered list, before any token has been drawn. No skipPrune: that is the path.
+    draw([], { skipCache: true, activeIds: new Set() });
+    assert.deepEqual([...done], ['cal', 'gintaras'], 'nobody is dropped from "has acted"');
+    assert.deepEqual(calls, { completed: [], groups: [], active: [] }, 'nothing is tidied and the turn is not cleared');
+
+    // The tokens arrive: both are drawn as done, and the ogre keeps its turn.
+    const everyone = [{ id: 'cal', name: 'Cal' }, { id: 'gintaras', name: 'Gintaras' }, { id: 'ogre', name: 'Ogre' }];
+    draw(everyone, { activeIds: new Set(['cal', 'gintaras', 'ogre']) });
+    assert.deepEqual(completed.children.map((node) => node.dataset.combatantId).sort(), ['cal', 'gintaras']);
+    assert.deepEqual(waiting.children.map((node) => node.dataset.combatantId), ['ogre']);
+    assert.deepEqual(calls.active, []);
+
+    // And the tidy-up still does its work once there is somebody to compare against: a token that was deleted.
+    draw(everyone.slice(1), { activeIds: new Set(['gintaras', 'ogre']) });
+    assert.deepEqual([...done], ['gintaras'], 'Cal\'s token is gone, so he leaves the list');
+  });
+
+  test('the page takes that path, and its own tidy-up holds to the same rule', async () => {
+    const { readFileSync } = await import('node:fs');
+    const board = readFileSync(new URL('../../ui/board-interactions.js', import.meta.url), 'utf8');
+    const apply = board.slice(board.indexOf('  function applyCombatStateFromBoardState('), board.indexOf('  function resetTurnEffects('));
+    assert.ok(apply.indexOf('normalized.completedCombatantIds.forEach((id) => completedCombatants.add(id));') > 0);
+    assert.ok(apply.indexOf('refreshCombatTracker();') > apply.indexOf('completedCombatants.add(id)'), 'the saved list is put in place, then the tracker is redrawn from what it remembers');
+    // That redraw no longer tidies at all: what the tracker remembers may be nothing yet, or another scene's tokens
+    // (the Director changing the map he looks at in mid-fight). Only tokens being drawn tidy.
+    assert.match(board, /function refreshCombatTracker\(\) \{[\s\S]{0,700}updateCombatTracker\(lastCombatTrackerEntries, \{\s*skipCache: true,\s*skipPrune: true,\s*activeIds: lastCombatTrackerActiveIds,\s*\}\);/);
+    assert.match(board, /if \(!options\.skipTracker\) \{\s*updateCombatTracker\(trackerEntries, \{ activeIds: activeCombatantIds \}\);/, 'drawing the tokens still does');
+    assert.match(board, /function pruneCompletedCombatants\(activeIds\) \{\s*const activeSet = [^\n]+\n[^\n]*\n\s*if \(!activeSet\.size\) return;/);
+  });
+
+  test('a redraw from another scene\'s remembered tokens does not drop this scene\'s list either', () => {
+    const { documentRef, root, waiting, completed } = createTrackerDom();
+    const done = new Set(['cal', 'gintaras']);
+    let tidied = 0;
+    renderCombatTracker({
+      elements: { root, waiting, completed },
+      combatants: [{ id: 'old-scene-goblin', name: 'Goblin' }],
+      options: { skipCache: true, skipPrune: true, activeIds: new Set(['old-scene-goblin']) },      // as refreshCombatTracker now draws
+      state: { combatantTeams: new Map(), completedCombatants: done, trackerHoverTokenIds: new Set() },
+      callbacks: createCallbacks({ activeCombatantId: 'cal', hooks: {
+        pruneCompletedCombatants: () => { tidied += 1; done.clear(); },
+        setActiveCombatantId: () => { tidied += 1; },
+      } }),
+      documentRef,
+      HTMLElementCtor: FakeElement,
+    });
+    assert.equal(tidied, 0);
+    assert.deepEqual([...done], ['cal', 'gintaras']);
+  });
+
   test('leaves an unknown team uncached so placement inference can run', () => {
     const { documentRef, root, waiting, completed } = createTrackerDom();
     const combatantTeams = new Map([['unknown', 'enemy']]);

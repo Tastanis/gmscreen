@@ -10095,8 +10095,12 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!combatTrackerRoot || !combatTrackerWaiting || !combatTrackerCompleted) {
       return;
     }
+    // A redraw from what the tracker remembers, so it is never the moment to decide who has left the fight: the
+    // remembered tokens may be none yet (a page just loaded) or another scene's (the map just changed). Tidying
+    // here is what made the Director's strip forget who had acted. Tokens being drawn (renderTokens) tidy.
     updateCombatTracker(lastCombatTrackerEntries, {
       skipCache: true,
+      skipPrune: true,
       activeIds: lastCombatTrackerActiveIds,
     });
   }
@@ -10115,6 +10119,8 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function pruneCompletedCombatants(activeIds) {
     const activeSet = activeIds instanceof Set ? activeIds : new Set(activeIds ?? []);
+    // No tokens to compare against (a page still loading them): nobody is known to have left.
+    if (!activeSet.size) return;
     const representativeSet = new Set();
 
     activeSet.forEach((id) => {

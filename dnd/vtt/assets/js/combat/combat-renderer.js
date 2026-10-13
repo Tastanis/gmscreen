@@ -84,7 +84,12 @@ export function renderCombatTracker({
     ? new Map()
     : callbacks.buildDisplayRepresentatives?.(visibleEntryIds) ?? new Map();
 
-  if (!options?.skipPrune) {
+  // A tracker with nobody on it says nothing about who has left the fight. The Director's page, reloaded in
+  // mid-round, applies the saved fight before its tokens are drawn, and redraws the tracker from a list that is
+  // still empty: tidying against that list emptied "who has acted" (and dropped whose turn it was) until the next
+  // turn ended. (The tester, Build 505; Brandon: "I've seen that where they like pop back. Especially after
+  // reloading.") Players' pages never tidied, and were right.
+  if (!options?.skipPrune && activeIds.size > 0) {
     const groupsPruned = gmViewing ? Boolean(callbacks.pruneCombatGroups?.(activeIds)) : false;
     if (gmViewing) {
       callbacks.pruneCompletedCombatants?.(activeIds);
@@ -160,6 +165,7 @@ export function renderCombatTracker({
   const activeCombatantId = getActiveCombatantId();
   if (
     !options?.skipPrune
+    && activeIds.size > 0             // as above: nobody drawn yet is not "the one whose turn it is has gone"
     && activeCombatantId
     && !renderedRepresentatives.has(activeCombatantId)
     && gmViewing
