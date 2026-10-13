@@ -501,3 +501,17 @@ Found by reading Build 493 again, not seen in play. When a player's page hurt a 
 once and the sheet a moment later. If your page's four-second read of the sheets fell in that moment, the
 token would have jumped back to the old number and forward again. Your page now leaves a hero alone for three
 seconds after its token changes, and reads it the next time round.
+
+## Build 500: an aura goes with its token while you drag it (item 7)
+
+Your words: "auras appear on the ground instead of tied to a token".
+
+Build 496 made an aura follow its token once a move was done, on every page. While you were dragging the
+token, though, the aura still sat where the token had been until you let go. It now moves with the token
+during the drag. On other pages a token moves when the move is made, and its aura with it: a walk, a push or
+pull, a teleport, a change of floor.
+
+**Why my earlier tests passed while the page was wrong.** For pings, the test handed the height straight to
+the part that draws; on a real page the ping passes through a tidying step first, and that step threw the
+height away. For auras, I had tested only an aura round a token standing still, never one that moved. Both now
+have tests of the path a page takes.
