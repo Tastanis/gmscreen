@@ -638,3 +638,29 @@ site disguised as a picture, and run it.
 - Uploading and deleting pictures in the Monster Creator works for you as before.
 
 Nothing was found to have been misused; this closes the door.
+
+## Build 507: the same security hole in the site's other picture uploads
+
+Build 506 closed a hole in the Monster Creator's picture upload. Looking at every other place the site takes a
+picture showed the same hole in thirteen more. Nothing you would have seen in play.
+
+**What was wrong.**
+- A logged-in player who knew how could put a program on the site disguised as a picture, through the hex map,
+  an inventory item, a hireling's picture, or the picture boxes in the students, staff and locations notes.
+- The old inventory page would delete, or make a public copy of, any file on the site that a player named.
+- A player taking one of your shared pictures off a hex also deleted your own copy of it.
+
+**What is different now.**
+- Every upload checks that the file really is a picture, names the stored file itself, and keeps it in a folder
+  that will not run anything.
+- Pictures in the students, staff and locations notes are yours alone to add, as those pages already were.
+- Deleting or sharing anything only ever touches that thing's own picture.
+- Adding and removing pictures works as before everywhere. One change you could notice: BMP files are no
+  longer accepted (JPEG, PNG, GIF and WebP are).
+
+**After the deploy, one look:** open a student's or staff member's portrait and an inventory item's picture. If
+they show, all is well. The folders they live in were given the same protective rule file the character
+portraits folder has had since September.
+
+Nothing was found to have been misused; this closes the door. The maps, the Gravity Orchard among them, are
+not touched by this build.
