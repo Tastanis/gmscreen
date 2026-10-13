@@ -1011,8 +1011,18 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
-  // Declared here, before anything that can be called while the page is still starting up.
+  // Declared here, before anything that can be called while the page is still starting up. (Build 493 declared
+  // the party read's own settings far below, after the line that starts the read as the page mounts: the
+  // Director's page stopped there with "Cannot access before initialization" and never drew its map. No test
+  // caught it; opening the page did.)
   const tokenStaminaChangedAt = new Map();
+  const PARTY_VITALS_INTERVAL_MS = 4000;
+  // A hit made on another page reaches this page's token at once, and the sheet a moment later (that page holds
+  // its write for a few tenths of a second, then the request). A read of the sheets in that gap would put the
+  // token back to the sheet's older number, and forward again when the write landed. So a hero whose token
+  // changed this recently is read again next time instead.
+  const PARTY_VITALS_SETTLE_MS = 3000;
+  let partyVitalsStamp = '', partyVitalsBusy = false;
   function applyConfirmedPlacementBatch(snapshot, mutations, context = {}) {
     for (const mutation of mutations) {
       // When a token's Stamina last changed, from any page: readPartyVitals leaves such a hero alone for a moment.
@@ -20210,13 +20220,6 @@ export function mountBoardInteractions(store, routes = {}) {
   // stays inside one browser. So the Director's page asks for the party's Stamina every few seconds. While no
   // sheet has been written the answer is one word. A hero with a write of this page's still on its way is left
   // alone until it is answered.
-  const PARTY_VITALS_INTERVAL_MS = 4000;
-  // A hit made on another page reaches this page's token at once, and the sheet a moment later (that page holds
-  // its write for a few tenths of a second, then the request). A read of the sheets in that gap would put the
-  // token back to the sheet's older number, and forward again when the write landed. So a hero whose token
-  // changed this recently is read again next time instead.
-  const PARTY_VITALS_SETTLE_MS = 3000;
-  let partyVitalsStamp = '', partyVitalsBusy = false;
   async function readPartyVitals() {
     const endpoint = typeof routes?.sheet === 'string' ? routes.sheet : null;
     if (!endpoint || !isGmUser() || partyVitalsBusy || document.visibilityState === 'hidden') return;

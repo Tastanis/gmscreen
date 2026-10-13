@@ -67,7 +67,7 @@ test('a sheet with no Stamina gives a token nothing; the Director\'s page hears 
   assert.match(board, /if \(vitals\?\.hasStamina !== true\) continue;\s*if \(sending\.has\(character\.toLowerCase\(\)\) \|\| heroTokenJustChanged\(character\)\) \{ held = true; continue; \}\s*applySheetStaminaToTokens\(character, vitals\.currentStamina, vitals\.staminaMax\);/, 'a hero with a write of this page\'s on its way is left alone');
   assert.match(board, /window\.setInterval\(readPartyVitals, PARTY_VITALS_INTERVAL_MS\);/);
   // Putting a sheet's Stamina on a token does not send it back to the sheet.
-  const apply = board.slice(board.indexOf('function applySheetStaminaToTokens('), board.indexOf('const PARTY_VITALS_INTERVAL_MS'));
+  const apply = board.slice(board.indexOf('function applySheetStaminaToTokens('), board.indexOf('async function readPartyVitals('));
   assert.ok(apply.length > 200 && !/syncPlacementHitPointsToSheet|scheduleSheetHitPointSync/.test(apply));
 });
 
@@ -81,4 +81,24 @@ test('the party read leaves alone a hero whose token has just changed, on any pa
   assert.match(board, /const PARTY_VITALS_SETTLE_MS = 3000;/);
   // The map of times exists before anything that can run while the page starts up.
   assert.ok(board.indexOf('const tokenStaminaChangedAt = new Map();') < board.indexOf('function applyConfirmedPlacementBatch('));
+});
+
+// Build 493 broke the Director's page and no test saw it: the settings of the party read were declared thousands
+// of lines below the line that starts the read while the page mounts, so the page stopped there with "Cannot
+// access 'PARTY_VITALS_INTERVAL_MS' before initialization" and the rest of its start-up never ran. Opening the
+// page found it at once. Everything startListeningForSheetSync touches as the page mounts must exist by then.
+test('what the page starts as it mounts is declared before the line that starts it', () => {
+  const started = board.indexOf('\n  startListeningForSheetSync();');
+  assert.ok(started > 0, 'the page starts the sheet listener as it mounts');
+  const body = board.slice(board.indexOf('function startListeningForSheetSync() {'), board.indexOf('function findExistingConditionDescription('));
+  const declaredAt = (name) => board.search(new RegExp('(?:const|let) ' + name + '[ ,;=]'));
+  for (const name of new Set(body.match(/\b[A-Z][A-Z0-9_]{5,}\b/g) || [])) {
+    const declared = declaredAt(name);
+    if (declared < 0) continue;                                   // a module-level import or constant
+    assert.ok(declared < started, `${name} is declared before the page's start-up reaches it`);
+  }
+  for (const name of ['tokenStaminaChangedAt', 'partyVitalsStamp', 'PARTY_VITALS_INTERVAL_MS', 'PARTY_VITALS_SETTLE_MS', 'sheetSyncQueue']) {
+    const declared = declaredAt(name);
+    assert.ok(declared > 0 && declared < started, `${name} is declared before the page's start-up reaches it`);
+  }
 });
