@@ -230,3 +230,36 @@ It worked in the test sandbox because the sandbox has no live push, which is why
 
 **Not proven from here:** live push itself. The test sandbox does not have it, so this is proven in the page's
 own modules and on the server, not at a live table. The first session after the deploy is the real check.
+
+## Build 490: "when the target moves" works from every page; Thorn In Foot lands by itself (item 8)
+
+Your words: "Thorn in foot, isnt triggering the damage when things move. is this a json or code issue". And of how
+it should work: "let's have the damage land by itself."
+
+**The answer: code, not the ability's data.** The ability's card was valid. The watch it sets ("when the target
+moves") lived only in the memory of the browser tab that used the ability, and a move is announced only in the
+tab that makes it. So when you moved the creature, Cal's page, which alone knew of the watch, never heard of
+the move. And when a page did hear, it only raised a "!" to click; it never dealt the damage.
+
+**What is different now.**
+- A watch an ability sets is also kept on the caster's token, which every page holds. Whoever moves the
+  creature, that page knows the watch and answers for it. This mends every "when X moves" ability, not Thorn
+  alone.
+- A watch may say it lands by itself. Then the effect is applied at once, with no "!" to click, and it does
+  not wait on the caster having a triggered action left.
+- The amount may be the squares of the move that set it off: "1 psychic for each square they move".
+- It counts the creature's own movement only: a walk, a shift, a climb, a fly. A push, a pull or a slide does
+  not set it off. A teleport does not either (no squares are moved through); a watch can say otherwise.
+- It runs out by itself at the end of Cal's next turn, on every page, and a page that loads part-way picks it
+  up where it stands. No watch outlives the combat.
+- Any other ability keeps today's behaviour, the "!" to click, unless its card says it lands by itself.
+
+**One thing has to be done on Cal's sheet.** "Lands by itself" is a setting of the ability's card. Thorn In
+Foot's watch card on Cal's sheet needs the line `"autoResolve": true` (the reference copy in
+dnd/ai-reference/characters/cal-automations.md has it). Until then Thorn In Foot raises the "!" as before, but
+now for whoever moves the target.
+
+**Limits to know.**
+- The app cannot tell a willing move from one a creature was ordered into; it counts every walk or shift of
+  the target while the watch lasts.
+- Moves made with the arrow keys count a square at a time: 1 damage each.
