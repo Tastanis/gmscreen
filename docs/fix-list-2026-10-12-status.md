@@ -422,3 +422,25 @@ number down.
   nothing sets Wrath at the start of a fight, gives it each turn, or clears it at the end.
 - Sharon's, Indigo's and Zepha's start-of-turn gains are prompts to click, by their rules. Say if you want
   them to land by themselves.
+
+## Build 495: drawings belong to the floor you draw on (item 3)
+
+Your words: "Drawings need to be drawn on the level i click on or am looking at."
+
+**The cause.** A stroke was given the floor your page was on, not the floor under the pointer. And each page
+showed only the strokes given its own floor. So when you drew on a raised platform while your page was on the
+ground floor, the stroke was the ground floor's, and the player standing on the platform never saw it.
+
+**What is different now, on maps with built floors.**
+- A stroke belongs to the floor that is under the pointer where the stroke begins.
+- It is shown to whoever is shown that floor. A hero on the platform sees what is drawn on it; a hero below,
+  who is not shown the platform's top, does not. Anything drawn on the ground is shown to everyone.
+- The layer follows the viewer: select another hero, or walk one up a stair, and the strokes shown change with
+  the floors shown.
+- The eraser and "clear" reach the strokes shown on your page, and still only your own unless you are the
+  Director.
+
+**Unchanged.** Maps with no built floors, and strokes drawn before this build, keep the old rule (the floor the
+page was on).
+
+**Not checked by eye.** I have no browser; the tester will draw on a platform and look from above and below.
