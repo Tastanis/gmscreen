@@ -534,3 +534,33 @@ anything over. Mended, and a test now guards that line.
 - Your page reads the party's Stamina every four seconds without error.
 
 **Not yet seen by me:** an aura during a drag, the eraser, a reload with strokes on the map, the sheets.
+
+## Build 502: Thorn In Foot, the rest of it (item 8)
+
+Your words: "Thorn in foot, isnt triggering the damage when things move."
+
+Build 490 made the damage land. The tester then found four things still wrong, and one about the "!".
+
+**Mended.**
+- **Arrow keys: three presses, three squares, 1 damage in all.** Every square of a willing move now counts,
+  however the move is made: arrow keys, a drag, a drag round corners (counted along the corners, not straight
+  across), your own drop.
+- **It stopped a turn early.** "Until the end of your next turn" now runs through that turn and ends when that
+  turn ends, however many pages are open. Before, each page kept its own count of turn-ends and they drifted.
+- **A second use on another creature killed both.** Each use is its own watch on its own creature. A new use on
+  another creature leaves the first alone; a new use on the same creature takes the first one's place.
+- **A creature moved by its own ability was not counted** (Gintaras's Footwork). It is its own willing move and
+  counts. Movement somebody else forces on it still does not.
+- **Cal's token was carrying eight of his standing triggers as well**, and one was left after the fight. Only a
+  watch set by using an ability is kept on a token now; all are cleared when a fight starts and when it ends.
+
+**The "!".** The "!" on a token only marks the triggered action used or free. It never resolved a trigger, but
+the chat line said "click the ! to resolve", and a click threw the waiting trigger away. Now the chat line says
+to use the ability from the hero's abilities, and the first click on a "!" with a trigger waiting says the same
+and changes nothing. A second click marks the action used, as before. This is for any card not set to land by
+itself, the monsters' too.
+
+**Still true on the live site:** Cal's real sheet has the old card. Until it gets the line
+`"autoResolve": true`, Thorn In Foot lights the "!" and waits for his player to press the ability again.
+
+**Seen in a browser:** not yet. I look at this one with two pages open before it counts as handed over.
