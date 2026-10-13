@@ -488,3 +488,9 @@ You called the drawing system "pretty janky". Read end to end. What I found, men
   before (by the floor the page was on).
 - Colour and width are kept with each stroke and are the same on every page. Width is in map pixels, so it
   grows and shrinks with the zoom.
+
+## Build 498: a drawing's floor survives a page reload (item 3)
+
+After the ping fault of Build 496 I read my other builds for the same mistake, and found one: a page that
+loads tidies the drawings it is given and kept a fixed list of details, so a stroke's floor (Build 495) was
+dropped on a reload. Mended, with a test of that path.
