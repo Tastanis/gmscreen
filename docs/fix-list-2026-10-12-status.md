@@ -685,3 +685,20 @@ slammed into it and both took collision damage.
 the Medpilis files. Upload those two files only after this build is on the live site.
 
 No map is touched; the Gravity Orchard plays as it does now.
+
+## Build 509: your turn-order strip after a reload
+
+**What was wrong.** If you reloaded your page in the middle of a round, your turn-order strip showed everybody as
+not yet having acted, until the next turn ended. The players' pages were right all along. You could start a
+creature's turn a second time without knowing. The same could happen when you opened another map for yourself in
+mid-fight and came back.
+
+**What is different now.**
+- After a reload, your strip shows who has acted and whose turn it is, the same as the players see.
+- Opening another map for yourself and coming back keeps the strip right.
+- A creature whose token you delete still leaves the list, as before.
+
+Seen in a page: Cal and a goblin done, your page reloaded, both still done from the moment the strip appears; a
+kobold's turn under way, reloaded, still its turn with End Turn showing.
+
+No map is touched; the Gravity Orchard plays as it does now.
