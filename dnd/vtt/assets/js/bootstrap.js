@@ -78,6 +78,10 @@ async function bootstrap() {
     mountMemoryMonitor({ getState });
   }
 
+  // Every part of the page is set up. The page-start check (ui/__tests__/pages-start.test.mjs) waits for this:
+  // a page whose start-up throws part-way never gets here.
+  document.documentElement.dataset.vttStarted = '1';
+
   await hydrateFromServer(routes, userContext);
 }
 

@@ -5152,6 +5152,8 @@ async function ready() {
   startStaminaSync();
   startHeroTokenSync();
   startSheetSync();
+  // The sheet is loaded and drawn. The page-start check (vtt ui/__tests__/pages-start.test.mjs) waits for this.
+  document.documentElement.dataset.sheetStarted = "1";
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") {
       flushPendingSheetSave();
