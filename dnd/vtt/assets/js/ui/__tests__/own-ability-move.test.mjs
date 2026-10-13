@@ -25,6 +25,7 @@ function picker({ tokens, gm = false, confirmedAfter = (id, to) => to, moveAnswe
     const tokenMovementRuntime = { getConfirmedSnapshot: () => ({ state: { placements: { scene: page.confirmed } } }) };
     const getActiveSceneId = () => 'scene';
     const getActiveScenePlacements = () => page.tokens;
+    const getPlacementFromStore = (id) => page.tokens.find((token) => token.id === id) || null;
     const isGmUser = () => gm;
     const resolvePlacementLevelId = (placement) => placement.levelId || 'level-0';
     const clampPlacementToBounds = (column, row) => ({ column: Math.max(0, Math.min(19, column)), row: Math.max(0, Math.min(19, row)) });
@@ -106,7 +107,10 @@ test('THE FAULT: picking a creature, or its square, moves nobody and hurts nobod
   const cal = token('cal', 5, 5), ogre = token('ogre', 7, 5);
   const { start, click, pending, page } = picker({ tokens: [cal, ogre] });
   start(shiftRequest(page, cal));
-  await click({ on: ogre, cell: { column: 7, row: 5 } });                     // the ogre itself
+  // The ogre itself, as the map hands it over: what is drawn carries the id and the square, not the name. (Seen in
+  // the page, October 13: the line read "Token is in that square".)
+  await click({ on: { id: 'ogre', column: 7, row: 5, width: 1, height: 1 }, cell: { column: 7, row: 5 } });
+  assert.match(page.statuses.at(-1), /^ogre is in that square\./);
   await click({ cell: { column: 7, row: 5 } });                                // its square, through the loupe
   assert.deepEqual(page.sent, [], 'nothing is sent: no slam');
   assert.deepEqual(page.resolved, []);

@@ -18632,7 +18632,8 @@ export function mountBoardInteractions(store, routes = {}) {
     const to = clampPlacementToBounds(cell.column, cell.row, mover.width, mover.height);
     const standing = (clicked && clicked.id !== mover.id && (isGmUser() || !getAutomationPlacementSnapshot(clicked).hidden) ? clicked : null) || creatureInTheWay(to, mover);
     if (standing) {
-      updateStatus(`${tokenLabel(standing)} is in that square. Choose an empty square, or click Skip.`);
+      // (Named from the store: what is drawn on the map does not carry the creature's name.)
+      updateStatus(`${tokenLabel(getPlacementFromStore(standing.id) || standing)} is in that square. Choose an empty square, or click Skip.`);
       return true;
     }
     if (to.column === mover.column && to.row === mover.row) {
