@@ -109,3 +109,22 @@ test('an aura is redrawn when its token moves', () => {
   assert.match(page, /if \(activeSceneId\) redrawAurasAfterMove\(null\);/, 'and when a page catches up after a gap');
   assert.match(page, /if \(!auraLayer\.childElementCount && !\(Array\.isArray\(moved\?\.automationAuras\) && moved\.automationAuras\.length\)\) return;\s*renderAuras\(/, 'only when there is an aura to draw');
 });
+
+test('an aura goes with its token during a drag, and only a drag with an aura in it pays for that', async () => {
+  const page = readFileSync(new URL('../board-interactions.js', import.meta.url), 'utf8');
+  assert.match(page, /if \(!viewState\.dragState \|\| dragCarriesAura\(viewState\.dragState\)\) \{\s*renderAuras\(state, auraLayer, view\);/);
+  assert.match(page, /dragged\.has\(placement\?\.id\) \? \{ \.\.\.placement, \.\.\.auraDragPosition\(dragged\.get\(placement\.id\)\) \} : placement/);
+  // The renderer draws an aura round wherever the token it is given stands.
+  globalThis.HTMLElement ??= class {};
+  const made = [];
+  globalThis.document = { createElement: () => { const el = new globalThis.HTMLElement(); Object.assign(el, { dataset: {}, style: {}, classList: { add() {}, remove() {}, toggle() {} }, setAttribute() {}, removeAttribute() {}, appendChild() {} }); made.push(el); return el; } };
+  const { renderTokenAuras } = await import('../token-aura-renderer.js');
+  const layer = { children: [], appendChild(el) { this.children.push(el); }, removeChild(el) { this.children = this.children.filter((kept) => kept !== el); } };
+  const token = { id: 'gintaras', column: 17, row: 12, width: 1, height: 1, aura: { enabled: true, radius: 2, color: '#ff0000' } };
+  const draw = (placement) => { renderTokenAuras({ placements: [placement], layer, view: { gridSize: 50, gridOffsets: {}, mapLoaded: true }, gmViewing: true, tokenLevelState: null, auraViewerLevelId: 'level-0' }); return layer.children[0]?.style.transform; };
+  const standing = draw(token), dragged = draw({ ...token, row: 14 });
+  assert.match(String(standing), /^translate3d\(/, 'the aura is drawn');
+  const top = (transform) => Number(transform.match(/translate3d\(([-\d.]+)px, ([-\d.]+)px/)[2]);
+  assert.equal(top(dragged) - top(standing), 100, 'two squares along (50 px a square), the aura is two squares along');
+  assert.equal(layer.children.length, 1, 'the same aura, moved, not a second one');
+});

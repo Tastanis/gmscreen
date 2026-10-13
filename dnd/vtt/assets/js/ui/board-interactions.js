@@ -9462,9 +9462,26 @@ export function mountBoardInteractions(store, routes = {}) {
     const gmViewing = isGmUser();
     const sceneId = state?.boardState?.activeSceneId ?? null;
     const levelId = sceneId ? getViewerLevelIdForCurrentUser(state, sceneId) : null;
-    renderTokenAuras({placements:getActiveScenePlacements(state),layer,view,gmViewing,
+    // A token being dragged is drawn where the drag has it, and so is its aura.
+    const dragged = view?.dragState?.previewPositions ?? null;
+    const placements = getActiveScenePlacements(state);
+    renderTokenAuras({placements:dragged?.size ? placements.map((placement) => (dragged.has(placement?.id) ? { ...placement, ...auraDragPosition(dragged.get(placement.id)) } : placement)) : placements,
+      layer,view,gmViewing,
       tokenLevelState:getActiveSceneTokenLevelState(state),auraViewerLevelId:levelId,
       isCellFogged:gmViewing ? null : createFogChecker(state,levelId)});
+  }
+
+  function auraDragPosition(preview = {}) {
+    return { ...(Number.isFinite(preview?.column) ? { column: preview.column } : {}), ...(Number.isFinite(preview?.row) ? { row: preview.row } : {}) };
+  }
+
+  // Auras were not redrawn at all while anything was being dragged, to spare the cost on every frame of every
+  // drag; so an aura sat where its token had been until the drop. It is paid now only for a drag that has an
+  // aura in it: "tied to a token" means it goes with the token as it moves.
+  function dragCarriesAura(dragState) {
+    if (!auraLayer || !dragState?.previewPositions?.size) return false;
+    const ids = new Set(dragState.previewPositions.keys());
+    return Array.from(auraLayer.children).some((aura) => ids.has(aura?.dataset?.placementId));
   }
 
   function renderTokens(state = {}, layer, view, options = {}) {
@@ -9778,7 +9795,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     // Skip aura rendering during active drag for performance; auras snap on drop
-    if (!viewState.dragState) {
+    if (!viewState.dragState || dragCarriesAura(viewState.dragState)) {
       renderAuras(state, auraLayer, view);
     }
   }
