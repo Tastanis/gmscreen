@@ -407,6 +407,9 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
       const abilityId = action?._stableActionId || getStableActionId(action, 'triggers', actionIndex);
       triggerBlocks.forEach((block) => {
         requestAutomationRegisterTrigger({
+          // A hero's own standing triggers, read from the sheet by whichever page shows the hero: not a watch an
+          // ability set on a creature, so not written to the token for other pages.
+          standing: true,
           casterId: activeToken.id,
           abilityId,
           abilityName: action.name || 'Triggered Ability',

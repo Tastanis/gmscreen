@@ -2932,7 +2932,10 @@ export function mountBoardInteractions(store, routes = {}) {
     // dispatches to listeners registered against `eventType === 'move'` and
     // each predicate decides whether it cares about this watcher's edge.
     try {
-      const movedDistance = distanceWithFloorHeight(automationChebyshevDistance(from, to), from, to, getActiveSceneTokenLevelState(state));
+      // Every square of the move: along its corners when it had any, not the straight line between its ends.
+      const stops = [from, ...(Array.isArray(detail.path) ? detail.path.map((corner) => ({ ...from, column: corner.column, row: corner.row })) : []), to];
+      const walked = stops.slice(1).reduce((sum, stop, index) => sum + automationChebyshevDistance(stops[index], stop), 0);
+      const movedDistance = distanceWithFloorHeight(walked, from, to, getActiveSceneTokenLevelState(state));
       triggerFire('move', {
         placementId: movingId,
         sourceId: movingId,
@@ -3196,8 +3199,34 @@ export function mountBoardInteractions(store, routes = {}) {
   // makes the move is the one page that answers for it. The Director's page keeps the shared record in step as
   // the watch runs out, and a page that loads later picks it up where it stands.
   const SHARED_WATCH = 'shared';
+  // One watch for each use: the ability and the creatures it was set on. A second use on another creature is a
+  // second watch and leaves the first alone; a second use on the same creature takes the first's place.
+  // (Functions, not constants: they are reached from combat boundaries, which can run while the page starts up.)
+  function watchKey(targetIds) { return [...new Set(Array.isArray(targetIds) ? targetIds.filter(Boolean).map(String) : [])].sort().join(','); }
+  function sameWatch(kept, abilityId, key) { return kept?.abilityId === abilityId && (kept.key ?? watchKey(kept.targetIds)) === key; }
+
+  // When a watch that lasts "until the end of your next turn" (or "of your turn") ends, worked out once, when it
+  // is set, from the combat as it then stands: the round in which the caster's turn-end ends it. Every page can
+  // then tell from the combat's own record whether it has run out. It used to be counted off, one turn-end at a
+  // time, by whichever page handled each turn-end; with several pages open the counts drifted, and a watch set
+  // on one turn was gone at the start of the next.
+  function watchUntil(lifetime, casterId) {
+    if (!combatActive || !lifetime || lifetime.event !== 'turnEnd' || lifetime.whose !== 'self') return null;
+    const round = Math.max(1, Math.trunc(Number(combatRound) || 1));
+    const onOwnTurn = activeCombatantId === casterId;
+    const first = onOwnTurn ? (lifetime.skipCurrent ? round + 1 : round) : (completedCombatants.has(casterId) ? round + 1 : round);
+    return { round: first + Math.max(0, (Math.trunc(Number(lifetime.count)) || 1) - 1) };
+  }
+  function watchHasRunOut(until, casterId) {
+    if (!until || !Number.isFinite(Number(until.round))) return false;
+    if (!combatActive) return true;
+    const round = Math.trunc(Number(combatRound) || 0);
+    return round > until.round || (round === until.round && completedCombatants.has(casterId) && activeCombatantId !== casterId);
+  }
+
   function watchRecordOf(entry) {
     return JSON.parse(JSON.stringify({
+      key: watchKey(entry.targetIds), until: entry.until || null,
       abilityId: entry.abilityId, abilityName: entry.abilityName || '', match: entry.match, targetIds: entry.targetIds || [],
       effects: entry.effects || [], autoResolve: Boolean(entry.autoResolve), effectTarget: entry.effectTarget || '',
       expires: entry.expires || null, usageLimit: entry.usageLimit || null, condition: entry.condition || '',
@@ -3208,15 +3237,17 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!entry?.tokenId || !entry.abilityId) return;
     const record = watchRecordOf(entry);
     updatePlacementById(entry.tokenId, (target) => {
-      const others = Array.isArray(target.runtimeTriggers) ? target.runtimeTriggers.filter((kept) => kept?.abilityId !== record.abilityId) : [];
+      const others = Array.isArray(target.runtimeTriggers) ? target.runtimeTriggers.filter((kept) => !sameWatch(kept, record.abilityId, record.key)) : [];
       target.runtimeTriggers = [...others, record];
     });
   }
-  function unshareRuntimeWatch(tokenId, abilityId) {
+  // `key` names the one watch to take off; without it, every watch of that ability.
+  function unshareRuntimeWatch(tokenId, abilityId, key = null) {
+    const gone = (kept) => (key === null ? kept?.abilityId === abilityId : sameWatch(kept, abilityId, key));
     const held = getPlacementFromStore(tokenId)?.runtimeTriggers;
-    if (!Array.isArray(held) || !held.some((kept) => kept?.abilityId === abilityId)) return;
+    if (!Array.isArray(held) || !held.some(gone)) return;
     updatePlacementById(tokenId, (target) => {
-      const left = (Array.isArray(target.runtimeTriggers) ? target.runtimeTriggers : []).filter((kept) => kept?.abilityId !== abilityId);
+      const left = (Array.isArray(target.runtimeTriggers) ? target.runtimeTriggers : []).filter((kept) => !gone(kept));
       if (left.length) target.runtimeTriggers = left; else delete target.runtimeTriggers;
     });
   }
@@ -3232,6 +3263,7 @@ export function mountBoardInteractions(store, routes = {}) {
       effects: Array.isArray(record.effects) ? JSON.parse(JSON.stringify(record.effects)) : [],
       usageLimit: record.usageLimit && typeof record.usageLimit === 'object' && record.usageLimit.key ? record.usageLimit : null,
       expires: record.expires || null, lifetimeState: record.lifetimeState ? { ...record.lifetimeState } : null,
+      registrationKey: `watch:${record.key ?? watchKey(record.targetIds)}`, until: record.until || null,
     };
     const matches = buildAuthoredTriggerPredicate(entry);
     entry.predicate = (payload, self) => (entry.eventType === 'move' && payload?.kind === 'teleport' && entry.match?.filter?.teleport !== true ? false : matches(payload, self));
@@ -3243,15 +3275,21 @@ export function mountBoardInteractions(store, routes = {}) {
     for (const placement of placements) {
       if (!placement?.id || !Array.isArray(placement.runtimeTriggers)) continue;
       for (const record of placement.runtimeTriggers) {
-        if (!record?.abilityId || !record.match?.event) continue;
-        held.add(`${placement.id}|${record.abilityId}`);
-        const mine = (triggerRegistry.byToken.get(placement.id) || []).some((entry) => entry.abilityId === record.abilityId && ['runtime', SHARED_WATCH].includes(entry.registrationSource));
+        if (!record?.abilityId || !record.match?.event || watchHasRunOut(record.until, placement.id)) continue;
+        const registrationKey = `watch:${record.key ?? watchKey(record.targetIds)}`;
+        held.add(`${placement.id}|${record.abilityId}|${registrationKey}`);
+        const mine = (triggerRegistry.byToken.get(placement.id) || []).some((entry) => entry.abilityId === record.abilityId
+          && entry.registrationKey === registrationKey && ['runtime', SHARED_WATCH].includes(entry.registrationSource));
         if (!mine && triggerRegister(runtimeWatchEntry(placement.id, record, SHARED_WATCH))) authoredTriggerTokenIds.add(placement.id);
       }
     }
-    // One this page took from the scene and the scene no longer holds has run out or been replaced.
+    // One this page took from the scene and the scene no longer holds has been taken off; and any watch, this
+    // page's own included, whose time is up by the combat's record has run out.
     for (const entries of [...triggerRegistry.byToken.values()]) {
-      for (const entry of [...entries]) if (entry?.registrationSource === SHARED_WATCH && !held.has(`${entry.tokenId}|${entry.abilityId}`)) triggerUnregisterEntry(entry);
+      for (const entry of [...entries]) {
+        const taken = entry?.registrationSource === SHARED_WATCH && !held.has(`${entry.tokenId}|${entry.abilityId}|${entry.registrationKey}`);
+        if (taken || (entry?.until && watchHasRunOut(entry.until, entry.tokenId))) triggerUnregisterEntry(entry);
+      }
     }
   }
 
@@ -3284,7 +3322,7 @@ export function mountBoardInteractions(store, routes = {}) {
           if (entry.authored && entry.abilityName && window.dashboardChat?.sendMessage) {
             const tokenName = tokenLabel(getPlacementFromStore(entry.tokenId)) || 'Token';
             window.dashboardChat.sendMessage({
-              message: `${tokenName} — "${entry.abilityName}" trigger is READY (click the ! to resolve).`,
+              message: `${tokenName}: "${entry.abilityName}" is READY. Use it from ${tokenName}'s abilities to resolve it.`,
               type: 'text',
             }).catch(() => {});
           }
@@ -3404,23 +3442,36 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     for (const entry of [...new Set(entries)]) {
       const shared = ['runtime', SHARED_WATCH].includes(entry?.registrationSource);
+      const key = String(entry?.registrationKey || '').startsWith('watch:') ? entry.registrationKey.slice(6) : null;
+      // A watch whose end was set when it was made ends by the combat's record, on every page alike.
+      if (entry?.until) {
+        if (watchHasRunOut(entry.until, entry.tokenId)) {
+          triggerUnregisterEntry(entry);
+          if (isGmUser()) unshareRuntimeWatch(entry.tokenId, entry.abilityId, key);
+        }
+        continue;
+      }
       const before = shared && entry.lifetimeState ? JSON.stringify(entry.lifetimeState) : null;
       if (shouldExpireTriggerEntry(entry, boundaryPayload, {
         activeCombatantId,
         getTeamForPlacementId,
       })) {
         triggerUnregisterEntry(entry);
-        if (shared && isGmUser()) unshareRuntimeWatch(entry.tokenId, entry.abilityId);
+        if (shared && isGmUser()) unshareRuntimeWatch(entry.tokenId, entry.abilityId, key);
       } else if (shared && isGmUser() && before !== null && before !== JSON.stringify(entry.lifetimeState)
-        && (getPlacementFromStore(entry.tokenId)?.runtimeTriggers || []).some((kept) => kept?.abilityId === entry.abilityId)) {
+        && (getPlacementFromStore(entry.tokenId)?.runtimeTriggers || []).some((kept) => sameWatch(kept, entry.abilityId, key ?? watchKey(entry.targetIds)))) {
         // Part of its time has gone (the caster's own turn end that does not count, say): the shared record says so.
         shareRuntimeWatch(entry);
       }
     }
-    // Combat over: no watch outlives it.
-    if (eventType === 'combatEnd' && isGmUser()) {
+    // The Director's page tidies the tokens: a watch that has run out is taken off, and when the fight is over,
+    // or one begins, every watch is (none outlives a fight, and none is carried into one).
+    if (isGmUser()) {
+      const all = eventType === 'combatEnd' || eventType === 'combatStart';
       for (const placement of getActiveScenePlacements(boardApi.getState?.() ?? {}) || []) {
-        for (const record of Array.isArray(placement?.runtimeTriggers) ? [...placement.runtimeTriggers] : []) unshareRuntimeWatch(placement.id, record?.abilityId);
+        for (const record of Array.isArray(placement?.runtimeTriggers) ? [...placement.runtimeTriggers] : []) {
+          if (all || watchHasRunOut(record?.until, placement.id)) unshareRuntimeWatch(placement.id, record?.abilityId, all ? null : (record?.key ?? watchKey(record?.targetIds)));
+        }
       }
     }
   }
@@ -5883,11 +5934,18 @@ export function mountBoardInteractions(store, routes = {}) {
       expires: payload.expires || payload.lifetime || null,
     };
     const watch = runtimeWatchEntry(casterId, { ...entry, usageLimit: entry.usageLimit, lifetimeState: null }, 'runtime');
+    // A hero's standing triggers keep the one place per ability they always had; a watch set by a use has one
+    // per creature it was set on.
+    if (payload.standing === true) delete watch.registrationKey;
     const registered = triggerRegister(watch);
     if (registered) {
       authoredTriggerTokenIds.add(casterId);
-      // And on the caster's token, for every other page (see "Watches every page knows").
-      shareRuntimeWatch(registered);
+      // And on the caster's token, for every other page (see "Watches every page knows"): only a watch an
+      // ability set by being used, with the round its time ends in.
+      if (payload.standing !== true) {
+        registered.until = watchUntil(registered.lifetimeState, casterId);
+        shareRuntimeWatch(registered);
+      }
     }
     resolve?.({ registered: Boolean(registered), abilityId: entry.abilityId, eventType: entry.eventType });
   }
@@ -15181,7 +15239,25 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!placementId) {
       return;
     }
+    if (readyTriggerHint(placementId)) return;
     toggleTriggeredActionState(placementId);
+  }
+
+  // The "!" on a token marks its triggered action as used or free. It never resolved a trigger, though the chat
+  // line said to click it: a click threw the waiting trigger away. With a trigger waiting, the first click now
+  // says where it is resolved and changes nothing; a second click within a few seconds marks the action used,
+  // as before, for whoever means that.
+  function readyTriggerHint(placementId) {
+    const readyTriggerHintAt = (readyTriggerHint.at ||= new Map());
+    const placement = getPlacementFromStore(placementId);
+    const waiting = (Array.isArray(placement?.readyTriggerAbilities) ? placement.readyTriggerAbilities : []).filter((id) => id && id !== '__opportunityAttack__');
+    if (!waiting.length || placement?.triggeredActionReady === false) return false;
+    const now = Date.now();
+    if (now - (readyTriggerHintAt.get(placementId) || 0) < 4000) { readyTriggerHintAt.delete(placementId); return false; }
+    readyTriggerHintAt.set(placementId, now);
+    const names = waiting.map((id) => (triggerRegistry.byToken.get(placementId) || []).find((entry) => entry.abilityId === id)?.abilityName).filter(Boolean);
+    updateStatus(`${tokenLabel(placement) || 'This token'}: ${names.length ? names.join(', ') : 'a triggered ability'} is waiting. Use it from the abilities list to resolve it. Click the "!" again to mark the triggered action used instead.`);
+    return true;
   }
 
   function handleTriggerIndicatorKeydown(event) {
@@ -18758,6 +18834,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }
 
+    announceOwnAbilityMove(request);
     flashAutomationTargetToken(request.targetSnapshot.id);
     clearAutomationMoveOverlay();
     request.resolve?.({
@@ -18767,6 +18844,24 @@ export function mountBoardInteractions(store, routes = {}) {
       collision,
     });
     return true;
+  }
+
+  // A creature moved by its OWN ability (a shift, a leap, a slide of itself) moved willingly: a watch on "when it
+  // moves" counts it, as it counts a walk. Movement somebody else forces on it is not announced here.
+  function announceOwnAbilityMove(request) {
+    const moved = request?.targetSnapshot, mover = request?.sourceSnapshot;
+    if (!moved?.id || !mover?.id || mover.id !== moved.id) return;
+    const now = getPlacementFromStore(moved.id);
+    if (!now) return;
+    const spot = (token) => ({ column: Number(token.column) || 0, row: Number(token.row) || 0, width: Number(token.width) || 1, height: Number(token.height) || 1, levelId: token.levelId || BASE_MAP_LEVEL_ID });
+    const from = spot(moved), to = spot(now);
+    if (from.column === to.column && from.row === to.row && from.levelId === to.levelId) return;
+    const movedDistance = distanceWithFloorHeight(automationChebyshevDistance(from, to), from, to, getActiveSceneTokenLevelState(boardApi.getState?.() ?? {}));
+    try {
+      triggerFire('move', { placementId: moved.id, sourceId: moved.id, from, to, distance: movedDistance, movedDistance, kind: 'shift', sceneId: getActiveSceneId(), perWatcher: new Map() });
+    } catch (err) {
+      console.warn('[VTT] triggerFire(move) failed for an ability\'s own move', err);
+    }
   }
 
   async function applyAutomationCollisionDamage(placementId, amount, damageType) {

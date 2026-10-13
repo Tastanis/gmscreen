@@ -21,15 +21,17 @@ import { createTriggerLifetimeState, shouldExpireTriggerEntry } from '../automat
 const board = readFileSync(new URL('../board-interactions.js', import.meta.url), 'utf8');
 
 test('a watch an ability sets is kept on the caster\'s token for every page', () => {
-  assert.match(board, /const watch = runtimeWatchEntry\(casterId, \{ \.\.\.entry, usageLimit: entry\.usageLimit, lifetimeState: null \}, 'runtime'\);\s*const registered = triggerRegister\(watch\);\s*if \(registered\) \{\s*authoredTriggerTokenIds\.add\(casterId\);[\s\S]{0,140}shareRuntimeWatch\(registered\);/, 'set on the page that used the ability, and shared');
+  // Changed on purpose in Build 502 (the tester's four faults on 490); the rules themselves are in watch-rules.test.mjs.
+  assert.match(board, /if \(payload\.standing !== true\) \{\s*registered\.until = watchUntil\(registered\.lifetimeState, casterId\);\s*shareRuntimeWatch\(registered\);/, 'set on the page that used the ability, and shared (a hero\'s standing triggers are not)');
   assert.match(board, /target\.runtimeTriggers = \[\.\.\.others, record\];/, 'on the token, beside any other watch it holds');
-  assert.match(board, /const others = Array\.isArray\(target\.runtimeTriggers\) \? target\.runtimeTriggers\.filter\(\(kept\) => kept\?\.abilityId !== record\.abilityId\) : \[\];/, 'using the ability again replaces its own watch, it does not stack');
+  assert.ok(board.includes('target.runtimeTriggers.filter((kept) => !sameWatch(kept, record.abilityId, record.key))'), 'used again on the same creature it replaces its own watch; on another creature it is a second watch');
 });
 
 test('every page takes the scene\'s watches before anything fires, and the page that makes the move answers', () => {
   assert.match(board, /function triggerFire\(eventType, payload\) \{\s*try \{ syncSharedWatches\(\); \}/, 'read at the moment of firing, so a watch set a moment ago on another page is known');
-  assert.match(board, /const mine = \(triggerRegistry\.byToken\.get\(placement\.id\) \|\| \[\]\)\.some\(\(entry\) => entry\.abilityId === record\.abilityId && \['runtime', SHARED_WATCH\]\.includes\(entry\.registrationSource\)\);\s*if \(!mine && triggerRegister\(runtimeWatchEntry\(placement\.id, record, SHARED_WATCH\)\)\)/, 'once each: the page that set it does not take it a second time');
-  assert.match(board, /if \(entry\?\.registrationSource === SHARED_WATCH && !held\.has\(`\$\{entry\.tokenId\}\|\$\{entry\.abilityId\}`\)\) triggerUnregisterEntry\(entry\);/, 'and one the scene no longer holds is dropped');
+  assert.ok(board.includes("&& entry.registrationKey === registrationKey && ['runtime', SHARED_WATCH].includes(entry.registrationSource));")
+    && board.includes('if (!mine && triggerRegister(runtimeWatchEntry(placement.id, record, SHARED_WATCH)))'), 'once each: the page that set it does not take it a second time');
+  assert.ok(board.includes('const taken = entry?.registrationSource === SHARED_WATCH && !held.has(`${entry.tokenId}|${entry.abilityId}|${entry.registrationKey}`);'), 'and one the scene no longer holds is dropped');
   // A move is announced on the page that made it, and nowhere else: one page answers.
   const moved = readFileSync(new URL('../../sync-v2/confirmed-movement.js', import.meta.url), 'utf8');
   assert.match(moved, /if \(context\.source !== 'acknowledgement' \|\| !previous \|\| !placement\) return null;/);
@@ -63,7 +65,7 @@ test('the watch runs out at the end of the caster\'s next turn, and the Director
   const later = { tokenId: 'cal', expires: entry.expires, lifetimeState: handed };
   assert.equal(shouldExpireTriggerEntry(later, { eventType: 'turnEnd', placementId: 'cal' }, { activeCombatantId: 'cal' }), true, 'it ends at the end of his next turn, on a page that loaded part-way too');
   assert.match(board, /if \(\(entry\.expires \|\| entry\.lifetime\) && !entry\.lifetimeState\) \{/, 'a count that came with the watch is kept, not started again');
-  assert.match(board, /triggerUnregisterEntry\(entry\);\s*if \(shared && isGmUser\(\)\) unshareRuntimeWatch\(entry\.tokenId, entry\.abilityId\);/, 'run out: the Director\'s page takes it off the token');
+  assert.ok(board.includes('if (shared && isGmUser()) unshareRuntimeWatch(entry.tokenId, entry.abilityId, key);'), 'run out: the Director\'s page takes it off the token');
   assert.match(board, /\/\/ Part of its time has gone[\s\S]{0,120}shareRuntimeWatch\(entry\);/, 'part of its time gone: the shared record says so');
-  assert.match(board, /if \(eventType === 'combatEnd' && isGmUser\(\)\) \{/, 'and no watch outlives the combat');
+  assert.ok(board.includes("const all = eventType === 'combatEnd' || eventType === 'combatStart';"), 'and no watch outlives the combat, or is carried into one');
 });

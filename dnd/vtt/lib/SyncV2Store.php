@@ -2035,6 +2035,9 @@ final class SyncV2Store
             $event['payload']['row'] = $next['row'];
             $event['payload']['_movementUndo'] = $next['_movementUndo'];
             $event['payload']['movementKind'] = $restore !== null ? 'undo' : $normalized['movementKind'];
+            // The corners a walk went round, so a page can count the squares walked and not only the squares
+            // between where it began and ended ("1 damage for each square they move").
+            if ($restore === null && $normalized['path'] !== []) $event['payload']['path'] = $normalized['path'];
             $event['payload']['_floorTraversal'] = $floor['traversal'];
             $event['payload']['levelId'] = $floor['levelId'];
             if ($this->placementLevelId($current) !== $floor['levelId']) {

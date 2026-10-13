@@ -41,6 +41,22 @@ try {
         'entityRevision'=>$snap['state']['placements']['scene']['ogre']['_entityRevision'] ?? 0,'payload'=>['column'=>8,'row'=>3]], 'gm', true);
     watchCheck($held('cal')['runtimeTriggers'] === [$watch], 'The target moving leaves the watch where it is');
 
+    // "1 damage for each square they move": a walk round corners carries its corners to every page, so the
+    // squares walked can be counted, not only the squares between its two ends (Build 502).
+    $snap = $store->getSnapshot(); $revision = $snap['revision'];
+    $store->acceptTokenMove(['type'=>'token.move','operationId'=>'watch-ogre-corners','sceneId'=>'scene','entityId'=>'ogre','baseRevision'=>$snap['revision'],
+        'entityRevision'=>$snap['state']['placements']['scene']['ogre']['_entityRevision'] ?? 0,
+        'payload'=>['column'=>10,'row'=>3,'movementKind'=>'walk','path'=>[['column'=>8,'row'=>6],['column'=>10,'row'=>6]]]], 'gm', true);
+    $walked = $store->replayAfter($revision)['events'][0];
+    watchCheck(($walked['payload']['path'] ?? null) === [['column'=>8,'row'=>6],['column'=>10,'row'=>6]], 'The corners of a walk travel with the move: ' . json_encode($walked['payload']['path'] ?? null));
+    $receipt = end($walked['payload']['_movementUndo']['history']);
+    watchCheck(($receipt['operationId'] ?? null) === 'watch-ogre-corners' && (float) $receipt['from']['column'] === 8.0,
+        'and the receipt of the move says where it began, which is what an arrow press is counted from: ' . json_encode($receipt['from'] ?? null));
+    $snap = $store->getSnapshot(); $revision = $snap['revision'];
+    $store->acceptTokenMove(['type'=>'token.move','operationId'=>'watch-ogre-plain','sceneId'=>'scene','entityId'=>'ogre','baseRevision'=>$snap['revision'],
+        'entityRevision'=>$snap['state']['placements']['scene']['ogre']['_entityRevision'] ?? 0,'payload'=>['column'=>11,'row'=>3]], 'gm', true);
+    watchCheck(!array_key_exists('path', $store->replayAfter($revision)['events'][0]['payload']), 'A straight move carries no corners');
+
     // The Director's page ticks the watch on (a turn seen) and, when it has run out, takes it off.
     $ticked = [[...$watch, 'lifetimeState'=>['kind'=>'endOfCasterNextTurn', 'turnsSeen'=>1]]];
     watchCheck($patch('watch-tick-0001', 'cal', ['runtimeTriggers'=>$ticked], 'gm', true)['status'] === 'accepted' && $held('cal')['runtimeTriggers'][0]['lifetimeState']['turnsSeen'] === 1, 'The Director\'s page keeps the shared record in step');
