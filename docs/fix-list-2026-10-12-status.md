@@ -129,3 +129,27 @@ and the view centres on that token with a ping. With none or several selected it
 find it."
 
 **Not in this build:** drawings (item 3). They are next, as a build of their own.
+
+## Build 486: players open doors; Escape and a drop off the map cancel a drag (items 12, 13, 14)
+
+The three small changes you released together on October 12.
+
+**Players open ordinary doors by clicking them.**
+- A player's door symbol is live now. One click opens the door, another closes it.
+- The rule, kept by the server: it must be a door (not a window), not broken, not locked, and one of the heroes
+  must stand within a square of it, on the door's own floor. From across the room or from the floor below,
+  nothing happens and a small word appears by the door: "Too far".
+- A locked door: the word is "Locked" and it does not move. You unlock it, as before.
+- A secret door: exactly as now. Closed, it is plain wall to players, with no symbol and no click. Opened by
+  you, they see a doorway, but they still cannot work it, so they cannot shut it away again.
+- You are asked none of this: you work any door or window from anywhere.
+
+**Escape cancels a token drag.** The token goes back where it was, nothing is sent, and the corners dropped
+during the drag go with it. One token, several at once, or a forced drag. A right click still drops a corner
+and the right-button pan is untouched. That Escape is spent on the drag: it does not also close a panel.
+
+**Dropping a token off the map cancels the move.** Let go over the side character sheet, the top bar or any
+panel, and it is the same as Escape. Only letting go over the map itself makes the move.
+
+**An old rule changed on purpose:** one test said a player's door symbol "grants no portal command control".
+It now says a player may click a door he can see.
