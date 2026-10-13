@@ -621,3 +621,20 @@ certain and inside your list, so they are mended here. The other three are yours
 - **The map's log sometimes notes a refused change ("409") when a player hits their own hero many times
   quickly.** Nothing is lost or shown wrong: two pages touched the same number at the same instant and the page
   took the server's answer. Left as it is unless you see something odd.
+
+## Build 506: a security hole in the Monster Creator's picture upload
+
+Found by the tester's sweep; nothing you would have seen in play.
+
+**What was wrong.** The page where you build monsters is yours alone, but the part of it that takes a
+monster's picture let any logged-in player use it. And it kept whatever ending the uploaded file's name had,
+checking only that the file started like a picture. So a player who knew how could have put a program on the
+site disguised as a picture, and run it.
+
+**What is different now.**
+- Only you can upload or delete a monster's picture.
+- The site names the stored file itself, with the ending of the kind of picture it really is.
+- The folder the pictures are kept in will not run anything.
+- Uploading and deleting pictures in the Monster Creator works for you as before.
+
+Nothing was found to have been misused; this closes the door.
