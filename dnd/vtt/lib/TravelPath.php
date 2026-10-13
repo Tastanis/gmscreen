@@ -37,6 +37,13 @@ final class TravelPath
     private ?array $ray = null;
     /** @var list<array{0:float,1:bool,2:bool}> height, in the air, hit higher ground: one per STEP */
     private array $walked = [];
+    /**
+     * The footing already read at each place, by place. The same place has the same footing however
+     * often it is asked about, and a push looking for where it stops asks about the same places on
+     * each of its thirty-odd tries: reading the footing means walking the path from the start again.
+     * @var array<string,float>
+     */
+    private array $footing = [];
 
     public function __construct(private array $from, private array $config, private string $kind = 'forced', ?float $start = null)
     {
@@ -64,7 +71,8 @@ final class TravelPath
     public function heightAt(array $at, bool $plain = false): float
     {
         $at = $this->placed($at);
-        $here = $plain ? WallMovement::height($at, $this->config) : WallMovement::movementHeight($this->from, $at, $this->config);
+        $key = ($plain ? 'p' : 'm') . self::place($at['column']) . ',' . self::place($at['row']);
+        $here = $this->footing[$key] ??= $plain ? WallMovement::height($at, $this->config) : WallMovement::movementHeight($this->from, $at, $this->config);
         if ($this->flying) return $here;
         $run = $this->aim($at);
         if ($run < 1e-9) return $here;
@@ -88,6 +96,12 @@ final class TravelPath
         [$z, $air] = $this->walk($k);
         for ($i = 1; $i <= $k; $i++) if ($this->walked[$i][2]) return true;
         return $air && WallMovement::height($to, $this->config) >= $z + TerrainContact::FACE_RISE - 1e-6;
+    }
+
+    /** A place's name for the remembered footings: the same to a billionth of a square is the same place. */
+    private static function place(float|int $v): string
+    {
+        return (string) (int) round($v * 1e9);
     }
 
     private function placed(array $at): array

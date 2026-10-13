@@ -245,14 +245,21 @@ lowBarrier:(from,to)=>!context||context.isGM||(from.levelId||'level-0')!==(conte
 // while it has one, and the height it left from once it has gone over an edge. Walls, slopes and
 // other creatures are tested against this, so what stands on the ground far below a push is not in
 // its way. `plain` reads the footing without looking for a plate to step onto on the way.
-function moverHeight(from,at,kind,plain=false){return pathFor(from,kind).heightAt(at,plain?undefined:terrainPrototype.movementGroundFor(from,at));}
+function moverHeight(from,at,kind,plain=false){const own=moverFor(from,kind);return own.path.heightAt(at,plain?undefined:own.stepped(at));}
 // One path per mover for as long as the board cannot change under it: until this turn of the page's
 // work is over. A push looking for where it stops asks about the same line some forty times.
+// With the path go the footings already read along it, by place (TravelPath has the same): the same
+// place has the same footing however often it is asked about, and reading the footing a mover has
+// stepped to means walking its path again from the start. Without this a push that stopped against
+// something on a map of many plates and rocks held the page for seconds at every move of the pointer.
 let travelPaths=null;
-function pathFor(from,kind){
+const place=v=>Math.round(v*1e9);
+function remembered(read){const seen=new Map();return at=>{const key=place(at.column)+','+place(at.row);let z=seen.get(key);if(z===undefined){z=read(at);seen.set(key,z);}return z;};}
+function moverFor(from,kind){
  if(!travelPaths){travelPaths=[];queueMicrotask(()=>{travelPaths=null;});}
  let hit=travelPaths.find(p=>p.from===from&&p.kind===kind);
- if(!hit){hit={from,kind,path:travelPath(from,t=>terrainPrototype.groundFor(t),{kind})};travelPaths.push(hit);}
- return hit.path;
+ if(!hit){hit={from,kind,path:travelPath(from,remembered(t=>terrainPrototype.groundFor(t)),{kind}),stepped:remembered(at=>terrainPrototype.movementGroundFor(from,at))};travelPaths.push(hit);}
+ return hit;
 }
+function pathFor(from,kind){return moverFor(from,kind).path;}
 requestAnimationFrame(tick);

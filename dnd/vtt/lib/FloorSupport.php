@@ -38,8 +38,23 @@ final class FloorSupport {
  }
 
  private static array $geometryCache=[];
+ /**
+  * The plain outlines asked about lately, under the plate's own id, held as they were given. The same arrays
+  * again are known at a glance (PHP knows its own array without reading it), so they need no content key.
+  * Making that key meant writing the whole outline out and hashing it, for every plate, at every eighth of a
+  * square of every walk; and with more plates than the content cache holds, working the outline out again too.
+  * An outline that has changed under the same id is not the same arrays, and takes the content key as before.
+  */
+ private static array $geometryKnown=[];
  private static function geometry(array $surface,array $cuts):array {
   $outer=$surface['points']??[];$holes=$surface['holes']??[];
+  $id=!$cuts&&is_string($surface['id']??null)?$surface['id']:null;
+  if($id!==null&&isset(self::$geometryKnown[$id])&&self::$geometryKnown[$id][0]===$outer&&self::$geometryKnown[$id][1]===$holes)return self::$geometryKnown[$id][2];
+  $geometry=self::compiled($outer,$holes,$cuts);
+  if($id!==null){if(count(self::$geometryKnown)>=1024)self::$geometryKnown=[];self::$geometryKnown[$id]=[$outer,$holes,$geometry];}
+  return $geometry;
+ }
+ private static function compiled(array $outer,array $holes,array $cuts):array {
   $key=hash('sha256',serialize([$outer,$holes,$cuts]));
   if(isset(self::$geometryCache[$key]))return self::$geometryCache[$key];
   foreach($cuts as $c){$x=$c['column'];$y=$c['row'];$w=$c['width'];$h=$c['height'];$holes[]=[['x'=>$x,'y'=>$y],['x'=>$x+$w,'y'=>$y],['x'=>$x+$w,'y'=>$y+$h],['x'=>$x,'y'=>$y+$h]];}

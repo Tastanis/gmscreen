@@ -47,11 +47,13 @@ final class WallMovement
         }
         $model=$config['environment']['walls']['value']??[];
         if (empty($model['segments'])) return;
-        $previous=$from;
-        foreach ([...$path,$to] as $point) {
+        $previous=$from;$points=[...$path,$to];$last=count($points)-1;
+        foreach ($points as $i=>$point) {
             $next=[...$previous,'column'=>$point['column'],'row'=>$point['row']];
             if (self::blocked($model,$previous,$next,$config,$kind,$previous===$from?$travel:null,$climb&&in_array($kind,['walk','shift'],true))) throw new InvalidArgumentException('Movement blocked by a wall or closed door/window.');
-            $previous=self::movementPlacement($previous,$next,$config);
+            // Where he stands after this leg matters only to the leg after it. Working it out walks the leg again from
+            // its start, and a push looking for where it stops asks about one leg some thirty times.
+            if ($i<$last) $previous=self::movementPlacement($previous,$next,$config);
         }
     }
 

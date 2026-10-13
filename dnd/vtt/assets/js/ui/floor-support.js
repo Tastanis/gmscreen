@@ -7,8 +7,14 @@ const bands=(ring,x)=>{const ys=[];for(let i=0,j=ring.length-1;i<ring.length;j=i
 export function intersectsFloor(p,surface,cuts=[]){
  const left=p.column,right=left+(p.width||1),top=p.row,bottom=top+(p.height||1),outer=surface.points||[];
  if(outer.length<3)return false;
- const holes=[...(surface.holes||[]),...cuts.map(c=>[{x:c.column,y:c.row},{x:c.column+c.width,y:c.row},{x:c.column+c.width,y:c.row+c.height},{x:c.column,y:c.row+c.height}])];
+ // Only a cut-out that reaches the token's own square can take floor from under it, so only those are laid out
+ // as holes. A cut-out elsewhere used to do one thing here: its two sides, where they fall between the square's
+ // sides, split the square into the strips it is judged in. They still do (FloorSupport::nearbyCuts keeps the same
+ // two things apart). A floor with a hundred cut-outs was laying every one of them over every square asked about.
+ const near=cuts.filter(c=>c.column<right&&c.column+c.width>left&&c.row<bottom&&c.row+c.height>top);
+ const holes=[...(surface.holes||[]),...near.map(c=>[{x:c.column,y:c.row},{x:c.column+c.width,y:c.row},{x:c.column+c.width,y:c.row+c.height},{x:c.column,y:c.row+c.height}])];
  const xs=[left,right],edges=[];
+ if(near.length<cuts.length)for(const c of cuts){const a=c.column,b=c.column+c.width;if(a>left&&a<right)xs.push(a);if(b>left&&b<right)xs.push(b);}
  for(const ring of [outer,...holes])for(let i=0,j=ring.length-1;i<ring.length;j=i++){
   const a=ring[i],b=ring[j];if(Math.max(a.x,b.x)>left&&Math.min(a.x,b.x)<right&&Math.max(a.y,b.y)>top&&Math.min(a.y,b.y)<bottom)edges.push([a,b]);if(a.x>left&&a.x<right)xs.push(a.x);
   for(const y of [top,bottom])if((a.y>y)!==(b.y>y)){const x=a.x+(y-a.y)*(b.x-a.x)/(b.y-a.y);if(x>left&&x<right)xs.push(x);}
