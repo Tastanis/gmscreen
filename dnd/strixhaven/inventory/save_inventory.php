@@ -10,6 +10,10 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 $user = $_SESSION['user'];
 $is_gm = ($user === 'GM');
 
+// An item's "image" is whatever a request wrote there, so only a picture in this page's own images folder is
+// ever deleted or copied for it (includes/picture-store.php). It used to be any path the site could reach.
+require_once __DIR__ . '/../../includes/picture-store.php';
+
 // Function to load inventory data
 function loadInventoryData() {
     $dataFile = '../data/inventory.json';
@@ -175,9 +179,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $item = $data[$tab]['items'][$index];
             
             // Delete associated image file if it exists
-            if (!empty($item['image']) && file_exists($item['image'])) {
-                unlink($item['image']);
-            }
+            PictureStore::remove(__DIR__ . '/images', $item['image'] ?? '');
             
             // Remove item from array
             array_splice($data[$tab]['items'], $index, 1);
@@ -302,18 +304,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $new_item['grid_y'] = 0;
             
             // Handle image file - copy the image if it exists
-            if (!empty($original_item['image']) && file_exists($original_item['image'])) {
-                $old_path = $original_item['image'];
-                $path_info = pathinfo($old_path);
-                $new_filename = $new_item['id'] . '_' . time() . '.' . $path_info['extension'];
+            $old_path = PictureStore::owned(__DIR__ . '/images', $original_item['image'] ?? '');
+            if ($old_path !== null) {
+                $new_filename = $new_item['id'] . '_' . time() . '.' . strtolower(pathinfo($old_path, PATHINFO_EXTENSION));
                 $new_path = 'images/' . $new_filename;
-                
-                // Ensure images directory exists
-                if (!is_dir('images')) {
-                    mkdir('images', 0755, true);
-                }
-                
-                if (copy($old_path, $new_path)) {
+
+                if (copy($old_path, __DIR__ . '/' . $new_path)) {
                     $new_item['image'] = $new_path;
                 } else {
                     // If copy fails, remove image reference
@@ -339,8 +335,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             array_splice($data[$from_tab]['items'], $index, 1);
             
             // Delete the original image file after successful copy
-            if (!empty($original_item['image']) && file_exists($original_item['image']) && !empty($new_item['image'])) {
-                unlink($original_item['image']);
+            if ($old_path !== null && !empty($new_item['image'])) {
+                unlink($old_path);
             }
             
             // Save to file
@@ -402,18 +398,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $new_item['grid_y'] = 0;
             
             // Handle image file - copy the image if it exists
-            if (!empty($original_item['image']) && file_exists($original_item['image'])) {
-                $old_path = $original_item['image'];
-                $path_info = pathinfo($old_path);
-                $new_filename = $new_item['id'] . '_' . time() . '.' . $path_info['extension'];
+            $old_path = PictureStore::owned(__DIR__ . '/images', $original_item['image'] ?? '');
+            if ($old_path !== null) {
+                $new_filename = $new_item['id'] . '_' . time() . '.' . strtolower(pathinfo($old_path, PATHINFO_EXTENSION));
                 $new_path = 'images/' . $new_filename;
-                
-                // Ensure images directory exists
-                if (!is_dir('images')) {
-                    mkdir('images', 0755, true);
-                }
-                
-                if (copy($old_path, $new_path)) {
+
+                if (copy($old_path, __DIR__ . '/' . $new_path)) {
                     $new_item['image'] = $new_path;
                 } else {
                     // If copy fails, remove image reference
@@ -439,8 +429,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             array_splice($data[$from_tab]['items'], $index, 1);
             
             // Delete the original image file after successful copy
-            if (!empty($original_item['image']) && file_exists($original_item['image']) && !empty($new_item['image'])) {
-                unlink($original_item['image']);
+            if ($old_path !== null && !empty($new_item['image'])) {
+                unlink($old_path);
             }
             
             // Save to file

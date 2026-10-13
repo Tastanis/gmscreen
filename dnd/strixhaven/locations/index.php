@@ -13,6 +13,9 @@ $is_gm = ($user === 'GM');
 // Include character integration for character details functionality
 require_once '../gm/includes/character-integration.php';
 
+// Storing a picture, and deleting one: only a picture in this page's own folders (includes/picture-store.php).
+require_once __DIR__ . '/../../includes/picture-store.php';
+
 // Function to load location data
 function loadLocationData() {
     $dataFile = 'locations.json';
@@ -221,9 +224,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 // Delete associated images
                 if (isset($data['locations'][$location_index]['images'])) {
                     foreach ($data['locations'][$location_index]['images'] as $image_path) {
-                        if (!empty($image_path) && file_exists($image_path)) {
-                            unlink($image_path);
-                        }
+                        PictureStore::remove(__DIR__ . '/images', $image_path);
                     }
                 }
                 
@@ -287,46 +288,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         
         $file = $_FILES['image'];
         
-        // Validate file type
-        $allowed_types = array('image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp');
-        $file_type = mime_content_type($file['tmp_name']);
-        
-        if (!in_array($file_type, $allowed_types) && !in_array($file['type'], $allowed_types)) {
-            echo json_encode(array('success' => false, 'error' => 'Invalid file type. Please upload JPEG, PNG, GIF, or WebP images only.'));
-            exit;
-        }
-        
-        // Validate file size (5MB max)
-        if ($file['size'] > 5 * 1024 * 1024) {
-            echo json_encode(array('success' => false, 'error' => 'File too large. Maximum size is 5MB.'));
-            exit;
-        }
-        
-        // Create images directory if it doesn't exist
+        // Judged by its content, named by the site, stored in a folder that runs nothing
+        // (includes/picture-store.php). The file used to keep the ending of the uploader's own file name, and the
+        // browser's word that it was a picture was enough.
         $images_dir = 'images';
-        if (!is_dir($images_dir)) {
-            mkdir($images_dir, 0755, true);
+        $filename = '';
+        try {
+            $filename = PictureStore::store($file, __DIR__ . '/' . $images_dir, (PictureStore::plainPart($location_id) ?? 'location') . '_image_' . time() . '_' . bin2hex(random_bytes(4)));
+        } catch (InvalidArgumentException $refused) {
+            echo json_encode(array('success' => false, 'error' => $refused->getMessage()));
+            exit;
+        } catch (Throwable $failed) {
+            $filename = '';
         }
-        
-        // Generate unique filename
-        $file_extension = pathinfo($file['name'], PATHINFO_EXTENSION);
-        if (empty($file_extension)) {
-            // Determine extension from MIME type
-            $mime_extensions = array(
-                'image/jpeg' => 'jpg',
-                'image/jpg' => 'jpg',
-                'image/png' => 'png',
-                'image/gif' => 'gif',
-                'image/webp' => 'webp'
-            );
-            $file_extension = isset($mime_extensions[$file_type]) ? $mime_extensions[$file_type] : 'jpg';
-        }
-        
-        $filename = $location_id . '_image_' . time() . '_' . uniqid() . '.' . $file_extension;
         $filepath = $images_dir . '/' . $filename;
-        
-        // Move uploaded file
-        if (move_uploaded_file($file['tmp_name'], $filepath)) {
+
+        if ($filename !== '') {
             // Update location data
             $data = loadLocationData();
             $location_found = false;
@@ -377,9 +354,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                             $location_found = true;
                             
                             // Delete physical file
-                            if (file_exists($image_path)) {
-                                unlink($image_path);
-                            }
+                            PictureStore::remove(__DIR__ . '/images', $image_path);
                         }
                     }
                     break;

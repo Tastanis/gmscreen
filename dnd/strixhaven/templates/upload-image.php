@@ -19,34 +19,23 @@ if (!$templateId) {
     exit;
 }
 
-// Validate file type
-$allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-$fileType = $_FILES['image']['type'];
-if (!in_array($fileType, $allowedTypes)) {
-    echo json_encode(['success' => false, 'error' => 'Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed']);
-    exit;
-}
-
-// Validate file size (max 5MB)
-$maxSize = 5 * 1024 * 1024; // 5MB
-if ($_FILES['image']['size'] > $maxSize) {
-    echo json_encode(['success' => false, 'error' => 'File too large. Maximum size is 5MB']);
-    exit;
-}
-
-// Create images directory if it doesn't exist
+// Judged by its content, named by the site, stored in a folder that runs nothing (includes/picture-store.php).
+// The file used to keep the ending of the uploader's own file name, the browser's word that it was a picture
+// was enough, and the template's id went into the path as it came.
+require_once __DIR__ . '/../../includes/picture-store.php';
 $uploadDir = 'images/';
-if (!is_dir($uploadDir)) {
-    mkdir($uploadDir, 0755, true);
+$fileName = '';
+try {
+    $fileName = PictureStore::store($_FILES['image'], __DIR__ . '/images', (PictureStore::plainPart($templateId) ?? 'template') . '_' . time() . '_' . bin2hex(random_bytes(8)));
+} catch (InvalidArgumentException $refused) {
+    echo json_encode(['success' => false, 'error' => $refused->getMessage()]);
+    exit;
+} catch (Throwable $failed) {
+    $fileName = '';
 }
-
-// Generate unique filename
-$fileExtension = pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION);
-$fileName = $templateId . '_' . time() . '_' . bin2hex(random_bytes(8)) . '.' . $fileExtension;
 $targetPath = $uploadDir . $fileName;
 
-// Move uploaded file
-if (move_uploaded_file($_FILES['image']['tmp_name'], $targetPath)) {
+if ($fileName !== '') {
     // Return success with image path
     echo json_encode([
         'success' => true,

@@ -71,43 +71,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     
     $uploadedFile = $_FILES['image'];
     
-    // Validate file type - EXPLICITLY INCLUDING .webp
-    $allowedTypes = array('image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/bmp', 'image/webp');
-    $fileType = $uploadedFile['type'];
-    
-    // Additional check for webp since some browsers may not report correct MIME type
-    $fileExtension = strtolower(pathinfo($uploadedFile['name'], PATHINFO_EXTENSION));
-    $allowedExtensions = array('jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp');
-    
-    if (!in_array($fileType, $allowedTypes) && !in_array($fileExtension, $allowedExtensions)) {
-        echo json_encode(array('success' => false, 'error' => "Invalid file type: $fileType (.$fileExtension). Only JPG, PNG, GIF, BMP, and WebP images are allowed."));
-        exit;
-    }
-    
-    // Validate file size (max 5MB)
-    $maxSize = 5 * 1024 * 1024; // 5MB in bytes
-    if ($uploadedFile['size'] > $maxSize) {
-        echo json_encode(array('success' => false, 'error' => 'File too large. Maximum size is 5MB.'));
-        exit;
-    }
-    
-    // Create images directory if it doesn't exist
+    // Judged by its content, named by the site, stored in a folder that runs nothing (includes/picture-store.php).
+    // The item's id used to go into the file's path as it came, the file kept the ending of the uploader's own
+    // file name, and either the browser's word or that ending was enough to call it a picture.
+    require_once __DIR__ . '/../../includes/picture-store.php';
     $imagesDir = 'images';
-    if (!is_dir($imagesDir)) {
-        if (!mkdir($imagesDir, 0755, true)) {
-            echo json_encode(array('success' => false, 'error' => 'Could not create images directory'));
-            exit;
-        }
+    $idPart = PictureStore::namePart($item_id, 100);
+    if ($idPart === null) {
+        echo json_encode(array('success' => false, 'error' => 'Invalid item.'));
+        exit;
     }
-    
-    // Generate unique filename
-    $fileName = $item_id . '_' . time() . '.' . $fileExtension;
+    try {
+        // (The random part: two uploads for one item inside a second had the same name, and the second then
+        // deleted "the old picture", which was itself.)
+        $fileName = PictureStore::store($uploadedFile, __DIR__ . '/' . $imagesDir, $idPart . '_' . time() . '_' . bin2hex(random_bytes(4)));
+    } catch (InvalidArgumentException $refused) {
+        echo json_encode(array('success' => false, 'error' => $refused->getMessage()));
+        exit;
+    } catch (Throwable $failed) {
+        $fileName = '';
+    }
     $filePath = $imagesDir . '/' . $fileName;
-    
-    error_log("Attempting to save file to: $filePath");
-    
-    // Move uploaded file
-    if (move_uploaded_file($uploadedFile['tmp_name'], $filePath)) {
+
+    if ($fileName !== '') {
         error_log("File uploaded successfully to: $filePath");
         
         // Load current inventory data
@@ -129,8 +115,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         }
                         
                         // Remove old image file if it exists
-                        if (!empty($item['image']) && file_exists($item['image'])) {
-                            unlink($item['image']);
+                        // Only a picture in this page's own folder: the field holds whatever a request put there.
+                        if (!empty($item['image']) && PictureStore::remove(__DIR__ . '/images', $item['image'])) {
                             error_log("Removed old image: " . $item['image']);
                         }
                         

@@ -306,10 +306,34 @@ function ciDeleteImageIfUnused($imagePath)
         return;
     }
 
-    $file = CI_IMAGES_DIR . '/' . basename($relative);
+    // Only a picture an inventory stored ("<item>_<24 hex digits>.<ending>", or the older "item_..._<time>.<ending>"):
+    // this folder holds the site's own pictures too, and an item's picture field can be set to anything by the
+    // request that then deletes the item.
+    $name = basename($relative);
+    if (preg_match('/^(?:[A-Za-z0-9_-]*_[0-9a-f]{24}|item_[A-Za-z0-9_]+_\d{9,11})\.(?:jpe?g|png|gif|webp|bmp)$/iD', $name) !== 1 || ciIsImageNameUsed($name)) {
+        return;
+    }
+    $file = CI_IMAGES_DIR . '/' . $name;
     if (is_file($file)) {
         unlink($file);
     }
+}
+
+/** Whether any item still shows the stored picture of that file name, however its path is spelt. */
+function ciIsImageNameUsed($name)
+{
+    if (!is_readable(CI_DATA_FILE)) {
+        return false;
+    }
+    $decoded = json_decode((string) file_get_contents(CI_DATA_FILE), true);
+    foreach (is_array($decoded) ? $decoded : array() as $tab) {
+        foreach ((isset($tab['items']) && is_array($tab['items'])) ? $tab['items'] : array() as $item) {
+            if (is_array($item) && !empty($item['image']) && basename(str_replace('\\', '/', (string) $item['image'])) === $name) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 function ciRevisionFields($field)
@@ -697,21 +721,7 @@ switch ($action) {
         }
 
         $uploadedFile = $_FILES['image'];
-        $allowedTypes = array('image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/bmp', 'image/webp');
-        $fileExtension = strtolower(pathinfo($uploadedFile['name'], PATHINFO_EXTENSION));
-        $allowedExtensions = array('jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp');
-
-        if (!in_array($uploadedFile['type'], $allowedTypes, true) && !in_array($fileExtension, $allowedExtensions, true)) {
-            ciFail('Invalid file type. Only JPG, PNG, GIF, BMP, and WebP images are allowed.');
-        }
-
-        if ($uploadedFile['size'] > 5 * 1024 * 1024) {
-            ciFail('File too large. Maximum size is 5MB.');
-        }
-
-        if (!is_dir(CI_IMAGES_DIR) && !mkdir(CI_IMAGES_DIR, 0755, true)) {
-            ciFail('Could not create images directory');
-        }
+        require_once __DIR__ . '/../includes/picture-store.php';
 
         $data = ciLoadData();
         $foundTab = null;
@@ -737,10 +747,13 @@ switch ($action) {
             $revision = ciFieldRevisions($data[$foundTab]['items'][$foundIndex], array('image'))['image'];
             if (!is_string($expected) || !hash_equals($revision, $expected)) ciFail('This image changed in another window. Reload before replacing it.');
         }
-        $fileName = preg_replace('/[^a-z0-9_\-]/i', '', $itemId) . '_' . bin2hex(random_bytes(12)) . '.' . $fileExtension;
-        $filePath = CI_IMAGES_DIR . '/' . $fileName;
-
-        if (!move_uploaded_file($uploadedFile['tmp_name'], $filePath)) {
+        // Judged by its content, named by the site, stored in a folder that runs nothing. The file used to keep
+        // the ending of the uploader's own file name and to pass on the browser's word that it was a picture.
+        try {
+            $fileName = PictureStore::store($uploadedFile, CI_IMAGES_DIR, preg_replace('/[^a-z0-9_\-]/i', '', $itemId) . '_' . bin2hex(random_bytes(12)));
+        } catch (InvalidArgumentException $refused) {
+            ciFail($refused->getMessage());
+        } catch (Throwable $failed) {
             ciFail('Failed to save uploaded file to server');
         }
 

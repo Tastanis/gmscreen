@@ -11,6 +11,9 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 $user = $_SESSION['user'] ?? 'unknown';
 $isGM = ($user === 'GM');
 
+// Storing a hex's picture, and deleting or copying one: includes/picture-store.php.
+require_once __DIR__ . '/../../includes/picture-store.php';
+
 /**
  * What a result may carry back to whoever asked. A save returns the whole hex record,
  * and for anyone but the GM the GM section must not go with it.
@@ -178,19 +181,24 @@ function handleImageUpload($q, $r, $section) {
         return ['success' => false, 'error' => 'Upload failed'];
     }
     
-    // Validate file type
-    $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    if (!in_array($file['type'], $allowedTypes)) {
-        return ['success' => false, 'error' => 'Invalid file type'];
+    if ($section !== 'player' && $section !== 'gm') {
+        return ['success' => false, 'error' => 'Invalid section'];
     }
-    
-    // Generate unique filename
-    $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
-    $filename = "hex-{$q}-{$r}-{$section}-" . time() . "-" . rand(1000, 9999) . "." . $extension;
+
+    // Judged by its content, named by the site, stored in a folder that runs nothing. The file used to keep the
+    // ending of the uploader's own file name, the browser's word that it was a picture was enough, and the
+    // section went into the file's name as it came.
+    $filename = '';
+    try {
+        $filename = PictureStore::store($file, __DIR__ . '/hex-images', "hex-{$q}-{$r}-{$section}-" . time() . '-' . rand(1000, 9999), 25 * 1024 * 1024);
+    } catch (InvalidArgumentException $refused) {
+        return ['success' => false, 'error' => $refused->getMessage()];
+    } catch (Throwable $failed) {
+        $filename = '';
+    }
     $filepath = "hex-images/" . $filename;
-    
-    // Move uploaded file
-    if (move_uploaded_file($file['tmp_name'], $filepath)) {
+
+    if ($filename !== '') {
         // Add to hex data using locked modify to prevent race conditions
         $imageEntry = [
             'filename' => $filename,
@@ -386,6 +394,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 echo json_encode(['success' => false, 'error' => 'GM access required']);
                 break;
             }
+            if ($section !== 'player' && $section !== 'gm') {
+                echo json_encode(['success' => false, 'error' => 'Invalid section']);
+                break;
+            }
 
             $result = lockedModifyHexData($q, $r, function($hexData) use ($section, $filename) {
                 $images = $hexData[$section]['images'] ?? [];
@@ -393,10 +405,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Find and remove image
                 for ($i = 0; $i < count($images); $i++) {
                     if ($images[$i]['filename'] === $filename) {
-                        // Delete file
-                        $filepath = "hex-images/" . $filename;
-                        if (file_exists($filepath)) {
-                            unlink($filepath);
+                        // Delete the file: one of this page's own pictures only, and not while the GM's list
+                        // still shows it. (A picture the GM shared sits in the players' list under the same file
+                        // name, and a player taking it off that list used to delete the GM's file.)
+                        $gmStillHas = $section !== 'gm' && in_array($filename, array_column(array_filter($hexData['gm']['images'] ?? [], 'is_array'), 'filename'), true);
+                        if (!$gmStillHas) {
+                            PictureStore::remove(__DIR__ . '/hex-images', $filename);
                         }
 
                         // Remove from array
@@ -582,19 +596,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Delete all associated image files
                 if (isset($hexData['player']['images'])) {
                     foreach ($hexData['player']['images'] as $image) {
-                        $filepath = "hex-images/" . $image['filename'];
-                        if (file_exists($filepath)) {
-                            unlink($filepath);
-                        }
+                        PictureStore::remove(__DIR__ . '/hex-images', $image['filename'] ?? '');
                     }
                 }
 
                 if (isset($hexData['gm']['images'])) {
                     foreach ($hexData['gm']['images'] as $image) {
-                        $filepath = "hex-images/" . $image['filename'];
-                        if (file_exists($filepath)) {
-                            unlink($filepath);
-                        }
+                        PictureStore::remove(__DIR__ . '/hex-images', $image['filename'] ?? '');
                     }
                 }
 
@@ -679,8 +687,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $copiedPlayerImages = [];
 
                     foreach ($sourceData['player']['images'] ?? [] as $image) {
-                        $sourceFile = "hex-images/" . $image['filename'];
-                        if (!file_exists($sourceFile)) {
+                        $sourceFile = PictureStore::owned(__DIR__ . '/hex-images', $image['filename'] ?? '');
+                        if ($sourceFile === null) {
                             continue;
                         }
 
@@ -700,10 +708,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     foreach ($existingPlayerImages as $image) {
                         $existingFilename = $image['filename'] ?? '';
                         if (!$existingFilename) continue;
-                        $filepath = "hex-images/" . $existingFilename;
-                        if (file_exists($filepath) && is_file($filepath)) {
-                            unlink($filepath);
-                        }
+                        if (($image['shared_from'] ?? '') === 'gm') continue;
+                        PictureStore::remove(__DIR__ . '/hex-images', $existingFilename);
                     }
 
                     $targetData['player']['images'] = $copiedPlayerImages;
@@ -723,8 +729,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $copiedGMImages = [];
 
                     foreach ($sourceData['gm']['images'] ?? [] as $image) {
-                        $sourceFile = "hex-images/" . $image['filename'];
-                        if (!file_exists($sourceFile)) {
+                        $sourceFile = PictureStore::owned(__DIR__ . '/hex-images', $image['filename'] ?? '');
+                        if ($sourceFile === null) {
                             continue;
                         }
 
@@ -744,10 +750,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     foreach ($existingGMImages as $image) {
                         $existingFilename = $image['filename'] ?? '';
                         if (!$existingFilename) continue;
-                        $filepath = "hex-images/" . $existingFilename;
-                        if (file_exists($filepath) && is_file($filepath)) {
-                            unlink($filepath);
-                        }
+                        PictureStore::remove(__DIR__ . '/hex-images', $existingFilename);
                     }
 
                     $targetData['gm']['images'] = $copiedGMImages;

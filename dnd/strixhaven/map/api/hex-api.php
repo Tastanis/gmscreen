@@ -306,30 +306,24 @@ function handleImageUpload() {
         sendError(400, 'Hex ID required for image upload');
     }
     
-    // Validate file type
-    $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    if (!in_array($file['type'], $allowedTypes)) {
-        sendError(400, 'Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.');
+    // Judged by its content, named by the site, stored in a folder that runs nothing (includes/picture-store.php).
+    // The hex id used to go into the file's path as it came ("../" walked out of the folder), and the file kept
+    // the ending of the uploader's own file name.
+    require_once __DIR__ . '/../../../includes/picture-store.php';
+    $hexPart = PictureStore::namePart($hexId, 60);
+    if ($hexPart === null) {
+        sendError(400, 'Invalid hex ID');
     }
-    
-    // Validate file size (max 5MB)
-    if ($file['size'] > 5 * 1024 * 1024) {
-        sendError(400, 'File too large. Maximum size is 5MB.');
+    $filename = '';
+    try {
+        $filename = PictureStore::store($file, __DIR__ . '/../images/hexes', $hexPart . '_' . time() . '_' . bin2hex(random_bytes(4)));
+    } catch (InvalidArgumentException $refused) {
+        sendError(400, $refused->getMessage());
+    } catch (Throwable $failed) {
+        $filename = '';
     }
-    
-    // Create upload directory
-    $uploadDir = __DIR__ . '/../images/hexes/';
-    if (!is_dir($uploadDir)) {
-        mkdir($uploadDir, 0755, true);
-    }
-    
-    // Generate unique filename
-    $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
-    $filename = $hexId . '_' . time() . '_' . substr(md5($file['name']), 0, 8) . '.' . $extension;
-    $filepath = $uploadDir . $filename;
-    
-    // Move uploaded file
-    if (move_uploaded_file($file['tmp_name'], $filepath)) {
+
+    if ($filename !== '') {
         // Return relative path for database storage
         $relativePath = 'images/hexes/' . $filename;
         

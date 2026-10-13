@@ -18,6 +18,9 @@ require_once '../../version.php';
 require_once '../gm/includes/character-integration.php';
 require_once __DIR__ . '/data-utils.php';
 
+// Storing a picture, and deleting one: only a picture in this page's own folders (includes/picture-store.php).
+require_once __DIR__ . '/../../includes/picture-store.php';
+
 // Handle AJAX requests
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     header('Content-Type: application/json');
@@ -188,9 +191,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
             if ($result['success']) {
                 foreach ($imagesToDelete as $image_path) {
-                    if (!empty($image_path) && file_exists($image_path)) {
-                        unlink($image_path);
-                    }
+                    PictureStore::remove(__DIR__ . '/portraits', $image_path);
                 }
                 echo json_encode(array('success' => true));
             } else {
@@ -307,46 +308,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         
         $file = $_FILES['portrait'];
         
-        // Validate file type
-        $allowed_types = array('image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp');
-        $file_type = mime_content_type($file['tmp_name']);
-        
-        if (!in_array($file_type, $allowed_types) && !in_array($file['type'], $allowed_types)) {
-            echo json_encode(array('success' => false, 'error' => 'Invalid file type. Please upload JPEG, PNG, GIF, or WebP images only.'));
-            exit;
-        }
-        
-        // Validate file size (5MB max)
-        if ($file['size'] > 5 * 1024 * 1024) {
-            echo json_encode(array('success' => false, 'error' => 'File too large. Maximum size is 5MB.'));
-            exit;
-        }
-        
-        // Create portraits directory if it doesn't exist
+        // Judged by its content, named by the site, stored in a folder that runs nothing
+        // (includes/picture-store.php). The file used to keep the ending of the uploader's own file name, and the
+        // browser's word that it was a picture was enough.
         $portraits_dir = 'portraits';
-        if (!is_dir($portraits_dir)) {
-            mkdir($portraits_dir, 0755, true);
+        $filename = '';
+        try {
+            $filename = PictureStore::store($file, __DIR__ . '/' . $portraits_dir, (PictureStore::plainPart($staff_id) ?? 'staff') . '_portrait_' . time() . '_' . bin2hex(random_bytes(4)));
+        } catch (InvalidArgumentException $refused) {
+            echo json_encode(array('success' => false, 'error' => $refused->getMessage()));
+            exit;
+        } catch (Throwable $failed) {
+            $filename = '';
         }
-        
-        // Generate unique filename
-        $file_extension = pathinfo($file['name'], PATHINFO_EXTENSION);
-        if (empty($file_extension)) {
-            // Determine extension from MIME type
-            $mime_extensions = array(
-                'image/jpeg' => 'jpg',
-                'image/jpg' => 'jpg',
-                'image/png' => 'png',
-                'image/gif' => 'gif',
-                'image/webp' => 'webp'
-            );
-            $file_extension = isset($mime_extensions[$file_type]) ? $mime_extensions[$file_type] : 'jpg';
-        }
-        
-        $filename = $staff_id . '_portrait_' . time() . '.' . $file_extension;
         $filepath = $portraits_dir . '/' . $filename;
-        
-        // Move uploaded file
-        if (move_uploaded_file($file['tmp_name'], $filepath)) {
+
+        if ($filename !== '') {
             // Generate thumbnail
             require_once '../includes/thumbnail-utils.php';
             generateThumbnail($filepath, 'thumbnails', 320);
@@ -418,14 +395,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             });
 
             if ($result['success']) {
-                if ($shouldDeleteFile && file_exists($image_path)) {
-                    unlink($image_path);
+                if ($shouldDeleteFile && PictureStore::remove(__DIR__ . '/portraits', $image_path)) {
                     // Also delete thumbnail
                     require_once '../includes/thumbnail-utils.php';
                     $thumbPath = getThumbnailPath($image_path);
-                    if (file_exists($thumbPath)) {
-                        unlink($thumbPath);
-                    }
+                    PictureStore::remove(__DIR__ . '/thumbnails', $thumbPath);
                 }
                 echo json_encode(array('success' => true));
             } else {

@@ -10,6 +10,14 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 
 $user = $_SESSION['user'];
 
+// These pictures go into pages only the Director edits. (This handler used to take them from any login.)
+if ($user !== 'GM') {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'Access denied']);
+    exit;
+}
+require_once __DIR__ . '/../../includes/picture-store.php';
+
 // Set content type
 header('Content-Type: application/json');
 
@@ -27,53 +35,13 @@ try {
         throw new Exception('Upload failed with error code: ' . $file['error']);
     }
     
-    // Validate file type
-    $allowedTypes = [
-        'image/jpeg',
-        'image/png',
-        'image/gif',
-        'image/webp',
-        'image/bmp'
-    ];
-    
-    $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'];
-    
-    $fileType = $file['type'];
-    $fileExtension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-    
-    if (!in_array($fileType, $allowedTypes) && !in_array($fileExtension, $allowedExtensions)) {
-        throw new Exception('Invalid file type. Allowed types: ' . implode(', ', $allowedExtensions));
-    }
-    
-    // Validate file size (limit to 10MB)
-    $maxSize = 10 * 1024 * 1024; // 10MB in bytes
-    if ($file['size'] > $maxSize) {
-        throw new Exception('File too large. Maximum size is 10MB.');
-    }
-    
-    // Create uploads directory if it doesn't exist
+    // Judged by its content, named by the site, stored in a folder that runs nothing (includes/picture-store.php).
+    // Nothing of the uploader's file name is kept, and what the browser says the file is counts for nothing.
     $uploadsDir = 'uploads/images';
-    if (!is_dir($uploadsDir)) {
-        if (!mkdir($uploadsDir, 0755, true)) {
-            throw new Exception('Failed to create uploads directory');
-        }
-    }
-    
-    // Generate unique filename
-    $originalName = pathinfo($file['name'], PATHINFO_FILENAME);
-    $extension = $fileExtension;
-    $timestamp = time();
-    $randomString = bin2hex(random_bytes(8));
-    $newFilename = $originalName . '_' . $timestamp . '_' . $randomString . '.' . $extension;
-    
-    // Full path for the uploaded file
+    $newFilename = PictureStore::store($file, __DIR__ . '/' . $uploadsDir, 'img_' . time() . '_' . bin2hex(random_bytes(8)), 10 * 1024 * 1024);
     $filePath = $uploadsDir . '/' . $newFilename;
-    
-    // Move uploaded file
-    if (!move_uploaded_file($file['tmp_name'], $filePath)) {
-        throw new Exception('Failed to save uploaded file');
-    }
-    
+    $fileType = array_search(pathinfo($newFilename, PATHINFO_EXTENSION), PictureStore::KINDS, true) ?: '';
+
     // Get file info
     $fileSize = filesize($filePath);
     $imageInfo = getimagesize($filePath);
