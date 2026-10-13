@@ -62,6 +62,8 @@ function dimensions(){return {width:image.naturalWidth,height:image.naturalHeigh
 function heightAt(x,y){if(!field||!active)return 0;const d=dimensions();return sample(field,(x-d.left)/d.width,(y-d.top)/d.height);}
 // How far a square of height moves a thing on screen. The scene's map design may ask for a flatter slant (height-view.mjs).
 function slant(){return slantVector(viewSlant(importedDesign()));}
+// How far each token is drawn lifted for its height, by placement id: `translate` as last set on it (see tick).
+const tokenLifts=new Map();
 function project(x,y,h){const g=dimensions().grid,s=slant();return {x:x+h*g*s.x,y:y-h*g*s.y};}
 // The same sum for a caller with thousands of points to place at once (the sight picture): the
 // grid and the slant are looked up once, not for every point. Good only for the piece of work it
@@ -104,6 +106,17 @@ function unproject(p,options={}){
  }
 
  return meshPoint(p);
+}
+// The same point with the height of what is drawn there: a floor's or a stair's own, else the ground's. A ping, a
+// drawing or anything else put down by a click belongs at that height, or it is drawn on the ground far below it.
+function unprojectAt(p){
+ if(!active||!field)return {x:p.x,y:p.y,height:0};
+ if(importedDesign()&&panel.hidden){
+  const g=dimensions().grid,ox=ctx.view.gridOffsets.left||0,oy=ctx.view.gridOffsets.top||0;
+  const hit=pickDrawn({x:(p.x-ox)/g,y:(p.y-oy)/g},{slant:slant(),surfaces:resolveSupportSurfaces(importedDesign()||{}),ramps:importedDesign()?.ramps||[],view:pointerView()});
+  if(hit)return {x:ox+hit.x*g,y:oy+hit.y*g,height:Number(hit.height)||0};
+ }
+ const q=meshPoint(p);return {x:q.x,y:q.y,height:heightAt(q.x,q.y)};
 }
 // The ground under a point on the screen, on the flat map: the drawn ground's own triangles.
 function meshPoint(p){
@@ -179,6 +192,10 @@ function tick(now){
  const placementById=new Map((ctx?.state.boardState.placements[ctx.state.boardState.activeSceneId]||[]).map(p=>[p.id,p]));
  const tokenSlant=active?slant():null;
  const tokenGeometry=Array.from(document.querySelectorAll('#vtt-token-layer [data-placement-id],#vtt-token-layer [data-vtt-drag-ghost]'),token=>{const matrix=active?new DOMMatrix(token.style.transform):null;return {token,matrix,x:active?matrix.m41+token.offsetWidth/2:0,y:active?matrix.m42+token.offsetHeight/2:0};});
+ // An aura belongs to its token, not to the ground under it (Brandon, October 12, 2026: "if a token is in the air...
+ // the aura is on the ground way under them"): it is drawn lifted exactly as its token was drawn a frame ago.
+ if(!active)tokenLifts.clear();
+ for(const aura of document.querySelectorAll('#vtt-aura-layer [data-placement-id]')){const lift=tokenLifts.get(aura.dataset.placementId)||'';if(aura.style.translate!==lift)aura.style.translate=lift;}
  for(const {token,matrix,x,y} of tokenGeometry){
    if(!active){if(token.style.translate)token.style.translate='';if(token.style.scale)token.style.scale='';continue;}
    const placement=placementById.get(token.dataset.placementId||token.dataset.terrainSourceId);
@@ -187,7 +204,7 @@ function tick(now){
    // The ghost of a dragged token is drawn where letting go would put the token (dropHeight below).
    const dropped=placement&&token.dataset.vttDragGhost?dropHeight(placement,Math.round((matrix.m41-(ctx.view.gridOffsets.left||0))/g),Math.round((matrix.m42-(ctx.view.gridOffsets.top||0))/g)):null;
    const z=dropped??(placement?Math.max(groundFor(placement,{x,y}),token.dataset.vttDragGhost&&['fly','hover'].includes(placement.movementMode)?heightAt(x,y):-Infinity):heightAt(x,y));
-   const value=`${z*g*tokenSlant.x}px ${-z*g*tokenSlant.y}px`;if(token.style.translate!==value)token.style.translate=value;const heightText=z.toFixed(2);if(token.dataset.terrainHeight!==heightText)token.dataset.terrainHeight=heightText;
+   const value=`${z*g*tokenSlant.x}px ${-z*g*tokenSlant.y}px`;if(token.style.translate!==value)token.style.translate=value;if(token.dataset.placementId)tokenLifts.set(token.dataset.placementId,value);const heightText=z.toFixed(2);if(token.dataset.terrainHeight!==heightText)token.dataset.terrainHeight=heightText;
    const targetScale=relativeScale(z,viewerHeight),oldHeight=tokenHeights.get(token.dataset.placementId),whole=groundSquare(z);
    if(token.style.transition)token.style.transition='';if(token.style.scale)token.style.scale='';const placed=`translate3d(${matrix.m41}px, ${matrix.m42}px, 0px)`;const scaled=`${placed} scale(${targetScale})`;if(token.style.transform!==scaled)token.style.transform=scaled;
    if(oldHeight!==undefined&&whole>oldHeight&&heightBand(whole)===heightBand(oldHeight)&&!matchMedia('(prefers-reduced-motion: reduce)').matches)token.animate([{transform:scaled},{transform:`${placed} scale(${targetScale*1.045})`},{transform:scaled}],{duration:220});
@@ -503,7 +520,7 @@ function paintRoute(overlay,points,gridSize,forced=false){
  overlay.path.style.opacity='0';
 }
 window.addEventListener('storage',e=>{if(e.key===key&&!drawing){key='';}});
-window.terrainPrototype={get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,projector,stairRoute,heightAt,groundFor,landingHeight,movementGroundFor,movementPlacement,highGround,isCliff,climbFace,walkerNear,get design(){return importedDesign();},route,rulerPass,rulerPoint,routePath,squarePath,paintRoute,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get key(){return key;},get storageError(){return storageError;},project,get slant(){return slant();},get active(){return active;}};
+window.terrainPrototype={get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,unprojectAt,projector,stairRoute,heightAt,groundFor,landingHeight,movementGroundFor,movementPlacement,highGround,isCliff,climbFace,walkerNear,get design(){return importedDesign();},route,rulerPass,rulerPoint,routePath,squarePath,paintRoute,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get key(){return key;},get storageError(){return storageError;},project,get slant(){return slant();},get active(){return active;}};
 requestAnimationFrame(tick);
 
 import('./wall-prototype.js');

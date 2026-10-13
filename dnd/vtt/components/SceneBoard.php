@@ -63,6 +63,9 @@ function renderVttSceneBoard(bool $isGm = false): string
                 </select>
                 <button type="button" class="vtt-board__level-return" data-action="return-token-floor"
                     title="Center your view on your linked token and its floor. This does not move the token." aria-label="Center on my token">My token</button>
+                <?php else: ?>
+                <button type="button" class="vtt-board__level-return" data-action="return-token-floor"
+                    title="Center your view on the selected token. This does not move the token." aria-label="Center on the selected token">Find token</button>
                 <?php endif; ?>
                 <div class="vtt-board__round-tracker" data-round-tracker hidden>
                     <span class="vtt-board__round-label">Round</span>

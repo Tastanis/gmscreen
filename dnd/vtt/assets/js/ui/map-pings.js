@@ -33,6 +33,9 @@ export function createMapPings({
   getCurrentUserId = () => null,
   normalizeProfileId = (value) => value,
   getLocalMapPoint = () => null,
+  // Where a point of the flat map at a height (in squares) is drawn: the board leans, so a floor above is not
+  // drawn over the ground under it.
+  projectPoint = (x, y) => ({ x, y }),
   markPingsDirty = () => {},
   persistBoardStateSnapshot = () => {},
 } = {}) {
@@ -73,6 +76,10 @@ export function createMapPings({
       type: focus ? 'focus' : 'ping',
       createdAt: now,
     };
+    // The height of what was clicked (getLocalMapPoint says), so the ping is drawn on that floor and not under it.
+    if (Number.isFinite(pointer.height) && pointer.height !== 0) {
+      pingEntry.z = Math.round(pointer.height * 100) / 100;
+    }
     if (authorId) {
       pingEntry.authorId = authorId;
     }
@@ -162,6 +169,7 @@ export function createMapPings({
         typeof entry.type === 'string' && entry.type.trim().toLowerCase() === 'focus'
           ? 'focus'
           : 'ping',
+      ...(Number.isFinite(Number(entry.z)) && Number(entry.z) !== 0 ? { z: Number(entry.z) } : {}),
       createdAt,
     };
 
@@ -181,9 +189,18 @@ export function createMapPings({
       return;
     }
 
-    const localX = Math.min(1, Math.max(0, pingEntry.x)) * mapWidth;
-    const localY = Math.min(1, Math.max(0, pingEntry.y)) * mapHeight;
-    spawnPingPulse(localX, localY, pingEntry.type, 0);
+    const drawn = drawnAt(pingEntry, mapWidth, mapHeight);
+    spawnPingPulse(drawn.x, drawn.y, pingEntry.type, 0);
+  }
+
+  // Where a ping is drawn on the board: its place on the flat map, at its own height.
+  function drawnAt(pingEntry, mapWidth, mapHeight) {
+    const x = Math.min(1, Math.max(0, pingEntry.x)) * mapWidth;
+    const y = Math.min(1, Math.max(0, pingEntry.y)) * mapHeight;
+    const z = Number(pingEntry.z);
+    if (!Number.isFinite(z) || z === 0) return { x, y };
+    const at = projectPoint(x, y, z);
+    return at && Number.isFinite(at.x) && Number.isFinite(at.y) ? { x: at.x, y: at.y } : { x, y };
   }
 
   function spawnPingPulse(localX, localY, type, delayMs) {
@@ -311,8 +328,7 @@ export function createMapPings({
 
     const boardRect = board.getBoundingClientRect();
     const scale = Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
-    const localX = Math.min(1, Math.max(0, pingEntry.x)) * mapWidth;
-    const localY = Math.min(1, Math.max(0, pingEntry.y)) * mapHeight;
+    const { x: localX, y: localY } = drawnAt(pingEntry, mapWidth, mapHeight);
     const desiredX = boardRect.width / 2 - localX * scale;
     const desiredY = boardRect.height / 2 - localY * scale;
 
@@ -398,6 +414,8 @@ export function createMapPings({
 
   return {
     handleMapPing,
+    // A pulse on this page only, at a point of the board as drawn (the find-my-token button).
+    pulseAt: (localX, localY) => spawnPingPulse(localX, localY, 'ping', 0),
     processIncomingPings,
     sanitizePingsForPersistence,
     clonePingEntries,

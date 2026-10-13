@@ -2947,12 +2947,18 @@ final class SyncV2Store
             ) {
                 throw new InvalidArgumentException('ping.add coordinates must be between zero and one.');
             }
+            // The height of what was pinged, in squares: a ping on a floor above is drawn on that floor.
+            $z = $payload['ping']['z'] ?? 0;
+            if ((!is_int($z) && !is_float($z)) || !is_finite((float) $z) || abs($z) > 1000000) {
+                throw new InvalidArgumentException('ping.add height must be a number.');
+            }
             $payload['ping'] = [
                 'id' => $entityId,
                 'sceneId' => $sceneId,
                 'x' => (float) $x,
                 'y' => (float) $y,
                 'type' => ($payload['ping']['type'] ?? '') === 'focus' ? 'focus' : 'ping',
+                ...((float) $z !== 0.0 ? ['z' => (float) $z] : []),
             ];
         }
         if ($type === 'fog.set' && !is_array($payload['fogOfWar'] ?? null)) {

@@ -790,7 +790,8 @@ export function mountBoardInteractions(store, routes = {}) {
     updateBoardState: (mutator) => boardApi.updateState?.(mutator),
     getCurrentUserId: () => getCurrentUserId(),
     normalizeProfileId: (value) => normalizeProfileId(value),
-    getLocalMapPoint: (event) => getLocalMapPoint(event),
+    getLocalMapPoint: (event) => getLocalMapPointAt(event),
+    projectPoint: (x, y, z) => window.terrainPrototype?.project?.(x, y, z) ?? { x, y },
     markPingsDirty: () => markPingsDirty(),
     persistBoardStateSnapshot: () => persistBoardStateSnapshot(),
   });
@@ -2648,6 +2649,12 @@ export function mountBoardInteractions(store, routes = {}) {
     const button = event.currentTarget;
     button.disabled = true;
     try {
+      // The Director has no token of his own: the button finds the one he has selected.
+      if (isGmUser()) {
+        const only = selectedTokenIds.size === 1 ? [...selectedTokenIds][0] : null;
+        updateStatus(only && centerOnBoardToken(only) ? 'Viewing the selected token.' : 'Select one token to find it.');
+        return;
+      }
       const changed = await reconcileCurrentPlayerViewToPcToken({ force: true });
       // Floor rendering and terrain projection settle before measuring the token.
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -7725,6 +7732,12 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
 
+  // The same point with the height of what is drawn under the pointer ({x, y, height}), for what a click puts down.
+  function getLocalMapPointAt(event) {
+    const raw = getLocalMapPoint(event, { terrain: false });
+    if (!raw) return null;
+    return window.terrainPrototype?.unprojectAt?.(raw) ?? { ...(getLocalMapPoint(event) ?? raw), height: 0 };
+  }
   // `standingOn` (a token id) reads the pointer at the height that token stands at: see unproject in terrain-prototype.js.
   function getLocalMapPoint(event, { terrain = true, standingOn = null } = {}) {
     const pointer = getPointerPosition(event, mapSurface);
@@ -9146,13 +9159,23 @@ export function mountBoardInteractions(store, routes = {}) {
     const linked = resolvePcTokenForUser({userId,placements:state.boardState.placements?.[sceneId],viewerAssociation:scene?.pcTokenAssociations?.[userId]});
     if (!linked) return false;
     // Use the board token, never a tracker entry. Its bounds include terrain parallax and scaling.
-    const token = Array.from(tokenLayer.querySelectorAll('[data-placement-id]')).find(node => node.dataset.placementId === linked.placementId);
+    return centerOnBoardToken(linked.placementId);
+  }
+
+  // Centres the view on a token as it is drawn, and sends a ping out from it on this page only, so it is found
+  // at a glance (Brandon, October 12, 2026: "causes a ping to emit from your token so you can find where it is
+  // on the map and it centers your screen on your token").
+  function centerOnBoardToken(placementId) {
+    const token = Array.from(tokenLayer.querySelectorAll('[data-placement-id]')).find(node => node.dataset.placementId === placementId);
     if (!token || token.hidden) return false;
     const tokenRect = token.getBoundingClientRect(), boardRect = board.getBoundingClientRect();
     if (!tokenRect.width || !tokenRect.height) return false;
     viewState.translation.x += boardRect.left + boardRect.width/2 - tokenRect.left - tokenRect.width/2;
     viewState.translation.y += boardRect.top + boardRect.height/2 - tokenRect.top - tokenRect.height/2;
     applyTransform();
+    // The token is in the middle of the board now: that point, in the board's own measure, is where the pulse goes.
+    const surfaceRect = mapSurface.getBoundingClientRect(), scale = Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
+    mapPings.pulseAt((boardRect.left + boardRect.width/2 - surfaceRect.left - viewState.translation.x) / scale, (boardRect.top + boardRect.height/2 - surfaceRect.top - viewState.translation.y) / scale);
     return true;
   }
 
