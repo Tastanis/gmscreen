@@ -174,3 +174,33 @@ pusher. Beside it is straight; off its corner is the diagonal. Creatures of one 
 **Still open from the same check:** on two of your four Orchard platforms a forced drag still pauses the page
 for a second or so at a time (it was eight seconds before Build 481). That needs a measurement from a real
 browser, which the tester is taking; it is the next forced-move work.
+
+## Build 488: Malice comes and goes correctly (item 6)
+
+Your words: "Malace sometimes pops back or doenst work right. make sure it comes and goes correctly. and doesnt
+pop back."
+
+**Why it popped back.** Every Malice change was sent as "set Malice to N", N being that page's own copy of the
+number. Two things followed. Any combat news that reached the page before the server's answer overwrote the
+copy with the old number: the pop back you saw. And if the page sent any other combat change in that moment,
+it carried the old number with it and the server kept it: the pop back that stayed. A second Director page did
+the same to the first.
+
+**What is different now.**
+- A change is sent as an amount: "take 3", "add 2". The server applies it to the number it holds. Two pages, or
+  two quick changes, can no longer undo each other.
+- While a change of yours is on its way, the pips keep the number you mean. When the server has answered, they
+  show what it holds, which has your change in it and anything done on another page meanwhile.
+- Malice never rides along on another combat change.
+- End Round says which round it is ending. A second End Round for the same round (another Director page, a
+  double click) is refused, so the round's Malice is gained once and no round is skipped.
+- An End Round or a turn start pressed while another combat change was still saving used to be dropped without
+  a word. It now waits its turn and goes.
+- After End Combat the pips are cleared. The tester found the stored number at 0 with both Director pages still
+  showing 5.
+- A change the server refuses puts the pips back to the stored number and tells you.
+
+**Not changed, as you said:** cancelling a Malice ability does not refund it.
+
+**To know:** a Director page left open from before this build still sends the old "set to N" until it is
+reloaded. The server still takes that, so reload your pages after the deploy.
