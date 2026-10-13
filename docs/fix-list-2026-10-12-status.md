@@ -373,3 +373,52 @@ ignored by the server from now on). Reload the map once after the update, as wit
 
 **Not in this build:** the heroic resource rules (start of combat, start of turn, costs). Traced, with real
 faults found; next build.
+
+## Build 494: the heroic resource (items 2 and 4, second half, part two)
+
+Your words: "specifically, the heroic resources making sure those are triggering correctly when players start
+their turns and stuff".
+
+**What the trace found.** The rules themselves are sound: start of fight, start of turn and "first time each
+round" each fire once, on one page, even with two tabs open or after a reload. What went wrong was writing the
+number down.
+
+**Mended in this build.**
+- **A gain could be refused and lost.** A gain was sent as "the number is now N, and was M" from the page's own
+  copy of the sheet. If that copy was behind, the server refused it and the gain was gone, with one line in the
+  status bar. That hit: the reset to 0 at the end of a fight (the number stayed until the next fight); a
+  player's first turn after the start-of-fight set; a turn's gain for a hero keeping a zone with upkeep. Gains
+  and losses are now amounts the server adds. Nothing is refused for being behind.
+- **An ability's cost could erase a gain.** An ability keeps the copy of the sheet it was started with for its
+  whole run, and wrote "the number is now N" from it. A gain taken meanwhile was wiped. Costs, riders, gains and
+  refunds from abilities are now amounts too.
+- **"First time this round" was skipped in the next fight.** Each page keeps its own "already had it" marks and
+  only your page cleared them. On a player's page they lasted into the next fight. Every page now starts each
+  fight clean.
+- **A gain meant for another player never showed.** When your page (a monster's fire damage near Zepha) worked
+  out a gain that was the player's to accept, it was left on the hero's token, and a page that was already open
+  never looked there. It was cleared at the end of the round, unseen. An open page now sees it arrive.
+
+**Found, not changed. Yours to rule on.**
+- **A cost is kept when an ability is cancelled.** Click a 5 Wrath ability, cancel at the target picker: the 5
+  is spent. You said of Malice that you need no refund on cancel; say if heroes should be the same, or get it
+  back when nothing had happened yet.
+- **The start-of-turn prompt goes to whoever started the turn.** If you start Sharon's turn, "Gain 1d3 Insight"
+  appears on your screen, not hers. Pressing Apply there works.
+- **Cancel a turn and start it again, and the gain is offered again.**
+- **A hero grouped under another token in the turn order gets no start-of-turn gain.** Only the token that
+  stands for the group does.
+- **"First time each round" is remembered per page.** A reload in the same round can offer it again.
+- **Two ways to gain exist side by side:** the rules, and the roll button on the sheet and panel. A hero with
+  both can take the turn's gain twice by hand. The button only reads "d3" or "+2", not "1d3".
+- **A cost naming a resource the sheet does not have costs nothing, silently.** "3 Wrath" on a sheet whose
+  resource is still titled "Resource" is free.
+- **Zone upkeep stops at 0 even for a resource that may go negative.**
+- **Forced movement by hand on the map fires no rule.** Only an ability's push or pull does (Indigo's gain).
+- **If the one page running a fight's effects is closed in that instant, that step's effects never run.**
+
+**To check on the sheets (data, not code).**
+- The reference copy of Cal's abilities has no heroic resource rules at all. If his live sheet is the same,
+  nothing sets Wrath at the start of a fight, gives it each turn, or clears it at the end.
+- Sharon's, Indigo's and Zepha's start-of-turn gains are prompts to click, by their rules. Say if you want
+  them to land by themselves.
