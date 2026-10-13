@@ -18571,6 +18571,10 @@ export function mountBoardInteractions(store, routes = {}) {
     const verb = getAutomationMoveVerb(request);
     const verbLabel = request.verbLabel || getAutomationMoveVerbLabel(verb);
     const baseVerb = getAutomationMoveBaseVerb(verb);
+    // An ability that moves its own user is a move, not forced movement (see commitOwnAbilityMove).
+    const ownMove = Boolean(sourceSnapshot?.id) && sourceSnapshot.id === targetSnapshot?.id && request.movementKind !== 'teleport';
+    // A square off the map is never a destination.
+    const onMap = cellsOnMap(buildAutomationMoveLegalCells(sourceSnapshot, targetSnapshot, request.effectiveDistance, baseVerb), clampPlacementToBounds, targetSnapshot);
     pendingAutomationMove = {
       ...request,
       sceneId:getActiveSceneId(),
@@ -18579,12 +18583,13 @@ export function mountBoardInteractions(store, routes = {}) {
       baseVerb,
       targetSnapshot,
       sourceSnapshot,
+      ownMove,
       previewCell: {
         column: targetSnapshot.column,
         row: targetSnapshot.row,
       },
-      // A square off the map is never a destination.
-      legalCells: cellsOnMap(buildAutomationMoveLegalCells(sourceSnapshot, targetSnapshot, request.effectiveDistance, baseVerb), clampPlacementToBounds, targetSnapshot),
+      // Nor, for a creature's own move, is a square another creature stands in.
+      legalCells: ownMove ? onMap.filter((cell) => !creatureInTheWay(cell, targetSnapshot)) : onMap,
     };
     // A pull that cannot bring the target any closer does nothing: there is no square to pick.
     if (baseVerb === 'pull' && !pendingAutomationMove.legalCells.length) {
@@ -18597,8 +18602,64 @@ export function mountBoardInteractions(store, routes = {}) {
     updateAutomationMovePreview(pendingAutomationMove.previewCell);
     const legalNote = pendingAutomationMove.legalCells.length
       ? `Highlighted cells show the legal ${request.effectiveDistance}-square distance.`
-      : 'No legal destination is highlighted after stability/size, but you can still choose a destination.';
+      : (ownMove ? 'No empty square is in reach.' : 'No legal destination is highlighted after stability/size, but you can still choose a destination.');
     updateStatus(`${verbLabel} ${targetSnapshot.name}: choose a destination or click Skip. ${legalNote}`);
+  }
+
+  // The creature standing where `mover` would stand with its corner on `cell`, if any: one on the same level,
+  // other than itself. A player is told nothing of a creature hidden from them, so for a player those do not count.
+  function creatureInTheWay(cell, mover) {
+    const spot = { column: cell.column, row: cell.row, width: mover.width, height: mover.height };
+    const everyone = isGmUser();
+    return (getActiveScenePlacements(boardApi.getState?.() ?? {}) || []).find((other) => {
+      if (!other?.id || other.id === mover.id) return false;
+      const there = getAutomationPlacementSnapshot(other);
+      if (there.levelId !== mover.levelId || (there.hidden && !everyone)) return false;
+      return automationFootprintsOverlap(spot, there);
+    }) || null;
+  }
+
+  // An ability that moves its own user (a shift, a move, a slide of itself) is a MOVE. Brandon, October 13, 2026,
+  // on a hero's shift colliding: "are you saying that shift is working like a push? That's incorrect. Shouldn't do
+  // that." It used to go the way a push goes: a creature picked, or met on the way, was slammed into, with
+  // collision damage to both. Now it goes the way a dragged shift goes (commitCanonicalTokenMoves): it never
+  // collides and deals no collision damage; walls, climbs and what the move sets off are a walk's. A square with a
+  // creature in it is not a place to land: the pick is explained and the picker stays open for another square.
+  async function commitOwnAbilityMove(request, event, target) {
+    const mover = request.targetSnapshot;
+    const clicked = target?.closest('[data-movement-loupe]') ? null : findRenderedPlacementAtPoint(event);
+    const cell = getAutomationGridCellFromEvent(event) || request.previewCell;
+    const to = clampPlacementToBounds(cell.column, cell.row, mover.width, mover.height);
+    const standing = (clicked && clicked.id !== mover.id && (isGmUser() || !getAutomationPlacementSnapshot(clicked).hidden) ? clicked : null) || creatureInTheWay(to, mover);
+    if (standing) {
+      updateStatus(`${tokenLabel(standing)} is in that square. Choose an empty square, or click Skip.`);
+      return true;
+    }
+    if (to.column === mover.column && to.row === mover.row) {
+      updateStatus(`${request.verbLabel} ${mover.name}: choose a square to move to, or click Skip.`);
+      return true;
+    }
+    request.committing = true;
+    let made = false;
+    try {
+      made = await commitCanonicalTokenMoves({ sceneId: request.sceneId, moves: [{ placementId: mover.id, column: to.column, row: to.row }], source: 'ability', movementKind: 'shift', drawnRuler: [] });
+    } catch (error) {
+      console.warn('[VTT] an ability\'s own move failed', error);
+      made = false;
+    }
+    if (pendingAutomationMove !== request) return true;       // skipped, or the scene changed, meanwhile
+    const now = tokenMovementRuntime.getConfirmedSnapshot()?.state?.placements?.[request.sceneId]?.[mover.id];
+    const moved = made !== false && now && (Number(now.column) !== mover.column || Number(now.row) !== mover.row || resolvePlacementLevelId(now) !== mover.levelId);
+    if (!moved) {
+      // Refused by a wall, or a climb was declined: the status line says which. Another square may be picked.
+      request.committing = false;
+      renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState, { skipTracker: true });
+      return true;
+    }
+    flashAutomationTargetToken(mover.id);
+    clearAutomationMoveOverlay();
+    request.resolve?.({ skipped: false, name: mover.name, movedDistance: automationChebyshevDistance(mover, now), collision: null });
+    return true;
   }
 
   // The rules for which squares are legal live in forced-move-cells.js.
@@ -18706,7 +18767,7 @@ export function mountBoardInteractions(store, routes = {}) {
       const request = pendingAutomationMove;
       clearAutomationMoveOverlay();
       request.resolve?.({ skipped: true, reason: 'user-skip' });
-      updateStatus('Forced movement skipped.');
+      updateStatus(request.ownMove ? 'Move skipped.' : 'Forced movement skipped.');
       return true;
     }
     // Keep direct callers on the same camera path as captured pointer events.
@@ -18723,6 +18784,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if(request.sceneId!==getActiveSceneId()) {
       clearAutomationMoveOverlay();request.reject?.(new Error('Scene changed before movement was confirmed.'));return true;
     }
+    if (request.ownMove) return commitOwnAbilityMove(request, event, target);
     const clickedPlacement = target?.closest('[data-movement-loupe]') ? null : findRenderedPlacementAtPoint(event);
     const cell = getAutomationGridCellFromEvent(event) || request.previewCell;
     let collisionPlacement = request.movementKind!=='teleport' && clickedPlacement && clickedPlacement.id !== request.targetSnapshot.id
@@ -18855,8 +18917,10 @@ export function mountBoardInteractions(store, routes = {}) {
     return true;
   }
 
-  // A creature moved by its OWN ability (a shift, a leap, a slide of itself) moved willingly: a watch on "when it
-  // moves" counts it, as it counts a walk. Movement somebody else forces on it is not announced here.
+  // A creature moved by its OWN ability moved willingly: a watch on "when it moves" counts it, as it counts a
+  // walk. A shift, a move or a slide of itself is sent as a shift (commitOwnAbilityMove), and the confirmed move
+  // tells the watches itself; this is for what is left, its own teleport. Movement somebody else forces on it is
+  // not announced here.
   function announceOwnAbilityMove(request) {
     const moved = request?.targetSnapshot, mover = request?.sourceSnapshot;
     if (!moved?.id || !mover?.id || mover.id !== moved.id) return;
