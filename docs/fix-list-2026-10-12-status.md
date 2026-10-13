@@ -62,3 +62,23 @@ pusher. A push could go off at an angle.
 - A slide. It may go round things and is offered any square, as before.
 - Your own forced drag by hand (Ctrl-drag). It goes where you put it; that is how you overrule the line.
 - What stops a push: walls, creatures, slopes, breaking through, the fall at the end.
+
+## Build 483: undoing a push mends the wall it broke (item 1)
+
+Your words: "I need a way to undo a breakthrough or to reset the broken walls on a map."
+
+**Undo a breakthrough.** When a push breaks through a wall, Undo Move on that push now does both halves: the
+creature goes back where it was pushed from, and the wall (or the whole object, or the cubes of a summoned
+wall) it broke is whole again. Everyone's page hears the wall mended, then the move back.
+- It is the mover's own Undo, with the same limits as any Undo Move: the person who made the push, and only
+  while the creature has not been moved again.
+- Damage already applied from the slam or the break is not taken back. That is as it was for any undone move.
+- An undo that is refused mends nothing.
+
+**Reset the broken walls on a map.** This was there already, and I have not moved it:
+- Open the Walls panel. When anything on the map is broken, a button at the bottom reads "Repair all N broken
+  walls" (or "Repair the broken wall"). One press mends every broken wall of the map's own design on that scene.
+- One wall or object by itself: select it in the Walls panel and untick Broken.
+- A summoned wall (a wall an ability made) is repaired from its own small panel, with its Repair button.
+
+**Not in this build:** a reset button anywhere outside the Walls panel. Say if you want one, and where.
