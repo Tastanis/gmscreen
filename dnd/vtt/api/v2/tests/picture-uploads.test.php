@@ -65,16 +65,20 @@ try {
     $write('strixhaven/students/students.json', ['students' => [['student_id' => 'student_1', 'name' => 'One', 'images' => ['data-utils.php']], ['student_id' => 'student_2', 'name' => 'Two', 'images' => ['index.php']]], 'metadata' => []]);
     $write('strixhaven/othernpcs/othernpcs.json', ['npcs' => [['npc_id' => 'npc_1', 'name' => 'One', 'images' => ['data-utils.php']], ['npc_id' => 'npc_2', 'name' => 'Two', 'images' => ['index.php']]], 'metadata' => []]);
     $write('strixhaven/locations/locations.json', ['locations' => [['location_id' => 'location_1', 'name' => 'One', 'images' => ['image-upload.php']], ['location_id' => 'location_2', 'name' => 'Two', 'images' => ['index.php']]], 'metadata' => []]);
-    $write('strixhaven/data/inventory.json', ['cal' => ['items' => [
-        ['id' => 'item_1', 'name' => 'A', 'image' => '../save_inventory.php'],
-        ['id' => 'item_2', 'name' => 'B', 'image' => '../../includes/picture-store.php'],
-        ['id' => 'item_3', 'name' => 'C', 'image' => ''],
-    ]], 'shared' => ['items' => []], 'gm' => ['items' => []]]);
+    // The worst of what was found: an item whose "picture" is any file, then deleted. Here it is aimed at the
+    // heroes' sheets, at the database, and at a file outside the web folder altogether.
+    $write('character_sheet/data/character_sheets.json', ['cal' => ['hero' => ['name' => 'Cal']]]);
+    $write('vtt/storage/sync-v2.sqlite', ['stands in for' => 'the database']);
+    file_put_contents("$base/outside-the-site.txt", 'not the site\'s to touch');
     $write('data/character_inventory.json', ['cal' => ['items' => [
         ['id' => 'item_a', 'name' => 'A', 'image' => '/dnd/images/logo.png'],
         ['id' => 'item_b', 'name' => 'B', 'image' => ''],
         ['id' => 'item_c', 'name' => 'C', 'image' => '/dnd/images/../character_sheet/inventory_handler.php'],
         ['id' => 'item_d', 'name' => 'D', 'image' => '/dnd/images/item_1750373239414_26ihytngo_1750712776.png'],
+        ['id' => 'item_e', 'name' => 'E', 'image' => '/dnd/images/../character_sheet/data/character_sheets.json'],
+        ['id' => 'item_f', 'name' => 'F', 'image' => '/dnd/images/../vtt/storage/sync-v2.sqlite'],
+        ['id' => 'item_g', 'name' => 'G', 'image' => '/dnd/images/../../outside-the-site.txt'],
+        ['id' => 'item_h', 'name' => 'H', 'image' => str_replace('\\', '/', $base) . '/outside-the-site.txt'],
     ]]]);
     mkdir("$site/images", 0777, true);
     file_put_contents("$site/images/logo.png", $gif);                             // one of the site's own pictures
@@ -115,7 +119,6 @@ try {
         ['another NPC\'s portrait', 'strixhaven/othernpcs/index.php', ['action' => 'upload_portrait', 'npc_id' => 'npc_1'], 'portrait', 'strixhaven/othernpcs/portraits', null],
         ['a location\'s picture', 'strixhaven/locations/index.php', ['action' => 'upload_image', 'location_id' => 'location_1'], 'image', 'strixhaven/locations/images', null],
         ['a hex\'s picture', 'strixhaven/map/hex-data-handler.php', ['action' => 'upload_image', 'q' => '1', 'r' => '-2', 'section' => 'player'], 'image', 'strixhaven/map/hex-images', 'cal'],
-        ['an item\'s picture on the old inventory page', 'strixhaven/inventory/upload_item_image.php', ['action' => 'upload_image', 'item_id' => 'item_3'], 'image', 'strixhaven/inventory/images', 'cal'],
         ['a hireling\'s picture', 'character_sheet/upload_hireling_image.php', ['character' => 'cal', 'hireling_id' => 'h 1/../x'], 'image', 'character_sheet/data/hireling_images', 'cal'],
         ['an item\'s picture on the sheet', 'character_sheet/inventory_handler.php', ['action' => 'upload_image', 'item_id' => 'item_b'], 'image', 'images', 'cal'],
     ];
@@ -149,9 +152,6 @@ try {
     uploadCheck(preg_match('/^cal_h1x_\d+\.gif$/D', $picturesIn('character_sheet/data/hireling_images')[0]) === 1 && count($picturesIn('character_sheet/data/hireling_images')) <= 2, 'and a hireling id the same; a hireling\'s older pictures are replaced: ' . json_encode($picturesIn('character_sheet/data/hireling_images')));
 
     // ---- ids and sections that go into a path ----------------------------------------------------
-    $before = $picturesIn('strixhaven/inventory/images');
-    [$status, $answer] = $ask('cal', 'strixhaven/inventory/upload_item_image.php', ['action' => 'upload_image', 'item_id' => '../../item_3'], ['image', 'p.gif', $gif]);
-    uploadCheck(($answer['success'] ?? null) === false && $picturesIn('strixhaven/inventory/images') === $before, 'An item id with a folder in it stores nothing: ' . json_encode($answer));
     $before = $picturesIn('strixhaven/map/hex-images');
     foreach (['gm' => 'cal', '../../x' => 'cal', '../x' => 'GM', '' => 'GM'] as $section => $as) {
         [$status, $answer] = $ask($as, 'strixhaven/map/hex-data-handler.php', ['action' => 'upload_image', 'q' => '1', 'r' => '-2', 'section' => (string) $section], ['image', 'p.gif', $gif]);
@@ -175,17 +175,26 @@ try {
         if ($page !== 'locations' && function_exists('imagewebp')) uploadCheck(!is_file("$site/strixhaven/$page/thumbnails/" . pathinfo($real[0], PATHINFO_FILENAME) . '_thumb.webp'), "and its thumbnail: $page");
     }
 
-    // The old inventory page: an item whose "picture" is one of the site's files. Sharing it used to COPY that
-    // file into the pictures folder, where anyone could fetch it, and then delete the original.
-    [$status, $answer] = $ask('cal', 'strixhaven/inventory/save_inventory.php', ['action' => 'share_item', 'from_tab' => 'cal', 'to_tab' => 'shared', 'index' => '1']);
-    uploadCheck(is_file("$site/includes/picture-store.php") && count($picturesIn('strixhaven/inventory/images')) === 1, 'Sharing an item copies and deletes nothing but its own picture: ' . json_encode([$answer, $picturesIn('strixhaven/inventory/images')]));
-    [$status, $answer] = $ask('cal', 'strixhaven/inventory/save_inventory.php', ['action' => 'delete_item', 'tab' => 'cal', 'index' => '0']);
-    uploadCheck(($answer['success'] ?? null) === true && is_file("$site/strixhaven/inventory/save_inventory.php"), 'Deleting an item deletes no file of the site: ' . json_encode($answer));
-    // What is left in cal's tab is item_3, with the true picture stored above: it travels with the item.
-    $own = $picturesIn('strixhaven/inventory/images');
-    [$status, $answer] = $ask('cal', 'strixhaven/inventory/save_inventory.php', ['action' => 'share_item', 'from_tab' => 'cal', 'to_tab' => 'shared', 'index' => '0']);
-    $now = $picturesIn('strixhaven/inventory/images');
-    uploadCheck(($answer['success'] ?? null) === true && count($now) === 1 && $now !== $own && str_ends_with($now[0], '.gif'), 'An item\'s own picture still goes with it when it is shared: ' . json_encode([$answer, $own, $now]));
+    // ---- retired, Build 510 --------------------------------------------------------------------------
+    // The old hex map's database API and setup page, and the old inventory page with its two handlers (the ones
+    // that deleted, or copied into a public folder, any file a player named). A deploy never deletes, so each
+    // address is a file that answers 404: for the Director, for a player and for nobody, asked either way.
+    foreach (['strixhaven/map/api/hex-api.php', 'strixhaven/map/setup.php', 'strixhaven/inventory/index.php', 'strixhaven/inventory/save_inventory.php', 'strixhaven/inventory/upload_item_image.php'] as $retired) {
+        foreach (['GM', 'cal', null] as $who) {
+            [$status, $answer, $raw] = $ask($who, $retired, ['action' => 'load', 'tab' => 'cal'], ['image', 'p.gif', $gif]);
+            $got = @file_get_contents("http://127.0.0.1:$port/$retired", false, stream_context_create(['http' => ['ignore_errors' => true, 'timeout' => 20, 'follow_location' => 0, 'header' => $who !== null ? "X-Test-User: $who" : '']]));
+            preg_match('/ (\d{3}) /', $http_response_header[0] ?? '', $read);
+            uploadCheck($status === 404 && $raw === '' && (int) ($read[1] ?? 0) === 404 && $got === '', "The retired address $retired answers 404 and nothing else, for " . ($who ?? 'nobody') . ': ' . json_encode([$status, $read[1] ?? null, substr($raw . $got, 0, 80)]));
+        }
+        $text = (string) file_get_contents("$dnd/$retired");
+        uploadCheck(substr_count($text, "\n") <= 4 && preg_match('/^<\?php\n\/\/ Left here on purpose: [^\n]+\nhttp_response_code\(404\);\nexit;\n$/D', str_replace("\r", '', $text)) === 1, "and is nothing but that: $retired");
+    }
+    uploadCheck(!is_dir("$site/strixhaven/inventory/images") && preg_match('/^(\/\/[^\n]*\n)+$/D', str_replace("\r", '', (string) file_get_contents("$dnd/strixhaven/inventory/js/inventory.js"))) === 1, 'Nothing was stored for them, and the old page\'s script is empty');
+    // Still in use, and not to be stubbed by mistake: the 3D map's own handlers in the same folders.
+    foreach (['strixhaven/map/hex-data-handler.php', 'strixhaven/map/api/ping-api.php', 'strixhaven/map/api/player-path-api.php', 'strixhaven/map/index.php', 'character_sheet/inventory_handler.php'] as $kept) {
+        uploadCheck(!str_contains(str_replace("\r", '', (string) file_get_contents("$dnd/$kept")), "http_response_code(404);\nexit;"), "Still a working file: $kept");
+    }
+    uploadCheck(str_contains((string) file_get_contents("$dnd/strixhaven/map3d/index.php"), "API + 'hex-data-handler.php'") && !str_contains((string) file_get_contents("$dnd/strixhaven/map3d/index.php"), 'hex-api'), 'The 3D map reads and writes through hex-data-handler.php and never named the old API');
 
     // The sheet's inventory: its folder holds the site's own pictures too.
     [$status, $answer] = $ask('cal', 'character_sheet/inventory_handler.php', ['action' => 'delete_item', 'tab' => 'cal', 'item_id' => 'item_a']);
@@ -197,6 +206,11 @@ try {
     uploadCheck(count($own) === 1 && ($answer['success'] ?? null) === true && !is_file("$site/images/{$own[0]}"), 'An item\'s own stored picture goes with the item: ' . json_encode([$own, $answer]));
     [$status, $answer] = $ask('cal', 'character_sheet/inventory_handler.php', ['action' => 'delete_item', 'tab' => 'cal', 'item_id' => 'item_d']);
     uploadCheck(($answer['success'] ?? null) === true && !is_file("$site/images/item_1750373239414_26ihytngo_1750712776.png"), 'and so does one stored under the older kind of name: ' . json_encode($answer));
+    // The heroes' sheets, the database, a file outside the web folder (by "../" and by its full path).
+    foreach (['item_e' => "$site/character_sheet/data/character_sheets.json", 'item_f' => "$site/vtt/storage/sync-v2.sqlite", 'item_g' => "$base/outside-the-site.txt", 'item_h' => "$base/outside-the-site.txt"] as $item => $aimedAt) {
+        [$status, $answer] = $ask('cal', 'character_sheet/inventory_handler.php', ['action' => 'delete_item', 'tab' => 'cal', 'item_id' => $item]);
+        uploadCheck(($answer['success'] ?? null) === true && is_file($aimedAt) && filesize($aimedAt) > 10, 'Deleting an item whose "picture" is ' . basename($aimedAt) . ' deletes the item and leaves the file: ' . json_encode($answer));
+    }
 
     // The hex map: a picture the GM shared sits in the players' list under the same file name.
     [$status, $answer] = $ask('GM', 'strixhaven/map/hex-data-handler.php', ['action' => 'upload_image', 'q' => '4', 'r' => '4', 'section' => 'gm'], ['image', 'p.gif', $gif]);
@@ -214,7 +228,7 @@ try {
     // ---- and across the whole site ------------------------------------------------------------------
     $phpAfter = array_values(array_filter($everyFile($site), static fn ($path) => str_ends_with($path, '.php')));
     uploadCheck($phpAfter === $phpBefore && array_map('md5_file', $phpAfter) === $hashBefore, 'After all of it the site has the PHP files it began with, unchanged, and no other: ' . json_encode(array_merge(array_diff($phpAfter, $phpBefore), array_diff($phpBefore, $phpAfter))));
-    $strays = array_values(array_filter($everyFile($site), static fn ($path) => preg_match('/\.(php|json|lock|log|gif|png|webp|htaccess)$|\/error_log$/D', $path) !== 1));
+    $strays = array_values(array_filter($everyFile($site), static fn ($path) => preg_match('/\.(php|json|lock|log|gif|png|webp|htaccess|sqlite)$|\/error_log$/D', $path) !== 1));
     uploadCheck($strays === [], 'and nothing of any other kind was written anywhere: ' . json_encode($strays));
 } finally {
     if (is_resource($server)) { proc_terminate($server); proc_close($server); }
@@ -232,8 +246,5 @@ foreach (['images', 'chat_uploads', 'strixhaven/students/uploads/images', 'strix
 }
 $house = array_slice(explode("\n", str_replace("\r", '', trim((string) file_get_contents("$dnd/portraits/.htaccess")))), 1);
 uploadCheck(array_slice(explode("\n", trim(PictureStore::rules())), 2) === $house, 'written exactly as the portraits folder\'s, which the host accepts');
-// The old hex API needs a database and nothing calls it; held to the same store by reading it.
-$old = (string) file_get_contents("$dnd/strixhaven/map/api/hex-api.php");
-uploadCheck(str_contains($old, 'PictureStore::store(') && str_contains($old, 'PictureStore::namePart($hexId') && !str_contains($old, "pathinfo(\$file['name']"), 'The old hex API stores through the same piece');
 
-echo "picture uploads: 13 handlers store only a picture, under the site's own name, in a folder that runs nothing; none deletes or copies a file of the site\n";
+echo "picture uploads: 12 handlers store only a picture, under the site's own name, in a folder that runs nothing; none deletes or copies a file of the site; the old hex API and the old inventory page answer 404\n";
