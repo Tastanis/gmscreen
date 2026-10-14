@@ -760,3 +760,20 @@ empty file that answers "not found". The next deploy puts these over the old one
 the old handler could have been made to store (DND helper has the exact places and name pattern).
 
 The other 39 old files on the host are scripts, styles and theme files that run nothing on the server.
+
+## Build 513: the page says what it did
+
+Four small things the tester found, none of them new faults: places where the page did something, or refused,
+and showed you nothing.
+
+- **Find token with several tokens selected.** It used to do nothing you could see. Now the view centres on all
+  of them together, each one pulses, and a notice says "Viewing the 2 selected tokens." If a selected token is on
+  a floor you are not viewing, the notice says so.
+- **A move you take back.** Let go of a token off the map, or press Escape while dragging: the token goes home
+  as before, and now a notice says "Move cancelled."
+- **The automation paste box.** When it stays open after Save (it does when the paste filled in the card, so
+  you can undo), it now says "Saved." If the save did not go through it says so and keeps your text.
+- **Other NPCs page.** The picture button in the notes editor never worked; the part of the site it sends the
+  picture to had never been written. It works now, for you only, the same way as on the students page.
+
+No map is touched; the Gravity Orchard plays as it does now.
