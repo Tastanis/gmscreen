@@ -777,3 +777,27 @@ and showed you nothing.
   picture to had never been written. It works now, for you only, the same way as on the students page.
 
 No map is touched; the Gravity Orchard plays as it does now.
+
+## Build 514: ask heroes for a test
+
+What you asked for, as in mock 5.
+
+- **Asking.** A Test button on the main page (by the dice roller) and on the map's toolbar opens the form. Pick
+  the heroes (from the map, the heroes with a token on that map start lit; from the main page, all four) and,
+  if you want, one or several characteristics. Ask works with just a hero. You never pick the skill.
+- **Privately.** In a whisper window with a hero there is a Test button: the same form, for that hero only. The
+  ask and the result go in your whispers with them.
+- **The player's pop-up** comes up on whatever page they are on (main page, sheet or map). They pick a
+  characteristic among those you lit (any of the five if you lit none), or none; a skill from the five groups
+  (their own are starred, with any bonus of their own), or none; bane, none or edge; and can type an extra plus
+  or minus. The Roll button shows the sum. If they close it without rolling, a small "Test waiting" button stays
+  in the corner for half an hour.
+- **The dice are rolled by the site**, from the hero's own sheet, not on the player's page.
+- **What comes back:** a pop-up for you with each hero's characteristic, skill, dice + modifier = total and
+  tier ("waiting" for those who have not rolled), and a chat line that only you and that player see. No easy,
+  medium or hard: total and tier only (11 or less tier 1, 12-16 tier 2, 17+ tier 3).
+- **Side fix in chat:** two messages sent in the same second could leave the second one missing from a page
+  until it was reloaded. Chat times are now to the millisecond, so that cannot happen.
+- **Find token** now says "That token is not drawn on this page." where it used to say it was on another floor.
+
+No map is touched; the Gravity Orchard plays as it does now.
