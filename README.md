@@ -54,4 +54,4 @@ Production D&D site: https://bharmsasl.com/dnd/
 
 ## Additional Notes
 - The VTT combat tracker (`dnd/vtt/combat-tracker/`) ships with Markdown specs and seeded JSON so you can explore the feature without configuring a database.
-- When you're ready to persist data in MySQL, update the credentials in `dnd/includes/database-config.php` and call the helper to create the campaign tables.
+- Nothing in the site uses MySQL. `dnd/includes/database-config.php` and `dnd/includes/hex-data-manager.php` belonged to a database storage for the hex map that was never the one in use; both are retired (they answer 404) and no credentials belong in the repository.
