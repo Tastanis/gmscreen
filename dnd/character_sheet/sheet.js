@@ -3459,7 +3459,7 @@ function bindAutomationButtons() {
         const targetAction = freshAction || action;
         targetAction.automation = normalizeAutomationBlock(automation);
         renderActionSection(type, ACTION_CONTAINER_IDS[type] || `${type}-pane`);
-        await saveSheet();
+        return await saveSheet();          // true or false: the paste box says which
       });
     };
   });
@@ -3482,7 +3482,7 @@ function bindFeatureAutomationButtons() {
         const targetFeature = freshFeature || feature;
         targetFeature.automation = normalizeAutomationBlock(automation);
         renderFeatures();
-        await saveSheet();
+        return await saveSheet();
       });
     };
   });

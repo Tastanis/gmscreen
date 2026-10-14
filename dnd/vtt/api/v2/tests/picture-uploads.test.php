@@ -113,6 +113,8 @@ try {
         ['a picture in a staff member\'s notes', 'strixhaven/staff/image-upload.php', [], 'image', 'strixhaven/staff/uploads/images', null],
         ['a picture in a location\'s notes', 'strixhaven/locations/image-upload.php', [], 'image', 'strixhaven/locations/uploads/images', null],
         ['a picture in the Director\'s notes', 'strixhaven/gm/image-upload.php', [], 'image', 'strixhaven/gm/uploads/images', null],
+        // Build 513: this handler did not exist, so the Other NPCs notes editor's picture button always failed.
+        ['a picture in another NPC\'s notes', 'strixhaven/othernpcs/image-upload.php', [], 'image', 'strixhaven/othernpcs/uploads/images', null],
         ['a template\'s picture', 'strixhaven/templates/upload-image.php', ['template_id' => '../../t'], 'image', 'strixhaven/templates/images', null],
         ['a staff member\'s portrait', 'strixhaven/staff/index.php', ['action' => 'upload_portrait', 'staff_id' => 'staff_1'], 'portrait', 'strixhaven/staff/portraits', null],
         ['a student\'s portrait', 'strixhaven/students/index.php', ['action' => 'upload_portrait', 'student_id' => 'student_1'], 'portrait', 'strixhaven/students/portraits', null],
@@ -239,7 +241,7 @@ try {
 // ---- the folders, as they are deployed ---------------------------------------------------------------
 // The rule file is in the repository for every upload folder, so a folder has it from the deploy on, not
 // only from its next upload. One text, kept in includes/picture-store.php.
-foreach (['images', 'chat_uploads', 'strixhaven/students/uploads/images', 'strixhaven/staff/uploads/images', 'strixhaven/locations/uploads/images', 'strixhaven/gm/uploads/images',
+foreach (['images', 'chat_uploads', 'strixhaven/students/uploads/images', 'strixhaven/staff/uploads/images', 'strixhaven/locations/uploads/images', 'strixhaven/gm/uploads/images', 'strixhaven/othernpcs/uploads/images',
     'strixhaven/staff/portraits', 'strixhaven/students/portraits', 'strixhaven/othernpcs/portraits', 'strixhaven/locations/images', 'strixhaven/inventory/images', 'strixhaven/templates/images',
     'strixhaven/map/hex-images', 'character_sheet/data/hireling_images'] as $folder) {
     uploadCheck(str_replace("\r", '', (string) @file_get_contents("$dnd/$folder/.htaccess")) === PictureStore::rules(), "The upload folder $folder carries the rule file");
@@ -247,4 +249,4 @@ foreach (['images', 'chat_uploads', 'strixhaven/students/uploads/images', 'strix
 $house = array_slice(explode("\n", str_replace("\r", '', trim((string) file_get_contents("$dnd/portraits/.htaccess")))), 1);
 uploadCheck(array_slice(explode("\n", trim(PictureStore::rules())), 2) === $house, 'written exactly as the portraits folder\'s, which the host accepts');
 
-echo "picture uploads: 12 handlers store only a picture, under the site's own name, in a folder that runs nothing; none deletes or copies a file of the site; the old hex API and the old inventory page answer 404\n";
+echo "picture uploads: 13 handlers store only a picture, under the site's own name, in a folder that runs nothing; none deletes or copies a file of the site; the old hex API and the old inventory page answer 404\n";

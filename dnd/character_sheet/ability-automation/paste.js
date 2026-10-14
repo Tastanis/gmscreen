@@ -98,6 +98,7 @@
           <p class="ability-paste__hint">Accepts automation JSON, or wrapped <code>{ fields, automation }</code> to also fill the text fields.</p>
           <div class="ability-paste__status" data-paste-status></div>
           <div class="ability-paste__field-warnings" data-paste-field-warnings hidden></div>
+          <div class="ability-paste__saved" data-paste-saved role="status" aria-live="polite" hidden></div>
         </div>
         <footer class="ability-paste__footer">
           <button class="ability-paste__btn ability-paste__btn--ghost" type="button" data-paste-clear>Clear automation</button>
@@ -114,7 +115,17 @@
     const statusEl = host.querySelector("[data-paste-status]");
     const fieldWarningsEl = host.querySelector("[data-paste-field-warnings]");
     const undoBtn = host.querySelector("[data-paste-undo]");
+    const savedEl = host.querySelector("[data-paste-saved]");
     let undoSnapshot = null;
+
+    // The box stays open after some saves (a paste that filled the card's fields can be undone; "Clear" is
+    // followed by a fresh paste). It used to stay open and say nothing, so it was not clear it had saved.
+    function say(saved, words) {
+      if (!savedEl) return;
+      savedEl.hidden = !words;
+      savedEl.textContent = words || "";
+      savedEl.classList.toggle("ability-paste__saved--not", saved === false);
+    }
 
     function setFieldWarnings(warnings) {
       if (!fieldWarningsEl) return;
@@ -171,6 +182,7 @@
     }
     scheduleRender();
     textarea.addEventListener("input", scheduleRender);
+    textarea.addEventListener("input", () => say(true, ""));      // what is in the box is no longer what was saved
 
     let isSaving = false;
     async function runSave(value) {
@@ -188,9 +200,12 @@
       if (cancelBtn) cancelBtn.disabled = true;
       if (clearBtn) clearBtn.disabled = true;
       if (undoButton) undoButton.disabled = true;
+      let saved = true;
       try {
-        await Promise.resolve(onSave(value));
+        // The sheet answers false when its save did not go through; anything else is a save.
+        saved = (await Promise.resolve(onSave(value))) !== false;
       } catch (err) {
+        saved = false;
         console.error('[AbilityAutomation paste] save failed', err);
       } finally {
         isSaving = false;
@@ -202,7 +217,9 @@
         if (clearBtn) clearBtn.disabled = false;
         if (undoButton) undoButton.disabled = false;
       }
+      return saved;
     }
+    const NOT_SAVED = "Not saved. The sheet's own notice says why; nothing was lost here.";
 
     host.addEventListener("click", async (event) => {
       const target = event.target instanceof Element ? event.target : null;
@@ -220,7 +237,7 @@
         if (undoBtn) undoBtn.hidden = true;
         // Persist the clear, but keep the dialog open so the user can paste
         // fresh JSON without reopening.
-        await runSave(null);
+        say(...((await runSave(null)) ? [true, "Automation cleared and saved."] : [false, NOT_SAVED]));
         textarea.focus();
         return;
       }
@@ -228,7 +245,7 @@
         if (!undoSnapshot) return;
         fieldMap?.restoreFields?.(actionId, actionType, undoSnapshot.fields, undoSnapshot.touched);
         setFieldWarnings([]);
-        await runSave(undoSnapshot.automation);
+        say(...((await runSave(undoSnapshot.automation)) ? [true, "Paste undone and saved."] : [false, NOT_SAVED]));
         undoSnapshot = null;
         if (undoBtn) undoBtn.hidden = true;
         textarea.focus();
@@ -270,8 +287,9 @@
             keepOpen = true;
           }
         }
-        await runSave(result.normalized);
-        if (keepOpen) {
+        const saved = await runSave(result.normalized);
+        if (keepOpen || !saved) {
+          say(...(saved ? [true, undoSnapshot ? "Saved. The card's fields were filled in; Undo paste puts them back." : "Saved."] : [false, NOT_SAVED]));
           textarea.focus();
           return;
         }

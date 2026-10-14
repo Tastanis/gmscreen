@@ -571,11 +571,20 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   const defaultStatusText = status?.textContent ?? '';
+  const sceneOpenStatusText = 'Right-click and drag to pan. Use the mouse wheel to zoom.';
+  // What the status line says when there is nothing to say. `defaultStatusText` is the page's own first line,
+  // "Select or create a scene to begin.", which is true only while no scene is open: every press on the map puts
+  // the line back to its resting text, and with a scene open that used to read as though there were none.
+  function restingStatusText() {
+    let sceneOpen = false;
+    try { sceneOpen = Boolean(getActiveSceneId()); } catch (error) { sceneOpen = false; }   // asked before the board is set up
+    return sceneOpen ? sceneOpenStatusText : defaultStatusText;
+  }
   function updateStatus(message) {
     if (!status) {
       return;
     }
-    status.textContent = message || defaultStatusText;
+    status.textContent = message || restingStatusText();
   }
 
   function restoreStatus(shouldRestore = () => true) {
@@ -585,7 +594,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (typeof shouldRestore === 'function' && !shouldRestore()) {
       return;
     }
-    status.textContent = defaultStatusText;
+    status.textContent = restingStatusText();
   }
   if (turnTimerDisplay) {
     turnTimerDisplay.textContent = TURN_TIMER_INITIAL_DISPLAY;
@@ -2720,8 +2729,14 @@ export function mountBoardInteractions(store, routes = {}) {
     try {
       // The Director has no token of his own: the button finds the one he has selected.
       if (isGmUser()) {
-        const only = selectedTokenIds.size === 1 ? [...selectedTokenIds][0] : null;
-        updateStatus(only && centerOnBoardToken(only) ? 'Viewing the selected token.' : 'Select one token to find it.');
+        // One token or several: the view is centred on them together. What happened is said where it can be seen
+        // (the status line is read out, not shown): the tester found that with two selected the button seemed to
+        // do nothing, because "Select one token" was written only there.
+        const asked = [...selectedTokenIds];
+        const shown = centerOnBoardTokens(asked);
+        const said = findTokenWords(asked.length, shown);
+        updateStatus(said);
+        if (!(asked.length === 1 && shown === 1)) window.UIKit?.toast?.(said, shown ? 'info' : 'warning');
         return;
       }
       const changed = await reconcileCurrentPlayerViewToPcToken({ force: true });
@@ -7293,7 +7308,9 @@ export function mountBoardInteractions(store, routes = {}) {
     const isPrimaryButton = event.button === 0 || event.button === -1;
     if (isPrimaryButton && viewState.dragState && event.pointerId === viewState.dragState.pointerId) {
       // Let go anywhere but over the map (the side sheet, the top bar, a panel): the move is taken back.
+      const takenBack = !releasedOverMap(event);
       endTokenDrag({ commit: releasedOverMap(event), pointerId: event.pointerId, movementKind: dragMovementKind(event) });
+      if (takenBack) sayMoveCancelled();
     } else if (isPrimaryButton && viewState.dragCandidate && event.pointerId === viewState.dragCandidate.pointerId) {
       clearDragCandidate(event.pointerId);
     }
@@ -7352,9 +7369,16 @@ export function mountBoardInteractions(store, routes = {}) {
     const under = document.elementFromPoint(event.clientX, event.clientY);
     return !!under && mapSurface.contains(under);
   }
+  // A move that is taken back says so, where it can be seen. (The tester: the token went home and the page said
+  // nothing, so it looked like a move neither made nor refused.)
+  function sayMoveCancelled() {
+    updateStatus('Move cancelled.');
+    window.UIKit?.toast?.('Move cancelled.', 'info');
+  }
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape' || !viewState.dragState) return;
     endTokenDrag({ commit: false });
+    sayMoveCancelled();
     // This Escape was for the drag: it does not also close a panel or clear a selection underneath.
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -9425,17 +9449,41 @@ export function mountBoardInteractions(store, routes = {}) {
   // at a glance (Brandon, October 12, 2026: "causes a ping to emit from your token so you can find where it is
   // on the map and it centers your screen on your token").
   function centerOnBoardToken(placementId) {
-    const token = Array.from(tokenLayer.querySelectorAll('[data-placement-id]')).find(node => node.dataset.placementId === placementId);
-    if (!token || token.hidden) return false;
-    const tokenRect = token.getBoundingClientRect(), boardRect = board.getBoundingClientRect();
-    if (!tokenRect.width || !tokenRect.height) return false;
-    viewState.translation.x += boardRect.left + boardRect.width/2 - tokenRect.left - tokenRect.width/2;
-    viewState.translation.y += boardRect.top + boardRect.height/2 - tokenRect.top - tokenRect.height/2;
+    return centerOnBoardTokens([placementId]) === 1;
+  }
+
+  // The same for several tokens at once: the view is centred on the middle of them all, and each sends out its
+  // pulse. Returns how many of them are drawn on this page (a token on a floor not being viewed is not).
+  function centerOnBoardTokens(placementIds) {
+    const wanted = new Set(placementIds);
+    const rects = Array.from(tokenLayer.querySelectorAll('[data-placement-id]'))
+      .filter(node => wanted.has(node.dataset.placementId) && !node.hidden)
+      .map(node => node.getBoundingClientRect())
+      .filter(rect => rect.width && rect.height);
+    if (!rects.length) return 0;
+    const boardRect = board.getBoundingClientRect(), surfaceRect = mapSurface.getBoundingClientRect();
+    const scale = Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
+    // Where each token is in the board's own measure: that does not change when the view is moved.
+    const points = rects.map(rect => ({
+      x: (rect.left + rect.width/2 - surfaceRect.left - viewState.translation.x) / scale,
+      y: (rect.top + rect.height/2 - surfaceRect.top - viewState.translation.y) / scale,
+    }));
+    const left = Math.min(...rects.map(rect => rect.left)), right = Math.max(...rects.map(rect => rect.right));
+    const top = Math.min(...rects.map(rect => rect.top)), bottom = Math.max(...rects.map(rect => rect.bottom));
+    viewState.translation.x += boardRect.left + boardRect.width/2 - (left + right)/2;
+    viewState.translation.y += boardRect.top + boardRect.height/2 - (top + bottom)/2;
     applyTransform();
-    // The token is in the middle of the board now: that point, in the board's own measure, is where the pulse goes.
-    const surfaceRect = mapSurface.getBoundingClientRect(), scale = Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
-    mapPings.pulseAt((boardRect.left + boardRect.width/2 - surfaceRect.left - viewState.translation.x) / scale, (boardRect.top + boardRect.height/2 - surfaceRect.top - viewState.translation.y) / scale);
-    return true;
+    points.forEach(point => mapPings.pulseAt(point.x, point.y));
+    return rects.length;
+  }
+
+  /** What the Director's "Find token" says: how many were selected, how many of them are drawn on this page. */
+  function findTokenWords(asked, shown) {
+    if (!asked) return 'Select a token to find it.';
+    if (!shown) return asked === 1 ? 'That token is not on the floor you are viewing.' : 'None of the selected tokens is on the floor you are viewing.';
+    if (asked === 1) return 'Viewing the selected token.';
+    if (shown === asked) return `Viewing the ${asked} selected tokens.`;
+    return `Viewing ${shown} of the ${asked} selected tokens. The ${asked - shown === 1 ? 'other is' : 'others are'} not on the floor you are viewing.`;
   }
 
   function applyTransform() {
@@ -16518,7 +16566,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const previousStatus = status && typeof status.textContent === 'string' && status.textContent.trim()
       ? status.textContent
-      : defaultStatusText;
+      : restingStatusText();
 
     pendingDamageHeal = {
       mode,

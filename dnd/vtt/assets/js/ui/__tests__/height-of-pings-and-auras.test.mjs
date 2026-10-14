@@ -76,7 +76,7 @@ test('the page reads the height under a click, lifts an aura with its token, and
   assert.match(terrain, /if\(!active\)tokenLifts\.clear\(\);/, 'with the leaning view off, nothing is lifted');
   const page = readFileSync(new URL('../board-interactions.js', import.meta.url), 'utf8');
   assert.match(page, /getLocalMapPoint: \(event\) => getLocalMapPointAt\(event\),\s*projectPoint: \(x, y, z\) => window\.terrainPrototype\?\.project\?\.\(x, y, z\) \?\? \{ x, y \},/);
-  assert.match(page, /const only = selectedTokenIds\.size === 1 \? \[\.\.\.selectedTokenIds\]\[0\] : null;/, 'the Director\'s button finds the one token he has selected');
+  assert.match(page, /const asked = \[\.\.\.selectedTokenIds\];\s*const shown = centerOnBoardTokens\(asked\);/, 'the Director\'s button finds the token, or tokens, he has selected (Build 513: more than one)');
   assert.match(page, /mapPings\.pulseAt\(/, 'and the token found sends out a pulse');
   const markup = readFileSync(new URL('../../../../components/SceneBoard.php', import.meta.url), 'utf8');
   assert.match(markup, /aria-label="Center on the selected token">Find token<\/button>/, 'the Director has the button too');

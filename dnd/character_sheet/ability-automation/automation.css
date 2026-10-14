@@ -804,3 +804,14 @@
   border-color: #d8c4a3;
   color: #1a1a1a;
 }
+
+/* The line that says a save went through (or did not), when the box stays open after it. */
+.ability-paste__saved {
+  color: var(--success, #2f7d4f);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.ability-paste__saved--not {
+  color: var(--danger, #a8341c);
+}
