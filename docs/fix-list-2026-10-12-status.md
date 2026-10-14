@@ -742,3 +742,21 @@ that is stored is changed, and no save is changed. A test holds, for you and for
 the lighter answer with each scene's heights and walls put back is the whole answer.
 
 No map is touched; the Gravity Orchard plays as it does now.
+
+## Build 512: old files that were still answering on the site
+
+**What was wrong.** A deploy puts new files on the site but never removes old ones. Seven old PHP files that
+left the code long ago were still on the site and still answering. The worst, the old dashboard inventory's
+handler, asked for no login at all and would store a program sent to it by anyone on the internet. Another
+showed any visitor the players' view of the board.
+
+**What this build does.** Each of those seven addresses, and two old settings files nothing uses, is now an
+empty file that answers "not found". The next deploy puts these over the old ones.
+
+**What you will notice.** Nothing.
+
+**Still yours to do, by hand in cPanel, and worth doing even after this deploy:** delete
+`dnd/inventory_handler.php`, `dnd/vtt/debug_vtt.php` and `dnd/vtt/debug-health.php`, and look for any stray file
+the old handler could have been made to store (DND helper has the exact places and name pattern).
+
+The other 39 old files on the host are scripts, styles and theme files that run nothing on the server.
