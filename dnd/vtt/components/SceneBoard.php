@@ -136,6 +136,19 @@ function renderVttSceneBoard(bool $isGm = false): string
                     >
                         Damage/Heal
                     </button>
+                    <?php if ($isGm): ?>
+                    <button
+                        class="btn"
+                        type="button"
+                        id="vtt-ask-test-btn"
+                        data-ask-test-open
+                        data-ask-test-from="map"
+                        aria-haspopup="dialog"
+                        title="Ask heroes for a test"
+                    >
+                        Test
+                    </button>
+                    <?php endif; ?>
                 </div>
                 <?php if ($isGm): ?>
                 <div class="vtt-board__coming-soon">

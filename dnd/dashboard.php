@@ -864,6 +864,7 @@ $currentCharacter = $is_gm ? 'cal' : $user; // GM starts viewing Cal, players se
     <link rel="stylesheet" href="css/theme.css">
     <link rel="stylesheet" href="css/ui-kit.css">
     <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/ask-test.css?v=<?php echo (int) @filemtime(__DIR__ . '/css/ask-test.css'); ?>">
     <link rel="stylesheet" href="dice-roller/dice-roller.css">
     <link rel="stylesheet" href="dice-roller/diablo-dice.css">
     <script src="js/ui-kit.js"></script>
@@ -913,6 +914,7 @@ $currentCharacter = $is_gm ? 'cal' : $user; // GM starts viewing Cal, players se
             <button class="nav-btn" onclick="openVTT()">VTT</button>
             <button type="button" class="nav-btn" id="theme-toggle-btn" title="Switch theme">Theme</button>
             <button type="button" class="nav-btn" id="dice-roller-btn" title="Open dice roller">Dice Roller</button>
+            <?php if ($is_gm): ?><button type="button" class="nav-btn" id="ask-test-btn" data-ask-test-open title="Ask heroes for a test">Test</button><?php endif; ?>
             <?php if ($is_gm): ?>
                 <div class="dropdown">
                     <button type="button" class="nav-btn dropdown-btn" id="character-sheet-btn" title="Open a character sheet">Character Sheets</button>
@@ -1548,7 +1550,8 @@ $currentCharacter = $is_gm ? 'cal' : $user; // GM starts viewing Cal, players se
         })();
     </script>
     <?php endif; ?>
-    <script src="js/chat-panel.js"></script>
+    <script src="js/ask-test.js?v=<?php echo (int) @filemtime(__DIR__ . '/js/ask-test.js'); ?>"></script>
+    <script src="js/chat-panel.js?v=<?php echo (int) @filemtime(__DIR__ . '/js/chat-panel.js'); ?>"></script>
     <script src="dice-roller/dice-roller.js"></script>
     <script src="js/theme-manager.js"></script>
     <script src="Halloween/theme.js" defer></script>

@@ -44,6 +44,7 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
     <link rel="stylesheet" href="assets/css/layout.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="assets/css/board.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="assets/css/chat.css?v=<?= $assetVersion ?>" />
+    <link rel="stylesheet" href="../css/ask-test.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="assets/css/character-summary.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="assets/css/settings.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="assets/css/fog-of-war.css?v=<?= $assetVersion ?>" />
@@ -84,6 +85,7 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
         window.chatPusherConfig = <?= json_encode($config['chatPusher'] ?? null, $jsonScriptFlags) ?>;
     </script>
     <script src="../js/ui-kit.js?v=<?= $assetVersion ?>"></script>
+    <script src="../js/ask-test.js?v=<?= $assetVersion ?>"></script>
     <script src="../js/chat-panel.js?v=<?= $assetVersion ?>"></script>
     <script src="../character_sheet/ability-automation/primitives.js?v=<?= $assetVersion ?>"></script>
     <script src="../character_sheet/ability-automation/schema.js?v=<?= $assetVersion ?>"></script>

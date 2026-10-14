@@ -584,6 +584,17 @@
                 fileInput.value = '';
             });
 
+            // The Director can ask the hero he is whispering to for a test, privately (js/ask-test.js).
+            if (isGM && targetId !== 'GM' && window.AskTest) {
+                const testBtn = document.createElement('button');
+                testBtn.type = 'button';
+                testBtn.className = 'chat-whisper-popout__attach chat-whisper-popout__test';
+                testBtn.textContent = 'Test';
+                testBtn.title = `Ask ${getParticipantLabel(targetId)} for a test, privately`;
+                testBtn.dataset.askTestOpen = '';
+                testBtn.dataset.askTestOnly = targetId;
+                controls.appendChild(testBtn);
+            }
             controls.appendChild(imageBtn);
             controls.appendChild(sendBtn);
             formElement.appendChild(textareaElement);
@@ -1447,6 +1458,17 @@
             wrapper.appendChild(meta);
             wrapper.appendChild(body);
 
+            // A line the site wrote for two people only (the result of a test the Director asked for).
+            if (Array.isArray(message.only)) {
+                const others = message.only
+                    .filter((id) => id !== currentUser)
+                    .map((id) => (id === 'GM' ? 'the Director' : getParticipantLabel(id)));
+                const note = document.createElement('div');
+                note.className = 'chat-message__only';
+                note.textContent = `Only you and ${others.join(' and ') || 'the Director'} see this.`;
+                wrapper.appendChild(note);
+            }
+
             return wrapper;
         }
 
@@ -1883,6 +1905,9 @@
                 if (data && data.success) {
                     mergeMessages(data.messages || []);
                     updateLatestTimestamp(data.latest);
+                    if (window.AskTest && typeof window.AskTest.noticed === 'function') {
+                        window.AskTest.noticed(data.tests);
+                    }
                 }
             } catch (error) {
                 // Swallow errors to keep polling running
@@ -2530,6 +2555,10 @@
             } catch (error) {
                 chatSyncChannel = null;
             }
+        }
+        // Tests the Director asks heroes for ride on the chat (js/ask-test.js).
+        if (window.AskTest && typeof window.AskTest.start === 'function') {
+            window.AskTest.start({ isGM, currentUser, endpoint: CHAT_ENDPOINT, participants });
         }
         initChatPusher();
         ensureInterval();

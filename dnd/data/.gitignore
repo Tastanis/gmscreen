@@ -11,3 +11,7 @@ character_inventory.json
 
 # Don't ignore example files
 !*.example
+
+# Tests the Director has asked heroes for (includes/ask-test.php)
+ask_tests.json
+ask_tests.json.lock

@@ -49,10 +49,12 @@ test('what Find token says, for each case, and that it is said where it can be s
   assert.equal(findTokenWords(0, 0), 'Select a token to find it.');
   assert.equal(findTokenWords(1, 1), 'Viewing the selected token.');
   assert.equal(findTokenWords(2, 2), 'Viewing the 2 selected tokens.');
-  assert.equal(findTokenWords(1, 0), 'That token is not on the floor you are viewing.', 'it used to answer "Select one token" for this too');
-  assert.equal(findTokenWords(3, 0), 'None of the selected tokens is on the floor you are viewing.');
-  assert.equal(findTokenWords(3, 2), 'Viewing 2 of the 3 selected tokens. The other is not on the floor you are viewing.');
-  assert.equal(findTokenWords(4, 2), 'Viewing 2 of the 4 selected tokens. The others are not on the floor you are viewing.');
+  // Build 514: "not drawn on this page", not "not on the floor you are viewing". The Director's page draws
+  // every floor, so for him a token that is not drawn is never on another floor.
+  assert.equal(findTokenWords(1, 0), 'That token is not drawn on this page.', 'it used to answer "Select one token" for this too');
+  assert.equal(findTokenWords(3, 0), 'None of the selected tokens is drawn on this page.');
+  assert.equal(findTokenWords(3, 2), 'Viewing 2 of the 3 selected tokens. The other is not drawn on this page.');
+  assert.equal(findTokenWords(4, 2), 'Viewing 2 of the 4 selected tokens. The others are not drawn on this page.');
   // One token found is seen by its pulse; every other outcome is put on the page as a notice.
   assert.match(board, /const said = findTokenWords\(asked\.length, shown\);\s*updateStatus\(said\);\s*if \(!\(asked\.length === 1 && shown === 1\)\) window\.UIKit\?\.toast\?\.\(said, shown \? 'info' : 'warning'\);/);
   const markup = readFileSync(new URL('../../../../components/SceneBoard.php', import.meta.url), 'utf8');

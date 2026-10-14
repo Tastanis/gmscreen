@@ -726,6 +726,9 @@ export function mountBoardInteractions(store, routes = {}) {
   const boardApi = store ?? {};
   window.submitEnvironmentCommand = descriptor => tokenMovementRuntime.submitBoardDomainCommands([descriptor], true);
   window.submitFlightHeight = (token,flightHeight) => tokenMovementRuntime.submitPlacementOps([{type:'placement.update',sceneId:getActiveSceneId(),placementId:token.id,patch:{flightHeight}}]);
+  // The heroes with a token on the map being viewed. The Director's "ask for a test" form (js/ask-test.js)
+  // starts with these lit when it is opened from the map.
+  window.vttHeroesOnMap = () => [...new Set(getActiveScenePlacements(boardApi.getState?.() ?? {}).map((placement) => getCharacterSheetProfileIdForPlacement(placement)).filter(Boolean))];
   // Every layer of the board asks for this every frame. The viewer's floor and their own token are
   // worked out from the state (checking every floor's cut-out squares, and every token's name), so
   // they are worked out once for each copy of the state and each user, not once for each asking.
@@ -9480,10 +9483,10 @@ export function mountBoardInteractions(store, routes = {}) {
   /** What the Director's "Find token" says: how many were selected, how many of them are drawn on this page. */
   function findTokenWords(asked, shown) {
     if (!asked) return 'Select a token to find it.';
-    if (!shown) return asked === 1 ? 'That token is not on the floor you are viewing.' : 'None of the selected tokens is on the floor you are viewing.';
+    if (!shown) return asked === 1 ? 'That token is not drawn on this page.' : 'None of the selected tokens is drawn on this page.';
     if (asked === 1) return 'Viewing the selected token.';
     if (shown === asked) return `Viewing the ${asked} selected tokens.`;
-    return `Viewing ${shown} of the ${asked} selected tokens. The ${asked - shown === 1 ? 'other is' : 'others are'} not on the floor you are viewing.`;
+    return `Viewing ${shown} of the ${asked} selected tokens. The ${asked - shown === 1 ? 'other is' : 'others are'} not drawn on this page.`;
   }
 
   function applyTransform() {

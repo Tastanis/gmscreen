@@ -48,6 +48,7 @@ require_once '../includes/strix-nav.php';
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Hero Sheet</title>
   <link rel="stylesheet" href="../css/chat-panel.css?v=<?php echo (int) $assetVersion; ?>" />
+  <link rel="stylesheet" href="../css/ask-test.css?v=<?php echo (int) $assetVersion; ?>" />
   <link rel="stylesheet" href="styles.css?v=<?php echo (int) $assetVersion; ?>" />
   <link rel="stylesheet" href="inventory-tab.css?v=<?php echo (int) $assetVersion; ?>" />
   <link rel="stylesheet" href="../dice-roller/dice-roller.css?v=<?php echo (int) $assetVersion; ?>" />
@@ -175,6 +176,7 @@ require_once '../includes/strix-nav.php';
       currentUser: <?php echo json_encode($currentUser, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>
     };
   </script>
+  <script src="../js/ask-test.js?v=<?php echo (int) $assetVersion; ?>"></script>
   <script src="../js/chat-panel.js?v=<?php echo (int) $assetVersion; ?>"></script>
   <script>
     document.addEventListener('DOMContentLoaded', function () {

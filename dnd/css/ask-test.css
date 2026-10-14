@@ -1,0 +1,323 @@
+/*
+ * Ask heroes for a test (js/ask-test.js). The pop-ups carry the Diablo look on every page and under every theme:
+ * stone slabs, bronze frames, gold lettering (the same tokens as Diablo/theme.css, kept here so the pop-ups do
+ * not depend on which theme the page is wearing).
+ */
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&display=swap');
+
+.ask-test {
+    --ask-gold: #c8a95e;
+    --ask-gold-bright: #f0d68a;
+    --ask-gold-dim: #8a7342;
+    --ask-text: #b8b0a2;
+    --ask-muted: #8d8474;
+    --ask-slab: linear-gradient(180deg, #3a352d 0%, #262119 45%, #16120d 100%);
+    --ask-slab-hover: linear-gradient(180deg, #4a4335 0%, #322a1f 45%, #1d1811 100%);
+    --ask-slab-on: linear-gradient(180deg, #5a4a26 0%, #3a2f18 45%, #221a0c 100%);
+    --ask-frame: inset 0 0 0 1px #000, inset 0 0 0 2px #6e5a33, inset 0 0 0 3px #241d12, inset 0 1px 0 3px rgba(255, 255, 255, .06);
+    --ask-frame-bright: inset 0 0 0 1px #000, inset 0 0 0 2px #d4b46a, inset 0 0 0 3px #2c2416, inset 0 1px 0 3px rgba(255, 255, 255, .08);
+}
+
+.ask-test [hidden] {
+    display: none !important;
+}
+
+.ask-test__panel {
+    position: fixed;
+    top: 84px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 8000;
+    box-sizing: border-box;
+    width: 380px;
+    max-width: calc(100vw - 16px);
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+    padding: 14px;
+    border: 1px solid #000;
+    border-radius: 3px;
+    color: var(--ask-text);
+    font: 14px/1.45 'Cinzel', 'Palatino Linotype', 'Book Antiqua', serif;
+    text-align: left;
+    background: radial-gradient(ellipse at 50% 0%, rgba(200, 169, 94, .05) 0%, rgba(200, 169, 94, 0) 50%), linear-gradient(180deg, #1b1712 0%, #100d09 100%);
+    box-shadow: var(--ask-frame), 0 18px 40px rgba(0, 0, 0, .8);
+}
+
+.ask-test__panel *,
+.ask-test__chip {
+    box-sizing: border-box;
+}
+
+/* What comes back sits to the side, off the middle of the map. */
+.ask-test__panel--results {
+    left: auto;
+    right: 24px;
+    transform: none;
+    width: 420px;
+}
+
+.ask-test__head {
+    position: relative;
+    margin: 0 0 12px;
+    cursor: move;
+    touch-action: none;
+    user-select: none;
+}
+
+.ask-test__title {
+    margin: 0;
+    padding: 0 22px;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ask-gold);
+    text-transform: uppercase;
+    letter-spacing: .14em;
+    text-align: center;
+    text-shadow: 0 0 12px rgba(200, 169, 94, .3), 0 2px 3px #000;
+    background: none;
+    border: 0;
+}
+
+.ask-test__close {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    font: 700 18px/1 system-ui, sans-serif;
+    color: var(--ask-gold);
+    background: none;
+    border: 0;
+    cursor: pointer;
+}
+
+.ask-test__close:hover,
+.ask-test__close:focus-visible {
+    color: var(--ask-gold-bright);
+    outline: none;
+}
+
+.ask-test__box {
+    padding: 9px;
+    margin: 0 0 10px;
+    border: 1px solid #000;
+    border-radius: 2px;
+    background: linear-gradient(180deg, #1d1912 0%, #12100b 100%);
+    box-shadow: inset 0 0 0 1px rgba(110, 90, 51, .32), inset 0 1px 0 rgba(255, 255, 255, .04);
+}
+
+.ask-test__label {
+    margin: 0 0 7px;
+    font-size: 10px;
+    color: var(--ask-gold-dim);
+    text-transform: uppercase;
+    letter-spacing: .16em;
+}
+
+.ask-test__slabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.ask-test__slab {
+    margin: 0;
+    padding: 7px 11px;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--ask-gold);
+    background: var(--ask-slab);
+    border: 1px solid #000;
+    border-radius: 2px;
+    box-shadow: var(--ask-frame), 0 2px 6px rgba(0, 0, 0, .8);
+    text-shadow: 0 0 8px rgba(200, 169, 94, .28), 0 1px 2px #000;
+    cursor: pointer;
+}
+
+.ask-test__slab:hover,
+.ask-test__slab:focus-visible {
+    background: var(--ask-slab-hover);
+    color: var(--ask-gold-bright);
+    outline: none;
+}
+
+.ask-test__slab--on,
+.ask-test__slab--on:hover,
+.ask-test__slab--on:focus-visible {
+    background: var(--ask-slab-on);
+    color: var(--ask-gold-bright);
+    box-shadow: var(--ask-frame-bright), 0 0 12px rgba(212, 180, 106, .35);
+    text-shadow: 0 0 12px rgba(240, 214, 138, .7), 0 1px 2px #000;
+}
+
+/* A skill that is not the hero's own: it can be picked, and it adds nothing. */
+.ask-test__slab--plain {
+    color: var(--ask-muted);
+    text-shadow: 0 1px 2px #000;
+}
+
+.ask-test__slab--plain.ask-test__slab--on {
+    color: var(--ask-gold-bright);
+}
+
+.ask-test__slab--wide {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    font-size: 14px;
+    letter-spacing: .14em;
+}
+
+.ask-test__slab--tiny {
+    padding: 4px 8px;
+    font-size: 10px;
+}
+
+.ask-test__slab--dim {
+    opacity: .4;
+}
+
+.ask-test__star {
+    margin-left: 5px;
+    color: var(--ask-gold-bright);
+    text-shadow: 0 0 10px rgba(240, 214, 138, .9);
+}
+
+.ask-test__plus {
+    margin-left: 5px;
+    color: #e9dfc6;
+}
+
+.ask-test__line {
+    min-height: 20px;
+    margin: 8px 0 0;
+    font-size: 12px;
+    color: var(--ask-text);
+    letter-spacing: .04em;
+}
+
+.ask-test__line b {
+    color: var(--ask-gold-bright);
+    font-weight: 700;
+}
+
+.ask-test__line--trouble {
+    color: #e2a08a;
+}
+
+.ask-test__pair {
+    display: flex;
+    gap: 10px;
+}
+
+.ask-test__pair > .ask-test__box {
+    flex: 1;
+}
+
+.ask-test__pair > .ask-test__box--extra {
+    flex: 0 0 110px;
+}
+
+.ask-test__extra {
+    width: 74px;
+    padding: 6px;
+    font: inherit;
+    font-size: 14px;
+    text-align: center;
+    color: var(--ask-gold-bright);
+    background: #0b0906;
+    border: 1px solid #000;
+    border-radius: 2px;
+    box-shadow: inset 0 0 0 1px #6e5a33;
+}
+
+.ask-test__extra:focus {
+    outline: none;
+    box-shadow: inset 0 0 0 1px #d4b46a;
+}
+
+.ask-test__table {
+    width: 100%;
+    border-collapse: collapse;
+    font: inherit;
+    color: var(--ask-text);
+    background: none;
+}
+
+.ask-test__table td {
+    padding: 6px 2px;
+    border: 0;
+    border-top: 1px solid rgba(110, 90, 51, .32);
+    background: none;
+    color: inherit;
+    vertical-align: baseline;
+}
+
+.ask-test__table tr:first-child td {
+    border-top: 0;
+}
+
+.ask-test__table td:last-child {
+    text-align: right;
+}
+
+.ask-test__dim,
+.ask-test__table td.ask-test__dim {
+    color: var(--ask-muted);
+}
+
+.ask-test__score {
+    white-space: nowrap;
+}
+
+.ask-test__sum {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--ask-gold-bright);
+    text-shadow: 0 0 12px rgba(240, 214, 138, .5);
+}
+
+.ask-test__result {
+    margin: 0 0 12px;
+    text-align: center;
+}
+
+.ask-test__sum--big {
+    font-size: 44px;
+    line-height: 1.2;
+}
+
+.ask-test__tier {
+    font-size: 13px;
+    color: var(--ask-gold);
+    text-transform: uppercase;
+    letter-spacing: .16em;
+}
+
+/* A test shut without a roll: a small slab to open it again. */
+.ask-test__chip {
+    position: fixed;
+    left: 16px;
+    bottom: 16px;
+    z-index: 8000;
+    font-family: 'Cinzel', 'Palatino Linotype', 'Book Antiqua', serif;
+    box-shadow: var(--ask-frame-bright), 0 0 12px rgba(212, 180, 106, .35), 0 2px 6px rgba(0, 0, 0, .8);
+}
+
+/* The Director's Test button in a whisper window, and the note under a chat line that only two people see. */
+.chat-whisper-popout__test {
+    margin-right: auto;
+}
+
+.chat-message__only {
+    margin-top: 2px;
+    font-size: 11px;
+    font-style: italic;
+    opacity: .7;
+}

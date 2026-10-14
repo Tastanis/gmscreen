@@ -3,6 +3,7 @@
 // Handles chat_send, chat_fetch, and chat_upload actions
 
 require_once __DIR__ . '/includes/chat_pusher.php';
+require_once __DIR__ . '/includes/ask-test.php';
 
 if (PHP_SAPI !== 'cli') {
     if (session_status() === PHP_SESSION_NONE) {
@@ -38,6 +39,14 @@ if (PHP_SAPI !== 'cli') {
 
         case 'clear':
             handleChatClear($chatDataFile);
+            break;
+
+        // The Director asks heroes for a test (includes/ask-test.php).
+        case 'test_ask':
+        case 'test_state':
+        case 'test_sheet':
+        case 'test_roll':
+            handleAskTest($chatAction, $chatDataFile, $maxMessages, $chatParticipantsMap);
             break;
 
         default:
@@ -254,6 +263,12 @@ function pruneWhisperMessages(array $messages, $limitPerConversation = 5)
 
 function isWhisperVisibleTo(array $message, $currentUser)
 {
+    // A line the site itself wrote for named people only (the result of a test the Director asked for): nobody
+    // else is sent it. A message that comes in through chat_send never carries this.
+    if (isset($message['only'])) {
+        return is_array($message['only']) && is_string($currentUser) && in_array($currentUser, $message['only'], true);
+    }
+
     $type = sanitizeMessageType($message['type'] ?? 'text');
     if ($type !== 'whisper') {
         return true;
@@ -572,7 +587,7 @@ function handleChatSend($dataFile, $maxMessages, array $validParticipants) {
 
     $entry = [
         'id' => uniqid('msg_', true),
-        'timestamp' => date('c'),
+        'timestamp' => nextChatTimestamp($messages),
         'user' => $currentUser,
         'message' => $message,
         'type' => $messageType
@@ -618,8 +633,9 @@ function handleChatFetch($dataFile, array $validParticipants) {
     }
 
     $messages = loadChatMessages($dataFile);
-    $since = $_POST['since'] ?? '';
-    $sinceTime = $since !== '' ? strtotime($since) : false;
+    // To the millisecond (nextChatTimestamp): with whole seconds, a message written in the same second as the
+    // last one a page had seen was never sent to that page.
+    $sinceTime = chatTimestampValue($_POST['since'] ?? '');
     $currentUser = $_SESSION['user'];
     $knownRollStatuses = parseKnownProjectRollStatuses($_POST['knownRollStatuses'] ?? '');
     $filtered = [];
@@ -638,7 +654,7 @@ function handleChatFetch($dataFile, array $validParticipants) {
                 continue;
             }
 
-            $messageTime = strtotime($message['timestamp']);
+            $messageTime = chatTimestampValue($message['timestamp']);
             if ($messageTime === false || $messageTime <= $sinceTime) {
                 continue;
             }
@@ -655,7 +671,9 @@ function handleChatFetch($dataFile, array $validParticipants) {
     echo json_encode([
         'success' => true,
         'messages' => array_values($filtered),
-        'latest' => $latest
+        'latest' => $latest,
+        // A mark that changes when a test is asked for or rolled, so the page asks for the tests only then.
+        'tests' => AskTest::stamp(askTestFile())
     ]);
     exit;
 }
@@ -945,4 +963,228 @@ function handleChatUpload($uploadsDir) {
 
     echo json_encode($response);
     exit;
+}
+
+/**
+ * The time of a chat message as a number, to the millisecond, or false when it is not a time.
+ */
+function chatTimestampValue($timestamp)
+{
+    if (!is_string($timestamp) || trim($timestamp) === '') {
+        return false;
+    }
+
+    try {
+        return (float) (new DateTimeImmutable($timestamp))->format('U.v');
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+/**
+ * The time to write on the next chat message: now, to the millisecond, and always later than the last message
+ * already there. Pages ask for "everything after the last time I have", so two messages must never carry the
+ * same time (with whole seconds they often did, and the second was then never sent to a page that had fetched
+ * in between).
+ */
+function nextChatTimestamp(array $messages): string
+{
+    $now = new DateTimeImmutable('now');
+    $last = end($messages);
+    $lastTime = is_array($last) ? chatTimestampValue($last['timestamp'] ?? null) : false;
+    $nowTime = (float) $now->format('U.v');
+
+    // Never more than a moment ahead of the clock: a stored time far in the future is not chased.
+    if ($lastTime !== false && $lastTime >= $nowTime && $lastTime - $nowTime < 5) {
+        $next = DateTimeImmutable::createFromFormat('U.u', sprintf('%.6F', $lastTime + 0.001));
+        if ($next !== false) {
+            $now = $next->setTimezone($now->getTimezone());
+        }
+    }
+
+    return $now->format('Y-m-d\TH:i:s.vP');
+}
+
+function askTestFile(): string
+{
+    return __DIR__ . '/data/ask_tests.json';
+}
+
+/**
+ * Every hero's sheet, or null when the file is there and could not be read (it is being written): a roll must
+ * never be made from numbers that were not read.
+ */
+function askTestSheets(): ?array
+{
+    $file = __DIR__ . '/character_sheet/data/character_sheets.json';
+    if (!is_file($file)) {
+        return [];
+    }
+
+    for ($try = 0; $try < 4; $try++) {
+        $handle = @fopen($file, 'r');
+        if ($handle !== false) {
+            $content = flock($handle, LOCK_SH) ? stream_get_contents($handle) : '';
+            flock($handle, LOCK_UN);
+            fclose($handle);
+            $decoded = json_decode((string) $content, true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+        usleep(60000);
+    }
+
+    return null;
+}
+
+/**
+ * Adds a line the site itself writes to the chat (a test asked for privately, a test's result).
+ */
+function appendChatLine($dataFile, $maxMessages, array $line): array
+{
+    $messages = loadChatMessages($dataFile);
+    $entry = ['id' => uniqid('msg_', true), 'timestamp' => nextChatTimestamp($messages)] + $line;
+    $messages[] = $entry;
+    $messages = pruneWhisperMessages($messages, 5);
+    if (count($messages) > $maxMessages) {
+        $messages = array_slice($messages, -1 * $maxMessages);
+    }
+    saveChatMessages($dataFile, $messages);
+
+    return $entry;
+}
+
+/**
+ * The Director asks heroes for a test; each player answers; the roll is made here (includes/ask-test.php).
+ *
+ *   chat_test_ask    the Director: heroes (JSON list), characteristics (JSON list, may be empty), private (1 or 0)
+ *   chat_test_state  anyone signed in: the tests they may see (a hero sees only their own row)
+ *   chat_test_sheet  a hero: their own characteristics and skills, and the five skill groups
+ *   chat_test_roll   a hero who was asked: test, characteristic, skill, edge (-1, 0, 1), extra
+ */
+function handleAskTest($action, $dataFile, $maxMessages, array $participants)
+{
+    $answer = static function (array $body): void {
+        echo json_encode($body);
+        exit;
+    };
+    $refuse = static function (string $why) use ($answer): void {
+        $answer(['success' => false, 'error' => $why]);
+    };
+
+    $user = isset($_SESSION['user']) && is_string($_SESSION['user']) ? $_SESSION['user'] : '';
+    if ($user === '') {
+        $refuse('Not authenticated');
+    }
+
+    $isGm = $user === 'GM';
+    $heroes = array_values(array_diff(array_keys($participants), ['GM']));
+    $isHero = in_array($user, $heroes, true);
+    $file = askTestFile();
+    $now = time();
+
+    try {
+        if ($action === 'test_state') {
+            $stamp = AskTest::stamp($file);
+            if (isset($_POST['stamp']) && $_POST['stamp'] === $stamp) {
+                $answer(['success' => true, 'stamp' => $stamp, 'unchanged' => true]);
+            }
+            $answer(['success' => true, 'stamp' => $stamp, 'tests' => AskTest::visibleTo(AskTest::read($file), $user, $isGm, $now)]);
+        }
+
+        if ($action === 'test_sheet') {
+            if (!$isHero) {
+                $refuse('Only a hero has a sheet to roll from.');
+            }
+            $sheets = askTestSheets();
+            if ($sheets === null) {
+                $refuse('Your sheet could not be read just now. Try again.');
+            }
+            $sheet = AskTest::sheetOf($sheets, $user);
+            $answer(['success' => true, 'hero' => $user, 'stats' => $sheet['stats'], 'skills' => (object) $sheet['skills'], 'groups' => AskTest::SKILLS]);
+        }
+
+        if ($action === 'test_ask') {
+            if (!$isGm) {
+                $refuse('Only the Director asks for a test.');
+            }
+            $named = json_decode((string) ($_POST['heroes'] ?? ''), true);
+            $asked = array_values(array_intersect($heroes, array_filter(is_array($named) ? $named : [], 'is_string')));
+            if (!$asked) {
+                $refuse('Pick a hero.');
+            }
+            $private = ($_POST['private'] ?? '') === '1';
+            if ($private && count($asked) !== 1) {
+                $refuse('A private test is for one hero.');
+            }
+            $characteristics = AskTest::characteristics(json_decode((string) ($_POST['characteristics'] ?? ''), true));
+            $test = AskTest::create($asked, $characteristics, $private, $now);
+            AskTest::change($file, static function (array $tests) use ($test, $private, $asked, $dataFile, $maxMessages) {
+                $tests[] = $test;
+                // Asked privately, it is said in that hero's whispers; asked of the table, the pop-ups say it.
+                if ($private) {
+                    appendChatLine($dataFile, $maxMessages, ['user' => 'GM', 'message' => 'Test: ' . AskTest::asks($test), 'type' => 'whisper', 'target' => $asked[0]]);
+                }
+                return ['tests' => $tests];
+            });
+            broadcastChatUpdate('test');
+            $answer(['success' => true, 'id' => $test['id'], 'stamp' => AskTest::stamp($file), 'tests' => AskTest::visibleTo(AskTest::read($file), $user, true, $now)]);
+        }
+
+        if ($action === 'test_roll') {
+            if (!$isHero) {
+                $refuse('Only a hero who was asked rolls a test.');
+            }
+            $id = is_string($_POST['test'] ?? null) ? $_POST['test'] : '';
+            $sheets = askTestSheets();
+            if ($sheets === null) {
+                $refuse('Your sheet could not be read just now. Try again.');
+            }
+            $sheet = AskTest::sheetOf($sheets, $user);
+            $choice = [
+                'characteristic' => $_POST['characteristic'] ?? '',
+                'skill' => $_POST['skill'] ?? '',
+                'edge' => is_numeric($_POST['edge'] ?? null) ? (int) $_POST['edge'] : 0,
+                'extra' => $_POST['extra'] ?? 0,
+            ];
+            $result = AskTest::change($file, static function (array $tests) use ($id, $user, $sheet, $choice, $now, $dataFile, $maxMessages) {
+                foreach ($tests as $index => $test) {
+                    if (($test['id'] ?? '') !== $id) {
+                        continue;
+                    }
+                    if (!isset($test['rows'][$user])) {
+                        return ['error' => 'That test is not asking you.'];
+                    }
+                    if (($test['rows'][$user]['status'] ?? '') !== 'waiting') {
+                        return ['error' => 'You have already rolled this test.'];
+                    }
+                    // The dice are rolled here, never on the player's page.
+                    $row = AskTest::roll($test, $sheet, $choice, [random_int(1, 10), random_int(1, 10)], $now);
+                    $tests[$index]['rows'][$user] = $row;
+                    $words = 'Test: ' . AskTest::words($row);
+                    // Asked privately, the result goes back in the whispers; otherwise it is a chat line that
+                    // only the roller and the Director are sent. Written while the tests are held, so two heroes
+                    // rolling at once cannot lose a line.
+                    appendChatLine($dataFile, $maxMessages, !empty($test['private'])
+                        ? ['user' => $user, 'message' => $words, 'type' => 'whisper', 'target' => 'GM']
+                        : ['user' => $user, 'message' => $words, 'type' => 'text', 'only' => [$user, 'GM']]);
+                    return ['tests' => $tests, 'row' => $row + ['words' => AskTest::words($row)]];
+                }
+                return ['error' => 'That test is no longer there.'];
+            });
+            if (isset($result['error'])) {
+                $answer(['success' => false, 'error' => $result['error'], 'stamp' => AskTest::stamp($file)]);
+            }
+            broadcastChatUpdate('test');
+            $answer(['success' => true, 'row' => $result['row'], 'stamp' => AskTest::stamp($file)]);
+        }
+    } catch (InvalidArgumentException $e) {
+        $refuse($e->getMessage());
+    } catch (Throwable $e) {
+        error_log('[Ask test] ' . $e->getMessage());
+        $refuse('The test could not be saved. Try again.');
+    }
+
+    $refuse('Invalid chat action');
 }
