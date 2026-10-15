@@ -733,18 +733,13 @@ let markerCache='',markerBuilds=0,markerPreferenceKey='',markersVisible=true;
 function setMarkersVisible(value){markersVisible=!!value;if(markerPreferenceKey)localStorage.setItem(markerPreferenceKey,String(markersVisible));markers.style.display=active&&markersVisible?'':'none';}
 function drawCostMarkers(){
  const d=dimensions(),g=d.grid,ox=ctx.view.gridOffsets.left||0,oy=ctx.view.gridOffsets.top||0,parts=[];
- let hash=2166136261;for(const byte of new Uint8Array(field.h.buffer,field.h.byteOffset,field.h.byteLength))hash=Math.imul(hash^byte,16777619);
+ const hash=fieldHash();
  const cache=JSON.stringify([key,hash,field.n,field.m,d,ox,oy,ctx.view.mapPixelSize]);if(cache===markerCache)return;markerCache=cache;markerBuilds++;
  const minCol=Math.ceil((d.left-ox)/g),minRow=Math.ceil((d.top-oy)/g),maxCol=Math.floor((d.left+d.width-ox)/g),maxRow=Math.floor((d.top+d.height-oy)/g);
  for(let row=minRow;row<maxRow;row++)for(let col=minCol;col<maxCol;col++){
    const shape=slopeIndicator(col+.5,row+.5,(x,y)=>heightAt(ox+x*g,oy+y*g),(x,y)=>x>=minCol&&x<maxCol&&y>=minRow&&y<maxRow);
    if(!shape)continue;const {dx,dy,grade:rise}=shape;
-   const stops=[[.3,[20,90,40]],[1,[144,224,144]],[2,[255,242,145]],[3,[180,145,0]],[4,[153,27,27]],[6,[255,150,150]]];
-   let color=stops.at(-1)[1];
-   for(let i=1;i<stops.length;i++)if(rise<=stops[i][0]){
-    const [lo,a]=stops[i-1],[hi,b]=stops[i],t=(rise-lo)/(hi-lo);
-    color=a.map((c,j)=>Math.round(c+(b[j]-c)*t));break;
-   }
+   const color=slopeArrowColor(rise);
    const x=ox+(col+.5+dx*.25)*g,y=oy+(row+.5+dy*.25)*g,q=project(x,y,heightAt(x,y));
    const ahead=project(x+dx*g*.08,y+dy*g*.08,heightAt(x+dx*g*.08,y+dy*g*.08));
    const length=Math.hypot(ahead.x-q.x,ahead.y-q.y)||1,ux=(ahead.x-q.x)/length,uy=(ahead.y-q.y)/length;
@@ -752,6 +747,30 @@ function drawCostMarkers(){
    parts.push(`<path data-elevation-arrow="up" data-grade="${rise}" d="M${tail.x},${tail.y} L${tip.x},${tip.y} M${base.x-uy*g*.045},${base.y+ux*g*.045} L${tip.x},${tip.y} L${base.x+uy*g*.045},${base.y-ux*g*.045}" fill="none" stroke="rgb(${color.join(',')})" stroke-width="${g*.026}" stroke-linecap="round" stroke-linejoin="round"/>`);
  }
  markers.setAttribute('width',ctx.view.mapPixelSize.width);markers.setAttribute('height',ctx.view.mapPixelSize.height);markers.innerHTML=parts.join('');
+}
+function fieldHash(){let hash=2166136261;for(const byte of new Uint8Array(field.h.buffer,field.h.byteOffset,field.h.byteLength))hash=Math.imul(hash^byte,16777619);return hash;}
+// The arrow's colour for how steep the climb is, from dark green (gentle) to pale red (steepest).
+function slopeArrowColor(rise){
+ const stops=[[.3,[20,90,40]],[1,[144,224,144]],[2,[255,242,145]],[3,[180,145,0]],[4,[153,27,27]],[6,[255,150,150]]];
+ for(let i=1;i<stops.length;i++)if(rise<=stops[i][0]){
+  const [lo,a]=stops[i-1],[hi,b]=stops[i],t=(rise-lo)/(hi-lo);
+  return a.map((c,j)=>Math.round(c+(b[j]-c)*t));
+ }
+ return stops.at(-1)[1];
+}
+// 3D board (board3d/layers/slope-arrows.mjs): the same arrows as drawCostMarkers, in squares. x,y is the arrow's
+// middle, dx,dy the way uphill, color its grade's colour. The same list is handed back until the ground changes.
+let slopeMarkCache='',slopeMarkList=[];
+function slopeMarks(){
+ if(!field||!active||!ctx?.view)return [];
+ const d=dimensions(),g=d.grid,ox=ctx.view.gridOffsets.left||0,oy=ctx.view.gridOffsets.top||0;
+ const cache=JSON.stringify([key,fieldHash(),field.n,field.m,d,ox,oy]);if(cache===slopeMarkCache)return slopeMarkList;slopeMarkCache=cache;
+ const minCol=Math.ceil((d.left-ox)/g),minRow=Math.ceil((d.top-oy)/g),maxCol=Math.floor((d.left+d.width-ox)/g),maxRow=Math.floor((d.top+d.height-oy)/g),list=[];
+ for(let row=minRow;row<maxRow;row++)for(let col=minCol;col<maxCol;col++){
+  const shape=slopeIndicator(col+.5,row+.5,(x,y)=>heightAt(ox+x*g,oy+y*g),(x,y)=>x>=minCol&&x<maxCol&&y>=minRow&&y<maxRow);
+  if(shape)list.push({x:col+.5+shape.dx*.25,y:row+.5+shape.dy*.25,dx:shape.dx,dy:shape.dy,color:slopeArrowColor(shape.grade)});
+ }
+ slopeMarkList=list;return list;
 }
 function paintRoute(overlay,points,gridSize,forced=false){
  const ns='http://www.w3.org/2000/svg';let group=overlay.svg.querySelector('[data-terrain-route]');
@@ -777,7 +796,7 @@ function heightShown(z){
  const height=Number(z)||0,view=pointerView();
  return height<=0||!view||floorDrawn(height,view);
 }
-window.terrainPrototype={floorUnder,heightShown,get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,unprojectAt,projector,stairRoute,walkEnding,pickedSurfaceReached,rampTargetHeight,heightAt,groundFor,landingHeight,movementGroundFor,movementPlacement,highGround,isCliff,climbFace,walkerNear,get design(){return importedDesign();},route,rulerPass,rulerPoint,routePath,squarePath,paintRoute,movementPresentation,squarePresentation,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get fieldVersion(){return fieldVersion;},get brush3d(){return panel.hidden?null:brush3d;},get key(){return key;},get storageError(){return storageError;},project,get slant(){return slant();},get active(){return active;}};
+window.terrainPrototype={floorUnder,heightShown,get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,slopeMarks,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,unprojectAt,projector,stairRoute,walkEnding,pickedSurfaceReached,rampTargetHeight,heightAt,groundFor,landingHeight,movementGroundFor,movementPlacement,highGround,isCliff,climbFace,walkerNear,get design(){return importedDesign();},route,rulerPass,rulerPoint,routePath,squarePath,paintRoute,movementPresentation,squarePresentation,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get fieldVersion(){return fieldVersion;},get brush3d(){return panel.hidden?null:brush3d;},get key(){return key;},get storageError(){return storageError;},project,get slant(){return slant();},get active(){return active;}};
 requestAnimationFrame(tick);
 
 import('./wall-prototype.js');

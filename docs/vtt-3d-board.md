@@ -35,7 +35,7 @@ same as before. Vision and fog are still in the code but switched off.
 | `dnd/vtt/board3d/camera-controls.mjs` | The camera, one gesture per mouse button, so gestures combine. |
 | `dnd/vtt/board3d/route-planner.mjs` | Route planner for the movement ruler. A* over the VTT's own walker; time-sliced; legs run along rows, columns or 45° diagonals. |
 | `dnd/vtt/board3d/movement-route.mjs` | The ruler drawn in 3D: dots, leg and total labels, arrowhead, flashing difficult terrain. |
-| `dnd/vtt/board3d/layers/` | Overlays: drawings, templates, persistent and terrain zones, auras, pings, surface paint. |
+| `dnd/vtt/board3d/layers/` | Overlays: drawings, templates, persistent and terrain zones, auras, pings, surface paint, slope arrows. |
 | `dnd/vtt/board3d/area-volume.mjs` | The see-through boxes for templates, zones and ability areas. |
 | `dnd/vtt/board3d/wall-overlay.mjs` | Named line overlays: walls, stairs, rubble, the flash when a wall stops a move. |
 | `dnd/vtt/board3d/scene.json`, `assets/` | Gravity Orchard's 3D art and textures. |
@@ -75,6 +75,30 @@ in the unit tests), those modules do what they did before.
   to drops.
 - While holding a token, right-click adds a waypoint.
 
+## Slope arrows
+
+The 2D board's slope arrows are drawn on the 3D board by `layers/slope-arrows.mjs`:
+
+- **On the ground,** the arrows are the ones `terrain-prototype.js` works out (`slopeMarks()`, the same
+  list and colours as `drawCostMarkers`).
+- **On ramps and vines,** one green arrow per square, as `roof-renderer.js` draws them.
+
+Each arrow lies flat on the slope at its middle and points uphill, at the 2D arrow's size. On a cliff it
+stands up the cliff face rather than stretching down it. The slope-arrows setting still turns them all
+off, and a ramp's arrows hide with it under the Height cut.
+
+## Roofs (not yet on the 3D board)
+
+The 3D board does not draw roofs yet. The roof picture upload in the wall editor works, but nothing
+on the 3D board uses it. Specifically:
+
+- Roofs with `kind: 'roof'` are built but never shown (`setRoofs` is never called).
+- A roof made in the wall editor has no `kind`. The 2D board counts that as a roof, but the 3D board
+  builds it as a floating island.
+- Roof and plate pictures (`imageId`) are not used on the 3D board.
+
+Gravity Orchard has no roofs: all 19 of its surfaces are floating floors, which its own 3D art draws.
+
 ## Checks before a release
 
 - `node dnd/vtt/tools/run-regression-suite.cjs`: at this build, 210 files and 1530 tests pass.
@@ -85,7 +109,10 @@ in the unit tests), those modules do what they did before.
   - the Height tool;
   - the ability pickers;
   - two viewers at once;
-  - combat movement.
+  - combat movement;
+  - slope arrows;
+  - the fall animation;
+  - grid alignment by clicks on the 3D ground (with every save blocked).
 
 ## Known, not caused by the 3D board
 

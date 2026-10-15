@@ -6,6 +6,7 @@ import {createPersistentZonesLayer} from './persistent-zones.mjs';
 import {createTerrainZonesLayer} from './terrain-zones.mjs';
 import {createAurasLayer} from './auras.mjs';
 import {createPingsLayer} from './pings.mjs';
+import {createSlopeArrowsLayer} from './slope-arrows.mjs';
 
 export function register(vtt3d){
  vtt3d.addLayer('drawings',createDrawingsLayer);
@@ -14,4 +15,5 @@ export function register(vtt3d){
  vtt3d.addLayer('terrain-zones',createTerrainZonesLayer);
  vtt3d.addLayer('auras',createAurasLayer);
  vtt3d.addLayer('pings',createPingsLayer);
+ vtt3d.addLayer('slope-arrows',createSlopeArrowsLayer);
 }

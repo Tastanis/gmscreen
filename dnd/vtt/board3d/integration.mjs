@@ -119,6 +119,8 @@ async function mount(){
   levelHeight(levelId){if(!levelId||levelId==='level-0')return 0;const l=(context.levels||[]).find(l=>l.id===levelId);const h=Number(l?.elevationSquares);return Number.isFinite(h)?h:null;},
   project(point){return view?.project(point)??null;},
   get shownLevel(){return shownLevel;},levelIndex:id=>levelIndex(id),
+  // The ramps and vines of the scene as built (live from the map), in squares; the same list until it is rebuilt.
+  get ramps(){return data?.ramps||null;},
   get context(){return context;},
  };
  function startLayers(){for(const [name,factory] of layerFactories){try{layers.set(name,factory({view,scene:view.scene,guideScene:view.guideScene,overlayHost,bridge,helpers}));}catch(error){console.error('[VTT 3D] layer',name,error);}}}
