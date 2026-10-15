@@ -5,6 +5,7 @@ const ns='http://www.w3.org/2000/svg',layer=document.createElementNS(ns,'svg');
 layer.id='height-tethers';layer.setAttribute('aria-hidden','true');layer.style.cssText='position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:100003';
 document.querySelector('#vtt-map-transform').append(layer);let signature='';
 function tick(){
+ if(window.vtt3dBoard&&window.vtt3dActive){layer.hidden=true;requestAnimationFrame(tick);return;}layer.hidden=false; // 3D draws its own (board3d); the 2D tools view keeps these
  const c=window.terrainContext?.(),terrain=window.terrainPrototype,lines=[];
  if(c&&terrain?.active){
   layer.setAttribute('width',c.view.mapPixelSize.width);layer.setAttribute('height',c.view.mapPixelSize.height);

@@ -1,5 +1,6 @@
 import { diffDrawings, applyDrawingEdits, invertDrawingEdits, canEditDrawing } from './drawing-edits.js';
 import { claimActiveTool, publishActiveTool } from './active-tool.js';
+import { rampHeight } from './imported-ramps.mjs';
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 let sharedState = null;
@@ -72,6 +73,8 @@ export function mountDrawingTool(options = {}) {
     pendingList: [],
     sendChain: Promise.resolve(),
     editBefore: null,
+    cursor3d: null,
+    lastEraseClient: null,
   };
 
   sharedState = state;
@@ -185,6 +188,13 @@ export function mountDrawingTool(options = {}) {
     continueDrawing(state, event);
   });
 
+  mapSurface.addEventListener('pointerleave', () => {
+    if (state.cursor3d) {
+      state.cursor3d = null;
+      bumpView();
+    }
+  });
+
   mapSurface.addEventListener('pointerup', (event) => {
     if (event.pointerId !== state.pointerId) {
       return;
@@ -294,7 +304,7 @@ function toggleDrawMode(state, nextActive) {
 }
 
 function beginDrawing(state, event) {
-  const point = getMapCoordinates(state.mapTransform, event);
+  const point = getMapCoordinates(state.mapTransform, event, state);
   if (!point) {
     return;
   }
@@ -304,6 +314,8 @@ function beginDrawing(state, event) {
   state.currentPoints = [point];
   // The floor that is under the pointer where the stroke begins: the stroke is that floor's.
   state.currentHeight = floorHeightUnder(point);
+  state.currentRamp = Boolean(point.hit?.rampId);
+  bumpView();
 
   const path = document.createElementNS(SVG_NS, 'path');
   path.setAttribute('stroke', state.color);
@@ -314,7 +326,7 @@ function beginDrawing(state, event) {
 }
 
 function continueDrawing(state, event) {
-  const point = getMapCoordinates(state.mapTransform, event);
+  const point = getMapCoordinates(state.mapTransform, event, state);
   if (!point || !state.currentPath) {
     return;
   }
@@ -325,12 +337,13 @@ function continueDrawing(state, event) {
   if (last && Math.hypot(point.x - last.x, point.y - last.y) < MIN_POINT_STEP) return;
   state.currentPoints.push(point);
   updatePathFromPoints(state.currentPath, state.currentPoints);
+  bumpView();
 }
 
 const MIN_POINT_STEP = 2;
 
 function endDrawing(state, event) {
-  const point = getMapCoordinates(state.mapTransform, event);
+  const point = getMapCoordinates(state.mapTransform, event, state);
   if (point && state.currentPath) {
     state.currentPoints.push(point);
     updatePathFromPoints(state.currentPath, state.currentPoints);
@@ -363,6 +376,7 @@ function endDrawing(state, event) {
   state.pointerId = null;
   state.currentPath = null;
   state.currentPoints = [];
+  bumpView();
 }
 
 function cancelDrawing(state) {
@@ -374,6 +388,7 @@ function cancelDrawing(state) {
   state.pointerId = null;
   state.currentPath = null;
   state.currentPoints = [];
+  bumpView();
 }
 
 function setEraseMode(state, eraseMode) {
@@ -393,10 +408,11 @@ function setEraseMode(state, eraseMode) {
     state.drawingLayer.setAttribute('data-erase-active', eraseMode ? 'true' : 'false');
   }
   updateCursorIndicatorStyle(state);
+  bumpView();
 }
 
 function beginErasing(state, event) {
-  const point = getMapCoordinates(state.mapTransform, event);
+  const point = getMapCoordinates(state.mapTransform, event, state);
   if (!point) {
     return;
   }
@@ -408,12 +424,13 @@ function beginErasing(state, event) {
   // Save undo snapshot before any erasing happens
   pushToUndoStack(state);
 
+  state.lastEraseClient = { clientX: event.clientX, clientY: event.clientY };
   eraseAtPoint(state, point);
   state.lastErasePoint = point;
 }
 
 function continueErasing(state, event) {
-  const point = getMapCoordinates(state.mapTransform, event);
+  const point = getMapCoordinates(state.mapTransform, event, state);
   if (!point) {
     return;
   }
@@ -423,6 +440,21 @@ function continueErasing(state, event) {
   const from = state.lastErasePoint || point;
   const reach = Math.max(1, state.strokeWidth / 2);
   const steps = Math.min(200, Math.ceil(Math.hypot(point.x - from.x, point.y - from.y) / reach));
+  // 3D board: the sweep is followed on the screen, and each sample is read on every stroke's own surface.
+  const fromClient = state.lastEraseClient;
+  state.lastEraseClient = { clientX: event.clientX, clientY: event.clientY };
+  if (point.client && fromClient) {
+    for (let step = 1; step < steps; step += 1) {
+      const t = step / steps;
+      eraseAtPoint(state, map3dPoint(state, {
+        clientX: fromClient.clientX + (event.clientX - fromClient.clientX) * t,
+        clientY: fromClient.clientY + (event.clientY - fromClient.clientY) * t,
+      }) || point);
+    }
+    eraseAtPoint(state, point);
+    state.lastErasePoint = point;
+    return;
+  }
   for (let step = 1; step < steps; step += 1) {
     eraseAtPoint(state, { x: from.x + (point.x - from.x) * step / steps, y: from.y + (point.y - from.y) * step / steps });
   }
@@ -443,9 +475,10 @@ function endErasing(state) {
   state.erasing = false;
   state.pointerId = null;
   state.eraseDidChange = false;
+  state.lastEraseClient = null;
 }
 
-function eraseAtPoint(state, point) {
+function eraseAtPoint(state, at) {
   const eraserRadius = state.strokeWidth / 2;
   const result = [];
   let changed = false;
@@ -459,6 +492,11 @@ function eraseAtPoint(state, point) {
     const halfStroke = (drawing.strokeWidth || 3) / 2;
     const hitRadius = eraserRadius + halfStroke;
     const hitRadiusSq = hitRadius * hitRadius;
+    const point = pointOnStroke(at, drawing);
+    if (!point) {
+      result.push(drawing);
+      continue;
+    }
 
     // Check each segment for intersection with the eraser
     const segmentCount = drawing.points.length - 1;
@@ -600,7 +638,11 @@ function isEditable(state, drawing) {
 // floors, or one drawn before this) keeps the old rule.
 function floorHeightUnder(point) {
   const height = Number(globalThis.terrainPrototype?.floorUnder?.(point) ?? NaN);
-  return Number.isFinite(height) ? Math.round(height * 100) / 100 : null;
+  if (!Number.isFinite(height)) return null;
+  // 3D board: the floor is the one the pointer actually touched (a floating plate), else the ground (0). A stroke
+  // begun on a vine or stair keeps the height it began at, and is shown as a floor of that height would be.
+  if (point?.hit) return (point.hit.surfaceId || point.hit.rampId) ? Math.round(point.hit.height * 100) / 100 : 0;
+  return Math.round(height * 100) / 100;
 }
 
 /** True or false where the stroke's height decides; null where the floor it was given does. */
@@ -684,7 +726,10 @@ function updatePathFromPoints(pathElement, points) {
   pathElement.setAttribute('d', d);
 }
 
-function getMapCoordinates(mapTransform, event) {
+function getMapCoordinates(mapTransform, event, state = null) {
+  if (globalThis.vtt3d?.active) {
+    return map3dPoint(state, event);
+  }
   const rect = mapTransform.getBoundingClientRect();
   const baseWidth = mapTransform.offsetWidth;
   const baseHeight = mapTransform.offsetHeight;
@@ -720,8 +765,13 @@ function isPointerOverToken(event) {
     return false;
   }
 
+  const board3d = Boolean(globalThis.vtt3d?.active);
   for (const token of tokens) {
     if (!(token instanceof Element)) {
+      continue;
+    }
+    // 3D board: tokens on a floor that is not shown stay in the layer, hidden.
+    if (board3d && getComputedStyle(token).visibility === 'hidden') {
       continue;
     }
     const rect = token.getBoundingClientRect();
@@ -828,6 +878,8 @@ function removeCursorIndicator(state) {
     state.cursorIndicator.remove();
     state.cursorIndicator = null;
   }
+  state.cursor3d = null;
+  bumpView();
 }
 
 function updateCursorIndicatorPosition(state, event) {
@@ -835,7 +887,15 @@ function updateCursorIndicatorPosition(state, event) {
     return;
   }
 
-  const point = getMapCoordinates(state.mapTransform, event);
+  const point = getMapCoordinates(state.mapTransform, event, state);
+  if (globalThis.vtt3d?.active) {
+    const next = point ? { x: point.x, y: point.y, height: point.height } : null;
+    const was = state.cursor3d;
+    if (!next !== !was || (next && (next.x !== was.x || next.y !== was.y || next.height !== was.height))) {
+      state.cursor3d = next;
+      bumpView();
+    }
+  }
   if (!point) {
     state.cursorIndicator.style.display = 'none';
     return;
@@ -851,6 +911,7 @@ function updateCursorIndicatorSize(state) {
     return;
   }
   state.cursorIndicator.setAttribute('r', String(state.strokeWidth / 2));
+  bumpView();
 }
 
 function updateCursorIndicatorStyle(state) {
@@ -864,6 +925,104 @@ function updateCursorIndicatorStyle(state) {
     state.cursorIndicator.setAttribute('stroke', state.color);
     state.cursorIndicator.setAttribute('fill', 'rgba(255, 255, 255, 0.15)');
   }
+  bumpView();
+}
+
+// --- 3D board ---
+// The 3D board (board3d/layers/drawings.mjs) draws the strokes, the stroke in hand and the brush circle
+// on the surface each belongs to, and the pointer is read on that same surface.
+
+let viewRevision = 0;
+function bumpView() {
+  viewRevision += 1;
+}
+
+/** The height (squares) of the floor a stroke lies on, or null when it lies on the ground, a vine or a stair. */
+export function drawingFloorHeight(drawing) {
+  if (Number.isFinite(drawing?.z)) return drawing.z > 0 && !drawingOnRamp(drawing) ? drawing.z : null;
+  const levelId = drawing?.levelId || 'level-0';
+  if (levelId === 'level-0') return null;
+  const height = globalThis.vtt3d?.helpers?.levelHeight?.(levelId);
+  return Number.isFinite(height) && height > 0 ? height : null;
+}
+
+/** True for a stroke begun on a vine or stair: its `z` is the ramp's height where it begins, not a floor's. */
+export function drawingOnRamp(drawing) {
+  const start = drawing?.points?.[0], board = globalThis.vtt3d;
+  if (!start || !(drawing.z > 0) || !board?.helpers) return false;
+  const model = globalThis.wallPrototype?.model, p = board.helpers.toSquares(start.x, start.y);
+  if (!(model?.ramps || []).some((ramp) => { const h = rampHeight(ramp, p.x, p.y); return h !== null && Math.abs(h - drawing.z) < 0.15; })) return false;
+  return !(model.roofs || []).some((s) => s.kind === 'floor' && Math.abs(s.height - drawing.z) < 0.01 && inside(s.points || [], p));
+}
+function inside(ring, p) {
+  let hit = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i], b = ring[j];
+    if ((a.y > p.y) !== (b.y > p.y) && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) hit = !hit;
+  }
+  return hit;
+}
+
+function map3dPoint(state, event) {
+  const board = globalThis.vtt3d;
+  if (!board || !Number.isFinite(event?.clientX) || !Number.isFinite(event?.clientY)) return null;
+  const client = { clientX: event.clientX, clientY: event.clientY };
+  // A stroke in hand stays on its own surface: its floor's plane, or the ground under the pointer.
+  if (state?.drawing) {
+    const floor = state.currentRamp ? null : state.currentHeight > 0 ? state.currentHeight
+      : (state.currentHeight === null ? drawingFloorHeight({ levelId: state.levelId }) : null);
+    if (floor !== null) {
+      const p = board.clientToMap(event.clientX, event.clientY, { plane: floor });
+      return p ? { x: p.x, y: p.y, height: floor, client } : null;
+    }
+    const hit = board.clientToMap(event.clientX, event.clientY);
+    if (hit && !(hit.surfaceId && !hit.rampId)) return { x: hit.x, y: hit.y, height: hit.height, hit, client };
+    // Passing over a floating floor: the ground stroke goes on at the height it had reached.
+    const last = state.currentPoints[state.currentPoints.length - 1];
+    const plane = Number.isFinite(last?.height) ? last.height : 0;
+    const p = board.clientToMap(event.clientX, event.clientY, { plane });
+    return p ? { x: p.x, y: p.y, height: plane, client } : null;
+  }
+  const hit = board.clientToMap(event.clientX, event.clientY);
+  return hit ? { x: hit.x, y: hit.y, height: hit.height, hit, client } : null;
+}
+
+/** Where the eraser is on a stroke's own surface (3D board); the map point itself on the 2D board. */
+function pointOnStroke(at, drawing) {
+  if (!at?.client || !globalThis.vtt3d?.active) return at;
+  const floor = drawingFloorHeight(drawing);
+  if (floor === null) {
+    // The pointer is on a floating floor: ground strokes under it are not where it points.
+    return at.hit && at.hit.surfaceId && !at.hit.rampId ? null : at;
+  }
+  if (Math.abs(at.height - floor) < 0.05) return at;
+  const p = globalThis.vtt3d.clientToMap(at.client.clientX, at.client.clientY, { plane: floor });
+  return p ? { x: p.x, y: p.y } : null;
+}
+
+/** What the 3D board draws; `revision` changes whenever any of it does. */
+export function getDrawingView() {
+  if (!sharedState) return null;
+  const state = sharedState;
+  return {
+    revision: viewRevision,
+    active: state.active,
+    erase: state.eraseMode,
+    color: state.color,
+    strokeWidth: state.strokeWidth,
+    drawings: state.drawings.filter((drawing) => drawing.points?.length >= 2 && shownOnThisPage(state, drawing)),
+    current: state.drawing && state.currentPoints.length
+      ? {
+        id: 'in-hand', points: state.currentPoints, color: state.color, strokeWidth: state.strokeWidth, levelId: state.levelId,
+        ...(state.currentHeight !== null ? { z: state.currentHeight } : {}),
+      }
+      : null,
+    cursor: state.active ? state.cursor3d : null,
+  };
+}
+
+export function drawingViewRevision() {
+  return viewRevision;
 }
 
 // --- Exports ---
@@ -943,6 +1102,7 @@ export function renderDrawings(state) {
   }
 
   targetState.shownKey = shownKey(targetState);
+  bumpView();
   for (const drawing of targetState.drawings) {
     if (!shownOnThisPage(targetState, drawing) || !drawing.points || drawing.points.length < 2) {
       continue;

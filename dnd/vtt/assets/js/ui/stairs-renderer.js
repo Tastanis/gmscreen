@@ -17,6 +17,7 @@
  * deselect) are wired in stairs-tool.js — this module only paints.
  */
 
+import { rampHeight } from './imported-ramps.mjs';
 import { BASE_MAP_LEVEL_ID } from '../state/normalize/map-levels.js';
 import { buildStairPerimeter, resolveSegmentColor } from './stairs-geometry.js';
 
@@ -102,6 +103,7 @@ export function renderStairs(state) {
 
   const stairs = getStairsOnViewerLevel(state);
   const selectedId = getSelectedStairId();
+  paintStairs3d(state, stairs, selectedId, editing);
 
   // Build a fresh tree each render; the layer is small (a few stairs
   // each with a few dozen segments) so the GC pressure is negligible
@@ -184,6 +186,40 @@ export function renderStairs(state) {
     return;
   }
   layerEl.replaceChildren(fragment);
+}
+
+// 3D board: the same edges, outline and corner handles, at the stair's real height:
+// along its ramp where one shares its id, else on the viewer's floor, else on the ground.
+function paintStairs3d(state, stairs, selectedId, editing) {
+  const board3d = window.vtt3d?.active ? window.vtt3d : null;
+  if (!board3d) return;
+  const sceneId = state?.boardState?.activeSceneId ?? null;
+  const viewerLevelId = sceneId ? getViewerLevelId(state, sceneId) : BASE_MAP_LEVEL_ID;
+  const ramps = window.wallPrototype?.model?.ramps || [];
+  const floor = board3d.helpers.levelHeight(viewerLevelId);
+  const heightOf = (stair, x, y) => {
+    const ramp = ramps.find((r) => r.id === stair.id);
+    if (ramp) {
+      const z = rampHeight(ramp, Math.max(ramp.left, Math.min(ramp.right, x)), Math.max(ramp.top, Math.min(ramp.bottom, y)));
+      if (Number.isFinite(z)) return z;
+    }
+    if (viewerLevelId && viewerLevelId !== BASE_MAP_LEVEL_ID && Number.isFinite(floor)) return floor;
+    return board3d.helpers.groundAt(x, y);
+  };
+  const at = (stair, cell) => ({ x: cell.column, y: cell.row, z: heightOf(stair, cell.column, cell.row) });
+  const colors = { green: '#2ecc71', red: '#e74c3c' };
+  const list = [];
+  for (const stair of stairs) {
+    const perimeter = buildStairPerimeter(stair.corners);
+    if (editing && perimeter.length) list.push({ kind: 'line', points: [at(stair, perimeter[0].from), ...perimeter.map((segment) => at(stair, segment.to))], color: stair.id === selectedId ? '#facc15' : '#f8fafc', opacity: 0.55 });
+    for (const segment of perimeter) {
+      const color = resolveSegmentColor(stair.edgeColors, segment.id);
+      if (!editing && color !== 'green' && color !== 'red') continue;
+      list.push({ kind: 'line', points: [at(stair, segment.from), at(stair, segment.to)], color: colors[color] || '#cbd5e1', opacity: 1 });
+    }
+    if (editing && stair.id === selectedId && Array.isArray(stair.corners)) for (const corner of stair.corners) list.push({ kind: 'dot', ...at(stair, corner), r: 0.12, color: '#facc15', stroke: '#1f2937' });
+  }
+  board3d.setOverlay('stairs', list);
 }
 
 function getStairsOnViewerLevel(state) {

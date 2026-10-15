@@ -84,7 +84,8 @@ test('the ruler shows the app\'s corners, sends them, and drops them the moment 
   assert.match(ruler, /sharedState\.assumed = assumedCorners\(sharedState\);/);
   const terrain = readFileSync(new URL('../terrain-prototype.js', import.meta.url), 'utf8');
   // Only when the straight line would not do, and the way by the stair is free of walls.
-  assert.match(terrain, /const kind=getCurrentMovementKind\(\);if\(kind!=='walk'&&kind!=='shift'\)return null;/);
+  // The 3D route planner names the kind it plans for; otherwise it is the kind chosen now.
+  assert.match(terrain, /function stairCorners\(placement,column,row,kind=getCurrentMovementKind\(\),resumeTraversal=false\)\{[^}]*if\(kind!=='walk'&&kind!=='shift'\)return null;/);
   assert.match(terrain, /if\(!Number\.isFinite\(byStair\.height\)\|\|\(Number\.isFinite\(plain\.height\)&&Math\.abs\(byStair\.height-plain\.height\)<\.05&&plain\.how===byStair\.how\)\)continue;/);
   assert.match(terrain, /if\(window\.wallPrototype\?\.blockedMove\?\.\(placement,\{column,row,path:corners\}\)\)continue;/);
   // The ghost and the pointer's pick follow the same route as the ruler.

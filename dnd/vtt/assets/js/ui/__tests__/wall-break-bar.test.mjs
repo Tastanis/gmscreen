@@ -48,7 +48,8 @@ test('the board makes the bar only for a GM with a wall selected, and hides it o
   assert.match(board, /root\.style\.cssText = WALL_BAR_STYLE;\s*showBar\(root, false\);/, 'it is hidden from the moment it is made');
   assert.doesNotMatch(board, /root\.style\.cssText = '[^']*display\s*:/, 'its own style never forces it on screen');
   assert.doesNotMatch(board, /panel\.root\.hidden = /, 'and it is never hidden by the mark alone');
-  assert.match(board, /showBar\(panel\.root, true\);\s*const place = placeBar\(\{ wall: shape\.elements\.root\.getBoundingClientRect\(\)/, 'shown, it is put beside its wall');
+  // On the 3D board the wall's box is the one drawn on the screen for it.
+  assert.match(board, /showBar\(panel\.root, true\);\s*const wallRect = \(globalThis\.vtt3d\?\.active && globalThis\.vtt3dLayers\?\.templates\?\.screenRect\?\.\(shape\.id\)\) \|\| shape\.elements\.root\.getBoundingClientRect\(\);\s*const place = placeBar\(\{ wall: wallRect,/, 'shown, it is put beside its wall');
 });
 
 test('the bar goes beside its wall: under it, or over it, and never off the screen', () => {

@@ -7,6 +7,11 @@ const bands=(ring,x)=>{const ys=[];for(let i=0,j=ring.length-1;i<ring.length;j=i
 export function intersectsFloor(p,surface,cuts=[]){
  const left=p.column,right=left+(p.width||1),top=p.row,bottom=top+(p.height||1),outer=surface.points||[];
  if(outer.length<3)return false;
+ // A square that does not overlap the outline's bounds by a positive area
+ // cannot overlap the floor, which is what the strip test below answers too.
+ let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+ for(const q of outer){if(q.x<minX)minX=q.x;if(q.x>maxX)maxX=q.x;if(q.y<minY)minY=q.y;if(q.y>maxY)maxY=q.y;}
+ if(Math.min(right,maxX)-Math.max(left,minX)<=1e-7||Math.min(bottom,maxY)-Math.max(top,minY)<=1e-7)return false;
  // Only a cut-out that reaches the token's own square can take floor from under it, so only those are laid out
  // as holes. A cut-out elsewhere used to do one thing here: its two sides, where they fall between the square's
  // sides, split the square into the strips it is judged in. They still do (FloorSupport::nearbyCuts keeps the same
@@ -84,7 +89,7 @@ export const BOX_REACH=1.5;
 // above his feet. Stepping off one that is taller than BOX_REACH is a drop, and the fall rule lands him.
 export const BOX_FOOT=.5;
 // Paired with FloorSupport::walkContact.
-export function walkFloorContact(from,to,path,surfaces,mapLevels,terrain,enter=true){
+export function createFloorContactWalker(from,surfaces,mapLevels,terrain,enter=true){
  if(['fly','hover'].includes(from.movementMode)||from._floorTraversal)return null;
  const levels=supportLevels(mapLevels);
  const floors=surfaces.filter(s=>(s.kind==='floor'||s.templateCube)&&levels.has(s.levelId)&&!levels.get(s.levelId).hidden);
@@ -93,13 +98,12 @@ export function walkFloorContact(from,to,path,surfaces,mapLevels,terrain,enter=t
  let support=floors.find(s=>from._supportSurfaceId&&from._supportSurfaceId===s.id&&overlap(from,s))
   ||floors.find(s=>!s.templateCube&&!s.boxTop&&(from.levelId||'level-0')!=='level-0'&&from.levelId===s.levelId&&overlap(from,s))
   ||terrainFloorContact(from,floors,mapLevels,terrain(from),.1),previous=from;
- for(const end of [...path,to]){
-  const start=previous,dx=end.column-start.column,dy=end.row-start.row,steps=Math.max(1,Math.min(8192,Math.ceil(Math.max(Math.abs(dx),Math.abs(dy))*8)));
-  for(let i=1;i<=steps;i++){
-   const p={...from,column:start.column+dx*i/steps,row:start.row+dy*i/steps},height=support?.height??terrain(previous);
+ return {
+  step(p){
+   const height=support?.height??terrain(previous);
    // A low box is stepped up onto from whatever he stands on, plate or ground: its walls have let him in.
    const box=enter&&boxes.length?boxes.find(s=>s!==support&&s.height>height+1e-6&&(s.climbable?s.base-height<=BOX_FOOT+1e-6:s.height-height<=BOX_REACH+1e-6)&&overlap(p,s)):null;
-   if(box){support=box;previous=p;continue;}
+   if(box){support=box;previous=p;return support;}
    if(!support||!overlap(p,support)){
     const prior=support;
     support=null;
@@ -114,10 +118,23 @@ export function walkFloorContact(from,to,path,surfaces,mapLevels,terrain,enter=t
      if(!cube||!overlap(previous,s)||(prior&&touchingSurfaces(prior,s)))support=s;
     }
    }
-   previous=p;
+   previous=p;return support;
+  },
+  get support(){return support;},
+ };
+}
+export function walkFloorContact(from,to,path,surfaces,mapLevels,terrain,enter=true){
+ const walker=createFloorContactWalker(from,surfaces,mapLevels,terrain,enter);
+ if(!walker)return null;
+ let previous=from;
+ for(const end of [...path,to]){
+  const start=previous,dx=end.column-start.column,dy=end.row-start.row,steps=Math.max(1,Math.min(8192,Math.ceil(Math.max(Math.abs(dx),Math.abs(dy))*8)));
+  for(let i=1;i<=steps;i++){
+   const p={...from,column:start.column+dx*i/steps,row:start.row+dy*i/steps};
+   walker.step(p);previous=p;
   }
  }
- return support;
+ return walker.support;
 }
 
 // A retained cube can step down to a touching cube; terrain never grants a climb.

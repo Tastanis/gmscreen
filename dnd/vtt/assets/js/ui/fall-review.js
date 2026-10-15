@@ -98,6 +98,25 @@ export function mountFallReview({context,placement,traits,damage,prone,climbing=
    panel.append(...[title,summary,affected,label,climbNote,status,actions].filter(Boolean));document.body.append(panel);
    const bounds=token?.getBoundingClientRect(),box=panel.getBoundingClientRect();let left=(bounds?.right??20)+12;if(left+box.width>innerWidth-12)left=(bounds?.left??innerWidth)-box.width-12;
    panel.style.left=Math.max(12,Math.min(innerWidth-box.width-12,left))+'px';panel.style.top=Math.max(12,Math.min(innerHeight-box.height-12,bounds?.top??20))+'px';
+   // 3D board: a recovered receipt can open before the 3D
+   // renderer has projected its token. Follow that real token once ready, and
+   // while the camera moves. Claims, damage and conditions are unchanged.
+   if(window.vtt3dBoard){
+    const followAnchor=()=>{
+     if(disposed||!panel.isConnected)return;
+     if(window.vtt3dActive){
+      const node=[...document.querySelectorAll('#vtt-token-layer [data-placement-id]')].find(e=>e.dataset.placementId===record.targetId);
+      if(node&&getComputedStyle(node).visibility==='visible'){
+       const rect=node.getBoundingClientRect(),size=panel.getBoundingClientRect();
+       let x=rect.right+12;if(x+size.width>innerWidth-12)x=rect.left-size.width-12;
+       panel.style.left=Math.max(12,Math.min(innerWidth-size.width-12,x))+'px';
+       panel.style.top=Math.max(12,Math.min(innerHeight-size.height-12,rect.top))+'px';
+      }
+     }
+     requestAnimationFrame(followAnchor);
+    };requestAnimationFrame(followAnchor);
+   }
+
   }catch(error){console.error('Fall review unavailable',error);}finally{busy=false;schedule(wakePending&&!popup?0:4000);}
  };
  const visible=()=>{if(!document.hidden)wake();};

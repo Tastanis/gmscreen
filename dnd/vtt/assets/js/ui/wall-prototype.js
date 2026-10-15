@@ -93,14 +93,19 @@ function save(){
 }
 
 function change(before){if(JSON.stringify(before)===JSON.stringify(model))return;history.push(before);if(history.length>60)history.shift();save();render();}
-function gridPoint(event){const v=context.view,r=surface.getBoundingClientRect();let p={x:(event.clientX-r.left-v.translation.x)/v.scale,y:(event.clientY-r.top-v.translation.y)/v.scale};if(window.terrainPrototype?.active)p=context.isGM?inspectionPlanePoint(p,gmVision.height,(x,y,h)=>terrainPrototype.project(x,y,h)):terrainPrototype.unproject(p);return {x:(p.x-(v.gridOffsets.left||0))/v.gridSize,y:(p.y-(v.gridOffsets.top||0))/v.gridSize};}
-function projected(p){const v=context.view,x=(v.gridOffsets.left||0)+p.x*v.gridSize,y=(v.gridOffsets.top||0)+p.y*v.gridSize;return window.terrainPrototype?.active?terrainPrototype.project(x,y,context.isGM?(drawHeight!==undefined?drawHeight:gmVision.height):terrainPrototype.heightAt(x,y)):{x,y};}
-function pointerPixel(event){const v=context.view,r=surface.getBoundingClientRect();return {x:(event.clientX-r.left-v.translation.x)/v.scale,y:(event.clientY-r.top-v.translation.y)/v.scale};}
+// 3D board: walls are edited on the plane at the inspection height (the GM's Height), read from the 3D view.
+const board3d=()=>window.vtt3d?.active?window.vtt3d:null;
+function planePixel(event){const hit=board3d().clientToMap(event.clientX,event.clientY,{plane:context.isGM?(inspectionHeight??gmVision.height):0});return hit?{x:hit.x,y:hit.y}:{x:NaN,y:NaN};}
+// Pick radii are in map pixels; on the 3D board they are a fixed share of a square.
+function viewScale(){return board3d()?33/(context.view.gridSize||64):context.view.scale;}
+function gridPoint(event){if(board3d()){const v=context.view,p=planePixel(event);return {x:(p.x-(v.gridOffsets.left||0))/v.gridSize,y:(p.y-(v.gridOffsets.top||0))/v.gridSize};}const v=context.view,r=surface.getBoundingClientRect();let p={x:(event.clientX-r.left-v.translation.x)/v.scale,y:(event.clientY-r.top-v.translation.y)/v.scale};if(window.terrainPrototype?.active)p=context.isGM?inspectionPlanePoint(p,gmVision.height,(x,y,h)=>terrainPrototype.project(x,y,h)):terrainPrototype.unproject(p);return {x:(p.x-(v.gridOffsets.left||0))/v.gridSize,y:(p.y-(v.gridOffsets.top||0))/v.gridSize};}
+function projected(p){const v=context.view,x=(v.gridOffsets.left||0)+p.x*v.gridSize,y=(v.gridOffsets.top||0)+p.y*v.gridSize;if(board3d())return {x,y};return window.terrainPrototype?.active?terrainPrototype.project(x,y,context.isGM?(drawHeight!==undefined?drawHeight:gmVision.height):terrainPrototype.heightAt(x,y)):{x,y};}
+function pointerPixel(event){if(board3d())return planePixel(event);const v=context.view,r=surface.getBoundingClientRect();return {x:(event.clientX-r.left-v.translation.x)/v.scale,y:(event.clientY-r.top-v.translation.y)/v.scale};}
 function inside(p){const v=context.view,img=$('#vtt-map-image'),x=(v.gridOffsets.left||0)+p.x*v.gridSize,y=(v.gridOffsets.top||0)+p.y*v.gridSize;return x>=v.mapInsets.left&&y>=v.mapInsets.top&&x<=v.mapInsets.left+img.naturalWidth&&y<=v.mapInsets.top+img.naturalHeight;}
 function hit(event,{excludeNodes=[],excludeEdges=[]}={}){
  if(synchronizeInspectionHeight())render(true);
  const slice=visibleSlice();
- const p=pointerPixel(event),radius=10/context.view.scale;let found=null,best=6/context.view.scale;
+ const p=pointerPixel(event),radius=10/viewScale();let found=null,best=6/viewScale();
  for(const n of model.nodes){if(excludeNodes.includes(n.id)||!slice.nodeIds.has(n.id)&&n.id!==anchor)continue;const q=projected(n),d=Math.hypot(p.x-q.x,p.y-q.y);if(d<best){best=d;found={kind:'node',id:n.id,p:{x:n.x,y:n.y}};}}
  if(found)return found;best=radius;
  for(const {edge:e,a,b,intervals} of slice.segments){if(excludeEdges.includes(e.id))continue;
@@ -144,7 +149,7 @@ board.addEventListener('pointermove',event=>{
  if(panel.hidden||!context?.isGM||(event.buttons&2))return;
  if(synchronizeInspectionHeight()){render(true);return;}
  if(drag){consume(event);const p=gridPoint(event),dx=p.x-drag.start.x,dy=p.y-drag.start.y;
-  if(!drag.moved&&Math.hypot(dx,dy)*context.view.gridSize*context.view.scale<3)return;
+  if(!drag.moved&&Math.hypot(dx,dy)*context.view.gridSize*viewScale()<3)return;
   drag.moved=true;const moved=drag.ids.map(id=>{const old=drag.before.nodes.find(n=>n.id===id);return {id,...(selection.kind==='node'?snapPoint({x:old.x+dx,y:old.y+dy}):{x:old.x+dx,y:old.y+dy})};});if(moved.some(p=>!inside(p)))return;
   for(const n of moved)Object.assign(pointNode(n.id),n);
   const near=!event.ctrlKey&&selection.kind==='node'?hit(event,{excludeNodes:drag.ids,excludeEdges:model.segments.map(e=>e.id)}):null;hover=near?.kind==='node'?near:null;render();
@@ -183,20 +188,24 @@ function render(lookOnly=false){try{draw(lookOnly);}finally{drawHeight=undefined
 function draw(lookOnly){
  synchronizeInspectionHeight();
  if(!lookOnly)revision++;
- if(!context)return;drawHeight=context.isGM?inspectionHeight:undefined;svg.style.display=context.isGM?'':'none';svg.setAttribute('width',context.view.mapPixelSize.width);svg.setAttribute('height',context.view.mapPixelSize.height);
+ if(!context)return;drawHeight=context.isGM?inspectionHeight:undefined;svg.style.display=context.isGM&&!board3d()?'':'none';
+ const strokes3d=[],at3d=q=>({x:q.x,y:q.y,z:Number.isFinite(drawHeight)?drawHeight:0}),line3d=(a,b)=>{const n=Math.max(1,Math.ceil(Math.hypot(b.x-a.x,b.y-a.y)*4)),pts=[];for(let i=0;i<=n;i++)pts.push(at3d({x:a.x+(b.x-a.x)*i/n,y:a.y+(b.y-a.y)*i/n}));return pts;};svg.setAttribute('width',context.view.mapPixelSize.width);svg.setAttribute('height',context.view.mapPixelSize.height);
  const scale=context.view.scale||1,fragment=document.createDocumentFragment(),slice=visibleSlice(),visibleIds=new Set(slice.segments.map(s=>s.edge.id));
  for(const id of selectedIds)if(!visibleIds.has(id))selectedIds.delete(id);
  if(selection&&(selection.kind==='segment'?!visibleIds.has(selection.id):!slice.nodeIds.has(selection.id)&&selection.id!==anchor))selection=null;
  for(const {edge:e,a,b,intervals} of slice.segments){const path=document.createElementNS(ns,'path');path.dataset.wallSegment=e.id;
   const portions=intervals.map(([lo,hi])=>[{x:a.x+(b.x-a.x)*lo,y:a.y+(b.y-a.y)*lo},{x:a.x+(b.x-a.x)*hi,y:a.y+(b.y-a.y)*hi}]);
-  path.setAttribute('d',portions.map(([a,b])=>pathBetween(a,b)).join(' '));path.setAttribute('fill','none');path.setAttribute('stroke',selectedIds.has(e.id)?'#ffeeb5':editor.color(e));path.setAttribute('stroke-width',3/scale);path.setAttribute('stroke-linecap','round');if(properties(e).sight==='pass'||e.open||isBroken(e))path.setAttribute('stroke-dasharray',isBroken(e)?`${2/scale} ${5/scale}`:`${6/scale} ${4/scale}`);path.setAttribute('opacity',panel.hidden?'.45':'.95');if(isBroken(e))path.dataset.wallBroken='';fragment.append(path);if(!panel.hidden)for(const [a,b] of portions)editor.directions(fragment,e,a,b,scale);
+  path.setAttribute('d',portions.map(([a,b])=>pathBetween(a,b)).join(' '));path.setAttribute('fill','none');path.setAttribute('stroke',selectedIds.has(e.id)?'#ffeeb5':editor.color(e));path.setAttribute('stroke-width',3/scale);path.setAttribute('stroke-linecap','round');if(properties(e).sight==='pass'||e.open||isBroken(e))path.setAttribute('stroke-dasharray',isBroken(e)?`${2/scale} ${5/scale}`:`${6/scale} ${4/scale}`);path.setAttribute('opacity',panel.hidden?'.45':'.95');if(isBroken(e))path.dataset.wallBroken='';fragment.append(path);
+  if(context.isGM)for(const [pa,pb] of portions)strokes3d.push({kind:'line',points:line3d(pa,pb),color:selectedIds.has(e.id)?'#ffeeb5':editor.color(e),opacity:panel.hidden?.45:.95,dash:properties(e).sight==='pass'||e.open||isBroken(e)?(isBroken(e)?[.06,.16]:[.22,.14]):null});if(!panel.hidden)for(const [a,b] of portions)editor.directions(fragment,e,a,b,scale);
   // Only the GM has this overlay. A breakable wall carries one small diamond; nothing is shown to players.
-  if(isBreakable(e)&&portions.length){const [p0,p1]=portions[Math.floor(portions.length/2)],q=projected({x:(p0.x+p1.x)/2,y:(p0.y+p1.y)/2}),r=4/scale,mark=document.createElementNS(ns,'path');mark.dataset.wallBreakable=e.material;mark.setAttribute('d',`M${q.x},${q.y-r} L${q.x+r},${q.y} L${q.x},${q.y+r} L${q.x-r},${q.y} Z`);mark.setAttribute('fill',isBroken(e)?'none':editor.materialColor(e.material));mark.setAttribute('stroke','#1b1b1b');mark.setAttribute('stroke-width',1/scale);mark.setAttribute('opacity',panel.hidden?'.6':'1');fragment.append(mark);}}
+  if(isBreakable(e)&&portions.length){const [p0,p1]=portions[Math.floor(portions.length/2)],q=projected({x:(p0.x+p1.x)/2,y:(p0.y+p1.y)/2}),r=4/scale,mark=document.createElementNS(ns,'path');mark.dataset.wallBreakable=e.material;mark.setAttribute('d',`M${q.x},${q.y-r} L${q.x+r},${q.y} L${q.x},${q.y+r} L${q.x-r},${q.y} Z`);mark.setAttribute('fill',isBroken(e)?'none':editor.materialColor(e.material));mark.setAttribute('stroke','#1b1b1b');mark.setAttribute('stroke-width',1/scale);mark.setAttribute('opacity',panel.hidden?'.6':'1');fragment.append(mark);
+   const mid3d={x:(p0.x+p1.x)/2,y:(p0.y+p1.y)/2};strokes3d.push({kind:'dot',...at3d(mid3d),r:.09,color:isBroken(e)?'#1b1b1b':editor.materialColor(e.material),opacity:panel.hidden?.6:1});}}
  if(!panel.hidden){
-   if(anchor&&pointNode(anchor)&&hover){const preview=document.createElementNS(ns,'path');preview.setAttribute('d',pathBetween(pointNode(anchor),hover.p));preview.setAttribute('fill','none');preview.setAttribute('stroke','#fff0ba');preview.setAttribute('stroke-width',2/scale);preview.setAttribute('stroke-dasharray',`${5/scale} ${4/scale}`);fragment.append(preview);}
-   for(const n of model.nodes){if(!slice.nodeIds.has(n.id)&&n.id!==anchor)continue;const p=projected(n),circle=document.createElementNS(ns,'circle');circle.dataset.wallNode=n.id;circle.setAttribute('cx',p.x);circle.setAttribute('cy',p.y);circle.setAttribute('r',(selection?.id===n.id||hover?.id===n.id?6:4)/scale);circle.setAttribute('fill',selection?.id===n.id||hover?.id===n.id?'#ffeeb5':'#27241e');circle.setAttribute('stroke','#e7ca88');circle.setAttribute('stroke-width',1.5/scale);fragment.append(circle);}
+   if(anchor&&pointNode(anchor)&&hover){const preview=document.createElementNS(ns,'path');preview.setAttribute('d',pathBetween(pointNode(anchor),hover.p));preview.setAttribute('fill','none');preview.setAttribute('stroke','#fff0ba');preview.setAttribute('stroke-width',2/scale);preview.setAttribute('stroke-dasharray',`${5/scale} ${4/scale}`);fragment.append(preview);strokes3d.push({kind:'line',points:line3d(pointNode(anchor),hover.p),color:'#fff0ba',opacity:1,dash:[.18,.14]});}
+   for(const n of model.nodes){if(!slice.nodeIds.has(n.id)&&n.id!==anchor)continue;const p=projected(n),circle=document.createElementNS(ns,'circle');circle.dataset.wallNode=n.id;circle.setAttribute('cx',p.x);circle.setAttribute('cy',p.y);circle.setAttribute('r',(selection?.id===n.id||hover?.id===n.id?6:4)/scale);circle.setAttribute('fill',selection?.id===n.id||hover?.id===n.id?'#ffeeb5':'#27241e');circle.setAttribute('stroke','#e7ca88');circle.setAttribute('stroke-width',1.5/scale);fragment.append(circle);
+    const big=selection?.id===n.id||hover?.id===n.id;strokes3d.push({kind:'dot',...at3d(n),r:big?.13:.085,color:big?'#ffeeb5':'#27241e',stroke:'#e7ca88',opacity:1});}
  }
- editor.refresh(propertiesOpen);svg.replaceChildren(fragment);if(document.activeElement!==slantInput)slantInput.value=String(viewSlant(model));for(const {select,current} of viewChoices)if(document.activeElement!==select)select.value=current(model);{const broken=model.segments.filter(isBroken).length;repairAll.hidden=!broken;repairAll.textContent=broken===1?'Repair the broken wall':`Repair all ${broken} broken walls`;}panel.querySelector('[data-wall-delete]').disabled=!selection&&!selectedIds.size;panel.querySelector('[data-wall-undo]').disabled=!history.length;
+ editor.refresh(propertiesOpen);svg.replaceChildren(fragment);if(board3d())board3d().setWallOverlay?.(context.isGM?strokes3d:[]);if(document.activeElement!==slantInput)slantInput.value=String(viewSlant(model));for(const {select,current} of viewChoices)if(document.activeElement!==select)select.value=current(model);{const broken=model.segments.filter(isBroken).length;repairAll.hidden=!broken;repairAll.textContent=broken===1?'Repair the broken wall':`Repair all ${broken} broken walls`;}panel.querySelector('[data-wall-delete]').disabled=!selection&&!selectedIds.size;panel.querySelector('[data-wall-undo]').disabled=!history.length;
  editor.portals();
 }
 function tick(){
@@ -231,16 +240,18 @@ function activeModel(){
  return cachedCubeModel;
 }
 function groundAt(x,y){const v=context.view;return terrainPrototype.heightAt((v.gridOffsets.left||0)+x*v.gridSize,(v.gridOffsets.top||0)+y*v.gridSize);}
+// The 3D board exposes every floor at once. Test the actor's native footing
+// against the world walls even while the 2D viewer follows another floor.
 window.wallPrototype={refreshPortals:()=>editor.portals(),get selectedTopHeight(){
  if(!context?.isGM||panel.hidden||selection?.kind!=='segment')return null;
  const edge=model.segments.find(e=>e.id===selection.id);if(!edge)return null;
  const a=pointNode(edge.a),b=pointNode(edge.b);
  return wallHeights(edge,a,b,{x:(a.x+b.x)/2,y:(a.y+b.y)/2},groundAt).top;
-},forcedBlockedMove:(from,to)=>!!context&&(forcedTerrainBlocked(from,to,groundAt,t=>moverHeight(from,t,'forced',true))||pathFor(from,'forced').slams(to)||movementBlocked(activeModel(),from,to,(t,origin)=>moverHeight(origin,t,'forced'),groundAt)),moverHeight:(from,at,kind='forced')=>moverHeight(from,at,kind),blockedMove:(from,to)=>!!context&&!context.isGM&&(from.levelId||'level-0')===(context.levelId||'level-0')&&movementPathBlocked(activeModel(),from,to,(t,origin)=>moverHeight(origin,t,'walk'),groundAt,(a,b)=>terrainPrototype.movementPlacement(a,b)),
+},forcedBlockedMove:(from,to)=>!!context&&(forcedTerrainBlocked(from,to,groundAt,t=>moverHeight(from,t,'forced',true))||pathFor(from,'forced').slams(to)||movementBlocked(activeModel(),from,to,(t,origin)=>moverHeight(origin,t,'forced'),groundAt)),moverHeight:(from,at,kind='forced')=>moverHeight(from,at,kind),blockedMove:(from,to)=>!!context&&!context.isGM&&(window.vtt3dActive||(from.levelId||'level-0')===(context.levelId||'level-0'))&&movementPathBlocked(activeModel(),from,to,(t,origin)=>moverHeight(origin,t,'walk'),groundAt,(a,b)=>terrainPrototype.movementPlacement(a,b)),
 // The wall piece this walk meets first ({a,b,base,top} in squares), for showing a refused walker which it was. Null when none.
 wallMet:(from,to)=>!context?null:firstWallMet(activeModel(),from,to,(t,origin)=>moverHeight(origin,t,'walk'),groundAt,(a,b)=>terrainPrototype.movementPlacement(a,b)),
 // When low barriers (a rail, a fence) are all that stop this walk: {rise}, how high the tallest stands above the walker's feet. Null otherwise.
-lowBarrier:(from,to)=>!context||context.isGM||(from.levelId||'level-0')!==(context.levelId||'level-0')?null:lowBarrierOnPath(activeModel(),from,to,(t,origin)=>moverHeight(origin,t,'walk'),groundAt,(a,b)=>terrainPrototype.movementPlacement(a,b)),get saving(){return savingShared;},get revision(){return revision;},get model(){return activeModel();},get key(){return key;},blocksSight:(a,b)=>blocksSight(activeModel(),a,b)};
+lowBarrier:(from,to)=>!context||context.isGM||(!window.vtt3dActive&&(from.levelId||'level-0')!==(context.levelId||'level-0'))?null:lowBarrierOnPath(activeModel(),from,to,(t,origin)=>moverHeight(origin,t,'walk'),groundAt,(a,b)=>terrainPrototype.movementPlacement(a,b)),get saving(){return savingShared;},get revision(){return revision;},get model(){return activeModel();},get key(){return key;},blocksSight:(a,b)=>blocksSight(activeModel(),a,b)};
 // The height a mover is at part-way through a move (travel-height.mjs): the height of its footing
 // while it has one, and the height it left from once it has gone over an edge. Walls, slopes and
 // other creatures are tested against this, so what stands on the ground far below a push is not in

@@ -11,7 +11,7 @@ import {claimActiveTool,publishActiveTool} from './active-tool.js';
 import {sample,paint,barycentric,clamp,groundSquare,heightBand,effectiveHeight,relativeScale,routeSteps,slopeColor,brushRate} from './terrain-math.mjs';
 import {floorElevations} from '../state/normalize/floor-elevation.js';
 import {terrainContact} from './terrain-contact.js';
-import {createRouteWalker,stepGhost,walksPlates,hasStairs} from './route-walker.mjs';
+import {createRouteWalker,stepGhost,walksPlates,hasStairs,traceSurfaceLeg,commandSurfaceEnding} from './route-walker.mjs';
 import {nearStair} from './stair-walk.mjs';
 import {viewSlant,slantVector,edgeFaces,usesHeightView} from './height-view.mjs';
 import {pointAtHeight,pickDrawn,pickView,pickWalked,floorDrawn} from './pointer-pick.mjs';
@@ -44,6 +44,9 @@ panel.innerHTML=`<header><strong>Map height</strong><button type="button" class=
  <footer><button type="button" class="btn" id="terrain-undo" disabled>Undo</button><span>Height <output id="terrain-readout">0.0</output></span></footer>`;
 board.parentElement.append(panel);
 const brush=document.createElement('div');brush.id='terrain-brush';brush.hidden=true;document.body.append(brush);
+// fieldVersion counts every change to the height field, so the 3D board can redraw the ground;
+// brush3d is the Height tool's brush on the 3D board ({x,y} map pixels, radius in squares) or null.
+let fieldVersion=0,brush3d=null;
 let field=null,key='',signature='',triangles=[],undo=[],drawing=false,mode='raise',last=null,ctx=null,dirty=true,active=false,textureSource='',storageError=false;
 const pad=1100;
 let terrainRevision=0;
@@ -89,6 +92,8 @@ function pointerView(){
 // token's own place, whatever else is drawn over it. Otherwise the point is whatever is drawn
 // there for this viewer, the highest floor first, then a ramp, then the ground.
 function unproject(p,options={}){
+ // 3D board: pointers are already read as map points on the 3D surfaces (window.vtt3d).
+ if(window.vtt3d?.active)return p;
  if(!active||!field)return p;
  if(importedDesign()&&panel.hidden){
   const g=dimensions().grid,ox=ctx.view.gridOffsets.left||0,oy=ctx.view.gridOffsets.top||0,s=slant();
@@ -110,6 +115,7 @@ function unproject(p,options={}){
 // The same point with the height of what is drawn there: a floor's or a stair's own, else the ground's. A ping, a
 // drawing or anything else put down by a click belongs at that height, or it is drawn on the ground far below it.
 function unprojectAt(p){
+ if(window.vtt3d?.active)return {x:p.x,y:p.y,height:Number.isFinite(p.height)?p.height:(field?heightAt(p.x,p.y):0)};
  if(!active||!field)return {x:p.x,y:p.y,height:0};
  if(importedDesign()&&panel.hidden){
   const g=dimensions().grid,ox=ctx.view.gridOffsets.left||0,oy=ctx.view.gridOffsets.top||0;
@@ -125,7 +131,7 @@ function meshPoint(p){
 }
 // The same in squares, with the height of the ground there, for pickWalked.
 function groundPick(p,g,ox,oy){const q=meshPoint(p),height=heightAt(q.x,q.y);return {x:(q.x-ox)/g,y:(q.y-oy)/g,height:Number.isFinite(height)?height:0};}
-function rawPoint(e){const rect=surface.getBoundingClientRect(),v=ctx.view;return {x:(e.clientX-rect.left-v.translation.x)/v.scale,y:(e.clientY-rect.top-v.translation.y)/v.scale};}
+function rawPoint(e){if(window.vtt3d?.active){const hit=window.vtt3d.clientToMap(e.clientX,e.clientY);return hit?{x:hit.x,y:hit.y,height:hit.height}:{x:NaN,y:NaN};}const rect=surface.getBoundingClientRect(),v=ctx.view;return {x:(e.clientX-rect.left-v.translation.x)/v.scale,y:(e.clientY-rect.top-v.translation.y)/v.scale};}
 let sharedTerrainRevision=-1,savingTerrain=false,dirtyWhileSaving=false;
 function save(){if(storageError)return;if(savingTerrain){dirtyWhileSaving=true;return;}dirtyWhileSaving=false;const savingKey=key;savingTerrain=true;saveShared('terrain',{n:field.n,m:field.m,h:Array.from(field.h),bounds:field.bounds||{left:(dimensions().left-(ctx.view.gridOffsets.left||0))/dimensions().grid,top:(dimensions().top-(ctx.view.gridOffsets.top||0))/dimensions().grid,width:dimensions().width/dimensions().grid,height:dimensions().height/dimensions().grid}},Math.max(0,sharedTerrainRevision),ctx.state.boardState.activeSceneId).then(result=>{if(key===savingKey)sharedTerrainRevision=acknowledgedRevision(result,'terrain')??sharedTerrainRevision;}).catch(e=>{if(key!==savingKey)return;storageError=true;console.error(e);alert('Terrain save was not confirmed. Keep this draft open; reload to recover shared terrain.');}).finally(()=>{savingTerrain=false;if(key===savingKey&&dirtyWhileSaving&&!storageError&&!drawing)save();});}
 function saveLocalBackup(){try{localStorage.setItem(key,JSON.stringify({n:field.n,m:field.m,h:Array.from(field.h)}));storageError=false;}catch(e){storageError=true;console.error('Terrain could not be saved in this browser',e);alert('Terrain could not be saved. Browser storage is full. Keep this tab open.');}}
@@ -133,10 +139,10 @@ function setOpen(open){panel.hidden=!open;button.setAttribute('aria-expanded',St
 button.onclick=()=>setOpen(panel.hidden);panel.querySelector('header button').onclick=()=>setOpen(false);
 panel.querySelectorAll('[data-brush]').forEach(b=>b.onclick=()=>{mode=b.dataset.brush;panel.querySelectorAll('[data-brush]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));});
 $('#terrain-size').oninput=e=>$('#terrain-size-value').textContent=e.target.value+' squares';
-$('#terrain-undo').onclick=()=>{if(!storageError&&undo.length){field.h=undo.pop();dirty=true;save();$('#terrain-undo').disabled=!undo.length;}};
+$('#terrain-undo').onclick=()=>{if(!storageError&&undo.length){field.h=undo.pop();dirty=true;fieldVersion++;save();$('#terrain-undo').disabled=!undo.length;}};
 function finish(){if(drawing){drawing=false;last=null;stampPosition=null;save();} }
-function stamp(p,amount){const d=dimensions();paint(field,{x:p.x-d.left,y:p.y-d.top,width:d.width,height:d.height,radius:Number($('#terrain-size').value)*d.grid/2,amount,mode,stopAtTarget:$('#terrain-limit').checked,target:clamp(Number($('#terrain-target').value)||0,-8,32)});dirty=true;}
-function move(e){if(!ctx||!active||panel.hidden)return;const p=unproject(rawPoint(e)),d=dimensions();brush.hidden=false;brush.style.left=e.clientX+'px';brush.style.top=e.clientY+'px';brush.style.width=brush.style.height=Number($('#terrain-size').value)*d.grid*ctx.view.scale+'px';$('#terrain-readout').textContent=groundSquare(heightAt(p.x,p.y))+(isCliff(p.x,p.y)?' · Cliff':'');
+function stamp(p,amount){const d=dimensions();paint(field,{x:p.x-d.left,y:p.y-d.top,width:d.width,height:d.height,radius:Number($('#terrain-size').value)*d.grid/2,amount,mode,stopAtTarget:$('#terrain-limit').checked,target:clamp(Number($('#terrain-target').value)||0,-8,32)});dirty=true;fieldVersion++;}
+function move(e){if(!ctx||!active||panel.hidden){brush3d=null;return;}const p=unproject(rawPoint(e)),d=dimensions();if(window.vtt3d?.active){brush.hidden=true;brush3d=Number.isFinite(p.x)?{x:p.x,y:p.y,radius:Number($('#terrain-size').value)/2}:null;}else brush.hidden=false;brush.style.left=e.clientX+'px';brush.style.top=e.clientY+'px';brush.style.width=brush.style.height=Number($('#terrain-size').value)*d.grid*ctx.view.scale+'px';$('#terrain-readout').textContent=groundSquare(heightAt(p.x,p.y))+(isCliff(p.x,p.y)?' · Cliff':'');
  if(drawing){if(Math.hypot(p.x-last.x,p.y-last.y)>.2)lastBrushMotion=performance.now();last=p;e.preventDefault();e.stopImmediatePropagation();}}
 board.addEventListener('pointerdown',e=>{if(panel.hidden||!active||e.button!==0||storageError)return;e.preventDefault();e.stopImmediatePropagation();const p=unproject(rawPoint(e)),d=dimensions();if(p.x<d.left||p.y<d.top||p.x>d.left+d.width||p.y>d.top+d.height)return;undo.push(field.h.slice());if(undo.length>30)undo.shift();$('#terrain-undo').disabled=false;drawing=true;lastBrushMotion=-Infinity;last=p;stampPosition=p;stampTime=performance.now();board.setPointerCapture(e.pointerId);stamp(p,.08);},true);
 board.addEventListener('pointermove',move,true);
@@ -168,8 +174,8 @@ function tick(now){
  document.documentElement.classList.toggle('terrain-on',active);canvas.hidden=!active;const pref='terrain-slope-arrows:'+String(ctx?.userId||'viewer');if(pref!==markerPreferenceKey){markerPreferenceKey=pref;markersVisible=localStorage.getItem(pref)!=='false';}markers.style.display=active&&markersVisible?'':'none';button.disabled=!ctx?.view.mapLoaded;
  if(active){
    const nextKey='terrain-prototype:v1:'+ctx.state.boardState.activeSceneId+':'+image.getAttribute('src');
-   if(key!==nextKey){finish();key=nextKey;sharedTerrainRevision=-1;storageError=false;undo=[];$('#terrain-undo').disabled=true;const n=Math.min(201,Math.max(17,Math.ceil(image.naturalWidth/ctx.view.gridSize*4)+1)),m=Math.min(201,Math.max(17,Math.ceil(image.naturalHeight/ctx.view.gridSize*4)+1));field={n,m,h:new Float32Array(n*m)};dirty=true;}
-   const shared=sharedField('terrain');if(!savingTerrain&&!drawing&&!storageError&&shared&&shared.revision!==sharedTerrainRevision){field={...shared.value,h:Float32Array.from(shared.value.h)};sharedTerrainRevision=shared.revision;dirty=true;undo=[];$('#terrain-undo').disabled=true;}
+   if(key!==nextKey){finish();key=nextKey;sharedTerrainRevision=-1;storageError=false;undo=[];$('#terrain-undo').disabled=true;const n=Math.min(201,Math.max(17,Math.ceil(image.naturalWidth/ctx.view.gridSize*4)+1)),m=Math.min(201,Math.max(17,Math.ceil(image.naturalHeight/ctx.view.gridSize*4)+1));field={n,m,h:new Float32Array(n*m)};dirty=true;fieldVersion++;}
+   const shared=sharedField('terrain');if(!savingTerrain&&!drawing&&!storageError&&shared&&shared.revision!==sharedTerrainRevision){field={...shared.value,h:Float32Array.from(shared.value.h)};fieldVersion++;sharedTerrainRevision=shared.revision;dirty=true;undo=[];$('#terrain-undo').disabled=true;}
    const nextSignature=JSON.stringify([ctx.view.mapPixelSize,ctx.view.mapInsets,ctx.view.gridSize,ctx.view.gridOffsets,ctx.state.grid.visible,ctx.isGM&&document.querySelector('#wall-panel')?.hidden===false,viewSlant(importedDesign()),usesHeightView(importedDesign())]);if(nextSignature!==signature){signature=nextSignature;dirty=true;}
    if(drawing&&last&&now-stampTime>=32){
      const amount=Math.min(.15,(now-stampTime)/1000)*brushRate(now-lastBrushMotion<100);stampTime=now;
@@ -177,7 +183,7 @@ function tick(now){
      for(let i=1;i<=steps;i++)stamp({x:stampPosition.x+(last.x-stampPosition.x)*i/steps,y:stampPosition.y+(last.y-stampPosition.y)*i/steps},amount/steps);
      stampPosition={...last};$('#terrain-readout').textContent=groundSquare(heightAt(last.x,last.y));
    }
-   if(dirty)draw();
+   if(dirty){if(window.vtt3dBoard&&window.vtt3dActive!==false){terrainRevision++;dirty=false;}else draw();}
    const placements=ctx.state.boardState.placements[ctx.state.boardState.activeSceneId]||[];
    flight.select('terrain-flight:v1:'+ctx.state.boardState.activeSceneId);flight.update(placements,flightGround);
    if(ctx.isGM)for(const token of placements)if(['fly','hover'].includes(token.movementMode)&&!Number.isFinite(token.flightHeight)&&!flightMigrationPending.has(ctx.state.boardState.activeSceneId+':'+token.id)){flightMigrationPending.add(ctx.state.boardState.activeSceneId+':'+token.id);window.submitFlightHeight(token,flight.height(token,(x,y)=>flightGround(x,y,token))).catch(console.error);}
@@ -188,6 +194,8 @@ function tick(now){
    if(!ctx.isGM&&!panel.hidden)setOpen(false);
 
  }
+ // The 3D board keeps canonical height/rule hydration above, without the 2D paint.
+ if(window.vtt3dBoard&&window.vtt3dActive!==false){canvas.hidden=true;markers.style.display='none';requestAnimationFrame(tick);return;}
  // Read token geometry together before writing styles to avoid per-token layout flushes.
  const placementById=new Map((ctx?.state.boardState.placements[ctx.state.boardState.activeSceneId]||[]).map(p=>[p.id,p]));
  const tokenSlant=active?slant():null;
@@ -294,6 +302,32 @@ function route(start,end,options={}){
 }
 function routeNow(start,end,options={}){
  const d=dimensions(),actor=options.actor||rulerActor(),design=importedDesign();
+ // The 3D path, prediction and cost all consume the same straight-leg
+ // trajectory. Physical support is carried explicitly rather than guessed
+ // anew from the original actor at each grid square.
+ if(window.vtt3dActive&&actor&&design&&options.ignoreZones!==true&&!['fly','hover'].includes(actor.movementMode)){
+  const entry=options.carry?.ghost||actor,dx=entry.column-start.column,dy=entry.row-start.row;
+  const trajectory=surfaceLeg(entry,{column:end.column+dx,row:end.row+dy});
+  const count=Math.ceil(Math.max(Math.abs(end.column-start.column),Math.abs(end.row-start.row)));
+  const heights=new Map(trajectory.samples.map(p=>[(p.column-dx)+','+(p.row-dy),p.height]));
+  const height=(column,row)=>{
+   const exact=heights.get(column+','+row);if(exact!==undefined)return exact;
+   const length=Math.max(Math.abs(end.column-start.column),Math.abs(end.row-start.row));
+   const t=length?Math.max(Math.abs(column-start.column),Math.abs(row-start.row))/length:0;
+   return trajectory.samples[Math.min(trajectory.samples.length-1,Math.round(t*(trajectory.samples.length-1)))].height;
+  };
+  const zones=window.terrainZones,squareCost=zones?.stepMultiplier?(column,row,rawHeight)=>zones.stepMultiplier(actor,column,row,rawHeight):null;
+  const face=options.ignoreClimb?null:(a,b)=>climbFace(actor,a,b),walked=routeSteps(start,start,height,squareCost,face);
+  let previous=start;
+  for(let i=1;i<=count;i++){
+   const p={column:start.column+(end.column-start.column)*i/count,row:start.row+(end.row-start.row)*i/count};
+   const part=routeSteps(previous,p,height,squareCost,face);
+   walked.points.push(...part.points.slice(1));walked.cost+=part.cost;walked.extra+=part.extra;walked.climbExtra+=part.climbExtra;walked.cliff||=part.cliff;previous=p;
+  }
+  for(const p of walked.points)p.exactWalk=true;
+  if(options.carry)options.carry.ghost=trajectory.placement;
+  return walked;
+ }
  // The preview walks the route as the move itself will: it steps onto bridges and decks and stays on them.
  // `options.carry` hands the walker from one leg of a route to the next, so a waypoint on a bridge keeps it there.
  const walker=createRouteWalker({actor,surfaces:design?resolveSupportSurfaces(design):[],mapLevels:levelConfig(),
@@ -319,40 +353,90 @@ function routeNow(start,end,options={}){
 // Where a walk through these squares ends, as the move itself decides it. The server carries each leg as one
 // straight line from its start to its end (FloorGeometry::move, FloorSupport::walkContact): a stair is climbed
 // when that line runs along it from its foot, and a plate is stepped onto when that line meets it. So the end of
-// each leg is asked the same way, in one step. The square-by-square walk (routeNow) is for what the route costs
-// and how its line is drawn; it goes slanted squares first, and can take a stair by a slanted step that the
-// straight line misses, which drew the ghost on a balcony the move never reached.
+// each leg is asked the same way. The 3D sandbox now shares a straight-chord surface trajectory for
+// physical samples, costs, and prediction; its endpoint must also agree with the whole-command floor
+// check. The unchanged 2D ruler retains its historical square-by-square walker.
 function walkEnd(placement,points){return walkEnding(placement,points).height;}
 // The same, with how he stands there: on which floor, on which plate, and by which end he came onto a stair.
+function surfaceLeg(placement,end){
+ const d=dimensions(),design=importedDesign();
+ return traceSurfaceLeg({actor:placement,end,surfaces:resolveSupportSurfaces(design||{}),mapLevels:levelConfig(),
+  terrain:p=>heightAt((ctx.view.gridOffsets.left||0)+(p.column+(p.width||1)/2)*d.grid,(ctx.view.gridOffsets.top||0)+(p.row+(p.height||1)/2)*d.grid),standing:p=>groundFor(p)});
+}
 function walkEnding(placement,points){
+ if(window.vtt3dActive&&importedDesign()&&placement&&!['fly','hover'].includes(placement.movementMode)){
+  let ghost={...placement,...points[0]},height=groundFor(ghost),stairExit=false;
+  for(const point of points.slice(1)){
+   if(point.column===ghost.column&&point.row===ghost.row)continue;
+   const leg=surfaceLeg(ghost,point);ghost=leg.placement;height=leg.height;stairExit=leg.stairExit;
+  }
+  const d=dimensions(),expected=commandSurfaceEnding({actor:placement,points,surfaces:resolveSupportSurfaces(importedDesign()||{}),mapLevels:levelConfig(),standing:p=>groundFor(p),
+   terrain:p=>heightAt((ctx.view.gridOffsets.left||0)+(p.column+(p.width||1)/2)*d.grid,(ctx.view.gridOffsets.top||0)+(p.row+(p.height||1)/2)*d.grid)});
+  const canonicalCompatible=expected.known&&Math.abs(height-expected.height)<=.55&&(ghost.levelId||'level-0')===(expected.placement?.levelId||'level-0')
+   &&(ghost._floorTraversal?.stairId||null)===(expected.placement?._floorTraversal?.stairId||null)
+   &&(ghost._floorTraversal?.entry||null)===(expected.placement?._floorTraversal?.entry||null);
+  return {height,placement:ghost,stairExit,canonicalCompatible,expectedHeight:expected.height,how:[ghost.levelId||'level-0',ghost._supportSurfaceId||'',ghost._floorTraversal?.entry||''].join('|')};
+ }
+
+ return nativeWalkEnding(placement,points);
+}
+function nativeWalkEnding(placement,points){
  const d=dimensions(),design=importedDesign(),surfaces=design?resolveSupportSurfaces(design):[],mapLevels=levelConfig();
  const standing=rampStanding(design),follow=standing&&hasStairs(mapLevels)?standing:null;
  const last=points[points.length-1];
- if(!walksPlates(placement,surfaces,!!follow))return {height:rulerGround(last.column,last.row,placement),how:''};
+ if(!walksPlates(placement,surfaces,!!follow))return {height:rulerGround(last.column,last.row,placement),how:'',placement:{...placement,...last}};
  const terrain=p=>heightAt((ctx.view.gridOffsets.left||0)+(p.column+(p.width||1)/2)*d.grid,(ctx.view.gridOffsets.top||0)+(p.row+(p.height||1)/2)*d.grid);
- let ghost={...placement,column:points[0].column,row:points[0].row},height=null;
+ let ghost={...placement,column:points[0].column,row:points[0].row},height=null,stairExit=false;
  for(let i=1;i<points.length;i++){
   if(points[i].column===ghost.column&&points[i].row===ghost.row)continue;
   const stepped=stepGhost({ghost,column:points[i].column,row:points[i].row,actor:placement,surfaces,mapLevels,terrain,plainHeight:(column,row,who)=>rulerGround(column,row,who),standing:follow});
+  stairExit=stepped.ghost._viaStair&&stepped.ghost.levelId!==ghost.levelId;
+  // Returning through the entry end does not change floor, but the native
+  // stair walker still defers support acquisition at its adjacent landing.
+  if(window.vtt3dActive&&!stairExit&&ghost._floorTraversal&&!stepped.ghost._floorTraversal){
+   const r=(design?.ramps||[]).find(r=>r.id===ghost._floorTraversal.stairId);
+   if(r&&rampCarries(r,ghost)){
+    const head=(ghost.levelId||'level-0')===r.toLevel,side=head?(r.direction||'north'):({north:'south',south:'north',east:'west',west:'east'}[r.direction||'north']);
+    const x=points[i].column+(ghost.width||1)/2,y=points[i].row+(ghost.height||1)/2;
+    const adjacent=side==='north'?y>=r.top-1&&y<r.top&&x>=r.left&&x<=r.right:side==='south'?y>r.bottom&&y<=r.bottom+1&&x>=r.left&&x<=r.right:side==='west'?x>=r.left-1&&x<r.left&&y>=r.top&&y<=r.bottom:x>r.right&&x<=r.right+1&&y>=r.top&&y<=r.bottom;
+    stairExit=adjacent&&stepped.ghost.levelId===ghost.levelId&&Math.abs(stepped.height-(head?r.height:r.base))<.55;
+   }
+  }
   ghost=stepped.ghost;height=stepped.height;
  }
- return {height:Number.isFinite(height)?height:null,how:[ghost.levelId||'level-0',ghost._supportSurfaceId||'',ghost._floorTraversal?.entry||''].join('|')};
+ return {height:Number.isFinite(height)?height:null,how:[ghost.levelId||'level-0',ghost._supportSurfaceId||'',ghost._floorTraversal?.entry||''].join('|'),placement:ghost,stairExit};
 }
 // The corners the app puts in for a hero who stands at a stair's end and is held over that stair or where it leads
 // (stair-assume.mjs): only when the straight line would not bring him out at the stair's height, and the way by the
 // stair is free of walls. In the token's own squares. Null when nothing is assumed.
-function stairCorners(placement,column,row){
+function stairCorners(placement,column,row,kind=getCurrentMovementKind(),resumeTraversal=false){
  const mapLevels=levelConfig();
  if(!placement||!hasStairs(mapLevels)||['fly','hover'].includes(placement.movementMode)||!importedDesign())return null;
- const kind=getCurrentMovementKind();if(kind!=='walk'&&kind!=='shift')return null;
+ if(kind!=='walk'&&kind!=='shift')return null;
  const levelId=placement.levelId||'level-0',stairs=levelId==='level-0'?mapLevels.baseStairs:(mapLevels.levels||[]).find(level=>level?.id===levelId)?.stairs;
  const hero={column:placement.column,row:placement.row},target={column,row},size=Math.max(placement.width||1,placement.height||1);
  for(const stair of stairs||[]){
   const ends=stairEnds(stair.corners,buildStairPerimeter(stair.corners).map(s=>({...s,colour:resolveSegmentColor(stair.edgeColors,s.id)})));
-  const corners=ends?stairAssume(ends,stair.direction==='down',hero,target,size):null;
+  let corners=ends?stairAssume(ends,stair.direction==='down',hero,target,size):null;
+  let resumed=false;
+  // A 3D pick beside the far end of an already-entered vine needs the same
+  // exit corner as a pick made from its foot. Keep the canonical traversal
+  // and let the existing exact-leg walker and server validate that route.
+  if(!corners&&resumeTraversal&&ends&&placement._floorTraversal?.stairId===stair.id
+    &&placement._floorTraversal.entry===(stair.direction==='down'?'green':'red')
+    &&hero.column>=ends.left&&hero.column<=ends.right-1&&hero.row>=ends.top&&hero.row<=ends.bottom-1){
+    const opposite={north:'south',south:'north',east:'west',west:'east'};
+    const near=stair.direction==='down'?opposite[ends.footSide]:ends.footSide;
+    const vertical=near==='north'||near==='south';
+    const lane=Math.max(vertical?ends.left:ends.top,Math.min(vertical?ends.right-size:ends.bottom-size,vertical?hero.column:hero.row));
+    const entry=near==='north'?{column:lane,row:ends.top-1}:near==='south'?{column:lane,row:ends.bottom}:near==='west'?{column:ends.left-1,row:lane}:{column:ends.right,row:lane};
+    corners=stairAssume(ends,stair.direction==='down',entry,target,size);
+    resumed=!!corners?.length;
+  }
   if(!corners)continue;
   // The straight line does as well when it leaves him at the same height, on the same floor, come onto the stair by the same end.
   const plain=walkEnding(placement,[hero,target]),byStair=walkEnding(placement,[hero,...corners,target]);
+  if(resumed&&byStair.placement?.levelId!==stair.linkedLevelId)continue;
   if(!Number.isFinite(byStair.height)||(Number.isFinite(plain.height)&&Math.abs(byStair.height-plain.height)<.05&&plain.how===byStair.how))continue;
   if(window.wallPrototype?.blockedMove?.(placement,{column,row,path:corners}))continue;
   return corners;
@@ -360,9 +444,160 @@ function stairCorners(placement,column,row){
  return null;
 }
 // The same for the ruler, in the ruler's own squares: `start` is where the route starts, `hover` where the token is held.
-function stairRoute(start,hover){
- const drag=window.vttDragTarget?.(),placement=drag?livePlacement(drag.id):null;if(!placement)return null;
- const dx=placement.column-start.column,dy=placement.row-start.row,corners=stairCorners(placement,hover.column+dx,hover.row+dy);
+function rampTargetHeight(rampId,placement){
+ const ramp=(importedDesign()?.ramps||[]).find(r=>r.id===rampId);
+ return ramp?rampHeight(ramp,placement.column+(placement.width||1)/2,placement.row+(placement.height||1)/2):null;
+}
+function pickedSurfaceReached(ending,picked){
+ if(ending?.canonicalCompatible===false)return false;
+ if(picked.rampId){
+  const ramp=(importedDesign()?.ramps||[]).find(r=>r.id===picked.rampId),ghost=ending?.placement;
+  return !!ramp&&!!ghost&&ghost._floorTraversal?.stairId===ramp.id&&rampCarries(ramp,ghost)
+   &&Number.isFinite(ending.height)&&Math.abs(ending.height-picked.surfaceElevation)<=.55
+   &&rampTargetHeight(ramp.id,ghost)!==null;
+ }
+
+ if(!Number.isFinite(ending?.height)||Math.abs(ending.height-picked.surfaceElevation)>.55)return false;
+ const ghost=ending.placement;
+ if(picked.surfaceId&&ghost?._supportSurfaceId!==picked.surfaceId){
+  // stairStep leaves support acquisition to the accepted landing. Verify that
+  // exact native plate at the exit without changing the ghost's canonical data.
+  const surface=ending.stairExit&&!ghost?._floorTraversal?resolveSupportSurfaces(importedDesign()).find(s=>s.id===picked.surfaceId):null;
+  const cuts=(levelConfig()?.levels||[]).find(l=>l.id===ghost?.levelId)?.cutouts||[];
+  if(!surface||surface.levelId!==ghost.levelId||!intersectsFloor(ghost,surface,cuts))return false;
+ }
+ if(picked.levelId&&(ghost?.levelId||'level-0')!==picked.levelId){
+  // The native ghost retains its old floor after an unsupported ground fall.
+  if(picked.levelId!=='level-0'||ghost?._supportSurfaceId||ghost?._floorTraversal)return false;
+ }
+ return true;
+}
+// A surface pick supplies the destination that the flat native picker cannot:
+// enter one real connected stair, leave its far end, then walk across that floor.
+// The server resolves only one stair transition per command, so do not chain
+// floors here. Every leg still uses its native footing and wall calculations.
+// Partial ramp picks enter this exact stair from the actor's own floor. Merely
+// matching its visual height is insufficient: native upper-floor sampling also
+// recognizes a side/barrier entry, which must not become a walking shortcut.
+function partialRampCorners(placement,column,row,picked,existing){
+ const ramps=importedDesign()?.ramps||[],ramp=ramps.find(r=>r.id===picked.rampId);
+ const hero={column:placement.column,row:placement.row},target={column,row};
+ if(!ramp||rampTargetHeight(ramp.id,{...placement,...target})===null)return null;
+ const reaches=points=>pickedSurfaceReached(walkEnding(placement,[hero,...points,target]),picked);
+ const blocked=points=>window.wallPrototype?.blockedMove?.(placement,{column,row,path:points});
+ if(reaches(existing||[])&&!blocked(existing||[]))return existing;
+ const levelId=placement.levelId||'level-0',mapLevels=levelConfig();
+ if(levelId!==ramp.fromLevel&&levelId!==ramp.toLevel)return null;
+ const stairs=levelId==='level-0'?mapLevels.baseStairs:(mapLevels.levels||[]).find(l=>l.id===levelId)?.stairs;
+ const stair=(stairs||[]).find(s=>s.id===ramp.id);
+ if(!stair)return null;
+ const ends=stairEnds(stair.corners,buildStairPerimeter(stair.corners).map(s=>({...s,colour:resolveSegmentColor(stair.edgeColors,s.id)})));
+ if(!ends)return null;
+ const opposite={north:'south',south:'north',east:'west',west:'east'};
+ const near=stair.direction==='down'?opposite[ends.footSide]:ends.footSide,vertical=near==='north'||near==='south';
+ const size=Math.max(placement.width||1,placement.height||1),lo=vertical?ends.left:ends.top,hi=Math.max(lo,(vertical?ends.right:ends.bottom)-size);
+ const clamp=n=>Math.max(lo,Math.min(hi,n)),same=(a,b)=>a.column===b.column&&a.row===b.row;
+ const lanes=[...new Set([clamp(vertical?column:row),clamp(vertical?hero.column:hero.row),lo,hi])],candidates=[];
+ for(const lane of lanes){
+  const entry=near==='north'?{column:lane,row:ends.top-1}:near==='south'?{column:lane,row:ends.bottom}:near==='west'?{column:ends.left-1,row:lane}:{column:ends.right,row:lane};
+  // A diagonal footprint can clip the rock beside its starting cell. Try a
+  // single local departure step before the entry chord; every leg still has
+  // to retain support and pass the full native wall check.
+  const departures=[{column:hero.column-1,row:hero.row},{column:hero.column+1,row:hero.row},{column:hero.column,row:hero.row-1},{column:hero.column,row:hero.row+1}];
+  for(const turn of [null,{column:hero.column,row:entry.row},{column:entry.column,row:hero.row},...departures]){
+   const approach=[...(turn&&!same(turn,hero)&&!same(turn,entry)?[turn]:[]),...(same(hero,entry)?[]:[entry])];
+   const path=[hero,...approach,target],cost=path.slice(1).reduce((sum,p,i)=>sum+Math.max(Math.abs(p.column-path[i].column),Math.abs(p.row-path[i].row)),0);
+   if(approach.every(p=>p.column>=0&&p.row>=0))candidates.push({approach,cost});
+  }
+ }
+ candidates.sort((a,b)=>a.cost-b.cost);
+ for(const {approach} of candidates){
+  let on=placement,valid=true;
+  for(const point of approach){
+   const step=walkEnding(on,[{column:on.column,row:on.row},point]);
+   const expected=levelId===ramp.toLevel?ramp.height:ramp.base;
+   if((step.placement?.levelId||'level-0')!==levelId||step.placement?._floorTraversal
+    ||(levelId!=='level-0'&&!step.placement?._supportSurfaceId)||Math.abs(step.height-expected)>.55){valid=false;break;}
+   on=step.placement;
+  }
+  if(valid&&reaches(approach)&&!blocked(approach))return approach;
+ }
+ return null;
+}
+function connectedSurfaceCorners(placement,column,row,picked,kind,existing){
+ if(!Number.isFinite(picked?.surfaceElevation)||!['walk','shift'].includes(kind)||['fly','hover'].includes(placement.movementMode))return existing;
+ if(picked.rampId)return partialRampCorners(placement,column,row,picked,existing);
+ const hero={column:placement.column,row:placement.row},target={column,row};
+ const reaches=points=>pickedSurfaceReached(walkEnding(placement,[hero,...points,target]),picked);
+ const carried=(importedDesign()?.ramps||[]).find(r=>r.id===placement._floorTraversal?.stairId&&rampCarries(r,placement));
+ if(carried&&reaches([])&&!window.wallPrototype?.blockedMove?.(placement,{column,row,path:[]}))return null;
+ if(reaches(existing||[]))return existing;
+ if(!picked.levelId||picked.levelId==='level-0')return null; // Preserve intentional ground drops.
+ const mapLevels=levelConfig(),levelId=placement.levelId||'level-0';
+ const stairs=levelId==='level-0'?mapLevels.baseStairs:(mapLevels.levels||[]).find(l=>l.id===levelId)?.stairs;
+ const linked=(mapLevels.levels||[]).find(l=>l.id===picked.levelId);
+ if(!linked||linked.hidden)return null;
+ const same=(a,b)=>a.column===b.column&&a.row===b.row;
+ const distance=(a,b)=>Math.max(Math.abs(a.column-b.column),Math.abs(a.row-b.row));
+ const opposite={north:'south',south:'north',east:'west',west:'east'},candidates=[];
+ for(const stair of stairs||[]){
+  if(stair.linkedLevelId!==picked.levelId)continue;
+  const ends=stairEnds(stair.corners,buildStairPerimeter(stair.corners).map(s=>({...s,colour:resolveSegmentColor(stair.edgeColors,s.id)})));
+  if(!ends)continue;
+  const near=stair.direction==='down'?opposite[ends.footSide]:ends.footSide,far=opposite[near];
+  const vertical=near==='north'||near==='south',size=Math.max(placement.width||1,placement.height||1);
+  const lo=vertical?ends.left:ends.top,hi=Math.max(lo,(vertical?ends.right:ends.bottom)-size);
+  const clamp=n=>Math.max(lo,Math.min(hi,n));
+  const lanes=[...new Set([clamp(vertical?hero.column:hero.row),clamp(vertical?column:row),lo,hi])];
+  const inFront=(side,lane)=>side==='north'?{column:lane,row:ends.top-1}:side==='south'?{column:lane,row:ends.bottom}:side==='west'?{column:ends.left-1,row:lane}:{column:ends.right,row:lane};
+  const resuming=placement._floorTraversal?.stairId===stair.id&&placement._floorTraversal.entry===(stair.direction==='down'?'green':'red')
+   &&hero.column>=ends.left&&hero.column<=ends.right-1&&hero.row>=ends.top&&hero.row<=ends.bottom-1;
+  for(const lane of lanes){
+   const entry=inFront(near,lane),exit=inFront(far,lane);
+   const forward={column:exit.column+(far==='west'?-1:far==='east'?1:0),row:exit.row+(far==='north'?-1:far==='south'?1:0)};
+   const tails=[[],[forward],[{column:exit.column,row}],[{column,row:exit.row}]];
+   for(const tail of tails){
+    const raw=[...(resuming||same(hero,entry)?[]:[entry]),exit,...tail];
+    const points=raw.filter((p,i)=>!same(p,target)&&(i===0||!same(p,raw[i-1])));
+    if(points.some(p=>p.column<0||p.row<0))continue;
+    const path=[hero,...points,target],cost=path.slice(1).reduce((sum,p,i)=>sum+distance(path[i],p),0);
+    candidates.push({points,entry,exit,tail,resuming,cost,stair});
+   }
+  }
+ }
+ candidates.sort((a,b)=>a.cost-b.cost||String(a.stair.id).localeCompare(String(b.stair.id)));
+ for(const c of candidates.slice(0,32)){
+  // An approach cannot quietly fall/change floors before reaching this stair.
+  if(!c.resuming&&!same(hero,c.entry)){
+   const approach=walkEnding(placement,[hero,c.entry]);
+   if((approach.placement?.levelId||'level-0')!==levelId||approach.placement?._floorTraversal)continue;
+   if(levelId!=='level-0'&&!approach.placement?._supportSurfaceId)continue;
+   const ramp=(importedDesign()?.ramps||[]).find(r=>r.id===c.stair.id);
+   const expected=ramp?(c.stair.direction==='down'?ramp.height:ramp.base):(floorElevations(mapLevels).get(levelId)??0);
+   if(!Number.isFinite(approach.height)||Math.abs(approach.height-expected)>.55)continue;
+  }
+  const crossing=walkEnding(placement,[hero,...(c.resuming||same(hero,c.entry)?[]:[c.entry]),c.exit]);
+  if(crossing.placement?.levelId!==c.stair.linkedLevelId||crossing.placement?._floorTraversal)continue;
+  // Every continuation leg must remain supported; a later valid endpoint
+  // cannot conceal an unsupported earlier leg across an island gap.
+  let on=crossing.placement,continuous=true;
+  for(const next of [...c.tail,target]){
+   if(same(on,next))continue;
+   const step=walkEnding(on,[{column:on.column,row:on.row},next]);
+   if(!step.placement?._supportSurfaceId||step.placement.levelId!==c.stair.linkedLevelId||Math.abs(step.height-picked.surfaceElevation)>.55){continuous=false;break;}
+   on=step.placement;
+  }
+  if(!continuous)continue;
+  if(!reaches(c.points)||window.wallPrototype?.blockedMove?.(placement,{column,row,path:c.points}))continue;
+  return c.points;
+ }
+ return null;
+}
+function stairRoute(start,hover,explicitActor=null,kind=getCurrentMovementKind()){
+ const drag=window.vttDragTarget?.(),placement=explicitActor|| (drag?livePlacement(drag.id):null);if(!placement)return null;
+ const dx=placement.column-start.column,dy=placement.row-start.row,column=hover.column+dx,row=hover.row+dy;
+ let corners=stairCorners(placement,column,row,kind,Boolean(explicitActor));
+ if(explicitActor)corners=connectedSurfaceCorners(placement,column,row,hover,kind,corners);
  return corners?corners.map(c=>({column:c.column-dx,row:c.row-dy})):null;
 }
 // The squares a drag of this token to a square goes through: his own corners when he has dropped any, else the
@@ -428,22 +663,36 @@ function walkerNear(actor,column,row,reach=15){
  return {plainHeight,step};
 }
 // Every leg of a route, walked in order with the walker carried from leg to leg.
-function routeLegs(points){const carry={},legs=[];for(let k=1;k<points.length;k++)legs.push(route(points[k-1],points[k],{carry}).points);return legs;}
+function routeLegs(points,actor=null){const carry={},legs=[];for(let k=1;k<points.length;k++)legs.push(route(points[k-1],points[k],{carry,...(actor?{actor}:{})}).points);return legs;}
 // The drawn line through walked steps. It follows the ground as before, except where the walker
 // is on a plate above (or below) the ground: there it follows the height it actually walks at.
-function stepsPath(steps,parts=[]){
- const d=dimensions(),actor=rulerActor();
+function stepsWorldPoints(steps){
+ const actor=rulerActor(),points=[];
  for(let i=0;i<steps.length;i++){
   const a=steps[Math.max(0,i-1)],b=steps[i],count=i?4:1;
   for(let j=1;j<=count;j++){
-   const col=a.column+(b.column-a.column)*j/count,row=a.row+(b.row-a.row)*j/count,x=(ctx.view.gridOffsets.left||0)+(col+.5)*d.grid,y=(ctx.view.gridOffsets.top||0)+(row+.5)*d.grid;
+   const col=a.column+(b.column-a.column)*j/count,row=a.row+(b.row-a.row)*j/count;
    const ground=rulerGround(col,row,actor),walkedAt=Number.isFinite(a.rawHeight)&&Number.isFinite(b.rawHeight)?a.rawHeight+(b.rawHeight-a.rawHeight)*j/count:ground;
-   const q=project(x,y,Math.abs(walkedAt-ground)>.3?walkedAt:ground);
-   parts.push(`${parts.length?'L':'M'} ${q.x.toFixed(2)} ${q.y.toFixed(2)}`);
+   points.push({x:col+.5,y:row+.5,z:a.exactWalk&&b.exactWalk?walkedAt:Math.abs(walkedAt-ground)>.3?walkedAt:ground});
   }
  }
+ return points;
+}
+function worldPointsPath(points,parts=[]){
+ const d=dimensions();
+ for(const p of points){const q=project((ctx.view.gridOffsets.left||0)+p.x*d.grid,(ctx.view.gridOffsets.top||0)+p.y*d.grid,p.z);parts.push(`${parts.length?'L':'M'} ${q.x.toFixed(2)} ${q.y.toFixed(2)}`);}
  return parts;
 }
+function stepsPath(steps,parts=[]){return worldPointsPath(stepsWorldPoints(steps),parts);}
+function movementPresentation(points,forced=false,actor=null){
+ const pieces=[];
+ for(const steps of forced?forcedLegs(points):routeLegs(points,actor))for(let i=1;i<steps.length;i++){
+  const a=steps[i-1],b=steps[i],distance=Math.max(Math.abs(b.column-a.column),Math.abs(b.row-a.row));
+  pieces.push({points:stepsWorldPoints([a,b]),color:slopeColor((b.rawHeight-a.rawHeight)/(distance||1))});
+ }
+ return pieces;
+}
+function squarePresentation(from,at,next){return [...stepsWorldPoints([from,at]),...(next?stepsWorldPoints([at,next]):[])].slice(2,next?8:5);}
 function rulerPoint(p){const actor=rulerActor(),d=dimensions(),h=rulerGround(p.column,p.row,actor),q=project(p.mapX,p.mapY,h);return {mapX:q.x,mapY:q.y};}
 function routePath(points,forced=false){
  const parts=[];
@@ -507,13 +756,7 @@ function drawCostMarkers(){
 function paintRoute(overlay,points,gridSize,forced=false){
  const ns='http://www.w3.org/2000/svg';let group=overlay.svg.querySelector('[data-terrain-route]');
  if(!group){group=document.createElementNS(ns,'g');group.dataset.terrainRoute='';overlay.svg.insertBefore(group,overlay.path.nextSibling);}
- const pieces=[];
- for(const steps of forced?forcedLegs(points):routeLegs(points)){
-   for(let i=1;i<steps.length;i++){
-     const a=steps[i-1],b=steps[i],distance=Math.max(Math.abs(b.column-a.column),Math.abs(b.row-a.row)),slope=(b.rawHeight-a.rawHeight)/(distance||1),color=slopeColor(slope);
-     const path=stepsPath([a,b]).join(' ');pieces.push({path,color});
-   }
- }
+ const pieces=movementPresentation(points,forced).map(piece=>({path:worldPointsPath(piece.points).join(' '),color:piece.color}));
  group.replaceChildren();
  for(const piece of pieces){const path=document.createElementNS(ns,'path');path.setAttribute('d',piece.path);path.setAttribute('fill','none');path.setAttribute('stroke',piece.color);path.setAttribute('stroke-width',Math.max(2,gridSize*.32));path.setAttribute('stroke-linecap','round');path.setAttribute('stroke-linejoin','round');group.append(path);}
  const last=group.lastChild;if(last){last.setAttribute('marker-end','url(#terrain-route-head)');let head=overlay.svg.querySelector('#terrain-route-head');if(!head){head=document.createElementNS(ns,'marker');head.id='terrain-route-head';head.setAttribute('viewBox','0 0 10 10');head.setAttribute('refX','8');head.setAttribute('refY','5');head.setAttribute('markerWidth','2');head.setAttribute('markerHeight','2');head.setAttribute('orient','auto');const shape=document.createElementNS(ns,'path');shape.setAttribute('d','M0 0L10 5L0 10Z');head.append(shape);overlay.svg.querySelector('defs').append(head);}head.firstChild.setAttribute('fill',pieces.at(-1).color);}
@@ -534,7 +777,7 @@ function heightShown(z){
  const height=Number(z)||0,view=pointerView();
  return height<=0||!view||floorDrawn(height,view);
 }
-window.terrainPrototype={floorUnder,heightShown,get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,unprojectAt,projector,stairRoute,heightAt,groundFor,landingHeight,movementGroundFor,movementPlacement,highGround,isCliff,climbFace,walkerNear,get design(){return importedDesign();},route,rulerPass,rulerPoint,routePath,squarePath,paintRoute,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get key(){return key;},get storageError(){return storageError;},project,get slant(){return slant();},get active(){return active;}};
+window.terrainPrototype={floorUnder,heightShown,get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,unprojectAt,projector,stairRoute,walkEnding,pickedSurfaceReached,rampTargetHeight,heightAt,groundFor,landingHeight,movementGroundFor,movementPlacement,highGround,isCliff,climbFace,walkerNear,get design(){return importedDesign();},route,rulerPass,rulerPoint,routePath,squarePath,paintRoute,movementPresentation,squarePresentation,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get fieldVersion(){return fieldVersion;},get brush3d(){return panel.hidden?null:brush3d;},get key(){return key;},get storageError(){return storageError;},project,get slant(){return slant();},get active(){return active;}};
 requestAnimationFrame(tick);
 
 import('./wall-prototype.js');

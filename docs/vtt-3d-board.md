@@ -1,0 +1,95 @@
+# The 3D board
+
+From this build the VTT's board is 3D. The rest of the page (panels, buttons, sheets, chat) is the
+same as before. Vision and fog are still in the code but switched off.
+
+## Brandon's decisions (October 14, 2026)
+
+- No new buttons or explanations. There is no 2D switch: the 3D board is the board.
+- Gravity Orchard keeps its 3D look, to be improved later. Every other scene is its map picture
+  laid flat on the ground. Old scenes do not matter.
+- Tokens stand facing the camera on a simple mini base. This is the first step toward 3D minis.
+- The camera opens tilted. Wheel zooms; right-drag grabs the ground and pulls it as far as the
+  pointer moves; middle-drag turns the camera.
+- These all work at once: holding a token (left), turning (middle), panning (right) and zooming
+  (wheel).
+- Arrow keys move relative to the camera, snapped to the nearest grid direction.
+- Templates and drawings belong to the floor that was clicked: an island's level, or the ground
+  (level-0) for the ground and vines.
+- Templates, persistent zones and ability areas are see-through 3D boxes on squares. There are no
+  circles: radius N means every square within N.
+  - Each one has bright edges.
+  - Removing one takes two steps (×, then confirm).
+  - You move one by dragging it, and turn it in 90° steps.
+- Difficult-terrain zones stay flat. Their names follow the 2D rule.
+- Left out because they only make sense in 2D: per-level floor pictures and the floor cut-out tool.
+- The Height control hides everything above the Height number.
+- A flying token has a green line straight down to the ground under it.
+
+## Where the code is
+
+| Path | What it is |
+| --- | --- |
+| `dnd/vtt/board3d/integration.mjs` | Mounts the 3D board, builds the scene, tokens, drag, ability pickers, Height control, layer registry. Exposes `window.vtt3d` and `window.vtt3dRenderer`. |
+| `dnd/vtt/board3d/scene-view.mjs` | three.js scene: ground, islands, ramps, picking, projection. |
+| `dnd/vtt/board3d/camera-controls.mjs` | The camera, one gesture per mouse button, so gestures combine. |
+| `dnd/vtt/board3d/route-planner.mjs` | Route planner for the movement ruler. A* over the VTT's own walker; time-sliced; legs run along rows, columns or 45° diagonals. |
+| `dnd/vtt/board3d/movement-route.mjs` | The ruler drawn in 3D: dots, leg and total labels, arrowhead, flashing difficult terrain. |
+| `dnd/vtt/board3d/layers/` | Overlays: drawings, templates, persistent and terrain zones, auras, pings, surface paint. |
+| `dnd/vtt/board3d/area-volume.mjs` | The see-through boxes for templates, zones and ability areas. |
+| `dnd/vtt/board3d/wall-overlay.mjs` | Named line overlays: walls, stairs, rubble, the flash when a wall stops a move. |
+| `dnd/vtt/board3d/scene.json`, `assets/` | Gravity Orchard's 3D art and textures. |
+| `dnd/vtt/board3d/lib/` | three.js r160, loaded through the import map as `three`. |
+
+The page loads `board3d/integration.mjs` from `templates/layout.php`. The `board3d` modules are
+in the import map with the build number, so a new build refreshes them like every other module.
+
+## How it fits the 2D code
+
+The 2D logic was not rewritten. There are two seams:
+
+1. **Input.** `#vtt-map-surface` still gets every pointer event; it is transparent over the 3D
+   canvas, so every tool's handler still runs. Each screen-to-map conversion calls
+   `window.vtt3d.clientToMap(clientX, clientY, options)`, which picks the 3D surface under the
+   pointer and returns map pixels, height, level, surface and ramp. The conversions that call it:
+   - `getLocalMapPoint`;
+   - the drag ruler;
+   - the drawing tool;
+   - wall `gridPoint`;
+   - terrain `rawPoint`/`unproject`;
+   - the stairs tool;
+   - token placement;
+   - the token hit-test.
+2. **Drawing.** The 2D layers in `#vtt-map-transform` are hidden, not removed. Each 3D layer
+   reads the same state the 2D one did. World units are squares: x = column, z = row, y = height.
+
+The 3D branches in the 2D modules run only while the 3D board is mounted. Without it (for example
+in the unit tests), those modules do what they did before.
+
+## Movement
+
+- The ruler follows the route the planner finds, and a dropped token takes that route.
+- The server still checks every move. The planner only proposes corners, which then go through
+  the same whole-command check (`walkEnding`, `wallMet`) as a hand-drawn route.
+- The planner takes at most one stair per move, never steps off a plate edge, and prefers slopes
+  to drops.
+- While holding a token, right-click adds a waypoint.
+
+## Checks before a release
+
+- `node dnd/vtt/tools/run-regression-suite.cjs`: at this build, 210 files and 1530 tests pass.
+- The sandbox browser checks (`claude-run-all.cjs` in the 3D sandbox folder) cover:
+  - movement, the camera and zoom;
+  - arrows, Find token and waypoints;
+  - the wall editor;
+  - the Height tool;
+  - the ability pickers;
+  - two viewers at once;
+  - combat movement.
+
+## Known, not caused by the 3D board
+
+- A teleport through the move path opens the Ground/Floor dialog and does not finish when a
+  choice is clicked from a script. This happens in tests only.
+- About 6% of the idle frame time is the 2D `edit-tools.js` reading `getBoundingClientRect`
+  every frame. It was there before the 3D board.

@@ -160,7 +160,7 @@ test('the board passes the settings from an ability and from the GM, and offers 
   const board = readFileSync(new URL('../board-interactions.js', import.meta.url), 'utf8');
   assert.match(board, /const wallBreak = wallBreakFields\(request\.targetConfig\);/);
   assert.match(board, /startWallPlacementForAutomation\(length, \{ wallColor, persistStructure, \.\.\.wallBreak \}\)/);
-  assert.match(board, /createPermanentWallFromSquares\(finalSquares, wallColor, placementValues\);/, 'an ability\'s wall is made with them');
+  assert.match(board, /createPermanentWallFromSquares\(finalSquares, wallColor, placementValues(?:, levelId)?\);/, 'an ability\'s wall is made with them');
   assert.match(board, /finalizePlacement\(\{ type: 'wall', squares: finalSquares, wallColor, \.\.\.placementValues \}\);/, 'and a wall placed by hand');
   assert.match(board, /Object\.assign\(base, wallBreakFields\(shape\)\);/, 'they are saved with the wall');
   assert.match(board, /\.\.\.\(isGmUser\(\) \? \[wallBreakPicker\.wrapper\] : \[\]\)/, 'only the GM is offered the choice when placing');

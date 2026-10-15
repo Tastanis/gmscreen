@@ -343,6 +343,14 @@ function pointerToGridCorner(event) {
 
 function pointerToLocalCoords(event, mapSurface) {
   const view = viewStateRef ?? {};
+  // 3D board: the point under the pointer on the 3D surfaces.
+  if (window.vtt3d?.active) {
+    const hit = window.vtt3d.clientToMap(event.clientX, event.clientY);
+    if (!hit) return null;
+    const gridSize = Math.max(8, Number.isFinite(view.gridSize) ? view.gridSize : 64), offsets = view.gridOffsets ?? {};
+    const x = hit.x - (Number.isFinite(offsets.left) ? offsets.left : 0), y = hit.y - (Number.isFinite(offsets.top) ? offsets.top : 0);
+    return x < 0 || y < 0 ? null : { x, y, gridSize };
+  }
   const scale = Number.isFinite(view.scale) && view.scale !== 0 ? view.scale : 1;
   const translation = view.translation ?? { x: 0, y: 0 };
   const offsetX = Number.isFinite(translation.x) ? translation.x : 0;

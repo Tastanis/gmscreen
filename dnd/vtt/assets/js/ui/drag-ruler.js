@@ -3,6 +3,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 import { placeLegLabels, placeTotalLabel, rulerWording, WORDING_SEPARATOR } from './ruler-label-layout.mjs';
 import { claimActiveTool, publishActiveTool } from './active-tool.js';
 import { forcedLabel } from './forced-line.mjs';
+import { teleportDistance } from './teleport-choice.js';
 /** Ruler labels take their size from the grid (see ruler-label-layout.mjs); the outline scales with it. */
 function sizeLabel(text, size) {
   text.style.fontSize = `${size}px`;
@@ -266,6 +267,8 @@ function endMeasurement(state) {
 }
 
 function clearMeasurement(state) {
+  state.measurementActor = null;
+  state.plannedRoute = null;
   if (state.pointerId !== null) {
     state.mapSurface.releasePointerCapture?.(state.pointerId);
   }
@@ -392,6 +395,11 @@ function getSnappedPoint(state, event) {
     mapY: centerY,
     column: clampedColumn,
     row: clampedRow,
+    // 3D board: the surface the pointer is on, so the ruler measures to it.
+    ...(Number.isFinite(mapCoords.height) ? { surfaceElevation: mapCoords.height } : {}),
+    ...(typeof mapCoords.levelId === 'string' ? { levelId: mapCoords.levelId } : {}),
+    ...(typeof mapCoords.surfaceId === 'string' ? { surfaceId: mapCoords.surfaceId } : {}),
+    ...(typeof mapCoords.rampId === 'string' ? { rampId: mapCoords.rampId } : {}),
   };
 }
 
@@ -419,6 +427,11 @@ function getOrComputeMapRect(mapTransform) {
 }
 
 function getMapCoordinates(mapTransform, event) {
+  // 3D board: the map point under the pointer on the 3D surfaces, with its height.
+  if (window.vtt3d?.active) {
+    const hit = window.vtt3d.clientToMap(event.clientX, event.clientY);
+    return hit ? { x: hit.x, y: hit.y, height: hit.height, levelId: hit.levelId, surfaceId: hit.surfaceId, rampId: hit.rampId } : null;
+  }
   const cached = getOrComputeMapRect(mapTransform);
   if (!cached) {
     return null;
@@ -476,12 +489,25 @@ function drawOverlay(state) {
   // where the token is to where it is held; with a corner in it, it is a slide, and each leg goes
   // straight (forced-line.mjs).
   const forced = kind === 'forced';
-  const rawPoints = getRenderablePoints(state);
+  // A 3D picker can name the actual pointed surface. Teleport range compares
+  // endpoints with the existing teleport rule, never a walk over intervening
+  // cliffs. Ordinary 2D measurements do not supply this optional height.
+  const lastPoint = state.hoverPoint ?? state.points.at(-1);
+  const teleport3D = kind === 'teleport' && Number.isFinite(state.points[0]?.surfaceElevation) && Number.isFinite(lastPoint?.surfaceElevation);
+  const rawPoints = teleport3D ? [state.points[0], lastPoint] : getRenderablePoints(state);
   const terrain=window.terrainPrototype?.active ? window.terrainPrototype : null;
   const points = terrain ? rawPoints.map(p=>({...p,...terrain.rulerPoint(p)})) : rawPoints;
   const zones = window.terrainZones?.routeCost ? window.terrainZones : null;
-  const segments = getSegments(rawPoints).map((segment) => {
-    const measured = zones ? zones.routeCost([segment.start, segment.end], { kind }) : null;
+  let priorMeasured={distance:0,cost:0,difficult:[],climbs:[]};
+  const segments = getSegments(rawPoints).map((segment,index) => {
+    const jumpDistance = teleport3D ? teleportDistance(segment.start, segment.end, segment.start.surfaceElevation, segment.end.surfaceElevation) : null;
+    const full3D=window.vtt3dActive&&state.measurementActor&&zones&&!forced&&!teleport3D;
+    let measured = teleport3D ? { distance: jumpDistance, cost: jumpDistance } : zones&&!full3D ? zones.routeCost([segment.start, segment.end], { kind }) : null;
+    if(full3D){
+      const full=zones.routeCost(rawPoints.slice(0,index+2),{kind,actor:state.measurementActor});
+      measured={...full,distance:full.distance-priorMeasured.distance,cost:full.cost-priorMeasured.cost,difficult:full.difficult.slice(priorMeasured.difficult.length),climbs:full.climbs.slice(priorMeasured.climbs.length)};
+      priorMeasured=full;
+    }
     const squares = forced ? segment.squares : measured ? measured.distance : terrain ? terrain.route(segment.start, segment.end).cost : segment.squares;
     const placed = terrain ? {...segment,start:{...segment.start,...terrain.rulerPoint(segment.start)},end:{...segment.end,...terrain.rulerPoint(segment.end)}} : segment;
     return { ...placed, squares, cost: forced ? squares : measured ? measured.cost : squares, difficult: measured?.difficult ?? [], climbs: measured?.climbs ?? [], shiftInDifficult: Boolean(measured?.shiftInDifficult), rawStart: segment.start };
@@ -491,6 +517,28 @@ function drawOverlay(state) {
   const totalCost = segments.reduce((sum, segment) => sum + segment.cost, 0);
   const shiftWarning = segments.some((segment) => segment.shiftInDifficult);
   state.lastMeasure = segments.length ? { distance: totalSquares, cost: totalCost, kind, shiftInDifficult: shiftWarning } : null;
+  state.lastPresentation = null;
+  if (segments.length && window.vtt3dActive) {
+    const cell = (p, rawHeight) => ({ column:p.column, row:p.row, ...(Number.isFinite(rawHeight)?{rawHeight}:{}) });
+    const world = p => ({ x:p.column+.5, y:p.row+.5, z:p.rawHeight??p.surfaceElevation??0 });
+    const pieces = teleport3D ? [{ points:rawPoints.map(p=>world({...p,rawHeight:p.surfaceElevation})), color:'#111111' }]
+      : terrain?.movementPresentation?.(rawPoints,forced,state.measurementActor) ?? [];
+    const difficult = [], climbs = [];
+    for (let index=0;index<segments.length;index++) {
+      const segment=segments[index];
+      for (const step of segment.difficult) {
+        const next=step.next||firstStepOf(segments[index+1]);
+        const from=cell(step.from,step.fromHeight),at=cell(step,step.rawHeight),onward=next?cell(next,next===step.next?step.nextHeight:undefined):null;
+        const points=terrain?.squarePresentation?.(from,at,onward)??[world(from),world(at)];
+        difficult.push({points,at:world(at),multiplier:step.multiplier});
+      }
+      for (const step of segment.climbs) {
+        const samples=terrain?.squarePresentation?.(cell(step.from,step.fromHeight),cell(step,step.rawHeight),null);
+        climbs.push({at:samples?.[0]??world(cell(step,step.rawHeight)),label:'×2'});
+      }
+    }
+    state.lastPresentation={pieces,difficult,climbs};
+  }
 
   if (!segments.length) {
     state.overlay.svg.setAttribute('hidden', 'hidden');
@@ -562,6 +610,24 @@ function drawOverlay(state) {
   if (wording.cost) readout.push(wording.cost);
   state.rulerValue.textContent = readout.join(WORDING_SEPARATOR);
 
+  // 3D board: the dots at the route's corners, each leg's length and the total,
+  // where the route actually runs, for the 3D route drawing.
+  if (state.lastPresentation) {
+    const heights = new Map();
+    for (const piece of state.lastPresentation.pieces || []) for (const q of piece.points || []) heights.set(`${q.x.toFixed(2)},${q.y.toFixed(2)}`, q.z);
+    const at = (p) => {
+      const x = p.column + 0.5, y = p.row + 0.5, known = heights.get(`${x.toFixed(2)},${y.toFixed(2)}`);
+      const z = Number.isFinite(known) ? known : Number.isFinite(p.surfaceElevation) ? p.surfaceElevation : (window.terrainPrototype?.heightAt?.(p.mapX, p.mapY) ?? 0);
+      return { x, y, z };
+    };
+    const gridForLabels = getGridMetrics(state.grid, state.mapTransform)?.size || 64;
+    state.lastPresentation.nodes = rawPoints.map(at);
+    state.lastPresentation.total = { text: wording.distance + (wording.fall ? WORDING_SEPARATOR + wording.fall : '') + (wording.cost ? WORDING_SEPARATOR + wording.cost : ''), at: at(rawPoints[rawPoints.length - 1]) };
+    state.lastPresentation.legs = placeLegLabels(segments, null, gridForLabels).map((label, index) => {
+      const a = at(rawPoints[index]), b = at(rawPoints[index + 1] ?? rawPoints[index]);
+      return { text: label.text, at: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 } };
+    });
+  }
   if (shiftWarning) showShiftWarning(); else hideShiftWarning();
   if (state.overlay.total && endPoint) {
     // The shift warning has its own pop-up, so the label on the map carries the cost only.
@@ -601,7 +667,21 @@ function ensureRulerDetail(ruler) {
 function assumedCorners(state) {
   if (state.mode !== 'external' || !state.measuring || state.points.length !== 1 || !state.hoverPoint) return null;
   let corners = null;
-  try { corners = window.terrainPrototype?.stairRoute?.(state.points[0], state.hoverPoint) || null; } catch (error) { corners = null; }
+  // 3D board: a square-by-square walking search supplies the corners, so the
+  // drawn line, the ruler's cost and the submitted move are one route.
+  const planner = window.vtt3dActive && state.measurementActor ? window.vtt3dPlanner : null;
+  if (planner) {
+    try {
+      const start = state.points[0], hover = state.hoverPoint, actor = state.measurementActor;
+      const dx = actor.column - start.column, dy = actor.row - start.row;
+      const planned = planner.plan(actor, { column: hover.column + dx, row: hover.row + dy, surfaceElevation: hover.surfaceElevation, levelId: hover.levelId ?? null, surfaceId: hover.surfaceId ?? null, rampId: hover.rampId ?? null }, movementKindOf(state));
+      state.plannedRoute = planned;
+      if (planned?.status === 'found') corners = planned.corners.map((p) => ({ column: p.column - dx, row: p.row - dy }));
+    } catch (error) { console.error('[VTT 3D] route planner', error); state.plannedRoute = null; }
+  }
+  if (!corners && state.plannedRoute?.status !== 'found') {
+    try { corners = window.terrainPrototype?.stairRoute?.(state.points[0], state.hoverPoint, state.measurementActor) || null; } catch (error) { corners = null; }
+  }
   if (!corners?.length) return null;
   const start = state.points[0], metrics = getGridMetrics(state.grid, state.mapTransform), grid = metrics && metrics.size > 0 ? metrics.size : 64;
   return corners.map((corner) => ({ ...start, column: corner.column, row: corner.row, mapX: start.mapX + (corner.column - start.column) * grid, mapY: start.mapY + (corner.row - start.row) * grid }));
@@ -1025,6 +1105,10 @@ function clonePoint(point) {
     mapY,
     column,
     row,
+    ...(Number.isFinite(point.surfaceElevation) ? { surfaceElevation: point.surfaceElevation } : {}),
+    ...(typeof point.levelId === 'string' ? { levelId: point.levelId } : {}),
+    ...(typeof point.surfaceId === 'string' ? { surfaceId: point.surfaceId } : {}),
+    ...(typeof point.rampId === 'string' ? { rampId: point.rampId } : {}),
   };
 }
 
@@ -1047,6 +1131,7 @@ export function beginExternalMeasurement(point, options = {}) {
   }
 
   clearMeasurement(sharedState);
+  sharedState.measurementActor = options.actor ?? null;
   sharedState.points = [snapshot];
   sharedState.hoverPoint = snapshot;
   sharedState.measuring = true;
@@ -1152,6 +1237,16 @@ export function clearRulerSupplement() {
 /** Distance and true cost of the measurement on screen, as last drawn ({distance, cost, kind}) or null. */
 export function getCurrentMeasurementCost() {
   return sharedState?.lastMeasure ? { ...sharedState.lastMeasure } : null;
+}
+
+/** Geometry from the same route pass used by the native ruler; read-only. */
+export function getCurrentMeasurementPresentation() {
+  return sharedState?.lastPresentation ?? null;
+}
+
+/** The 3D board planner's answer for the held route ({status, cost, ...}) or null. */
+export function getCurrentPlannedRoute() {
+  return sharedState?.plannedRoute ?? null;
 }
 
 /** 'walk', 'shift', 'forced' or 'teleport', from the modifier keys held during the current drag. */

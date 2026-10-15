@@ -39,6 +39,7 @@ function mount() {
   if (plates ? plates.nextElementSibling !== floors : !floors.isConnected) { if (plates) plates.after(floors); else transform.append(floors); }
 }
 function clear(mark) {
+  window.vtt3d?.setOverlay?.("rubble", []);
   if (signature === mark) return;
   ground.replaceChildren(); floors.replaceChildren(); signature = mark; drawn = [];
 }
@@ -107,6 +108,8 @@ function pieceNode(entry, g, mark) {
 }
 
 function draw() {
+  // 3D board: the same pieces, as small stones along each broken wall at its base (window.vtt3d overlay 'rubble').
+  const three = !!window.vtt3d?.active;
   const c = context();
   if (!c?.view?.mapLoaded || !transform) { clear('no-map'); return; }
   const sceneId = c.state.boardState.activeSceneId, walls = c.state.boardState.sceneState?.[sceneId]?.environment?.walls;
@@ -120,7 +123,7 @@ function draw() {
   const project = (point, height) => { const x = ox + point.x * g, y = oy + point.y * g; return active ? active.project(x, y, height) : { x, y }; };
   const surfaces = resolveSupportSurfaces(model);
   // A player, or the GM looking through a token's eyes, sees floor rubble only where they can see the spot.
-  const bySight = !c.isGM || document.documentElement.classList.contains('height-vision-active');
+  const bySight = !three && (!c.isGM || document.documentElement.classList.contains('height-vision-active'));
   // The GM with no single token selected looks down from a chosen height. Otherwise the view is a
   // token's: a player's own floor, or the floor of the token the GM is looking through.
   const fromHeight = c.isGM && window.gmVision?.manual ? Number(window.gmVision.height) : null;
@@ -140,6 +143,21 @@ function draw() {
     };
   });
   const next = JSON.stringify([sceneId, walls?.revision ?? 0, cubes.map((cube) => cube.id + cube.kind).join('|'), viewed, g, ox, oy, v.mapPixelSize, !!active, active?.revision ?? 0, active?.key ?? '', entries.map((entry) => (entry.onPlate ? 'p' : 'g') + (entry.shown ? 1 : 0)).join('')]);
+  if (three) {
+    const stones = [];
+    entries.forEach((entry, index) => {
+      if (!entry.shown) return;
+      const { a, b, edge } = entry.piece, from = wallHeights(edge, a, b, a, groundAt).base, to = wallHeights(edge, a, b, b, groundAt).base;
+      const count = Math.max(2, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) * 5));
+      for (let i = 0; i <= count; i += 1) {
+        const t = i / count, noise = Math.sin((index * 31 + i) * 12.9898) * 43758.5453, r = noise - Math.floor(noise), r2 = (r * 7.31) % 1;
+        stones.push({ kind: 'dot', x: a.x + (b.x - a.x) * t + (r - 0.5) * 0.16, y: a.y + (b.y - a.y) * t + (r2 - 0.5) * 0.16, z: from + (to - from) * t, r: 0.05 + r * 0.06, color: r > 0.5 ? '#7c7468' : '#9a9184', opacity: 1 });
+      }
+    });
+    window.vtt3d.setOverlay('rubble', stones);
+    drawn = entries.map((entry) => ({ id: entry.piece.id, kind: entry.piece.kind, layer: entry.onPlate ? 'floor' : 'ground', shown: entry.shown }));
+    return;
+  }
   if (next === signature) return;
   signature = next; builds++;
   for (const svg of [ground, floors]) { svg.setAttribute('width', v.mapPixelSize?.width || 0); svg.setAttribute('height', v.mapPixelSize?.height || 0); }

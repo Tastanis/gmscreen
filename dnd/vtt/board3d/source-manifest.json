@@ -1,0 +1,73 @@
+{
+  "native": {
+    "file": "Gravity Orchard - Prismari.dam",
+    "sha256": "fefe445f4d8793142fecd4f6f4a561627f73829237569aad4ccfc7616118c961",
+    "packageFile": "Gravity Orchard - Prismari.vttmap",
+    "packageSha256": "9063a2334cf47c5ac22598c4b8b64d4f5f145439300b5efee71a0029d9d8b7a7",
+    "placements": 3843,
+    "blockTypes": 73,
+    "note": "Native placements plus verified matching bundle geometry; original procedural meshes with replacement CC0 textures."
+  },
+  "inputs": {
+    "C:\\Users\\tasta\\Desktop\\dungeon alchemist\\Gravity Orchard - Prismari.dam": "fefe445f4d8793142fecd4f6f4a561627f73829237569aad4ccfc7616118c961",
+    "C:\\Users\\tasta\\Desktop\\dungeon alchemist\\Gravity Orchard - Prismari.vttmap": "9063a2334cf47c5ac22598c4b8b64d4f5f145439300b5efee71a0029d9d8b7a7",
+    "C:\\Users\\tasta\\Desktop\\gmscreen\\.playwright-mcp\\terrain-prototype\\gravity-orchard\\package\\Gravity-Orchard.scene.json": "a66c4a613cc839439f345cacfc6f92c602a3b03f3b557563cf518df99ba8a50e",
+    "C:\\Users\\tasta\\Desktop\\gmscreen\\.playwright-mcp\\terrain-prototype\\gravity-orchard\\package\\Gravity-Orchard.conversion.json": "5f1b6cbc4ec29ea06b7594642b02ede9d5c81f0d63d259695b1c1f68f26e7ef3",
+    "C:\\Users\\tasta\\Desktop\\gmscreen\\.playwright-mcp\\terrain-prototype\\gravity-orchard\\Gravity Orchard - v15 saved.design.json": "e29cb6779f94790dd4075c42b43b29872dce3f6e8ea31a664b6edf83bda75269",
+    "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\1588530\\3079989967\\e7860564-c7e2-4eb9-8a2b-b0fef013704b\\e7860564-c7e2-4eb9-8a2b-b0fef013704b.json": "ae0b206626d9d805489291f679db5c9ef90a492f2acc0646da6360b3763c67cb",
+    "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\1588530\\3708893320\\b8f1f4de-c625-4993-8d39-ca1e093a3e3e\\b8f1f4de-c625-4993-8d39-ca1e093a3e3e.json": "53691bd091a983ea4c1e809a9bd8946834245b25a2363916e8d0b7ddea809c24"
+  },
+  "counts": {
+    "nativePlacements": 3843,
+    "floors": 648,
+    "props": 3195,
+    "barriers": 388,
+    "floatingPlates": 19,
+    "ramps": 23,
+    "groundPropsRebased": 1080
+  },
+  "propNames": {
+    "Rock": 913,
+    "Mosscovered Big Rock": 53,
+    "Big Mosscovered Rock": 20,
+    "Mosscovered Rock": 479,
+    "Moss": 217,
+    "Mosscovered Rock Pillar": 8,
+    "Fey Crystal": 59,
+    "Small Fey Crystal": 47,
+    "Lantern": 63,
+    "Stalagmite": 127,
+    "Crate": 4,
+    "Crystal Geode": 3,
+    "Magic Circle": 17,
+    "Rope": 9,
+    "Overgrown Vines": 90,
+    "Overgrown Roots": 45,
+    "Ground Ivy": 164,
+    "Fey Flower": 57,
+    "Orange Tree": 9,
+    "Grass": 47,
+    "Lemon Tree": 4,
+    "Fern": 60,
+    "Rocks": 202,
+    "Green Swirling Mist": 145,
+    "Cold Fog": 12,
+    "Animated water": 149,
+    "Medium Waterfall": 3,
+    "Rubble": 171,
+    "Easel with canvas": 2,
+    "Necrotic Smoke": 10,
+    "Easel": 1,
+    "Barrel": 1,
+    "Bedroll": 2,
+    "Backpack with Bedroll": 1,
+    "Canvas": 1
+  },
+  "transform": {
+    "x": "native x + 1",
+    "y": "65 - native y",
+    "z": "(native + 7) / 1.2 * 1.5",
+    "verticalScale": 1.5
+  },
+  "terrainNote": "Canonical flat-floor conversion retained, including pit, rim, fallen blocks and pools. Native terraces deliberately differ."
+}

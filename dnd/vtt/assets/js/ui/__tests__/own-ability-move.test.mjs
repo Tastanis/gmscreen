@@ -30,7 +30,7 @@ function picker({ tokens, gm = false, confirmedAfter = (id, to) => to, moveAnswe
     const resolvePlacementLevelId = (placement) => placement.levelId || 'level-0';
     const clampPlacementToBounds = (column, row) => ({ column: Math.max(0, Math.min(19, column)), row: Math.max(0, Math.min(19, row)) });
     const updateStatus = (text) => page.statuses.push(text);
-    const renderTokens = () => {}, flashAutomationTargetToken = () => {}, updateAutomationMovePreview = () => {};
+    const renderTokens = () => {}, flashAutomationTargetToken = () => {}, updateAutomationMovePreview = () => {}, notifyCoordinateView = () => {};
     const renderAutomationMoveOverlay = () => { page.overlays += 1; return { remove() {} }; };
     const cancelPendingAutomationMove = () => { pendingAutomationMove = null; };
     const clearAutomationMoveOverlay = () => { automationMoveOverlay = null; pendingAutomationMove = null; };

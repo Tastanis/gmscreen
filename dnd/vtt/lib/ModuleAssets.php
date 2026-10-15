@@ -4,7 +4,7 @@ declare(strict_types=1);
 /** Version transitive modules as well as entrypoints; no web-server rewrite needed. */
 final class ModuleAssets
 {
-    public static function importMap(string $directory, int $build): array
+    public static function importMap(string $directory, int $build, string $urlBase = '/dnd/vtt/assets/js/'): array
     {
         $imports = [];
         $root = rtrim(str_replace('\\', '/', $directory), '/');
@@ -12,7 +12,7 @@ final class ModuleAssets
             if (!$file->isFile() || !in_array($file->getExtension(), ['js','mjs'], true)) continue;
             $relative = substr(str_replace('\\', '/', $file->getPathname()), strlen($root) + 1);
             if (str_contains($relative, '__tests__/')) continue;
-            $url = '/dnd/vtt/assets/js/' . $relative;
+            $url = $urlBase . $relative;
             $imports[$url] = $url . '?v=' . $build;
         }
         ksort($imports);

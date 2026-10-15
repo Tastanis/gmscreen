@@ -32,6 +32,7 @@ function clear(mark) {
 }
 
 function draw() {
+  if(window.vtt3dBoard)return;
   const c = context();
   if (!c?.view?.mapLoaded || !transform) { clear('no-map'); return; }
   const sceneId = c.state.boardState.activeSceneId, scene = c.state.boardState.sceneState?.[sceneId], walls = scene?.environment?.walls;

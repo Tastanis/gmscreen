@@ -7,7 +7,7 @@
 /** Everything about a token that the height it stands at can depend on. */
 export const passActorKey = (actor) => (actor
   ? [actor.id, actor.column, actor.row, actor.width, actor.height, actor.levelId, actor.movementMode, actor.flightHeight,
-    actor._supportSurfaceId, actor._floorTraversal ? JSON.stringify(actor._floorTraversal) : '', actor._viaStair ? 'stair' : ''].join('|')
+    actor._supportSurfaceId, actor._floorTraversal ? JSON.stringify(actor._floorTraversal) : '', actor._viaStair ? 'stair' : '', actor._trajectoryStairTransition ? 'command-stair' : ''].join('|')
   : '');
 
 export function createRulerPass() {

@@ -40,6 +40,8 @@ export function createMapPings({
   persistBoardStateSnapshot = () => {},
 } = {}) {
   const processedPings = new Map();
+  // 3D board: pulses are drawn by board3d/layers/pings.mjs at the point clicked, and a focus turns the camera.
+  const board3d = () => (windowRef?.vtt3d?.active && windowRef.vtt3dLayers?.pings) || null;
 
   function handleMapPing(event, { focus = false } = {}) {
     const viewState = getViewState() ?? {};
@@ -189,6 +191,12 @@ export function createMapPings({
       return;
     }
 
+    const layer3d = board3d();
+    if (layer3d) {
+      const x = Math.min(1, Math.max(0, pingEntry.x)) * mapWidth, y = Math.min(1, Math.max(0, pingEntry.y)) * mapHeight;
+      layer3d.pulse({ x, y, z: Number.isFinite(Number(pingEntry.z)) ? Number(pingEntry.z) : null, type: pingEntry.type });
+      return;
+    }
     const drawn = drawnAt(pingEntry, mapWidth, mapHeight);
     spawnPingPulse(drawn.x, drawn.y, pingEntry.type, 0);
   }
@@ -326,6 +334,14 @@ export function createMapPings({
       return;
     }
 
+    if (board3d() && windowRef?.vtt3dRenderer?.focus) {
+      const helpers = windowRef.vtt3d.helpers;
+      const at = helpers.toSquares(Math.min(1, Math.max(0, pingEntry.x)) * mapWidth, Math.min(1, Math.max(0, pingEntry.y)) * mapHeight);
+      const z = Number(pingEntry.z);
+      windowRef.vtt3dRenderer.focus({ x: at.x, y: at.y, z: Number.isFinite(z) ? z : helpers.groundAt(at.x, at.y) });
+      return;
+    }
+
     const boardRect = board.getBoundingClientRect();
     const scale = Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
     const { x: localX, y: localY } = drawnAt(pingEntry, mapWidth, mapHeight);
@@ -415,7 +431,12 @@ export function createMapPings({
   return {
     handleMapPing,
     // A pulse on this page only, at a point of the board as drawn (the find-my-token button).
-    pulseAt: (localX, localY) => spawnPingPulse(localX, localY, 'ping', 0),
+    // On the 3D board the point is a map point, and `z` the height it is at (the ground under it when not given).
+    pulseAt: (localX, localY, z = null) => {
+      const layer3d = board3d();
+      if (layer3d) layer3d.pulse({ x: localX, y: localY, z: Number.isFinite(z) ? z : null, type: 'ping' });
+      else spawnPingPulse(localX, localY, 'ping', 0);
+    },
     processIncomingPings,
     sanitizePingsForPersistence,
     clonePingEntries,

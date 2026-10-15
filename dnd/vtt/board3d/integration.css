@@ -1,0 +1,17 @@
+/* 3D board: the picture is drawn by #vtt-board3d underneath; the 2D map layer
+   stays on top, transparent and hidden, so the existing tools still receive the
+   pointer; tokens are projected into their own layer above both. */
+#vtt-board3d{position:absolute;inset:0;overflow:hidden;background:#14282c;z-index:0;pointer-events:none}
+#vtt-board3d canvas{display:block;width:100%;height:100%}
+.vtt3d-on #vtt-map-surface{background:transparent!important}
+.vtt3d-on #vtt-map-surface::after{background:transparent}
+.vtt3d-on #vtt-map-transform{visibility:hidden!important}
+#vtt-board3d-token-host{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:2}
+.vtt3d-on #vtt-token-layer{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;transform:none!important;opacity:1!important;pointer-events:none!important;visibility:visible!important}
+.vtt3d-on #vtt-token-layer>.vtt-token{left:0!important;top:0!important;width:var(--vtt3d-size,36px)!important;height:var(--vtt3d-size,36px)!important;transform:translate3d(var(--vtt3d-x,0px),var(--vtt3d-y,0px),0)!important;translate:none!important;scale:1!important;transition:none!important;pointer-events:auto!important;visibility:var(--vtt3d-visible,hidden)!important;z-index:var(--vtt3d-order,1)!important;cursor:grab;filter:drop-shadow(0 3px 3px #0008)}
+.vtt3d-on #vtt-token-layer>.vtt-token.is-selected{outline:2px solid #f5d284;outline-offset:3px}
+.vtt3d-on #vtt-token-layer .vtt-token__level-indicator{display:none!important}
+#vtt-board3d-overlay-host{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:3}
+#vtt-board3d-overlay-host .vtt3d-board-controls{position:absolute!important;left:50%!important;transform:translateX(-50%)!important;pointer-events:auto!important;visibility:visible!important}
+#vtt-board3d-overlay-host .vtt-automation-area__controls.vtt3d-board-controls{bottom:1.25rem!important}
+#vtt-board3d-overlay-host .vtt-automation-move__controls.vtt3d-board-controls{bottom:86px!important}

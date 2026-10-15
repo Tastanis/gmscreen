@@ -22,6 +22,9 @@ import { fetchScenes } from './services/scene-service.js';
 import { fetchTokens } from './services/token-service.js';
 import { configurePlayerRoster } from './state/normalize/map-levels.js';
 async function bootstrap() {
+  // The board is drawn in 3D (board3d/). Vision and fog are switched off; the
+  // server's audience projection still decides which placements reach the browser.
+  window.vtt3dBoard = true;
   const config = window.vttConfig ?? {};
   configurePlayerRoster(config.playerRoster);
   const routes = config.routes ?? {};
@@ -60,7 +63,11 @@ async function bootstrap() {
   mountCharacterSummaryPanel(routes, userContext);
   const chatParticipants = Array.isArray(config.chatParticipants) ? config.chatParticipants : [];
   mountChatPanel(routes, userContext, chatParticipants);
-  mountBoardInteractions(storeApi, routes);
+  // The 3D board submits coordinate intent through the ordinary board
+  // controller, never through a replacement rules engine.
+  const boardInteractions = mountBoardInteractions(storeApi, routes);
+  window.vtt3dBridge = boardInteractions?.coordinateBridge ?? null;
+  window.dispatchEvent(new CustomEvent('vtt3d:bridge-ready'));
   mountDragRuler();
   mountDrawingTool({
     onDrawingChange: (edits, context) => storeApi.commitDrawingChanges(context.sceneId, edits),

@@ -74,9 +74,37 @@ export function createTokenInteractions({
 
   // --- selection box ---
 
+  // 3D board: the box is drawn on the screen and takes the tokens whose pictures it touches.
+  function screenBox() {
+    const host = globalThis.vtt3d?.active ? globalThis.vtt3d.overlayHost : null;
+    if (!host) return null;
+    let box = host.querySelector('#vtt3d-selection-box');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'vtt3d-selection-box';
+      box.className = 'vtt-board__selection-box';
+      box.hidden = true;
+      box.style.position = 'absolute';
+      host.append(box);
+    }
+    return box;
+  }
+
   function startSelectionBox(event) {
     if (!selectionBox || !viewState.mapLoaded) {
       return false;
+    }
+    if (screenBox()) {
+      viewState.selectionBoxState = {
+        pointerId: event.pointerId,
+        startLocal: { x: 0, y: 0 },
+        currentLocal: { x: 0, y: 0 },
+        startScreen: { x: event.clientX, y: event.clientY },
+        currentScreen: { x: event.clientX, y: event.clientY },
+        active: false,
+      };
+      try { mapSurface.setPointerCapture(event.pointerId); } catch (error) { /* the box still follows window events */ }
+      return true;
     }
 
     const localPoint = getLocalMapPoint(event);
@@ -103,6 +131,19 @@ export function createTokenInteractions({
   function updateSelectionBox(event) {
     const state = viewState.selectionBoxState;
     if (!state || !selectionBox) {
+      return;
+    }
+    const box = state.startScreen ? screenBox() : null;
+    if (box) {
+      state.currentScreen = { x: event.clientX, y: event.clientY };
+      const dx = state.currentScreen.x - state.startScreen.x, dy = state.currentScreen.y - state.startScreen.y;
+      if (!state.active && Math.hypot(dx, dy) >= 6) { state.active = true; box.hidden = false; }
+      if (!state.active) return;
+      const host = box.parentElement.getBoundingClientRect();
+      box.style.left = `${Math.min(state.startScreen.x, state.currentScreen.x) - host.left}px`;
+      box.style.top = `${Math.min(state.startScreen.y, state.currentScreen.y) - host.top}px`;
+      box.style.width = `${Math.abs(dx)}px`;
+      box.style.height = `${Math.abs(dy)}px`;
       return;
     }
 
@@ -141,6 +182,17 @@ export function createTokenInteractions({
     const state = viewState.selectionBoxState;
     if (!state || !state.active) {
       return [];
+    }
+    if (state.startScreen) {
+      const left = Math.min(state.startScreen.x, state.currentScreen.x), right = Math.max(state.startScreen.x, state.currentScreen.x);
+      const top = Math.min(state.startScreen.y, state.currentScreen.y), bottom = Math.max(state.startScreen.y, state.currentScreen.y);
+      const wanted = new Set();
+      for (const node of tokenLayer?.querySelectorAll('[data-placement-id]') || []) {
+        if (getComputedStyle(node).visibility === 'hidden') continue;
+        const rect = node.getBoundingClientRect();
+        if (rect.right > left && rect.left < right && rect.bottom > top && rect.top < bottom) wanted.add(node.dataset.placementId);
+      }
+      return (getRenderedPlacements() ?? []).filter((placement) => placement?.id && wanted.has(placement.id));
     }
 
     const minX = Math.min(state.startLocal.x, state.currentLocal.x);
@@ -224,6 +276,7 @@ export function createTokenInteractions({
 
     if (selectionBox) {
       selectionBox.hidden = true;
+      const box3d = screenBox(); if (box3d) box3d.hidden = true;
     }
     viewState.selectionBoxState = null;
 
@@ -257,6 +310,7 @@ export function createTokenInteractions({
 
     if (selectionBox) {
       selectionBox.hidden = true;
+      const box3d = screenBox(); if (box3d) box3d.hidden = true;
     }
     viewState.selectionBoxState = null;
   }

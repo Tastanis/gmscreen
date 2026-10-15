@@ -95,6 +95,7 @@ function tokenVisible(id){
  return isAlwaysVisibleAlly(p)||Boolean(sight?.(center(p),head(p,window.terrainPrototype.groundFor(p)),p));
 }
 function tick(){
+ if(window.vtt3dBoard){canvas.hidden=tokenView.hidden=true;document.documentElement.classList.remove('height-vision-active','vtt-player-visibility-pending');return;}
  if(document.hidden){requestAnimationFrame(tick);return;}
  const c=window.terrainContext?.(),wallApi=window.wallPrototype;
  if(c?.view.mapLoaded&&preparePlayerVisibility(c.state,{isGm:c.isGM,levelId:c.levelId}))renderFog(c.state);

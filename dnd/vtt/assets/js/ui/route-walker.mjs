@@ -9,8 +9,9 @@
 // far below and priced it as a long drop. So the ghost also uses stairs and ramps by the rule the
 // move uses (stair-walk.mjs, paired with FloorGeometry.php): it is carried along a ramp and is on
 // the other floor once it walks off the far end.
-import { walkFloorContact, cubeStepDown } from './floor-support.js';
-import { stairStep, nearStair } from './stair-walk.mjs';
+import { walkFloorContact, cubeStepDown, createFloorContactWalker, floorSupported, intersectsFloor, terrainFloorContact, PLATE_REACH } from './floor-support.js';
+import { stairStep, nearStair, stairCrossing, stairLane } from './stair-walk.mjs';
+import {floorElevations} from '../state/normalize/floor-elevation.js';
 
 /** True when the scene has any stair or ramp to follow. */
 export const hasStairs = (mapLevels) => !!(mapLevels?.baseStairs?.length || mapLevels?.levels?.some((level) => level?.stairs?.length));
@@ -91,4 +92,104 @@ export function createRouteWalker({ actor = null, surfaces = [], mapLevels = nul
     /** Where the ghost stands now; hand it to the next leg as `carried`. */
     get ghost() { return ghost; },
   };
+}
+
+/** A single submitted straight leg, sampled in its real direction. This opt-in
+ * sandbox trajectory shares native contact/stair rules; sample points never
+ * become separate moves that can reacquire an old floor after a drop. */
+export function traceSurfaceLeg({actor,end,surfaces=[],mapLevels=null,terrain=()=>0,standing=()=>0}={}){
+ const start={column:actor.column,row:actor.row},dx=end.column-start.column,dy=end.row-start.row;
+ const distance=Math.max(Math.abs(dx),Math.abs(dy)),count=Math.max(1,Math.ceil(distance)),steps=Math.min(8192,count*8);
+ // This private flag is carried only by preview ghosts between waypoints.
+ // Accepted placement data never receives it; the next command starts fresh.
+ // FloorGeometry gives a whole-command stair transition priority over ordinary
+ // box/cube contact, including later legs across the destination island.
+ let ghost={...actor},changedFloor=actor._trajectoryStairTransition===true,firedThisLeg=false;
+ const contactSurfaces=()=>changedFloor?surfaces.filter(s=>!s.boxTop&&!s.templateCube):surfaces;
+ const contactFor=p=>createFloorContactWalker(p,contactSurfaces(),mapLevels,terrain);
+ let contact=contactFor(ghost);
+ const cuts=id=>(mapLevels?.levels||[]).find(l=>l.id===id)?.cutouts||[],heights=floorElevations(mapLevels);
+ const plateAt=p=>surfaces.find(s=>s.kind==='floor'&&s.levelId===(p.levelId||'level-0')&&Math.abs(s.height-(heights.get(s.levelId)||0))<=.125+1e-6&&!(mapLevels?.levels||[]).find(l=>l.id===s.levelId)?.hidden&&intersectsFloor(p,s,cuts(s.levelId)));
+ let height=standing(ghost),samples=[{...start,height,placement:{...ghost}}];
+ if(distance<1e-9)return {samples,placement:ghost,height,stairExit:false};
+ for(let i=1;i<=steps;i++){
+  const point={column:start.column+dx*i/steps,row:start.row+dy*i/steps},before=ghost;
+  const stair=!changedFloor&&(ghost.levelId||'level-0')===(actor.levelId||'level-0')&&(ghost._floorTraversal||nearStair(ghost,point,mapLevels))?stairStep(ghost,point,mapLevels):null;
+  if(stair){
+   ghost={...ghost,...point,_floorTraversal:stair.fired?null:stair.traversal,_viaStair:true,...(stair.fired?{levelId:stair.levelId,_supportSurfaceId:null}:{})};
+   if(stair.fired){
+    changedFloor=true;firedThisLeg=true;ghost._trajectoryStairTransition=true;
+    const plate=plateAt(ghost);
+    if(plate)ghost._supportSurfaceId=plate.id;
+    contact=contactFor(ghost);
+   }else contact=null;
+   height=standing(ghost);
+  }else{
+   if(before._floorTraversal){
+    // Reversing through an entry may land on its original plate. A side exit
+    // does not gain a disconnected floor merely from its old level identity.
+    ghost={...before,...point,_floorTraversal:null,_supportSurfaceId:null};
+    const oldStair=(before.levelId==='level-0'?mapLevels?.baseStairs:(mapLevels?.levels||[]).find(l=>l.id===before.levelId)?.stairs)?.find(s=>s.id===before._floorTraversal.stairId);
+    const validEntry=oldStair&&before._floorTraversal.entry===(oldStair.direction==='down'?'green':'red');
+    const candidate=validEntry?plateAt(ghost):null;
+    const plate=candidate&&Math.abs(candidate.height-standing(before))<=PLATE_REACH+1e-6?candidate:null;
+    if(plate)ghost._supportSurfaceId=plate.id;
+    else ghost.levelId='level-0';
+    contact=contactFor(ghost);
+   }else ghost={...before,...point};
+   const surface=contact?.step(ghost)||(!changedFloor&&cubeStepDown(before,ghost,surfaces,mapLevels));
+   if(surface){ghost={...ghost,levelId:surface.levelId,_supportSurfaceId:surface.id};height=surface.height;}
+   else{
+    // The trajectory is physically unsupported. Its former floor is not a
+    // license to stand on an overhead plate encountered later in this leg.
+    ghost={...ghost,levelId:'level-0',_supportSurfaceId:null,_floorTraversal:null};height=terrain(ghost);
+   }
+  }
+  samples.push({...point,height,placement:{...ghost}});
+ }
+ return {samples,placement:ghost,height,stairExit:firedThisLeg};
+}
+
+/** Read-only endpoint compatibility check for the imported-floor sandbox.
+ * Mirrors FloorGeometry::move ordering: source-floor stairs over the WHOLE
+ * command first, whole-path native contact second, endpoint falling last.
+ * Unknown implicit legacy-floor support fails closed, never grants a move. */
+export function commandSurfaceEnding({actor,points,surfaces=[],mapLevels,terrain,standing}){
+ const levels=[{id:'level-0',cutouts:[]},...(mapLevels?.levels||[]).filter(l=>l.id!=='level-0').map((l,i)=>({...l,_index:i})).sort((a,b)=>(a.zIndex??a._index)-(b.zIndex??b._index)||a._index-b._index)];
+ const byId=new Map(levels.map(l=>[l.id,l])),heights=floorElevations(mapLevels),source=actor.levelId||'level-0',end=points.at(-1);
+ const width=actor.width||1,height=actor.height||1,path=points.map(p=>({x:p.column+width/2,y:p.row+height/2}));
+ let ghost={...actor,...end,levelId:source,_floorTraversal:null,_supportSurfaceId:null},changed=false,carried=false,fell=false;
+ const stairs=source==='level-0'?mapLevels?.baseStairs:byId.get(source)?.stairs;
+ if(!byId.get(source)?.hidden)for(const stair of stairs||[]){
+  if(!byId.has(stair.linkedLevelId)||stair.linkedLevelId===source||byId.get(stair.linkedLevelId)?.hidden)continue;
+  const crossing=stairCrossing(stairLane(path,stair,width,height),stair,actor._floorTraversal?.stairId===stair.id?actor._floorTraversal.entry:null);
+  if(crossing.fired){ghost.levelId=stair.linkedLevelId;changed=true;break;}
+  if(crossing.endsInside){ghost._floorTraversal={stairId:stair.id,entry:crossing.entry};carried=crossing.entry===(stair.direction==='down'?'green':'red');break;}
+ }
+ const contactResult=surface=>({known:true,placement:{...ghost,levelId:surface.levelId,_supportSurfaceId:surface.id,_floorTraversal:null},height:surface.height});
+ if(changed){
+  const landing=surfaces.filter(s=>s.kind==='floor'&&s.levelId===ghost.levelId&&!byId.get(s.levelId)?.hidden&&Math.abs(s.height-(heights.get(s.levelId)||0))<=.125+1e-6&&intersectsFloor(ghost,s,byId.get(s.levelId)?.cutouts||[])).sort((a,b)=>b.height-a.height)[0];
+  if(landing)return contactResult(landing);
+ }
+ if(!changed&&!carried&&!ghost._floorTraversal){
+  const contact=walkFloorContact(actor,{...actor,...end},points.slice(1,-1),surfaces,mapLevels,terrain)||cubeStepDown(actor,{...actor,...end},surfaces,mapLevels);
+  if(contact)return contactResult(contact);
+ }
+ if(!carried){
+  let index=levels.findIndex(l=>l.id===ghost.levelId);
+  if(index<0)return {known:false};
+  const original=index;
+  while(index>0){
+   const level=levels[index],supported=floorSupported({...ghost,levelId:level.id},surfaces,level.cutouts||[]);
+   if(supported===null)return {known:false};
+   if(!level.hidden&&supported)break;
+   index--;
+  }
+  if(index!==original){ghost.levelId=levels[index].id;ghost._floorTraversal=null;fell=true;}
+ }
+ if(ghost.levelId==='level-0'&&(!changed||fell)&&!carried&&!ghost._floorTraversal){
+  const contact=terrainFloorContact({...actor,...end},surfaces,mapLevels,terrain({...actor,...end}));
+  if(contact)return contactResult(contact);
+ }
+ return {known:true,placement:ghost,height:standing(ghost)};
 }

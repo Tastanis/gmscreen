@@ -49,6 +49,7 @@ import {
   updateExternalMeasurement,
   clearRulerSupplement,
   getCurrentMeasurementPoints,
+  getCurrentMeasurementPresentation,
   getCurrentMovementKind,
   flashShiftWarning,
   addExternalMeasurementNode,
@@ -494,6 +495,20 @@ export {
 export {shouldRenderWallDiagonalConnector, getWallDiagonalConnectorSides} from './wall-diagonal.js';
 
 export function mountBoardInteractions(store, routes = {}) {
+  // 3D board adapter (board3d/integration.mjs): read-only context and coordinate intents.
+  const coordinateListeners = new Set();
+  let coordinateNotifyQueued = false, coordinateMovePending = false, coordinateMovementRuler = null, coordinatePreview = null;
+  function notifyCoordinateView() {
+    if (coordinateNotifyQueued || !coordinateListeners.size) return;
+    coordinateNotifyQueued = true;
+    queueMicrotask(() => {
+      coordinateNotifyQueued = false;
+      const context = getCoordinateContext();
+      for (const listener of coordinateListeners) {
+        try { listener(context); } catch (error) { console.warn('[3D board] view listener failed', error); }
+      }
+    });
+  }
   const board = document.getElementById('vtt-board-canvas');
   const mapSurface = document.getElementById('vtt-map-surface');
   const mapTransform = document.getElementById('vtt-map-transform');
@@ -863,6 +878,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function patchTokenMovementNode(sceneId, placementId, placement) {
+    notifyCoordinateView();
     const state = boardApi.getState?.() ?? {};
     const activeSceneId = state.boardState?.activeSceneId ?? null;
     if (!tokenLayer || !viewState.mapLoaded || sceneId !== activeSceneId) {
@@ -875,10 +891,10 @@ export function mountBoardInteractions(store, routes = {}) {
     const current = state.boardState?.placements?.[sceneId]?.find(entry => entry?.id === placementId);
     const normalized = normalizePlacementForRender(current ?? placement);
     const viewerLevelId = getViewerLevelIdForCurrentUser(state, sceneId);
-    const presentation = normalized && resolveVisibleTokenPresentation(normalized, getActiveSceneTokenLevelState(state), {
+    const presentation = normalized && (isGmUser() || !normalized.hidden) && resolveVisibleTokenPresentation(normalized, getActiveSceneTokenLevelState(state), {
       viewerLevelId,
-      gmViewing: isGmUser(),
-      isCellFogged: isGmUser() ? null : createFogChecker(state, viewerLevelId),
+      gmViewing: isGmUser() || Boolean(window.vtt3dBoard),
+      isCellFogged: isGmUser() || window.vtt3dBoard ? null : createFogChecker(state, viewerLevelId),
     });
     // Visibility changes need node creation/removal. Keep the cheap transform
     // path for ordinary movement with unchanged floor/fog presentation.
@@ -968,6 +984,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function reconcileTokenMovementSnapshot(snapshot, context = {}) {
+    notifyCoordinateView();
     fallReview.wake();
     applyConfirmedRequestedTests(snapshot);
     boardApi.updateStateSilently?.((draft) => {
@@ -1036,6 +1053,7 @@ export function mountBoardInteractions(store, routes = {}) {
   const PARTY_VITALS_SETTLE_MS = 3000;
   let partyVitalsStamp = '', partyVitalsBusy = false;
   function applyConfirmedPlacementBatch(snapshot, mutations, context = {}) {
+    notifyCoordinateView();
     for (const mutation of mutations) {
       // When a token's Stamina last changed, from any page: readPartyVitals leaves such a hero alone for a moment.
       if (mutation?.placementId && mutation.changedFields?.some((field) => field === 'hp' || field === '*')) {
@@ -1296,6 +1314,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function applyConfirmedBoardDomain(snapshot, changeSet, context = {}) {
+    notifyCoordinateView();
     boardApi.updateStateSilently?.((draft) => {
       tokenMovementRuntime?.overlayBoardState(draft.boardState);
       if (changeSet.grid || changeSet.sceneRouting) syncConfirmedSceneGrid(draft, snapshot);
@@ -1434,10 +1453,10 @@ export function mountBoardInteractions(store, routes = {}) {
     return { refunded: true };
   }
 
-  function promptTeleport(from,to,range=null){
+  function promptTeleport(from,to,range=null,preferredSurface=null){
     const context=window.terrainContext(),active=window.terrainPrototype?.active;
     const startHeight=active?terrainPrototype.groundFor(from):from.flightHeight??teleportFloorElevations(context.state.boardState.sceneState?.[context.state.boardState.activeSceneId]?.mapLevels).get(from.levelId||'level-0')??0;
-    return chooseTeleportHeight({from,to,range,context,startHeight,combatActive,ground:(x,y)=>active?terrainPrototype.heightAt((context.view.gridOffsets.left||0)+x*context.view.gridSize,(context.view.gridOffsets.top||0)+y*context.view.gridSize):0});
+    return chooseTeleportHeight({from,to,range,context,startHeight,combatActive,preferredSurface,ground:(x,y)=>active?terrainPrototype.heightAt((context.view.gridOffsets.left||0)+x*context.view.gridSize,(context.view.gridOffsets.top||0)+y*context.view.gridSize):0});
   }
 
   // Route cost for the per-turn movement counter: the same walk the ruler draws,
@@ -1447,7 +1466,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!zones?.routeCost || !from || !to) return null;
     const kind = movementKind || getCurrentMovementKind();
     if (kind === 'teleport') return null;
-    const ruler = getCurrentMeasurementPoints();
+    const ruler = coordinateMovementRuler ?? getCurrentMeasurementPoints();
     const followsRuler = ruler.length > 0 && Math.abs(ruler[0].column - from.column) < 0.01 && Math.abs(ruler[0].row - from.row) < 0.01;
     const points = followsRuler ? ruler.map((point) => ({ column: point.column, row: point.row })) : [{ column: from.column, row: from.row }];
     const last = points[points.length - 1];
@@ -1462,6 +1481,8 @@ export function mountBoardInteractions(store, routes = {}) {
       const origin = move ? canonical?.[move.placementId] : null, mapLayer = document.getElementById('vtt-map-transform');
       const met = origin ? window.wallPrototype?.wallMet?.(origin, { column: move.column, row: move.row, path: (move.path || []).slice(1, -1) }) : null;
       if (!met || !mapLayer) return false;
+      // 3D board: the piece is outlined where it stands, from its base to its top.
+      if (window.vtt3d?.active) return Boolean(window.vtt3d.flashWall?.(met));
       const grid = viewState.gridSize, left = viewState.gridOffsets?.left || 0, top = viewState.gridOffsets?.top || 0, terrain = window.terrainPrototype?.active ? window.terrainPrototype : null;
       const at = (q) => (terrain?.project ? terrain.project(left + q.x * grid, top + q.y * grid, met.base) : { x: left + q.x * grid, y: top + q.y * grid });
       return Boolean(flashWall([at(met.a), at(met.b)], { layer: mapLayer, size: viewState.mapPixelSize, grid }));
@@ -1519,7 +1540,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if(movementKind==='teleport'){
       for(const move of moves){const origin=canonical[move.placementId];if(!origin)return;
         updatePlacementById(move.placementId,p=>Object.assign(p,origin),{syncBoard:false});
-        const choice=await promptTeleport(origin,move);if(!choice||sceneId!==getActiveSceneId()){renderTokens(boardApi.getState?.()??{},tokenLayer,viewState);return;}
+        const choice=await promptTeleport(origin,move,null,move.pickedSurface??null);if(!choice||sceneId!==getActiveSceneId()){renderTokens(boardApi.getState?.()??{},tokenLayer,viewState);return;}
         move.teleportChoice=choice;
       }
     }
@@ -1648,6 +1669,7 @@ export function mountBoardInteractions(store, routes = {}) {
           if (status) status.textContent += ' Shift crossed difficult terrain, which the rules do not allow.';
           flashShiftWarning();
         }
+        return { accepted: true, operationIds: results.map(result => result?.event?.operationId).filter(Boolean) };
       })
       .catch((error) => {
         // A walk refused by a wall is not a fault of the connection: show which wall piece it met and say how
@@ -1919,7 +1941,7 @@ export function mountBoardInteractions(store, routes = {}) {
   tokenMovementController = createTokenMovementController({
     mapTransform,
     routes,
-    getViewState: () => viewState,
+    getViewState: () => coordinatePreview ? { ...viewState, dragState: { cursorSquare: coordinatePreview.positions } } : viewState,
     getBoardState: () => boardApi.getState?.() ?? {},
     getCombatContext: () => ({
       active: combatActive,
@@ -1974,7 +1996,7 @@ export function mountBoardInteractions(store, routes = {}) {
       }))) return null;
       return { tokenId, sceneId, from: last.from, to: last.to };
     },
-    cancelActiveDrag: () => endTokenDrag({ commit: false }),
+    cancelActiveDrag: () => { endCoordinateMovementPreview(); document.dispatchEvent(new CustomEvent('vtt3d:movement-preview-cancelled')); endTokenDrag({ commit: false }); },
     isUndoSuppressed: () =>
       isDrawModeActive() ||
       isDrawingInProgress() ||
@@ -7504,7 +7526,8 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    const levelId = getActiveTokenPlacementLevelId(state);
+    const droppedOn = window.vtt3d?.active ? window.vtt3d.clientToMap(event.clientX, event.clientY) : null;
+    const levelId = (droppedOn?.surfaceId && typeof droppedOn.levelId === 'string' ? droppedOn.levelId : null) || getActiveTokenPlacementLevelId(state);
     if (levelId) {
       placement.levelId = levelId;
     }
@@ -7819,6 +7842,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function notifySelectionChanged() {
+    notifyCoordinateView();
     keyboardMovementQueue.syncContext();
     if (groupButton) {
       const canGroup = selectedTokenIds.size > 1;
@@ -8016,12 +8040,25 @@ export function mountBoardInteractions(store, routes = {}) {
 
   // The same point with the height of what is drawn under the pointer ({x, y, height}), for what a click puts down.
   function getLocalMapPointAt(event) {
+    // 3D board: the point the pointer lands on, with its height.
+    if (window.vtt3d?.active) {
+      const hit = window.vtt3d.clientToMap(event.clientX, event.clientY);
+      return hit ? { x: hit.x, y: hit.y, height: hit.height } : null;
+    }
     const raw = getLocalMapPoint(event, { terrain: false });
     if (!raw) return null;
     return window.terrainPrototype?.unprojectAt?.(raw) ?? { ...(getLocalMapPoint(event) ?? raw), height: 0 };
   }
   // `standingOn` (a token id) reads the pointer at the height that token stands at: see unproject in terrain-prototype.js.
   function getLocalMapPoint(event, { terrain = true, standingOn = null } = {}) {
+    // 3D board: the map point under the pointer on the 3D surfaces, or on the
+    // level that token stands at when `standingOn` names one.
+    if (window.vtt3d?.active) {
+      const own = standingOn ? getPlacementFromStore(String(standingOn)) : null;
+      const plane = own ? window.terrainPrototype?.groundFor?.(own) : null;
+      const hit = window.vtt3d.clientToMap(event.clientX, event.clientY, Number.isFinite(plane) ? { plane } : {});
+      return hit ? { x: hit.x, y: hit.y, height: hit.height, levelId: hit.levelId } : null;
+    }
     const pointer = getPointerPosition(event, mapSurface);
     const scale = Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
     const translation = viewState.translation ?? { x: 0, y: 0 };
@@ -9458,6 +9495,12 @@ export function mountBoardInteractions(store, routes = {}) {
   // The same for several tokens at once: the view is centred on the middle of them all, and each sends out its
   // pulse. Returns how many of them are drawn on this page (a token on a floor not being viewed is not).
   function centerOnBoardTokens(placementIds) {
+    // 3D board: the camera turns to the tokens; the pulses mark where they stand.
+    if (globalThis.vtt3d?.active) {
+      const shown = globalThis.vtt3d.focusTokens?.(placementIds) ?? [];
+      shown.forEach(point => mapPings.pulseAt(point.x, point.y, point.z));
+      return shown.length;
+    }
     const wanted = new Set(placementIds);
     const rects = Array.from(tokenLayer.querySelectorAll('[data-placement-id]'))
       .filter(node => wanted.has(node.dataset.placementId) && !node.hidden)
@@ -9736,8 +9779,8 @@ export function mountBoardInteractions(store, routes = {}) {
       const levelPlacement = { ...placement, column, row, width, height };
       const presentation = resolveVisibleTokenPresentation(levelPlacement, tokenLevelState, {
         viewerLevelId,
-        gmViewing,
-        isCellFogged,
+        gmViewing: gmViewing || Boolean(window.vtt3dBoard),
+        isCellFogged: window.vtt3dBoard ? null : isCellFogged,
       });
       if (!presentation) {
         return;
@@ -15402,6 +15445,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function findRenderedPlacementAtPoint(event) {
+    if (event?.vtt3dPick) return event.vtt3dPick.placement;
     if (!renderedPlacements.length) {
       return null;
     }
@@ -15437,7 +15481,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     if (
-      !window.terrainPrototype?.active && (localX < offsetLeft ||
+      !window.terrainPrototype?.active && !window.vtt3d?.active && (localX < offsetLeft ||
       localX > offsetLeft + innerWidth ||
       localY < offsetTop ||
       localY > offsetTop + innerHeight)
@@ -15492,10 +15536,12 @@ export function mountBoardInteractions(store, routes = {}) {
       const bottom = centerY + halfH;
 
       // Terrain sandbox token hit rectangles retain the existing cell/fog authority checks.
-      const terrainNode=window.terrainPrototype?.active ? Array.from(tokenLayer.children).find(node=>node.dataset.placementId===placement.id) : null;
+      // On the 3D board (as with terrain) a token is where its projected picture is drawn.
+      const byPicture=window.terrainPrototype?.active||window.vtt3d?.active;
+      const terrainNode=byPicture ? Array.from(tokenLayer.children).find(node=>node.dataset.placementId===placement.id) : null;
       const terrainRect=terrainNode?.getBoundingClientRect();
       const terrainHit=terrainRect && event.clientX>=terrainRect.left && event.clientX<terrainRect.right && event.clientY>=terrainRect.top && event.clientY<terrainRect.bottom;
-      if (window.terrainPrototype?.active ? terrainHit : (pointX >= left && pointX < right && pointY >= top && pointY < bottom)) {
+      if (byPicture ? terrainHit : (pointX >= left && pointX < right && pointY >= top && pointY < bottom)) {
         if(terrainHit)pointCell={column:Math.floor(column+(event.clientX-terrainRect.left)/terrainRect.width*width),row:Math.floor(row+(event.clientY-terrainRect.top)/terrainRect.height*height)};
         if (!gmViewing) {
           const interactable = getTokenLevelPresentation(placement, tokenLevelState, {
@@ -15770,11 +15816,14 @@ export function mountBoardInteractions(store, routes = {}) {
       return null;
     }
 
-    const pointer = getPointerPosition(event, surface);
+    // 3D board: the square under the pointer on the 3D surfaces, and the floor it is on.
+    const dropHit = window.vtt3d?.active ? window.vtt3d.clientToMap(event.clientX, event.clientY) : null;
+    if (window.vtt3d?.active && !dropHit) return null;
+    const pointer = dropHit ? null : getPointerPosition(event, surface);
     const scale = Number.isFinite(view.scale) && view.scale !== 0 ? view.scale : 1;
     const translation = view.translation ?? { x: 0, y: 0 };
-    const localX = (pointer.x - (Number.isFinite(translation.x) ? translation.x : 0)) / scale;
-    const localY = (pointer.y - (Number.isFinite(translation.y) ? translation.y : 0)) / scale;
+    const localX = dropHit ? dropHit.x : (pointer.x - (Number.isFinite(translation.x) ? translation.x : 0)) / scale;
+    const localY = dropHit ? dropHit.y : (pointer.y - (Number.isFinite(translation.y) ? translation.y : 0)) / scale;
 
     if (!Number.isFinite(localX) || !Number.isFinite(localY)) {
       return null;
@@ -16884,6 +16933,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function handleAutomationTargetRequest(event) {
+    notifyCoordinateView();
     const detail = event?.detail ?? {};
     pendingAutomationTarget = {
       targetConfig: detail.targetConfig && typeof detail.targetConfig === 'object'
@@ -17086,6 +17136,13 @@ export function mountBoardInteractions(store, routes = {}) {
 
     const hit = findRenderedPlacementAtPoint(event);
     const placement = hit?.id ? getPlacementFromStore(hit.id) : null;
+    return acceptAutomationTargetPlacement(placement);
+  }
+
+  // Both the ordinary pointer hit and the 3D renderer use this existing target
+  // selection resolution. No simulated event or alternate ability execution.
+  function acceptAutomationTargetPlacement(placement) {
+    if (!pendingAutomationTarget) return false;
     if (!placement) {
       cancelPendingAutomationTarget('Target selection canceled.');
       return true;
@@ -17112,10 +17169,12 @@ export function mountBoardInteractions(store, routes = {}) {
       name,
       placement: getAutomationPlacementSnapshot(placement),
     });
+    notifyCoordinateView();
     return true;
   }
 
   function handleAutomationAreaRequest(event) {
+    notifyCoordinateView();
     const detail = event?.detail ?? {};
     cancelPendingAutomationArea();
     pendingAutomationArea = {
@@ -17181,7 +17240,8 @@ export function mountBoardInteractions(store, routes = {}) {
           height: maxRow - minRow + 1,
           squares: squares.map((s) => ({ column: s.column, row: s.row })),
           shape: 'wall',
-          levelId: getActiveTokenPlacementLevelId(boardApi.getState?.() ?? {}) || BASE_MAP_LEVEL_ID,
+          // The floor the wall was placed on (3D board), else the floor the page is on.
+          levelId: result.levelId || getActiveTokenPlacementLevelId(boardApi.getState?.() ?? {}) || BASE_MAP_LEVEL_ID,
         };
         // Find creatures whose footprint overlaps any of the wall squares.
         const affected = getPlacementsForActiveScene().filter((p) =>
@@ -17331,6 +17391,12 @@ export function mountBoardInteractions(store, routes = {}) {
     event.preventDefault();
     const request = pendingAutomationArea;
     const cell = getAutomationGridCellFromEvent(event) || request.previewCell;
+    return commitAutomationAreaCell(cell);
+  }
+
+  function commitAutomationAreaCell(cell) {
+    const request = pendingAutomationArea;
+    if (!request) return false;
     if (!cell) return true;
     const { width, height } = getAutomationAreaDimensions(request.targetConfig);
     const affected = findAutomationAreaTargets(cell, width, height, request.targetConfig);
@@ -17349,6 +17415,7 @@ export function mountBoardInteractions(store, routes = {}) {
       })),
     });
     updateStatus(`${affected.length} target${affected.length === 1 ? '' : 's'} selected in area.`);
+    notifyCoordinateView();
     return true;
   }
 
@@ -17424,6 +17491,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function clearAutomationAreaOverlay() {
+    notifyCoordinateView();
     pendingAutomationArea?.hoverIds?.forEach((id) => setAutomationAreaHoverToken(id, false));
     automationAreaOverlay?.remove();
     automationAreaOverlay = null;
@@ -18621,6 +18689,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function startAutomationMoveSelection(request) {
+    notifyCoordinateView();
     if(pendingAutomationMove?.committing) {request.reject?.(new Error('Another movement is still resolving its effects.'));return;}
     cancelPendingAutomationMove();
     const targetSnapshot = getAutomationPlacementSnapshot(request.targetPlacement);
@@ -19079,6 +19148,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function getAutomationGridCellFromEvent(event) {
+    if (event?.vtt3dPick) return event.vtt3dPick.cell;
     if (pendingAutomationMove) {
       const button = event.target instanceof Element ? event.target.closest('[data-movement-cell]') : null;
       if (button && automationMoveOverlay?.contains(button)) {
@@ -19167,6 +19237,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function clearAutomationMoveOverlay() {
+    notifyCoordinateView();
     automationMoveOverlay?.remove();
     automationMoveOverlay = null;
     pendingAutomationMove = null;
@@ -19390,6 +19461,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function cancelPendingAutomationTarget(message) {
+    notifyCoordinateView();
     if (!pendingAutomationTarget) {
       return;
     }
@@ -19403,6 +19475,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function skipPendingAutomationTarget(message) {
+    notifyCoordinateView();
     if (!pendingAutomationTarget) {
       return;
     }
@@ -19416,6 +19489,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function donePendingAutomationTarget(message) {
+    notifyCoordinateView();
     if (!pendingAutomationTarget) {
       return;
     }
@@ -24188,6 +24262,10 @@ function createTemplateTool() {
   let placementState = null;
   let activeDrag = null;
   let activeRotation = null;
+  // 3D board: set only while vtt3dTemplateTool.handle() forwards an event (see the end of createTemplateTool).
+  let point3d = null;
+  let cube3d = null;
+  const templatePoint = (event) => point3d ?? getLocalMapPoint(event);
   let menuController = null;
   let outsideClickHandler = null;
   let colorIndex = 0;
@@ -24349,6 +24427,9 @@ function createTemplateTool() {
 
 
   function hydrateFromSerializedTemplates(entries) {
+    // 3D board: the chosen template (and its picked cube) stays chosen when the board state comes back after a
+    // save, so its handles stay where they are.
+    const keptId = globalThis.vtt3d?.active ? selectedId : null, keptCube = selectedWallSquareKey;
     colorIndex = 0;
     // Clear all shrink timers for existing shapes
     shrinkTimers.forEach((timer) => clearTimeout(timer));
@@ -24371,6 +24452,16 @@ function createTemplateTool() {
     colorIndex = shapes.length;
     templateBaseline = serializeShapesList();
     selectedId = null;
+    const kept = keptId ? shapes.find((shape) => shape.id === keptId) : null;
+    if (kept) {
+      selectedId = kept.id;
+      kept.elements.root.classList.add('is-selected');
+      kept.elements.node.classList.remove('is-shrunk');
+      selectedWallSquareKey = kept.type === 'wall' && kept.squares?.some((square) => wallSquareKey(square) === keptCube) ? keptCube : null;
+      kept.selectedSquareKey = selectedWallSquareKey;
+    } else if (keptId) {
+      selectedWallSquareKey = null;
+    }
     refreshWallBreakPanel();
     updateLayerVisibility();
   }
@@ -24563,13 +24654,17 @@ function createTemplateTool() {
     }
 
     if ((event.key === 'Delete' || event.key === 'Backspace') && selectedId) {
-      removeSelectedTemplate();
+      // 3D board: the first press asks ("Remove?"), a second within 3 s removes (board3d/layers/templates.mjs).
+      if (globalThis.vtt3d?.active && globalThis.vtt3dLayers?.templates?.requestRemove) globalThis.vtt3dLayers.templates.requestRemove(selectedId);
+      else removeSelectedTemplate();
       event.preventDefault();
       return true;
     }
 
-    if (event.key === 'r' && selectedId) {
-      rotateRectangle(selectedId, event.shiftKey ? -45 : 45);
+    // With Shift held the key reads 'R'.
+    if ((event.key === 'r' || event.key === 'R') && selectedId) {
+      const step = globalThis.vtt3d?.active ? 90 : 45;
+      rotateRectangle(selectedId, event.shiftKey ? -step : step);
       event.preventDefault();
       return true;
     }
@@ -24603,6 +24698,13 @@ function createTemplateTool() {
 
     event.preventDefault();
     event.stopPropagation();
+
+    // 3D board: a template belongs to the floor clicked first (a floating plate's level, else the ground), as a
+    // drawing does, not to the floor the page is on.
+    if (globalThis.vtt3d?.active && placementState.level3d === undefined) {
+      const hit = globalThis.vtt3d.clientToMap(event.clientX, event.clientY);
+      placementState.level3d = hit ? (hit.rampId ? BASE_MAP_LEVEL_ID : hit.levelId || BASE_MAP_LEVEL_ID) : null;
+    }
 
     if (placementState.type === 'wall') {
       handleWallPlacement(gridPoint);
@@ -24937,7 +25039,7 @@ function createTemplateTool() {
   function finalizePlacement(config) {
     const templateLevelId = typeof config.levelId === 'string' && config.levelId.trim()
       ? config.levelId.trim()
-      : getActiveTokenPlacementLevelId() ?? BASE_MAP_LEVEL_ID;
+      : placementState?.level3d ?? getActiveTokenPlacementLevelId() ?? BASE_MAP_LEVEL_ID;
     clearPreview();
     restoreTemplateStatus();
     placementState = null;
@@ -25012,10 +25114,10 @@ function createTemplateTool() {
   // board instead of a transient persistent-zone overlay. Unlike addShape this
   // does NOT select/activate the new shape, so it won't hijack the board's
   // selection or open the template editor mid-automation.
-  function createPermanentWallFromSquares(squares, wallColor, wallBreak = {}) {
+  function createPermanentWallFromSquares(squares, wallColor, wallBreak = {}, placedLevelId = null) {
     const clamped = clampWallSquares(squares, viewState);
     if (!clamped.length) return null;
-    const levelId = getActiveTokenPlacementLevelId() ?? BASE_MAP_LEVEL_ID;
+    const levelId = placedLevelId ?? getActiveTokenPlacementLevelId() ?? BASE_MAP_LEVEL_ID;
     const shape = createShape('wall', { squares: clamped, wallColor, ...wallBreakFields(wallBreak), levelId, persistent: true });
     shapes.push(shape);
     layer.appendChild(shape.elements.root);
@@ -25130,13 +25232,7 @@ function createTemplateTool() {
       node.addEventListener('pointerup', handleNodePointerUp);
       node.addEventListener('pointercancel', handleNodePointerCancel);
       node.addEventListener('click', (event) => handleNodeClick(event, shape));
-      if (type === 'wall') node.addEventListener('dblclick', (event) => {
-        // Pointer capture retargets clicks to the wall button; use the cube picked on pointerdown.
-        if (placementState || !canManageShape(shape) || selectedId !== shape.id || !selectedWallSquareKey) return;
-        event.preventDefault(); event.stopPropagation();
-        selectShape(shape.id); selectWallCube(event, shape);
-        void removeSelectedTemplate();
-      });
+      if (type === 'wall') node.addEventListener('dblclick', (event) => handleWallDoubleClick(event, shape));
       if (rotateHandle) {
         rotateHandle.addEventListener('pointerdown', (event) => startRectangleRotation(event, shape));
         rotateHandle.addEventListener('pointermove', (event) => updateRectangleRotation(event, shape));
@@ -25249,7 +25345,8 @@ function createTemplateTool() {
     showBar(panel.repairButton, shape.squares.some((square) => square.broken === true), '');
     // Beside the wall it belongs to, clear of the turn tracker and the panels along the top.
     showBar(panel.root, true);
-    const place = placeBar({ wall: shape.elements.root.getBoundingClientRect(), bar: panel.root.getBoundingClientRect(), viewport: { width: window.innerWidth, height: window.innerHeight } });
+    const wallRect = (globalThis.vtt3d?.active && globalThis.vtt3dLayers?.templates?.screenRect?.(shape.id)) || shape.elements.root.getBoundingClientRect();
+    const place = placeBar({ wall: wallRect, bar: panel.root.getBoundingClientRect(), viewport: { width: window.innerWidth, height: window.innerHeight } });
     panel.root.style.left = `${place.left}px`;
     panel.root.style.top = `${place.top}px`;
   }
@@ -25328,17 +25425,30 @@ function createTemplateTool() {
     commitShapes();
   }
 
+  function handleWallDoubleClick(event, shape) {
+    // Pointer capture retargets clicks to the wall button; use the cube picked on pointerdown.
+    if (placementState || !canManageShape(shape) || selectedId !== shape.id || !selectedWallSquareKey) return;
+    event.preventDefault(); event.stopPropagation();
+    selectShape(shape.id); selectWallCube(event, shape);
+    void removeSelectedTemplate();
+  }
+
   function wallPointerCell(event) {
     if (placementState && placementState.type !== 'wall') return null;
     const cube = event.target?.closest?.('[data-wall-square]');
+    if (!cube && globalThis.vtt3d?.active) {
+      // 3D board: a cube under the pointer (board3d/layers/templates.mjs), so a click on one stacks on it.
+      const hit = globalThis.vtt3dLayers?.templates?.cubeAt?.(event.clientX, event.clientY);
+      return hit ? { column: hit.column, row: hit.row } : null;
+    }
     return cube ? { column: Number(cube.dataset.wallColumn), row: Number(cube.dataset.wallRow) } : null;
   }
 
   function selectWallCube(event, shape) {
     if (shape.type !== 'wall') return;
     const cube = event.target?.closest?.('[data-wall-square]');
-    if (!cube && event.type !== 'pointerdown') return;
-    selectedWallSquareKey = cube?.dataset.wallSquare ?? null;
+    if (!cube && !cube3d && event.type !== 'pointerdown') return;
+    selectedWallSquareKey = cube3d ?? cube?.dataset.wallSquare ?? null;
     shape.selectedSquareKey = selectedWallSquareKey;
     shape.elements.root.querySelectorAll('[data-wall-square]').forEach(tile => {
       tile.classList.toggle('is-selected-cube', tile.dataset.wallSquare === selectedWallSquareKey);
@@ -25421,7 +25531,7 @@ function createTemplateTool() {
     selectShape(shape.id);
     activateTemplate(shape);
 
-    const localPoint = getLocalMapPoint(event);
+    const localPoint = templatePoint(event);
     const pivot = rectangleAnchorToLocal(shape, viewState) ?? rectangleCenterToLocal(shape, viewState);
     if (!localPoint || !pivot) {
       return;
@@ -25451,7 +25561,7 @@ function createTemplateTool() {
     event.preventDefault();
     event.stopPropagation();
 
-    const localPoint = getLocalMapPoint(event);
+    const localPoint = templatePoint(event);
     const pivot = rectangleAnchorToLocal(shape, viewState) ?? rectangleCenterToLocal(shape, viewState);
     if (!localPoint || !pivot) {
       return;
@@ -25537,7 +25647,7 @@ function createTemplateTool() {
       return;
     }
 
-    if (event.key === 'r' && shape.type === 'rectangle') {
+    if ((event.key === 'r' || event.key === 'R') && shape.type === 'rectangle') {
       event.preventDefault();
       event.stopPropagation();
       selectShape(shape.id);
@@ -25565,7 +25675,7 @@ function createTemplateTool() {
     selectWallCube(event, shape);
     activateTemplate(shape);
 
-    const localPoint = getLocalMapPoint(event);
+    const localPoint = templatePoint(event);
     if (!localPoint) {
       return;
     }
@@ -25607,7 +25717,7 @@ function createTemplateTool() {
       return;
     }
 
-    const localPoint = getLocalMapPoint(event);
+    const localPoint = templatePoint(event);
     if (!localPoint) {
       return;
     }
@@ -26395,15 +26505,17 @@ function createTemplateTool() {
       // proper textured visual instead of vanishing after the last square.
       if (typeof placementState.automationCallback === 'function') {
         const cb = placementState.automationCallback;
+        // 3D board: the floor clicked first (a template's own rule); null on the 2D board.
+        const levelId = placementState.level3d ?? null;
         placementState = null;
         clearPreview();
         restoreTemplateStatus();
         updateLayerVisibility();
         if (persistStructure) {
-          createPermanentWallFromSquares(finalSquares, wallColor, placementValues);
+          createPermanentWallFromSquares(finalSquares, wallColor, placementValues, levelId);
         }
         try {
-          cb({ squares: finalSquares, wallColor });
+          cb({ squares: finalSquares, wallColor, levelId });
         } catch (err) {
           console.warn('[VTT] automation wall placement callback failed', err);
         }
@@ -26603,6 +26715,65 @@ function createTemplateTool() {
     return typeof value === 'number' && Number.isFinite(value) && value > 0;
   }
 
+  // 3D board (board3d/layers/templates.mjs). It draws the live shapes (read only) and has its own copies of the
+  // node, the rotate handle and the wall cubes; their events come here to the handlers above. `mapPoint` is the
+  // pointer read on the template's own floor; `cubeKey` is the wall cube under the pointer.
+  const handlers3d = {
+    'node-pointerdown': handleNodePointerDown,
+    'node-pointermove': handleNodePointerMove,
+    'node-pointerup': (event) => handleNodePointerUp(event),
+    'node-pointercancel': (event) => handleNodePointerCancel(event),
+    'node-click': handleNodeClick,
+    'node-keydown': handleNodeKeydown,
+    'node-dblclick': handleWallDoubleClick,
+    'rotate-pointerdown': startRectangleRotation,
+    'rotate-pointermove': updateRectangleRotation,
+    'rotate-pointerup': endRectangleRotation,
+    'rotate-pointercancel': endRectangleRotation,
+    // The 3D board's ⟳ button: a quarter turn (Shift for the other way).
+    'rotate-90': (event, shape) => rotateRectangle(shape.id, event?.shiftKey ? -90 : 90),
+    // The 3D board's × after its second press: the cube picked, or the whole template; no further question.
+    'remove': (event, shape) => {
+      if (!canManageShape(shape)) return;
+      selectShape(shape.id);
+      if (shape.type !== 'wall' || !selectedWallSquareKey) { removeShape(shape.id); return; }
+      const remaining = shape.squares.filter((square) => wallSquareKey(square) !== selectedWallSquareKey);
+      if (!remaining.length) { removeShape(shape.id); return; }
+      shape.squares = remaining;
+      shape.selectedSquareKey = selectedWallSquareKey = null;
+      render(viewState);
+      commitShapes();
+    },
+  };
+  window.vtt3dTemplateTool = {
+    get shapes() { return shapes; },
+    get preview() { return previewShape; },
+    get selectedId() { return selectedId; },
+    get selectedWallSquareKey() { return selectedWallSquareKey; },
+    get placement() { return placementState; },
+    get dragging() { return activeDrag?.shapeId ?? null; },
+    get rotating() { return activeRotation?.shapeId ?? null; },
+    canManage: (shape) => canManageShape(shape),
+    handle(kind, event, shapeId, { mapPoint = null, cubeKey = null, levelId = null } = {}) {
+      const shape = shapes.find((item) => item.id === shapeId), handler = handlers3d[kind];
+      if (!shape || !handler) return false;
+      // Carried onto another floor while it is dragged (the floor under the pointer); saved when it is let go.
+      if (levelId && activeDrag?.shapeId === shape.id && shape.levelId !== levelId && canManageShape(shape)) {
+        shape.levelId = levelId;
+        shape.elements.root.dataset.templateLevelId = levelId;
+      }
+      point3d = mapPoint;
+      cube3d = cubeKey;
+      try {
+        handler(event, shape);
+      } finally {
+        point3d = null;
+        cube3d = null;
+      }
+      return true;
+    },
+  };
+
   return {
     render,
     reset,
@@ -26640,7 +26811,236 @@ function createTemplateTool() {
     return { width, height, formatted: `${width}x${height}` };
   }
 
+  function coordinatePlacement(id) {
+    const placement = getPlacementFromStore(String(id || ''));
+    return placement && (isGmUser() || !isAutomationPlacementHidden(placement)) ? placement : null;
+  }
+
+  function getCoordinateContext() {
+    const state = boardApi.getState?.() ?? {}, sceneId = getActiveSceneId();
+    const confirmed = tokenMovementRuntime?.getConfirmedSnapshot?.();
+    const sceneConfig = confirmed?.state?.sceneConfig?.[sceneId] ?? state.boardState?.sceneState?.[sceneId] ?? {};
+    const placements = getPlacementsForActiveScene().filter(p => isGmUser() || !isAutomationPlacementHidden(p)).map(p => {
+      const effective = tokenMovementRuntime?.getEffectivePlacement?.(sceneId, p.id) ?? p;
+      return { ...JSON.parse(JSON.stringify(effective)), canMove: canCurrentUserMovePlacement(p), movementLeft: tokenMovementController?.getMovementLeft?.(p.id) ?? null };
+    });
+    return {
+      sceneId, placements, selectedIds: [...selectedTokenIds], user: { ...state.user }, isGM: isGmUser(),
+      sceneConfig, environment: sceneConfig.environment ?? {}, mapLevels: sceneConfig.mapLevels ?? {},
+      levels: sceneConfig.mapLevels?.levels ?? [], grid: state.grid ?? {},
+      viewerLevelId: getViewerLevelIdForCurrentUser(state, sceneId) || BASE_MAP_LEVEL_ID,
+      view: { gridSize: viewState.gridSize, gridOffsets: { ...viewState.gridOffsets }, mapPixelSize: { ...viewState.mapPixelSize }, mapInsets: { ...(viewState.mapInsets ?? {}) }, mapLoaded: viewState.mapLoaded },
+      busy: coordinateMovePending,
+      inputMode: isMeasureModeActive() ? 'measure' : isDrawModeActive() ? 'draw' : null,
+      targetMode: pendingAutomationTarget ? 'token' : pendingAutomationArea ? 'area' : pendingAutomationMove ? 'move' : null,
+      abilityGuide: getCoordinateAbilityGuide(),
+    };
+  }
+
+  function getCoordinateAbilityGuide() {
+    if (pendingAutomationMove) {
+      const r = pendingAutomationMove;
+      return { kind: 'move', sceneId: r.sceneId, levelId: r.targetSnapshot.levelId, source: { ...r.sourceSnapshot }, target: { ...r.targetSnapshot }, movementKind: r.movementKind, verb: r.baseVerb, ownMove: r.ownMove, distance: r.effectiveDistance, committing: Boolean(r.committing), legalCells: (r.legalCells || []).map(p => ({ ...p })), previewCell: r.previewCell ? { ...r.previewCell } : null };
+    }
+    if (pendingAutomationArea) {
+      const r = pendingAutomationArea;
+      return { kind: 'area', ...getAutomationAreaDimensions(r.targetConfig), shape: r.targetConfig.shape || 'cube', source: r.targetConfig.sourcePlacement ?? null, distance: r.targetConfig.distance ?? null, levelId: getActiveTokenPlacementLevelId(boardApi.getState?.() ?? {}) || BASE_MAP_LEVEL_ID, previewCell: r.previewCell ? { ...r.previewCell } : null, targetIds: [...r.hoverIds] };
+    }
+    if (pendingAutomationTarget) return { kind: 'token', source: pendingAutomationTarget.targetConfig.sourcePlacement ?? null, distance: pendingAutomationTarget.targetConfig.distance ?? null, excludeTargetIds: [...(pendingAutomationTarget.targetConfig.excludeTargetIds || [])] };
+    return null;
+  }
+
+  function coordinateAbilityCell(point) {
+    if (!Number.isFinite(point?.column) || !Number.isFinite(point?.row)) throw new TypeError('Ability pick requires finite canonical coordinates.');
+    return clampPlacementToBounds(Math.floor(point.column), Math.floor(point.row), pendingAutomationMove?.targetSnapshot.width || 1, pendingAutomationMove?.targetSnapshot.height || 1);
+  }
+
+  function selectCoordinatePlacement(id, { additive = false, toggle = false } = {}) {
+    if (!coordinatePlacement(id)) return false;
+    if (!additive && !toggle) selectedTokenIds.clear();
+    if (toggle && selectedTokenIds.has(id)) selectedTokenIds.delete(id); else selectedTokenIds.add(id);
+    notifySelectionChanged();
+    return true;
+  }
+
+  // Reuse the ordinary ruler and combat allowance preview. This session is
+  // read-only: accepted movement still goes through moveFromCoordinates below.
+  function endCoordinateMovementPreview() {
+    if (!coordinatePreview) return;
+    coordinatePreview = null;
+    cancelExternalMeasurement();
+    tokenMovementController?.handleDragEnd({ commit: false });
+  }
+
+  function captureCoordinateMovementPreview() {
+    if (!coordinatePreview?.destination) return null;
+    const original=coordinatePreview.original, start=measurementPointFromToken(original);
+    if(!start)return null;
+    const points=getCurrentMeasurementPoints().map(p=>({column:p.column+original.column-start.column,row:p.row+original.row-start.row}));
+    const destination=coordinatePreview.destination;
+    if(!points.length)points.push({column:original.column,row:original.row});
+    const last=points[points.length-1];
+    if(last.column!==destination.column||last.row!==destination.row)points.push({column:destination.column,row:destination.row});
+    return {placementId:coordinatePreview.id,...destination,waypoints:points.slice(1,-1)};
+  }
+
+  function previewCoordinateMovement({ placementId, column, row, surfaceElevation, levelId=null, surfaceId=null, rampId=null } = {}) {
+    if (coordinateMovePending || pendingAutomationTarget || pendingAutomationArea || pendingAutomationMove
+      || !Number.isFinite(column) || !Number.isFinite(row)) { endCoordinateMovementPreview(); return false; }
+    const original = coordinatePlacement(placementId), sceneId = getActiveSceneId();
+    if (!original || !canCurrentUserMovePlacement(original) || keyboardMovementQueue.busy()) { endCoordinateMovementPreview(); return false; }
+    if (coordinatePreview && (coordinatePreview.id !== placementId || coordinatePreview.sceneId !== sceneId)) endCoordinateMovementPreview();
+    if (!coordinatePreview) {
+      const start = measurementPointFromToken(original);
+      if (start && Number.isFinite(surfaceElevation)) start.surfaceElevation = window.terrainPrototype?.groundFor?.(original) ?? 0;
+      if (!start || !beginExternalMeasurement(start, { allowInactive: true, actor:original })) return false;
+      coordinatePreview = { id: placementId, sceneId, original: { ...original }, positions: new Map([[placementId, { ...original }]]) };
+      tokenMovementController?.handleDragStart({ primaryToken: original, originalPositions: new Map([[placementId, { ...original }]]) });
+    }
+    const destination = { ...coordinatePreview.original, ...clampPlacementToBounds(column, row, original.width || 1, original.height || 1) };
+    if(rampId){const z=window.terrainPrototype?.rampTargetHeight?.(rampId,destination);if(Number.isFinite(z))surfaceElevation=z;}
+    coordinatePreview.destination={column:destination.column,row:destination.row,...(Number.isFinite(surfaceElevation)?{surfaceElevation}:{}),levelId:typeof levelId==='string'?levelId:null,surfaceId:typeof surfaceId==='string'?surfaceId:null,rampId:typeof rampId==='string'?rampId:null};
+    coordinatePreview.positions.set(placementId, destination);
+    const point = measurementPointFromToken(destination);
+    if (point && Number.isFinite(surfaceElevation)) point.surfaceElevation = surfaceElevation;
+    if(point){point.levelId=coordinatePreview.destination.levelId;point.surfaceId=coordinatePreview.destination.surfaceId;point.rampId=coordinatePreview.destination.rampId;}
+    updateExternalMeasurement(point);
+    tokenMovementController?.handleDragMove({ preview: coordinatePreview.positions });
+    const intent=captureCoordinateMovementPreview();
+    const predictedLanding=['walk','shift'].includes(getCurrentMovementKind())?window.terrainPrototype?.walkEnding?.(original,[{column:original.column,row:original.row},...(intent?.waypoints||[]),{column:destination.column,row:destination.row}]):null;
+    const validSurface=predictedLanding&&Number.isFinite(intent?.surfaceElevation)?window.terrainPrototype?.pickedSurfaceReached?.(predictedLanding,intent):null;
+    return { route: getCurrentMeasurementPresentation(),...intent,predictedLanding,validSurface };
+  }
+
+  async function moveFromCoordinates({ placementId, column, row, movementKind = 'walk', waypoints, surfaceElevation, levelId=null, surfaceId=null, rampId=null } = {}) {
+    if(rampId){const original=coordinatePlacement(placementId);if(original){const z=window.terrainPrototype?.rampTargetHeight?.(rampId,{...original,column,row});if(Number.isFinite(z))surfaceElevation=z;}}
+    const captured=captureCoordinateMovementPreview();
+    if(captured?.placementId===placementId&&captured.column===column&&captured.row===row
+      &&(!Number.isFinite(surfaceElevation)||Math.abs(surfaceElevation-captured.surfaceElevation)<.01)
+      &&(!levelId||levelId===captured.levelId)&&(!surfaceId||surfaceId===captured.surfaceId)&&(!rampId||rampId===captured.rampId)){
+      waypoints??=captured.waypoints;surfaceElevation??=captured.surfaceElevation;levelId??=captured.levelId;surfaceId??=captured.surfaceId;rampId??=captured.rampId;
+    }
+    endCoordinateMovementPreview();
+    if (coordinateMovePending) return { accepted: false, reason: 'movement-pending' };
+    if (pendingAutomationTarget || pendingAutomationArea || pendingAutomationMove) return { accepted: false, reason: 'ability-selection-pending' };
+    if (!['walk', 'shift', 'forced', 'teleport'].includes(movementKind)) throw new TypeError('Invalid movement kind.');
+    waypoints??=[];
+    if (!Number.isFinite(column) || !Number.isFinite(row) || !Array.isArray(waypoints) || waypoints.length > 128
+      || waypoints.some(p => !Number.isFinite(p?.column) || !Number.isFinite(p?.row))) throw new TypeError('Movement requires finite canonical coordinates.');
+    const sceneId = getActiveSceneId(), original = coordinatePlacement(placementId);
+    if (!sceneId || !original || !canCurrentUserMovePlacement(original)) return { accepted: false, reason: 'not-permitted' };
+    if (keyboardMovementQueue.busy()) {
+      holdForOpenQuestion();
+      return { accepted: false, reason: 'movement-pending' };
+    }
+    const width = original.width || 1, height = original.height || 1;
+    const destination = clampPlacementToBounds(column, row, width, height);
+    if(rampId&&['walk','shift'].includes(movementKind)){
+      const z=window.terrainPrototype?.rampTargetHeight?.(rampId,{...original,...destination});
+      if(!Number.isFinite(z))return {accepted:false,reason:'The picked ramp is unknown or does not contain the destination.'};
+      surfaceElevation=z;
+    }
+    const changingTeleportSurface=movementKind==='teleport'&&Number.isFinite(surfaceElevation)
+      && (Math.abs(surfaceElevation-(window.terrainPrototype?.groundFor?.(original)??0))>.01 || (typeof levelId==='string'&&levelId!==(original.levelId||BASE_MAP_LEVEL_ID)));
+    if (destination.column === original.column && destination.row === original.row&&!changingTeleportSurface) return { accepted: false, reason: 'unchanged' };
+    if(!waypoints.length&&['walk','shift'].includes(movementKind)){
+      const start=measurementPointFromToken(original),end=measurementPointFromToken({...original,...destination});
+      if(end){end.surfaceElevation=surfaceElevation;end.levelId=levelId;end.surfaceId=surfaceId;end.rampId=rampId;}
+      // The 3D board's route planner already chose this route for the preview; a
+      // straight planned route must not gain other corners at submission.
+      // A long route may still be searching: give it a bounded moment to finish.
+      let planned=null;
+      if(window.vtt3dActive&&window.vtt3dPlanner)for(let i=0;i<60&&(!planned||planned.status==='pending');i++)planned=window.vtt3dPlanner.plan(original,{...destination,surfaceElevation,levelId,surfaceId,rampId},movementKind);
+      const corners=planned?.status==='found'?planned.corners.map(p=>({column:p.column-original.column+start.column,row:p.row-original.row+start.row}))
+        :start&&end?window.terrainPrototype?.stairRoute?.(start,end,original,movementKind):null;
+      if(corners?.length)waypoints=corners.map(p=>({column:p.column+original.column-start.column,row:p.row+original.row-start.row}));
+    }
+    const members = selectedTokenIds.has(placementId) ? [...selectedTokenIds].map(coordinatePlacement).filter(p => p && canCurrentUserMovePlacement(p)) : [original];
+    const originalPositions = new Map(members.map(p => [p.id, JSON.parse(JSON.stringify(p))]));
+    const deltaColumn = destination.column - original.column, deltaRow = destination.row - original.row;
+    const moves = members.map(p => ({ placementId: p.id, ...clampPlacementToBounds(p.column + deltaColumn, p.row + deltaRow, p.width || 1, p.height || 1) }));
+    const ruler = [{ column: original.column, row: original.row }, ...waypoints.map(p => clampPlacementToBounds(p.column, p.row, width, height)), destination];
+    if(['walk','shift'].includes(movementKind)&&!['fly','hover'].includes(original.movementMode)&&Number.isFinite(surfaceElevation)){
+      const ending=window.terrainPrototype?.walkEnding?.(original,ruler);
+      const wrongHeight=Number.isFinite(ending?.height)&&Math.abs(ending.height-surfaceElevation)>.55;
+      // The native preview ghost retains its old floor when it steps off an
+      // unsupported edge; its computed height already describes the ground.
+      // Only a positively acquired support identifies a conflicting floor.
+      const wrongLevel=levelId&&ending?.placement?._supportSurfaceId&&!ending.placement._floorTraversal&&(ending.placement.levelId||BASE_MAP_LEVEL_ID)!==levelId;
+      const wrongRamp=rampId&&window.terrainPrototype?.pickedSurfaceReached?.(ending,{rampId,surfaceElevation})!==true;
+      if(wrongHeight||wrongLevel||wrongRamp||ending?.canonicalCompatible===false){
+        const reason='The walking route does not reach the picked surface. Follow its stairs or vine, or choose teleport.';
+        updateStatus(reason);return {accepted:false,reason,predictedLanding:ending};
+      }
+    }
+    if(movementKind==='teleport'&&Number.isFinite(surfaceElevation))moves.find(p=>p.placementId===placementId).pickedSurface={surfaceElevation,levelId:typeof levelId==='string'?levelId:null,surfaceId:typeof surfaceId==='string'?surfaceId:null};
+    coordinateMovePending = true; coordinateMovementRuler = ruler;
+    if (!selectedTokenIds.has(placementId)) selectCoordinatePlacement(placementId);
+    notifyCoordinateView();
+    try {
+      tokenMovementController?.handleDragStart({ primaryToken: original, originalPositions });
+      tokenMovementController?.handleDragEnd({ commit: true, moved: true });
+      const result = await commitCanonicalTokenMoves({ sceneId, moves, source: 'drag', originalPositions, movementKind, drawnRuler: ruler });
+      const placement = tokenMovementRuntime?.getConfirmedSnapshot?.()?.state?.placements?.[sceneId]?.[placementId] ?? null;
+      return { accepted: result?.accepted === true, sceneId, movementOperationIds: result?.operationIds ?? [], placement: placement ? JSON.parse(JSON.stringify(placement)) : null };
+    } finally {
+      tokenMovementController?.handleDragEnd({ commit: false });
+      coordinateMovementRuler = null; coordinateMovePending = false; notifyCoordinateView();
+    }
+  }
+
+  const coordinateBridge = {
+    getContext: getCoordinateContext,
+    select: selectCoordinatePlacement,
+    previewMovement: previewCoordinateMovement,
+    captureMovementPreview: captureCoordinateMovementPreview,
+    endMovementPreview: endCoordinateMovementPreview,
+    move: moveFromCoordinates,
+    openSettings(id, { clientX = window.innerWidth / 2, clientY = window.innerHeight / 2 } = {}) {
+      if (!selectCoordinatePlacement(id)) return false;
+      return openTokenSettingsById(id, clientX, clientY);
+    },
+    target(id) {
+      if (!pendingAutomationTarget) return false;
+      const placement = coordinatePlacement(id);
+      if (!placement) return true;
+      return acceptAutomationTargetPlacement(placement);
+    },
+    // 3D board: the Skip buttons are shown above the 3D view; their press runs the same skip.
+    skipAbility(event) {
+      if (pendingAutomationArea) return handleAutomationAreaPointerDown(event);
+      if (pendingAutomationMove) return handleAutomationMovePointerDown(event);
+      return false;
+    },
+    pickAbility(point) {
+      if (pendingAutomationTarget) return coordinateBridge.target(point?.placementId);
+      if (!pendingAutomationArea && !pendingAutomationMove) return false;
+      const cell = coordinateAbilityCell(point);
+      if (pendingAutomationArea) return commitAutomationAreaCell(cell);
+      if (!cell) return true;
+      // The pick goes through the same press handler as a click on the 2D board.
+      const vtt3dPick = { cell, placement: point?.placementId ? coordinatePlacement(point.placementId) : null };
+      return handleAutomationMovePointerDown({ button: 0, target: null, preventDefault() {}, vtt3dPick });
+    },
+    previewAbility(point) {
+      if (!pendingAutomationArea && !pendingAutomationMove) return false;
+      const cell = coordinateAbilityCell(point);
+      if (pendingAutomationArea) updateAutomationAreaPreview(cell);
+      else updateAutomationMovePreview(cell);
+      notifyCoordinateView(); return true;
+    },
+    getTokenElement(id) { return [...tokenLayer.querySelectorAll('[data-placement-id]')].find(node => node.dataset.placementId === id) ?? null; },
+    heightFor(id) { const p = coordinatePlacement(id); return p ? window.terrainPrototype?.groundFor?.(p) ?? 0 : null; },
+    subscribe(listener) {
+      if (typeof listener !== 'function') throw new TypeError('Expected a listener.');
+      coordinateListeners.add(listener); listener(getCoordinateContext());
+      return () => coordinateListeners.delete(listener);
+    },
+  };
+  boardApi.subscribe?.(notifyCoordinateView);
+
   return {
+    coordinateBridge,
     getViewState: () => viewState,
     __testing: {
       openTokenSettingsById,
@@ -26678,6 +27078,15 @@ function normalizeSceneState(raw = {}) {
 }
 
 function movementFromKey(key) {
+  // 3D board: arrows follow the camera. Up is away from the viewer, snapped to the nearest grid direction.
+  const turned = window.vtt3d?.active ? window.vtt3d.gridDirections?.() : null;
+  if (turned) {
+    const { up, right } = turned;
+    if (key === 'ArrowUp') return { ...up };
+    if (key === 'ArrowDown') return { x: -up.x, y: -up.y };
+    if (key === 'ArrowRight') return { ...right };
+    if (key === 'ArrowLeft') return { x: -right.x, y: -right.y };
+  }
   switch (key) {
     case 'ArrowUp':
       return { x: 0, y: -1 };

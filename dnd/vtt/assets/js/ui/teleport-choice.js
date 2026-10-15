@@ -22,8 +22,10 @@ export function teleportSurfaces({from,to,context,ground}){
  const unique=legalChoices.filter((c,i)=>Number.isFinite(c.height)&&legalChoices.findIndex(v=>v.height===c.height)===i).sort((a,b)=>a.height-b.height);
  return unique;
 }
-export function chooseTeleportHeight({from,to,range=null,context,ground,startHeight,combatActive=false}){
+export function chooseTeleportHeight({from,to,range=null,context,ground,startHeight,combatActive=false,preferredSurface=null}){
  const unique=teleportSurfaces({from,to,context,ground}),x=to.column+(from.width||1)/2,y=to.row+(from.height||1)/2;
+ const picked=preferredSurface&&unique.find(c=>Math.abs(c.height-preferredSurface.surfaceElevation)<.55&&(!preferredSurface.levelId||c.levelId===preferredSurface.levelId)&&(!preferredSurface.surfaceId||c.surfaceId===preferredSurface.surfaceId));
+ if(preferredSurface&&Number.isFinite(preferredSurface.surfaceElevation)&&!picked)throw new Error('The picked surface is not a supported teleport landing. Choose a supported floor or ground surface.');
  const display=z=>Math.round(z)+1,air=['fly','hover'].includes(from.movementMode);
  if(!combatActive&&range===null&&!air&&unique.length===1&&Math.abs(unique[0].height-startHeight)<1e-6)return Promise.resolve({height:unique[0].height,range});
  return new Promise(resolve=>{
@@ -42,12 +44,13 @@ export function chooseTeleportHeight({from,to,range=null,context,ground,startHei
    const button=document.createElement('button');button.type='button';button.className='vtt-teleport-choice__location';
    const label=document.createElement('span');label.textContent=choice.label;const height=document.createElement('strong');height.textContent=display(choice.height);button.append(label,height);
    const legal=allowed(choice.height);button.classList.toggle('is-out-of-range',!legal);button.title=legal?`${choice.label}, height ${display(choice.height)}`:'Out of range';
+   if(choice===picked){button.dataset.pickedSurface='true';button.style.outline='2px solid currentColor';button.setAttribute('aria-label',`${choice.label}, height ${display(choice.height)}, picked surface`);}
    button.onclick=()=>finish({height:choice.height,range,allowOutOfRange:!legal});list.append(button);controls.push({button,legal});
   }
   const custom=document.createElement('div');custom.className='vtt-teleport-choice__custom';
   const label=document.createElement('label');label.textContent='Custom height';
   const input=document.createElement('input');input.type='number';input.step='1';input.setAttribute('aria-label','Teleport destination height');
-  const preferred=unique.find(c=>c.levelId===(from.levelId||'level-0'))||unique[0];input.value=display(preferred?.height??startHeight);label.append(input);
+  const preferred=picked||unique.find(c=>c.levelId===(from.levelId||'level-0'))||unique[0];input.value=display(preferred?.height??startHeight);label.append(input);
   const go=document.createElement('button');go.type='button';go.textContent='Go';custom.append(label,go);
   const warning=document.createElement('div');warning.className='vtt-teleport-choice__warning';warning.setAttribute('aria-live','polite');
   function customHeight(){const value=input.valueAsNumber;return unique.find(c=>display(c.height)===value)?.height??value-1;}
@@ -62,6 +65,11 @@ export function chooseTeleportHeight({from,to,range=null,context,ground,startHei
   dialog.addEventListener('cancel',e=>{e.preventDefault();finish(null);});
   dialog.append(header,info,list,custom,warning);document.body.append(dialog);
   function position(){
+   // 3D board: beside the destination square as the 3D view draws it.
+   const board3d=window.vtt3d?.active?window.vtt3dRenderer:null;
+   if(board3d){const canvasRect=board3d.canvas?.getBoundingClientRect(),q=board3d.project({x,y,z:window.vtt3d.helpers.groundAt(x,y)});
+    if(canvasRect&&q){const cx=canvasRect.left+q.x,cy=canvasRect.top+q.y,gap=40,box=dialog.getBoundingClientRect();let left=cx+gap;if(left+box.width>innerWidth-12)left=cx-gap-box.width;
+     dialog.style.left=`${Math.max(12,Math.min(innerWidth-box.width-12,left))}px`;dialog.style.top=`${Math.max(12,Math.min(innerHeight-box.height-12,cy-box.height/2))}px`;return;}}
    const transform=document.getElementById('vtt-map-transform'),rect=transform?.getBoundingClientRect(),view=context.view;
    const sx=rect&&transform.offsetWidth?rect.width/transform.offsetWidth:1,sy=rect&&transform.offsetHeight?rect.height/transform.offsetHeight:1;
    const cx=rect?rect.left+((view.gridOffsets?.left||0)+x*view.gridSize)*sx:innerWidth/2;

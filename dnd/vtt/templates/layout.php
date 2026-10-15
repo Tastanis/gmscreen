@@ -9,6 +9,9 @@ $jsonScriptFlags = JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP |
 require_once __DIR__ . '/../lib/ModuleAssets.php';
 require_once __DIR__ . '/../lib/RubbleImages.php';
 $moduleMap = ModuleAssets::importMap(__DIR__ . '/../assets/js', $assetVersion);
+// The 3D board's modules are versioned like the rest; 'three' is its rendering library.
+$moduleMap['imports'] += ModuleAssets::importMap(__DIR__ . '/../board3d', $assetVersion, '/dnd/vtt/board3d/')['imports'];
+$moduleMap['imports']['three'] = '/dnd/vtt/board3d/lib/three.module.js?v=' . $assetVersion;
 // Pictures laid over broken walls: whatever is in the rubble folder, found by file name.
 $rubbleImages = RubbleImages::urls(__DIR__ . '/../assets/images/rubble', 'assets/images/rubble');
 
@@ -19,6 +22,7 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
 <html lang="en"<?= empty($config['isGM']) ? ' class="vtt-player-visibility-pending"' : '' ?>>
 <head>
     <meta charset="utf-8" />
+    <script>window.vtt3dBoard = true;</script>
     <style>.vtt-player-visibility-pending #vtt-map-transform{opacity:0!important;pointer-events:none!important}</style>
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -101,5 +105,6 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
     <script type="module" src="assets/js/ui/terrain-zones-overlay.js?v=<?= $assetVersion ?>"></script>
     <script type="module" src="assets/js/ui/wall-rubble-overlay.js?v=<?= $assetVersion ?>"></script>
     <script type="module" src="assets/js/ui/floating-shadows.js?v=<?= $assetVersion ?>"></script>
+    <script type="module" src="/dnd/vtt/board3d/integration.mjs?v=<?= $assetVersion ?>"></script>
 </body>
 </html>
