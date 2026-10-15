@@ -6,6 +6,7 @@ import {
   normalizeRiderExecutions,
   normalizeStoredConditionRiders,
 } from './condition-riders.js';
+import { storedMiniModel } from '../../ui/mini-model.js';
 
 export function normalizePlacements(raw = {}) {
   if (!raw || typeof raw !== 'object') {
@@ -196,6 +197,12 @@ export function normalizePlacementEntry(entry) {
 
   if (monsterId) {
     normalized.monsterId = monsterId;
+  }
+
+  // A 3D mini (docs/vtt-3d-minis.md) rides on the placement itself, so players see it too.
+  const model = storedMiniModel(entry.model);
+  if (model) {
+    normalized.model = model;
   }
 
   if (stackOrder !== null) {

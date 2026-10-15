@@ -9,6 +9,8 @@ import {rampHeight} from '../assets/js/ui/imported-ramps.mjs';
 import {createWallOverlayLayer} from './wall-overlay.mjs';
 import {createTerrainBrushLayer} from './terrain-brush.mjs';
 import {buildAreaVolume} from './area-volume.mjs';
+import {createMiniLayer} from './minis.mjs';
+import {normalizeMiniModel} from '../assets/js/ui/mini-model.js';
 
 // The 3D board. It draws the scene and the tokens; every rule, command and
 // panel stays the VTT's own. The 2D map layer stays in place, transparent, on
@@ -38,7 +40,7 @@ async function mount(){
   let found=0;for(const r of roofs)if(art.roofs.has(r.id))found++;return found>=art.roofs.size*.8;
  }
 
- let context=bridge.getContext(),view=null,data=null,effects=null,canvas=null,builtKey='',building=null;
+ let context=bridge.getContext(),view=null,data=null,effects=null,minis=null,miniIds=new Set(),canvas=null,builtKey='',building=null;
  let clickMoveTokenId=null,hoverPointer=null,held=null,drag=null,lastTime=performance.now(),lastTokenSignature='',hoverSignature='',shownLevel=null;
 
  function pictureRect(){
@@ -83,10 +85,12 @@ async function mount(){
   try{
    const useArt=key.startsWith('art:'),nextData=withStructure(useArt?art.data:pictureScene()),nextCanvas=document.createElement('canvas');nextCanvas.tabIndex=-1;
    const nextView=await createSceneView({canvas:nextCanvas,sceneData:nextData,groundPicture:useArt?null:pictureRect()});
-   if(view){cancelDrag();stopLayers();effects?.dispose?.();view.dispose();canvas?.remove();}
+   if(view){cancelDrag();stopLayers();effects?.dispose?.();minis?.dispose();view.dispose();canvas?.remove();}
    host.append(nextCanvas);canvas=nextCanvas;view=nextView;data=nextData;builtKey=key;shownLevel=null;lastTokenSignature='';fieldShown=-1;fieldAt=0;
    view.setTokenBodiesVisible(false);view.setLevel(-1);view.setVision([],false);view.resize();
    effects=createEffectOverlays({scene:view.scene,heightFor:id=>bridge.heightFor(id)});startLayers();
+   // 3D minis: a token whose placement names a model stands on the board as that model.
+   minis=createMiniLayer(view.scene,{onLoaded:()=>{lastPlaceKey='';}});miniIds=new Set();
    const own=!context.isGM&&(context.placements?.find(p=>p.visionOwners?.includes(String(context.user?.name||'').toLowerCase()))||context.placements?.find(p=>p.canMove));
    if(own)focus(own.id);else view.home();
    document.dispatchEvent(new CustomEvent('vtt3d:scene-built',{detail:{sceneId:context.sceneId,art:useArt}}));
@@ -159,7 +163,7 @@ async function mount(){
  function stackOrderOf(id){const value=Number(find(id)?.stackOrder);return Number.isFinite(value)?value:0;}
  function selected(){return find(context.selectedIds?.[0]);}
  function levelIndex(levelId){return Math.max(0,data?.levels?.findIndex(l=>l.id===levelId)??0);}
- function world(p){const z=bridge.heightFor(p.id);return {id:p.id,x:p.column+(p.width||1)/2,y:p.row+(p.height||1)/2,z:Number.isFinite(z)?z:0,width:p.width||1,height:p.height||1,color:p.color||p.borderColor||(p.team==='enemy'?'#d39184':'#a9d6c7'),level:levelIndex(p.levelId)};}
+ function world(p){const z=bridge.heightFor(p.id);return {id:p.id,x:p.column+(p.width||1)/2,y:p.row+(p.height||1)/2,z:Number.isFinite(z)?z:0,width:p.width||1,height:p.height||1,color:p.color||p.borderColor||(p.team==='enemy'?'#d39184':'#a9d6c7'),level:levelIndex(p.levelId),model:normalizeMiniModel(p.model)};}
  function destination(hit,p){return {column:Math.max(0,Math.round(hit.x-(p.width||1)/2)),row:Math.max(0,Math.round(hit.y-(p.height||1)/2))};}
  function movementKind(e){return dragMovementKind(e||{});}
  const pickAtClient=(x,y,options)=>view?.pick({clientX:x,clientY:y},options)??null;
@@ -313,8 +317,11 @@ async function mount(){
    const records=recordsCache.records,signature=JSON.stringify([records,context.selectedIds]);if(signature!==lastTokenSignature){lastTokenSignature=signature;view.setTokens(records,context.selectedIds?.[0]);}
    // The ruler on the board, whether it measures a held token or the Measure tool.
    view.setMovementRoute(getCurrentMeasurementPresentation());
-   effects?.update(context);for(const [name,layer] of layers){try{layer?.update?.(context,dt);}catch(error){console.error('[VTT 3D] layer',name,error);layers.delete(name);}}view.render(dt);
+   effects?.update(context);for(const [name,layer] of layers){try{layer?.update?.(context,dt);}catch(error){console.error('[VTT 3D] layer',name,error);layers.delete(name);}}
    const recordById=new Map(records.map(p=>[p.id,p]));if(held&&recordById.has(held.id))recordById.set(held.id,{...recordById.get(held.id),...held});view.setTethers(tethers([...recordById.values()]));
+   // Minis stand where their tokens are drawn (a held token where it would land), on the floors shown.
+   if(minis){const nextMinis=minis.update([...recordById.values()].filter(p=>p.model&&(shownLevel===null||shownLevel<0||p.level<=shownLevel)),dt);if(nextMinis.size!==miniIds.size||[...nextMinis].some(id=>!miniIds.has(id))){miniIds=nextMinis;lastPlaceKey='';}if(minis.moved)view.renderer.shadowMap.needsUpdate=true;}
+   view.render(dt);
    const {width,height}=view.viewport();
    // Nothing to place again while the camera, the tokens and the floor cut stay as they were.
    const camera=view.camera,cameraKey=camera.matrixWorld.elements.join(',')+'|'+camera.projectionMatrix.elements[0]+'|'+width+'x'+height;
@@ -330,7 +337,14 @@ async function mount(){
     const shared=spread.get(p.id);if(shared)foot.x+=shared.offset*size*.55;
     // Badges, HP bars and labels are sized in token units (board.css --tok-unit), so they scale with the token.
     node.style.setProperty('--tok-unit',`${(size/(64*Math.max(p.width,p.height))).toFixed(3)}px`);
-    node.style.setProperty('--vtt3d-x',`${foot.x-size/2}px`);node.style.setProperty('--vtt3d-y',`${Math.min(foot.y-size*.12,top.y+size*.1)-size}px`);node.style.setProperty('--vtt3d-size',`${size}px`);
+    // A mini's card reaches from its base to the top of the model, so the whole model can be
+    // picked and dragged, and the HP bar (above the card) stands over its head.
+    const miniTop=miniIds.has(p.id)?minis?.topOf(p.id):null;
+    if(Number.isFinite(miniTop)){const head=view.project({...p,z:p.z+miniTop}),bottom=foot.y+size*.12,cardTop=Math.min(head.y,bottom-size*.5);
+     node.style.setProperty('--vtt3d-x',`${foot.x-size/2}px`);node.style.setProperty('--vtt3d-y',`${cardTop}px`);node.style.setProperty('--vtt3d-size',`${size}px`);node.style.setProperty('--vtt3d-mini-height',`${bottom-cardTop}px`);}
+    else{node.style.setProperty('--vtt3d-x',`${foot.x-size/2}px`);node.style.setProperty('--vtt3d-y',`${Math.min(foot.y-size*.12,top.y+size*.1)-size}px`);node.style.setProperty('--vtt3d-size',`${size}px`);node.style.removeProperty('--vtt3d-mini-height');}
+    // A token drawn as a mini keeps its card (HP bar, badges, picking) but not its picture.
+    if(miniIds.has(p.id))node.dataset.vtt3dMini='true';else delete node.dataset.vtt3dMini;
     node.style.setProperty('--vtt3d-visible',(shownLevel===null||shownLevel<0||p.level<=shownLevel)&&foot.visible&&foot.x>-size&&foot.y>-size&&foot.x<width+size&&foot.y<height+size?'visible':'hidden');node.style.setProperty('--vtt3d-order',String(Math.round(10000+foot.y)*4+(shared?shared.order:0)));node.dataset.terrainHeight=String(p.z);
    }
    }

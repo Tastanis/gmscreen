@@ -9,6 +9,7 @@ same as before. Vision and fog are still in the code but switched off.
 - Gravity Orchard keeps its 3D look, to be improved later. Every other scene is its map picture
   laid flat on the ground. Old scenes do not matter.
 - Tokens stand facing the camera on a simple mini base. This is the first step toward 3D minis.
+  A monster with a 3D mini stands as its model on that base: see [3D minis](vtt-3d-minis.md).
 - The camera opens tilted. Wheel zooms; right-drag grabs the ground and pulls it as far as the
   pointer moves; middle-drag turns the camera.
 - These all work at once: holding a token (left), turning (middle), panning (right) and zooming
@@ -39,7 +40,8 @@ same as before. Vision and fog are still in the code but switched off.
 | `dnd/vtt/board3d/area-volume.mjs` | The see-through boxes for templates, zones and ability areas. |
 | `dnd/vtt/board3d/wall-overlay.mjs` | Named line overlays: walls, stairs, rubble, the flash when a wall stops a move. |
 | `dnd/vtt/board3d/scene.json`, `assets/` | Gravity Orchard's 3D art and textures. |
-| `dnd/vtt/board3d/lib/` | three.js r160, loaded through the import map as `three`. |
+| `dnd/vtt/board3d/minis.mjs`, `mini-preview.mjs` | 3D minis on the board, and the Monster Creator's preview ([3D minis](vtt-3d-minis.md)). |
+| `dnd/vtt/board3d/lib/` | three.js r160, loaded through the import map as `three`; `lib/addons/` has its glTF loader (unchanged r160 examples). |
 
 The page loads `board3d/integration.mjs` from `templates/layout.php`. The `board3d` modules are
 in the import map with the build number, so a new build refreshes them like every other module.

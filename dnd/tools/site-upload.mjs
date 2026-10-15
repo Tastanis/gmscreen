@@ -7,6 +7,9 @@
 //   node dnd/tools/site-upload.mjs map "C:\maps\Gravity Orchard.vttmap" --folder Prismari --replace
 //   node dnd/tools/site-upload.mjs creature "C:\creatures\orchard" --tab "Gravity Orchard" --create-tab --replace
 //
+// A creature's 3D mini goes with it: the .glb its file names in "model": {"file": ...}, or else
+// the .glb next to it with the same name (orchard-tender.json + orchard-tender.glb). See docs/vtt-3d-minis.md.
+//
 // The key is read from a file outside this repository and sent in a request header over HTTPS.
 // This tool never prints it, never puts it in an address, and never writes it anywhere else.
 
@@ -234,9 +237,25 @@ async function creatureFiles(target) {
   return names.map((name) => path.join(target, name));
 }
 
-/** Reads and checks creature files on this PC. Returns {ready: [{file, monster, requestedId}], refused: [{file, reason}]}. */
+/**
+ * The 3D mini that goes with a creature file, or null: the .glb the file names in "model.file"
+ * (relative to the creature file), or else the .glb beside it with the same name. A file that
+ * already names a stored model (mini_….glb) needs nothing sent.
+ */
+export async function creatureModelFile(file, parsed) {
+  const named = parsed?.model ?? parsed?.monster?.model;
+  const wanted = typeof named?.file === 'string' ? named.file.trim() : '';
+  const mini = await import(pathToFileURL(path.join(repository, 'dnd/vtt/assets/js/ui/mini-model.js')).href);
+  if (wanted && mini.MINI_MODEL_FILE_PATTERN.test(wanted)) return null;
+  const candidate = wanted ? path.resolve(path.dirname(file), wanted) : path.join(path.dirname(file), `${path.basename(file, path.extname(file))}.glb`);
+  if (!wanted && !existsSync(candidate)) return null;
+  return candidate;
+}
+
+/** Reads and checks creature files on this PC. Returns {ready: [{file, monster, requestedId, mini?}], refused: [{file, reason}]}. */
 export async function prepareCreatures(files, { force = false, creator = null } = {}) {
   const page = creator ?? await monsterCreator(), ready = [], refused = [];
+  const mini = await import(pathToFileURL(path.join(repository, 'dnd/vtt/assets/js/ui/mini-model.js')).href);
   try {
     for (const file of files) {
       const short = path.basename(file);
@@ -246,7 +265,21 @@ export async function prepareCreatures(files, { force = false, creator = null } 
       try { read = page.read(parsed); } catch (error) { refused.push({ file: short, reason: `The monster creator's import refused it: ${error.message}` }); continue; }
       const issues = page.check(parsed);
       if (issues.length && !force) { refused.push({ file: short, name: read.monster.name, reason: `The automation checker found ${issues.length} problem${issues.length === 1 ? '' : 's'} (add --force to upload anyway):`, issues }); continue; }
-      ready.push({ file: short, ...read, warnings: issues });
+      // Its 3D mini, checked here by the same rules as the server's, before anything is sent.
+      let model = null;
+      const modelPath = await creatureModelFile(file, parsed);
+      if (modelPath) {
+        const bytes = await readFile(modelPath).catch(() => null);
+        if (!bytes) { refused.push({ file: short, name: read.monster.name, reason: `Its 3D mini ${path.basename(modelPath)} is not there.` }); continue; }
+        const check = mini.inspectGlb(bytes);
+        if (!check.ok) { refused.push({ file: short, name: read.monster.name, reason: `Its 3D mini ${path.basename(modelPath)} was not accepted:`, issues: check.problems }); continue; }
+        const settings = parsed?.model ?? parsed?.monster?.model ?? {};
+        model = { name: path.basename(modelPath), bytes, stats: check.stats, settings: { scale: settings.scale, yaw: settings.yaw, lift: settings.lift } };
+      } else {
+        const kept = mini.storedMiniModel(parsed?.model ?? parsed?.monster?.model);
+        if (kept) read.monster.model = kept;
+      }
+      ready.push({ file: short, ...read, warnings: issues, ...(model ? { mini: model } : {}) });
     }
   } finally { if (!creator) page.close(); }
   return { ready, refused };
@@ -255,6 +288,15 @@ export async function prepareCreatures(files, { force = false, creator = null } 
 export async function uploadCreatures(connection, target, flags, { fetcher = fetch } = {}) {
   const prepared = await prepareCreatures(await creatureFiles(target), { force: flags.force === true });
   let results = [];
+  const mini = await import(pathToFileURL(path.join(repository, 'dnd/vtt/assets/js/ui/mini-model.js')).href);
+  // Each 3D mini first; the creature then names the file the server stored it under.
+  for (const entry of prepared.ready) {
+    if (!entry.mini) continue;
+    const stored = await call(connection, 'creature-model', { form: entry.mini.bytes }, fetcher);
+    entry.monster.model = mini.storedMiniModel({ file: stored.file, ...entry.mini.settings });
+    if (!entry.monster.model) throw new Refused(`The site stored ${entry.mini.name} under a name this tool does not recognise. Nothing else was sent.`);
+    entry.mini.stored = stored.stored !== false;
+  }
   if (prepared.ready.length) {
     const answer = await call(connection, 'creature-import', { json: {
       creatures: prepared.ready.map(({ file, monster, requestedId }) => ({ file, monster, requestedId })),
@@ -262,14 +304,18 @@ export async function uploadCreatures(connection, target, flags, { fetcher = fet
     } }, fetcher);
     results = answer.creatures || [];
   }
-  return { results, refused: prepared.refused, forced: prepared.ready.filter((entry) => entry.warnings.length) };
+  const minis = Object.fromEntries(prepared.ready.filter((entry) => entry.mini).map((entry) => [entry.file, { name: entry.mini.name, stats: entry.mini.stats, file: entry.monster.model.file }]));
+  return { results, refused: prepared.refused, forced: prepared.ready.filter((entry) => entry.warnings.length), minis };
 }
 
-export function creatureReport({ results, refused, forced }) {
+export function creatureReport({ results, refused, forced, minis = {} }) {
   const lines = [];
   for (const r of results) {
     if (r.action === 'refused') lines.push(`${r.file}: NOT uploaded. ${r.reason}`);
-    else lines.push(`${r.file}: ${r.action === 'replaced' ? 'replaced' : 'created'} "${r.name}" (${r.abilities} abilities)${r.tab ? `, in ${r.tab}` : ', in no tab'}.`);
+    else {
+      const mini = minis[r.file];
+      lines.push(`${r.file}: ${r.action === 'replaced' ? 'replaced' : 'created'} "${r.name}" (${r.abilities} abilities)${r.tab ? `, in ${r.tab}` : ', in no tab'}${mini ? `, with its 3D mini ${mini.name} (${(mini.stats.bytes / 1048576).toFixed(2)} MB, ${mini.stats.triangles} triangles)` : ''}.`);
+    }
   }
   for (const r of refused) {
     lines.push(`${r.file}: NOT uploaded. ${r.reason}`);

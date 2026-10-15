@@ -3727,7 +3727,7 @@ final class SyncV2Store
         $gmOnly = [
             'visionOwners', 'primaryPc', 'profileId', 'profile', 'playerId', 'player', 'owner', 'controller', 'meta',
             'id', 'hidden', 'isHidden', 'flags', 'levelId', '_floorTraversal', '_movementUndo', 'width', 'height',
-            'size', 'stackOrder', 'monster', 'monsterId', 'monsterRef',
+            'size', 'stackOrder', 'monster', 'monsterId', 'monsterRef', 'model',
             'team', 'name', 'label', 'image', 'imageUrl', 'tokenId',
             'metadata', 'authorId', 'authorRole', 'authorIsGm',
         ];

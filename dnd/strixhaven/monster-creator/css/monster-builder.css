@@ -3862,3 +3862,66 @@ body.modal-open {
     background: #efe4d4;
     border-top: 1px solid #b89c84;
 }
+
+/* 3D mini (js/monster-mini.js, docs/vtt-3d-minis.md): under the picture in a monster's card. */
+.monster-mini {
+    width: 120px;
+    margin-top: 6px;
+    padding: 5px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 11px;
+    box-sizing: border-box;
+}
+.monster-mini__head { display: flex; flex-direction: column; gap: 1px; margin-bottom: 4px; }
+.monster-mini__title { font-weight: 700; }
+.monster-mini__none, .monster-mini__file { opacity: .8; }
+.monster-mini__buttons { display: flex; flex-wrap: wrap; gap: 3px; }
+.monster-mini__button {
+    font: inherit;
+    font-size: 11px;
+    padding: 2px 6px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+.monster-mini__button:hover { background: rgba(127, 127, 127, .15); }
+.monster-mini__button--quiet { opacity: .75; }
+.monster-mini__settings { display: grid; gap: 2px; margin-top: 4px; }
+.monster-mini__setting { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+.monster-mini__setting input[type="number"] { width: 58px; font-size: 11px; padding: 1px 3px; }
+.search-mode .monster-mini { display: none; }
+
+.monster-mini-preview {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, .55);
+}
+.monster-mini-preview__panel {
+    width: min(560px, calc(100vw - 32px));
+    padding: 12px;
+    border-radius: 8px;
+    background: #fffbf4;
+    color: #2a1f17;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .4);
+}
+.monster-mini-preview__header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.monster-mini-preview__view { position: relative; height: min(420px, 60vh); border-radius: 6px; overflow: hidden; background: #1c2b31; }
+.monster-mini-preview__status { margin: 0; padding: 16px; color: #e8efe9; }
+.monster-mini-preview__settings { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+.monster-mini-preview__settings .monster-mini__setting { flex-direction: column; align-items: stretch; font-size: 12px; }
+.monster-mini-preview__hint { margin: 6px 0 0; font-size: 11px; opacity: .75; }
+.monster-mini-badge {
+    margin-top: 4px;
+    padding: 1px 6px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 10px;
+    text-align: center;
+}

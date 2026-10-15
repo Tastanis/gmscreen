@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/../../strixhaven/monster-creator/includes/model-store.php';
+
 const VTT_MONSTER_DATA_PATH = __DIR__ . '/../../strixhaven/monster-creator/data/gm-monsters.json';
 
 function vttArrayIsList(array $value): bool
@@ -100,6 +102,7 @@ function getMonsterSummaries(): array
                 'stamina' => $monster['stamina'] ?? null,
                 'updatedAt' => $monster['updatedAt'] ?? null,
                 'imageUrl' => $monster['imageUrl'] ?? null,
+                'model' => $monster['model'] ?? null,
                 'sourceFolder' => $monster['sourceFolder'] ?? null,
                 'sourceFolderParts' => $monster['sourceFolderParts'] ?? null,
             ],
@@ -252,6 +255,8 @@ function normalizeMonsterSnapshot($monster, ?string $fallbackId = null): ?array
     $withCaptain = sanitizeMonsterString($monster['with_captain'] ?? ($monster['withCaptain'] ?? ''));
 
     $abilities = normalizeMonsterAbilities($monster['abilities'] ?? []);
+    // A 3D mini (docs/vtt-3d-minis.md): {file, scale, yaw, lift}, a stored model's name only.
+    $model = monsterModelNormalize($monster['model'] ?? null);
 
     $result = [
         'id' => $id,
@@ -292,6 +297,9 @@ function normalizeMonsterSnapshot($monster, ?string $fallbackId = null): ?array
     }
     if ($withCaptain !== '') {
         $result['with_captain'] = $withCaptain;
+    }
+    if ($model !== null) {
+        $result['model'] = $model;
     }
 
     return removeNullMonsterFields($result);

@@ -11,6 +11,10 @@
 .vtt3d-on #vtt-token-layer>.vtt-token{left:0!important;top:0!important;width:var(--vtt3d-size,36px)!important;height:var(--vtt3d-size,36px)!important;transform:translate3d(var(--vtt3d-x,0px),var(--vtt3d-y,0px),0)!important;translate:none!important;scale:1!important;transition:none!important;pointer-events:auto!important;visibility:var(--vtt3d-visible,hidden)!important;z-index:var(--vtt3d-order,1)!important;cursor:grab;filter:drop-shadow(0 3px 3px #0008)}
 .vtt3d-on #vtt-token-layer>.vtt-token.is-selected{outline:2px solid #f5d284;outline-offset:3px}
 .vtt3d-on #vtt-token-layer .vtt-token__level-indicator{display:none!important}
+/* A token drawn as a 3D mini (minis.mjs): the model stands on the board, so the card keeps its
+   HP bar, badges and picking but shows no picture or card shadow. */
+.vtt3d-on #vtt-token-layer>.vtt-token[data-vtt3d-mini="true"]{height:var(--vtt3d-mini-height,var(--vtt3d-size,36px))!important;filter:none;background:transparent!important;box-shadow:none!important;border-color:transparent!important}
+.vtt3d-on #vtt-token-layer>.vtt-token[data-vtt3d-mini="true"] .vtt-token__image{opacity:0!important}
 #vtt-board3d-overlay-host{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:3}
 #vtt-board3d-overlay-host .vtt3d-board-controls{position:absolute!important;left:50%!important;transform:translateX(-50%)!important;pointer-events:auto!important;visibility:visible!important}
 #vtt-board3d-overlay-host .vtt-automation-area__controls.vtt3d-board-controls{bottom:1.25rem!important}

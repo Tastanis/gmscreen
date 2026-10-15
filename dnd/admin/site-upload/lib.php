@@ -236,7 +236,7 @@ function siteUploadTabNames(array $data): array
 /**
  * Puts creatures into the monster creator's data, in memory. Returns the new data and one result
  * for each creature. A creature whose name is already there is replaced only when asked to, and
- * then keeps its id, its place in the tabs and, if the new file names none, its portrait.
+ * then keeps its id, its place in the tabs and, if the new file names none, its portrait and its 3D mini.
  *
  * `$entries` are [{file, monster, requestedId?}], each `monster` already put through the monster
  * creator's own import and checker by the tool.
@@ -265,6 +265,8 @@ function siteUploadMergeCreatures(array $data, array $entries, array $options, i
             $id = (string) $same[0]; $old = $data['monsters'][$id];
             foreach (['tabId','subTabId','created'] as $keep) if (array_key_exists($keep, $old)) $monster[$keep] = $old[$keep];
             if (trim((string) ($monster['image'] ?? '')) === '' && isset($old['image'])) $monster['image'] = $old['image'];
+            // So is its 3D mini, when the new file names none.
+            if (!isset($monster['model']) && isset($old['model'])) $monster['model'] = $old['model'];
             $monster['lastModified'] = $nowMs;
             $data['monsters'][$id] = $monster; $changed = true;
             $where = null;

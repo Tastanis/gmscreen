@@ -27,6 +27,8 @@ import {executeClaimedZoneEntry,assertZoneEntryOutcomesConfirmed} from '../servi
 import {assertPersistentZoneStillActive} from './persistent-zone-lifecycle.js';
 import {resolvePersistentZoneLevelId,doesPersistentZoneOverlapPlacement,doesPersistentZoneMovementEnter} from './persistent-zone-geometry.js';
 import {renderTokenAuras} from './token-aura-renderer.js';
+import {storedMiniModel} from './mini-model.js';
+import {loadMonsterModels,monsterModelFor} from './monster-models.js';
 import {normalizeAutomationAuraId,createAutomationAuraId,cloneAutomationAuraRecord,getAutomationAuraRecords,getRenderableAurasForPlacement} from './token-aura-records.js';
 import {normalizePlacementForRender,toBoolean} from './token-render-normalize.js';
 import {normalizePlacementCondition,ensurePlacementCondition,normalizePlacementConditions,ensurePlacementConditions,buildConditionKey,normalizeConditionDurationValue} from './token-conditions.js';
@@ -7578,6 +7580,9 @@ export function mountBoardInteractions(store, routes = {}) {
   const tokenDragListenerOptions = { capture: true };
 
   mapSurface.addEventListener('dragenter', handleTokenDragEnter, tokenDragListenerOptions);
+  // Each monster's current 3D mini, read again (at most every 20 s) as a token is brought to the board.
+  if (isGmUser()) loadMonsterModels(routes?.monsters);
+  mapSurface.addEventListener('dragenter', () => { if (isGmUser()) loadMonsterModels(routes?.monsters); }, tokenDragListenerOptions);
   mapSurface.addEventListener('dragleave', handleTokenDragLeave, tokenDragListenerOptions);
   mapSurface.addEventListener('dragover', handleTokenDragOver, tokenDragListenerOptions);
   mapSurface.addEventListener('drop', handleTokenDrop, tokenDragListenerOptions);
@@ -15937,6 +15942,15 @@ export function mountBoardInteractions(store, routes = {}) {
       placement.metadata = placementMetadata;
     }
 
+    // A monster with a 3D mini comes onto the board as that mini (docs/vtt-3d-minis.md): the
+    // Monster Creator's current model first, so older tokens get it too.
+    const miniModel = storedMiniModel(monsterModelFor(placement.monsterId))
+      ?? storedMiniModel(template.model)
+      ?? storedMiniModel(template.monster?.model);
+    if (miniModel) {
+      placement.model = miniModel;
+    }
+
     markPlacementAsGmAuthored(placement);
 
     return placement;
@@ -20734,6 +20748,12 @@ export function mountBoardInteractions(store, routes = {}) {
               <span>Hidden from Players</span>
             </label>
           </div>
+          <div class="vtt-token-settings__row" data-token-settings-mini-row hidden>
+            <label class="vtt-token-settings__toggle" title="Draw this token as its monster's 3D model from the Monster Creator">
+              <input type="checkbox" data-token-settings-toggle="mini" />
+              <span>Show as 3D mini</span>
+            </label>
+          </div>
           <div class="vtt-token-settings__row" data-token-settings-visible-row hidden>
             <label class="vtt-token-settings__toggle">
               <input type="checkbox" data-token-settings-toggle="visibleToPlayers" />
@@ -20948,6 +20968,8 @@ export function mountBoardInteractions(store, routes = {}) {
       conditionApply: element.querySelector('[data-token-settings-condition-apply]'),
       conditionList: element.querySelector('[data-token-settings-condition-list]'),
       hiddenToggle: element.querySelector('[data-token-settings-toggle="hidden"]'),
+      miniRow: element.querySelector('[data-token-settings-mini-row]'),
+      miniToggle: element.querySelector('[data-token-settings-toggle="mini"]'),
       visibleToPlayersRow: element.querySelector('[data-token-settings-visible-row]'),
       visibleToPlayersToggle: element.querySelector('[data-token-settings-toggle="visibleToPlayers"]'),
       sizeSelect: element.querySelector('[data-token-settings-size-select]'),
@@ -21128,6 +21150,25 @@ export function mountBoardInteractions(store, routes = {}) {
           return;
         }
 
+        refreshTokenSettings();
+      });
+    }
+
+    if (menu.miniToggle) {
+      // On: the monster's current model from the Monster Creator. Off: the token's picture.
+      menu.miniToggle.addEventListener('change', () => {
+        if (!activeTokenSettingsId) return;
+        const wanted = menu.miniToggle.checked;
+        const targetIds = getTokenSettingsTargetIds(activeTokenSettingsId);
+        const updated = updatePlacementsByIds(targetIds, (target) => {
+          const model = wanted ? (storedMiniModel(monsterModelFor(target.monsterId)) ?? storedMiniModel(target.model)) : null;
+          if (model) target.model = model;
+          else target.model = null;
+        });
+        if (!updated) {
+          menu.miniToggle.checked = !wanted;
+          return;
+        }
         refreshTokenSettings();
       });
     }
@@ -21999,6 +22040,18 @@ export function mountBoardInteractions(store, routes = {}) {
       tokenSettingsMenu.hiddenToggle.checked = Boolean(
         placement.hidden ?? placement.isHidden ?? false
       );
+    }
+
+    // "Show as 3D mini" is offered when the token has a mini or its monster has one now.
+    if (tokenSettingsMenu.miniRow) {
+      const available = Boolean(storedMiniModel(placement.model) || storedMiniModel(monsterModelFor(placement.monsterId)));
+      tokenSettingsMenu.miniRow.hidden = !available;
+      if (tokenSettingsMenu.miniToggle) tokenSettingsMenu.miniToggle.checked = Boolean(storedMiniModel(placement.model));
+      if (isGmUser() && placement.monsterId) loadMonsterModels(routes?.monsters).then(() => {
+        if (!tokenSettingsMenu?.miniRow || activeTokenSettingsId !== placement.id) return;
+        const now = Boolean(storedMiniModel(placement.model) || storedMiniModel(monsterModelFor(placement.monsterId)));
+        if (now !== !tokenSettingsMenu.miniRow.hidden) tokenSettingsMenu.miniRow.hidden = !now;
+      });
     }
 
     // "Visible to Players" toggle is monster-only. Hide the row for non-monster

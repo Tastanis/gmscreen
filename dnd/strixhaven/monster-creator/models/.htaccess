@@ -1,0 +1,15 @@
+# Monsters' 3D minis (.glb), put here by upload-model.php and the site upload, named from their own
+# content (includes/model-store.php). Static files only: nothing in this folder is ever run.
+# Written the same way as images/.htaccess, which this host accepts.
+Options -ExecCGI -Indexes
+<FilesMatch "(?i)\.(php[0-9]?|phtml|phar|cgi|pl|py|sh|shtml)(\.|$)">
+    Require all denied
+</FilesMatch>
+RemoveHandler .glb
+AddType model/gltf-binary .glb
+<IfModule mod_headers.c>
+    <FilesMatch "\.glb$">
+        Header set X-Content-Type-Options "nosniff"
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+</IfModule>

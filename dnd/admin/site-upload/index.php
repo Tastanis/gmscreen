@@ -31,12 +31,13 @@ if ($status !== 200) siteUploadAnswer($status, ['success'=>false, 'error'=>$mess
 
 try {
     $action = (string) ($_GET['action'] ?? '');
-    if (!in_array($action, ['status', 'map-image', 'map-import', 'creature-import'], true)) siteUploadAnswer(400, ['success'=>false, 'error'=>'Unknown action.']);
+    if (!in_array($action, ['status', 'map-image', 'map-import', 'creature-import', 'creature-model'], true)) siteUploadAnswer(400, ['success'=>false, 'error'=>'Unknown action.']);
 
     define('VTT_SCENES_API_INCLUDE_ONLY', true);
     require_once __DIR__ . '/../../vtt/api/scenes.php'; // bootstrap, the store, the scene list, the lock
     require_once __DIR__ . '/../../vtt/lib/MapImageStore.php';
     require_once __DIR__ . '/../../strixhaven/monster-creator/includes/monster-store.php';
+    require_once __DIR__ . '/../../strixhaven/monster-creator/includes/model-store.php';
     require_once __DIR__ . '/../../strixhaven/gm/includes/file-lock-manager.php';
     $monsterDir = __DIR__ . '/../../strixhaven/monster-creator/data/';
     $monsterFile = $monsterDir . 'gm-monsters.json';
@@ -61,6 +62,17 @@ try {
         if (!isset($_FILES['map'])) siteUploadAnswer(400, ['success'=>false, 'error'=>'No map image was provided. If the picture is large, it may be over this server\'s upload limit.']);
         [$code, $payload] = MapImageStore::store($_FILES['map'], true);
         siteUploadAnswer($code, $payload);
+    }
+
+    // A creature's 3D mini: the .glb file as the request body, checked and stored by the Monster
+    // Creator's own model store under a name made from its content. The tool then names that file
+    // in the creature it sends next. The same file sent again keeps its one name.
+    if ($action === 'creature-model') {
+        $bytes = file_get_contents('php://input', false, null, 0, MONSTER_MODEL_MAX_BYTES + 1);
+        if ($bytes === false || $bytes === '') siteUploadAnswer(400, ['success'=>false, 'error'=>'The request was empty. It may be over this server\'s size limit (post_max_size).']);
+        if (strlen($bytes) > MONSTER_MODEL_MAX_BYTES) siteUploadAnswer(413, ['success'=>false, 'error'=>'A mini may be at most ' . intdiv(MONSTER_MODEL_MAX_BYTES, 1048576) . ' MB.']);
+        $stored = monsterModelStore($bytes, __DIR__ . '/../../strixhaven/monster-creator/models');
+        siteUploadAnswer(200, ['success'=>true, 'result'=>$stored]);
     }
 
     $limit = $action === 'map-import' ? SITE_UPLOAD_MAX_JSON_BYTES : SITE_UPLOAD_MAX_CREATURE_BYTES;

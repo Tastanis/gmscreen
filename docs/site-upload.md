@@ -20,8 +20,8 @@ What keeps it safe:
   for a page that is not there. **Deleting that one file switches the whole thing off.**
 - It works over HTTPS only. Eight wrong keys in fifteen minutes and it refuses everyone until
   the fifteen minutes are up.
-- It does three things and no others: file a map's pictures, import a map package, import
-  creature files. The only things it tells a caller are the short result, the names of your scene
+- It does four things and no others: file a map's pictures, import a map package, import
+  creature files, and store a creature's 3D mini (a checked `.glb`). The only things it tells a caller are the short result, the names of your scene
   folders and monster tabs, and the server's size limits.
 
 ## One-time setup (you do this once; about five minutes)
@@ -168,7 +168,18 @@ old-draft.json: NOT uploaded. The automation checker found 1 problem (add --forc
 2 uploaded, 1 not.
 ```
 
-A replaced creature keeps its place in the tabs and its portrait. **Portraits are not uploaded
+**3D minis go with them.** A creature's `.glb` is sent with it: the file its `.json` names in
+`"model": {"file": "werewolf.glb"}`, or else the `.glb` beside it with the same name
+(`werewolf.json` + `werewolf.glb`). It is checked on this PC by the site's own rules first; a
+creature whose model is refused is not sent, and the problems are listed. See
+[3D minis](vtt-3d-minis.md).
+
+```
+werewolf.json: created "Werewolf" (16 abilities), in Minis / General, with its 3D mini werewolf.glb (0.22 MB, 10332 triangles).
+```
+
+A replaced creature keeps its place in the tabs, its portrait and its 3D mini (unless the new file
+brings another). **Portraits are not uploaded
 by this tool**: a creature file names a picture's address but does not carry the picture, and
 the monster creator uploads portraits in a step of its own. Add or change a portrait in the
 monster creator as before.

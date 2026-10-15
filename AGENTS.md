@@ -1,3 +1,11 @@
+## 3D minis — October 15, 2026
+
+A monster's 3D model ("mini") is `model: {file, scale, yaw, lift}` on the monster and on each
+placement made from it. Read `docs/vtt-3d-minis.md` before building a mini, changing the Monster
+Creator's 3D mini part, the upload tool's model step, or `dnd/vtt/board3d/minis.mjs`. Build minis
+with `node dnd/tools/mini-build.mjs <recipe.mini.json>`; the rules for accepted files are shared in
+`dnd/vtt/assets/js/ui/mini-model.js` and `monster-creator/includes/model-store.php`.
+
 ## Current map runtime authority — September 27, 2026
 
 The deployable source is now checked in under `dnd/vtt/assets/js/ui/`, the Sync V2

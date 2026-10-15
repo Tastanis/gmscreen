@@ -26,6 +26,8 @@ require_once '../../version.php';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 3D minis: the preview (js/monster-mini.js) uses the VTT's own three.js. -->
+    <script type="importmap">{"imports":{"three":"/dnd/vtt/board3d/lib/three.module.js"}}</script>
     <title>Monster Creator - Strixhaven</title>
     <link rel="stylesheet" href="../../css/theme.css">
     <link rel="stylesheet" href="../../css/ui-kit.css">
@@ -238,6 +240,8 @@ require_once '../../version.php';
     <script src="../../character_sheet/ability-automation/paste.js"></script>
     <script src="../../character_sheet/ability-automation/inspector.js"></script>
     <script src="js/monster-json-import-normalize.js"></script>
+    <!-- 3D minis: the card's "3D mini" part; before monster-builder.js, which draws the cards. -->
+    <script src="js/monster-mini.js"></script>
     <script src="js/monster-builder.js"></script>
     <!-- monster-automation-ui.js wires the button hooks. Must load AFTER
          monster-builder.js so window.monsterData / markMonsterDirty exist. -->

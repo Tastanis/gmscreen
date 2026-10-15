@@ -74,6 +74,9 @@ pnpm-lock.yaml
 
 # Monster creator data
 /dnd/strixhaven/monster-creator/data/
+# Monsters' 3D minis uploaded on the site (only the folder's rules are in the repository)
+/dnd/strixhaven/monster-creator/models/*
+!/dnd/strixhaven/monster-creator/models/.htaccess
 
 # Templates data
 /dnd/strixhaven/templates/data/

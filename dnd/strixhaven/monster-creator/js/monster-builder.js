@@ -925,6 +925,7 @@ function createCompactMonsterCard(monsterId, monsterData) {
             <div class="monster-info-top">
                 <div class="info-left">
                     ${imageDisplay}
+                    ${monsterData.model ? '<div class="monster-mini-badge" title="This monster stands on the VTT board as its 3D mini">3D mini</div>' : ''}
                 </div>
                 <div class="info-right">
                     <div class="info-row-1">
@@ -1283,6 +1284,7 @@ function createFullMonsterCard(monsterId, monsterData) {
                     ${imageDisplay}
                     <input type="file" id="file-${monsterId}" style="display: none;" 
                            accept="image/*" onchange="handleImageUpload('${monsterId}', this)">
+                    ${window.MonsterMini ? window.MonsterMini.cardBlock(monsterId, monsterData) : ''}
                 </div>
                 <div class="info-right">
                     <div class="info-row-1">
@@ -4079,8 +4081,22 @@ function normalizeImportedMonsterJson(raw) {
         created: Date.now(),
         lastModified: Date.now()
     };
+    // A 3D mini already on the site (docs/vtt-3d-minis.md). A file on someone's PC is attached by
+    // the upload tool, or in the monster's card; a name the site did not make is dropped here.
+    const importedModel = normalizeImportedMonsterModel(source.model);
+    if (importedModel) monster.model = importedModel;
     monster.role = formatMonsterRole(monster);
     return monster;
+}
+
+/** {file, scale, yaw, lift} for a stored model (mini_<24 hex>.glb), or null. Same rules as mini-model.js. */
+function normalizeImportedMonsterModel(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const file = typeof value.file === 'string' ? value.file.trim() : '';
+    if (!/^mini_[a-f0-9]{24}\.glb$/.test(file)) return null;
+    const number = (raw, low, high, fallback) => { const n = Number(raw); return Number.isFinite(n) ? Math.min(high, Math.max(low, n)) : fallback; };
+    const yaw = Number(value.yaw);
+    return { file, scale: number(value.scale, 0.25, 4, 1), yaw: Number.isFinite(yaw) ? ((((yaw + 180) % 360) + 360) % 360) - 180 : 0, lift: number(value.lift, -2, 4, 0) };
 }
 
 function parseImportedRoleString(roleString) {

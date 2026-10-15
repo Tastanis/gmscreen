@@ -8,6 +8,11 @@ The importer accepts the canonical lowercase `attributes` object shown below. Fo
 
 Each imported ability's `automation` is normalized through the current ability-automation schema during import. Unsupported fields remain visible under `_extra` and schema warnings are retained for the automation inspector instead of silently bypassing validation.
 
+A monster may have a **3D mini**: `"model": {"file": "werewolf.glb", "scale": 1, "yaw": 0, "lift": 0}`,
+naming the `.glb` beside the creature file (or leave `model` out and give the `.glb` the creature
+file's name). The upload tool sends the model and fills in its stored name; the Import JSON
+button keeps only a model already stored on the site. See `docs/vtt-3d-minis.md`.
+
 ---
 
 ## ⚠️ Two non-negotiable requirements (read before anything else)
