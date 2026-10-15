@@ -89,6 +89,9 @@ off, and a ramp's arrows hide with it under the Height cut.
 
 ## Roofs (not yet on the 3D board)
 
+Brandon, October 14, 2026: leave roofs out for now, and deal with them when maps with buildings
+are built.
+
 The 3D board does not draw roofs yet. The roof picture upload in the wall editor works, but nothing
 on the 3D board uses it. Specifically:
 
