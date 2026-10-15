@@ -1,0 +1,79 @@
+{
+  "note": "Minis on the 3D board (minis.mjs). heroes: character sheet id (a token's characterProfileId) -> model, scaled by scale x token size. monsters: monster id (a token's monsterId) -> {model, scale (true size, default 1), noBase (floats at the token height with no base or ring)}. names: token name (lower case) -> the same as a monster entry, for a creature with no monster id.",
+  "scale": 1.15,
+  "heroes": {
+    "cal": "mycelian",
+    "sharon": "rogue",
+    "indigo": "psion",
+    "zepha": "pyre"
+  },
+  "monsters": {
+    "driftstone-level-4-elite": {
+      "model": "driftstone",
+      "scale": 1,
+      "noBase": true
+    },
+    "orchard-tender-level-4-elite": {
+      "model": "tender",
+      "scale": 1
+    },
+    "algis-the-lance-level-4-elite": {
+      "model": "algis",
+      "scale": 1
+    },
+    "mantas-the-wand-level-4-elite": {
+      "model": "mantas",
+      "scale": 1
+    },
+    "rimas-the-shield-level-4-elite": {
+      "model": "rimas",
+      "scale": 1
+    },
+    "vaidas-the-banner-level-4-elite": {
+      "model": "vaidas",
+      "scale": 1
+    },
+    "gintaras-the-duelist-level-4-solo": {
+      "model": "gintaras",
+      "scale": 1.15
+    },
+    "kragen-thornwhisper-level-4-leader": {
+      "model": "kragen",
+      "scale": 1.15
+    },
+    "ghoul-packmaster-level-4-horde": {
+      "model": "packmaster",
+      "scale": 1.15
+    },
+    "sluice-ghoul-level-4-minion": {
+      "model": "ghoul",
+      "scale": 1.15
+    },
+    "sluice-drowner-level-4-horde": {
+      "model": "drowner",
+      "scale": 1.15
+    },
+    "sluice-saltbearer-level-4-horde": {
+      "model": "saltbearer",
+      "scale": 1.15
+    },
+    "sluice-warden-level-4-defender": {
+      "model": "warden",
+      "scale": 1
+    },
+    "sluice-rootgnawer-level-4-minion": {
+      "model": "rootgnawer",
+      "scale": 1.15
+    }
+  },
+  "names": {
+    "egle": {
+      "model": "egle",
+      "scale": 1.15
+    },
+    "eglė": {
+      "model": "egle",
+      "scale": 1.15
+    }
+  }
+}

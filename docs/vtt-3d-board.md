@@ -40,6 +40,18 @@ same as before. Vision and fog are still in the code but switched off.
 | `dnd/vtt/board3d/wall-overlay.mjs` | Named line overlays: walls, stairs, rubble, the flash when a wall stops a move. |
 | `dnd/vtt/board3d/scene.json`, `assets/` | Gravity Orchard's 3D art and textures. |
 | `dnd/vtt/board3d/lib/` | three.js r160, loaded through the import map as `three`. |
+| `dnd/vtt/board3d/art-kit.mjs`, `assets/kit/` | CC0 art kit (Quaternius nature models, Poly Haven textures; see its CREDITS.md) used to draw the Orchard's rocks, trees, plants and ground. |
+| `dnd/vtt/board3d/vine-art.mjs` | Vine ramps as climbable vines, hanging ivy and roots, ground cover. |
+| `dnd/vtt/board3d/glb-reader.mjs` | A small reader for plain .glb files (no compression, no animation), so no outside loader is needed. |
+| `dnd/vtt/board3d/minis.mjs`, `assets/minis/` | 3D minis on tokens. `minis.json` maps a character sheet id (heroes) or monster id (monsters), or a token name, to a model; `noBase` floats a model with no base. |
+| `dnd/vtt/board3d/scene-art.mjs` | A map's own 3D art from `assets/scenes/index.json` (matched by terrain size and floor ids), drawn over the map that plays. No maps are installed yet. |
+
+## Gravity Orchard art (October 14–15, 2026)
+
+Art only: the Orchard's map data is unchanged (Brandon: "make no more changes to that map"). The Map maker graded
+it from 3.3 to 8.0 out of 10. Lots of floating rocks are intended (the Orchard is made by rock elementals) and they
+drift slowly; sticks, props and lamps never float, so the map's lanterns are drawn as floating stones with amber
+cracks. Close to the camera, rocks, trees and vines dissolve so tokens behind them stay visible; walkable tops never do.
 
 The page loads `board3d/integration.mjs` from `templates/layout.php`. The `board3d` modules are
 in the import map with the build number, so a new build refreshes them like every other module.
@@ -90,7 +102,9 @@ off, and a ramp's arrows hide with it under the Height cut.
 ## Roofs (not yet on the 3D board)
 
 Brandon, October 14, 2026: leave roofs out for now, and deal with them when maps with buildings
-are built.
+are built. His idea for then: a roof sits at its own height and shows while the camera is above
+it. Zoom the camera in below the roof's height and the roof is gone, so you see inside; zoom back
+out and it returns.
 
 The 3D board does not draw roofs yet. The roof picture upload in the wall editor works, but nothing
 on the 3D board uses it. Specifically:
@@ -115,7 +129,8 @@ Gravity Orchard has no roofs: all 19 of its surfaces are floating floors, which 
   - combat movement;
   - slope arrows;
   - the fall animation;
-  - grid alignment by clicks on the 3D ground (with every save blocked).
+  - grid alignment by clicks on the 3D ground (with every save blocked);
+  - hero minis on their tokens.
 
 ## Known, not caused by the 3D board
 

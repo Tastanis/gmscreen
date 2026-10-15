@@ -20,15 +20,21 @@ export async function loadSurfaceTextures(renderer){
 
 // World-space projection preserves the physical grain size across scaled instances.
 // Three planar projections blend on sloped faces instead of stretching cliff UVs.
-export function surfaceMaterial(set,{color='#ffffff',scale=.5,normalStrength=.45,roughness=1,terrainGround=null,groundScale=.35}={}){
+// tint / groundTint {color, amount}: recolour a texture from its own light and dark (amount 0 = its own colours, 1 = only
+// the tint), so one photo texture can be grass-green or a grey cliff while keeping its detail.
+// groundAlt / groundAltTint: a second ground (bare earth) in broad patches over the first, so flat ground is not one
+// even colour.
+export function surfaceMaterial(set,{color='#ffffff',scale=.5,normalStrength=.45,roughness=1,terrainGround=null,groundScale=.35,tint=null,groundTint=null,groundAlt=null,groundAltTint=null}={}){
  const material=new THREE.MeshStandardMaterial({color,roughness,metalness:0});
  material.name=terrainGround?'Forest ground / exposed rock':'Photographic triplanar surface';
- material.customProgramCacheKey=()=>`bathhouse-surface-v3-${!!terrainGround}`;
+ material.customProgramCacheKey=()=>`bathhouse-surface-v3-${!!terrainGround}-${!!groundAlt}`;
  material.onBeforeCompile=shader=>{
   Object.assign(shader.uniforms,{
    surfaceDiff:{value:set.diff},surfaceNormal:{value:set.normal},surfaceRough:{value:set.rough},
    surfaceScale:{value:scale},surfaceNormalStrength:{value:normalStrength},
+   surfaceTintColor:{value:new THREE.Color(tint?.color||'#ffffff')},surfaceTintAmount:{value:tint?.amount||0},groundTintColor:{value:new THREE.Color(groundTint?.color||'#ffffff')},groundTintAmount:{value:groundTint?.amount||0},
    groundDiff:{value:(terrainGround||set).diff},groundNormal:{value:(terrainGround||set).normal},groundRough:{value:(terrainGround||set).rough},groundScale:{value:groundScale},
+   altDiff:{value:(groundAlt||terrainGround||set).diff},altTintColor:{value:new THREE.Color(groundAltTint?.color||'#ffffff')},altTintAmount:{value:groundAltTint?.amount||0},
   });
   shader.vertexShader=`varying vec3 vSurfacePosition; varying vec3 vSurfaceNormal;\n${shader.vertexShader}`;
   shader.vertexShader=shader.vertexShader.replace('#include <worldpos_vertex>',`#include <worldpos_vertex>
@@ -45,6 +51,11 @@ export function surfaceMaterial(set,{color='#ffffff',scale=.5,normalStrength=.45
    uniform sampler2D surfaceDiff;uniform sampler2D surfaceNormal;uniform sampler2D surfaceRough;
    uniform sampler2D groundDiff;uniform sampler2D groundNormal;uniform sampler2D groundRough;
    uniform float surfaceScale;uniform float surfaceNormalStrength;uniform float groundScale;
+   uniform vec3 surfaceTintColor;uniform float surfaceTintAmount;uniform vec3 groundTintColor;uniform float groundTintAmount;
+   vec3 tintBy(vec3 c,vec3 tint,float amount){float l=dot(c,vec3(.2126,.7152,.0722));return mix(c,l*tint*1.9,amount);}
+   uniform sampler2D altDiff;uniform vec3 altTintColor;uniform float altTintAmount;
+   float sHash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+   float sNoise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(sHash(i),sHash(i+vec2(1.,0.)),f.x),mix(sHash(i+vec2(0.,1.)),sHash(i+vec2(1.,1.)),f.x),f.y);}
    vec3 surfaceWeights(vec3 n){vec3 w=pow(abs(n),vec3(5.));return w/max(dot(w,vec3(1.)),.00001);}
    vec3 triSample(sampler2D tex,vec3 p,vec3 w){return texture2D(tex,p.zy).rgb*w.x+texture2D(tex,p.xz).rgb*w.y+texture2D(tex,p.xy).rgb*w.z;}
    vec3 triDetail(vec3 p,vec3 n,vec3 w){
@@ -60,8 +71,11 @@ export function surfaceMaterial(set,{color='#ffffff',scale=.5,normalStrength=.45
    vec3 surfaceW=surfaceWeights(surfaceN);
    vec3 surfaceP=vSurfacePosition*surfaceScale;
    float exposedRock=${terrainGround?'1.-smoothstep(.58,.90,abs(surfaceN.y))':'1.'};
-   vec3 surfaceColor=triSample(surfaceDiff,surfaceP,surfaceW);
-   ${terrainGround?'surfaceColor=mix(texture2D(groundDiff,vSurfacePosition.xz*groundScale).rgb,surfaceColor,exposedRock);':''}
+   ${groundAlt?'exposedRock=max(exposedRock,smoothstep(.6,.67,sNoise(vSurfacePosition.xz*.028+vec2(3.1,7.7))*.7+sNoise(vSurfacePosition.xz*.12)*.3)*.95);':''}
+   vec3 surfaceColor=tintBy(triSample(surfaceDiff,surfaceP,surfaceW),surfaceTintColor,surfaceTintAmount);
+   ${terrainGround?`vec3 groundColor=tintBy(texture2D(groundDiff,vSurfacePosition.xz*groundScale).rgb,groundTintColor,groundTintAmount);
+   ${groundAlt?'float patchN=sNoise(vSurfacePosition.xz*.03)*.55+sNoise(vSurfacePosition.xz*.13)*.3+sNoise(vSurfacePosition.xz*.9)*.15;float low=smoothstep(8.,3.,vSurfacePosition.y);float trail=1.-smoothstep(.012,.04,abs(sNoise(vSurfacePosition.xz*.07+vec2(11.,3.))-.5));float worn=max(smoothstep(.42-low*.2,.52-low*.2,patchN),trail*.85);groundColor=mix(groundColor,tintBy(texture2D(altDiff,vSurfacePosition.xz*groundScale*.8).rgb,altTintColor,altTintAmount),worn*.9);groundColor*=1.-.16*smoothstep(.62,.78,sNoise(vSurfacePosition.xz*.07+7.3));':''}
+   surfaceColor=mix(groundColor,surfaceColor,exposedRock);`:''}
    float luminance=dot(surfaceColor,vec3(.2126,.7152,.0722));
    diffuseColor.rgb*=mix(surfaceColor,vec3(luminance),.08);
   `);

@@ -2,6 +2,8 @@ import {createSceneView} from './scene-view.mjs';
 import {bindCameraInput} from './camera-controls.mjs';
 import {dragMovementKind,getCurrentPlannedRoute,getCurrentMeasurementPresentation,addExternalMeasurementNode} from '../assets/js/ui/drag-ruler.js';
 import {createEffectOverlays} from './effect-overlays.mjs';
+import {createMinis} from './minis.mjs';
+import {sceneArtFor,loadSceneArt} from './scene-art.mjs';
 import {createRoutePlanner} from './route-planner.mjs';
 import {tetherSupport} from '../assets/js/ui/height-tethers.mjs';
 import {roofSurfaces} from '../assets/js/ui/roof-geometry.mjs';
@@ -38,6 +40,8 @@ async function mount(){
   let found=0;for(const r of roofs)if(art.roofs.has(r.id))found++;return found>=art.roofs.size*.8;
  }
 
+ let sceneArtParts=[];
+ let minis=null,miniIds='',profiles=new Map(),profilesFor=null;
  let context=bridge.getContext(),view=null,data=null,effects=null,canvas=null,builtKey='',building=null;
  let clickMoveTokenId=null,hoverPointer=null,held=null,drag=null,lastTime=performance.now(),lastTokenSignature='',hoverSignature='',shownLevel=null;
 
@@ -83,10 +87,16 @@ async function mount(){
   try{
    const useArt=key.startsWith('art:'),nextData=withStructure(useArt?art.data:pictureScene()),nextCanvas=document.createElement('canvas');nextCanvas.tabIndex=-1;
    const nextView=await createSceneView({canvas:nextCanvas,sceneData:nextData,groundPicture:useArt?null:pictureRect()});
-   if(view){cancelDrag();stopLayers();effects?.dispose?.();view.dispose();canvas?.remove();}
+   if(view){cancelDrag();stopLayers();effects?.dispose?.();minis?.dispose();minis=null;for(const part of sceneArtParts)view.removeLevelArt(part);sceneArtParts=[];view.dispose();canvas?.remove();}
    host.append(nextCanvas);canvas=nextCanvas;view=nextView;data=nextData;builtKey=key;shownLevel=null;lastTokenSignature='';fieldShown=-1;fieldAt=0;
    view.setTokenBodiesVisible(false);view.setLevel(-1);view.setVision([],false);view.resize();
    effects=createEffectOverlays({scene:view.scene,heightFor:id=>bridge.heightFor(id)});startLayers();
+   minis?.dispose();minis=createMinis(view.scene);miniIds='';
+   // A map with its own 3D art (scene-art.mjs) draws that art in place of its picture.
+   if(!useArt){const entry=await sceneArtFor(context);if(entry&&view===nextView){const art=await loadSceneArt(entry).catch(error=>{console.warn('[3D board] map art not loaded',error);return null;});
+    if(art&&view===nextView){art.userData.parts??=[...art.children];view.useArtModel();
+     // Each art part belongs to the floor at its height (a scene copy renames its floors, so names cannot be used).
+     for(const part of art.userData.parts){const height=Number(entry.levels?.[part.name]),index=Number.isFinite(height)?Math.max(0,(data?.levels||[]).findIndex(l=>Math.abs(l.height-height)<.1)):0;view.addLevelArt(part,index,{always:index===0});sceneArtParts.push(part);}}}}
    const own=!context.isGM&&(context.placements?.find(p=>p.visionOwners?.includes(String(context.user?.name||'').toLowerCase()))||context.placements?.find(p=>p.canMove));
    if(own)focus(own.id);else view.home();
    document.dispatchEvent(new CustomEvent('vtt3d:scene-built',{detail:{sceneId:context.sceneId,art:useArt}}));
@@ -317,6 +327,10 @@ async function mount(){
    view.setMovementRoute(getCurrentMeasurementPresentation());
    effects?.update(context);for(const [name,layer] of layers){try{layer?.update?.(context,dt);}catch(error){console.error('[VTT 3D] layer',name,error);layers.delete(name);}}view.render(dt);
    const recordById=new Map(records.map(p=>[p.id,p]));if(held&&recordById.has(held.id))recordById.set(held.id,{...recordById.get(held.id),...held});view.setTethers(tethers([...recordById.values()]));
+   // Hero minis on their tokens' bases (minis.mjs); a token with a mini hides its portrait (class vtt3d-mini).
+   if(minis){if(profilesFor!==context.placements){profilesFor=context.placements;profiles=new Map((context.placements||[]).map(p=>[p.id,{hero:p.characterProfileId,monster:p.monsterId,name:p.name}]));}
+    const result=minis.update([...recordById.values()],profiles,p=>shownLevel===null||shownLevel<0||p.level<=shownLevel,view.camera,dt);if(result.redraw)view.renderer.shadowMap.needsUpdate=true;view.setTokensWithoutBase?.(result.noBase);
+    const key=[...result.ids].sort().join(',')+'|'+tokenLayer.childElementCount;if(key!==miniIds){miniIds=key;for(const node of tokenLayer.querySelectorAll('[data-placement-id]'))node.classList.toggle('vtt3d-mini',result.ids.has(node.dataset.placementId));}}
    const {width,height}=view.viewport();
    // Nothing to place again while the camera, the tokens and the floor cut stay as they were.
    const camera=view.camera,cameraKey=camera.matrixWorld.elements.join(',')+'|'+camera.projectionMatrix.elements[0]+'|'+width+'x'+height;

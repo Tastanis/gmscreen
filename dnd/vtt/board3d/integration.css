@@ -15,3 +15,9 @@
 #vtt-board3d-overlay-host .vtt3d-board-controls{position:absolute!important;left:50%!important;transform:translateX(-50%)!important;pointer-events:auto!important;visibility:visible!important}
 #vtt-board3d-overlay-host .vtt-automation-area__controls.vtt3d-board-controls{bottom:1.25rem!important}
 #vtt-board3d-overlay-host .vtt-automation-move__controls.vtt3d-board-controls{bottom:86px!important}
+
+/* A token whose hero stands on the board as a 3D mini (minis.mjs): its portrait is not drawn, but it stays the
+   token's click target, and its badges and bars stay. Its round frame is not drawn either: the base's ring under the
+   mini shows its side and selection. */
+#vtt-board3d-token-host .vtt-token.vtt3d-mini > .vtt-token__image { opacity: 0; }
+#vtt-board3d-token-host .vtt-token.vtt3d-mini { border-color: transparent !important; background: none !important; box-shadow: none !important; }

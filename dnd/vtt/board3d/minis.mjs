@@ -1,0 +1,41 @@
+import * as THREE from 'three';
+import {readGlb} from './glb-reader.mjs';
+
+// Hero minis: 3D figures for the player characters, standing on their token's base (assets/minis). minis.json says
+// which character sheet (a placement's characterProfileId) gets which hero model, and which monster (its monsterId)
+// gets which monster model (true size; a monster may have no base, its model floating at the token's height), and
+// "names" does the same for a creature with no monster id, by its token's name; a model is fetched only when a
+// token of that character is on the board. A mini turns to face the camera, as the flat tokens do, and is hidden
+// with its floor above the Height cut. The token's portrait is hidden while its mini stands (class vtt3d-mini);
+// its badges, bars and clicks stay on the token.
+const BASE_TOP=.17;
+const url=name=>new URL(`./assets/minis/${name}${new URL(import.meta.url).search}`,import.meta.url).href;
+
+export function createMinis(scene){
+ const root=new THREE.Group();root.name='vtt-hero-minis';scene.add(root);
+ const models=new Map(),standing=new Map();let config=null,configLoad=null,changed=false,time=0;
+ const loadConfig=()=>configLoad??=fetch(url('minis.json')).then(r=>r.ok?r.json():null).catch(()=>null).then(c=>{config=c;changed=true;return c;});
+ const model=name=>{if(models.has(name))return models.get(name);const entry={template:null,extras:null,failed:false};models.set(name,entry);
+  readGlb(url(name+'.glb')).then(({scene:s,extras})=>{s.traverse(o=>{if(!o.isMesh)return;const fx=o.material.userData.additive||o.material.type==='MeshBasicMaterial';const see=o.material.transparent&&!o.material.userData.additive;o.castShadow=!fx&&!see&&!/-glow|-fx|-ghost/.test(o.name);o.receiveShadow=!o.material.userData.additive&&!see;o.renderOrder=o.material.userData.additive?5:see?4:0;});entry.template=s;entry.extras=extras;changed=true;})
+   .catch(error=>{entry.failed=true;console.warn('[3D board] hero mini not loaded:',name,error);});
+  return entry;};
+ /**
+  * records: board tokens {id,x,y,z,width,height,level}; profiles: id -> {hero: characterProfileId, monster: monsterId}; visible(record) whether
+  * its floor is shown; camera: to face. Returns the ids with a mini standing, and whether shadows need redrawing.
+  */
+ function update(records,profiles,visible,camera,dt=0){
+  loadConfig();time+=dt;const seen=new Set();
+  const noBase=new Set();
+  if(config)for(const r of records){const who=profiles.get(r.id)||{},monster=config.monsters?.[who.monster]||config.names?.[String(who.name||'').trim().toLowerCase()],name=monster?.model||config.heroes?.[who.hero];if(!name)continue;if(monster?.noBase)noBase.add(r.id);const entry=model(name);if(!entry.template)continue;
+   let mini=standing.get(r.id);if(!mini||mini.userData.model!==name){if(mini)root.remove(mini);mini=entry.template.clone();mini.userData={model:name,extras:entry.extras};standing.set(r.id,mini);root.add(mini);changed=true;}
+   const scale=monster?(monster.scale??1):(config.scale||1)*Math.max(r.width,r.height),x=r.x,z=r.y,y=r.z+(monster?.noBase?0:BASE_TOP),yaw=Math.atan2(camera.position.x-x,camera.position.z-z),show=visible(r);
+   if(mini.position.x!==x||mini.position.y!==y||mini.position.z!==z||mini.scale.x!==scale||mini.visible!==show)changed=true;
+   mini.position.set(x,y,z);mini.scale.setScalar(scale);mini.rotation.y=yaw;mini.visible=show;seen.add(r.id);
+   // Idle motion from the model's own hint: its glow and effects breathe and turn a little.
+   mini.traverse(o=>{if(o.isMesh&&/-fx$/.test(o.name)){o.rotation.y=Math.sin(time*.8)*.25;o.material.opacity=.75+.25*Math.sin(time*5.3+x);}});
+  }
+  for(const [id,mini] of standing)if(!seen.has(id)){root.remove(mini);standing.delete(id);changed=true;}
+  const redraw=changed;changed=false;return {ids:new Set(standing.keys()),noBase,redraw};
+ }
+ return {update,dispose(){scene.remove(root);for(const e of models.values())e.template?.traverse(o=>{if(o.isMesh){o.geometry.dispose();o.material.map?.dispose();o.material.emissiveMap?.dispose();o.material.dispose();}});}};
+}
