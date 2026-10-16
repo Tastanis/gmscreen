@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {readGlb} from './glb-reader.mjs';
+import {createParticles,HERO_FX} from './hero-fx.mjs';
 
 // Hero minis: 3D figures for the player characters, standing on their token's base (assets/minis). minis.json says
 // which character sheet (a placement's characterProfileId) gets which hero model, and which monster (its monsterId)
@@ -11,12 +12,17 @@ import {readGlb} from './glb-reader.mjs';
 const BASE_TOP=.17;
 const url=name=>new URL(`./assets/minis/${name}${new URL(import.meta.url).search}`,import.meta.url).href;
 
+// A model with several detail levels (top nodes named *_lod0, *_lod1, ...) is drawn as one, switching by camera
+// distance: the finest close up, the lightest far off.
+function detailLevels(s){const levels=s.children.filter(c=>/_lod\d+$/.test(c.name)).sort((a,b)=>a.name.localeCompare(b.name));if(levels.length<2)return s;
+ const lod=new THREE.LOD();levels.forEach((c,i)=>{s.remove(c);lod.addLevel(c,[0,4,10,20][i]??i*10);});s.add(lod);return s;}
+
 export function createMinis(scene){
  const root=new THREE.Group();root.name='vtt-hero-minis';scene.add(root);
  const models=new Map(),standing=new Map();let config=null,configLoad=null,changed=false,time=0;
  const loadConfig=()=>configLoad??=fetch(url('minis.json')).then(r=>r.ok?r.json():null).catch(()=>null).then(c=>{config=c;changed=true;return c;});
  const model=name=>{if(models.has(name))return models.get(name);const entry={template:null,extras:null,failed:false};models.set(name,entry);
-  readGlb(url(name+'.glb')).then(({scene:s,extras})=>{s.traverse(o=>{if(!o.isMesh)return;const fx=o.material.userData.additive||o.material.type==='MeshBasicMaterial';const see=o.material.transparent&&!o.material.userData.additive;o.castShadow=!fx&&!see&&!/-glow|-fx|-ghost/.test(o.name);o.receiveShadow=!o.material.userData.additive&&!see;o.renderOrder=o.material.userData.additive?5:see?4:0;});entry.template=s;entry.extras=extras;changed=true;})
+  readGlb(url(name+'.glb')).then(({scene:s,extras})=>{s.traverse(o=>{if(!o.isMesh)return;const fx=o.material.userData.additive||o.material.type==='MeshBasicMaterial';const see=o.material.transparent&&!o.material.userData.additive;o.castShadow=!fx&&!see&&!/-glow|-fx|-ghost/.test(o.name);o.receiveShadow=!o.material.userData.additive&&!see;o.renderOrder=o.material.userData.additive?5:see?4:0;});entry.template=detailLevels(s);for(const fx of HERO_FX[name]||[])entry.template.add(createParticles({...fx,clock:()=>time}));entry.extras=extras;changed=true;})
    .catch(error=>{entry.failed=true;console.warn('[3D board] hero mini not loaded:',name,error);});
   return entry;};
  /**
@@ -37,5 +43,5 @@ export function createMinis(scene){
   for(const [id,mini] of standing)if(!seen.has(id)){root.remove(mini);standing.delete(id);changed=true;}
   const redraw=changed;changed=false;return {ids:new Set(standing.keys()),noBase,redraw};
  }
- return {update,dispose(){scene.remove(root);for(const e of models.values())e.template?.traverse(o=>{if(o.isMesh){o.geometry.dispose();o.material.map?.dispose();o.material.emissiveMap?.dispose();o.material.dispose();}});}};
+ return {update,dispose(){scene.remove(root);for(const e of models.values())e.template?.traverse(o=>{if(o.isPoints){o.geometry.dispose();o.material.dispose();}if(o.isMesh){o.geometry.dispose();o.material.map?.dispose();o.material.emissiveMap?.dispose();o.material.dispose();}});}};
 }

@@ -37,6 +37,8 @@ export async function readGlb(url){
   else if(m.extensions?.KHR_materials_unlit)out=new THREE.MeshBasicMaterial({...common,transparent:m.alphaMode==='BLEND',toneMapped:false});
   else{out=new THREE.MeshStandardMaterial({...common,metalness:pbr.metallicFactor??1,roughness:pbr.roughnessFactor??1,transparent:m.alphaMode==='BLEND',alphaTest:m.alphaMode==='MASK'?(m.alphaCutoff??.5):0,
    emissive:new THREE.Color().setRGB(...(m.emissiveFactor||[0,0,0]),THREE.SRGBColorSpace),emissiveMap:texture(m.emissiveTexture,true),normalMap:texture(m.normalTexture,false)});
+   // glTF packs roughness in green and metalness in blue of one texture; three.js reads them from the same channels.
+   const mr=texture(pbr.metallicRoughnessTexture,false);if(mr){out.roughnessMap=mr;out.metalnessMap=mr;}
    if(out.normalMap&&m.normalTexture?.scale)out.normalScale.set(m.normalTexture.scale,m.normalTexture.scale);
    if(m.extensions?.KHR_materials_emissive_strength)out.emissiveIntensity=m.extensions.KHR_materials_emissive_strength.emissiveStrength;
    if(m.alphaMode==='BLEND'){out.forceSinglePass=true;out.depthWrite=m.extras?.depthWrite??true;}}

@@ -2,10 +2,10 @@
   "note": "Minis on the 3D board (minis.mjs). heroes: character sheet id (a token's characterProfileId) -> model, scaled by scale x token size. monsters: monster id (a token's monsterId) -> {model, scale (true size, default 1), noBase (floats at the token height with no base or ring)}. names: token name (lower case) -> the same as a monster entry, for a creature with no monster id.",
   "scale": 1.15,
   "heroes": {
-    "cal": "mycelian",
-    "sharon": "rogue",
-    "indigo": "psion",
-    "zepha": "pyre"
+    "cal": "mycelian-meshy",
+    "sharon": "sharon-meshy",
+    "indigo": "psion-meshy",
+    "zepha": "zepha-meshy"
   },
   "monsters": {
     "driftstone-level-4-elite": {

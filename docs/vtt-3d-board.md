@@ -43,7 +43,8 @@ same as before. Vision and fog are still in the code but switched off.
 | `dnd/vtt/board3d/art-kit.mjs`, `assets/kit/` | CC0 art kit (Quaternius nature models, Poly Haven textures; see its CREDITS.md) used to draw the Orchard's rocks, trees, plants and ground. |
 | `dnd/vtt/board3d/vine-art.mjs` | Vine ramps as climbable vines, hanging ivy and roots, ground cover. |
 | `dnd/vtt/board3d/glb-reader.mjs` | A small reader for plain .glb files (no compression, no animation), so no outside loader is needed. |
-| `dnd/vtt/board3d/minis.mjs`, `assets/minis/` | 3D minis on tokens. `minis.json` maps a character sheet id (heroes) or monster id (monsters), or a token name, to a model; `noBase` floats a model with no base. |
+| `dnd/vtt/board3d/minis.mjs`, `assets/minis/` | 3D minis on tokens. `minis.json` maps a character sheet id (heroes) or monster id (monsters), or a token name, to a model; `noBase` floats a model with no base. A model whose top nodes are named `*_lod0/1/2` switches detail by camera distance. |
+| `dnd/vtt/board3d/hero-fx.mjs` | Hero particle effects (embers, spores, psionic sparks), run on the graphics card and added to a hero's mini. |
 | `dnd/vtt/board3d/scene-art.mjs` | A map's own 3D art from `assets/scenes/index.json` (matched by terrain size and floor ids), drawn over the map that plays. No maps are installed yet. |
 
 ## Gravity Orchard art (October 14–15, 2026)
