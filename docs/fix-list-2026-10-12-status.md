@@ -848,3 +848,11 @@ The Gravity Orchard's map is not touched.
 - **Scenes already uploaded:** every scene in the Scenes panel has a **Folder** choice at the bottom of its card.
   Pick a folder and the scene moves there (pick Unsorted to take it out). Medpilis v5b can be filed this way.
 - A folder that was deleted in the meantime is refused with a plain message, never guessed at.
+
+## Build 523: opening a scene unloads the old one
+
+- When you open another scene, the old one is cleared off the board straight away: its art, its islands and
+  vines, its tokens and its buttons. The board says "Loading scene…" until the new scene is ready, then draws only
+  the new one. Nothing of the old scene is layered under the new one any more, so no refresh is needed.
+- One cause was that the board remembered a scene's floors and ramps by a number two scenes could share, so the
+  new scene could be drawn with the old one's floating islands. It now remembers them per scene.
