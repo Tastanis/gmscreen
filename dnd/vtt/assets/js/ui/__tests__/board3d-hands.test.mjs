@@ -17,14 +17,30 @@ const minis = readFileSync(new URL('../../../../board3d/minis.mjs', import.meta.
 const board = readFileSync(new URL('../board-interactions.js', import.meta.url), 'utf8');
 
 test('hold Z and drag: up and down a square at a time, never below what is under it, saved on letting go', () => {
-  assert.match(board3d, /if\(\(e\.key==='z'\|\|e\.key==='Z'\)&&!e\.ctrlKey&&!e\.metaKey&&!e\.altKey&&!typing\(e\.target\)\)zHeld=true;/, 'Z is held, but not while typing, and not Ctrl+Z');
+  assert.match(board3d, /if\(\(e\.key==='z'\|\|e\.key==='Z'\)&&!e\.ctrlKey&&!e\.metaKey&&!e\.altKey&&!typing\(e\.target\)\)\{zHeld=true;/, 'Z is held, but not while typing, and not Ctrl+Z');
   assert.match(board3d, /if\(zHeld&&p&&p\.canMove!==false&&!context\.busy\)\{cancelDrag\(\);if\(!context\.selectedIds\?\.includes\(id\)\)bridge\.select\(id\);board\.focus\(\{preventScroll:true\}\);startLift\(p,e\);return;\}/, 'a token this user may move, players included; first, even over a held token');
   assert.match(board3d, /steps=Math\.round\(\(lift\.y-e\.clientY\)\/perSquare\);\s*lift\.z=steps\?Math\.max\(Math\.ceil\(lift\.floor-\.01\),Math\.round\(lift\.start\)\+steps\):lift\.start;/, 'up the screen is up; it stops at the floor below');
-  assert.match(board3d, /liftLabel\.textContent=up\?`\$\{up\} \$\{up===1\?'square':'squares'\} up`:'On the ground';/);
-  assert.match(board3d, /if\(!save\|\|done\.z===done\.start\)\{held=null;return;\}\s*try\{await bridge\.setHeight\?\.\(done\.id,done\.z\);\}/, 'nothing is sent when the height did not change; Escape takes it back');
-  assert.match(board3d, /if\(lift&&e\.key==='Escape'\)\{e\.preventDefault\(\);e\.stopImmediatePropagation\(\);endLift\(false\);return;\}/);
+  assert.match(board3d, /liftLabel\.textContent=\(up\?`\$\{up\} \$\{up===1\?'square':'squares'\} up`:'On the ground'\)/);
+  assert.match(board3d, /const z=keepHolding\?\(done\.locked\?\?done\.start\):done\.z;\s*if\(save&&z!==\(done\.saved\?\?done\.start\)\)\{try\{await bridge\.setHeight\?\.\(done\.id,z\);\}/, 'nothing is sent when the height did not change');
+  assert.match(board3d, /if\(lift&&e\.key==='Escape'\)\{e\.preventDefault\(\);e\.stopImmediatePropagation\(\);const from=lift\.from;endLift\(false\);if\(from\)cancelDrag\(\);return;\}/, 'Escape takes it back');
   // The bridge: a token that walked starts flying; one this user may not move is left alone.
   assert.match(board, /async setHeight\(id, z\) \{\s*const placement = coordinatePlacement\(id\), sceneId = getActiveSceneId\(\);\s*if \(!placement \|\| !sceneId \|\| !canCurrentUserMovePlacement\(placement\) \|\| !Number\.isFinite\(z\) \|\| z < 0\) return false;\s*const patch = \{ flightHeight: z, \.\.\.\(\['fly', 'hover'\]\.includes\(placement\.movementMode\) \? \{\} : \{ movementMode: 'fly' \}\) \};/);
+});
+
+test('Z pressed while a token is already held switches it to up and down, as Shift and Space switch how it moves (Build 521)', () => {
+  assert.match(board3d, /zHeld=true;if\(!lift&&\(drag\|\|clickMoveTokenId\)\)liftHeld\(\);/, 'dragged or click-held');
+  assert.match(board3d, /if\(e\.key==='z'\|\|e\.key==='Z'\)\{zHeld=false;if\(lift\?\.from\)endLift\(true,true\);\}/, 'Z let go: sideways again');
+  // Brandon: lift it, right-click for a waypoint, let go of Z, and it is locked at that height and moves on from there.
+  assert.match(board3d, /onRightClick:\(\)=>\{if\(lift\?\.from\)\{lockLift\(\);return true;\}/, 'a right-click while it goes up and down is a waypoint at that height');
+  assert.match(board3d, /async function lockLift\(\)\{const done=lift;if\(!done\?\.from\)return false;done\.locked=done\.z;[\s\S]{0,120}await bridge\.setHeight\?\.\(done\.id,done\.z\);/, 'kept at once');
+  assert.match(board3d, /const z=keepHolding\?\(done\.locked\?\?done\.start\):done\.z;/, 'Z let go: from the waypoint, or back where it started when none was made');
+  assert.match(board3d, /\+\(lift\.locked===lift\.z\?' \(waypoint\)':''\);/);
+  assert.match(board3d, /function liftHeld\(\)\{[\s\S]{0,300}bridge\.endMovementPreview\?\.\(\);clearGuides\(\);/, 'the sideways preview is put away while it goes up and down');
+  assert.match(board3d, /window\.addEventListener\('pointermove',e=>\{if\(!drag\|\|e\.pointerId!==drag\.pointerId\|\|lift\)return;/, 'and the sideways drag stands still');
+  assert.match(board3d, /function showHover\(e,p=selected\(\)\)\{\s*if\(!view\|\|lift\)return;/);
+  assert.match(board3d, /if\(keepHolding&&\(drag\?\.id===done\.id\|\|clickMoveTokenId===done\.id\)\)\{if\(drag\?\.air\)drag\.air\.z=z;/, 'a flier keeps its new height going sideways');
+  assert.match(board3d, /if\(liftPointer\(e\)&&e\.button===0\)\{e\.preventDefault\(\);e\.stopPropagation\(\);const from=lift\.from;endLift\(true\);if\(from\)cancelDrag\(\);\}/, 'letting go of the mouse keeps the height and ends the hold');
+  assert.match(board3d, /if\(liftPointer\(e\)&&!\(lift\.from==='hold'&&\(e\.buttons&6\)\)\)/, 'turning or panning the view does not change the height');
 });
 
 test('a flying token is dragged on a sheet at its own height, keeping where it was grabbed', () => {

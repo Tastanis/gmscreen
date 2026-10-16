@@ -208,7 +208,7 @@ async function mount(){
   const dest=destination(hit,p);let status='pending';for(let i=0;i<60&&status==='pending';i++)status=planner.plan(p,{...dest,surfaceElevation:hit.z,levelId:hit.levelId??null,surfaceId:hit.surfaceId??null,rampId:hit.rampId??null},movementKind(e)).status;
   hoverSignature='';showHover(e,p);}
  function showHover(e,p=selected()){
-  if(!view)return;
+  if(!view||lift)return;
   if(Number.isFinite(e.clientX)&&Number.isFinite(e.clientY))hoverPointer={clientX:e.clientX,clientY:e.clientY,shiftKey:!!e.shiftKey,ctrlKey:!!e.ctrlKey,altKey:!!e.altKey,metaKey:!!e.metaKey};
   if(context.targetMode==='area'||context.targetMode==='move'){const hit=pickAtClient(e.clientX,e.clientY,{tokens:false});if(hit){const cell={column:Math.floor(hit.x),row:Math.floor(hit.y)},key=`ability:${context.targetMode}:${cell.column}:${cell.row}`;if(key!==hoverSignature){hoverSignature=key;bridge.previewAbility?.(cell);context=bridge.getContext();paintAbilityGuide();}}return;}
   if(!p||(!drag?.moved&&clickMoveTokenId!==p.id)||context.busy||context.targetMode){if(hoverSignature){view.setReachable([]);view.setPath([]);hoverSignature='';}return;}
@@ -239,7 +239,7 @@ async function mount(){
 
  // Tokens: select, drag or click-to-move, through the VTT bridge.
  tokenLayer.addEventListener('pointerdown',e=>{const node=e.target.closest('[data-placement-id]');if(!node||e.target.closest('[data-token-trigger-ready],[data-token-judgment-mark],[data-token-hidden-effect],button'))return;
-  if(e.button!==0)return;e.preventDefault();e.stopImmediatePropagation();const id=node.dataset.placementId;
+  if(e.button!==0)return;e.preventDefault();e.stopImmediatePropagation();if(lift)return;const id=node.dataset.placementId;
   if(context.targetMode){const p=find(id);if(p)bridge.pickAbility?.({column:p.column,row:p.row,placementId:id});return;}
   if(bridge.target(id,{clientX:e.clientX,clientY:e.clientY}))return;
   const p=find(id);
@@ -256,36 +256,55 @@ async function mount(){
  // 2026). Players may lift their own tokens.
  let zHeld=false,lift=null,liftLabel=null;
  const typing=t=>!!t?.closest?.('input,textarea,select,[contenteditable]');
- document.addEventListener('keydown',e=>{if((e.key==='z'||e.key==='Z')&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!typing(e.target))zHeld=true;},true);
- document.addEventListener('keyup',e=>{if(e.key==='z'||e.key==='Z')zHeld=false;},true);
- window.addEventListener('blur',()=>{zHeld=false;endLift(false);});
+ // Z pressed while a token is already held switches it to up and down, as Shift and Space switch how it moves;
+ // Z let go turns it back to sideways, from its new height (Brandon, October 2026).
+ document.addEventListener('keydown',e=>{if((e.key==='z'||e.key==='Z')&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!typing(e.target)){zHeld=true;if(!lift&&(drag||clickMoveTokenId))liftHeld();}},true);
+ document.addEventListener('keyup',e=>{if(e.key==='z'||e.key==='Z'){zHeld=false;if(lift?.from)endLift(true,true);}},true);
+ window.addEventListener('blur',()=>{zHeld=false;const from=lift?.from;endLift(false);if(from)cancelDrag();});
  // What a token would stand on below the height it is at: a floor, a ramp or the ground (the tether's own rule).
  function supportUnder(w){const below=tethers([{...w,level:-1}])[0];return Number.isFinite(below?.bottom)?below.bottom:w.z;}
- function startLift(p,e){const w=world(p);lift={id:p.id,pointerId:e.pointerId,y:e.clientY,start:w.z,z:w.z,floor:supportUnder(w),x:w.x,yy:w.y};tokenLayer.setPointerCapture(e.pointerId);
+ function startLift(p,e){const w=world(p);lift={id:p.id,pointerId:e.pointerId,from:null,y:e.clientY,start:w.z,z:w.z,floor:supportUnder(w),x:w.x,yy:w.y};tokenLayer.setPointerCapture(e.pointerId);
   held={id:p.id,x:w.x,y:w.y,z:w.z};showLift();}
+ // A token already held (dragged, or picked up by a click) goes up and down from where the pointer is now; the
+ // sideways preview is put away while it does.
+ function liftHeld(){const id=drag?.id??clickMoveTokenId,p=find(id),pointer=drag?.pointer??(drag?{clientX:drag.x,clientY:drag.y}:hoverPointer);
+  if(!p||p.canMove===false||context.busy||!pointer||!view)return;
+  bridge.endMovementPreview?.();clearGuides();hoverSignature='';const w=world(p);
+  lift={id,pointerId:drag?drag.pointerId:null,from:drag?'drag':'hold',y:pointer.clientY,start:w.z,z:w.z,floor:supportUnder(w),x:w.x,yy:w.y};held={id,x:w.x,y:w.y,z:w.z};showLift();}
  function moveLift(e){if(!lift||!view)return;const at={x:lift.x,y:lift.yy},a=view.project({...at,z:lift.start}),b=view.project({...at,z:lift.start+1});
   const perSquare=Math.max(8,Math.abs(a.y-b.y)),steps=Math.round((lift.y-e.clientY)/perSquare);
   lift.z=steps?Math.max(Math.ceil(lift.floor-.01),Math.round(lift.start)+steps):lift.start;held={id:lift.id,x:lift.x,y:lift.yy,z:lift.z};showLift();}
  function showLift(){if(!lift||!view)return;if(!liftLabel){liftLabel=document.createElement('div');liftLabel.className='vtt3d-lift-label';liftLabel.setAttribute('role','status');overlayHost.append(liftLabel);}
   const up=Math.max(0,Math.round(lift.z-lift.floor)),q=view.project({x:lift.x,y:lift.yy,z:lift.z}),canvasRect=canvas.getBoundingClientRect(),hostRect=overlayHost.getBoundingClientRect();
-  liftLabel.textContent=up?`${up} ${up===1?'square':'squares'} up`:'On the ground';liftLabel.style.left=`${canvasRect.left-hostRect.left+q.x}px`;liftLabel.style.top=`${canvasRect.top-hostRect.top+q.y}px`;}
- async function endLift(save){const done=lift;lift=null;liftLabel?.remove();liftLabel=null;if(!done)return;if(tokenLayer.hasPointerCapture(done.pointerId))tokenLayer.releasePointerCapture(done.pointerId);
-  if(!save||done.z===done.start){held=null;return;}
-  try{await bridge.setHeight?.(done.id,done.z);}finally{held=null;context=bridge.getContext();}}
- window.addEventListener('pointermove',e=>{if(lift&&e.pointerId===lift.pointerId){e.stopPropagation();moveLift(e);}},true);
- window.addEventListener('pointerup',e=>{if(lift&&e.pointerId===lift.pointerId){e.preventDefault();e.stopPropagation();endLift(true);}},true);
- window.addEventListener('pointercancel',e=>{if(lift&&e.pointerId===lift.pointerId)endLift(false);},true);
+  liftLabel.textContent=(up?`${up} ${up===1?'square':'squares'} up`:'On the ground')+(lift.locked===lift.z?' (waypoint)':'');liftLabel.style.left=`${canvasRect.left-hostRect.left+q.x}px`;liftLabel.style.top=`${canvasRect.top-hostRect.top+q.y}px`;}
+ // Right-click while a held token goes up and down: a waypoint at that height. The height is kept (saved now), and
+ // letting go of Z goes on sideways from there (Brandon, October 2026). Another right-click moves the waypoint.
+ async function lockLift(){const done=lift;if(!done?.from)return false;done.locked=done.z;showLift();
+  if(done.z!==(done.saved??done.start)){done.saved=done.z;try{await bridge.setHeight?.(done.id,done.z);}finally{context=bridge.getContext();}}return true;}
+ // keepHolding: Z let go while the token is still held. It goes on sideways from its last waypoint's height, or from
+ // where it started when no waypoint was made. Letting go of the mouse instead keeps the height it is at.
+ async function endLift(save,keepHolding=false){const done=lift;lift=null;liftLabel?.remove();liftLabel=null;if(!done)return;
+  if(!done.from&&tokenLayer.hasPointerCapture(done.pointerId))tokenLayer.releasePointerCapture(done.pointerId);
+  const z=keepHolding?(done.locked??done.start):done.z;
+  if(save&&z!==(done.saved??done.start)){try{await bridge.setHeight?.(done.id,z);}finally{context=bridge.getContext();}}
+  held=null;
+  if(keepHolding&&(drag?.id===done.id||clickMoveTokenId===done.id)){if(drag?.air)drag.air.z=z;hoverSignature='';const pointer=drag?.pointer??hoverPointer;if(pointer)showHover(pointer,find(done.id));}}
+ const liftPointer=e=>!!lift&&(lift.pointerId===null||e.pointerId===lift.pointerId);
+ window.addEventListener('pointermove',e=>{if(liftPointer(e)&&!(lift.from==='hold'&&(e.buttons&6))){e.stopPropagation();moveLift(e);}},true);
+ // Letting go of the mouse (or the click that puts a click-held token down) keeps the height, and ends the hold.
+ window.addEventListener('pointerup',e=>{if(liftPointer(e)&&e.button===0){e.preventDefault();e.stopPropagation();const from=lift.from;endLift(true);if(from)cancelDrag();}},true);
+ window.addEventListener('pointercancel',e=>{if(liftPointer(e)){const from=lift.from;endLift(false);if(from)cancelDrag();}},true);
  // The held token is followed at the window, not by pointer capture: pressing
  // another mouse button to turn or pan the view can drop the capture, and the
  // left button's release must still drop the token where it is held.
- window.addEventListener('pointermove',e=>{if(!drag||e.pointerId!==drag.pointerId)return;e.stopPropagation();drag.pointer={clientX:e.clientX,clientY:e.clientY,shiftKey:e.shiftKey,ctrlKey:e.ctrlKey,altKey:e.altKey,metaKey:e.metaKey};if(!drag.moved&&Math.hypot(e.clientX-drag.x,e.clientY-drag.y)>5){drag.moved=true;markHeld(drag.id);}if(drag.moved)showHover(e,find(drag.id));if(!(e.buttons&1))finishDrag(e);},true);
+ window.addEventListener('pointermove',e=>{if(!drag||e.pointerId!==drag.pointerId||lift)return;e.stopPropagation();drag.pointer={clientX:e.clientX,clientY:e.clientY,shiftKey:e.shiftKey,ctrlKey:e.ctrlKey,altKey:e.altKey,metaKey:e.metaKey};if(!drag.moved&&Math.hypot(e.clientX-drag.x,e.clientY-drag.y)>5){drag.moved=true;markHeld(drag.id);}if(drag.moved)showHover(e,find(drag.id));if(!(e.buttons&1))finishDrag(e);},true);
  window.addEventListener('pointerup',e=>{if(!drag||e.pointerId!==drag.pointerId||(e.buttons&1))return;e.preventDefault();e.stopPropagation();finishDrag(e);},true);
  function finishDrag(e){const released=drag;if(!released)return;if(released.moved)settleRoute(e,find(released.id));const intent=bridge.captureMovementPreview?.();cancelDrag();
   if(released.moved){const hit=dragHit(e,find(released.id),released.air||null);if(hit)commit(hit,find(released.id),e,intent);}else{clickMoveTokenId=released.id;markHeld(released.id);}}
  window.addEventListener('pointercancel',e=>{if(drag&&e.pointerId===drag.pointerId)cancelDrag();},true);
  tokenLayer.addEventListener('contextmenu',e=>{const node=e.target.closest('[data-placement-id]');if(!node)return;e.preventDefault();e.stopImmediatePropagation();bridge.openSettings(node.dataset.placementId,{clientX:e.clientX,clientY:e.clientY});},true);
  window.addEventListener('blur',cancelDrag);document.addEventListener('visibilitychange',()=>{if(document.hidden)cancelDrag();});
- const refreshDragKeys=e=>{if(lift&&e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();endLift(false);return;}if((!drag&&!clickMoveTokenId)||e.target?.closest?.('input,textarea,select,[contenteditable],button,dialog'))return;if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();cancelDrag();return;}if((drag?.moved||clickMoveTokenId)&&['Shift','Control',' '].includes(e.key)){const pointer=drag?.pointer??hoverPointer;if(pointer){hoverSignature='';showHover({...pointer,ctrlKey:e.ctrlKey,shiftKey:e.shiftKey},find(drag?.id??clickMoveTokenId));}}};
+ const refreshDragKeys=e=>{if(lift&&e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();const from=lift.from;endLift(false);if(from)cancelDrag();return;}if(lift)return;if((!drag&&!clickMoveTokenId)||e.target?.closest?.('input,textarea,select,[contenteditable],button,dialog'))return;if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();cancelDrag();return;}if((drag?.moved||clickMoveTokenId)&&['Shift','Control',' '].includes(e.key)){const pointer=drag?.pointer??hoverPointer;if(pointer){hoverSignature='';showHover({...pointer,ctrlKey:e.ctrlKey,shiftKey:e.shiftKey},find(drag?.id??clickMoveTokenId));}}};
  document.addEventListener('keydown',refreshDragKeys,true);document.addEventListener('keyup',refreshDragKeys,true);
  document.addEventListener('vtt3d:movement-preview-cancelled',cancelDrag);
 
@@ -294,7 +313,7 @@ async function mount(){
  const inBoard=e=>!!(e.target?.closest?.('#vtt-map-surface,#vtt-board3d-token-host,#vtt-board3d')||(drag&&e.target===tokenLayer));
  bindCameraInput({controls:{orbit:(dx,dy)=>view?.orbit(dx,dy)},zoomAt:(x,y,d)=>view?.zoomAt(x,y,d),grabStart:(x,y)=>view?.grabStart(x,y),grabMove:(x,y)=>view?.grabMove(x,y),inBoard,onChange:()=>refreshHeld(),
   // A quick right click while a token is held drops a corner of its path there, as on the 2D board.
-  onRightClick:()=>{if(!drag?.moved&&!clickMoveTokenId)return false;if(addExternalMeasurementNode()){hoverSignature='';refreshHeld();}return true;}});
+  onRightClick:()=>{if(lift?.from){lockLift();return true;}if(!drag?.moved&&!clickMoveTokenId)return false;if(addExternalMeasurementNode()){hoverSignature='';refreshHeld();}return true;}});
 
  let guideSignature='',areaPreview=null;
  // An ability's area while it is being placed: the same see-through volume as templates
