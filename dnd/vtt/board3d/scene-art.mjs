@@ -17,6 +17,6 @@ export function sceneArtFor(context){
 export function loadSceneArt(entry){
  if(!loaded.has(entry.id))loaded.set(entry.id,readGlb(url(entry.glb)).then(({scene})=>{
   scene.traverse(o=>{if(!o.isMesh)return;const see=o.material.transparent;o.castShadow=!see&&!o.material.userData.additive;o.receiveShadow=!o.material.userData.additive;});
-  return scene;}));
+  return scene;}).catch(error=>{loaded.delete(entry.id);throw error;})); // a failed read is tried again next time
  return loaded.get(entry.id);
 }

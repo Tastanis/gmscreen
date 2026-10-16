@@ -112,7 +112,9 @@ function addBob(material,time,amount=.12){
    mvPosition=modelViewMatrix*mvPosition;gl_Position=projectionMatrix*mvPosition;`);};
  material.customProgramCacheKey=()=>(key?key.call(material):'')+'|bob';material.needsUpdate=true;return material;
 }
-export async function createSceneView({canvas,sceneData:d,groundPicture=null}){
+// isCurrent: whether this board is still wanted. When another scene is opened while this one loads, the build stops at
+// its next wait, frees what it made and returns null, so an old scene never lands on the new one.
+export async function createSceneView({canvas,sceneData:d,groundPicture=null,isCurrent=()=>true}){
  const waterUniforms={uTime:{value:0}}; // the board clock: water, glows, motes and floating rocks
  const near={value:0}; // how close to the camera decoration dissolves (addNearFade), set each frame
  const levelHeights=d.levelHeights||[0,6,12,18,24,30],levelAt=z=>Math.max(0,levelHeights.findIndex(h=>Math.abs(h-z)<.1));
@@ -151,7 +153,12 @@ export async function createSceneView({canvas,sceneData:d,groundPicture=null}){
  const materials={stone:new THREE.MeshStandardMaterial({color:'#e2c7a0',map:stoneTex,roughness:.88}),cap:new THREE.MeshStandardMaterial({color:'#ead5b1',roughness:.8}),wood:new THREE.MeshStandardMaterial({color:'#d9ba93',map:woodTex,roughness:.78}),darkWood:new THREE.MeshStandardMaterial({color:'#493b31',roughness:.7}),brass:new THREE.MeshStandardMaterial({color:'#d6ab52',metalness:.72,roughness:.32}),blue:new THREE.MeshStandardMaterial({color:'#247786',metalness:.3,roughness:.35}),leaf:new THREE.MeshStandardMaterial({color:'#52786c',roughness:.8}),rock:new THREE.MeshStandardMaterial({color:'#bba081',flatShading:true,roughness:1}),book:new THREE.MeshStandardMaterial({color:'#6a8c96',roughness:.8}),roof:new THREE.MeshStandardMaterial({color:'#3d6f76',metalness:.12,roughness:.6})};
  materials.stone.color.set('#c0c5bd');materials.cap.color.set('#bebfae');materials.wood.color.set('#87745d');materials.rock.color.set('#676e6b');materials.leaf.color.set('#2c5945');materials.roof.color.set('#824e34');
  Object.assign(materials,{snow:new THREE.MeshStandardMaterial({color:'#dde7e4',roughness:.94}),cloth:new THREE.MeshStandardMaterial({color:'#ddd5bb',roughness:.95}),red:new THREE.MeshStandardMaterial({color:'#9a4f3d',roughness:.92}),metal:new THREE.MeshStandardMaterial({color:'#485f64',metalness:.58,roughness:.45}),glow:new THREE.MeshStandardMaterial({color:'#edb15b',emissive:'#ffa444',emissiveIntensity:.7,roughness:.4}),steam:new THREE.MeshBasicMaterial({color:'#d9edeb',transparent:true,opacity:.048,depthWrite:false})});
- const surfaceTextures=await loadSurfaceTextures(renderer),photographic=['ground','rock','wood','stone'].every(k=>surfaceTextures.sets[k]);
+ const abandoned=(...extra)=>{if(isCurrent())return false;const gs=new Set(),ms=new Set(Object.values(materials));
+  scene.traverse(o=>{if(o.geometry)gs.add(o.geometry);for(const m of Array.isArray(o.material)?o.material:o.material?[o.material]:[])ms.add(m);});
+  for(const g of gs)g.dispose();for(const m of ms)m.dispose();stoneTex.dispose();woodTex.dispose();scene.environment?.dispose();for(const x of extra)x?.dispose?.();
+  renderer.dispose();renderer.forceContextLoss();return true;};
+ const surfaceTextures=await loadSurfaceTextures(renderer);if(abandoned(surfaceTextures))return null;
+ const photographic=['ground','rock','wood','stone'].every(k=>surfaceTextures.sets[k]);
  if(photographic){
   const s=surfaceTextures.sets;
   for(const key of ['stone','cap','wood','darkWood','rock'])materials[key].dispose();
@@ -166,7 +173,7 @@ export async function createSceneView({canvas,sceneData:d,groundPicture=null}){
  materials.flower=new THREE.MeshStandardMaterial({color:'#b89bd2',roughness:.75});
  materials.rock.side=THREE.DoubleSide;
  // CC0 art kit (art-kit.mjs): models and textures for plants, trees, rocks and vines. Without it the plain shapes below are drawn.
- const kit=d.props?.length||d.ramps?.length?await loadArtKit(renderer):null;
+ const kit=d.props?.length||d.ramps?.length?await loadArtKit(renderer):null;if(abandoned(surfaceTextures,kit))return null;
  const kitTexture=(file,srgb=true)=>kit?.texture(file,{srgb,repeat:true})||null;
  const cliffSet=kit?{diff:kitTexture('cliff-diff.webp'),normal:kitTexture('cliff-normal.webp',false),rough:kitTexture('cliff-rough.webp',false)}:null;
  const grassSet=kit?{diff:kitTexture('grass-diff.webp'),normal:kitTexture('grass-normal.webp',false),rough:kitTexture('grass-rough.webp',false)}:null;
@@ -226,7 +233,8 @@ export async function createSceneView({canvas,sceneData:d,groundPicture=null}){
  let pictureTexture=null;
  if(groundPicture?.url){pictureTexture=await new THREE.TextureLoader().loadAsync(groundPicture.url).catch(()=>null);
   if(pictureTexture){pictureTexture.colorSpace=THREE.SRGBColorSpace;pictureTexture.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());pictureTexture.wrapS=pictureTexture.wrapT=THREE.ClampToEdgeWrapping;
-   const r=groundPicture;pictureTexture.repeat.set(w/r.width,depth/r.height);pictureTexture.offset.set(-r.left/r.width,1-depth/r.height+r.top/r.height);}}
+   const r=groundPicture;pictureTexture.repeat.set(w/r.width,depth/r.height);pictureTexture.offset.set(-r.left/r.width,1-depth/r.height+r.top/r.height);}
+  if(abandoned(surfaceTextures,kit,pictureTexture))return null;}
  const terrainMaterial=pictureTexture?new THREE.MeshStandardMaterial({map:pictureTexture,roughness:1,metalness:0}):photographic?surfaceMaterial(cliffSet||surfaceTextures.sets.rock,{terrainGround:grassSet||surfaceTextures.sets.ground,color:cliffSet?'#ffffff':'#c9cbbd',scale:cliffSet?.22:.48,groundScale:grassSet?.42:.36,normalStrength:.55,tint:cliffSet?{color:'#a2a69a',amount:.72}:null,groundTint:grassSet?{color:'#6c9e47',amount:.8}:null,groundAlt:grassSet?surfaceTextures.sets.ground:null,groundAltTint:{color:'#7d6643',amount:.55}}):new THREE.MeshStandardMaterial({vertexColors:true,roughness:1});
  const terrain=new THREE.Mesh(terrainG,terrainMaterial);terrain.receiveShadow=true;terrain.userData={level:0};root.add(terrain);pickSurfaces.push(terrain);
  function heightAt(x,y){const gx=Math.max(0,Math.min(n-1,(x-fx0)/fw*(n-1))),gy=Math.max(0,Math.min(m-1,(y-fz0)/fd*(m-1)));const a=Math.floor(gx),b=Math.floor(gy),u=gx-a,v=gy-b;return (h[b*n+a]*(1-u)+h[b*n+Math.min(a+1,n-1)]*u)*(1-v)+(h[Math.min(b+1,m-1)*n+a]*(1-u)+h[Math.min(b+1,m-1)*n+Math.min(a+1,n-1)]*u)*v;}
@@ -738,6 +746,7 @@ export async function createSceneView({canvas,sceneData:d,groundPicture=null}){
  const tokenBases=new THREE.InstancedMesh(new THREE.CylinderGeometry(.42,.44,.10,24),new THREE.MeshStandardMaterial({color:'#162d37',roughness:.35,metalness:.4}),tokenCapacity);
  const tokenRings=new THREE.InstancedMesh(new THREE.TorusGeometry(.36,.045,7,32),new THREE.MeshBasicMaterial({color:'#ffffff'}),tokenCapacity);
  for(const mesh of [tokenBodies,tokenHeads,tokenBases,tokenRings]){mesh.count=0;mesh.castShadow=true;mesh.frustumCulled=false;mesh.boundingSphere=new THREE.Sphere(new THREE.Vector3(w/2,2,depth/2),w+depth);scene.add(mesh);}tokenBodies.userData.token=true;tokenBases.userData.token=true;tokenHeads.userData.token=true;
+ let disposed=false; // set by dispose(): art that finishes loading for a board already gone is not added
  let tokenRecords=[],selectedId=null,visibleTokens=[],noBaseIds=new Set(),noBaseKey='';
  function belongsToLevel(p){
   if(Number.isFinite(p.level)&&p.level<10)return p.level;
@@ -856,12 +865,13 @@ export async function createSceneView({canvas,sceneData:d,groundPicture=null}){
   setTokenBodiesVisible(value){tokenBodies.visible=tokenHeads.visible=!!value;},
   setTokens(tokens,id){tokenRecords=tokens;selectedId=id;updateTokenMatrices();},
   // Tokens whose mini floats with no base (minis.json noBase): no base or ring is drawn under them.
+  get disposed(){return disposed;},
   // A map's own 3D art (a .glb: scene-art.mjs) in place of the board's drawn ground, floors and sides. The ground and
   // floors stay as unseen surfaces for picking and height; the grid stays. Each art part is hidden with its level.
-  useArtModel(){const keep=new Set([...pickSurfaces,...grids]),hidden=new THREE.MeshBasicMaterial({visible:false});
+  useArtModel(){if(disposed)return false;const keep=new Set([...pickSurfaces,...grids]),hidden=new THREE.MeshBasicMaterial({visible:false});
    for(const o of [...root.children])if(!keep.has(o))root.remove(o);props.length=0;
    for(const o of pickSurfaces){o.material=hidden;o.castShadow=false;}renderer.shadowMap.needsUpdate=true;},
-  addLevelArt(object,level,{always=false}={}){object.userData.level=always?0:level;object.userData.category='art';root.add(object);props.push(object);updateLevels();},
+  addLevelArt(object,level,{always=false}={}){if(disposed)return false;object.userData.level=always?0:level;object.userData.category='art';root.add(object);props.push(object);updateLevels();},
   removeLevelArt(object){root.remove(object);const i=props.indexOf(object);if(i>=0)props.splice(i,1);},
   setTokensWithoutBase(ids){const key=[...(ids||[])].sort().join(',');if(key===noBaseKey)return;noBaseKey=key;noBaseIds=new Set(ids||[]);if(tokenRecords.length)updateTokenMatrices();},
   setLevel(level){activeLevel=Number(level);updateLevels();},setGrid(value){gridOn=value;updateLevels();},setRoofs(value){roofsOn=value;updateLevels();},setDoors(value){doorsOpen=value;updateLevels();},
@@ -879,6 +889,7 @@ export async function createSceneView({canvas,sceneData:d,groundPicture=null}){
   metrics(){return {drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures,tokens:visibleTokens.length,movementRoute:movementRoute.summary(),propReport,materials:{photographic,loadedTextures:surfaceTextures.loaded,expectedTextures:12,errors:surfaceTextures.errors,projection:'world-space triplanar',terrainDisplacement:false}};},
   // Canvas size is read on resize, not per call: a read between style writes would force a layout each time.
   project(point){projected.set(point.x,point.z||0,point.y).project(camera);return {x:(projected.x+1)*viewSize.width/2,y:(1-projected.y)*viewSize.height/2,visible:projected.z<1&&projected.z>-1};},
-  dispose(){controls.dispose();movementRoute.dispose();if(pathLine)pathLine.geometry.dispose();pathMat.dispose();pathGhostMat.dispose();const gs=new Set(),ms=new Set();scene.traverse(o=>{if(o.geometry)gs.add(o.geometry);for(const m of Array.isArray(o.material)?o.material:o.material?[o.material]:[])ms.add(m);});for(const g of gs)g.dispose();for(const m of ms)m.dispose();stoneTex.dispose();woodTex.dispose();kit?.dispose();scene.environment?.dispose();pictureTexture?.dispose();surfaceTextures.dispose();renderer.dispose();renderer.forceContextLoss();}
+  // A map's own art (addLevelArt) is loaded once and moved from board to board: it is taken off, never freed, here.
+  dispose(){if(disposed)return;disposed=true;for(const o of [...props])if(o.userData.category==='art')root.remove(o);controls.dispose();movementRoute.dispose();if(pathLine)pathLine.geometry.dispose();pathMat.dispose();pathGhostMat.dispose();const gs=new Set(),ms=new Set();scene.traverse(o=>{if(o.geometry)gs.add(o.geometry);for(const m of Array.isArray(o.material)?o.material:o.material?[o.material]:[])ms.add(m);});for(const g of gs)g.dispose();for(const m of ms)m.dispose();stoneTex.dispose();woodTex.dispose();kit?.dispose();scene.environment?.dispose();pictureTexture?.dispose();surfaceTextures.dispose();renderer.dispose();renderer.forceContextLoss();}
  };
 }
