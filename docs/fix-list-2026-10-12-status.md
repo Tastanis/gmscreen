@@ -874,3 +874,10 @@ The Gravity Orchard's map is not touched.
 
 - Importing a scene no longer asks "Allow players to browse this new scene". Every imported scene starts hidden
   from players. **Show Players** is the way to show it, as before.
+
+## Build 529: falls from 3 squares, and no dip when a model is put down
+
+- **Falls:** Agility is taken off first, and a fall counts only if what is left is 3 squares or more. So falling 3
+  with Agility 1 (3 - 1 = 2) is no fall: no damage, not prone, no pop-up. Falling 4 with Agility 1 is a fall of 3.
+- **Putting a model down:** it stays where it is landing until the move is answered, instead of first dropping to
+  the ground and then popping up onto the floor it reached.
