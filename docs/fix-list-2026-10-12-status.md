@@ -864,3 +864,8 @@ The Gravity Orchard's map is not touched.
 - A scene with its own 3D art keeps "Loading scene…" up until the art is in, instead of first showing plain shapes.
 - Includes the 3D conversion chat's half (commit bb3dd54d): 3D art still loading for a scene you have left is
   dropped instead of landing on the new one.
+
+## Build 525: a clean loading screen
+
+- Between scenes, the "Loading scene…" screen could still show a couple of the old scene's token rings for a
+  moment. It now shows nothing but the note.
