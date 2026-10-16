@@ -91,8 +91,11 @@ async function mount(){
   if(view){stopLayers();effects?.dispose?.();effects=null;minis?.dispose();minis=null;for(const part of sceneArtParts)view.removeLevelArt(part);sceneArtParts=[];view.dispose();canvas?.remove();}
   view=null;canvas=null;data=null;builtKey='';builtSceneId=null;lastTokenSignature='';recordsCache=null;lastPlaceKey='';lastAnchorKey='';miniIds='';held=null;
   showLoading(true);}
- function showLoading(on){tokenHost.style.visibility=on?'hidden':'';overlayHost.style.visibility=on?'hidden':'';
+ function showLoading(on){// display, not visibility: each token sets its own visibility, which would show through.
+  tokenHost.style.display=on?'none':'';overlayHost.style.display=on?'none':'';
   if(on&&!loadingNote){loadingNote=document.createElement('div');loadingNote.className='vtt3d-loading';loadingNote.textContent='Loading scene…';host.append(loadingNote);}
+  // Shown again: place tokens and pinned controls afresh (they were measured against a hidden layer).
+  if(!on){lastPlaceKey='';lastAnchorKey='';}
   if(!on&&loadingNote){loadingNote.remove();loadingNote=null;}}
  function scheduleBuild(){const key=sceneKey();if(!key||key===builtKey)return;const sameScene=builtKey&&key.split(':').slice(0,2).join(':')===builtKey.split(':').slice(0,2).join(':')&&key.startsWith('art:');clearTimeout(buildTimer);buildTimer=setTimeout(buildScene,sameScene?600:0);}
  async function buildScene(){
