@@ -1,0 +1,59 @@
+[
+  {
+    "id": "medpilis",
+    "note": "Medpilis 3D art (Map maker, pass 10). Matches the Medpilis v5b scene package.",
+    "match": {
+      "terrain": [
+        442,
+        421
+      ],
+      "roofs": [
+        "medpilis-over-chapel-0",
+        "medpilis-over-cellar-0",
+        "medpilis-over-steam-0",
+        "medpilis-bridge-w-0",
+        "medpilis-bridge-e-0",
+        "medpilis-gallery-0",
+        "medpilis-rooms-0",
+        "medpilis-musicians-0",
+        "medpilis-spectators-0",
+        "medpilis-walk-north-0",
+        "medpilis-walk-south-0",
+        "medpilis-gatehouse-0",
+        "medpilis-tower-upper-0"
+      ]
+    },
+    "glb": "medpilis/Medpilis.glb",
+    "levels": {
+      "level-0": 0,
+      "level-3": 3,
+      "level-6": 6,
+      "scenery": 0
+    }
+  },
+  {
+    "id": "deadroot",
+    "note": "Dead Root Node 3D art (Map maker, pass 8). Matches the Dead Root Node v39 scene package.",
+    "match": {
+      "terrain": [
+        477,
+        225
+      ],
+      "roofs": [
+        "deadroot-walkway-0",
+        "deadroot-walkway-1",
+        "deadroot-deck-0",
+        "deadroot-deck-1",
+        "deadroot-deck-2",
+        "deadroot-deck-3",
+        "deadroot-deck-4"
+      ]
+    },
+    "glb": "deadroot/DeadRoot.glb",
+    "levels": {
+      "level-0": 0,
+      "level-2": 2,
+      "scenery": 0
+    }
+  }
+]
