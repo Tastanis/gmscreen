@@ -840,3 +840,11 @@ The Gravity Orchard's map is not touched.
 - **Let go of Z**: it goes on sideways from the waypoint's height. With no waypoint it goes back to the height
   it started at, so a tap of Z changes nothing.
 - Letting go of the mouse while it is going up and down keeps that height. Escape takes it all back.
+
+## Build 522: scene folders
+
+- **Importing a map:** the import box now has a **Folder** choice. It starts on the folder the map came from when
+  your game has a folder of that name, otherwise Unsorted. The new scene goes straight into the folder you pick.
+- **Scenes already uploaded:** every scene in the Scenes panel has a **Folder** choice at the bottom of its card.
+  Pick a folder and the scene moves there (pick Unsorted to take it out). Medpilis v5b can be filed this way.
+- A folder that was deleted in the meantime is refused with a plain message, never guessed at.
