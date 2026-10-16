@@ -29,6 +29,8 @@ test('the import box asks which folder, starting on the package\'s own folder wh
   assert.match(preview, /const folderLabel=document\.createElement\('label'\); folderLabel\.textContent='Folder';/);
   assert.match(preview, /folderSelect\.append\(choice\('Unsorted',''\),\.\.\.folders\.map\(folder=>choice\(folder\.name\|\|'Untitled Folder',folder\.id\)\)\);/);
   assert.match(preview, /folderSelect\.value=\(folders\.find\(folder=>folder\.id===packageFolder\?\.id\)\|\|folders\.find\(folder=>packageFolder\?\.name&&sameName\(folder\.name\)===sameName\(packageFolder\.name\)\)\)\?\.id\|\|'';/, 'by id, else by name, else Unsorted');
-  assert.match(preview, /requestBody=JSON\.stringify\(\{package:packageData,operationId,allowPlayerBrowsing:true,folderId:folderSelect\.value\|\|null\}\);/);
+  assert.match(preview, /requestBody=JSON\.stringify\(\{package:packageData,operationId,folderId:folderSelect\.value\|\|null\}\);/);
+  // Build 527: no "Allow players to browse" box; an import is hidden from players until Show Players.
+  assert.doesNotMatch(preview, /Allow players to browse|allowPlayerBrowsing|type='checkbox'/);
   assert.match(preview, /nameInput\.disabled=true; folderSelect\.disabled=true;/, 'a retry finishes the same import into the same folder');
 });

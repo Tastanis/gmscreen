@@ -48,25 +48,22 @@ export function mountSceneImportPreview(root, store) {
       const sameName=name=>String(name||'').trim().toLowerCase();
       folderSelect.value=(folders.find(folder=>folder.id===packageFolder?.id)||folders.find(folder=>packageFolder?.name&&sameName(folder.name)===sameName(packageFolder.name)))?.id||'';
       folderLabel.append(folderSelect); result.append(folderLabel);
-      const label = document.createElement('label');
-      const visibility = document.createElement('input'); visibility.type='checkbox';
-      label.append(visibility, document.createTextNode(' Allow players to browse this new scene. Importing will not change anyone’s active scene.'));
-      const install = document.createElement('button'); install.type='button'; install.className='btn btn--primary'; install.textContent='Import as new scene'; install.disabled=true;
+      // The new scene is hidden from players until Show Players; nothing to ask here.
+      const install = document.createElement('button'); install.type='button'; install.className='btn btn--primary'; install.textContent='Import as new scene';
       const operationId = `scene-import-${crypto.randomUUID()}`;
       let requestBody = null;
       let selectedName = null;
       const uploadedImages = new Map();
-      visibility.addEventListener('change',()=>{install.disabled=!visibility.checked;});
       install.addEventListener('click',async()=>{
         if (!nameInput.value.trim()) {status.textContent='Enter a name for the new scene.';nameInput.focus();return;}
-        busy=true; install.disabled=true; visibility.disabled=true; input.disabled=true; nameInput.disabled=true; folderSelect.disabled=true;
+        busy=true; install.disabled=true; input.disabled=true; nameInput.disabled=true; folderSelect.disabled=true;
         status.textContent='Importing scene…';
         try {
           if (requestBody === null) {
             selectedName ??= nameInput.value.trim();
             const packageData = bundle ? await uploadMapBundle(bundle, uploadedImages, fetch, text=>{status.textContent=text;}) : JSON.parse(packageText);
             packageData.scene.name=selectedName;
-            requestBody=JSON.stringify({package:packageData,operationId,allowPlayerBrowsing:true,folderId:folderSelect.value||null});
+            requestBody=JSON.stringify({package:packageData,operationId,folderId:folderSelect.value||null});
           }
           const response = await fetch('/dnd/vtt/api/v2/scene-import.php',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},
             body:requestBody});
@@ -90,10 +87,10 @@ export function mountSceneImportPreview(root, store) {
           status.scrollIntoView({block:'center'});
         } catch(error) {
           status.textContent=`${error.message || 'Import response was interrupted.'} Retry here to finish the same import without creating a duplicate.`;
-          install.textContent='Retry import'; install.disabled=false; visibility.disabled=false;
+          install.textContent='Retry import'; install.disabled=false;
         } finally {input.disabled=false;busy=false;}
       });
-      result.append(label,install);
+      result.append(install);
     } catch(error) {status.textContent=error.message || 'Unable to preview scene package.';}
     finally {input.disabled=false;input.value='';busy=false;}
   }

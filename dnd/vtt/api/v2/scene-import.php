@@ -11,7 +11,6 @@ try {
     try { $request = json_decode($raw,true,128,JSON_THROW_ON_ERROR); }
     catch (JsonException $error) { throw new InvalidArgumentException('The file is not valid scene JSON.'); }
     if (!is_array($request['package'] ?? null) || !is_string($request['operationId'] ?? null)) throw new InvalidArgumentException('A scene package and operation ID are required.');
-    if (($request['allowPlayerBrowsing'] ?? null) !== true) throw new InvalidArgumentException('Confirm that players may browse the imported scene.');
     $result = withVttBoardStateLock(static function () use ($request,$auth): array {
         $store = vttSyncV2Store();
         $catalog = SceneImportCatalog::recover($store,loadScenesPayload(),'persistScenes');

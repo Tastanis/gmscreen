@@ -72,7 +72,6 @@ test('one package UI previews before upload and imports with an immutable idempo
     assert.equal(input.disabled,true,'file read and validation lock controls immediately');
     await waitFor(()=>root.querySelector('button'));
     assert.equal(calls.length,1,'preview must not upload assets');
-    const check=root.querySelector('input[type=checkbox]');check.checked=true;check.dispatchEvent(new dom.window.Event('change'));
     const button=root.querySelector('button');button.click();
     await waitFor(()=>button.textContent==='Retry import');
     assert.equal(calls.filter(call=>call.url.endsWith('uploads.php')).length,2);
@@ -80,7 +79,7 @@ test('one package UI previews before upload and imports with an immutable idempo
     const imports=calls.filter(call=>call.url.endsWith('scene-import.php'));
     assert.equal(imports.length,2);assert.equal(imports[0].body,imports[1].body);
     assert.equal(calls.filter(call=>call.url.endsWith('uploads.php')).length,2);
-    const submitted=JSON.parse(imports[1].body);assert.equal(submitted.allowPlayerBrowsing,true);
+    const submitted=JSON.parse(imports[1].body);assert.equal('allowPlayerBrowsing' in submitted,false,'nothing is asked about players: an import is hidden from them (Build 527)');
     assert.match(submitted.package.scene.mapUrl,/^\/dnd\/vtt\/storage\/uploads\//);
   } finally {globalThis.document=previousDocument;globalThis.fetch=previousFetch;dom.window.close();}
 });

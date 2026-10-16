@@ -54,7 +54,7 @@ try {
     $catalog = static fn (): array => $ask('GM', 'GET', 'vtt/api/scenes.php')[1]['data'] ?? [];
     $sceneIn = static function (string $id) use ($catalog): ?array { foreach ($catalog()['items'] ?? [] as $scene) if (($scene['id'] ?? null) === $id) return $scene; return null; };
     $package = static fn (string $name) => ScenePackage::build(['id' => 'source', 'name' => $name, 'mapUrl' => '/map.jpg'], ['state' => ['placements' => ['source' => []], 'sceneConfig' => ['source' => []]]]);
-    $import = static fn (string $name, $folderId, string $operation) => $ask('GM', 'POST', 'vtt/api/v2/scene-import.php', ['package' => $package($name), 'operationId' => $operation, 'allowPlayerBrowsing' => true] + ($folderId === false ? [] : ['folderId' => $folderId]));
+    $import = static fn (string $name, $folderId, string $operation) => $ask('GM', 'POST', 'vtt/api/v2/scene-import.php', ['package' => $package($name), 'operationId' => $operation] + ($folderId === false ? [] : ['folderId' => $folderId]));
 
     [$status, $made] = $ask('GM', 'POST', 'vtt/api/scenes.php', ['action' => 'create-folder', 'name' => 'Dungeons']);
     $folder = $made['data']['id'] ?? null;
@@ -65,6 +65,8 @@ try {
     $deadRoot = $answer['scene']['id'] ?? null;
     folderCheck($status === 200 && ($answer['scene']['folderId'] ?? 'x') === $folder, 'An imported map goes into the folder picked: ' . json_encode($answer));
     folderCheck(($sceneIn($deadRoot)['folderId'] ?? null) === $folder, 'and it is in that folder in the scene list');
+    // Build 527 (Brandon): an imported scene is hidden from players until Show Players; nothing is asked.
+    folderCheck(($sceneIn($deadRoot)['playerVisible'] ?? null) === false, 'An imported scene is hidden from players');
     [$status, $answer] = $import('Medpilis', false, 'scene-folders-import-2');
     $medpilis = $answer['scene']['id'] ?? null;
     folderCheck($status === 200 && array_key_exists('folderId', $sceneIn($medpilis) ?? []) && $sceneIn($medpilis)['folderId'] === null, 'No folder picked: Unsorted, as before');

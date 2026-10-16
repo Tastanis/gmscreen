@@ -354,9 +354,9 @@ final class SyncV2Store
             // The folder the GM picked (checked against the catalog by the caller), or Unsorted.
             $scene['folderId'] = $folderId;
             $scene['_importOperationId'] = $operationId;
-            // Import visibility must be explicit in the eventual UI. This operation
-            // creates a browsable scene; it never activates it for anyone.
-            $scene['playerVisible'] = true;
+            // Hidden from players until the Director uses Show Players (Brandon, October 2026: players never
+            // browse a scene). An import never activates a scene for anyone.
+            $scene['playerVisible'] = false;
             $scene['createdAt'] = gmdate('c');
             $revision = $snapshot['revision'] + 1; $serverTime = $this->nowMilliseconds();
             $event = ['revision'=>$revision,'operationId'=>$operationId,'type'=>'scene.installed','actorId'=>$actorId,
