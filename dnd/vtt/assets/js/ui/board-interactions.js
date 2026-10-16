@@ -34,7 +34,7 @@ import {syncTokenTeamAffiliation,syncSquadBadge,paintTokenMarkIndicator,paintTok
 import {normalizeHitPointsValue,normalizePlacementHitPoints,parseHitPointsNumber,calculateHitPointsFillPercentage,formatHitPointsDisplayParts,syncTokenHitPoints,shouldRevealPlacementHitPointValues} from './token-hit-points.js';
 import {paintWallTemplate} from './template-wall-renderer.js';
 import {wallSquareKey,nextWallElevation} from './wall-cubes.js';
-import {BREAK_TYPES,BREAK_STAMINA,MAX_WALL_STAMINA,wallBreakFields,squareMarks,wallKind,breakChoice,breakSetting,breakSummary,markCubes} from './wall-break.mjs';
+import {wallBreakFields,squareMarks,wallStamina,breakSummary,markCubes} from './wall-break.mjs';
 import {WALL_BAR_STYLE,showBar,placeBar} from './wall-break-bar.js';
 import {createTemplateGeometry, TEMPLATE_COLORS} from './template-geometry.js';
 import {paintTemplateArea} from './template-area-renderer.js';
@@ -25244,41 +25244,9 @@ function createTemplateTool() {
     return shape;
   }
 
-  /**
-   * The two fields for what it takes to break a wall: a list (not breakable, the book's four
-   * materials, or a stated Stamina) and the number. `value()` gives the settings chosen.
-   */
-  function buildWallBreakFields() {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'vtt-template-menu__field';
-    wrapper.dataset.wallBreakField = '';
-    const label = document.createElement('label');
-    label.textContent = 'Breaks at (GM only)';
-    const select = document.createElement('select');
-    select.dataset.wallBreakChoice = '';
-    for (const [value, text] of [['none', 'Not breakable'], ...BREAK_TYPES.map((type) => [type, `${type[0].toUpperCase()}${type.slice(1)} (Stamina ${BREAK_STAMINA[type]})`]), ['stamina', 'Stamina per square…']]) {
-      const option = document.createElement('option');
-      option.value = value; option.textContent = text;
-      select.appendChild(option);
-    }
-    const number = document.createElement('input');
-    number.type = 'number'; number.min = '1'; number.max = String(MAX_WALL_STAMINA); number.step = '1'; number.value = '6';
-    number.dataset.wallBreakStamina = '';
-    number.setAttribute('aria-label', 'Stamina per square');
-    number.style.width = '72px';
-    const sync = () => showBar(number, select.value === 'stamina', '');
-    select.addEventListener('change', sync);
-    sync();
-    wrapper.append(label, select, number);
-    return {
-      wrapper, select, number, sync,
-      value: () => breakSetting(select.value, number.value),
-      show: (template) => { select.value = breakChoice(template); if (template?.wallStamina) number.value = String(template.wallStamina); sync(); },
-    };
-  }
-
-  // Shown to the GM while a wall is selected: what it takes to break it, and breaking or repairing
-  // its cubes by hand. Players are never shown it.
+  // Shown to the GM while a wall is selected, only when there is something to do: break the cube he picked, or
+  // repair cubes that are broken. Every wall breaks; what it is made of says how hard (breakSummary). Players are
+  // never shown it.
   let wallBreakPanel = null;
   // The wall the bar is for: the selected one, when it is a wall this GM may change. Null otherwise.
   function selectedWallForBar() {
@@ -25294,31 +25262,20 @@ function createTemplateTool() {
     root.setAttribute('aria-label', 'Wall breaking');
     root.style.cssText = WALL_BAR_STYLE;
     showBar(root, false);
-    const fields = buildWallBreakFields();
-    fields.wrapper.style.cssText = 'display:flex;gap:6px;align-items:center;margin:0';
     const summary = document.createElement('span');
     summary.dataset.wallBreakSummary = '';
     const breakButton = document.createElement('button'), repairButton = document.createElement('button');
     breakButton.type = repairButton.type = 'button';
     breakButton.className = repairButton.className = 'btn';
     breakButton.dataset.wallBreakCube = ''; repairButton.dataset.wallRepairCubes = '';
+    breakButton.textContent = 'Break this cube';
     repairButton.textContent = 'Repair broken cubes';
-    root.append(fields.wrapper, summary, breakButton, repairButton);
+    root.append(summary, breakButton, repairButton);
     const selectedWall = selectedWallForBar;
     const save = () => { render(viewState); commitShapes(); refreshWallBreakPanel(); };
-    const setting = () => {
-      const shape = selectedWall(); if (!shape) return;
-      delete shape.wallType; delete shape.wallStamina;
-      Object.assign(shape, fields.value());
-      save();
-    };
-    fields.select.addEventListener('change', setting);
-    fields.number.addEventListener('change', setting);
     breakButton.addEventListener('click', () => {
-      const shape = selectedWall(); if (!shape) return;
-      // The cube picked, or the whole wall when none is.
-      const keys = selectedWallSquareKey ? [selectedWallSquareKey] : shape.squares.map(wallSquareKey);
-      shape.squares = markCubes(shape, keys, true);
+      const shape = selectedWall(); if (!shape || !selectedWallSquareKey) return;
+      shape.squares = markCubes(shape, [selectedWallSquareKey], true);
       shape.selectedSquareKey = selectedWallSquareKey = null;
       save();
     });
@@ -25328,21 +25285,20 @@ function createTemplateTool() {
       save();
     });
     document.body.appendChild(root);
-    wallBreakPanel = { root, fields, summary, breakButton, repairButton, selectedWall };
+    wallBreakPanel = { root, summary, breakButton, repairButton, selectedWall };
     return wallBreakPanel;
   }
   function refreshWallBreakPanel() {
-    // Nothing is made, and nothing is shown, until the GM has a wall selected.
+    // Nothing is made, and nothing is shown, until the GM has a wall selected with something to do on it.
     const shape = selectedWallForBar();
-    if (!shape) { if (wallBreakPanel) showBar(wallBreakPanel.root, false); return; }
+    const picked = Boolean(shape && selectedWallSquareKey && wallStamina(shape) !== null
+      && shape.squares.some((square) => square.broken !== true && wallSquareKey(square) === selectedWallSquareKey));
+    const broken = Boolean(shape?.squares.some((square) => square.broken === true));
+    if (!shape || (!picked && !broken)) { if (wallBreakPanel) showBar(wallBreakPanel.root, false); return; }
     const panel = ensureWallBreakPanel();
-    const fire = wallKind(shape.wallColor) === 'fire';
-    if (document.activeElement !== panel.fields.number) panel.fields.show(shape);
-    panel.fields.select.disabled = fire;
     panel.summary.textContent = breakSummary(shape);
-    panel.breakButton.textContent = selectedWallSquareKey ? 'Break this cube' : 'Break the whole wall';
-    panel.breakButton.disabled = !shape.squares.some((square) => square.broken !== true);
-    showBar(panel.repairButton, shape.squares.some((square) => square.broken === true), '');
+    showBar(panel.breakButton, picked, '');
+    showBar(panel.repairButton, broken, '');
     // Beside the wall it belongs to, clear of the turn tracker and the panels along the top.
     showBar(panel.root, true);
     const wallRect = (globalThis.vtt3d?.active && globalThis.vtt3dLayers?.templates?.screenRect?.(shape.id)) || shape.elements.root.getBoundingClientRect();
@@ -26028,7 +25984,7 @@ function createTemplateTool() {
     const wallColorPicker = document.createElement('div');
     wallColorPicker.className = 'vtt-template-menu__field';
     const wallColorLabel = document.createElement('label');
-    wallColorLabel.textContent = 'Material (optional)';
+    wallColorLabel.textContent = 'Material';
     wallColorPicker.appendChild(wallColorLabel);
     const wallColorRow = document.createElement('div');
     wallColorRow.className = 'vtt-template-menu__colors';
@@ -26055,9 +26011,6 @@ function createTemplateTool() {
       wallColorRow.appendChild(swatch);
     });
 
-    // What it takes to break the wall. Only the GM is offered it; left at "Not breakable" the
-    // wall is as walls always were.
-    const wallBreakPicker = buildWallBreakFields();
 
     form.appendChild(lengthField.wrapper);
     form.appendChild(widthField.wrapper);
@@ -26090,7 +26043,7 @@ function createTemplateTool() {
       } else if (nextType === 'rectangle') {
         form.replaceChildren(lengthField.wrapper, widthField.wrapper, templateColorPicker, actions);
       } else {
-        form.replaceChildren(wallField.wrapper, wallColorPicker, ...(isGmUser() ? [wallBreakPicker.wrapper] : []), actions);
+        form.replaceChildren(wallField.wrapper, wallColorPicker, actions);
       }
     }
 
@@ -26111,7 +26064,6 @@ function createTemplateTool() {
         squares: parseSquareCount(wallField.input.value),
         color: activeType === 'wall' ? null : selectedTemplateColor,
         wallColor: activeType === 'wall' ? selectedWallColor : null,
-        ...(activeType === 'wall' && isGmUser() ? wallBreakPicker.value() : {}),
       };
       controller.hide();
       beginPlacement(activeType, values);
@@ -27031,6 +26983,20 @@ function createTemplateTool() {
     },
     getTokenElement(id) { return [...tokenLayer.querySelectorAll('[data-placement-id]')].find(node => node.dataset.placementId === id) ?? null; },
     heightFor(id) { const p = coordinatePlacement(id); return p ? window.terrainPrototype?.groundFor?.(p) ?? 0 : null; },
+    // 3D board, hold Z and drag: the height a token is raised or lowered to. A token that walked starts flying.
+    async setHeight(id, z) {
+      const placement = coordinatePlacement(id), sceneId = getActiveSceneId();
+      if (!placement || !sceneId || !canCurrentUserMovePlacement(placement) || !Number.isFinite(z) || z < 0) return false;
+      const patch = { flightHeight: z, ...(['fly', 'hover'].includes(placement.movementMode) ? {} : { movementMode: 'fly' }) };
+      try {
+        await tokenMovementRuntime.submitPlacementOps([{ type: 'placement.update', sceneId, placementId: id, patch }]);
+        return true;
+      } catch (error) {
+        const words = error?.message || 'The height was not saved.';
+        updateStatus(words); window.UIKit?.toast?.(words, 'error');
+        return false;
+      }
+    },
     subscribe(listener) {
       if (typeof listener !== 'function') throw new TypeError('Expected a listener.');
       coordinateListeners.add(listener); listener(getCoordinateContext());

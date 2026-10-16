@@ -1,9 +1,9 @@
 // What it takes to break a wall made during play (the template tool, or an ability). Pure.
 // Paired with WallCubes::stamina, rubble, settle and validate on the server.
 //
-// A summoned wall is a list of cubes. It may be given a type (one of the book's materials) or a
-// Stamina for each square; each cube is then one breakable object. A wall given neither cannot be
-// broken, as before. Fire is something a creature goes through: it never breaks.
+// A summoned wall is a list of cubes, each one breakable object. An ability may give it a type (one of
+// the book's materials) or a Stamina for each square; otherwise what it is made of says how hard it is
+// (Brandon, October 2026: every wall breaks). Fire is something a creature goes through: it never breaks.
 //
 // The book's four materials already read as Stamina a square: glass 1, wood 3, stone 6, metal 9.
 // Breaking a square costs that many squares of forced movement and does that much plus 2.
@@ -34,11 +34,11 @@ export function squareMarks(square) {
   return { broken: true, ...(BREAK_TYPES.includes(square.rubble) ? { rubble: square.rubble } : {}) };
 }
 
-/** The Stamina of each cube, or null when the wall cannot be broken. */
+/** The Stamina of each cube, or null for fire, which never breaks. */
 export function wallStamina(template) {
   if (wallKind(template?.wallColor) === 'fire') return null;
   const fields = wallBreakFields(template);
-  return fields.wallStamina ?? BREAK_STAMINA[fields.wallType] ?? null;
+  return fields.wallStamina ?? BREAK_STAMINA[fields.wallType ?? wallRubble(template)] ?? null;
 }
 
 /** The heap of rubble a broken cube leaves: its type, or else what its colour says it is. */
@@ -63,9 +63,9 @@ export function breakSetting(choice, stamina) {
 /** In words, for the GM: "Stone: 6 squares of push, 8 damage", "Stamina 15: 15 squares of push, 17 damage". */
 export function breakSummary(template) {
   const stamina = wallStamina(template);
-  if (stamina === null) return wallKind(template?.wallColor) === 'fire' ? 'Fire: never breaks' : 'Not breakable';
-  const { wallType, wallStamina: stated } = wallBreakFields(template);
-  const name = stated ? `Stamina ${stated}` : wallType[0].toUpperCase() + wallType.slice(1);
+  if (stamina === null) return 'Fire: never breaks';
+  const { wallStamina: stated } = wallBreakFields(template), type = wallRubble(template);
+  const name = stated ? `Stamina ${stated}` : type[0].toUpperCase() + type.slice(1);
   return `${name}: ${stamina} ${stamina === 1 ? 'square' : 'squares'} of push, ${stamina + BREAK_EXTRA} damage`;
 }
 

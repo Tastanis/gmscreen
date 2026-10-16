@@ -215,6 +215,11 @@ export function normalizePlacementEntry(entry) {
     normalized.monsterTriggerHooks = clonePlainObject(entry.monsterTriggerHooks);
   }
 
+  // A player's copy of a monster token names only its 3D mini (bootstrap.php playerMiniForPlacement).
+  if (entry.mini && typeof entry.mini === 'object' && typeof entry.mini.model === 'string' && entry.mini.model) {
+    normalized.mini = { model: entry.mini.model, ...(Number.isFinite(entry.mini.scale) ? { scale: entry.mini.scale } : {}), ...(entry.mini.noBase === true ? { noBase: true } : {}) };
+  }
+
   if (entry.automationTraits && typeof entry.automationTraits === 'object') {
     normalized.automationTraits = clonePlainObject(entry.automationTraits);
   }

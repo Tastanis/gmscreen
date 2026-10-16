@@ -246,4 +246,29 @@ final class MonsterStatSanitizationTest extends TestCase
         $this->assertSame(4, $token['column']);
         $this->assertSame(8, $token['row']);
     }
+
+    /**
+     * Build 518: the 3D minis were found by monster id, which a player is never sent, so players saw bare bases.
+     * A player's copy now names the mini only (board3d/assets/minis/minis.json): model and size, nothing more.
+     */
+    public function testEnemyMiniIsNamedWithoutItsMonsterId(): void
+    {
+        $sanitized = sanitizePlacementForPlayerView([
+            'id' => 'algis-token', 'name' => 'Algis', 'combatTeam' => 'enemy',
+            'monster' => ['name' => 'Algis the Lance', 'stamina' => 80], 'monsterId' => 'algis-the-lance-level-4-elite',
+        ]);
+        $this->assertSame(['model' => 'algis', 'scale' => 1.0], $sanitized['mini']);
+        $this->assertArrayNotHasKey('monsterId', $sanitized);
+        $this->assertArrayNotHasKey('monster', $sanitized);
+
+        $floating = sanitizePlacementForPlayerView(['id' => 'd', 'combatTeam' => 'enemy', 'metadata' => ['monsterId' => 'driftstone-level-4-elite']]);
+        $this->assertSame(['model' => 'driftstone', 'scale' => 1.0, 'noBase' => true], $floating['mini'], 'the id may be kept in the metadata');
+
+        $unknown = sanitizePlacementForPlayerView(['id' => 'g', 'combatTeam' => 'enemy', 'monsterId' => 'goblin-001']);
+        $this->assertArrayNotHasKey('mini', $unknown, 'a monster with no mini gets none');
+
+        $ally = sanitizePlacementForPlayerView(['id' => 'a', 'combatTeam' => 'ally', 'monsterId' => 'algis-the-lance-level-4-elite']);
+        $this->assertSame('algis-the-lance-level-4-elite', $ally['monsterId'], 'an ally keeps its id, and is found by it as before');
+        $this->assertArrayNotHasKey('mini', $ally);
+    }
 }

@@ -10,22 +10,17 @@ const stoneNoMore = { destination: { column: 9, row: 6 }, steps: [{ materials: {
 const large = { destination: { column: 9, row: 5 }, steps: [{ materials: { wood: 1, stone: 1 }, cost: 9, damage: 13, left: 9 }], breakDamage: 13, damage: 0, collidedIds: [], wall: false, walls: 2, stopped: { column: 9, row: 5, damage: 11 } };
 const thenCreature = { ...wood, damage: 1, collidedIds: ['other'] };
 
-test('the words: what it hits, what breaking costs, and what stopping costs', () => {
+test('the words: one line a wall, and what each answer costs on its button (Build 518: fewer words)', () => {
   const text = breakThroughText({ name: 'War dog', offer: wood });
-  assert.deepEqual(text.lines, [
-    'War dog hits a wood wall with 4 squares of the push left. Breaking it uses 3 and does 5 damage.',
-    'Break through: 5 damage, then moves on 1 square.',
-    'Stop at the wall: 6 damage.',
-  ]);
-  assert.deepEqual([text.title, text.yes, text.no], ['Break through?', 'Break through', 'Stop at the wall']);
-  assert.match(breakThroughText({ name: 'Ogre', offer: stoneNoMore }).lines[1], /^Break through: 8 damage, then moves on 0 squares\.$/);
-  assert.match(breakThroughText({ name: 'Ogre', offer: large }).lines[0], /hits a wood and stone wall with 9 squares of the push left\. Breaking it uses 9 and does 13 damage\./);
-  assert.match(breakThroughText({ name: 'Ogre', offer: { ...large, steps: [{ materials: { stone: 2 }, cost: 12, damage: 16, left: 12 }] } }).lines[0], /^Ogre hits 2 squares of stone wall with 12 squares of the push left\./);
-  assert.match(breakThroughText({ name: 'War dog', offer: thenCreature, others: ['Sharon'] }).lines[1], /moves on 1 square\. Then hits Sharon: 1 more\.$/);
-  assert.match(breakThroughText({ name: 'War dog', offer: { ...wood, damage: 3, wall: true } }).lines[1], /Then slams into a wall: 3 more\.$/);
+  assert.deepEqual(text, { title: 'War dog: break through?', lines: ['Wood: uses 3 of 4 push, 5 damage'], yes: 'Break: 5 damage, 1 more square', no: 'Stop: 6 damage' });
+  assert.equal(breakThroughText({ name: 'Ogre', offer: stoneNoMore }).yes, 'Break: 8 damage', 'no square left to go on: none said');
+  assert.equal(breakThroughText({ name: 'Ogre', offer: large }).lines[0], 'Wood and stone: uses 9 of 9 push, 13 damage');
+  assert.equal(breakThroughText({ name: 'Ogre', offer: { ...large, steps: [{ materials: { stone: 2 }, cost: 12, damage: 16, left: 12 }] } }).lines[0], '2 stone: uses 12 of 12 push, 16 damage');
+  assert.equal(breakThroughText({ name: 'War dog', offer: thenCreature, others: ['Sharon'] }).lines[1], 'Then hits Sharon: 1 more');
+  assert.equal(breakThroughText({ name: 'War dog', offer: { ...wood, damage: 3, wall: true } }).lines[1], 'Then hits a wall: 3 more');
   // Two walls, one after the other.
   const two = breakThroughText({ name: 'War dog', offer: { ...wood, steps: [wood.steps[0], { materials: { glass: 1 }, cost: 1, damage: 3, left: 1 }], breakDamage: 8 } });
-  assert.match(two.lines[1], /^Then a glass wall with 1 square of the push left\. Breaking it uses 1 and does 3 damage\.$/);
+  assert.equal(two.lines[1], 'Then glass: uses 1 of 1 push, 3 damage');
 });
 
 test('the server is asked; no offer, a refusal or a lost connection all mean no pop-up', async () => {

@@ -21,3 +21,8 @@
    mini shows its side and selection. */
 #vtt-board3d-token-host .vtt-token.vtt3d-mini > .vtt-token__image { opacity: 0; }
 #vtt-board3d-token-host .vtt-token.vtt3d-mini { border-color: transparent !important; background: none !important; box-shadow: none !important; }
+/* ...and it is grabbed at the mini too: its base and the lower part of the model, below the token's box. */
+#vtt-board3d-token-host .vtt-token.vtt3d-mini::after { content: ''; position: absolute; left: 5%; width: 90%; top: var(--vtt3d-grab-top, 100%); height: var(--vtt3d-grab-height, 0px); border-radius: 40%; pointer-events: auto; cursor: grab; }
+
+/* Hold Z and drag a token: how high it stands above what is under it. */
+#vtt-board3d-overlay-host .vtt3d-lift-label { position: absolute; transform: translate(-50%, calc(-100% - 46px)); padding: 3px 8px; border-radius: 6px; background: #111c; color: #f5d284; font: 600 13px/1.3 system-ui, sans-serif; white-space: nowrap; pointer-events: none; }

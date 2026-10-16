@@ -43,7 +43,10 @@ test('the fault itself: a hidden mark does not hide an element that sets its own
 test('the board makes the bar only for a GM with a wall selected, and hides it otherwise', () => {
   const board = readFileSync(new URL('../board-interactions.js', import.meta.url), 'utf8');
   // With nothing selected, or no wall on the scene, nothing is made and nothing is shown.
-  assert.match(board, /function refreshWallBreakPanel\(\) \{[\s\S]{0,160}const shape = selectedWallForBar\(\);\s*if \(!shape\) \{ if \(wallBreakPanel\) showBar\(wallBreakPanel\.root, false\); return; \}\s*const panel = ensureWallBreakPanel\(\);/);
+  // Build 518: and only when there is something to do on it: break the cube picked, or repair broken ones.
+  assert.match(board, /function refreshWallBreakPanel\(\) \{[\s\S]{0,180}const shape = selectedWallForBar\(\);[\s\S]{0,400}if \(!shape \|\| \(!picked && !broken\)\) \{ if \(wallBreakPanel\) showBar\(wallBreakPanel\.root, false\); return; \}\s*const panel = ensureWallBreakPanel\(\);/);
+  assert.match(board, /const picked = Boolean\(shape && selectedWallSquareKey && wallStamina\(shape\) !== null/, 'a fire wall offers no break');
+  assert.match(board, /showBar\(panel\.breakButton, picked, ''\);\s*showBar\(panel\.repairButton, broken, ''\);/);
   assert.match(board, /function selectedWallForBar\(\) \{\s*if \(!isGmUser\(\)\) return null;\s*const shape = shapes\.find\(\(item\) => item\.id === selectedId\);\s*return shape\?\.type === 'wall' && !shape\.isPreview && canManageShape\(shape\) \? shape : null;/, 'a player never gets it');
   assert.match(board, /root\.style\.cssText = WALL_BAR_STYLE;\s*showBar\(root, false\);/, 'it is hidden from the moment it is made');
   assert.doesNotMatch(board, /root\.style\.cssText = '[^']*display\s*:/, 'its own style never forces it on screen');

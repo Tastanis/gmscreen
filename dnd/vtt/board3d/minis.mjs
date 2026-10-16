@@ -26,7 +26,7 @@ export function createMinis(scene){
  function update(records,profiles,visible,camera,dt=0){
   loadConfig();time+=dt;const seen=new Set();
   const noBase=new Set();
-  if(config)for(const r of records){const who=profiles.get(r.id)||{},monster=config.monsters?.[who.monster]||config.names?.[String(who.name||'').trim().toLowerCase()],name=monster?.model||config.heroes?.[who.hero];if(!name)continue;if(monster?.noBase)noBase.add(r.id);const entry=model(name);if(!entry.template)continue;
+  if(config)for(const r of records){const who=profiles.get(r.id)||{},monster=who.mini||config.monsters?.[who.monster]||config.names?.[String(who.name||'').trim().toLowerCase()],name=monster?.model||config.heroes?.[who.hero];if(!name)continue;if(monster?.noBase)noBase.add(r.id);const entry=model(name);if(!entry.template)continue;
    let mini=standing.get(r.id);if(!mini||mini.userData.model!==name){if(mini)root.remove(mini);mini=entry.template.clone();mini.userData={model:name,extras:entry.extras};standing.set(r.id,mini);root.add(mini);changed=true;}
    const scale=monster?(monster.scale??1):(config.scale||1)*Math.max(r.width,r.height),x=r.x,z=r.y,y=r.z+(monster?.noBase?0:BASE_TOP),yaw=Math.atan2(camera.position.x-x,camera.position.z-z),show=visible(r);
    if(mini.position.x!==x||mini.position.y!==y||mini.position.z!==z||mini.scale.x!==scale||mini.visible!==show)changed=true;

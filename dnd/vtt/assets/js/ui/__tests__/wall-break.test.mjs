@@ -12,8 +12,10 @@ import { createTemplateGeometry } from '../template-geometry.js';
 // rules is summoned-walls.test.php.
 const wall = (extra = {}, squares = [{ column: 10, row: 5 }, { column: 10, row: 6 }, { column: 10, row: 7 }]) => ({ id: 'summoned', type: 'wall', levelId: 'level-0', squares, ...extra });
 
-test('what it takes to break a wall: a type, a number, or nothing', () => {
-  assert.equal(wallStamina(wall()), null, 'given neither, it does not break');
+test('what it takes to break a wall: a type, a number, or what it is made of', () => {
+  // Build 518 (Brandon: "All walls are breakable"): given neither, what it is made of says how hard.
+  assert.equal(wallStamina(wall()), 6, 'given neither, a wall of no stated material is stone');
+  assert.deepEqual(['gray', 'brown', 'purple', 'blue'].map((wallColor) => wallStamina(wall({ wallColor }))), [6, 3, 9, 1], 'stone, dirt (as wood), metal, ice (as glass)');
   assert.deepEqual(BREAK_TYPES.map((wallType) => wallStamina(wall({ wallType }))), [1, 3, 6, 9], 'a type is shorthand for the book\'s number');
   assert.equal(wallStamina(wall({ wallStamina: 15 })), 15);
   assert.equal(wallStamina(wall({ wallType: 'wood', wallStamina: 15 })), 15, 'a stated number is used over the type');
@@ -45,7 +47,8 @@ test('the GM\'s choice, and the words that go with it', () => {
   assert.deepEqual(breakSetting('stamina', 15.9), { wallStamina: 15 });
   assert.deepEqual(breakSetting('stamina', ''), {}, 'no number is no setting');
   assert.deepEqual(breakSetting('stamina', 5000), {});
-  assert.equal(breakSummary(wall()), 'Not breakable');
+  assert.equal(breakSummary(wall()), 'Stone: 6 squares of push, 8 damage', 'every wall breaks (Build 518)');
+  assert.equal(breakSummary(wall({ wallColor: 'blue' })), 'Glass: 1 square of push, 3 damage', 'an ice wall breaks as glass');
   assert.equal(breakSummary(wall({ wallType: 'stone' })), 'Stone: 6 squares of push, 8 damage');
   assert.equal(breakSummary(wall({ wallType: 'glass' })), 'Glass: 1 square of push, 3 damage');
   assert.equal(breakSummary(wall({ wallStamina: 15 })), 'Stamina 15: 15 squares of push, 17 damage');
@@ -163,7 +166,8 @@ test('the board passes the settings from an ability and from the GM, and offers 
   assert.match(board, /createPermanentWallFromSquares\(finalSquares, wallColor, placementValues(?:, levelId)?\);/, 'an ability\'s wall is made with them');
   assert.match(board, /finalizePlacement\(\{ type: 'wall', squares: finalSquares, wallColor, \.\.\.placementValues \}\);/, 'and a wall placed by hand');
   assert.match(board, /Object\.assign\(base, wallBreakFields\(shape\)\);/, 'they are saved with the wall');
-  assert.match(board, /\.\.\.\(isGmUser\(\) \? \[wallBreakPicker\.wrapper\] : \[\]\)/, 'only the GM is offered the choice when placing');
-  assert.match(board, /\.\.\.\(activeType === 'wall' && isGmUser\(\) \? wallBreakPicker\.value\(\) : \{\}\)/);
+  // Build 518: nothing is asked when a wall is made; what it is made of says how hard it breaks.
+  assert.match(board, /form\.replaceChildren\(wallField\.wrapper, wallColorPicker, actions\);/, 'the wall form asks for its length and material only');
+  assert.doesNotMatch(board, /wallBreakPicker|Not breakable|Break the whole wall/);
   assert.match(board, /function selectedWallForBar\(\) \{\s*if \(!isGmUser\(\)\) return null;/, 'and only the GM gets the bar for a wall that stands (wall-break-bar.test.mjs)');
 });

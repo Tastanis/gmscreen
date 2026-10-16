@@ -926,6 +926,10 @@ function sanitizePlacementForPlayerView(array $placement): array
     if (!canPlayersViewPlacementMonster($placement)) {
         $sanitized = attachSafeMovementTrait($sanitized);
         $sanitized = attachPlayerAutomationData($sanitized);
+        $mini = playerMiniForPlacement($placement);
+        if ($mini !== null) {
+            $sanitized['mini'] = $mini;
+        }
         unset($sanitized['monster'], $sanitized['monsterId']);
 
         if (isset($sanitized['metadata']) && is_array($sanitized['metadata'])) {
@@ -939,6 +943,33 @@ function sanitizePlacementForPlayerView(array $placement): array
     }
 
     return $sanitized;
+}
+
+/**
+ * The 3D mini a monster token stands as (board3d/assets/minis/minis.json), for a player's page, which is not sent
+ * the monster's id: the model's name and size only, never the id or anything of the stat block.
+ */
+function playerMiniForPlacement(array $placement): ?array
+{
+    static $monsters = null;
+    if ($monsters === null) {
+        $file = __DIR__ . '/board3d/assets/minis/minis.json';
+        $decoded = is_file($file) ? json_decode((string) file_get_contents($file), true) : null;
+        $monsters = is_array($decoded['monsters'] ?? null) ? $decoded['monsters'] : [];
+    }
+    $id = $placement['monsterId'] ?? ($placement['metadata']['monsterId'] ?? ($placement['monster']['id'] ?? null));
+    $entry = is_string($id) ? ($monsters[$id] ?? null) : null;
+    if (!is_array($entry) || !is_string($entry['model'] ?? null) || $entry['model'] === '') {
+        return null;
+    }
+    $mini = ['model' => $entry['model']];
+    if (is_numeric($entry['scale'] ?? null)) {
+        $mini['scale'] = (float) $entry['scale'];
+    }
+    if (!empty($entry['noBase'])) {
+        $mini['noBase'] = true;
+    }
+    return $mini;
 }
 
 /** Automation inputs only: never use this block to render a monster stat panel. */

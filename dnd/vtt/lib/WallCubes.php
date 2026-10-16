@@ -28,13 +28,13 @@ final class WallCubes {
   return ['gray'=>'stone','brown'=>'dirt','green'=>'dirt','purple'=>'metal','blue'=>'ice','cyan'=>'ice','red'=>'fire'][$value]??(in_array($value,['stone','dirt','metal','ice','fire'],true)?$value:'stone');
  }
  /**
-  * The Stamina of each cube, or null when the wall cannot be broken: it was given neither a
-  * type nor a number, or it is fire, which a creature goes through and never breaks.
+  * The Stamina of each cube, or null for fire, which a creature goes through and never breaks.
+  * Every other wall breaks: its stated number, its type, or else what it is made of (rubble).
   */
  public static function stamina(array $template):?int {
   if(self::kind($template)==='fire')return null;
   if(is_int($template['wallStamina']??null)&&$template['wallStamina']>0)return $template['wallStamina'];
-  return WallObjects::STAMINA[$template['wallType']??'']??null;
+  return WallObjects::STAMINA[self::rubble($template)]??null;
  }
  /** The heap of rubble a broken cube leaves: its type, or else what its colour says it is. */
  public static function rubble(array $template):string {
@@ -88,7 +88,7 @@ final class WallCubes {
   $derived=[...$model,'nodes'=>$model['nodes']??[],'segments'=>$model['segments']??[],'roofs'=>$model['roofs']??[]];
   foreach($templates as $template){if(($template['type']??'')!=='wall')continue;
    // A breakable cube is one object: its four walls share a group and carry its Stamina.
-   $stamina=self::stamina($template);$breaks=$stamina===null?[]:['stamina'=>$stamina,'material'=>self::rubble($template),'breakLabel'=>isset($template['wallType'])&&!isset($template['wallStamina'])?$template['wallType']:'Stamina '.$stamina];
+   $stamina=self::stamina($template);$breaks=$stamina===null?[]:['stamina'=>$stamina,'material'=>self::rubble($template),'breakLabel'=>isset($template['wallStamina'])?'Stamina '.$stamina:self::rubble($template)];
    foreach($template['squares']??[] as $s){
     // A broken cube is kept, to draw its rubble, but it stops nothing and holds nothing up.
     if(($s['broken']??false)===true)continue;

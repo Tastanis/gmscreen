@@ -27,7 +27,9 @@ summonRefused($wall([], [['column'=>10,'row'=>5,'broken'=>true,'rubble'=>'lava']
 echo "PASS a summoned wall may carry a type, a Stamina, and broken cubes\n";
 
 // ---- what it takes to break one --------------------------------------------------------
-summonCheck(WallCubes::stamina($wall()) === null, 'A wall given neither is not breakable');
+// Build 518 (Brandon: "All walls are breakable"): given neither, what it is made of says how hard.
+summonCheck(WallCubes::stamina($wall()) === 6, 'A wall given neither breaks as what it is made of (stone when unsaid)');
+summonCheck(array_map(static fn ($c) => WallCubes::stamina($wall(['wallColor'=>$c])), ['gray','brown','purple','blue']) === [6, 3, 9, 1], 'stone, dirt as wood, metal, ice as glass');
 summonCheck(array_map(static fn ($type) => WallCubes::stamina($wall(['wallType'=>$type])), ['glass','wood','stone','metal']) === [1, 3, 6, 9], 'A type is shorthand for the book\'s number');
 summonCheck(WallCubes::stamina($wall(['wallStamina'=>15])) === 15 && WallCubes::stamina($wall(['wallType'=>'wood','wallStamina'=>15])) === 15, 'A stated Stamina is used as it is, over the type');
 summonCheck(WallCubes::stamina($wall(['wallColor'=>'fire','wallType'=>'wood'])) === null && WallCubes::stamina($wall(['wallColor'=>'red','wallStamina'=>5])) === null, 'Fire is never breakable, whatever it is given');
@@ -36,8 +38,10 @@ foreach ([[['wallType'=>'glass','wallColor'=>'stone'], 'glass'], [['wallStamina'
     summonCheck(WallCubes::rubble($wall($extra)) === $rubble, 'Rubble for ' . json_encode($extra) . ' is ' . $rubble);
 // The walls the app makes from the cubes.
 $edges = static fn (array $template) => WallCubes::withTemplates([], [$template])['environment']['walls']['value']['segments'];
-$plain = $edges($wall());
-summonCheck(count($plain) === 12 && !isset($plain[0]['stamina'], $plain[0]['group'], $plain[0]['material']), 'An unbreakable wall\'s cubes are plain walls, as before');
+$plain = $edges($wall(['wallColor'=>'fire']));
+summonCheck(count($plain) === 12 && !isset($plain[0]['stamina'], $plain[0]['group'], $plain[0]['material']), 'A fire wall\'s cubes are plain walls: it never breaks');
+$unsaid = $edges($wall(['wallColor'=>'purple']));
+summonCheck($unsaid[0]['stamina'] === 9 && $unsaid[0]['material'] === 'metal' && $unsaid[0]['breakLabel'] === 'metal', 'A metal wall with no type breaks as metal: ' . json_encode(array_intersect_key($unsaid[0], ['stamina'=>1,'material'=>1,'breakLabel'=>1])));
 $stone = $edges($wall(['wallType'=>'stone']));
 summonCheck($stone[0]['stamina'] === 6 && $stone[0]['material'] === 'stone' && $stone[0]['breakLabel'] === 'stone' && $stone[0]['group'] === 'template-cube:summoned:10,5,0', 'A stone wall\'s cube: Stamina 6, one group for its four sides: ' . json_encode(array_intersect_key($stone[0], ['stamina'=>1,'material'=>1,'group'=>1,'breakLabel'=>1])));
 summonCheck(count(array_unique(array_column($stone, 'group'))) === 3, 'Each cube is its own object');
@@ -58,7 +62,7 @@ $plan = $through($wall(['wallStamina'=>15]), $token(8, 5), 24, 5);
 summonCheck($plan['breakCost'] === 15 && $plan['breakDamage'] === 17 && $plan['steps'][0]['materials'] === ['Stamina 15'=>1], 'With 15 left it breaks: 15 squares, and 15 plus 2 damage: ' . json_encode([$plan['breakCost'], $plan['breakDamage'], $plan['steps']]));
 $plan = $through($wall(['wallType'=>'glass']), $token(8, 5, 2), 11, 5);
 summonCheck(count($plan['breaks']) === 8 && $plan['breakCost'] === 2 && $plan['breakDamage'] === 6, 'A large creature against two glass cubes breaks both, and pays for both');
-summonCheck($through($wall(), $token(8, 5), 40, 5)['breaks'] === [] && $through($wall(['wallColor'=>'fire','wallStamina'=>1]), $token(8, 5), 40, 5)['breaks'] === [], 'A wall given nothing, and fire, never break');
+summonCheck(count($through($wall(), $token(8, 5), 40, 5)['breaks']) === 4 && $through($wall(['wallColor'=>'fire','wallStamina'=>1]), $token(8, 5), 40, 5)['breaks'] === [], 'A wall given nothing breaks as stone; fire never breaks');
 // The book's table and a stated number are one rule: the cost is the Stamina, the damage 2 more.
 foreach (WallObjects::STAMINA as $material => $stamina) summonCheck(ForcedMovement::BREAK_DAMAGE[$material] === $stamina + ForcedMovement::BREAK_EXTRA, "The book's $material row is its Stamina plus 2");
 echo "PASS a push breaks a cube for its Stamina in squares and that plus 2 in damage\n";

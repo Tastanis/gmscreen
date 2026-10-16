@@ -10,16 +10,19 @@ const distance = (a, b) => Math.max(Math.abs(a.column - b.column), Math.abs(a.ro
 /** The words on the pop-up. Pure, so the wording is tested without a page. */
 export function breakThroughText({ name = 'Token', offer, others = [] } = {}) {
   const lines = [];
+  // One line for each wall in the way: what it is, and what breaking it takes out of the push.
   for (const [index, step] of (offer?.steps || []).entries()) {
-    const parts = Object.entries(step.materials || {}), many = parts.some(([, squares]) => squares > 1);
-    const what = `${many ? '' : 'a '}${list(parts.map(([material, squares]) => (squares > 1 ? `${plural(squares, 'square')} of ${material}` : material)))} wall`;
-    lines.push(`${index ? 'Then' : `${name} hits`} ${what} with ${plural(step.left, 'square')} of the push left. Breaking it uses ${step.cost} and does ${step.damage} damage.`);
+    const what = list(Object.entries(step.materials || {}).map(([material, squares]) => (squares > 1 ? `${squares} ${material}` : material)));
+    lines.push(`${index ? `Then ${what}` : what[0].toUpperCase() + what.slice(1)}: uses ${step.cost} of ${step.left} push, ${step.damage} damage`);
   }
+  if (offer?.damage > 0) lines.push(offer.collidedIds?.length ? `Then hits ${list(others.length ? others : ['another creature'])}: ${offer.damage} more` : `Then hits a wall: ${offer.damage} more`);
   const on = offer ? distance(offer.destination, offer.stopped) : 0;
-  let after = `Break through: ${offer?.breakDamage ?? 0} damage, then moves on ${plural(on, 'square')}.`;
-  if (offer?.damage > 0) after += offer.collidedIds?.length ? ` Then hits ${list(others.length ? others : ['another creature'])}: ${offer.damage} more.` : ` Then slams into a wall: ${offer.damage} more.`;
-  lines.push(after, `Stop at the wall: ${offer?.stopped?.damage ?? 0} damage.`);
-  return { title: 'Break through?', lines, yes: 'Break through', no: 'Stop at the wall' };
+  return {
+    title: `${name}: break through?`,
+    lines,
+    yes: `Break: ${offer?.breakDamage ?? 0} damage${on ? `, ${plural(on, 'more square')}` : ''}`,
+    no: `Stop: ${offer?.stopped?.damage ?? 0} damage`,
+  };
 }
 
 /** Asks the server what this push would break. Null when it would break nothing, or on any failure. */
