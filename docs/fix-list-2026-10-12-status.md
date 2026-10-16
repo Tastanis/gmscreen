@@ -869,3 +869,8 @@ The Gravity Orchard's map is not touched.
 
 - Between scenes, the "Loading scene…" screen could still show a couple of the old scene's token rings for a
   moment. It now shows nothing but the note.
+
+## Build 527: imported scenes stay hidden from players
+
+- Importing a scene no longer asks "Allow players to browse this new scene". Every imported scene starts hidden
+  from players. **Show Players** is the way to show it, as before.
