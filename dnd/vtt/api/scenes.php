@@ -75,6 +75,14 @@ try {
             ]);
         }
 
+        if ($action === 'move-scene') {
+            $scene = moveSceneToFolder($payload);
+            respondSceneJson(200, [
+                'success' => true,
+                'data' => $scene,
+            ]);
+        }
+
         if ($action === 'update-scene-visibility') {
             $scene = updateSceneVisibility($payload);
             respondSceneJson(200, [
@@ -257,6 +265,63 @@ function deleteScene(string $sceneId, bool $broadcast = true): int
         );
     }
     return (int) ($event['revision'] ?? 0);
+}
+
+/**
+ * The folder a request names, checked against the catalog: null for Unsorted (no folder named), the id when the
+ * folder exists. A folder that does not exist (deleted meanwhile, or never made) is refused, never guessed at.
+ */
+function sceneFolderIdFromRequest(array $storage, $raw): ?string
+{
+    $folderId = is_string($raw) ? trim($raw) : '';
+    if ($folderId === '') {
+        return null;
+    }
+    foreach ($storage['folders'] ?? [] as $folder) {
+        if (($folder['id'] ?? null) === $folderId) {
+            return $folderId;
+        }
+    }
+    respondSceneJson(422, [
+        'success' => false,
+        'error' => 'That folder no longer exists. Pick another.',
+    ]);
+}
+
+/** Puts a scene into a folder, or into Unsorted when no folder is named. */
+function moveSceneToFolder(array $payload): array
+{
+    return withVttBoardStateLock(static function () use ($payload): array {
+    $sceneId = trim((string) ($payload['sceneId'] ?? $payload['id'] ?? ''));
+    if ($sceneId === '') {
+        respondSceneJson(400, [
+            'success' => false,
+            'error' => 'Scene id is required.',
+        ]);
+    }
+
+    // A scene whose import has not reached the catalog yet is put there first.
+    $storage = SceneImportCatalog::recover(vttSyncV2Store(), loadScenesPayload(), 'persistScenes');
+    $folderId = sceneFolderIdFromRequest($storage, $payload['folderId'] ?? null);
+    foreach ($storage['items'] as &$scene) {
+        if (($scene['id'] ?? null) !== $sceneId) {
+            continue;
+        }
+
+        $scene['folderId'] = $folderId;
+        $scene['updatedAt'] = date(DATE_ATOM);
+        $updatedScene = $scene;
+        unset($scene);
+        persistScenes($storage);
+        return $updatedScene;
+    }
+    unset($scene);
+
+    respondSceneJson(404, [
+        'success' => false,
+        'error' => 'Scene not found.',
+    ]);
+    });
 }
 
 function updateSceneVisibility(array $payload): array

@@ -38,6 +38,16 @@ export function mountSceneImportPreview(root, store) {
       const nameLabel = document.createElement('label'); nameLabel.textContent='New scene name';
       const nameInput = document.createElement('input'); nameInput.type='text'; nameInput.maxLength=160; nameInput.value=preview.name;
       nameLabel.append(nameInput); result.append(nameLabel);
+      // The folder the new scene goes in. The package's own folder is picked when this game has it (by id, else by name).
+      const folders=(store?.getState?.()?.scenes?.folders||[]).filter(folder=>folder&&typeof folder.id==='string');
+      let packageFolder=null; try{packageFolder=JSON.parse(packageText)?.folder??null;}catch{packageFolder=null;}
+      const folderLabel=document.createElement('label'); folderLabel.textContent='Folder';
+      const folderSelect=document.createElement('select'); folderSelect.dataset.sceneImportFolder='';
+      const choice=(text,value)=>{const option=document.createElement('option');option.textContent=text;option.value=value;return option;};
+      folderSelect.append(choice('Unsorted',''),...folders.map(folder=>choice(folder.name||'Untitled Folder',folder.id)));
+      const sameName=name=>String(name||'').trim().toLowerCase();
+      folderSelect.value=(folders.find(folder=>folder.id===packageFolder?.id)||folders.find(folder=>packageFolder?.name&&sameName(folder.name)===sameName(packageFolder.name)))?.id||'';
+      folderLabel.append(folderSelect); result.append(folderLabel);
       const label = document.createElement('label');
       const visibility = document.createElement('input'); visibility.type='checkbox';
       label.append(visibility, document.createTextNode(' Allow players to browse this new scene. Importing will not change anyone’s active scene.'));
@@ -49,14 +59,14 @@ export function mountSceneImportPreview(root, store) {
       visibility.addEventListener('change',()=>{install.disabled=!visibility.checked;});
       install.addEventListener('click',async()=>{
         if (!nameInput.value.trim()) {status.textContent='Enter a name for the new scene.';nameInput.focus();return;}
-        busy=true; install.disabled=true; visibility.disabled=true; input.disabled=true; nameInput.disabled=true;
+        busy=true; install.disabled=true; visibility.disabled=true; input.disabled=true; nameInput.disabled=true; folderSelect.disabled=true;
         status.textContent='Importing scene…';
         try {
           if (requestBody === null) {
             selectedName ??= nameInput.value.trim();
             const packageData = bundle ? await uploadMapBundle(bundle, uploadedImages, fetch, text=>{status.textContent=text;}) : JSON.parse(packageText);
             packageData.scene.name=selectedName;
-            requestBody=JSON.stringify({package:packageData,operationId,allowPlayerBrowsing:true});
+            requestBody=JSON.stringify({package:packageData,operationId,allowPlayerBrowsing:true,folderId:folderSelect.value||null});
           }
           const response = await fetch('/dnd/vtt/api/v2/scene-import.php',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},
             body:requestBody});

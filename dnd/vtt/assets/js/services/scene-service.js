@@ -70,6 +70,22 @@ export async function createSceneFolder(endpoint, name) {
   return data.data;
 }
 
+/** Puts a scene into a folder; null (or '') for Unsorted. */
+export async function moveSceneToFolder(endpoint, sceneId, folderId) {
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'move-scene', sceneId, folderId: folderId || null }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.success) {
+    throw new Error(data.error || 'Unable to move the scene');
+  }
+
+  return data.data;
+}
+
 export async function deleteScene(endpoint, sceneId) {
   const response = await fetch(endpoint, {
     method: 'DELETE',

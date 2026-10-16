@@ -4,6 +4,7 @@ import {
   createScene,
   createSceneFolder,
   deleteScene,
+  moveSceneToFolder,
   updateSceneVisibility,
 } from '../services/scene-service.js';
 import { normalizeGridState } from '../state/normalize/grid.js';
@@ -169,6 +170,7 @@ export function renderSceneList(routes, store) {
         assetUploadPending: isAssetUploadPending(),
         playerMapDisabled: Boolean(state.boardState?.playerMapDisabled),
         playerActiveSceneId: state.boardState?.playerActiveSceneId ?? null,
+        folders: sceneState.folders,
       }
     );
     container.querySelectorAll('.scene-level__edit').forEach(el => {
@@ -561,6 +563,29 @@ export function renderSceneList(routes, store) {
 
   document.addEventListener('change', async (event) => {
     if (!container.contains(event.target) && !event.target.closest('#edits-levels')) return;
+    // A scene's Folder choice moves it into that folder (or Unsorted).
+    const moveSelect = event.target.closest('[data-action="move-scene"]');
+    if (moveSelect) {
+      const sceneId = moveSelect.dataset.sceneId, folderId = moveSelect.value || null;
+      if (!endpoints.scenes || !sceneId) return;
+      moveSelect.disabled = true;
+      try {
+        const moved = await moveSceneToFolder(endpoints.scenes, sceneId, folderId);
+        stateApi.updateState?.((draft) => {
+          ensureSceneDraft(draft);
+          const scene = draft.scenes.items.find((item) => item.id === sceneId);
+          if (scene) scene.folderId = moved?.folderId ?? folderId;
+        });
+        const folder = normalizeSceneState(stateApi.getState?.()?.scenes).folders.find((item) => item.id === folderId);
+        showFeedback(feedback, `Moved to ${folder ? folder.name || 'Untitled Folder' : 'Unsorted'}.`, 'success');
+      } catch (error) {
+        showFeedback(feedback, error?.message || 'The scene was not moved.', 'error');
+        render(stateApi.getState?.());
+      } finally {
+        moveSelect.disabled = false;
+      }
+      return;
+    }
     const heightInput = event.target.closest('[data-action="set-map-level-height"]');
     if (heightInput) {
       const sceneId = heightInput.dataset.sceneId, levelId = heightInput.dataset.mapLevelId;
@@ -1444,10 +1469,20 @@ function renderSceneItem(scene, activeSceneId, sceneBoardState = {}, options = {
           <button type="button" class="btn btn--danger" data-action="delete-scene" data-scene-id="${scene.id}">Delete</button>
           <button type="button" class="btn" data-action="export-scene" data-scene-id="${scene.id}" title="Download scene setup as JSON. Images are links; image files and character sheets are not bundled.">Export scene JSON</button>
           <button type="button" class="btn" data-action="duplicate-scene" data-scene-id="${scene.id}" title="Review a new copy of this scene, including tokens and floor geometry.">Duplicate scene</button>
+          <label class="scene-item__folder">Folder ${renderSceneFolderSelect(scene, options.folders)}</label>
         </footer>
       </div>
     </article>
   `;
+}
+
+/** The folder a scene is in, as a choice that moves it (data-action="move-scene"). */
+function renderSceneFolderSelect(scene, folders = []) {
+  const current = (folders || []).some((folder) => folder.id === scene.folderId) ? scene.folderId : '';
+  const choices = [{ id: '', name: 'Unsorted' }, ...(folders || [])]
+    .map((folder) => `<option value="${escapeHtml(folder.id)}"${folder.id === current ? ' selected' : ''}>${escapeHtml(folder.name || 'Untitled Folder')}</option>`)
+    .join('');
+  return `<select data-action="move-scene" data-scene-id="${escapeHtml(scene.id)}" aria-label="Folder for ${escapeHtml(scene.name || 'this scene')}">${choices}</select>`;
 }
 
 function renderMapLevelList(sceneId, mapLevelsState, options = {}) {

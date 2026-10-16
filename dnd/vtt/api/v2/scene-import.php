@@ -15,7 +15,9 @@ try {
     $result = withVttBoardStateLock(static function () use ($request,$auth): array {
         $store = vttSyncV2Store();
         $catalog = SceneImportCatalog::recover($store,loadScenesPayload(),'persistScenes');
-        $result = $store->installScenePackage($request['package'],$request['operationId'],(string)($auth['user'] ?? 'gm'),true);
+        // The folder picked in the import box: one this game has, or none (Unsorted).
+        $folderId = sceneFolderIdFromRequest($catalog,$request['folderId'] ?? null);
+        $result = $store->installScenePackage($request['package'],$request['operationId'],(string)($auth['user'] ?? 'gm'),true,$folderId);
         if (!isset($store->getSnapshot()['state']['sceneConfig'][$result['scene']['id']])) throw new InvalidArgumentException('This import was already completed and its scene was later deleted. Choose the file again to create a new copy.');
         SceneImportCatalog::recover($store,$catalog,'persistScenes');
         return $result;

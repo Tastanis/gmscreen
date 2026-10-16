@@ -1285,6 +1285,18 @@
   margin-top: auto;
 }
 
+/* Which folder a scene is in; changing it moves the scene (scene-manager.js renderSceneFolderSelect). */
+.scene-item__folder {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+}
+
+.scene-item__folder select {
+  max-width: 11rem;
+}
+
 .scene-item__preview {
   position: relative;
   flex: 0 0 64px;

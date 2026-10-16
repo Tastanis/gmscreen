@@ -314,7 +314,7 @@ final class SyncV2Store
      */
     /** Import authority. The HTTP installer holds the catalog lock; validation and
      * fresh-ID preparation run here before writes. No catalog or asset files are written here. */
-    public function installScenePackage(array $package, string $operationId, string $actorId, bool $isGm): array
+    public function installScenePackage(array $package, string $operationId, string $actorId, bool $isGm, ?string $folderId = null): array
     {
         if (!$isGm || trim($actorId) === '') throw new InvalidArgumentException('Scene import is GM-only.');
         if (!preg_match('/^[A-Za-z0-9._:-]{8,128}$/', $operationId)) throw new InvalidArgumentException('Invalid import operation ID.');
@@ -351,7 +351,8 @@ final class SyncV2Store
             unset($entry);
             foreach ($domains as $domain=>$entries) $state[$domain][$sceneId] = $entries;
             $scene = array_intersect_key($prepared['scene'], array_flip(['id','name','mapUrl','thumbnailUrl','grid']));
-            $scene['folderId'] = null;
+            // The folder the GM picked (checked against the catalog by the caller), or Unsorted.
+            $scene['folderId'] = $folderId;
             $scene['_importOperationId'] = $operationId;
             // Import visibility must be explicit in the eventual UI. This operation
             // creates a browsable scene; it never activates it for anyone.
