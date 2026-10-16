@@ -831,3 +831,12 @@ The Gravity Orchard's map is not touched.
   and its health bar, conditions and other popups sit just above its head. They are a quarter bigger.
 - **Hold Z** to lift: checked again with real key presses. If it does nothing on the live site, the page is
   probably an old copy: reload with Ctrl+F5 after deploying.
+
+## Build 521: Z while holding a token
+
+- **Press Z while you are already holding a token** (dragging it, or after clicking it up): the mouse now moves it
+  up and down instead of sideways, like Shift and Space change how it moves.
+- **Right-click** while it is up there: a waypoint at that height. It is kept, and the label says "(waypoint)".
+- **Let go of Z**: it goes on sideways from the waypoint's height. With no waypoint it goes back to the height
+  it started at, so a tap of Z changes nothing.
+- Letting go of the mouse while it is going up and down keeps that height. Escape takes it all back.
