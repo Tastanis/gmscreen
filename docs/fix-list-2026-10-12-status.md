@@ -819,3 +819,15 @@ No map is touched; the Gravity Orchard plays as it does now.
   gone. The push question is shorter: one line per wall, the damage on each button.
 
 The Gravity Orchard's map is not touched.
+
+## Build 520: putting tokens down, and the model is the token
+
+- **Putting a held token down works every time.** When you click a token you hold it until you click again. The
+  click to put it down used to land on the held token itself (it follows your mouse), so it was put back or
+  picked up again. Now the click goes to the square under your mouse. A click with a little wiggle still puts it
+  down; a click off the map puts it back where it was; a click while the last move is still saving lets go.
+  If a move is refused (for example onto another creature's square) a notice says why.
+- **The model is the token.** No invisible token floats above the models any more. You grab the model itself,
+  and its health bar, conditions and other popups sit just above its head. They are a quarter bigger.
+- **Hold Z** to lift: checked again with real key presses. If it does nothing on the live site, the page is
+  probably an old copy: reload with Ctrl+F5 after deploying.
