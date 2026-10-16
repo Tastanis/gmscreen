@@ -93,7 +93,12 @@ test('opening another scene unloads the old one first (Build 523)', () => {
   assert.match(board3d, /function clearBoard\(\)\{\s*buildGeneration\+\+;clearTimeout\(buildTimer\);cancelDrag\(\);\s*if\(view\)\{stopLayers\(\);effects\?\.dispose\?\.\(\);effects=null;minis\?\.dispose\(\);minis=null;for\(const part of sceneArtParts\)view\.removeLevelArt\(part\);sceneArtParts=\[\];view\.dispose\(\);canvas\?\.remove\(\);\}/, 'everything of the old scene goes at once');
   assert.match(board3d, /loadingNote\.textContent='Loading scene…'/);
   assert.match(board3d, /tokenHost\.style\.visibility=on\?'hidden':''/, 'tokens are not drawn between scenes');
-  assert.match(board3d, /if\(!current\(\)\)\{nextView\.dispose\(\);return;\}/, 'a build for a scene no longer shown is dropped');
+  assert.match(board3d, /isCurrent:current\}\);\s*if\(!nextView\|\|!current\(\)\)\{nextView\?\.dispose\(\);return;\}/, 'a build for a scene no longer shown is dropped (scene-view.mjs stops at its own waits too)');
+  // Build 524: never on the old scene's picture, and the scene's own 3D art is in before the board is shown.
+  assert.match(board3d, /if\(\(context\.mapUrl\?\?null\)!==\(context\.view\?\.activeMapUrl\?\?null\)\|\|!context\.view\?\.mapLoaded\)return null;/);
+  assert.match(board, /mapUrl: state\.boardState\?\.mapUrl \?\? null,/);
+  assert.match(board, /mapLoaded: viewState\.mapLoaded, activeMapUrl: viewState\.activeMapUrl \?\? null \},/);
+  assert.match(board3d, /if\(!current\(\)\|\|view!==nextView\)return;\s*\/\/ "Loading scene…" stays until the scene's own 3D art is in[^\n]*\n\s*showLoading\(false\);/);
 });
 
 test('players see the monster minis: the token names its mini, the page keeps it, the minis use it', () => {

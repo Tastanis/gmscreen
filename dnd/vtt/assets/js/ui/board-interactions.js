@@ -26781,7 +26781,9 @@ function createTemplateTool() {
       sceneConfig, environment: sceneConfig.environment ?? {}, mapLevels: sceneConfig.mapLevels ?? {},
       levels: sceneConfig.mapLevels?.levels ?? [], grid: state.grid ?? {},
       viewerLevelId: getViewerLevelIdForCurrentUser(state, sceneId) || BASE_MAP_LEVEL_ID,
-      view: { gridSize: viewState.gridSize, gridOffsets: { ...viewState.gridOffsets }, mapPixelSize: { ...viewState.mapPixelSize }, mapInsets: { ...(viewState.mapInsets ?? {}) }, mapLoaded: viewState.mapLoaded },
+      // The scene's own map picture, and the one the board has loaded (the 3D board waits until they are the same).
+      mapUrl: state.boardState?.mapUrl ?? null,
+      view: { gridSize: viewState.gridSize, gridOffsets: { ...viewState.gridOffsets }, mapPixelSize: { ...viewState.mapPixelSize }, mapInsets: { ...(viewState.mapInsets ?? {}) }, mapLoaded: viewState.mapLoaded, activeMapUrl: viewState.activeMapUrl ?? null },
       busy: coordinateMovePending,
       inputMode: isMeasureModeActive() ? 'measure' : isDrawModeActive() ? 'draw' : null,
       targetMode: pendingAutomationTarget ? 'token' : pendingAutomationArea ? 'area' : pendingAutomationMove ? 'move' : null,

@@ -46,6 +46,8 @@ async function mount(){
  let clickMoveTokenId=null,hoverPointer=null,held=null,drag=null,lastTime=performance.now(),lastTokenSignature='',hoverSignature='',shownLevel=null;
 
  function pictureRect(){
+  // Only the scene's own picture: just after a switch the map image still holds the old scene's until the new one loads.
+  if((context.mapUrl??null)!==(context.view?.activeMapUrl??null)||!context.view?.mapLoaded)return null;
   const v=context.view||{},g=v.gridSize||64,off=v.gridOffsets||{},insets=v.mapInsets||{},image=document.querySelector('#vtt-map-image');
   const width=image?.naturalWidth||0,height=image?.naturalHeight||0;if(!width||!height)return null;
   return {url:image.currentSrc||image.src,left:((insets.left||0)-(off.left||0))/g,top:((insets.top||0)-(off.top||0))/g,width:width/g,height:height/g};
@@ -100,10 +102,10 @@ async function mount(){
   const current=()=>generation===buildGeneration&&context.sceneId===sceneId;
   try{
    const useArt=key.startsWith('art:'),nextData=withStructure(useArt?art.data:pictureScene()),nextCanvas=document.createElement('canvas');nextCanvas.tabIndex=-1;
-   const nextView=await createSceneView({canvas:nextCanvas,sceneData:nextData,groundPicture:useArt?null:pictureRect()});
-   if(!current()){nextView.dispose();return;}
+   const nextView=await createSceneView({canvas:nextCanvas,sceneData:nextData,groundPicture:useArt?null:pictureRect(),isCurrent:current});
+   if(!nextView||!current()){nextView?.dispose();return;}
    if(view){cancelDrag();stopLayers();effects?.dispose?.();minis?.dispose();minis=null;for(const part of sceneArtParts)view.removeLevelArt(part);sceneArtParts=[];view.dispose();canvas?.remove();}
-   host.append(nextCanvas);canvas=nextCanvas;view=nextView;data=nextData;builtKey=key;builtSceneId=sceneId;showLoading(false);shownLevel=null;lastTokenSignature='';fieldShown=-1;fieldAt=0;
+   host.append(nextCanvas);canvas=nextCanvas;view=nextView;data=nextData;builtKey=key;builtSceneId=sceneId;shownLevel=null;lastTokenSignature='';fieldShown=-1;fieldAt=0;
    view.setTokenBodiesVisible(false);view.setLevel(-1);view.setVision([],false);view.resize();
    effects=createEffectOverlays({scene:view.scene,heightFor:id=>bridge.heightFor(id)});startLayers();
    minis?.dispose();minis=createMinis(view.scene);miniIds='';
@@ -112,6 +114,9 @@ async function mount(){
     if(art&&view===nextView){art.userData.parts??=[...art.children];view.useArtModel();
      // Each art part belongs to the floor at its height (a scene copy renames its floors, so names cannot be used).
      for(const part of art.userData.parts){const height=Number(entry.levels?.[part.name]),index=Number.isFinite(height)?Math.max(0,(data?.levels||[]).findIndex(l=>Math.abs(l.height-height)<.1)):0;view.addLevelArt(part,index,{always:index===0});sceneArtParts.push(part);}}}}
+   if(!current()||view!==nextView)return;
+   // "Loading scene…" stays until the scene's own 3D art is in, so its plain floor shapes are never shown first.
+   showLoading(false);
    const own=!context.isGM&&(context.placements?.find(p=>p.visionOwners?.includes(String(context.user?.name||'').toLowerCase()))||context.placements?.find(p=>p.canMove));
    if(own)focus(own.id);else view.home();
    document.dispatchEvent(new CustomEvent('vtt3d:scene-built',{detail:{sceneId:context.sceneId,art:useArt}}));
@@ -361,7 +366,7 @@ async function mount(){
   if(clickMoveTokenId&&(next.sceneId!==context.sceneId||next.targetMode||!next.selectedIds?.includes(clickMoveTokenId)))cancelDrag();
   const switched=(view||building)&&next.sceneId!==(builtSceneId??(building?context.sceneId:null));
   context=next;if(switched)clearBoard();scheduleBuild();paintAbilityGuide();const value=context.grid?.visible!==false;if(view&&value!==gridVisible){gridVisible=value;view.setGrid(value);}});
- document.querySelector('#vtt-map-image')?.addEventListener('load',()=>{context=bridge.getContext();buildScene();});
+ document.querySelector('#vtt-map-image')?.addEventListener('load',()=>setTimeout(()=>{context=bridge.getContext();buildScene();},0));
  // Ability pickers' Skip buttons and range words are screen controls; on the 3D board they
  // are shown above the view, and pressing Skip runs the VTT's own skip.
  const relocated=new Map(),relocate=['.vtt-automation-area__controls','.vtt-automation-move__controls'];
