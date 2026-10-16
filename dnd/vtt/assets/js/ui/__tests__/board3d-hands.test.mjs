@@ -18,7 +18,7 @@ const board = readFileSync(new URL('../board-interactions.js', import.meta.url),
 
 test('hold Z and drag: up and down a square at a time, never below what is under it, saved on letting go', () => {
   assert.match(board3d, /if\(\(e\.key==='z'\|\|e\.key==='Z'\)&&!e\.ctrlKey&&!e\.metaKey&&!e\.altKey&&!typing\(e\.target\)\)zHeld=true;/, 'Z is held, but not while typing, and not Ctrl+Z');
-  assert.match(board3d, /if\(zHeld&&p&&p\.canMove!==false&&!context\.busy\)\{startLift\(p,e\);return;\}/, 'a token this user may move, players included');
+  assert.match(board3d, /if\(zHeld&&p&&p\.canMove!==false&&!context\.busy\)\{cancelDrag\(\);if\(!context\.selectedIds\?\.includes\(id\)\)bridge\.select\(id\);board\.focus\(\{preventScroll:true\}\);startLift\(p,e\);return;\}/, 'a token this user may move, players included; first, even over a held token');
   assert.match(board3d, /steps=Math\.round\(\(lift\.y-e\.clientY\)\/perSquare\);\s*lift\.z=steps\?Math\.max\(Math\.ceil\(lift\.floor-\.01\),Math\.round\(lift\.start\)\+steps\):lift\.start;/, 'up the screen is up; it stops at the floor below');
   assert.match(board3d, /liftLabel\.textContent=up\?`\$\{up\} \$\{up===1\?'square':'squares'\} up`:'On the ground';/);
   assert.match(board3d, /if\(!save\|\|done\.z===done\.start\)\{held=null;return;\}\s*try\{await bridge\.setHeight\?\.\(done\.id,done\.z\);\}/, 'nothing is sent when the height did not change; Escape takes it back');
@@ -36,10 +36,36 @@ test('a flying token is dragged on a sheet at its own height, keeping where it w
   assert.match(board3d, /const airborne=p=>!!p&&\['fly','hover'\]\.includes\(p\.movementMode\);/, 'a token on the ground follows the surface under the pointer, as before');
 });
 
-test('a token with a mini is grabbed at the mini: its base and the lower part of the model', () => {
-  assert.match(board3d, /if\(miniStanding\.has\(p\.id\)\)\{node\.style\.setProperty\('--vtt3d-grab-top',`\$\{foot\.y-size\*\.6-nodeTop\}px`\);node\.style\.setProperty\('--vtt3d-grab-height',`\$\{size\*\.85\}px`\);\}/);
-  assert.match(css, /\.vtt-token\.vtt3d-mini::after \{ content: ''; position: absolute; left: 5%; width: 90%; top: var\(--vtt3d-grab-top, 100%\); height: var\(--vtt3d-grab-height, 0px\);[^}]*pointer-events: auto;/, 'part of the token, so a press there is a press on the token');
+test('a token with a mini is the mini: its box covers the model from base to head, popups above the head (Build 520)', () => {
+  // Build 518 added a grab area under a box that floated above the model; Brandon: "the invisible token thing above
+  // the models needs to go away", and the popups go just above the character, a little bigger.
+  assert.match(minis, /tops\.set\(r\.id,y\+\(entry\.height\|\|1\)\*scale\);/, 'each mini says where its head is');
+  assert.match(minis, /function modelHeight\(s\)\{[^\n]*if\(o\.isMesh&&!\/-glow\|-fx\|-ghost\/\.test\(o\.name\)\)box\.expandByObject\(o\);/, 'measured from its meshes, not its particles');
+  assert.match(board3d, /const head=miniStanding\.has\(p\.id\)&&Number\.isFinite\(miniTops\.get\(p\.id\)\)\?view\.project\(\{\.\.\.p,z:miniTops\.get\(p\.id\)\}\):null;\s*const boxTop=head\?Math\.min\(head\.y,foot\.y-size\*\.5\):/);
+  assert.match(board3d, /if\(head\)node\.style\.setProperty\('--vtt3d-height',`\$\{foot\.y\+size\*\.12-boxTop\}px`\);else node\.style\.removeProperty\('--vtt3d-height'\);/, 'down to its base');
+  assert.match(css, /#vtt-token-layer>\.vtt-token\.vtt3d-mini \{ height: var\(--vtt3d-height, var\(--vtt3d-size, 36px\)\) !important;/);
+  assert.match(css, /\.vtt3d-mini \.vtt-token__condition \{ bottom: auto; top: calc\(var\(--tok-unit\) \* -18\); \}/, 'conditions above the head too');
+  assert.doesNotMatch(board3d + css, /vtt3d-grab|vtt3d-mini::after/, 'no box floats over the model any more');
+  assert.match(board3d, /node\.style\.setProperty\('--tok-unit',`\$\{\(1\.25\*size\//, 'badges and bars a quarter bigger');
   assert.match(board3d, /const placeKey=cameraKey\+'\|'\+shownLevel\+'\|'\+tokenLayer\.childElementCount\+'\|'\+miniIds\+/, 'placed again when a mini appears');
+});
+
+test('a held token is always put down by the next click (Build 520)', () => {
+  // On itself: it stays where it stands, and is not picked up again.
+  assert.match(board3d, /if\(clickMoveTokenId\)\{const mover=find\(clickMoveTokenId\);if\(id===clickMoveTokenId\|\|!mover\)\{cancelDrag\(\);return;\}/);
+  // A little movement of the hand, or a click with no square under it, never leaves it held.
+  assert.match(board3d, /if\(Math\.hypot\(e\.clientX-start\.x,e\.clientY-start\.y\)>5&&!clickMoveTokenId\)return;\s*const hit=pickAtClient\(e\.clientX,e\.clientY,\{tokens:false\}\);if\(!hit\)\{if\(clickMoveTokenId\)cancelDrag\(\);return;\}/);
+  // The held token's box goes with the pointer: while held it lets the pointer through, so the click that puts it
+  // down lands on the square, not on the token (which used to count as "put it back": "it won't place it").
+  assert.match(board3d, /else\{clickMoveTokenId=released\.id;markHeld\(released\.id\);\}\}/);
+  assert.match(board3d, /if\(!drag\.moved&&Math\.hypot\(e\.clientX-drag\.x,e\.clientY-drag\.y\)>5\)\{drag\.moved=true;markHeld\(drag\.id\);\}/);
+  assert.match(board3d, /function cancelDrag\(\)\{markHeld\(null\);clickMoveTokenId=null;/);
+  assert.match(css, /\.vtt-token\.vtt3d-held, \.vtt3d-on #vtt-token-layer>\.vtt-token\.vtt3d-held \* \{ pointer-events: none !important; \}/);
+  // A drop that is refused says why, where it can be seen.
+  assert.match(board3d, /if\(result\?\.accepted===false&&result\.reason!=='unchanged'\)\{const words=REFUSED\[result\.reason\]\|\|/);
+  assert.match(board3d, /window\.UIKit\?\.toast\?\.\(words,'warning'\);/);
+  // Nor does a click while the last move is still being saved.
+  assert.match(board3d, /async function commit\(hit,p,e,intent=null\)\{if\(!p\|\|p\.canMove===false\|\|context\.busy\)\{cancelDrag\(\);return;\}/);
 });
 
 test('players see the monster minis: the token names its mini, the page keeps it, the minis use it', () => {

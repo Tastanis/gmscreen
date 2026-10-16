@@ -173,6 +173,7 @@ async function mount(){
  function levelIndex(levelId){return Math.max(0,data?.levels?.findIndex(l=>l.id===levelId)??0);}
  function world(p){const z=bridge.heightFor(p.id);return {id:p.id,x:p.column+(p.width||1)/2,y:p.row+(p.height||1)/2,z:Number.isFinite(z)?z:0,width:p.width||1,height:p.height||1,color:p.color||p.borderColor||(p.team==='enemy'?'#d39184':'#a9d6c7'),level:levelIndex(p.levelId)};}
  function destination(hit,p){return {column:Math.max(0,Math.round(hit.x-(p.width||1)/2)),row:Math.max(0,Math.round(hit.y-(p.height||1)/2))};}
+ const REFUSED={'movement-pending':'Still moving the last token.','not-permitted':'You cannot move that token.','ability-selection-pending':'Finish the ability first.'};
  function movementKind(e){return dragMovementKind(e||{});}
  const pickAtClient=(x,y,options)=>view?.pick({clientX:x,clientY:y},options)??null;
  // A flying or hovering token is dragged on a flat sheet at its own height, keeping the gap between where it was
@@ -184,14 +185,22 @@ async function mount(){
   const q=view?.pointOnPlane(e.clientX,e.clientY,air.z);if(!q)return null;
   const x=q.x+air.dx,y=q.y+air.dy;return {x,y,z:helpers.groundAt(x,y),levelId:null,surfaceId:null,rampId:null,air:air.z};}
  function clearGuides(){if(!view)return;view.setReachable([]);view.setPath([]);view.setMovementRoute(null);}
- function cancelDrag(){clickMoveTokenId=null;hoverPointer=null;held=null;const previous=drag;drag=null;if(previous&&tokenLayer.hasPointerCapture(previous.pointerId))tokenLayer.releasePointerCapture(previous.pointerId);bridge.endMovementPreview?.();clearGuides();hoverSignature='';}
- async function commit(hit,p,e,intent=null){if(!p||p.canMove===false||context.busy)return;const to=destination(hit,p);intent=intent||bridge.captureMovementPreview?.();
+ // The held token's box goes with the pointer; while it is held it lets the pointer through to the square under it
+ // (integration.css .vtt3d-held), so the click that puts it down lands on the board, not on the token itself.
+ function markHeld(id){for(const node of tokenLayer.querySelectorAll('.vtt3d-held'))if(node.dataset.placementId!==id)node.classList.remove('vtt3d-held');
+  if(id)bridge.getTokenElement?.(id)?.classList.add('vtt3d-held');}
+ function cancelDrag(){markHeld(null);clickMoveTokenId=null;hoverPointer=null;held=null;const previous=drag;drag=null;if(previous&&tokenLayer.hasPointerCapture(previous.pointerId))tokenLayer.releasePointerCapture(previous.pointerId);bridge.endMovementPreview?.();clearGuides();hoverSignature='';}
+ async function commit(hit,p,e,intent=null){if(!p||p.canMove===false||context.busy){cancelDrag();return;}const to=destination(hit,p);intent=intent||bridge.captureMovementPreview?.();
   const matches=intent&&intent.placementId===p.id&&intent.column===to.column&&intent.row===to.row
    &&(intent.rampId??null)===(hit.rampId??null)&&(intent.levelId??null)===(hit.levelId??null)&&(intent.surfaceId??null)===(hit.surfaceId??null)
    &&(hit.rampId||Number.isFinite(intent.surfaceElevation)&&Math.abs(intent.surfaceElevation-hit.z)<.55);
   if(!matches){bridge.previewMovement?.({placementId:p.id,...to,surfaceElevation:hit.z,levelId:hit.levelId??null,surfaceId:hit.surfaceId??null,rampId:hit.rampId??null});intent=bridge.captureMovementPreview?.();}
   cancelDrag();
-  try{await bridge.move({...intent,placementId:p.id,...to,surfaceElevation:hit.z,levelId:hit.levelId??null,surfaceId:hit.surfaceId??null,rampId:hit.rampId??null,movementKind:movementKind(e)});}catch(error){console.error('[VTT 3D] move',error);}
+  // A drop that is refused says why where it can be seen (the board's own status line is read out, not shown).
+  const status=document.querySelector('#active-scene-status'),said=status?.textContent;
+  try{const result=await bridge.move({...intent,placementId:p.id,...to,surfaceElevation:hit.z,levelId:hit.levelId??null,surfaceId:hit.surfaceId??null,rampId:hit.rampId??null,movementKind:movementKind(e)});
+   if(result?.accepted===false&&result.reason!=='unchanged'){const words=REFUSED[result.reason]||(typeof result.reason==='string'&&/\s/.test(result.reason)?result.reason:status&&status.textContent!==said?status.textContent:'The token was not moved there.');window.UIKit?.toast?.(words,'warning');}}
+  catch(error){console.error('[VTT 3D] move',error);window.UIKit?.toast?.(error?.message||'The token was not moved there.','warning');}
   context=bridge.getContext();}
  // Before a drop is sent, finish the route search for that square (bounded) so
  // the move carries the planned corners rather than a provisional straight line.
@@ -220,8 +229,11 @@ async function mount(){
  mapSurface.addEventListener('pointermove',e=>{if(!e.buttons)showHover(e);});
  mapSurface.addEventListener('pointerleave',()=>{if(!drag&&!clickMoveTokenId){bridge.endMovementPreview?.();clearGuides();hoverSignature='';}});
  mapSurface.addEventListener('pointerdown',e=>{if(e.button!==0||e.altKey||!view||!claims())return;e.preventDefault();e.stopImmediatePropagation();surfaceDown={x:e.clientX,y:e.clientY};},true);
- mapSurface.addEventListener('pointerup',e=>{if(e.button!==0||!surfaceDown)return;const start=surfaceDown;surfaceDown=null;e.preventDefault();e.stopImmediatePropagation();if(Math.hypot(e.clientX-start.x,e.clientY-start.y)>5)return;
-  const hit=pickAtClient(e.clientX,e.clientY,{tokens:false});if(!hit)return;
+ mapSurface.addEventListener('pointerup',e=>{if(e.button!==0||!surfaceDown)return;const start=surfaceDown;surfaceDown=null;e.preventDefault();e.stopImmediatePropagation();
+  // A held token is put down by this click whatever happens: a little movement of the hand, or a click off the map
+  // (no square under it: it stays where it was), never leaves it held. An ability's pick still wants a clean click.
+  if(Math.hypot(e.clientX-start.x,e.clientY-start.y)>5&&!clickMoveTokenId)return;
+  const hit=pickAtClient(e.clientX,e.clientY,{tokens:false});if(!hit){if(clickMoveTokenId)cancelDrag();return;}
   if(context.targetMode==='area'||context.targetMode==='move'){bridge.pickAbility?.({column:Math.floor(hit.x),row:Math.floor(hit.y)});return;}
   if(!clickMoveTokenId)return;const mover=find(clickMoveTokenId);showHover(e,mover);settleRoute(e,mover);const intent=bridge.captureMovementPreview?.();commit(hit,mover,e,intent);},true);
 
@@ -230,9 +242,13 @@ async function mount(){
   if(e.button!==0)return;e.preventDefault();e.stopImmediatePropagation();const id=node.dataset.placementId;
   if(context.targetMode){const p=find(id);if(p)bridge.pickAbility?.({column:p.column,row:p.row,placementId:id});return;}
   if(bridge.target(id,{clientX:e.clientX,clientY:e.clientY}))return;
-  if(e.shiftKey||!context.selectedIds?.includes(id))bridge.select(id,{additive:e.shiftKey});planner.warm(find(id));clickMoveTokenId=null;board.focus({preventScroll:true});
   const p=find(id);
-  if(zHeld&&p&&p.canMove!==false&&!context.busy){startLift(p,e);return;}
+  if(zHeld&&p&&p.canMove!==false&&!context.busy){cancelDrag();if(!context.selectedIds?.includes(id))bridge.select(id);board.focus({preventScroll:true});startLift(p,e);return;}
+  // A held token is put down by the next click. On itself it stays where it stands (it is not picked up again);
+  // on another token it goes to the square under the pointer.
+  if(clickMoveTokenId){const mover=find(clickMoveTokenId);if(id===clickMoveTokenId||!mover){cancelDrag();return;}
+   const hit=pickAtClient(e.clientX,e.clientY,{tokens:false});if(!hit){cancelDrag();return;}showHover(e,mover);settleRoute(e,mover);commit(hit,mover,e,bridge.captureMovementPreview?.());return;}
+  if(e.shiftKey||!context.selectedIds?.includes(id))bridge.select(id,{additive:e.shiftKey});planner.warm(find(id));clickMoveTokenId=null;board.focus({preventScroll:true});
   drag={id,x:e.clientX,y:e.clientY,pointerId:e.pointerId,moved:false};tokenLayer.setPointerCapture(e.pointerId);
   if(airborne(p)&&view){const w=world(p),q=view.pointOnPlane(e.clientX,e.clientY,w.z);if(q)drag.air={z:w.z,dx:w.x-q.x,dy:w.y-q.y};}},true);
  // Hold Z and drag a token up or down to raise or lower it, a square at a time; a label says how high it stands
@@ -262,10 +278,10 @@ async function mount(){
  // The held token is followed at the window, not by pointer capture: pressing
  // another mouse button to turn or pan the view can drop the capture, and the
  // left button's release must still drop the token where it is held.
- window.addEventListener('pointermove',e=>{if(!drag||e.pointerId!==drag.pointerId)return;e.stopPropagation();drag.pointer={clientX:e.clientX,clientY:e.clientY,shiftKey:e.shiftKey,ctrlKey:e.ctrlKey,altKey:e.altKey,metaKey:e.metaKey};drag.moved||=Math.hypot(e.clientX-drag.x,e.clientY-drag.y)>5;if(drag.moved)showHover(e,find(drag.id));if(!(e.buttons&1))finishDrag(e);},true);
+ window.addEventListener('pointermove',e=>{if(!drag||e.pointerId!==drag.pointerId)return;e.stopPropagation();drag.pointer={clientX:e.clientX,clientY:e.clientY,shiftKey:e.shiftKey,ctrlKey:e.ctrlKey,altKey:e.altKey,metaKey:e.metaKey};if(!drag.moved&&Math.hypot(e.clientX-drag.x,e.clientY-drag.y)>5){drag.moved=true;markHeld(drag.id);}if(drag.moved)showHover(e,find(drag.id));if(!(e.buttons&1))finishDrag(e);},true);
  window.addEventListener('pointerup',e=>{if(!drag||e.pointerId!==drag.pointerId||(e.buttons&1))return;e.preventDefault();e.stopPropagation();finishDrag(e);},true);
  function finishDrag(e){const released=drag;if(!released)return;if(released.moved)settleRoute(e,find(released.id));const intent=bridge.captureMovementPreview?.();cancelDrag();
-  if(released.moved){const hit=dragHit(e,find(released.id),released.air||null);if(hit)commit(hit,find(released.id),e,intent);}else clickMoveTokenId=released.id;}
+  if(released.moved){const hit=dragHit(e,find(released.id),released.air||null);if(hit)commit(hit,find(released.id),e,intent);}else{clickMoveTokenId=released.id;markHeld(released.id);}}
  window.addEventListener('pointercancel',e=>{if(drag&&e.pointerId===drag.pointerId)cancelDrag();},true);
  tokenLayer.addEventListener('contextmenu',e=>{const node=e.target.closest('[data-placement-id]');if(!node)return;e.preventDefault();e.stopImmediatePropagation();bridge.openSettings(node.dataset.placementId,{clientX:e.clientX,clientY:e.clientY});},true);
  window.addEventListener('blur',cancelDrag);document.addEventListener('visibilitychange',()=>{if(document.hidden)cancelDrag();});
@@ -365,7 +381,7 @@ async function mount(){
    // Hero minis on their tokens' bases (minis.mjs); a token with a mini hides its portrait (class vtt3d-mini).
    if(minis){if(profilesFor!==context.placements){profilesFor=context.placements;profiles=new Map((context.placements||[]).map(p=>[p.id,{hero:p.characterProfileId,monster:p.monsterId,mini:p.mini,name:p.name}]));}
     const result=minis.update([...recordById.values()],profiles,p=>shownLevel===null||shownLevel<0||p.level<=shownLevel,view.camera,dt);if(result.redraw)view.renderer.shadowMap.needsUpdate=true;view.setTokensWithoutBase?.(result.noBase);
-    miniStanding=result.ids;
+    miniStanding=result.ids;miniTops=result.tops||new Map();
     const key=[...result.ids].sort().join(',')+'|'+tokenLayer.childElementCount;if(key!==miniIds){miniIds=key;for(const node of tokenLayer.querySelectorAll('[data-placement-id]'))node.classList.toggle('vtt3d-mini',result.ids.has(node.dataset.placementId));}}
    const {width,height}=view.viewport();
    // Nothing to place again while the camera, the tokens and the floor cut stay as they were.
@@ -380,12 +396,16 @@ async function mount(){
    for(const node of tokenNodes){placedElements.add(node);const p=recordById.get(node.dataset.placementId);if(!p){node.style.setProperty('--vtt3d-visible','hidden');continue;}
     const foot=view.project(p),top=view.project({...p,z:p.z+Math.max(p.width,p.height)*1.1}),across=view.project({...p,x:p.x+Math.max(p.width,p.height)*.5});const size=Math.max(25,Math.min(110,Math.hypot(across.x-foot.x,across.y-foot.y)*2));
     const shared=spread.get(p.id);if(shared)foot.x+=shared.offset*size*.55;
-    // Badges, HP bars and labels are sized in token units (board.css --tok-unit), so they scale with the token.
-    node.style.setProperty('--tok-unit',`${(size/(64*Math.max(p.width,p.height))).toFixed(3)}px`);
-    const nodeTop=Math.min(foot.y-size*.12,top.y+size*.1)-size;
-    node.style.setProperty('--vtt3d-x',`${foot.x-size/2}px`);node.style.setProperty('--vtt3d-y',`${nodeTop}px`);node.style.setProperty('--vtt3d-size',`${size}px`);
-    // A token with a mini is also grabbed at the mini: its base and the lower part of the model (integration.css .vtt3d-mini::after).
-    if(miniStanding.has(p.id)){node.style.setProperty('--vtt3d-grab-top',`${foot.y-size*.6-nodeTop}px`);node.style.setProperty('--vtt3d-grab-height',`${size*.85}px`);}
+    // Badges, HP bars and labels are sized in token units (board.css --tok-unit), so they scale with the token;
+    // a quarter bigger than on the flat board, so they read on the 3D one (Brandon, October 2026).
+    node.style.setProperty('--tok-unit',`${(1.25*size/(64*Math.max(p.width,p.height))).toFixed(3)}px`);
+    // A flat token stands as its portrait over its square. A token with a mini is the mini: its box covers the
+    // model from its base to its head, so the model is what is grabbed and its popups sit just above its head
+    // (integration.css .vtt3d-mini), with nothing invisible floating over it.
+    const head=miniStanding.has(p.id)&&Number.isFinite(miniTops.get(p.id))?view.project({...p,z:miniTops.get(p.id)}):null;
+    const boxTop=head?Math.min(head.y,foot.y-size*.5):Math.min(foot.y-size*.12,top.y+size*.1)-size;
+    node.style.setProperty('--vtt3d-x',`${foot.x-size/2}px`);node.style.setProperty('--vtt3d-y',`${boxTop}px`);node.style.setProperty('--vtt3d-size',`${size}px`);
+    if(head)node.style.setProperty('--vtt3d-height',`${foot.y+size*.12-boxTop}px`);else node.style.removeProperty('--vtt3d-height');
     node.style.setProperty('--vtt3d-visible',(shownLevel===null||shownLevel<0||p.level<=shownLevel)&&foot.visible&&foot.x>-size&&foot.y>-size&&foot.x<width+size&&foot.y<height+size?'visible':'hidden');node.style.setProperty('--vtt3d-order',String(Math.round(10000+foot.y)*4+(shared?shared.order:0)));node.dataset.terrainHeight=String(p.z);
    }
    }
@@ -404,7 +424,7 @@ async function mount(){
    const portalKey=[window.wallPrototype?.revision,document.querySelector('#wall-panel')?.hidden,context.isGM,window.terrainPrototype?.revision,context.sceneId].join('|');if(portalKey!==portalsAt){portalsAt=portalKey;window.wallPrototype?.refreshPortals?.();}
   }
   requestAnimationFrame(frame);}
- let portalsAt='',recordsCache=null,lastPlaceKey='',lastAnchorKey='',miniStanding=new Set();const placedElements=new WeakSet();
+ let portalsAt='',recordsCache=null,lastPlaceKey='',lastAnchorKey='',miniStanding=new Set(),miniTops=new Map();const placedElements=new WeakSet();
  function focus(point){if(!view)return;const goal=point&&typeof point==='object'?point:find(point)&&world(find(point));if(!goal)return;view.focus(goal);view.camera.position.copy(view.controls.target).add({x:13,y:17,z:16});view.controls.update();}
  const api={get ready(){return !!view;},
   // The held token as drawn on its landing square ({id,x,y,z}), or null.
