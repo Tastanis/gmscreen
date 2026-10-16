@@ -29,6 +29,19 @@
       "level-3": 3,
       "level-6": 6,
       "scenery": 0
+    },
+    "light": {
+      "hemi": [
+        "#eeecf6",
+        "#b8a080",
+        3.4
+      ],
+      "sun": [
+        "#ffdcb8",
+        4.6
+      ],
+      "rim": 1.6,
+      "exposure": 1.8
     }
   },
   {
@@ -54,6 +67,19 @@
       "level-0": 0,
       "level-2": 2,
       "scenery": 0
+    },
+    "light": {
+      "hemi": [
+        "#f2eefa",
+        "#b4a6bc",
+        5.4
+      ],
+      "sun": [
+        "#ffdcc0",
+        4.8
+      ],
+      "rim": 2,
+      "exposure": 2.15
     }
   }
 ]

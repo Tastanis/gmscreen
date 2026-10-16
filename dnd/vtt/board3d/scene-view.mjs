@@ -146,9 +146,17 @@ export async function createSceneView({canvas,sceneData:d,groundPicture=null,isC
  const center=new THREE.Vector3(d.width*.50,11,d.height*.51),viewScale=Math.max(d.width,d.height)/66;
  function home(){controls.target.copy(center);camera.position.copy(center).add(new THREE.Vector3(68,98,80).multiplyScalar(viewScale));controls.update();}
  home();
- scene.add(new THREE.HemisphereLight('#dfeaf0','#4f5a44',.55));
+ const hemi=new THREE.HemisphereLight('#dfeaf0','#4f5a44',.55);scene.add(hemi);
  const sun=new THREE.DirectionalLight('#ffdcae',2.5);sun.position.set(-55,42,-25);sun.target.position.set(d.width/2,10,d.height/2);scene.add(sun,sun.target);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);sun.shadow.camera.left=-57;sun.shadow.camera.right=57;sun.shadow.camera.top=57;sun.shadow.camera.bottom=-57;sun.shadow.camera.near=1;sun.shadow.camera.far=180;sun.shadow.normalBias=.055;sun.shadow.bias=-.0003;
  const rim=new THREE.DirectionalLight('#aac8d2',1.0);rim.position.set(25,16,-12);scene.add(rim);
+ // A map's own art comes lit the way its maker lit it (assets/scenes/index.json "light": sky and ground colours and
+ // strength of the soft light, the sun's colour and strength, exposure), not with the Orchard's daylight.
+ let artLight=null;
+ function setArtLight(light){const key=JSON.stringify(light);if(!light||key===artLight)return;artLight=key;
+  if(light.hemi){hemi.color.set(light.hemi[0]);hemi.groundColor.set(light.hemi[1]);hemi.intensity=light.hemi[2];}
+  if(light.sun){sun.color.set(light.sun[0]);sun.intensity=light.sun[1];}
+  if(Number.isFinite(light.rim))rim.intensity=light.rim;if(Number.isFinite(light.exposure))renderer.toneMappingExposure=light.exposure;
+  renderer.shadowMap.needsUpdate=true;}
  const stoneTex=texture('stone'),woodTex=texture('wood');stoneTex.repeat.set(.8,.8);woodTex.repeat.set(.33,.33);
  const materials={stone:new THREE.MeshStandardMaterial({color:'#e2c7a0',map:stoneTex,roughness:.88}),cap:new THREE.MeshStandardMaterial({color:'#ead5b1',roughness:.8}),wood:new THREE.MeshStandardMaterial({color:'#d9ba93',map:woodTex,roughness:.78}),darkWood:new THREE.MeshStandardMaterial({color:'#493b31',roughness:.7}),brass:new THREE.MeshStandardMaterial({color:'#d6ab52',metalness:.72,roughness:.32}),blue:new THREE.MeshStandardMaterial({color:'#247786',metalness:.3,roughness:.35}),leaf:new THREE.MeshStandardMaterial({color:'#52786c',roughness:.8}),rock:new THREE.MeshStandardMaterial({color:'#bba081',flatShading:true,roughness:1}),book:new THREE.MeshStandardMaterial({color:'#6a8c96',roughness:.8}),roof:new THREE.MeshStandardMaterial({color:'#3d6f76',metalness:.12,roughness:.6})};
  materials.stone.color.set('#c0c5bd');materials.cap.color.set('#bebfae');materials.wood.color.set('#87745d');materials.rock.color.set('#676e6b');materials.leaf.color.set('#2c5945');materials.roof.color.set('#824e34');
@@ -866,12 +874,13 @@ export async function createSceneView({canvas,sceneData:d,groundPicture=null,isC
   setTokens(tokens,id){tokenRecords=tokens;selectedId=id;updateTokenMatrices();},
   // Tokens whose mini floats with no base (minis.json noBase): no base or ring is drawn under them.
   get disposed(){return disposed;},
+  setArtLight,
   // A map's own 3D art (a .glb: scene-art.mjs) in place of the board's drawn ground, floors and sides. The ground and
   // floors stay as unseen surfaces for picking and height; the grid stays. Each art part is hidden with its level.
   useArtModel(){if(disposed)return false;const keep=new Set([...pickSurfaces,...grids]),hidden=new THREE.MeshBasicMaterial({visible:false});
    for(const o of [...root.children])if(!keep.has(o))root.remove(o);props.length=0;
    for(const o of pickSurfaces){o.material=hidden;o.castShadow=false;}renderer.shadowMap.needsUpdate=true;},
-  addLevelArt(object,level,{always=false}={}){if(disposed)return false;object.userData.level=always?0:level;object.userData.category='art';root.add(object);props.push(object);updateLevels();},
+  addLevelArt(object,level,{always=false}={}){if(disposed)return false;if(object.userData.sceneLight)setArtLight(object.userData.sceneLight);object.userData.level=always?0:level;object.userData.category='art';root.add(object);props.push(object);updateLevels();},
   removeLevelArt(object){root.remove(object);const i=props.indexOf(object);if(i>=0)props.splice(i,1);},
   setTokensWithoutBase(ids){const key=[...(ids||[])].sort().join(',');if(key===noBaseKey)return;noBaseKey=key;noBaseIds=new Set(ids||[]);if(tokenRecords.length)updateTokenMatrices();},
   setLevel(level){activeLevel=Number(level);updateLevels();},setGrid(value){gridOn=value;updateLevels();},setRoofs(value){roofsOn=value;updateLevels();},setDoors(value){doorsOpen=value;updateLevels();},
