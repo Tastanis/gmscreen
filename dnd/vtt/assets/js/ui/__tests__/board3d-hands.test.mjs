@@ -84,6 +84,18 @@ test('a held token is always put down by the next click (Build 520)', () => {
   assert.match(board3d, /async function commit\(hit,p,e,intent=null\)\{if\(!p\|\|p\.canMove===false\|\|context\.busy\)\{cancelDrag\(\);return;\}/);
 });
 
+test('opening another scene unloads the old one first (Build 523)', () => {
+  // Brandon: "When I open a new scene, I want it to get rid of all the old scene and unload all of that. And then I
+  // want to load the new scene." The old board stayed drawn until the new one was built, and the new one could be
+  // built with the old one's floors and ramps (remembered by walls revision only).
+  assert.match(board3d, /key=\(context\.sceneId\|\|''\)\+'\|'\+revision;if\(key===structure\.key\)return structure;/, 'floors and ramps remembered per scene');
+  assert.match(board3d, /const switched=\(view\|\|building\)&&next\.sceneId!==\(builtSceneId\?\?\(building\?context\.sceneId:null\)\);\s*context=next;if\(switched\)clearBoard\(\);/);
+  assert.match(board3d, /function clearBoard\(\)\{\s*buildGeneration\+\+;clearTimeout\(buildTimer\);cancelDrag\(\);\s*if\(view\)\{stopLayers\(\);effects\?\.dispose\?\.\(\);effects=null;minis\?\.dispose\(\);minis=null;for\(const part of sceneArtParts\)view\.removeLevelArt\(part\);sceneArtParts=\[\];view\.dispose\(\);canvas\?\.remove\(\);\}/, 'everything of the old scene goes at once');
+  assert.match(board3d, /loadingNote\.textContent='Loading scene…'/);
+  assert.match(board3d, /tokenHost\.style\.visibility=on\?'hidden':''/, 'tokens are not drawn between scenes');
+  assert.match(board3d, /if\(!current\(\)\)\{nextView\.dispose\(\);return;\}/, 'a build for a scene no longer shown is dropped');
+});
+
 test('players see the monster minis: the token names its mini, the page keeps it, the minis use it', () => {
   const kept = normalizePlacementEntry({ id: 'algis', name: 'Algis', column: 1, row: 1, mini: { model: 'algis', scale: 1, noBase: true, extra: 'x' } });
   assert.deepEqual(kept.mini, { model: 'algis', scale: 1, noBase: true });

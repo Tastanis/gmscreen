@@ -59,13 +59,14 @@ async function mount(){
    levels,levelHeights:levels.map(l=>l.height),spots:[]};
  }
  // Floating floors and ramps come from the live map, so edits to them show in 3D.
- let structure={revision:undefined,roofs:[],ramps:[],hash:''};
+ let structure={key:undefined,revision:undefined,roofs:[],ramps:[],hash:''};
  function liveStructure(){
-  const walls=context.environment?.walls,revision=walls?.revision??null;if(revision===structure.revision)return structure;
+  // Remembered per scene: two scenes can be at the same walls revision, and must never share floors or ramps.
+  const walls=context.environment?.walls,revision=walls?.revision??null,key=(context.sceneId||'')+'|'+revision;if(key===structure.key)return structure;
   const v=walls?.value||{},nodes=new Map((v.nodes||[]).map(n=>[n.id,n]));
   const roofs=(v.roofs||[]).filter(r=>!r.boxTop).map(r=>({...r,points:r.points||(r.nodes||[]).map(id=>nodes.get(id)).filter(Boolean)})).filter(r=>r.points.length>=3&&Number.isFinite(r.height));
   const ramps=(v.ramps||[]).map(r=>({...r})),text=JSON.stringify([roofs,ramps]);let hash=5381;for(let i=0;i<text.length;i++)hash=(hash*33^text.charCodeAt(i))>>>0;
-  structure={revision,roofs,ramps,hash:hash.toString(36)};return structure;
+  structure={key,revision,roofs,ramps,hash:hash.toString(36)};return structure;
  }
  function withStructure(sceneData){
   const live=liveStructure(),index=id=>Math.max(0,(sceneData.levels||[]).findIndex(l=>l.id===id));
@@ -79,16 +80,30 @@ async function mount(){
   const artScene=isArtScene();if(artScene===null)return '';if(artScene)return 'art:'+context.sceneId+':'+hash;
   const picture=pictureRect();return picture?JSON.stringify(['picture',context.sceneId,picture,boardSize(),hash]):'';
  }
- let buildTimer=0;
+ let buildTimer=0,buildGeneration=0,builtSceneId=null,loadingNote=null;
+ // Opening another scene unloads this one first (Brandon, October 2026): the old view, its art, layers, minis and
+ // overlays go at once, tokens are not drawn, and the board says it is loading until the new scene is built. A build
+ // or a load still under way for the old scene is dropped when it finishes (buildGeneration).
+ function clearBoard(){
+  buildGeneration++;clearTimeout(buildTimer);cancelDrag();
+  if(view){stopLayers();effects?.dispose?.();effects=null;minis?.dispose();minis=null;for(const part of sceneArtParts)view.removeLevelArt(part);sceneArtParts=[];view.dispose();canvas?.remove();}
+  view=null;canvas=null;data=null;builtKey='';builtSceneId=null;lastTokenSignature='';recordsCache=null;lastPlaceKey='';lastAnchorKey='';miniIds='';held=null;
+  showLoading(true);}
+ function showLoading(on){tokenHost.style.visibility=on?'hidden':'';overlayHost.style.visibility=on?'hidden':'';
+  if(on&&!loadingNote){loadingNote=document.createElement('div');loadingNote.className='vtt3d-loading';loadingNote.textContent='Loading scene…';host.append(loadingNote);}
+  if(!on&&loadingNote){loadingNote.remove();loadingNote=null;}}
  function scheduleBuild(){const key=sceneKey();if(!key||key===builtKey)return;const sameScene=builtKey&&key.split(':').slice(0,2).join(':')===builtKey.split(':').slice(0,2).join(':')&&key.startsWith('art:');clearTimeout(buildTimer);buildTimer=setTimeout(buildScene,sameScene?600:0);}
  async function buildScene(){
   const key=sceneKey();if(!key||key===builtKey||building)return;
-  building=key;
+  building=key;const generation=buildGeneration,sceneId=context.sceneId;
+  // Still the scene being shown, and not cleared meanwhile.
+  const current=()=>generation===buildGeneration&&context.sceneId===sceneId;
   try{
    const useArt=key.startsWith('art:'),nextData=withStructure(useArt?art.data:pictureScene()),nextCanvas=document.createElement('canvas');nextCanvas.tabIndex=-1;
    const nextView=await createSceneView({canvas:nextCanvas,sceneData:nextData,groundPicture:useArt?null:pictureRect()});
+   if(!current()){nextView.dispose();return;}
    if(view){cancelDrag();stopLayers();effects?.dispose?.();minis?.dispose();minis=null;for(const part of sceneArtParts)view.removeLevelArt(part);sceneArtParts=[];view.dispose();canvas?.remove();}
-   host.append(nextCanvas);canvas=nextCanvas;view=nextView;data=nextData;builtKey=key;shownLevel=null;lastTokenSignature='';fieldShown=-1;fieldAt=0;
+   host.append(nextCanvas);canvas=nextCanvas;view=nextView;data=nextData;builtKey=key;builtSceneId=sceneId;showLoading(false);shownLevel=null;lastTokenSignature='';fieldShown=-1;fieldAt=0;
    view.setTokenBodiesVisible(false);view.setLevel(-1);view.setVision([],false);view.resize();
    effects=createEffectOverlays({scene:view.scene,heightFor:id=>bridge.heightFor(id)});startLayers();
    minis?.dispose();minis=createMinis(view.scene);miniIds='';
@@ -344,7 +359,8 @@ async function mount(){
  let gridVisible=null,warmSignature='';
  bridge.subscribe(next=>{const selectedNow=next.placements?.find(p=>p.id===next.selectedIds?.[0]);const warmKey=selectedNow&&selectedNow.canMove?[selectedNow.id,selectedNow.column,selectedNow.row,selectedNow.levelId].join(':'):'';if(warmKey&&warmKey!==warmSignature&&!next.busy){warmSignature=warmKey;planner.warm(selectedNow);}
   if(clickMoveTokenId&&(next.sceneId!==context.sceneId||next.targetMode||!next.selectedIds?.includes(clickMoveTokenId)))cancelDrag();
-  context=next;scheduleBuild();paintAbilityGuide();const value=context.grid?.visible!==false;if(view&&value!==gridVisible){gridVisible=value;view.setGrid(value);}});
+  const switched=(view||building)&&next.sceneId!==(builtSceneId??(building?context.sceneId:null));
+  context=next;if(switched)clearBoard();scheduleBuild();paintAbilityGuide();const value=context.grid?.visible!==false;if(view&&value!==gridVisible){gridVisible=value;view.setGrid(value);}});
  document.querySelector('#vtt-map-image')?.addEventListener('load',()=>{context=bridge.getContext();buildScene();});
  // Ability pickers' Skip buttons and range words are screen controls; on the 3D board they
  // are shown above the view, and pressing Skip runs the VTT's own skip.
