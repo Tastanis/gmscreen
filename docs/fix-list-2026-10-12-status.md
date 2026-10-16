@@ -801,3 +801,21 @@ What you asked for, as in mock 5.
 - **Find token** now says "That token is not drawn on this page." where it used to say it was on another floor.
 
 No map is touched; the Gravity Orchard plays as it does now.
+
+## Build 518: hands on the 3D board, and walls that ask less
+
+- **Lift a token: hold Z and drag it up or down.** A square at a time; a label beside it says "3 squares up"
+  ("On the ground" at the bottom). Let go to keep it. A token that was walking starts flying. Players can lift
+  their own tokens. Escape puts it back. If a token cannot fly (prone, speed 0) the page says so.
+- **Flying tokens drag in the air.** Grab a flying token and it moves with your hand, staying at its height,
+  square by square over the ground. It no longer jumps to the ground point behind your mouse.
+- **Grab a model at its base.** A token with a 3D model can be picked up by its base and the lower part of the
+  model, not only by the floating box above its head.
+- **Players see the monster models.** They only saw bare bases: the models were found by the monster's id, which
+  players are never sent (so they can't read stat blocks). Their page now gets the model's name only.
+- **Walls.** Every wall breaks, by what it is made of: stone 6, dirt 3, metal 9, ice 1; fire never breaks. Making
+  a wall asks only its length and material. Selecting a wall shows a bar only when there is something to do:
+  "Break this cube" when you pick a cube, "Repair broken cubes" when some are broken. "Break the whole wall" is
+  gone. The push question is shorter: one line per wall, the damage on each button.
+
+The Gravity Orchard's map is not touched.
