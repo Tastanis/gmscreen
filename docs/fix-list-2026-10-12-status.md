@@ -856,3 +856,11 @@ The Gravity Orchard's map is not touched.
   the new one. Nothing of the old scene is layered under the new one any more, so no refresh is needed.
 - One cause was that the board remembered a scene's floors and ramps by a number two scenes could share, so the
   new scene could be drawn with the old one's floating islands. It now remembers them per scene.
+
+## Build 524: switching scenes, finished
+
+- With Build 523 the old scene was cleared, but for a moment the new scene could still be drawn on the old scene's
+  map picture. Now the board waits for the new scene's own picture before drawing it.
+- A scene with its own 3D art keeps "Loading scene…" up until the art is in, instead of first showing plain shapes.
+- Includes the 3D conversion chat's half (commit bb3dd54d): 3D art still loading for a scene you have left is
+  dropped instead of landing on the new one.
