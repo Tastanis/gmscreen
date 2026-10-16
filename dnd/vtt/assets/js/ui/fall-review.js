@@ -1,7 +1,10 @@
 import {collisionRequest} from '../services/collision-effects.js';
 import {playTokenFallAnimation} from './token-fall-animation.js';
+// Brandon's ruling (October 2026): a fall counts only when it is 3 squares or more after Agility is taken off.
+// Shorter, it is no fall: no damage, not prone, and (with nothing else to settle) no pop-up.
+export const FALL_MIN_SQUARES=3;
 export function fallDamage(squares,agility=0,forcedDown=false){
- const effective=Math.max(0,squares-(forcedDown?0:Math.max(0,agility)));return effective<2?0:Math.min(50,2*effective);
+ const effective=Math.max(0,squares-(forcedDown?0:Math.max(0,agility)));return effective<FALL_MIN_SQUARES?0:Math.min(50,2*effective);
 }
 export function fallerLandsProne(details,agility=0){return !!details.collidedIds?.length||fallDamage(details.squares,agility,details.forcedDown)>0;}
 export function landingTargetProne(fallerSize,targetMight){return (Number.parseFloat(fallerSize)||1)>Number(targetMight||0);}

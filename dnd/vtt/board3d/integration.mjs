@@ -43,7 +43,7 @@ async function mount(){
  let sceneArtParts=[];
  let minis=null,miniIds='',profiles=new Map(),profilesFor=null;
  let context=bridge.getContext(),view=null,data=null,effects=null,canvas=null,builtKey='',building=null;
- let clickMoveTokenId=null,hoverPointer=null,held=null,drag=null,lastTime=performance.now(),lastTokenSignature='',hoverSignature='',shownLevel=null;
+ let landing=null,clickMoveTokenId=null,hoverPointer=null,held=null,drag=null,lastTime=performance.now(),lastTokenSignature='',hoverSignature='',shownLevel=null;
 
  function pictureRect(){
   // Only the scene's own picture: just after a switch the map image still holds the old scene's until the new one loads.
@@ -218,12 +218,17 @@ async function mount(){
    &&(intent.rampId??null)===(hit.rampId??null)&&(intent.levelId??null)===(hit.levelId??null)&&(intent.surfaceId??null)===(hit.surfaceId??null)
    &&(hit.rampId||Number.isFinite(intent.surfaceElevation)&&Math.abs(intent.surfaceElevation-hit.z)<.55);
   if(!matches){bridge.previewMovement?.({placementId:p.id,...to,surfaceElevation:hit.z,levelId:hit.levelId??null,surfaceId:hit.surfaceId??null,rampId:hit.rampId??null});intent=bridge.captureMovementPreview?.();}
+  // Where it was being drawn as it was put down: it stays there until the move is answered (frame, `landing`).
+  const shown=held&&held.id===p.id?{...held}:{id:p.id,x:to.column+(p.width||1)/2,y:to.row+(p.height||1)/2,z:Number.isFinite(hit.air)?hit.air:hit.z};
   cancelDrag();
+  landing={...shown,column:to.column,row:to.row,answered:false,until:performance.now()+8000};
   // A drop that is refused says why where it can be seen (the board's own status line is read out, not shown).
   const status=document.querySelector('#active-scene-status'),said=status?.textContent;
   try{const result=await bridge.move({...intent,placementId:p.id,...to,surfaceElevation:hit.z,levelId:hit.levelId??null,surfaceId:hit.surfaceId??null,rampId:hit.rampId??null,movementKind:movementKind(e)});
+   if(result?.accepted===false&&landing?.id===p.id)landing=null;
    if(result?.accepted===false&&result.reason!=='unchanged'){const words=REFUSED[result.reason]||(typeof result.reason==='string'&&/\s/.test(result.reason)?result.reason:status&&status.textContent!==said?status.textContent:'The token was not moved there.');window.UIKit?.toast?.(words,'warning');}}
-  catch(error){console.error('[VTT 3D] move',error);window.UIKit?.toast?.(error?.message||'The token was not moved there.','warning');}
+  catch(error){console.error('[VTT 3D] move',error);window.UIKit?.toast?.(error?.message||'The token was not moved there.','warning');if(landing?.id===p.id)landing=null;}
+  finally{if(landing?.id===p.id){landing.answered=true;landing.until=performance.now()+1500;}}
   context=bridge.getContext();}
  // Before a drop is sent, finish the route search for that square (bounded) so
  // the move carries the planned corners rather than a provisional straight line.
@@ -420,7 +425,12 @@ async function mount(){
    // The ruler on the board, whether it measures a held token or the Measure tool.
    view.setMovementRoute(getCurrentMeasurementPresentation());
    effects?.update(context);for(const [name,layer] of layers){try{layer?.update?.(context,dt);}catch(error){console.error('[VTT 3D] layer',name,error);layers.delete(name);}}view.render(dt);
-   const recordById=new Map(records.map(p=>[p.id,p]));if(held&&recordById.has(held.id))recordById.set(held.id,{...recordById.get(held.id),...held});view.setTethers(tethers([...recordById.values()]));
+   const recordById=new Map(records.map(p=>[p.id,p]));if(held&&recordById.has(held.id))recordById.set(held.id,{...recordById.get(held.id),...held});
+   // A token just put down stays where it is landing until the move is answered and the board has it on that square:
+   // in between, the board has it on the new square at ground height (its floor not yet known), which looked like a
+   // dip under the ground and a pop back up (Brandon, October 2026).
+   if(landing){const p=find(landing.id);if(!p||performance.now()>landing.until||(landing.answered&&p.column===landing.column&&p.row===landing.row))landing=null;}
+   if(landing&&!held&&recordById.has(landing.id))recordById.set(landing.id,{...recordById.get(landing.id),x:landing.x,y:landing.y,z:landing.z});view.setTethers(tethers([...recordById.values()]));
    // Hero minis on their tokens' bases (minis.mjs); a token with a mini hides its portrait (class vtt3d-mini).
    if(minis){if(profilesFor!==context.placements){profilesFor=context.placements;profiles=new Map((context.placements||[]).map(p=>[p.id,{hero:p.characterProfileId,monster:p.monsterId,mini:p.mini,name:p.name}]));}
     const result=minis.update([...recordById.values()],profiles,p=>shownLevel===null||shownLevel<0||p.level<=shownLevel,view.camera,dt);if(result.redraw)view.renderer.shadowMap.needsUpdate=true;view.setTokensWithoutBase?.(result.noBase);

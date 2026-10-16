@@ -29,7 +29,9 @@ test('canonical falls and legacy ledger migration',()=>{
  const r=spawnSync(php,[...phpArgs,fileURLToPath(new URL('../../../../api/v2/tests/fall-outcome.test.php',import.meta.url))],{encoding:'utf8'});assert.equal(r.status,0,r.stderr||r.stdout);
 });
 test('fall damage thresholds, cap, forced descent and actor-only prompt routing',()=>{
- assert.equal(fallDamage(3,2),0);assert.equal(fallDamage(4,2),4);assert.equal(fallDamage(100,0),50);assert.equal(fallDamage(4,2,true),8);
+ // Build 529 (Brandon): a fall counts from 3 squares after Agility; 3 - 1 = 2 is no fall.
+ assert.equal(fallDamage(3,1),0,'3 squares with Agility 1 is 2: no fall');assert.equal(fallDamage(4,1),6);assert.equal(fallDamage(2,0),0);
+ assert.equal(fallDamage(3,2),0);assert.equal(fallDamage(5,2),6);assert.equal(fallDamage(100,0),50);assert.equal(fallDamage(4,2,true),8);
  assert.equal(fallDamage(3,-1),6,'Negative Agility cannot increase falling damage');
  assert.equal(fallDamage(3,0),6);assert.equal(fallDamage(1,-2),0,'Negative Agility cannot turn a short fall into a damaging one');
  assert.equal(fallDamage(3,-1,true),6);assert.equal(fallDamage(3,5),0);
