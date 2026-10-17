@@ -4144,27 +4144,66 @@ function buildProps() {
   const spires = [spireGeo(1.15, 11), spireGeo(1.75, 23), spireGeo(.75, 37)];
   spires.forEach((g, i) => instanced(g, spireMat, L.sp[i]));
 
-  // Conjurot Hall (3 hexes): a towering structure with a glassed-in observation level, circled by strands of elemental energy
+  // Conjurot Hall (3 hexes): a tall blue column, its stone streaked and swept, with ribbons of fire, ice and storm winding up it; on top a broad red disc on a ring of struts,
+  // and on the disc a drum, a smaller disc, and a crown of flame. Two smaller towers of the same make stand beside it, between the wind-swept spires
   addThing('Conjurot Hall', '🎨', PH, 2.2, 95, g => {
-    const stoneP = solid(0x3d2c52, .45, { flatShading: true }), trim = solid(0x8a6aa8, .4, { flatShading: true });
-    const glass = new THREE.MeshStandardMaterial({ color: 0x9fe6e0, emissive: 0x2a8a84, emissiveIntensity: .9, roughness: .05, transparent: true, opacity: .72, envMapIntensity: 2 });
-    M(g, new THREE.CylinderGeometry(27, 31, 6, 10), stoneP, 0, 3, 0);
-    const prof = [[19, 6], [15, 22], [11.5, 46], [9.5, 70], [10.5, 78], [14.5, 84], [14.5, 86]].map(p => new THREE.Vector2(p[0], p[1]));
-    M(g, new THREE.LatheGeometry(prof, 10), stoneP, 0, 0, 0);
-    for (let i = 0; i < 5; i++) { const a = i / 5 * 6.283; M(g, new THREE.BoxGeometry(3, 34, 9), trim, Math.cos(a) * 17, 17, Math.sin(a) * 17, { ry: -a + Math.PI / 2 }); }
-    M(g, new THREE.CylinderGeometry(13.5, 13.5, 13, 10), glass, 0, 92.5, 0);
-    for (let i = 0; i < 10; i++) { const a = i / 10 * 6.283; M(g, new THREE.BoxGeometry(.9, 13, .9), trim, Math.cos(a) * 13.6, 92.5, Math.sin(a) * 13.6); }
-    M(g, new THREE.CylinderGeometry(15.5, 14.5, 2, 10), trim, 0, 100, 0);
-    M(g, new THREE.ConeGeometry(15, 20, 10), solid(0x6a3a7a, .35, { flatShading: true }), 0, 111, 0);
-    M(g, new THREE.ConeGeometry(1.2, 14, 6), trim, 0, 127, 0);
+    const streak = canvasTex(256, 512, (c, w, h) => { c.fillStyle = '#22306c'; c.fillRect(0, 0, w, h); const r = mulberry32(41); c.lineCap = 'round';
+      for (let i = 0; i < 80; i++) { const x = r() * w, y = r() * h, len = 60 + r() * 170; c.strokeStyle = ['#3b4fa8', '#5a3c9a', '#161c48', '#7a3a8a', '#2f5fb8'][i % 5]; c.globalAlpha = .3 + r() * .45; c.lineWidth = 4 + r() * 16;
+        for (const ox of [-w, 0, w]) for (const oy of [-h, 0, h]) { c.beginPath(); c.moveTo(x + ox, y + oy); c.quadraticCurveTo(x + ox + len * .5, y + oy - len * .2, x + ox + len, y + oy - len * .55); c.stroke(); } } c.globalAlpha = 1; }, 2, 1);
+    const colM = new THREE.MeshStandardMaterial({ map: streak, roughness: .42 }), red = solid(0x92200f, .55), redD = solid(0x5a140e, .6), dark = solid(0x221a2e, .5);
+    const flameM = new THREE.MeshStandardMaterial({ color: 0xc8381c, emissive: 0xff4a12, emissiveIntensity: .9, roughness: .45, flatShading: true }), heart = glowM(0xffb040, 3);
+    const tongue = (hgt, curl, wd) => { const sh = new THREE.Shape(); sh.moveTo(-wd, 0); sh.bezierCurveTo(-wd * 1.2, hgt * .35, -wd * .3 + curl * .3, hgt * .7, curl, hgt); sh.bezierCurveTo(wd * .45 + curl * .2, hgt * .65, wd * 1.1, hgt * .3, wd, 0); sh.closePath();
+      return new THREE.ExtrudeGeometry(sh, { depth: wd * .35, bevelEnabled: true, bevelThickness: wd * .15, bevelSize: wd * .15, bevelSegments: 1, curveSegments: 8 }).translate(0, 0, -wd * .17); };
+    // one tower: column, collar, struts flaring out under the disc, the disc and its lip, the drum, the upper disc, the crown of flame. sc scales the whole, H is the column's height
+    const tower = (x0, z0, sc, H, seed) => { const P = (v) => v * sc, Y = H * sc;
+      const prof = [[20, 0], [17, 10], [15, 30], [14, H - 14], [14.6, H - 4], [17, H]].map(p => new THREE.Vector2(p[0] * sc, p[1] * sc)); M(g, new THREE.LatheGeometry(prof, 24), colM, x0, 0, z0);
+      M(g, new THREE.CylinderGeometry(P(17.5), P(17), P(3), 24), redD, x0, Y + P(1.5), z0);
+      for (let i = 0; i < 18; i++) { const a = i / 18 * 6.2832; M(g, new THREE.BoxGeometry(P(19.9), P(.9), P(.9)), redD, x0 + Math.cos(a) * P(25), Y + P(4.5), z0 + Math.sin(a) * P(25), { ry: -a, rz: .47 }); }
+      M(g, new THREE.TorusGeometry(P(34), P(.9), 6, 40), redD, x0, Y + P(9), z0, { rx: Math.PI / 2 });
+      M(g, new THREE.CylinderGeometry(P(41.5), P(41.5), P(.8), 32), redD, x0, Y + P(8.6), z0); M(g, new THREE.ConeGeometry(P(42), P(15), 32), red, x0, Y + P(16.5), z0); M(g, new THREE.TorusGeometry(P(42), P(1.3), 6, 48), red, x0, Y + P(9), z0, { rx: Math.PI / 2 });
+      M(g, new THREE.CylinderGeometry(P(8.5), P(10), P(6), 16), redD, x0, Y + P(22), z0); M(g, new THREE.ConeGeometry(P(17), P(5), 24), red, x0, Y + P(27.5), z0);
+      const hs = [27, 18, 31, 16, 23, 19], r = mulberry32(seed);
+      for (let i = 0; i < 6; i++) { const a = i / 6 * 6.2832 + r() * .5, m = M(g, tongue(P(hs[i] * (.85 + r() * .3)), P((i % 2 ? 5 : -5) * (.6 + r() * .6)), P(3.2)), flameM, x0 + Math.cos(a) * P(4.5), Y + P(28), z0 + Math.sin(a) * P(4.5));
+        m.rotation.order = 'YXZ'; m.rotation.set(.22 + r() * .12, Math.PI / 2 - a, 0); }
+      NS(M(g, new THREE.ConeGeometry(P(3.6), P(19), 8), heart, x0, Y + P(37.5), z0)); };
+    M(g, new THREE.CylinderGeometry(27, 31, 6, 14), dark, 0, 3, 0);
+    tower(0, 0, 1, 86, 7); tower(Math.cos(2.5) * 47, Math.sin(2.5) * 47, .42, 86, 11); tower(Math.cos(5.0) * 46, Math.sin(5.0) * 46, .36, 86, 13);
+    for (const a of [2.5, 5.0]) M(g, new THREE.CylinderGeometry(9, 11, 3, 12), dark, Math.cos(a) * 46.5, 1.5, Math.sin(a) * 46.5);
+    // the ribbons winding up the main column, flaring out round its foot like the swept rock below it, and turning slowly: two of living fire, flames licking up off them
+    // and running up their length; two of clear ice, frosted and cracked, with shards of crystal growing off their edges; and one thin band of violet storm
+    const rib = new THREE.Group(), ribbon = (seed, phase, dir, mat, wide, along) => { const N = 140, v = [], uv = [], ix = [];
+      for (let i = 0; i <= N; i++) { const t = i / N, ang = phase + dir * t * 6.2832 * 1.6 + .4 * Math.sin(t * 7 + seed), rr = 17.5 + 5 * Math.sin(t * 3.1 + seed) + (t < .15 ? (.15 - t) * 60 : 0), y = 4 + t * 82;
+        const w = wide * (2.2 + 3.5 * Math.sin(t * Math.PI)) * Math.min(1, t / .06, (1 - t) / .06), tw = 1.1 + .7 * Math.sin(t * 5 + seed), cx = Math.cos(ang), cz = Math.sin(ang);
+        const ux = cx * Math.sin(tw) * w, uy = Math.cos(tw) * w, uz = cz * Math.sin(tw) * w; v.push(cx * rr - ux, y - uy, cz * rr - uz, cx * rr + ux, y + uy, cz * rr + uz); uv.push(t * 5, 0, t * 5, 1);
+        if (along) along(i, [cx * rr, y, cz * rr], [ux, uy, uz], w);
+        if (i < N) { const k = i * 2; ix.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); } }
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(v, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); geo.setIndex(ix); geo.computeVertexNormals();
+      const m = new THREE.Mesh(geo, mat); m.userData.noShadow = true; m.raycast = () => {}; rib.add(m); };
+    const fireT = canvasTex(512, 128, (c, w, h) => { c.clearRect(0, 0, w, h); const r = mulberry32(61); c.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 46; i++) { const x = r() * w, ht = h * (.45 + r() * .55), wd = 10 + r() * 22, lean = (r() - .5) * 26;
+        for (const ox of [-w, 0, w]) { const gr = c.createLinearGradient(0, h, 0, h - ht); gr.addColorStop(0, 'rgba(255,240,170,.95)'); gr.addColorStop(.3, 'rgba(255,170,40,.85)'); gr.addColorStop(.7, 'rgba(230,60,10,.6)'); gr.addColorStop(1, 'rgba(160,20,0,0)'); c.fillStyle = gr;
+          c.beginPath(); c.moveTo(x + ox - wd, h); c.bezierCurveTo(x + ox - wd, h - ht * .5, x + ox + lean - wd * .2, h - ht * .8, x + ox + lean, h - ht); c.bezierCurveTo(x + ox + lean + wd * .2, h - ht * .7, x + ox + wd, h - ht * .45, x + ox + wd, h); c.closePath(); c.fill(); } } });
+    const iceT = canvasTex(512, 128, (c, w, h) => { const r = mulberry32(62); const gr = c.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, 'rgba(235,250,255,.95)'); gr.addColorStop(.12, 'rgba(170,225,250,.6)'); gr.addColorStop(.5, 'rgba(120,195,240,.42)'); gr.addColorStop(.88, 'rgba(170,225,250,.6)'); gr.addColorStop(1, 'rgba(235,250,255,.95)'); c.fillStyle = gr; c.fillRect(0, 0, w, h);
+      c.lineCap = 'round'; for (let i = 0; i < 60; i++) { const x = r() * w, y = r() * h, len = 14 + r() * 50, an = (r() - .5) * 1.6; c.strokeStyle = 'rgba(255,255,255,' + (.25 + r() * .5) + ')'; c.lineWidth = .8 + r() * 2.2;
+        for (const ox of [-w, 0, w]) { c.beginPath(); c.moveTo(x + ox, y); c.lineTo(x + ox + Math.cos(an) * len, y + Math.sin(an) * len); c.lineTo(x + ox + Math.cos(an + .7) * len * 1.3, y + Math.sin(an + .7) * len * 1.3); c.stroke(); } } });
+    const fireR = new THREE.MeshBasicMaterial({ map: fireT, color: new THREE.Color(2.2, 1.7, 1.4), transparent: true, depthWrite: false, side: THREE.DoubleSide });
+    const iceR = new THREE.MeshStandardMaterial({ map: iceT, transparent: true, depthWrite: false, roughness: .06, metalness: .2, envMapIntensity: 2.4, emissive: 0x3a8ad8, emissiveIntensity: .3, side: THREE.DoubleSide });
+    const stormR = new THREE.MeshStandardMaterial({ color: 0x6a4ab8, emissive: 0x9a6aff, emissiveIntensity: .7, roughness: .4, side: THREE.DoubleSide });
+    const shardM = new THREE.MeshStandardMaterial({ color: 0xd2f4ff, roughness: .05, metalness: .15, envMapIntensity: 2.4, emissive: 0x5ab0ff, emissiveIntensity: .35, transparent: true, opacity: .88, flatShading: true }), shardG = new THREE.OctahedronGeometry(1, 0), sr = mulberry32(63);
+    const shards = (i, p, u, w) => { if (i % 6 !== 3 || w < 2) return; for (const sd of [-1, 1]) { if (sr() < .35) continue; const len = 2.5 + sr() * 4.5, ul = Math.hypot(u[0], u[1], u[2]), d = [u[0] / ul * sd, u[1] / ul * sd, u[2] / ul * sd];
+        const m = new THREE.Mesh(shardG, shardM); m.position.set(p[0] + u[0] * sd + d[0] * len * .45, p[1] + u[1] * sd + d[1] * len * .45, p[2] + u[2] * sd + d[2] * len * .45); m.scale.set(.7 + sr() * .5, len, .7 + sr() * .5);
+        m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(d[0] + (sr() - .5) * .5, d[1], d[2] + (sr() - .5) * .5).normalize()); m.userData.noShadow = true; m.raycast = () => {}; rib.add(m); } };
+    ribbon(1, 0, 1, fireR, 1.35); ribbon(2.4, 3.1, 1, fireR, 1.1); ribbon(4, 1.6, -1, iceR, 1, shards); ribbon(5.5, 4.7, -1, iceR, .8, shards); ribbon(7, 2.3, 1, stormR, .45);
+    anim.push((t, dt) => { fireT.offset.x -= dt * .55; fireT.offset.y = Math.sin(t * 9) * .015; iceT.offset.x += dt * .05; });
+    g.add(rib); spin.push({ o: rib, speed: .1, bolt: false });
     for (let i = 0; i < 5; i++) { const a = i / 5 * 6.283 + .6, sz = 78 + (i % 3) * 20; M(g, spires[i % 3], spireMat, Math.cos(a) * 40, -3, Math.sin(a) * 40, { ry: -(a + 1.25), sx: sz, sy: sz, sz }); }
-  }, { hexes: [[10, 41], [11, 40], [11, 41]], top: 140, view: 640 });
+  }, { hexes: [[10, 41], [11, 40], [11, 41]], top: 150, view: 640 });
   { const py = heightAt(PH[0], PH[1]);
-    for (const o of [{ n: 280, seed: 201, arms: 2, jit: .2, r0: 70, r1: 30, y0: 14, y1: 255, spin: .55, rise: .2, twist: 5, size: 4.6, alpha: .85, col: [2.6, 1.0, .25], add: true },      // fire: two ropes of embers winding up it
-                     { n: 90, seed: 202, arms: 2, jit: .5, r0: 66, r1: 32, y0: 18, y1: 245, spin: .55, rise: .26, twist: 5, size: 12, alpha: .14, col: [2.4, .6, .1], add: true },          // and the glow that goes with them
-                     { n: 260, seed: 203, arms: 2, jit: .2, r0: 44, r1: 80, y0: 236, y1: 16, spin: -.4, rise: .18, twist: 4, size: 4, alpha: .8, col: [.5, 1.3, 2.6], add: true },         // water: spray winding down the other way and flaring out at the foot
-                     { n: 140, seed: 204, arms: 3, jit: .5, r0: 92, r1: 50, y0: 10, y1: 275, spin: .8, rise: .3, twist: 3, size: 17, alpha: .09, col: [.85, .9, 1] }]) { const m = mist(o); m.position.set(PH[0], py, PH[1]); scene.add(m); }   // wind: pale streamers round all of it
-    lightning([[PH[0], py + 127 * 2.2, PH[1]]], 8, 1.3, 420); }                                                                                                                             // and now and then a bolt to the spire
+    for (const o of [{ n: 280, seed: 201, arms: 2, jit: .2, r0: 70, r1: 34, y0: 14, y1: 198, spin: .55, rise: .2, twist: 5, size: 4.6, alpha: .85, col: [2.6, 1.0, .25], add: true },      // fire: two ropes of embers winding up it
+                     { n: 90, seed: 202, arms: 2, jit: .5, r0: 66, r1: 36, y0: 18, y1: 192, spin: .55, rise: .26, twist: 5, size: 12, alpha: .14, col: [2.4, .6, .1], add: true },          // and the glow that goes with them
+                     { n: 260, seed: 203, arms: 2, jit: .2, r0: 44, r1: 80, y0: 196, y1: 16, spin: -.4, rise: .18, twist: 4, size: 4, alpha: .8, col: [.5, 1.3, 2.6], add: true },         // water: spray winding down the other way and flaring out at the foot
+                     { n: 140, seed: 204, arms: 3, jit: .5, r0: 92, r1: 56, y0: 10, y1: 205, spin: .8, rise: .3, twist: 3, size: 17, alpha: .09, col: [.85, .9, 1] }, { n: 70, seed: 205, arms: 3, jit: .6, r0: 6, r1: 26, y0: 250, y1: 340, spin: .3, rise: .5, twist: 1, size: 5, alpha: .8, col: [2.6, 1.1, .3], add: true }]) { const m = mist(o); m.position.set(PH[0], py, PH[1]); scene.add(m); }   // wind: pale streamers round all of it
+    lightning([[PH[0], py + 146 * 2.2, PH[1]]], 8, 1.3, 420); }                                                                                                                             // and now and then a bolt to the spire
 
   // the black bridge where the Prismari walkway crosses the mountain river: an arched span of obsidian, with the same wind-swept spires as the rest of Prismari growing from its flanks and its abutments
   { const mid = Wp(BR2.p), dir = BR2.dir, len = 150, half = len / 2, ry = -Math.atan2(dir[1], dir[0]), br = mulberry32(77), HL = half + 16;
