@@ -99,27 +99,13 @@ export function mountFallReview({context,placement,traits,damage,prone,climbing=
    };
    if(dismissalUnconfirmed){apply.disabled=dismiss.disabled=input.disabled=true;if(climb)climb.disabled=true;status.textContent='Dismissal unconfirmed. Reload to check the outcome.';}
    panel.append(...[title,summary,affected,label,climbNote,status,actions].filter(Boolean));document.body.append(panel);
-   const bounds=token?.getBoundingClientRect(),box=panel.getBoundingClientRect();let left=(bounds?.right??20)+12;if(left+box.width>innerWidth-12)left=(bounds?.left??innerWidth)-box.width-12;
-   panel.style.left=Math.max(12,Math.min(innerWidth-box.width-12,left))+'px';panel.style.top=Math.max(12,Math.min(innerHeight-box.height-12,bounds?.top??20))+'px';
-   // 3D board: a recovered receipt can open before the 3D
-   // renderer has projected its token. Follow that real token once ready, and
-   // while the camera moves. Claims, damage and conditions are unchanged.
-   if(window.vtt3dBoard){
-    const followAnchor=()=>{
-     if(disposed||!panel.isConnected)return;
-     if(window.vtt3dActive){
-      const node=[...document.querySelectorAll('#vtt-token-layer [data-placement-id]')].find(e=>e.dataset.placementId===record.targetId);
-      if(node&&getComputedStyle(node).visibility==='visible'){
-       const rect=node.getBoundingClientRect(),size=panel.getBoundingClientRect();
-       let x=rect.right+12;if(x+size.width>innerWidth-12)x=rect.left-size.width-12;
-       panel.style.left=Math.max(12,Math.min(innerWidth-size.width-12,x))+'px';
-       panel.style.top=Math.max(12,Math.min(innerHeight-size.height-12,rect.top))+'px';
-      }
-     }
-     requestAnimationFrame(followAnchor);
-    };requestAnimationFrame(followAnchor);
-   }
-
+   // Docked at the right of the board, under the top bar: it no longer stands beside the fallen token, where it
+   // covered the very squares being clicked and swallowed those clicks (Brandon, October 16, 2026). The fallen
+   // token is named in the panel.
+   const dock=()=>{if(disposed||!panel.isConnected)return;const box=panel.getBoundingClientRect(),bar=document.querySelector('.vtt-board__toolbar, .vtt-toolbar, .vtt-board__header')?.getBoundingClientRect?.();
+    const top=Math.max(12,Math.min(innerHeight-box.height-12,(bar&&bar.bottom>0&&bar.bottom<innerHeight/2?bar.bottom:160)+12));
+    panel.style.left=Math.max(12,innerWidth-box.width-64)+'px';panel.style.top=top+'px';};
+   dock();addEventListener('resize',dock);
   }catch(error){console.error('Fall review unavailable',error);}finally{busy=false;schedule(wakePending&&!popup?0:4000);}
  };
  const visible=()=>{if(!document.hidden)wake();};

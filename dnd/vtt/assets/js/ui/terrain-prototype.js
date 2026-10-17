@@ -448,6 +448,12 @@ function rampTargetHeight(rampId,placement){
  const ramp=(importedDesign()?.ramps||[]).find(r=>r.id===rampId);
  return ramp?rampHeight(ramp,placement.column+(placement.width||1)/2,placement.row+(placement.height||1)/2):null;
 }
+// A walk that ends on top of an object's box (low-boxes.mjs, `box-top:`), no more than a storey above the picked height.
+function endsOnBoxAbove(ending,picked){
+ const id=String(ending?.placement?._supportSurfaceId||'');
+ return id.startsWith('box-top:')&&!picked?.rampId&&Number.isFinite(ending?.height)&&Number.isFinite(picked?.surfaceElevation)
+  &&ending.height>=picked.surfaceElevation-.05&&ending.height-picked.surfaceElevation<=4;
+}
 function pickedSurfaceReached(ending,picked){
  if(ending?.canonicalCompatible===false)return false;
  if(picked.rampId){
@@ -457,6 +463,10 @@ function pickedSurfaceReached(ending,picked){
    &&rampTargetHeight(ramp.id,ghost)!==null;
  }
 
+ // The 3D board cannot pick the top of an object (a barricade, a cart, casks): the pointer finds the ground under
+ // it. A walk that ends on top of one, on the square that was picked, has reached it; the move then asks to climb
+ // onto it, as the 2D board does (Brandon, October 16, 2026: climbing works on the 2D board and must on the 3D one).
+ if(endsOnBoxAbove(ending,picked))return true;
  if(!Number.isFinite(ending?.height)||Math.abs(ending.height-picked.surfaceElevation)>.55)return false;
  const ghost=ending.placement;
  if(picked.surfaceId&&ghost?._supportSurfaceId!==picked.surfaceId){

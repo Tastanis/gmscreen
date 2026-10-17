@@ -11,6 +11,11 @@ import {routeSteps} from '../assets/js/ui/terrain-math.mjs';
 const DIRS=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
 const FALL=1.05; // A drop larger than this off a plate or stair is a fall, not a walk.
 const SLICE_MS=6,SYNC_MS=8,MAX_NODES=8000,MAX_SEARCHES=16,MAX_STEPS=120000;
+// A route may be at most half as long again as the straight distance, and never less than two squares more
+// (Brandon, October 16, 2026: "when moving x squares, it shouldnt search past like 1/2 x squares away ... I want it
+// to search for best paths, but not making me go backward 20 squares"). Beyond that the move goes as drawn.
+const DETOUR_SHARE=.5,DETOUR_MIN=2;
+export function detourLimit(straight){const d=Math.max(0,Math.round(Number(straight)||0));return d+Math.max(DETOUR_MIN,Math.ceil(d*DETOUR_SHARE));}
 // The walker's own fields; sheets, images and history are not carried in each searched square.
 const WALK_FIELDS=['id','column','row','width','height','size','levelId','movementMode','flightHeight','team','combatTeam','_floorTraversal','_supportSurfaceId'];
 const slim=a=>{const g={};for(const k of WALK_FIELDS)if(a[k]!==undefined)g[k]=a[k];return g;};
@@ -104,7 +109,10 @@ export function createRoutePlanner({context,onProgress=()=>{}}){
   // Prefer gentle ground: a steep drop on bare terrain is allowed but costs
   // a little in the search order so routes follow slopes when they can.
   const steep=onStair?0:Math.max(0,fromHeight-toHeight-1);
-  return {ghost:next,cost,height:toHeight,changedFloor:(next.levelId||'level-0')!==(ghost.levelId||'level-0'),steep};
+  const changedFloor=(next.levelId||'level-0')!==(ghost.levelId||'level-0');
+  // Only a stair counts toward the server's one stair a command: stepping between a floor plate and the ground level
+  // with it (a hall floor over a cellar beside its stair) is walking, not a change of floor (FloorGeometry::move).
+  return {ghost:next,cost,height:toHeight,changedFloor,stairHop:changedFloor&&(onStair||!!ghost._floorTraversal),steep};
  }
  function actorKey(a,kind){return JSON.stringify([a.id,a.column,a.row,a.width||1,a.height||1,a.levelId||'level-0',a._supportSurfaceId||a.supportSurfaceId||null,a._floorTraversal||null,a.movementMode||'ground',kind]);}
  const targetKey=t=>JSON.stringify([t.column,t.row,Number.isFinite(t.surfaceElevation)?Math.round(t.surfaceElevation*20)/20:null,t.levelId||null,t.surfaceId||null,t.rampId||null]);
@@ -117,8 +125,8 @@ export function createRoutePlanner({context,onProgress=()=>{}}){
  function start(actor,target,kind){
   buildGeometry();const key=actorKey(actor,kind)+'#'+targetKey(target)+'#'+geometry.key;
   let s=searches.get(key);if(s){searches.delete(key);searches.set(key,s);return s;}
-  const ghost=slim(actor),root={ghost,cost:0,height:tp().groundFor(actor),hops:0,parent:null,key:stateKey(ghost,0),turns:0,steep:0};
-  s={key,actor,target,kind,actorKey:actorKey(actor,kind),open:new Heap(),closed:new Set(),best:new Map([[root.key,root]]),done:false,goal:null,expanded:0};
+  const ghost=slim(actor),root={ghost,cost:0,height:tp().groundFor(actor),hops:0,parent:null,key:stateKey(ghost,0),turns:0,steep:0,squares:0};
+  s={key,actor,target,kind,actorKey:actorKey(actor,kind),open:new Heap(),closed:new Set(),best:new Map([[root.key,root]]),done:false,goal:null,expanded:0,limit:detourLimit(heuristic(ghost,target))};
   s.open.push({key:order(root,heuristic(root.ghost,target)),node:root});stats.searches++;
   searches.set(key,s);while(searches.size>MAX_SEARCHES)searches.delete(searches.keys().next().value);
   return s;
@@ -137,9 +145,10 @@ export function createRoutePlanner({context,onProgress=()=>{}}){
    if(s.expanded>=MAX_NODES){s.done=true;return;}
    for(const [dx,dy] of DIRS){
     const edge=step({actor:s.actor,actorKey:s.actorKey,ghost:node.ghost},dx,dy);if(!edge)continue;
-    const hops=node.hops+(edge.changedFloor?1:0);if(hops>1)continue; // The server takes one stair per command.
-    const dir=dx+','+dy,child={ghost:edge.ghost,cost:node.cost+edge.cost,height:edge.height,hops,parent:node,dir,turns:node.turns+(node.dir&&node.dir!==dir?1:0),steep:node.steep+edge.steep,key:stateKey(edge.ghost,hops)};
+    const hops=node.hops+(edge.stairHop?1:0);if(hops>1)continue; // The server takes one stair per command.
+    const dir=dx+','+dy,child={ghost:edge.ghost,cost:node.cost+edge.cost,height:edge.height,hops,parent:node,dir,turns:node.turns+(node.dir&&node.dir!==dir?1:0),steep:node.steep+edge.steep,squares:(node.squares||0)+1,key:stateKey(edge.ghost,hops)};
     if(s.closed.has(child.key))continue;const h=heuristic(child.ghost,s.target),prior=s.best.get(child.key);
+    if(child.squares+h>s.limit)continue; // a detour longer than the limit is not looked for
     if(prior&&order(prior,h)<=order(child,h))continue;
     s.best.set(child.key,child);s.open.push({key:order(child,h),node:child});
    }
@@ -163,7 +172,7 @@ export function createRoutePlanner({context,onProgress=()=>{}}){
    const moves=[];const straight=Math.abs(dx)>Math.abs(dy)?[sx,0]:[0,sy],rest=Math.max(Math.abs(dx),Math.abs(dy))-diag;
    const d=Array(diag).fill([sx,sy]),st=Array(rest).fill(straight);moves.push(...(diagFirst?[...d,...st]:[...st,...d]));
    let node=from,list=[];
-   for(const [mx,my] of moves){const edge=step({actor:search.actor,actorKey:search.actorKey,ghost:node.ghost},mx,my);if(!edge)return null;const hops=node.hops+(edge.changedFloor?1:0);if(hops>1)return null;node={ghost:edge.ghost,cost:node.cost+edge.cost,height:edge.height,hops,parent:node,steep:(node.steep||0)+edge.steep};list.push(node);}
+   for(const [mx,my] of moves){const edge=step({actor:search.actor,actorKey:search.actorKey,ghost:node.ghost},mx,my);if(!edge)return null;const hops=node.hops+(edge.stairHop?1:0);if(hops>1)return null;node={ghost:edge.ghost,cost:node.cost+edge.cost,height:edge.height,hops,parent:node,steep:(node.steep||0)+edge.steep};list.push(node);}
    const end=list.at(-1);if(!end||end.cost>to.cost+1e-9||end.steep>(to.steep||0)+1e-9||stateKey(end.ghost,end.hops)!==stateKey(to.ghost,to.hops))return null;
    return list;
   };
@@ -223,7 +232,7 @@ export function createRoutePlanner({context,onProgress=()=>{}}){
   const job=warming;
   const run=deadline=>{if(warming!==job||geometry.key!==job.key.split('#').at(-1))return;const until=performance.now()+Math.min(8,Math.max(2,deadline.timeRemaining()));
    while(job.open.size&&performance.now()<until){const {node}=job.open.pop();if(node.cost>=radius)continue;
-    for(const [dx,dy] of DIRS){const edge=step({actor:job.actor,actorKey:job.actorKey,ghost:node.ghost},dx,dy);if(!edge)continue;const hops=node.hops+(edge.changedFloor?1:0);if(hops>1)continue;const k=stateKey(edge.ghost,hops);if(job.seen.has(k))continue;job.seen.add(k);const child={ghost:edge.ghost,cost:node.cost+edge.cost,hops};job.open.push({key:child.cost,node:child});}}
+    for(const [dx,dy] of DIRS){const edge=step({actor:job.actor,actorKey:job.actorKey,ghost:node.ghost},dx,dy);if(!edge)continue;const hops=node.hops+(edge.stairHop?1:0);if(hops>1)continue;const k=stateKey(edge.ghost,hops);if(job.seen.has(k))continue;job.seen.add(k);const child={ghost:edge.ghost,cost:node.cost+edge.cost,hops};job.open.push({key:child.cost,node:child});}}
    if(job.open.size)idle(run);};
   idle(run);
  }

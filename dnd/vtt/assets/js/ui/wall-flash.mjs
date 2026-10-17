@@ -8,6 +8,14 @@ export function blockedByWallText(byDrag) {
   return byDrag ? 'Blocked by a wall. Right click while dragging to drop a corner and go round.' : 'Blocked by a wall.';
 }
 
+/** The same line for the piece that was met: a shut door or a window is named, not called a wall (Brandon, October 16, 2026).
+ *  A secret door is never named to anyone it is hidden from: it reads as the wall it looks like. */
+export function blockedText(edge, byDrag) {
+  if (edge?.interaction === 'door' && edge.secret !== true && edge.open !== true) return edge.locked === true ? 'The door is locked.' : 'The door is shut. Click it to open it.';
+  if (edge?.interaction === 'window' && edge.open !== true) return 'A window is in the way.';
+  return blockedByWallText(byDrag);
+}
+
 /** True when the server's refusal is the wall one (WallMovement::assertAllowed). */
 export const isWallRefusal = (message) => /blocked by a wall/i.test(String(message || ''));
 

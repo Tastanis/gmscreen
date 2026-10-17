@@ -42,6 +42,8 @@ export function createMinis(scene){
    const scale=monster?(monster.scale??1):(config.scale||1)*Math.max(r.width,r.height),x=r.x,z=r.y,y=r.z+(monster?.noBase?0:BASE_TOP),yaw=Math.atan2(camera.position.x-x,camera.position.z-z),show=visible(r);
    if(mini.position.x!==x||mini.position.y!==y||mini.position.z!==z||mini.scale.x!==scale||mini.visible!==show)changed=true;
    mini.position.set(x,y,z);mini.scale.setScalar(scale);mini.rotation.y=yaw;mini.visible=show;seen.add(r.id);tops.set(r.id,y+(entry.height||1)*scale);
+   // A falling token's model shakes (r.shake, 1 at the start of the fall down to 0), as the flat token's picture did.
+   const shake=Number(r.shake)||0;if(shake>0){mini.rotation.z=Math.sin(time*38)*.22*shake;mini.position.x+=Math.sin(time*31)*.05*shake;changed=true;}else if(mini.rotation.z){mini.rotation.z=0;changed=true;}
    // Idle motion from the model's own hint: its glow and effects breathe and turn a little.
    mini.traverse(o=>{if(o.isMesh&&/-fx$/.test(o.name)){o.rotation.y=Math.sin(time*.8)*.25;o.material.opacity=.75+.25*Math.sin(time*5.3+x);}});
   }

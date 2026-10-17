@@ -207,12 +207,20 @@ async function mount(){
   if(!air)return pickAtClient(e.clientX,e.clientY,{tokens:false});
   const q=view?.pointOnPlane(e.clientX,e.clientY,air.z);if(!q)return null;
   const x=q.x+air.dx,y=q.y+air.dy;return {x,y,z:helpers.groundAt(x,y),levelId:null,surfaceId:null,rampId:null,air:air.z};}
- function clearGuides(){if(!view)return;view.setReachable([]);view.setPath([]);view.setMovementRoute(null);}
+ function clearGuides(){if(!view)return;view.setReachable([]);view.setPath([]);view.setMovementRoute(null);sayHeld(null);}
+ // A short line by the pointer while a token is held over a square it cannot be put down on (or over no ground).
+ let heldNote=null;
+ function sayHeld(words,e=null){
+  if(!words){heldNote?.remove();heldNote=null;return;}
+  if(!heldNote){heldNote=document.createElement('div');heldNote.className='vtt3d-held-note';heldNote.setAttribute('role','status');overlayHost.append(heldNote);}
+  if(heldNote.textContent!==words)heldNote.textContent=words;
+  if(e&&Number.isFinite(e.clientX)){const h=overlayHost.getBoundingClientRect();heldNote.style.left=`${e.clientX-h.left+18}px`;heldNote.style.top=`${e.clientY-h.top+18}px`;}
+ }
  // The held token's box goes with the pointer; while it is held it lets the pointer through to the square under it
  // (integration.css .vtt3d-held), so the click that puts it down lands on the board, not on the token itself.
  function markHeld(id){for(const node of tokenLayer.querySelectorAll('.vtt3d-held'))if(node.dataset.placementId!==id)node.classList.remove('vtt3d-held');
   if(id)bridge.getTokenElement?.(id)?.classList.add('vtt3d-held');}
- function cancelDrag(){markHeld(null);clickMoveTokenId=null;hoverPointer=null;held=null;const previous=drag;drag=null;if(previous&&tokenLayer.hasPointerCapture(previous.pointerId))tokenLayer.releasePointerCapture(previous.pointerId);bridge.endMovementPreview?.();clearGuides();hoverSignature='';}
+ function cancelDrag(){sayHeld(null);markHeld(null);clickMoveTokenId=null;hoverPointer=null;held=null;const previous=drag;drag=null;if(previous&&tokenLayer.hasPointerCapture(previous.pointerId))tokenLayer.releasePointerCapture(previous.pointerId);bridge.endMovementPreview?.();clearGuides();hoverSignature='';}
  async function commit(hit,p,e,intent=null){if(!p||p.canMove===false||context.busy){cancelDrag();return;}const to=destination(hit,p);intent=intent||bridge.captureMovementPreview?.();
   const matches=intent&&intent.placementId===p.id&&intent.column===to.column&&intent.row===to.row
    &&(intent.rampId??null)===(hit.rampId??null)&&(intent.levelId??null)===(hit.levelId??null)&&(intent.surfaceId??null)===(hit.surfaceId??null)
@@ -240,9 +248,10 @@ async function mount(){
   if(Number.isFinite(e.clientX)&&Number.isFinite(e.clientY))hoverPointer={clientX:e.clientX,clientY:e.clientY,shiftKey:!!e.shiftKey,ctrlKey:!!e.ctrlKey,altKey:!!e.altKey,metaKey:!!e.metaKey};
   if(context.targetMode==='area'||context.targetMode==='move'){const hit=pickAtClient(e.clientX,e.clientY,{tokens:false});if(hit){const cell={column:Math.floor(hit.x),row:Math.floor(hit.y)},key=`ability:${context.targetMode}:${cell.column}:${cell.row}`;if(key!==hoverSignature){hoverSignature=key;bridge.previewAbility?.(cell);context=bridge.getContext();paintAbilityGuide();}}return;}
   if(!p||(!drag?.moved&&clickMoveTokenId!==p.id)||context.busy||context.targetMode){if(hoverSignature){view.setReachable([]);view.setPath([]);hoverSignature='';}return;}
-  const hit=dragHit(e,p);if(!hit){bridge.endMovementPreview?.();clearGuides();hoverSignature='';held=null;return;}
+  const hit=dragHit(e,p);if(!hit){bridge.endMovementPreview?.();clearGuides();hoverSignature='';held=null;sayHeld('No ground here: let go to put it back.',e);return;}
   const dest=destination(hit,p),key=[p.id,dest.column,dest.row,hit.rampId?'ramp':hit.z.toFixed(2),hit.levelId,hit.surfaceId,hit.rampId,movementKind(e),Boolean(drag?.moved)].join(':');if(key===hoverSignature)return;hoverSignature=key;
   const preview=bridge.previewMovement?.({placementId:p.id,...dest,surfaceElevation:hit.z,levelId:hit.levelId??null,surfaceId:hit.surfaceId??null,rampId:hit.rampId??null});
+  sayHeld(preview?.blocked||null,e);
   const displayHeight=Number.isFinite(preview?.surfaceElevation)?preview.surfaceElevation:hit.z;
   const cells=[];for(let x=0;x<(p.width||1);x++)for(let y=0;y<(p.height||1);y++)cells.push({x:dest.column+x+.5,y:dest.row+y+.5,z:displayHeight,level:hit.level});view.setReachable(cells);
   const source=world(p),airZ=Number.isFinite(hit.air)?hit.air:null;view.setMovementRoute(preview?.route??null);view.setPath(preview?.route?[]:[source,{x:dest.column+(p.width||1)/2,y:dest.row+(p.height||1)/2,z:airZ??displayHeight}]);
@@ -308,15 +317,21 @@ async function mount(){
  // Right-click while a held token goes up and down: a waypoint at that height. The height is kept (saved now), and
  // letting go of Z goes on sideways from there (Brandon, October 2026). Another right-click moves the waypoint.
  async function lockLift(){const done=lift;if(!done?.from)return false;done.locked=done.z;showLift();
-  if(done.z!==(done.saved??done.start)){done.saved=done.z;try{await bridge.setHeight?.(done.id,done.z);}finally{context=bridge.getContext();}}return true;}
+  if(done.z!==(done.saved??done.start)){done.saved=done.z;try{await bridge.setHeight?.(done.id,done.z,{landed:done.z<=done.floor+.01});}finally{context=bridge.getContext();}}return true;}
  // keepHolding: Z let go while the token is still held. It goes on sideways from its last waypoint's height, or from
  // where it started when no waypoint was made. Letting go of the mouse instead keeps the height it is at.
  async function endLift(save,keepHolding=false){const done=lift;lift=null;liftLabel?.remove();liftLabel=null;if(!done)return;
   if(!done.from&&tokenLayer.hasPointerCapture(done.pointerId))tokenLayer.releasePointerCapture(done.pointerId);
   const z=keepHolding?(done.locked??done.start):done.z;
-  if(save&&z!==(done.saved??done.start)){try{await bridge.setHeight?.(done.id,z);}finally{context=bridge.getContext();}}
+  if(save&&z!==(done.saved??done.start)){try{await bridge.setHeight?.(done.id,z,{landed:z<=done.floor+.01});}finally{context=bridge.getContext();}}
   held=null;
-  if(keepHolding&&(drag?.id===done.id||clickMoveTokenId===done.id)){if(drag?.air)drag.air.z=z;hoverSignature='';const pointer=drag?.pointer??hoverPointer;if(pointer)showHover(pointer,find(done.id));}}
+  if(keepHolding&&(drag?.id===done.id||clickMoveTokenId===done.id)){
+   // Raised (or lowered) and then carried on sideways: it is carried at that height under the hand, as a flying token
+   // is, not to the ground point behind the pointer. Without this it was put down at a square that was not under it,
+   // or not at all when the pointer was over no ground (Brandon, October 16, 2026: Z and right-click glitching).
+   if(drag&&z>done.floor+.01&&view){const pointer=drag.pointer??{clientX:drag.x,clientY:drag.y},q=view.pointOnPlane(pointer.clientX,pointer.clientY,z);if(q)drag.air={z,dx:done.x-q.x,dy:done.yy-q.y};}
+   else if(drag&&!(z>done.floor+.01))drag.air=null;
+   if(drag?.air)drag.air.z=z;hoverSignature='';const pointer=drag?.pointer??hoverPointer;if(pointer)showHover(pointer,find(done.id));}}
  const liftPointer=e=>!!lift&&(lift.pointerId===null||e.pointerId===lift.pointerId);
  window.addEventListener('pointermove',e=>{if(liftPointer(e)&&!(lift.from==='hold'&&(e.buttons&6))){e.stopPropagation();moveLift(e);}},true);
  // Letting go of the mouse (or the click that puts a click-held token down) keeps the height, and ends the hold.
@@ -433,7 +448,11 @@ async function mount(){
    if(landing&&!held&&recordById.has(landing.id))recordById.set(landing.id,{...recordById.get(landing.id),x:landing.x,y:landing.y,z:landing.z});view.setTethers(tethers([...recordById.values()]));
    // Hero minis on their tokens' bases (minis.mjs); a token with a mini hides its portrait (class vtt3d-mini).
    if(minis){if(profilesFor!==context.placements){profilesFor=context.placements;profiles=new Map((context.placements||[]).map(p=>[p.id,{hero:p.characterProfileId,monster:p.monsterId,mini:p.mini,name:p.name}]));}
-    const result=minis.update([...recordById.values()],profiles,p=>shownLevel===null||shownLevel<0||p.level<=shownLevel,view.camera,dt);if(result.redraw)view.renderer.shadowMap.needsUpdate=true;view.setTokensWithoutBase?.(result.noBase);
+    // A token the board is playing the fall on (token-fall-animation.js, class vtt-token--falling): its model shakes
+    // for the length of that animation, and its flat picture does not show (integration.css).
+    const now=performance.now();for(const node of tokenLayer.querySelectorAll('.vtt-token--falling[data-placement-id]'))if(!fallShakes.has(node.dataset.placementId))fallShakes.set(node.dataset.placementId,now);
+    for(const [id,since] of fallShakes)if(now-since>1100)fallShakes.delete(id);
+    const result=minis.update([...recordById.values()].map(r=>fallShakes.has(r.id)?{...r,shake:Math.max(0,1-(now-fallShakes.get(r.id))/1100)}:r),profiles,p=>shownLevel===null||shownLevel<0||p.level<=shownLevel,view.camera,dt);if(result.redraw)view.renderer.shadowMap.needsUpdate=true;view.setTokensWithoutBase?.(result.noBase);
     miniStanding=result.ids;miniTops=result.tops||new Map();
     const key=[...result.ids].sort().join(',')+'|'+tokenLayer.childElementCount;if(key!==miniIds){miniIds=key;for(const node of tokenLayer.querySelectorAll('[data-placement-id]'))node.classList.toggle('vtt3d-mini',result.ids.has(node.dataset.placementId));}}
    const {width,height}=view.viewport();
@@ -449,6 +468,10 @@ async function mount(){
    for(const node of tokenNodes){placedElements.add(node);const p=recordById.get(node.dataset.placementId);if(!p){node.style.setProperty('--vtt3d-visible','hidden');continue;}
     const foot=view.project(p),top=view.project({...p,z:p.z+Math.max(p.width,p.height)*1.1}),across=view.project({...p,x:p.x+Math.max(p.width,p.height)*.5});const size=Math.max(25,Math.min(110,Math.hypot(across.x-foot.x,across.y-foot.y)*2));
     const shared=spread.get(p.id);if(shared)foot.x+=shared.offset*size*.55;
+    // Tokens on one square: each says so, in large print over its head, so a model hidden inside another is not
+    // missed (Brandon, October 16, 2026: "a big indicator that the other model is hidden under the first").
+    {const count=shared?(stacks.get([Math.round(p.x*2),Math.round(p.y*2),Math.round(p.z)].join(','))||[]).length:0;const want=count>1?String(count):'';
+     if((node.dataset.vtt3dStacked||'')!==want){if(want){node.dataset.vtt3dStacked=want;node.title=`${count} tokens share this square`;}else{delete node.dataset.vtt3dStacked;if(/share this square$/.test(node.title||''))node.removeAttribute('title');}}}
     // Badges, HP bars and labels are sized in token units (board.css --tok-unit), so they scale with the token;
     // a quarter bigger than on the flat board, so they read on the 3D one (Brandon, October 2026).
     node.style.setProperty('--tok-unit',`${(1.25*size/(64*Math.max(p.width,p.height))).toFixed(3)}px`);
@@ -477,7 +500,7 @@ async function mount(){
    const portalKey=[window.wallPrototype?.revision,document.querySelector('#wall-panel')?.hidden,context.isGM,window.terrainPrototype?.revision,context.sceneId].join('|');if(portalKey!==portalsAt){portalsAt=portalKey;window.wallPrototype?.refreshPortals?.();}
   }
   requestAnimationFrame(frame);}
- let portalsAt='',recordsCache=null,lastPlaceKey='',lastAnchorKey='',miniStanding=new Set(),miniTops=new Map();const placedElements=new WeakSet();
+ let portalsAt='',recordsCache=null,lastPlaceKey='',lastAnchorKey='',miniStanding=new Set(),miniTops=new Map();const fallShakes=new Map();const placedElements=new WeakSet();
  function focus(point){if(!view)return;const goal=point&&typeof point==='object'?point:find(point)&&world(find(point));if(!goal)return;view.focus(goal);view.camera.position.copy(view.controls.target).add({x:13,y:17,z:16});view.controls.update();}
  const api={get ready(){return !!view;},
   // The held token as drawn on its landing square ({id,x,y,z}), or null.

@@ -149,6 +149,28 @@ final class FloorGeometry
         return array_values($segments);
     }
 
+    /**
+     * The ground's height just beyond one end of a stair: the middle of its edges of that colour ('red' foot of an up
+     * stair, 'green' its head), half a square outside the stair. Null when the stair has no edge of that colour.
+     * Paired with stairEndHeight in route-walker.mjs.
+     */
+    public static function stairEndHeight(array $stair, string $colour, callable $terrainAt): ?float
+    {
+        $edges = self::perimeter($stair['corners'] ?? []);
+        if (!$edges) return null;
+        $sx = 0.0; $sy = 0.0; $n = 0; $cx = 0.0; $cy = 0.0;
+        foreach ($stair['corners'] as $corner) { $cx += (float) $corner['column'] / 4; $cy += (float) $corner['row'] / 4; }
+        foreach ($edges as $edge) {
+            if (($stair['edgeColors'][$edge['id']] ?? 'barrier') !== $colour) continue;
+            $sx += ($edge['from']['x'] + $edge['to']['x']) / 2; $sy += ($edge['from']['y'] + $edge['to']['y']) / 2; $n++;
+        }
+        if (!$n) return null;
+        $x = $sx / $n; $y = $sy / $n; $dx = $x - $cx; $dy = $y - $cy; $length = sqrt($dx * $dx + $dy * $dy);
+        if ($length > 1e-9) { $x += $dx / $length * .5; $y += $dy / $length * .5; }
+        $height = (float) $terrainAt(['column' => $x - .5, 'row' => $y - .5, 'width' => 1, 'height' => 1]);
+        return is_finite($height) ? $height : null;
+    }
+
     private static function inside(array $point, array $edges): bool
     {
         $inside = false;
@@ -304,6 +326,7 @@ final class FloorGeometry
         $byId = array_column($levels, null, 'id');
         $result = ['levelId'=>$levelId, 'traversal'=>null, 'cause'=>null];
         $supportedStair = false;
+        $firedStair = null;
         $width = max(1, (float) ($current['width'] ?? 1));
         $height = max(1, (float) ($current['height'] ?? 1));
         $path = [];
@@ -330,7 +353,7 @@ final class FloorGeometry
                 $signature = hash('sha256', json_encode([$levelId, $width, $height, $stair]));
                 $prior = $current['_floorTraversal'] ?? [];
                 $crossing = self::crossing(self::stairLane($path, $stair, $width, $height), $stair, ($prior['signature'] ?? '') === $signature ? ($prior['entry'] ?? null) : null);
-                if ($crossing['fired']) { $result['levelId']=$target; $result['cause']='stairs'; break; }
+                if ($crossing['fired']) { $result['levelId']=$target; $result['cause']='stairs'; $firedStair=$stair; break; }
                 if ($crossing['endsInside']) {
                     $result['traversal']=['stairId'=>$stair['id'], 'signature'=>$signature, 'entry'=>$crossing['entry']];
                     $supportedStair = (($stair['direction'] ?? '') === 'down' && $crossing['entry'] === 'green') || (($stair['direction'] ?? '') === 'up' && $crossing['entry'] === 'red');
@@ -338,10 +361,46 @@ final class FloorGeometry
                 }
             }
         }
+        // A walker on a floor plate level with the ground at a ground stair's foot steps off onto that ground and up the
+        // stair in the same move (Medpilis: the great hall's floor over the chapel and the hall's stairs beside it).
+        // Its own floor has no stair there; the ground's is the one it would take a step later. Brandon, October 16,
+        // 2026, on code rather than map faults. Paired with commandSurfaceEnding in route-walker.mjs.
+        if ($result['cause'] === null && $result['traversal'] === null && $levelId !== self::BASE && $terrainAt !== null && in_array($kind, ['walk','shift'], true)) {
+            $plate = FloorSupport::retained($current, $surfaces, $mapLevels);
+            if ($plate && ($plate['kind'] ?? 'roof') === 'floor') {
+                foreach (($mapLevels['baseStairs'] ?? []) as $stair) {
+                    $target = $stair['linkedLevelId'] ?? '';
+                    if (!isset($byId[$target]) || $target === self::BASE || ($byId[$target]['hidden'] ?? false) === true) continue;
+                    $foot = self::stairEndHeight($stair, ($stair['direction'] ?? 'up') === 'down' ? 'green' : 'red', $terrainAt);
+                    if ($foot === null || abs($foot - (float) ($plate['height'] ?? 0)) > .55) continue;
+                    $crossing = self::crossing(self::stairLane($path, $stair, $width, $height), $stair, null);
+                    if ($crossing['fired']) { $result['levelId']=$target; $result['cause']='stairs'; $firedStair=$stair; break; }
+                    if ($crossing['endsInside']) {
+                        $result['levelId']=self::BASE;
+                        $result['traversal']=['stairId'=>$stair['id'], 'signature'=>hash('sha256', json_encode([self::BASE, $width, $height, $stair])), 'entry'=>$crossing['entry']];
+                        $supportedStair = (($stair['direction'] ?? '') === 'down' && $crossing['entry'] === 'green') || (($stair['direction'] ?? '') === 'up' && $crossing['entry'] === 'red');
+                        break;
+                    }
+                }
+            }
+        }
         if($result['cause']==='stairs'){
             $p=[...$current,...$destination,'levelId'=>$result['levelId']];
             $contact=FloorSupport::stairLanding($p,$surfaces,$mapLevels);
             if($contact){$result['supportSurfaceId']=$contact['id']??null;return $result;}
+            // Down a stair to the ground and on: a floor plate level with the stair's foot, where the walk ends, is
+            // stood on; the walker does not drop through it to whatever is under it (Medpilis: down from the gallery
+            // onto the hall floor over the chapel). Paired with commandSurfaceEnding in route-walker.mjs.
+            if($result['levelId']===self::BASE&&$firedStair!==null&&$terrainAt!==null){
+                $exit=self::stairEndHeight($firedStair,($firedStair['direction']??'up')==='down'?'red':'green',$terrainAt);
+                $levels=array_column(self::orderedLevels($mapLevels),null,'id');$best=null;
+                if($exit!==null)foreach($surfaces as $s){
+                    if(($s['kind']??'')!=='floor'||!empty($s['boxTop'])||!empty($s['templateCube'])||!isset($levels[$s['levelId']??''])||($levels[$s['levelId']]['hidden']??false)===true)continue;
+                    if(abs((float)$s['height']-$exit)>.55||!FloorSupport::intersects($p,$s,$levels[$s['levelId']]['cutouts']??[]))continue;
+                    if(!$best||abs((float)$s['height']-$exit)<abs((float)$best['height']-$exit))$best=$s;
+                }
+                if($best)return ['levelId'=>$best['levelId'],'traversal'=>null,'cause'=>'stairs','supportSurfaceId'=>$best['id']??null];
+            }
         }
         if($terrainAt!==null && $surfaces && $kind!=='teleport' && !$supportedStair && $result['traversal']===null && $result['cause']!=='stairs'){
             $contact=FloorSupport::walkContact($current,[...$current,...$destination],$waypoints,$surfaces,$mapLevels,$terrainAt);

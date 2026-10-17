@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { flashWall, blockedByWallText, isWallRefusal, WALL_FLASH_MS } from '../wall-flash.mjs';
+import { flashWall, blockedByWallText, blockedText, isWallRefusal, WALL_FLASH_MS } from '../wall-flash.mjs';
 import { firstWallMet } from '../wall-properties.mjs';
 
 // Brandon, October 10, 2026, in the bathhouse: "I'm trying to go up the stairs as a player and keep hitting
@@ -76,7 +76,15 @@ test('the board marks the wall and gives the hint for the wall refusal of a move
   assert.ok(start > 0 && end > start, 'the wall refusal is answered before anything is reported as a failure');
   const answer = board.slice(start, end);
   assert.match(answer, /markWallMet\(intendedMoves\[0\], canonical\);/);
-  assert.match(answer, /const hint = blockedByWallText\(source === 'drag'\);\s*updateStatus\(hint\);\s*window\.UIKit\?\.toast\?\.\(hint, 'warning'\);\s*return false;/);
+  assert.match(answer, /const hint = blockedText\(lastWallMet\?\.edge, source === 'drag'\);\s*updateStatus\(hint\);\s*window\.UIKit\?\.toast\?\.\(hint, 'warning'\);\s*return false;/);
   const walls = readFileSync(new URL('../wall-prototype.js', import.meta.url), 'utf8');
   assert.match(walls, /wallMet:\(from,to\)=>!context\?null:firstWallMet\(/);
+});
+
+test('a refused walk names a shut or locked door and a window; a secret door reads as the wall it looks like (October 16, 2026)', () => {
+  assert.equal(blockedText({ interaction: 'door', open: false }, true), 'The door is shut. Click it to open it.');
+  assert.equal(blockedText({ interaction: 'door', open: false, locked: true }, true), 'The door is locked.');
+  assert.equal(blockedText({ interaction: 'window', open: false }, false), 'A window is in the way.');
+  assert.equal(blockedText({ interaction: 'door', open: false, secret: true }, true), blockedByWallText(true));
+  assert.equal(blockedText(null, false), blockedByWallText(false));
 });

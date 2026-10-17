@@ -56,7 +56,7 @@ import {
 } from './drag-ruler.js';
 import { rightPressAt, rightPressPulls, rightPressClicked } from './right-press.mjs';
 import { slideLegs } from './forced-line.mjs';
-import { flashWall, blockedByWallText, isWallRefusal } from './wall-flash.mjs';
+import { flashWall, blockedByWallText, blockedText, isWallRefusal } from './wall-flash.mjs';
 import { buildAutomationTargetPromptHtml } from './automation-target-prompt.js';
 import { getAutomationMoveRangePresentation } from './automation-move-display.js';
 import {
@@ -1476,11 +1476,15 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   // Marks, for a moment, the wall piece that a refused walk met. True when a piece was found and drawn.
+  // The piece the last refused walk met (markWallMet), so the line can say a door is shut rather than "a wall".
+  let lastWallMet = null;
   function markWallMet(move, canonical) {
+    lastWallMet = null;
     try {
       const origin = move ? canonical?.[move.placementId] : null, mapLayer = document.getElementById('vtt-map-transform');
       const met = origin ? window.wallPrototype?.wallMet?.(origin, { column: move.column, row: move.row, path: (move.path || []).slice(1, -1) }) : null;
       if (!met || !mapLayer) return false;
+      lastWallMet = met;
       // 3D board: the piece is outlined where it stands, from its base to its top.
       if (window.vtt3d?.active) return Boolean(window.vtt3d.flashWall?.(met));
       const grid = viewState.gridSize, left = viewState.gridOffsets?.left || 0, top = viewState.gridOffsets?.top || 0, terrain = window.terrainPrototype?.active ? window.terrainPrototype : null;
@@ -1676,7 +1680,7 @@ export function mountBoardInteractions(store, routes = {}) {
         // to go round (wall-flash.mjs), in the line and in a plain notice, and raise no error.
         if (!movementAccepted && isWallRefusal(error?.message)) {
           markWallMet(intendedMoves[0], canonical);
-          const hint = blockedByWallText(source === 'drag');
+          const hint = blockedText(lastWallMet?.edge, source === 'drag');
           updateStatus(hint);
           window.UIKit?.toast?.(hint, 'warning');
           return false;
@@ -26863,7 +26867,18 @@ function createTemplateTool() {
     const intent=captureCoordinateMovementPreview();
     const predictedLanding=['walk','shift'].includes(getCurrentMovementKind())?window.terrainPrototype?.walkEnding?.(original,[{column:original.column,row:original.row},...(intent?.waypoints||[]),{column:destination.column,row:destination.row}]):null;
     const validSurface=predictedLanding&&Number.isFinite(intent?.surfaceElevation)?window.terrainPrototype?.pickedSurfaceReached?.(predictedLanding,intent):null;
-    return { route: getCurrentMeasurementPresentation(),...intent,predictedLanding,validSurface };
+    // Said while the token is still held, so a refused drop is no surprise (Brandon, October 16, 2026): the walk does
+    // not reach the picked square, or a wall, a shut door or a window is in the way and cannot be climbed over.
+    let blocked=null;
+    if(['walk','shift'].includes(getCurrentMovementKind())&&!['fly','hover'].includes(original.movementMode)){
+      if(validSurface===false)blocked='Can’t walk there: use its stairs, right-click a corner, or hold Space to teleport.';
+      else if(!isGmUser()){
+        const to={column:destination.column,row:destination.row,path:intent?.waypoints||[]};
+        const met=window.wallPrototype?.wallMet?.(original,to);
+        if(met&&!window.wallPrototype?.lowBarrier?.(original,to))blocked=blockedText(met.edge,true);
+      }
+    }
+    return { route: getCurrentMeasurementPresentation(),...intent,predictedLanding,validSurface,blocked };
   }
 
   async function moveFromCoordinates({ placementId, column, row, movementKind = 'walk', waypoints, surfaceElevation, levelId=null, surfaceId=null, rampId=null } = {}) {
@@ -26916,7 +26931,10 @@ function createTemplateTool() {
     const ruler = [{ column: original.column, row: original.row }, ...waypoints.map(p => clampPlacementToBounds(p.column, p.row, width, height)), destination];
     if(['walk','shift'].includes(movementKind)&&!['fly','hover'].includes(original.movementMode)&&Number.isFinite(surfaceElevation)){
       const ending=window.terrainPrototype?.walkEnding?.(original,ruler);
-      const wrongHeight=Number.isFinite(ending?.height)&&Math.abs(ending.height-surfaceElevation)>.55;
+      // Ending on top of an object on the picked square is reaching it (the 3D board picks the ground under an object); the
+      // move goes on and asks to climb onto it (terrain-prototype.js pickedSurfaceReached).
+      const ontoObject=window.terrainPrototype?.pickedSurfaceReached?.(ending,{surfaceElevation})===true&&String(ending?.placement?._supportSurfaceId||'').startsWith('box-top:');
+      const wrongHeight=!ontoObject&&Number.isFinite(ending?.height)&&Math.abs(ending.height-surfaceElevation)>.55;
       // The native preview ghost retains its old floor when it steps off an
       // unsupported edge; its computed height already describes the ground.
       // Only a positively acquired support identifies a conflicting floor.
@@ -26986,10 +27004,14 @@ function createTemplateTool() {
     getTokenElement(id) { return [...tokenLayer.querySelectorAll('[data-placement-id]')].find(node => node.dataset.placementId === id) ?? null; },
     heightFor(id) { const p = coordinatePlacement(id); return p ? window.terrainPrototype?.groundFor?.(p) ?? 0 : null; },
     // 3D board, hold Z and drag: the height a token is raised or lowered to. A token that walked starts flying.
-    async setHeight(id, z) {
+    // `landed`: Z brought it down to what is under it; it stands there and walks again, it does not fly at no height
+    // (Brandon, October 16, 2026).
+    async setHeight(id, z, { landed = false } = {}) {
       const placement = coordinatePlacement(id), sceneId = getActiveSceneId();
       if (!placement || !sceneId || !canCurrentUserMovePlacement(placement) || !Number.isFinite(z) || z < 0) return false;
-      const patch = { flightHeight: z, ...(['fly', 'hover'].includes(placement.movementMode) ? {} : { movementMode: 'fly' }) };
+      const patch = landed
+        ? { movementMode: 'ground', flightHeight: null }
+        : { flightHeight: z, ...(['fly', 'hover'].includes(placement.movementMode) ? {} : { movementMode: 'fly' }) };
       try {
         await tokenMovementRuntime.submitPlacementOps([{ type: 'placement.update', sceneId, placementId: id, patch }]);
         return true;

@@ -21,10 +21,10 @@ test('hold Z and drag: up and down a square at a time, never below what is under
   assert.match(board3d, /if\(zHeld&&p&&p\.canMove!==false&&!context\.busy\)\{cancelDrag\(\);if\(!context\.selectedIds\?\.includes\(id\)\)bridge\.select\(id\);board\.focus\(\{preventScroll:true\}\);startLift\(p,e\);return;\}/, 'a token this user may move, players included; first, even over a held token');
   assert.match(board3d, /steps=Math\.round\(\(lift\.y-e\.clientY\)\/perSquare\);\s*lift\.z=steps\?Math\.max\(Math\.ceil\(lift\.floor-\.01\),Math\.round\(lift\.start\)\+steps\):lift\.start;/, 'up the screen is up; it stops at the floor below');
   assert.match(board3d, /liftLabel\.textContent=\(up\?`\$\{up\} \$\{up===1\?'square':'squares'\} up`:'On the ground'\)/);
-  assert.match(board3d, /const z=keepHolding\?\(done\.locked\?\?done\.start\):done\.z;\s*if\(save&&z!==\(done\.saved\?\?done\.start\)\)\{try\{await bridge\.setHeight\?\.\(done\.id,z\);\}/, 'nothing is sent when the height did not change');
+  assert.match(board3d, /const z=keepHolding\?\(done\.locked\?\?done\.start\):done\.z;\s*if\(save&&z!==\(done\.saved\?\?done\.start\)\)\{try\{await bridge\.setHeight\?\.\(done\.id,z,\{landed:z<=done\.floor\+\.01\}\);\}/, 'nothing is sent when the height did not change; brought down to what is under it, it stands again');
   assert.match(board3d, /if\(lift&&e\.key==='Escape'\)\{e\.preventDefault\(\);e\.stopImmediatePropagation\(\);const from=lift\.from;endLift\(false\);if\(from\)cancelDrag\(\);return;\}/, 'Escape takes it back');
   // The bridge: a token that walked starts flying; one this user may not move is left alone.
-  assert.match(board, /async setHeight\(id, z\) \{\s*const placement = coordinatePlacement\(id\), sceneId = getActiveSceneId\(\);\s*if \(!placement \|\| !sceneId \|\| !canCurrentUserMovePlacement\(placement\) \|\| !Number\.isFinite\(z\) \|\| z < 0\) return false;\s*const patch = \{ flightHeight: z, \.\.\.\(\['fly', 'hover'\]\.includes\(placement\.movementMode\) \? \{\} : \{ movementMode: 'fly' \}\) \};/);
+  assert.match(board, /async setHeight\(id, z, \{ landed = false \} = \{\}\) \{\s*const placement = coordinatePlacement\(id\), sceneId = getActiveSceneId\(\);\s*if \(!placement \|\| !sceneId \|\| !canCurrentUserMovePlacement\(placement\) \|\| !Number\.isFinite\(z\) \|\| z < 0\) return false;\s*const patch = landed\s*\? \{ movementMode: 'ground', flightHeight: null \}\s*: \{ flightHeight: z, \.\.\.\(\['fly', 'hover'\]\.includes\(placement\.movementMode\) \? \{\} : \{ movementMode: 'fly' \}\) \};/);
 });
 
 test('Z pressed while a token is already held switches it to up and down, as Shift and Space switch how it moves (Build 521)', () => {
@@ -32,13 +32,15 @@ test('Z pressed while a token is already held switches it to up and down, as Shi
   assert.match(board3d, /if\(e\.key==='z'\|\|e\.key==='Z'\)\{zHeld=false;if\(lift\?\.from\)endLift\(true,true\);\}/, 'Z let go: sideways again');
   // Brandon: lift it, right-click for a waypoint, let go of Z, and it is locked at that height and moves on from there.
   assert.match(board3d, /onRightClick:\(\)=>\{if\(lift\?\.from\)\{lockLift\(\);return true;\}/, 'a right-click while it goes up and down is a waypoint at that height');
-  assert.match(board3d, /async function lockLift\(\)\{const done=lift;if\(!done\?\.from\)return false;done\.locked=done\.z;[\s\S]{0,120}await bridge\.setHeight\?\.\(done\.id,done\.z\);/, 'kept at once');
+  assert.match(board3d, /async function lockLift\(\)\{const done=lift;if\(!done\?\.from\)return false;done\.locked=done\.z;[\s\S]{0,120}await bridge\.setHeight\?\.\(done\.id,done\.z,\{landed:done\.z<=done\.floor\+\.01\}\);/, 'kept at once');
   assert.match(board3d, /const z=keepHolding\?\(done\.locked\?\?done\.start\):done\.z;/, 'Z let go: from the waypoint, or back where it started when none was made');
   assert.match(board3d, /\+\(lift\.locked===lift\.z\?' \(waypoint\)':''\);/);
   assert.match(board3d, /function liftHeld\(\)\{[\s\S]{0,300}bridge\.endMovementPreview\?\.\(\);clearGuides\(\);/, 'the sideways preview is put away while it goes up and down');
   assert.match(board3d, /window\.addEventListener\('pointermove',e=>\{if\(!drag\|\|e\.pointerId!==drag\.pointerId\|\|lift\)return;/, 'and the sideways drag stands still');
   assert.match(board3d, /function showHover\(e,p=selected\(\)\)\{\s*if\(!view\|\|lift\)return;/);
-  assert.match(board3d, /if\(keepHolding&&\(drag\?\.id===done\.id\|\|clickMoveTokenId===done\.id\)\)\{if\(drag\?\.air\)drag\.air\.z=z;/, 'a flier keeps its new height going sideways');
+  assert.match(board3d, /if\(keepHolding&&\(drag\?\.id===done\.id\|\|clickMoveTokenId===done\.id\)\)\{[\s\S]{0,900}if\(drag\?\.air\)drag\.air\.z=z;/, 'a flier keeps its new height going sideways');
+  // Raised from the ground and carried on sideways: it is carried at that height under the hand (October 16, 2026).
+  assert.match(board3d, /if\(drag&&z>done\.floor\+\.01&&view\)\{const pointer=drag\.pointer\?\?\{clientX:drag\.x,clientY:drag\.y\},q=view\.pointOnPlane\(pointer\.clientX,pointer\.clientY,z\);if\(q\)drag\.air=\{z,dx:done\.x-q\.x,dy:done\.yy-q\.y\};\}/, 'carried on at the waypoint height, not dropped to the ground under the pointer');
   assert.match(board3d, /if\(liftPointer\(e\)&&e\.button===0\)\{e\.preventDefault\(\);e\.stopPropagation\(\);const from=lift\.from;endLift\(true\);if\(from\)cancelDrag\(\);\}/, 'letting go of the mouse keeps the height and ends the hold');
   assert.match(board3d, /if\(liftPointer\(e\)&&!\(lift\.from==='hold'&&\(e\.buttons&6\)\)\)/, 'turning or panning the view does not change the height');
 });
@@ -75,7 +77,7 @@ test('a held token is always put down by the next click (Build 520)', () => {
   // down lands on the square, not on the token (which used to count as "put it back": "it won't place it").
   assert.match(board3d, /else\{clickMoveTokenId=released\.id;markHeld\(released\.id\);\}\}/);
   assert.match(board3d, /if\(!drag\.moved&&Math\.hypot\(e\.clientX-drag\.x,e\.clientY-drag\.y\)>5\)\{drag\.moved=true;markHeld\(drag\.id\);\}/);
-  assert.match(board3d, /function cancelDrag\(\)\{markHeld\(null\);clickMoveTokenId=null;/);
+  assert.match(board3d, /function cancelDrag\(\)\{sayHeld\(null\);markHeld\(null\);clickMoveTokenId=null;/);
   assert.match(css, /\.vtt-token\.vtt3d-held, \.vtt3d-on #vtt-token-layer>\.vtt-token\.vtt3d-held \* \{ pointer-events: none !important; \}/);
   // A drop that is refused says why, where it can be seen.
   assert.match(board3d, /if\(result\?\.accepted===false&&result\.reason!=='unchanged'\)\{const words=REFUSED\[result\.reason\]\|\|/);
