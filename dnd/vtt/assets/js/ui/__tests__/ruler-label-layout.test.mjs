@@ -119,12 +119,17 @@ test('the ruler counts a forced move flat and asks the board for the fall', () =
   const ruler = readFileSync(new URL('../drag-ruler.js', import.meta.url), 'utf8');
   assert.match(ruler, /const squares = forced \? segment\.squares : measured \? measured\.distance/);
   assert.match(ruler, /cost: forced \? squares : measured \? measured\.cost : squares/);
-  assert.match(ruler, /const fall = forced && segments\.length && zones\?\.forcedFall \? zones\.forcedFall\(/);
+  assert.match(ruler, /const forcedLegs = forced && segments\.length \? rawPoints\.map/);
+  // A push that runs into a wall stops there: the ruler says so and shows no fall beyond it (October 16, 2026).
+  assert.match(ruler, /const stops = Boolean\(forcedLegs && zones\?\.forcedStops\?\.\(forcedLegs\)\);/);
+  assert.match(ruler, /const fall = forcedLegs && !stops && zones\?\.forcedFall \? zones\.forcedFall\(forcedLegs\) : 0;/);
+  assert.match(ruler, /if \(stops\) readout\.push\('Stops at a wall'\);/);
   assert.match(ruler, /if \(wording\.fall\) readout\.push\(wording\.fall\);/);
   const zones = readFileSync(new URL('../terrain-zones-overlay.js', import.meta.url), 'utf8');
   assert.match(zones, /const travelling = walls\.moverHeight\(from, at\(end\), 'forced'\);/);
   assert.match(zones, /return fallSquares\(travelling, caught === null \? ground : Math\.max\(ground, caught\)\);/);
-  assert.match(zones, /routeCost,\s+forcedFall,/);
+  assert.match(zones, /routeCost,\s+forcedFall,\s+forcedStops,/);
+  assert.match(zones, /try \{ return Boolean\(walls\.forcedBlockedMove\(from, at\(end\)\)\); \} catch \{ return false; \}/);
 });
 
 // ---- the corner Zones control ------------------------------------------------

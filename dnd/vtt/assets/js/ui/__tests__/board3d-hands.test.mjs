@@ -25,6 +25,8 @@ test('hold Z and drag: up and down a square at a time, never below what is under
   assert.match(board3d, /if\(lift&&e\.key==='Escape'\)\{e\.preventDefault\(\);e\.stopImmediatePropagation\(\);const from=lift\.from;endLift\(false\);if\(from\)cancelDrag\(\);return;\}/, 'Escape takes it back');
   // The bridge: a token that walked starts flying; one this user may not move is left alone.
   assert.match(board, /async setHeight\(id, z, \{ landed = false \} = \{\}\) \{\s*const placement = coordinatePlacement\(id\), sceneId = getActiveSceneId\(\);\s*if \(!placement \|\| !sceneId \|\| !canCurrentUserMovePlacement\(placement\) \|\| !Number\.isFinite\(z\) \|\| z < 0\) return false;\s*const patch = landed\s*\? \{ movementMode: 'ground', flightHeight: null \}\s*: \{ flightHeight: z, \.\.\.\(\['fly', 'hover'\]\.includes\(placement\.movementMode\) \? \{\} : \{ movementMode: 'fly' \}\) \};/);
+  // Brought down first, then set to walking: in one step the server counts a fall from the old height.
+  assert.match(board, /if \(landed && \['fly', 'hover'\]\.includes\(placement\.movementMode\)\) await tokenMovementRuntime\.submitPlacementOps\(\[\{ type: 'placement\.update', sceneId, placementId: id, patch: \{ flightHeight: z \} \}\]\);/);
 });
 
 test('Z pressed while a token is already held switches it to up and down, as Shift and Space switch how it moves (Build 521)', () => {

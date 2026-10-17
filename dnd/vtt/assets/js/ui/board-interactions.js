@@ -27014,6 +27014,9 @@ function createTemplateTool() {
         ? { movementMode: 'ground', flightHeight: null }
         : { flightHeight: z, ...(['fly', 'hover'].includes(placement.movementMode) ? {} : { movementMode: 'fly' }) };
       try {
+        // Brought down first, then set to walking: switched to walking from its old height in one step, the server
+        // counts it as a fall from that height (damage, prone).
+        if (landed && ['fly', 'hover'].includes(placement.movementMode)) await tokenMovementRuntime.submitPlacementOps([{ type: 'placement.update', sceneId, placementId: id, patch: { flightHeight: z } }]);
         await tokenMovementRuntime.submitPlacementOps([{ type: 'placement.update', sceneId, placementId: id, patch }]);
         return true;
       } catch (error) {

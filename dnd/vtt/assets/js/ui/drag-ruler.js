@@ -512,7 +512,9 @@ function drawOverlay(state) {
     const placed = terrain ? {...segment,start:{...segment.start,...terrain.rulerPoint(segment.start)},end:{...segment.end,...terrain.rulerPoint(segment.end)}} : segment;
     return { ...placed, squares, cost: forced ? squares : measured ? measured.cost : squares, difficult: measured?.difficult ?? [], climbs: measured?.climbs ?? [], shiftInDifficult: Boolean(measured?.shiftInDifficult), rawStart: segment.start };
   });
-  const fall = forced && segments.length && zones?.forcedFall ? zones.forcedFall(rawPoints.map((point) => ({ column: point.column, row: point.row }))) : 0;
+  const forcedLegs = forced && segments.length ? rawPoints.map((point) => ({ column: point.column, row: point.row })) : null;
+  const stops = Boolean(forcedLegs && zones?.forcedStops?.(forcedLegs));
+  const fall = forcedLegs && !stops && zones?.forcedFall ? zones.forcedFall(forcedLegs) : 0;
   const totalSquares = segments.reduce((sum, segment) => sum + segment.squares, 0);
   const totalCost = segments.reduce((sum, segment) => sum + segment.cost, 0);
   const shiftWarning = segments.some((segment) => segment.shiftInDifficult);
@@ -606,6 +608,7 @@ function drawOverlay(state) {
   // The true movement cost follows the distance only when they differ.
   const readout = [wording.distance];
   if (wording.fall) readout.push(wording.fall);
+  if (stops) readout.push('Stops at a wall');
   if (shiftWarning) readout.push('No shift in difficult terrain');
   if (wording.cost) readout.push(wording.cost);
   state.rulerValue.textContent = readout.join(WORDING_SEPARATOR);
@@ -622,7 +625,7 @@ function drawOverlay(state) {
     };
     const gridForLabels = getGridMetrics(state.grid, state.mapTransform)?.size || 64;
     state.lastPresentation.nodes = rawPoints.map(at);
-    state.lastPresentation.total = { text: wording.distance + (wording.fall ? WORDING_SEPARATOR + wording.fall : '') + (wording.cost ? WORDING_SEPARATOR + wording.cost : ''), at: at(rawPoints[rawPoints.length - 1]) };
+    state.lastPresentation.total = { text: wording.distance + (wording.fall ? WORDING_SEPARATOR + wording.fall : '') + (stops ? WORDING_SEPARATOR + 'Stops at a wall' : '') + (wording.cost ? WORDING_SEPARATOR + wording.cost : ''), at: at(rawPoints[rawPoints.length - 1]) };
     state.lastPresentation.legs = placeLegLabels(segments, null, gridForLabels).map((label, index) => {
       const a = at(rawPoints[index]), b = at(rawPoints[index + 1] ?? rawPoints[index]);
       return { text: label.text, at: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 } };

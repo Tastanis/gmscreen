@@ -96,6 +96,18 @@ function routeCost(points, {kind = 'walk', actor = undefined} = {}) {
   summary.shiftInDifficult = kind === 'shift' && (summary.difficult.length > 0 || summary.startsInDifficult);
   return summary;
 }
+// True when the last leg of a forced move runs into a wall, a rail or rising ground: the push stops there, so the ruler
+// says so and does not promise the fall beyond it (Brandon, October 16, 2026: the ruler said "Fall 3" for a push into
+// a parapet that the server stopped). Paired with WallMovement / ForcedMovement on the server.
+function forcedStops(points, {actor = undefined} = {}) {
+  const c = context(), walls = window.wallPrototype;
+  const mover = actor === undefined ? moverFor(c) : actor;
+  if (!mover || !walls?.forcedBlockedMove || !(points?.length > 1) || ['fly', 'hover'].includes(mover.movementMode)) return false;
+  const at = (p) => ({...mover, column: p.column, row: p.row});
+  const start = points[points.length - 2], end = points[points.length - 1];
+  const from = start.column === mover.column && start.row === mover.row ? mover : at(start);
+  try { return Boolean(walls.forcedBlockedMove(from, at(end))); } catch { return false; }
+}
 /**
  * How far a forced move drops at its end, in whole squares: from the height the creature
  * travels at (travel-height.mjs) down to where it lands, a plate under it or the ground. The
@@ -300,6 +312,7 @@ window.terrainZones = {
   stepMultiplier,
   routeCost,
   forcedFall,
+  forcedStops,
   paysForClimb,
   cellInfoFor,
   standingHeight: (target) => { const placement = placementOf(target); return placement ? standingHeight(placement) : null; },
