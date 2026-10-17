@@ -42,7 +42,10 @@ export function createWallEditor({panel,transform,selected,model,revision=()=>Na
  // not by reading every wall on the map each time.
  let doorsAt=NaN,doors=[];
  // A word beside a door for the player who clicked it (Brandon: no explanations): it is locked, or his hero is not at it.
- function doorNote(button,text){const note=document.createElement('span');note.className='wall-portal-note';note.textContent=text;note.style.left=button.style.left;note.style.top=button.style.top;note.style.transform=button.style.transform+' translateY(-170%)';transform.append(note);setTimeout(()=>note.remove(),1500);}
+ function doorNote(button,text){
+  // 3D board: the flat map layer is hidden there, so the word is shown over the button where it is on the screen.
+  if(window.vtt3d?.active){const r=button.getBoundingClientRect(),note=document.createElement('span');note.className='wall-portal-note';note.textContent=text;note.style.cssText=`position:fixed;left:${r.left+r.width/2}px;top:${r.top-6}px;transform:translate(-50%,-100%);z-index:100007;pointer-events:none`;document.body.append(note);setTimeout(()=>note.remove(),1800);return;}
+  const note=document.createElement('span');note.className='wall-portal-note';note.textContent=text;note.style.left=button.style.left;note.style.top=button.style.top;note.style.transform=button.style.transform+' translateY(-170%)';transform.append(note);setTimeout(()=>note.remove(),1500);}
  function portals(){
   // 3D board: the buttons live above the 3D view, each pinned to its doorway (data-vtt3d-anchor).
   const board3d=window.vtt3d?.active?window.vtt3d:null;if(board3d&&portalLayer.parentElement!==board3d.overlayHost)board3d.overlayHost.append(portalLayer);else if(!board3d&&portalLayer.parentElement!==transform)transform.append(portalLayer);

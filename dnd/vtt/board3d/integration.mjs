@@ -234,7 +234,7 @@ async function mount(){
   const status=document.querySelector('#active-scene-status'),said=status?.textContent;
   try{const result=await bridge.move({...intent,placementId:p.id,...to,surfaceElevation:hit.z,levelId:hit.levelId??null,surfaceId:hit.surfaceId??null,rampId:hit.rampId??null,movementKind:movementKind(e)});
    if(result?.accepted===false&&landing?.id===p.id)landing=null;
-   if(result?.accepted===false&&result.reason!=='unchanged'){const words=REFUSED[result.reason]||(typeof result.reason==='string'&&/\s/.test(result.reason)?result.reason:status&&status.textContent!==said?status.textContent:'The token was not moved there.');window.UIKit?.toast?.(words,'warning');}}
+   if(result?.accepted===false&&!['unchanged','said'].includes(result.reason)){const words=REFUSED[result.reason]||(typeof result.reason==='string'&&/\s/.test(result.reason)?result.reason:status&&status.textContent!==said?status.textContent:'The token was not moved there.');window.UIKit?.toast?.(words,'warning');}}
   catch(error){console.error('[VTT 3D] move',error);window.UIKit?.toast?.(error?.message||'The token was not moved there.','warning');if(landing?.id===p.id)landing=null;}
   finally{if(landing?.id===p.id){landing.answered=true;landing.until=performance.now()+1500;}}
   context=bridge.getContext();}
@@ -283,10 +283,13 @@ async function mount(){
   if(zHeld&&p&&p.canMove!==false&&!context.busy){cancelDrag();if(!context.selectedIds?.includes(id))bridge.select(id);board.focus({preventScroll:true});startLift(p,e);return;}
   // A held token is put down by the next click. On itself it stays where it stands (it is not picked up again);
   // on another token it goes to the square under the pointer.
+  // Shift-click adds to (or takes from) the selection; it never puts a carried token down on the clicked one
+  // (it used to put the carried token on that token's square). Brandon, October 16, 2026.
+  if(clickMoveTokenId&&e.shiftKey){cancelDrag();bridge.select(id,{additive:true});board.focus({preventScroll:true});return;}
   if(clickMoveTokenId){const mover=find(clickMoveTokenId);if(id===clickMoveTokenId||!mover){cancelDrag();return;}
    const hit=pickAtClient(e.clientX,e.clientY,{tokens:false});if(!hit){cancelDrag();return;}showHover(e,mover);settleRoute(e,mover);commit(hit,mover,e,bridge.captureMovementPreview?.());return;}
   if(e.shiftKey||!context.selectedIds?.includes(id))bridge.select(id,{additive:e.shiftKey});planner.warm(find(id));clickMoveTokenId=null;board.focus({preventScroll:true});
-  drag={id,x:e.clientX,y:e.clientY,pointerId:e.pointerId,moved:false};tokenLayer.setPointerCapture(e.pointerId);
+  drag={id,x:e.clientX,y:e.clientY,pointerId:e.pointerId,moved:false,shift:!!e.shiftKey};tokenLayer.setPointerCapture(e.pointerId);
   if(airborne(p)&&view){const w=world(p),q=view.pointOnPlane(e.clientX,e.clientY,w.z);if(q)drag.air={z:w.z,dx:w.x-q.x,dy:w.y-q.y};}},true);
  // Hold Z and drag a token up or down to raise or lower it, a square at a time; a label says how high it stands
  // above what is under it. Letting go saves the height, and a token that walked starts flying (Brandon, October
@@ -343,7 +346,7 @@ async function mount(){
  window.addEventListener('pointermove',e=>{if(!drag||e.pointerId!==drag.pointerId||lift)return;e.stopPropagation();drag.pointer={clientX:e.clientX,clientY:e.clientY,shiftKey:e.shiftKey,ctrlKey:e.ctrlKey,altKey:e.altKey,metaKey:e.metaKey};if(!drag.moved&&Math.hypot(e.clientX-drag.x,e.clientY-drag.y)>5){drag.moved=true;markHeld(drag.id);}if(drag.moved)showHover(e,find(drag.id));if(!(e.buttons&1))finishDrag(e);},true);
  window.addEventListener('pointerup',e=>{if(!drag||e.pointerId!==drag.pointerId||(e.buttons&1))return;e.preventDefault();e.stopPropagation();finishDrag(e);},true);
  function finishDrag(e){const released=drag;if(!released)return;if(released.moved)settleRoute(e,find(released.id));const intent=bridge.captureMovementPreview?.();cancelDrag();
-  if(released.moved){const hit=dragHit(e,find(released.id),released.air||null);if(hit)commit(hit,find(released.id),e,intent);}else{clickMoveTokenId=released.id;markHeld(released.id);}}
+  if(released.moved){const hit=dragHit(e,find(released.id),released.air||null);if(hit)commit(hit,find(released.id),e,intent);}else if(!released.shift){clickMoveTokenId=released.id;markHeld(released.id);}}
  window.addEventListener('pointercancel',e=>{if(drag&&e.pointerId===drag.pointerId)cancelDrag();},true);
  tokenLayer.addEventListener('contextmenu',e=>{const node=e.target.closest('[data-placement-id]');if(!node)return;e.preventDefault();e.stopImmediatePropagation();bridge.openSettings(node.dataset.placementId,{clientX:e.clientX,clientY:e.clientY});},true);
  window.addEventListener('blur',cancelDrag);document.addEventListener('visibilitychange',()=>{if(document.hidden)cancelDrag();});

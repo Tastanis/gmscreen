@@ -222,7 +222,9 @@ export async function createSceneView({canvas,sceneData:d,groundPicture=null,isC
  let {n,m,h}=d.field;
  // The height field covers these squares (a live field carries its own bounds).
  let fx0=d.field.bounds?.left??0,fz0=d.field.bounds?.top??0,fw=d.field.bounds?.width??d.width,fd=d.field.bounds?.height??d.height;
- const w=d.width,depth=d.height,bottom=h.reduce((a,b)=>Math.min(a,b),0)-.7;
+ // `bottom`: under the lowest ground, for the board's sides and for picking. Worked out again whenever the ground
+ // changes (setField): kept from the first field, a pit deeper than that could not be pointed at (Medpilis, Oct 2026).
+ const w=d.width,depth=d.height;let bottom=h.reduce((a,b)=>Math.min(a,b),0)-.7;
  const terrainG=new THREE.PlaneGeometry(w,depth,n-1,m-1);terrainG.rotateX(-Math.PI/2);terrainG.translate(w/2,0,depth/2);
  const pos=terrainG.attributes.position;const colors=[];const c=new THREE.Color();
  for(let i=0;i<pos.count;i++){
@@ -277,6 +279,7 @@ export async function createSceneView({canvas,sceneData:d,groundPicture=null,isC
    // Texture coordinates over the board, as the first ground had them (the picture's own placement is in its texture).
    const uv=g.attributes.uv,position=g.attributes.position;for(let i=0;i<position.count;i++)uv.setXY(i,position.getX(i)/w,1-position.getZ(i)/depth);}
   const position=g.attributes.position;for(let i=0;i<position.count;i++)position.setY(i,h[i]-.025);position.needsUpdate=true;
+  {let low=0;for(let i=0;i<h.length;i++)if(h[i]<low)low=h[i];bottom=low-.7;base.position.y=bottom-.12;}
   groundColors(g);g.computeVertexNormals();g.computeBoundingSphere();g.computeBoundingBox();
   if(!sameGrid){terrain.geometry.dispose();terrain.geometry=g;}
   {const list=skirtPositions();skirtG.setAttribute('position',new THREE.Float32BufferAttribute(list,3));skirtG.setAttribute('color',new THREE.Float32BufferAttribute(skirtShade(list),3));}skirtG.computeVertexNormals();

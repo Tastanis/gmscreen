@@ -26954,7 +26954,8 @@ function createTemplateTool() {
       tokenMovementController?.handleDragEnd({ commit: true, moved: true });
       const result = await commitCanonicalTokenMoves({ sceneId, moves, source: 'drag', originalPositions, movementKind, drawnRuler: ruler });
       const placement = tokenMovementRuntime?.getConfirmedSnapshot?.()?.state?.placements?.[sceneId]?.[placementId] ?? null;
-      return { accepted: result?.accepted === true, sceneId, movementOperationIds: result?.operationIds ?? [], placement: placement ? JSON.parse(JSON.stringify(placement)) : null };
+      // A refusal commitCanonicalTokenMoves has already shown (a wall, a shut door) is not shown a second time.
+      return { accepted: result?.accepted === true, ...(result === false ? { reason: 'said' } : {}), sceneId, movementOperationIds: result?.operationIds ?? [], placement: placement ? JSON.parse(JSON.stringify(placement)) : null };
     } finally {
       tokenMovementController?.handleDragEnd({ commit: false });
       coordinateMovementRuler = null; coordinateMovePending = false; notifyCoordinateView();

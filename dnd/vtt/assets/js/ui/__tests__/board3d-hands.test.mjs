@@ -75,12 +75,14 @@ test('a held token is always put down by the next click (Build 520)', () => {
   assert.match(board3d, /if\(Math\.hypot\(e\.clientX-start\.x,e\.clientY-start\.y\)>5&&!clickMoveTokenId\)return;\s*const hit=pickAtClient\(e\.clientX,e\.clientY,\{tokens:false\}\);if\(!hit\)\{if\(clickMoveTokenId\)cancelDrag\(\);return;\}/);
   // The held token's box goes with the pointer: while held it lets the pointer through, so the click that puts it
   // down lands on the square, not on the token (which used to count as "put it back": "it won't place it").
-  assert.match(board3d, /else\{clickMoveTokenId=released\.id;markHeld\(released\.id\);\}\}/);
+  assert.match(board3d, /else if\(!released\.shift\)\{clickMoveTokenId=released\.id;markHeld\(released\.id\);\}\}/);
+  // Shift-click changes the selection only: it never picks a token up, nor puts a carried one down on the clicked one.
+  assert.match(board3d, /if\(clickMoveTokenId&&e\.shiftKey\)\{cancelDrag\(\);bridge\.select\(id,\{additive:true\}\);board\.focus\(\{preventScroll:true\}\);return;\}/);
   assert.match(board3d, /if\(!drag\.moved&&Math\.hypot\(e\.clientX-drag\.x,e\.clientY-drag\.y\)>5\)\{drag\.moved=true;markHeld\(drag\.id\);\}/);
   assert.match(board3d, /function cancelDrag\(\)\{sayHeld\(null\);markHeld\(null\);clickMoveTokenId=null;/);
   assert.match(css, /\.vtt-token\.vtt3d-held, \.vtt3d-on #vtt-token-layer>\.vtt-token\.vtt3d-held \* \{ pointer-events: none !important; \}/);
   // A drop that is refused says why, where it can be seen.
-  assert.match(board3d, /if\(result\?\.accepted===false&&result\.reason!=='unchanged'\)\{const words=REFUSED\[result\.reason\]\|\|/);
+  assert.match(board3d, /if\(result\?\.accepted===false&&!\['unchanged','said'\]\.includes\(result\.reason\)\)\{const words=REFUSED\[result\.reason\]\|\|/);
   assert.match(board3d, /window\.UIKit\?\.toast\?\.\(words,'warning'\);/);
   // Nor does a click while the last move is still being saved.
   assert.match(board3d, /async function commit\(hit,p,e,intent=null\)\{if\(!p\|\|p\.canMove===false\|\|context\.busy\)\{cancelDrag\(\);return;\}/);
