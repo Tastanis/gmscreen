@@ -46,7 +46,7 @@
   },
   {
     "id": "deadroot",
-    "note": "Dead Root Node 3D art (Map maker, pass 8). Matches the Dead Root Node v39 scene package.",
+    "note": "Dead Root Node 3D art (Map maker, pass 9). Matches the Dead Root Node v39 scene package.",
     "match": {
       "terrain": [
         477,
