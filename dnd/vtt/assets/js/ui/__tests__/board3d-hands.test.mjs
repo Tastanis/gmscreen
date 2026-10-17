@@ -77,7 +77,9 @@ test('a held token is always put down by the next click (Build 520)', () => {
   assert.match(board3d, /if\(Math\.hypot\(e\.clientX-start\.x,e\.clientY-start\.y\)>5&&!clickMoveTokenId\)return;\s*const hit=pickAtClient\(e\.clientX,e\.clientY,\{tokens:false\}\);if\(!hit\)\{if\(clickMoveTokenId\)cancelDrag\(\);return;\}/);
   // The held token's box goes with the pointer: while held it lets the pointer through, so the click that puts it
   // down lands on the square, not on the token (which used to count as "put it back": "it won't place it").
-  assert.match(board3d, /else if\(!released\.shift\)\{clickMoveTokenId=released\.id;markHeld\(released\.id\);\}\}/);
+  // A click selects only; a drag moves (October 16, 2026): letting go without moving never picks the token up.
+  assert.match(board3d, /if\(released\.moved\)\{const hit=dragHit\(e,find\(released\.id\),released\.air\|\|null\);if\(hit\)commit\(hit,find\(released\.id\),e,intent\);\}\}/);
+  assert.doesNotMatch(board3d, /clickMoveTokenId=released\.id/);
   // Shift-click changes the selection only: it never picks a token up, nor puts a carried one down on the clicked one.
   assert.match(board3d, /if\(clickMoveTokenId&&e\.shiftKey\)\{cancelDrag\(\);bridge\.select\(id,\{additive:true\}\);board\.focus\(\{preventScroll:true\}\);return;\}/);
   assert.match(board3d, /if\(!drag\.moved&&Math\.hypot\(e\.clientX-drag\.x,e\.clientY-drag\.y\)>5\)\{drag\.moved=true;markHeld\(drag\.id\);\}/);

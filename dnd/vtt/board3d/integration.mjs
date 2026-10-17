@@ -305,7 +305,7 @@ async function mount(){
  function supportUnder(w){const below=tethers([{...w,level:-1}])[0];return Number.isFinite(below?.bottom)?below.bottom:w.z;}
  function startLift(p,e){const w=world(p);lift={id:p.id,pointerId:e.pointerId,from:null,y:e.clientY,start:w.z,z:w.z,floor:supportUnder(w),x:w.x,yy:w.y};tokenLayer.setPointerCapture(e.pointerId);
   held={id:p.id,x:w.x,y:w.y,z:w.z};showLift();}
- // A token already held (dragged, or picked up by a click) goes up and down from where the pointer is now; the
+ // A token already held (being dragged) goes up and down from where the pointer is now; the
  // sideways preview is put away while it does.
  function liftHeld(){const id=drag?.id??clickMoveTokenId,p=find(id),pointer=drag?.pointer??(drag?{clientX:drag.x,clientY:drag.y}:hoverPointer);
   if(!p||p.canMove===false||context.busy||!pointer||!view)return;
@@ -346,7 +346,10 @@ async function mount(){
  window.addEventListener('pointermove',e=>{if(!drag||e.pointerId!==drag.pointerId||lift)return;e.stopPropagation();drag.pointer={clientX:e.clientX,clientY:e.clientY,shiftKey:e.shiftKey,ctrlKey:e.ctrlKey,altKey:e.altKey,metaKey:e.metaKey};if(!drag.moved&&Math.hypot(e.clientX-drag.x,e.clientY-drag.y)>5){drag.moved=true;markHeld(drag.id);}if(drag.moved)showHover(e,find(drag.id));if(!(e.buttons&1))finishDrag(e);},true);
  window.addEventListener('pointerup',e=>{if(!drag||e.pointerId!==drag.pointerId||(e.buttons&1))return;e.preventDefault();e.stopPropagation();finishDrag(e);},true);
  function finishDrag(e){const released=drag;if(!released)return;if(released.moved)settleRoute(e,find(released.id));const intent=bridge.captureMovementPreview?.();cancelDrag();
-  if(released.moved){const hit=dragHit(e,find(released.id),released.air||null);if(hit)commit(hit,find(released.id),e,intent);}else if(!released.shift){clickMoveTokenId=released.id;markHeld(released.id);}}
+  // A click (no drag) only selects the token, which the press already did; only a drag moves it, and letting go puts
+  // it down. It used to pick the token up, and the next click on the map moved it (Brandon, October 16, 2026: "clicking
+  // should select it. But you have to begin to drag it to move it").
+  if(released.moved){const hit=dragHit(e,find(released.id),released.air||null);if(hit)commit(hit,find(released.id),e,intent);}}
  window.addEventListener('pointercancel',e=>{if(drag&&e.pointerId===drag.pointerId)cancelDrag();},true);
  tokenLayer.addEventListener('contextmenu',e=>{const node=e.target.closest('[data-placement-id]');if(!node)return;e.preventDefault();e.stopImmediatePropagation();bridge.openSettings(node.dataset.placementId,{clientX:e.clientX,clientY:e.clientY});},true);
  window.addEventListener('blur',cancelDrag);document.addEventListener('visibilitychange',()=>{if(document.hidden)cancelDrag();});
