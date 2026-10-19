@@ -99,12 +99,13 @@ export function mountFallReview({context,placement,traits,damage,prone,climbing=
    };
    if(dismissalUnconfirmed){apply.disabled=dismiss.disabled=input.disabled=true;if(climb)climb.disabled=true;status.textContent='Dismissal unconfirmed. Reload to check the outcome.';}
    panel.append(...[title,summary,affected,label,climbNote,status,actions].filter(Boolean));document.body.append(panel);
-   // Docked at the right of the board, under the top bar: it no longer stands beside the fallen token, where it
-   // covered the very squares being clicked and swallowed those clicks (Brandon, October 16, 2026). The fallen
-   // token is named in the panel.
+   // Middle-right of the screen, where it is seen and settled (Brandon, October 19, 2026): its middle at about
+   // 62% across and halfway down, below the top bar. Not beside the fallen token, where it covered the squares
+   // being clicked (October 16), and not docked at the far right. The fallen token is named in the panel.
    const dock=()=>{if(disposed||!panel.isConnected)return;const box=panel.getBoundingClientRect(),bar=document.querySelector('.vtt-board__toolbar, .vtt-toolbar, .vtt-board__header')?.getBoundingClientRect?.();
-    const top=Math.max(12,Math.min(innerHeight-box.height-12,(bar&&bar.bottom>0&&bar.bottom<innerHeight/2?bar.bottom:160)+12));
-    panel.style.left=Math.max(12,innerWidth-box.width-64)+'px';panel.style.top=top+'px';};
+    const below=(bar&&bar.bottom>0&&bar.bottom<innerHeight/2?bar.bottom:0)+12;
+    const top=Math.max(below,Math.min(innerHeight-box.height-12,(innerHeight-box.height)/2));
+    panel.style.left=Math.max(12,Math.min(innerWidth-box.width-12,innerWidth*.62-box.width/2))+'px';panel.style.top=top+'px';};
    dock();addEventListener('resize',dock);
   }catch(error){console.error('Fall review unavailable',error);}finally{busy=false;schedule(wakePending&&!popup?0:4000);}
  };
