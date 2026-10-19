@@ -881,3 +881,7 @@ The Gravity Orchard's map is not touched.
   with Agility 1 (3 - 1 = 2) is no fall: no damage, not prone, no pop-up. Falling 4 with Agility 1 is a fall of 3.
 - **Putting a model down:** it stays where it is landing until the move is answered, instead of first dropping to
   the ground and then popping up onto the floor it reached.
+
+## Build 537: the fall pop-up is middle-right
+
+- The fall pop-up now comes up middle-right of the screen, halfway down, instead of tucked at the far right edge.
