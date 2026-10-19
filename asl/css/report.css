@@ -8,21 +8,23 @@ h1, h2, h3, p { margin: 0; }
 h1 { font-size: 16pt; }
 h2 { font-size: 11pt; margin-bottom: 5px; }
 h3 { font-size: 9.5pt; margin-bottom: 3px; }
-.report-header { display: flex; justify-content: space-between; gap: 16px; border-bottom: 2px solid #333; padding-bottom: 5px; }
-.report-header > p { text-align: right; font-size: 10pt; }
+.report-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; border-bottom: 2px solid #333; padding-bottom: 8px; }
+.report-identity { min-width: 0; }
+.report-identity p { font-size: 10pt; }
+.report-header h2, .report-summary h2 { color: black; margin: 0; font-size: 8pt; letter-spacing: .07em; text-transform: uppercase; }
+/* Skills + participation = grade; the grade box sits top right and is the largest figure. */
+.report-formula { display: flex; align-items: center; gap: 8px; flex: none; }
+.formula-term { display: flex; flex-direction: column; gap: 2px; }
+.formula-term strong { font-size: 18pt; line-height: 1; font-variant-numeric: tabular-nums; }
+.formula-term p { font-size: 8pt; line-height: 1.2; }
+.formula-op { font-size: 18pt; font-weight: bold; padding: 0 2px; }
+.report-estimate { display: flex; flex-direction: column; gap: 3px; padding: 6px 12px 8px; border: 3px solid black; }
+.report-estimate strong { font-size: 38pt; line-height: 1; font-variant-numeric: tabular-nums; }
 .report-summary { padding-top: 9px; }
-.report-summary h2 { color: black; margin: 0; font-size: 8pt; letter-spacing: .07em; text-transform: uppercase; }
 .report-summary p { font-size: 9pt; }
-/* The grade leads: one ruled strip, largest figure first. */
-.report-band { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; border: 2.5px solid black; }
-.report-band > div { display: flex; flex-direction: column; gap: 3px; padding: 6px 9px; border-left: 1px solid black; }
-.report-band > div:first-child { border-left: 0; }
-.report-band strong { font-size: 25pt; line-height: 1; font-variant-numeric: tabular-nums; }
-.report-band .report-estimate strong { font-size: 38pt; }
-.report-attendance { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 34px; margin-top: 8px; padding: 6px 9px; border: 2.5px solid black; }
-.report-attendance h2 { font-size: 10pt; }
+.report-attendance { display: grid; grid-template-columns: auto auto auto 1fr; align-items: baseline; gap: 0 28px; padding: 6px 10px; border: 2.5px solid black; }
 .report-attendance p { white-space: nowrap; }
-.report-attendance strong { font-size: 20pt; line-height: 1; margin-right: 3px; font-variant-numeric: tabular-nums; }
+.report-attendance strong { font-size: 16pt; line-height: 1; font-variant-numeric: tabular-nums; }
 .report-improvements { margin-top: 10px; }
 .improvement-columns { columns: 3; column-gap: 20px; font-size: 9.5pt; }
 .improvement-group { margin-bottom: 7px; }
@@ -51,7 +53,8 @@ h3 { font-size: 9.5pt; margin-bottom: 3px; }
 .report-progress-chart line:not(.chart-axis) { stroke-width: .35; }
 .report-progress-chart polyline:not(.chart-line) { stroke-width: 1; }
 .report-comments { margin-top: 10px; break-inside: avoid; }
-.comment-space { height: 62px; background: repeating-linear-gradient(to bottom, white 0, white 20px, black 20px, black 21px); }
+/* Real rules, not a gradient: gradients print as images, which slows copiers. */
+.comment-space div { height: 21px; border-bottom: 1px solid black; }
 @page { size: letter portrait; margin: .4in; }
 @media print {
     .report-actions { display: none; }

@@ -42,8 +42,9 @@ function aslhub_report_summary(array $payload): array {
     $participation = $payload['participation_metrics'];
     $earned = array_sum($participation['points']); $possible = array_sum($participation['max_points']);
     $participationPercent = $possible > 0 ? 100 * $earned / $possible : null;
+    // The report still shows pace above 100%, but the grade counts at most 100% skills.
     $estimatedGrade = $pace !== null && $participationPercent !== null
-        ? (2 * $pace + $participationPercent) / 3 : null;
+        ? (2 * min(100, $pace) + $participationPercent) / 3 : null;
     return [
         'estimated_grade_percent' => $estimatedGrade === null ? null : round($estimatedGrade, 1),
         'student' => $payload['student'], 'today' => $payload['today'],

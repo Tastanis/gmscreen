@@ -34,7 +34,18 @@ for(const mark of await reports.locator('.report-progress-chart line, .report-pr
  assert.equal(await mark.evaluate(e=>getComputedStyle(e).stroke),'rgb(0, 0, 0)','monochrome chart marks');
 }
 assert.equal(await reports.locator('.report-progress-chart polyline[stroke-dasharray="7 5"]').count(),2,'grade reference dash patterns retained');
-assert.equal(await reports.getByText('Projected year-end skills',{exact:false}).count(),2);
+assert.equal(await reports.getByText('Year-end pace',{exact:false}).count(),2);
+assert.equal(await reports.getByText('Overall completion',{exact:false}).count(),0);
+for (const formula of await reports.locator('.report-formula').all()) {
+ assert.deepEqual(await formula.locator('.formula-op').allTextContents(),['+','=']);
+ const box=await formula.locator('.report-estimate').boundingBox(),header=await formula.locator('xpath=ancestor::header').boundingBox();
+ assert(box.x+box.width>header.x+header.width-2 && box.y<header.y+header.height,'estimated grade sits top right');
+}
+assert.equal(await reports.getByText("You've missed more days than",{exact:false}).count(),2);
+for (const row of await reports.locator('.report-attendance').all()) {
+ const tops=await row.locator('p').evaluateAll(ps=>ps.map(p=>Math.round(p.getBoundingClientRect().top)));
+ assert.equal(new Set(tops).size,1,'attendance figures share one line');
+}
 assert.equal(await reports.locator('.report-participation-chart').count(),2);
 assert.equal(await reports.locator('.report-estimate').count(),2);
 assert(await reports.locator('.report-participation-chart polyline').count() >= 2);

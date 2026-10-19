@@ -166,7 +166,8 @@ foreach ([62,64] as $targetCount) {
     unset($paceBlock);
     verify(abs(aslhub_expected_growth($paceBlocks,$targetCount)-2*$targetCount)<.00001, 'slower start retains annual target');
 }
-verify(abs($summary['estimated_grade_percent'] - 694.7) < .01, 'grade estimate weights skills twice participation and excludes leadership');
+verify($summary['pace_percent'] > 100 && abs($summary['estimated_grade_percent'] - (200 + $summary['participation_percent']) / 3) < .1,
+    'grade estimate caps skills at 100%, weights skills twice participation and excludes leadership');
 $noPace = $payload;
 $noPace['reporting_blocks'][1]['instructional_days_elapsed'] = 0;
 verify(aslhub_report_summary($noPace)['estimated_grade_percent'] === null, 'no grade estimate before a nonzero skills expectation');
