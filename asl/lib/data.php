@@ -153,7 +153,8 @@ function aslhub_reporting_blocks(PDO $pdo): array {
     return $rows;
 }
 
-/** Proficiency snapshots evaluated at every block end (or today for the partial block). */
+/** Proficiency snapshots at every block end. The latest started block counts through today,
+ * so scores entered after it ends show on its report until the next block starts. */
 function aslhub_block_progress(PDO $pdo, int $userId, int $level, array $blocks): array {
     if (!$blocks) return ['overall' => [], 'byBucket' => [], 'byStandard' => []];
     $stmt = $pdo->prepare("SELECT h.learning_target_id, h.score, h.scored_at, s.bucket_id, s.standard_id
@@ -172,7 +173,9 @@ function aslhub_block_progress(PDO $pdo, int $userId, int $level, array $blocks)
 /** Pure score-history replay used by the dashboard and disposable tests. */
 function aslhub_progress_from_events(array $events, array $blocks, string $today): array {
     $latest = []; $bucketOf = []; $standardOf = []; $overall = []; $byBucket = []; $byStandard = []; $i = 0; $n = count($events);
-    foreach ($blocks as $block) {
+    $lastStarted = null;
+    foreach (array_values($blocks) as $index => $block) if ($block['start_date'] <= $today && ($block['instructional_days_elapsed'] ?? 1) > 0) $lastStarted = $index;
+    foreach (array_values($blocks) as $index => $block) {
         if ($block['start_date'] > $today) {
             $overall[] = null;
             foreach ($byBucket as &$series) $series[] = null;
@@ -181,7 +184,7 @@ function aslhub_progress_from_events(array $events, array $blocks, string $today
             unset($series);
             continue;
         }
-        $cutoff = min($block['end_date'], $today) . ' 23:59:59';
+        $cutoff = ($index === $lastStarted ? $today : min($block['end_date'], $today)) . ' 23:59:59';
         while ($i < $n && $events[$i]['scored_at'] <= $cutoff) {
             $tid = (int)$events[$i]['learning_target_id'];
             $latest[$tid] = (int)$events[$i]['score'];

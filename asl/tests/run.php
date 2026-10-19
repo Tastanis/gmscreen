@@ -38,6 +38,11 @@ $progress = aslhub_progress_from_events($events,$scoreBlocks,'2026-01-15');
 expect_same([1,2,null], $progress['overall'], 'repeated clicks use only latest target score at each checkpoint');
 expect_same([1,2,null], $progress['byStandard']['CLS.1'], 'standard series is independently scoped');
 expect_same([1,2,null], $progress['byBucket']['CLS'], 'bucket series is independently scoped');
+$gapBlocks = [['start_date'=>'2026-01-01','end_date'=>'2026-01-10'],['start_date'=>'2026-01-15','end_date'=>'2026-01-20']];
+$late = [['learning_target_id'=>1,'score'=>2,'scored_at'=>'2026-01-05 09:00:00','bucket_id'=>'CLS','standard_id'=>'CLS.1'],
+    ['learning_target_id'=>2,'score'=>2,'scored_at'=>'2026-01-12 09:00:00','bucket_id'=>'CLS','standard_id'=>'CLS.2']];
+expect_same([2,null], aslhub_progress_from_events($late,$gapBlocks,'2026-01-13')['overall'], 'scores entered after a block ends count on it until the next block starts');
+expect_same([1,2], aslhub_progress_from_events($late,$gapBlocks,'2026-01-16')['overall'], 'once the next block starts, late scores move to it');
 
 $participation = [100,100,100,60,60,60,60,60];
 $trend = [];

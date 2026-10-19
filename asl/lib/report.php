@@ -69,7 +69,7 @@ function aslhub_student_report(PDO $pdo, array $payload): array {
         WHERE user_id=? ORDER BY scored_at, id');
     $stmt->execute([$payload['student']['id']]);
     $report['improvements'] = $report['block'] ? aslhub_report_improvements($stmt->fetchAll(), $report['targets'],
-        $report['previous_block']['end_date'] ?? null, min($report['block']['end_date'], $report['today'])) : [];
+        $report['previous_block']['end_date'] ?? null, $report['today']) : []; // Latest block: through today.
     unset($report['targets']);
     return $report;
 }
