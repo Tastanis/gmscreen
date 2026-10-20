@@ -58,8 +58,9 @@
       "scale": 1.15
     },
     "sluice-warden-level-4-defender": {
-      "model": "warden",
-      "scale": 1
+      "model": "warden-meshy",
+      "scale": 1.15,
+      "noBase": true
     },
     "sluice-rootgnawer-level-4-minion": {
       "model": "rootgnawer",
