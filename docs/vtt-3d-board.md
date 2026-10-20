@@ -25,6 +25,9 @@ same as before. Vision and fog are still in the code but switched off.
 - Left out because they only make sense in 2D: per-level floor pictures and the floor cut-out tool.
 - The Height control hides everything above the Height number.
 - A flying token has a green line straight down to the ground under it.
+- October 19, 2026: abilities are never blocked, only informed ("never block abilities. just inform. we
+  should always be able to force through things"). The 3D board shows range, legal squares and areas as
+  guides; it never refuses a pick. Any token can be picked as a target, as on the 2D board.
 
 ## Where the code is
 

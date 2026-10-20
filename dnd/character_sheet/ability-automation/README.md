@@ -4,6 +4,8 @@ This folder contains the character-sheet ability automation system: paste-in JSO
 
 Start here before changing automation code. Saved ability data, paste UI, runtime execution, and VTT board effects are kept separate.
 
+**Never block an ability; only inform** (Brandon, October 19, 2026: "never block abilities. just inform. we should always be able to force through things"). Out of range, no line of sight, not enough heroic resource, a target or square that does not fit: the runner and the board say so (a warning, a highlight, a note in the prompt) and the user can always go ahead. Do not add a check that refuses an ability or leaves it impossible to finish. Target picking already works this way: any token can be picked, and range is shown as a guide only.
+
 For LLM-friendly authoring docs, read [`AUTHORING.md`](AUTHORING.md). For the registry of every supported field, hook, and feature, read [`REGISTRY.md`](REGISTRY.md).
 
 ## File Map
