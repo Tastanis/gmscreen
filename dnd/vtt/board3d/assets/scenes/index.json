@@ -32,16 +32,16 @@
     },
     "light": {
       "hemi": [
-        "#eeecf6",
-        "#b8a080",
-        3.4
+        "#e6e4f2",
+        "#ae9676",
+        2.5
       ],
       "sun": [
-        "#ffdcb8",
-        4.6
+        "#ffd8b0",
+        4
       ],
-      "rim": 1.6,
-      "exposure": 1.8
+      "rim": 1.3,
+      "exposure": 1.4
     }
   },
   {
@@ -70,16 +70,16 @@
     },
     "light": {
       "hemi": [
-        "#f2eefa",
-        "#b4a6bc",
-        5.4
+        "#ece6f8",
+        "#a898b0",
+        3.6
       ],
       "sun": [
-        "#ffdcc0",
-        4.8
+        "#ffd4b0",
+        3.6
       ],
-      "rim": 2,
-      "exposure": 2.15
+      "rim": 1.5,
+      "exposure": 1.6
     }
   }
 ]

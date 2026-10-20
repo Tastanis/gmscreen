@@ -31,12 +31,12 @@ export async function readGlb(url){
   const tex=new THREE.Texture(image);tex.flipY=false;tex.colorSpace=srgb?THREE.SRGBColorSpace:THREE.NoColorSpace;const sm=json.samplers?.[t.sampler]||{},wrap=c=>c===33071?THREE.ClampToEdgeWrapping:c===33648?THREE.MirroredRepeatWrapping:THREE.RepeatWrapping;tex.wrapS=wrap(sm.wrapS);tex.wrapT=wrap(sm.wrapT);tex.anisotropy=4;tex.needsUpdate=true;textures.set(key,tex);return tex;};
  const materials=new Map();
  const material=(index,colored)=>{const key=index+':'+colored;if(materials.has(key))return materials.get(key);const m=json.materials?.[index]||{},pbr=m.pbrMetallicRoughness||{},f=pbr.baseColorFactor||[1,1,1,1];
-  const common={color:new THREE.Color().setRGB(f[0],f[1],f[2],THREE.SRGBColorSpace),map:texture(pbr.baseColorTexture,true),vertexColors:colored,side:m.doubleSided?THREE.DoubleSide:THREE.FrontSide,opacity:f[3]};
+  const common={color:new THREE.Color().setRGB(f[0],f[1],f[2]),map:texture(pbr.baseColorTexture,true),vertexColors:colored,side:m.doubleSided?THREE.DoubleSide:THREE.FrontSide,opacity:f[3]};
   let out;
   if(m.alphaMode==='BLEND'&&m.extras?.blending==='additive')out=new THREE.MeshBasicMaterial({...common,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,forceSinglePass:true,toneMapped:false});
   else if(m.extensions?.KHR_materials_unlit)out=new THREE.MeshBasicMaterial({...common,transparent:m.alphaMode==='BLEND',toneMapped:false});
   else{out=new THREE.MeshStandardMaterial({...common,metalness:pbr.metallicFactor??1,roughness:pbr.roughnessFactor??1,transparent:m.alphaMode==='BLEND',alphaTest:m.alphaMode==='MASK'?(m.alphaCutoff??.5):0,
-   emissive:new THREE.Color().setRGB(...(m.emissiveFactor||[0,0,0]),THREE.SRGBColorSpace),emissiveMap:texture(m.emissiveTexture,true),normalMap:texture(m.normalTexture,false)});
+   emissive:new THREE.Color().setRGB(...(m.emissiveFactor||[0,0,0])),emissiveMap:texture(m.emissiveTexture,true),normalMap:texture(m.normalTexture,false)});
    // glTF packs roughness in green and metalness in blue of one texture; three.js reads them from the same channels.
    const mr=texture(pbr.metallicRoughnessTexture,false);if(mr){out.roughnessMap=mr;out.metalnessMap=mr;}
    if(out.normalMap&&m.normalTexture?.scale)out.normalScale.set(m.normalTexture.scale,m.normalTexture.scale);
