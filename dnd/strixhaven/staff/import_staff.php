@@ -1,5 +1,6 @@
 <?php
 session_start();
+require_once __DIR__ . '/../../includes/players.php'; players_gate(); // a player turned off is logged out
 
 header('Content-Type: application/json');
 

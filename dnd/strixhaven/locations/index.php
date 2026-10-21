@@ -1,5 +1,6 @@
 <?php
 session_start();
+require_once __DIR__ . '/../../includes/players.php'; players_gate(); // a player turned off is logged out
 
 // Check if user is logged in
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
@@ -469,6 +470,7 @@ $locationData = loadLocationData();
     <link rel="stylesheet" href="../../css/style.css">
     <link rel="stylesheet" href="css/locations.css">
     <link rel="stylesheet" href="../gm/css/character-refs.css">
+    <?php echo players_script(); ?>
 </head>
 <body>
     <!-- Top Navigation Bar -->

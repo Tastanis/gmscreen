@@ -2,6 +2,7 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
+require_once __DIR__ . '/../includes/players.php'; players_gate(); // a player turned off is logged out
 
 header('Content-Type: application/json');
 
@@ -12,7 +13,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 
 $user = $_SESSION['user'];
 $is_gm = ($user === 'GM');
-$characters = array('cal', 'sharon', 'indigo', 'zepha');
+$characters = players_ids(); // every player on the site's list
 
 $character = isset($_POST['character']) ? strtolower(trim($_POST['character'])) : '';
 $hirelingId = isset($_POST['hireling_id']) ? trim($_POST['hireling_id']) : '';

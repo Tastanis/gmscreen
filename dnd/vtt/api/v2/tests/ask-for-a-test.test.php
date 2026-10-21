@@ -81,7 +81,7 @@ $server = null;
 try {
     foreach (['sessions', 'dnd/includes', 'dnd/vtt/lib', 'dnd/data', 'dnd/character_sheet/data'] as $folder) mkdir("$base/$folder", 0777, true);
     copy("$dnd/chat_handler.php", "$site/chat_handler.php");
-    foreach (['chat_pusher.php', 'chat_participants.php', 'ask-test.php'] as $file) copy("$dnd/includes/$file", "$site/includes/$file");
+    foreach (['chat_pusher.php', 'chat_participants.php', 'ask-test.php', 'players.php'] as $file) copy("$dnd/includes/$file", "$site/includes/$file");
     copy("$dnd/vtt/lib/PusherClient.php", "$site/vtt/lib/PusherClient.php");
     file_put_contents("$site/character_sheet/data/character_sheets.json", json_encode($sheets));
     // Signs a request in as whoever its header names. Written here, for this test, and nowhere in the site.

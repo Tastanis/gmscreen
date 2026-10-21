@@ -28,6 +28,7 @@ if ($API_KEY !== '' && (!isset($_GET['key']) || $_GET['key'] !== $API_KEY)) {
 
 // Load data utilities
 require_once __DIR__ . '/../strixhaven/students/data-utils.php';
+require_once __DIR__ . '/../includes/players.php';
 require_once __DIR__ . '/../strixhaven/staff/data-utils.php';
 
 $validColleges = ['lorehold', 'prismari', 'quandrix', 'silverquill', 'witherbloom'];
@@ -116,12 +117,12 @@ function formatStudent($s) {
     // Relationships
     if (!empty($s['relationships']) && is_array($s['relationships'])) {
         $relLines = [];
-        $characters = ['cal', 'zepha', 'sharon', 'indigo'];
-        foreach ($characters as $char) {
+        // Every player on the list, on or off, so an export never leaves anyone's points out
+        foreach (players_names() as $char => $name) {
             $points = $s['relationships']["{$char}_points"] ?? '';
             $notes = $s['relationships']["{$char}_notes"] ?? '';
             if ($points !== '' || !empty($notes)) {
-                $entry = ucfirst($char);
+                $entry = $name;
                 if ($points !== '') $entry .= " ({$points} points)";
                 if (!empty($notes)) $entry .= ": {$notes}";
                 $relLines[] = $entry;

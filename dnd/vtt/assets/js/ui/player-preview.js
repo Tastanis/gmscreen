@@ -84,8 +84,10 @@ export function mountPlayerPreview(root, store) {
       const roster=await request('/dnd/vtt/api/v2/player-roster.php');
       if(current!==sequence)return;
       const selected=select.value;
-      select.replaceChildren(...roster.players.map(id=>{const option=document.createElement('option');option.value=id;option.textContent=id;return option;}));
-      if(roster.players.includes(selected))select.value=selected;
+      // The players who are on, by name (a player turned off is not offered).
+      const offered=Array.isArray(roster.active)?roster.active:roster.players;
+      select.replaceChildren(...offered.map(id=>{const option=document.createElement('option');option.value=id;option.textContent=roster.names?.[id]||id;return option;}));
+      if(offered.includes(selected))select.value=selected;
       if(!select.value){status.textContent='No players are configured.';return;}
       const {preview}=await request('/dnd/vtt/api/v2/player-preview.php?user='+encodeURIComponent(select.value));
       if(current!==sequence)return;

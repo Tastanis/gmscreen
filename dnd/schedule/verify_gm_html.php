@@ -1,5 +1,6 @@
 <?php
 session_start();
+require_once __DIR__ . '/../includes/players.php'; players_gate(); // a player turned off is logged out
 
 // Check if user is logged in as GM
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {

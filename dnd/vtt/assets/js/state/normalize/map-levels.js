@@ -43,6 +43,14 @@ export let PLAYER_CHARACTER_USER_IDS = Object.freeze([
   'zepha',
 ]);
 
+// The players who are on (window.vttConfig.activePlayers): what pick lists offer. The roster above is every player,
+// on or off, for everything that is data.
+export let ACTIVE_PLAYER_USER_IDS = PLAYER_CHARACTER_USER_IDS;
+export function configureActivePlayers(raw) {
+  if (!Array.isArray(raw)) return;
+  ACTIVE_PLAYER_USER_IDS = Object.freeze(raw.map(value => typeof value === 'string' ? value.trim().toLowerCase() : '').filter(id => PLAYER_CHARACTER_USER_IDS.includes(id)));
+}
+
 const mapLevelSeed = Date.now();
 export function configurePlayerRoster(raw) {
   if (!Array.isArray(raw) || raw.length > 100) throw new Error('Invalid player roster.');
@@ -50,6 +58,7 @@ export function configurePlayerRoster(raw) {
   if (ids.some(id => !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id) || id === 'gm')) throw new Error('Invalid player roster profile ID.');
   PLAYER_CHARACTER_USER_IDS = Object.freeze([...new Set(ids)]);
   KNOWN_LEVEL_USER_IDS = Object.freeze(['gm', ...PLAYER_CHARACTER_USER_IDS]);
+  ACTIVE_PLAYER_USER_IDS = PLAYER_CHARACTER_USER_IDS;
 }
 let mapLevelSequence = 0;
 

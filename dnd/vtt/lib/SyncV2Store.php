@@ -29,6 +29,8 @@ require_once __DIR__ . '/SyncV2Layout.php';
 final class SyncV2Store
 {
     private array $playerCharacterUserIds;
+    /** id => words a token's name may carry to be that player's (PlayerRoster::aliases). */
+    private array $playerAliases;
 
     private PDO $pdo;
     private string $worldId;
@@ -50,6 +52,7 @@ final class SyncV2Store
         int $snapshotRetention = 20
     ) {
         $this->playerCharacterUserIds = PlayerRoster::playerIds();
+        $this->playerAliases = PlayerRoster::aliases();
         if (!extension_loaded('pdo_sqlite')) {
             throw new RuntimeException('Sync V2 requires the PDO SQLite extension.');
         }
@@ -3661,7 +3664,8 @@ final class SyncV2Store
         return count($profiles);
     }
 
-    private function linkedPlayerProfileForPlacement(array $placement): ?string
+    /** The player a token is (its profile field, or exactly one player's name or id in its name), or null. */
+    public function linkedPlayerProfileForPlacement(array $placement): ?string
     {
         $metadata = is_array($placement['metadata'] ?? null)
             ? $placement['metadata']
@@ -3686,9 +3690,12 @@ final class SyncV2Store
         }
         $matches = [];
         foreach ($this->playerCharacterUserIds as $profileId) {
-            $alias = preg_replace('/[^a-z0-9]+/', ' ', $profileId);
-            if (preg_match('/(^|\s)' . preg_quote($alias, '/') . '(\s|$)/', $normalizedName) === 1) {
-                $matches[] = $profileId;
+            // The id, or the player's display name (a new player's id is "player5"; their token is called by name).
+            foreach ($this->playerAliases[$profileId] ?? [preg_replace('/[^a-z0-9]+/', ' ', $profileId)] as $alias) {
+                if (preg_match('/(^|\s)' . preg_quote($alias, '/') . '(\s|$)/', $normalizedName) === 1) {
+                    $matches[] = $profileId;
+                    break;
+                }
             }
         }
         return count($matches) === 1 ? $matches[0] : null;

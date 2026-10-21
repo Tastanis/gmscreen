@@ -1,5 +1,6 @@
 <?php
 session_start();
+require_once __DIR__ . '/../includes/players.php'; players_gate(); // a player turned off is logged out
 
 // Check if user is logged in
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
@@ -46,13 +47,10 @@ if (file_exists($schedules_file)) {
 
 // Ensure current week tracking exists
 if (!isset($schedules['_current_week'])) {
-    $schedules['_current_week'] = array(
-        'GM' => 1,
-        'cal' => 1,
-        'sharon' => 1,
-        'indigo' => 1,
-        'zepha' => 1
-    );
+    $schedules['_current_week'] = array('GM' => 1);
+    foreach (players_ids() as $char) {
+        $schedules['_current_week'][$char] = 1;
+    }
 }
 
 // Update current week for this user
@@ -85,20 +83,15 @@ echo json_encode(array(
 
 // Helper function
 function initializeEmptySchedule() {
-    $valid_characters = ['cal', 'sharon', 'indigo', 'zepha'];
+    $valid_characters = players_ids();
     $valid_days = ['monday', 'tuesday', 'thursday', 'friday', 'saturday', 'sunday'];
-    
+
     $schedule = array(
-        '_current_week' => array(
-            'GM' => 1,
-            'cal' => 1,
-            'sharon' => 1,
-            'indigo' => 1,
-            'zepha' => 1
-        )
+        '_current_week' => array('GM' => 1)
     );
-    
+
     foreach ($valid_characters as $char) {
+        $schedule['_current_week'][$char] = 1;
         $schedule[$char] = array(
             '1' => array()
         );

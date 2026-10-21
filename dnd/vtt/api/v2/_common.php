@@ -136,9 +136,24 @@ function vttSyncV2HiddenMapLevelIds(array $sceneConfig): array
     return $hidden;
 }
 
+/**
+ * A token of a player the GM has turned off (the site's player list): players are not sent it, as a hidden token,
+ * until that player is on again. Nothing on the token is changed.
+ */
+function vttSyncV2PlacementOfPlayerOff(array $placement): bool
+{
+    static $off = null;
+    $off ??= array_flip(array_values(array_diff(PlayerRoster::playerIds(), PlayerRoster::activeIds())));
+    if (!$off) {
+        return false;
+    }
+    $profile = vttSyncV2Store()->linkedPlayerProfileForPlacement($placement);
+    return $profile !== null && isset($off[$profile]);
+}
+
 function vttSyncV2PlacementHiddenForPlayer(array $placement, array $sceneConfig): bool
 {
-    if (vttSyncV2PlacementHidden($placement)) {
+    if (vttSyncV2PlacementHidden($placement) || vttSyncV2PlacementOfPlayerOff($placement)) {
         return true;
     }
     $levelId = is_string($placement['levelId'] ?? null)

@@ -427,19 +427,10 @@ header h1 {
     text-transform: uppercase;
 }
 
-/* Character-specific accent colors */
-.character-section:nth-child(2) .character-name {
-    border-left: 4px solid var(--danger);
-} /* Cal */
-.character-section:nth-child(3) .character-name {
-    border-left: 4px solid var(--info);
-} /* Sharon */
-.character-section:nth-child(4) .character-name {
-    border-left: 4px solid var(--success);
-} /* Indigo */
-.character-section:nth-child(5) .character-name {
-    border-left: 4px solid var(--accent);
-} /* Zepha */
+/* Character-specific accent colors: each section sets --player-color from the player list */
+.character-section .character-name {
+    border-left: 4px solid var(--player-color, var(--accent));
+}
 
 /* ===== TABLE STYLES ===== */
 .schedule-table {

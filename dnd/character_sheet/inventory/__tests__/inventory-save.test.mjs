@@ -14,6 +14,9 @@ async function fixture() {
   for (const name of ['inventory_handler.php', 'AtomicJsonFile.php', 'InventoryEffectTable.php']) {
     await copyFile(new URL('../../' + name, import.meta.url), path.join(sheet, name));
   }
+  // The site's player list beside it, as on the site (the handler asks it who the players are).
+  await mkdir(path.join(root, 'includes'));
+  await copyFile(new URL('../../../includes/players.php', import.meta.url), path.join(root, 'includes', 'players.php'));
   const wrapper = path.join(root, 'request.php');
   await writeFile(wrapper, `<?php
 session_start();

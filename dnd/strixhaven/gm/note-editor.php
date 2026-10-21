@@ -2,6 +2,7 @@
 error_log("DEBUG: note-editor.php loaded at " . date('Y-m-d H:i:s'));
 
 session_start();
+require_once __DIR__ . '/../../includes/players.php'; players_gate(); // a player turned off is logged out
 
 // Check if user is logged in and is GM
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
@@ -336,6 +337,7 @@ if (!$currentTab) {
             }
         }
     </style>
+    <?php echo players_script(); ?>
 </head>
 <body>
     <div class="note-editor-container">

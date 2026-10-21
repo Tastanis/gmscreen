@@ -48,7 +48,12 @@ test('where the turn began, a ghost of the token stays once it moves', () => {
 
 test('right-click a tracker entry pings its token, or says it is not on this map', () => {
   has(board, "combatTrackerRoot.addEventListener('contextmenu', handleCombatTrackerContextMenu);");
-  assert.match(board, /function handleCombatTrackerContextMenu\(event\) \{[\s\S]{0,400}if \(!pingBoardTokens\(members\.length \? members : \[representativeId\]\)\) \{\s*window\.UIKit\?\.toast\?\.\('That token is not on this map\.', 'info'\);/);
+  assert.match(board, /function findFromTracker\(representativeId, bringView\) \{[\s\S]{0,300}\.filter\(id => isGmUser\(\) \|\| !getPlacementFromStore\(id\)\?\.hidden\);\s*const found = bringView \? \(ids\.length \? centerOnBoardTokens\(ids\) : 0\) : pingBoardTokens\(ids\);\s*if \(!found\) \{\s*window\.UIKit\?\.toast\?\.\('That token is not on this map\.', 'info'\);/);
+  // Build 545: let go within 0.75 s, a ping; held longer, the ping and the view comes to it.
+  has(board, 'const TRACKER_HOLD_MS = 750;');
+  has(board, "combatTrackerRoot.addEventListener('pointerdown', handleCombatTrackerRightPress);\n    window.addEventListener('pointerup', handleCombatTrackerRightRelease);");
+  has(board, 'findFromTracker(press.id, trackerReleasedAt - press.at >= TRACKER_HOLD_MS);');
+  has(board, 'if (!trackerPress && performance.now() - trackerReleasedAt > 400) findFromTracker(entry.dataset.combatantId, false);', 'the menu key pings; a mouse right-click is not done twice');
   assert.match(board, /function pingBoardTokens\(placementIds\) \{[\s\S]{0,500}if \(!placement \|\| \(placement\.hidden && !isGmUser\(\)\)/, 'a hidden token is not given away');
 });
 

@@ -781,14 +781,24 @@ class CharacterLookup {
                 ${student.relationships ? `
                 <div class="info-block">
                     <h3>PC Relationships</h3>
-                    ${student.relationships.cal_points || student.relationships.cal_notes ? `<p><strong>Cal:</strong> ${this.escapeHtml(student.relationships.cal_points || '')} ${this.escapeHtml(student.relationships.cal_notes || '')}</p>` : ''}
-                    ${student.relationships.zepha_points || student.relationships.zepha_notes ? `<p><strong>Zepha:</strong> ${this.escapeHtml(student.relationships.zepha_points || '')} ${this.escapeHtml(student.relationships.zepha_notes || '')}</p>` : ''}
-                    ${student.relationships.sharon_points || student.relationships.sharon_notes ? `<p><strong>Sharon:</strong> ${this.escapeHtml(student.relationships.sharon_points || '')} ${this.escapeHtml(student.relationships.sharon_notes || '')}</p>` : ''}
-                    ${student.relationships.indigo_points || student.relationships.indigo_notes ? `<p><strong>Indigo:</strong> ${this.escapeHtml(student.relationships.indigo_points || '')} ${this.escapeHtml(student.relationships.indigo_notes || '')}</p>` : ''}
+                    ${this.getRelationshipPlayers().map(player => {
+                        const points = student.relationships[`${player.id}_points`];
+                        const notes = student.relationships[`${player.id}_notes`];
+                        return points || notes ? `<p><strong>${this.escapeHtml(player.name)}:</strong> ${this.escapeHtml(points || '')} ${this.escapeHtml(notes || '')}</p>` : '';
+                    }).join('')}
                 </div>
                 ` : ''}
             </div>
         `;
+    }
+
+    // The players whose relationships are shown: those on in window.dndPlayers (includes/players.php),
+    // or the original four when the page has no list
+    getRelationshipPlayers() {
+        if (Array.isArray(window.dndPlayers)) {
+            return window.dndPlayers.filter(p => p && p.active).map(p => ({ id: p.id, name: p.name || p.id }));
+        }
+        return [['cal', 'Cal'], ['zepha', 'Zepha'], ['sharon', 'Sharon'], ['indigo', 'Indigo']].map(([id, name]) => ({ id, name }));
     }
 
     createStaffDetailContent(staff) {

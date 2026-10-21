@@ -1,5 +1,6 @@
 import {showHeroTokenConfirmation} from './hero-token-confirmation.js';
-const PC_CHARACTER_IDS = new Set(['cal', 'sharon', 'indigo', 'zepha']);
+// Every player on the site's list, on or off (window.vttConfig.playerRoster); the four when it is missing.
+const PC_CHARACTER_IDS = new Set(Array.isArray(globalThis.vttConfig?.playerRoster) ? globalThis.vttConfig.playerRoster : ['cal', 'sharon', 'indigo', 'zepha']);
 
 const SKILL_GROUPS = {
   Crafting: [

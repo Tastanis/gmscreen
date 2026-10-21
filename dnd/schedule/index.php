@@ -2,6 +2,7 @@
 if (session_status() == PHP_SESSION_NONE) {
     session_start();
 }
+require_once __DIR__ . '/../includes/players.php'; players_gate(); // a player turned off is logged out
 
 // Check if user is logged in
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
@@ -12,14 +13,12 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 $user = $_SESSION['user'];
 $is_gm = ($user === 'GM');
 
-// Define character names for display
-$character_names = [
-    'cal' => 'CAL',
-    'sharon' => 'SHARON', 
-    'indigo' => 'INDIGO',
-    'zepha' => 'ZEPHA',
-    'GM' => 'GAME MASTER'
-];
+// Define character names for display (from the site's player list, on and off)
+$character_names = [];
+foreach (players_names() as $player_id => $player_name) {
+    $character_names[$player_id] = strtoupper($player_name);
+}
+$character_names['GM'] = 'GAME MASTER';
 
 // Define time blocks
 $time_blocks = [
@@ -48,17 +47,14 @@ if (!file_exists('data/')) {
 
 if (!file_exists($schedules_file)) {
     $empty_schedule = [
-        '_current_week' => [
-            'GM' => 1,
-            'cal' => 1,
-            'sharon' => 1,
-            'indigo' => 1,
-            'zepha' => 1
-        ]
+        '_current_week' => ['GM' => 1]
     ];
-    
+    foreach (players_ids() as $char) {
+        $empty_schedule['_current_week'][$char] = 1;
+    }
+
     // Initialize week 1 for all characters
-    foreach (['cal', 'sharon', 'indigo', 'zepha'] as $char) {
+    foreach (players_ids() as $char) {
         $empty_schedule[$char] = [
             '1' => []
         ];
@@ -105,12 +101,13 @@ require_once '../includes/strix-nav.php';
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Strixhaven Schedule System</title>
     <link rel="stylesheet" href="schedule.css">
+    <?php echo players_script(); ?>
 </head>
 <body>
     <?php renderStrixNav('schedule'); ?>
     <div class="container">
         <header>
-            <h1><?php echo $is_gm ? 'Game Master Schedule' : $character_names[$user] . ' Schedule'; ?></h1>
+            <h1><?php echo $is_gm ? 'Game Master Schedule' : htmlspecialchars($character_names[$user] ?? strtoupper($user)) . ' Schedule'; ?></h1>
             <div class="user-info">
                 <a href="../dashboard.php" class="back-btn">← Back to Main</a>
             </div>
@@ -143,9 +140,10 @@ require_once '../includes/strix-nav.php';
                         <span class="save-status" id="saveStatus">Ready</span>
                     </div>
                     
-                    <?php foreach (['cal', 'sharon', 'indigo', 'zepha'] as $character): ?>
-                        <div class="character-section">
-                            <h2 class="character-name"><?php echo $character_names[$character]; ?></h2>
+                    <?php // Only players who are on get a section; an off player's saved schedule is left as it is ?>
+                    <?php foreach (players_active() as $player): $character = $player['id']; ?>
+                        <div class="character-section" style="--player-color: <?php echo htmlspecialchars($player['color']); ?>">
+                            <h2 class="character-name"><?php echo htmlspecialchars($character_names[$character]); ?></h2>
                             <div class="table-wrapper">
                                 <table class="schedule-table gm-table">
                                 <thead>

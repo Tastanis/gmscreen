@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/json-file-helper.php';
+require_once __DIR__ . '/../../includes/players.php';
 
 function getStudentDataFilePath() {
     return __DIR__ . '/students.json';
@@ -19,6 +20,16 @@ function getDefaultStudentDataset() {
     ];
 }
 
+// Points and notes for every player on the list, on or off (includes/players.php)
+function getBlankStudentRelationships() {
+    $relationships = [];
+    foreach (players_ids() as $id) {
+        $relationships[$id . '_points'] = '';
+        $relationships[$id . '_notes'] = '';
+    }
+    return $relationships;
+}
+
 function getBlankStudentRecord() {
     return [
         'student_id' => 'student_' . time() . '_' . uniqid(),
@@ -34,16 +45,7 @@ function getBlankStudentRecord() {
         'edge' => '',
         'bane' => '',
         'favorites' => [],
-        'relationships' => [
-            'cal_points' => '',
-            'cal_notes' => '',
-            'zepha_points' => '',
-            'zepha_notes' => '',
-            'sharon_points' => '',
-            'sharon_notes' => '',
-            'indigo_points' => '',
-            'indigo_notes' => '',
-        ],
+        'relationships' => getBlankStudentRelationships(),
         'conflict_engine' => [
             'want' => '',
             'want_tag' => '',

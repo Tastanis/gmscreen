@@ -39,6 +39,7 @@ function ensureVttSession(): void
     if (session_status() !== PHP_SESSION_ACTIVE) {
         session_start();
     }
+    require_once __DIR__ . '/../includes/players.php'; players_gate(); // a player turned off is logged out
 }
 
 /**
@@ -486,6 +487,10 @@ function getVttBootstrapConfig(?array $authContext = null): array
     return [
         'routes' => $routes,
         'playerRoster' => PlayerRoster::playerIds(),
+        // The players who are on (offered in pick lists) and the words a token's name may carry to be each one's.
+        'activePlayers' => PlayerRoster::activeIds(),
+        'playerAliases' => PlayerRoster::aliases(),
+        'playerNames' => PlayerRoster::names(),
         'scenes' => $scenes,
         'tokens' => $tokens,
         'boardState' => $boardState,

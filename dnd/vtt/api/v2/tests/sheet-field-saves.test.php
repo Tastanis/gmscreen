@@ -13,8 +13,12 @@ declare(strict_types=1);
 function sheetCheck(bool $ok, string $message): void { if (!$ok) throw new RuntimeException($message); }
 
 $source = realpath(__DIR__ . '/../../../../character_sheet');
-$site = sys_get_temp_dir() . '/vtt-sheets-' . bin2hex(random_bytes(6));
+// The site's layout: the handler in character_sheet/, the player list in includes/ beside it.
+$root = sys_get_temp_dir() . '/vtt-sheets-' . bin2hex(random_bytes(6));
+$site = $root . '/character_sheet';
 mkdir($site . '/data', 0777, true);
+mkdir($root . '/includes', 0777, true);
+copy($source . '/../includes/players.php', $root . '/includes/players.php');
 foreach (['handler.php', 'AtomicJsonFile.php', 'CharacterWriteReceipts.php', 'SheetChanges.php'] as $file) copy($source . '/' . $file, $site . '/' . $file);
 $remove = static function (string $folder) use (&$remove): void {
     foreach (scandir($folder) ?: [] as $entry) { if ($entry === '.' || $entry === '..') continue; $path = $folder . '/' . $entry; is_dir($path) ? $remove($path) : @unlink($path); }
@@ -97,7 +101,7 @@ try {
     sheetCheck(in_array(['path'=>'hero.vitals.currentRecoveries', 'from'=>1, 'to'=>8], $respite['changes'], true), 'The respite is in it too: ' . json_encode($respite['changes']));
     sheetCheck(count(glob($site . '/data/backups/daily_character_sheets_*.json')) === 1, 'One copy of the sheets is kept for the day');
     sheetCheck(str_ends_with('sheet_changes.json', '.json') && str_ends_with('daily_character_sheets_20261013.json', '.json'), 'Both are .json, which the data folder\'s keep-out rule covers');
-} finally { $remove($site); }
+} finally { $remove($root); }
 
 // The parts by themselves.
 require_once $source . '/SheetChanges.php';

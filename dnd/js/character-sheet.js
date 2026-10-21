@@ -2035,7 +2035,9 @@ function saveAllDataForCharacter(targetCharacter, silent = false) {
     if (!isGM) return; // Only GM can save
     
     // Validate character parameter
-    if (!targetCharacter || !['cal', 'sharon', 'indigo', 'zepha'].includes(targetCharacter)) {
+    // Every player on the site's list, on or off (includes/players.php, window.dndPlayers).
+    const knownPlayers = Array.isArray(window.dndPlayers) ? window.dndPlayers.map(p => p.id) : ['cal', 'sharon', 'indigo', 'zepha'];
+    if (!targetCharacter || !knownPlayers.includes(targetCharacter)) {
         console.error('Invalid character specified for save:', targetCharacter);
         return;
     }

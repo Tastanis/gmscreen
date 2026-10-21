@@ -1,5 +1,6 @@
 <?php
 session_start();
+require_once __DIR__ . '/../../includes/players.php'; players_gate(); // a player turned off is logged out
 
 // Check if user is logged in and is GM
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
@@ -465,6 +466,7 @@ $panelTitles = loadPanelTitles($panelTitlesFile);
     <title>Strixhaven GM Screen</title>
     <link rel="stylesheet" href="css/gm-screen.css">
     <link rel="stylesheet" href="css/character-refs.css">
+    <?php echo players_script(); ?>
 </head>
 <body>
     <!-- Background Image -->

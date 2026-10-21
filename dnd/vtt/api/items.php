@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../bootstrap.php';
+require_once __DIR__ . '/../../includes/players.php';
 
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 if ($method !== 'GET') {
@@ -56,7 +57,8 @@ respondVttItemsJson(200, [
 function normalizeVttItemsCharacter($value): string
 {
     $normalized = is_string($value) ? strtolower(trim($value)) : '';
-    return in_array($normalized, ['cal', 'sharon', 'indigo', 'zepha'], true) ? $normalized : '';
+    // Every player on the site's list, on or off.
+    return in_array($normalized, players_ids(), true) ? $normalized : '';
 }
 
 function loadVttInventoryData(): array

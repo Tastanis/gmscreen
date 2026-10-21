@@ -1,5 +1,6 @@
 <?php
 session_start();
+require_once __DIR__ . '/../../includes/players.php'; players_gate(); // a player turned off is logged out
 
 // Check if user is logged in
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
@@ -44,7 +45,7 @@ function syncRelationshipsToCharacters($student) {
             $relationships = $student['relationships'];
             $studentId = $student['student_id'];
             $studentName = isset($student['name']) ? $student['name'] : '';
-            $pcs = array('cal', 'zepha', 'sharon', 'indigo');
+            $pcs = players_ids(); // every player, on or off: their stored points still sync
             $updated = false;
 
             foreach ($pcs as $pc) {
@@ -247,7 +248,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                             if (!is_array($decoded)) {
                                 return ['save' => false, 'error' => 'Invalid relationships data'];
                             }
-                            $student['relationships'] = $decoded;
+                            // Merged, not replaced: keys the page did not send (players turned off) are kept
+                            $existing = isset($student['relationships']) && is_array($student['relationships']) ? $student['relationships'] : array();
+                            $student['relationships'] = array_merge($existing, $decoded);
                         } else {
                             $student[$field] = $value;
                         }
@@ -677,6 +680,7 @@ require_once '../../includes/strix-nav.php';
     <link rel="stylesheet" href="../includes/image-adjuster.css">
     <link rel="stylesheet" href="../../Diablo/theme.css">
     <link rel="stylesheet" href="../../Diablo/satellite.css">
+    <?php echo players_script(); ?>
     <script src="../../js/diablo-theme-loader.js"></script>
     <script src="../../Diablo/theme.js" defer></script>
 </head>

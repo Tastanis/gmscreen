@@ -157,17 +157,13 @@ function renderVttSettingsPanel(string $tokenLibraryMarkup = '', bool $isGm = fa
                     <?= $tokenLibraryMarkup ?>
                 </div>
                 <?php if ($isGm): ?>
-                    <details class="vtt-roster-editor" data-player-roster-editor>
+                    <?php // The players are the site's one list now (includes/players.php), set on the dashboard's Players page. ?>
+                    <details class="vtt-roster-editor">
                         <summary>Player roster</summary>
-                        <p>List existing player profile IDs, one per line. This controls token association and Show players; it does not create accounts or character sheets. GM is included automatically.</p>
-                        <label for="vtt-roster-players">Player profile IDs</label>
-                        <textarea id="vtt-roster-players" data-roster-players rows="5" spellcheck="false"></textarea>
+                        <p>Players are added, named and turned on or off on the dashboard's Players page. A player who is off keeps their tokens and everything else.</p>
                         <div class="vtt-checkpoints__actions">
-                            <button type="button" class="btn" data-roster-save>Save roster</button>
-                            <button type="button" class="btn" data-roster-load>Load current roster</button>
-                            <button type="button" class="btn" data-roster-reload hidden>Reload this VTT</button>
+                            <a class="btn" href="../players.php" target="_blank" rel="noopener">Open the Players page</a>
                         </div>
-                        <p role="status" aria-live="polite" data-roster-status></p>
                     </details>
                 <?php endif; ?>
             </section>

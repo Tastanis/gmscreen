@@ -26,8 +26,12 @@ foreach (['../upload-image.php', 'monster_m_5.php', 'monster_m_5.png.php', 'mons
 }
 
 // ---- through the real handler --------------------------------------------------------------------
-$site = sys_get_temp_dir() . '/vtt-monster-pictures-' . bin2hex(random_bytes(6));
+// The site's layout: the handler in strixhaven/monster-creator/, the player list in includes/.
+$root = sys_get_temp_dir() . '/vtt-monster-pictures-' . bin2hex(random_bytes(6));
+$site = $root . '/strixhaven/monster-creator';
 mkdir($site . '/images', 0777, true);
+mkdir($root . '/includes', 0777, true);
+copy($source . '/../../includes/players.php', $root . '/includes/players.php');
 copy($source . '/upload-image.php', $site . '/upload-image.php');
 // Signs a request in as whoever its header names. Written here, for this test, and nowhere in the site.
 file_put_contents($site . '/router.php', '<?php session_save_path(' . var_export($site, true) . '); $as = $_SERVER["HTTP_X_TEST_USER"] ?? ""; if ($as !== "") { session_start(); $_SESSION["logged_in"] = true; $_SESSION["user"] = $as; session_write_close(); } return false;');
@@ -98,7 +102,7 @@ try {
 } finally {
     if (is_resource($server)) { proc_terminate($server); proc_close($server); }
     usleep(200000);
-    $remove($site);
+    $remove($root);
 }
 
 // ---- the folder ----------------------------------------------------------------------------------

@@ -37,6 +37,7 @@ if (defined('MONSTER_IMAGE_INCLUDE_ONLY') && MONSTER_IMAGE_INCLUDE_ONLY) {
 }
 
 session_start();
+require_once __DIR__ . '/../../includes/players.php'; players_gate(); // a player turned off is logged out
 
 // Check if user is logged in
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {

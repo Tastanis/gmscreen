@@ -172,10 +172,13 @@ async function loadScheduleData() {
 
 // ===== GM VIEW FUNCTIONS =====
 function populateGMView(allSchedules) {
-    const characters = ['cal', 'sharon', 'indigo', 'zepha'];
+    // The site's player list (players_script in index.php); only players who are on are shown
+    const characters = Array.isArray(window.dndPlayers)
+        ? window.dndPlayers.filter(p => p.active).map(p => p.id)
+        : ['cal', 'sharon', 'indigo', 'zepha'];
     const days = ['monday', 'tuesday', 'thursday', 'friday', 'saturday', 'sunday'];
     const blocks = ['block1', 'block2', 'block3', 'block4'];
-    
+
     characters.forEach(character => {
         days.forEach(day => {
             blocks.forEach(block => {

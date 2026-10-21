@@ -8,6 +8,7 @@ require_once __DIR__ . '/InventoryEffectTable.php';
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
+require_once __DIR__ . '/../includes/players.php'; players_gate(); // a player turned off is logged out
 
 header('Content-Type: application/json');
 
@@ -23,8 +24,9 @@ define('CI_DATA_FILE', __DIR__ . '/../data/character_inventory.json');
 define('CI_IMAGES_DIR', __DIR__ . '/../images');
 define('CI_IMAGES_WEB_PATH', '/dnd/images');
 
-$CI_TABS = array('cal', 'sharon', 'indigo', 'zepha', 'shared', 'gm');
-$CI_CHARACTER_TABS = array('cal', 'sharon', 'indigo', 'zepha');
+// Every player on the site's list, on or off (includes/players.php): a new one gets a tab, an off one keeps theirs.
+$CI_TABS = array_merge(players_ids(), array('shared', 'gm'));
+$CI_CHARACTER_TABS = players_ids();
 
 function ciLoadData()
 {

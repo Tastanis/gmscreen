@@ -9,6 +9,7 @@ if (PHP_SAPI !== 'cli') {
     if (session_status() === PHP_SESSION_NONE) {
         session_start();
     }
+    require_once __DIR__ . '/includes/players.php'; players_gate(); // a player turned off is logged out
 
     $chatDataFile = __DIR__ . '/data/chat_messages.json';
     $chatUploadsDir = __DIR__ . '/chat_uploads';

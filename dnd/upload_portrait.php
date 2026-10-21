@@ -1,5 +1,6 @@
 <?php
 session_start();
+require_once __DIR__ . '/includes/players.php'; players_gate(); // a player turned off is logged out
 header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/includes/portrait-upload.php';
 
@@ -15,7 +16,7 @@ try {
     }
     $user = $_SESSION['user'] ?? '';
     $character = $_POST['character'] ?? '';
-    if (!is_string($character) || !in_array($character, ['cal', 'sharon', 'indigo', 'zepha'], true)) {
+    if (!is_string($character) || !in_array($character, players_ids(), true)) {
         throw new RuntimeException('Invalid character');
     }
     if ($user !== 'GM' && $character !== $user) {

@@ -20,13 +20,14 @@ import { mountDiceRoller } from './ui/dice-roller.js';
 import { mountMemoryMonitor } from './ui/memory-monitor.js'; // [REMOVABLE] Memory monitor widget
 import { fetchScenes } from './services/scene-service.js';
 import { fetchTokens } from './services/token-service.js';
-import { configurePlayerRoster } from './state/normalize/map-levels.js';
+import { configureActivePlayers, configurePlayerRoster } from './state/normalize/map-levels.js';
 async function bootstrap() {
   // The board is drawn in 3D (board3d/). Vision and fog are switched off; the
   // server's audience projection still decides which placements reach the browser.
   window.vtt3dBoard = true;
   const config = window.vttConfig ?? {};
   configurePlayerRoster(config.playerRoster);
+  configureActivePlayers(config.activePlayers);
   const routes = config.routes ?? {};
 
   const userContext = {

@@ -1,5 +1,6 @@
 <?php
 session_start();
+require_once __DIR__ . '/includes/players.php'; players_gate(); // a player turned off is logged out
 
 // Check if user is logged in
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
@@ -38,8 +39,10 @@ foreach ($chatParticipantsMap as $participantId => $participantLabel) {
 require_once __DIR__ . '/includes/chat_pusher.php';
 $chatPusherConfig = getChatPusherClientConfig();
 
-// Define character list
-$characters = array('cal', 'sharon', 'indigo', 'zepha');
+// The players (includes/players.php): every one for saving and loading, those on for the GM's tabs and lists.
+$characters = players_ids();
+$shownCharacters = players_ids(true);
+$characterNames = players_names();
 
 // Include character integration utilities for loading student data
 require_once __DIR__ . '/strixhaven/gm/includes/character-integration.php';
@@ -142,7 +145,7 @@ function loadCharacterData() {
     if (!file_exists($dataFile)) {
         error_log("Creating new character data file (first time setup)");
         $default_data = array();
-        foreach (array('cal', 'sharon', 'indigo', 'zepha') as $char) {
+        foreach (players_ids() as $char) {
             $default_data[$char] = array(
                 'character' => array(
                     'character_name' => '',
@@ -852,7 +855,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
 // Load initial data
 $allData = loadCharacterData();
-$currentCharacter = $is_gm ? 'cal' : $user; // GM starts viewing Cal, players see their own
+$currentCharacter = $is_gm ? ($shownCharacters[0] ?? 'cal') : $user; // GM starts on the first player who is on, players see their own
 ?>
 
 <!DOCTYPE html>
@@ -871,6 +874,7 @@ $currentCharacter = $is_gm ? 'cal' : $user; // GM starts viewing Cal, players se
     <link rel="stylesheet" href="Halloween/theme.css" id="halloween-theme" disabled>
     <link rel="stylesheet" href="Christmas/theme.css" id="christmas-theme" disabled>
     <link rel="stylesheet" href="Cal/theme.css" id="cal-theme" disabled>
+    <?php echo players_script(); ?>
     <link rel="stylesheet" href="Diablo/theme.css" id="diablo-theme" disabled>
 <?php if ($chatPusherConfig !== null): ?>
     <script src="https://js.pusher.com/8.4.0/pusher.min.js"></script>
@@ -919,8 +923,8 @@ $currentCharacter = $is_gm ? 'cal' : $user; // GM starts viewing Cal, players se
                 <div class="dropdown">
                     <button type="button" class="nav-btn dropdown-btn" id="character-sheet-btn" title="Open a character sheet">Character Sheets</button>
                     <div class="dropdown-content" id="character-sheet-dropdown">
-                        <?php foreach ($characters as $character): ?>
-                            <a href="#" data-character="<?php echo $character; ?>"><?php echo ucfirst($character); ?></a>
+                        <?php foreach ($shownCharacters as $character): ?>
+                            <a href="#" data-character="<?php echo $character; ?>"><?php echo htmlspecialchars($characterNames[$character] ?? ucfirst($character)); ?></a>
                         <?php endforeach; ?>
                     </div>
                 </div>
@@ -929,21 +933,22 @@ $currentCharacter = $is_gm ? 'cal' : $user; // GM starts viewing Cal, players se
             <?php endif; ?>
             <?php if ($is_gm): ?>
                 <button type="button" class="nav-btn" id="clear-cache-btn" title="Clear server + browser cache and reload">Clear Cache</button>
+                <button type="button" class="nav-btn" id="players-btn" title="Turn players on and off, add a player" onclick="window.location.href='players.php'">Players</button>
             <?php endif; ?>
             <button class="nav-btn logout-btn" onclick="window.location.href='logout.php'">Logout</button>
         </div>
-        <h1 class="nav-title"><?php echo $is_gm ? 'GM Dashboard' : ucfirst($user) . '\'s Character Sheet'; ?></h1>
+        <h1 class="nav-title"><?php echo $is_gm ? 'GM Dashboard' : htmlspecialchars($characterNames[$user] ?? ucfirst($user)) . '\'s Character Sheet'; ?></h1>
     </div>
 
     <div class="main-container">
         <?php if ($is_gm): ?>
             <!-- GM Character Tabs -->
             <div class="character-tabs">
-                <?php foreach ($characters as $index => $character): ?>
+                <?php foreach ($shownCharacters as $index => $character): ?>
                     <button class="character-tab <?php echo $index === 0 ? 'active' : ''; ?>" 
                             data-character="<?php echo $character; ?>"
                             onclick="switchCharacter('<?php echo $character; ?>').catch(err => console.error('Error switching character:', err))">
-                        <?php echo ucfirst($character); ?>
+                        <?php echo htmlspecialchars($characterNames[$character] ?? ucfirst($character)); ?>
                     </button>
                 <?php endforeach; ?>
             </div>

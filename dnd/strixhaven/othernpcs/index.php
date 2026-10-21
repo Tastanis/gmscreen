@@ -1,5 +1,6 @@
 <?php
 session_start();
+require_once __DIR__ . '/../../includes/players.php'; players_gate(); // a player turned off is logged out
 
 // Check if user is logged in
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
@@ -434,6 +435,7 @@ require_once '../../includes/strix-nav.php';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Strixhaven Other NPCs - <?php echo htmlspecialchars($user); ?></title>
+    <?php echo players_script(); ?>
     <link rel="stylesheet" href="../../css/style.css">
     <link rel="stylesheet" href="css/othernpcs.css">
     <link rel="stylesheet" href="../includes/image-adjuster.css">

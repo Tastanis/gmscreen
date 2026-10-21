@@ -12,7 +12,7 @@ import {askClimb} from './climb-prompt.js';
 import {offerBreakThrough} from './break-through-prompt.js';
 import {climbSurcharge} from './terrain-math.mjs';
 import {settleCollisionEffects,collisionDamageDealt} from '../services/collision-effects.js';
-import {PLAYER_CHARACTER_USER_IDS as visionOwnerProfiles} from '../state/normalize/map-levels.js';
+import {PLAYER_CHARACTER_USER_IDS as visionOwnerProfiles, ACTIVE_PLAYER_USER_IDS} from '../state/normalize/map-levels.js';
 import {resolveForcedDrag} from './forced-drag.js';
 import {createMaliceChanges} from './malice-changes.mjs';
 import {forcedMoveLegalCells, forcedLineCells, isForcedMovePathLegal, footprintsOverlap, nearestPullCell, cellsOnMap, closestCell} from './forced-move-cells.js';
@@ -2477,7 +2477,10 @@ export function mountBoardInteractions(store, routes = {}) {
     ],
   };
 
-  const PLAYER_PROFILE_ALIASES = Object.fromEntries(PLAYER_CHARACTER_USER_IDS.map(id => [id, [id]]));
+  // The words a token's name may carry to be each player's: the id, and the display name (a new player's id is
+  // "player5"; their token is called by their name). From the site's player list (PlayerRoster::aliases).
+  const PLAYER_PROFILE_ALIASES = Object.fromEntries(PLAYER_CHARACTER_USER_IDS.map(id => [id,
+    Array.isArray(window.vttConfig?.playerAliases?.[id]) ? window.vttConfig.playerAliases[id] : [id]]));
 
   function formatProfileDisplayName(profileId) {
     if (typeof profileId !== 'string' || !profileId.trim()) {
@@ -6072,6 +6075,8 @@ export function mountBoardInteractions(store, routes = {}) {
     combatTrackerRoot.addEventListener('click', handleCombatTrackerClick);
     combatTrackerRoot.addEventListener('dblclick', handleCombatTrackerDoubleClick);
     combatTrackerRoot.addEventListener('contextmenu', handleCombatTrackerContextMenu);
+    combatTrackerRoot.addEventListener('pointerdown', handleCombatTrackerRightPress);
+    window.addEventListener('pointerup', handleCombatTrackerRightRelease);
     combatTrackerRoot.addEventListener('keydown', handleCombatTrackerKeydown);
   }
 
@@ -9494,14 +9499,36 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   // Right-click an entry in the turn tracker: its token, or each token of its group, pulses on the map so it is easy
-  // to find (Brandon, October 2026). On this page only; the view does not move.
+  // to find (Brandon, October 2026). On this page only. Let go within 0.75 s: the view stays; held longer: the view
+  // comes to it as well, as Find token does. Decided on letting go of the button (the menu key pings at once).
+  const TRACKER_HOLD_MS = 750;
+  let trackerPress = null, trackerReleasedAt = 0;
+  function handleCombatTrackerRightPress(event) {
+    if (event.button !== 2) return;
+    const entry = event.target instanceof Element ? event.target.closest('[data-combatant-id]') : null;
+    trackerPress = entry ? { id: entry.dataset.combatantId, at: performance.now() } : null;
+  }
+  function handleCombatTrackerRightRelease(event) {
+    if (event.button !== 2 || !trackerPress) return;
+    const press = trackerPress;
+    trackerPress = null;
+    trackerReleasedAt = performance.now();
+    findFromTracker(press.id, trackerReleasedAt - press.at >= TRACKER_HOLD_MS);
+  }
   function handleCombatTrackerContextMenu(event) {
     const entry = event.target instanceof Element ? event.target.closest('[data-combatant-id]') : null;
     if (!entry) return;
     event.preventDefault();
-    const representativeId = entry.dataset.combatantId;
+    // A mouse right-click is handled on letting go (Windows sends this menu after that, a Mac before); the menu key
+    // has no press, so it pings here.
+    if (!trackerPress && performance.now() - trackerReleasedAt > 400) findFromTracker(entry.dataset.combatantId, false);
+  }
+  function findFromTracker(representativeId, bringView) {
     const members = Array.from(getGroupMembers(representativeId) || []);
-    if (!pingBoardTokens(members.length ? members : [representativeId])) {
+    const ids = (members.length ? members : [representativeId])
+      .filter(id => isGmUser() || !getPlacementFromStore(id)?.hidden);
+    const found = bringView ? (ids.length ? centerOnBoardTokens(ids) : 0) : pingBoardTokens(ids);
+    if (!found) {
       window.UIKit?.toast?.('That token is not on this map.', 'info');
     }
   }
@@ -9819,7 +9846,7 @@ export function mountBoardInteractions(store, routes = {}) {
       token.style.transformOrigin = '50% 50%';
       clearTokenMapLevelVisibilityMask(token);
       applyTokenLevelPresentation(token, presentation);
-      token.classList.toggle('vtt-token--hidden', Boolean(normalized.hidden));
+      token.classList.toggle('vtt-token--hidden', Boolean(normalized.hidden) || isOffPlayerToken(normalized));
 
       if (normalized.imageUrl) {
         let img = token.querySelector('img.vtt-token__image');
@@ -12396,7 +12423,8 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
     const endpoint = typeof routes?.sheet === 'string' && routes.sheet ? routes.sheet : '/dnd/character_sheet/handler.php';
-    await Promise.all(PLAYER_CHARACTER_USER_IDS.map(async (profileId) => {
+    // The sheets of players who are on: an off player's sheet is left as it is.
+    await Promise.all(ACTIVE_PLAYER_USER_IDS.map(async (profileId) => {
       const body = new URLSearchParams();
       body.set('action', 'sync-surges');
       body.set('character', profileId);
@@ -17561,6 +17589,13 @@ export function mountBoardInteractions(store, routes = {}) {
     return Boolean(placement?.hidden || placement?.flags?.hidden);
   }
 
+  // A token of a player the GM has turned off (the site's player list): players are not sent it at all (the server's
+  // projection); the GM sees it faded, as a hidden token, until the player is on again. Nothing on it is changed.
+  function isOffPlayerToken(placement) {
+    const profile = getCharacterSheetProfileIdForPlacement(placement);
+    return Boolean(profile) && !ACTIVE_PLAYER_USER_IDS.includes(profile);
+  }
+
   function clearAutomationAreaOverlay() {
     notifyCoordinateView();
     pendingAutomationArea?.hoverIds?.forEach((id) => setAutomationAreaHoverToken(id, false));
@@ -20993,7 +21028,7 @@ export function mountBoardInteractions(store, routes = {}) {
           </label>
           <p data-flight-height-error role="alert" hidden></p>
         </div>
-        ${gmUser ? `<label class="vtt-token-settings__section">Owners<select multiple size="4" data-token-vision-owners aria-label="Token owners">${visionOwnerProfiles.map(id=>`<option value="${escapeHtml(id)}">${escapeHtml(id)}</option>`).join('')}</select></label>` : ''}
+        ${gmUser ? `<label class="vtt-token-settings__section">Owners<select multiple size="4" data-token-vision-owners aria-label="Token owners">${visionOwnerProfiles.map(id=>`<option value="${escapeHtml(id)}"${ACTIVE_PLAYER_USER_IDS.includes(id)?'':' data-player-off'}>${escapeHtml(window.vttConfig?.playerNames?.[id]||id)}</option>`).join('')}</select></label>` : ''}
         ${hiddenToggleMarkup}
       </form>
     `;
@@ -21965,7 +22000,8 @@ export function mountBoardInteractions(store, routes = {}) {
       tokenSettingsMenu.primaryPc.disabled = !profile;
       tokenSettingsMenu.primaryProfile.textContent = profile ? ` (${profile})` : ' (link a player profile first)';
     }
-    if(tokenSettingsMenu?.visionOwners)for(const option of tokenSettingsMenu.visionOwners.options)option.selected=placement?.visionOwners?.includes(option.value)===true;
+    // A player turned off is not offered, but stays an owner of a token they own (the option is kept, only hidden).
+    if(tokenSettingsMenu?.visionOwners)for(const option of tokenSettingsMenu.visionOwners.options){option.selected=placement?.visionOwners?.includes(option.value)===true;option.hidden=option.hasAttribute('data-player-off')&&!option.selected;}
     if (tokenSettingsMenu?.movementMode) tokenSettingsMenu.movementMode.value = placement?.movementMode || 'ground';
     const flightInput=tokenSettingsMenu?.element.querySelector('[data-token-flight-height]');
     if(flightInput){flightInput.closest('label').hidden=!['fly','hover'].includes(placement?.movementMode);if(document.activeElement!==flightInput)flightInput.value=groundSquare(window.terrainPrototype?.groundFor(placement)??0);}
@@ -26846,7 +26882,8 @@ function createTemplateTool() {
     const sceneConfig = confirmed?.state?.sceneConfig?.[sceneId] ?? state.boardState?.sceneState?.[sceneId] ?? {};
     const placements = getPlacementsForActiveScene().filter(p => isGmUser() || !isAutomationPlacementHidden(p)).map(p => {
       const effective = tokenMovementRuntime?.getEffectivePlacement?.(sceneId, p.id) ?? p;
-      return { ...JSON.parse(JSON.stringify(effective)), canMove: canCurrentUserMovePlacement(p), movementLeft: tokenMovementController?.getMovementLeft?.(p.id) ?? null };
+      // An off player's token is drawn as a hidden one (the GM sees it faded).
+      return { ...JSON.parse(JSON.stringify(effective)), ...(isOffPlayerToken(p) ? { hidden: true } : {}), canMove: canCurrentUserMovePlacement(p), movementLeft: tokenMovementController?.getMovementLeft?.(p.id) ?? null };
     });
     return {
       sceneId, placements, selectedIds: [...selectedTokenIds], user: { ...state.user }, isGM: isGmUser(),
@@ -27074,6 +27111,16 @@ function createTemplateTool() {
     },
     getTokenElement(id) { return [...tokenLayer.querySelectorAll('[data-placement-id]')].find(node => node.dataset.placementId === id) ?? null; },
     heightFor(id) { const p = coordinatePlacement(id); return p ? window.terrainPrototype?.groundFor?.(p) ?? 0 : null; },
+    // The Measure tool (drag-ruler.js): a token as a measuring point. Its space, the height it is at (flying or not)
+    // and the ground under it (where it would stand; told only for a flier, as a plate it stands on is not the ground).
+    // A token this user may not see is none.
+    measurePoint(id) {
+      const p = coordinatePlacement(id);
+      if (!p) return null;
+      const terrain = window.terrainPrototype;
+      const ground = terrain?.groundFor?.({ ...p, movementMode: 'ground', flightHeight: null }) ?? 0;
+      return { id: p.id, name: typeof p.name === 'string' ? p.name : '', column: p.column, row: p.row, width: Math.max(1, p.width || 1), height: Math.max(1, p.height || 1), z: terrain?.groundFor?.(p) ?? ground, ground, flying: ['fly', 'hover'].includes(p.movementMode) };
+    },
     // 3D board, hold Z and drag: the height a token is raised or lowered to. A token that walked starts flying.
     // `landed`: Z brought it down to what is under it; it stands there and walks again, it does not fly at no height
     // (Brandon, October 16, 2026).

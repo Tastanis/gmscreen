@@ -2,6 +2,20 @@ import { DEFAULT_MOVEMENT_SPEED } from './movement-math.js';
 
 export const PC_TOKEN_NAMES = new Set(['cal', 'sharon', 'indigo', 'zepha']);
 
+/**
+ * The player whose sheet a token's name is: an id, or a player's display name (window.vttConfig.playerAliases, from
+ * the site's player list: a new player's id is "player5", their token is called by their name). The four by id otherwise.
+ */
+export function pcIdForTokenName(name, aliases = globalThis.vttConfig?.playerAliases) {
+  const words = typeof name === 'string' ? name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() : '';
+  if (!words) return null;
+  if (aliases && typeof aliases === 'object') {
+    for (const [id, list] of Object.entries(aliases)) if (Array.isArray(list) && list.includes(words)) return id;
+    return null;
+  }
+  return PC_TOKEN_NAMES.has(words) ? words : null;
+}
+
 const CACHE_TTL_MS = 30000;
 
 export function createTokenSpeedResolver({
@@ -18,8 +32,8 @@ export function createTokenSpeedResolver({
   }
 
   async function resolveSpeed(placement) {
-    const tokenName = normalizeTokenName(placement?.name);
-    if (PC_TOKEN_NAMES.has(tokenName)) {
+    const tokenName = pcIdForTokenName(placement?.name);
+    if (tokenName) {
       const sheetSpeed = await fetchCached(`pc:${tokenName}`, () => fetchCharacterSpeed(routes.sheet, tokenName, fetchImpl), cacheTtlMs, cache);
       const speed = sheetSpeed ?? extractLocalSpeedValue(placement) ?? defaultSpeed;
       return { speed, source: sheetSpeed !== null ? 'sheet' : 'fallback' };

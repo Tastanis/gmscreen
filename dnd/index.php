@@ -1,8 +1,11 @@
 <?php
 session_start();
+require_once __DIR__ . '/includes/players.php';
 
-// Define credentials: username => array('password' => ..., 'session_user' => ...)
+// The original credentials: username => array('password' => ..., 'session_user' => ...)
 // Username 'harms' maps to session user 'GM' for compatibility with the rest of the app.
+// Who may log in is the player list (includes/players.php): a player's login name, on or off, and a password set
+// from the GM page. The four originals keep the passwords below (by their fixed id) until one is set for them.
 $users = array(
     'cal'  => array('password' => 'cal',  'session_user' => 'cal'),
     'sharon' => array('password' => 'sharon', 'session_user' => 'sharon'),
@@ -52,8 +55,18 @@ if (isset($_POST['password']) && $_POST['password'] != '') {
     $username = strtolower(trim($_POST['username'] ?? ''));
     $password = trim($_POST['password']);
 
-    if (isset($users[$username]) && hash_equals($users[$username]['password'], $password)) {
-        $sessionUser = $users[$username]['session_user'];
+    $sessionUser = null;
+    $player = $username === 'harms' ? null : player_by_login($username);
+    if ($username === 'harms') {
+        if (hash_equals($users['harms']['password'], $password)) $sessionUser = 'GM';
+    } elseif ($player && $player['active']) {
+        $ok = isset($player['passwordHash'])
+            ? password_verify($password, $player['passwordHash'])
+            : isset($users[$player['id']]) && hash_equals($users[$player['id']]['password'], $password);
+        if ($ok) $sessionUser = $player['id'];
+    }
+
+    if ($sessionUser !== null) {
         $_SESSION['user'] = $sessionUser;
         $_SESSION['logged_in'] = true;
 
@@ -65,6 +78,8 @@ if (isset($_POST['password']) && $_POST['password'] != '') {
 
         header('Location: dashboard.php');
         exit;
+    } elseif ($player && !$player['active']) {
+        $error_message = 'That player is turned off for now.';
     } else {
         $error_message = 'Invalid username or password';
     }
@@ -74,7 +89,8 @@ if (isset($_POST['password']) && $_POST['password'] != '') {
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     if (isset($_COOKIE[REMEMBER_COOKIE])) {
         $user = validateRememberToken($_COOKIE[REMEMBER_COOKIE]);
-        if ($user !== false) {
+        // A player turned off is not let back in by a remembered login.
+        if ($user !== false && player_may_play($user)) {
             $_SESSION['user'] = $user;
             $_SESSION['logged_in'] = true;
             header('Location: dashboard.php');
@@ -86,7 +102,8 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     }
 }
 
-// If already logged in, redirect to dashboard
+// If already logged in, redirect to dashboard (a player turned off meanwhile is logged out first)
+players_gate();
 if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
     header('Location: dashboard.php');
     exit;

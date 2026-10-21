@@ -7,7 +7,10 @@
   var HANDLER_URL = "inventory_handler.php";
   var SYNC_INTERVAL_MS = 4000;
   var SAVE_DEBOUNCE_MS = 800;
-  var CHARACTER_TABS = ["cal", "sharon", "indigo", "zepha"];
+  // The players who are on (window.dndPlayers, includes/players.php); an off player's tab is kept, not shown.
+  var CHARACTER_TABS = Array.isArray(window.dndPlayers)
+    ? window.dndPlayers.filter(function (p) { return p && p.active; }).map(function (p) { return p.id; })
+    : ["cal", "sharon", "indigo", "zepha"];
 
   var ciData = {};
   var ciFolder = "";
@@ -995,7 +998,7 @@
     activeCharacter = (document.body.getAttribute("data-character") || "").toLowerCase();
     currentUser = (document.body.getAttribute("data-user") || "").toLowerCase();
     isGM = document.body.getAttribute("data-is-gm") === "1";
-    ciFolder = CHARACTER_TABS.indexOf(activeCharacter) !== -1 ? activeCharacter : "cal";
+    ciFolder = CHARACTER_TABS.indexOf(activeCharacter) !== -1 ? activeCharacter : (CHARACTER_TABS[0] || "shared");
 
     pane.addEventListener("click", handleClick);
     pane.addEventListener("input", function (event) {

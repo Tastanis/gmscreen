@@ -5,8 +5,10 @@ require_once __DIR__ . "/SheetChanges.php";
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
+require_once __DIR__ . '/../includes/players.php'; players_gate(); // a player turned off is logged out
 
-$characters = array('cal', 'sharon', 'indigo', 'zepha');
+// Every player on the site's list, on or off (includes/players.php): a new one gets a blank sheet, an off one keeps theirs.
+$characters = players_ids();
 $dataDir = __DIR__ . '/data';
 $dataFile = $dataDir . '/character_sheets.json';
 $heroTokenFile = $dataDir . '/hero_tokens.json';

@@ -119,6 +119,36 @@ function prepareStudentFieldValue(field, value) {
     return { field: field, value: value };
 }
 
+// The players shown in the relationships section: those on in window.dndPlayers (includes/players.php),
+// or the original four when the page has no list. Points/notes of players turned off stay in the data, unshown.
+function getRelationshipPlayers() {
+    if (Array.isArray(window.dndPlayers)) {
+        return window.dndPlayers.filter(p => p && p.active).map(p => ({ id: p.id, name: p.name || p.id }));
+    }
+    return [['cal', 'Cal'], ['zepha', 'Zepha'], ['sharon', 'Sharon'], ['indigo', 'Indigo']].map(([id, name]) => ({ id, name }));
+}
+
+// One player's points and notes block
+function createPcRelationshipHtml(player, relationships) {
+    const pointsKey = `${player.id}_points`;
+    const notesKey = `${player.id}_notes`;
+    return `
+                    <div class="pc-relationship">
+                        <div class="pc-relationship-header">
+                            <label>${escapeHtml(player.name)}:</label>
+                            ${isGM ?
+                                `<input type="text" value="${escapeHtml(relationships[pointsKey] || '')}" data-field="relationships.${pointsKey}" placeholder="Points" class="relationship-points">` :
+                                `<span class="readonly-points">${escapeHtml(relationships[pointsKey] || '0')}</span>`
+                            }
+                        </div>
+                        ${isGM ?
+                            `<div class="rich-text-container small" data-field="relationships.${notesKey}" data-placeholder="Relationship notes..."></div>` :
+                            `<div class="readonly-field readonly-textarea">${escapeHtml(relationships[notesKey] || 'No relationship notes')}</div>`
+                        }
+                    </div>
+    `;
+}
+
 // Create student detail form
 function createStudentDetailForm(student) {
     const relationships = student.relationships || {};
@@ -387,61 +417,7 @@ function createStudentDetailForm(student) {
             <div class="form-section">
                 <h3>PC Relationships</h3>
                 <div class="pc-relationships-list">
-                    <div class="pc-relationship">
-                        <div class="pc-relationship-header">
-                            <label>Cal:</label>
-                            ${isGM ?
-                                `<input type="text" value="${escapeHtml(relationships.cal_points || '')}" data-field="relationships.cal_points" placeholder="Points" class="relationship-points">` :
-                                `<span class="readonly-points">${escapeHtml(relationships.cal_points || '0')}</span>`
-                            }
-                        </div>
-                        ${isGM ?
-                            `<div class="rich-text-container small" data-field="relationships.cal_notes" data-placeholder="Relationship notes..."></div>` :
-                            `<div class="readonly-field readonly-textarea">${escapeHtml(relationships.cal_notes || 'No relationship notes')}</div>`
-                        }
-                    </div>
-
-                    <div class="pc-relationship">
-                        <div class="pc-relationship-header">
-                            <label>Zepha:</label>
-                            ${isGM ?
-                                `<input type="text" value="${escapeHtml(relationships.zepha_points || '')}" data-field="relationships.zepha_points" placeholder="Points" class="relationship-points">` :
-                                `<span class="readonly-points">${escapeHtml(relationships.zepha_points || '0')}</span>`
-                            }
-                        </div>
-                        ${isGM ?
-                            `<div class="rich-text-container small" data-field="relationships.zepha_notes" data-placeholder="Relationship notes..."></div>` :
-                            `<div class="readonly-field readonly-textarea">${escapeHtml(relationships.zepha_notes || 'No relationship notes')}</div>`
-                        }
-                    </div>
-
-                    <div class="pc-relationship">
-                        <div class="pc-relationship-header">
-                            <label>Sharon:</label>
-                            ${isGM ?
-                                `<input type="text" value="${escapeHtml(relationships.sharon_points || '')}" data-field="relationships.sharon_points" placeholder="Points" class="relationship-points">` :
-                                `<span class="readonly-points">${escapeHtml(relationships.sharon_points || '0')}</span>`
-                            }
-                        </div>
-                        ${isGM ?
-                            `<div class="rich-text-container small" data-field="relationships.sharon_notes" data-placeholder="Relationship notes..."></div>` :
-                            `<div class="readonly-field readonly-textarea">${escapeHtml(relationships.sharon_notes || 'No relationship notes')}</div>`
-                        }
-                    </div>
-
-                    <div class="pc-relationship">
-                        <div class="pc-relationship-header">
-                            <label>Indigo:</label>
-                            ${isGM ?
-                                `<input type="text" value="${escapeHtml(relationships.indigo_points || '')}" data-field="relationships.indigo_points" placeholder="Points" class="relationship-points">` :
-                                `<span class="readonly-points">${escapeHtml(relationships.indigo_points || '0')}</span>`
-                            }
-                        </div>
-                        ${isGM ?
-                            `<div class="rich-text-container small" data-field="relationships.indigo_notes" data-placeholder="Relationship notes..."></div>` :
-                            `<div class="readonly-field readonly-textarea">${escapeHtml(relationships.indigo_notes || 'No relationship notes')}</div>`
-                        }
-                    </div>
+                    ${getRelationshipPlayers().map(player => createPcRelationshipHtml(player, relationships)).join('')}
                 </div>
             </div>
 
@@ -634,6 +610,7 @@ function expandStudentToNewTab() {
             </div>
 
             <script src="../../js/ui-kit.js"></script>
+            <script>window.dndPlayers = ${JSON.stringify(window.dndPlayers || null).replace(/</g, '\\u003c')};</script>
             <script src="../gm/js/character-lookup.js"></script>
             <script src="../gm/js/rich-text-editor.js"></script>
             <script>

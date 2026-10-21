@@ -2,6 +2,7 @@
 if (session_status() === PHP_SESSION_NONE) {
   session_start();
 }
+require_once __DIR__ . '/../includes/players.php'; players_gate(); // a player turned off is logged out
 
 $sessionUser = isset($_SESSION['user']) ? strtolower($_SESSION['user']) : '';
 $currentUser = isset($_SESSION['user']) ? (string) $_SESSION['user'] : '';
@@ -50,6 +51,7 @@ require_once '../includes/strix-nav.php';
   <link rel="stylesheet" href="../css/chat-panel.css?v=<?php echo (int) $assetVersion; ?>" />
   <link rel="stylesheet" href="../css/ask-test.css?v=<?php echo (int) $assetVersion; ?>" />
   <link rel="stylesheet" href="styles.css?v=<?php echo (int) $assetVersion; ?>" />
+  <?php echo players_script(); ?>
   <link rel="stylesheet" href="inventory-tab.css?v=<?php echo (int) $assetVersion; ?>" />
   <link rel="stylesheet" href="../dice-roller/dice-roller.css?v=<?php echo (int) $assetVersion; ?>" />
   <link rel="stylesheet" href="../dice-roller/diablo-dice.css?v=<?php echo (int) $assetVersion; ?>" />

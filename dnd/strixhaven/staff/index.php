@@ -1,5 +1,6 @@
 <?php
 session_start();
+require_once __DIR__ . '/../../includes/players.php'; players_gate(); // a player turned off is logged out
 
 // Check if user is logged in
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
@@ -552,6 +553,7 @@ require_once '../../includes/strix-nav.php';
     <link rel="stylesheet" href="../includes/image-adjuster.css">
     <link rel="stylesheet" href="../../Diablo/theme.css">
     <link rel="stylesheet" href="../../Diablo/satellite.css">
+    <?php echo players_script(); ?>
     <script src="../../js/diablo-theme-loader.js"></script>
     <script src="../../Diablo/theme.js" defer></script>
 </head>

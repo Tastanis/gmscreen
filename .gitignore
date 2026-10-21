@@ -145,3 +145,8 @@ asl/.account-reset.lock
 
 # Runtime lock for the GM-managed VTT roster.
 /dnd/vtt/config/player-roster.json.lock
+
+# The site player list (includes/players.php): live data, never deployed over
+/dnd/data/players.json
+/dnd/data/players.json.lock
+/dnd/data/players.json.tmp

@@ -15,8 +15,12 @@ declare(strict_types=1);
 function counterCheck(bool $ok, string $message): void { if (!$ok) throw new RuntimeException($message); }
 
 $source = realpath(__DIR__ . '/../../../../character_sheet');
-$site = sys_get_temp_dir() . '/vtt-counters-' . bin2hex(random_bytes(6));
+// The site's layout: the handler in character_sheet/, the player list in includes/ beside it.
+$root = sys_get_temp_dir() . '/vtt-counters-' . bin2hex(random_bytes(6));
+$site = $root . '/character_sheet';
 mkdir($site . '/data', 0777, true);
+mkdir($root . '/includes', 0777, true);
+copy($source . '/../includes/players.php', $root . '/includes/players.php');
 foreach (['handler.php', 'AtomicJsonFile.php', 'CharacterWriteReceipts.php', 'SheetChanges.php'] as $file) copy($source . '/' . $file, $site . '/' . $file);
 $remove = static function (string $folder) use (&$remove): void {
     foreach (scandir($folder) ?: [] as $entry) { if ($entry === '.' || $entry === '..') continue; $path = $folder . '/' . $entry; is_dir($path) ? $remove($path) : @unlink($path); }
@@ -139,7 +143,7 @@ try {
     file_put_contents($site . '/data/character_sheets.json', '{ not json');
     $broken = $ask('GM', 'GET', ['action'=>'party-vitals']);
     counterCheck($broken['success'] === false && !isset($broken['party']), 'Sheets that cannot be read give an error, not empty heroes: ' . json_encode($broken));
-} finally { $remove($site); }
+} finally { $remove($root); }
 
 // The parts by themselves.
 require_once $source . '/SheetChanges.php';

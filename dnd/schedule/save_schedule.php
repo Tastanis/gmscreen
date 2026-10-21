@@ -2,6 +2,7 @@
 if (session_status() == PHP_SESSION_NONE) {
     session_start();
 }
+require_once __DIR__ . '/../includes/players.php'; players_gate(); // a player turned off is logged out
 
 // Check if user is logged in
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
@@ -49,9 +50,9 @@ if ($week < 1) {
     exit;
 }
 
-// Validate character name
-$valid_characters = ['cal', 'sharon', 'indigo', 'zepha'];
-if (!in_array($character, $valid_characters)) {
+// Validate character name (any player on the site's list, on or off)
+$valid_characters = players_ids();
+if (!in_array($character, $valid_characters, true)) {
     echo json_encode(array('success' => false, 'error' => 'Invalid character'));
     exit;
 }
@@ -100,13 +101,10 @@ if (file_exists($schedules_file)) {
 
 // Ensure current week tracking exists
 if (!isset($schedules['_current_week'])) {
-    $schedules['_current_week'] = array(
-        'GM' => 1,
-        'cal' => 1,
-        'sharon' => 1,
-        'indigo' => 1,
-        'zepha' => 1
-    );
+    $schedules['_current_week'] = array('GM' => 1);
+    foreach ($valid_characters as $char) {
+        $schedules['_current_week'][$char] = 1;
+    }
 }
 
 // Ensure the character structure exists
@@ -202,20 +200,15 @@ echo json_encode(array(
 
 // Helper function
 function initializeEmptySchedule() {
-    $valid_characters = ['cal', 'sharon', 'indigo', 'zepha'];
+    $valid_characters = players_ids();
     $valid_days = ['monday', 'tuesday', 'thursday', 'friday', 'saturday', 'sunday'];
-    
+
     $schedule = array(
-        '_current_week' => array(
-            'GM' => 1,
-            'cal' => 1,
-            'sharon' => 1,
-            'indigo' => 1,
-            'zepha' => 1
-        )
+        '_current_week' => array('GM' => 1)
     );
-    
+
     foreach ($valid_characters as $char) {
+        $schedule['_current_week'][$char] = 1;
         $schedule[$char] = array(
             '1' => array()
         );
