@@ -36,6 +36,7 @@ same as before. Vision and fog are still in the code but switched off.
 | `dnd/vtt/board3d/integration.mjs` | Mounts the 3D board, builds the scene, tokens, drag, ability pickers, Height control, layer registry. Exposes `window.vtt3d` and `window.vtt3dRenderer`. |
 | `dnd/vtt/board3d/scene-view.mjs` | three.js scene: ground, islands, ramps, picking, projection. |
 | `dnd/vtt/board3d/camera-controls.mjs` | The camera, one gesture per mouse button, so gestures combine. |
+| `dnd/vtt/board3d/first-person.mjs` | The "1st person" button beside My token / Find token: the camera at a model's eyes, just in front of it, looking out (the selected token, else the player's own). Drag or arrow keys look around, the wheel widens or narrows the view, Escape or the button again puts the camera back. Viewer only; nothing is saved. Loaded by `templates/layout.php`. |
 | `dnd/vtt/board3d/route-planner.mjs` | Route planner for the movement ruler. A* over the VTT's own walker; time-sliced; legs run along rows, columns or 45° diagonals. |
 | `dnd/vtt/board3d/movement-route.mjs` | The ruler drawn in 3D: dots, leg and total labels, arrowhead, flashing difficult terrain. |
 | `dnd/vtt/board3d/layers/` | Overlays: drawings, templates, persistent and terrain zones, auras, pings, surface paint, slope arrows. |

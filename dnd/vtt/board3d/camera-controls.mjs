@@ -61,7 +61,8 @@ export function bindCameraInput({controls,zoomAt,grabStart,grabMove,inBoard,onCh
   if(changed)onChange(e);
  }
  function up(e){sync(e);last={x:e.clientX,y:e.clientY};}
- function wheel(e){if(!inBoard(e))return;e.preventDefault();e.stopImmediatePropagation();zoomAt(e.clientX,e.clientY,e.deltaY*(e.deltaMode===1?33:e.deltaMode===2?400:1));onChange(e);}
+ // A view that takes the wheel for itself (1st person: the field of view, globalThis.vtt3dWheelHook) gets it instead of the zoom.
+ function wheel(e){if(!inBoard(e))return;e.preventDefault();e.stopImmediatePropagation();if(globalThis.vtt3dWheelHook?.(e))return;zoomAt(e.clientX,e.clientY,e.deltaY*(e.deltaMode===1?33:e.deltaMode===2?400:1));onChange(e);}
  function menu(e){if(suppressMenu){suppressMenu=false;e.preventDefault();e.stopImmediatePropagation();}}
  function mouseDown(e){if(e.button===1&&inBoard(e))e.preventDefault();}
  function blur(){buttons=0;orbiting=false;panning=false;}
