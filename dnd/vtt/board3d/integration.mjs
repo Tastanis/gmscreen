@@ -405,6 +405,25 @@ async function mount(){
  overlayHost.addEventListener('pointerdown',e=>{if(!e.target.closest?.('[data-skip-automation-area],[data-skip-automation-move]'))return;e.preventDefault();e.stopPropagation();bridge.skipAbility?.(e);tidyControls();});
  const resizeObserver=new ResizeObserver(()=>view?.resize());resizeObserver.observe(host);
 
+ // Keyboard camera (Brandon, October 2026): W A S D move the view, Q and E turn it, the up and down arrows zoom in and
+ // out, the left and right arrows turn it like Q and E. A held key keeps going, smoothly; two keys mix (W with D goes
+ // forward and right). Nothing happens while typing, or with Ctrl, Alt or Cmd held (Ctrl+Z and the like stay as they were).
+ const CAMERA_KEYS={w:'forward',a:'left',s:'back',d:'right',q:'turnLeft',e:'turnRight',arrowup:'zoomIn',arrowdown:'zoomOut',arrowleft:'turnLeft',arrowright:'turnRight'};
+ const cameraKeys=new Set();
+ document.addEventListener('keydown',e=>{const k=CAMERA_KEYS[String(e.key||'').toLowerCase()];
+  if(!k||!view||e.ctrlKey||e.metaKey||e.altKey||typing(e.target)||e.target?.closest?.('dialog,[role="dialog"],select,button'))return;
+  e.preventDefault();e.stopImmediatePropagation();cameraKeys.add(k);},true);
+ document.addEventListener('keyup',e=>{const k=CAMERA_KEYS[String(e.key||'').toLowerCase()];if(k)cameraKeys.delete(k);},true);
+ window.addEventListener('blur',()=>cameraKeys.clear());document.addEventListener('visibilitychange',()=>{if(document.hidden)cameraKeys.clear();});
+ function keyCamera(dt){
+  if(!cameraKeys.size||!dt||!view)return;const step=Math.min(dt,.05),has=k=>cameraKeys.has(k)?1:0;
+  const camera=view.camera,target=view.controls.target,forward=target.clone().sub(camera.position).setY(0);if(forward.lengthSq()<1e-6)return;forward.normalize();
+  const ahead=has('forward')-has('back'),side=has('right')-has('left'),turn=has('turnRight')-has('turnLeft'),zoom=has('zoomOut')-has('zoomIn');
+  if(ahead||side){const right={x:-forward.z,z:forward.x},speed=Math.max(4,camera.position.distanceTo(target))*.6*step;
+   const shift={x:(forward.x*ahead+right.x*side)*speed,y:0,z:(forward.z*ahead+right.z*side)*speed};camera.position.add(shift);target.add(shift);view.controls.update();}
+  if(turn)view.orbit(turn*step*220,0);
+  if(zoom){const r=canvas.getBoundingClientRect();view.zoomAt(r.left+r.width/2,r.top+r.height/2,zoom*step*900);}
+  hoverSignature='';refreshHeld();}
  function edgePan(dt){
   const pointer=drag?.moved?drag.pointer:null;if(!pointer||!dt||!view)return;
   const r=board.getBoundingClientRect(),m=Math.min(56,r.width*.08,r.height*.08),push=(v,lo,hi)=>v<lo+m?-(1-Math.max(0,v-lo)/m):v>hi-m?1-Math.max(0,hi-v)/m:0;
@@ -438,7 +457,7 @@ async function mount(){
   // Layout is read once, before this frame writes any styles.
   const canvasRect=view&&!document.hidden?canvas.getBoundingClientRect():null,hostRect=canvasRect?overlayHost.getBoundingClientRect():null;
   if(view&&!document.hidden){
-   edgePan(dt);syncLevels();syncField(now);
+   edgePan(dt);keyCamera(dt);syncLevels();syncField(now);
    // Token heights are worked out again only when the board, the ground or the walls change.
    const recordKey=[context.placements,window.terrainPrototype?.fieldVersion,window.wallPrototype?.revision,context.isGM,data];
    if(!recordsCache||recordKey.some((v,i)=>v!==recordsCache.key[i]))recordsCache={key:recordKey,records:(context.placements||[]).filter(p=>context.isGM||!p.hidden).map(world)};

@@ -116,3 +116,11 @@ test('players see the monster minis: the token names its mini, the page keeps it
   assert.match(board3d, /\{hero:p\.characterProfileId,monster:p\.monsterId,mini:p\.mini,name:p\.name\}/);
   assert.match(minis, /monster=who\.mini\|\|config\.monsters\?\.\[who\.monster\]/);
 });
+
+test('keyboard camera: W A S D move the view, Q and E turn it, the up and down arrows zoom (Build 542)', () => {
+  // Brandon: "I need the vtt to have wasd and q e to rotate. lets make the arrow buttons zoom in and zoom out."
+  assert.match(board3d, /const CAMERA_KEYS=\{w:'forward',a:'left',s:'back',d:'right',q:'turnLeft',e:'turnRight',arrowup:'zoomIn',arrowdown:'zoomOut',arrowleft:'turnLeft',arrowright:'turnRight'\};/);
+  assert.match(board3d, /if\(!k\|\|!view\|\|e\.ctrlKey\|\|e\.metaKey\|\|e\.altKey\|\|typing\(e\.target\)/, 'not while typing, and Ctrl+Z and the like stay as they were');
+  assert.match(board3d, /e\.preventDefault\(\);e\.stopImmediatePropagation\(\);cameraKeys\.add\(k\);/, 'so no arrow moves a token any more');
+  assert.match(board3d, /edgePan\(dt\);keyCamera\(dt\);/, 'a held key keeps going, smoothly, every frame');
+});
