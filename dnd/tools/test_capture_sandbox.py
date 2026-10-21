@@ -75,6 +75,15 @@ class CaptureTests(unittest.TestCase):
                 time.sleep(.05)
         self.output = self.root / 'captures'
 
+    def test_licence_files_are_documentation_not_unknown(self):
+        self.write('board3d-lib/THREE-LICENSE', 'MIT')
+        self.write('kit/LICENSE.txt', 'CC0')
+        manifest = self.connection.manifest()
+        excluded = {item['path']: item['reason'] for item in manifest['excluded']}
+        self.assertEqual(excluded.get('dnd/board3d-lib/THREE-LICENSE'), 'excluded:documentation')
+        self.assertEqual(excluded.get('dnd/kit/LICENSE.txt'), 'excluded:documentation')
+        self.assertFalse([issue for issue in manifest['issues'] if 'LICENSE' in issue['path']])
+
     def test_session_and_retired_files_are_excluded(self):
         self.write('data/sess_example123', 'private session')
         self.write('strixhaven/map/js/coordinate-system.old', 'retired source')

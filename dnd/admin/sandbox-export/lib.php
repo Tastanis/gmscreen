@@ -41,6 +41,8 @@ function sandboxPolicy(string $path): string
     if (str_contains($name, '.before-split-')) return 'excluded:non-runtime';
     $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
     if (in_array($ext, ['md', 'map'], true)) return 'excluded:documentation';
+    // Licence and notice files beside bundled libraries (board3d/lib/THREE-LICENSE has no extension) are documentation too.
+    if (preg_match('/^(?:[A-Za-z0-9_.-]*[-_.])?(?:LICEN[CS]E|NOTICE|COPYING)(?:\.txt)?$/i', $name)) return 'excluded:documentation';
     if (in_array($ext, ['php', 'js', 'mjs', 'css', 'html', 'htm'], true)) return 'code';
     if (in_array($ext, ['sqlite', 'sqlite3', 'db'], true)) return 'sqlite';
     if (in_array($ext, ['json', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'avif', 'ico', 'pdf', 'mp3', 'ogg', 'wav', 'mp4', 'webm', 'woff', 'woff2', 'ttf', 'glb', 'gltf', 'bin', 'dam'], true)) return 'file';
