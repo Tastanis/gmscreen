@@ -421,10 +421,11 @@ async function mount(){
  overlayHost.addEventListener('pointerdown',e=>{if(!e.target.closest?.('[data-skip-automation-area],[data-skip-automation-move]'))return;e.preventDefault();e.stopPropagation();bridge.skipAbility?.(e);tidyControls();});
  const resizeObserver=new ResizeObserver(()=>view?.resize());resizeObserver.observe(host);
 
- // Keyboard camera (Brandon, October 2026): W A S D move the view, Q and E turn it, the up and down arrows zoom in and
- // out, the left and right arrows turn it like Q and E. A held key keeps going, smoothly; two keys mix (W with D goes
- // forward and right). Nothing happens while typing, or with Ctrl, Alt or Cmd held (Ctrl+Z and the like stay as they were).
- const CAMERA_KEYS={w:'forward',a:'left',s:'back',d:'right',q:'turnLeft',e:'turnRight',arrowup:'zoomIn',arrowdown:'zoomOut',arrowleft:'turnLeft',arrowright:'turnRight'};
+ // Keyboard camera (Brandon, October 2026): W A S D move the view, Q and E take it straight up and down (whatever the
+ // angle), the up and down arrows zoom in and out, the left and right arrows turn it. A held key keeps going, smoothly;
+ // two keys mix (W with D goes forward and right). Nothing happens while typing, or with Ctrl, Alt or Cmd held (Ctrl+Z
+ // and the like stay as they were).
+ const CAMERA_KEYS={w:'forward',a:'left',s:'back',d:'right',q:'up',e:'down',arrowup:'zoomIn',arrowdown:'zoomOut',arrowleft:'turnLeft',arrowright:'turnRight'};
  const cameraKeys=new Set();
  document.addEventListener('keydown',e=>{const k=CAMERA_KEYS[String(e.key||'').toLowerCase()];
   if(!k||!view||e.ctrlKey||e.metaKey||e.altKey||typing(e.target)||e.target?.closest?.('dialog,[role="dialog"],select,button'))return;
@@ -434,9 +435,11 @@ async function mount(){
  function keyCamera(dt){
   if(!cameraKeys.size||!dt||!view)return;const step=Math.min(dt,.05),has=k=>cameraKeys.has(k)?1:0;
   const camera=view.camera,target=view.controls.target,forward=target.clone().sub(camera.position).setY(0);if(forward.lengthSq()<1e-6)return;forward.normalize();
-  const ahead=has('forward')-has('back'),side=has('right')-has('left'),turn=has('turnRight')-has('turnLeft'),zoom=has('zoomOut')-has('zoomIn');
+  const ahead=has('forward')-has('back'),side=has('right')-has('left'),turn=has('turnRight')-has('turnLeft'),zoom=has('zoomOut')-has('zoomIn'),rise=has('up')-has('down');
   if(ahead||side){const right={x:-forward.z,z:forward.x},speed=Math.max(4,camera.position.distanceTo(target))*.6*step;
    const shift={x:(forward.x*ahead+right.x*side)*speed,y:0,z:(forward.z*ahead+right.z*side)*speed};camera.position.add(shift);target.add(shift);view.controls.update();}
+  // Straight up or down: the view and the point it looks at move together, so the angle stays.
+  if(rise){const lift=rise*Math.max(6,camera.position.distanceTo(target)*.5)*step,y=Math.max(-60,Math.min(200,target.y+lift))-target.y;camera.position.y+=y;target.y+=y;view.controls.update();}
   if(turn)view.orbit(turn*step*220,0);
   if(zoom){const r=canvas.getBoundingClientRect();view.zoomAt(r.left+r.width/2,r.top+r.height/2,zoom*step*900);}
   hoverSignature='';refreshHeld();}

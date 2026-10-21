@@ -4,6 +4,7 @@ import { placeLegLabels, placeTotalLabel, rulerWording, WORDING_SEPARATOR } from
 import { claimActiveTool, publishActiveTool } from './active-tool.js';
 import { forcedLabel } from './forced-line.mjs';
 import { teleportDistance } from './teleport-choice.js';
+import { heightNote, straightWords } from './measure-straight.mjs';
 /** Ruler labels take their size from the grid (see ruler-label-layout.mjs); the outline scales with it. */
 function sizeLabel(text, size) {
   text.style.fontSize = `${size}px`;
@@ -58,6 +59,9 @@ export function mountDragRuler() {
     overlaySize: { width: 0, height: 0 },
     mode: null,
     movementLabel: 'Move',
+    // Click, then click: let go on the square pressed and the line follows the pointer until the next click.
+    following: false,
+    pressSquare: null,
   };
 
   sharedState = state;
@@ -74,6 +78,8 @@ export function mountDragRuler() {
     }
     state.movementLabel = {teleport:'Teleport',forced:'Forced movement',shift:'Shift',walk:'Move'}[dragMovementKind(event)];
     if (state.mode === 'external' && state.measuring) updateOverlay(state);
+    // The Measure tool's own ruler on the 3D board: Space held is the walking route, let go the straight line.
+    else if (state.mode !== 'external' && state.points.length && window.vtt3dActive && state.walkShown !== teleportSpaceHeld) updateOverlay(state);
   };
   document.addEventListener('keydown', updateMovementLabel, true);
   document.addEventListener('keyup', updateMovementLabel, true);
@@ -118,25 +124,26 @@ export function mountDragRuler() {
       if (!snapPoint) {
         return;
       }
-
-      event.preventDefault();
-      event.stopPropagation();
-
-      if (canExtendExistingMeasurement(state, snapPoint)) {
-        resumeMeasurement(state, event.pointerId, snapPoint);
-      } else {
-        beginMeasurement(state, event.pointerId, snapPoint);
-      }
-      try {
-        mapSurface.setPointerCapture(event.pointerId);
-      } catch (error) {
-        // Ignore pointer capture errors – measurement will still function without it.
-      }
+      pressMeasure(state, event, snapPoint);
     },
     true
   );
 
-  mapSurface.addEventListener('pointermove', (event) => {
+  // 3D board: a token is a measuring point, measured from its own space and height (Brandon, October 2026: "how high
+  // our players are compared to another player", "from a monster to another monster"). The board's capture runs
+  // before the 3D board's token handler, which would take the press as a grab.
+  const boardCanvas = document.getElementById('vtt-board-canvas') ?? mapSurface;
+  boardCanvas.addEventListener('pointerdown', (event) => {
+    if (!state.active || event.button !== 0 || state.mode === 'external' || !window.vtt3d?.active) return;
+    const snapPoint = tokenUnderPointer(state, event);
+    if (!snapPoint) return;
+    event.stopImmediatePropagation();
+    pressMeasure(state, event, snapPoint);
+  }, true);
+
+  // While a measurement is being made: dragged with the button held, or following the pointer after a click. Over the
+  // whole board, the 3D board's tokens included (they sit beside the map surface, not in it).
+  boardCanvas.addEventListener('pointermove', (event) => {
     if (!state.measuring || state.mode !== 'pointer' || event.pointerId !== state.pointerId) {
       return;
     }
@@ -146,25 +153,50 @@ export function mountDragRuler() {
       return;
     }
 
-    event.preventDefault();
-    event.stopPropagation();
+    if (!state.following) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
     updateHoverPoint(state, snapPoint);
   });
 
   mapSurface.addEventListener('pointerup', (event) => {
-    if (!state.measuring || state.mode !== 'pointer' || event.pointerId !== state.pointerId) {
+    if (!state.measuring || state.mode !== 'pointer' || event.pointerId !== state.pointerId || state.following) {
       return;
     }
 
     event.preventDefault();
     event.stopPropagation();
     const snapPoint = getSnappedPoint(state, event);
+    mapSurface.releasePointerCapture?.(event.pointerId);
+    // Let go on the square it was pressed on: a click. The line follows the pointer until the next click ends it.
+    if (snapPoint && state.pressSquare && pointsShareCell(snapPoint, state.pressSquare)) {
+      state.following = true;
+      return;
+    }
     if (snapPoint) {
       commitHoverPoint(state, snapPoint);
     }
     endMeasurement(state);
-    mapSurface.releasePointerCapture?.(event.pointerId);
   });
+
+  // The height under the pointer, in a note beside it, while the Measure tool is on (3D board).
+  const note = document.createElement('div');
+  note.className = 'vtt-measure-height-note';
+  note.setAttribute('aria-hidden', 'true');
+  note.hidden = true;
+  document.body.append(note);
+  state.heightNote = note;
+  let notePending = null;
+  document.addEventListener('pointermove', (event) => {
+    if (!state.active || !window.vtt3d?.active || state.mode === 'external') {
+      if (!note.hidden) note.hidden = true;
+      return;
+    }
+    const first = !notePending;
+    notePending = { clientX: event.clientX, clientY: event.clientY, target: event.target };
+    if (first) requestAnimationFrame(() => { const at = notePending; notePending = null; showHeightNote(state, at); });
+  }, { passive: true });
 
   mapSurface.addEventListener('pointercancel', (event) => {
     if (state.measuring && state.mode === 'pointer' && event.pointerId === state.pointerId) {
@@ -176,7 +208,17 @@ export function mountDragRuler() {
 
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && state.active) {
-      toggleMeasureMode(state, false);
+      // A measurement following the pointer is dropped; otherwise the tool is put away.
+      if (state.measuring && state.mode === 'pointer') clearMeasurement(state);
+      else toggleMeasureMode(state, false);
+      return;
+    }
+    // M turns the Measure tool on and off (Brandon, October 2026). Not while typing, nor with Ctrl, Alt or Cmd.
+    if ((event.key === 'm' || event.key === 'M') && !event.repeat && !event.ctrlKey && !event.metaKey && !event.altKey
+      && !event.target?.closest?.('input,textarea,select,[contenteditable],dialog,[role="dialog"]')
+      && mapSurface.getClientRects().length && state.mode !== 'external') {
+      event.preventDefault();
+      toggleMeasureMode(state, !state.active);
       return;
     }
 
@@ -214,6 +256,75 @@ function toggleMeasureMode(state, nextActive) {
   if (!state.active) {
     clearMeasurement(state);
   }
+}
+
+// A press with the Measure tool, on the ground or (3D board) on a token. A press while the line follows the pointer
+// ends it there (click, then click); any other starts a measurement, or carries one on from its end square.
+function pressMeasure(state, event, snapPoint) {
+  event.preventDefault();
+  event.stopPropagation();
+  if (state.measuring && state.mode === 'pointer' && state.following) {
+    commitHoverPoint(state, snapPoint);
+    endMeasurement(state);
+    return;
+  }
+  if (canExtendExistingMeasurement(state, snapPoint)) {
+    resumeMeasurement(state, event.pointerId, snapPoint);
+  } else {
+    beginMeasurement(state, event.pointerId, snapPoint);
+  }
+  state.following = false;
+  state.pressSquare = { column: snapPoint.column, row: snapPoint.row };
+  try {
+    state.mapSurface.setPointerCapture(event.pointerId);
+  } catch (error) {
+    // Ignore pointer capture errors – measurement will still function without it.
+  }
+}
+
+/** 3D board: the token under the pointer as a measuring point (its space and the height it stands at), or null. */
+function tokenUnderPointer(state, event) {
+  if (!window.vtt3d?.active || !Number.isFinite(event?.clientX)) return null;
+  const node = document.elementsFromPoint(event.clientX, event.clientY)
+    .find((element) => element.matches?.('#vtt-token-layer [data-placement-id]') || element.closest?.('#vtt-token-layer [data-placement-id]'));
+  const id = node?.closest?.('[data-placement-id]')?.dataset.placementId;
+  const token = id ? window.vtt3dBridge?.measurePoint?.(id) : null;
+  if (!token) return null;
+  const metrics = getGridMetrics(state.grid, state.mapTransform);
+  const grid = metrics && metrics.size > 0 ? metrics.size : 64, left = metrics?.offsets.left ?? 0, top = metrics?.offsets.top ?? 0;
+  return {
+    mapX: left + (token.column + 0.5) * grid,
+    mapY: top + (token.row + 0.5) * grid,
+    column: token.column,
+    row: token.row,
+    width: token.width,
+    height: token.height,
+    surfaceElevation: token.z,
+    tokenId: token.id,
+    tokenName: token.name,
+  };
+}
+
+function showHeightNote(state, at) {
+  const note = state.heightNote;
+  if (!note || !at) return;
+  const onBoard = at.target?.closest?.('#vtt-board-canvas') && !at.target.closest('button,input,select,textarea,dialog,[role="dialog"],[role="menu"]');
+  let text = '';
+  if (onBoard && state.active && window.vtt3d?.active) {
+    const node = document.elementsFromPoint(at.clientX, at.clientY).find((element) => element.closest?.('#vtt-token-layer [data-placement-id]'));
+    const id = node?.closest('[data-placement-id]')?.dataset.placementId;
+    const token = id ? window.vtt3dBridge?.measurePoint?.(id) : null;
+    const hit = token ? null : window.vtt3d.clientToMap?.(at.clientX, at.clientY);
+    text = heightNote(token ? { token } : hit ? { ground: hit.height } : null);
+  }
+  if (!text) {
+    note.hidden = true;
+    return;
+  }
+  if (note.textContent !== text) note.textContent = text;
+  note.style.left = `${at.clientX + 16}px`;
+  note.style.top = `${at.clientY + 18}px`;
+  note.hidden = false;
 }
 
 function beginMeasurement(state, pointerId, startPoint) {
@@ -258,6 +369,8 @@ function commitHoverPoint(state, snapPoint) {
 function endMeasurement(state) {
   invalidateMapRectCache();
   state.measuring = false;
+  state.following = false;
+  state.pressSquare = null;
   state.pointerId = null;
   state.hoverPoint = null;
   if (state.mode === 'pointer') {
@@ -274,6 +387,8 @@ function clearMeasurement(state) {
   }
   state.assumed = null;
   state.measuring = false;
+  state.following = false;
+  state.pressSquare = null;
   state.pointerId = null;
   state.points = [];
   state.hoverPoint = null;
@@ -363,6 +478,9 @@ function isPointerOverToken(event) {
 }
 
 function getSnappedPoint(state, event) {
+  // 3D board, Measure tool: pointing at a token measures to the token.
+  const token = state.active && state.mode !== 'external' ? tokenUnderPointer(state, event) : null;
+  if (token) return token;
   const rawCoords = getMapCoordinates(state.mapTransform, event);
   const mapCoords = rawCoords && (window.terrainPrototype?.unproject(rawCoords) ?? rawCoords);
   if (!mapCoords) {
@@ -482,6 +600,10 @@ function updateOverlay(state) {
 }
 
 function drawOverlay(state) {
+  // The Measure tool on the 3D board measures in straight lines through the air, Draw Steel's way (measure-straight.mjs);
+  // Space held shows the walking route over the ground instead, as below (Brandon, October 2026).
+  state.walkShown = teleportSpaceHeld;
+  if (state.mode !== 'external' && window.vtt3dActive && !teleportSpaceHeld && drawStraight(state)) return;
   // Distance is the route as before; cost adds difficult terrain for a walk or shift.
   const kind = state.mode === 'external' ? movementKindOf(state) : 'walk';
   // A forced move counts the squares it is moved across the map. How far it then drops is not
@@ -649,6 +771,34 @@ function drawOverlay(state) {
     state.overlay.total.style.display = '';
   }
   syncSegmentLabels(state.overlay.labels, segments, totalBox, gridSize);
+}
+
+/** The Measure tool's straight line on the 3D board. False when there is nothing to measure yet. */
+function drawStraight(state) {
+  const raw = getRenderablePoints(state);
+  if (raw.length < 2) return false;
+  const points = raw.map((p) => ({ ...p, z: Number.isFinite(p.surfaceElevation) ? p.surfaceElevation : (window.terrainPrototype?.heightAt?.(p.mapX, p.mapY) ?? 0) }));
+  const words = straightWords(points);
+  // A token's line runs from the middle of its space.
+  const nodes = points.map((p) => ({ x: p.column + (p.width || 1) / 2, y: p.row + (p.height || 1) / 2, z: p.z }));
+  const middle = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 });
+  state.lastMeasure = { distance: words.total, cost: words.total, kind: 'walk', shiftInDifficult: false };
+  state.lastPresentation = {
+    pieces: [{ points: nodes, color: '#111111' }],
+    difficult: [],
+    climbs: [],
+    nodes,
+    total: { text: words.text, at: nodes.at(-1) },
+    legs: nodes.length > 2 ? words.legs.map((leg, index) => ({ text: String(leg.distance), at: middle(nodes[index], nodes[index + 1]) })) : [],
+  };
+  // The flat map's drawing is not used on the 3D board.
+  state.overlay.svg.setAttribute('hidden', 'hidden');
+  state.overlay.svg.style.display = 'none';
+  state.overlay.svg.querySelector('[data-difficult-route]')?.remove();
+  hideShiftWarning();
+  state.ruler.removeAttribute('hidden');
+  state.rulerValue.textContent = words.text;
+  return true;
 }
 
 function ensureRulerDetail(ruler) {
