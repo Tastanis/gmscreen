@@ -42,11 +42,11 @@
       "scale": 1.15
     },
     "ghoul-packmaster-level-4-horde": {
-      "model": "packmaster",
+      "model": "packmaster-blender",
       "scale": 1.15
     },
     "sluice-ghoul-level-4-minion": {
-      "model": "ghoul",
+      "model": "ghoul-blender",
       "scale": 1.15
     },
     "sluice-drowner-level-4-horde": {
@@ -54,7 +54,7 @@
       "scale": 1.15
     },
     "sluice-saltbearer-level-4-horde": {
-      "model": "saltbearer",
+      "model": "saltbearer-blender",
       "scale": 1.15
     },
     "sluice-warden-level-4-defender": {
