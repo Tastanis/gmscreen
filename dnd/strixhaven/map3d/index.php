@@ -400,16 +400,16 @@ const BR_E = [BR_P[0] + BR_N[0] * BR_HALF, BR_P[1] + BR_N[1] * BR_HALF], BR_W = 
 // Kollema massif. KF points downhill from the hall toward the bridge, KL is sideways; kpt(a, b) = a along KF, b along KL
 const KF = (() => { const dx = BR_W[0] - KOLL[0], dz = BR_W[1] - KOLL[1], l = Math.hypot(dx, dz); return [dx / l, dz / l]; })(), KL = [-KF[1], KF[0]];
 const kpt = (a, b) => [KOLL[0] + KF[0] * a + KL[0] * b, KOLL[1] + KF[1] * a + KL[1] * b];
-const KY = 235;                                                    // height of the hall's middle terrace
+const KY = 235;                                                    // height of the hall's summit
+const KG = [BR_P[0] - BR_N[0] * 207, BR_P[1] - BR_N[1] * 207];      // Kollema Hall's gate, where Effigy Row runs on into the mountain
+const KTIER = [[0, 57, 76, 0], [-53, 108, 76, 0], [-98, 148, 64, 8], [-143, 188, 54, -9], [-215, 230, 50, 4]];   // the hall's tiers up the mountain: [rise, along the bridge line from the gate; floor height; half width; sideways offset]
 const KPEAKS = [[-40, 0, 300, 330], [25, -128, 160, 300], [25, 128, 160, 300], [-190, -130, 180, 260], [-215, 90, 185, 275], [-90, 265, 150, 200], [-70, -270, 150, 190], [-175, -85, 120, 250], [-180, 90, 125, 262], [110, -235, 130, 170], [120, 225, 130, 165], [-320, -30, 130, 150]]
   .map(([a, b, r, H], i) => { const p = kpt(a, b); return { x: p[0], z: p[1], r, H, s: i * 2.3 + .7 }; });
 { const r = mulberry32(555), c = kpt(-40, 0);                       // a broken ring of small foothill peaks, left open toward the bridge
   for (let i = 0; i < 14; i++) { const a = i / 14 * 6.283 + r() * .4, d = 330 + 100 * r(), ca = Math.cos(a), sa = Math.sin(a), rr = 60 + 55 * r(), H = 60 + 90 * r();
     if (ca * KF[0] + sa * KF[1] > .72) continue; KPEAKS.push({ x: c[0] + ca * d, z: c[1] + sa * d, r: rr, H, s: 40 + i }); } }
 // the road up to the hall: uneven legs and rounded hairpins, the way a real mountain road picks its line
-const KSWITCH = (() => { const ctl = [[262, 0], [226, -74], [204, -138], [186, -40], [171, 74], [158, 122], [139, 30], [124, -52], [112, -96], [98, -20], [92, 44], [82, 4]]
-    .map(([a, b]) => { const p = kpt(a, b); return new THREE.Vector3(p[0], 0, p[1]); });
-  return new THREE.CatmullRomCurve3(ctl, false, 'centripetal').getPoints(36).map(p => [p.x, p.z]); })();
+const KSWITCH = [[KG[0] - BR_N[0] * 196, KG[1] - BR_N[1] * 196], [KG[0] - BR_N[0] * 208, KG[1] - BR_N[1] * 208]];
 const KROAD = makePath(KSWITCH, 0, 30);
 const TB_R = 132, TB_D = 50, TB_F = 95;                                       // Torus Hall sits in a stepped basin this wide and this deep
 const WALKS = [
@@ -422,7 +422,7 @@ const WALKS = [
 // straight walkway segments (world units), handed to the shader so path edges stay crisp at any zoom
 const WALK_SEGS = [];
 const seg4 = (p, i) => new THREE.Vector4(p.pts[2 * i], p.pts[2 * i + 1], p.pts[2 * i + 2], p.pts[2 * i + 3]).multiplyScalar(S);
-WALKS.forEach((p, wi) => { const n = wi === 4 ? 3 : p.pts.length / 2 - 1; for (let i = 0; i < n; i++) WALK_SEGS.push(seg4(p, i)); });
+WALKS.forEach((p, wi) => { const n = wi === 4 ? 2 : p.pts.length / 2 - 1; for (let i = 0; i < n; i++) WALK_SEGS.push(seg4(p, i)); });
 // the curving mountain road has many short segments, so the shader only tests them inside this box
 const ROAD_SEGS = []; for (let i = 0; i < KROAD.pts.length / 2 - 1; i++) ROAD_SEGS.push(seg4(KROAD, i));
 const ROAD_BOX = new THREE.Vector4(KROAD.x0 * S, KROAD.z0 * S, KROAD.x1 * S, KROAD.z1 * S);
@@ -548,11 +548,17 @@ function sample(x, z) {
       const t = 1 - d / p.r, ph = 30 + p.H * Math.pow(t, 1.2) * (.74 + .33 * ridged(x / 170 + p.s, z / 170, 3));
       mh = any ? smax(mh, ph, 16) : ph; any = true; }
     if (any) { mh += (12 * ridged(x / 105 + 3, z / 105 + 7, 3) - 5) * sstep(32, 95, mh); h = smax(h, mh, 14); }
-    const dx = x - KOLL[0], dz = z - KOLL[1], a = dx * KF[0] + dz * KF[1], b = Math.abs(dx * KL[0] + dz * KL[1]);
-    if (a > -100 && a < 90 && b < 86) { kolM = sstep(-96, -80, a) * sstep(86, 72, a) * sstep(82, 66, b);   // cut far enough back that the whole hall stands clear of the rock
-      h = lerp(h, KY - 14 + 26 * sstep(36, 28, a) + 18 * sstep(-4, -12, a), kolM); }
+    { const gx = x - KG[0], gz = z - KG[1], gu = gx * BR_N[0] + gz * BR_N[1], gv = gz * BR_N[0] - gx * BR_N[1], av = Math.abs(gv), T = KTIER;   // along the bridge line from the gate, and across it
+      if (gu > -260 && gu < 140 && av < 130) {
+        if (gu < 8) { const Hc = T[0][1] + (T[1][1] - T[0][1]) * sstep(-3.5, -8.5, gu) + (T[2][1] - T[1][1]) * sstep(-53, -59, gu) + (T[3][1] - T[2][1]) * sstep(-98, -104, gu) + (T[4][1] - T[3][1]) * sstep(-143, -149, gu);
+          const W = T[1][2] + (T[2][2] - T[1][2]) * sstep(-53, -59, gu) + (T[3][2] - T[2][2]) * sstep(-98, -104, gu) + (T[4][2] - T[3][2]) * sstep(-143, -149, gu), back = sstep(-234, -214, gu);
+          const off = T[1][3] + (T[2][3] - T[1][3]) * sstep(-53, -59, gu) + (T[3][3] - T[2][3]) * sstep(-98, -104, gu) + (T[4][3] - T[3][3]) * sstep(-143, -149, gu), ov = gv - off, aov = Math.abs(ov), side = ov < 0 ? 34 : 22;
+          kolM = sstep(W + 8, W, aov) * back; h = lerp(h, Hc, kolM);
+          const sh = sstep(W - 2, W + 5, aov) * sstep(W + side + 10, W + side - 4, aov) * back * sstep(12, 0, gu); if (sh > 0) h = smax(h, lerp(h, Hc + 26 + 22 * ridged(x / 40 + 3, z / 40, 3), sh), 8); }
+        if (gu > 0 && gu < 135) { const ap = sstep(72, 52, av) * sstep(0, 6, gu) * sstep(132, 112, gu); h = lerp(h, Math.min(h, 50 + .3 * Math.max(0, av - 26)), ap);
+          const rv = sstep(21, 13, av + 3 * fbm(x / 14, z / 14, 2)) * sstep(0, 5, gu) * sstep(130, 110, gu); h = lerp(h, -26 + 6 * fbm(x / 20, z / 20, 2), rv); } } }
     { const d = Math.hypot(x - PHX[0], z - PHX[1]); if (d < 66) { phxK = sstep(66, 44, d); h = lerp(h, 96, phxK); if (d < 30) { const q = clamp((d - 12) / 16, 0, 1) * 3, fl = Math.floor(q); h = Math.min(h, 80 + (fl + sstep(.7, 1, q - fl)) * 5.33); } } }   // the Phalanx Crucible: the hill is cut level for the ring of statues, with a small arena sunk in tiers at its middle
-    const dr = polyDist(KROAD, x, z); if (dr < 22) { const ramp = 46 + (KY - 60) * Math.pow(PD_T, 1.6); h = lerp(h, lerp(h, ramp, sstep(0, .1, PD_T)), sstep(20, 9, dr)); } }
+  }
   // --- Lorehold: courts cut into the massif, a shaft, a scrap pit, a slot canyon, an old river bed and a battlefield
   let cutK = 0, scarK = 0, brkK = 0, brkT = 0;
   const notch = (c, ux, uz, a0, a1, hw, F) => { const dx = x - c[0], dz = z - c[1], a = dx * ux + dz * uz, b = Math.abs(dz * ux - dx * uz); if (a < a0 - 30 || a > a1 + 4 || b > hw + 8) return; const k = sstep(hw + 6, hw, b) * sstep(a1 + 2.5, a1, a) * sstep(a0 - 30, a0, a); if (k > 0) h = lerp(h, Math.min(h, F), k); };
@@ -684,7 +690,7 @@ function sample(x, z) {
   if (starK > 0) { mixTo(P.obsidian, starK); rough = lerp(rough, .04, starK); lava *= 1 - starK; }
   { const d = Math.hypot(x - THORN[0], z - THORN[1]); if (d < 175) mixTo(P.scorch, sstep(175, 90, d) * .7); }
   if (torusB > 0) { const fl = sstep(.93, 1, torusB); mixTo(P.paved, fl * .8); rough = lerp(rough, .6, fl); quan *= 1 - fl; }
-  if (kolM > 0) { mixTo(P.loreB, kolM * .55); ka *= 1 - kolM * .6; }
+  if (kolM > 0) { mixTo([.34, .23, .14], kolM * .82); rough = lerp(rough, .75, kolM); ka *= 1 - kolM * .85; }   // the hall's terraces are paved
   if (cityM > 0) { mixTo(P.paved, cityM * .9); rough = lerp(rough, .6, cityM); quan = 0; }
   if (sinkR > 0) { const bnd = .5 + .5 * Math.sin(h * .42 + 3 * fbm(x / 30, z / 30, 2)), dk = 1 - .55 * sstep(-15, -95, h); mixTo([lerp(.12, .25, bnd) * dk, lerp(.11, .22, bnd) * dk, lerp(.095, .18, bnd) * dk], sinkR * .92); rough = lerp(rough, .9, sinkR); }   // bare rock, banded as it goes down, darker with depth
   if (sluD < 20) { const k = sstep(20, 14, sluD); mixTo([.27, .25, .22], k * .85); rough = lerp(rough, .8, k); if (sluD < 6.5) mixTo([.1, .008, .01], .9); }
@@ -1606,33 +1612,119 @@ function buildProps() {
       const ink = new THREE.Group(); for (let i = 0; i < 9; i++) { const a = i / 9 * 6.283, d = 22 + (i % 4) * 4; M(ink, new THREE.SphereGeometry(1.5 + (i % 3) * .5, 8, 6), bm, Math.cos(a) * d, 90 + (i * 7) % 40, Math.sin(a) * d, { sx: 1.6 }); }
       ink.traverse(m => { m.userData.noShadow = true; }); ink.position.z = -14; g.add(ink); spin.push({ o: ink, speed: .6, bolt: false });
     }, { ry: Math.atan2(SQGATE[0] * S - CWp[0], SQGATE[1] * S - CWp[1]), hexes: [[29, 17]], top: 165, view: 1000 }); }
-  // Kollema Hall: 3 hexes. A square rampart fortress stepping up three terraces: curtain walls, four great corner towers, a gatehouse and a three-tier keep - all flat-topped and crenellated
-  addThing('Kollema Hall', '🏰', Wp(KOLL), 2.4, 95, g => {
-    const st = tx(solid(0xb89164, .85), 'masonry'), dk = tx(solid(0x8a6845, .9), 'masonry'), red = solid(0xa01c1c, .8), wht = solid(0xe9e2d0, .8), wst = tx(solid(0xe9e2d0, .8), 'rock'), shade = solid(0x2a2018, 1), fire = glowM(0xff9a3a, 3);
-    const B = (w, hh, d, m, x, y, z, o) => M(g, new THREE.BoxGeometry(w, hh, d), m, x, y, z, o);
-    const Y1 = -8.2, Y2 = 7, Y3 = 17.5, HW = 36, ZF = 42, ZB = -38;
-    const crenX = (x0, x1, y, z) => { for (let x = x0 + 1.5; x < x1; x += 4.4) B(2.4, 2.6, 3.4, st, x, y, z); };      // battlements along a wall top
-    const crenZ = (z0, z1, y, x) => { for (let z = z0 + 1.5; z < z1; z += 4.4) B(3.4, 2.6, 2.4, st, x, y, z); };
-    const tower = (x, z, base, hgt, w) => { B(w, hgt + 6, w, st, x, base + hgt / 2 - 3, z); B(w + 2.4, 2.2, w + 2.4, dk, x, base + hgt + .2, z);   // square, flat-topped, battlements all round
-      for (const sx of [-1, 1]) for (let i = -1; i <= 1; i++) { B(2.4, 3, 2.4, st, x + sx * (w / 2 + .1), base + hgt + 2.8, z + i * (w / 2 - 1.2)); B(2.4, 3, 2.4, st, x + i * (w / 2 - 1.2), base + hgt + 2.8, z + sx * (w / 2 + .1)); }
-      const f = M(g, new THREE.SphereGeometry(1.5, 8, 6), fire, x, base + hgt + 2.6, z); f.userData.keepSep = 1; };
-    B(2 * HW, 18, 3.4, st, 0, Y1 + 5, ZF); crenX(-HW + 6, -8, Y1 + 15.3, ZF); crenX(8, HW - 6, Y1 + 15.3, ZF);                      // front wall
-    B(2 * HW, 20, 3.4, st, 0, Y3 + 6, ZB); crenX(-HW + 6, HW - 6, Y3 + 17.3, ZB);                                                  // back wall
-    for (const sx of [-1, 1]) { const x = sx * HW;                                                                                // side walls, stepping up with the terraces
-      B(3.4, 18, 22, st, x, Y1 + 5, 31); crenZ(20, 40, Y1 + 15.3, x); B(3.4, 18, 26, st, x, Y2 + 5, 7); crenZ(-6, 20, Y2 + 15.3, x); B(3.4, 20, 32, st, x, Y3 + 6, -22); crenZ(-38, -6, Y3 + 17.3, x); }
-    tower(-HW, ZF, Y1, 34, 12); tower(HW, ZF, Y1, 34, 12); tower(-HW, ZB, Y3, 40, 13); tower(HW, ZB, Y3, 40, 13);                 // the four corner towers
-    B(16, 26, 9, st, 0, Y1 + 9, ZF); B(18.4, 2.2, 11.4, dk, 0, Y1 + 22.6, ZF); crenX(-9, 9, Y1 + 25, ZF + 4.5); crenX(-9, 9, Y1 + 25, ZF - 4.5); B(7, 12, 9.6, shade, 0, Y1 + 2, ZF);   // gatehouse
-    B(3.2, 16, .4, red, -5.6, Y1 + 13, ZF + 4.8); B(3.2, 16, .4, wht, 5.6, Y1 + 13, ZF + 4.8);
-    B(6, 3, 6, dk, 0, Y1 + 1.5, 30); M(g, new THREE.CylinderGeometry(1.5, 2.6, 13, 8), wst, 0, Y1 + 9.5, 30); M(g, new THREE.SphereGeometry(2.1, 10, 8), wst, 0, Y1 + 17.5, 30);       // statue of Kollema
-    for (let i = 0; i < 6; i++) B(24 - i * 1.2, 2.6, 2.2, st, 0, Y1 + 1.3 + i * 2.5, 24.5 - i * 1.9);                              // stair up to the keep
-    B(50, 28, 24, st, 0, Y2 + 10, 3); B(52.4, 2, 26.4, dk, 0, Y2 + 24, 3); crenX(-25, 25, Y2 + 26.3, 15); crenX(-25, 25, Y2 + 26.3, -9); crenZ(-9, 15, Y2 + 26.3, -25); crenZ(-9, 15, Y2 + 26.3, 25);   // keep, lower tier
-    for (let i = -4; i <= 4; i++) B(1.6, 12, 1.6, wst, i * 5.4, Y2 + 6, 15.8); B(48, 2, 2.4, wst, 0, Y2 + 13, 15.8);
-    B(36, 30, 26, st, 0, Y3 + 11, -19); B(38.4, 2, 28.4, dk, 0, Y3 + 26, -19); crenX(-18, 18, Y3 + 28.3, -6); crenX(-18, 18, Y3 + 28.3, -32); crenZ(-32, -6, Y3 + 28.3, -18); crenZ(-32, -6, Y3 + 28.3, 18);   // middle tier
-    B(20, 20, 16, st, 0, Y3 + 36, -19); B(22.4, 2, 18.4, dk, 0, Y3 + 46, -19); crenX(-10, 10, Y3 + 48.3, -11); crenX(-10, 10, Y3 + 48.3, -27); crenZ(-27, -11, Y3 + 48.3, -10); crenZ(-27, -11, Y3 + 48.3, 10);   // top tier
-    M(g, new THREE.SphereGeometry(2.2, 8, 6), fire, 0, Y3 + 49, -19);
-    for (let i = -2; i <= 2; i++) B(3.4, 20, .4, i % 2 ? wht : red, i * 7, Y3 + 13, -5.8);                                          // banners
-    for (const [x, c] of [[-18, red], [-6, wht], [6, red], [18, wht]]) B(3.4, 16, .4, c, x, Y2 + 16, 15.3);
-  }, { y: KY * S, ry: Math.atan2(KF[0], KF[1]), top: 100, view: 820 });
+  // Kollema Hall: Lorehold's seat, built into the Kollema mountain itself. Effigy Row runs straight on from the chasm into a great gate at the mountain's foot, flanked by colossal effigies;
+  // above it the hall climbs the mountain in carved tiers - facades cut into each rise of rock with tall windows lit blue, towers standing out from them, stairs along the faces, statues and
+  // pavilions on the terraces - to the summit, where the hall proper faces the bridge, a domed rotunda stands to one side and a tall tower lifts a colossal effigy holding up a golden orb
+  { const G = Wp(KG), K = Wp(KOLL), ry = Math.atan2(BR_N[0], BR_N[1]), cs = Math.cos(ry), sn = Math.sin(ry), Ky = KY * S;
+    const YB = Math.max(heightAt(BR_E[0] * S, BR_E[1] * S), heightAt(BR_W[0] * S, BR_W[1] * S)) + 2, ddx = G[0] - K[0], ddz = G[1] - K[1], OX = ddx * cs - ddz * sn, OZ = ddx * sn + ddz * cs, OY = YB - Ky;
+    const F = KTIER.map(t => t[1] * S - YB), R = KTIER.map(t => t[0] * S), HWs = KTIER.map(t => t[2] * S), XO = KTIER.map(t => t[3] * S);       // floor heights above the deck, riser positions, half widths
+    const worldYmin = (lx, lz, r) => { let m = 1e9; for (let a = 0; a < 8; a++) m = Math.min(m, worldY(lx + Math.cos(a * .785) * r, lz + Math.sin(a * .785) * r)); return Math.min(m, worldY(lx, lz)); };
+    const worldY = (lx, lz) => { const wx = K[0] + (lx + OX) * cs + (lz + OZ) * sn, wz = K[1] - (lx + OX) * sn + (lz + OZ) * cs; return heightAt(wx, wz) - YB; };
+    addThing('Kollema Hall', '🏰', Wp(KOLL), 1, 120, g => {
+      const st = tx(solid(0xc49866, .85), 'masonry'), stL = tx(solid(0xdcb888, .8), 'masonry'), dk = tx(solid(0x8a6442, .9), 'masonry'), rk = tx(solid(0x9a7452, .95, { flatShading: true }), 'rock'), wht = tx(solid(0xece2cc, .75), 'marble'), shade = solid(0x140e0a, 1);
+      const win = glowM(0x2a6cff, 1.8), winW = glowM(0xff9a4a, 1.8), roof = solid(0x7a6a52, .7, { metalness: .35 }), gold = solid(0xd8a640, .35, { metalness: .8, emissive: 0x3a2400, emissiveIntensity: .6 }), red = solid(0x9a2018, .8), fire = glowM(0x8ac8ff, 3);
+      let xo = 0; const P = (geo, m, x, y, z, o) => M(g, geo, m, x + OX + xo, y + OY, z + OZ, o), B = (w, h, d, m, x, y, z, o) => P(new THREE.BoxGeometry(w, h, d), m, x, y, z, o);
+      const C = (r1, r2, h, n, m, x, y, z, o) => P(new THREE.CylinderGeometry(r1, r2, h, n), m, x, y, z, o), Sp = (r, m, x, y, z, o, n = 14) => P(new THREE.SphereGeometry(r, n, Math.max(6, n >> 1)), m, x, y, z, o);
+      const dome = (r, m, x, y, z) => P(new THREE.SphereGeometry(r, 18, 9, 0, 6.283, 0, Math.PI / 2), m, x, y, z);
+      const statueAt = (x, y, z, H, kind, face = 0) => statue(g, wht, x + OX + xo, y + OY, z + OZ, H, face, kind);
+      // the gate's guardians: colossal hooded figures in weathered stone, deep folds falling down their robes, both hands resting on the pommel of a great sword planted before them
+      const effT = ctex(256, 512, (c, W, H) => { const r = mulberry32(919); c.fillStyle = '#cbbb9e'; c.fillRect(0, 0, W, H);
+        for (let i = 0; i < 18; i++) { const x0 = i / 18 * W, gr = c.createLinearGradient(x0, 0, x0 + W / 18, 0); gr.addColorStop(0, 'rgba(60,44,28,.32)'); gr.addColorStop(.45, 'rgba(255,245,225,.12)'); gr.addColorStop(1, 'rgba(60,44,28,.28)'); c.fillStyle = gr; c.beginPath(); c.moveTo(x0, 0); for (let y = 0; y <= H; y += 16) c.lineTo(x0 + 3 * Math.sin(y / 40 + i), y); for (let y = H; y >= 0; y -= 16) c.lineTo(x0 + W / 18 + 3 * Math.sin(y / 40 + i + 1), y); c.fill(); }
+        for (let y = 60; y < H; y += 70 + r() * 40) { c.fillStyle = 'rgba(70,52,34,.25)'; c.fillRect(0, y, W, 2); c.fillStyle = 'rgba(255,240,215,.12)'; c.fillRect(0, y + 2, W, 1.5); }
+        for (let i = 0; i < 40; i++) { const x = r() * W, gr = c.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(.25 + r() * .5, 'rgba(50,40,30,' + (.15 + r() * .25) + ')'); gr.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = gr; c.fillRect(x, 0, 1.5 + r() * 5, H); }
+        for (let i = 0; i < 26; i++) { c.fillStyle = 'rgba(' + (95 + r() * 30 | 0) + ',' + (100 + r() * 30 | 0) + ',' + (70 + r() * 20 | 0) + ',' + (.18 + r() * .2) + ')'; c.beginPath(); c.ellipse(r() * W, H * .55 + r() * H * .45, 4 + r() * 14, 3 + r() * 9, r() * 3, 0, 6.283); c.fill(); }
+        c.strokeStyle = 'rgba(40,28,18,.6)'; for (let i = 0; i < 22; i++) { let x = r() * W, y = r() * H; c.lineWidth = .7 + r() * 1.4; c.beginPath(); c.moveTo(x, y); for (let k = 0; k < 6; k++) { x += (r() - .5) * 26; y += r() * 26; c.lineTo(x, y); } c.stroke(); }
+        for (let i = 0; i < 9000; i++) { c.fillStyle = r() < .5 ? 'rgba(0,0,0,.14)' : 'rgba(255,245,225,.1)'; c.fillRect(r() * W, r() * H, 1 + r() * 2, 1 + r() * 2); } });
+      const effM = new THREE.MeshStandardMaterial({ map: effT, color: 0xe8dcc8, roughness: .93 }), hoodM = new THREE.MeshStandardMaterial({ map: effT, color: 0xe8dcc8, roughness: .93, side: THREE.DoubleSide }), faceM = new THREE.MeshStandardMaterial({ roughness: 1, map: ctex(64, 96, (c, w, h) => { const gr = c.createRadialGradient(w / 2, h * .5, 2, w / 2, h * .5, w * .62); gr.addColorStop(0, '#0e0b08'); gr.addColorStop(.55, '#1e1812'); gr.addColorStop(1, '#6a5c48'); c.fillStyle = gr; c.fillRect(0, 0, w, h); }) }), effS = tx(solid(0xbfae92, .9), 'rock'), steel = solid(0x6a645c, .55, { metalness: .5 });
+      const gateEffigy = (x, y, z, H, sd) => { const k = H / 56;
+        B(13 * k, 4 * k, 11 * k, effS, x, y + 2 * k, z); B(11 * k, 1.4 * k, 9.4 * k, effS, x, y + 4.7 * k, z);
+        const prof = [[0, 0], [6.6, 0], [7, 1.6], [6.4, 10], [5.7, 20], [5.1, 29], [5, 34], [5.5, 37], [5.6, 39.2], [4.8, 41.4], [3.2, 42.8], [0, 43.4]].map(p => new THREE.Vector2(p[0] * k, p[1] * k)), ge = new THREE.LatheGeometry(prof, 40), pa = ge.attributes.position;
+        for (let i = 0; i < pa.count; i++) { const vx = pa.getX(i), vy = pa.getY(i), vz = pa.getZ(i), a = Math.atan2(vz, vx), lo = 1 - Math.min(1, vy / (36 * k)), f = 1 + (.09 * Math.sin(a * 9 + vy * .04) + .04 * Math.sin(a * 17 + 1.3)) * (.25 + .75 * lo); pa.setXYZ(i, vx * f, vy, vz * f * .8); }
+        ge.computeVertexNormals(); P(ge, effM, x, y + 5.4 * k, z);
+        const hood = new THREE.SphereGeometry(5.2 * k, 24, 14, 0, 6.283, 0, 2.45); P(hood, hoodM, x, y + 48.6 * k, z - .3 * k, { sy: 1.22, sz: 1.05 });
+        P(new THREE.CircleGeometry(2.4 * k, 24), faceM, x, y + 47.4 * k, z + 5.5 * k, { sy: 1.55 }); P(new THREE.TorusGeometry(2.55 * k, .34 * k, 5, 24), hoodM, x, y + 47.4 * k, z + 5.4 * k, { sy: 1.52 });
+        P(new THREE.SphereGeometry(7 * k, 24, 10, 0, 6.283, 0, 1.2), effM, x, y + 37.6 * k, z, { sy: .72, sz: .86 });
+                const hand = [x, y + 39 * k, z + 6.2 * k]; for (const hx of [-1, 1]) { const sh = [x + hx * 4.4 * k, y + 43.4 * k, z + 1.2 * k], d = new THREE.Vector3(hand[0] - sh[0] + hx * 1.3 * k, hand[1] - sh[1], hand[2] - sh[2]), L = d.length(), ag = new THREE.CylinderGeometry(2.2 * k, 1.3 * k, L, 10).translate(0, L / 2, 0); ag.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize())); P(ag, effM, sh[0], sh[1], sh[2]); }
+        P(new THREE.SphereGeometry(1.9 * k, 10, 8), effS, hand[0], hand[1], hand[2], { sx: 1.5 }); P(new THREE.TorusGeometry(5.3 * k, .6 * k, 6, 24), effS, x, y + 34 * k, z, { rx: Math.PI / 2, sy: .8 }); B(1.8 * k, 7 * k, .6 * k, effS, x + 1.6 * k, y + 30 * k, z + 4.5 * k); P(new THREE.SphereGeometry(1.1 * k, 10, 8), effS, hand[0], hand[1] + 2.3 * k, hand[2]);
+        C(.55 * k, .55 * k, 3.4 * k, 8, effS, hand[0], hand[1] - .6 * k, hand[2]); B(10 * k, 1.3 * k, 1.5 * k, effS, hand[0], hand[1] - 2.8 * k, hand[2]); for (const e of [-1, 1]) P(new THREE.SphereGeometry(.9 * k, 8, 6), effS, hand[0] + e * 5 * k, hand[1] - 2.8 * k, hand[2]);
+        const bl = new THREE.BufferGeometry(), bh = 31 * k, bw = 1.6 * k, bt = .5 * k, v = [-bw, 0, -bt, bw, 0, -bt, bw, 0, bt, -bw, 0, bt, 0, -bh, 0], idx = [0, 1, 4, 1, 2, 4, 2, 3, 4, 3, 0, 4, 0, 2, 1, 0, 3, 2]; bl.setAttribute('position', new THREE.Float32BufferAttribute(v, 3)); bl.setIndex(idx); bl.setAttribute('uv', new THREE.Float32BufferAttribute([0, 1, 1, 1, 1, 0, 0, 0, .5, 0], 2)); bl.computeVertexNormals(); P(bl, effS, hand[0], hand[1] - 3.4 * k, hand[2]);
+      };
+      const glowT = ctex(64, 128, (c, w, h) => { const g1 = c.createLinearGradient(0, 0, 0, h); g1.addColorStop(0, '#081634'); g1.addColorStop(.45, '#1d4cb8'); g1.addColorStop(.8, '#5aa8ff'); g1.addColorStop(1, '#bfe8ff'); c.fillStyle = g1; c.fillRect(0, 0, w, h);
+        const g2 = c.createLinearGradient(0, 0, w, 0); g2.addColorStop(0, 'rgba(2,8,22,.85)'); g2.addColorStop(.22, 'rgba(2,8,22,0)'); g2.addColorStop(.78, 'rgba(2,8,22,0)'); g2.addColorStop(1, 'rgba(2,8,22,.85)'); c.fillStyle = g2; c.fillRect(0, 0, w, h);
+        c.fillStyle = 'rgba(4,12,34,.35)'; c.fillRect(w * .2, h * .2, w * .07, h * .65); c.fillRect(w * .73, h * .2, w * .07, h * .65); c.fillStyle = 'rgba(200,235,255,.25)'; c.fillRect(0, h * .84, w, 2);
+        const g3 = c.createRadialGradient(w / 2, h * .92, 2, w / 2, h * .92, w * .55); g3.addColorStop(0, 'rgba(230,248,255,.55)'); g3.addColorStop(1, 'rgba(230,248,255,0)'); c.fillStyle = g3; c.fillRect(0, 0, w, h);
+        const g4 = c.createLinearGradient(0, 0, 0, h * .25); g4.addColorStop(0, 'rgba(2,6,16,.8)'); g4.addColorStop(1, 'rgba(2,6,16,0)'); c.fillStyle = g4; c.fillRect(0, 0, w, h * .25); });
+      const archGlow = new THREE.MeshBasicMaterial({ map: glowT, color: new THREE.Color(1.5, 1.6, 2.1) }), archG = new Map();
+      const arch = (x, y, z, w, h, ry = 0) => { h = Math.max(h, w * .9); const key = w.toFixed(2) + '_' + h.toFixed(2); let ge = archG.get(key);
+        if (!ge) { const sh = new THREE.Shape(); sh.moveTo(-w / 2, 0); sh.lineTo(w / 2, 0); sh.lineTo(w / 2, h - w / 2); sh.absarc(0, h - w / 2, w / 2, 0, Math.PI, false); sh.lineTo(-w / 2, 0); ge = new THREE.ShapeGeometry(sh, 10); const p = ge.attributes.position, uv = ge.attributes.uv; for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / w + .5, p.getY(i) / h); archG.set(key, ge); }
+        const c2 = Math.cos(ry), s2 = Math.sin(ry), at2 = (dx, dz) => [x + dx * c2 + dz * s2, z - dx * s2 + dz * c2], jw = Math.max(.7, w * .1), sp = h - w / 2;
+        P(ge, archGlow, x, y, z, { ry }); for (const e of [-1, 1]) { const [jx, jz] = at2(e * (w / 2 + jw / 2), .55); B(jw, sp, 1.4, stL, jx, y + sp / 2, jz, { ry }); }
+        { const [ax, az] = at2(0, .55); P(new THREE.TorusGeometry(w / 2 + jw / 2, jw * .62, 5, 16, Math.PI), stL, ax, y + sp, az, { ry }); } { const [kx, kz] = at2(0, .8); B(jw * 1.6, jw * 2.2, 1.8, dk, kx, y + h + jw * .55, kz, { ry }); } { const [sx2, sz2] = at2(0, .8); B(w + jw * 3, .9, 2.2, dk, sx2, y - .45, sz2, { ry }); } };
+      const crag = (x, y, z, w, h, d, seed = 0) => { const ge = new THREE.IcosahedronGeometry(1, 1), p = ge.attributes.position; for (let i = 0; i < p.count; i++) { const vx = p.getX(i), vy = p.getY(i), vz = p.getZ(i), hh = Math.sin(vx * 12.9898 + vy * 78.233 + vz * 37.719 + seed * 4.1) * 43758.5453, k = (.66 + .62 * (hh - Math.floor(hh))) * (1 - .42 * Math.max(0, vy)); p.setXYZ(i, vx * k, vy * (vy > 0 ? 1.3 : 1), vz * k); }
+        ge.computeVertexNormals(); return P(ge, rk, x, y + h * .42, z, { sx: w / 2, sy: h / 2, sz: d / 2, ry: seed }); };
+      const gabled = (x, y, z, w, d, h) => { B(w, h, d, st, x, y + h / 2, z); B(w + 1.6, 1.4, d + 1.6, dk, x, y + h + .4, z); const sh = new THREE.Shape([new THREE.Vector2(-w / 2 - 1.4, 0), new THREE.Vector2(w / 2 + 1.4, 0), new THREE.Vector2(0, w * .42)]); P(new THREE.ExtrudeGeometry(sh, { depth: d + 2, bevelEnabled: false }), roof, x, y + h + 1.1, z - d / 2 - 1);
+        for (const k of [-1, 1]) arch(x + k * w * .3, y + 2.5, z + d / 2 + .05, 4.2, Math.min(h - 4, 11)); B(4, 6.5, .6, shade, x, y + 3.2, z + d / 2 + .35); for (const k of [-1, 1]) C(.6, .6, h * .7, 6, wht, x + k * 3.6, y + h * .35, z + d / 2 + 2.4); B(9, 1, 3.6, stL, x, y + h * .7 + .5, z + d / 2 + 1.8); };
+      // ---- a carved face: a wall cut into each rise of rock, bay after bay of pilasters and lit windows, every few bays a tower standing out from it with a dome or a spire
+      const stairSpan = i => { const sx = i % 2 ? 1 : -1, rise = F[i + 1] - F[i], xb = sx * (HWs[i + 1] - 12), xa = xb - sx * rise * .95; return { sx, rise, xa, xb, lo: Math.min(xa, xb) - 4, hi: Math.max(xa, xb) + 8 }; };
+      const face = (i, gate) => { const y0 = F[i], y1 = F[i + 1], z = R[i] + 1, hw = HWs[i + 1] - 4, hgt = y1 - y0, nb = Math.max(3, Math.round(2 * hw / 26)), bw = 2 * hw / nb, nst = Math.max(1, Math.floor((hgt - 10) / 13));
+        const wall = (x0, x1, ya, yb2) => { if (x1 - x0 > .1 && yb2 - ya > .1) B(x1 - x0, yb2 - ya, 14, st, (x0 + x1) / 2, (ya + yb2) / 2, z - 6); };
+        if (gate) { wall(-hw, -17, y0 - 4, y1 + .5); wall(17, hw, y0 - 4, y1 + .5); wall(-17, 17, 46, y1 + .5); B(32, 46, 30, shade, 0, 23, -14); P(new THREE.TorusGeometry(17.5, 2.6, 6, 18, Math.PI), dk, 0, 32, z + .5, { sz: 1.4 }); B(5, 7, 3, stL, 0, 51, z + 1);
+          for (const sx of [-1, 1]) { B(16, 64, 9, dk, sx * 30, 32, z - 2); B(13, 58, 3, shade, sx * 30, 31, z + 2.2); gateEffigy(sx * 30, 0, z + 2, 58, sx); B(16, 3, 8, stL, sx * 30, 1.5, z + 2); } }
+        else wall(-hw, hw, y0 - 3, y1 + .5);
+        { const lw = gate ? 0 : 2 * hw - 6; if (lw > 0) { B(lw, 7.4, .8, shade, 0, y1 - 7, z + .9); for (let x = -lw / 2 + 2; x <= lw / 2 - 2; x += 4.2) C(.55, .65, 7.6, 6, wht, x, y1 - 7, z + 2.2); B(lw, 1, 2.6, stL, 0, y1 - 11.2, z + 2.1); } }
+        B(2 * hw + 4, 2.6, 4, dk, 0, y1 - 1.3, z + 1.2); for (let x = -hw + 2; x <= hw - 2; x += 3.6) B(1.1, 2.4, 1.1, stL, x, y1 + 1.7, z + .4); B(2 * hw + 2, .8, 1.8, stL, 0, y1 + 3.2, z + .4);
+        for (let j = 0; j < nb; j++) { const x = -hw + (j + .5) * bw, tower = !gate && (j + i * 2) % 4 === 1 && j > 0 && j < nb - 1 && !(i > 0 && (() => { const st = stairSpan(i); return x + bw * .45 > st.lo && x - bw * .45 < st.hi; })()), cen = Math.abs(x) < bw * .6;
+          if (gate && Math.abs(x) < 40) continue;
+          B(2.4, hgt + 2, 2, stL, x - bw / 2, y0 + hgt / 2, z + 1.4);
+          if (tower) { const tw = bw * .8, out = 9, th = hgt + 18; B(tw, th, out + 2, st, x, y0 + th / 2 - 3, z + out / 2); B(tw + 2, 2, out + 4, dk, x, y0 + th - 2, z + out / 2);
+            arch(x, y0 + 6, z + out + 1.06, tw * .44, Math.min(th * .5, tw * 1.6));
+            if ((j + i) % 2) dome(tw * .42, roof, x, y0 + th - 1, z + out / 2); else P(new THREE.ConeGeometry(tw * .5, tw * 1.1, 4), roof, x, y0 + th - 1 + tw * .55, z + out / 2, { ry: Math.PI / 4 });
+            continue; }
+          { const aw = bw * .56, ah = Math.min(hgt - 22, aw * 3.1); if (i > 0) { const st = stairSpan(i); if (x + aw / 2 + 2 > st.lo && x - aw / 2 - 2 < st.hi) continue; } arch(x, y0 + 5, z + 1.05, aw, ah); const room = (y1 - 12) - (y0 + 5 + ah + 4); if (room >= 9) arch(x, y0 + 5 + ah + 4.5, z + 1.05, aw * .55, room - 2); } }
+        B(2.4, hgt + 2, 2, stL, hw, y0 + hgt / 2, z + 1.4); };
+      const wing = (x, y0, y1, z, w) => { const h = y1 - y0 + 8, d = 16; B(w, h, d, st, x, y0 + h / 2 - 2, z + d / 2 - 2); B(w + 1.4, 1.4, d + 1.2, dk, x, y0 + h - 1.4, z + d / 2 - 2); const sh = new THREE.Shape([new THREE.Vector2(-w / 2 - 1, 0), new THREE.Vector2(w / 2 + 1, 0), new THREE.Vector2(0, w * .46)]); P(new THREE.ExtrudeGeometry(sh, { depth: d + 1.5, bevelEnabled: false }), roof, x, y0 + h - .8, z - 3.2);
+        for (const k of [-1, 1]) arch(x + k * w * .23, y0 + 6, z + d - 1.95, w * .26, Math.min(h - 16, w * .26 * 3.4)); P(new THREE.CircleGeometry(w * .11, 16), archGlow, x, y0 + h + w * .17, z + d - 1.15); P(new THREE.TorusGeometry(w * .12, w * .02 + .3, 5, 18), stL, x, y0 + h + w * .17, z + d - 1); };
+      for (let i = 0; i < 4; i++) { xo = XO[i + 1]; face(i, i === 0); if (i > 0) wing((i % 2 ? -1 : 1) * HWs[i + 1] * .58, F[i], F[i + 1], R[i] + 1, 26); } xo = 0;
+      for (let i = 0; i < 4; i++) { const y0 = F[i], y1 = F[i + 1], hw = HWs[i + 1] - 4, z = R[i], hgt = y1 - y0; xo = XO[i + 1];
+        for (const sx of [-1, 1]) { crag(sx * (hw + 6), y0 - 10, z - 6, 24, hgt + 34, 30, i * 2 + (sx > 0 ? 1 : 0)); crag(sx * (hw + 16), y0 - 6, z - 18, 20, hgt + 46, 26, i * 2 + 7 + (sx > 0 ? 1 : 0)); }
+        for (const sx of [-1, 1]) crag(sx * (HWs[i + 1] - 2), F[i + 1] - 4, R[i] - 16, 16, 24, 18, 60 + i * 2 + sx); } xo = 0;
+      // slender spires on the rock round about, at different heights, the way they stand up all over the mountain in the old paintings
+      for (const [lx, lz, hgt] of [[-HWs[2] - 8, R[1] + 6, 34], [HWs[1] + 4, R[0] - 46, 40], [HWs[3] + 8, R[2] - 52, 30], [-HWs[4] - 18, R[3] - 30, 44], [HWs[4] + 26, R[3] - 70, 36], [-HWs[1] - 30, R[0] - 20, 28]]) { const y = worldY(lx, lz) - 3, yb = worldYmin(lx, lz, 7) - 3; if (y - yb > 1) B(10.5, y - yb + 3, 10.5, dk, lx, (yb + y + 3) / 2, lz);
+        B(8, hgt, 8, st, lx, y + hgt / 2, lz); B(9.4, 1.4, 9.4, dk, lx, y + hgt, lz); arch(lx, y + 10, lz + 4.05, 3.2, hgt * .42); P(new THREE.ConeGeometry(6, 15, 4), roof, lx, y + hgt + 8, lz, { ry: Math.PI / 4 }); C(.25, .25, 5, 5, gold, lx, y + hgt + 17.5, lz); }
+      for (const sx of [-1, 1]) { crag(sx * 92, F[0] - 50, -2, 34, 120, 30, 40 + sx); crag(sx * (HWs[4] + 10), F[4] - 8, R[3] - 40, 30, 70, 50, 44 + sx); crag(sx * (HWs[4] + 4), F[4] - 6, R[3] - 92, 34, 84, 40, 47 + sx); }
+      crag(-8, F[4] - 4, R[3] - 108, 70, 60, 26, 51);
+      { const mT = ctex(64, 64, (c, w, h) => { const gr = c.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2); gr.addColorStop(0, 'rgba(255,255,255,.75)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = gr; c.fillRect(0, 0, w, h); });
+        for (let k = 0; k < 9; k++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: mT, color: 0xd8c8b4, transparent: true, opacity: .32, depthWrite: false })); sp.position.set(OX + (k % 3 - 1) * 14, OY - 40 + (k % 2) * 16, OZ + 20 + k * 17); sp.scale.set(70, 34, 1); sp.raycast = () => {}; g.add(sp); } }
+      // ---- the terraces: a balustrade along each front edge, pavilions, effigies on plinths, blue braziers, and a stair climbing the next face from one end
+      for (let i = 1; i < 4; i++) { xo = XO[i]; const y = F[i], z0 = R[i - 1] - 13, z1 = R[i] + 10, hw = HWs[i] - 6, zm = (z0 + z1) / 2;
+        for (const sx of [-1, 1]) { const px = sx * hw * .62; if ((sx > 0) === (i % 2 === 1)) { gabled(px, y, zm - 2, 22, 24, 16); continue; } B(14, 1.2, 14, stL, px, y + .6, zm); for (const [cx, cz] of [[-5, -5], [5, -5], [-5, 5], [5, 5]]) C(.8, .8, 10, 8, wht, px + cx, y + 6, zm + cz); B(14, 1.6, 14, st, px, y + 11.6, zm); dome(6, roof, px, y + 12.4, zm); C(.3, .3, 3, 5, gold, px, y + 19.6, zm); }
+        for (const x of [-hw * .25, hw * .25]) { B(5, 3, 5, dk, x, y + 1.5, zm - 4); statueAt(x, y + 3, zm - 4, 18, (i + (x > 0 ? 1 : 2)) % 4); }
+        for (const x of [-hw + 4, hw - 4]) { C(1.2, .7, 5, 8, dk, x, y + 2.5, z0 + 5); const f = Sp(1.4, fire, x, y + 5.6, z0 + 5); f.userData.keepSep = 1; }
+        if (i < 4) { xo = XO[i + 1]; const st = stairSpan(i), sx = st.sx, x0 = st.xa, rise = F[i + 1] - y; B(9, st.rise + 1.6, 9, stL, st.xb + sx * 4.5, F[i] + (st.rise + 1.6) / 2, R[i] + 6); for (const e of [-1, 1]) B(.8, 3, .8, dk, st.xb + sx * 4.5 + e * 4, F[i + 1] + 3.1, R[i] + 10.2); const  n = Math.ceil(rise / 1.6); for (let k = 0; k < n; k++) { const t = k / n, top = t * rise + 1.6; B(4.2, top, 8, stL, x0 + sx * t * rise * .95, y + top / 2, R[i] + 6); } for (let k = 0; k <= n; k += 3) { const t = k / n; B(.8, 3, .8, dk, x0 + sx * t * rise * .95, y + t * rise + 3.1, R[i] + 10.4); } } }
+      // ---- the summit: the hall proper, columned and pedimented, facing down the bridge; a domed rotunda beside it; and the tower of the orb-bearer
+      xo = XO[4]; { const y = F[4], zf = R[3] - 16;
+        B(76, 4, 46, stL, 0, y + 2, zf - 22); for (let k = 0; k < 4; k++) B(76 - k * 2, 1, 4, stL, 0, y + .5 + k, zf + 2 - k * 1.2);
+        B(60, 34, 32, st, 0, y + 21, zf - 26); for (let k = 0; k < 10; k++) { C(1.7, 2, 30, 10, wht, -27 + k * 6, y + 19, zf - 6); B(4.6, 1.2, 4.6, stL, -27 + k * 6, y + 4.6, zf - 6); }
+        B(64, 4, 26, stL, 0, y + 36, zf - 12); { const sh = new THREE.Shape([new THREE.Vector2(-33, 0), new THREE.Vector2(33, 0), new THREE.Vector2(0, 12)]), ge = new THREE.ExtrudeGeometry(sh, { depth: 40, bevelEnabled: false }); P(ge, st, 0, y + 38, zf - 44); }
+        B(8, 14, .8, shade, 0, y + 11, zf - 9.6); for (const x of [-18, -9, 9, 18]) arch(x, y + 9, zf - 9.95, 4.4, 14); for (const x of [-24, -12, 0, 12, 24]) B(2.6, 22, .5, x % 24 ? red : wht, x, y + 23, zf - 9.5);
+        // the rotunda: a drum ringed with columns under a copper dome
+        { const rx = -50, rz = zf - 60; C(17, 18, 4, 20, stL, rx, y + 2, rz); C(14, 14, 26, 20, st, rx, y + 17, rz); for (let k = 0; k < 14; k++) { const a = k / 14 * 6.283; C(1, 1, 24, 8, wht, rx + Math.cos(a) * 16.5, y + 16, rz + Math.sin(a) * 16.5); } C(18, 18, 2.4, 20, stL, rx, y + 29, rz);
+          for (let k = 0; k < 8; k++) { const a = k / 8 * 6.283 + .2; arch(rx + Math.cos(a) * 14.05, y + 9, rz + Math.sin(a) * 14.05, 3.6, 13, Math.PI / 2 - a); } C(14, 14, 6, 20, st, rx, y + 33, rz); dome(14, roof, rx, y + 36, rz); C(2.4, 2.4, 6, 8, stL, rx, y + 52, rz); Sp(2.2, gold, rx, y + 56, rz); }
+        // the tower of the orb-bearer: a tall square tower, a lantern stage, and on top a colossal effigy holding a golden orb up over the hall
+        { const tx2 = 24, tz = zf - 58; B(18, 64, 18, st, tx2, y + 32, tz); B(21, 3, 21, dk, tx2, y + 64, tz); for (const s of [0, 1, 2]) { arch(tx2, y + 8 + s * 18, tz + 9.05, 5, 13); arch(tx2, y + 8 + s * 18, tz - 9.05, 5, 13, Math.PI); }
+          B(13, 18, 13, stL, tx2, y + 74.5, tz); for (const [fx, fz, r3] of [[6.55, 0, Math.PI / 2], [-6.55, 0, -Math.PI / 2], [0, 6.55, 0], [0, -6.55, Math.PI]]) arch(tx2 + fx, y + 68, tz + fz, 4.4, 12, r3); B(16, 2, 16, dk, tx2, y + 84.5, tz);
+          const SY = y + 85.5; C(3.4, 5.4, 26, 10, wht, tx2, SY + 13, tz); C(4.4, 3.4, 8, 10, wht, tx2, SY + 30, tz); Sp(3.2, wht, tx2, SY + 37, tz); for (const sx of [-1, 1]) B(2.4, 16, 2.4, wht, tx2 + sx * 3.6, SY + 40, tz + .6, { rz: sx * .28 });
+          const orb = Sp(7, gold, tx2, SY + 52, tz + .6, {}, 20); orb.userData.keepSep = 1; } }
+      xo = 0;
+      // ---- rock spurs either side carry two more towers, and a statue on a column stands on the right shoulder over the bridge
+      for (const [lx, lz, hgt, kind] of [[-HWs[2] - 22, R[1] - 30, 70, 0], [HWs[3] + 20, R[2] - 26, 58, 1]]) { const y = worldY(lx, lz) - 4, yb = worldYmin(lx, lz, 10) - 4; if (y - yb > 1) B(17, y - yb + 4, 17, dk, lx, (yb + y + 4) / 2, lz); B(14, hgt, 14, st, lx, y + hgt / 2, lz); B(16, 2, 16, dk, lx, y + hgt, lz); arch(lx, y + 12, lz + 7.05, 5.4, hgt * .48);
+        if (kind) P(new THREE.ConeGeometry(9, 26, 4), roof, lx, y + hgt + 13, lz, { ry: Math.PI / 4 }); else { dome(8, roof, lx, y + hgt + 1, lz); C(.4, .4, 8, 5, gold, lx, y + hgt + 12, lz); } }
+      { const lx = HWs[1] + 12, lz = -10, y = worldY(lx, lz) - 2, yb = worldYmin(lx, lz, 9) - 4, top = y + 45; B(13, y - yb + 6, 13, dk, lx, (yb + y + 6) / 2, lz); B(10, 3, 10, stL, lx, y + 7.5, lz); C(4, 5, top - y - 9, 12, wht, lx, (y + 9 + top) / 2, lz); B(11, 4, 11, stL, lx, top + 2, lz); statueAt(lx, top + 4, lz, 24, 3); }
+    }, { y: Ky, ry, top: 140, view: 980, hexes: [[3, 29], [4, 28], [4, 29]] });
+    const lw = (lx, y, lz, size = 7) => lanternPts.push([K[0] + (lx + OX) * cs + (lz + OZ) * sn, Ky + y + OY, K[1] - (lx + OX) * sn + (lz + OZ) * cs, { c: [.5, 1.1, 2.6], size, drift: .2, speed: .3 }]);
+    for (let i = 0; i < 4; i++) { const hw = HWs[i + 1] - 6, xo2 = XO[i + 1]; for (const f of [-1, -.5, 0, .5, 1]) lw(xo2 + f * hw, F[i + 1] + 4.5, R[i] + 2); }
+    for (const sx of [-1, 1]) { lw(sx * 20, 40, 3, 9); lw(sx * 42, 62, 3, 9); }
+    for (let d = 16; d < 150; d += 26) for (const sd of [-1, 1]) lw(sd * 22, 10, d, 6); }
   // Widdershins Hall: 7 hexes. A living grove of colossal swamp trees - classrooms carved into the trunks, roots arching over the paths, lanterns in the boughs.
   // The canopy is left open on the south side so you can look down into the lit heart of the grove.
   { const Wc = Wp(WIDD), Wy = heightAt(Wc[0], Wc[1]), bark = [], lits = [], litsG = [];
@@ -1705,12 +1797,20 @@ function buildProps() {
       const nL = 4, sL = len / nL, rL = sL / 2 - 6;                                     // lower arcade: four great arches on piers down to the chasm floor
       for (let i = 0; i <= nL; i++) { const x = -len / 2 + i * sL, gr = groundAt(x), top = yb - 36, hh = top - gr + 6; if (hh > 4) { B(11, hh, W - 8, st, x, top - hh / 2, 0); B(15, hh * .45, W - 2, dk, x, gr - 6 + hh * .225, 0); } }
       for (let i = 0; i < nL; i++) M(g, new THREE.TorusGeometry(rL, 3.6, 6, 18, Math.PI), dk, -len / 2 + (i + .5) * sL, yb - 40.6 - rL, 0, { sz: (W - 8) / 7.2 });
-      for (const e of [-1, 1]) { const x = e * (len / 2 - 7);                              // gate towers
+      { const xA = -len / 2, xG = -207 * S, L2 = xA - xG, xm = (xA + xG) / 2;          // the approach: past the chasm's rim, over the ravine, into the gate of Kollema Hall
+        B(L2, 6, W, st, xm, y - 3, 0); for (const sd of [-1, 1]) B(L2, 4.5, 2.6, st, xm, y + 2.2, sd * (W / 2 - 1.3)); B(L2, 5, W - 4, dk, xm, yb - 33.5, 0);
+        const n2 = Math.max(2, Math.round(L2 / sU)), s2 = L2 / n2, r2 = s2 / 2 - 3.2;
+        for (let i = 0; i <= n2; i++) { const x = xG + i * s2; B(6.4, 31, W - 6, st, x, yb - 15.5, 0); if (i > 0 && i < n2) for (const sd of [-1, 1]) { const z = sd * (W / 2 + 1.5); B(6, 7, 6, dk, x, y + 3.5, z); statue(g, wht, x, y + 7, z, 26, sd > 0 ? Math.PI / 2 : -Math.PI / 2, (i + (sd > 0 ? 2 : 3)) % 4); } }
+        for (let i = 0; i < n2; i++) M(g, new THREE.TorusGeometry(r2, 2.6, 6, 14, Math.PI), dk, xG + (i + .5) * s2, yb - 3.6 - r2, 0, { sz: (W - 6) / 5.2 });
+        const n3 = 2, s3 = L2 / n3, r3 = s3 / 2 - 6;
+        for (let i = 0; i <= n3; i++) { const x = xG + i * s3, gr = groundAt(x), top = yb - 36, hh = top - gr + 6; if (hh > 4) { B(11, hh, W - 8, st, x, top - hh / 2, 0); B(15, hh * .45, W - 2, dk, x, gr - 6 + hh * .225, 0); } }
+        for (let i = 0; i < n3; i++) M(g, new THREE.TorusGeometry(r3, 3.6, 6, 18, Math.PI), dk, xG + (i + .5) * s3, yb - 40.6 - r3, 0, { sz: (W - 8) / 7.2 }); }
+      for (const e of [1]) { const x = e * (len / 2 - 7);                              // gate towers, at the east end only: at the west the bridge runs on into the mountain
         for (const sd of [-1, 1]) { const z = sd * (W / 2 + 4); B(13, 58, 13, st, x, y + 23, z); B(15.6, 2.4, 15.6, dk, x, y + 53.2, z);                                // square and flat-topped, battlements all round, a beacon on each
           for (const sx of [-1, 1]) for (let i = -1; i <= 1; i++) { B(2.7, 3.4, 2.7, st, x + sx * 6.5, y + 56.1, z + i * 5.2); B(2.7, 3.4, 2.7, st, x + i * 5.2, y + 56.1, z + sx * 6.5); }
           const f = M(g, new THREE.SphereGeometry(1.7, 8, 6), fire, x, y + 56, z); f.userData.keepSep = 1; }
         B(13, 9, W - 5, st, x, y + 40, 0); }
-    }, { y: 0, ry, top: y + 85, hexes: [[7, 29], [8, 28], [8, 29], [9, 28], [9, 29]], view: 640 }); }
+    }, { y: 0, ry, top: y + 85, hexes: (() => { const hx = [[7, 29], [8, 28], [8, 29], [9, 28], [9, 29]]; for (let d = 150; d <= 285; d += 20) { const p = worldToHex(Pm[0] - BR_N[0] * d, Pm[1] - BR_N[1] * d); if (!hx.some(q => q[0] === p.q && q[1] === p.r)) hx.push([p.q, p.r]); } return hx; })(), view: 640 }); }
 
   // ================= other campus landmarks =================
   const waterGlass = (hex = 0x4aa8d8, op = .5) => new THREE.MeshStandardMaterial({ color: hex, roughness: .04, transparent: true, opacity: op, envMapIntensity: 2.2, emissive: 0x0a3050, emissiveIntensity: .5 });
