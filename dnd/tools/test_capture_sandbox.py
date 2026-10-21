@@ -180,7 +180,9 @@ class CaptureTests(unittest.TestCase):
     def test_failed_refresh_preserves_last_pointer(self):
         capture.capture(self.connection, self.output)
         pointer = (self.output / 'latest-capture.json').read_bytes()
-        real = self.connection.manifest
+        # The capture lists the site twice (in parts first, then a quick list to confirm nothing moved); a file added
+        # before the second list fails the capture.
+        real = self.connection.quick_list
         count = 0
         def changing():
             nonlocal count
@@ -188,7 +190,7 @@ class CaptureTests(unittest.TestCase):
             if count == 2:
                 self.write('new.json', '{}')
             return real()
-        self.connection.manifest = changing
+        self.connection.quick_list = changing
         with self.assertRaisesRegex(ValueError, 'changed during capture'):
             capture.capture(self.connection, self.output)
         self.assertEqual((self.output / 'latest-capture.json').read_bytes(), pointer)

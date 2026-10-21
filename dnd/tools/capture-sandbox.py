@@ -91,13 +91,52 @@ class Connection:
         self.token = token
         self.opener = urllib.request.build_opener(NoRedirect())
 
-    def open(self, params):
+    def open(self, params, body=None):
         url = self.site + '/admin/sandbox-export/index.php?' + urllib.parse.urlencode(params)
-        request = urllib.request.Request(url, headers={
-            'X-DND-Capture-Token': self.token, 'Cache-Control': 'no-cache',
-            'User-Agent': 'GM-Screen-Sandbox-Capture/1.0',
-        })
+        headers = {'X-DND-Capture-Token': self.token, 'Cache-Control': 'no-cache', 'User-Agent': 'GM-Screen-Sandbox-Capture/1.0'}
+        if body is not None:
+            headers['Content-Type'] = 'application/json'
+        request = urllib.request.Request(url, data=None if body is None else json.dumps(body).encode('utf-8'), headers=headers,
+                                         method='GET' if body is None else 'POST')
         return self.opener.open(request, timeout=180)
+
+    def quick_list(self):
+        """Every file by kind, size and last-changed time; nothing is opened, so it answers in seconds."""
+        with self.open({'action': 'manifest', 'checksums': '0'}) as response:
+            data = json.load(response)
+        if data.get('schema') != SCHEMA or data.get('checksums') is not False or not isinstance(data.get('files'), dict):
+            raise ValueError('The site does not offer the quick list; update its export endpoint')
+        return data
+
+    def manifest_in_parts(self):
+        """The whole list with checksums, asked for in parts so no request passes the host's 100-second limit:
+        the quick list, then checksums for at most 200 paths or 300 MB a request, and a database alone."""
+        quick = self.quick_list()
+        files, batch, size = {}, [], 0
+
+        def ask(paths):
+            with self.open({'action': 'checksums'}, {'paths': paths}) as response:
+                answer = json.load(response)
+            if answer.get('missing'):
+                raise ValueError('The site changed during capture; wait for an idle period and retry')
+            files.update(answer.get('files') or {})
+
+        for path, item in sorted(quick['files'].items()):
+            if item.get('kind') == 'sqlite':
+                ask([path])
+                continue
+            if batch and (len(batch) >= 200 or size + item.get('size', 0) > 250 * 1048576):
+                ask(batch)
+                batch, size = [], 0
+            batch.append(path)
+            size += item.get('size', 0)
+        if batch:
+            ask(batch)
+        if set(files) != set(quick['files']):
+            raise ValueError('The site changed during capture; wait for an idle period and retry')
+        manifest = {key: value for key, value in quick.items() if key != 'checksums'}
+        manifest['files'] = {path: {key: entry[key] for key in entry if key != 'mtime'} for path, entry in files.items()}
+        return validate_manifest(manifest), quick
 
     def manifest(self):
         with self.open({'action': 'manifest'}) as response:
@@ -120,7 +159,7 @@ def capture(connection, output: Path) -> Path:
     if output == REPO or output.is_relative_to(REPO / 'dnd'):
         raise ValueError('Capture into a separate directory, never the source application')
     output.mkdir(parents=True, exist_ok=True)
-    first = connection.manifest()
+    first, first_quick = connection.manifest_in_parts()
     stage = output / ('capture-' + dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:8])
     stage.mkdir()
     try:
@@ -134,9 +173,10 @@ def capture(connection, output: Path) -> Path:
                 with closing(sqlite3.connect(destination.as_uri() + '?mode=ro', uri=True)) as db:
                     if db.execute('PRAGMA integrity_check').fetchall() != [('ok',)]:
                         raise ValueError('Captured SQLite failed integrity check')
-        last = connection.manifest()
+        # Nothing changed meanwhile: the same files at the same sizes and times, the same issues and exclusions.
+        last = connection.quick_list()
         for key in ('files', 'issues', 'excluded', 'environment'):
-            if first.get(key) != last.get(key):
+            if first_quick.get(key) != last.get(key):
                 raise ValueError('The site changed during capture; wait for an idle period and retry')
         first['source_site'] = connection.site
         first['verified_at'] = dt.datetime.now(dt.timezone.utc).isoformat()
