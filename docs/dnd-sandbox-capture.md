@@ -100,6 +100,12 @@ $k = (Get-Content "$env:USERPROFILE\Desktop\DND Capture Private\capture-token.tx
 
 The tool then reads the generic credential `dnd-capture` itself (`vault_token()` in capture-sandbox.py), before
 falling back to the prompt. To revoke it: `cmdkey /delete:dnd-capture`.
+
+The capture asks for the list quickly and the checksums in parts (at most 200 paths or 250 MB a request, a database
+alone), so no request passes the host's 100-second limit. If the game may be in use (an open VTT tab updates the
+board database about once a minute), add `--live`: the database is checksummed again just before its download and
+retried if it changed, and it is left out of the final no-change check (the manifest says so in `consistency_live`).
+Every other file stays strict. The first complete live capture was taken this way on October 21, 2026.
 The command prints a new `capture-...` folder. Open its `manifest.json`: review
 `issues`, `excluded`, `environment`, and `limitations`. Resolve issues before
 preparing. Keep the capture private: it contains campaign/GM data.

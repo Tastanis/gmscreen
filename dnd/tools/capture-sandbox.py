@@ -19,6 +19,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
@@ -114,6 +115,8 @@ class Connection:
         quick = self.quick_list()
         files, batch, size = {}, [], 0
 
+        self.checksums_for = None
+
         def ask(paths):
             with self.open({'action': 'checksums'}, {'paths': paths}) as response:
                 answer = json.load(response)
@@ -134,6 +137,14 @@ class Connection:
             ask(batch)
         if set(files) != set(quick['files']):
             raise ValueError('The site changed during capture; wait for an idle period and retry')
+        def one(path):
+            with self.open({'action': 'checksums'}, {'paths': [path]}) as response:
+                answer = json.load(response)
+            entry = (answer.get('files') or {}).get(path)
+            if not entry:
+                raise ValueError('The site changed during capture; wait for an idle period and retry')
+            return {key: entry[key] for key in entry if key != 'mtime'}
+        self.checksums_for = one
         manifest = {key: value for key, value in quick.items() if key != 'checksums'}
         manifest['files'] = {path: {key: entry[key] for key in entry if key != 'mtime'} for path, entry in files.items()}
         return validate_manifest(manifest), quick
@@ -154,7 +165,10 @@ class Connection:
             raise ValueError('Download integrity mismatch')
 
 
-def capture(connection, output: Path) -> Path:
+def capture(connection, output: Path, *, live: bool = False) -> Path:
+    """`live`: the game may be in use (Brandon, October 21, 2026). The board database is then checksummed again and
+    retried when it changes before its download (its copy is SQLite's own consistent snapshot), and it is left out of
+    the final no-change check; the manifest records that. Every other file stays strict."""
     output = output.resolve()
     if output == REPO or output.is_relative_to(REPO / 'dnd'):
         raise ValueError('Capture into a separate directory, never the source application')
@@ -168,13 +182,27 @@ def capture(connection, output: Path) -> Path:
                 continue
             destination = stage / 'data' / relative_path(path)
             destination.parent.mkdir(parents=True, exist_ok=True)
-            connection.download(path, item, destination)
+            if live and item['kind'] == 'sqlite' and connection.checksums_for:
+                item = first['files'][path] = connection.checksums_for(path)  # fresh, seconds before its download
+            for attempt in range(4):
+                try:
+                    connection.download(path, item, destination)
+                    break
+                except urllib.error.HTTPError as error:
+                    if error.code != 409 or not live or item['kind'] != 'sqlite' or attempt == 3 or not connection.checksums_for:
+                        raise
+                    destination.unlink(missing_ok=True)
+                    item = first['files'][path] = connection.checksums_for(path)
             if item['kind'] == 'sqlite':
                 with closing(sqlite3.connect(destination.as_uri() + '?mode=ro', uri=True)) as db:
                     if db.execute('PRAGMA integrity_check').fetchall() != [('ok',)]:
                         raise ValueError('Captured SQLite failed integrity check')
         # Nothing changed meanwhile: the same files at the same sizes and times, the same issues and exclusions.
         last = connection.quick_list()
+        if live:
+            for listing in (first_quick, last):
+                listing['files'] = {path: entry for path, entry in listing['files'].items() if entry.get('kind') != 'sqlite'}
+            first['consistency_live'] = 'Captured with --live: databases are their own consistent snapshots, taken while the game may have been in use; other files unchanged throughout.'
         for key in ('files', 'issues', 'excluded', 'environment'):
             if first_quick.get(key) != last.get(key):
                 raise ValueError('The site changed during capture; wait for an idle period and retry')
@@ -384,6 +412,7 @@ def main():
     get = sub.add_parser('capture')
     get.add_argument('--site', default='https://bharmsasl.com/dnd')
     get.add_argument('--output', type=Path, required=True)
+    get.add_argument('--live', action='store_true', help='The game may be in use: retry and snapshot the board database')
     build = sub.add_parser('prepare')
     build.add_argument('--capture', type=Path, required=True)
     build.add_argument('--source', type=Path, default=REPO)
@@ -397,7 +426,7 @@ def main():
     args = parser.parse_args()
     if args.command == 'capture':
         token = os.environ.pop('DND_CAPTURE_TOKEN', None) or vault_token() or getpass.getpass('Capture token (not saved): ')
-        result = capture(Connection(args.site, token), args.output)
+        result = capture(Connection(args.site, token), args.output, live=args.live)
         print(f'Verified capture: {result}\nReview manifest.json coverage issues before preparing.')
     elif args.command == 'prepare':
         print('Prepared sandbox: ' + str(prepare(args.capture, args.source, args.output)))
