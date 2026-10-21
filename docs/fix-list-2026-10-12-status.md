@@ -885,3 +885,10 @@ The Gravity Orchard's map is not touched.
 ## Build 537: the fall pop-up is middle-right
 
 - The fall pop-up now comes up middle-right of the screen, halfway down, instead of tucked at the far right edge.
+
+## Build 542: keyboard camera
+
+- **W A S D** move the view, **Q** and **E** turn it, the **up and down arrows** zoom in and out. The left and right
+  arrows turn it too. Hold a key and it keeps going; W and D together go forward and right.
+- The keys do nothing while you type in the chat or any box.
+- The arrow keys no longer move a selected token; drag it or click it and click a square.
