@@ -90,6 +90,16 @@ python dnd/tools/capture-sandbox.py capture --output "$env:USERPROFILE\Desktop\D
 ```
 
 Paste the private token at the hidden prompt. It is not saved in the capture.
+
+Or store the token once in the Windows Credential Manager, so captures run without anyone typing it (Brandon,
+October 21, 2026, so the chats can take backups). Run this yourself once; it reads the key file and prints nothing:
+
+```powershell
+$k = (Get-Content "$env:USERPROFILE\Desktop\DND Capture Private\capture-token.txt" -Raw).Trim(); cmdkey /generic:dnd-capture /user:capture /pass:$k | Out-Null; Remove-Variable k
+```
+
+The tool then reads the generic credential `dnd-capture` itself (`vault_token()` in capture-sandbox.py), before
+falling back to the prompt. To revoke it: `cmdkey /delete:dnd-capture`.
 The command prints a new `capture-...` folder. Open its `manifest.json`: review
 `issues`, `excluded`, `environment`, and `limitations`. Resolve issues before
 preparing. Keep the capture private: it contains campaign/GM data.

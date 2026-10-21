@@ -293,6 +293,51 @@ def serve(app: Path, php: str, port: int):
     subprocess.run(args, cwd=app, env=env, check=True)
 
 
+VAULT_NAME = 'dnd-capture'
+
+
+def vault_token(name: str = VAULT_NAME) -> str | None:
+    """The capture token from the Windows Credential Manager (a generic credential named `name`), or None.
+
+    Stored once by the owner (`cmdkey /generic:dnd-capture ...`), so a capture can run without the token ever being
+    typed, printed or passed on a command line. Never printed here either.
+    """
+    if os.name != 'nt':
+        return None
+    import ctypes
+    from ctypes import wintypes
+
+    class CREDENTIAL(ctypes.Structure):
+        _fields_ = [('Flags', wintypes.DWORD), ('Type', wintypes.DWORD), ('TargetName', wintypes.LPWSTR),
+                    ('Comment', wintypes.LPWSTR), ('LastWritten', wintypes.FILETIME), ('CredentialBlobSize', wintypes.DWORD),
+                    ('CredentialBlob', ctypes.POINTER(ctypes.c_ubyte)), ('Persist', wintypes.DWORD),
+                    ('AttributeCount', wintypes.DWORD), ('Attributes', ctypes.c_void_p), ('TargetAlias', wintypes.LPWSTR),
+                    ('UserName', wintypes.LPWSTR)]
+
+    advapi = ctypes.WinDLL('advapi32', use_last_error=True)
+    advapi.CredReadW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.POINTER(ctypes.POINTER(CREDENTIAL))]
+    advapi.CredReadW.restype = wintypes.BOOL
+    advapi.CredFree.argtypes = [ctypes.c_void_p]
+    pointer = ctypes.POINTER(CREDENTIAL)()
+    if not advapi.CredReadW(name, 1, 0, ctypes.byref(pointer)):  # 1 = CRED_TYPE_GENERIC
+        return None
+    try:
+        size = pointer.contents.CredentialBlobSize
+        raw = bytes(ctypes.cast(pointer.contents.CredentialBlob, ctypes.POINTER(ctypes.c_ubyte * size)).contents) if size else b''
+    finally:
+        advapi.CredFree(pointer)
+    # cmdkey stores the password as UTF-16; fall back to UTF-8 for anything else.
+    for encoding in ('utf-16-le', 'utf-8'):
+        try:
+            token = raw.decode(encoding).strip().strip('\x00')
+        except UnicodeDecodeError:
+            continue
+        # A capture token is URL-safe base64 (letters, digits, - and _), so anything else was read in the wrong encoding.
+        if re.fullmatch(r'[A-Za-z0-9_-]{32,}', token):
+            return token
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
@@ -311,7 +356,7 @@ def main():
     key.add_argument('--output', type=Path, required=True, help='New private directory, never inside a repository or web root')
     args = parser.parse_args()
     if args.command == 'capture':
-        token = os.environ.pop('DND_CAPTURE_TOKEN', None) or getpass.getpass('Capture token (not saved): ')
+        token = os.environ.pop('DND_CAPTURE_TOKEN', None) or vault_token() or getpass.getpass('Capture token (not saved): ')
         result = capture(Connection(args.site, token), args.output)
         print(f'Verified capture: {result}\nReview manifest.json coverage issues before preparing.')
     elif args.command == 'prepare':
