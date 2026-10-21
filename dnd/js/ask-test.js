@@ -159,6 +159,11 @@
   };
 
   /** What this browser has been told to leave shut, kept across pages. */
+  // A user's other open windows (the map, the sheet, the main page): when a pop-up is settled in one (rolled, closed),
+  // it closes in the rest at once (Brandon, October 2026). The server's list catches up a moment later anyway.
+  let windows = null;
+  const tellWindows = (message) => { try { windows?.postMessage({ ...message, user: settings?.currentUser }); } catch (error) { /* one window only */ } };
+
   const closed = {
     has(id) {
       try { return JSON.parse(window.localStorage.getItem('askTestClosed') || '[]').includes(id); } catch (error) { return false; }
@@ -342,7 +347,7 @@
     closed.remove(id);
     if (!open.results || shownTestId !== id) {
       shut('results');
-      open.results = panel('', 'results', () => { closed.add(shownTestId); shut('results'); });
+      open.results = panel('', 'results', () => { closed.add(shownTestId); tellWindows({ type: 'results-closed', id: shownTestId }); shut('results'); });
       open.results.table = el('table', 'ask-test__table');
       open.results.node.appendChild(open.results.table);
       shownTestId = id;
@@ -376,7 +381,7 @@
   // ---- the player answers -------------------------------------------------------------------------------
   async function showRequest(test) {
     if (open.request) return;
-    const view = panel(test.private ? 'Test, to you only' : 'Test', 'request', () => { if (!view.rolled) closed.add(test.id); shut('request'); settle(); });
+    const view = panel(test.private ? 'Test, to you only' : 'Test', 'request', () => { if (!view.rolled) closed.add(test.id); tellWindows({ type: view.rolled ? 'request-done' : 'request-closed', id: test.id }); shut('request'); settle(); });
     view.testId = test.id;
     open.request = view;
     shut('chip');
@@ -482,6 +487,7 @@
       }
       view.rolled = true;
       answered.add(test.id);
+      tellWindows({ type: 'request-done', id: test.id });
       [statBox.node, groupBox.node, skillBox.node, pair, roll, trouble].forEach((node) => node.remove());
       const [lead, total, tier] = logic.rowParts(answer.row);
       const result = el('div', 'ask-test__result');
@@ -489,7 +495,7 @@
       result.appendChild(el('div', 'ask-test__sum ask-test__sum--big', String(total)));
       result.appendChild(el('div', 'ask-test__tier', tier));
       const done = slab('Close', 'ask-test__slab--wide');
-      done.addEventListener('click', () => { shut('request'); settle(); });
+      done.addEventListener('click', () => { tellWindows({ type: 'request-done', id: test.id }); shut('request'); settle(); });
       view.node.appendChild(result);
       view.node.appendChild(done);
       refresh();
@@ -509,16 +515,26 @@
   }
 
   // ---- keeping up -----------------------------------------------------------------------------------
+  // Pop-ups open in the window in use only (Brandon, October 2026: they showed in every open window); another of his
+  // windows opens one when it is next used, if it is still unsettled. Settled in one, they close in all (heard).
+  let resultsDue = null;
+  function inUse() {
+    return document.visibilityState !== 'hidden' && (typeof document.hasFocus !== 'function' || document.hasFocus());
+  }
+
   /** Puts on the page whatever the tests now call for. */
   function settle(before) {
     if (!settings || !loaded) return;
     if (settings.isGM) {
       const rolled = before ? logic.newlyRolled(before, tests) : [];
-      if (rolled.length) {
-        showResults(rolled[rolled.length - 1][0]);
+      if (rolled.length) resultsDue = rolled[rolled.length - 1][0];
+      if (resultsDue && (inUse() || open.results)) {
+        const id = resultsDue;
+        resultsDue = null;
+        showResults(id);
       } else if (open.results && shownTestId) {
         showResults(shownTestId);
-      } else if (!before && tests.length) {
+      } else if (!before && tests.length && inUse()) {
         // A page opened while a test is still out: the newest one, unless he shut it.
         const newest = tests[tests.length - 1];
         const stillOut = Object.keys(newest.rows).some((hero) => newest.rows[hero].status === 'waiting');
@@ -526,9 +542,16 @@
       }
       return;
     }
-    if (open.request) return;
+    // A request still open here that was rolled meanwhile (in another window, or on another device) closes; one that
+    // shows this window's own result stays until it is closed.
+    if (open.request) {
+      const stillWaiting = tests.some((test) => test.id === open.request.testId && test.rows?.[settings.currentUser]?.status === 'waiting');
+      if (open.request.rolled || stillWaiting) return;
+      shut('request');
+    }
     const waiting = logic.waitingOn(tests, settings.currentUser, (Date.now() - fetchedAt) / 1000).filter((test) => !answered.has(test.id));
     const fresh = waiting.find((test) => !closed.has(test.id));
+    if (fresh && !inUse()) return;   // opens when this window is next used, if still waiting then
     if (fresh) {
       showRequest(fresh);
     } else if (waiting.length) {
@@ -571,8 +594,25 @@
     else if (!settings.isGM) settle(tests);     // nothing new, but a test left waiting may have grown too old to offer
   }
 
+  // What another of this user's windows settled.
+  function heard(message) {
+    if (!settings || !message || message.user !== settings.currentUser || typeof message.id !== 'string') return;
+    if (message.type === 'results-closed' && resultsDue === message.id) resultsDue = null;
+    if (message.type === 'results-closed' && open.results && shownTestId === message.id) { closed.add(message.id); shut('results'); return; }
+    if (message.type === 'request-done' || message.type === 'request-closed') {
+      if (message.type === 'request-done') answered.add(message.id); else closed.add(message.id);
+      if (open.request && open.request.testId === message.id && !open.request.rolled) shut('request');
+      settle(tests);
+    }
+  }
+
   function start(options) {
     if (settings || !options || typeof options.currentUser !== 'string' || options.currentUser === '') return;
+    // Opened here, on a page, not when the file loads.
+    try { windows = typeof BroadcastChannel === 'function' ? new BroadcastChannel('dnd-ask-test-v1') : null; } catch (error) { windows = null; }
+    windows?.addEventListener?.('message', (event) => heard(event?.data));
+    window.addEventListener('focus', () => settle());
+    document.addEventListener('visibilitychange', () => { if (inUse()) settle(); });
     settings = { isGM: Boolean(options.isGM), currentUser: options.currentUser, endpoint: options.endpoint || 'chat_handler.php', participants: Array.isArray(options.participants) ? options.participants : [] };
     document.addEventListener('click', (event) => {
       const opener = event.target && event.target.closest ? event.target.closest('[data-ask-test-open]') : null;

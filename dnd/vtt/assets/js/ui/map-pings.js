@@ -85,6 +85,11 @@ export function createMapPings({
     if (authorId) {
       pingEntry.authorId = authorId;
     }
+    // The Director's own camera, so every 3D board is put exactly where he is looking from (Brandon, October 2026).
+    const camera = focus ? windowRef?.vtt3dRenderer?.cameraState?.() : null;
+    if (camera) {
+      pingEntry.camera = camera;
+    }
 
     const queued = queuePingForState(pingEntry);
     recordProcessedPing(pingEntry);
@@ -141,6 +146,13 @@ export function createMapPings({
     return updated;
   }
 
+  /** A camera carried by a focus ping: {position: [x, y, z], target: [x, y, z]} in board units, or null. */
+  function cameraFrom(camera) {
+    const three = (list) => Array.isArray(list) && list.length === 3 && list.every((n) => Number.isFinite(Number(n))) ? list.map(Number) : null;
+    const position = three(camera?.position), target = three(camera?.target);
+    return position && target ? { position, target } : null;
+  }
+
   function normalizeIncomingPing(entry) {
     if (!entry || typeof entry !== 'object') {
       return null;
@@ -172,6 +184,7 @@ export function createMapPings({
           ? 'focus'
           : 'ping',
       ...(Number.isFinite(Number(entry.z)) && Number(entry.z) !== 0 ? { z: Number(entry.z) } : {}),
+      ...(cameraFrom(entry.camera) ? { camera: cameraFrom(entry.camera) } : {}),
       createdAt,
     };
 
@@ -334,6 +347,10 @@ export function createMapPings({
       return;
     }
 
+    // The Director's exact camera, when his move carries it.
+    if (board3d() && pingEntry.type === 'focus' && cameraFrom(pingEntry.camera) && windowRef?.vtt3dRenderer?.setCameraState?.(cameraFrom(pingEntry.camera))) {
+      return;
+    }
     if (board3d() && windowRef?.vtt3dRenderer?.focus) {
       const helpers = windowRef.vtt3d.helpers;
       const at = helpers.toSquares(Math.min(1, Math.max(0, pingEntry.x)) * mapWidth, Math.min(1, Math.max(0, pingEntry.y)) * mapHeight);

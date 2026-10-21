@@ -27,9 +27,15 @@
    grabbed. The base's ring shows selection, so the box is not outlined; conditions sit above the head, under the bar. */
 .vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini { height: var(--vtt3d-height, var(--vtt3d-size, 36px)) !important; border-radius: 8px !important; filter: none !important; }
 .vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini.is-selected { outline: none !important; }
+/* The turn tracker's hover (and the active combatant) shows on a mini too: a ring round the model, as board.css
+   .vtt-token.is-hover-highlight rings a flat token (its box-shadow is cleared on a mini above). */
+.vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini.is-hover-highlight { outline: 3px solid rgba(129, 140, 248, .95) !important; outline-offset: 2px; box-shadow: 0 0 0 7px rgba(165, 180, 252, .45), 0 0 18px rgba(129, 140, 248, .6) !important; }
 /* A held token lets the pointer through to the square it is being put down on (integration.mjs markHeld). */
 .vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-held, .vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-held * { pointer-events: none !important; }
 .vtt3d-on #vtt-token-layer>.vtt-token.vtt3d-mini .vtt-token__condition { bottom: auto; top: calc(var(--tok-unit) * -18); }
+
+/* Where the turn began (integration.mjs placeTurnGhost): a faint copy of the token, in a dashed gold ring. */
+#vtt-board3d-overlay-host .vtt3d-turn-ghost { position: absolute; border-radius: 50%; background: center / cover no-repeat rgba(15, 23, 42, .35); border: 2px dashed rgba(245, 210, 132, .9); opacity: .5; filter: grayscale(.35); pointer-events: none; box-sizing: border-box; }
 
 /* Hold Z and drag a token: how high it stands above what is under it. */
 #vtt-board3d-overlay-host .vtt3d-lift-label { position: absolute; transform: translate(-50%, calc(-100% - 46px)); padding: 3px 8px; border-radius: 6px; background: #111c; color: #f5d284; font: 600 13px/1.3 system-ui, sans-serif; white-space: nowrap; pointer-events: none; }

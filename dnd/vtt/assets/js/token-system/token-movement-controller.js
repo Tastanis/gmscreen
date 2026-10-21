@@ -310,7 +310,18 @@ export function createTokenMovementController({
 
     const context = getTurnContext();
     const tokenId = context.activeCombatantId;
-    const move = movementState.peekLastMove(tokenId, context) ?? getUndoMove();
+    // On a turn: back to where the turn began (the 3D board's ghost), every move of it undone, last first (Brandon,
+    // October 2026). Off a turn: the last move only, as before.
+    if (movementState.peekLastMove(tokenId, context)) {
+      event.preventDefault();
+      event.stopPropagation();
+      for (let step = 0; step < 32; step += 1) {
+        const move = movementState.peekLastMove(tokenId, context);
+        if (!move || !(await undoMove(move, tokenId, context)) || movementState.peekLastMove(tokenId, context) === move) break;
+      }
+      return;
+    }
+    const move = getUndoMove();
     if (!move) {
       return;
     }

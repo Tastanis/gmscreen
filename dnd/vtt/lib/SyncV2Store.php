@@ -858,6 +858,11 @@ final class SyncV2Store
                     return $this->rollbackConflict('ping_exists', $snapshot);
                 }
                 $ping = $payload['ping'];
+                // Moving everyone's view is the Director's: a player's is an ordinary ping.
+                if (!$isGm && ($ping['type'] ?? '') === 'focus') {
+                    $ping['type'] = 'ping';
+                    unset($ping['camera']);
+                }
                 $ping['id'] = $entityId;
                 $ping['sceneId'] = $sceneId;
                 $ping['authorId'] = $actorId;
@@ -2949,6 +2954,28 @@ final class SyncV2Store
         return array_values($path);
     }
 
+    /**
+     * The camera a focus ping carries (the Director's, so every 3D board looks from where he looks):
+     * ['camera' => ['position' => [x, y, z], 'target' => [x, y, z]]] in board units, or nothing.
+     */
+    private function pingCamera(array $ping): array
+    {
+        $camera = $ping['camera'] ?? null;
+        if (($ping['type'] ?? '') !== 'focus' || !is_array($camera)) return [];
+        $out = [];
+        foreach (['position', 'target'] as $key) {
+            $list = $camera[$key] ?? null;
+            if (!is_array($list) || count($list) !== 3) return [];
+            $numbers = [];
+            foreach (array_values($list) as $n) {
+                if ((!is_int($n) && !is_float($n)) || !is_finite((float) $n) || abs((float) $n) > 1000000) return [];
+                $numbers[] = (float) $n;
+            }
+            $out[$key] = $numbers;
+        }
+        return ['camera' => $out];
+    }
+
     private function normalizeBoardDomainCommand(array $command): array
     {
         $operationId = trim((string) ($command['operationId'] ?? ''));
@@ -3030,6 +3057,7 @@ final class SyncV2Store
                 'y' => (float) $y,
                 'type' => ($payload['ping']['type'] ?? '') === 'focus' ? 'focus' : 'ping',
                 ...((float) $z !== 0.0 ? ['z' => (float) $z] : []),
+                ...$this->pingCamera($payload['ping']),
             ];
         }
         if ($type === 'fog.set' && !is_array($payload['fogOfWar'] ?? null)) {

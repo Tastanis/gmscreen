@@ -6071,6 +6071,7 @@ export function mountBoardInteractions(store, routes = {}) {
   if (combatTrackerRoot) {
     combatTrackerRoot.addEventListener('click', handleCombatTrackerClick);
     combatTrackerRoot.addEventListener('dblclick', handleCombatTrackerDoubleClick);
+    combatTrackerRoot.addEventListener('contextmenu', handleCombatTrackerContextMenu);
     combatTrackerRoot.addEventListener('keydown', handleCombatTrackerKeydown);
   }
 
@@ -6621,6 +6622,19 @@ export function mountBoardInteractions(store, routes = {}) {
     keyboardMovementQueue.enqueue(movement);
   });
 
+  // 3D board: the tokens are not inside the map surface there, and the board's own token handler takes a press as a
+  // grab. While a manual damage or heal waits for its target, a press on a token is that target (Brandon, October 2026:
+  // "it turns the click into a grab"). The board's capture runs before the token layer's.
+  board.addEventListener('pointerdown', (event) => {
+    if (!window.vtt3d?.active || event.button !== 0 || !pendingDamageHeal) return;
+    const node = event.target instanceof Element ? event.target.closest('#vtt-token-layer [data-placement-id]') : null;
+    const placement = node ? getPlacementFromStore(node.dataset.placementId) : null;
+    if (!placement) return;
+    event.stopImmediatePropagation();
+    event.vtt3dPick = { placement };
+    handleDamageHealClick(event);
+  }, true);
+
   board.addEventListener('contextmenu', (event) => {
     event.preventDefault();
   });
@@ -6896,7 +6910,9 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     if (event.altKey && (event.button === 0 || event.button === 2)) {
-      const handled = mapPings.handleMapPing(event, { focus: event.button === 2 });
+      // Alt+right-click moves everyone's view to the spot: the Director's only (Brandon, October 2026). A player's is
+      // an ordinary ping, as Alt+left-click is.
+      const handled = mapPings.handleMapPing(event, { focus: event.button === 2 && isGmUser() });
       if (handled) {
         event.preventDefault();
         return;
@@ -6913,84 +6929,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     if (pendingDamageHeal && event.button === 0) {
-      event.preventDefault();
-      closeHealOverflowPopup();
-      const action = pendingDamageHeal;
-      const placement = findRenderedPlacementAtPoint(event);
-      if (!placement) {
-        const noun = action.mode === 'damage' ? 'damage' : 'healing';
-        updateStatus(`Click a token to apply ${action.amount} ${noun}.`);
-        return;
-      }
-
-      // Check if healing would exceed max HP - show popup to choose
-      if (action.mode === 'heal' && wouldHealOverflow(placement.id, action.amount)) {
-        showHealOverflowPopup(event, placement, action, (choice) => {
-          const allowTempHp = choice === 'temp';
-          const healResult = applyDamageHealToPlacement(placement.id, 'heal', action.amount, { allowTempHp });
-          if (!healResult) {
-            updateStatus('Unable to update hit points for that token.');
-            return;
-          }
-          floatStaminaDelta(placement.id, healResult.change || action.amount, 'heal');
-          const healName = healResult.name;
-          const healMax = healResult.max;
-          const healMaxDisplay = healMax !== null ? healMax : DEFAULT_HP_PLACEHOLDER;
-          const healCurrent = healResult.current;
-          const showHitPointValues = !shouldHideEnemyHitPointValues(placement);
-          if (allowTempHp && healMax !== null && healCurrent > healMax) {
-            const tempAmount = healCurrent - healMax;
-            updateStatus(showHitPointValues
-              ? `${healName} healed to max + ${tempAmount} temp HP (${healCurrent}/${healMaxDisplay} HP).`
-              : `${healName} recovers ${healResult.change} HP and gains temporary stamina.`);
-          } else {
-            updateStatus(showHitPointValues
-              ? `${healName} recovers ${healResult.change} HP (${healCurrent}/${healMaxDisplay} HP).`
-              : `${healName} recovers ${healResult.change} HP.`);
-          }
-        });
-        return;
-      }
-
-      const result = action.mode === 'damage'
-        ? await applyManualDamageToPlacement(placement.id, action.amount, action.damageType || '')
-        : applyDamageHealToPlacement(placement.id, action.mode, action.amount);
-      if (!result) {
-        updateStatus('Unable to update hit points for that token.');
-        return;
-      }
-      if ((result.change || result.amount || 0) > 0) {
-        floatStaminaDelta(placement.id, result.change || result.amount || action.amount, action.mode === 'damage' ? 'damage' : 'heal');
-      }
-
-      const { name, current, max, change } = result;
-      const damageTypeLabel = action.mode === 'damage' && result.damageType
-        ? `${formatDamageTypeLabel(result.damageType)} `
-        : '';
-      const effectLabel = action.mode === 'damage' ? `${damageTypeLabel}damage` : 'HP';
-      const verb = action.mode === 'damage' ? 'takes' : 'recovers';
-      const maxDisplay = max !== null ? max : DEFAULT_HP_PLACEHOLDER;
-      const hpDisplay = max !== null ? `${current}/${maxDisplay}` : `${current}`;
-      const showHitPointValues = !shouldHideEnemyHitPointValues(placement);
-      const suffix = !showHitPointValues
-        ? '.'
-        : action.mode === 'damage'
-          ? ` (${hpDisplay} HP remaining).`
-          : ` (${hpDisplay} HP).`;
-      const adjustmentText = action.mode === 'damage' && showHitPointValues
-        ? formatManualDamageAdjustment(result)
-        : '';
-      updateStatus(`${name} ${verb} ${change} ${effectLabel}${adjustmentText}${suffix}`);
-      if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
-        const noun = action.mode === 'damage'
-          ? `${damageTypeLabel.toLowerCase()}damage`
-          : 'healing';
-        window.setTimeout(() => {
-          if (pendingDamageHeal) {
-            updateStatus(`Click a token to apply ${action.amount} ${noun}.`);
-          }
-        }, 1400);
-      }
+      await handleDamageHealClick(event);
       return;
     }
 
@@ -9527,6 +9466,46 @@ export function mountBoardInteractions(store, routes = {}) {
     return rects.length;
   }
 
+  /** Pulses tokens where they stand, on this page only, without moving the view. Returns how many were pulsed. */
+  function pingBoardTokens(placementIds) {
+    const wanted = [...new Set(placementIds)].filter(Boolean);
+    if (globalThis.vtt3d?.active) {
+      const helpers = globalThis.vtt3d.helpers;
+      let pulsed = 0;
+      for (const id of wanted) {
+        const placement = getPlacementFromStore(id);
+        if (!placement || (placement.hidden && !isGmUser()) || !helpers?.toMap) continue;
+        const at = helpers.toMap(placement.column + (placement.width || 1) / 2, placement.row + (placement.height || 1) / 2);
+        mapPings.pulseAt(at.x, at.y, window.vtt3dBridge?.heightFor?.(id));
+        pulsed += 1;
+      }
+      return pulsed;
+    }
+    const set = new Set(wanted), surfaceRect = mapSurface.getBoundingClientRect();
+    const scale = Number.isFinite(viewState.scale) && viewState.scale !== 0 ? viewState.scale : 1;
+    const rects = Array.from(tokenLayer.querySelectorAll('[data-placement-id]'))
+      .filter(node => set.has(node.dataset.placementId) && !node.hidden)
+      .map(node => node.getBoundingClientRect())
+      .filter(rect => rect.width && rect.height);
+    rects.forEach(rect => mapPings.pulseAt(
+      (rect.left + rect.width / 2 - surfaceRect.left - viewState.translation.x) / scale,
+      (rect.top + rect.height / 2 - surfaceRect.top - viewState.translation.y) / scale));
+    return rects.length;
+  }
+
+  // Right-click an entry in the turn tracker: its token, or each token of its group, pulses on the map so it is easy
+  // to find (Brandon, October 2026). On this page only; the view does not move.
+  function handleCombatTrackerContextMenu(event) {
+    const entry = event.target instanceof Element ? event.target.closest('[data-combatant-id]') : null;
+    if (!entry) return;
+    event.preventDefault();
+    const representativeId = entry.dataset.combatantId;
+    const members = Array.from(getGroupMembers(representativeId) || []);
+    if (!pingBoardTokens(members.length ? members : [representativeId])) {
+      window.UIKit?.toast?.('That token is not on this map.', 'info');
+    }
+  }
+
   /** What the Director's "Find token" says: how many were selected, how many of them are drawn on this page. */
   function findTokenWords(asked, shown) {
     if (!asked) return 'Select a token to find it.';
@@ -10752,7 +10731,7 @@ export function mountBoardInteractions(store, routes = {}) {
       return false;
     }
 
-    const combatantId = getCurrentPlayerTurnCombatantId();
+    const combatantId = getCurrentPlayerTurnCombatantId({ ignoreTeam: true });
     if (!combatantId) {
       return false;
     }
@@ -12089,7 +12068,8 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    const combatantId = getCurrentPlayerTurnCombatantId();
+    // Shown during the enemies' turn too; pressing it then warns, and lets the player go anyway.
+    const combatantId = getCurrentPlayerTurnCombatantId({ ignoreTeam: true });
     if (!combatActive || !combatantId) {
       closePlayerTurnStartButton();
       return;
@@ -12159,7 +12139,9 @@ export function mountBoardInteractions(store, routes = {}) {
     positionTurnPromptOverlay(overlay);
   }
 
-  function getCurrentPlayerTurnCombatantId() {
+  // ignoreTeam: the player's own hero even while it is the enemies' pick; the turn start then asks first (Brandon,
+  // October 2026: the button used to vanish during the enemies' turn).
+  function getCurrentPlayerTurnCombatantId({ ignoreTeam = false } = {}) {
     const userId = getCurrentUserId();
     if (!userId || !PLAYER_CHARACTER_USER_IDS.includes(userId)) {
       return null;
@@ -12194,7 +12176,7 @@ export function mountBoardInteractions(store, routes = {}) {
       activeCombatantIds: activeIds,
       livePlacementIds,
       completedCombatantIds: completedCombatants,
-      currentTurnTeam,
+      currentTurnTeam: ignoreTeam ? null : currentTurnTeam,
       getRepresentativeIdFor,
       getCombatantTeam,
     });
@@ -14253,9 +14235,10 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function confirmPlayerTurnOverride() {
-    return confirmBoardAction("It is not the PC's turn. Would you like to go anyways?", {
+    const enemies = currentTurnTeam && normalizeCombatTeam(currentTurnTeam) === 'enemy';
+    return confirmBoardAction(enemies ? "It's the enemies' turn. Take your turn anyway?" : "It is not the PC's turn. Would you like to go anyways?", {
       title: 'Out of Turn',
-      confirmText: 'Go anyway',
+      confirmText: enemies ? 'Take my turn' : 'Go anyway',
     });
   }
 
@@ -16647,6 +16630,90 @@ export function mountBoardInteractions(store, routes = {}) {
       : '';
     const noun = action.mode === 'damage' ? `${typeLabel.toLowerCase()}damage` : 'healing';
     updateStatus(`Click a token to ${verb} ${action.amount} ${noun}. Right-click or press Escape to cancel.`);
+  }
+
+  // A click on a token while a manual damage or heal waits for its target (the Damage/Heal tool). The 2D map
+  // surface and, on the 3D board, the board's capture listener both send the press here.
+  async function handleDamageHealClick(event) {
+    event.preventDefault();
+    closeHealOverflowPopup();
+    const action = pendingDamageHeal;
+    const placement = findRenderedPlacementAtPoint(event);
+    if (!placement) {
+      const noun = action.mode === 'damage' ? 'damage' : 'healing';
+      updateStatus(`Click a token to apply ${action.amount} ${noun}.`);
+      return;
+    }
+
+    // Check if healing would exceed max HP - show popup to choose
+    if (action.mode === 'heal' && wouldHealOverflow(placement.id, action.amount)) {
+      showHealOverflowPopup(event, placement, action, (choice) => {
+        const allowTempHp = choice === 'temp';
+        const healResult = applyDamageHealToPlacement(placement.id, 'heal', action.amount, { allowTempHp });
+        if (!healResult) {
+          updateStatus('Unable to update hit points for that token.');
+          return;
+        }
+        floatStaminaDelta(placement.id, healResult.change || action.amount, 'heal');
+        const healName = healResult.name;
+        const healMax = healResult.max;
+        const healMaxDisplay = healMax !== null ? healMax : DEFAULT_HP_PLACEHOLDER;
+        const healCurrent = healResult.current;
+        const showHitPointValues = !shouldHideEnemyHitPointValues(placement);
+        if (allowTempHp && healMax !== null && healCurrent > healMax) {
+          const tempAmount = healCurrent - healMax;
+          updateStatus(showHitPointValues
+            ? `${healName} healed to max + ${tempAmount} temp HP (${healCurrent}/${healMaxDisplay} HP).`
+            : `${healName} recovers ${healResult.change} HP and gains temporary stamina.`);
+        } else {
+          updateStatus(showHitPointValues
+            ? `${healName} recovers ${healResult.change} HP (${healCurrent}/${healMaxDisplay} HP).`
+            : `${healName} recovers ${healResult.change} HP.`);
+        }
+      });
+      return;
+    }
+
+    const result = action.mode === 'damage'
+      ? await applyManualDamageToPlacement(placement.id, action.amount, action.damageType || '')
+      : applyDamageHealToPlacement(placement.id, action.mode, action.amount);
+    if (!result) {
+      updateStatus('Unable to update hit points for that token.');
+      return;
+    }
+    if ((result.change || result.amount || 0) > 0) {
+      floatStaminaDelta(placement.id, result.change || result.amount || action.amount, action.mode === 'damage' ? 'damage' : 'heal');
+    }
+
+    const { name, current, max, change } = result;
+    const damageTypeLabel = action.mode === 'damage' && result.damageType
+      ? `${formatDamageTypeLabel(result.damageType)} `
+      : '';
+    const effectLabel = action.mode === 'damage' ? `${damageTypeLabel}damage` : 'HP';
+    const verb = action.mode === 'damage' ? 'takes' : 'recovers';
+    const maxDisplay = max !== null ? max : DEFAULT_HP_PLACEHOLDER;
+    const hpDisplay = max !== null ? `${current}/${maxDisplay}` : `${current}`;
+    const showHitPointValues = !shouldHideEnemyHitPointValues(placement);
+    const suffix = !showHitPointValues
+      ? '.'
+      : action.mode === 'damage'
+        ? ` (${hpDisplay} HP remaining).`
+        : ` (${hpDisplay} HP).`;
+    const adjustmentText = action.mode === 'damage' && showHitPointValues
+      ? formatManualDamageAdjustment(result)
+      : '';
+    updateStatus(`${name} ${verb} ${change} ${effectLabel}${adjustmentText}${suffix}`);
+    if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
+      const noun = action.mode === 'damage'
+        ? `${damageTypeLabel.toLowerCase()}damage`
+        : 'healing';
+      window.setTimeout(() => {
+        if (pendingDamageHeal) {
+          updateStatus(`Click a token to apply ${action.amount} ${noun}.`);
+        }
+      }, 1400);
+    }
+    return;
   }
 
   function cancelDamageHealTargeting({ restoreMessage = true } = {}) {
@@ -23177,7 +23244,7 @@ export function mountBoardInteractions(store, routes = {}) {
         return;
       }
       cleanedUp = true;
-      mapSurface.removeEventListener('pointerdown', handlePointerDown, true);
+      board.removeEventListener('pointerdown', handlePointerDown, true);
       document.removeEventListener('keydown', handleKeydown, true);
       if (activeConditionPrompt && activeConditionPrompt.bannerId === bannerId) {
         activeConditionPrompt = null;
@@ -23195,7 +23262,8 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    mapSurface.addEventListener('pointerdown', handlePointerDown, true);
+    // On the board, which holds both the 2D map surface and the 3D board's token layer.
+    board.addEventListener('pointerdown', handlePointerDown, true);
     document.addEventListener('keydown', handleKeydown, true);
 
     activeConditionPrompt = { bannerId, cleanup };
@@ -26789,6 +26857,8 @@ function createTemplateTool() {
       mapUrl: state.boardState?.mapUrl ?? null,
       view: { gridSize: viewState.gridSize, gridOffsets: { ...viewState.gridOffsets }, mapPixelSize: { ...viewState.mapPixelSize }, mapInsets: { ...(viewState.mapInsets ?? {}) }, mapLoaded: viewState.mapLoaded, activeMapUrl: viewState.activeMapUrl ?? null },
       busy: coordinateMovePending,
+      // Whose turn it is (the 3D board's turn-start ghost).
+      turn: combatActive && activeCombatantId ? { combatantId: activeCombatantId, round: combatRound } : null,
       inputMode: isMeasureModeActive() ? 'measure' : isDrawModeActive() ? 'draw' : null,
       targetMode: pendingAutomationTarget ? 'token' : pendingAutomationArea ? 'area' : pendingAutomationMove ? 'move' : null,
       abilityGuide: getCoordinateAbilityGuide(),

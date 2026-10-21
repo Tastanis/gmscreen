@@ -81,6 +81,12 @@ export function normalizePingEntry(entry) {
   if (entry.z !== null && entry.z !== undefined && Number.isFinite(z) && z !== 0) {
     normalized.z = z;
   }
+  // The Director's camera on his view-move (map-pings.js), so every 3D board looks from where he looks.
+  const three = (list) => Array.isArray(list) && list.length === 3 && list.every((n) => Number.isFinite(Number(n))) ? list.map(Number) : null;
+  const position = three(entry.camera?.position), target = three(entry.camera?.target);
+  if (type === 'focus' && position && target) {
+    normalized.camera = { position, target };
+  }
   return normalized;
 }
 

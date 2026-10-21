@@ -248,6 +248,12 @@
             if (!message || message.user === currentUser) {
                 return;
             }
+            // Only in the window being used (Brandon: not in every version of the chat that is open). The chat
+            // button is still marked unread everywhere.
+            if (typeof document.hasFocus === 'function' && !document.hasFocus()) {
+                toggleButton.classList.add('chat-panel-toggle--unread');
+                return;
+            }
             chatNotificationQueue.push(message);
             toggleButton.classList.add('chat-panel-toggle--unread');
             if (!chatNotificationActive) {

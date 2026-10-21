@@ -82,6 +82,22 @@ async function mount(){
   const artScene=isArtScene();if(artScene===null)return '';if(artScene)return 'art:'+context.sceneId+':'+hash;
   const picture=pictureRect();return picture?JSON.stringify(['picture',context.sceneId,picture,boardSize(),hash]):'';
  }
+ // Where the token whose turn it is stood when the turn began: a faint copy of it stays there once it has moved (Brandon,
+ // October 2026). Ctrl+Z on that turn takes it back there (token-movement-controller.js). Noted by each page when it
+ // sees the turn begin; a page opened mid-turn notes where the token stands then.
+ let turnStart=null,turnGhost=null;
+ function syncTurnStart(){const t=context.turn,key=t&&context.sceneId?`${context.sceneId}:${t.round}:${t.combatantId}`:'';
+  if(!key){turnStart=null;return;}if(turnStart?.key===key)return;const p=find(t.combatantId);if(!p)return;const w=world(p);
+  turnStart={key,id:p.id,x:w.x,y:w.y,z:w.z,width:Math.max(w.width,w.height),level:w.level,image:typeof p.imageUrl==='string'?p.imageUrl:'',hidden:!!p.hidden};}
+ function placeTurnGhost(recordById,canvasRect,hostRect){
+  const p=turnStart&&recordById.get(turnStart.id),moved=p&&(Math.abs(p.x-turnStart.x)>.01||Math.abs(p.y-turnStart.y)>.01||Math.abs(p.z-turnStart.z)>.3);
+  const shown=moved&&canvasRect&&hostRect&&(!turnStart.hidden||context.isGM)&&(shownLevel===null||shownLevel<0||turnStart.level<=shownLevel);
+  const foot=shown?view.project(turnStart):null;
+  if(!foot?.visible){turnGhost?.remove();turnGhost=null;return;}
+  if(!turnGhost){turnGhost=document.createElement('div');turnGhost.className='vtt3d-turn-ghost';turnGhost.setAttribute('aria-hidden','true');overlayHost.append(turnGhost);}
+  const across=view.project({...turnStart,x:turnStart.x+turnStart.width*.5}),size=Math.max(22,Math.min(110,Math.hypot(across.x-foot.x,across.y-foot.y)*2));
+  const image=turnStart.image?`url(${JSON.stringify(turnStart.image)})`:'none';if(turnGhost.dataset.image!==image){turnGhost.dataset.image=image;turnGhost.style.backgroundImage=image;}
+  turnGhost.style.width=turnGhost.style.height=`${size}px`;turnGhost.style.left=`${canvasRect.left-hostRect.left+foot.x-size/2}px`;turnGhost.style.top=`${canvasRect.top-hostRect.top+foot.y-size*.85}px`;}
  let buildTimer=0,buildGeneration=0,builtSceneId=null,loadingNote=null;
  // Opening another scene unloads this one first (Brandon, October 2026): the old view, its art, layers, minis and
  // overlays go at once, tokens are not drawn, and the board says it is loading until the new scene is built. A build
@@ -163,14 +179,14 @@ async function mount(){
  // the viewer's right, each snapped to the nearest row or column direction.
  function gridDirections(){if(!view)return null;const f=view.controls.target.clone().sub(view.camera.position);f.y=0;if(f.lengthSq()<1e-8)return null;
   const up=Math.abs(f.x)>Math.abs(f.z)?{x:Math.sign(f.x),y:0}:{x:0,y:Math.sign(f.z)};return {up,right:{x:-up.y,y:up.x}};}
- // Bring tokens into view (Find token, My token): the camera keeps its angle and
- // backs off far enough for all of them. Returns their map points for the pulses.
+ // Bring tokens into view (Find token, My token): the camera keeps its angle and comes in close (about 26 squares off
+ // at most, Brandon October 2026: from far out it only looked like a ping), or backs off far enough for all of them. Returns their map points for the pulses.
  function focusTokens(ids){if(!view)return [];const wanted=new Set(ids||[]);
   const shown=(context.placements||[]).filter(p=>wanted.has(p.id)&&(context.isGM||!p.hidden)).map(world).filter(p=>shownLevel===null||shownLevel<0||p.level<=shownLevel);
   if(!shown.length)return [];
   const mid={x:shown.reduce((a,p)=>a+p.x,0)/shown.length,y:shown.reduce((a,p)=>a+p.y,0)/shown.length,z:shown.reduce((a,p)=>a+p.z,0)/shown.length};
   const span=Math.max(...shown.map(p=>Math.hypot(p.x-mid.x,p.y-mid.y)),0);
-  const offset=view.camera.position.clone().sub(view.controls.target),distance=Math.max(offset.length(),12+span*2.2);
+  const offset=view.camera.position.clone().sub(view.controls.target),distance=Math.max(12+span*2.2,Math.min(offset.length(),26));
   view.focus(mid);view.camera.position.copy(view.controls.target).add(offset.setLength(distance));view.controls.update();
   return shown.map(p=>({...helpers.toMap(p.x,p.y),z:p.z}));}
  // Line-and-dot overlays drawn by the 3D overlay layer (wall-overlay.mjs), by name: 'walls', 'stairs', ...
@@ -394,7 +410,7 @@ async function mount(){
  bridge.subscribe(next=>{const selectedNow=next.placements?.find(p=>p.id===next.selectedIds?.[0]);const warmKey=selectedNow&&selectedNow.canMove?[selectedNow.id,selectedNow.column,selectedNow.row,selectedNow.levelId].join(':'):'';if(warmKey&&warmKey!==warmSignature&&!next.busy){warmSignature=warmKey;planner.warm(selectedNow);}
   if(clickMoveTokenId&&(next.sceneId!==context.sceneId||next.targetMode||!next.selectedIds?.includes(clickMoveTokenId)))cancelDrag();
   const switched=(view||building)&&next.sceneId!==(builtSceneId??(building?context.sceneId:null));
-  context=next;if(switched)clearBoard();scheduleBuild();paintAbilityGuide();const value=context.grid?.visible!==false;if(view&&value!==gridVisible){gridVisible=value;view.setGrid(value);}});
+  context=next;if(switched)clearBoard();syncTurnStart();scheduleBuild();paintAbilityGuide();const value=context.grid?.visible!==false;if(view&&value!==gridVisible){gridVisible=value;view.setGrid(value);}});
  document.querySelector('#vtt-map-image')?.addEventListener('load',()=>setTimeout(()=>{context=bridge.getContext();buildScene();},0));
  // Ability pickers' Skip buttons and range words are screen controls; on the 3D board they
  // are shown above the view, and pressing Skip runs the VTT's own skip.
@@ -471,6 +487,7 @@ async function mount(){
    // dip under the ground and a pop back up (Brandon, October 2026).
    if(landing){const p=find(landing.id);if(!p||performance.now()>landing.until||(landing.answered&&p.column===landing.column&&p.row===landing.row))landing=null;}
    if(landing&&!held&&recordById.has(landing.id))recordById.set(landing.id,{...recordById.get(landing.id),x:landing.x,y:landing.y,z:landing.z});view.setTethers(tethers([...recordById.values()]));
+   placeTurnGhost(recordById,canvasRect,hostRect);
    // Hero minis on their tokens' bases (minis.mjs); a token with a mini hides its portrait (class vtt3d-mini).
    if(minis){if(profilesFor!==context.placements){profilesFor=context.placements;profiles=new Map((context.placements||[]).map(p=>[p.id,{hero:p.characterProfileId,monster:p.monsterId,mini:p.mini,name:p.name}]));}
     // A token the board is playing the fall on (token-fall-animation.js, class vtt-token--falling): its model shakes
@@ -530,7 +547,10 @@ async function mount(){
  const api={get ready(){return !!view;},
   // The held token as drawn on its landing square ({id,x,y,z}), or null.
   get held(){return held?{...held}:null;},get view(){return view;},get scene(){return view?.scene;},get camera(){return view?.camera;},get canvas(){return canvas;},bridge,pickAtClient,clientToMap,pick:event=>view?.pick(event),project:point=>view?.project(point),getContext:()=>bridge.getContext(),
-  getTokenPoint:id=>{const p=find(id);return p&&view?view.project(world(p)):null;},focus,metrics:()=>view?{...view.metrics(),fog:false,effects:effects?.summary()}:null,requestRender:()=>{lastTokenSignature='';}};
+  getTokenPoint:id=>{const p=find(id);return p&&view?view.project(world(p)):null;},focus,
+  // The camera as {position, target} in board units (the Director's, sent with his focus ping), and putting it there.
+  cameraState:()=>view?{position:view.camera.position.toArray().map(n=>Math.round(n*1000)/1000),target:view.controls.target.toArray().map(n=>Math.round(n*1000)/1000)}:null,
+  setCameraState:state=>{if(!view||!Array.isArray(state?.position)||!Array.isArray(state?.target))return false;view.controls.target.fromArray(state.target);view.camera.position.fromArray(state.position);view.controls.update();lastPlaceKey='';return true;},metrics:()=>view?{...view.metrics(),fog:false,effects:effects?.summary()}:null,requestRender:()=>{lastTokenSignature='';}};
  window.vtt3dRenderer=window.vtt3dView=api;
  addLayer('walls',createWallOverlayLayer);addLayer('terrain-brush',createTerrainBrushLayer);
  try{(await import('./layers/index.mjs')).register?.(window.vtt3d);}catch(error){console.error('[VTT 3D] layers',error);}
