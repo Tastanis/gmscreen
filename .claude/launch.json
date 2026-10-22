@@ -4,8 +4,27 @@
     {
       "name": "php-dev",
       "runtimeExecutable": "C:\\Users\\tasta\\AppData\\Local\\Microsoft\\WinGet\\Packages\\PHP.PHP.8.3_Microsoft.Winget.Source_8wekyb3d8bbwe\\php.exe",
-      "runtimeArgs": ["-S", "localhost:8123", "-t", "C:\\Users\\tasta\\Desktop\\gmscreen"],
+      "runtimeArgs": [
+        "-S",
+        "localhost:8123",
+        "-t",
+        "C:\\Users\\tasta\\Desktop\\gmscreen"
+      ],
       "port": 8123
+    },
+    {
+      "name": "public-map",
+      "runtimeExecutable": "py",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8131",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "C:/Users/tasta/Desktop/3D map upload/site"
+      ],
+      "port": 8131
     }
   ]
 }
