@@ -1259,6 +1259,7 @@ export function mountBoardInteractions(store, routes = {}) {
       resetPlayerSurgesToZero('combat-end');
       clearAllPersistentZones({ reason: 'combat ended' });
       clearAllMarksForActiveScene({ reason: 'combat ended' });
+      clearEndOfEncounterConditions();
       resetAutomationScopedFlags('all');
     }
   }
@@ -3443,13 +3444,40 @@ export function mountBoardInteractions(store, routes = {}) {
     return Number.isFinite(parsed) ? parsed : null;
   }
 
-  function fireManualStaminaTriggers({ placementId, before, after, kind = 'manual', source = 'manual' } = {}) {
+  // `damage`: damage applied by hand ({amount, originalAmount, damageType, sourceId}), told to automation as a hit by
+  // its source (none: no source) before the stamina events, as an automated hit is.
+  function fireManualStaminaTriggers({ placementId, before, after, kind = 'manual', source = 'manual', damage = null } = {}) {
     if (!placementId) return;
     const beforeValue = parsePlacementStaminaValue(before);
     const afterValue = parsePlacementStaminaValue(after);
     if (beforeValue === null || afterValue === null || beforeValue === afterValue) return;
-    registerAuthoredTriggersForPlacement(placementId).then(() => {
+    const damageSourceId = damage && typeof damage.sourceId === 'string' ? damage.sourceId : '';
+    Promise.all([
+      registerAuthoredTriggersForPlacement(placementId),
+      damageSourceId ? registerAuthoredTriggersForPlacement(damageSourceId) : null,
+    ]).then(() => {
       const delta = afterValue - beforeValue;
+      if (damage) {
+        const hit = {
+          placementId,
+          targetId: placementId,
+          sourceId: damageSourceId,
+          amount: damage.amount,
+          originalAmount: damage.originalAmount ?? damage.amount,
+          damageType: damage.damageType || '',
+          abilityName: source,
+          actionId: '',
+          actionKind: '',
+          cost: '',
+          keywords: [],
+          includesSurge: false,
+          surgeSpent: 0,
+          surgeDamage: 0,
+          manual: true,
+        };
+        triggerFire('damage', hit);
+        triggerFire('damageDealt', hit);
+      }
       triggerFire('staminaChange', {
         placementId,
         targetId: placementId,
@@ -3464,7 +3492,7 @@ export function mountBoardInteractions(store, routes = {}) {
         triggerFire('staminaZero', {
           placementId,
           targetId: placementId,
-          sourceId: '',
+          sourceId: damageSourceId,
           before: beforeValue,
           after: afterValue,
           delta: afterValue - beforeValue,
@@ -12553,6 +12581,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!combatV2Enabled) {
       fireTimingBoundary('combatEnd', { round: combatRound });
       resetPlayerSurgesToZero('combat-end');
+      clearEndOfEncounterConditions();
     }
     combatActive = false;
     combatRound = 0;
@@ -16702,8 +16731,9 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
+    const sourceId = action.mode === 'damage' ? manualDamageSourceFor(placement.id) : '';
     const result = action.mode === 'damage'
-      ? await applyManualDamageToPlacement(placement.id, action.amount, action.damageType || '')
+      ? await applyManualDamageToPlacement(placement.id, action.amount, action.damageType || '', { sourceId })
       : applyDamageHealToPlacement(placement.id, action.mode, action.amount);
     if (!result) {
       updateStatus('Unable to update hit points for that token.');
@@ -16730,7 +16760,8 @@ export function mountBoardInteractions(store, routes = {}) {
     const adjustmentText = action.mode === 'damage' && showHitPointValues
       ? formatManualDamageAdjustment(result)
       : '';
-    updateStatus(`${name} ${verb} ${change} ${effectLabel}${adjustmentText}${suffix}`);
+    const fromText = sourceId ? ` from ${tokenLabel(getPlacementFromStore(sourceId))}` : '';
+    updateStatus(`${name} ${verb} ${change} ${effectLabel}${fromText}${adjustmentText}${suffix}`);
     if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
       const noun = action.mode === 'damage'
         ? `${damageTypeLabel.toLowerCase()}damage`
@@ -17914,8 +17945,12 @@ export function mountBoardInteractions(store, routes = {}) {
         condition.damageType = dt;
       }
     }
-    if (duration === 'end-of-turn' && payload.sourceId) {
-      condition.endsOn = { tokenId: payload.sourceId };
+    // (EoT) lasts until the end of the target's next turn, or of their current turn if imposed on it (Draw Steel,
+    // End of Next Turn): the bearer's own turn ends it, as a condition added by hand names its token.
+    if (duration === 'end-of-turn') {
+      condition.duration.targetTokenId = placementId;
+      const bearerName = tokenLabel(getPlacementFromStore(placementId));
+      if (bearerName) condition.duration.targetTokenName = bearerName;
     }
     const result = applyConditionToPlacement(placementId, condition, { returnSavePromise: true });
     try {
@@ -18038,7 +18073,14 @@ export function mountBoardInteractions(store, routes = {}) {
     };
   }
 
-  async function applyManualDamageToPlacement(placementId, amount, damageType = '') {
+  // The creature that dealt damage applied by hand: the one token selected, if it is not the target itself
+  // (Brandon, October 2026). None selected, or several: the damage has no source.
+  function manualDamageSourceFor(targetId) {
+    const picked = [...selectedTokenIds].filter((id) => id && id !== targetId && getPlacementFromStore(id));
+    return picked.length === 1 ? picked[0] : '';
+  }
+
+  async function applyManualDamageToPlacement(placementId, amount, damageType = '', { sourceId = '' } = {}) {
     const normalizedType = normalizeAutomationDamageType(damageType);
     const originalAmount = parseDamageHealAmount(amount);
     if (!placementId || !originalAmount) {
@@ -18047,11 +18089,23 @@ export function mountBoardInteractions(store, routes = {}) {
     const adjustment = await getAutomationDamageAdjustment(placementId, normalizedType);
     const adjustedAmount = Math.max(0, originalAmount + adjustment.vulnerability - adjustment.immunity);
     const result = adjustedAmount > 0
-      ? applyDamageHealToPlacement(placementId, 'damage', adjustedAmount)
+      ? applyDamageHealToPlacement(placementId, 'damage', adjustedAmount, { fireStaminaTriggers: false })
       : getZeroDamageResult(placementId);
     if (!result) return null;
+    // Told to automation as a hit: `damage` (taken) and `damageDealt` (by the source), then the stamina events.
+    if (adjustedAmount > 0) {
+      fireManualStaminaTriggers({
+        placementId,
+        before: result.previous,
+        after: result.current,
+        kind: 'damage',
+        source: 'Manual damage',
+        damage: { amount: adjustedAmount, originalAmount, damageType: normalizedType, sourceId },
+      });
+    }
     return {
       ...result,
+      sourceId,
       amount: adjustedAmount,
       originalAmount,
       damageType: normalizedType,
@@ -23032,6 +23086,33 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     return updated && didChange;
+  }
+
+  // Conditions that last until the end of the encounter come off when combat ends, on every token of the scene.
+  function clearEndOfEncounterConditions() {
+    const placements = getPlacementsForActiveScene();
+    const isEncounterLong = (condition) => getConditionDurationType(condition) === 'end-of-encounter';
+    const ids = (Array.isArray(placements) ? placements : [])
+      .filter((placement) => ensurePlacementConditions(placement?.conditions ?? placement?.condition ?? null).some(isEncounterLong))
+      .map((placement) => placement.id)
+      .filter(Boolean);
+    ids.forEach((placementId) => {
+      updatePlacementById(placementId, (target) => {
+        const remaining = ensurePlacementConditions(target?.conditions ?? target?.condition ?? null).filter((condition) => !isEncounterLong(condition));
+        if (remaining.length) {
+          target.conditions = remaining;
+          target.condition = remaining[0];
+        } else {
+          delete target.conditions;
+          delete target.condition;
+        }
+      });
+    });
+    if (ids.length) {
+      refreshTokenSettings();
+      syncConditionsAfterMutation(true);
+      dispatchTokenSelectionSummary();
+    }
   }
 
   function clearEndOfTurnConditionsForTarget(targetTokenId) {

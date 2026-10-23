@@ -448,6 +448,7 @@
         if (!normalized) return '';
         if (normalized === 'end-of-turn') return 'end of turn';
         if (normalized === 'save-ends') return 'save ends';
+        if (normalized === 'instantaneous') return '';
         return normalized.replace(/-/g, ' ');
     }
 

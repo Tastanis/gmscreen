@@ -156,6 +156,17 @@ export function normalizeConditionDurationValue(value) {
   if (normalized.includes('save') || normalized === 'se') {
     return 'save-ends';
   }
+  // Kept apart from end of turn (an ability's "end of encounter" used to become end of turn, never cleared) and
+  // from save ends (an ability's "until dying" or no-suffix condition used to raise a save prompt).
+  if (normalized.includes('encounter')) {
+    return 'end-of-encounter';
+  }
+  if (normalized.includes('dying')) {
+    return 'until-dying';
+  }
+  if (normalized.includes('instant') || normalized === 'until-removed') {
+    return 'instantaneous';
+  }
   if (normalized.includes('eot') || normalized.includes('end')) {
     return 'end-of-turn';
   }

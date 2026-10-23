@@ -21,14 +21,17 @@
 //     from getAttributeBonus / getStrongestAttribute.
 //   - Heroic resource and recoveries don't exist on monsters. spendResource
 //     skips with a chat note.
-//   - Villain / malice abilities auto-deduct from the encounter malice pool.
+//   - Any ability whose cost is a Malice cost deducts it from the encounter malice pool (actions and maneuvers
+//     too); villain actions cost no Malice; a cost in anything else ("30 stamina") is not Malice.
 //   - Triggered actions prompt the GM with a confirm dialog before firing.
 
 (function () {
     'use strict';
 
     var TRIGGERED_CATEGORY = 'triggered_action';
-    var MALICE_CATEGORIES = ['villain_action', 'malice', 'triggered_action'];
+    // Villain actions cost no Malice (Draw Steel); every other kind spends Malice when its cost says so.
+    var VILLAIN_CATEGORY = 'villain_action';
+    var MALICE_CATEGORY = 'malice';
 
     function canRun(ability) {
         if (!ability || typeof ability !== 'object') return false;
@@ -36,9 +39,12 @@
         return !!(a && typeof a === 'object' && Object.keys(a).length > 0);
     }
 
-    function parseMaliceCost(resourceCost) {
-        if (typeof resourceCost !== 'string') return 0;
-        var match = resourceCost.match(/(\d+)/);
+    // The Malice a cost asks for: a number with the word Malice ("2 Malice", "3+ Malice", "Malice 2"), or, on a
+    // Malice ability, a bare number ("3", "5+"). Any other cost ("30 stamina") is no Malice.
+    function parseMaliceCost(resourceCost, category) {
+        var text = typeof resourceCost === 'number' ? String(resourceCost) : typeof resourceCost === 'string' ? resourceCost : '';
+        var match = text.match(/(\d+)\s*\+?\s*malice\b/i) || text.match(/\bmalice\s*:?\s*(\d+)/i)
+            || (category === MALICE_CATEGORY ? text.match(/^\s*(\d+)\s*\+?\s*$/) : null);
         if (!match) return 0;
         var n = parseInt(match[1], 10);
         return Number.isFinite(n) && n > 0 ? n : 0;
@@ -301,8 +307,8 @@
         });
     }
 
-    async function ensureMalice(monster, ability) {
-        var cost = parseMaliceCost(ability.resource_cost);
+    async function ensureMalice(monster, ability, category) {
+        var cost = parseMaliceCost(ability.resource_cost, category);
         if (cost <= 0) {
             return { proceed: true, cost: 0 };
         }
@@ -349,8 +355,8 @@
         }
 
         var maliceResult = { proceed: true, cost: 0 };
-        if (MALICE_CATEGORIES.indexOf(category) !== -1) {
-            maliceResult = await ensureMalice(monster, ability);
+        if (category !== VILLAIN_CATEGORY) {
+            maliceResult = await ensureMalice(monster, ability, category);
             if (!maliceResult.proceed) {
                 return { aborted: true, reason: 'malice-cancelled' };
             }
