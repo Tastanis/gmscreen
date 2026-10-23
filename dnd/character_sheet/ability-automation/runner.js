@@ -1432,6 +1432,9 @@
     state.resultText = "";
     state.rollSuggestionContext = null;
     refreshPowerRollSuggestions(state, block);
+    // Spends the ability asks for before the roll ("timing": "preRoll") are offered now, before the dice.
+    await offerPreRollSpends(state);
+    if (state.aborted) return;
 
     const host = makeHost("Power Roll", state.action.name || "Ability Automation", "power", state.context?.automationAnchor || null);
     renderPowerRoll(host, state, block);
@@ -3031,7 +3034,39 @@
     });
   }
 
+  // A spend decided before the roll (timing "preRoll") is known by what it is, so the same spend written into each
+  // tier is asked about once.
+  function spendSignature(effect) {
+    return JSON.stringify([effect.resource || "", effect.amount || 1, effect.maxAmount || 0, effect.prompt || "", effect.effects || []]);
+  }
+
+  // Before an ability's dice are rolled: every preRoll spend in it not yet decided is asked about now.
+  async function offerPreRollSpends(state) {
+    const spends = [];
+    walkAutomationEffects(state.automation, (effect) => {
+      if (effect?.kind === "spend" && effect.timing === "preRoll") spends.push(effect);
+    });
+    if (!spends.length) return;
+    if (!state.preRollSpends) state.preRollSpends = new Map();
+    for (const effect of spends) {
+      if (state.aborted) return;
+      const key = spendSignature(effect);
+      if (state.preRollSpends.has(key)) continue;
+      const decision = await askSpend(state, effect, " (before the roll)");
+      state.preRollSpends.set(key, decision);
+    }
+  }
+
   async function applySpendEffect(state, effect, targets, ctx) {
+    // Decided before the roll: its effects run now if it was spent, nothing if not, with no second question.
+    const decided = effect.timing === "preRoll" ? state.preRollSpends?.get(spendSignature(effect)) : null;
+    const outcome = decided || await askSpend(state, effect, "");
+    if (!outcome?.spent) return;
+    await applyEffects(state, effect.effects || [], effect.target || null, ctx);
+  }
+
+  // Asks for a spend and takes it: { spent, resource } when spent, { spent: 0 } when declined or not possible.
+  async function askSpend(state, effect, when) {
     const cost = `${effect.amount || 1} ${effect.resource || "resource"}`;
     const inner = (effect.effects || []).map(P.describeEffect).filter(Boolean).join("; ");
     const spendResult = typeof state.context.spendHeroicResource === "function"
@@ -3049,13 +3084,13 @@
           message: `${state.heroName} - ${state.action.name || "Ability"}: ${P.describeEffect(effect)} — apply manually.`,
         });
       }
-      return;
+      return { spent: 0 };
     }
     if (spendResult?.canceled) {
       await postChat(state.context, {
-        message: `${state.heroName} - ${state.action.name || "Ability"}: declined to spend ${cost}.`,
+        message: `${state.heroName} - ${state.action.name || "Ability"}: declined to spend ${cost}${when}.`,
       });
-      return;
+      return { spent: 0 };
     }
     if (!spendResult) {
       const question = `Spend ${cost} for ${state.action.name || "this ability"}?\n${inner || "(no listed effect)"}`;
@@ -3068,18 +3103,18 @@
         : global.confirm(question);
       if (!proceed) {
         await postChat(state.context, {
-          message: `${state.heroName} - ${state.action.name || "Ability"}: declined to spend ${cost}.`,
+          message: `${state.heroName} - ${state.action.name || "Ability"}: declined to spend ${cost}${when}.`,
         });
-        return;
+        return { spent: 0 };
       }
     }
     const spent = spendResult?.spent || effect.amount || 1;
     if (spent > 0) fireActionUsedEvent(state);
     const resource = spendResult?.resource || effect.resource || "resource";
     await postChat(state.context, {
-      message: `${state.heroName} - ${state.action.name || "Ability"}: spent ${spent} ${resource}.`,
+      message: `${state.heroName} - ${state.action.name || "Ability"}: spent ${spent} ${resource}${when}.`,
     });
-    await applyEffects(state, effect.effects || [], effect.target || null, ctx);
+    return { spent, resource };
   }
 
   async function applyResourceGainEffect(state, effect, _targets, _ctx) {

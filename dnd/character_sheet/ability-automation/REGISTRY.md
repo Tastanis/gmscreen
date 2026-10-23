@@ -258,7 +258,7 @@ Registered values: `untyped`, `acid`, `cold`, `corruption`, `fire`, `holy`,
 
 ## Spend timings — `spend.timing`
 
-`preRoll`, `postResult`: accepted, but they do nothing. A spend is offered when its effect is reached (after any roll before it); the paste box warns when `timing` is anything but `postResult`.
+`postResult` (default): the spend is offered when its effect is reached. `preRoll`: in an ability with a power roll, the spend is offered before the dice are rolled, and the answer is used when the effect is reached (the same spend written into each tier is asked once); in an ability with no roll it is offered when reached.
 
 ## Trigger value sources — `amountFrom.source`
 

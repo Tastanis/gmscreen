@@ -74,7 +74,8 @@ test('the paste box: movement amount sources kept, autoResolve takes per-effect 
     const auto = S.normalizeAutomation({ schema: V3, cards: [{ type: 'trigger', autoResolve: true, match: { event: 'damage' }, effects: [{ kind: 'damage', amount: 1, target: 'eventSource' }] }] });
     assert.ok(!auto.warnings.some((w) => /per-effect target routing/.test(w)));
     const spend = S.normalizeAutomation({ schema: V3, cards: [{ type: 'effect', effects: [{ kind: 'spend', resource: 'Insight', amount: 1, timing: 'preRoll', effects: [] }] }] });
-    assert.ok(spend.warnings.some((w) => /timing: "preRoll" does nothing/.test(w)));
+    // Build 552: preRoll works (spend-timing-552 test), so the paste box no longer warns about it.
+    assert.ok(!spend.warnings.some((w) => /timing/.test(w)));
   } finally { harness.close(); }
 });
 

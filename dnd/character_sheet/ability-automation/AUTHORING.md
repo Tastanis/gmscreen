@@ -1005,7 +1005,7 @@ Optional resource spend that, if accepted by the user, triggers extra effects.
 |---|---|
 | `resource` | string — the heroic resource name |
 | `amount` | int — cost |
-| `timing` | Does nothing: a spend is offered when its effect is reached. The paste box warns on `"preRoll"`. |
+| `timing` | `"postResult"` (default): offered when the effect is reached. `"preRoll"`: offered before the power roll's dice, the answer used when the effect is reached; with no roll, offered when reached. |
 | `effects` | list of effects to apply on accept |
 
 Runtime prompts the user contextually: "Spend N <resource> for: <effects>?".

@@ -691,9 +691,7 @@
           prompt: asTrimmedString(input.prompt),
           effects: normalizeEffectList(input.effects || [], warnings, `${path}.effects`),
         };
-        if (input.timing !== undefined && input.timing !== "" && input.timing !== "postResult") {
-          warnings.push(`${path}.timing: "${input.timing}" does nothing; a spend is offered when its effect is reached (after any roll before it).`);
-        }
+
         if (!effect.resource) warnings.push(`${path}: spend missing resource name.`);
         const extras = pickExtras(input, known);
         if (extras) effect._extra = extras;
