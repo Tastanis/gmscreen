@@ -517,6 +517,7 @@ Top-level `automation.modifiers[]` on a feature's automation JSON. Each modifier
 | `match.keywordsNone` | string[] — ability needs none of these |
 | `match.damageType` | string — at least one damage effect must use this type |
 | `match.attribute` | string — power-roll attribute must match |
+| `match.reach` | `"melee"` or `"ranged"` (optional) — the damage bonus lands only on a target within the ability's melee distance (melee) or beyond it (ranged), judged per target when the damage lands; the distance bonus goes to melee or ranged distances only. When the distance can't be told the bonus applies. Without it: any distance. |
 | `apply.damageBonus` | int — added to every `damage.amount` |
 | `apply.rangeBonus` | int — added to every `target.distance.value` |
 | `apply.forcedMovementBonus` | int — added to every `forcedMovement.distance` |

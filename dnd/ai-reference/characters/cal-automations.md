@@ -1099,3 +1099,40 @@ Live action id: action_1780274956221_e53656897d4a6
                    }
 }
 
+========================================================================
+16. Shining Armor Kit
+Section: features (paste into the feature's automation box)
+Live feature id: feature_1780442005704_d3888411e83b18
+Rules source: Shining Armor kit (melee damage bonus +2/+2/+2). "reach": "melee" makes the +2 land only on a target within the ability's melee distance (Build 551).
+{
+    "schema": "ability-automation/v3",
+    "version": 3,
+    "cards": [],
+    "modifiers": [
+        {
+            "match": {
+                "keywordsAll": [
+                    "Melee",
+                    "Weapon"
+                ],
+                "keywordsAny": [],
+                "keywordsNone": [],
+                "damageType": "",
+                "attribute": "",
+                "reach": "melee"
+            },
+            "apply": {
+                "damageBonus": 2,
+                "rangeBonus": 0,
+                "forcedMovementBonus": 0,
+                "damageType": "",
+                "note": "Shining Armor: +2/+2/+2 melee damage bonus to melee weapon abilities, against a target within melee distance, including melee free strikes."
+            },
+            "label": "Shining Armor - Melee Damage Bonus"
+        }
+    ],
+    "passives": [],
+    "keywords": [],
+    "usageLimit": null,
+    "warnings": []
+}

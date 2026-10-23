@@ -1850,6 +1850,8 @@
         keywordsNone: Array.isArray(match.keywordsNone) ? match.keywordsNone.map((k) => P.normalizeKeyword?.(k) || String(k || "").trim()).filter(Boolean) : [],
         damageType: asTrimmedString(match.damageType),
         attribute: asTrimmedString(match.attribute),
+        // Melee or ranged only: judged per target when the damage lands (runner reachBonusFor).
+        ...(["melee", "ranged"].includes(String(match.reach || "").toLowerCase()) ? { reach: String(match.reach).toLowerCase() } : {}),
       },
       apply: {
         damageBonus: asInt(apply.damageBonus, 0),
@@ -1862,6 +1864,9 @@
       },
       label: asTrimmedString(input.label),
     };
+    if (match.reach !== undefined && match.reach !== "" && !out.match.reach) {
+      warnings.push(`${path}.match.reach: "${match.reach}" is not melee or ranged; the bonus applies at any distance.`);
+    }
     if (input.note) out.note = asTrimmedString(input.note);
     const extras = pickExtras(input, new Set(["match", "apply", "label", "note"]));
     if (extras) out._extra = extras;

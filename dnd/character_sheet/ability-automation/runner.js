@@ -1962,6 +1962,31 @@
     return null;
   }
 
+  // The ability's melee distance: the largest melee distance among its target cards (1 when it names none).
+  function abilityMeleeDistance(state) {
+    let reach = 0;
+    walkAutomationBlocks(state.automation, (block) => {
+      const distance = block?.type === "target" ? block.distance : null;
+      if (distance && (distance.form === "melee" || distance.form === "meleeOrRanged")) reach = Math.max(reach, Number(distance.value) || 0);
+    });
+    return reach || 1;
+  }
+
+  // A kit's melee-only (or ranged-only) damage bonus for this target: melee when it stands within the ability's melee
+  // distance of the caster, ranged beyond it. When the distance can't be told, the bonus applies, as it did before.
+  async function reachBonusFor(state, effect, target) {
+    const bonuses = Array.isArray(effect?.reachBonuses) ? effect.reachBonuses : [];
+    if (!bonuses.length) return 0;
+    let squares = null;
+    const sourceId = state.sourcePlacement?.id || "";
+    if (sourceId && target?.id && typeof state.context.getDistanceBetween === "function") {
+      try { squares = Number(await state.context.getDistanceBetween(sourceId, target.id)); } catch (_) { squares = null; }
+    }
+    const known = Number.isFinite(squares);
+    const melee = known && squares <= abilityMeleeDistance(state);
+    return bonuses.reduce((sum, bonus) => sum + (!known || (bonus.reach === "melee") === melee ? Number(bonus.amount) || 0 : 0), 0);
+  }
+
   async function applyDamageEffect(state, effect, targets, ctx) {
     if (!targets.length) {
       await postChat(state.context, {
@@ -2024,7 +2049,8 @@
         });
         if (check?.matched) markBonus = rollDiceFormula(effect.markBonusDice);
       }
-      const amountBeforeSurge = Math.max(0, baseAmount + attributeBonus + diceAmount + markBonus + triggerValue);
+      const reachBonus = await reachBonusFor(state, effect, target);
+      const amountBeforeSurge = Math.max(0, baseAmount + attributeBonus + diceAmount + markBonus + triggerValue + reachBonus);
       const amount = Math.max(0, amountBeforeSurge + surgeBonus.damage);
       const damagePayload = {
         placementId: target.id,
@@ -3703,7 +3729,7 @@
       if (!featureMods?.length) continue;
       for (const mod of featureMods) {
         if (modifierMatches(mod, keywords, automation, action)) {
-          matched.push({ apply: mod.apply || {}, source: feature.title || feature.name || "Feature", label: mod.label || "" });
+          matched.push({ apply: mod.apply || {}, reach: mod.match?.reach || "", source: feature.title || feature.name || "Feature", label: mod.label || "" });
         }
       }
     }
@@ -3968,7 +3994,10 @@
   // damage calculations see the post-modifier values.
   function applyModifiersInPlace(automation, matchedModifiers, state) {
     if (!matchedModifiers.length) return;
-    const totals = matchedModifiers.reduce((acc, m) => {
+    // Melee- or ranged-only modifiers: their damage bonus waits on each damage effect (reachBonuses) to be judged per
+    // target when it lands; their distance bonus goes to the matching distance only.
+    const reachModifiers = matchedModifiers.filter((m) => m.reach === "melee" || m.reach === "ranged");
+    const totals = matchedModifiers.filter((m) => !reachModifiers.includes(m)).reduce((acc, m) => {
       const a = m.apply || {};
       acc.damageBonus += Number.parseInt(a.damageBonus, 10) || 0;
       acc.rangeBonus += Number.parseInt(a.rangeBonus, 10) || 0;
@@ -3977,6 +4006,23 @@
       return acc;
     }, { damageBonus: 0, rangeBonus: 0, forcedMovementBonus: 0, damageTypeOverride: "" });
 
+    for (const modifier of reachModifiers) {
+      const bonus = Number.parseInt(modifier.apply?.rangeBonus, 10) || 0;
+      if (!bonus) continue;
+      walkAutomationBlocks(automation, (block) => {
+        const distance = block?.type === "target" ? block.distance : null;
+        if (!distance) return;
+        if (modifier.reach === "melee" && (distance.form === "melee" || distance.form === "meleeOrRanged") && Number.isFinite(distance.value)) {
+          distance.value = Math.max(0, distance.value + bonus);
+        }
+        if (modifier.reach === "ranged" && distance.form === "ranged" && Number.isFinite(distance.value)) {
+          distance.value = Math.max(0, distance.value + bonus);
+        }
+        if (modifier.reach === "ranged" && distance.form === "meleeOrRanged" && Number.isFinite(distance.secondary)) {
+          distance.secondary = Math.max(0, distance.secondary + bonus);
+        }
+      });
+    }
     // Add range bonus to every target block's distance.value.
     if (totals.rangeBonus) {
       walkAutomationBlocks(automation, (block) => {
@@ -4000,6 +4046,12 @@
           if (effect.raw) return;
           if (totals.damageBonus && rolled) {
             effect.amount = (Number.parseInt(effect.amount, 10) || 0) + totals.damageBonus;
+          }
+          if (rolled) {
+            for (const modifier of reachModifiers) {
+              const amount = Number.parseInt(modifier.apply?.damageBonus, 10) || 0;
+              if (amount) (effect.reachBonuses ||= []).push({ reach: modifier.reach, amount, source: modifier.source });
+            }
           }
           if (totals.damageTypeOverride) {
             effect.damageType = totals.damageTypeOverride;
