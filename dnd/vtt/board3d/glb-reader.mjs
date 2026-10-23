@@ -1,10 +1,13 @@
 import * as THREE from 'three';
+import {MeshoptDecoder} from './lib/meshopt_decoder.module.js';
 
 // A small reader for plain .glb files (glTF 2.0 binary): meshes with POSITION, NORMAL, COLOR_0, TEXCOORD_0 and
 // indices, the node tree with its transforms, PNG/JPEG images stored in the file, metallic-roughness materials,
 // KHR_materials_unlit, alphaMode BLEND (alpha may come from a 4-part COLOR_0) with extras.blending "additive", and
-// extras.ghost (see-through, still writing depth, drawn in one pass). No compression (Draco, meshopt, KTX2),
-// skins or animation: what the board's hero minis and map art use. Returns {scene, extras} (the root node's extras).
+// extras.ghost (see-through, still writing depth, drawn in one pass). Packed files read too: geometry compressed with
+// meshoptimizer (EXT_/KHR_meshopt_compression, as gltfpack writes), smaller number types (KHR_mesh_quantization),
+// WebP pictures (EXT_texture_webp) and KHR_texture_transform. No Draco, KTX2, skins or animation: what the board's
+// hero minis and map art use. Returns {scene, extras} (the root node's extras).
 const COMPONENT={5120:Int8Array,5121:Uint8Array,5122:Int16Array,5123:Uint16Array,5125:Uint32Array,5126:Float32Array};
 const SIZE={SCALAR:1,VEC2:2,VEC3:3,VEC4:4};
 
@@ -16,10 +19,15 @@ export async function readGlb(url){
   if(type===0x4e4f534a)json=JSON.parse(new TextDecoder().decode(new Uint8Array(buffer,offset+8,length)));else if(type===0x004e4942)bin=buffer.slice(offset+8,offset+8+length);
   offset+=8+length;}
  if(!json)throw Error(`${url} has no glTF JSON`);
- const bytes=index=>{const v=json.bufferViews[index];return bin.slice(v.byteOffset||0,(v.byteOffset||0)+v.byteLength);};
+ // A view packed with meshoptimizer is unpacked once into a buffer of its own; every other view is read from the file's binary chunk.
+ const unpacked=new Map(),packed=(json.bufferViews||[]).map((v,i)=>[i,v.extensions?.EXT_meshopt_compression||v.extensions?.KHR_meshopt_compression]).filter(([,e])=>e);
+ if(packed.length){await MeshoptDecoder.ready;for(const [i,e] of packed){if((e.buffer||0)!==0)throw Error(`${url}: packed data outside the file`);
+  const out=new Uint8Array(e.count*e.byteStride),src=new Uint8Array(bin,e.byteOffset||0,e.byteLength);MeshoptDecoder.decodeGltfBuffer(out,e.count,e.byteStride,src,e.mode,e.filter||'NONE');unpacked.set(i,out.buffer);}}
+ const source=index=>unpacked.has(index)?{buf:unpacked.get(index),at:0}:{buf:bin,at:json.bufferViews[index].byteOffset||0};
+ const bytes=index=>{const v=json.bufferViews[index],{buf,at}=source(index);return buf.slice(at,at+v.byteLength);};
  // An accessor as a buffer attribute (copied out of the file, so strides and alignment never matter).
- const attribute=index=>{const a=json.accessors[index],v=json.bufferViews[a.bufferView],T=COMPONENT[a.componentType],n=SIZE[a.type],stride=v.byteStride||T.BYTES_PER_ELEMENT*n,base=(v.byteOffset||0)+(a.byteOffset||0);
-  const out=new T(a.count*n),src=new DataView(bin);
+ const attribute=index=>{const a=json.accessors[index],v=json.bufferViews[a.bufferView],T=COMPONENT[a.componentType],n=SIZE[a.type],stride=v.byteStride||T.BYTES_PER_ELEMENT*n,{buf,at}=source(a.bufferView),base=at+(a.byteOffset||0);
+  const out=new T(a.count*n),src=new DataView(buf);
   const read={1:(p)=>T===Int8Array?src.getInt8(p):src.getUint8(p),2:(p)=>T===Int16Array?src.getInt16(p,true):src.getUint16(p,true),4:(p)=>T===Float32Array?src.getFloat32(p,true):src.getUint32(p,true)}[T.BYTES_PER_ELEMENT];
   for(let i=0;i<a.count;i++)for(let k=0;k<n;k++)out[i*n+k]=read(base+i*stride+k*T.BYTES_PER_ELEMENT);
   return new THREE.BufferAttribute(out,n,!!a.normalized);};
@@ -27,8 +35,8 @@ export async function readGlb(url){
   if(img.bufferView===undefined)return null;const blob=new Blob([bytes(img.bufferView)],{type:img.mimeType||'image/png'});
   return createImageBitmap(blob,{imageOrientation:'none',premultiplyAlpha:'none'});}));
  const textures=new Map();
- const texture=(ref,srgb)=>{if(!ref)return null;const key=ref.index+':'+srgb;if(textures.has(key))return textures.get(key);const t=json.textures[ref.index],image=images[t.source];if(!image)return null;
-  const tex=new THREE.Texture(image);tex.flipY=false;tex.colorSpace=srgb?THREE.SRGBColorSpace:THREE.NoColorSpace;const sm=json.samplers?.[t.sampler]||{},wrap=c=>c===33071?THREE.ClampToEdgeWrapping:c===33648?THREE.MirroredRepeatWrapping:THREE.RepeatWrapping;tex.wrapS=wrap(sm.wrapS);tex.wrapT=wrap(sm.wrapT);tex.anisotropy=4;tex.needsUpdate=true;textures.set(key,tex);return tex;};
+ const texture=(ref,srgb)=>{if(!ref)return null;const key=ref.index+':'+srgb+':'+JSON.stringify(ref.extensions?.KHR_texture_transform||0);if(textures.has(key))return textures.get(key);const t=json.textures[ref.index],image=images[t.extensions?.EXT_texture_webp?.source??t.source];if(!image)return null;
+  const tex=new THREE.Texture(image);tex.flipY=false;const tt=ref.extensions?.KHR_texture_transform;if(tt){if(tt.offset)tex.offset.fromArray(tt.offset);if(tt.scale)tex.repeat.fromArray(tt.scale);if(tt.rotation)tex.rotation=tt.rotation;}tex.colorSpace=srgb?THREE.SRGBColorSpace:THREE.NoColorSpace;const sm=json.samplers?.[t.sampler]||{},wrap=c=>c===33071?THREE.ClampToEdgeWrapping:c===33648?THREE.MirroredRepeatWrapping:THREE.RepeatWrapping;tex.wrapS=wrap(sm.wrapS);tex.wrapT=wrap(sm.wrapT);tex.anisotropy=4;tex.needsUpdate=true;textures.set(key,tex);return tex;};
  const materials=new Map();
  const material=(index,colored)=>{const key=index+':'+colored;if(materials.has(key))return materials.get(key);const m=json.materials?.[index]||{},pbr=m.pbrMetallicRoughness||{},f=pbr.baseColorFactor||[1,1,1,1];
   const common={color:new THREE.Color().setRGB(f[0],f[1],f[2]),map:texture(pbr.baseColorTexture,true),vertexColors:colored,side:m.doubleSided?THREE.DoubleSide:THREE.FrontSide,opacity:f[3]};
