@@ -389,7 +389,7 @@ const SLUICE = (() => { const A = [[33, 34], [32, 35], [32, 36], [31, 37], [30, 
   const dist = (x, z) => { if (x < x0 - 36 || x > x1 + 36 || z < z0 - 36 || z > z1 + 36) return 1e9; let b = 1e18; for (const g of segs) { let t = ((x - g[0]) * g[2] + (z - g[1]) * g[3]) / (g[2] * g[2] + g[3] * g[3]); t = t < 0 ? 0 : t > 1 ? 1 : t; const px = g[0] + g[2] * t - x, pz = g[1] + g[3] * t - z, d = px * px + pz * pz; if (d < b) b = d; }
     let dd = Math.sqrt(b); for (const p of basins) dd = Math.min(dd, Math.max(Math.hypot(x - p[0], z - p[1]) - 11, 0)); return dd; };
   return { A, B, C, D, lines, dist, basins }; })();
-const ARBIT = hexC([26, 21], [26, 22], [27, 21]), SEALW = hexD(31, 19), METER = hexD(34, 17), ASHG = hexC([28, 21], [28, 22], [29, 21]), CLAR = hexD(24, 16), EWF = (() => { const p = hexC([25, 17], [24, 17], [25, 16]); return [p[0] - 30, p[1]]; })(), STAR2 = (() => { const p = hexD(26, 19); return [p[0] - 14, p[1] + 4]; })(), COLDS = hexD(35, 4);
+const ARBIT = hexC([26, 21], [26, 22], [27, 21]), SEALW = hexD(31, 19), METER = hexD(34, 17), ASHG = hexC([28, 21], [28, 22], [29, 21]), CLAR = hexD(24, 16), EWF = (() => { const p = hexC([25, 17], [24, 17], [25, 16]); return [p[0] - 30, p[1]]; })(), STAR2 = (() => { const p = hexD(25, 19); return [p[0] - 6, p[1] + 4]; })(), COLDS = hexD(35, 4);
 const MAZE = (() => { const p = hexC([16, 16], [17, 16], [16, 17]); return [p[0] - 7, p[1] + 7]; })();
 // the players' workshop (1,39 2,39 1,40), in the hills behind the Draftfire House: where its gate stands, where the dome beside it stands, and the way the gate faces (at that house)
 const WKG = [-1738 / S, 318 / S], WKD = [-1694 / S, 296 / S], WKO = [.784, .622], WKI = [8, 81.5, -87.5, 20.5];   // the workshop's gate, its dome, the way the gate looks; and the hall behind it: how far into the hill it runs (from, to) and how far along the face (from, to), measured from the gate
@@ -1143,7 +1143,7 @@ const things = [], thingRoots = [], hexOwner = new Map(), spin = [], lanternPts 
 // box: the model's own centre x, lowest point, centre z and widest side as first made, so trimming hidden parts off it never moves or resizes it.
 // lo: a light copy (about a sixth of the triangles, small textures) that loads first and is drawn from afar; the full model is fetched only once the view comes near the hall,
 // and the two change places at about three times the hall's size. Every file is packed with meshoptimizer and its pictures are WebP; parts never seen from anywhere are left out
-const HALLS = { 'Grandloft Hall': { file: 'grandloft.glb', lo: 'grandloft-lo.glb', size: 300, lift: 0, turn: 0, box: [.00075, -.4584, -.00225, 1.8955] },
+const HALLS = { 'Biblioplex': { file: 'biblioplex.glb', lo: 'biblioplex-lo.glb', size: 295, lift: 0, turn: 0, box: [-.0004, -.60874, -.0005, 1.8998] }, 'Grandloft Hall': { file: 'grandloft.glb', lo: 'grandloft-lo.glb', size: 300, lift: 0, turn: 0, box: [.00075, -.4584, -.00225, 1.8955] },
   'Conjurot Hall': { file: 'conjurot.glb', lo: 'conjurot-lo.glb', size: 330, lift: -8, turn: 0, box: [-.00085, -.7089, .00435, 1.8999] },
   'Torus Hall': { file: 'torus.glb', lo: 'torus-lo.glb', size: 380, lift: 0, turn: 0, box: [-.0002, -.9514, -.00385, 1.8554], fix: (m, first) => torusFix(m, first) },
   'Widdershins Hall': { file: 'widdershins.glb', unit: true, size: 420, fix: (m, first) => first ? widdFix(m) : null }, 'Kollema Hall': { file: 'kollema.glb', lo: 'kollema-lo.glb', size: 400, place: () => { const s = KM.s, ry = Math.atan2(BR_N[0], BR_N[1]), G = [Wp(KG)[0] + BR_N[0] * KM.fwd, Wp(KG)[1] + BR_N[1] * KM.fwd], fx = .01 * s, fz = .95 * s, c = Math.cos(ry), sn = Math.sin(ry); return { s, ry, pos: [G[0] - (fx * c + fz * sn), KM.base + .69 * s, G[1] - (-fx * sn + fz * c)] }; } } };
@@ -1225,6 +1225,49 @@ function torusFix(m, first = true) {
   for (const [y, r, tip, w] of [[.12, .085, .16, .5], [-.18, .11, .22, -.4], [.45, .06, .12, .7]]) { const h = new THREE.Mesh(new THREE.TorusGeometry(r, .005, 6, 48), hoopM); const pv = new THREE.Group(); pv.position.y = y; pv.add(h); h.rotation.x = Math.PI / 2 + tip; glow.add(pv);
     anim.push(t => { pv.rotation.y = t * w; }); }
   return glow; }
+// Silverquill's houses (Oct 2026): Brandon's four Meshy buildings - black Violetspire towers and Obsidian manors on the dark side, white Angelic towers and
+// cathedrals on the bright - in place of the plain boxes, which stay until the models arrive. Each file holds five detail levels (lod0-4) on one set of pictures,
+// and a picture of its glass lit. The houses of the city's blocks use lod1-4, unlit; those along Duskwalk and Ray Promenade stand a third larger, use the finest
+// levels (lod0, 1, 3, 4) and have their windows lit, violet on the dark street and warm on the bright. Every house is one copy in a batch per model, kind and level, so the
+// whole city is a couple of dozen draws; each house takes the level its distance from the camera calls for, and houses out of the picture are not drawn.
+// Shadows come from a hidden batch of the lightest level on a layer only the sun's shadow camera sees, so they never flicker as the levels change and cost the picture nothing
+const SQ_HOUSES = [{ file: 'sq-violet.glb', dark: true, tall: true }, { file: 'sq-obsidian.glb', dark: true }, { file: 'sq-angel2.glb', dark: false, tall: true }, { file: 'sq-angel1.glb', dark: false }];
+const SQ_SIZE = { tower: 21, manor: 27.5 };   // a house's widest side (world): Violetspire and Angelic towers, Obsidian manors and Angelic cathedrals
+const SQ_LOT = { street: 10, block: 132, depth: 23, back: 0, gap: 2, towers: .55, yards: .02, named: 36, clear: 5 };   // the city's street grid: street width, block length, lot depth, gap between the back-to-back rows, gap between houses, share of towers, share of lots left as yards, clearance from the named streets' middles
+const SQ_KINDS = { city: { lods: [1, 2, 3, 4], cuts: [190, 520, 2000], size: 1, glow: 0 }, street: { lods: [0, 1, 2, 4], cuts: [150, 380, 2000], size: 1.15, glow: 2.2 } };   // cuts: camera distances (world) at which a house moves to its next level; the last, a few hundred triangles, only once it is a speck on the whole-map view
+function cityHouses(houses, boxes, GY) {
+  const L = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder), R = mulberry32(777), types = SQ_HOUSES.map(() => []);
+  for (const h of houses) { const tall = h.tall ?? R() < .5, k = SQ_HOUSES.findIndex(t => t.dark === h.dark && !!t.tall === tall); types[k].push({ ...h, js: .92 + .16 * R() }); }
+  let left = SQ_HOUSES.length; const batches = [], T4 = new THREE.Matrix4();
+  const mk = (geo, mat, n) => { const im = new THREE.InstancedMesh(geo, mat, n); im.count = 0; im.raycast = () => {}; im.receiveShadow = true; im.castShadow = false; scene.add(im); return im; };
+  SQ_HOUSES.forEach((t, ti) => { const all = types[ti]; if (!all.length) { left--; return; }
+    L.load('models/halls/' + t.file, gltf => { const meshOf = o => { let m = null; if (o) o.traverse(c => { if (c.isMesh && !m) m = c; }); return m; }, ms = [0, 1, 2, 3, 4].map(i => meshOf(gltf.scene.getObjectByName('lod' + i)));
+      if (ms.some(m => !m)) { console.warn('house model incomplete: ' + t.file); return; }
+      gltf.scene.updateMatrixWorld(true); const own = ms.map(m => m.matrixWorld.clone());   // each level's own placing (the packer stores a scale and shift on it)
+      const box = new THREE.Box3().setFromObject(ms[1]), sz = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+      const sc = (t.tall ? SQ_SIZE.tower : SQ_SIZE.manor) / Math.max(sz.x, sz.z), base = new THREE.Matrix4().makeTranslation(-c.x, -box.min.y, -c.z);
+      const mat = ms[0].material; mat.metalness = 0; mat.envMapIntensity = .8; const glowMap = mat.emissiveMap;
+      const plain = mat.clone(); plain.emissiveMap = null; plain.emissive.setRGB(0, 0, 0);                                                                     // the blocks' houses: unlit
+      const lit = mat.clone(); lit.emissive.setRGB(1, 1, 1); lit.emissiveMap = glowMap; lit.emissiveIntensity = SQ_KINDS.street.glow;                            // the streets' houses: glass lit
+      const far = plain.clone(); far.normalMap = null; far.roughnessMap = null; far.metalnessMap = null; far.roughness = .7;                                       // far off the fine bumps and sheen cannot be seen
+      const farLit = far.clone(); farLit.emissive.setRGB(1, 1, 1); farLit.emissiveMap = glowMap; farLit.emissiveIntensity = SQ_KINDS.street.glow;
+      for (const [kind, K] of Object.entries(SQ_KINDS)) { const list = all.filter(h => !!h.street === (kind === 'street')); if (!list.length) continue;
+        const mtx = list.map(h => new THREE.Matrix4().compose(new THREE.Vector3(h.x, GY - .3, h.z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), h.face), new THREE.Vector3().setScalar(sc * h.js * K.size * (h.k || 1))).multiply(base));
+        const lv = K.lods.map((li, j) => mk(ms[li].geometry, j >= 2 ? (K.glow ? farLit : far) : (K.glow ? lit : plain), list.length));
+        const sh = mk(ms[3].geometry, new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }), list.length); sh.castShadow = true; sh.receiveShadow = false;
+        sh.layers.set(6); sun.shadow.camera.layers.enable(6);   // on a layer only the sun's shadow camera looks at, so the picture itself never pays for it
+        mtx.forEach((m, i) => sh.setMatrixAt(i, T4.multiplyMatrices(m, own[3]))); sh.count = list.length; sh.instanceMatrix.needsUpdate = true; sh.computeBoundingSphere();
+        batches.push({ K, list, mtx, lv, own: K.lods.map(li => own[li]), sh, pos: list.map(h => new THREE.Vector3(h.x, GY + 12, h.z)) }); }
+      if (--left === 0) { for (const b of boxes) { scene.remove(b); b.dispose(); } window.__sqHouses = batches.reduce((n, b) => n + b.list.length, 0); window.__sqBatches = batches; }
+      renderer.shadowMap.needsUpdate = true; last.set(1e9, 0, 0);
+    }, undefined, () => { console.warn('house model not loaded, keeping the plain houses: ' + t.file); left = -1; }); });
+  // which level each house shows: worked out again only when the camera has moved a little
+  const last = new THREE.Vector3(1e9, 0, 0), lastQ = new THREE.Quaternion(), fr = new THREE.Frustum(), PV = new THREE.Matrix4(), ball = new THREE.Sphere();
+  anim.push(() => { if (!batches.length || (camera.position.distanceToSquared(last) < 4 && camera.quaternion.angleTo(lastQ) < .01)) return; last.copy(camera.position); lastQ.copy(camera.quaternion);
+    camera.updateMatrixWorld(); fr.setFromProjectionMatrix(PV.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+    for (const b of batches) { const n = [0, 0, 0, 0], r = 26 * b.K.size, cu = b.K.cuts;
+      for (let i = 0; i < b.list.length; i++) { ball.set(b.pos[i], r); if (!fr.intersectsSphere(ball)) continue; const d = camera.position.distanceTo(b.pos[i]), l = d < cu[0] ? 0 : d < cu[1] ? 1 : d < cu[2] ? 2 : 3; b.lv[l].setMatrixAt(n[l]++, T4.multiplyMatrices(b.mtx[i], b.own[l])); }
+      b.lv.forEach((im, l) => { im.count = n[l]; im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); }); } }); }
 const dummy = new THREE.Object3D(), tmpC = new THREE.Color();
 const M = (g, geo, mat, x, y, z, o = {}) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(o.rx || 0, o.ry || 0, o.rz || 0); m.scale.set(o.sx || 1, o.sy || 1, o.sz || 1); g.add(m); return m; };
 function mergeKids(g) { const groups = new Map();
@@ -3367,9 +3410,13 @@ function buildProps() {
     const rndWebs = (c, R0, n, y0, y1, col, op, seed) => { const r = mulberry32(seed), st = []; for (let i = 0; i < n; i++) { const a = r() * 6.283, d = R0 * Math.sqrt(r()), a2 = a + (r() - .5) * 2, l = 14 + 30 * r(), x = c[0] + Math.cos(a) * d, z = c[1] + Math.sin(a) * d, ya = y0 + (y1 - y0) * r(), yb = y0 + (y1 - y0) * r(), wd = .35 + .9 * r() * r(); if (Math.hypot(x + Math.cos(a2) * l - c[0], z + Math.sin(a2) * l - c[1]) > R0 + 4) continue; st.push([[x, ya, z], [x + Math.cos(a2) * l, yb, z + Math.sin(a2) * l], wd]); } webs(st, col, op); };   // no strand may end outside the circle, so none trails over the place next door
 
     // a street: paving, lamps and a row of houses down each side, laid along a line of world points, in the frame of the thing it belongs to
+    const sqStreet = [], sqSegs = [];   // the houses along the named streets: Meshy houses (see cityHouses), set out here and drawn with the rest of the city
+    const sqHouseAt = (g, lx, lz, fx, fz, dark, tall, k = 1) => { g.updateMatrixWorld(true); const p = new THREE.Vector3(lx, 0, lz).applyMatrix4(g.matrixWorld), f = new THREE.Vector3(fx, 0, fz).applyQuaternion(g.quaternion);   // a lit Meshy house inside a place, facing (fx, fz) in the place's own frame
+      sqStreet.push({ x: p.x, z: p.z, dark, tall, k, face: Math.atan2(f.x, f.z), street: true }); };
     const street = (g, c, pts, o) => { for (let i = 0; i + 1 < pts.length; i++) { const A = pts[i], B = pts[i + 1], dx = B[0] - A[0], dz = B[1] - A[1], L = Math.hypot(dx, dz), ux = dx / L, uz = dz / L, nx = -uz, nz = ux, ry = -Math.atan2(uz, ux), mx = (A[0] + B[0]) / 2 - c[0], mz = (A[1] + B[1]) / 2 - c[1];
         M(g, new THREE.BoxGeometry(L + o.w * .4, .5, o.w), o.road, mx, .3, mz, { ry }); if (o.edge) for (const sd of [-1, 1]) M(g, new THREE.BoxGeometry(L + o.w * .4, .7, 1.4), o.edge, mx + nx * sd * (o.w / 2 + .3), .4, mz + nz * sd * (o.w / 2 + .3), { ry });
-        if (o.h0) for (let d0 = 6, kk = 0; d0 < L - 6; kk++) { const d = 12 + 4 * sr(); for (const sd of [-1, 1]) { const w = 12 + 4 * sr(), h = o.h0 + o.h1 * sr() * sr(), sp = sr() < .18, lt = sr() < .75 ? o.lit : o.lit2; if ((kk + (sd > 0 ? 2 : 0)) % 5 === 4) continue; const x = A[0] + ux * (d0 + d / 2) + nx * sd * (o.w / 2 + 2 + w / 2), z = A[1] + uz * (d0 + d / 2) + nz * sd * (o.w / 2 + 2 + w / 2); if (o.skip && o.skip(x, z)) continue; house(g, x - c[0], 0, z - c[1], Math.atan2(nx, nz), d - 1, w, h, o.wall, o.roof, lt, sp); }
+        if (o.h0 && o.models) sqSegs.push({ A, B, w: o.w, dark: o.models === 'dark' });   // Meshy houses go along it later, once the places' footprints are known (see the city below)
+        else if (o.h0) for (let d0 = 6, kk = 0; d0 < L - 6; kk++) { const d = 12 + 4 * sr(); for (const sd of [-1, 1]) { const w = 12 + 4 * sr(), h = o.h0 + o.h1 * sr() * sr(), sp = sr() < .18, lt = sr() < .75 ? o.lit : o.lit2; if ((kk + (sd > 0 ? 2 : 0)) % 5 === 4) continue; const x = A[0] + ux * (d0 + d / 2) + nx * sd * (o.w / 2 + 2 + w / 2), z = A[1] + uz * (d0 + d / 2) + nz * sd * (o.w / 2 + 2 + w / 2); if (o.skip && o.skip(x, z)) continue; if (o.models) { sqStreet.push({ x, z, dark: o.models === 'dark', face: Math.atan2(-sd * nx, -sd * nz), street: true }); continue; } house(g, x - c[0], 0, z - c[1], Math.atan2(nx, nz), d - 1, w, h, o.wall, o.roof, lt, sp); }
           d0 += d + (kk % 5 === 4 ? 5 : .5); }
         for (let d0 = 10; d0 < L; d0 += o.gap || 24) for (const sd of [-1, 1]) { const x = A[0] + ux * d0 + nx * sd * (o.w / 2 - 1.4), z = A[1] + uz * d0 + nz * sd * (o.w / 2 - 1.4); M(g, new THREE.CylinderGeometry(.35, .5, 10, 6), o.post, x - c[0], 5, z - c[1]); NS(M(g, new THREE.SphereGeometry(1.05, 8, 6), o.lit, x - c[0], 10.6, z - c[1])); if (o.lamps) o.lamps.push([x, z]); } } };
 
@@ -3380,20 +3427,37 @@ function buildProps() {
       addThing('Vellum Gargoyle Gate', '🦇', GW, 1, 30, g => { const k = kit(g);
         for (const sd of [-1, 1]) { k.B(24, 78, 24, bm, 0, 39, sd * 30); k.B(27, 4, 27, gd, 0, 79, sd * 30); M(g, new THREE.ConeGeometry(17, 30, 4), roofD, 0, 96, sd * 30, { ry: Math.PI / 4 }); for (const yy of [30, 54]) NS(k.B(.5, 9, 3, litP, 12.2, yy, sd * 30)); }   // gate towers
         k.B(16, 16, 40, bm, 0, 62, 0); M(g, gable(40, 16, 16), bm, 0, 70, 0, { ry: Math.PI / 2 }); NS(M(g, new THREE.PlaneGeometry(36, 50), new THREE.MeshBasicMaterial({ color: 0x7a40d0, transparent: true, opacity: .18, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }), 0, 27, 0, { ry: Math.PI / 2 }));       // the arch, and the shimmer of the ward across it
-        // the gargoyle, on its plinth outside the wall
-        const gp = new THREE.Group(); gp.position.set(46, 0, 62); gp.rotation.y = -.5; gp.scale.setScalar(2.1); g.add(gp); M(gp, new THREE.BoxGeometry(26, 7, 20), bm, 0, 3.5, 0); const bd = new THREE.Group(); gp.add(bd);
+        // (the old hand-built gargoyle, kept only if the model cannot load: see Vellum Gargoyle below)
+        const gp = new THREE.Group(); gp.userData.oldGargoyle = true; gp.position.set(46, 0, 62); gp.rotation.y = -.5; gp.scale.setScalar(2.1); g.add(gp); M(gp, new THREE.BoxGeometry(26, 7, 20), bm, 0, 3.5, 0); const bd = new THREE.Group(); gp.add(bd);
         E(bd, 9, parch, -3, 15, 0, 1.3, 1, 1.05); E(bd, 7.5, parch, 6, 19, 0, 1, 1.15, 1); for (const sd of [-1, 1]) { E(bd, 5.4, parch, -5, 11, sd * 7, 1.3, 1, .8); M(bd, new THREE.CylinderGeometry(1.9, 1.6, 15, 7), parch, 9, 13, sd * 4.2); E(bd, 2.2, parch, 10.4, 7.6, sd * 4.2, 1.6, .6, 1); E(bd, 2.4, parch, 1, 7.6, sd * 8, 1.7, .6, 1); }
         for (let i = 0; i < 7; i++) { const a = i * .5; M(bd, new THREE.CylinderGeometry(1.5 - i * .15, 1.6 - i * .15, 5, 6), parch, -14 - Math.sin(a) * 9, 9 + (1 - Math.cos(a)) * 5, Math.cos(a) * 5 - 5, { rz: Math.PI / 2, ry: a }); }                                                                 // tail, curled round
         mergeKids(bd); head = new THREE.Group(); head.position.set(11, 27, 0); gp.add(head); E(head, 5.6, parch, 0, 0, 0, 1.15, .9, 1); M(head, new THREE.BoxGeometry(7, 3.4, 4.6), parch, 5.5, -1.6, 0); for (const sd of [-1, 1]) { M(head, new THREE.ConeGeometry(1.2, 8, 5), parch, -2.5, 5.5, sd * 3, { rz: .7, rx: sd * .4 }); M(head, new THREE.SphereGeometry(.9, 8, 6), litP, 3.6, 1.2, sd * 3.2); }
         wings = [-1, 1].map(sd => { const w = new THREE.Group(); w.position.set(2, 23, sd * 5); for (let i = 0; i < 9; i++) M(w, new THREE.BoxGeometry(22 - i * 1.2, .5, 7), parch, -8 - i * 1.2, 4 + i * 2.2, sd * (3 + i * 1.5), { rz: -.5 - i * .06, rx: sd * (.5 - i * .03) }); mergeKids(w); gp.add(w); return w; });
-        k.C(30, 30, .7, 28, wm, -34, .35, 0);                                                                                                                         // a white forecourt just inside, where the Ray Promenade begins
-      }, { y: GY, ry: ry0, hexes: [[28, 18], [27, 19], [28, 19]], top: 120, view: 560 });
+        { const pave = tx(solid(0xd9d3c7, .82), 'masonry'); k.B(44, .7, 52, pave, -30, .35, 0); for (const sd of [-1, 1]) k.B(44, 1, 1.4, gd, -30, .5, sd * 26.7); k.B(1.4, 1, 54.8, gd, -52.7, .5, 0); }   // a paved forecourt just inside, as wide as the arch, where the road to the hall begins                                                                                                                         // a white forecourt just inside, where the Ray Promenade begins
+      }, { y: GY, ry: ry0, hexes: [[28, 18], [28, 19]], top: 120, view: 560 });
+      // the Vellum Gargoyle: Brandon's Meshy model (Oct 2026), crouched on a great plinth outside the gate, facing the road in; three hexes of its own. Its painting shows in its panel
+      { const gH = [[27, 19], [26, 19], [27, 20]].map(([q, r]) => hexAt(q, r)), gx = gH.reduce((a, h) => a + h.x, 0) / 3, gz = gH.reduce((a, h) => a + h.z, 0) / 3, gy = heightAt(gx, gz);
+        const gT = addThing('Vellum Gargoyle', '🦇', [gx, gz], 1, 30, g2 => { const k2 = kit(g2), stoneP = tx(solid(0x2a2830, .7), 'masonry');
+          k2.B(118, 8, 96, stoneP, 0, 4, 0); k2.B(108, 3, 86, bm, 0, 9.5, 0); for (const sd of [-1, 1]) { k2.B(120, 1.4, 1.6, gd, 0, 8.4, sd * 48.4); k2.B(1.6, 1.4, 98, gd, sd * 59.4, 8.4, 0); }   // the plinth, black stone banded in gold
+          for (let i = 0; i < 8; i++) { const a = i * .8; NS(M(g2, new THREE.PlaneGeometry(4, 6), parch, -30 + i * 8, 11.2, (i % 3 - 1) * 18, { rx: -Math.PI / 2, rz: a })); }   // loose pages fallen about it
+        }, { y: gy, hexes: [[27, 19], [26, 19], [27, 20]], top: 150, view: 640 });
+        { const L = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder), g2 = gT.group, face = Math.atan2(GW[0] - gx, GW[1] - gz) + Math.PI, SZ = 130, st = { lo: null, hi: null, asked: false, near: false };   // SZ: its length nose to tail (world)
+          const mount = (gl, isLo) => { const m = gl.scene, box = new THREE.Box3().setFromObject(m), sz = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3()), piv = new THREE.Group(), sc = SZ / Math.max(sz.x, sz.z);
+            m.position.set(-c.x, -box.min.y, -c.z); piv.add(m); piv.scale.setScalar(sc); piv.position.y = 11; piv.rotation.y = face;   // the model faces +z: turned to look out from the gate, guarding the way in
+            m.traverse(o => { if (!o.isMesh) return; o.castShadow = o.receiveShadow = true; o.material.metalness = 0; o.material.envMapIntensity = .8; o.material.userData.e0 = o.material.emissive ? o.material.emissive.clone() : null; gT.mats.push(o.material); });
+            if (!st.lo && !st.hi) { const oldG = things.find(t => t.name === 'Vellum Gargoyle Gate'); if (oldG) oldG.group.traverse(o => { if (o.userData.oldGargoyle) o.visible = false; }); head = null; }
+            g2.add(piv); g2.updateMatrixWorld(true); renderer.shadowMap.needsUpdate = true; return piv; };
+          const getHi = () => { st.asked = true; L.load('models/halls/gargoyle.glb', gl => { st.hi = mount(gl, false); if (st.lo) { st.lo.visible = false; st.near = true; } }); };
+          L.load('models/halls/gargoyle-lo.glb', gl => { st.lo = mount(gl, true); if (st.hi) st.lo.visible = false; }, undefined, () => getHi());
+          anim.push(() => { if (!st.lo && !st.hi) return; const d = camera.position.distanceTo(g2.position); if (!st.asked && d < 900) getHi();
+            if (st.hi && st.lo) { const near = d < (st.near ? 560 : 480); if (near !== st.near) { st.near = near; st.hi.visible = near; st.lo.visible = !near; renderer.shadowMap.needsUpdate = true; } } }); } }
       anim.push(t => { if (head) { head.rotation.y = .5 * Math.sin(t * .17) + .12 * Math.sin(t * .6); head.rotation.z = .08 * Math.sin(t * .23); wings.forEach((w, i) => { w.rotation.x = (i ? 1 : -1) * .06 * Math.sin(t * .5 + i); }); } }); }
 
     // Inkfall Streets (27,16): a knot of streets where black-purple ink dust gathers in every crevice and hangs between the roofs like cobweb
     { const bm = bmL, roofD = roofL, c = hexW(27, 16);
       addThing('Inkfall Streets', '🕸️', c, 1, 30, g => { const k = kit(g); k.B(100, .6, 12, solid(0x0c0c10, .5), 0, .3, 0); k.B(12, .6, 100, solid(0x0c0c10, .5), 0, .3, 0);
-        for (const qx of [-1, 1]) for (const qz of [-1, 1]) for (let i = 0; i < 3; i++) { house(g, qx * (15 + i * 15), 0, qz * 15, 0, 13, 14 + 4 * sr(), 20 + 24 * sr(), bm, roofD, litP, i === 1 && sr() < .6); if (i) house(g, qx * 15, 0, qz * (15 + i * 15), Math.PI / 2, 13, 14, 18 + 20 * sr(), bm, roofD, sr() < .5 ? litP : litW, false); }
+        for (const qx of [-1, 1]) for (const qz of [-1, 1]) { sqHouseAt(g, qx * 20, qz * 18, 0, -qz, true, true); sqHouseAt(g, qx * 42, qz * 18, 0, -qz, true, (qx + qz) % 4 === 0); sqHouseAt(g, qx * 18, qz * 42, -qx, 0, true, true, .9); }   // Meshy houses round the crossing, each facing its street
+        if (false) for (const qx of [-1, 1]) for (const qz of [-1, 1]) for (let i = 0; i < 3; i++) { house(g, qx * (15 + i * 15), 0, qz * 15, 0, 13, 14 + 4 * sr(), 20 + 24 * sr(), bm, roofD, litP, i === 1 && sr() < .6); if (i) house(g, qx * 15, 0, qz * (15 + i * 15), Math.PI / 2, 13, 14, 18 + 20 * sr(), bm, roofD, sr() < .5 ? litP : litW, false); }
       }, { y: GY, hexes: [[27, 16]], top: 64, view: 420 });
       rndWebs(c, 54, 170, GY + 6, GY + 44, 0x2a0f3e, .62, 53); rndWebs(c, 54, 66, GY + 10, GY + 40, 0x7a3ac0, .3, 54);
       const pm = mist({ n: 90, seed: 55, r0: 6, r1: 60, y0: 3, y1: 16, spin: .06, rise: 0, size: 20, alpha: .12, col: [.4, .14, .6] }); pm.position.set(c[0], GY, c[1]); scene.add(pm);
@@ -3548,7 +3612,7 @@ function buildProps() {
     // Clause Net Driftways (32,16): white streets and a bridge between the houses, all hung with drifting threads of vellum, and brightly lit
     { const c = hexW(32, 16);
       addThing('Clause Net Driftways', '🕸️', c, 1, 30, g => { const k = kit(g); k.B(104, .6, 12, wm, 0, .3, 0);
-        for (let i = 0; i < 5; i++) for (const sd of [-1, 1]) house(g, -40 + i * 20, 0, sd * 17, 0, 15, 14, 20 + 20 * sr(), wm, roofG, litW, i === 2);
+        for (let i = 0; i < 5; i++) for (const sd of [-1, 1]) sqHouseAt(g, -42 + i * 21, sd * 18, 0, -sd, false, true, .85);   // Meshy towers down both sides of the street, facing across it
         k.B(10, 2, 40, wm, 10, 22, 0); M(g, new THREE.TorusGeometry(6, 1.4, 5, 12, Math.PI), wm, 10, 15.5, 0, { ry: Math.PI / 2 }); for (const sd of [-1, 1]) k.B(10, 3, 1, gd, 10, 24, sd * 5);                           // a bridge from roof to roof across the street
         // more to it. Gold kerbs and lamps down the street, a gilded awning over every door, two more bridges overhead
         for (const sd of [-1, 1]) { k.B(104, .5, .8, gd, 0, .55, sd * 6.2); for (let i = 0; i < 6; i++) { const x = -50 + i * 20; k.C(.35, .5, 9, 6, gd, x, 4.5, sd * 7.6); NS(k.S(1.1, litW, x, 9.7, sd * 7.6)); } for (let i = 0; i < 5; i++) k.B(5.4, .4, 2.6, gd, -40 + i * 20, 6.2, sd * 9, { rx: sd * .32 }); }
@@ -3588,7 +3652,7 @@ function buildProps() {
         // out front: lamps, a notice board with the day's pages pinned up, a flag
         for (const x of [-13, 9]) { k.C(.35, .5, 9, 6, bm, x, 5.6, 17); k.B(1.6, 2, 1.6, bm, x, 10.6, 17); NS(k.S(.9, glassL, x, 10.6, 17)); } k.B(.5, 6, .5, bm, 6, 4, 19.4); k.B(.5, 6, .5, bm, 12, 4, 19.4); k.B(7, 4.4, .4, solid(0x5a3d28, .85), 9, 5.4, 19.4); for (let i = 0; i < 6; i++) k.B(1.5, 1.9, .1, paper, 6.8 + (i % 3) * 2.1, 4.5 + Math.floor(i / 3) * 2, 19.7, { rz: (i % 2 ? .08 : -.06) });
         rod(g, gd, [-16.6, 27, 11.8], [-19.6, 37, 13.4], .2, 5); k.B(.2, 4.4, 6, solid(0x4a1460, .8, { side: THREE.DoubleSide }), -19.4, 33.4, 16.4, { rz: -.28, ry: .25 });
-      }, { y: y0, hexes: [[26, 19]], top: 72, view: 420 }); chimneys.push([c[0] + 7.4 * K, y0 + 37 * K, c[1] - 17 * K]);
+      }, { y: y0, hexes: [[25, 19]], top: 72, view: 420 }); chimneys.push([c[0] + 7.4 * K, y0 + 37 * K, c[1] - 17 * K]);
       for (const x of [-13, 9]) lanternPts.push([c[0] + x * K, y0 + 10.8 * K, c[1] + 17 * K, { c: [2.6, 2, 1.2], size: 8, drift: .1, speed: .5 }]); lanternPts.push([c[0] + 16.5 * K, y0 + 66 * K, c[1] + 8 * K, { c: [2.8, 2.2, .8], size: 16, drift: .1, speed: .6 }]); }
 
     // Arbitration Steps (three hexes): outside the city, where devils do their business - ten tiers of black marble with a white stair up the front, horned figures down both sides of it, red fire burning on the tiers, and a canopied seat under a crescent at the top
@@ -3776,30 +3840,72 @@ function buildProps() {
     const ROADS = [[from(GTW), [GTW[0] - GOUT[0] * 14, GTW[1] - GOUT[1] * 14]]];
     // Duskwalk (28,15 28,16 28,17): the dark road, running out from the hall's north side through the shadow district to the steps of the Annex; close-built with narrow black houses and the alleys between them, purple lamps, a little ink-dust webbing, lanterns moving along it
     { const bm = bmL, roofD = roofL, c = hexW(28, 16);
-      addThing('Duskwalk', '🌑', c, 1, 30, g => { street(g, c, DUSK, { w: 18, road: roadD, wall: bm, roof: roofD, lit: litP, lit2: litW, post: postD, h0: 20, h1: 26, skip: owned }); }, { y: GY, hexes: [[28, 15], [28, 16], [28, 17]], top: 70, view: 620 });
+      addThing('Duskwalk', '🌑', c, 1, 30, g => { street(g, c, DUSK, { w: 18, road: roadD, wall: bm, roof: roofD, lit: litP, lit2: litW, post: postD, h0: 20, h1: 26, skip: owned, models: 'dark' }); }, { y: GY, hexes: [[28, 15], [28, 16], [28, 17]], top: 70, view: 620 });
       for (let i = 0; i + 1 < DUSK.length; i++) walkers(DUSK[i], DUSK[i + 1], 12, [1.5, .6, 2.6], 9, GY + 4, 51 + i); { const wr = mulberry32(52), st = []; for (let i = 0; i + 1 < DUSK.length; i++) { const A = DUSK[i], B = DUSK[i + 1], dx = B[0] - A[0], dz = B[1] - A[1], L = Math.hypot(dx, dz), nx = -dz / L, nz = dx / L; for (let d = 14; d < L - 10; d += 12 + 14 * wr()) { const d2 = d + (wr() - .5) * 16, p = [A[0] + dx / L * d, A[1] + dz / L * d], q = [A[0] + dx / L * d2, A[1] + dz / L * d2]; if (owned(p[0], p[1]) || owned(q[0], q[1])) continue; st.push([[p[0] + nx * 13, GY + 22 + 12 * wr(), p[1] + nz * 13], [q[0] - nx * 13, GY + 22 + 12 * wr(), q[1] - nz * 13], .35 + .7 * wr() * wr()]); } } webs(st, 0x08080c, .5); } }
     // Ray Promenade (four hexes): the bright road, white marble edged in gold, lamps both sides, white houses with gilded roofs - running out from the hall's east side through the bright district, with a second, short arm south
     { const c = hexW(31, 16), lamps = [];
-      addThing('Ray Promenade', '✨', c, 1, 30, g => { const o = { w: 22, road: wm, edge: gd, wall: wm, roof: roofG, lit: litW, lit2: litW, post: gd, h0: 18, h1: 18, gap: 20, skip: owned, lamps }; street(g, c, RAY, o); street(g, c, RAY2, o); }, { y: GY, hexes: [[32, 15], [31, 16], [30, 17], [29, 18]], top: 60, view: 760 });
+      addThing('Ray Promenade', '✨', c, 1, 30, g => { const o = { w: 22, road: wm, edge: gd, wall: wm, roof: roofG, lit: litW, lit2: litW, post: gd, h0: 18, h1: 18, gap: 20, skip: owned, lamps, models: 'bright' }; street(g, c, RAY, o); }, { y: GY, hexes: [[32, 15], [31, 16], [30, 17], [29, 18]], top: 60, view: 760 });
       lamps.forEach((p, i) => { if (i % 3 === 0) lanternPts.push([p[0], GY + 11, p[1], { c: [2.6, 2.2, 1.5], size: 9, drift: .1, speed: .4 }]); }); for (let i = 0; i + 1 < RAY.length; i++) walkers(RAY[i], RAY[i + 1], 9, [2.6, 2.3, 1.6], 12, GY + 4, 58 + i); }
     // the only other road is the short one from the hall's doors to the gate; it is part of the city rather than a place of its own
     const cityG = new THREE.Group(); cityG.position.set(0, GY, 0); const ZERO = [0, 0];
-    street(cityG, ZERO, ROADS[0], { w: 24, road: wm, edge: gd, post: gd, lit: litW, gap: 18 });
+    { const pave = applyTex(solid(0xd9d3c7, .82), 'masonry'), [P0, P1] = ROADS[0], dx = P1[0] - P0[0], dz = P1[1] - P0[1], L = Math.hypot(dx, dz), ux = dx / L, uz = dz / L, ry = -Math.atan2(uz, ux);
+      street(cityG, ZERO, [P0, [P1[0] + ux * 6, P1[1] + uz * 6]], { w: 30, road: pave, edge: gd, post: gd, lit: litW, gap: 16 });   // the processional from the hall's doors to the gate: paved like the forecourts at either end, gold kerbs, lamps
+      M(cityG, new THREE.BoxGeometry(46, .9, 64), pave, P0[0] - ux * 14, .45, P0[1] - uz * 14, { ry }); M(cityG, new THREE.BoxGeometry(40, 1.6, 56), pave, P0[0] - ux * 16, .8, P0[1] - uz * 16, { ry });   // a landing before the doors, a step up
+      for (const sd of [-1, 1]) { const nx = -uz * sd, nz = ux * sd; M(cityG, new THREE.BoxGeometry(46, 1.2, 1.4), gd, P0[0] - ux * 14 + nx * 32, .6, P0[1] - uz * 14 + nz * 32, { ry }); for (const k of [-16, 8]) { const x = P0[0] + ux * k + nx * 26, z = P0[1] + uz * k + nz * 26; M(cityG, new THREE.CylinderGeometry(1.2, 1.6, 16, 8), gd, x, 8, z); M(cityG, new THREE.SphereGeometry(1.8, 10, 8), litW, x, 17, z); } } }
     mergeKids(cityG); cityG.traverse(m => { if (m.isMesh) { m.raycast = () => {}; m.receiveShadow = true; } }); scene.add(cityG);
 
-    // ---------------- the city: small houses, block after block, everywhere inside the wall that is not a place or a road. Black with violet windows on the dark side, white with gilded roofs on the bright ----------------
+    // ---------------- the city: block after block of houses, everywhere inside the wall that is not a place or a road. Black with violet windows on the dark side, white on the bright ----------------
+    // The streets run square to the hall, so the road from its doors to the gate is one of them. Each block holds two rows of houses back to back, each row facing its own
+    // street, shoulder to shoulder; a lot is as wide as the house on it (a tower or a manor, the manor's long side to the street), with now and then a small yard left open
     { const segD = (x, z, P) => { let b = 1e9; for (let i = 0; i + 1 < P.length; i++) { const ax = P[i][0], az = P[i][1], dx = P[i + 1][0] - ax, dz = P[i + 1][1] - az, t = clamp(((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz), 0, 1); b = Math.min(b, Math.hypot(ax + dx * t - x, az + dz * t - z)); } return b; };
       const EX = [[hexW(27, 15), 62], [hexW(27, 16), 80], [cA, 104], [hexW(29, 14), 86], [hexW(29, 15), 72], [hexW(31, 15), 70], [hexW(33, 15), 78], [hexW(32, 14), 68], [hexW(32, 16), 80], [GTW, 62], [[GTW[0] - GOUT[0] * 34, GTW[1] - GOUT[1] * 34], 38]];
-      const bodies = [], roofs = [], spires = [], winP = [], winW = [], hr = mulberry32(4242), x0 = SQPATH.x0 * S, x1 = SQPATH.x1 * S, z0 = SQPATH.z0 * S, z1 = SQPATH.z1 * S, ST = 18.5;
-      for (let ix = 0, x = x0; x < x1; ix++, x += ST) for (let iz = 0, z = z0; z < z1; iz++, z += ST) { const jx = hr(), jz = hr(), jh = hr(), jw = hr(); if (ix % 5 === 0 || iz % 4 === 0) continue;                                         // streets between the blocks
-          if (!sqInside(x / S, z / S) || polyDist(SQPATH, x / S, z / S) * S < 22 || inPlaza(x, z, 14)) continue; if (EX.some(([p, r]) => Math.hypot(x - p[0], z - p[1]) < r)) continue;
-          if (segD(x, z, DUSK) < 37 || segD(x, z, RAY) < 39 || segD(x, z, RAY2) < 39 || segD(x, z, ROADS[0]) < 22) continue;
-          const dark = (x / S - X(.83)) * .8 + (z / S - Z(.305)) * .6 + 34 * fbm(x / S / 75, z / S / 75, 3) < 0, w = 12.5 + 2.5 * jw, d = 13 + 2 * jx, h = 17 + 17 * jh * jh, px = x + (jx - .5) * 2, pz = z + (jz - .5) * 2, v = .85 + .3 * jz, ry = (Math.floor(ix / 5) + Math.floor(iz / 4)) % 2 ? Math.PI / 2 : 0, rt = dark ? [.006, .006, .01] : [.3 * v, .32 * v, .38 * v];
-          bodies.push({ x: px, y: GY + h / 2, z: pz, sx: w, sy: h, sz: d, ry, tint: dark ? [.013 * v, .013 * v, .018 * v] : [.6 * v, .585 * v, .54 * v] }); roofs.push({ x: px, y: GY + h, z: pz, sx: w + 1.2, sy: w * .7, sz: d + 1.2, ry, tint: rt });
-          if (jw > .88) spires.push({ x: px, y: GY + h + w * .5 + h * .3, z: pz, sx: w * .22, sy: h * .9, sz: w * .22, ry: ry + Math.PI / 4, tint: rt }); (dark ? (jz < .8 ? winP : winW) : winW).push({ x: px, y: GY, z: pz, sx: w, sy: h, sz: d, ry }); }
+      const houses = [], bodies = [], roofs = [], spires = [], winP = [], winW = [], hr = mulberry32(4242);
+      const U = HR, V = HF, SW = SQ_LOT.street, BL = SQ_LOT.block, DEP = SQ_LOT.depth, PU = BL + SW, PV = 2 * DEP + SW + SQ_LOT.back;
+      // where the named places stand on the ground: the boxes of their parts that come down to street level (beams and lights overhead do not count), a little apart from them
+      const foot = [], skipT = new Set(['Grandloft Hall', 'Duskwalk', 'Ray Promenade']), bx = new THREE.Box3();
+      for (const t of things) { if (skipT.has(t.name) || !sqInside(t.x / S, t.z / S)) continue; t.group.updateMatrixWorld(true);
+        t.group.traverse(o => { if (!o.isMesh || o.material.transparent) return; if (!o.geometry.boundingBox) o.geometry.computeBoundingBox(); bx.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld);
+          if (bx.min.y > GY + 14 || bx.max.x - bx.min.x > 170 || bx.max.z - bx.min.z > 170) return; foot.push([bx.min.x - SQ_LOT.clear, bx.max.x + SQ_LOT.clear, bx.min.z - SQ_LOT.clear, bx.max.z + SQ_LOT.clear, t.name]); }); }
+      for (const h of sqStreet) if (!h.check) { const r = (h.tall ? SQ_SIZE.tower : SQ_SIZE.manor) * SQ_KINDS.street.size * (h.k || 1) * .55 + SQ_LOT.clear; foot.push([h.x - r, h.x + r, h.z - r, h.z + r, 'place house']); }   // the Meshy houses inside places count as part of them
+      const onPlace = (x, z) => foot.some(f => x > f[0] && x < f[1] && z > f[2] && z < f[3]);
+      // the street houses that stand: clear of the places and of each other (where a street turns, the houses on the inside of the bend would meet)
+      const hdim = h => { const k = (h.check ? 1 : SQ_KINDS.street.size) * (h.k || 1), w = (h.tall ? SQ_SIZE.tower : SQ_SIZE.manor) * (h.check ? 1 : k), d = (h.tall ? SQ_SIZE.tower * .95 : SQ_SIZE.manor * .78) * (h.check ? 1 : k); return h.check ? [h.check[0], h.check[1]] : [w, d]; };
+      const inHouse = (h, x, z, m) => { const [w, d] = hdim(h), fx = Math.sin(h.face), fz = Math.cos(h.face), dx = x - h.x, dz = z - h.z, a = dx * fz - dz * fx, b = dx * fx + dz * fz; return Math.abs(a) < w / 2 + m && Math.abs(b) < d / 2 + m; };
+      const streetKept = [], sr2 = mulberry32(919);
+      for (const h of sqStreet) { const [w, d] = hdim(h), fx = Math.sin(h.face), fz = Math.cos(h.face), ux = fz, uz = -fx, pts = [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2], [0, 0]].map(([a, b]) => [h.x + ux * a + fx * b, h.z + uz * a + fz * b]);
+        if (h.check && pts.some(([px, pz]) => onPlace(px, pz))) continue; if (streetKept.some(o => pts.some(([px, pz]) => inHouse(o, px, pz, -1.5)))) continue; streetKept.push(h); }
+      // along the two named streets: walk each side in small steps and stand the largest house that fits there, front to the road, shoulder to shoulder
+      for (const sg of sqSegs) { const dx = sg.B[0] - sg.A[0], dz = sg.B[1] - sg.A[1], L = Math.hypot(dx, dz), ux = dx / L, uz = dz / L, nx = -uz, nz = ux;
+        for (const sd of [-1, 1]) for (let u = 0; u < L;) { let put = false;
+          for (const [tall, kk] of sr2() < .3 ? [[false, 1], [true, 1], [true, .85]] : [[true, 1], [false, 1], [true, .85]]) { const k = SQ_KINDS.street.size * kk, w = (tall ? SQ_SIZE.tower : SQ_SIZE.manor) * k, dd = (tall ? SQ_SIZE.tower * .95 : SQ_SIZE.manor * .78) * k;
+            const off = sg.w / 2 + 2.5 + dd / 2, x = sg.A[0] + ux * (u + w / 2) + nx * sd * off, z = sg.A[1] + uz * (u + w / 2) + nz * sd * off;
+            const h = { x, z, dark: sg.dark, face: Math.atan2(-sd * nx, -sd * nz), street: true, tall, check: [w, dd, ux, uz] }, fx = Math.sin(h.face), fz = Math.cos(h.face), ax = fz, az = -fx;
+            const pts = [[-w / 2, -dd / 2], [w / 2, -dd / 2], [w / 2, dd / 2], [-w / 2, dd / 2], [0, 0]].map(([p, q]) => [x + ax * p + fx * q, z + az * p + fz * q]);
+            if (pts.some(([px, pz]) => !sqInside(px / S, pz / S) || polyDist(SQPATH, px / S, pz / S) * S < 10 || inPlaza(px, pz, 6) || onPlace(px, pz) || segD(px, pz, ROADS[0]) < 13)) continue;
+            if (streetKept.some(o => pts.some(([px, pz]) => inHouse(o, px, pz, -1)) || Math.hypot(o.x - x, o.z - z) < (Math.min(...hdim(o)) + Math.min(w, dd)) / 2)) continue;
+            streetKept.push(h); u += w + 1.5; put = true; break; }
+          if (!put) u += 3; } }
+      const byStreet = (x, z) => streetKept.some(h => inHouse(h, x, z, 2));
+      const free = (x, z) => sqInside(x / S, z / S) && polyDist(SQPATH, x / S, z / S) * S > 10 && !inPlaza(x, z, 8) && !onPlace(x, z) && !EX.slice(-2).some(([p, r]) => Math.hypot(x - p[0], z - p[1]) < r)
+        && segD(x, z, DUSK) > 13 && segD(x, z, RAY) > 15 && segD(x, z, ROADS[0]) > 14 && !byStreet(x, z);   // right up behind the street houses, never on a named street itself
+      const R0 = Math.hypot(SQPATH.x1 - SQPATH.x0, SQPATH.z1 - SQPATH.z0) * S;
+      for (let iu = -Math.ceil(R0 / PU); iu <= Math.ceil(R0 / PU); iu++) for (let iv = -Math.ceil(R0 / PV); iv <= Math.ceil(R0 / PV); iv++) {
+        const bu = iu * PU + PU / 2, bv = iv * PV + PV / 2;                                                                                                   // the block's middle, in the street grid
+        for (const row of [-1, 1]) { const fwd = [V[0] * row, V[1] * row], face = Math.atan2(fwd[0], fwd[1]);
+          for (let u = -BL / 2 + (hr() < .5 ? 0 : 6); u < BL / 2 - 10;) { let tall = hr() < SQ_LOT.towers, k = 1, w = tall ? SQ_SIZE.tower : SQ_SIZE.manor, d = tall ? SQ_SIZE.tower * .95 : SQ_SIZE.manor * .78, lot = w + SQ_LOT.gap;
+            if (u + lot > BL / 2 + 2) { if (!tall && u + SQ_SIZE.tower + SQ_LOT.gap <= BL / 2 + 2) continue; break; }
+            const cu = bu + u + lot / 2, cv = bv + row * (DEP + SQ_LOT.back / 2 - d / 2 - 1) + 0, x = HALL[0] + U[0] * cu + V[0] * cv, z = HALL[1] + U[1] * cu + V[1] * cv; u += lot;
+            if (hr() < SQ_LOT.yards) continue;                                                                                                               // a small yard here and there
+            const fits = (w2, d2) => [[-w2 / 2, -d2 / 2], [w2 / 2, -d2 / 2], [w2 / 2, d2 / 2], [-w2 / 2, d2 / 2]].every(([a, b]) => free(x + U[0] * a + fwd[0] * b, z + U[1] * a + fwd[1] * b));
+            if (!fits(w, d)) { if (!tall && fits(SQ_SIZE.tower, SQ_SIZE.tower * .95)) { tall = true; w = SQ_SIZE.tower; d = w * .95; } else if (fits(SQ_SIZE.tower * .8, SQ_SIZE.tower * .76)) { tall = true; k = .8; w = SQ_SIZE.tower * .8; d = w * .95; } else continue; }
+            const dark = (x / S - X(.83)) * .8 + (z / S - Z(.305)) * .6 + 34 * fbm(x / S / 75, z / S / 75, 3) < 0, h = tall ? w * 2.1 : w * .8, v = .85 + .3 * hr(), ry = face;
+            houses.push({ x, z, dark, face, tall, k });
+            bodies.push({ x, y: GY + h / 2, z, sx: w, sy: h, sz: d, ry, tint: dark ? [.013 * v, .013 * v, .018 * v] : [.6 * v, .585 * v, .54 * v] }); roofs.push({ x, y: GY + h, z, sx: w + 1.2, sy: w * .5, sz: d + 1.2, ry, tint: dark ? [.006, .006, .01] : [.3 * v, .32 * v, .38 * v] });
+            (dark ? winP : winW).push({ x, y: GY, z, sx: w, sy: h, sz: d, ry }); } } }
       const plain = applyTex(new THREE.MeshStandardMaterial({ roughness: .35 }), 'marbleW'), roofM = applyTex(new THREE.MeshStandardMaterial({ roughness: .35 }), 'slateW'), wq = []; for (const sd of [-1, 1]) for (const wx of [-.26, .26]) for (const wy of [.3, .66]) { const q = new THREE.PlaneGeometry(.13, .2); if (sd < 0) q.rotateY(Math.PI); q.translate(wx, wy, sd * .504); wq.push(q); }
-      const winGeo = mergeGeometries(wq), mk = (geo, mat, list, sh) => { const m = instanced(geo, mat, list); if (m) { m.castShadow = sh; m.raycast = () => {}; } };
-      mk(new THREE.BoxGeometry(1, 1, 1), plain, bodies, true); mk(gable(1, 1, 1), roofM, roofs, true); mk(new THREE.ConeGeometry(1, 1, 4), roofM, spires, true); mk(winGeo, glowM(0xa860ff, 2.2), winP, false); mk(winGeo, glowM(0xffe2a8, 1.5), winW, false); window.__cityHouses = bodies.length; }
+      const winGeo = mergeGeometries(wq), boxes = [], mk = (geo, mat, list, sh) => { const m = instanced(geo, mat, list); if (m) { m.castShadow = sh; m.raycast = () => {}; boxes.push(m); } };
+      mk(new THREE.BoxGeometry(1, 1, 1), plain, bodies, true); mk(gable(1, 1, 1), roofM, roofs, true); mk(winGeo, glowM(0xa860ff, 2.2), winP, false); mk(winGeo, glowM(0xffe2a8, 1.5), winW, false); window.__cityHouses = bodies.length;
+      cityHouses(houses.concat(streetKept), boxes, GY); }
 
     // ---------------- and round all of it, the wall: black marble, towers along it, a line of violet light running round its top; open only at the gate ----------------
     { const segs = [], tw = [], cones = [], glowS = [], W = SQWALL.map(p => [p[0] * S, p[1] * S]), n = W.length;
@@ -4738,7 +4844,7 @@ const panel = document.getElementById('panel'), $ = id => document.getElementByI
 const filled = d => !!d && ['player', 'gm'].some(k => d[k] && (d[k].title || d[k].notes || (d[k].images || []).length)), last = a => (a && a.length ? a[a.length - 1] : null);
 const candidates = t => { const list = []; if (t.thing) { for (const h of DATA_HEX[t.thing.name] || []) list.push(h); for (const h of t.thing.hexes) { const m = DATA_AT[h.q + ',' + h.r]; if (m) list.push(m); } for (const h of t.thing.hexes) list.push([h.q, h.r]); } else list.push([t.hex.q, t.hex.r]); return list; };
 const FIELDS = ['pNotes', 'pGmNotes', 'pGmTitle', 'pPlTitle'];
-const HALL_IMG = { 'Kollema Hall': 'kollema-hall.webp', 'Torus Hall': 'torus-hall.webp', 'Conjurot Hall': 'conjurot-hall.webp', 'Grandloft Hall': 'grandloft-hall.webp', 'Widdershins Hall': 'widdershins-hall.webp' };   // the colleges' main halls: their paintings live beside this page in images/
+const HALL_IMG = { 'Vellum Gargoyle': 'vellum-gargoyle.webp', 'Kollema Hall': 'kollema-hall.webp', 'Torus Hall': 'torus-hall.webp', 'Conjurot Hall': 'conjurot-hall.webp', 'Grandloft Hall': 'grandloft-hall.webp', 'Widdershins Hall': 'widdershins-hall.webp' };   // the colleges' main halls: their paintings live beside this page in images/
 const imgList = () => { const d = (cur && cur.data) || {}, pl = (d.player || {}).images || [], gm = (d.gm || {}).images || [], hall = cur && cur.t && cur.t.thing && HALL_IMG[cur.t.thing.name], base = hall ? [{ f: hall, sec: 'hall', url: 'images/' + hall }] : [];
   return base.concat(role.gm ? [...gm.map(x => ({ f: x.filename, sec: 'gm' })), ...pl.filter(x => x.shared_from !== 'gm').map(x => ({ f: x.filename, sec: 'player' }))] : pl.map(x => ({ f: x.filename, sec: 'player' }))); };
 function render() { const d = cur.data || {}, pl = d.player || {}, gm = d.gm || {}, list = imgList(), where = cur.q > 50 ? '' : `Hex ${cur.q},${cur.r}`; cur.i = clamp(cur.i == null ? (list[0] && list[0].sec === 'hall' ? 0 : list.length - 1) : cur.i, 0, Math.max(list.length - 1, 0)); const img = list[cur.i];
@@ -4936,7 +5042,7 @@ $('tpToggle').onclick = () => setCircles(!tp.on);
 // To go down: select the place and keep zooming in on it, or press Go below in its panel; the Under button goes down wherever you are, and the same button (Surface) comes back up
 const UNDER_AT = {
   'Grandloft Hall': { name: 'The Underloft', ring: 2, col: 0x4a5a86, glow: 0x9ab8ff },
-  'Archive of Unfinished Spells': { name: 'Archive of Unfinished Spells: the depths', ring: 2, col: 0x55406e, glow: 0xb070ff },
+  'Archive of Unfinished Spells': { name: 'Archive of Unfinished Spells: the depths', ring: 2, reach: [[2, -1], [4, -2], [6, -3], [8, -4]], col: 0x55406e, glow: 0xb070ff },   // reach: more centres, east of the door, the depths running back under the map
   'Sanguine Sluice': { name: 'The city under the Sanguine Sluice', ring: 1, col: 0x6a2626, glow: 0xff5a44 },
   'Crystal Pavilion Hedgemaze': { name: 'The Hedgemaze labyrinth', ring: 2, col: 0x1f5258, glow: 0x60f0ff, maze: true },
   'The Pillardrop': { name: 'The Pillardrop', shaft: true, col: 0x5a4a3a, glow: 0xffb060 } };
@@ -4947,6 +5053,481 @@ let uhintT = 0; const showHint = (txt, ms) => { uhint.textContent = txt; uhint.s
 const fadeTo = (v, cb) => { ufade.style.opacity = v; setTimeout(() => { if (cb) cb(); }, 380); };
 function ctex(w, h, draw, rx = 1, ry = 1) { const cv = document.createElement('canvas'); cv.width = w; cv.height = h; draw(cv.getContext('2d'), w, h); const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.anisotropy = 4; return t; }
 const hexDist = (a, b) => { const dq = a.q - b.q, dr = a.r - b.r; return (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2; };
+// @@UNDER_BUILDERS_BEGIN
+const UNDER_BUILD = {};
+// ---- the under-areas built out in full (Oct 2026). Each place in UNDER_BUILD fills its own cavern in place of the plain one: a floor of its own, its rock rim,
+// and what stands there. Kept general on purpose - halls, passages and features with room left for the particular things to come later.
+// Everything is merged into one draw per material; lights are few, and flicker only while someone is underground. The kit holds what they share
+function underKit(g, area, R) {
+  let seed = 7; for (const ch of area.name) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0; const rnd = mulberry32(seed);
+  const set = new Set(area.hexes.map(h => hexKey(h.q, h.r)));
+  const inHex = (x, z) => { const h = worldToHex(x, z); return set.has(hexKey(h.q, h.r)); };
+  const inA = (x, z, m = 0) => { if (!inHex(x, z)) return false; if (!m) return true; for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; if (!inHex(x + Math.cos(a) * m, z + Math.sin(a) * m)) return false; } return true; };
+  let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const h of area.hexes) { x0 = Math.min(x0, h.x - R); x1 = Math.max(x1, h.x + R); z0 = Math.min(z0, h.z - R); z1 = Math.max(z1, h.z + R); }
+  const batches = new Map(), add = (geo, mat) => { if (!batches.has(mat)) batches.set(mat, []); batches.get(mat).push(geo); return geo; };
+  const tr = (geo, x, y, z, ry = 0, rx = 0, rz = 0) => { if (rx) geo.rotateX(rx); if (rz) geo.rotateZ(rz); if (ry) geo.rotateY(ry); return geo.translate(x, y, z); };
+  const B = (w, h, d, mat, x, y, z, ry = 0) => add(tr(new THREE.BoxGeometry(w, h, d), x, y, z, ry), mat);                                     // a box, its middle at (x, y, z)
+  const C = (rt, rb, h, seg, mat, x, y, z, ry = 0, rx = 0, rz = 0) => add(tr(new THREE.CylinderGeometry(rt, rb, h, seg), x, y, z, ry, rx, rz), mat);
+  const S = (r, mat, x, y, z, sx = 1, sy = 1, sz = 1, det = 8) => add(new THREE.SphereGeometry(r, det, Math.max(4, det * .7 | 0)).scale(sx, sy, sz).translate(x, y, z), mat);
+  const T = (r, tube, mat, x, y, z, ry = 0, rx = 0, arc = Math.PI * 2, seg = 16) => add(tr(new THREE.TorusGeometry(r, tube, 6, seg, arc), x, y, z, ry, rx), mat);
+  const K = (r, h, seg, mat, x, y, z, ry = 0, rx = 0) => add(tr(new THREE.ConeGeometry(r, h, seg), x, y, z, ry, rx), mat);
+  const P = (w, d, mat, x, y, z, ry = 0) => add(tr(new THREE.PlaneGeometry(w, d), x, y, z, ry, -Math.PI / 2), mat);                          // a flat sheet lying on the ground
+  const flush = () => { for (const [mat, list] of batches) { const geos = list.map(ge => { const n = ge.index ? ge.toNonIndexed() : ge; for (const k of Object.keys(n.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv') n.deleteAttribute(k); if (!n.attributes.uv) n.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(n.attributes.position.count * 2), 2)); return n; });
+      for (let i = 0; i < geos.length; i += 4000) { const m = new THREE.Mesh(mergeGeometries(geos.slice(i, i + 4000)), mat); m.raycast = () => {}; g.add(m); } } batches.clear(); };
+  // the floor over every hex of the area, and the rock rim round its outside edges (hgt: how tall the rim stands)
+  const floor = (mat, y = 1, uvs = 60) => { const fv = [], fu = []; for (const h of area.hexes) for (let i = 0; i < 6; i++) { const a0 = i * Math.PI / 3, a1 = a0 + Math.PI / 3;
+      for (const [px, pz] of [[h.x, h.z], [h.x + Math.cos(a1) * R, h.z + Math.sin(a1) * R], [h.x + Math.cos(a0) * R, h.z + Math.sin(a0) * R]]) { fv.push(px, y, pz); fu.push(px / uvs, pz / uvs); } }
+    const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.Float32BufferAttribute(fv, 3)); fg.setAttribute('uv', new THREE.Float32BufferAttribute(fu, 2)); fg.computeVertexNormals(); add(fg, mat); };
+  const edges = []; for (const h of area.hexes) for (let i = 0; i < 6; i++) { const th = i * Math.PI / 3 + Math.PI / 6, nb = worldToHex(h.x + Math.cos(th) * R * SQ3, h.z + Math.sin(th) * R * SQ3);
+    if (!set.has(hexKey(nb.q, nb.r))) edges.push({ x: h.x + Math.cos(th) * R * .87, z: h.z + Math.sin(th) * R * .87, th, nx: Math.cos(th), nz: Math.sin(th) }); }   // th points out of the area
+  const rim = (mat, hgt = 50, jag = 20) => { for (const e of edges) { const h = hgt + rnd() * jag; for (let k = -1; k <= 1; k++) { const hh = h * (.8 + rnd() * .4), ox = -Math.sin(e.th) * k * R * .36, oz = Math.cos(e.th) * k * R * .36;
+      B(R * .44, hh, 14 + rnd() * 10, mat, e.x + ox + e.nx * 4, hh / 2, e.z + oz + e.nz * 4, -e.th - Math.PI / 2 + (rnd() - .5) * .25); } } };
+  // lights: a handful of real ones that flicker like fire, and a shared flame material whose glow breathes
+  const light = (x, y, z, col, k = 1, dist = 110, fl = .25) => { UNDER_SPOTS.push({ x, y, z, col: new THREE.Color(col), k: 60 * k, dist, fl, ph: rnd() * 9 }); };   // a light spot: the pool below lights the nearest of them
+  const glow = (hex, k = 2.4) => new THREE.MeshStandardMaterial({ color: 0x111111, emissive: hex, emissiveIntensity: k, roughness: .6 });
+  const tex = (w, h, draw, rep = 1) => ctex(w, h, draw, rep, rep);
+  const mark = (name, x, y, z) => { (UNDER.marks = UNDER.marks || {})[area.src.name + ':' + name] = [x, y, z]; };   // key spots, for finding them again
+  return { mark, rnd, set, inA, inHex, x0, x1, z0, z1, cx: (x0 + x1) / 2, cz: (z0 + z1) / 2, B, C, S, T, K, P, add, tr, flush, floor, rim, edges, light, glow, tex, R };
+}
+// The under-areas' lights: many spots, but only a fixed pool of real lights, which each frame take the spots nearest the middle of the view. The number of lights never
+// changes, so no material has to be rebuilt as you move about; everything else that glows does so by its own material
+const UNDER_SPOTS = [], UNDER_POOL = 12;
+function underLightPool(g) { if (!UNDER_SPOTS.length) return; const pool = Array.from({ length: UNDER_POOL }, () => { const p = new THREE.PointLight(0xffffff, 0, 100, 1.15); g.add(p); return p; }), focus = new THREE.Vector3();
+  anim.push(t => { if (!UNDER.on || UNDER.shaft) { for (const p of pool) p.intensity = 0; return; } focus.copy(controls.target).lerp(camera.position, .25);
+    const near = UNDER_SPOTS.map(s2 => [s2, (s2.x - focus.x) ** 2 + (s2.y - focus.y) ** 2 * .3 + (s2.z - focus.z) ** 2]).sort((a, b) => a[1] - b[1]);
+    pool.forEach((p, i) => { const e = near[i]; if (!e) { p.intensity = 0; return; } const s2 = e[0]; p.position.set(s2.x, s2.y, s2.z); p.color.copy(s2.col); p.distance = s2.dist;
+      p.intensity = s2.k * (1 - s2.fl + s2.fl * (.55 + .25 * Math.sin(t * 9.1 + s2.ph) + .2 * Math.sin(t * 23.7 + s2.ph * 2))); }); }); }
+// textures drawn once and shared: stone blocks, brick, wet flagstones
+const UTEX = {};
+const utex = (key, make) => UTEX[key] || (UTEX[key] = make());
+const brickTex = (base, mortar, bw = 64, bh = 28) => utex('brick' + base + mortar, () => ctex(512, 512, (c, w, h) => { const r = mulberry32(base.length * 77 + 3); c.fillStyle = mortar; c.fillRect(0, 0, w, h);
+  for (let row = 0, y = 0; y < h; row++, y += bh) for (let x = (row % 2) * -bw / 2; x < w; x += bw) { const k = .75 + r() * .45; c.fillStyle = base; c.globalAlpha = 1; c.fillRect(x + 2, y + 2, bw - 4, bh - 4); c.fillStyle = 'rgba(0,0,0,' + (1 - k) * .9 + ')'; c.fillRect(x + 2, y + 2, bw - 4, bh - 4);
+    for (let s = 0; s < 6; s++) { c.fillStyle = 'rgba(255,255,255,' + r() * .05 + ')'; c.fillRect(x + 2 + r() * (bw - 8), y + 2 + r() * (bh - 8), 3 + r() * 10, 2 + r() * 4); } } }));
+const flagTex = (base, joint, n = 6) => utex('flag' + base + joint, () => ctex(512, 512, (c, w, h) => { const r = mulberry32(n * 31 + base.length); c.fillStyle = joint; c.fillRect(0, 0, w, h); const s = w / n;
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const k = .7 + r() * .5; c.fillStyle = base; c.fillRect(i * s + 3, j * s + 3, s - 6, s - 6); c.fillStyle = 'rgba(0,0,0,' + (1 - k) + ')'; c.fillRect(i * s + 3, j * s + 3, s - 6, s - 6);
+    for (let q = 0; q < 14; q++) { c.fillStyle = r() < .5 ? 'rgba(0,0,0,.12)' : 'rgba(255,255,255,.04)'; c.beginPath(); c.arc(i * s + r() * s, j * s + r() * s, 2 + r() * 9, 0, 6.283); c.fill(); } } }));
+const noiseTex = (key, col, spots, a = .25) => utex('noise' + key, () => ctex(256, 256, (c, w, h) => { const r = mulberry32(key.length * 13 + 5); c.fillStyle = col; c.fillRect(0, 0, w, h);
+  for (let i = 0; i < 900; i++) { c.fillStyle = spots[i % spots.length].replace('A', (r() * a).toFixed(3)); const x = r() * w, y = r() * h, s = 2 + r() * 16; for (const ox of [-w, 0, w]) for (const oy of [-h, 0, h]) { c.beginPath(); c.arc(x + ox, y + oy, s, 0, 6.283); c.fill(); } } }));
+// The Underloft, under Grandloft Hall: the city's old sewers, cut through the rock as a net of brick tunnels, each with a channel of dark water between two walkways,
+// arched over here and there and fed by outfall pipes. They meet at a great round cistern where the crypt stair comes down from the hall, and at the far ends of the net they
+// open into the older work beneath: a cell block, a guard room, and broad stairs going down into the dark where the deeper dungeons begin
+UNDER_BUILD['Grandloft Hall'] = (g, area, R) => {
+  const K = underKit(g, area, R), { rnd, inA, B, C, S, T, P, add, tr } = K, u = 22, H = 15;
+  const brick = new THREE.MeshStandardMaterial({ map: brickTex('#8a7562', '#3a3029'), roughness: .9, color: 0xe0d0bc }), brickD = new THREE.MeshStandardMaterial({ map: brickTex('#6a5a4c', '#2a221c'), roughness: .95, color: 0xd0c2b0 });
+  const capM = new THREE.MeshStandardMaterial({ map: noiseTex('rockcap2', '#1e1b18', ['rgba(0,0,0,A)', 'rgba(70,62,54,A)']), roughness: 1, color: 0x8a8278 }), flag = new THREE.MeshStandardMaterial({ map: flagTex('#7a6e60', '#2a241e'), roughness: .85, color: 0xd8ccbc });
+  const curb = new THREE.MeshStandardMaterial({ color: 0x6e665a, roughness: .8 }), stone = new THREE.MeshStandardMaterial({ map: flagTex('#857a6c', '#3a332c', 3), roughness: .9, color: 0xc8beb0 }), shaftM = new THREE.MeshBasicMaterial({ color: 0xbfd0ff, map: utex('shaftfade', () => ctex(8, 128, (c, w, h) => { const gr = c.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(.75, 'rgba(255,255,255,.35)'); gr.addColorStop(1, 'rgba(255,255,255,1)'); c.fillStyle = gr; c.fillRect(0, 0, w, h); })), transparent: true, opacity: .32, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide }), iron = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, roughness: .55, metalness: .7 }), wood = new THREE.MeshStandardMaterial({ color: 0x4a3524, roughness: .9 });
+  const water = new THREE.MeshStandardMaterial({ map: noiseTex('sewer', '#1d2a1c', ['rgba(120,150,90,A)', 'rgba(0,0,0,A)'], .3), color: 0x5a6438, roughness: .08, metalness: .25, envMapIntensity: .5, emissive: 0x10200a, emissiveIntensity: 1 });
+  const slime = new THREE.MeshStandardMaterial({ color: 0x3e5a2a, roughness: .7, emissive: 0x1a3a10, emissiveIntensity: .6 }), flame = K.glow(0xff9a3a, 4), voidM = new THREE.MeshBasicMaterial({ color: 0x000000 }), rune = K.glow(0x6a9cff, 2.6);
+  water.map.repeat.set(1 / 30, 1 / 30); anim.push(t => { if (UNDER.on) water.map.offset.set(t * .006, t * .011); });
+  const topM = new THREE.MeshStandardMaterial({ map: noiseTex('looftop2', '#6a6052', ['rgba(0,0,0,A)', 'rgba(140,128,110,A)', 'rgba(60,80,40,A)'], .3), roughness: 1, color: 0xc8beb0, flatShading: true }), moss = new THREE.MeshStandardMaterial({ color: 0x4a6a2a, roughness: 1 });
+  const fung = [K.glow(0x5affd0, 2.6), K.glow(0x9aff5a, 2.4), K.glow(0x7ab0ff, 2.4)], stemM = new THREE.MeshStandardMaterial({ color: 0xd8d0b8, roughness: .8 }), bone = new THREE.MeshStandardMaterial({ color: 0xd0c6a8, roughness: .8 }), darkM = new THREE.MeshStandardMaterial({ color: 0x0c0a08, roughness: 1 });
+  K.floor(flag, 1, 44); K.rim(capM, 46, 18);
+  // the grid: node cells (odd, odd) are junctions, cells between two nodes are tunnels when the two are joined, every other cell is rock
+  const NI = Math.ceil((K.x1 - K.x0) / u), NJ = Math.ceil((K.z1 - K.z0) / u), at = (i, j) => [K.x0 + (i + .5) * u, K.z0 + (j + .5) * u], key = (i, j) => i * 1000 + j;
+  const inside = (i, j) => { const [x, z] = at(i, j); return inA(x, z, u * .75); }, open = new Map();   // open: key -> 'sewer' | room name
+  const nodes = []; for (let i = 1; i < NI; i += 2) for (let j = 1; j < NJ; j += 2) if (inside(i, j)) nodes.push([i, j]);
+  // rooms first: the cistern at the middle, and at the far ends of the net the old dungeon rooms
+  const ci = Math.round((area.x - K.x0) / u - .5) | 1, cj = Math.round((area.z - K.z0) / u - .5) | 1, rooms = [];
+  const carve = (i0, j0, i1, j1, name) => { for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) if (inside(i, j)) open.set(key(i, j), name); rooms.push({ i0, j0, i1, j1, name }); };
+  for (let i = ci - 3; i <= ci + 3; i++) for (let j = cj - 3; j <= cj + 3; j++) if ((i - ci) ** 2 + (j - cj) ** 2 <= 10.5 && inside(i, j)) open.set(key(i, j), 'cistern');
+  const far = nodes.slice().sort((a, b) => Math.hypot(b[0] - ci, b[1] - cj) - Math.hypot(a[0] - ci, a[1] - cj)), kinds = ['deep', 'cells', 'deep2', 'guard'];
+  for (const nd of far) { if (rooms.length >= 4) break; if (Math.hypot(nd[0] - ci, nd[1] - cj) < 6) continue;
+    for (const [oi, oj] of [[-2, -2], [0, -2], [-2, 0], [0, 0]]) { const i0 = nd[0] + oi, j0 = nd[1] + oj; let ok = true;
+      for (let i = i0; i <= i0 + 2 && ok; i++) for (let j = j0; j <= j0 + 2; j++) if (!inside(i, j)) { ok = false; break; }
+      if (!ok || rooms.some(r => Math.abs(r.i0 - i0) < 6 && Math.abs(r.j0 - j0) < 6)) continue; carve(i0, j0, i0 + 2, j0 + 2, kinds[rooms.length]); break; } }
+  for (let i = 0; i < NI; i++) for (let j = cj - 1; j <= cj + 1; j++) if (inside(i, j) && !open.has(key(i, j))) open.set(key(i, j), 'trunk');   // the great trunk sewer, straight through the middle
+  // the sewer net: a random tree through every junction, with a few loops added, as old sewers have
+  const seen = new Set(), st = [[ci, cj]]; seen.add(key(ci, cj)); open.set(key(ci, cj), open.get(key(ci, cj)) || 'sewer'); const links = [];
+  while (st.length) { const [i, j] = st[st.length - 1], nb = [[2, 0], [-2, 0], [0, 2], [0, -2]].map(([a, b]) => [i + a, j + b]).filter(([a, b]) => inside(a, b) && !seen.has(key(a, b)));
+    if (!nb.length) { st.pop(); continue; } const [a, b] = nb[(rnd() * nb.length) | 0]; seen.add(key(a, b)); links.push([i, j, a, b]); st.push([a, b]); }
+  for (const [i, j] of nodes) for (const [a, b] of [[i + 2, j], [i, j + 2]]) if (inside(a, b) && rnd() < .14) links.push([i, j, a, b]);
+  for (const [i, j, a, b] of links) for (const [p, q] of [[i, j], [(i + a) / 2, (j + b) / 2], [a, b]]) if (!open.has(key(p, q))) open.set(key(p, q), 'sewer');
+  const isOpen = (i, j) => open.has(key(i, j)), kind = (i, j) => { const k = open.get(key(i, j)); return k === 'trunk' ? 'sewer' : k; };
+  // rock: every inside cell that is not open is solid, brick-faced, capped with rough rock
+  for (let i = 0; i < NI; i++) for (let j = 0; j < NJ; j++) { const [x, z] = at(i, j); if (!inA(x, z, u * .3) || isOpen(i, j)) continue; const h = H + rnd() * 8;
+    const old = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]].some(([a, b]) => { const k = open.get(key(i + a, j + b)); return k && k !== 'sewer' && k !== 'cistern'; });
+    B(u, h, u, old ? stone : (i + j) % 3 ? brick : brickD, x, h / 2, z); B(u + 1.5, 2.5, u + 1.5, topM, x, h + 1.2, z);
+    for (let q = 0, nq = 1 + (rnd() * 3 | 0); q < nq; q++) add(new THREE.DodecahedronGeometry(3 + rnd() * 4, 0).scale(1, .45 + rnd() * .3, 1).rotateY(rnd() * 6).translate(x + (rnd() - .5) * u * .6, h + 2.4, z + (rnd() - .5) * u * .6), topM); if (rnd() < .45) S(3 + rnd() * 3, moss, x + (rnd() - .5) * u * .5, h + 2.3, z + (rnd() - .5) * u * .5, 1, .18, 1.3, 7);
+    if (!old && rnd() < .3) { const fc = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([a, b]) => kind(i + a, j + b) === 'sewer'); if (fc) { const [a, b] = fc; C(.9, .9, u, 8, iron, x + a * (u / 2 + .9), 9 + rnd() * 3, z + b * (u / 2 + .9), 0, b ? Math.PI / 2 : 0, a ? 0 : Math.PI / 2); if (rnd() < .4) for (let q = 0; q < 3; q++) C(.25, .25, 5 + q, 4, iron, x + a * (u / 2 + .5) + (b ? (q - 1) * 4 : 0), h - 3 - q / 2, z + b * (u / 2 + .5) + (a ? (q - 1) * 4 : 0)); } } }   // pipes along the tunnel walls, and hanging chains
+  // the water: a channel down every tunnel, with stone kerbs, and where a tunnel runs straight now and then a brick arch over it, an outfall pipe, a grating, rubbish
+  const lamps = [];
+  // the trunk: a broad channel the length of it, walkways each side, and every other cell a great brick vault on piers
+  { const tr2 = [...open].filter(([k2, kd]) => kd === 'trunk' && k2 % 1000 === cj).map(([k2]) => Math.floor(k2 / 1000)).sort((a, b) => a - b);
+    tr2.forEach((i, n) => { const [x, z] = at(i, cj); B(u + .5, .6, u * 1.25, water, x, 1.2, z); for (const s of [-1, 1]) B(u + .5, 1.6, 1.4, curb, x, 1.8, z + s * u * .66);
+      if (n % 2 === 0) { T(u * 1.45, 2.2, brickD, x, 4, z, Math.PI / 2, 0, Math.PI, 18); for (const s of [-1, 1]) B(3.2, 8, 3.2, brickD, x, 4, z + s * u * 1.45); }
+      if (n % 5 === 2) K.light(x, 14, z + u, 0xff9a4a, 2.2, 150); if (n % 4 === 1) { C(.6, .9, 3, 6, iron, x, 10, z + u * 1.45); K.K(1.1, 3.2, 6, flame, x, 13, z + u * 1.45); } }); }
+  for (const [k2, kd] of open) { if (kd !== 'sewer') continue; const i = Math.floor(k2 / 1000), j = k2 % 1000, [x, z] = at(i, j), dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([a, b]) => isOpen(i + a, j + b) && kind(i + a, j + b) === 'sewer' || isOpen(i + a, j + b) && kind(i + a, j + b) !== 'sewer' && (i % 2 && j % 2));
+    if (dirs.length) { B(10, .6, 10, water, x, 1.3, z); for (const [a, b] of dirs) { const cx = x + a * (u / 4 + 2.5), cz = z + b * (u / 4 + 2.5), ry = a ? 0 : Math.PI / 2; B(u / 2 - 5 + .4, .6, 10, water, cx, 1.3, cz, ry);   // the water: the middle square and a strip out to each tunnel that meets here
+        for (const s of [-1, 1]) B(u / 2 - 5, 1.4, 1.2, curb, x + a * (u / 4 + 2.5) + (b ? s * 5.6 : 0), 1.7, z + b * (u / 4 + 2.5) + (a ? s * 5.6 : 0), ry); }   // its kerbs, stopping where the tunnels meet
+      for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (!dirs.some(([p, q]) => p === a && q === b)) B(a ? 1.2 : 12.4, 1.4, a ? 12.4 : 1.2, curb, x + a * 5.6, 1.7, z + b * 5.6); }   // and a kerb across each side no tunnel leaves by
+    if (!dirs.length) continue;
+    const straight = dirs.length === 2 && dirs[0][0] === -dirs[1][0] && dirs[0][1] === -dirs[1][1], ax = dirs[0][0] !== 0;
+    if (straight && rnd() < .3) { const ry2 = ax ? Math.PI / 2 : 0; T(u / 2 - 1.2, 1.5, brickD, x, H - 2, z, ry2, 0, Math.PI, 12); for (const s of [-1, 1]) B(2.4, H - 2, 2.4, brickD, x + (ax ? 0 : s * (u / 2 - 1.2)), (H - 2) / 2, z + (ax ? s * (u / 2 - 1.2) : 0)); }   // a brick arch over the tunnel, on its two piers
+    if (straight && rnd() < .22) { const s = rnd() < .5 ? -1 : 1, px = x + (ax ? 0 : s * u / 2), pz = z + (ax ? s * u / 2 : 0); C(1.8, 1.8, 6, 10, iron, px - (ax ? 0 : s * 2), 8, pz - (ax ? s * 2 : 0), 0, ax ? Math.PI / 2 : 0, ax ? 0 : Math.PI / 2);
+      B(ax ? 2.6 : 1, 6, ax ? 1 : 2.6, slime, px - (ax ? 0 : s * 5), 4.5, pz - (ax ? s * 5 : 0)); }                                                                 // an outfall pipe, green with what runs out of it
+    if (straight && rnd() < .15) for (let q = 0; q < 5; q++) B(ax ? 1 : 5, .5, ax ? 5 : 1, iron, x + (ax ? (q - 2) * 1.4 : (rnd() - .5) * 2 + 7), 1.3, z + (ax ? 7 : (q - 2) * 1.4));
+    if (dirs.length === 1) { for (let q = 0; q < 4; q++) S(2 + rnd() * 2.4, capM, x + (rnd() - .5) * 10, 1.5, z + (rnd() - .5) * 10, 1, .6, 1, 6); C(2.2, 2.2, 4.4, 10, wood, x + 6, 3.2, z - 5); }   // a dead end: rubble and a barrel
+    if (i % 2 && j % 2 && dirs.length >= 3) lamps.push([x, z]); }
+  { const sp = [...open].filter(([k2, kd]) => kd === 'sewer').map(([k2]) => k2); for (let q = 0; q < 7 && sp.length; q++) { const k2 = sp[(rnd() * sp.length) | 0], i = Math.floor(k2 / 1000), j = k2 % 1000, [x, z] = at(i, j);   // light falling through street drains far above, onto a grating
+    add(tr(new THREE.CylinderGeometry(3.5, 6.5, 70, 14, 1, true), x, 35, z), shaftM); for (let b2 = 0; b2 < 5; b2++) B(1, .5, 9, iron, x - 4 + b2 * 2, 1.9, z); K.light(x, 8, z, 0xbfd0ff, 1.4, 70, .02); } }
+  // torches on the walls at the junctions where three or four tunnels meet: a sconce, a flame, and at a few of them a real flickering light
+  lamps.forEach(([x, z], n) => { const [a, b] = [[1, 1], [-1, 1], [1, -1], [-1, -1]][n % 4], tx = x + a * (u / 2 - 1.5), tz = z + b * (u / 2 - 1.5); C(.5, .8, 3, 6, iron, tx, 10, tz); K.K(1.1, 3.2, 6, flame, tx, 13, tz); if (n % 2 === 0) K.light(tx, 16, tz, 0xff9a4a, 2.4, 150); });
+  // clusters of glowing fungus on the walkways and up the walls, in three colours, so the tunnels are never one long brown
+  { const sp = [...open].filter(([k2, kd]) => kd === 'sewer').map(([k2]) => k2); for (let q = 0; q < 34 && sp.length; q++) { const k2 = sp[(rnd() * sp.length) | 0], i = Math.floor(k2 / 1000), j = k2 % 1000, [x, z] = at(i, j), m = fung[q % 3], cx = x + (rnd() < .5 ? -1 : 1) * 7.5, cz = z + (rnd() - .5) * 8;
+      for (let f = 0; f < 6; f++) { const fx = cx + (rnd() - .5) * 4, fz = cz + (rnd() - .5) * 4, hh = .8 + rnd() * 2.2, r = .6 + rnd() * 1.1; C(.18, .26, hh, 5, stemM, fx, 1.5 + hh / 2, fz); S(r, m, fx, 1.5 + hh, fz, 1, .45, 1, 7); }
+      if (q % 4 === 0) K.light(cx, 5, cz, [0x5affd0, 0x9aff5a, 0x7ab0ff][q % 3], .9, 60, .05); } }
+  // the cistern: a round pool fed from all sides, the crypt stair spiralling down round a column from the hall above, a gallery of brick piers
+  { const [x, z] = at(ci, cj), rr = u * 3.1; C(rr * .62, rr * .62, 1, 40, water, x, 1.4, z); T(rr * .62, 1.6, curb, x, 2, z, 0, Math.PI / 2, Math.PI * 2, 48);
+    for (let q = 0; q < 8; q++) { const a = q * Math.PI / 4 + .2; B(5, H + 10, 5, brickD, x + Math.cos(a) * rr * .86, (H + 10) / 2, z + Math.sin(a) * rr * .86); }
+    { const hx = x + rr * .32, hz = z - rr * .18, stat = new THREE.MeshStandardMaterial({ map: noiseTex('sunk', '#6a7258', ['rgba(0,0,0,A)', 'rgba(90,130,60,A)'], .3), roughness: .9, color: 0xd0d8c0 });   // a drowned statue: a great head half sunk in the pool, tilted, and a hand rising from the water nearby
+      add(new THREE.SphereGeometry(7, 14, 10).scale(1, 1.2, 1.05).rotateZ(.35).translate(hx, 2, hz), stat); add(new THREE.BoxGeometry(5.5, 3.2, 3).rotateZ(.35).translate(hx + 1.4, 3.8, hz + 6.6), stat); add(new THREE.ConeGeometry(1.4, 3.4, 4).rotateX(Math.PI / 2).rotateZ(.35).translate(hx + .6, 2.8, hz + 7.6), stat);
+      for (const sd of [-1, 1]) add(new THREE.BoxGeometry(1.6, .6, .4).translate(hx + sd * 2.6 + 1.3, 5.6 + sd * .9, hz + 6.9), darkM);
+      const hdx = x - rr * .3, hdz = z + rr * .28; add(new THREE.BoxGeometry(3, 9, 2.2).rotateZ(-.2).translate(hdx, 4.5, hdz), stat); for (let f = 0; f < 4; f++) add(new THREE.BoxGeometry(.6, 4 + (f % 3), .6).rotateZ(-.2 + (f - 1.5) * .12).translate(hdx - 1.2 + f * .8, 10.4, hdz), stat); add(new THREE.BoxGeometry(.7, 3, .7).rotateZ(.9).translate(hdx + 2.2, 7.8, hdz), stat);
+      K.light(x, 4, z, 0x7aff90, 1.2, 90, .05); }
+    C(5, 5, 70, 16, brick, x, 35, z); for (let s = 0; s < 34; s++) { const a = s * .42, y = 2 + s * 2; B(11, 1.4, 4.5, flag, x + Math.cos(a) * 9.5, y, z + Math.sin(a) * 9.5, -a); }   // the stair down from the hall
+    for (let q = 0; q < 4; q++) { const a = q * Math.PI / 2 + .6; K.light(x + Math.cos(a) * rr * .7, 20, z + Math.sin(a) * rr * .7, 0xffa860, 3, 190); K.K(1.2, 3.4, 6, flame, x + Math.cos(a) * rr * .86, 27, z + Math.sin(a) * rr * .86); } }
+  // the old dungeon rooms at the ends of the net
+  { const [x, z] = at(ci, cj); K.mark('cistern', x, 10, z); K.mark('trunk', at(Math.max(1, ci - 6), cj)[0], 8, z); }
+  for (const rm of rooms) { const [ax0, az0] = at(rm.i0, rm.j0), [ax1, az1] = at(rm.i1, rm.j1), mx = (ax0 + ax1) / 2, mz = (az0 + az1) / 2, w = ax1 - ax0 + u, d = az1 - az0 + u; K.mark(rm.name, mx, 6, mz);
+    P(w - 2, d - 2, flag, mx, 1.15, mz);
+    if (rm.name === 'cells') { for (let q = 0; q < 5; q++) { const x = ax0 - u / 2 + 4 + q * (w - 8) / 4.5, z = az0 - u / 2 + 6; for (let b2 = 0; b2 < 6; b2++) C(.35, .35, 16, 5, iron, x - 4 + b2 * 1.6, 9, z + 5);
+        B(.8, 16, 10, brickD, x - 5, 9, z); S(2.2, new THREE.MeshStandardMaterial({ color: 0x8a7a4a, roughness: 1 }), x, 1.6, z - 1, 1.6, .3, 1, 6); C(.3, .3, 6, 4, iron, x + 2, 5, z - 4, 0, 0, .5); S(.9, curb, x + 2, 1.8, z - 3, 1.4, .5, 1, 5); }   // straw, a chain, a bucket                                                                         // a row of cells with bars
+      B(10, 4, 5, wood, mx, 3, mz + 6); K.light(mx, 20, mz, 0xff9a4a, 3.4, 170); K.K(1.1, 3, 6, flame, mx + w / 2 - 3, 13, mz);
+      { const sx = ax0 - u / 2 + 4 + 2 * (w - 8) / 4.5, sz = az0 - u / 2 + 2.4; S(1, bone, sx, 7.4, sz, 1, 1.1, 1, 7); C(.9, .7, 3.2, 6, bone, sx, 4.8, sz + .2); for (const sd of [-1, 1]) { C(.25, .25, 4, 4, bone, sx + sd * 1.8, 7.2, sz, 0, 0, sd * 1.1); C(.3, .3, 4.4, 4, bone, sx + sd * .7, 2.4, sz + 1.6, 0, Math.PI / 2.4); C(.12, .12, 3, 4, iron, sx + sd * 3.2, 9.2, sz); } }   // what is left of a prisoner, still chained to the wall
+      C(3, 3, .3, 16, darkM, mx - 6, 1.3, mz - 2); for (let q = -2; q <= 2; q++) B(5, .4, .3, iron, mx - 6, 1.5, mz - 2 + q); P(9, 6, new THREE.MeshStandardMaterial({ color: 0x3a0806, roughness: .6, transparent: true, opacity: .7 }), mx - 4, 1.2, mz - 1); }
+    if (rm.name === 'guard') { for (let q = 0; q < 3; q++) C(.5, .5, 1.6, 6, K.glow(0xffd090, 3), mx - 5 + q * 5, 5.6, mz); B(6, .8, 4, K.glow(0x2a2010, .1), mx + 3, 5, mz + 1); for (let q = 0; q < 4; q++) B(3, 7, 3, wood, ax0 - u / 2 + 3, 4.5, az0 - u / 2 + 6 + q * 7);   // candles and a map on the table, a stack of crates
+      for (let q = 0; q < 6; q++) S(.9, iron, ax1 + u / 2 - 3, 9 + (q % 2) * 2, mz - 5 + q * 2, 1, 1, 1, 5); B(16, 3.4, 7, wood, mx, 3, mz); for (const s of [-1, 1]) B(14, 2, 2.5, wood, mx, 2, mz + s * 6); for (let q = 0; q < 6; q++) C(2.2, 2.2, 4.4, 10, wood, ax0 - u / 2 + 4 + q * 4.6, 3.2, az1 + u / 2 - 4);
+      B(12, 10, 2, wood, ax1 + u / 2 - 2, 6, mz, Math.PI / 2); for (let q = 0; q < 5; q++) C(.3, .3, 9, 4, iron, ax1 + u / 2 - 3, 6, mz - 4 + q * 2, 0, 0, .3); K.light(mx, 20, mz, 0xffa04a, 3.4, 170);
+      for (let q = 0; q < 3; q++) { const bz = az0 - u / 2 + 10 + q * 13, bx = ax1 + u / 2 - 10; for (const lvl of [0, 7]) { B(6, 1, 11, wood, bx, 3 + lvl, bz); B(5, .8, 10, new THREE.MeshStandardMaterial({ color: [0x7a4a3a, 0x5a6a4a, 0x6a5a3a][q], roughness: 1 }), bx, 3.9 + lvl, bz); } for (const [ox, oz] of [[-2.8, -5.3], [2.8, -5.3], [-2.8, 5.3], [2.8, 5.3]]) B(.8, 12, .8, wood, bx + ox, 7, bz + oz); }   // bunks for the watch
+      C(2.6, 1.6, 3, 10, iron, mx - 8, 3.6, mz + 10); K.K(2, 4, 8, flame, mx - 8, 6.6, mz + 10); K.light(mx - 8, 9, mz + 10, 0xff8a3a, 1.8, 90, .35); }   // a table and benches, barrels, a weapon rack, bunks and a brazier
+    if (rm.name === 'deep' || rm.name === 'deep2') { const n = 9, dx = mx - area.x, dz = mz - area.z, l = Math.hypot(dx, dz), ux = dx / l, uz = dz / l, ry = Math.atan2(ux, uz);   // broad stairs going down, away from the cistern, into the dark
+      for (let s = 0; s < n; s++) { const k = Math.pow(1 - s / n, 1.6); add(tr(new THREE.BoxGeometry(w * .8, 1, 4.2), mx + ux * (s * 4.2 - 18), 1.2 + .02 * s, mz + uz * (s * 4.2 - 18), ry), new THREE.MeshStandardMaterial({ color: new THREE.Color(.5 * k, .46 * k, .42 * k), roughness: .9 })); add(tr(new THREE.BoxGeometry(w * .8, .4, .7), mx + ux * (s * 4.2 - 18 + 2.1), 1.75, mz + uz * (s * 4.2 - 18 + 2.1), ry), darkM); }   // the stair fades into black as it goes down, a dark edge at every step
+      add(tr(new THREE.PlaneGeometry(w * .8, 22), mx + ux * 27, 1.3, mz + uz * 27, ry, -Math.PI / 2), voidM);
+      for (const s of [-1, 1]) for (let q = 0; q < 5; q++) B(1.6, 1.6, .5, rune, mx + uz * s * w * .42 + ux * (q * 8 - 14), 6, mz - ux * s * w * .42 + uz * (q * 8 - 14), ry);   // runes cut down both walls of the stair, glowing blue
+      for (const s of [-1, 1]) { const px = mx + uz * s * w * .36, pz = mz - ux * s * w * .36; B(4, 24, 4, brickD, px, 12, pz); K.K(1.1, 3, 6, flame, px, 25.5, pz); }
+      T(w * .36, 2, brickD, mx, 26, mz, ry, 0, Math.PI, 16); for (let q = 0; q < 7; q++) { const a = Math.PI * (q + .5) / 7; B(1.4, 1.4, .4, rune, mx + uz * Math.cos(a) * w * .36, 26 + Math.sin(a) * w * .36 - 1, mz - ux * Math.cos(a) * w * .36, ry); }
+      K.light(mx + ux * 6, 16, mz + uz * 6, 0x6a8cff, 2.4, 140, .05); K.light(mx - ux * 8, 18, mz - uz * 8, 0xff9a4a, 2, 120); } }
+  K.flush();
+};
+// The Empire of the Undead, under the Sanguine Sluice: a necropolis the length of the works above. Down its spine runs the great sluice - a channel of slow blood between
+// stone banks, crossed by sluice gates - lined with hooded statues; on both sides stand rows of mausoleums facing it, with sarcophagi, obelisks and bone heaps between;
+// the outer walls are catacombs, niche over niche of skulls. Off the channel a stepped ziggurat carries the empire's throne between braziers of green fire, and ghost-lights drift
+UNDER_BUILD['Sanguine Sluice'] = (g, area, R) => {
+  const K = underKit(g, area, R), { rnd, inA, B, C, S, T, P, add, tr } = K;
+  const flag = new THREE.MeshStandardMaterial({ map: flagTex('#5c5652', '#22201e', 4), roughness: .9, color: 0xd0c8c0 }), stoneD = new THREE.MeshStandardMaterial({ map: flagTex('#57514c', '#1c1a18', 2), roughness: .92, color: 0xc8c0b8 });
+  const marble = new THREE.MeshStandardMaterial({ map: noiseTex('tomb2', '#c8c0b2', ['rgba(0,0,0,A)', 'rgba(255,250,240,A)'], .05), roughness: .45, color: 0xf2ece2 }), dark = new THREE.MeshStandardMaterial({ color: 0x0a0909, roughness: 1 });
+  const capM = new THREE.MeshStandardMaterial({ map: noiseTex('rockcap2', '#1e1b18', ['rgba(0,0,0,A)', 'rgba(70,62,54,A)']), roughness: 1, color: 0x6a6460 }), bone = new THREE.MeshStandardMaterial({ color: 0xcfc4a8, roughness: .8 }), iron = new THREE.MeshStandardMaterial({ color: 0x2a2426, roughness: .5, metalness: .7 });
+  const blood = new THREE.MeshStandardMaterial({ map: noiseTex('blood', '#4a0606', ['rgba(140,10,10,A)', 'rgba(0,0,0,A)'], .4), color: 0x9a1414, roughness: .35, metalness: 0, envMapIntensity: .15, emissive: 0x500404, emissiveIntensity: 1.5 });
+  blood.map.repeat.set(1 / 40, 1 / 40); anim.push(t => { if (UNDER.on) blood.map.offset.set(t * .004, -t * .009); });
+  const ghost = K.glow(0x6aff9a, 3.2), ember = K.glow(0x40ff80, 4), redGlow = K.glow(0xff3030, 3), shroud = new THREE.MeshStandardMaterial({ color: 0x2a2a30, roughness: .95 });
+  K.floor(flag, 1, 40); K.rim(capM, 70, 30);
+  // the spine: the hexes of the Sluice above in order down the chain, smoothed
+  const src = area.src.hexes.map(h => [h.x, h.z]), mx0 = src.reduce((a, p) => a + p[0], 0) / src.length, mz0 = src.reduce((a, p) => a + p[1], 0) / src.length;
+  let sxx = 0, sxz = 0, szz = 0; for (const [x, z] of src) { sxx += (x - mx0) ** 2; sxz += (x - mx0) * (z - mz0); szz += (z - mz0) ** 2; } const ang = .5 * Math.atan2(2 * sxz, sxx - szz), ax = [Math.cos(ang), Math.sin(ang)];
+  const proj = p => (p[0] - mx0) * ax[0] + (p[1] - mz0) * ax[1]; src.sort((a, b) => proj(a) - proj(b));
+  let spine = src.map((p, i) => { const q = src.slice(Math.max(0, i - 1), i + 2); return [q.reduce((a, v) => a + v[0], 0) / q.length, q.reduce((a, v) => a + v[1], 0) / q.length]; });
+  for (let pass = 0; pass < 3; pass++) spine = spine.map((p, i) => { const q = spine.slice(Math.max(0, i - 2), i + 3); return [q.reduce((a, v) => a + v[0], 0) / q.length, q.reduce((a, v) => a + v[1], 0) / q.length]; });
+  { const s0 = spine[0], s1 = spine[1], e0 = spine[spine.length - 1], e1 = spine[spine.length - 2], l0 = Math.hypot(s0[0] - s1[0], s0[1] - s1[1]), l1 = Math.hypot(e0[0] - e1[0], e0[1] - e1[1]); spine = [[s0[0] + (s0[0] - s1[0]) / l0 * 120, s0[1] + (s0[1] - s1[1]) / l0 * 120], ...spine, [e0[0] + (e0[0] - e1[0]) / l1 * 120, e0[1] + (e0[1] - e1[1]) / l1 * 120]]; }
+  { const out = []; for (let i = 0; i + 1 < spine.length; i++) { const p0 = spine[Math.max(0, i - 1)], p1 = spine[i], p2 = spine[i + 1], p3 = spine[Math.min(spine.length - 1, i + 2)]; for (let k = 0; k < 6; k++) { const t = k / 6, t2 = t * t, t3 = t2 * t, f = (a, b, c, d) => .5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3); out.push([f(p0[0], p1[0], p2[0], p3[0]), f(p0[1], p1[1], p2[1], p3[1])]); } } out.push(spine[spine.length - 1]); spine = out; }   // and drawn through as a smooth curve
+  const segInfo = (x, z) => { let b = 1e9, bt = 0, bi = 0; for (let i = 0; i + 1 < spine.length; i++) { const [ax2, az2] = spine[i], dx = spine[i + 1][0] - ax2, dz = spine[i + 1][1] - az2, l2 = dx * dx + dz * dz, t = clamp(((x - ax2) * dx + (z - az2) * dz) / l2, 0, 1), d = Math.hypot(ax2 + dx * t - x, az2 + dz * t - z); if (d < b) { b = d; bt = t; bi = i; } } return { d: b, i: bi, t: bt }; };
+  // the channel: laid as short overlapping pieces down the spine, banks of dressed stone each side, a sluice gate every so often, and hooded statues along both banks
+  const CW = 26; let run = 0;
+  for (let i = 0; i + 1 < spine.length; i++) { const [ax2, az2] = spine[i], [bx, bz] = spine[i + 1], L = Math.hypot(bx - ax2, bz - az2), ux = (bx - ax2) / L, uz = (bz - az2) / L, ry = Math.atan2(ux, uz), n = Math.ceil(L / 12);
+    for (let k = 0; k < n; k++) { const t = (k + .5) / n, x = ax2 + (bx - ax2) * t, z = az2 + (bz - az2) * t; if (!inA(x, z, 10)) continue; run += L / n;
+      add(tr(new THREE.BoxGeometry(CW, .8, L / n + 3), x, 1.2, z, ry), blood); for (const s of [-1, 1]) { add(tr(new THREE.BoxGeometry(5, 4, L / n + 3), x + uz * s * (CW / 2 + 2.5), 2.5, z - ux * s * (CW / 2 + 2.5), ry), stoneD); }
+      if (k % 7 === 3) K.light(x, 10, z, 0xff3a2a, 1.6, 120, .08);
+      if (run > 140) { run = 0; for (const s of [-1, 1]) { const px = x + uz * s * (CW / 2 + 3), pz = z - ux * s * (CW / 2 + 3); B(6, 30, 6, stoneD, px, 15, pz, ry); K.K(3.6, 6, 4, stoneD, px, 33, pz, ry + Math.PI / 4); }   // a sluice gate: two towers and a portcullis over the blood
+        add(tr(new THREE.BoxGeometry(CW + 6, 4, 4), x, 26, z, ry), stoneD); for (let q = 0; q < 7; q++) add(tr(new THREE.BoxGeometry(.8, 18, .8), x + uz * (q - 3) * 3.6, 15, z - ux * (q - 3) * 3.6, ry), iron); add(tr(new THREE.BoxGeometry(CW, .8, .8), x, 9, z, ry), iron);
+        K.light(x, 14, z, 0xff4030, 2.2, 160, .12); }
+      if (k % 3 === 1) for (const s of [-1, 1]) { const px = x + uz * s * (CW / 2 + 5), pz = z - ux * s * (CW / 2 + 5); if (!inA(px, pz, 6)) continue;   // a hooded figure on a plinth, facing the channel, a green flame in its hands
+        B(5, 4, 5, stoneD, px, 3, pz, ry); C(1.6, 3.2, 14, 8, shroud, px, 12, pz); S(2.2, shroud, px, 20, pz, 1, 1.2, 1, 8); K.K(2.6, 4, 8, shroud, px, 22.5, pz); S(.9, ghost, px - uz * s * 2.4, 14, pz + ux * s * 2.4, 1, 1, 1, 6); } } }
+  // the city of the dead, laid out along the channel: measured as distance along it (a) and out from it (b). A quay each side of the blood, then block after block of tombs
+  // back to back, each row facing its own street, shoulder to shoulder - pillared mausoleums, crypt-houses under slate and copper roofs, gothic chapels with spires, columbarium towers, walled grave plots with dead trees - with cross streets, small squares,
+  // and the throne of the empire in its own great square off the channel
+  const arc = [0]; for (let i = 1; i < spine.length; i++) arc.push(arc[i - 1] + Math.hypot(spine[i][0] - spine[i - 1][0], spine[i][1] - spine[i - 1][1]));
+  const at2 = (a2, b2) => { let i = 0; while (i < arc.length - 2 && arc[i + 1] < a2) i++; const t = clamp((a2 - arc[i]) / (arc[i + 1] - arc[i] || 1), 0, 1), x = spine[i][0] + (spine[i + 1][0] - spine[i][0]) * t, z = spine[i][1] + (spine[i + 1][1] - spine[i][1]) * t, dx = spine[i + 1][0] - spine[i][0], dz = spine[i + 1][1] - spine[i][1], l = Math.hypot(dx, dz) || 1;
+    return { x: x + dz / l * b2, z: z - dx / l * b2, ux: dx / l, uz: dz / l, nx: dz / l, nz: -dx / l }; };
+  const L = arc[arc.length - 1], Q0 = CW / 2 + 6, QW = 18, ROWD = 24, STW = 12, BL = 92, CSW = 12, cells = [], thr = { a: L * .62, b: 0 };
+  for (const sd of [-1, 1]) { if (thr.b) break; for (const bb of [118, 140, 100]) { const p = at2(L * .62, sd * bb); if (inA(p.x, p.z, 58)) { thr.b = sd * bb; break; } } }
+  const thrP = thr.b ? at2(thr.a, thr.b) : null, nearThrone = (x, z, m = 0) => thrP && Math.hypot(x - thrP.x, z - thrP.z) < 74 + m;
+  const pave = new THREE.MeshStandardMaterial({ map: flagTex('#6e6862', '#26231f', 3), roughness: .85, color: 0xe0d8d0 }), lampM = K.glow(0x60ff90, 3.6);
+  const slate = new THREE.MeshStandardMaterial({ map: utex('slate2', () => ctex(256, 256, (c, w, h) => { c.fillStyle = '#14171c'; c.fillRect(0, 0, w, h); const r = mulberry32(5); for (let y = 0, row = 0; y < h; y += 16, row++) for (let x = (row % 2) * -12; x < w; x += 24) { const k = r() * .3; c.fillStyle = 'rgb(' + (58 + k * 90 | 0) + ',' + (64 + k * 90 | 0) + ',' + (78 + k * 90 | 0) + ')'; c.fillRect(x + 1, y + 1, 22, 14); } })), roughness: .65, color: 0x9ea2aa });
+  slate.map.wrapS = slate.map.wrapT = THREE.RepeatWrapping; slate.map.repeat.set(.08, .08);
+  const copper = new THREE.MeshStandardMaterial({ map: noiseTex('verd2', '#3f8a76', ['rgba(16,50,40,A)', 'rgba(150,215,190,A)'], .22), color: 0x7a9a90, roughness: .7, metalness: .1 }), deadW = new THREE.MeshStandardMaterial({ color: 0x1c1814, roughness: 1 });
+  const lancet = K.glow(0x5aff90, 2.2), boneD = new THREE.MeshStandardMaterial({ color: 0x8e8670, roughness: .85 });
+  const gable = (w, h, d) => { const sh = new THREE.Shape(); sh.moveTo(-w / 2, 0); sh.lineTo(w / 2, 0); sh.lineTo(0, h); sh.closePath(); const ge = new THREE.ExtrudeGeometry(sh, { depth: d, bevelEnabled: false }); ge.translate(0, 0, -d / 2); const uv = ge.attributes.uv, pos = ge.attributes.position; for (let i = 0; i < uv.count; i++) uv.setXY(i, pos.getX(i) + pos.getZ(i), pos.getY(i) + pos.getZ(i) * .5); return ge; };   // a pitched roof, ridge along z
+  const deadTree = (x, z, y, len, ang, tilt, dd) => { const ex = x + Math.sin(tilt) * Math.cos(ang) * len, ez = z + Math.sin(tilt) * Math.sin(ang) * len, ey = y + Math.cos(tilt) * len;
+    add(new THREE.CylinderGeometry(.15 + dd * .18, .25 + dd * .24, len, 5).translate(0, len / 2, 0).applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(ex - x, ey - y, ez - z).normalize())).translate(x, y, z), deadW);
+    if (dd > 0) for (let b = 0; b < (dd > 2 ? 3 : 2); b++) deadTree(ex, ez, ey, len * (.62 + rnd() * .15), ang + (b - .8) * 1.3 + (rnd() - .5) * .8, Math.min(1.35, tilt + .35 + rnd() * .3), dd - 1); };
+  const lantern = (x, z, hgt) => { C(.35, .55, hgt, 6, iron, x, hgt / 2 + 1, z); B(1.6, .3, 1.6, iron, x, hgt + 1.1, z); B(1.1, 1.7, 1.1, lampM, x, hgt + 2.1, z); K.K(1.2, 1.4, 4, iron, x, hgt + 3.6, z, Math.PI / 4); };
+  const bands = []; for (let b = Q0 + QW; b < 420; b += 2 * ROWD + STW) bands.push(b);   // where each block starts, out from the quay
+  const inCross = a2 => { const m = ((a2 % BL) + BL) % BL; return m < CSW; };
+  // the quays and their lamps
+  for (const sd of [-1, 1]) for (let a2 = 0; a2 < L; a2 += 12) { const p = at2(a2, sd * (Q0 + QW / 2)); if (!inA(p.x, p.z, 4) || nearThrone(p.x, p.z)) continue; add(tr(new THREE.BoxGeometry(QW, .5, 13), p.x, 1.3, p.z, Math.atan2(p.ux, p.uz)), pave);
+    if (a2 % 48 === 0) { const q = at2(a2, sd * (Q0 + QW - 2)); lantern(q.x, q.z, 11); if (a2 % 192 === 0) K.light(q.x, 18, q.z, 0x60ff90, 1.6, 140, .2); } }
+  // the tombs
+  const bld = (p, face, w, d, kind) => { const put = (geo, mat) => add(geo.rotateY(face).translate(p.x, 0, p.z), mat), h0 = 2.2;
+    put(new THREE.BoxGeometry(w + 1, h0, d + 1).translate(0, h0 / 2 + 1, 0), stoneD);
+    if (kind === 'mauso') { const h = w * .75 + rnd() * 6; put(new THREE.BoxGeometry(w - 1, h, d - 6).translate(0, 2 + h0 + h / 2, -3), marble); put(new THREE.BoxGeometry(w * .34, h * .6, .6).translate(0, 2 + h0 + h * .3, d / 2 - 6.3), dark);
+      for (const k of [-1, -.33, .33, 1]) put(new THREE.CylinderGeometry(1, 1.2, h, 8).translate(k * (w / 2 - 1.6), 2 + h0 + h / 2, d / 2 - 1.8), marble);
+      put(new THREE.BoxGeometry(w + 1, 1.6, d).translate(0, 2.8 + h0 + h, -.5), marble); put(gable(w + 1.6, w * .3, d + .6).translate(0, 3.6 + h0 + h, -.5), rnd() < .6 ? slate : copper); put(gable(w * .9, w * .24, .5).translate(0, 3.7 + h0 + h, d / 2 - .1), marble); }
+    else if (kind === 'crypt') { const h = 12 + rnd() * 14, m = rnd() < .5 ? marble : stoneD; put(new THREE.BoxGeometry(w - 1, h, d - 1).translate(0, 2 + h0 + h / 2, 0), m); put(new THREE.BoxGeometry(w + .6, 1.2, d + .6).translate(0, 2.6 + h0 + h, 0), marble); const along = rnd() < .5, rh = (along ? w : d) * (.38 + rnd() * .2), roofM = rnd() < .55 ? slate : copper;
+      put((along ? gable(w + 1.4, rh, d + 1.4) : gable(d + 1.4, rh, w + 1.4).rotateY(Math.PI / 2)).translate(0, 3.2 + h0 + h, 0), roofM); put(new THREE.BoxGeometry(.6, 4, .6).translate(0, 5 + h0 + h + rh, 0), iron); put(new THREE.BoxGeometry(2.6, .6, .6).translate(0, 6 + h0 + h + rh, 0), iron);
+      put(new THREE.BoxGeometry(w * .4, h * .55, .6).translate(0, 2 + h0 + h * .28, d / 2 - .2), dark);
+      if (rnd() < .4) for (const k of [-1, 1]) put(new THREE.BoxGeometry(1.4, 1.4, .4).translate(k * w * .3, 2 + h0 + h * .62, d / 2 - .2), ghost); }
+    else if (kind === 'tower') { const h = 34 + rnd() * 22; put(new THREE.BoxGeometry(w - 1, h, d - 1).translate(0, 2 + h0 + h / 2, 0), stoneD); for (let r = 0; r < 6; r++) for (let c = -1; c <= 1; c++) put(new THREE.BoxGeometry(2.4, 3, .5).translate(c * (w * .28), 8 + h0 + r * (h - 10) / 6, d / 2 - .3), dark);
+      put(new THREE.BoxGeometry(w + .8, 1.6, d + .8).translate(0, 2.8 + h0 + h, 0), marble); put(new THREE.ConeGeometry((w + .4) * .72, w * 1.4, 4).rotateY(Math.PI / 4).translate(0, 3.6 + h0 + h + w * .7, 0), slate); put(new THREE.ConeGeometry(.5, 5, 4).translate(0, 6 + h0 + h + w * 1.4, 0), iron); }
+    else if (kind === 'chapel') { const h = 13 + rnd() * 5, nw = w * .72, nd = d - 3, roofM = rnd() < .7 ? slate : copper;   // a gothic chapel: a nave under a steep roof, buttresses, green lancet windows, a spire over the door
+      put(new THREE.BoxGeometry(nw, h, nd).translate(0, 2 + h0 + h / 2, -1), stoneD); put(gable(nw + 1.6, nw * .9, nd + 1).translate(0, 2 + h0 + h, -1), roofM);
+      for (const sx of [-1, 1]) for (let k = 0; k < 3; k++) { const zz = -nd / 2 + 2 + k * (nd - 4) / 2 - 1; put(new THREE.BoxGeometry(1.6, h * .8, 2).translate(sx * (nw / 2 + .8), 2 + h0 + h * .4, zz), stoneD); if (k < 2) put(new THREE.BoxGeometry(.4, h * .5, 1.4).translate(sx * (nw / 2 + .05), 2 + h0 + h * .55, zz + (nd - 4) / 4), lancet); }
+      const tw = nw * .46, th = h + 8; put(new THREE.BoxGeometry(tw, th, tw).translate(0, 2 + h0 + th / 2, nd / 2 - 1), stoneD); put(new THREE.ConeGeometry(tw * .74, 16 + rnd() * 6, 4).rotateY(Math.PI / 4).translate(0, 2 + h0 + th + 9, nd / 2 - 1), roofM);
+      put(new THREE.BoxGeometry(tw * .5, h * .45, .5).translate(0, 2 + h0 + h * .23, nd / 2 - 1 + tw / 2), dark); put(new THREE.BoxGeometry(.5, 3.4, .5).translate(0, 2 + h0 + th - 4, nd / 2 - 1 + tw / 2), lancet); }
+    else { const pw = w - 1, pd = d - 1;   // a walled grave plot: low wall and iron railing, headstones in rows, a sarcophagus, and a dead tree
+      for (const [fx, fz, fw, fd] of [[0, pd / 2, pw, .5], [0, -pd / 2, pw, .5], [pw / 2, 0, .5, pd], [-pw / 2, 0, .5, pd]]) { put(new THREE.BoxGeometry(fw + .4, 1.4, fd + .4).translate(fx, 3.9, fz), stoneD); if (fd < 1) for (let q = -pw / 2; q <= pw / 2; q += 1.6) if (Math.abs(q) > 1.4) put(new THREE.BoxGeometry(.18, 2.6, .18).translate(q, 5.8, fz), iron); }
+      for (let r2 = -1; r2 <= 1; r2++) for (let c2 = -1; c2 <= 1; c2++) { if (rnd() < .3 || (r2 === 0 && c2 === 0)) continue; const hx = c2 * pw * .3, hz = r2 * pd * .3, hh = 2 + rnd() * 1.6; put(new THREE.BoxGeometry(1.8, hh, .5).rotateZ((rnd() - .5) * .25).translate(hx, 3.2 + hh / 2, hz), rnd() < .5 ? marble : stoneD); }
+      if (rnd() < .5) { put(new THREE.BoxGeometry(3, 2, 6).translate(pw * .2, 4.2, 0), marble); put(new THREE.BoxGeometry(3.4, .6, 6.4).translate(pw * .2, 5.4, 0), marble); }
+      const c = Math.cos(face), s2 = Math.sin(face), lx = -pw * .2, lz = pd * .1; deadTree(p.x + lx * c + lz * s2, p.z - lx * s2 + lz * c, 3.2, 5 + rnd() * 2, rnd() * 6.28, .12, 4); } };
+  for (const sd of [-1, 1]) bands.forEach((b0, bi) => { for (const row of [0, 1]) { const bc = b0 + row * ROWD + ROWD / 2, sgn = row ? 1 : -1;   // the front row faces the street nearer the channel, the back row the one beyond
+      for (let a2 = 0; a2 < L;) { if (inCross(a2)) { a2 += 2; continue; } const rk = rnd(), kind = rk < .22 ? 'mauso' : rk < .48 ? 'crypt' : rk < .66 ? 'chapel' : rk < .8 ? 'tower' : 'plot', w = kind === 'tower' ? 12 + rnd() * 3 : kind === 'chapel' ? 17 + rnd() * 4 : kind === 'plot' ? 15 + rnd() * 6 : 15 + rnd() * 9, d = kind === 'mauso' ? ROWD - 1 : ROWD - 3;
+        let ok = true; for (let q = a2; q < a2 + w; q += 2) if (inCross(q)) ok = false; if (!ok) { a2 += 2; continue; }
+        const p = at2(a2 + w / 2, sd * bc), f = { x: p.nx * sd * sgn, z: p.nz * sd * sgn }; a2 += w + .8;
+        if (!inA(p.x, p.z, Math.max(w, d) * .6) || nearThrone(p.x, p.z, 10)) continue; if ((bi + Math.floor(a2 / BL)) % 7 === 3 && row === 0) { if (rnd() < .5) cells.push(p); continue; }   // a small square here
+        bld(p, Math.atan2(f.x, f.z), w, d, kind); cells.push(p); } }
+    const sb = b0 + 2 * ROWD + STW / 2; for (let a2 = 30; a2 < L; a2 += 96) { const q = at2(a2, sd * (sb - STW / 2 + 1)); if (inA(q.x, q.z, 6) && !nearThrone(q.x, q.z)) { lantern(q.x, q.z, 9); } } });
+  // a statue on an obelisk in each small square
+  for (let k = 0; k < cells.length; k += 23) { const p = cells[k]; if ((k / 23) % 2) { add(new THREE.CylinderGeometry(.6, 2.4, 26, 4).translate(p.x, 14, p.z), marble); B(5, 3, 5, stoneD, p.x, 2.5, p.z); } else { B(9, 1.6, 9, stoneD, p.x, 1.8, p.z); deadTree(p.x, p.z, 2.4, 8, rnd() * 6.28, .1, 5); C(1.2, 2.6, 9, 7, shroud, p.x + 5, 6, p.z + 3); K.K(1.8, 3, 7, shroud, p.x + 5, 12, p.z + 3); } }
+  // the catacombs: round the outside, the rock face is cut into rows of niches, a skull in each
+  for (const e of K.edges) { const ix = e.x - e.nx * 9, iz = e.z - e.nz * 9, tx = -e.nz, tz = e.nx, ry = Math.atan2(e.nx, e.nz);
+    add(tr(new THREE.BoxGeometry(R * 1.02, 40, 6), ix + e.nx * 3, 20, iz + e.nz * 3, ry), stoneD);
+    for (let row = 0; row < 5; row++) for (let q = -3; q <= 3; q++) { if (rnd() < .1) continue; const px = ix + tx * q * 9 - e.nx * .4, pz = iz + tz * q * 9 - e.nz * .4, y = 6 + row * 6.4; add(tr(new THREE.BoxGeometry(6, 4, .6), px, y, pz, ry), dark); if (rnd() < .7) { add(tr(new THREE.CylinderGeometry(.25, .25, 4.6, 4), px - e.nx * .7, y - 1.4, pz - e.nz * .7, ry, 0, Math.PI / 2), boneD); if (rnd() < .5) S(.75, boneD, px - e.nx * .8 + tx * 1.4, y - .6, pz - e.nz * .8 + tz * 1.4, 1, .9, 1.1, 5); } }
+    if (rnd() < .3) K.K(.8, 2.2, 6, ember, ix - e.nx * 2, 38, iz - e.nz * 2); if (rnd() < .12) K.light(ix - e.nx * 14, 24, iz - e.nz * 14, 0x60ff90, 1.6, 140, .2); }
+  // bridges of bone over the blood: a low arch of stone, a rail of long bones each side with a skull on every other post
+  for (const f of [.16, .38, .84]) { const a2 = L * f, c0 = at2(a2, 0); if (!inA(c0.x, c0.z, 30)) continue; const ry = Math.atan2(c0.nx, c0.nz), SP = CW + 14;
+    for (let k = -7; k <= 7; k++) { const b2 = k * SP / 14, q = at2(a2, b2), y = 3 + 4.5 * Math.cos(Math.PI * b2 / SP); add(tr(new THREE.BoxGeometry(10, 1.2, SP / 14 + .6), q.x, y, q.z, ry), stoneD);
+      for (const sd2 of [-1, 1]) { const rx = q.x + q.ux * sd2 * 4.6, rz = q.z + q.uz * sd2 * 4.6; if (k % 2 === 0) { add(new THREE.CylinderGeometry(.3, .35, 4, 5).translate(rx, y + 2.6, rz), bone); S(.65, bone, rx, y + 4.9, rz, 1, .9, 1.1, 6); } add(tr(new THREE.CylinderGeometry(.22, .22, SP / 14 + .4, 4), rx, y + 3.8, rz, ry, Math.PI / 2), bone); } }
+    K.mark('bridge' + Math.round(f * 100), c0.x, 6, c0.z); }
+  // the throne of the empire: a stepped ziggurat, a stair up the front facing the channel, braziers of green fire at the corners and a great seat at the top under a canopy of bone
+  { const q = at2(L * .3, 0), q2 = at2(L * .3, 70); K.mark('channel', q.x, 6, q.z); K.mark('tombs', q2.x, 8, q2.z); }
+  if (thr.b) { const tp = at2(thr.a, thr.b), cp = at2(thr.a, 0), x = tp.x, z = tp.z; K.mark('throne', x, 30, z); const face = Math.atan2(cp.x - x, cp.z - z), fx = Math.sin(face), fz = Math.cos(face);
+    for (let s = 0; s < 5; s++) { const w = 92 - s * 16; add(new THREE.BoxGeometry(w, 7, w).translate(0, 3.5 + s * 7, 0).rotateY(face).translate(x, 0, z), s % 2 ? stoneD : marble); }
+    for (let s = 0; s < 18; s++) add(new THREE.BoxGeometry(16, 2, 2.6).translate(0, 1 + s * 2, 46 - s * 2.6).rotateY(face).translate(x, 0, z), marble);
+    add(new THREE.BoxGeometry(10, 12, 9).translate(0, 41, -2).rotateY(face).translate(x, 0, z), dark); add(new THREE.BoxGeometry(12, 22, 2).translate(0, 46, -6.5).rotateY(face).translate(x, 0, z), dark);
+    for (let q = 0; q < 9; q++) { const a = Math.PI * q / 8; add(new THREE.CylinderGeometry(.5, .8, 14, 5).rotateZ(Math.PI / 2 - a).translate(Math.cos(a) * 9, 52 + Math.sin(a) * 9, -6).rotateY(face).translate(x, 0, z), bone); }
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { const px = x + fx * sz * 40 + fz * sx * 40, pz = z + fz * sz * 40 - fx * sx * 40; C(3.6, 2.4, 8, 10, iron, px, 5, pz); K.K(3.2, 8, 8, ember, px, 13, pz); K.light(px, 18, pz, 0x40ff80, 2.4, 170, .3); }
+    for (let q = 0; q < 3; q++) for (const sx of [-1, 1]) { const lz = 58 + q * 10, px = x + fx * lz + fz * sx * 12, pz = z + fz * lz - fx * sx * 12; if (!inA(px, pz, 4)) continue;   // hooded statues lining the approach, a green flame in their hands
+      B(4.4, 3, 4.4, stoneD, px, 2.5, pz, face); C(1.5, 3.2, 13, 8, shroud, px, 10.5, pz); S(2, shroud, px, 18, pz, 1, 1.2, 1, 8); K.K(2.4, 3.6, 8, shroud, px, 20.4, pz); K.K(.7, 2, 6, ember, px - fz * sx * 2.2 + fx * 1.2, 14, pz + fx * sx * 2.2 + fz * 1.2); }
+    K.light(x, 60, z, 0x60ff90, 2, 220, .15); }
+  for (let k = 0; k < cells.length; k += Math.max(9, Math.ceil(cells.length / 14))) { const p = cells[k]; K.light(p.x, 26, p.z, k % 2 ? 0x60ff90 : 0xa0ffc0, 1.5, 120, .2); }   // soft green light over the streets
+  // ghost-lights drifting over the dead
+  { const wisps = []; const wispM = new THREE.MeshBasicMaterial({ color: 0x7affa8, transparent: true, opacity: .45, blending: THREE.AdditiveBlending, depthWrite: false }); for (let q = 0; q < 30; q++) { const c = cells[(rnd() * cells.length) | 0]; if (!c) break; const m = new THREE.Mesh(new THREE.SphereGeometry(.7 + rnd() * .6, 8, 6).scale(1, 2.2, 1), wispM); m.position.set(c.x + (rnd() - .5) * 20, 10 + rnd() * 24, c.z + (rnd() - .5) * 20); m.userData.p = m.position.clone(); m.userData.ph = rnd() * 9; g.add(m); wisps.push(m); }
+    anim.push(t => { if (!UNDER.on) return; for (const m of wisps) { const p = m.userData.p, ph = m.userData.ph; m.position.set(p.x + Math.sin(t * .3 + ph) * 8, p.y + Math.sin(t * .7 + ph * 2) * 3, p.z + Math.cos(t * .23 + ph) * 8); } });
+    for (let q = 0; q < 6; q++) { const c = cells[((q + .5) / 6 * cells.length) | 0]; if (c) K.light(c.x, 22, c.z, 0x50ff88, 1.6, 150, .2); } }
+  K.flush();
+};
+// The Archive of Unfinished Spells, its depths: you come in at the top, under the sealed door, and the archive goes down eastward in great terraces of basalt columns,
+// one level for each element - Air, Fire, Water, Earth - each with its own light and its own half-made magic, the stair winding down through them. Tall cases of
+// unfinished spellbooks stand along every terrace edge and loose pages drift in the air. At the very bottom, in the dark, the lich's sanctum: an obsidian floor
+// ringed with a summoning circle, a throne, its phylactery turning in a cage of runes, and a slow wheel of four elemental motes that it has never finished binding
+UNDER_BUILD['Archive of Unfinished Spells'] = (g, area, R) => {
+  const K = underKit(g, area, R), { rnd, inA, B, C, S, T, add, tr } = K;
+  const basalt = new THREE.MeshStandardMaterial({ map: noiseTex('basalt', '#2a2730', ['rgba(0,0,0,A)', 'rgba(120,110,140,A)'], .25), roughness: .85, color: 0xb0a8bc, flatShading: true });
+  const capM = new THREE.MeshStandardMaterial({ map: noiseTex('rockcap2', '#1e1b18', ['rgba(0,0,0,A)', 'rgba(70,62,54,A)']), roughness: 1, color: 0x6a6070 });
+  const shelfW = new THREE.MeshStandardMaterial({ color: 0x5a3a24, roughness: .75 }), books = new THREE.MeshStandardMaterial({ map: utex('spines', () => ctex(256, 128, (c, w, h) => { const r = mulberry32(9); for (let x = 0; x < w;) { const bw = 4 + r() * 9; c.fillStyle = ['#5a1e22', '#1e3a5a', '#2a4a22', '#5a4a1e', '#3a1e4a', '#6a5a4a'][(r() * 6) | 0]; c.fillRect(x, h * (.05 + r() * .15), bw - 1, h); c.fillStyle = 'rgba(220,180,90,.6)'; c.fillRect(x + 1, h * .5, bw - 3, 2); x += bw; } })), roughness: .75, emissive: 0x2a1a10, emissiveIntensity: .35 });
+  const page = new THREE.MeshStandardMaterial({ color: 0xf0e6c8, emissive: 0x6a5a30, emissiveIntensity: .5, side: THREE.DoubleSide, roughness: .9 });
+  K.floor(capM, .5, 40); K.rim(capM, 110, 30);
+  // the levels: from the door westward at the top, down eastward to the sanctum
+  let xa = 1e9, xb = -1e9; for (const h of area.hexes) { xa = Math.min(xa, h.x); xb = Math.max(xb, h.x); }
+  const door = { x: area.x, z: area.z }, EL = [
+    { name: 'air', y: 92, top: 0xe8f0ff, lit: 0xcfe4ff, glow: K.glow(0xbfe0ff, 2.6) },
+    { name: 'fire', y: 70, top: 0x4a2218, lit: 0xff6a20, glow: K.glow(0xff5a10, 4) },
+    { name: 'water', y: 48, top: 0x1e3a50, lit: 0x40b0ff, glow: K.glow(0x30a8ff, 3) },
+    { name: 'earth', y: 26, top: 0x3a4a26, lit: 0x9aff60, glow: K.glow(0x7aff50, 3) },
+    { name: 'lich', y: 4, top: 0x120e18, lit: 0xa050ff, glow: K.glow(0xa040ff, 4) }];
+  const tierOf = x => Math.min(EL.length - 1, Math.max(0, Math.floor((x - xa) / (xb - xa + 1e-6) * EL.length * .999)));
+  const tops = EL.map(e => new THREE.MeshStandardMaterial({ map: basalt.map, color: e.top, roughness: .8, flatShading: true }));
+  // basalt columns: small hexagons over the whole floor, each standing to its level's height (a little uneven); the edge of each level a cliff of columns
+  const cr = R / 4.2, cols = [], CH = new THREE.CylinderGeometry(cr, cr, 1, 6);
+  for (let ix = 0, x = xa - R; x < xb + R; ix++, x += cr * 1.5) for (let z = area.hexes.reduce((m, h) => Math.min(m, h.z), 1e9) - R + (ix % 2) * cr * .866; z < area.hexes.reduce((m, h) => Math.max(m, h.z), -1e9) + R; z += cr * 1.732) {
+    if (!inA(x, z, cr * .6)) continue; const ti = tierOf(x), e = EL[ti], f = (x - xa) / (xb - xa + 1e-6) * EL.length - ti, edge = f > .86 && ti < EL.length - 1, y = e.y + (rnd() - .5) * 3 - (edge ? rnd() * 10 : 0);
+    add(CH.clone().scale(1, y, 1).translate(x, y / 2, z), basalt); add(new THREE.CylinderGeometry(cr * .98, cr * .98, .6, 6).translate(x, y + .3, z), tops[ti]); cols.push({ x, z, y, ti, edge, f }); }
+  // the stair: from the door, down through every level along the middle of the cavern
+  const zMid = area.hexes.reduce((a, h) => a + h.z, 0) / area.hexes.length, stairM = new THREE.MeshStandardMaterial({ color: 0x8a8090, roughness: .8 });
+  for (let ti = 0; ti + 1 < EL.length; ti++) { const x0 = xa + (xb - xa) * (ti + 1) / EL.length - R * .3, y0 = EL[ti].y, y1 = EL[ti + 1].y, n = 14; for (let s2 = 0; s2 < n; s2++) { const t = s2 / n, x = x0 + t * R * .9, y = y0 + (y1 - y0) * t; B(R * .07, Math.max(1, y), 14, stairM, x, y / 2, zMid); }
+    for (const sd of [-1, 1]) { C(.5, .5, 12, 6, K.glow(0xffd090, 3), x0 + R * .45, (y0 + y1) / 2 + 8, zMid + sd * 8); } }
+  // the archive itself: tall cases of unfinished books along the cliff edges, facing out over the drop
+  { const zs = area.hexes.map(h => h.z), z0 = Math.min(...zs) - R, z1 = Math.max(...zs) + R;
+    for (let ti = 0; ti < EL.length - 1; ti++) { const xl = xa + (xb - xa) * ti / EL.length + 14, xr = xa + (xb - xa) * (ti + .82) / EL.length, y = EL[ti].y;
+      for (let x = xl; x < xr; x += 30) for (let z = z0; z < z1; z += 40) { if (Math.abs(z - zMid) < 78) continue; const zc = z + 15; if (!inA(x, zc, 18)) continue;   // a case 28 long running across, books on both faces
+        add(new THREE.BoxGeometry(5, 26, 28).translate(x, y + 13, zc), shelfW); for (const sd of [-1, 1]) add(new THREE.PlaneGeometry(26, 24).rotateY(sd * Math.PI / 2).translate(x + sd * 2.55, y + 13, zc), books);
+        add(new THREE.BoxGeometry(6, 1.2, 29).translate(x, y + 26.6, zc), shelfW); if (rnd() < .18) add(new THREE.BoxGeometry(4, 3, 4).translate(x + 5, y + 1.5, zc + (rnd() - .5) * 20), shelfW); } } }
+  // what each level holds
+  const lvl = ti => cols.filter(c => c.ti === ti && !c.edge && Math.abs(c.z - zMid) < 70 && Math.abs(c.z - zMid) > 12);
+  // shapes shared by the levels: a flat ribbon laid along a smoothed path, a pool of uneven outline, a sheet of falling light
+  const ribbon = (pts, w, y, mat) => { const cv = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(p[0], 0, p[1]))), n = Math.max(8, pts.length * 6), P = cv.getSpacedPoints(n), v = [], uv = [], id = [];
+    P.forEach((p, i) => { const q = P[Math.min(n, i + 1)], o = P[Math.max(0, i - 1)], dx = q.x - o.x, dz = q.z - o.z, l = Math.hypot(dx, dz) || 1, ww = w * (.75 + .25 * Math.sin(i * .7)); v.push(p.x - dz / l * ww / 2, y, p.z + dx / l * ww / 2, p.x + dz / l * ww / 2, y, p.z - dx / l * ww / 2); uv.push(0, i / 6, 1, i / 6); if (i) id.push(2 * i - 2, 2 * i - 1, 2 * i, 2 * i - 1, 2 * i + 1, 2 * i); });
+    const ge = new THREE.BufferGeometry(); ge.setAttribute('position', new THREE.Float32BufferAttribute(v, 3)); ge.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); ge.setIndex(id); ge.computeVertexNormals(); if (ge.attributes.normal.getY(0) < 0) { const ix = ge.index.array; for (let i = 0; i < ix.length; i += 3) { const t = ix[i]; ix[i] = ix[i + 1]; ix[i + 1] = t; } ge.computeVertexNormals(); } add(ge, mat); };
+  const blob = (x, y, z, r, th, mat) => { const sh = new THREE.Shape(), ph = rnd() * 9, k1 = 2 + (rnd() * 3 | 0); for (let i = 0; i <= 28; i++) { const an = i / 28 * Math.PI * 2, rr = r * (1 + .22 * Math.sin(k1 * an + ph) + .1 * Math.sin(5 * an + ph * 2)); i ? sh.lineTo(Math.cos(an) * rr, Math.sin(an) * rr) : sh.moveTo(Math.cos(an) * rr, Math.sin(an) * rr); }
+    add(new THREE.ExtrudeGeometry(sh, { depth: th, bevelEnabled: false, curveSegments: 4 }).rotateX(-Math.PI / 2).translate(x, y, z), mat); };
+  const fallTex = utex('fall', () => ctex(64, 256, (c, w, h) => { const r = mulberry32(21); c.fillStyle = '#000'; c.fillRect(0, 0, w, h); for (let i = 0; i < 60; i++) { const x = r() * w, g2 = c.createLinearGradient(0, 0, 0, h); g2.addColorStop(0, 'rgba(255,255,255,0)'); g2.addColorStop(.5, 'rgba(255,255,255,' + (.3 + r() * .5) + ')'); g2.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g2; c.fillRect(x, 0, 1 + r() * 3, h); } }));
+  const falls = []; const fall = (x, yTop, yBot, z, w, col) => { const tx = fallTex.clone(); tx.needsUpdate = true; tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.repeat.set(w / 20, 1); const m = new THREE.MeshBasicMaterial({ color: col, map: tx, transparent: true, opacity: .9, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    const me = new THREE.Mesh(new THREE.PlaneGeometry(w, yTop - yBot).rotateY(Math.PI / 2).translate(x, (yTop + yBot) / 2, z), m); me.raycast = () => {}; g.add(me); falls.push(tx); };
+  anim.push(t => { if (!UNDER.on) return; for (const tx of falls) tx.offset.y = t * .6; });
+  const lectern = (x, y, z, col) => { C(.6, 1, 6, 6, shelfW, x, y + 3, z); add(new THREE.BoxGeometry(4, .5, 3).rotateZ(.35).translate(x, y + 6.4, z), shelfW); add(new THREE.PlaneGeometry(3.4, 2.4).rotateX(-Math.PI / 2).rotateY(Math.PI / 2).rotateZ(.35).translate(x - .1, y + 6.75, z), K.glow(col, 2.2)); };
+  // air: floating islands of rock drifting on the wind, a bookcase or a reader's desk on each; banks of cloud; ribbons of wind spiralling up; stones hung in the air with rings round them
+  { const L0 = lvl(0), e = EL[0], cloud = new THREE.MeshBasicMaterial({ color: 0xa8c0e0, transparent: true, opacity: .1, blending: THREE.AdditiveBlending, depthWrite: false }), grass = new THREE.MeshStandardMaterial({ color: 0x8ab8a8, roughness: 1, flatShading: true });
+    const isles = []; for (let q = 0; q < 6 && L0.length; q++) { const c = L0[((q + .5) / 6 * L0.length) | 0], gI = new THREE.Group(), r = 11 + rnd() * 6, hy = c.y + 24 + rnd() * 16; gI.position.set(c.x, hy, c.z);
+      const rock = new THREE.Mesh(new THREE.ConeGeometry(r, r * 1.6, 7).rotateX(Math.PI).translate(0, -r * .8, 0), basalt); const top = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.02, r, 1.2, 7), grass); gI.add(rock, top);
+      if (q % 2) { for (const oz of [-4.5, 4.5]) { const bc = new THREE.Mesh(new THREE.BoxGeometry(2.4, 9, 8), shelfW); bc.position.set(0, 5, oz); const bk = new THREE.Mesh(new THREE.PlaneGeometry(7.4, 8).rotateY(Math.PI / 2), books); bk.position.set(1.25, 5, oz); gI.add(bc, bk); } }
+      else { const ped = new THREE.Mesh(new THREE.CylinderGeometry(.5, .8, 5, 6), shelfW); ped.position.y = 3; const bk = new THREE.Mesh(new THREE.BoxGeometry(3, .6, 2.4), e.glow); bk.position.y = 5.8; gI.add(ped, bk); }
+      gI.traverse(o => { o.raycast = () => {}; }); g.add(gI); isles.push([gI, hy, rnd() * 9]); }
+    anim.push(t => { if (!UNDER.on) return; for (const [gI, hy, ph] of isles) { gI.position.y = hy + Math.sin(t * .4 + ph) * 2.5; gI.rotation.y = t * .03 + ph; } });
+    for (let q = 0; q < 10 && L0.length; q++) { const c = L0[(rnd() * L0.length) | 0], cy = c.y + 6 + rnd() * 14; for (let k = 0; k < 6; k++) S(5 + rnd() * 6, cloud, c.x + (rnd() - .5) * 22, cy + (rnd() - .5) * 2, c.z + (rnd() - .5) * 22, 1.6, .3, 1.2, 14); }
+    const wind = new THREE.MeshBasicMaterial({ color: 0xdff0ff, transparent: true, opacity: .45, blending: THREE.AdditiveBlending, depthWrite: false });
+    for (let q = 0; q < 5 && L0.length; q++) { const c = L0[((q + .25) / 5 * L0.length) | 0], pts = []; for (let k = 0; k <= 50; k++) { const t = k / 50, an = t * Math.PI * 5 + q; pts.push(new THREE.Vector3(c.x + Math.cos(an) * (5 + t * 9), c.y + 2 + t * 46, c.z + Math.sin(an) * (5 + t * 9))); } add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 90, .35, 4), wind); }
+    for (let q = 0; q < 12 && L0.length; q++) { const c = L0[(rnd() * L0.length) | 0], s2 = 2.5 + rnd() * 3.5; S(s2, new THREE.MeshStandardMaterial({ color: 0xc8d4e8, roughness: .6, emissive: 0x4a6a9a, emissiveIntensity: .6, flatShading: true }), c.x, c.y + 18 + rnd() * 26, c.z, 1, .7, 1, 5); if (rnd() < .5) T(s2 * 1.8, .25, e.glow, c.x, c.y + 18 + rnd() * 20, c.z, rnd() * 3, Math.PI / 2 + (rnd() - .5) * .6, Math.PI * 1.4); }
+    for (let q = 0; q < 4 && L0.length; q++) { const c = L0[((q + .5) / 4 * L0.length) | 0]; K.light(c.x, c.y + 34, c.z, e.lit, 3, 200, .05); } }
+  // fire: rivers of lava winding over the column tops in smooth curves, crusted dark at their edges; lava pools of uneven shape; braziers; and the lava pouring over the cliff to the level below
+  { const L1 = lvl(1), e = EL[1], crust = new THREE.MeshStandardMaterial({ color: 0x1a1210, roughness: .9, emissive: 0x3a0a00, emissiveIntensity: .6 }), lava = new THREE.MeshStandardMaterial({ map: noiseTex('lava', '#ff6a10', ['rgba(255,220,80,A)', 'rgba(120,10,0,A)'], .5), color: 0xffffff, emissive: 0xff4a08, emissiveIntensity: 2.4, roughness: .5 });
+    lava.emissiveMap = lava.map; lava.map.wrapS = lava.map.wrapT = THREE.RepeatWrapping; anim.push(t => { if (UNDER.on) lava.map.offset.set(0, -t * .05); });
+    for (let r2 = 0; r2 < 3; r2++) { let p = L1[(rnd() * L1.length) | 0]; if (!p) break; let an = rnd() * 6.28; const pts = [[p.x, p.z]]; for (let k = 0; k < 26; k++) { const nx = p.x + Math.cos(an) * cr * 1.6, nz = p.z + Math.sin(an) * cr * 1.6, n2 = L1.find(c => Math.hypot(c.x - nx, c.z - nz) < cr); if (!n2) { an += 1.2; continue; } pts.push([n2.x, n2.z]); p = n2; an += (rnd() - .5) * 1.1; }
+      if (pts.length > 3) { ribbon(pts, 11, e.y + 1.9, crust); ribbon(pts, 7, e.y + 2.1, lava); } }
+    for (let q = 0; q < 5 && L1.length; q++) { const c = L1[(rnd() * L1.length) | 0], r3 = 6 + rnd() * 7; blob(c.x, e.y + 1.7, c.z, r3 + 2.2, .4, crust); blob(c.x, e.y + 1.9, c.z, r3, .4, lava); }
+    for (let q = 0; q < 8 && L1.length; q++) { const c = L1[((q + .5) / 8 * L1.length) | 0]; C(2.6, 1.6, 6, 8, new THREE.MeshStandardMaterial({ color: 0x2a2020, metalness: .6, roughness: .5 }), c.x, c.y + 3, c.z); K.K(2.4, 8, 7, e.glow, c.x, c.y + 10, c.z); if (q % 2 === 0) K.light(c.x, c.y + 16, c.z, e.lit, 2.6, 150, .35); }
+    const xe = xa + (xb - xa) * 2 / EL.length; for (const sd of [-1, 1]) { const zz = zMid + sd * (40 + rnd() * 20); if (inA(xe, zz, 10)) { fall(xe - 1, EL[1].y + 1, EL[2].y + 1, zz, 14, 0xff7a20); blob(xe + 8, EL[2].y + 1.2, zz, 9, .4, lava); K.light(xe + 4, EL[2].y + 10, zz, e.lit, 2.4, 140, .3); } } }
+  // water: pools of uneven shape with ice standing up out of them, orbs of water hanging in the air, and a fall of water down the cliff to the level below
+  { const L2 = lvl(2), e = EL[2], pool = new THREE.MeshStandardMaterial({ color: 0x2a6a9a, roughness: .05, metalness: .3, emissive: 0x0a3a6a, emissiveIntensity: 1.2, transparent: true, opacity: .85 }), ice = new THREE.MeshStandardMaterial({ color: 0xbfeaff, roughness: .1, emissive: 0x2a7aaa, emissiveIntensity: .8, transparent: true, opacity: .8 });
+    for (let q = 0; q < 6 && L2.length; q++) { const c = L2[((q + .5) / 6 * L2.length) | 0], r2 = 10 + rnd() * 9; blob(c.x, e.y + 1.5, c.z, r2, .5, pool);
+      for (let k = 0; k < 5; k++) { const an = rnd() * 6.28, d = rnd() * r2 * .6, hh = 6 + rnd() * 16; add(new THREE.ConeGeometry(1.4 + rnd() * 2, hh, 5).rotateZ((rnd() - .5) * .4).translate(c.x + Math.cos(an) * d, c.y + hh / 2, c.z + Math.sin(an) * d), ice); }
+      if (q % 2 === 0) K.light(c.x, c.y + 18, c.z, e.lit, 2.2, 160, .05); }
+    const orbM = new THREE.MeshStandardMaterial({ color: 0x8ad4ff, roughness: .05, metalness: .1, emissive: 0x1a5a9a, emissiveIntensity: 1, transparent: true, opacity: .6 }), orbs = [];
+    for (let q = 0; q < 12 && L2.length; q++) { const c = L2[(rnd() * L2.length) | 0], m = new THREE.Mesh(new THREE.SphereGeometry(1.5 + rnd() * 3, 16, 12), orbM); m.position.set(c.x, c.y + 14 + rnd() * 20, c.z); m.raycast = () => {}; g.add(m); orbs.push([m, m.position.y, rnd() * 9]); }
+    anim.push(t => { if (!UNDER.on) return; for (const [m, y0, ph] of orbs) { m.position.y = y0 + Math.sin(t * .8 + ph) * 2; const k = 1 + .08 * Math.sin(t * 2.3 + ph); m.scale.set(k, 2 - k, k); } });
+    const xe = xa + (xb - xa) * 3 / EL.length; for (const sd of [-1, 1]) { const zz = zMid + sd * (36 + rnd() * 24); if (inA(xe, zz, 10)) { fall(xe - 1, EL[2].y + 1, EL[3].y + 1, zz, 16, 0x5ac0ff); blob(xe + 9, EL[3].y + 1.2, zz, 10, .4, pool); } } }
+  // earth: clusters of green crystal, boulders, great roots arching out of the rock and back into it, moss
+  { const L3 = lvl(3), e = EL[3], rootM = new THREE.MeshStandardMaterial({ color: 0x4a3420, roughness: .95 }), stoneE = new THREE.MeshStandardMaterial({ color: 0x6a5a44, roughness: 1, flatShading: true }), moss = new THREE.MeshStandardMaterial({ color: 0x4a7a2a, roughness: 1 });
+    for (let q = 0; q < 14 && L3.length; q++) { const c = L3[(rnd() * L3.length) | 0]; for (let k = 0; k < 5; k++) { const hh = 5 + rnd() * 14, an = rnd() * 6.28; add(new THREE.CylinderGeometry(.01, 1.2 + rnd() * 1.6, hh, 6).rotateZ((rnd() - .5) * .8).rotateY(an).translate(c.x + Math.cos(an) * 2, c.y + hh / 2, c.z + Math.sin(an) * 2), e.glow); } }
+    for (let q = 0; q < 10 && L3.length; q++) { const c = L3[(rnd() * L3.length) | 0]; add(new THREE.DodecahedronGeometry(3 + rnd() * 4, 0).scale(1, .7, 1).rotateY(rnd() * 6).translate(c.x, c.y + 2.5, c.z), stoneE); if (rnd() < .6) S(3 + rnd() * 3, moss, c.x + 2, c.y + 1.2, c.z, 1, .15, 1.2, 7); }
+    for (let q = 0; q < 6 && L3.length; q++) { const c = L3[(rnd() * L3.length) | 0], an = rnd() * 6.28, sp = 24 + rnd() * 18, ht = 12 + rnd() * 12, pts = []; for (let k = 0; k <= 12; k++) { const t = k / 12; pts.push(new THREE.Vector3(c.x + Math.cos(an) * (t - .5) * sp, c.y + Math.sin(Math.PI * t) * ht - 1, c.z + Math.sin(an) * (t - .5) * sp + Math.sin(t * 6) * 1.5)); } add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, 2 + rnd() * 1.2, 7), rootM); }
+    if (L3.length) { const c = L3[(L3.length * .5) | 0], R2 = 22;   // a ring of standing stones round a green rune circle, the earth's binding half made
+      for (let q = 0; q < 9; q++) { const an = q / 9 * Math.PI * 2, hh = 10 + rnd() * 8; if (q === 4) { add(new THREE.BoxGeometry(4, 3, 3).rotateZ(1.3).translate(c.x + Math.cos(an) * R2, e.y + 2.5, c.z + Math.sin(an) * R2), stoneE); continue; } add(new THREE.BoxGeometry(4, hh, 3).rotateY(-an).rotateZ((rnd() - .5) * .15).translate(c.x + Math.cos(an) * R2, e.y + hh / 2, c.z + Math.sin(an) * R2), stoneE); }
+      T(R2 * .7, .5, e.glow, c.x, e.y + 2, c.z, 0, Math.PI / 2, Math.PI * 1.6, 48); for (let q = 0; q < 6; q++) { const an = q / 6 * Math.PI * 2; B(1.4, .3, 5, e.glow, c.x + Math.cos(an) * R2 * .45, e.y + 2, c.z + Math.sin(an) * R2 * .45, -an); } K.light(c.x, e.y + 12, c.z, e.lit, 2.4, 150, .1); }
+    for (let q = 0; q < 14 && L3.length; q++) { const c = L3[(rnd() * L3.length) | 0]; S(3 + rnd() * 4, moss, c.x, e.y + 1.8, c.z, 1.3, .12, 1, 8); }
+    for (let q = 0; q < 4 && L3.length; q++) { const c = L3[((q + .5) / 4 * L3.length) | 0]; K.light(c.x, c.y + 16, c.z, e.lit, 2, 150, .05); } }
+  // readers' lecterns along the stair on each level, an open book glowing in the level's colour
+  for (let ti = 0; ti < 4; ti++) { const x0 = xa + (xb - xa) * (ti + .3) / EL.length; for (const sd of [-1, 1]) { const zz = zMid + sd * 16; if (inA(x0, zz, 4)) lectern(x0, EL[ti].y, zz, EL[ti].lit); } }
+  for (let ti = 0; ti < 4; ti++) { const L = lvl(ti); if (L.length) { const c = L[(L.length / 2) | 0]; K.mark(EL[ti].name, c.x, c.y + 6, c.z); } }
+  // the sanctum at the bottom
+  { const L4 = lvl(4), cx = L4.reduce((a, c) => a + c.x, 0) / Math.max(1, L4.length), cz = L4.reduce((a, c) => a + c.z, 0) / Math.max(1, L4.length), y = EL[4].y + .6, obs = new THREE.MeshStandardMaterial({ color: 0x0a080e, roughness: .15, metalness: .4 });
+    add(new THREE.CylinderGeometry(70, 76, 3, 48).translate(cx, y + 1.5, cz), obs); T(62, 1, EL[4].glow, cx, y + 3.2, cz, 0, Math.PI / 2, Math.PI * 2, 72); T(46, .6, EL[4].glow, cx, y + 3.2, cz, 0, Math.PI / 2, Math.PI * 2, 56);
+    for (let q = 0; q < 12; q++) { const a = q * Math.PI / 6; B(4, .3, 9, EL[4].glow, cx + Math.cos(a) * 54, y + 3.3, cz + Math.sin(a) * 54, -a); }   // the summoning circle's sigils
+    const fx = xa > cx ? 1 : -1; add(new THREE.BoxGeometry(14, 8, 12).translate(cx + 30 * fx, y + 7, cz), obs); add(new THREE.BoxGeometry(14, 30, 3).translate(cx + 36 * fx, y + 18, cz), obs); for (const sd of [-1, 1]) add(new THREE.ConeGeometry(1.4, 14, 5).translate(cx + 36 * fx, y + 38, cz + sd * 6), obs);   // the throne, facing back up the levels
+    add(new THREE.OctahedronGeometry(3.2).translate(cx, y + 22, cz), EL[4].glow); for (let k = 0; k < 3; k++) T(6 + k * 2, .25, EL[4].glow, cx, y + 22, cz, k * 1.1, Math.PI / 2 + k * .7, Math.PI * 2, 32);   // the phylactery in its cage of runes
+    for (const [sx, sz] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) { add(new THREE.CylinderGeometry(2.6, 3.4, 44, 6).translate(cx + sx * 64, y + 22, cz + sz * 64), obs); K.K(2, 5, 6, EL[4].glow, cx + sx * 64, y + 46, cz + sz * 64); K.light(cx + sx * 64, y + 40, cz + sz * 64, EL[4].lit, 1.4, 120, .2); }
+    K.light(cx, y + 30, cz, EL[4].lit, 3, 220, .15); K.mark('lich', cx, y + 10, cz);
+    const wheel = new THREE.Group(); wheel.position.set(cx, y + 22, cz); g.add(wheel); [0, 1, 2, 3].forEach(i => { const m = new THREE.Mesh(new THREE.SphereGeometry(2.4, 12, 8), EL[i].glow); const a = i * Math.PI / 2; m.position.set(Math.cos(a) * 16, Math.sin(i * 1.3) * 3, Math.sin(a) * 16); wheel.add(m); });   // the four elements it has never finished binding
+    anim.push(t => { if (UNDER.on) { wheel.rotation.y = t * .25; wheel.rotation.x = Math.sin(t * .3) * .2; } }); }
+  // loose pages of unfinished spells, drifting
+  { const pg = []; for (let q = 0; q < 90; q++) { const c = cols[(rnd() * cols.length) | 0]; if (!c) break; const m = new THREE.Mesh(new THREE.PlaneGeometry(3, 4), page); m.position.set(c.x, c.y + 10 + rnd() * 30, c.z); m.rotation.set(rnd() * 3, rnd() * 3, rnd() * 3); m.userData.p = m.position.clone(); m.userData.ph = rnd() * 9; g.add(m); pg.push(m); }
+    anim.push(t => { if (!UNDER.on) return; for (const m of pg) { const p = m.userData.p, ph = m.userData.ph; m.position.set(p.x + Math.sin(t * .2 + ph) * 6, p.y + Math.sin(t * .5 + ph) * 3, p.z + Math.cos(t * .17 + ph) * 6); m.rotation.y = t * .3 + ph; m.rotation.x = Math.sin(t * .4 + ph) * .6; } }); }
+  K.flush();
+};
+// The labyrinth under the Hedgemaze, Quandrix's: a true maze, every passage floored with a lit grid, that changes as you go through it. Its quarters are walled differently -
+// pale stone with crystal caps, glass panes in white frames, hex tiles in teal and violet - and it opens here and there into chambers, each holding a piece of Quandrix's
+// work from above: a stack of glass cubes, an impossible staircase, a hex bloom, pylons joined by lines of light, a grove of crystal trees, a flock of folded paper. Teleport
+// pads glow in pairs at far-apart dead ends with an arc of light between them; great glowing cubes rest across passages or hang over them; fractal trees grow in the dead ends;
+// solids turn in the air; and over the heart - a round chamber with a golden spiral in its floor and a nest of turning polyhedra - a broken piece of maze floats upside down
+UNDER_BUILD['Crystal Pavilion Hedgemaze'] = (g, area, R) => {
+  const K = underKit(g, area, R), { rnd, inA, B, C, S, T, add, tr } = K, u = 20, WH = 16;
+  const stone = new THREE.MeshStandardMaterial({ map: noiseTex('qstone', '#a8b4b8', ['rgba(0,0,0,A)', 'rgba(255,255,255,A)'], .12), color: 0xd8e4e6, roughness: .55 });
+  const crystal = new THREE.MeshStandardMaterial({ color: 0x7ff6ff, emissive: 0x20c8e0, emissiveIntensity: 1.6, roughness: .15, transparent: true, opacity: .82 }), teal = K.glow(0x60f0ff, 2.6), gold = K.glow(0xffd070, 2.4), violet = K.glow(0xb070ff, 2.8), white = K.glow(0xe8fbff, 2.2);
+  const floorM = new THREE.MeshStandardMaterial({ map: utex('qgrid', () => ctex(256, 256, (c, w, h) => { c.fillStyle = '#0e2226'; c.fillRect(0, 0, w, h); c.strokeStyle = 'rgba(96,240,255,.55)'; c.lineWidth = 2; for (let i = 0; i <= 8; i++) { c.beginPath(); c.moveTo(i * w / 8, 0); c.lineTo(i * w / 8, h); c.stroke(); c.beginPath(); c.moveTo(0, i * h / 8); c.lineTo(w, i * h / 8); c.stroke(); } c.strokeStyle = 'rgba(96,240,255,.18)'; c.lineWidth = 1; for (let i = 0; i < 32; i++) { c.beginPath(); c.moveTo(i * w / 32, 0); c.lineTo(i * w / 32, h); c.stroke(); c.beginPath(); c.moveTo(0, i * h / 32); c.lineTo(w, i * h / 32); c.stroke(); } })), color: 0xffffff, emissive: 0x0c3a40, emissiveIntensity: .8, roughness: .4 });
+  const runeM = new THREE.MeshStandardMaterial({ map: utex('qrunes', () => ctex(512, 64, (c, w, h) => { c.fillStyle = '#000'; c.fillRect(0, 0, w, h); c.fillStyle = '#7ff6ff'; c.font = 'bold 40px Georgia, serif'; const r = mulberry32(3), sy = ['∑', 'π', 'φ', '∞', '√', '∫', 'Δ', '∂', 'λ', '7', '3', '1', '8', 'ℵ', '≡', 'θ']; for (let x = 8; x < w; x += 32) c.fillText(sy[(r() * sy.length) | 0], x, 46); })), color: 0x000000, emissive: 0x60f0ff, emissiveIntensity: 2.2, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+  runeM.emissiveMap = runeM.map;
+  const glassW = new THREE.MeshStandardMaterial({ color: 0xbff4ff, emissive: 0x2a8a9a, emissiveIntensity: .55, roughness: .05, transparent: true, opacity: .34, depthWrite: false, side: THREE.DoubleSide }), frameW = new THREE.MeshStandardMaterial({ color: 0xf2f8fa, roughness: .4 });
+  const hexW = new THREE.MeshStandardMaterial({ map: utex('qhex', () => ctex(256, 256, (c, w, h) => { const r = 18, cols = ['#5ad8e6', '#7a8af0', '#9a6ae8', '#4ab8d8', '#b48af0']; c.fillStyle = '#1a1a3a'; c.fillRect(0, 0, w, h); for (let y = -r, row = 0; y < h + r; y += r * 1.5, row++) for (let x = -r, n = 0; x < w + r; x += r * 1.732, n++) { const ox = (row % 2) * r * .866; c.fillStyle = cols[(n * 3 + row * 2) % cols.length]; c.beginPath(); for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3 + Math.PI / 6; c.lineTo(x + ox + Math.cos(a) * r * .9, y + Math.sin(a) * r * .9); } c.fill(); } })), color: 0xffffff, emissive: 0x4a3a8a, emissiveIntensity: .55, roughness: .45 });
+  const obsW = new THREE.MeshStandardMaterial({ map: utex('qobs', () => ctex(256, 256, (c, w, h) => { const r = mulberry32(11); c.fillStyle = '#16121e'; c.fillRect(0, 0, w, h); for (let i = 0; i < 260; i++) { c.fillStyle = 'rgba(120,90,160,' + r() * .12 + ')'; c.fillRect(r() * w, r() * h, 2 + r() * 20, 1 + r() * 4); }
+    c.strokeStyle = '#ffc860'; for (let v = 0; v < 3; v++) { let x = r() * w, y = 0; c.lineWidth = .7 + r() * .9; c.beginPath(); c.moveTo(x, y); while (y < h) { x += (r() - .5) * 26; y += 6 + r() * 14; c.lineTo(x, y); } c.stroke(); } })), color: 0x8a8098, emissive: 0xffffff, emissiveIntensity: .0, roughness: .3, metalness: .05, envMapIntensity: .4 });
+  obsW.emissiveMap = utex('qobsE', () => ctex(256, 256, (c, w, h) => { const r = mulberry32(11); c.fillStyle = '#000'; c.fillRect(0, 0, w, h); for (let i = 0; i < 260; i++) { r(); r(); r(); r(); r(); } c.strokeStyle = '#ffb040';
+    for (let v = 0; v < 3; v++) { let x = r() * w, y = 0; c.lineWidth = .7 + r() * .9; c.beginPath(); c.moveTo(x, y); while (y < h) { x += (r() - .5) * 26; y += 6 + r() * 14; c.lineTo(x, y); } c.stroke(); } })); obsW.emissive.set(0xffb040); obsW.emissiveIntensity = 1.2;
+  const paper = new THREE.MeshStandardMaterial({ color: 0xf6f4ee, roughness: .8, side: THREE.DoubleSide, flatShading: true, emissive: 0x3a3a34, emissiveIntensity: .4 });
+  K.floor(floorM, 1, 40); K.rim(stone, 40, 14);
+  // the maze: cells on a square grid; a random-walk maze carved through all of them, with a few loops, a round heart and seven square chambers left open
+  const NI = Math.ceil((K.x1 - K.x0) / u), NJ = Math.ceil((K.z1 - K.z0) / u), at = (i, j) => [K.x0 + (i + .5) * u, K.z0 + (j + .5) * u], key = (i, j) => i * 1000 + j;
+  const ok = (i, j) => { const [x, z] = at(i, j); return inA(x, z, u * .55); }, hi = Math.round((area.x - K.x0) / u - .5), hj = Math.round((area.z - K.z0) / u - .5), inHeart = (i, j) => (i - hi) ** 2 + (j - hj) ** 2 <= 5.5;
+  const open = new Set(), seen = new Set([key(hi, hj)]), st = [[hi, hj]];
+  while (st.length) { const [i, j] = st[st.length - 1], nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([a, b]) => [i + a, j + b]).filter(([a, b]) => ok(a, b) && !seen.has(key(a, b)));
+    if (!nb.length) { st.pop(); continue; } const [a, b] = nb[(rnd() * nb.length) | 0]; seen.add(key(a, b)); open.add(key(i, j) + ':' + key(a, b)); open.add(key(a, b) + ':' + key(i, j)); st.push([a, b]); }
+  for (const k of [...seen]) { const i = Math.floor(k / 1000), j = k % 1000; for (const [a, b] of [[1, 0], [0, 1]]) if (seen.has(key(i + a, j + b)) && rnd() < .08) { open.add(key(i, j) + ':' + key(i + a, j + b)); open.add(key(i + a, j + b) + ':' + key(i, j)); } }
+  const chambers = []; for (const [i, j] of [...seen].map(k => [Math.floor(k / 1000), k % 1000]).sort(() => rnd() - .5)) { if (chambers.length >= 7) break; if ((i - hi) ** 2 + (j - hj) ** 2 < 24) continue;
+    if (![[0, 0], [1, 0], [0, 1], [1, 1], [-1, 0], [2, 1]].every(([a, b]) => seen.has(key(i + a, j + b)))) continue; if (chambers.some(c => Math.abs(c[0] - i) < 6 && Math.abs(c[1] - j) < 6)) continue; chambers.push([i, j]); }
+  const inCh = (i, j) => chambers.find(([ci, cj]) => i >= ci && i <= ci + 1 && j >= cj && j <= cj + 1);
+  const linked = (i, j, a, b) => open.has(key(i, j) + ':' + key(a, b)) || (inHeart(i, j) && inHeart(a, b)) || (inCh(i, j) && inCh(i, j) === inCh(a, b));
+  const quarter = (x, z) => (x > area.x ? 1 : 0) + (z > area.z ? 2 : 0);   // 0 pale stone, 1 glass, 2 hex tiles, 3 obsidian veined with gold
+  // walls between unlinked cells (each drawn once), in their quarter's style; posts at the corners
+  const deadEnds = [], wall = (wx, wz, alongZ, q) => { const L = u, W = alongZ ? 2.4 : L, D = alongZ ? L : 2.4;
+    if (q === 1) { B(alongZ ? .6 : L - 2, WH - 1, alongZ ? L - 2 : .6, glassW, wx, WH / 2 + .5, wz); B(alongZ ? 1.6 : L, 1.4, alongZ ? L : 1.6, frameW, wx, WH + .7, wz); B(alongZ ? 1.6 : L, 1, alongZ ? L : 1.6, frameW, wx, 1.5, wz); B(alongZ ? 1.4 : 1.4, WH, alongZ ? 1.4 : 1.4, frameW, wx, WH / 2 + 1, wz); }
+    else if (q === 2) { B(W, WH, D, hexW, wx, WH / 2 + 1, wz); B(alongZ ? 1.2 : L - 2, 1.6, alongZ ? L - 2 : 1.2, violet, wx, WH + 1.8, wz); }
+    else if (q === 3) { B(W, WH, D, obsW, wx, WH / 2 + 1, wz); B(alongZ ? 1.4 : L - 2, 1.2, alongZ ? L - 2 : 1.4, gold, wx, WH + 1.6, wz); }
+    else { B(W, WH, D, stone, wx, WH / 2 + 1, wz); B(alongZ ? 1.2 : L - 2, 2, alongZ ? L - 2 : 1.2, crystal, wx, WH + 2, wz); } };
+  for (const k of seen) { const i = Math.floor(k / 1000), j = k % 1000, [x, z] = at(i, j); let links = 0;
+    for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { if (linked(i, j, i + a, j + b)) { links++; continue; } if ((a < 0 || b < 0) && seen.has(key(i + a, j + b))) continue;
+      const wx = x + a * u / 2, wz = z + b * u / 2, q = quarter(wx, wz); wall(wx, wz, !!a, q);
+      if (q !== 1 && rnd() < .22) for (const sd of [-1, 1]) add(tr(new THREE.PlaneGeometry(u - 4, 2.4), wx + (a ? sd * 1.25 : 0), WH * .62, wz + (b ? sd * 1.25 : 0), a ? (sd > 0 ? Math.PI / 2 : -Math.PI / 2) : (sd > 0 ? 0 : Math.PI)), runeM); }
+    if (links === 1 && !inHeart(i, j) && !inCh(i, j)) deadEnds.push([x, z, i, j]); }
+  for (let i = 0; i <= NI; i++) for (let j = 0; j <= NJ; j++) { const x = K.x0 + i * u, z = K.z0 + j * u; if (!inA(x, z, 2) || (i - hi - .5) ** 2 + (j - hj - .5) ** 2 < 6 || chambers.some(([ci, cj]) => i > ci && i < ci + 2 && j > cj && j < cj + 2)) continue; const q = quarter(x, z);
+    B(3.6, WH + 3, 3.6, q === 1 ? frameW : q === 2 ? hexW : q === 3 ? obsW : stone, x, (WH + 3) / 2 + 1, z); add(new THREE.OctahedronGeometry(1.6).translate(x, WH + 5, z), q === 2 ? violet : q === 3 ? gold : teal); }
+  const spin = [];
+  // fractal trees of light in some dead ends
+  const tree = (x, z, y, len, ang, tilt, d) => { const ex = x + Math.sin(tilt) * Math.cos(ang) * len, ez = z + Math.sin(tilt) * Math.sin(ang) * len, ey = y + Math.cos(tilt) * len, dx = ex - x, dy = ey - y, dz = ez - z;
+    add(new THREE.CylinderGeometry(.18 + d * .1, .25 + d * .12, len, 5).translate(0, len / 2, 0).applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(dx, dy, dz).normalize())).translate(x, y, z), d > 1 ? teal : gold);
+    if (d > 0) for (const s2 of [-1, 1]) tree(ex, ez, ey, len * .68, ang + s2 * 1.1 + (rnd() - .5) * .4, tilt + .45, d - 1); };
+  // teleport pads: pairs at dead ends far apart, each a ring of light with a column rising from it, and an arc of light joining the pair high overhead
+  const pads = deadEnds.slice().sort(() => rnd() - .5), padCols = [0x60f0ff, 0xb070ff, 0xffd070, 0x7aff9a], used = new Set();
+  for (let p = 0; p < 4; p++) { const a = pads.find(d => !used.has(d)); if (!a) break; used.add(a); const b = pads.filter(d => !used.has(d)).sort((d1, d2) => Math.hypot(d2[0] - a[0], d2[1] - a[1]) - Math.hypot(d1[0] - a[0], d1[1] - a[1]))[0]; if (!b) break; used.add(b);
+    const col = padCols[p], m = K.glow(col, 3.2), beamM = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: .16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    for (const d of [a, b]) { add(new THREE.CylinderGeometry(6.5, 7, 1, 24).translate(d[0], 1.4, d[1]), stone); T(5.4, .5, m, d[0], 2, d[1], 0, Math.PI / 2, Math.PI * 2, 32); T(3.2, .3, m, d[0], 2.1, d[1], 0, Math.PI / 2, Math.PI * 2, 24); add(new THREE.CylinderGeometry(4.6, 4.6, 34, 20, 1, true).translate(d[0], 19, d[1]), beamM); K.light(d[0], 8, d[1], col, 1.2, 70, .05); }
+    const pts = []; for (let k = 0; k <= 40; k++) { const t = k / 40; pts.push(new THREE.Vector3(a[0] + (b[0] - a[0]) * t, 36 + Math.sin(Math.PI * t) * Math.hypot(b[0] - a[0], b[1] - a[1]) * .22, a[1] + (b[1] - a[1]) * t)); }
+    add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 60, .5, 5), m); }
+  deadEnds.forEach((d, n) => { if (used.has(d) || n % 2) return; tree(d[0], d[1], 1, 7.5, rnd() * 6.28, 0, 5); add(new THREE.CylinderGeometry(2.6, 3, 1, 8).translate(d[0], 1.4, d[1]), stone); });
+  // great glowing cubes: some resting across passages, some hanging over them, turning
+  for (let q = 0; q < 14; q++) { const k = [...seen][(rnd() * seen.size) | 0], i = Math.floor(k / 1000), j = k % 1000, [x, z] = at(i, j); if (inHeart(i, j) || inCh(i, j)) continue; const s = 9 + rnd() * 6, hang = q % 2;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), [crystal, violet, gold, white][q % 4]); m.position.set(x, hang ? WH + 16 + rnd() * 10 : s / 2 + 1.2, z); if (!hang) m.rotation.y = rnd(); else { m.userData.s = [(rnd() - .5) * .4, (rnd() - .5) * .4, (rnd() - .5) * .4]; spin.push(m); } g.add(m);
+    const e = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(s * 1.04, s * 1.04, s * 1.04)), new THREE.LineBasicMaterial({ color: 0xffffff })); m.add(e); }
+  // solids turning in the air over the passages
+  const solids = [() => new THREE.TetrahedronGeometry(6), () => new THREE.OctahedronGeometry(6), () => new THREE.DodecahedronGeometry(5.6), () => new THREE.IcosahedronGeometry(6), () => new THREE.TorusKnotGeometry(4, 1, 64, 8)];
+  for (let q = 0; q < 20; q++) { const k = [...seen][(rnd() * seen.size) | 0], i = Math.floor(k / 1000), j = k % 1000, [x, z] = at(i, j); if (inHeart(i, j) || inCh(i, j)) continue; const m = new THREE.Mesh(solids[q % solids.length](), q % 3 ? crystal : gold); m.position.set(x, WH + 14 + rnd() * 14, z); m.userData.s = [rnd() - .5, rnd() - .5, rnd() - .5]; g.add(m); spin.push(m); }
+  // the chambers, each with a piece of Quandrix's work
+  const kinds = ['cubes', 'stair', 'bloom', 'pylons', 'grove', 'paper', 'cubes'];
+  chambers.forEach(([ci, cj], n) => { const [x0, z0] = at(ci, cj), x = x0 + u / 2, z = z0 + u / 2, kind = kinds[n % kinds.length];
+    add(new THREE.BoxGeometry(u * 2 - 3, .3, u * 2 - 3).translate(x, 1.3, z), new THREE.MeshStandardMaterial({ color: 0x1a3a40, roughness: .25, metalness: .4 })); T(u * .85, .4, teal, x, 1.6, z, 0, Math.PI / 2, Math.PI * 2, 4);
+    K.mark('ch' + n + '-' + kind, x, 8, z);
+    if (kind === 'cubes') { for (let q = 0; q < 9; q++) { const s = 7 + rnd() * 3, px = x + (rnd() - .5) * 18, pz = z + (rnd() - .5) * 18, py = s / 2 + 1.5 + (q % 3) * s * .8; add(new THREE.BoxGeometry(s, s, s).translate(px, py, pz), glassW); add(new THREE.BoxGeometry(s + .4, .5, .5).translate(px, py + s / 2, pz + s / 2), frameW); add(new THREE.BoxGeometry(.5, .5, s + .4).translate(px + s / 2, py + s / 2, pz), frameW); add(new THREE.BoxGeometry(1.4, 2.4, 1.4).translate(px, py, pz), white); } K.light(x, 16, z, 0xbff4ff, 1.4, 90, .05); }
+    if (kind === 'stair') { for (let s2 = 0; s2 < 4; s2++) { const a = s2 * Math.PI / 2, cx = x + Math.cos(a) * 9, cz = z + Math.sin(a) * 9; for (let k = 0; k < 8; k++) B(2.6, 1, 6, frameW, cx - Math.sin(a) * (k - 4) * 2.4, 2 + s2 * 4 + k * .9, cz + Math.cos(a) * (k - 4) * 2.4, -a); }   // four flights climbing round and round, arriving where they began
+      B(10, 2, 10, frameW, x, 2 + 4 * 4, z); B(3, 6, 3, stone, x, 4, z); add(new THREE.BoxGeometry(6, 9, .6).translate(x, 24, z), new THREE.MeshStandardMaterial({ color: 0x0a1a20 })); K.light(x, 22, z, 0x7ff6ff, 1.2, 80, .05); }
+    if (kind === 'bloom') { for (let ring = 0; ring < 5; ring++) { const n2 = 6 + ring * 6, r2 = ring * 3.4; for (let k = 0; k < n2; k++) { const a = k / n2 * 6.283 + ring * .3; add(new THREE.CylinderGeometry(1.9, 1.9, .6, 6).rotateX(-.25 * ring).translate(x + Math.cos(a) * r2, 8 - ring * 1.3, z + Math.sin(a) * r2), ring % 2 ? violet : K.glow(0x60d0f0, 2.2)); } }   // hex petals, rising to a lit heart
+      S(2, gold, x, 10, z, 1, 1, 1, 10); K.light(x, 14, z, 0xb070ff, 1.4, 90, .05); }
+    if (kind === 'pylons') { const tops = []; for (let k = 0; k < 6; k++) { const a = k / 6 * 6.283, px = x + Math.cos(a) * 14, pz = z + Math.sin(a) * 14, h = 18 + (k % 3) * 5; add(new THREE.CylinderGeometry(.8, 1.6, h, 4).translate(px, h / 2 + 1.5, pz), crystal); add(new THREE.OctahedronGeometry(1.8).translate(px, h + 3, pz), white); tops.push(new THREE.Vector3(px, h + 3, pz)); }
+      for (let k = 0; k < 6; k++) for (const d of [1, 2]) add(new THREE.TubeGeometry(new THREE.LineCurve3(tops[k], tops[(k + d) % 6]), 1, .18, 4), teal); K.light(x, 18, z, 0x60f0ff, 1.4, 90, .05); }   // lines of light from top to top
+    if (kind === 'grove') { for (let k = 0; k < 7; k++) { const a = k * 2.4, d = 4 + (k % 3) * 5, px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d, h = 8 + rnd() * 6; C(.5, .9, h, 6, frameW, px, h / 2 + 1.5, pz); add(new THREE.IcosahedronGeometry(3 + rnd() * 2, 0).translate(px, h + 3, pz), crystal); } K.light(x, 14, z, 0x7ff6ff, 1.2, 80, .05); }   // trees with crystal canopies
+    if (kind === 'paper') { for (let k = 0; k < 14; k++) { const m = new THREE.Mesh(new THREE.ConeGeometry(2.2, 6, 3).rotateZ(Math.PI / 2).scale(1, .35, 1), paper); m.position.set(x + (rnd() - .5) * 26, 8 + rnd() * 18, z + (rnd() - .5) * 26); m.userData.p = m.position.clone(); m.userData.ph = rnd() * 9; g.add(m); spin.push(m); m.userData.fly = true; }   // a flock of folded paper, circling
+      for (let k = 0; k < 4; k++) add(new THREE.ConeGeometry(3, 6, 4).translate(x + (rnd() - .5) * 20, 4.5, z + (rnd() - .5) * 20), paper); } });
+  // the heart: a round chamber, a golden spiral inlaid in its floor, and the nested solids turning over a plinth, each its own way; above, a broken piece of maze floats upside down
+  { const [x, z] = at(hi, hj), rr = u * 2.3; add(new THREE.CylinderGeometry(rr, rr, .4, 48).translate(x, 1.3, z), new THREE.MeshStandardMaterial({ color: 0x1a3a40, roughness: .3, metalness: .3 }));
+    for (let k = 0; k < 220; k++) { const t = k / 220 * 4 * Math.PI, r2 = 1.2 * Math.exp(.306 * t); if (r2 > rr - 2) break; B(1.2, .3, 1.2, gold, x + Math.cos(t) * r2, 1.6, z + Math.sin(t) * r2); }   // phi's spiral
+    T(rr - .8, .6, teal, x, 1.8, z, 0, Math.PI / 2, Math.PI * 2, 64);
+    for (let q = 0; q < 8; q++) { const a = q * Math.PI / 4; B(3, 24, 3, stone, x + Math.cos(a) * (rr + 1), 13, z + Math.sin(a) * (rr + 1)); add(new THREE.OctahedronGeometry(2.2).translate(x + Math.cos(a) * (rr + 1), 27, z + Math.sin(a) * (rr + 1)), teal); }
+    add(new THREE.CylinderGeometry(5, 6.5, 6, 6).translate(x, 4, z), stone);
+    const nest = [new THREE.Mesh(new THREE.IcosahedronGeometry(20, 0), new THREE.MeshStandardMaterial({ color: 0x7ff6ff, emissive: 0x20c8e0, emissiveIntensity: .6, wireframe: true })), new THREE.Mesh(new THREE.OctahedronGeometry(13, 0), new THREE.MeshStandardMaterial({ color: 0xffd070, emissive: 0xc08020, emissiveIntensity: 1.2, wireframe: true })), new THREE.Mesh(new THREE.BoxGeometry(8.5, 8.5, 8.5), crystal), new THREE.Mesh(new THREE.SphereGeometry(1.6, 12, 8), gold)];
+    nest.forEach((m, i) => { m.position.set(x, 32, z); g.add(m); m.userData.s = [[.13, .2, 0], [-.2, .13, .1], [.3, -.25, .2], [0, 0, 0]][i]; spin.push(m); });
+    const inv = new THREE.Group(); inv.position.set(x, 96, z); g.add(inv); const iw = (lx, lz, az) => { const m = new THREE.Mesh(new THREE.BoxGeometry(az ? 2.4 : u, WH, az ? u : 2.4), glassW); const fr = new THREE.Mesh(new THREE.BoxGeometry(az ? 1.6 : u, 1.2, az ? u : 1.6), frameW); fr.position.set(lx, -WH, lz); inv.add(fr); m.position.set(lx, -WH / 2, lz); inv.add(m); const c2 = new THREE.Mesh(new THREE.BoxGeometry(az ? 1.2 : u - 2, 2, az ? u - 2 : 1.2), crystal); c2.position.set(lx, -WH - 1, lz); inv.add(c2); };
+    const fl = new THREE.Mesh(new THREE.BoxGeometry(u * 3, 1, u * 3), new THREE.MeshStandardMaterial({ map: floorM.map, color: 0xffffff, emissive: 0x30c8e0, emissiveMap: floorM.map, emissiveIntensity: 1.4, transparent: true, opacity: .3, depthWrite: false, side: THREE.DoubleSide })); inv.add(fl); for (const [lx, lz, az] of [[-u, 0, 1], [0, -u * 1.5, 0], [u * .5, u * .5, 1], [u, -u * .5, 0], [-u * .5, u * 1.5, 0], [u * 1.5, u, 1]]) iw(lx, lz, az);   // the floating piece of maze, upside down
+    inv.userData.s = [0, .05, 0]; inv.traverse(o => { o.raycast = () => {}; }); spin.push(inv);
+    K.light(x, 30, z, 0x7ff6ff, 3.2, 220, .05); K.mark('heart', x, 10, z); if (deadEnds.length) K.mark('tree', deadEnds[0][0], 4, deadEnds[0][1]); K.light(x, 8, z, 0xffd070, 1.6, 120, .05); }
+  anim.push(t => { if (!UNDER.on) return; for (const m of spin) { if (m.userData.fly) { const p = m.userData.p, ph = m.userData.ph; m.position.set(p.x + Math.sin(t * .4 + ph) * 8, p.y + Math.sin(t * .9 + ph) * 2, p.z + Math.cos(t * .4 + ph) * 8); m.rotation.y = -t * .4 - ph; continue; } const s2 = m.userData.s; m.rotation.set(t * s2[0], t * s2[1], t * s2[2]); } });
+  const cells = [...seen]; for (let q = 0; q < 6; q++) { const k = cells[((q + .5) / 6 * cells.length) | 0], [x, z] = at(Math.floor(k / 1000), k % 1000); K.light(x, 22, z, 0x60f0ff, 1.6, 130, .03); }
+  K.flush();
+};
+// @@UNDER_BUILDERS_END
 function buildUnder() {
   const g = UNDER.grp = new THREE.Group(); g.visible = false; scene.add(g); const rnd = mulberry32(404), R = HEX_R;
   const rockT = ctex(512, 512, (c, w, h) => { c.fillStyle = '#2a2622'; c.fillRect(0, 0, w, h); for (let i = 0; i < 2600; i++) { const x = rnd() * w, y = rnd() * h, sz = 2 + rnd() * 18, rot = rnd() * 3.14, k = .4 + rnd() * .6; c.fillStyle = rnd() < .5 ? 'rgba(0,0,0,' + (.08 + rnd() * .2) + ')' : 'rgba(120,108,96,' + (.04 + rnd() * .1) + ')';
@@ -4967,10 +5548,11 @@ function buildUnder() {
       if (!nb.length) { st.pop(); continue; } const [nx, ny] = nb[(mr() * nb.length) | 0]; vis[ny * N + nx] = 1; c.beginPath(); c.moveTo((cx + .5) * cs, (cy + .5) * cs); c.lineTo((nx + .5) * cs, (ny + .5) * cs); c.stroke(); st.push(ny * N + nx); } });
   const rock1 = rockT.clone(); rock1.repeat.set(1, 1); rock1.needsUpdate = true; const wallM = new THREE.MeshStandardMaterial({ color: 0x3a342e, roughness: 1 });
   for (const t of things) { const cfg = UNDER_AT[t.name]; if (!cfg) continue;
-    const hexes = cfg.shaft ? t.hexes.map(h => hexAt(h.q, h.r)) : all.filter(h => t.hexes.some(b => hexDist(h, b) <= cfg.ring)), area = { name: cfg.name, src: t, hexes, x: t.x, z: t.z, view: 600, mats: [], id: 'u' + t.id, shaft: !!cfg.shaft, under: true };
+    const ctrs = cfg.reach ? t.hexes.flatMap(b => [b, ...cfg.reach.map(([dq, dr]) => ({ q: b.q + dq, r: b.r + dr }))]) : t.hexes, hexes = cfg.shaft ? t.hexes.map(h => hexAt(h.q, h.r)) : all.filter(h => ctrs.some(b => hexDist(h, b) <= cfg.ring)), area = { name: cfg.name, src: t, hexes, x: t.x, z: t.z, view: 600, mats: [], id: 'u' + t.id, shaft: !!cfg.shaft, under: true };
     let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const h of hexes) { x0 = Math.min(x0, h.x); x1 = Math.max(x1, h.x); z0 = Math.min(z0, h.z); z1 = Math.max(z1, h.z); UNDER.byHex.set(hexKey(h.q, h.r), area); }
     area.view = clamp(Math.max(x1 - x0, z1 - z0) * 1.3 + 320, 480, 1900); UNDER.areas.push(area);
     if (cfg.shaft) { buildShaft(g, t); continue; }
+    if (UNDER_BUILD[t.name]) { UNDER_BUILD[t.name](g, area, R); const bm = new THREE.Mesh(new THREE.CylinderGeometry(14, 18, 240, 24, 1, true), new THREE.MeshBasicMaterial({ color: cfg.glow, transparent: true, opacity: .05, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false })); bm.position.set(t.x, 120, t.z); bm.raycast = () => {}; g.add(bm); continue; }   // built out in full: its own builder, and the way up still shown
     // the cavern: its floor across all its hexes, a ragged wall of rock round its edge, and in the middle the way down from above
     const fv = [], fu = [], walls = [], spanX = x1 - x0 + 2 * R, spanZ = z1 - z0 + 2 * R;
     for (const h of hexes) for (let i = 0; i < 6; i++) { const a0 = i * Math.PI / 3, a1 = a0 + Math.PI / 3;
@@ -4986,6 +5568,7 @@ function buildUnder() {
     const lamps = hexes.filter(() => rnd() < .4), li = new THREE.InstancedMesh(new THREE.SphereGeometry(2.2, 8, 6), new THREE.MeshBasicMaterial({ color: cfg.glow }), Math.max(lamps.length, 1)), m4 = new THREE.Matrix4();
     lamps.forEach((h, i) => li.setMatrixAt(i, m4.makeTranslation(h.x + (rnd() - .5) * R, 6 + rnd() * 8, h.z + (rnd() - .5) * R))); li.count = lamps.length; li.computeBoundingSphere(); g.add(li); }
   { const hl = new THREE.HemisphereLight(0xffe2c0, 0x3a3028, 1.1); g.add(hl); UNDER.hemi = hl; }
+  underLightPool(g);
   g.traverse(o => o.layers.set(3));   // the under map is drawn on a layer of its own: underground the camera looks at that layer alone, so nothing of the campus above is drawn, whatever its animations do
 }
 // the Pillardrop: a round shaft going down a very long way, its walls lined ring under ring with thousands of small doorways, a few of them lit; ledges every so often, and the daylight far above
@@ -5224,12 +5807,13 @@ function buildShaft(g, t) { const D = SHAFT_D, rnd = mulberry32(492), G = pdGeo(
     for (const key in LS) low.add(stripMesh(LS[key], key));
     
     real.traverse(o => { o.raycast = () => {}; }); low.traverse(o => { o.raycast = () => {}; });
-    return { real, low, LP, LC };
+    return { real, low, LP, LC, BR };
   }
   const lowMat = { plankL: new THREE.MeshStandardMaterial({ map: woodT, roughness: .9, side: THREE.DoubleSide }), timberL: new THREE.MeshStandardMaterial({ map: scafT, color: 0x8a6440, alphaTest: .5, side: THREE.DoubleSide, roughness: .9 }), deck: mats.deck, rail: mats.rail, stair: new THREE.MeshStandardMaterial({ map: stoneT, roughness: .92, side: THREE.DoubleSide }), scaf: mats.scaf, door: new THREE.MeshStandardMaterial({ map: doorT, roughness: .9, side: THREE.DoubleSide }),
     pier: new THREE.MeshStandardMaterial({ map: stoneT, roughness: .92, side: THREE.DoubleSide }), hut: new THREE.MeshStandardMaterial({ color: 0xc09a6a, roughness: .95, side: THREE.DoubleSide }) };
   function stripMesh(R, key) { const ge = new THREE.BufferGeometry(); ge.setAttribute('position', new THREE.Float32BufferAttribute(R.p, 3)); ge.setAttribute('uv', new THREE.Float32BufferAttribute(R.u, 2)); ge.setIndex(R.i); ge.computeVertexNormals(); ge.computeBoundingSphere(); const m = new THREE.Mesh(ge, lowMat[key] || mats.deck); m.raycast = () => {}; return m; }
   const VER = [buildBand(7001, true), buildBand(7307, false), buildBand(7919, false)], vOf = bi => bi === 0 ? 0 : 1 + (((bi * 2654435761) >>> 0) >>> 9) % 2;
+  UNDER.lay.brOf = L => VER[vOf(Math.floor(L / LB))].BR[L % LB] || [];   // the bridges leaving level L, in its band's own coordinates (the same as the world's but for height)
   UNDER.band = { top: levelY(0), h: BANDH, n: NB, vOf: Array.from({ length: NB }, (_, bi) => vOf(bi)), pool: VER.map((v, i) => i === 0 ? [v.real] : [v.real, v.real.clone()]), far: [] };
   for (const P of UNDER.band.pool) for (const r of P) { r.visible = false; g.add(r); }
   for (let bi = 0; bi < NB; bi++) { const V = VER[UNDER.band.vOf[bi]], c = V.low.clone(), f = Math.pow(.8, bi), fl2 = Math.pow(.9, bi), rr = mulberry32(5000 + bi * 131), P2 = [], C2 = []; c.position.y = levelY(0) - bi * BANDH; c.visible = false;
@@ -5801,7 +6385,7 @@ function underClick(t, dbl) { if (t.door != null) { toDoor(t.door); return; } if
 // People and skeletons walk briskly with arms swinging, some carrying loads; mummies shuffle slowly with arms held out before them, a loose bandage trailing; ghosts are the same
 // ghosts as haunt Lorehold, shrunk: a glowing hooded shape with reaching arms and bright eyes, its tail rippling, drifting above the walkway and now and then out over the drop.
 // They are worked out afresh each frame for the levels round the eye only, so the whole shaft seems busy while nothing is kept for the levels out of sight
-function buildPeople(g) { const NMAX = 360, GMAX = 120, XMAX = 200;
+function buildPeople(g) { const NMAX = 480, GMAX = 160, XMAX = 280;
   const mk = (geo, mat, n) => { const m = new THREE.InstancedMesh(geo, mat, n); m.count = 0; m.frustumCulled = false; m.raycast = () => {}; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.setColorAt(0, new THREE.Color()); g.add(m); return m; };
   const flat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .9 }), glowE = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false });
   // a leg with its foot, an arm with its hand, both hanging from the joint
@@ -5827,7 +6411,7 @@ const hatCols = [0x5a3a22, 0x3a3028, 0x7a5a30, 0x6a2a20];
 function updatePeople(t) { const P = UNDER.people, Ly = UNDER.lay; if (!P || !Ly) return; let n = 0, gn = 0, hn = 0, rn = 0, sn = 0; const wrap = s2 => ((s2 % Ly.len) + Ly.len) % Ly.len, blocked = s2 => Ly.cols.some(a => wrap(s2 - (a - 6)) < Ly.COLL + 12);
   const face = (fx, fz) => { WkX.set(-fz, 0, fx); WkZ.set(fx, 0, fz); WkB.makeBasis(WkZ, WkY, WkX); WkQ.setFromRotationMatrix(WkB); };
   const setI = (m, i, px, py, pz, sx, sy, sz, c, q = WkQ) => { WkM.compose(WkV.set(px, py, pz), q, WkS.set(sx, sy, sz)); m.setMatrixAt(i, WkM); m.setColorAt(i, CC.setHex(c)); };
-  const put = (x, y, z, fx, fz, walk, kind, ci, carry, sc) => { if (n >= 360) return; const K = CREW[kind], col = K.cols[ci % K.cols.length], st = Math.sin(walk) * K.stride, bob = Math.abs(Math.cos(walk)) * .08 * sc * K.pace; face(fx, fz);
+  const put = (x, y, z, fx, fz, walk, kind, ci, carry, sc) => { if (n >= 480) return; const K = CREW[kind], col = K.cols[ci % K.cols.length], st = Math.sin(walk) * K.stride, bob = Math.abs(Math.cos(walk)) * .08 * sc * K.pace; face(fx, fz);
     const set = (m, ...a) => setI(m, n, ...a), hip = y + 1.35 * sc + bob, lean = kind === 'mummy' ? .12 : 0, hx = x + fx * lean * 1.6, hy = hip + (K.h + .35) * sc, hz = z + fz * lean * 1.6;
     set(P.body, x + fx * lean, hip + K.h * .5 * sc, z + fz * lean, K.w * sc, K.h * sc, K.w * 1.25 * sc, col[0]);
     set(P.head, hx, hy, hz, .32 * sc, .34 * sc, .32 * sc, col[1]);
@@ -5835,12 +6419,12 @@ function updatePeople(t) { const P = UNDER.people, Ly = UNDER.lay; if (!P || !Ly
     for (const [leg, sg] of [[P.legL, 1], [P.legR, -1]]) { WkQ2.setFromAxisAngle(WkX, st * sg); WkQ2.premultiply(WkQ); set(leg, x + WkX.x * .17 * sc * sg, hip, z + WkX.z * .17 * sc * sg, .18 * sc, 1.35 * sc, .2 * sc, col[2], WkQ2); }
     for (const [arm, sg] of [[P.armL, 1], [P.armR, -1]]) { const ang = K.arms === 'out' ? -1.45 + .08 * Math.sin(walk * 2 + sg) : carry ? -.9 : -st * sg * .9; WkQ2.setFromAxisAngle(WkX, ang); WkQ2.premultiply(WkQ);
       const ax = x + WkX.x * (K.w + .1) * sc * sg + fx * lean, ay = hip + K.h * .95 * sc, az = z + WkX.z * (K.w + .1) * sc * sg + fz * lean; set(arm, ax, ay, az, .14 * sc, .95 * sc, .16 * sc, kind === 'person' ? col[1] : col[0], WkQ2);
-      if (kind === 'mummy' && sg > 0 && sn < 200) { WkQ2.setFromAxisAngle(WkX, -.25 + .35 * Math.sin(t * 4 + walk)); WkQ2.premultiply(WkQ); setI(P.strip, sn++, ax + fx * .8 * sc, ay - .05, az + fz * .8 * sc, .12 * sc, .9 * sc, 1, col[0], WkQ2); } }
-    if (kind === 'person' && ci % 3 !== 2 && hn < 200) setI(P.hat, hn++, hx, hy + .3 * sc, hz, .32 * sc, .32 * sc, .32 * sc, hatCols[ci % 4]);
-    if (kind === 'skeleton' && rn < 200) setI(P.ribs, rn++, x, hip + K.h * .62 * sc, z, .36 * sc, .9 * sc, .32 * sc, col[0]);
+      if (kind === 'mummy' && sg > 0 && sn < 280) { WkQ2.setFromAxisAngle(WkX, -.25 + .35 * Math.sin(t * 4 + walk)); WkQ2.premultiply(WkQ); setI(P.strip, sn++, ax + fx * .8 * sc, ay - .05, az + fz * .8 * sc, .12 * sc, .9 * sc, 1, col[0], WkQ2); } }
+    if (kind === 'person' && ci % 3 !== 2 && hn < 280) setI(P.hat, hn++, hx, hy + .3 * sc, hz, .32 * sc, .32 * sc, .32 * sc, hatCols[ci % 4]);
+    if (kind === 'skeleton' && rn < 280) setI(P.ribs, rn++, x, hip + K.h * .62 * sc, z, .36 * sc, .9 * sc, .32 * sc, col[0]);
     if (carry === 2) set(P.load, x, hip + (K.h + .78) * sc, z, .6 * sc, .4 * sc, .6 * sc, 0x9a7c54); else if (carry === 1) set(P.load, x + fx * .45 * sc, hip + K.h * .55 * sc, z + fz * .45 * sc, .7 * sc, .55 * sc, .6 * sc, 0x8a6a44); else set(P.load, x, y - 60, z, .001, .001, .001, 0);
     n++; };
-  const ghost = (x, y, z, fx, fz, ph, sc) => { if (gn >= 120) return; face(fx, fz); const k = .2 * sc, fy = y + .4 + .45 * Math.sin(t * 1.7 + ph);
+  const ghost = (x, y, z, fx, fz, ph, sc) => { if (gn >= 160) return; face(fx, fz); const k = .2 * sc, fy = y + .4 + .45 * Math.sin(t * 1.7 + ph);
     for (const m of [P.gBody, P.gArms, P.gEyes]) { WkM.compose(WkV.set(x, fy, z), WkQ, WkS.setScalar(k)); m.setMatrixAt(gn, WkM); } gn++; };
   const camL = Math.round((Ly.levelY(0) - camera.position.y) / PD_LV);
   for (let L = camL - 5; L <= camL + 5; L++) { if (L < 1 || L >= Ly.levels) continue; const y = Ly.levelY(L), r = mulberry32(31337 + L * 977);
@@ -5851,7 +6435,12 @@ function updatePeople(t) { const P = UNDER.people, Ly = UNDER.lay; if (!P || !Ly
       else put(a[0] + a[2] * off, y, a[1] + a[3] * off, fx, fz, stand ? Math.sin(t * 3 + ph) * .3 : s2 * 1.6 * (kind === 'mummy' ? 1.6 : 1), kind, ci, stand ? 0 : carry, sc); }
     // a few on each flight of stairs going down from this level, climbing or descending
     Ly.cols.forEach(col => { for (let q = 0; q < 2; q++) { if (r() < .4) continue; const kr = r(), kind = kr < .5 ? 'person' : kr < .8 ? 'skeleton' : 'mummy', even = L % 2 === 0, top = even ? col : col + Ly.RUN + Ly.HOLE + Ly.LAND, fd = even ? 1 : -1, sp = (.025 + r() * .03) * CREW[kind].pace, ph = r() * 6.283, d = (Math.sin(t * sp + ph) * .5 + .5) * (Ly.RUN - 2) + 1, up = Math.cos(t * sp + ph) < 0;
-      const s2 = wrap(top + fd * d), a = Ly.along(s2), yy = y - d * PD_LV / Ly.RUN + .3; put(a[0] + a[2] * (Ly.SW / 2 + .3), yy, a[1] + a[3] * (Ly.SW / 2 + .3), a[4] * fd * (up ? -1 : 1), a[5] * fd * (up ? -1 : 1), d * 2.6, kind, (r() * 9) | 0, kind !== 'mummy' && r() < .4 ? 1 : 0, .9 + r() * .2); } }); }
+      const s2 = wrap(top + fd * d), a = Ly.along(s2), yy = y - d * PD_LV / Ly.RUN + .3; put(a[0] + a[2] * (Ly.SW / 2 + .3), yy, a[1] + a[3] * (Ly.SW / 2 + .3), a[4] * fd * (up ? -1 : 1), a[5] * fd * (up ? -1 : 1), d * 2.6, kind, (r() * 9) | 0, kind !== 'mummy' && r() < .4 ? 1 : 0, .9 + r() * .2); } });
+    // and some crossing the chasm on its bridges, there and back, keeping to one side of the deck and following its sag; a ghost now and then drifts over with them
+    if (Ly.brOf) Ly.brOf(L).forEach(br => { const P0 = br.A, P1 = br.B, dy = y - P0[1], span = Math.hypot(P1[0] - P0[0], P1[2] - P0[2]), dx = (P1[0] - P0[0]) / span, dz = (P1[2] - P0[2]) / span, sag = 1 + span * .025;
+      for (let q = 0, nq = 1 + ((r() * 3) | 0); q < nq; q++) { const kr = r(), isGhost = kr < .18, kind = kr < .55 ? 'person' : kr < .8 ? 'skeleton' : 'mummy', sp = (.05 + r() * .05) * (isGhost ? .7 : CREW[kind].pace) * 60 / span, ph = r() * 6.283, side = (r() < .5 ? -1 : 1) * (.6 + r() * .9), ci = (r() * 9) | 0, carry = !isGhost && kind !== 'mummy' && r() < .4 ? 1 + (r() < .5 ? 1 : 0) : 0, sc = .85 + r() * .25;
+        const u = .04 + .92 * (.5 - .5 * Math.cos(t * sp + ph)), dir = Math.sin(t * sp + ph) >= 0 ? 1 : -1, x = lerp(P0[0], P1[0], u) - dz * side, z = lerp(P0[2], P1[2], u) + dx * side, yy = lerp(P0[1], P1[1], u) - sag * 4 * u * (1 - u) + dy + .2;
+        if (isGhost) ghost(x, yy + 1, z, dx * dir, dz * dir, ph, sc); else put(x, yy, z, dx * dir, dz * dir, u * span * 1.6 * (kind === 'mummy' ? 1.6 : 1), kind, ci, carry, sc); } }); }
   const done = (m, c) => { m.count = c; m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; };
   for (const k of ['body', 'head', 'legL', 'legR', 'armL', 'armR', 'load', 'eyes']) done(P[k], n); done(P.hat, hn); done(P.ribs, rn); done(P.strip, sn); for (const k of ['gBody', 'gArms', 'gEyes']) done(P[k], gn); }
 // ---- the machinery round the eye: jib cranes on the rails swinging their loads out over the drop and turning them, which fold back against the wall as the eye comes level with them;
@@ -6040,7 +6629,7 @@ setTimeout(async () => {
     veil.rotation.x = -Math.PI / 2; veil.position.y = 40; veil.renderOrder = 9999; veil.frustumCulled = false; veil.raycast = () => {}; scene.add(veil); const lb = document.getElementById('labels'); if (lb) lb.style.opacity = 0;
     const tv = performance.now(), DUR = 3200; anim.push(() => { if (!veil.parent) return; const f = Math.min((performance.now() - tv) / DUR, 1); veil.material.uniforms.uR.value = -400 + 6400 * f * f * (3 - 2 * f); if (f >= 1) { scene.remove(veil); veil.geometry.dispose(); veil.material.dispose(); if (lb) { lb.style.transition = 'opacity .6s'; lb.style.opacity = 1; } } }); }
   loading.style.display = 'none'; terrainCache.put();
-  window.__sx = { THREE, camera, controls, flyTo, heightAt, renderer, scene, U, stats, things, movers, quality: Q, pick, targetAt, terrainMesh, pace, ray, hexOwner, select, setHover, composer, updateLabels };
+  window.__sx = { THREE, camera, controls, flyTo, heightAt, renderer, scene, U, stats, things, movers, quality: Q, pick, targetAt, terrainMesh, pace, ray, hexOwner, select, setHover, composer, updateLabels, under: { go: p => goUnder(p), surface: () => goSurface(), U: UNDER }, hexAt, sqIn: (x, z) => sqInside(x / S, z / S) };
   const clock = new THREE.Clock(); let acc = 0, frames = 0;
   const fwd = new THREE.Vector3(), right = new THREE.Vector3(), mv = new THREE.Vector3(), hvP = new THREE.Vector3(), hvQ = new THREE.Quaternion(); let hvX = -1, hvY = -1, hvAt = 0;
   // the solid, unlit parts of things, which may be left out of a frame when too small to see. Lights and glowing things stay in always (a glint shows however small it is), and so does anything that walks or flies
