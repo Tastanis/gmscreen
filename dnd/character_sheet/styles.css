@@ -2361,6 +2361,10 @@ body.edit-mode .respite-btn {
   gap: 6px;
 }
 
+/* Kit box values that come from the kit's feature card (sheet.js effectiveKit): shown, not typed. */
+.kit-card .kit-card-source { font-weight: 400; font-size: 0.8em; opacity: 0.7; text-transform: none; letter-spacing: 0; }
+.kit-card .kit-from-card .display-value { font-style: italic; }
+
 .kit-card .kit-grid {
   margin-bottom: 8px;
 }

@@ -114,6 +114,43 @@ const DEFAULT_KIT_FIELDS = {
   rangedDamageHigh: "",
 };
 
+// The kit's feature card: a feature whose title names a kit ("Shining Armor Kit", "Kit- Warrior Priest"), the one with
+// automation modifiers first. Its values are what the Kit box shows for the fields it carries (one source).
+function kitFeatureOf(state = sheetState) {
+  const features = Array.isArray(state?.features) ? state.features : [];
+  const isKit = (feature) => /\bkit\b/i.test(String(feature?.title || feature?.name || ""));
+  return features.find((feature) => isKit(feature) && feature?.automation?.modifiers?.length) || features.find(isKit) || null;
+}
+
+/** The Kit box values a kit card carries: its name, and +N damage and distance for melee and for ranged. */
+function kitValuesFromFeature(feature) {
+  if (!feature) return {};
+  const values = {};
+  const name = String(feature.title || feature.name || "").replace(/\bkit\b/gi, "").replace(/^[\s\-–—:]+|[\s\-–—:]+$/g, "").replace(/\s+/g, " ").trim();
+  if (name) values.name = name.replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
+  const modifiers = Array.isArray(feature.automation?.modifiers) ? feature.automation.modifiers : [];
+  const reachOf = (modifier) => {
+    if (modifier?.match?.reach === "melee" || modifier?.match?.reach === "ranged") return modifier.match.reach;
+    const keywords = [...(modifier?.match?.keywordsAll || []), ...(modifier?.match?.keywordsAny || [])].map((k) => String(k).toLowerCase());
+    return keywords.includes("melee") ? "melee" : keywords.includes("ranged") ? "ranged" : "";
+  };
+  for (const reach of ["melee", "ranged"]) {
+    const mine = modifiers.filter((modifier) => reachOf(modifier) === reach);
+    const damage = mine.reduce((sum, modifier) => sum + (Number(modifier?.apply?.damageBonus) || 0), 0);
+    const distance = mine.reduce((sum, modifier) => sum + (Number(modifier?.apply?.rangeBonus) || 0), 0);
+    if (damage) ["Low", "Mid", "High"].forEach((tier) => { values[`${reach}Damage${tier}`] = `+${damage}`; });
+    if (distance) values[`${reach}Distance`] = `+${distance}`;
+  }
+  return values;
+}
+
+/** The Kit box as shown, printed and exported: its own fields, with what the kit card carries over them. */
+function effectiveKit(state = sheetState) {
+  const card = kitFeatureOf(state);
+  const fromCard = kitValuesFromFeature(card);
+  return { values: { ...DEFAULT_KIT_FIELDS, ...(state?.hero?.kit || {}), ...fromCard }, fromCard, card };
+}
+
 function defaultCommonThing() {
   return {
     id: createId("common"),
@@ -1231,7 +1268,17 @@ function renderHeroPane() {
     `;
   };
 
+  const kit = effectiveKit();
   const kitItem = (label, key) => {
+    // From the kit's feature card: shown, not typed (change the card to change it).
+    if (Object.prototype.hasOwnProperty.call(kit.fromCard, key)) {
+      return `
+      <div class="detail-item kit-from-card" title="From the kit card: ${escapeHtml(kit.card?.title || kit.card?.name || "")}">
+        <div class="detail-item__label">${label}</div>
+        <div class="display-value">${escapeHtml(kit.fromCard[key])}</div>
+      </div>
+    `;
+    }
     const value = hero.kit?.[key] ?? "";
     return `
       <div class="detail-item">
@@ -1403,7 +1450,7 @@ function renderHeroPane() {
 
       <div class="bottom-details">
         <div class="field-card detail-card kit-card">
-          <label>Kit</label>
+          <label>Kit${kit.card ? ` <span class="kit-card-source">from ${escapeHtml(kit.card.title || kit.card.name || "the kit card")}</span>` : ""}</label>
           <div class="detail-grid kit-grid">
             ${kitItem("Kit Name", "name")}
             ${kitItem("Weapon / Implement", "weapon")}
@@ -4403,7 +4450,7 @@ function buildSkillExportPayload() {
       ancestry: sheetState.hero?.ancestry || "",
       career: sheetState.hero?.career || {},
       culture: sheetState.hero?.culture || {},
-      kit: sheetState.hero?.kit || {},
+      kit: effectiveKit(sheetState).values,
       complication: sheetState.hero?.complication || "",
     },
     trainedSkills: skills,
@@ -4746,7 +4793,7 @@ function buildPrintableCharacterSheetHtml(inventoryData) {
   const immunities = sheetState.sidebar?.lists?.immunity || [];
   const languages = sheetState.sidebar?.lists?.languages || [];
   const commonThings = normalizeCommonThings(sheetState.sidebar?.lists?.common || []);
-  const kit = { ...DEFAULT_KIT_FIELDS, ...(hero.kit || {}) };
+  const kit = effectiveKit(sheetState).values;
   const kitHasData = Object.values(kit).some((value) => String(value ?? "").trim() !== "");
   const kitDamageTiers = (prefix) => ["Low", "Mid", "High"].map((tier, index) => `
     <div class="fs-kit-tier">
