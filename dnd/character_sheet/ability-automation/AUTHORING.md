@@ -462,7 +462,7 @@ Put trigger-resolution effects such as `halveTriggeringDamage`, teleport, option
 
 For passive no-choice effects, add `"autoResolve": true` to the trigger block and put the effects directly on that same trigger block. The VTT runs those trigger `effects` immediately instead of showing a ready `!`. This is intended for simple public banners and similar automatic effects, not for reactions that require a player choice.
 
-`autoResolve` uses the board's ongoing-effect dispatcher, not the full interactive runner. Supported kinds are `damage`, flat `heal`, `temporaryStamina`, `surgeGain`, `condition`, `floatingText`, `note`, `other`, and `ifMark` branches containing those kinds. It does not support forced movement, teleport, potency, resource spends/recoveries, `amountFrom`, or per-effect target routing. Use the trigger block's `effectTarget` for targeting; otherwise resolve manually. The schema warns when an auto-resolved trigger contains an unsupported effect.
+`autoResolve` uses the board's ongoing-effect dispatcher, not the full interactive runner. Supported kinds are `damage`, flat `heal`, `temporaryStamina`, `surgeGain`, `condition`, `floatingText`, `note`, `other`, and `ifMark` branches containing those kinds. It does not support forced movement, teleport, potency, resource spends/recoveries, or `amountFrom` (other than the squares of the move that set it off). Each effect goes to its own `target` (`self`, `target`, `eventActor`, `eventSource`, `eventTarget`), else to the trigger block's `effectTarget`; otherwise resolve manually. The schema warns when an auto-resolved trigger contains an unsupported effect.
 
 Clicking a structured trigger ability directly with no captured trigger payload registers only the trigger listener and then stops. Treat this as a fallback/debug path, not the default gameplay flow.
 
@@ -1005,7 +1005,7 @@ Optional resource spend that, if accepted by the user, triggers extra effects.
 |---|---|
 | `resource` | string — the heroic resource name |
 | `amount` | int — cost |
-| `timing` | `"preRoll"` (must be decided before the roll) or `"postResult"` (after the tier is known) |
+| `timing` | Does nothing: a spend is offered when its effect is reached. The paste box warns on `"preRoll"`. |
 | `effects` | list of effects to apply on accept |
 
 Runtime prompts the user contextually: "Spend N <resource> for: <effects>?".

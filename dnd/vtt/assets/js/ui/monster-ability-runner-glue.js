@@ -273,6 +273,7 @@
             applyMark: board.applyMark,
             endMark: board.endMark,
             checkMark: board.checkMark,
+            getMarkedTarget: board.getMarkedTarget,
             fireTriggerEvent: board.fireTriggerEvent,
             checkScopedFlag: board.checkScopedFlag,
             setScopedFlag: board.setScopedFlag,

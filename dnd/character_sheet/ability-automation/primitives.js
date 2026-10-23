@@ -412,16 +412,20 @@
     if (!effect || typeof effect !== "object") return "";
     switch (effect.kind) {
       case "damage": {
-        const amount = effect.amount || 0;
         const mult = Number(effect.multiplier) || 1;
-        const attr = effect.attribute ? ` + ${mult !== 1 ? `${mult}× ` : ""}${effect.attribute}` : "";
+        const parts = [Number(effect.amount) ? String(effect.amount) : "", effect.amountDice ? String(effect.amountDice) : "",
+          effect.attribute ? `${mult !== 1 ? `${mult}× ` : ""}${effect.attribute}` : ""].filter(Boolean);
+        const from = describeTriggerValue(effect.amountFrom);
         const type = Array.isArray(effect.damageTypeOptions) && effect.damageTypeOptions.length > 1
           ? ` [choose ${effect.damageTypeOptions.join(" / ")}]`
           : effect.damageType && effect.damageType !== "untyped" ? ` ${effect.damageType}` : "";
         const immunity = effect.ignoreImmunity === true
           ? " (ignores immunity)"
           : Number(effect.ignoreImmunity) > 0 ? ` (ignores ${effect.ignoreImmunity} immunity)` : "";
-        return `${amount}${attr}${type} damage${describeTriggerValue(effect.amountFrom)}${immunity}`;
+        // "5 + 2d6 + Might fire damage", or "psychic damage equal to triggering movement" when that is all of it.
+        const amountText = parts.length ? parts.join(" + ") : from ? "" : "0";
+        const tail = from ? (amountText ? from : ` equal to ${from.slice(3)}`) : "";
+        return `${amountText}${type} damage${tail}${immunity}`.trim();
       }
       case "heal": {
         if (effect.recoveries) {

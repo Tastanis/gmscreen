@@ -257,9 +257,12 @@ function hasAbilityAutomation(automation) {
   // Ability automation lives in `cards`; feature automation (kit modifiers)
   // lives in `modifiers`. Both shapes count as "has automation" — without
   // this, kit JSONs were being discarded on save by normalizeAutomationBlock.
-  const hasCards = Array.isArray(automation.cards) && automation.cards.length > 0;
+  const hasCards = (Array.isArray(automation.cards) && automation.cards.length > 0)
+    || (Array.isArray(automation.blocks) && automation.blocks.length > 0);
   const hasModifiers = Array.isArray(automation.modifiers) && automation.modifiers.length > 0;
-  return hasCards || hasModifiers;
+  // A feature whose automation is only passives (Stand Firm) was dropped on save.
+  const hasPassives = Array.isArray(automation.passives) && automation.passives.length > 0;
+  return hasCards || hasModifiers || hasPassives;
 }
 
 function normalizeAutomationBlock(automation) {

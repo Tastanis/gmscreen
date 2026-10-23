@@ -283,7 +283,9 @@
       warnings.push(`${path}: amountFrom must be an object.`);
       return null;
     }
-    const rawSource = asTrimmedString(input.source) || "triggeringDamage";
+    let rawSource = asTrimmedString(input.source) || "triggeringDamage";
+    // The squares of the move that set the trigger off: the same field as forced movement's distance.
+    if (rawSource === "triggeringMovement" || rawSource === "movedDistance") rawSource = "triggeringForcedMovement";
     const sourceValid = P.TRIGGER_VALUE_SOURCES.includes(rawSource);
     if (!sourceValid) {
       warnings.push(`${path}.source: "${input.source}" not in ${P.TRIGGER_VALUE_SOURCES.join("/")}. Using triggeringDamage.`);
@@ -689,6 +691,9 @@
           prompt: asTrimmedString(input.prompt),
           effects: normalizeEffectList(input.effects || [], warnings, `${path}.effects`),
         };
+        if (input.timing !== undefined && input.timing !== "" && input.timing !== "postResult") {
+          warnings.push(`${path}.timing: "${input.timing}" does nothing; a spend is offered when its effect is reached (after any roll before it).`);
+        }
         if (!effect.resource) warnings.push(`${path}: spend missing resource name.`);
         const extras = pickExtras(input, known);
         if (extras) effect._extra = extras;
@@ -964,7 +969,7 @@
       if (value.value !== undefined) {
         return {
           value: Math.max(0, asInt(value.value, 1)),
-          mode: pickKnown(value.mode, ["exact", "upTo"], "exact"),
+          mode: pickKnown(value.mode, ["exact", "upTo", "all"], "exact"),
         };
       }
     }
@@ -1524,9 +1529,6 @@
       if (!AUTO_RESOLVE_EFFECT_KINDS.has(effect?.kind)) {
         warnings.push(`${effectPath}: "${effect?.kind || "(blank)"}" is not supported by trigger autoResolve; resolve this trigger manually.`);
         return;
-      }
-      if (effect?.target) {
-        warnings.push(`${effectPath}.target: per-effect target routing is not supported by trigger autoResolve; use the trigger block's effectTarget.`);
       }
       // An amount taken from the squares of the move that set the trigger off IS worked out when it resolves by
       // itself (Thorn In Foot: 1 damage for each square moved). Other amountFrom sources are not.

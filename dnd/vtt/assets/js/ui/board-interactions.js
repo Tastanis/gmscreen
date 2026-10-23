@@ -3393,7 +3393,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const targetKey = String(entry?.effectTarget || entry?.resolveTarget || 'eventActor').trim().toLowerCase();
     const idsByKey = {
       self: [entry?.tokenId || ''],
-      target: [entry?.tokenId || ''],
+      target: Array.isArray(entry?.targetIds) && entry.targetIds.length ? entry.targetIds : [entry?.tokenId || ''],
       eventactor: [payload.actorId || payload.placementId || payload.sourceId || payload.targetId || entry?.tokenId || ''],
       triggeractor: [payload.actorId || payload.placementId || payload.sourceId || payload.targetId || entry?.tokenId || ''],
       eventsource: [payload.sourceId || payload.actorId || payload.placementId || entry?.tokenId || ''],
@@ -3421,15 +3421,27 @@ export function mountBoardInteractions(store, routes = {}) {
       const { amountFrom: _from, ...rest } = effect;
       return { ...rest, amount: moved * (Number(effect.amountFrom?.multiplier) || 1) };
     });
-    const result = await applyOngoingAutomationEffects({
-      sourceId: entry.tokenId || '',
-      sourceName: tokenLabel(sourcePlacement),
-      abilityId: entry.abilityId || '',
-      abilityName: entry.abilityName || 'Triggered Ability',
-      effects: resolved,
-      placements: resolveAutoTriggerPlacements(entry, payload),
-      reason: eventType || 'trigger',
+    const byTarget = new Map();
+    resolved.forEach((effect) => {
+      const key = typeof effect?.target === 'string' ? effect.target.trim() : '';
+      if (!byTarget.has(key)) byTarget.set(key, []);
+      byTarget.get(key).push(effect);
     });
+    const details = [];
+    let result = null;
+    for (const [key, list] of byTarget) {
+      result = await applyOngoingAutomationEffects({
+        sourceId: entry.tokenId || '',
+        sourceName: tokenLabel(sourcePlacement),
+        abilityId: entry.abilityId || '',
+        abilityName: entry.abilityName || 'Triggered Ability',
+        effects: list,
+        placements: resolveAutoTriggerPlacements(key ? { ...entry, effectTarget: key } : entry, payload),
+        reason: eventType || 'trigger',
+      });
+      if (result?.detail) details.push(result.detail);
+    }
+    if (result && details.length > 1) result = { ...result, detail: details.join('; ') };
     if (entry.authored && entry.abilityName && window.dashboardChat?.sendMessage) {
       const detail = result?.detail ? `: ${result.detail}` : '.';
       window.dashboardChat.sendMessage({
@@ -5763,6 +5775,13 @@ export function mountBoardInteractions(store, routes = {}) {
         const otherPlacement = getPlacementFromStore(otherId);
         if (!casterPlacement || !otherPlacement) return null;
         return placementSquareDistance(casterPlacement, otherPlacement, getActiveSceneTokenLevelState());
+      },
+      // Line of effect between two tokens' middles, past the map's walls (null when it can't be told).
+      hasLineOfEffect(casterId, otherId) {
+        const a = getPlacementFromStore(casterId), b = getPlacementFromStore(otherId);
+        if (!a || !b || typeof window.wallPrototype?.blocksSight !== 'function') return null;
+        const middle = (p) => ({ x: (Number(p.column) || 0) + (Number(p.width) || 1) / 2, y: (Number(p.row) || 0) + (Number(p.height) || 1) / 2 });
+        try { return !window.wallPrototype.blocksSight(middle(a), middle(b)); } catch (error) { return null; }
       },
     });
   }
@@ -13677,6 +13696,10 @@ export function mountBoardInteractions(store, routes = {}) {
     applyMark: function (payload) { return dispatchBoardCustom('vtt:automation-apply-mark', 'payload', payload); },
     endMark: function (payload) { return dispatchBoardCustom('vtt:automation-end-mark', 'payload', payload); },
     checkMark: function (payload) { return dispatchBoardCustom('vtt:automation-check-mark', 'payload', payload); },
+    getMarkedTarget: function (payload) {
+      const target = getJudgedTargetForSource(payload?.sourceId || '', payload?.markType || 'judgment');
+      return target ? { id: target.id, name: tokenLabel(target) } : null;
+    },
     fireTriggerEvent: function (payload) { return dispatchBoardCustom('vtt:automation-fire-trigger-event', 'payload', payload); },
     checkScopedFlag: function (payload) { return dispatchBoardCustom('vtt:automation-check-scoped-flag', 'payload', payload); },
     setScopedFlag: function (payload) { return dispatchBoardCustom('vtt:automation-set-scoped-flag', 'payload', payload); },

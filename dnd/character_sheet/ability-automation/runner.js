@@ -539,6 +539,10 @@
     }
     const eventTarget = resolveTriggerPlacementGroup(state, groupName);
     if (eventTarget) return eventTarget;
+    // "target" means the ability's target: a group of that name, or else the targets picked last.
+    if (String(groupName).toLowerCase() === "target" && !state.groups[groupName]) {
+      return state.groups[state.currentGroup || "primary"] || [];
+    }
     return state.groups[groupName] || [];
   }
 
@@ -657,9 +661,10 @@
       if (effect.kind === kind) return true;
       if (effect.kind === "potency" && (effectListContainsKind(effect.onFail, kind) || effectListContainsKind(effect.onResist, kind))) return true;
       if (effect.kind === "spend" && effectListContainsKind(effect.effects, kind)) return true;
-      if (effect.kind === "ifKeyword" || effect.kind === "ifPrompt" || effect.kind === "ifMark" || effect.kind === "ifScopedFlag" || effect.kind === "ifDistance" || effect.kind === "ifZone") {
+      if (effect.kind === "ifKeyword" || effect.kind === "ifPrompt" || effect.kind === "ifMark" || effect.kind === "ifScopedFlag" || effect.kind === "ifDistance" || effect.kind === "ifZone" || effect.kind === "ifStrained") {
         if (effectListContainsKind(effect.then, kind) || effectListContainsKind(effect.else, kind)) return true;
       }
+      if (effect.kind === "aura" && effectListContainsKind(effect.effects, kind)) return true;
     }
     return false;
   }
@@ -907,7 +912,7 @@
           seen.add(result.id);
           selected.push(result);
         }
-        if (!Number.isFinite(desired)) break;
+        // Count "all"/"each": picking goes on until Done.
       }
       setTargetGroup(state, block.name, selected);
     } catch (error) {
@@ -1621,8 +1626,10 @@
   async function runTriggerBlock(state, block) {
     const ctx = state.context || {};
     const casterId = state.sourcePlacement?.id || "";
-    const targetGroupRef = block.target || "";
-    const targetIds = collectTargetIdsForGroup(state, targetGroupRef);
+    const targetGroupRef = block.target || block.match?.filter?.targetGroup || "";
+    let targetIds = collectTargetIdsForGroup(state, targetGroupRef);
+    // whose:"target" with no group of its own: the targets picked last (REGISTRY).
+    if (!targetIds.length && block.match?.filter?.whose === "target") targetIds = collectTargetIdsForGroup(state, state.currentGroup);
     const inner = (block.effects || []).map(P.describeEffect).filter(Boolean).join("; ");
 
     if (block.match && typeof ctx.registerTrigger === "function") {
@@ -2134,8 +2141,8 @@
     const strained = isCasterStrained(state);
     const branch = strained ? effect.then : effect.else;
     if (!Array.isArray(branch) || !branch.length) return;
-    // Branch reuses the current target group — same convention as ifKeyword.
-    await applyEffects(state, branch, null, ctx);
+    // Branch goes to the wrapper's own target, else the current target group (as ifPrompt).
+    await applyEffects(state, branch, effect.target || null, ctx);
   }
 
   function formatPromptQuestion(effect, targets) {
@@ -2587,22 +2594,29 @@
           message: `${state.heroName} - ${state.action.name || "Ability"}: ${target.name || "Target"} resisted ${effect.attribute}<${Number.isFinite(Number(effect.threshold)) ? Number(effect.threshold) : effect.level}.`,
         });
         if (Array.isArray(effect.onResist) && effect.onResist.length) {
-          await applyEffects(
-            { ...state, groups: { _potency: [target] } },
-            effect.onResist,
-            "_potency",
-            ctx
-          );
+          await applyPotencyBranch(state, [target], effect.onResist, ctx);
         }
         continue;
       }
-      const failedTargets = [target];
-      await applyEffects(
-        { ...state, groups: { _potency: failedTargets } },
-        effect.onFail || [],
-        "_potency",
-        ctx
-      );
+      await applyPotencyBranch(state, [target], effect.onFail || [], ctx);
+    }
+  }
+
+  // A potency result's effects: on the ability's own state (its named groups, and a stop that ends the ability), with
+  // the target that failed or resisted as the group they fall back to. The state is put back as it was afterwards.
+  async function applyPotencyBranch(state, targets, effects, ctx) {
+    if (!effects.length) return;
+    const hadGroup = Object.prototype.hasOwnProperty.call(state.groups, "_potency");
+    const previousGroup = state.groups._potency;
+    const previousCurrent = state.currentGroup;
+    state.groups._potency = targets;
+    state.currentGroup = "_potency";
+    try {
+      await applyEffects(state, effects, "_potency", ctx);
+    } finally {
+      if (hadGroup) state.groups._potency = previousGroup;
+      else delete state.groups._potency;
+      state.currentGroup = previousCurrent;
     }
   }
 
@@ -2613,8 +2627,8 @@
       : true;
     const branch = matched ? effect.then : effect.else;
     if (!Array.isArray(branch) || !branch.length) return;
-    // Reuse the current target group for the branch.
-    await applyEffects(state, branch, null, ctx);
+    // The wrapper's own target, else the current target group (as ifPrompt).
+    await applyEffects(state, branch, effect.target || null, ctx);
   }
 
   function rollDiceFormula(formula) {
@@ -2840,8 +2854,7 @@
     if (effect.target === "eventTarget") {
       targetId = payload.targetId || payload.placementId || "";
     } else if (effect.target === "judgedTarget" && typeof state.context.getMarkedTarget === "function") {
-      // This hook is optional; fall back to current target when absent.
-      targetId = "";
+      targetId = state.context.getMarkedTarget({ markType: "judgment", sourceId: state.sourcePlacement?.id || "" })?.id || "";
     }
     if (!targetId) targetId = (targets || []).find((t) => t?.id)?.id || payload.targetId || payload.placementId || "";
     return { sourceId, targetId };
@@ -2981,6 +2994,10 @@
           automation,
         });
       }
+      const on = targetMode === "target" ? ` on ${(targets || []).map((t) => t?.name).filter(Boolean).join(", ") || "the target"}` : "";
+      await postChat(state.context, {
+        message: `${state.heroName} - ${state.action.name || "Ability"}: aura ${enabled ? `on, ${radius} ${radius === 1 ? "square" : "squares"}` : "off"}${on}.`,
+      });
       return;
     }
     await postChat(state.context, {
@@ -3036,7 +3053,7 @@
     await postChat(state.context, {
       message: `${state.heroName} - ${state.action.name || "Ability"}: spent ${spent} ${resource}.`,
     });
-    await applyEffects(state, effect.effects || [], null, ctx);
+    await applyEffects(state, effect.effects || [], effect.target || null, ctx);
   }
 
   async function applyResourceGainEffect(state, effect, _targets, _ctx) {
@@ -3901,10 +3918,12 @@
 
   function walkBlockEffects(block, visit) {
     if (!block || typeof block !== "object") return;
-    if (block.type === "powerRoll" && block.tiers) {
+    if ((block.type === "powerRoll" || block.type === "requestedTest") && block.tiers) {
       for (const key of P.TIER_KEYS) {
         const effects = block.tiers[key]?.effects || [];
         walkEffectList(effects, visit);
+        // The tiers used while the actor is winded.
+        walkEffectList(block.whenWinded?.tiers?.[key]?.effects || [], visit);
       }
     } else if (Array.isArray(block.effects)) {
       walkEffectList(block.effects, visit);
@@ -3936,10 +3955,11 @@
         walkEffectList(effect.then || [], visit);
         walkEffectList(effect.else || [], visit);
       }
-      if (effect.kind === "ifDistance" || effect.kind === "ifZone") {
+      if (effect.kind === "ifDistance" || effect.kind === "ifZone" || effect.kind === "ifStrained") {
         walkEffectList(effect.then || [], visit);
         walkEffectList(effect.else || [], visit);
       }
+      if (effect.kind === "aura" && Array.isArray(effect.effects)) walkEffectList(effect.effects, visit);
     }
   }
 

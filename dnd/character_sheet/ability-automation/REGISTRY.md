@@ -209,7 +209,8 @@ Token target blocks support `excludeGroups: ["groupName"]`, which prevents selec
 Multi-target token blocks always show the board picker. After the first target,
 the next picker exposes **Done** and continues with the selected targets.
 `count.mode: "upTo"` additionally exposes **Done** before the first selection,
-allowing an empty target group.
+allowing an empty target group. `count: "all"` (or `"each"`, or `{ mode: "all" }`) keeps
+picking until **Done**.
 
 ## Target predicates — `target.predicate`
 
@@ -257,11 +258,11 @@ Registered values: `untyped`, `acid`, `cold`, `corruption`, `fire`, `holy`,
 
 ## Spend timings — `spend.timing`
 
-`preRoll`, `postResult`
+`preRoll`, `postResult`: accepted, but they do nothing. A spend is offered when its effect is reached (after any roll before it); the paste box warns when `timing` is anything but `postResult`.
 
 ## Trigger value sources — `amountFrom.source`
 
-`triggeringDamage` (Full — reads the captured damage `amount`), `triggeringForcedMovement` (Full — reads `distance` / `movedDistance` from normal move and forced-movement trigger payloads).
+`triggeringDamage` (Full — reads the captured damage `amount`), `triggeringForcedMovement` (Full — reads `distance` / `movedDistance` from normal move and forced-movement trigger payloads). `triggeringMovement` and `movedDistance` are accepted as names for `triggeringForcedMovement`.
 
 `amountFrom` is accepted on `damage`, `heal`, and `temporaryStamina`. The captured value is scaled by `multiplier` × `fraction` (both default `1`) then rounded (`rounding`: `down` default, `up`), and the result is added on top of the effect's own `amount` / `attribute` / `amountDice`. Only populated when the effect runs from a resolved trigger payload (`state.triggerPayload`); contributes `0` on a normal ability use. `halveTriggeringDamage` remains the dedicated "you take half" refund; `amountFrom` is for turning the captured value into a new damage/heal on any target.
 
@@ -429,22 +430,22 @@ Trigger blocks may carry a structured `match` alongside the free-text `condition
 | `staminaChange` | `whose`, `direction` (`up`/`down`/`either`) |
 | `turnStart`, `turnEnd` | `whose` |
 | `roundStart`, `roundEnd`, `combatStart`, `combatEnd` | no filter usually; `whose` defaults to `any` |
-| `move` | `whose`, `leavesAdjacency` bool, `entersAdjacency` bool, `minDistance`, `maxDistance` |
+| `move` | `whose`, `leavesAdjacency` bool, `entersAdjacency` bool, `minDistance`, `maxDistance`, `verb` (the kind of move: `walk` or `move`, `shift`, `teleport`) |
 | `damageDealt` | same fields as `damage`; `whose` resolves against `sourceId` |
 | `forcedMovement` | `whose`, `targetWhose`, `minDistance`, `maxDistance`, `verb` |
 | `forcedMovementDealt` | same fields as `forcedMovement`; `whose` resolves against `sourceId` |
 | `powerRoll`, `abilityTest`, `abilityRoll` | `whose`, `targetWhose`, `actionKind`, `keywordsAny`, `costIncludes`, `attribute`, `tier`, `minTotal`, `maxTotal` |
 | `potency` | `whose`, `targetWhose`, `attribute`, `level`, `minTargets`, `maxTargets` |
 | `staminaZero` | same as `staminaChange` |
-| `actionUsed` | `whose`, `actionKind`, `keywordsAny`, `costIncludes`; `lineOfEffectTo` is accepted by the schema but not evaluated yet |
-| `markApplied` | `whose`, `markType`, `source` |
+| `actionUsed` | `whose`, `actionKind`, `keywordsAny`, `costIncludes`, `lineOfEffectTo` (`eventActor`/`eventSource`/`eventTarget`: the caster must have line of effect to that creature, past the map's walls; when it can't be told, the trigger is not stopped) |
+| `markApplied` | `whose`, `markType`, `source` (who put the mark on: `self`, `ally`, `enemy`, `any`) |
 | *(any event)* | `withinSquares` int, `minSquares` int — square-distance band between the caster and the event's other token; skipped if either lacks a placement |
 | *(any event)* | `excludeSelf` bool — never arm off an event the caster themself caused (pair with `whose:"ally"`, which is a team check that INCLUDES self). `casterHasNotActed` bool — only arm while the caster has not yet taken (and is not currently taking) their turn this combat round. Use both for "another hero ends their turn" reactions like Hesitation Is Weakness. |
 | *(events with target ids)* | `targetWhose` — requires at least one payload target (`targetId`, `placementId`, or `targetIds[]`) to match `self`/`ally`/`enemy`/`target`/`judgedTarget`/`markSource`/`any`. Use with `whose:"ally"` + `targetWhose:"target"` for "an ally rolls against the watched target." |
 
 `whose` resolves against:
 - `self` -> the caster's own placement id
-- `target` -> ids in the target group named by `block.target` (or just the most recent group)
+- `target` -> ids in the target group named by `block.target` (or `filter.targetGroup`), else the targets picked last
 - `judgedTarget` -> the caster's current `judgment` target
 - `markSource` -> a token marked by the caster
 - `ally`/`enemy` -> team comparison against the caster's combat team

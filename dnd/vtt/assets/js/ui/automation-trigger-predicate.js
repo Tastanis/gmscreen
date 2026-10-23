@@ -101,6 +101,14 @@ export function buildAutomationTriggerPredicate(entry, env = {}) {
     if (filter.targetWhose && !anyTokenMatchesWhose(payloadTargetIds(payload), (id) => matchWhose(filter.targetWhose, id))) {
       return false;
     }
+    // Line of effect from the caster to the creature named (walls only; when it can't be told, it doesn't stop the trigger).
+    if (filter.lineOfEffectTo && typeof env.hasLineOfEffect === 'function') {
+      const key = String(filter.lineOfEffectTo).toLowerCase();
+      const otherId = key === 'eventsource' || key === 'triggersource' ? (payload.sourceId || payloadTokenId)
+        : key === 'eventtarget' || key === 'triggertarget' ? (payloadTargetIds(payload)[0] || payloadTokenId)
+          : payloadTokenId;
+      if (otherId && env.hasLineOfEffect(casterId, otherId) === false) return false;
+    }
     if ((filter.withinSquares != null || filter.minSquares != null) && typeof env.getSquareDistance === 'function') {
       const otherDistanceId = payload.sourceId || payloadTokenId;
       const squares = env.getSquareDistance(casterId, otherDistanceId);
@@ -176,7 +184,8 @@ export function buildAutomationTriggerPredicate(entry, env = {}) {
     }
     if (event === 'markApplied') {
       if (filter.markType && String(payload.markType || '').toLowerCase() !== String(filter.markType).toLowerCase()) return false;
-      if (filter.source === 'self' && payload.sourceId !== casterId) return false;
+      // Who put the mark on: self, ally, enemy (only "self" was honoured).
+      if (filter.source && filter.source !== 'any' && !matchWhose(filter.source, payload.sourceId || '')) return false;
       return true;
     }
     if (event === 'move') {
@@ -190,6 +199,11 @@ export function buildAutomationTriggerPredicate(entry, env = {}) {
       const distance = Number.parseInt(payload.distance ?? payload.movedDistance, 10) || 0;
       if (filter.minDistance && distance < filter.minDistance) return false;
       if (filter.maxDistance && distance > filter.maxDistance) return false;
+      // The kind of move: walk (or move), shift, teleport... (it was accepted and ignored).
+      if (filter.verb) {
+        const kind = String(payload.kind || 'walk').toLowerCase(), verb = String(filter.verb).toLowerCase();
+        if (verb !== kind && !(verb === 'move' && kind === 'walk')) return false;
+      }
       return true;
     }
     if (event === 'forcedMovement' || event === 'forcedMovementDealt') {
