@@ -657,7 +657,10 @@
         return `${total}${type} damage${describeTriggerValue(effect.amountFrom)}${immunity}`;
       }
       case "potency": {
-        const threshold = resolvePotencyThreshold(effect.level, ctx);
+        // A monster's written number (M<2) wins over the level worked out from the user's stats.
+        const threshold = Number.isFinite(Number(effect.threshold)) && effect.threshold !== "" && effect.threshold !== null
+          ? Number(effect.threshold)
+          : resolvePotencyThreshold(effect.level, ctx);
         const failed = (effect.onFail || []).map((eff) => describeEffectResolved(eff, ctx)).filter(Boolean).join(", ");
         const resisted = (effect.onResist || []).map((eff) => describeEffectResolved(eff, ctx)).filter(Boolean).join(", ");
         const inner = [failed, resisted ? `resisted: ${resisted}` : ""].filter(Boolean).join("; ");

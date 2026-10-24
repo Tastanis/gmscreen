@@ -1045,7 +1045,8 @@ test('power roll surge control exposes available and armed visual states', async
     assert.match(availableHtml, /power-roll-runner__surges--available/);
     assert.match(availableHtml, /power-roll-runner__surge-btn is-available/);
     assert.match(availableHtml, /aria-pressed="false"/);
-    assert.match(availableHtml, />Surge \+2<\/button>/);
+    assert.match(availableHtml, /2 surges/);
+    assert.match(availableHtml, /\+0 dmg/);
 
     const armedHtml = render(
       { hero: { surges: 2, stats: { agility: 2 } }, powerRollSurges: 1 },
@@ -1054,7 +1055,9 @@ test('power roll surge control exposes available and armed visual states', async
     assert.match(armedHtml, /power-roll-runner__surges--armed/);
     assert.match(armedHtml, /is-available is-armed/);
     assert.match(armedHtml, /aria-pressed="true"/);
-    assert.match(armedHtml, />Surge Armed<\/button>/);
+    assert.match(armedHtml, /\+2 dmg/);
+    // No surges to spend: the pill is not shown at all.
+    assert.equal(render({ hero: { surges: 0, stats: { agility: 2 } }, powerRollSurges: 0 }, { type: 'powerRoll', tiers: {} }), '');
   } finally {
     harness.close();
   }

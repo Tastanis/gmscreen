@@ -1117,33 +1117,44 @@
     return () => { stopped = true; window.clearTimeout(timer); };
   }
 
-  function renderRollSuggestionButtons(state) {
+  function renderRollSuggestionButtons(state, manualEdgeState = null) {
     const suggestions = Array.isArray(state.rollSuggestions) ? state.rollSuggestions : [];
-    if (!suggestions.length) {
-      return '<div class="power-roll-runner__suggestions power-roll-runner__suggestions--empty"><span>No board suggestions</span></div>';
-    }
-    const buttons = suggestions.map((suggestion) => {
+    const chips = suggestions.map((suggestion) => {
       const count = Math.max(1, Math.min(2, asInt(suggestion.count, 1)));
       const icon = suggestion.kind === "damage"
         ? `+${asInt(suggestion.amount, 0)} dmg`
         : suggestion.kind === "potency"
           ? `+${asInt(suggestion.amount, 0)} potency`
           : suggestion.kind === "edge"
-            ? (count > 1 ? "^^" : "^")
-            : (count > 1 ? "vv" : "v");
-      const pressed = suggestion.active ? "true" : "false";
+            ? (count > 1 ? "▲▲" : "▲")
+            : (count > 1 ? "▼▼" : "▼");
+      const tone = suggestion.kind === "bane" ? "b" : "e";
       return `
         <button
-          class="power-roll-runner__suggestion ${suggestion.active ? "power-roll-runner__suggestion--active" : ""}"
+          class="power-roll-runner__suggestion pr5-chip pr5-chip--${tone} ${suggestion.active ? "power-roll-runner__suggestion--active is-on" : ""}"
           type="button"
           data-power-roll-suggestion-toggle="${escapeHtml(suggestion.id)}"
           data-suggestion-kind="${escapeHtml(suggestion.kind)}"
-          aria-pressed="${pressed}"
+          aria-pressed="${suggestion.active ? "true" : "false"}"
           title="${escapeHtml(suggestion.reason || suggestion.label)}"
         >${escapeHtml(icon)} ${escapeHtml(suggestion.label)}</button>
       `;
     }).join("");
-    return `<div class="power-roll-runner__suggestions">${buttons}</div>`;
+    const manual = manualEdgeState || getEdgeState(state.edgeCount, state.baneCount);
+    const manualChip = (kind, count, label) => {
+      const active = edgeControlIsActive(manual, kind, count);
+      const attribute = kind === "edge" ? "data-power-roll-edge-adjust" : "data-power-roll-bane-adjust";
+      return `<button class="pr5-chip pr5-chip--${kind === "edge" ? "e" : "b"} ${active ? "is-on" : ""}" type="button" ${attribute}="${count}" aria-pressed="${active ? "true" : "false"}">${label}</button>`;
+    };
+    const manualOpen = Boolean(state.showManualEdges) || manual.edge > 0 || manual.bane > 0;
+    return `
+      <div class="power-roll-runner__suggestions pr5-chips">
+        ${chips}
+        <button class="pr5-chip pr5-chip--add ${manualOpen ? "is-open" : ""}" type="button" data-power-roll-manual-toggle aria-expanded="${manualOpen ? "true" : "false"}" title="Add an edge or bane yourself">+</button>
+      </div>
+      <div class="pr5-chips pr5-chips--manual" ${manualOpen ? "" : "hidden"}>
+        ${manualChip("edge", 1, "▲ Edge")}${manualChip("edge", 2, "▲▲ Double edge")}${manualChip("bane", 1, "▼ Bane")}${manualChip("bane", 2, "▼▼ Double bane")}
+      </div>`;
   }
 
   function getPowerRollTotal(state, block) {
@@ -1225,26 +1236,25 @@
     return state.powerRollSurges;
   }
 
+  // Surges: a small pill (they are not used often). Hidden when the roller has none to spend.
   function renderPowerRollSurgeControls(state, block) {
     if (!canUsePowerRollSurges(block)) return "";
     const available = getAvailableSurges(state);
     const count = clampPowerRollSurges(state, block);
     const hasAvailableSurges = available > 0;
     const hasArmedSurges = count > 0;
+    if (!hasAvailableSurges && !hasArmedSurges) return "";
+    const per = surgeDamagePerSpend(state);
     const disabledMinus = count <= 0 ? "disabled" : "";
     const disabledPlus = count >= Math.min(3, available) ? "disabled" : "";
-    const plusTitle = available <= 0
-      ? ' title="No surges available on this character" aria-label="No surges available"'
-      : hasArmedSurges
-        ? ` title="${count} surge${count === 1 ? "" : "s"} armed for +${count * surgeDamagePerSpend(state)} damage" aria-label="${count} surge${count === 1 ? "" : "s"} armed for +${count * surgeDamagePerSpend(state)} damage"`
-        : ` title="Spend one surge for +${surgeDamagePerSpend(state)} damage" aria-label="Spend one surge for +${surgeDamagePerSpend(state)} damage"`;
     return `
-      <div class="power-roll-runner__surges ${hasAvailableSurges ? "power-roll-runner__surges--available" : ""} ${hasArmedSurges ? "power-roll-runner__surges--armed" : ""}">
-        <span>Surges: ${escapeHtml(available)}</span>
-        <button class="power-roll-runner__mini-btn" type="button" data-power-roll-surge-adjust="-1" ${disabledMinus}>-</button>
-        <strong class="${hasArmedSurges ? "is-armed" : ""}" data-power-roll-surge-count>${escapeHtml(count)} (+${escapeHtml(count * surgeDamagePerSpend(state))} damage)</strong>
-        <button class="power-roll-runner__mini-btn power-roll-runner__surge-btn ${hasAvailableSurges ? "is-available" : ""} ${hasArmedSurges ? "is-armed" : ""}" type="button" data-power-roll-surge-adjust="1" aria-pressed="${hasArmedSurges ? "true" : "false"}" ${disabledPlus}${plusTitle}>${hasArmedSurges ? "Surge Armed" : `Surge +${surgeDamagePerSpend(state)}`}</button>
-      </div>
+      <span class="pr5-pill pr5-surge power-roll-runner__surges ${hasAvailableSurges ? "power-roll-runner__surges--available" : ""} ${hasArmedSurges ? "power-roll-runner__surges--armed is-on" : ""}">
+        <span class="pr5-gem" aria-hidden="true">◆</span>${escapeHtml(available)} surge${available === 1 ? "" : "s"}
+        <button class="pr5-step" type="button" data-power-roll-surge-adjust="-1" ${disabledMinus} aria-label="One surge fewer">−</button>
+        <span class="pr5-n ${hasArmedSurges ? "is-armed" : ""}" data-power-roll-surge-count>${escapeHtml(count)}</span>
+        <button class="pr5-step power-roll-runner__surge-btn ${hasAvailableSurges ? "is-available" : ""} ${hasArmedSurges ? "is-armed" : ""}" type="button" data-power-roll-surge-adjust="1" aria-pressed="${hasArmedSurges ? "true" : "false"}" ${disabledPlus} aria-label="Spend one surge for +${escapeHtml(per)} damage">+</button>
+        <span class="pr5-dmg">+${escapeHtml(count * per)} dmg</span>
+      </span>
     `;
   }
 
@@ -1289,79 +1299,132 @@
     return { spent, damage: spent * surgeDamagePerSpend(state), targetId: choice.id };
   }
 
+  // ---------- the power roll window (C5 "Tier Ladder") ----------
+
+  const TIER_ROWS = [
+    { key: "tier3", range: "17+", label: "Tier 3" },
+    { key: "tier2", range: "12–16", label: "Tier 2" },
+    { key: "tier1", range: "≤11", label: "Tier 1" },
+  ];
+
+  function edgeStateWords(edgeState) {
+    if (edgeState.net >= 2) return { text: "Double Edge: Tier +1", kind: "edge" };
+    if (edgeState.net === 1) return { text: "Edge +2", kind: "edge" };
+    if (edgeState.net === -1) return { text: "Bane −2", kind: "bane" };
+    if (edgeState.net <= -2) return { text: "Double Bane: Tier −1", kind: "bane" };
+    if (edgeState.edge > 0 && edgeState.bane > 0) return { text: "Edge and bane cancel", kind: "flat" };
+    return { text: "No edge or bane", kind: "flat" };
+  }
+
+  function shortAttribute(name, flat) {
+    const text = String(name || "").trim();
+    if (flat || !text || /^flat$/i.test(text)) return "Base";
+    if (/^strongest$/i.test(text)) return "Best";
+    return text.length > 4 ? text.slice(0, 3) : text;
+  }
+
+  // One tier's effects as text: the first damage number large, potencies as tags; long text wraps.
+  function renderTierEffects(effects, ctx, extraDamage) {
+    let bigDone = false;
+    const parts = (effects || []).map((eff) => {
+      const raw = ctx && P.describeEffectResolved ? P.describeEffectResolved(eff, ctx) : P.describeEffect(eff);
+      if (!raw) return "";
+      // Table words: "A<2 weakened (save ends)", not "Agility<2 → weakened (saveEnds)".
+      const text = String(raw)
+        .replace(/\b(Might|Agility|Reason|Intuition|Presence)</g, (m, name) => `${name[0]}<`)
+        .replace(/ → /g, " ")
+        .replace(/\(saveEnds\)/g, "(save ends)")
+        .replace(/\(endOfTurn\)/g, "(EoT)")
+        .replace(/\(endOfEncounter\)/g, "(end of encounter)")
+        .replace(/\(untilDying\)/g, "(until dying)");
+      if (eff?.kind === "potency") return `<span class="pr5-pot">${escapeHtml(text)}</span>`;
+      if (eff?.kind === "damage" && !bigDone) {
+        bigDone = true;
+        const match = /^(\d+)(.*)$/.exec(text);
+        if (match) {
+          const extra = extraDamage ? `<small> +${escapeHtml(extraDamage)}</small>` : "";
+          return `<span class="pr5-big">${escapeHtml(match[1])}${extra}</span>${escapeHtml(match[2])}`;
+        }
+      }
+      return escapeHtml(text);
+    }).filter(Boolean);
+    return parts.join("; ") || '<span class="pr5-none">No effects</span>';
+  }
+
   function renderPowerRoll(host, state, block) {
     const { total, attribute, attributeBonus, skill, skillBonus, bonus, manualBonus, edgeState } = getPowerRollTotal(state, block);
     const manualEdgeState = getEdgeState(state.edgeCount, state.baneCount);
-    const formulaParts = [`${block.rollFormula || "2d10"} + ${attribute}`];
-    if (skillBonus) formulaParts.push(`${skill || "Skill"} ${formatModifier(skillBonus)}`);
-    if (bonus) formulaParts.push(formatModifier(bonus));
-    if (manualBonus) formulaParts.push(formatModifier(manualBonus));
-    if (edgeState.net) formulaParts.push(edgeState.label);
-    const detail = state.roll
-      ? `Dice: ${state.roll.rolls.join(" + ")} | ${attribute} ${formatModifier(attributeBonus)}${skillBonus ? ` | ${skill || "Skill"} ${formatModifier(skillBonus)}` : ""} | ${edgeState.label}`
-      : formulaParts.join(" ");
-
     const targetGroup = getTargetGroup(state, block.target);
-    const targetName =
-      targetGroup.length > 1
-        ? `${targetGroup.length} targets`
-        : targetGroup[0]?.name || "No target selected";
+    const targetNames = targetGroup.map((target) => target?.name).filter(Boolean).join(" · ") || "No target selected";
+    const titleEl = host.querySelector("#power-roll-title");
+    if (titleEl) titleEl.textContent = state.action.name || "Power Roll";
+    const labelEl = host.querySelector(".dice-modal-project-label");
+    if (labelEl) labelEl.textContent = targetNames;
+    host.classList.add("power-roll-runner--c5");
 
-    const tierDetail = state.roll
-      ? `Tier: ${P.tierLabel(state.selectedTier)}${
-          state.baseTier && state.baseTier !== state.selectedTier ? ` from ${P.tierLabel(state.baseTier)}` : ""
-        }`
-      : "Ready";
+    const flat = asInt(attributeBonus) + asInt(skillBonus) + asInt(bonus) + asInt(manualBonus) + asInt(edgeState.bonus);
+    const formula = `${block.rollFormula || "2d10"} ${flat < 0 ? "−" : "+"} ${Math.abs(flat)}`;
+    const words = edgeStateWords(edgeState);
+    const hasFlat = block && typeof block.flatBonus === "number" && Number.isFinite(block.flatBonus);
+    const breakdown = [`${escapeHtml(shortAttribute(attribute, hasFlat))} ${escapeHtml(formatModifier(attributeBonus))}`];
+    if (skillBonus) breakdown.push(`${escapeHtml(skill || "Skill")} ${escapeHtml(formatModifier(skillBonus))}`);
+    if (bonus) breakdown.push(`Ability ${escapeHtml(formatModifier(bonus))}`);
+    breakdown.push(`<span class="pr5-tag pr5-tag--${words.kind}">${escapeHtml(words.text)}</span>`);
+    if (manualBonus) breakdown.push(`<span class="pr5-tag pr5-tag--bonus">Bonus ${escapeHtml(formatModifier(manualBonus))}</span>`);
 
+    const rolled = Boolean(state.roll);
+    const tierShifted = rolled && state.baseTier && state.selectedTier && state.baseTier !== state.selectedTier;
+    const tierNumber = (key) => String(key || "").replace(/\D/g, "");
+    const tierBadge = rolled && state.selectedTier
+      ? `<span class="pr5-tier ${tierShifted ? (tierNumber(state.selectedTier) > tierNumber(state.baseTier) ? "pr5-tier--up" : "pr5-tier--down") : ""}">TIER ${tierShifted ? `${tierNumber(state.baseTier)} → ${tierNumber(state.selectedTier)}` : tierNumber(state.selectedTier)}</span>`
+      : "";
+    const dice = rolled ? (state.roll.rolls || []).map((value) => `<span class="pr5-die"><span>${escapeHtml(value)}</span></span>`).join("") : "";
+
+    const surgeDamage = clampPowerRollSurges(state, block) * surgeDamagePerSpend(state);
+    const chipDamage = (state.rollSuggestions || []).filter((s) => s?.active && s.kind === "damage").reduce((sum, s) => sum + asInt(s.amount, 0), 0);
+    const ctx = buildResolveCtx(state);
+    const tiers = block.tiers || {};
+    const rows = TIER_ROWS.map(({ key, range, label }) => {
+      const hit = rolled && state.selectedTier === key;
+      return `
+        <button class="pr5-row ${hit ? "pr5-row--hit" : ""}" type="button" data-select-tier="${key}" ${rolled ? "" : "disabled"} aria-pressed="${hit ? "true" : "false"}">
+          <span class="pr5-range">${escapeHtml(range)}<small>${escapeHtml(label.toUpperCase())}</small></span>
+          <span class="pr5-fx">${renderTierEffects(tiers[key]?.effects || [], ctx, hit ? surgeDamage + chipDamage : 0)}</span>
+        </button>`;
+    }).join("");
+
+    const description = plainText(state.action.description || "");
     host.querySelector("[data-power-roll-body]").innerHTML = `
-      <section class="power-roll-runner__section power-roll-runner__section--ability">
-        <div class="power-roll-runner__ability">
-          <h3>${escapeHtml(state.action.name || "Unnamed Ability")}</h3>
-          <p>${escapeHtml(plainText(state.action.description || "No ability text entered."))}</p>
-          <div class="power-roll-runner__meta">
-            <span>Target: ${escapeHtml(targetName)}</span>
-            ${state.action.range ? `<span>Range: ${escapeHtml(state.action.range)}</span>` : ""}
-            ${state.action.cost ? `<span>Cost: ${escapeHtml(state.action.cost)}</span>` : ""}
+      <div class="pr5">
+        <div class="pr5-top">
+          <div class="pr5-medal" aria-live="polite">${rolled && total !== null ? `<span class="pr5-total">${escapeHtml(total)}</span>` : '<span class="pr5-ready">roll</span>'}</div>
+          <div class="pr5-sum">
+            <div class="pr5-formula">${escapeHtml(formula)}</div>
+            <div class="pr5-parts">${breakdown.join(" · ")}</div>
+            ${rolled ? `<div class="pr5-dice">${dice}${tierBadge}</div>` : ""}
           </div>
         </div>
-      </section>
-      <section class="power-roll-runner__dice dice-view dice-view--standard" aria-live="polite">
-        <div class="dice-result-screen power-roll-runner__screen">
-          <div class="dice-queue-display">${escapeHtml(detail)}</div>
-          <div class="dice-result-total">${total === null ? "--" : total}</div>
-          <div class="dice-result-detail">${escapeHtml(tierDetail)}</div>
+        ${state.resultText && !/^Rolled /.test(state.resultText) ? `<div class="pr5-status">${escapeHtml(state.resultText)}</div>` : ""}
+        <div class="pr5-rows ${rolled ? "pr5-rows--rolled" : ""}">${rows}</div>
+        ${description ? `<details class="pr5-text"><summary>Ability text</summary><p>${escapeHtml(description)}</p></details>` : ""}
+        <div class="pr5-mods">
+          ${renderRollSuggestionButtons(state, manualEdgeState)}
+          <div class="pr5-pills">
+            <span class="pr5-pill pr5-bonus ${manualBonus ? "is-on" : ""}">Bonus
+              <button class="pr5-step" type="button" data-power-roll-bonus-adjust="-1" aria-label="Bonus minus one">−</button>
+              <span class="pr5-n">${escapeHtml(formatModifier(manualBonus))}</span>
+              <button class="pr5-step" type="button" data-power-roll-bonus-adjust="1" aria-label="Bonus plus one">+</button>
+            </span>
+            ${renderPowerRollSurgeControls(state, block)}
+            <button class="pr5-clear" type="button" data-power-roll-clear-adjustments>Clear</button>
+          </div>
         </div>
-        <div class="dice-row dice-row--edge-bane power-roll-runner__edge-buttons" aria-label="Manual edge and bane controls">
-          ${renderEdgeControlButton(manualEdgeState, "bane", 2, "BANE vv", "Select double bane")}
-          ${renderEdgeControlButton(manualEdgeState, "bane", 1, "BANE v", "Select bane")}
-          ${renderEdgeControlButton(manualEdgeState, "edge", 1, "EDGE ^", "Select edge")}
-          ${renderEdgeControlButton(manualEdgeState, "edge", 2, "EDGE ^^", "Select double edge")}
-        </div>
-        ${renderRollSuggestionButtons(state)}
-        ${renderPowerRollSurgeControls(state, block)}
-        <div class="power-roll-runner__adjustments">
-          <span>${escapeHtml(edgeState.label)}</span>
-          <span>${escapeHtml(getRollSuggestionLabel(state))}</span>
-          <span>Manual: ${escapeHtml(formatModifier(state.manualBonus))}</span>
-          <button class="power-roll-runner__mini-btn" type="button" data-power-roll-bonus-adjust="-1">-1</button>
-          <button class="power-roll-runner__mini-btn" type="button" data-power-roll-bonus-adjust="1">+1</button>
-          <button class="power-roll-runner__mini-btn" type="button" data-power-roll-clear-adjustments>Clear</button>
-        </div>
-        <div class="dice-actions__controls power-roll-runner__controls">
-          <button class="dice-roll-btn" type="button" data-power-roll-roll>${state.roll ? "Reroll" : "Roll"}</button>
-          <button class="dice-clear-btn" type="button" data-cancel-automation>Cancel</button>
-          ${state.roll ? '<button class="dice-project-roll-btn" type="button" data-power-roll-accept>Accept</button>' : ""}
-        </div>
-      </section>
-      <section class="power-roll-runner__section">
-        <div class="power-roll-runner__tiers">
-          ${renderTierCards(block, state.selectedTier, Boolean(state.roll), state)}
-        </div>
-        <div class="power-roll-runner__details">
-          <strong>Tier preview</strong>
-          <p>${escapeHtml(state.resultText || "Roll, pick a tier if needed, then accept.")}</p>
-        </div>
-      </section>
+      </div>
+      <div class="pr5-bar">
+        ${rolled
+          ? `<button class="pr5-btn" type="button" data-power-roll-roll>Reroll</button><button class="pr5-btn pr5-btn--ok" type="button" data-power-roll-accept>Accept</button>`
+          : `<button class="pr5-btn" type="button" data-cancel-automation>Cancel</button><button class="pr5-btn pr5-btn--roll" type="button" data-power-roll-roll>Roll</button>`}
+      </div>
     `;
   }
 
@@ -1437,6 +1500,11 @@
         state.resultText = state.roll
           ? `${selection.active ? (selection.count >= 2 ? "Double bane selected" : "Bane selected") : "Bane cleared"}. Reroll to post the adjusted result.`
           : "";
+        renderPowerRoll(host, state, block);
+        return;
+      }
+      if (target.closest("[data-power-roll-manual-toggle]")) {
+        state.showManualEdges = !state.showManualEdges;
         renderPowerRoll(host, state, block);
         return;
       }
