@@ -338,7 +338,7 @@ const STREAMS = [[[.0556,.813],[.060,.803],[.055,.793],[.060,.7805]], [[.060,.81
 const platQ = (x, z) => { const dF = Math.hypot(x - CLIFF[0], z - CLIFF[1]); return -((x - CLIFF[0]) * CLIFF[2] + (z - CLIFF[1]) * CLIFF[3]) + 20 * fbm(x / 120, z / 120, 2) * sstep(35, 130, dF) + 5 * fbm(x / 28, z / 28, 2) * sstep(20, 60, dF); };
 const FXSCALE = { value: 1000 };
 // Lorehold locations (live-map hexes)
-const KEYW = hexD(2, 28), MONU = hexD(2, 30), SCRIP = hexD(3, 31), VAULT = hexD(5, 26), BKF = hexD(5, 34), BKF2 = hexD(4, 34), MILL = hexD(6, 24), BONE1 = hexD(7, 23), BONE2 = hexD(6, 23), P492 = hexD(11, 25), HEAP = hexD(8, 34), COFD = hexD(12, 31), COLDL = hexD(3, 23);
+const KEYW = hexD(2, 28), MONU = hexD(2, 30), SCRIP = hexD(3, 31), VAULT = hexD(5, 26), BKF = hexD(7, 34), BKF2 = hexD(6, 34),   /* Oct 24: two hexes east, clear of the trenches */ MILL = hexD(6, 24), BONE1 = hexD(7, 23), BONE2 = hexD(6, 23), P492 = hexD(11, 25), HEAP = hexD(8, 34), COFD = hexD(12, 31), COLDL = hexD(3, 23);
 const PHX = hexD(7, 26);                                              // the Phalanx Crucible, moved off the road onto the hill north-east of the hall
 const WSCAR = makePath(uvs([[.228,.226],[.25,.236],[.278,.25],[.306,.264],[.333,.25],[.361,.236],[.380,.224]]), 40, 60);   // the White Scar: an old river bed
 const BRKL = [(hexD(2, 34)[0] + hexD(3, 37)[0]) / 2, (hexD(2, 34)[1] + hexD(3, 37)[1]) / 2];
@@ -637,7 +637,7 @@ function sample(x, z) {
   site(MONU, 30, 180); site(VAULT, 26, 123);   // (Oct 22: these four places on Kollema's mountain sit lower since the peak above the hall was eased) site(MILL, 22, 98); site(BKF, 40, 38); site(BKF2, 30, 40); site(COLDL, 24, 26); site(BONE1, 34, 28); site(BONE2, 34, 34);
   // --- Quandrix: a stepped hill of paddocks, ground twisted round the Great Snarl, a chalk plateau and its cliff, a gorge, and a quarry floor
   let chalkK = 0, snarlK = 0, snarlS = 0;
-  { const d = Math.hypot(x - BEAST[0], z - BEAST[1]); if (d < 86) { const q = clamp((80 - d) / 64, 0, 1) * 5, fl = Math.floor(q); h = lerp(h, 22 + (fl + sstep(.75, 1, q - fl)) * 9.5, sstep(86, 79, d)); } }
+  { const d = Math.hypot(x - BEAST[0], z - BEAST[1]), BK = 1.55; if (d < 86 * BK) { const q = clamp((80 * BK - d) / (64 * BK), 0, 1) * 5, fl = Math.floor(q); h = lerp(h, 22 + (fl + sstep(.75, 1, q - fl)) * 9.5 * BK, sstep(86 * BK, 79 * BK, d)); } }   // the Beastward's terraces (Oct 24: half as large again, so its beasts fit)
   { const dx = x - SNARL[0], dz = z - SNARL[1], d = Math.hypot(dx, dz); if (d < 100) { const k = sstep(100, 55, d), a = Math.atan2(dz, dx); snarlS = Math.sin(a * 5 + Math.log(d + 8) * 6); h += k * (8 * snarlS + 4 * Math.sin(a * 11 - d * .12)); snarlK = k; if (d < 36) h = lerp(h, 30, sstep(36, 26, d)); } }
   { const dx = x - MESA[0], dz = z - MESA[1], d = Math.hypot(dx, dz); if (d < 190) { const a = Math.atan2(dz, dx), tri = v => Math.abs((((v / 6.283) % 1) + 1) % 1 * 2 - 1) * 2 - 1, rr = 92 + 15 * tri(a * 3 + .6) + 8 * tri(a * 9 + 1.3) + 4 * tri(a * 27), pk = sstep(rr + 4, rr - 4, d);   // a mesa with a snowflake's outline, not a square's
       if (pk > 0) { h = lerp(h, 74 + 6 * sstep(60, 20, d) + 3 * fbm(x / 50, z / 50, 2), pk); const dr = Math.abs(dx - 7 * Math.sin(dz / 26)); if (dr < 15 && dz > -20) { const k = sstep(15, 7, dr) * pk; h -= 4 * k; chalkK = k; } }
@@ -679,6 +679,7 @@ function sample(x, z) {
   // --- Losheal's mountain: the top cut flat, and one piece already lifted out of it (done late, after the peaks round Kollema that would otherwise raise it again)
   { const d = Math.hypot(x - LOSH[0], z - LOSH[1]) + 2.5 * fbm(x / 11, z / 11, 2); if (d < 56) h = lerp(h, 143 + .8 * fbm(x / 9, z / 9, 2), sstep(56, 40, d));   // the summit cut level for the city
     const d2 = Math.hypot(x - LOSH[0] - 34, z - LOSH[1] - 22) + 2 * fbm(x / 8, z / 8, 2); if (d2 < 34) h = Math.min(h, 106 + 37 * sstep(17, 32, d2)); }      // and the crater the first piece was lifted out of
+  site(BKF, 40, 38); site(BKF2, 30, 40); site(MILL, 22, 98);   // the foundry's yard and the mill's levelled again here, after everything that might have built the ground up over it
   // --- walkways
   let walk = 0;
   for (const p of WALKS) { const d = polyDist(p, x, z); if (d < 10) walk = Math.max(walk, sstep(8.5, 5.5, d)); }
@@ -2829,7 +2830,13 @@ function buildProps() {
 
   // ================= Lorehold locations from the live map (each linked to its real hex ids) =================
   { const LST = tx(solid(0xb48d60, .85), 'masonry'), LDK = tx(solid(0x8f6e4a, .9), 'masonry'), LWH = tx(solid(0xe6dcc6, .8), 'rock'), LRK = tx(solid(0x7a5236, .95, { flatShading: true }), 'rock'), timber = solid(0x4a3524, .9), ironM = new THREE.MeshStandardMaterial({ color: 0x3c3a3a, roughness: .55, metalness: .7 }), brassM = new THREE.MeshStandardMaterial({ color: 0xb8923c, roughness: .35, metalness: .8 });
-    const boneM = tx(solid(0xd8d2bc, .8), 'rock'), darkM = solid(0x120e0a, 1), rustM = new THREE.MeshStandardMaterial({ color: 0x5a3626, roughness: .8, metalness: .4, flatShading: true });
+    const boneM = tx(solid(0xd8d2bc, .8), 'rock'), darkM = solid(0x120e0a, 1), rustM = new THREE.MeshStandardMaterial({ map: canvasTex(256, 256, (cx, w, hh) => { const r = mulberry32(404); cx.fillStyle = '#3c3530'; cx.fillRect(0, 0, w, hh);   // old iron (Oct 24): dark metal mottled with rust, pitted
+        for (let i = 0; i < 160; i++) { const x = r() * w, y = r() * hh, rr = 4 + r() * 26, gr = cx.createRadialGradient(x, y, 0, x, y, rr), c = r() < .6 ? '150,70,30' : '90,45,25'; gr.addColorStop(0, 'rgba(' + c + ',' + (.25 + r() * .5) + ')'); gr.addColorStop(1, 'rgba(' + c + ',0)'); cx.fillStyle = gr; cx.fillRect(x - rr, y - rr, rr * 2, rr * 2); }
+        for (let i = 0; i < 500; i++) { cx.fillStyle = r() < .5 ? 'rgba(20,14,10,.6)' : 'rgba(190,110,60,.5)'; cx.fillRect(r() * w, r() * hh, 1 + r() * 2, 1 + r() * 2); } }), roughness: .62, metalness: .65 }),
+      bladeM = new THREE.MeshStandardMaterial({ map: canvasTex(128, 512, (cx, w, hh) => { const r = mulberry32(405), gr = cx.createLinearGradient(0, 0, w, 0); gr.addColorStop(0, '#d8dcde'); gr.addColorStop(.18, '#8f969b'); gr.addColorStop(.45, '#b4babe'); gr.addColorStop(.5, '#5a6066'); gr.addColorStop(.55, '#b4babe'); gr.addColorStop(.82, '#8f969b'); gr.addColorStop(1, '#d8dcde');   // a blade: bright worn edges, a fuller down the middle, scratches, rust climbing from the ground up
+        cx.fillStyle = gr; cx.fillRect(0, 0, w, hh); for (let i = 0; i < 70; i++) { cx.strokeStyle = 'rgba(240,244,246,' + (.1 + r() * .25) + ')'; cx.lineWidth = .6 + r(); const x = r() * w, y = r() * hh; cx.beginPath(); cx.moveTo(x, y); cx.lineTo(x + (r() - .5) * 8, y + 20 + r() * 90); cx.stroke(); }
+        for (let i = 0; i < 140; i++) { const y = hh * Math.pow(r(), .45), x = r() * w, rr = 3 + r() * 16 * (y / hh + .3), g2 = cx.createRadialGradient(x, y, 0, x, y, rr); g2.addColorStop(0, 'rgba(140,62,26,' + (.3 + .5 * y / hh) + ')'); g2.addColorStop(1, 'rgba(140,62,26,0)'); cx.fillStyle = g2; cx.fillRect(x - rr, y - rr, rr * 2, rr * 2); }
+        for (let i = 0; i < 400; i++) { const y = hh * Math.pow(r(), .6); cx.fillStyle = 'rgba(40,24,16,' + (.3 + .4 * y / hh) + ')'; cx.fillRect(r() * w, y, 1 + r() * 1.5, 1 + r() * 1.5); } }), roughness: .35, metalness: .85 });
     const warm = { c: [2.6, 1.5, .5], size: 9, drift: .4, speed: .5 }, lr = mulberry32(2028), gAt = (c, x, z) => heightAt(c[0] + x, c[1] + z);
     const toW = (c, ry, x, z) => [c[0] + x * Math.cos(ry) + z * Math.sin(ry), c[1] - x * Math.sin(ry) + z * Math.cos(ry)];                                    // a point in a turned thing's own frame, out in the world
     const bake = (g, sub) => { sub.updateMatrix(); for (const m of [...sub.children]) { m.applyMatrix4(sub.matrix); g.add(m); } };                           // fold a positioned sub-assembly into its parent so the parts can merge
@@ -2931,7 +2938,7 @@ function buildProps() {
       }, { y: y0, ry: ry0, hexes: [[5, 26]], top: 50, view: 380 });
       lanternPts.push([c[0], y0 + 5, c[1], { c: [2.4, 1.9, .8], size: 26, drift: .2, speed: .4 }]); }
 
-    // Breach-knuckle Foundry (5,34 and the hex west of it): where blasting charges are made for the digs - a long works with tall stacks, powder kegs in the yard, earth-banked magazines and a proving ground that goes off now and then
+    // Breach-knuckle Foundry (7,34 and the hex west of it, moved two hexes east of the trenches on Oct 24): where blasting charges are made for the digs - a long works with tall stacks, powder kegs in the yard, earth-banked magazines and a proving ground that goes off now and then
     { const c = Wp(BKF), y0 = 38 * S, gy = (x, z) => gAt(c, x, z) - y0;
       addThing('Breach-knuckle Foundry', '💥', c, 1, 30, g => { const k = kit(g), roofM = solid(0x3a302a, .8);
         k.B(72, 22, 34, LST, 0, 11, 0); M(g, gable(38, 13, 74), roofM, 0, 22, 0, { ry: Math.PI / 2 }); k.B(30, 16, 22, LDK, 20, 8, 27); M(g, gable(26, 9, 31), roofM, 20, 16, 27, { ry: Math.PI / 2 });
@@ -2941,7 +2948,7 @@ function buildProps() {
         for (let i = 0; i < 6; i++) k.B(5, 4, 5, timber, 44 + (i % 2) * 6, 2 + Math.floor(i / 2) * 4, -10 + (i % 3) * 2, { ry: lr() * .4 });
         for (let i = 0; i < 3; i++) { const x = -78 - i * 24, z = -72 + i * 10, yy = gy(x, z); k.D(11, LRK, x, yy - 1, z, { sy: .75 }); k.B(3, 9, 9, LST, x + 8.6, yy + 4, z); k.B(1, 7, 6, ironM, x + 10.2, yy + 3.5, z); }   // magazines
         k.B(46, 9, 3, LST, -66, gy(-66, -34) + 4.5, -34, { ry: .15 });                                                                                              // blast wall
-      }, { y: y0, hexes: [[5, 34], [4, 34]], top: 70, view: 520 });
+      }, { y: y0, hexes: [[7, 34], [6, 34]], top: 70, view: 520 });
       const PG = [c[0] - 120, c[1] - 20], py = heightAt(PG[0], PG[1]); chimneys.push([PG[0], py + 4, PG[1], 0x5a5048]);
       const fl = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 1.6, .5), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false })); fl.position.set(PG[0], py + 4, PG[1]); fl.raycast = () => {}; fl.visible = false; scene.add(fl);
       anim.push(t => { const q = (t + 3) % 13; fl.visible = q < .7; if (fl.visible) { fl.scale.setScalar(4 + 34 * Math.sqrt(q / .7)); fl.material.opacity = 1 - q / .7; } }); }
@@ -2957,7 +2964,6 @@ function buildProps() {
         for (let i = 0; i < 16; i++) { const a = i * .3927; if (i < 4) M(wh, new THREE.BoxGeometry(40, 1.2, 1.2), timber, 0, 0, 0, { rz: i * .785 }); M(wh, new THREE.BoxGeometry(1, 5, 6), timber, Math.cos(a) * 20, Math.sin(a) * 20, 0, { rz: a }); }
         M(wh, new THREE.CylinderGeometry(2, 2, 9, 8), ironM, 0, 0, 0, { rx: Math.PI / 2 }); mergeKids(wh); g.add(wh); anim.push(t => { wh.rotation.z = -t * .5; });
         k.B(5, 20, 80, LDK, -30, 10, 0); for (let i = 0; i < 11; i++) for (let j = 0; j < 3; j++) k.B(.8, 4, 4.6, darkM, -27.2, 4 + j * 6, -33 + i * 6.6); for (let i = 0; i < 40; i++) k.B(1.4 + lr(), .7, .7, boneM, -24 + 8 * lr(), .5, -30 + 60 * lr(), { ry: lr() * 3 });
-        ghost(g, 14, 2, 26, .9); ghost(g, -6, 2, 30, .8); ghost(g, -20, 2, 12, .8);
         [H1, H2].forEach((H, yi) => { const o = toL(H[0], H[1]), by = heightAt(H[0], H[1]) - y0, yr = mulberry32(700 + yi), hAt = (u, v) => { const w = toW(c, ry0, o[0] + u, o[1] + v); return heightAt(w[0], w[1]) - y0; };
           k.C(11, 12, 3, 16, LDK, o[0], by + 1.5, o[1]); NS(k.C(9.6, 9.6, .6, 16, pool, o[0], by + 3, o[1]));                                                              // the basin the spirit stream ends in
           for (const [u, v] of [[-8, -8], [8, -8], [-8, 8], [8, 8]]) k.B(1.4, 20, 1.4, timber, o[0] + u, by + 10, o[1] + v); for (const v of [-8, 8]) k.B(19, 1.4, 1.4, timber, o[0], by + 20, o[1] + v); k.B(1.4, 1.4, 19, timber, o[0], by + 20.6, o[1]);
@@ -2966,12 +2972,12 @@ function buildProps() {
             let p = bx(10, 0); k.B(2, 8, 22, LST, p[0], hy + 4, p[1], { ry }); for (const sd of [-1, 1]) { p = bx(0, sd * 11); k.B(20, 8, 2, LST, p[0], hy + 4, p[1], { ry }); }                  // a stone bay, open toward the basin
             M(g, new THREE.SphereGeometry(9, 10, 5, 0, 6.283, 0, 1.4), boneM, o[0] + u, hy - 1.5, o[1] + v, { sy: .6 });
             for (let j = 0; j < 22; j++) { const aa = yr() * 6.283, rr = 8 * Math.sqrt(yr()), px = o[0] + u + Math.cos(aa) * rr, pz = o[1] + v + Math.sin(aa) * rr, py = hy + 4.6 * Math.sqrt(Math.max(0, 1 - rr * rr / 81)) + .6, kind = i % 3;
-              if (kind === 0) M(g, new THREE.SphereGeometry(1.1 + .5 * yr(), 6, 5), boneM, px, py, pz); else if (kind === 1) M(g, new THREE.CylinderGeometry(.35, .45, 4 + 3 * yr(), 5), boneM, px, py, pz, { rx: yr() * 3, rz: yr() * 3 }); else M(g, new THREE.TorusGeometry(1.6 + yr(), .3, 4, 8, 2.6), boneM, px, py, pz, { rx: yr() * 3, ry: yr() * 3 }); }
+              if (kind === 0) { const w2 = toW(c, ry0, px, pz); skullAt(w2[0], y0 + py - 1.1, w2[1], 2.4 + yr(), yr() * 6.283); } else if (kind === 1) M(g, new THREE.CylinderGeometry(.35, .45, 4 + 3 * yr(), 5), boneM, px, py, pz, { rx: yr() * 3, rz: yr() * 3 }); else M(g, new THREE.TorusGeometry(1.6 + yr(), .3, 4, 8, 2.6), boneM, px, py, pz, { rx: yr() * 3, ry: yr() * 3 }); }
             k.B(24, .6, 2.6, timber, o[0] + u * .42, by + 12, o[1] + v * .42, { ry, rz: -.42 }); }                                                                         // a chute from the frame down into the bay
           for (let j = 0; j < 7; j++) { const aa = j * .8976 + .5 + yi, rr = 54 + 8 * yr(), u = Math.cos(aa) * rr, v = Math.sin(aa) * rr, q = 7 + 5 * yr(); M(g, new THREE.SphereGeometry(q, 9, 5, 0, 6.283, 0, 1.4), boneM, o[0] + u, hAt(u, v) - q * .25, o[1] + v, { sy: .5, ry: j });                 // unsorted drifts out toward the edge of the hex
             for (let q2 = 0; q2 < 7; q2++) { const a2 = yr() * 6.283, r2 = q * .8 * Math.sqrt(yr()); M(g, q2 % 2 ? new THREE.SphereGeometry(1.1, 6, 5) : new THREE.CylinderGeometry(.35, .45, 5, 5), boneM, o[0] + u + Math.cos(a2) * r2, hAt(u, v) + q * .32, o[1] + v + Math.sin(a2) * r2, { rx: yr() * 3, rz: yr() * 3 }); } }
           for (let j = 0; j < 190; j++) { const aa = yr() * 6.283, rr = 12 + 54 * Math.sqrt(yr()), u = Math.cos(aa) * rr, v = Math.sin(aa) * rr; k.B(1.2 + 2.6 * yr(), .7, .7, boneM, o[0] + u, hAt(u, v) + .4, o[1] + v, { ry: yr() * 3 }); }
-          for (let j = 0; j < 3; j++) { const aa = j * 2.1 + yi; ghost(g, o[0] + Math.cos(aa) * 22, by + 1, o[1] + Math.sin(aa) * 22, .9); } });
+        });
       }, { y: y0, ry: ry0, hexes: [[6, 24], [7, 23], [6, 23]], top: 72, view: 520 });
       const ribbon = (P, hw) => { const C = []; for (let i = 0; i < P.length - 1; i++) { const n = Math.ceil(Math.hypot(P[i + 1][0] - P[i][0], P[i + 1][1] - P[i][1]) / 5); for (let j = 0; j < n; j++) C.push([lerp(P[i][0], P[i + 1][0], j / n), lerp(P[i][1], P[i + 1][1], j / n)]); } C.push(P[P.length - 1]);
         const pos = [], uv = [], idx = []; C.forEach((p, i) => { const a = C[Math.max(i - 1, 0)], b = C[Math.min(i + 1, C.length - 1)], tx = b[0] - a[0], tz = b[1] - a[1], tl = Math.hypot(tx, tz) || 1, nx = -tz / tl * hw, nz = tx / tl * hw, yy = Math.max(heightAt(p[0] - nx, p[1] - nz), heightAt(p[0] + nx, p[1] + nz), heightAt(p[0], p[1])) + 1.2;
@@ -2979,7 +2985,12 @@ function buildProps() {
         const ge = new THREE.BufferGeometry(); ge.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); ge.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); ge.setIndex(idx); ge.computeVertexNormals(); const m = new THREE.Mesh(ge, spiritM); m.raycast = () => {}; scene.add(m); };
       ribbon([toW(c, ry0, -80, 19), E], 3.4); ribbon([E, H1], 3); ribbon([E, H2], 3);                                                                                   // the spirit stream: past the wheel, then forking to the two yards
       const wp = toW(c, ry0, 4, 19), sm = mist({ n: 50, seed: 55, r0: 4, r1: 16, y0: 0, y1: 34, spin: .5, rise: .18, size: 9, alpha: .3, col: [.4, .9, 1.5], add: true }); sm.position.set(wp[0], y0, wp[1]); scene.add(sm);
-      for (const H of [H1, H2]) lanternPts.push([H[0], heightAt(H[0], H[1]) + 6, H[1], { c: [.5, 1.5, 2.6], size: 26, drift: .2, speed: .5 }]); }
+      for (const H of [H1, H2]) lanternPts.push([H[0], heightAt(H[0], H[1]) + 6, H[1], { c: [.5, 1.5, 2.6], size: 26, drift: .2, speed: .5 }]);
+      // Brandon's ghosts at work (Oct 24): the delivery man carrying crates of bones from the wheel down to each yard's basin and back, the laundress going round the bays with her tray
+      surfGhost('delivery', 12, sgPingPong(toW(c, ry0, 10, 40), H1, 7, 4, 3, 0)); surfGhost('delivery', 12, sgPingPong(toW(c, ry0, -16, 36), H2, 6.5, 5, 3, .5));   // (Oct 24: three and a half times the size they were)
+      [H1, H2].forEach((H, yi) => { const ring = []; for (let k = 0; k < 6; k++) { const a = k / 6 * 6.283 + yi; ring.push([H[0] + Math.cos(a) * 26, H[1] + Math.sin(a) * 26]); } surfGhost('laundress', 11.5, sgLoop(ring, 5, 3, yi * .4));
+        surfGhost(yi ? 'laundress' : 'delivery', 11.5, sgLoop(ring.slice().reverse().map(([x, z]) => [H[0] + (x - H[0]) * 1.6, H[1] + (z - H[1]) * 1.6]), 5.5, 3, .3 + yi * .2)); });
+      surfGhost('laundress', 11.5, sgLoop([toW(c, ry0, 26, 32), toW(c, ry0, -12, 40), toW(c, ry0, -34, 12), toW(c, ry0, -26, -30), toW(c, ry0, 28, -28)], 4.5, 3, .1)); }
 
     // Phalanx Crucible (now standing on hex 7,26): the hill is cut level for it - a ring of colossal armoured statues on even ground, facing in over a small sunken arena
     { const c = Wp(PHX), y0 = 80 * S, top = 16 * S, armor = tx(new THREE.MeshStandardMaterial({ color: 0x77705f, roughness: .5, metalness: .45 }), 'rock'), rune = glowM(0xffb040, 2.4);
@@ -3046,9 +3057,34 @@ function buildProps() {
     // White Scar (five hexes): an old river bed gone to salt, crags standing in it - and a swarm pouring down it, thousands of small pale things running all one way
     { const HX = [[9, 24], [10, 24], [11, 24], [12, 23], [13, 22]], c = hexW(11, 24), a = WSCAR.pts, n = a.length / 2, NP = 40, PTS = [];
       for (let i = 0; i < NP; i++) { const f = i / (NP - 1) * (n - 1), i0 = Math.min(Math.floor(f), n - 2), fr = f - i0, x = lerp(a[2 * i0], a[2 * i0 + 2], fr) * S, z = lerp(a[2 * i0 + 1], a[2 * i0 + 3], fr) * S; PTS.push(new THREE.Vector3(x, heightAt(x, z) + .6, z)); }
-      addThing('White Scar', '💀', c, 1, 30, g => { const pale = solid(0xcfcabb, .8, { flatShading: true });
-        for (let i = 0; i < 46; i++) { const j = 2 + Math.floor(lr() * (NP - 4)), p = PTS[j], q = PTS[j + 1], dx = q.x - p.x, dz = q.z - p.z, l = Math.hypot(dx, dz) || 1, lat = (lr() < .5 ? -1 : 1) * (14 + 22 * lr()), x = p.x - dz / l * lat - c[0], z = p.z + dx / l * lat - c[1], hh = 6 + 16 * lr() * lr();
-          M(g, new THREE.ConeGeometry(2 + 3 * lr(), hh, 5), pale, x, heightAt(c[0] + x, c[1] + z) + hh * .4, z, { rx: (lr() - .5) * .6, rz: (lr() - .5) * .6 }); }
+      addThing('White Scar', '💀', c, 1, 30, g => { const pale = solid(0xd8d3c4, .8, { flatShading: true }), paleD = solid(0xb8b2a2, .9, { flatShading: true }), crust = solid(0xeeeae0, .7, { flatShading: true }), crustE = solid(0xc8c2b2, .9),
+          hole = new THREE.MeshBasicMaterial({ color: 0x0c0a08 }), boneM = solid(0xe8e0cc, .7), bleach = solid(0xcfc4ae, .95, { flatShading: true }), salt = solid(0xf8fcff, .25, { emissive: 0x506070, emissiveIntensity: .3, transparent: true, opacity: .9 });
+        const G = (x, z) => heightAt(c[0] + x, c[1] + z), at = (j, lat) => { const p = PTS[j], q = PTS[Math.min(NP - 1, j + 1)], dx = q.x - p.x, dz = q.z - p.z, l = Math.hypot(dx, dz) || 1; return [p.x - dz / l * lat - c[0], p.z + dx / l * lat - c[1], Math.atan2(dx, dz)]; };
+        const jag = (r, h, sd) => { const ge = new THREE.ConeGeometry(r, h, 6, 4), pa = ge.attributes.position; for (let i = 0; i < pa.count; i++) { const x = pa.getX(i), y = pa.getY(i), z = pa.getZ(i), n = 1 + .38 * Math.sin(x * 2.1 + y * .9 + sd) * Math.cos(z * 1.7 - y * .6 + sd * 2); pa.setXYZ(i, x * n, y, z * n); } ge.computeVertexNormals(); return ge; };
+        // the White Scar (Oct 24): an old river bed gone to salt. Crags of salt in jagged clusters along its banks, the bed crusted in cracked plates, burrows the crawlers pour out of,
+        // bones everywhere and the skeleton of something huge lying in the middle, a boat left stranded when the river went, dead trees bleached white on the banks, salt crystals glinting
+        for (let i = 0; i < 34; i++) { const j = 2 + Math.floor(lr() * (NP - 4)), lat = (lr() < .5 ? -1 : 1) * (15 + 22 * lr()), [x, z] = at(j, lat), k = 2 + Math.floor(lr() * 4);
+          for (let q = 0; q < k; q++) { const hh = (5 + 15 * lr() * lr()) * (q ? .65 : 1), xx = x + (lr() - .5) * 9, zz = z + (lr() - .5) * 9; M(g, jag(1.6 + 2.6 * lr(), hh, i * 3 + q), q % 3 ? paleD : pale, xx, G(xx, zz) + hh * .42, zz, { rx: (lr() - .5) * .5, rz: (lr() - .5) * .5, ry: lr() * 6 }); } }
+        for (let i = 0; i < 160; i++) { const j = 1 + Math.floor(lr() * (NP - 2)), lat = (lr() - .5) * 46, [x, z] = at(j, lat), r = 2 + 3.4 * lr(), ry = lr() * 6;   // salt crust: raised plates with dark cracks between
+          M(g, new THREE.CylinderGeometry(r, r * 1.05, .5, 6), crust, x, G(x, z) + .15, z, { ry, rx: (lr() - .5) * .08, rz: (lr() - .5) * .08 }); if (i % 3 === 0) M(g, new THREE.TorusGeometry(r * 1.02, .14, 3, 6), crustE, x, G(x, z) + .38, z, { rx: Math.PI / 2, rz: ry }); }
+        for (let i = 0; i < 14; i++) { const j = 3 + Math.floor(lr() * (NP - 6)), [x, z] = at(j, (lr() - .5) * 30), r = 1.6 + 1.6 * lr(), y = G(x, z);   // burrows, a heap of thrown-up salt round each
+          M(g, new THREE.CircleGeometry(r, 10), hole, x, y + .35, z, { rx: -Math.PI / 2 }); M(g, new THREE.TorusGeometry(r + .5, .7, 5, 10), paleD, x, y + .3, z, { rx: Math.PI / 2 }); for (let q = 0; q < 4; q++) { const a = lr() * 6.28; M(g, new THREE.DodecahedronGeometry(.6 + .5 * lr(), 0), pale, x + Math.cos(a) * (r + 1.4), y + .4, z + Math.sin(a) * (r + 1.4)); } }
+        for (let i = 0; i < 70; i++) { const j = 1 + Math.floor(lr() * (NP - 2)), [x, z] = at(j, (lr() - .5) * 44), y = G(x, z), kind = i % 5;   // bones: long bones, skulls, a rib cage now and then
+          if (kind < 3) M(g, new THREE.CylinderGeometry(.18, .22, 2.4 + 1.6 * lr(), 5), boneM, x, y + .25, z, { rz: Math.PI / 2, ry: lr() * 6 }); else if (kind === 3) skullAt(c[0] + x, y - .05, c[1] + z, .7, lr() * 6.283);
+          else for (let q = 0; q < 5; q++) M(g, new THREE.TorusGeometry(1 - q * .1, .1, 3, 8, Math.PI), boneM, x + q * .5, y + .1, z, { ry: lr() * .3 }); }
+        { const [x, z, ry] = at(Math.floor(NP * .55), 4), y = G(x, z), L2 = 46;   // the skeleton of something huge: a spine down the bed, ribs arching over it, the skull at its head
+          for (let k = 0; k < 18; k++) { const u = k / 17 - .5, px = x + Math.sin(ry) * u * L2, pz = z + Math.cos(ry) * u * L2; M(g, new THREE.SphereGeometry(1.1 - Math.abs(u) * .8, 7, 5), boneM, px, G(px, pz) + 1.2, pz);
+            if (k > 3 && k < 13) M(g, new THREE.TorusGeometry(5.4 - Math.abs(k - 8) * .45, .35, 4, 12, Math.PI), boneM, px, G(px, pz) + .6, pz, { ry: ry + Math.PI / 2 }); }
+          const hx = x + Math.sin(ry) * (L2 / 2 + 3), hz = z + Math.cos(ry) * (L2 / 2 + 3); M(g, new THREE.SphereGeometry(3.2, 10, 8), boneM, hx, G(hx, hz) + 2.2, hz, { sx: 1, sy: .8, sz: 1.5, ry }); M(g, new THREE.ConeGeometry(.6, 5, 5), boneM, hx + 2, G(hx, hz) + 5, hz, { rz: -.6, ry }); M(g, new THREE.ConeGeometry(.6, 5, 5), boneM, hx - 2, G(hx, hz) + 5, hz, { rz: .6, ry }); }
+        { const [x, z, ry] = at(Math.floor(NP * .3), -20), y = G(x, z);   // a boat left high and dry when the river went: a hull half sunk in salt, its ribs showing, a broken mast
+          M(g, new THREE.CylinderGeometry(4, 4, 18, 12, 1, true, 0, Math.PI).scale(1, 1, .55), bleach, x, y + .6, z, { rz: Math.PI / 2 + .2, ry: ry + .4 }); for (let k = 0; k < 6; k++) M(g, new THREE.TorusGeometry(3.4, .22, 3, 10, Math.PI), bleach, x + Math.sin(ry + .4) * (k - 2.5) * 2.6, y + .3, z + Math.cos(ry + .4) * (k - 2.5) * 2.6, { ry: ry + .4 + Math.PI / 2, rz: .2 });
+          M(g, new THREE.CylinderGeometry(.3, .4, 11, 6), bleach, x, y + 5, z, { rz: .5 }); }
+        for (let i = 0; i < 12; i++) { const j = 2 + Math.floor(lr() * (NP - 4)), [x, z] = at(j, (lr() < .5 ? -1 : 1) * (34 + 10 * lr())), y = G(x, z);   // dead trees bleached white along the banks
+          const tr2 = (bx, by, bz, len, a, tilt, d) => { const ex = bx + Math.sin(tilt) * Math.cos(a) * len, ez = bz + Math.sin(tilt) * Math.sin(a) * len, ey = by + Math.cos(tilt) * len, m = M(g, new THREE.CylinderGeometry(.12 + d * .14, .18 + d * .16, len, 5).translate(0, len / 2, 0), bleach, bx, by, bz);
+            m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(ex - bx, ey - by, ez - bz).normalize()); if (d > 0) for (let b = 0; b < 2; b++) tr2(ex, ey, ez, len * .68, a + (b - .5) * 1.6 + (lr() - .5) * .5, Math.min(1.3, tilt + .45), d - 1); };
+          tr2(x, y, z, 5 + 2 * lr(), lr() * 6.28, .1, 3); }
+        for (let i = 0; i < 26; i++) { const j = 1 + Math.floor(lr() * (NP - 2)), [x, z] = at(j, (lr() - .5) * 50), y = G(x, z);   // salt crystals, glinting
+          for (let q = 0; q < 4; q++) { const hh = .8 + 1.8 * lr(), a = lr() * 6.28; M(g, new THREE.OctahedronGeometry(.5, 0), salt, x + Math.cos(a) * .9, y + hh * .4, z + Math.sin(a) * .9, { sy: hh, rz: (lr() - .5) * .6, rx: (lr() - .5) * .6 }); } }
       }, { y: 0, hexes: HX, top: 46, view: 620 });
       const NSW = 750, body = mergeGeometries([new THREE.BoxGeometry(2.6, 1, 1.2).translate(0, 1.1, 0), new THREE.BoxGeometry(1, .9, 1).translate(1.7, 1.5, 0), new THREE.BoxGeometry(.4, 1.1, 1.8).translate(.8, .5, 0), new THREE.BoxGeometry(.4, 1.1, 1.8).translate(-.8, .5, 0)]);
       const ig = new THREE.InstancedBufferGeometry(); ig.index = body.index; ig.setAttribute('position', body.attributes.position); ig.setAttribute('normal', body.attributes.normal); const ai = new Float32Array(NSW * 4), aj = new Float32Array(NSW * 3), sr = mulberry32(313);
@@ -3065,7 +3101,68 @@ function buildProps() {
           ' vec3 w = vec3(c.x + nr.x * lat + hd.x * p.x - hd.y * p.z, c.y + hop * step(0.01, sc) + p.y, c.z + nr.y * lat + hd.y * p.x + hd.x * p.z); vec3 nn = vec3(hd.x * normal.x - hd.y * normal.z, normal.y, hd.y * normal.x + hd.x * normal.z);' +
           ' vL = 0.5 + 0.7 * max(dot(nn, vec3(-0.59, 0.66, -0.45)), 0.0); gl_Position = projectionMatrix * viewMatrix * vec4(w, 1.0); }',
         fragmentShader: 'uniform vec3 uCol; varying float vL; void main(){ gl_FragColor = vec4(uCol * vL, 1.0); }' });
-      const sw = new THREE.Mesh(ig, swM); sw.frustumCulled = false; sw.raycast = () => {}; scene.add(sw); }
+      const swOld = new THREE.Mesh(ig, swM); swOld.frustumCulled = false; swOld.raycast = () => {}; scene.add(swOld);   // the plain swarm, until the crawlers below have loaded
+      {
+      // the swarm (Oct 24): Brandon's crypt crawlers, hundreds of them, of many sizes, scuttling down the bed - low and quick on all fours, legs working in diagonal pairs,
+      // surging and slowing, swaying as they go. All of them are one light model (250 triangles) placed and moved on the graphics card; the few nearest the eye are swapped
+      // for a closer copy (4,000 triangles), worked out the same way here so it stands exactly where the light one would have
+      const NSW = 900, sr = mulberry32(313), ai = new Float32Array(NSW * 4), aj = new Float32Array(NSW * 3);
+      let sLen = 0; for (let i = 1; i < NP; i++) sLen += PTS[i].distanceTo(PTS[i - 1]);
+      for (let i = 0; i < NSW; i++) { ai[4 * i] = sr(); ai[4 * i + 1] = sr(); ai[4 * i + 2] = (sr() * 2 - 1) * 16; ai[4 * i + 3] = (sr() < .5 ? 0 : Math.PI) + (sr() - .5) * 2.6;
+        const big = sr() < .1 ? .25 * sr() : 0, s = .4 + .5 * sr() + big; aj[3 * i] = (9 + 8 * sr()) * (.7 + .3 / Math.max(.6, s)); aj[3 * i + 1] = 4 + 5 * sr(); aj[3 * i + 2] = s; }
+      const NEAR_D = 70, NEARMAX = 120, U_NEAR = { value: 0 };
+      // the ground under the bed as a small height map, so each one runs on the ground where it is, not at the height of the bed's middle
+      let gx0 = 1e9, gz0 = 1e9, gx1 = -1e9, gz1 = -1e9; for (const p of PTS) { gx0 = Math.min(gx0, p.x - 45); gz0 = Math.min(gz0, p.z - 45); gx1 = Math.max(gx1, p.x + 45); gz1 = Math.max(gz1, p.z + 45); }
+      const HN = 160, hd = new Uint16Array(HN * HN); for (let j = 0; j < HN; j++) for (let i = 0; i < HN; i++) hd[j * HN + i] = THREE.DataUtils.toHalfFloat(heightAt(gx0 + (i + .5) / HN * (gx1 - gx0), gz0 + (j + .5) / HN * (gz1 - gz0)));
+      const hTex = new THREE.DataTexture(hd, HN, HN, THREE.RedFormat, THREE.HalfFloatType); hTex.magFilter = hTex.minFilter = THREE.LinearFilter; hTex.needsUpdate = true; const U_HB = { value: new THREE.Vector4(gx0, gz0, gx1 - gx0, gz1 - gz0) };
+      // the motion, written once for the card and once for here: where it is, which way it heads, how big it is now, and where its stride is
+      const motionGLSL = 'uniform vec3 uP[40]; uniform float uTime, uLen, uNearD; uniform sampler2D uH; uniform vec4 uHB; attribute vec4 aI; attribute vec3 aJ;' +
+        'void crawl(out vec3 c0, out vec2 hd, out float sc, out float gp){ float tt = aI.x + uTime / aJ.y; float life = fract(tt); float cyc = floor(tt); float ang = aI.w + cyc * 2.4; float ca = cos(ang), sa = sin(ang);' +
+        ' float tau = life * aJ.y; float dist = aJ.x * tau + aJ.x * 0.113 * sin(3.1 * tau + aI.x * 40.0);' +
+        ' float sE = fract(aI.y + cyc * 0.371) + ca * dist / uLen; float lat = aI.z * cos(cyc * 1.9 + aI.x * 7.0) + sa * dist; float f = clamp(sE, 0.0, 1.0) * 39.0; int i = int(min(floor(f), 38.0)); float fr = f - float(i); vec3 a = uP[i]; vec3 b = uP[i + 1]; vec3 c = mix(a, b, fr);' +
+        ' vec2 dir = normalize(b.xz - a.xz + vec2(1e-4)); vec2 nr = vec2(-dir.y, dir.x); vec2 h0 = dir * ca + nr * sa; float wob = 0.22 * sin(tau * 7.0 + aI.x * 30.0); hd = vec2(h0.x * cos(wob) - h0.y * sin(wob), h0.x * sin(wob) + h0.y * cos(wob));' +
+        ' sc = aJ.z * smoothstep(0.0, 0.1, life) * smoothstep(1.0, 0.82, life) * (1.0 - smoothstep(17.0, 29.0, abs(lat))) * smoothstep(0.0, 0.04, sE) * smoothstep(1.0, 0.96, sE);' +
+        ' gp = dist / (1.7 * aJ.z) * 6.2832 + aI.x * 9.0; c0 = vec3(c.x + nr.x * lat, 0.0, c.z + nr.y * lat); c0.y = texture2D(uH, (c0.xz - uHB.xy) / uHB.zw).r + 0.05 + max(0.0, sin(gp + 0.6)) * 0.38 * sc; }';
+      const crawlJS = (i, t, o) => { const tt = ai[4 * i] + t / aj[3 * i + 1], life = tt - Math.floor(tt), cyc = Math.floor(tt), ang = ai[4 * i + 3] + cyc * 2.4, ca = Math.cos(ang), sa = Math.sin(ang), tau = life * aj[3 * i + 1], sp = aj[3 * i], dist = sp * tau + sp * .113 * Math.sin(3.1 * tau + ai[4 * i] * 40);
+        const sE = (ai[4 * i + 1] + cyc * .371) % 1 + ca * dist / sLen, lat = ai[4 * i + 2] * Math.cos(cyc * 1.9 + ai[4 * i] * 7) + sa * dist, f = clamp(sE, 0, 1) * 39, k = Math.min(Math.floor(f), 38), fr = f - k, a = PTS[k], b = PTS[k + 1];
+        const cx = lerp(a.x, b.x, fr), cy = lerp(a.y, b.y, fr), cz = lerp(a.z, b.z, fr); let dx = b.x - a.x + 1e-4, dz = b.z - a.z + 1e-4; const l = Math.hypot(dx, dz); dx /= l; dz /= l; const nx = -dz, nz = dx, hx = dx * ca + nx * sa, hz = dz * ca + nz * sa, wob = .22 * Math.sin(tau * 7 + ai[4 * i] * 30);
+        o.hx = hx * Math.cos(wob) - hz * Math.sin(wob); o.hz = hx * Math.sin(wob) + hz * Math.cos(wob); const sm = (e0, e1, x) => { const q = clamp((x - e0) / (e1 - e0), 0, 1); return q * q * (3 - 2 * q); };
+        o.sc = aj[3 * i + 2] * sm(0, .1, life) * sm(1, .82, life) * (1 - sm(17, 29, Math.abs(lat))) * sm(0, .04, sE) * sm(1, .96, sE); o.gp = dist / (1.7 * aj[3 * i + 2]) * 6.2832 + ai[4 * i] * 9;
+        o.bob = Math.max(0, Math.sin(o.gp + .6)) * .38 * o.sc; o.x = cx + nx * lat; o.y = cy + o.bob; o.z = cz + nz * lat; return o; };
+      // the gait: below the knees, each leg swings forward and back and lifts as it comes through, front-left with back-right and front-right with back-left
+      // the gait (Oct 24, a gallop): both arms reach and pull together, then both back legs drive, the body rocking forward and back on each bound and lifting off the ground between
+      const gaitGLSL = H => { const f = v => (H * v).toFixed(3); return 'vec3 gait(vec3 p, float gp){ float wf = smoothstep(0.15, 0.75, p.x) * (1.0 - smoothstep(' + f(.3) + ', ' + f(.62) + ', p.y)); float wb = (1.0 - smoothstep(-0.9, -0.25, p.x)) * (1.0 - smoothstep(' + f(.22) + ', ' + f(.5) + ', p.y));' +
+        ' p += vec3(sin(gp) * 0.6, max(0.0, cos(gp)) * 0.45, 0.0) * wf; p += vec3(sin(gp + 2.3) * 0.55, max(0.0, cos(gp + 2.3)) * 0.4, 0.0) * wb;' +
+        ' float th = 0.16 * sin(gp + 1.1); vec2 q = p.xy - vec2(0.0, ' + f(.45) + '); p.xy = vec2(q.x * cos(th) - q.y * sin(th), q.x * sin(th) + q.y * cos(th)) + vec2(0.0, ' + f(.45) + '); return p; }'; };
+      const prep = gltf => { let geo = null; gltf.scene.updateMatrixWorld(true); gltf.scene.traverse(o => { if (o.isMesh && !geo) { geo = o.geometry.clone(); for (const k of Object.keys(geo.attributes)) { const a = geo.attributes[k]; if (a.array instanceof Float32Array) continue; const fa = new Float32Array(a.count * a.itemSize); for (let q = 0; q < a.count; q++) for (let c2 = 0; c2 < a.itemSize; c2++) fa[q * a.itemSize + c2] = c2 === 0 ? a.getX(q) : c2 === 1 ? a.getY(q) : c2 === 2 ? a.getZ(q) : a.getW(q); geo.setAttribute(k, new THREE.BufferAttribute(fa, a.itemSize)); } geo.applyMatrix4(o.matrixWorld); } });
+        geo.rotateY(Math.PI / 2); geo.computeBoundingBox(); const bb = geo.boundingBox, s = 3 / (bb.max.x - bb.min.x); geo.translate(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2).scale(s, s, s); geo.computeBoundingBox(); return geo; };   // facing +x, standing on y = 0, three units long
+      laterGL.load('models/crawler-far.glb', gltf => { const geo = prep(gltf), H = geo.boundingBox.max.y, ig = new THREE.InstancedBufferGeometry(); ig.index = geo.index; for (const k of ['position', 'normal', 'color']) if (geo.attributes[k]) ig.setAttribute(k, geo.attributes[k]);
+        ig.setAttribute('aI', new THREE.InstancedBufferAttribute(ai, 4)); ig.setAttribute('aJ', new THREE.InstancedBufferAttribute(aj, 3)); ig.instanceCount = NSW;
+        const swM = new THREE.ShaderMaterial({ fog: false, vertexColors: true, uniforms: { uTime: U.uTime, uP: { value: PTS }, uLen: { value: sLen }, uNearD: U_NEAR, uH: { value: hTex }, uHB: U_HB },
+          vertexShader: motionGLSL + gaitGLSL(H) + ' varying float vL; varying vec3 vC;' +
+            'void main(){ vec3 c0; vec2 hd; float sc, gp; crawl(c0, hd, sc, gp); if (distance(c0, cameraPosition) < uNearD) sc = 0.0; vec3 p = gait(position, gp) * sc;' +
+            ' vec3 w = vec3(c0.x + hd.x * p.x - hd.y * p.z, c0.y + p.y, c0.z + hd.y * p.x + hd.x * p.z); vec3 nn = vec3(hd.x * normal.x - hd.y * normal.z, normal.y, hd.y * normal.x + hd.x * normal.z);' +
+            ' vL = 0.55 + 0.75 * max(dot(nn, vec3(-0.59, 0.66, -0.45)), 0.0);' + String.fromCharCode(10) + '#if defined( USE_COLOR_ALPHA )' + String.fromCharCode(10) + ' vC = color.rgb;' + String.fromCharCode(10) + '#else' + String.fromCharCode(10) + ' vC = color;' + String.fromCharCode(10) + '#endif' + String.fromCharCode(10) +
+            ' gl_Position = projectionMatrix * viewMatrix * vec4(w, 1.0); }',
+          fragmentShader: 'varying float vL; varying vec3 vC; void main(){ gl_FragColor = vec4(vC * vL * 1.15, 1.0); }' });
+        const sw = new THREE.Mesh(ig, swM); sw.frustumCulled = false; sw.raycast = () => {}; scene.add(sw); scene.remove(swOld); });
+      // the near ones: a 4,000-triangle copy within 70 of the eye, and for the dozen closest when zoomed right in, a textured 10,000-triangle copy
+      const HI_D = 30, HIMAX = 12, nearSet = { mid: null, hi: null };
+      const mkNear = (gltf, n, textured) => { const geo = prep(gltf), H = geo.boundingBox.max.y, gpA = new THREE.InstancedBufferAttribute(new Float32Array(n), 1); gpA.setUsage(THREE.DynamicDrawUsage); geo.setAttribute('aGp', gpA);
+        let src = null; gltf.scene.traverse(o => { if (o.isMesh && !src) src = o.material; });
+        const mat = textured ? new THREE.MeshStandardMaterial({ map: src.map, normalMap: src.normalMap || null, roughness: .7 }) : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .7 });
+        mat.onBeforeCompile = sh => { sh.vertexShader = 'attribute float aGp;' + String.fromCharCode(10) + gaitGLSL(H) + String.fromCharCode(10) + sh.vertexShader.replace('#include <begin_vertex>', 'vec3 transformed = gait(vec3(position), aGp);'); };
+        const m = new THREE.InstancedMesh(geo, mat, n); m.count = 0; m.frustumCulled = false; m.raycast = () => {}; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(m); return { m, gpA }; };
+      laterGL.load('models/crawler.glb', gltf => { nearSet.mid = mkNear(gltf, NEARMAX, false); U_NEAR.value = NEAR_D;
+        const o = {}, m4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), v3 = new THREE.Vector3(), s3 = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), near = [];
+        anim.push(() => { const t = U.uTime.value, cp = camera.position, mid = nearSet.mid, hi = nearSet.hi; near.length = 0; if (Math.hypot(cp.x - c[0], cp.z - c[1]) > 900) { mid.m.count = 0; if (hi) hi.m.count = 0; return; }
+          for (let i = 0; i < NSW; i++) { crawlJS(i, t, o); if (o.sc <= 0) continue; const d = Math.hypot(o.x - cp.x, o.y - cp.y, o.z - cp.z); if (d < NEAR_D) near.push([d, i, o.x, heightAt(o.x, o.z) + .05 + o.bob, o.z, o.hx, o.hz, o.sc, o.gp]); }
+          near.sort((a, b) => a[0] - b[0]); let nm = 0, nh = 0;
+          for (let k = 0; k < near.length; k++) { const [d, , x, y, z, hx, hz, sc, gp] = near[k], useHi = hi && nh < HIMAX && d < HI_D * Math.max(.7, sc), set = useHi ? hi : mid, j = useHi ? nh++ : nm++; if (!useHi && j >= NEARMAX) break;
+            q4.setFromAxisAngle(up, Math.atan2(-hz, hx)); m4.compose(v3.set(x, y, z), q4, s3.set(sc, sc, sc)); set.m.setMatrixAt(j, m4); set.gpA.array[j] = gp; }
+          mid.m.count = nm; mid.m.instanceMatrix.needsUpdate = true; mid.gpA.needsUpdate = true; if (hi) { hi.m.count = nh; hi.m.instanceMatrix.needsUpdate = true; hi.gpA.needsUpdate = true; } }); });
+      laterGL.load('models/crawler-hi.glb', gltf => { nearSet.hi = mkNear(gltf, HIMAX, true); });
+      } }
 
     // Glass Cofferdam (12,31): a short slot canyon. One wall of it is glass in a brass frame, holding back a drowned river with ruins standing in it; a winch and crane on the floor work the dive bell
     { const c = Wp(COFD), y0 = 7 * S, ry0 = -Math.PI / 3;
@@ -3082,19 +3179,21 @@ function buildProps() {
     // Breakline Trenches (eight hexes): an old battlefield where giants fought. Their skeletons lie in the trenches with their weapons driven into the ground, siege engines rot where they fell, bones are everywhere, and the dead still drift about
     { const HX = [[2, 34], [2, 35], [2, 36], [2, 37], [3, 34], [3, 35], [3, 36], [3, 37]], c = Wp(BRKL), br = mulberry32(1066), gy = (x, z) => gAt(c, x, z);
       addThing('Breakline Trenches', '⚔️', c, 1, 30, g => { const sub = () => new THREE.Group(), place = (sg, x, z, ry, tilt) => { sg.position.set(x, gy(x, z), z); sg.rotation.set(tilt || 0, ry, 0); bake(g, sg); };
-        for (const [x, z, ry, sc] of [[-40, -210, .4, 1], [55, -120, 2.2, 1.25], [-70, -20, 4.1, .9], [40, 70, 1.2, 1.1], [-30, 150, 5.3, 1.3], [80, 175, 3, .8]]) { const sg = sub();
-          for (let i = 0; i < 9; i++) M(sg, new THREE.BoxGeometry(3.4 * sc, 3 * sc, 4.4 * sc), boneM, (i - 4) * 5 * sc, 2 * sc, 0, { rz: (i % 2) * .1 });
-          for (let i = 0; i < 7; i++) { const r = (9 - Math.abs(i - 2.5) * 1.3) * sc; for (const sd of [-1, 1]) M(sg, new THREE.TorusGeometry(r, .8 * sc, 5, 10, 2.5), boneM, (i - 5) * 4.6 * sc, 2 * sc, 0, { ry: sd * Math.PI / 2 }); }
-          M(sg, new THREE.SphereGeometry(7.5 * sc, 10, 8), boneM, 27 * sc, 5 * sc, 2 * sc, { sx: 1.25, rz: .3 }); M(sg, new THREE.BoxGeometry(8 * sc, 3 * sc, 7 * sc), boneM, 33 * sc, .6 * sc, 3 * sc, { ry: .3 }); for (const sd of [-1, 1]) M(sg, new THREE.SphereGeometry(2 * sc, 6, 5), darkM, 32.5 * sc, 6.5 * sc, (2 + sd * 3.2) * sc);
-          for (const sd of [-1, 1]) { M(sg, new THREE.CylinderGeometry(1.5 * sc, 1.9 * sc, 30 * sc, 6), boneM, -34 * sc, 1.6 * sc, sd * 9 * sc, { rz: Math.PI / 2, ry: sd * .35 }); M(sg, new THREE.CylinderGeometry(1.2 * sc, 1.5 * sc, 24 * sc, 6), boneM, 8 * sc, 1.4 * sc, sd * 17 * sc, { rz: Math.PI / 2, ry: sd * 1.1 }); }
-          place(sg, x, z, ry); }
-        for (const [x, z, ry, tl, L] of [[-10, -160, 0, .35, 70], [70, -60, 1.3, -.5, 56], [-60, 60, 2.5, .25, 84], [20, 140, .7, -.3, 60], [-80, -100, 4, .6, 50], [60, 150, 5, .45, 66]]) { const sg = sub(); M(sg, new THREE.BoxGeometry(1.6, L, 8), rustM, 0, L * .42, 0); M(sg, new THREE.BoxGeometry(2.4, 3, 24), rustM, 0, L * .9, 0); M(sg, new THREE.CylinderGeometry(1.4, 1.4, 14, 6), timber, 0, L * .9 + 8, 0); M(sg, new THREE.SphereGeometry(2.6, 6, 5), rustM, 0, L * .9 + 16, 0); place(sg, x, z, ry, tl); }
+        // the giants (Oct 24): Brandon's skeleton at giant size, lying on its back where it fell; soldiers' skeletons scattered through the trenches, and skulls among the bones
+        for (const [x, z, ry, sc] of [[-40, -210, .4, 1], [55, -120, 2.2, 1.25], [-70, -20, 4.1, .9], [40, 70, 1.2, 1.1], [-30, 150, 5.3, 1.3], [80, 175, 3, .8]]) { const H = 70 * sc;
+          const dn = (Math.round(ry * 10) & 1) ? -1 : 1; placeModel('crew-skelA', c[0] + x + dn * Math.cos(ry) * H / 2, gy(x, z) + H * .05, c[1] + z - dn * Math.sin(ry) * H / 2, H, 0, ry, dn * Math.PI / 2 + (br() - .5) * .15); }   // on its back, or every other one face down
+        for (let i = 0; i < 46; i++) { const x = (br() - .5) * 180, z = (br() - .5) * 540, H = 3 + br() * .4, ry = br() * 6.283, dn = br() < .5 ? 1 : -1; placeModel('crew-skelA-far', c[0] + x + dn * Math.cos(ry) * H / 2, gy(x, z) + H * .05, c[1] + z - dn * Math.sin(ry) * H / 2, H, 0, ry, dn * Math.PI / 2); }
+        for (let i = 0; i < 70; i++) { const x = (br() - .5) * 190, z = (br() - .5) * 560; skullAt(c[0] + x, gy(x, z) - .1, c[1] + z, .45 + .2 * br(), br() * 6.283); }
+        for (const [x, z, ry, tl, L] of [[-10, -160, 0, .35, 70], [70, -60, 1.3, -.5, 56], [-60, 60, 2.5, .25, 84], [20, 140, .7, -.3, 60], [-80, -100, 4, .6, 50], [60, 150, 5, .45, 66]]) { const sg = sub(); M(sg, new THREE.BoxGeometry(1.6, L, 8), bladeM, 0, L * .42, 0); M(sg, new THREE.BoxGeometry(2.4, 3, 24), rustM, 0, L * .9, 0); M(sg, new THREE.CylinderGeometry(1.4, 1.4, 14, 6), timber, 0, L * .9 + 8, 0); M(sg, new THREE.SphereGeometry(2.6, 6, 5), rustM, 0, L * .9 + 16, 0); place(sg, x, z, ry, tl); }
         for (const [x, z, ry] of [[10, -250, .5], [-55, -75, 2.4], [70, 20, 4.4], [-25, 205, 1.1]]) { const sg = sub(); for (const sd of [-1, 1]) { M(sg, new THREE.BoxGeometry(46, 2.4, 2.4), timber, 0, 1.2, sd * 9); M(sg, new THREE.BoxGeometry(2.2, 34, 2.2), timber, -7, 16, sd * 9, { rz: -.42 }); M(sg, new THREE.BoxGeometry(2.2, 34, 2.2), timber, 7, 16, sd * 9, { rz: .42 }); M(sg, new THREE.TorusGeometry(5, 1, 5, 10), timber, sd * 18, 5, sd * 12); }
           M(sg, new THREE.CylinderGeometry(1.2, 1.2, 22, 6), ironM, 0, 31, 0, { rx: Math.PI / 2 }); M(sg, new THREE.BoxGeometry(62, 2.4, 2.4), timber, 12, 17, 0, { rz: -.5 }); M(sg, new THREE.BoxGeometry(10, 9, 9), rustM, -19, 4.5, 3, { ry: .4, rz: .2 }); place(sg, x, z, ry, (br() - .5) * .25); }
         for (const [x, z, ry] of [[-75, 130, .3], [75, -180, 2]]) { const sg = sub(); for (const u of [-7, 7]) for (const v of [-7, 7]) M(sg, new THREE.BoxGeometry(1.8, 60, 1.8), timber, u, 30, v); for (let j = 1; j <= 4; j++) { M(sg, new THREE.BoxGeometry(16, 1, 16), timber, 0, j * 14, 0); if (j % 2) M(sg, new THREE.BoxGeometry(.8, 13, 15), timber, 7.4, j * 14 - 7, 0); } M(sg, new THREE.BoxGeometry(16, 10, .8), rustM, 0, 52, 7.6); sg.position.set(x, gy(x, z) + 6, z); sg.rotation.set(0, ry, 1.25); bake(g, sg); }
         for (let i = 0; i < 150; i++) { const x = (br() - .5) * 190, z = (br() - .5) * 560; M(g, new THREE.BoxGeometry(1.2 + 3 * br(), .8, .8), boneM, x, gy(x, z) + .5, z, { ry: br() * 3 }); }
-        for (let i = 0; i < 14; i++) { const x = (br() - .5) * 170, z = (br() - .5) * 520; ghost(g, x, gy(x, z), z, 1.2 + .8 * br()); }
       }, { y: 0, hexes: HX, top: 90, view: 900 });
+      // the dead still walking the trenches (Oct 24, Brandon's ghosts): the horned giant, the largest; the bare-chested giant; and soldiers, as they were, wandering among the bones
+      { const w = (lx, lz) => [c[0] + lx, c[1] + lz], R2 = (n, cx, cz, rx, rz, sd) => { const r = mulberry32(sd), P = []; for (let k = 0; k < n; k++) { const a = k / n * 6.283 + r() * .6; P.push(w(cx + Math.cos(a) * rx * (.6 + .4 * r()), cz + Math.sin(a) * rz * (.6 + .4 * r()))); } return P; };
+        surfGhost('wraithB', 46, sgLoop(R2(6, 0, -60, 60, 150, 71), 5, 3, 0), 2400); surfGhost('wraithA', 32, sgLoop(R2(6, 10, 110, 55, 110, 72), 4.5, 2.5, .3), 1700);
+        for (let i = 0; i < 22; i++) surfGhost('sentinel', 7.5, sgLoop(R2(5, (br() - .5) * 140, (br() - .5) * 480, 16 + 14 * br(), 22 + 20 * br(), 80 + i), 1.6 + br(), 1.2, br()), 300); }
       for (let i = 0; i < 3; i++) { const z = (i - 1) * 180, mm = mist({ n: 90, seed: 60 + i, r0: 10, r1: 95, y0: 3, y1: 16, spin: .05, rise: 0, size: 36, alpha: .1, col: [.45, 1, .9], add: true }); mm.position.set(c[0], heightAt(c[0], c[1] + z), c[1] + z); scene.add(mm); }
       for (let i = 0; i < 22; i++) { const x = c[0] + (br() - .5) * 180, z = c[1] + (br() - .5) * 540; lanternPts.push([x, heightAt(x, z) + 5 + 8 * br(), z, { c: [.5, 2.2, 1.8], size: 6, drift: 4, speed: .3 }]); } }
 
@@ -3280,14 +3379,13 @@ function buildProps() {
         boats.forEach((b, i) => { const ph = t * .03 + i * 1.6, p = GP(.5 + .24 * Math.sin(ph)), sg = Math.cos(ph) > 0 ? 1 : -1, lat = (i - 1.5) * 4; b.position.set(p[0] - p[3] * lat, .6 + .3 * Math.sin(t + i), p[1] + p[2] * lat); b.rotation.y = Math.atan2(-p[3] * sg, p[2] * sg); }); }); }
 
     // Terraced Beastward (three hexes): a hill cut into fenced terraces, each with its own weather kept by standing stones. A giant horse paces one terrace and a giant bird circles overhead; on the others, herds of very small animals drift round together
-    { const HX = [[11, 18], [11, 17], [10, 18]], c = Wp(BEAST), lvl = j => (22 + 9.5 * j) * S, rad = j => (80 - 12.8 * (j + .5)) * S;
+    { const HX = [[11, 18], [11, 17], [10, 18]], c = Wp(BEAST), BK = 1.55, lvl = j => (22 + 9.5 * BK * j) * S, rad = j => (80 - 12.8 * (j + .5)) * BK * S;
       addThing('Terraced Beastward', '🦬', c, 1, 30, g => { const k = kit(g), fence = solid(0x6a5238, .9);
-        for (let j = 1; j <= 5; j++) { const Rr = (80 - 12.8 * j) * S - 2.5, yy = lvl(j); M(g, new THREE.TorusGeometry(Rr, .35, 4, 72), fence, 0, yy + 3.2, 0, { rx: Math.PI / 2 }); const n = Math.round(Rr * 6.283 / 10); for (let i = 0; i < n; i++) { const a = i / n * 6.283; k.B(.8, 4, .8, fence, Math.cos(a) * Rr, yy + 2, Math.sin(a) * Rr); } }
-        for (let j = 0; j < 5; j++) for (let q = 0; q < 3; q++) { const a = j * 1.3 + q * 2.094, Rr = rad(j); k.B(3, 11, 2.4, QST, Math.cos(a) * Rr, lvl(j) + 5, Math.sin(a) * Rr, { ry: a }); }
-        k.C(10, 12, 3, 12, QST, 0, lvl(5) + 1.5, 0);
+        for (let j = 1; j <= 5; j++) { const Rr = (80 - 12.8 * j) * BK * S - 2.5, yy = lvl(j); M(g, new THREE.TorusGeometry(Rr, .35, 4, 72), fence, 0, yy + 3.2, 0, { rx: Math.PI / 2 }); const n = Math.round(Rr * 6.283 / 10); for (let i = 0; i < n; i++) { const a = i / n * 6.283; k.B(.8, 4, .8, fence, Math.cos(a) * Rr, yy + 2, Math.sin(a) * Rr); } }
         // and on the very top, a cat the size of a house: sitting, watching, its tail never quite still. A Maine Coon with great golden wings half raised: models/beastward-cat.glb, Brandon's Meshy cat
         // cut to 60k triangles (Oct 17 2026), with bones for neck, head, both wings and the tail; the code turns its head slowly about, stirs its wings and twitches the tip of its tail
-        { const cat = new THREE.Group(); cat.position.set(0, lvl(5) + 3, 0); cat.rotation.y = -.9; cat.scale.setScalar(1.45); g.add(cat); let rig = null;
+        { const cat = new THREE.Group(); cat.position.set(0, lvl(5) - .6, 0);   // (Oct 24: straight on the hilltop, the white plinth gone)
+           cat.rotation.y = -.9; cat.scale.setScalar(1.45); g.add(cat); let rig = null;
           const hit = M(cat, new THREE.BoxGeometry(42, 48, 32), new THREE.MeshBasicMaterial(), 0, 24, 0); hit.visible = false; hit.userData.noShadow = true;   // what a click finds: the skinned cat itself is left out of picking
           laterGL.load('models/beastward-cat.glb', gltf => { const m = gltf.scene, K = 54; m.scale.setScalar(K); m.rotation.y = Math.PI / 2; m.position.y = .505 * K; cat.add(m); m.updateMatrixWorld(true);   // its +Z front turned to +x, paws on the terrace
             const mq = m.getWorldQuaternion(new THREE.Quaternion()).invert(), th = things.find(x => x.name === 'Terraced Beastward'), J = {};
@@ -3302,9 +3400,12 @@ function buildProps() {
             turn(J.tail3, 'y', .07 * Math.sin(t * 1.1) * Math.max(0, Math.sin(t * .37))); }); }                                                                                          // the tip of the curled tail twitches now and then (more bends the fur out of shape)
       }, { y: 0, hexes: HX, top: lvl(5) + 110, view: 620 });
       for (const [j, a, col] of [[0, 1.2, [.9, .93, .98]], [2, 3.6, [.9, .93, .98]], [3, 5.3, [1, .95, .8]]]) { const mm = mist({ n: 46, seed: 20 + j, r0: 5, r1: 24, y0: 2, y1: 15, spin: .2, rise: 0, size: 20, alpha: .13, col }); mm.position.set(c[0] + Math.cos(a) * rad(j), lvl(j), c[1] + Math.sin(a) * rad(j)); scene.add(mm); }
-      herds(c, [{ n: 46, R: rad(0), w: 12, a0: .4, spread: .5, speed: .05, y: lvl(0), size: .9 }, { n: 40, R: rad(0), w: 12, a0: 3.4, spread: .45, speed: .05, y: lvl(0), size: .9 }, { n: 34, R: rad(2), w: 10, a0: 2.2, spread: .6, speed: -.07, y: lvl(2), size: .8 }, { n: 28, R: rad(3), w: 9, a0: 5, spread: .7, speed: .09, y: lvl(3), size: .7 }, { n: 18, R: rad(4), w: 7, a0: 1, spread: .9, speed: -.12, y: lvl(4), size: .7 }], [.45, .36, .26]);
-      beast('Horse.glb', 60, 1.8, (o, t) => { const a = t * .045 + 1; o.position.set(c[0] + Math.cos(a) * rad(1), lvl(1), c[1] + Math.sin(a) * rad(1)); o.rotation.y = -a; });
-      beast('Stork.glb', 46, 1.4, (o, t) => { const a = -t * .12; o.position.set(c[0] + Math.cos(a) * 70, lvl(5) + 90 + 10 * Math.sin(t * .3), c[1] + Math.sin(a) * 70); o.rotation.y = -a + Math.PI; }); }
+      // Brandon's beasts (Oct 24): a swarm of tiny moose drifting round the terraces in place of the little herds; the horse galloping its terrace; giant rats running the rings and frogs hopping round them
+      mooseHerds(c, [{ n: 90, R: rad(0), w: 14, a0: .4, spread: .6, speed: .05, y: lvl(0), size: .44 }, { n: 80, R: rad(0), w: 14, a0: 3.4, spread: .5, speed: .05, y: lvl(0), size: .44 }, { n: 64, R: rad(2), w: 12, a0: 2.2, spread: .7, speed: -.07, y: lvl(2), size: .4 }, { n: 52, R: rad(3), w: 11, a0: 5, spread: .8, speed: .09, y: lvl(3), size: .37 }, { n: 34, R: rad(4), w: 9, a0: 1, spread: 1, speed: -.12, y: lvl(4), size: .37 }]);
+      for (const [j, w, a0] of [[0, .22, .3], [0, .2, 3.6], [2, -.27, 1.2], [2, -.25, 4.4], [3, .3, 2.6]]) beastLoad('beast-rat', 28, 'gallop', ringRun(c[0], c[1], rad(j), lvl(j), w, a0, 2.3), { yaw: Math.PI, frontMax: .3, nod: 0 });
+      for (const [j, sg, a0, fi] of [[0, 1, 1.8, 0], [0, -1, 5, 1], [2, 1, .2, 0], [2, -1, 3, 1], [3, 1, 4.2, 0], [4, -1, 2, 1]]) beastLoad(fi ? 'beast-frogB' : 'beast-frogA', 19, 'hop', ringHop(c[0], c[1], rad(j), lvl(j), sg * 30 / rad(j), 1.6 + .3 * fi, .58, 11, a0), { plate: fi ? .045 : .065 });
+      beastLoad('beast-horse', 48, 'gallop', ringRun(c[0], c[1], rad(1), lvl(1), .16, 1, 1.25));
+      beast('Stork.glb', 46, 1.4, (o, t) => { const a = -t * .12; o.position.set(c[0] + Math.cos(a) * 70 * BK, lvl(5) + 90 + 10 * Math.sin(t * .3), c[1] + Math.sin(a) * 70 * BK); o.rotation.y = -a + Math.PI; }); }
 
     // Bone-Glass Menagerie (23,11): a great pale dome of bone-ribbed glass, pools and perches inside, and bright birds wheeling under the roof
     { const c = Wp(MENAG), y0 = 17 * S, bone = solid(0xe9e4d4, .6), domeG = new THREE.MeshStandardMaterial({ color: 0xe8f0ea, roughness: .08, transparent: true, opacity: .28, envMapIntensity: 2, side: THREE.DoubleSide, depthWrite: false });
@@ -5242,7 +5343,8 @@ function underKit(g, area, R) {
   const glow = (hex, k = 2.4) => { const key = hex + ':' + k; return UGLOW[key] || (UGLOW[key] = new THREE.MeshStandardMaterial({ color: 0x111111, emissive: hex, emissiveIntensity: k, roughness: .6 })); };   // one material per colour and strength, so like glows batch together
   const tex = (w, h, draw, rep = 1) => ctex(w, h, draw, rep, rep);
   const mark = (name, x, y, z) => { (UNDER.marks = UNDER.marks || {})[area.src.name + ':' + name] = [x, y + UNDER_OFF, z]; };   // key spots, for finding them again
-  return { mark, rnd, set, inA, inHex, x0, x1, z0, z1, cx: (x0 + x1) / 2, cz: (z0 + z1) / 2, B, C, S, T, K, P, add, tr, flush, floor, rim, edges, light, glow, tex, R };
+  const skull = (r, mat, x, y, z, ry = rnd() * 6.283) => { if (!UNDER_SKULL.geo) return S(r, mat, x, y, z, 1, 1.05, 1.15, 6); const s = r * 2.3; add(UNDER_SKULL.geo.clone().scale(s, s, s).rotateY(ry).translate(x, y - r * .95, z), mat); };   // a skull of radius r, sitting where a round one would
+  return { mark, rnd, set, inA, inHex, x0, x1, z0, z1, cx: (x0 + x1) / 2, cz: (z0 + z1) / 2, B, C, S, T, K, P, add, tr, flush, floor, rim, edges, light, glow, tex, R, skull };
 }
 // The under-areas' lights: many spots, but only a fixed pool of real lights, which each frame take the spots nearest the middle of the view. The number of lights never
 // changes, so no material has to be rebuilt as you move about; everything else that glows does so by its own material
@@ -5295,6 +5397,10 @@ function ufunnel(o) { const n = o.n || 160, r = mulberry32(o.seed || 7), aP = ne
       ' float sz = aP.w * (0.6 + 1.1 * h) * uScale / -mv.z; gl_PointSize = clamp(sz, 1.0, 420.0); vA = aQ.y * smoothstep(0.0, 0.12, h) * smoothstep(1.0, 0.6, h) * min(1.0, sz / 3.0); }',
     fragmentShader: 'uniform vec4 uCol; varying float vA; void main(){ float a = smoothstep(0.5, 0.05, length(gl_PointCoord - 0.5)); gl_FragColor = vec4(uCol.rgb, a * a * vA * uCol.a); }' });
   const p = new THREE.Points(ge, m); p.frustumCulled = false; p.raycast = () => {}; return p; }
+// the skull off Brandon's skeleton (Oct 24), for every skull the under-areas set down; until it has loaded they keep their round ones
+const UNDER_SKULL = { geo: null };
+laterGL.load('models/skull.glb', gltf => { let geo = null; gltf.scene.updateMatrixWorld(true); gltf.scene.traverse(o => { if (o.isMesh && !geo) { geo = o.geometry.clone(); for (const k of Object.keys(geo.attributes)) { const a = geo.attributes[k]; if (k !== 'position' && k !== 'normal') { geo.deleteAttribute(k); continue; } const f = new Float32Array(a.count * a.itemSize); for (let i = 0; i < a.count; i++) { f[i * a.itemSize] = a.getX(i); f[i * a.itemSize + 1] = a.getY(i); f[i * a.itemSize + 2] = a.getZ(i); } geo.setAttribute(k, new THREE.BufferAttribute(f, a.itemSize)); } geo.applyMatrix4(o.matrixWorld); } });
+  if (!geo) return; geo.rotateY(Math.PI / 2); geo.computeBoundingBox(); const bb = geo.boundingBox, s = 1 / (bb.max.y - bb.min.y); geo.translate(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2).scale(s, s, s); UNDER_SKULL.geo = geo.index ? geo.toNonIndexed() : geo; });
 // The Underloft, under Grandloft Hall: the city's old sewers, cut through the rock as a net of brick tunnels, each with a channel of dark water between two walkways,
 // arched over here and there and fed by outfall pipes. They meet at a great round cistern where the crypt stair comes down from the hall, and at the far ends of the net they
 // open into the older work beneath: a cell block, a guard room, and broad stairs going down into the dark where the deeper dungeons begin
@@ -5415,7 +5521,7 @@ UNDER_BUILD['Grandloft Hall'] = (g, area, R) => {
       K.light(hx + ex * 9, 5, hz + ez * 9, 0xffc040, .35, 40, .05); } }
   { const tr2 = [...open].filter(([k2, kd]) => kd === 'trunk').map(([k2]) => k2); for (let q = 0; q < 5 && tr2.length; q++) { const k2 = tr2[Math.floor((q + .5) / 5 * tr2.length)], [x, z] = at(Math.floor(k2 / 1000), k2 % 1000), cy = H - 4 - rnd() * 3;   // cages hung over the trunk
       for (let b2 = 0; b2 < 10; b2++) { const a = b2 / 10 * 6.283; C(.12, .12, 6, 3, iron, x + Math.cos(a) * 2, cy, z + Math.sin(a) * 2); } C(2.2, 2.2, .3, 10, iron, x, cy - 3, z); K.K(2.4, 1.6, 10, iron, x, cy + 3.8, z); C(.1, .1, 30, 3, iron, x, cy + 19, z);
-      if (q % 2 === 0) { S(.8, bone, x, cy - 1.6, z, 1, 1.1, 1, 6); C(.5, .4, 1.8, 5, bone, x, cy - 2.6, z); } } }
+      if (q % 2 === 0) { K.skull(.8, bone, x, cy - 1.6, z); C(.5, .4, 1.8, 5, bone, x, cy - 2.6, z); } } }
   { const webT = utex('web', () => ctex(256, 256, (c, w, h) => { c.clearRect(0, 0, w, h); c.strokeStyle = 'rgba(235,235,225,.85)'; c.lineWidth = 1.4; const cx = w / 2, cy = h / 2;
       for (let k = 0; k < 14; k++) { const a = k / 14 * 6.283; c.beginPath(); c.moveTo(cx, cy); c.lineTo(cx + Math.cos(a) * w * .7, cy + Math.sin(a) * h * .7); c.stroke(); }
       for (let r2 = 10; r2 < w * .6; r2 += 11) { c.beginPath(); for (let k = 0; k <= 14; k++) { const a = k / 14 * 6.283, rr2 = r2 * (1 + .08 * Math.sin(k * 3 + r2)); c.lineTo(cx + Math.cos(a) * rr2, cy + Math.sin(a) * rr2); } c.stroke(); } }));
@@ -5565,7 +5671,7 @@ UNDER_BUILD['Sanguine Sluice'] = (g, area, R) => {
       for (let k = 0; k < 14; k++) ghoul(...at3((rnd() - .5) * (W - 12), (rnd() - .5) * (D - 14)), rnd() * 6.28, y0 + .6); lit(0, 14, 0, 0x90ff60, 1.6, 140); }
     else if (st.kind === 'ossuary') {   // an ossuary tower: course on course of skulls round a stone core, a lantern room at the top with a green beacon
       P2(new THREE.CylinderGeometry(13, 14, 4, 20).translate(0, 2, -2), stoneD); P2(new THREE.CylinderGeometry(8, 9, 54, 16).translate(0, 31, -2), stoneD);
-      for (let r = 0; r < 16; r++) { const y = 6 + r * 3.2, n2 = 18; for (let k = 0; k < n2; k++) { const a = k / n2 * 6.283 + r * .17; P2(new THREE.SphereGeometry(1.25, 6, 5).scale(1, 1.05, 1.15).translate(Math.cos(a) * 8.9, y, -2 + Math.sin(a) * 8.9), r % 4 === 3 ? boneD : bone); } P2(new THREE.TorusGeometry(9.2, .45, 4, 20).rotateX(Math.PI / 2).translate(0, y + 1.6, -2), boneD); }
+      for (let r = 0; r < 16; r++) { const y = 6 + r * 3.2, n2 = 18; for (let k = 0; k < n2; k++) { const a = k / n2 * 6.283 + r * .17; P2(UNDER_SKULL.geo ? UNDER_SKULL.geo.clone().scale(2.9, 2.9, 2.9).rotateY(-a).translate(Math.cos(a) * 9.1, y - 1.2, -2 + Math.sin(a) * 9.1) : new THREE.SphereGeometry(1.25, 6, 5).scale(1, 1.05, 1.15).translate(Math.cos(a) * 8.9, y, -2 + Math.sin(a) * 8.9), r % 4 === 3 ? boneD : bone); } P2(new THREE.TorusGeometry(9.2, .45, 4, 20).rotateX(Math.PI / 2).translate(0, y + 1.6, -2), boneD); }
       P2(new THREE.CylinderGeometry(9.5, 9.5, 1.6, 18).translate(0, 59, -2), marble); for (let k = 0; k < 8; k++) { const a = k / 8 * 6.283; P2(new THREE.CylinderGeometry(.6, .6, 8, 5).translate(Math.cos(a) * 7, 64, -2 + Math.sin(a) * 7), bone); }
       P2(new THREE.SphereGeometry(3.2, 12, 8).translate(0, 64, -2), K.glow(0x60ff90, 5)); P2(new THREE.ConeGeometry(9, 12, 16).translate(0, 74, -2), slate); P2(new THREE.BoxGeometry(5, 9, 1).translate(0, 8.5, 7.1), dark);
       lit(0, 66, -2, 0x60ff90, 2.6, 240); umist(g, ...at3(0, -2), { n: 20, seed: 6004, r0: 0, r1: 6, y0: y0 + 60, y1: y0 + 80, rise: .1, spin: .5, size: 22, alpha: .14, col: [.4, 1.5, .7] }); }
@@ -5606,12 +5712,12 @@ UNDER_BUILD['Sanguine Sluice'] = (g, area, R) => {
   // the catacombs: round the outside, the rock face is cut into rows of niches, a skull in each
   for (const e of K.edges) { const ix = e.x - e.nx * 9, iz = e.z - e.nz * 9, tx = -e.nz, tz = e.nx, ry = Math.atan2(e.nx, e.nz);
     add(tr(new THREE.BoxGeometry(R * 1.02, 40, 6), ix + e.nx * 3, 20, iz + e.nz * 3, ry), stoneD);
-    for (let row = 0; row < 5; row++) for (let q = -3; q <= 3; q++) { if (rnd() < .1) continue; const px = ix + tx * q * 9 - e.nx * .4, pz = iz + tz * q * 9 - e.nz * .4, y = 6 + row * 6.4; add(tr(new THREE.BoxGeometry(6, 4, .6), px, y, pz, ry), dark); if (rnd() < .7) { add(tr(new THREE.CylinderGeometry(.25, .25, 4.6, 4), px - e.nx * .7, y - 1.4, pz - e.nz * .7, ry, 0, Math.PI / 2), boneD); if (rnd() < .5) S(.75, boneD, px - e.nx * .8 + tx * 1.4, y - .6, pz - e.nz * .8 + tz * 1.4, 1, .9, 1.1, 5); } }
+    for (let row = 0; row < 5; row++) for (let q = -3; q <= 3; q++) { if (rnd() < .1) continue; const px = ix + tx * q * 9 - e.nx * .4, pz = iz + tz * q * 9 - e.nz * .4, y = 6 + row * 6.4; add(tr(new THREE.BoxGeometry(6, 4, .6), px, y, pz, ry), dark); if (rnd() < .7) { add(tr(new THREE.CylinderGeometry(.25, .25, 4.6, 4), px - e.nx * .7, y - 1.4, pz - e.nz * .7, ry, 0, Math.PI / 2), boneD); if (rnd() < .5) K.skull(.75, boneD, px - e.nx * .8 + tx * 1.4, y - .6, pz - e.nz * .8 + tz * 1.4, Math.atan2(e.nz, -e.nx)); } }
     if (rnd() < .3) K.K(.8, 2.2, 6, ember, ix - e.nx * 2, 38, iz - e.nz * 2); if (rnd() < .12) K.light(ix - e.nx * 14, 24, iz - e.nz * 14, 0x60ff90, 1.6, 140, .2); }
   // bridges of bone over the blood: a low arch of stone, a rail of long bones each side with a skull on every other post
   for (const f of [.16, .38, .84]) { const a2 = L * f, c0 = at2(a2, 0); if (!inA(c0.x, c0.z, 30)) continue; const ry = Math.atan2(c0.nx, c0.nz), SP = CW + 14;
     for (let k = -7; k <= 7; k++) { const b2 = k * SP / 14, q = at2(a2, b2), y = 3 + 4.5 * Math.cos(Math.PI * b2 / SP); add(tr(new THREE.BoxGeometry(10, 1.2, SP / 14 + .6), q.x, y, q.z, ry), stoneD);
-      for (const sd2 of [-1, 1]) { const rx = q.x + q.ux * sd2 * 4.6, rz = q.z + q.uz * sd2 * 4.6; if (k % 2 === 0) { add(new THREE.CylinderGeometry(.3, .35, 4, 5).translate(rx, y + 2.6, rz), bone); S(.65, bone, rx, y + 4.9, rz, 1, .9, 1.1, 6); } add(tr(new THREE.CylinderGeometry(.22, .22, SP / 14 + .4, 4), rx, y + 3.8, rz, ry, Math.PI / 2), bone); } }
+      for (const sd2 of [-1, 1]) { const rx = q.x + q.ux * sd2 * 4.6, rz = q.z + q.uz * sd2 * 4.6; if (k % 2 === 0) { add(new THREE.CylinderGeometry(.3, .35, 4, 5).translate(rx, y + 2.6, rz), bone); K.skull(.65, bone, rx, y + 4.9, rz, Math.atan2(q.nz * sd2, q.nx * sd2)); } add(tr(new THREE.CylinderGeometry(.22, .22, SP / 14 + .4, 4), rx, y + 3.8, rz, ry, Math.PI / 2), bone); } }
     K.mark('bridge' + Math.round(f * 100), c0.x, 6, c0.z); }
   // the throne of the empire: a stepped ziggurat, a stair up the front facing the channel, braziers of green fire at the corners and a great seat at the top under a canopy of bone
   { const q = at2(L * .3, 0), q2 = at2(L * .3, 70); K.mark('channel', q.x, 6, q.z); K.mark('tombs', q2.x, 8, q2.z); }
@@ -5712,7 +5818,7 @@ UNDER_BUILD['Sanguine Sluice'] = (g, area, R) => {
         P2(new THREE.CylinderGeometry(1.1, 1.6, 34, 6).translate(gx * 1.9, 17 + hgt(0), 0), boneD); P2(new THREE.CylinderGeometry(.7, .9, R0 * 1.1, 6).rotateZ(Math.PI / 2 - sd * .2).translate(gx * 1.05, 34 + hgt(0), 0), bone); P2(new THREE.SphereGeometry(2.2, 8, 6).translate(gx * 1.9, 35 + hgt(0), 0), bone);
         P2(new THREE.CylinderGeometry(.12, .12, 18, 3).translate(gx * .35, 25 + hgt(0), 0), iron); for (let k = 0; k < 8; k++) { const a = k / 8 * 6.283; P2(new THREE.CylinderGeometry(.14, .14, 5, 3).translate(gx * .35 + Math.cos(a) * 1.8, 13.5 + hgt(0), Math.sin(a) * 1.8), iron); } P2(new THREE.CylinderGeometry(2, 2, .3, 8).translate(gx * .35, 11 + hgt(0), 0), iron); P2(new THREE.ConeGeometry(2.2, 1.6, 8).translate(gx * .35, 16.8 + hgt(0), 0), iron); }
       for (let k = 0; k < 16; k++) { const a = rnd() * 6.283, d = R0 + 4 + rnd() * Math.max(4, r - R0 - 6), [x, z] = at3(Math.cos(a) * d, Math.sin(a) * d);   // bones heaped round the rim
-        for (let q = 0; q < 6; q++) add(new THREE.CylinderGeometry(.25, .25, 3 + rnd() * 2, 4).rotateZ(Math.PI / 2 + (rnd() - .5) * .8).rotateY(rnd() * 3).translate(x + (rnd() - .5) * 4, 1.4 + q * .25, z + (rnd() - .5) * 4), bone); if (k % 3 === 0) S(.8, bone, x, 2.6, z, 1, 1.1, 1.1, 6); }
+        for (let q = 0; q < 6; q++) add(new THREE.CylinderGeometry(.25, .25, 3 + rnd() * 2, 4).rotateZ(Math.PI / 2 + (rnd() - .5) * .8).rotateY(rnd() * 3).translate(x + (rnd() - .5) * 4, 1.4 + q * .25, z + (rnd() - .5) * 4), bone); if (k % 3 === 0) K.skull(.8, bone, x, 2.6, z); }
       for (let k = 0; k < 10; k++) { const a = k / 10 * 6.283; if (k % 2) lantern(...at3(Math.cos(a) * (R0 + 3), Math.sin(a) * (R0 + 3)), 9); }
       K.mark('pit', cx, 10, cz); } }
   // and every spot of floor left bare at the ends filled the way the rest of the city is: walled plots, crypts, mausoleums and chapels, turned to face the nearest of the two
@@ -7171,17 +7277,180 @@ function buildPeople(g) { const NMAX = 480, GMAX = 160, XMAX = 280;
     fragmentShader: 'uniform float uTime; varying vec3 vN; varying vec3 vV; varying float vH; void main(){ float fr = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 1.5); float a = (0.16 + 0.95 * fr) * smoothstep(0.0, 0.4, vH) * (0.85 + 0.15 * sin(uTime * 3.0 + vH * 22.0)); gl_FragColor = vec4(mix(vec3(0.2, 1.0, 0.8), vec3(0.75, 1.0, 1.0), fr) * a, 1.0); }' });
   UNDER.people = { body: mk(new THREE.CylinderGeometry(.8, 1, 1, 8), flat, NMAX), head: mk(new THREE.SphereGeometry(1, 8, 6), flat, NMAX), legL: mk(leg, flat, NMAX), legR: mk(leg, flat, NMAX), armL: mk(arm, flat, NMAX), armR: mk(arm, flat, NMAX),
     load: mk(new THREE.BoxGeometry(1, 1, 1), flat, NMAX), hat: mk(hat, flat, XMAX), ribs: mk(ribs, flat, XMAX), eyes: mk(eyes, glowE, NMAX), strip: mk(new THREE.PlaneGeometry(1, 1).translate(0, -.5, 0), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, side: THREE.DoubleSide }), XMAX),
-    gBody: mk(ghostBody, ghostSh, GMAX), gArms: mk(ghostArms, ghostSh, GMAX), gEyes: mk(mergeGeometries([-1, 1].map(sd => new THREE.SphereGeometry(.34, 6, 5).translate(1.75, 12.5, sd * .8))), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 3, 2.8), fog: false }), GMAX) }; }
+    gBody: mk(ghostBody, ghostSh, GMAX), gArms: mk(ghostArms, ghostSh, GMAX), gEyes: mk(mergeGeometries([-1, 1].map(sd => new THREE.SphereGeometry(.34, 6, 5).translate(1.75, 12.5, sd * .8))), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 3, 2.8), fog: false }), GMAX) }; loadGhosts(g, GMAX); loadCrew(g, NMAX); }
+// ---- the Pillardrop's ghosts (Oct 24): Brandon's two Meshy ghosts, a delivery man with his crate and a laundress with her tray of linen. Each body is see-through without
+// showing its own insides: it is drawn first into the depth buffer only, then its colour is laid on only where it is the nearest surface, so the shaft shows through a ghost
+// but never the far side of its own robe; a pale rim, a tail that ripples and fades. What they carry is a separate part and stays solid. A close copy for the few nearest
+// the eye; the rest use a light copy (about 2,000 triangles, its colours in its vertices), so the shaft can hold a crowd of them
+function loadGhosts(g, GMAX) { const P = UNDER.people, NNEAR = 8, H = 3, NL = String.fromCharCode(10), files = ['ghost-delivery', 'ghost-laundress'], sets = [[], []]; let left = 4;
+  const vs = ['uniform float uTime; varying vec3 vN; varying vec3 vV; varying vec2 vUv; varying vec3 vC; varying float vH;',
+    'void main(){ vec3 p = position; float ph = instanceMatrix[3].x * 0.13 + instanceMatrix[3].z * 0.07; float lo = clamp(1.0 - p.y / 1.15, 0.0, 1.0);',
+    '  p.x += sin(uTime * 1.7 + p.y * 2.6 + ph) * lo * lo * 0.24; p.z += cos(uTime * 1.3 + p.y * 3.1 + ph) * lo * lo * 0.2;',
+    '  vec4 mv = modelViewMatrix * instanceMatrix * vec4(p, 1.0); vN = normalize(normalMatrix * mat3(instanceMatrix) * normal); vV = normalize(-mv.xyz); vUv = uv; vH = p.y / 3.0;',
+    '#if defined( USE_COLOR_ALPHA )', '  vC = color.rgb;', '#elif defined( USE_COLOR )', '  vC = color;', '#else', '  vC = vec3(1.0);', '#endif',
+    '  gl_Position = projectionMatrix * mv; }'].join(NL);
+  const fsC = ['uniform float uTime; uniform sampler2D map; uniform float uHasMap; varying vec3 vN; varying vec3 vV; varying vec2 vUv; varying vec3 vC; varying float vH;',
+    'void main(){ vec3 base = uHasMap > 0.5 ? texture2D(map, vUv).rgb : vC; float fr = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.0);',
+    '  vec3 col = mix(base * vec3(0.95, 1.1, 1.3), vec3(0.7, 1.0, 1.0), 0.22) + vec3(0.35, 0.85, 1.0) * fr * 1.3;',
+    '  float a = (0.34 + 0.6 * fr) * smoothstep(0.0, 0.32, vH) * (0.9 + 0.1 * sin(uTime * 3.0 + vH * 20.0)); gl_FragColor = vec4(col, a); }'].join(NL);
+  const toF32 = ge => { for (const k of Object.keys(ge.attributes)) { const a = ge.attributes[k]; if (a.array instanceof Float32Array && !a.isInterleavedBufferAttribute) continue; const f = new Float32Array(a.count * a.itemSize);
+      for (let i = 0; i < a.count; i++) for (let c = 0; c < a.itemSize; c++) f[i * a.itemSize + c] = a.getComponent ? a.getComponent(i, c) : [a.getX(i), a.getY(i), a.getZ(i), a.getW(i)][c]; ge.setAttribute(k, new THREE.BufferAttribute(f, a.itemSize)); } return ge; };
+  const mk = (geo, mat, n, order) => { const m = new THREE.InstancedMesh(geo, mat, n); m.count = 0; m.frustumCulled = false; m.raycast = () => {}; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.renderOrder = order; m.layers.mask = P.body.layers.mask; g.add(m); return m; };   // on the same layer as the rest of the crew (the shaft's camera sees only its own)
+  const L = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+  files.forEach((f, mi) => ['', '-far'].forEach(sfx => L.load('models/' + f + sfx + '.glb', gltf => { const sc = gltf.scene, parts = {}; sc.updateMatrixWorld(true);
+    sc.traverse(o => { if (!o.isMesh) return; let n = o; while (n && n.name !== 'body' && n.name !== 'item') n = n.parent; if (n) parts[n.name] = { geo: toF32(o.geometry.clone()).applyMatrix4(o.matrixWorld), mat: o.material }; });
+    if (!parts.body || !parts.item) { console.warn('ghost model incomplete: ' + f + sfx); return; }
+    const bb = new THREE.Box3().setFromBufferAttribute(parts.body.geo.attributes.position).union(new THREE.Box3().setFromBufferAttribute(parts.item.geo.attributes.position)), s = H / (bb.max.y - bb.min.y);
+    for (const p of [parts.body, parts.item]) p.geo.translate(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2).scale(s, s, s).rotateY(Math.PI / 2);   // standing on its tail, facing +x as the crew do
+    const far = sfx === '-far', n = far ? GMAX : NNEAR, bm = parts.body.mat, hasMap = !!bm.map;
+    const depth = new THREE.ShaderMaterial({ vertexShader: vs, fragmentShader: 'void main(){ gl_FragColor = vec4(0.0); }', uniforms: { uTime: U.uTime }, colorWrite: false, depthWrite: true, transparent: true, vertexColors: !hasMap });
+    const color = new THREE.ShaderMaterial({ vertexShader: vs, fragmentShader: fsC, uniforms: { uTime: U.uTime, map: { value: bm.map || null }, uHasMap: { value: hasMap ? 1 : 0 } }, transparent: true, depthWrite: false, depthFunc: THREE.LessEqualDepth, fog: false, vertexColors: !hasMap });
+    const im = parts.item.mat.clone(); im.metalness = 0; im.roughness = .8;
+    sets[mi][far ? 1 : 0] = { depth: mk(parts.body.geo, depth, n, 1), color: mk(parts.body.geo, color, n, 2), item: mk(parts.item.geo, im, n, 0) };
+    if (--left === 0) { P.gh = sets.map(s2 => ({ near: s2[0], far: s2[1] })); P.ghNN = NNEAR; P.ghMax = GMAX; console.log('pillardrop ghosts in place'); } },
+    undefined, () => console.warn('ghost model not loaded: ' + f + sfx)))); }
+// ---- ghosts on the surface (Oct 24): drawn the same see-through way as the Pillardrop's (depth first, then colour on the nearest surface only), a few of them each on its own
+// round: Brandon's delivery man and laundress at the Bone Sorter Mill, his two giants and the soldier in the Breakline Trenches. A close copy near the eye, a light one beyond
+const SGH = { list: [], kinds: {}, on: false }; window.__sgh = SGH;   // (for testing from the console)
+function surfGhost(kind, H, path, farD) { SGH.list.push({ kind, H, path, farD: farD || H * 45, g: null }); if (!SGH.kinds[kind]) { const K = SGH.kinds[kind] = { near: null, far: null };
+    for (const sfx of ['', '-far']) laterGL.load('models/ghost-' + kind + sfx + '.glb', gltf => { K[sfx ? 'far' : 'near'] = sghPrep(gltf); sghBuild(); }, undefined, () => console.warn('surface ghost not loaded: ' + kind + sfx)); } }
+function sghPrep(gltf) { const NL = String.fromCharCode(10), parts = {}; gltf.scene.updateMatrixWorld(true);
+  const toF32 = ge => { for (const k of Object.keys(ge.attributes)) { const a = ge.attributes[k]; if (a.array instanceof Float32Array && !a.isInterleavedBufferAttribute) continue; const f = new Float32Array(a.count * a.itemSize);
+      for (let i = 0; i < a.count; i++) for (let c = 0; c < a.itemSize; c++) f[i * a.itemSize + c] = c === 0 ? a.getX(i) : c === 1 ? a.getY(i) : c === 2 ? a.getZ(i) : a.getW(i); ge.setAttribute(k, new THREE.BufferAttribute(f, a.itemSize)); } return ge; };
+  gltf.scene.traverse(o => { if (!o.isMesh) return; let n = o; while (n && n.name !== 'body' && n.name !== 'item') n = n.parent; const key = n ? n.name : 'body'; if (!parts[key]) parts[key] = { geo: toF32(o.geometry.clone()).applyMatrix4(o.matrixWorld), mat: o.material }; });
+  const bb = new THREE.Box3(); for (const p of Object.values(parts)) bb.union(new THREE.Box3().setFromBufferAttribute(p.geo.attributes.position)); const s = 3 / (bb.max.y - bb.min.y);
+  for (const p of Object.values(parts)) p.geo.translate(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2).scale(s, s, s).rotateY(Math.PI / 2);
+  const vs = ['uniform float uTime; varying vec3 vN; varying vec3 vV; varying vec2 vUv; varying vec3 vC; varying float vH;',
+    'void main(){ vec3 p = position; float ph = modelMatrix[3].x * 0.13 + modelMatrix[3].z * 0.07; float lo = clamp(1.0 - p.y / 1.15, 0.0, 1.0);',
+    '  p.x += sin(uTime * 1.5 + p.y * 2.6 + ph) * lo * lo * 0.24; p.z += cos(uTime * 1.2 + p.y * 3.1 + ph) * lo * lo * 0.2;',
+    '  vec4 mv = modelViewMatrix * vec4(p, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); vUv = uv; vH = p.y / 3.0;',
+    '#if defined( USE_COLOR_ALPHA )', '  vC = color.rgb;', '#elif defined( USE_COLOR )', '  vC = color;', '#else', '  vC = vec3(1.0);', '#endif', '  gl_Position = projectionMatrix * mv; }'].join(NL);
+  const fs = ['uniform float uTime; uniform sampler2D map; uniform float uHasMap; varying vec3 vN; varying vec3 vV; varying vec2 vUv; varying vec3 vC; varying float vH;',
+    'void main(){ vec3 base = uHasMap > 0.5 ? texture2D(map, vUv).rgb : vC; float fr = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.0);',
+    '  vec3 col = mix(base * vec3(0.95, 1.1, 1.3), vec3(0.7, 1.0, 1.0), 0.22) + vec3(0.35, 0.85, 1.0) * fr * 1.3;',
+    '  float a = (0.34 + 0.6 * fr) * smoothstep(0.0, 0.32, vH) * (0.9 + 0.1 * sin(uTime * 3.0 + vH * 20.0)); gl_FragColor = vec4(col, a); }'].join(NL);
+  const bm = parts.body.mat, hasMap = !!bm.map;
+  const out = { body: parts.body.geo, depth: new THREE.ShaderMaterial({ vertexShader: vs, fragmentShader: 'void main(){ gl_FragColor = vec4(0.0); }', uniforms: { uTime: U.uTime }, colorWrite: false, depthWrite: true, transparent: true, vertexColors: !hasMap }),
+    color: new THREE.ShaderMaterial({ vertexShader: vs, fragmentShader: fs, uniforms: { uTime: U.uTime, map: { value: bm.map || null }, uHasMap: { value: hasMap ? 1 : 0 } }, transparent: true, depthWrite: false, depthFunc: THREE.LessEqualDepth, fog: false, vertexColors: !hasMap }) };
+  if (parts.item) { const im = parts.item.mat.clone(); im.metalness = 0; im.roughness = .8; out.item = parts.item.geo; out.itemMat = im; } return out; }
+function sghBuild() { for (const e of SGH.list) { if (e.g) continue; const K = SGH.kinds[e.kind]; if (!K.near || !K.far) continue; const g0 = new THREE.Group(); e.lv = [];
+    for (const L of [K.near, K.far]) { const sg = new THREE.Group(), d = new THREE.Mesh(L.body, L.depth), c = new THREE.Mesh(L.body, L.color); d.renderOrder = 1; c.renderOrder = 2; sg.add(d, c); if (L.item) sg.add(new THREE.Mesh(L.item, L.itemMat)); sg.traverse(o => { o.raycast = () => {}; o.frustumCulled = false; }); g0.add(sg); e.lv.push(sg); }
+    g0.scale.setScalar(e.H / 3); scene.add(g0); e.g = g0; }
+  if (!SGH.on) { SGH.on = true; const o = {}; anim.push(t => { for (const e of SGH.list) { if (!e.g) continue; e.path(t, o); e.g.position.set(o.x, o.y, o.z); e.g.rotation.y = Math.atan2(-o.fz, o.fx);
+      const near = camera.position.distanceTo(e.g.position) < e.farD; e.lv[0].visible = near; e.lv[1].visible = !near; } }); } }
+// rounds for them: a slow loop through some points, or there and back between two with a rest at each end; both hover a little off the ground and bob
+function sgLoop(pts, speed, hover, ph) { const cv = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(p[0], 0, p[1])), true, 'centripetal'), len = cv.getLength(), v = new THREE.Vector3(), tg = new THREE.Vector3();
+  return (t, o) => { const u = ((t * speed / len + ph) % 1 + 1) % 1; cv.getPointAt(u, v); cv.getTangentAt(u, tg); o.x = v.x; o.z = v.z; o.y = heightAt(v.x, v.z) + hover + Math.sin(t * 1.4 + ph * 9) * hover * .25; o.fx = tg.x; o.fz = tg.z; }; }
+function sgPingPong(A, B, speed, rest, hover, ph) { const dx = B[0] - A[0], dz = B[1] - A[1], L = Math.hypot(dx, dz) || 1, Tm = L / speed, per = 2 * (Tm + rest);
+  return (t, o) => { const tc = ((t + ph * per) % per + per) % per; let u, dir; if (tc < rest) { u = 0; dir = 1; } else if (tc < rest + Tm) { u = (tc - rest) / Tm; dir = 1; } else if (tc < 2 * rest + Tm) { u = 1; dir = -1; } else { u = 1 - (tc - 2 * rest - Tm) / Tm; dir = -1; }
+    const e = u * u * (3 - 2 * u); o.x = A[0] + dx * e; o.z = A[1] + dz * e; o.y = heightAt(o.x, o.z) + hover + Math.sin(t * 1.4 + ph * 9) * hover * .25; o.fx = dx / L * dir; o.fz = dz / L * dir; }; }
+// ---- the crew themselves (Oct 24): Brandon's people (two explorers and a girl with a satchel) and his two mummies take the place of the box figures. They are sculpted standing still,
+// so the walk is made on the graphics card: each leg swings from the hip, its knee bending as it comes through, each arm swings against the leg on its side (or for the mummies is
+// held out before them), the body bobs at each step, and the mummies sway as they shuffle. A light copy (1,000 triangles) for the crowd, a closer one (5,000) for the nearest few
+// [file, hip, knee, shoulder height, shoulder half-width (all on a figure three tall), arm drop (for one modelled with its arms out), leg swing, knee bend, arm swing, arms raised, sway]
+const CREW_M = [['personA', 1.5, .82, 2.42, .42, 0, .55, .95, .7, 0, .02], ['personB', 1.45, .8, 2.3, .42, 0, .55, .95, .65, 0, .02], ['personC', 1.45, .8, 2.35, .4, .9, .5, .9, .6, 0, .02],
+  ['mummyA', 1.35, .75, 2.2, .42, 0, .34, .4, .25, .5, .09], ['mummyB', 1.45, .82, 2.4, .45, 0, .3, .35, .15, 1.3, .1], ['personD', 1.45, .8, 2.45, .4, 1.45, .55, .95, .65, 0, .02],
+  ['skelA', 1.5, .82, 2.45, .4, 0, .55, .9, .65, 0, .03], ['skelC', 1.4, .78, 2.25, .38, 0, .5, .85, .6, .2, .04]];   // and Brandon's skeletons, standing and hunched
+function loadCrew(g, NMAX) { const P = UNDER.people, NNEAR = 24, NL = String.fromCharCode(10), sets = CREW_M.map(() => []); let left = CREW_M.length * 2;
+  const walkGLSL = ['uniform vec4 uBody; uniform vec4 uGait; uniform vec3 uArm; attribute float aWalk;',
+    'vec2 crRot(vec2 q, float a){ float c = cos(a), s = sin(a); return vec2(q.x * c - q.y * s, q.x * s + q.y * c); }',
+    'vec3 crWalk(vec3 p, float ph){ float side = p.z >= 0.0 ? 1.0 : -1.0; float lp = ph + (side > 0.0 ? 0.0 : 3.1416);',
+    '  float wa = smoothstep(uBody.w * 0.6, uBody.w * 0.95, abs(p.z)) * (1.0 - smoothstep(uBody.z + 0.02, uBody.z + 0.22, p.y)) * smoothstep(uBody.x - 0.55, uBody.x - 0.25, p.y);',
+    '  float wl = (1.0 - smoothstep(uBody.x - 0.12, uBody.x + 0.08, p.y)) * (1.0 - wa); float wk = 1.0 - smoothstep(uBody.y - 0.08, uBody.y + 0.08, p.y);',
+    '  if (wa > 0.0) { vec2 qz = crRot(vec2(p.z - side * uBody.w, p.y - uBody.z), -uArm.x * side * wa); p.z = qz.x + side * uBody.w; p.y = qz.y + uBody.z;',
+    '    vec2 q = crRot(vec2(p.x, p.y - uBody.z), (-sin(lp) * uGait.z + uGait.w) * wa); p.x = q.x; p.y = q.y + uBody.z; }',
+    '  vec2 q = crRot(vec2(p.x, p.y - uBody.y), -max(0.0, cos(lp)) * uGait.y * wk * wl); p.x = q.x; p.y = q.y + uBody.y;',
+    '  q = crRot(vec2(p.x, p.y - uBody.x), sin(lp) * uGait.x * wl); p.x = q.x; p.y = q.y + uBody.x;',
+    '  float up = smoothstep(uBody.x - 0.15, uBody.x + 0.35, p.y); vec2 ln = crRot(vec2(p.x, p.y - uBody.x), -0.08 * up); p.x = ln.x; p.y = ln.y + uBody.x;',   // a lean into the walk
+    '  vec2 tw = crRot(vec2(p.x, p.z), sin(ph) * 0.12 * up); p.x = tw.x; p.z = tw.y; p.z += sin(ph) * 0.06;',   // the shoulders turning with the stride, the hips swaying over the planted foot
+    '  p.y += abs(cos(ph)) * 0.1; vec2 qs = crRot(vec2(p.z, p.y), sin(ph) * uArm.y); p.z = qs.x; p.y = qs.y; return p; }'].join(NL);
+  const toF32 = ge => { for (const k of Object.keys(ge.attributes)) { const a = ge.attributes[k]; if (a.array instanceof Float32Array && !a.isInterleavedBufferAttribute) continue; const f = new Float32Array(a.count * a.itemSize);
+      for (let i = 0; i < a.count; i++) for (let c = 0; c < a.itemSize; c++) f[i * a.itemSize + c] = c === 0 ? a.getX(i) : c === 1 ? a.getY(i) : c === 2 ? a.getZ(i) : a.getW(i); ge.setAttribute(k, new THREE.BufferAttribute(f, a.itemSize)); } return ge; };
+  const L = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+  CREW_M.forEach((M, mi) => ['', '-far'].forEach(sfx => L.load('models/crew-' + M[0] + sfx + '.glb', gltf => { let geo = null, src = null; gltf.scene.updateMatrixWorld(true);
+    gltf.scene.traverse(o => { if (o.isMesh && !geo) { geo = toF32(o.geometry.clone()).applyMatrix4(o.matrixWorld); src = o.material; } });
+    geo.computeBoundingBox(); const bb = geo.boundingBox, s = 3 / (bb.max.y - bb.min.y); geo.translate(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2).scale(s, s, s).rotateY(Math.PI / 2);   // standing on y = 0, three tall, facing +x
+    const far = sfx === '-far', n = far ? NMAX : NNEAR, wA = new THREE.InstancedBufferAttribute(new Float32Array(n), 1); wA.setUsage(THREE.DynamicDrawUsage); geo.setAttribute('aWalk', wA);
+    const mat = src.map ? new THREE.MeshStandardMaterial({ map: src.map, normalMap: src.normalMap || null, roughness: .85 }) : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .85 }), uni = { uBody: { value: new THREE.Vector4(M[1], M[2], M[3], M[4]) }, uGait: { value: new THREE.Vector4(M[6], M[7], M[8], M[9]) }, uArm: { value: new THREE.Vector3(M[5], M[10], 0) } };
+    mat.onBeforeCompile = sh => { Object.assign(sh.uniforms, uni); sh.vertexShader = walkGLSL + NL + sh.vertexShader.replace('#include <begin_vertex>', 'vec3 transformed = crWalk(vec3(position), aWalk);'); }; mat.customProgramCacheKey = () => 'crew-' + M[0];
+    const m = new THREE.InstancedMesh(geo, mat, n); m.count = 0; m.frustumCulled = false; m.raycast = () => {}; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.layers.mask = P.body.layers.mask; m.castShadow = true; g.add(m);
+    sets[mi][far ? 1 : 0] = { m, wA }; if (--left === 0) { P.crew = sets.map(s2 => ({ near: s2[0], far: s2[1] })); P.crewNN = NNEAR; P.crewMax = NMAX; console.log('pillardrop crew in place'); } },
+    undefined, () => console.warn('crew model not loaded: ' + M[0] + sfx)))); }
+// ---- models set down in numbers (Oct 24): every copy of one model drawn as one batch, set in place once its file has loaded - Brandon's skeleton lying in the trenches, his skull among the bones.
+// Each model is made one tall, standing on y = 0 and facing +x; s is the height to draw it, the turns are applied z first, then y, then x
+const PLACED = {};
+function placeModel(name, x, y, z, s, rx = 0, ry = 0, rz = 0) { let P = PLACED[name]; if (!P) { P = PLACED[name] = { list: [] };
+    laterGL.load('models/' + name + '.glb', gltf => { let geo = null, src = null; gltf.scene.updateMatrixWorld(true); gltf.scene.traverse(o => { if (o.isMesh && !geo) { geo = o.geometry.clone(); src = o.material;
+        for (const k of Object.keys(geo.attributes)) { const a = geo.attributes[k]; if (a.array instanceof Float32Array) continue; const f = new Float32Array(a.count * a.itemSize); for (let i = 0; i < a.count; i++) for (let c = 0; c < a.itemSize; c++) f[i * a.itemSize + c] = c === 0 ? a.getX(i) : c === 1 ? a.getY(i) : c === 2 ? a.getZ(i) : a.getW(i); geo.setAttribute(k, new THREE.BufferAttribute(f, a.itemSize)); }
+        geo.applyMatrix4(o.matrixWorld); } });
+      geo.rotateY(Math.PI / 2); geo.computeBoundingBox(); const bb = geo.boundingBox, k = 1 / (bb.max.y - bb.min.y); geo.translate(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2).scale(k, k, k);
+      const mat = src.clone(); mat.metalness = 0; mat.roughness = .85; const im = new THREE.InstancedMesh(geo, mat, P.list.length), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), sc = new THREE.Vector3();
+      P.list.forEach(([x2, y2, z2, s2, a, b, c2], i) => { e.set(a, b, c2, 'XYZ'); q.setFromEuler(e); m4.compose(v.set(x2, y2, z2), q, sc.set(s2, s2, s2)); im.setMatrixAt(i, m4); });
+      im.castShadow = im.receiveShadow = true; im.raycast = () => {}; scene.add(im); P.mesh = im; }, undefined, () => console.warn('placed model not loaded: ' + name)); }
+  P.list.push([x, y, z, s, rx, ry, rz]); }
+const skullAt = (x, y, z, s, ry = 0) => placeModel('skull', x, y, z, s, 0, ry, 0);
+// ---- Brandon's beasts (Oct 24): the horse galloping its terrace, rats running the rings, frogs hopping, all sculpted standing still and moved on the graphics card.
+// A gallop: the front pair of legs reach and pull together, then the back pair drive, the body rocking on each bound and lifting clear between; the head nods, a tail sways.
+// A hop: crouched, then the back legs kick out straight behind as it springs and the front legs reach for the ground, the body pitching up and then down into the landing.
+// Each model is made one long (nose to tail along +x), standing on y = 0; len is its length on the map. place(t, o) sets o.x, o.y, o.z, o.fx, o.fz, o.ph (stride), o.air (0..1 through a hop, or -1)
+function beastLoad(file, len, kind, place, opt = {}) { laterGL.load('models/' + file + '.glb', gltf => { let geo = null, src = null; gltf.scene.updateMatrixWorld(true);
+    gltf.scene.traverse(o => { if (o.isMesh && !geo) { geo = o.geometry.clone(); src = o.material; for (const k of Object.keys(geo.attributes)) { const a = geo.attributes[k]; if (a.array instanceof Float32Array) continue; const f = new Float32Array(a.count * a.itemSize); for (let i = 0; i < a.count; i++) for (let c = 0; c < a.itemSize; c++) f[i * a.itemSize + c] = c === 0 ? a.getX(i) : c === 1 ? a.getY(i) : c === 2 ? a.getZ(i) : a.getW(i); geo.setAttribute(k, new THREE.BufferAttribute(f, a.itemSize)); } geo.applyMatrix4(o.matrixWorld); } });
+    geo.rotateY(opt.yaw ?? Math.PI / 2); geo.computeBoundingBox(); let bb = geo.boundingBox; const s = 1 / (bb.max.x - bb.min.x); geo.translate(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2).scale(s, s, s); geo.computeBoundingBox(); bb = geo.boundingBox;
+    if (opt.plate && geo.index) { const ix = geo.index.array, pa = geo.attributes.position, keep = []; for (let i = 0; i < ix.length; i += 3) { if (Math.max(pa.getY(ix[i]), pa.getY(ix[i + 1]), pa.getY(ix[i + 2])) < bb.max.y * opt.plate) continue; keep.push(ix[i], ix[i + 1], ix[i + 2]); } geo.setIndex(keep); }   // the ground plate it was modelled on, cut away
+    const h = bb.max.y, NL = String.fromCharCode(10), f = v => v.toFixed(4), uni = { uPh: { value: 0 }, uAir: { value: -1 }, uT: { value: 0 } };
+    const gal = ['uniform float uPh, uAir, uT;', 'vec2 bRot(vec2 q, float a){ float c = cos(a), s = sin(a); return vec2(q.x * c - q.y * s, q.x * s + q.y * c); }',
+      'vec3 bMove(vec3 p){ float legs = 1.0 - smoothstep(' + f(h * .4) + ', ' + f(h * .55) + ', p.y);',
+      kind === 'hop' ? [
+        // the hop: back legs (behind the middle, low) kick out behind in the air; front legs reach forward and down; the body pitches nose-up off the ground and nose-down to land; a crouch before the spring
+        '  float air = uAir < 0.0 ? 0.0 : sin(3.1416 * uAir); float bk = (1.0 - smoothstep(-0.12, 0.05, p.x)) * legs, fr = smoothstep(0.05, 0.2, p.x) * legs;',
+        '  vec2 q = bRot(vec2(p.x + 0.12, p.y - ' + f(h * .3) + '), -1.25 * air * bk); p.x = q.x - 0.12; p.y = q.y + ' + f(h * .3) + '; p.x -= 0.18 * air * bk;',
+        '  q = bRot(vec2(p.x - 0.18, p.y - ' + f(h * .35) + '), 0.55 * air * fr); p.x = q.x + 0.18; p.y = q.y + ' + f(h * .35) + ';',
+        '  float pitch = uAir < 0.0 ? 0.0 : 0.42 * (1.0 - 2.0 * uAir); q = bRot(vec2(p.x, p.y - ' + f(h * .4) + '), pitch); p.x = q.x; p.y = q.y + ' + f(h * .4) + ';',
+        '  if (uAir < 0.0) p.y *= 1.0 - 0.1 * smoothstep(0.6, 1.0, -uAir); return p; }'].join(NL) : [
+        '  float fr = smoothstep(0.08, 0.22, p.x) * (1.0 - smoothstep(' + f(opt.frontMax ?? .6) + ' - 0.06, ' + f(opt.frontMax ?? .6) + ', p.x)) * legs, bk = (1.0 - smoothstep(-0.22, -0.08, p.x)) * legs, sd = p.z > 0.0 ? 0.35 : 0.0;',   // (front legs stop short of the head: a low head was being pulled about with them)
+        '  vec2 q = bRot(vec2(p.x - 0.28, p.y - ' + f(h * .5) + '), (sin(uPh + sd) * 0.55) * fr); p.x = q.x + 0.28; p.y = q.y + ' + f(h * .5) + ';',
+        '  q = bRot(vec2(p.x + 0.28, p.y - ' + f(h * .5) + '), (sin(uPh + 2.6 + sd) * 0.6) * bk); p.x = q.x - 0.28; p.y = q.y + ' + f(h * .5) + ';',
+        '  float hd = smoothstep(0.28, 0.42, p.x) * smoothstep(' + f(h * .5) + ', ' + f(h * .7) + ', p.y); q = bRot(vec2(p.x - 0.3, p.y - ' + f(h * .6) + '), ' + f(opt.nod ?? .12) + ' * sin(uPh + 0.8) * hd); p.x = q.x + 0.3; p.y = q.y + ' + f(h * .6) + ';',
+        '  float tl = 1.0 - smoothstep(-0.5, -0.32, p.x); p.z += sin(uT * 5.0 + p.x * 12.0) * 0.04 * tl * (1.0 - legs);',
+        '  q = bRot(vec2(p.x, p.y - ' + f(h * .5) + '), 0.08 * sin(uPh + 1.0)); p.x = q.x; p.y = q.y + ' + f(h * .5) + '; p.y += max(0.0, sin(uPh + 0.5)) * ' + f(h * .1) + '; return p; }'].join(NL)].join(NL);
+    const mat = new THREE.MeshStandardMaterial({ map: src.map || null, normalMap: src.normalMap || null, roughness: .8, vertexColors: !src.map });
+    mat.onBeforeCompile = sh => { Object.assign(sh.uniforms, uni); sh.vertexShader = gal + NL + sh.vertexShader.replace('#include <begin_vertex>', 'vec3 transformed = bMove(vec3(position));'); }; mat.customProgramCacheKey = () => 'beast-' + file + kind;
+    const m = new THREE.Mesh(geo, mat), holder = new THREE.Group(); m.scale.setScalar(len); m.castShadow = true; m.frustumCulled = false; m.raycast = () => {}; holder.add(m); scene.add(holder); const o = {};
+    anim.push(t => { place(t, o); holder.position.set(o.x, o.y, o.z); holder.rotation.y = Math.atan2(-o.fz, o.fx); uni.uPh.value = o.ph || 0; uni.uAir.value = o.air === undefined ? -1 : o.air; uni.uT.value = t; }); }, undefined, () => console.warn('beast not loaded: ' + file)); }
+// round a ring at angle speed w (negative for the other way), galloping at hz strides a second
+function ringRun(cx, cz, R, y, w, a0, hz) { return (t, o) => { const a = a0 + t * w, sg = Math.sign(w); o.x = cx + Math.cos(a) * R; o.z = cz + Math.sin(a) * R; o.y = y; o.fx = -Math.sin(a) * sg; o.fz = Math.cos(a) * sg; o.ph = t * hz * 6.2832 + a0 * 3; }; }
+// hopping round a ring: a spring every 'per' seconds, in the air for 'airT' of them, covering 'step' of the ring and rising 'hgt' at the top
+function ringHop(cx, cz, R, y, step, per, airT, hgt, a0) { return (t, o) => { const k = t / per + a0 * 7, n = Math.floor(k), fr = (k - n) * per, inAir = fr < airT, u = inAir ? fr / airT : 1, e = u * u * (3 - 2 * u), a = a0 + (n + e) * step, sg = Math.sign(step);
+    o.x = cx + Math.cos(a) * R; o.z = cz + Math.sin(a) * R; o.y = y + (inAir ? 4 * u * (1 - u) * hgt : 0); o.fx = -Math.sin(a) * sg; o.fz = Math.cos(a) * sg; o.air = inAir ? u : -Math.min(1, (fr - airT) / (per - airT)); o.ph = 0; }; }
+// a swarm of tiny moose in place of the little box herds: the same rings and drifting, each one galloping as it goes
+function mooseHerds(c, list) { laterGL.load('models/beast-moose-tiny.glb', gltf => { let geo = null; gltf.scene.updateMatrixWorld(true); gltf.scene.traverse(o => { if (o.isMesh && !geo) { geo = o.geometry.clone();
+      for (const k of Object.keys(geo.attributes)) { const a = geo.attributes[k]; if (a.array instanceof Float32Array) continue; const f = new Float32Array(a.count * a.itemSize); for (let i = 0; i < a.count; i++) for (let c2 = 0; c2 < a.itemSize; c2++) f[i * a.itemSize + c2] = c2 === 0 ? a.getX(i) : c2 === 1 ? a.getY(i) : c2 === 2 ? a.getZ(i) : a.getW(i); geo.setAttribute(k, new THREE.BufferAttribute(f, a.itemSize)); } geo.applyMatrix4(o.matrixWorld); } });
+    geo.rotateY(Math.PI / 2); geo.computeBoundingBox(); const bb = geo.boundingBox, s = 3 / (bb.max.x - bb.min.x); geo.translate(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2).scale(s, s, s); geo.computeBoundingBox(); const h = geo.boundingBox.max.y;
+    const tot = list.reduce((a, v) => a + v.n, 0), aH = new Float32Array(tot * 4), aG = new Float32Array(tot * 3), hr = mulberry32(78); let o = 0;
+    list.forEach((hd, hi) => { for (let i = 0; i < hd.n; i++, o++) { aH[4 * o] = hd.R + (hr() - .5) * hd.w; aH[4 * o + 1] = hd.a0 + (hr() - .5) * hd.spread; aH[4 * o + 2] = hd.speed; aH[4 * o + 3] = hd.y; aG[3 * o] = hd.size * (.7 + .6 * hr()); aG[3 * o + 1] = hr() * 6.3; aG[3 * o + 2] = hi * 2.3; } });
+    const ig = new THREE.InstancedBufferGeometry(); ig.index = geo.index; for (const k of ['position', 'normal', 'color']) if (geo.attributes[k]) ig.setAttribute(k, geo.attributes[k]); ig.setAttribute('aH', new THREE.InstancedBufferAttribute(aH, 4)); ig.setAttribute('aG', new THREE.InstancedBufferAttribute(aG, 3)); ig.instanceCount = tot;
+    const NL = String.fromCharCode(10), f = v => v.toFixed(3);
+    const m = new THREE.Mesh(ig, new THREE.ShaderMaterial({ fog: false, vertexColors: true, uniforms: { uTime: U.uTime, uC: { value: new THREE.Vector3(c[0], 0, c[1]) } },
+      vertexShader: 'attribute vec4 aH; attribute vec3 aG; uniform vec3 uC; uniform float uTime; varying float vL; varying vec3 vC; vec2 mRot(vec2 q, float a){ float c = cos(a), s = sin(a); return vec2(q.x * c - q.y * s, q.x * s + q.y * c); }' +
+        ' void main(){ float th = aH.y + uTime * aH.z + 0.08 * sin(uTime * 0.1 + aG.z); vec2 rd = vec2(cos(th), sin(th)); vec2 hd = vec2(-rd.y, rd.x) * sign(aH.z); float rr = aH.x + 2.0 * sin(uTime * 0.4 + aG.y);' +
+        ' float gp = uTime * 9.0 + aG.y * 4.0; vec3 p = position; float legs = 1.0 - smoothstep(' + f(h * .4) + ', ' + f(h * .55) + ', p.y); float fr = step(0.0, p.x) * legs, bk = (1.0 - step(0.0, p.x)) * legs;' +
+        ' vec2 q = mRot(vec2(p.x - 0.8, p.y - ' + f(h * .5) + '), sin(gp) * 0.55 * fr); p.x = mix(p.x, q.x + 0.8, fr); p.y = mix(p.y, q.y + ' + f(h * .5) + ', fr); q = mRot(vec2(p.x + 0.8, p.y - ' + f(h * .5) + '), sin(gp + 2.6) * 0.6 * bk); p.x = mix(p.x, q.x - 0.8, bk); p.y = mix(p.y, q.y + ' + f(h * .5) + ', bk);' +
+        ' p.y *= 0.9; p *= aG.x; vec3 w = vec3(uC.x + rd.x * rr + hd.x * p.x - hd.y * p.z, aH.w + 0.35 + max(0.0, sin(gp + 0.5)) * 0.25 * aG.x + p.y, uC.z + rd.y * rr + hd.y * p.x + hd.x * p.z); vec3 nn = vec3(hd.x * normal.x - hd.y * normal.z, normal.y, hd.y * normal.x + hd.x * normal.z);' +
+        ' vL = 0.55 + 0.75 * max(dot(nn, vec3(-0.59, 0.66, -0.45)), 0.0);' + NL + '#if defined( USE_COLOR_ALPHA )' + NL + ' vC = color.rgb;' + NL + '#else' + NL + ' vC = color;' + NL + '#endif' + NL + ' gl_Position = projectionMatrix * viewMatrix * vec4(w, 1.0); }',
+      fragmentShader: 'varying float vL; varying vec3 vC; void main(){ gl_FragColor = vec4(vC * vL * 1.2, 1.0); }' })); m.frustumCulled = false; m.raycast = () => {}; scene.add(m); }, undefined, () => console.warn('moose not loaded')); }
 // how each kind looks: body, head, legs colours; build (width, height); and how it moves (pace, stride, arms)
 const CREW = { person: { cols: [[0x7a3a2a, 0xc89870, 0x3a2c22], [0x3a5a6a, 0xb08060, 0x2a2420], [0x6a6a3a, 0xd0a080, 0x3a2c22], [0x8a6a4a, 0x9a6a48, 0x2a2018], [0x4a3a5a, 0xc89870, 0x2a2420]], w: .55, h: 1.2, pace: 1, stride: .55, arms: 'swing' },
   skeleton: { cols: [[0xd8d0bc, 0xe8e0cc, 0xcfc6b0]], w: .26, h: 1.15, pace: 1.15, stride: .7, arms: 'swing' },
   mummy: { cols: [[0xc8b890, 0xb8a880, 0xb0a078], [0xa89870, 0x988860, 0x908058]], w: .5, h: 1.2, pace: .45, stride: .25, arms: 'out' } };
 const CC = new THREE.Color(), WkM = new THREE.Matrix4(), WkQ = new THREE.Quaternion(), WkQ2 = new THREE.Quaternion(), WkV = new THREE.Vector3(), WkS = new THREE.Vector3(), WkX = new THREE.Vector3(), WkY = new THREE.Vector3(0, 1, 0), WkZ = new THREE.Vector3(), WkB = new THREE.Matrix4();
 const hatCols = [0x5a3a22, 0x3a3028, 0x7a5a30, 0x6a2a20];
-function updatePeople(t) { const P = UNDER.people, Ly = UNDER.lay; if (!P || !Ly) return; let n = 0, gn = 0, hn = 0, rn = 0, sn = 0; const wrap = s2 => ((s2 % Ly.len) + Ly.len) % Ly.len, blocked = s2 => Ly.cols.some(a => wrap(s2 - (a - 6)) < Ly.COLL + 12);
+function updatePeople(t) { const P = UNDER.people, Ly = UNDER.lay; if (!P || !Ly) return; let n = 0, gn = 0, hn = 0, rn = 0, sn = 0, ln = 0; const ghN = [0, 0], ghF = [0, 0], crN = CREW_M.map(() => 0), crF = CREW_M.map(() => 0); const wrap = s2 => ((s2 % Ly.len) + Ly.len) % Ly.len, blocked = s2 => Ly.cols.some(a => wrap(s2 - (a - 6)) < Ly.COLL + 12);
   const face = (fx, fz) => { WkX.set(-fz, 0, fx); WkZ.set(fx, 0, fz); WkB.makeBasis(WkZ, WkY, WkX); WkQ.setFromRotationMatrix(WkB); };
   const setI = (m, i, px, py, pz, sx, sy, sz, c, q = WkQ) => { WkM.compose(WkV.set(px, py, pz), q, WkS.set(sx, sy, sz)); m.setMatrixAt(i, WkM); m.setColorAt(i, CC.setHex(c)); };
   const put = (x, y, z, fx, fz, walk, kind, ci, carry, sc) => { if (n >= 480) return; const K = CREW[kind], col = K.cols[ci % K.cols.length], st = Math.sin(walk) * K.stride, bob = Math.abs(Math.cos(walk)) * .08 * sc * K.pace; face(fx, fz);
+    if (P.crew) { const mi = kind === 'mummy' ? 3 + (ci % 2) : kind === 'skeleton' ? 6 + (ci % 2) : [0, 1, 2, 5][ci % 4], d = camera.position.distanceTo(WkV.set(x, y, z)), near = d < 60 && crN[mi] < P.crewNN, i = near ? crN[mi]++ : crF[mi]++, set = P.crew[mi][near ? 'near' : 'far']; if (!near && i >= P.crewMax) return;   // Brandon's people and mummies, once loaded
+      WkM.compose(WkV.set(x, y, z), WkQ, WkS.setScalar(sc * 1.05)); set.m.setMatrixAt(i, WkM); set.wA.array[i] = walk * (kind === 'mummy' ? .55 : 1);
+      if (carry === 2) setI(P.load, ln++, x, y + 3.3 * sc, z, .6 * sc, .4 * sc, .6 * sc, 0x9a7c54); else if (carry === 1) setI(P.load, ln++, x + fx * .5 * sc, y + 1.9 * sc, z + fz * .5 * sc, .7 * sc, .55 * sc, .6 * sc, 0x8a6a44); return; }
     const set = (m, ...a) => setI(m, n, ...a), hip = y + 1.35 * sc + bob, lean = kind === 'mummy' ? .12 : 0, hx = x + fx * lean * 1.6, hy = hip + (K.h + .35) * sc, hz = z + fz * lean * 1.6;
     set(P.body, x + fx * lean, hip + K.h * .5 * sc, z + fz * lean, K.w * sc, K.h * sc, K.w * 1.25 * sc, col[0]);
     set(P.head, hx, hy, hz, .32 * sc, .34 * sc, .32 * sc, col[1]);
@@ -7195,6 +7464,8 @@ function updatePeople(t) { const P = UNDER.people, Ly = UNDER.lay; if (!P || !Ly
     if (carry === 2) set(P.load, x, hip + (K.h + .78) * sc, z, .6 * sc, .4 * sc, .6 * sc, 0x9a7c54); else if (carry === 1) set(P.load, x + fx * .45 * sc, hip + K.h * .55 * sc, z + fz * .45 * sc, .7 * sc, .55 * sc, .6 * sc, 0x8a6a44); else set(P.load, x, y - 60, z, .001, .001, .001, 0);
     n++; };
   const ghost = (x, y, z, fx, fz, ph, sc) => { if (gn >= 160) return; face(fx, fz); const k = .2 * sc, fy = y + .4 + .45 * Math.sin(t * 1.7 + ph);
+    if (P.gh) { const mi = ((ph * 977) | 0) & 1, d = camera.position.distanceTo(WkV.set(x, fy, z)), near = d < 70 && ghN[mi] < P.ghNN, i = near ? ghN[mi]++ : ghF[mi]++, m = P.gh[mi][near ? 'near' : 'far']; if (!near && i >= P.ghMax) return;   // Brandon's ghosts, once loaded
+      WkM.compose(WkV.set(x, fy, z), WkQ, WkS.setScalar(sc)); m.depth.setMatrixAt(i, WkM); m.color.setMatrixAt(i, WkM); m.item.setMatrixAt(i, WkM); return; }
     for (const m of [P.gBody, P.gArms, P.gEyes]) { WkM.compose(WkV.set(x, fy, z), WkQ, WkS.setScalar(k)); m.setMatrixAt(gn, WkM); } gn++; };
   const camL = Math.round((Ly.levelY(0) - camera.position.y) / PD_LV);
   for (let L = camL - 5; L <= camL + 5; L++) { if (L < 1 || L >= Ly.levels) continue; const y = Ly.levelY(L), r = mulberry32(31337 + L * 977);
@@ -7203,6 +7474,11 @@ function updatePeople(t) { const P = UNDER.people, Ly = UNDER.lay; if (!P || !Ly
       const u = stand ? 0 : Math.sin(t * base + ph), s2 = s0 + u * amp, aT = Ly.along(s2); if (L <= 2 && UNDER.tabXZ && Math.hypot(aT[0] - UNDER.tabXZ[0], aT[1] - UNDER.tabXZ[1]) < 40) continue; if (!isGhost && (blocked(s2) || blocked(s0 - amp) || blocked(s0 + amp))) continue; const a = Ly.along(s2), dir = stand ? 1 : Math.sign(Math.cos(t * base + ph)) || 1, fx = stand ? a[2] : a[4] * dir, fz = stand ? a[3] : a[5] * dir;
       if (isGhost) { const out = off + 2.5 * Math.max(0, Math.sin(t * .23 + ph)) * (j % 3 === 0 ? 3 : 1); ghost(a[0] + a[2] * out, y, a[1] + a[3] * out, fx, fz, ph, sc); }
       else put(a[0] + a[2] * off, y, a[1] + a[3] * off, fx, fz, stand ? Math.sin(t * 3 + ph) * .3 : s2 * 1.6 * (kind === 'mummy' ? 1.6 : 1), kind, ci, stand ? 0 : carry, sc); }
+    // ghosts flying across the drop (Oct 24): out of a door on one side, over to a door on the far side a level or three up or down, rising as they cross; a rest inside it, then back
+    for (let q = 0; q < 4; q++) { const s1 = r() * Ly.len, s2 = s1 + Ly.len * (.42 + r() * .16), L2 = clamp(L + (1 + ((r() * 3) | 0)) * (r() < .5 ? -1 : 1), 1, Ly.levels - 1), ph = r() * 6.283, sc = .85 + r() * .25, sp = 7 + r() * 6, Tw = 4 + r() * 7;
+      const A = Ly.along(s1), Bq = Ly.along(s2), ax = A[0] + A[2] * .3, az = A[1] + A[3] * .3, bx = Bq[0] + Bq[2] * .3, bz = Bq[1] + Bq[3] * .3, ay = y + 1.4, by = Ly.levelY(L2) + 1.4, Dh = Math.hypot(bx - ax, bz - az) || 1, Tf = Math.hypot(Dh, by - ay) / sp, per = 2 * (Tf + Tw), tc = ((t + ph * 31) % per + per) % per;
+      let u, dir; if (tc < Tw || (tc >= Tw + Tf && tc < 2 * Tw + Tf)) continue; if (tc < Tw + Tf) { u = (tc - Tw) / Tf; dir = 1; } else { u = 1 - (tc - 2 * Tw - Tf) / Tf; dir = -1; }
+      const e = u * u * (3 - 2 * u); ghost(lerp(ax, bx, e), lerp(ay, by, e) + Math.sin(Math.PI * e) * 9, lerp(az, bz, e), (bx - ax) / Dh * dir, (bz - az) / Dh * dir, ph, sc); }
     // a few on each flight of stairs going down from this level, climbing or descending
     Ly.cols.forEach(col => { for (let q = 0; q < 2; q++) { if (r() < .4) continue; const kr = r(), kind = kr < .5 ? 'person' : kr < .8 ? 'skeleton' : 'mummy', even = L % 2 === 0, top = even ? col : col + Ly.RUN + Ly.HOLE + Ly.LAND, fd = even ? 1 : -1, sp = (.025 + r() * .03) * CREW[kind].pace, ph = r() * 6.283, d = (Math.sin(t * sp + ph) * .5 + .5) * (Ly.RUN - 2) + 1, up = Math.cos(t * sp + ph) < 0;
       const s2 = wrap(top + fd * d), a = Ly.along(s2), yy = y - d * PD_LV / Ly.RUN + .3; put(a[0] + a[2] * (Ly.SW / 2 + .3), yy, a[1] + a[3] * (Ly.SW / 2 + .3), a[4] * fd * (up ? -1 : 1), a[5] * fd * (up ? -1 : 1), d * 2.6, kind, (r() * 9) | 0, kind !== 'mummy' && r() < .4 ? 1 : 0, .9 + r() * .2); } });
@@ -7212,7 +7488,7 @@ function updatePeople(t) { const P = UNDER.people, Ly = UNDER.lay; if (!P || !Ly
         const u = .04 + .92 * (.5 - .5 * Math.cos(t * sp + ph)), dir = Math.sin(t * sp + ph) >= 0 ? 1 : -1, x = lerp(P0[0], P1[0], u) - dz * side, z = lerp(P0[2], P1[2], u) + dx * side, yy = lerp(P0[1], P1[1], u) - sag * 4 * u * (1 - u) + dy + .2;
         if (isGhost) ghost(x, yy + 1, z, dx * dir, dz * dir, ph, sc); else put(x, yy, z, dx * dir, dz * dir, u * span * 1.6 * (kind === 'mummy' ? 1.6 : 1), kind, ci, carry, sc); } }); }
   const done = (m, c) => { m.count = c; m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; };
-  for (const k of ['body', 'head', 'legL', 'legR', 'armL', 'armR', 'load', 'eyes']) done(P[k], n); done(P.hat, hn); done(P.ribs, rn); done(P.strip, sn); for (const k of ['gBody', 'gArms', 'gEyes']) done(P[k], gn); }
+  for (const k of ['body', 'head', 'legL', 'legR', 'armL', 'armR', 'eyes']) done(P[k], n); done(P.load, P.crew ? ln : n); if (P.crew) P.crew.forEach((m, mi) => { done(m.near.m, crN[mi]); m.near.wA.needsUpdate = true; done(m.far.m, crF[mi]); m.far.wA.needsUpdate = true; }); done(P.hat, hn); done(P.ribs, rn); done(P.strip, sn); for (const k of ['gBody', 'gArms', 'gEyes']) done(P[k], gn); if (P.gh) P.gh.forEach((m, mi) => { for (const k of ['depth', 'color', 'item']) { done(m.near[k], ghN[mi]); done(m.far[k], ghF[mi]); } }); }
 // ---- the machinery round the eye: jib cranes on the rails swinging their loads out over the drop and turning them, which fold back against the wall as the eye comes level with them;
 // and lift platforms riding up and down past the levels on their ropes, swaying a little, a crate or two aboard. Like the crew, worked out each frame for the levels near the eye only
 function buildMachines(g) { const N = 320, mk = (geo, mat) => { const m = new THREE.InstancedMesh(geo, mat, N); m.count = 0; m.frustumCulled = false; m.raycast = () => {}; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); g.add(m); return m; };
