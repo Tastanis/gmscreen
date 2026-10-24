@@ -2785,6 +2785,11 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
         ? window.VTTBoardCallbacks.getPlacementById(placementId)
         : null
     ),
+    removeCondition: (payload) => (
+      window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.removeCondition === 'function'
+        ? window.VTTBoardCallbacks.removeCondition(payload)
+        : { removed: false }
+    ),
     spendHeroicResource: (payload) => spendHeroicResource(sheet, payload, options),
     spendResource: (ability) => spendAbilityResource(sheet, ability, options),
     consumeTriggeredAction: requestAutomationConsumeTriggeredAction,

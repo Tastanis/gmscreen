@@ -826,6 +826,20 @@
         if (extras) effect._extra = extras;
         return effect;
       }
+      case "endCondition": {
+        const known = new Set(["kind", "condition", "conditions", "duration", "pick", "count", "target"]);
+        const effect = { kind: "endCondition" };
+        const names = normalizeWordList(input.conditions !== undefined ? input.conditions : input.condition);
+        if (names.length) effect.condition = names;
+        effect.duration = pickKnownLoose(input.duration, ["any", "saveEnds", "endOfTurn", "endOfEncounter"], "any");
+        effect.pick = pickKnownLoose(input.pick, ["choose", "all"], "choose");
+        effect.count = asPosInt(input.count, 1);
+        const target = asTrimmedString(input.target);
+        if (target) effect.target = target;
+        const extras = pickExtras(input, known);
+        if (extras) effect._extra = extras;
+        return effect;
+      }
       case "ifRoll": {
         const known = new Set(["kind", ...ROLL_TEST_KEYS, "target", "then", "else"]);
         const effect = {

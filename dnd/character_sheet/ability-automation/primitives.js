@@ -35,6 +35,7 @@
     "ifZone",
     "ifTarget",
     "ifRoll",
+    "endCondition",
     "setScopedFlag",
     "applyMark",
     "endMark",
@@ -587,6 +588,11 @@
         const label = `the roll ${describeRollTest(effect)}`;
         if (elseText) return `If ${label}: ${thenText || "(no effect)"} else: ${elseText}`;
         return `If ${label}: ${thenText || "(no effect)"}`;
+      }
+      case "endCondition": {
+        const which = Array.isArray(effect.condition) && effect.condition.length ? effect.condition.join(" or ") : effect.duration === "saveEnds" ? "save-ends effect" : "condition";
+        const count = effect.pick === "all" ? "every" : effect.count > 1 ? `up to ${effect.count}` : "one";
+        return `end ${count} ${which}`;
       }
       case "applyMark":
         return `apply ${effect.markType || "mark"}`;

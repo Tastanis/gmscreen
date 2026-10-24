@@ -288,6 +288,7 @@
             getPowerRollSuggestions: board.getPowerRollSuggestions,
             consumeRollRiders: board.consumeRollRiders,
             getPlacementById: board.getPlacementById,
+            removeCondition: board.removeCondition,
             getDistanceBetween: board.getDistanceBetween,
             getZoneTags: board.getZoneTags
         };

@@ -1771,7 +1771,7 @@
 
   async function applyEffect(state, effect, targets, ctx) {
     if (!effect || typeof effect !== "object") return;
-    if (targets.length && ["damage","condition","forcedMovement","shift","setScopedFlag","applyMark","endMark","halveTriggeringDamage","aura","heal","temporaryStamina","teleport","swap","resourceGain","surgeGain"].includes(effect.kind)) {
+    if (targets.length && ["damage","condition","forcedMovement","shift","setScopedFlag","applyMark","endMark","halveTriggeringDamage","aura","heal","temporaryStamina","teleport","swap","resourceGain","surgeGain","endCondition"].includes(effect.kind)) {
       fireActionUsedEvent(state);
     }
     switch (effect.kind) {
@@ -1805,6 +1805,8 @@
         return applyIfTargetEffect(state, effect, targets, ctx);
       case "ifRoll":
         return applyIfRollEffect(state, effect, targets, ctx);
+      case "endCondition":
+        return applyEndConditionEffect(state, effect, targets, ctx);
       case "setScopedFlag":
         return applySetScopedFlagEffect(state, effect, targets, ctx);
       case "applyMark":
@@ -3043,6 +3045,84 @@
     const branch = passes ? effect.then : effect.else;
     if (!Array.isArray(branch) || !branch.length) return;
     await applyEffects(state, branch, effect.target || state.currentGroup || "primary", ctx);
+  }
+
+  // ---------- endCondition ----------
+  //
+  // Ends conditions on each target: "an ally ends one condition on them", "end one save-ends effect". With more
+  // than the allowed number to choose from, the user picks.
+
+  function conditionDurationKind(condition) {
+    const source = condition?.duration ?? condition?.mode ?? condition?.type ?? "";
+    const text = String(typeof source === "string" ? source : source?.type || "").toLowerCase().replace(/[^a-z]/g, "");
+    if (text === "saveends" || text === "save") return "saveEnds";
+    if (text === "endofturn" || text === "eot") return "endOfTurn";
+    if (text === "endofencounter" || text === "encounter") return "endOfEncounter";
+    return text || "saveEnds";
+  }
+
+  function conditionLabel(condition) {
+    const name = String(condition?.name || "condition");
+    const kind = conditionDurationKind(condition);
+    const words = { saveEnds: "save ends", endOfTurn: "end of turn", endOfEncounter: "end of encounter" };
+    return words[kind] ? `${name} (${words[kind]})` : name;
+  }
+
+  async function applyEndConditionEffect(state, effect, targets) {
+    const label = state.action.name || "Ability";
+    for (const target of targets || []) {
+      if (state.aborted) return;
+      if (!target?.id) continue;
+      const token = liveTokenFor(state, target);
+      const name = token?.name || target.name || "The target";
+      const candidates = tokenConditions(token).filter((condition) => {
+        const conditionName = String(condition.name || "").trim().toLowerCase();
+        if (!conditionName || conditionName === "hiddeneffect" || conditionName === "dying") return false;
+        if (effect.condition && effect.condition.length) {
+          const names = [condition.name, condition.text, condition.label].map((value) => String(value || "").trim().toLowerCase());
+          if (!effect.condition.some((wanted) => names.includes(wanted))) return false;
+        }
+        if (effect.duration && effect.duration !== "any" && conditionDurationKind(condition) !== effect.duration) return false;
+        return true;
+      });
+      if (!candidates.length) {
+        await postChat(state.context, { message: `${state.heroName} - ${label}: ${name} has nothing to end.` });
+        continue;
+      }
+      const count = Math.max(1, asInt(effect.count, 1));
+      let chosen = candidates;
+      if (effect.pick !== "all" && candidates.length > count) {
+        chosen = [];
+        const left = candidates.map((condition, index) => ({ condition, id: `c${index}` }));
+        while (chosen.length < count && left.length) {
+          const option = await askChoice(state, {
+            prompt: `Which effect on ${name} ends?${count > 1 ? ` (${chosen.length + 1} of ${count})` : ""}`,
+            options: left.map((entry) => ({ id: entry.id, label: conditionLabel(entry.condition) })),
+          });
+          if (state.aborted || !option) return;
+          const at = left.findIndex((entry) => entry.id === option.id);
+          chosen.push(left[at].condition);
+          left.splice(at, 1);
+        }
+      } else if (effect.pick !== "all") {
+        chosen = candidates.slice(0, count);
+      }
+      const ended = [];
+      for (const condition of chosen) {
+        if (typeof state.context.removeCondition !== "function") break;
+        const result = await state.context.removeCondition({ placementId: target.id, condition, abilityName: label });
+        if (result?.removed !== false) ended.push(condition);
+      }
+      if (typeof state.context.removeCondition !== "function") {
+        await postChat(state.context, { message: `${state.heroName} - ${label}: end ${chosen.map((c) => c.name).join(", ")} on ${name} by hand.` });
+        continue;
+      }
+      await postChat(state.context, {
+        message: ended.length
+          ? `${state.heroName} - ${label}: ${chosen.length === ended.length ? "" : "only "}${ended.map((c) => c.name).join(", ")} on ${name} ${ended.length === 1 ? "ends" : "end"}.`
+          : `${state.heroName} - ${label}: could not end ${chosen.map((c) => c.name).join(", ")} on ${name}; remove it by hand.`,
+      });
+    }
   }
 
   async function applyMarkEffect(state, effect, targets) {

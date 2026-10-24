@@ -249,6 +249,7 @@ import {
 } from '../combat/combat-renderer.js';
 import { squadForPlacement, squadPool, damageSquad, pickCaptain, livingCaptain, captainBonusFor, captainFeature, captainAction, squadBadge, describeCaptainBonus } from './minion-squads.mjs';
 import { lacksDefenses, monsterIdOf, restoredDefenses } from './monster-defense-repair.mjs';
+import { endEffectFor } from './end-effect.mjs';
 
 let trackerOverflowResizeListenerAttached = false;
 
@@ -11464,6 +11465,12 @@ export function mountBoardInteractions(store, routes = {}) {
             class="btn vtt-save-ends-dialog__button vtt-save-ends-dialog__button--bonus"
             data-save-ends-bonus-button
           >+1</button>
+          <button
+            type="button"
+            class="btn vtt-save-ends-dialog__button vtt-save-ends-dialog__button--end-effect"
+            data-save-ends-end-effect
+            hidden
+          ></button>
         </div>
       </div>
     `;
@@ -11478,6 +11485,9 @@ export function mountBoardInteractions(store, routes = {}) {
     const descriptionElement = overlay.querySelector('[data-save-ends-description]');
     const bonusElement = overlay.querySelector('[data-save-ends-bonus]');
     const resultElement = overlay.querySelector('[data-save-ends-result]');
+    const endEffectButton = overlay.querySelector('[data-save-ends-end-effect]');
+    // A solo or leader with End Effect may instead take N damage to end the effect (Monsters book).
+    const endEffect = endEffectFor(getPlacementFromStore(placementId)?.monster);
 
     if (!rollButton || !bonusButton || !closeButton || !titleElement || !descriptionElement || !resultElement) {
       overlay.remove();
@@ -11507,6 +11517,9 @@ export function mountBoardInteractions(store, routes = {}) {
       descriptionElement,
       bonusElement,
       resultElement,
+      endEffectButton,
+      endEffect,
+      endEffectLeft: endEffect ? endEffect.count : 0,
       handleOverlayClick: null,
       handleRollButtonClick: null,
       handleBonusButtonClick: null,
@@ -11565,6 +11578,7 @@ export function mountBoardInteractions(store, routes = {}) {
       state.mode = hasNext ? 'advance' : 'close';
       state.rollButton.textContent = hasNext ? 'Next Condition' : 'Close';
       renderSaveEndsPromptResult();
+      state.updateEndEffectButton?.();
     };
 
     const handleBonusButtonClick = () => {
@@ -11587,6 +11601,58 @@ export function mountBoardInteractions(store, routes = {}) {
 
       renderSaveEndsPromptResult();
     };
+
+    const handleEndEffectClick = async () => {
+      if (!activeSaveEndsPrompt || activeSaveEndsPrompt !== state || state.endEffectLeft < 1 || state.endEffectBusy) {
+        return;
+      }
+      const entry = state.queue[state.index];
+      if (!entry || entry.successApplied) {
+        return;
+      }
+      state.endEffectBusy = true;
+      if (endEffectButton) endEffectButton.disabled = true;
+      try {
+        // The damage can't be reduced in any way: immunity is ignored.
+        await dispatchBoardCustom('vtt:automation-apply-damage', 'payload', {
+          placementId,
+          sourceId: placementId,
+          amount: endEffect.damage,
+          ignoreImmunity: true,
+          abilityName: endEffect.label,
+        });
+      } catch (error) {
+        console.warn('[VTT] End Effect damage failed', error);
+        state.endEffectBusy = false;
+        if (endEffectButton) endEffectButton.disabled = false;
+        if (state.resultElement) state.resultElement.textContent = 'The damage did not go through. Try again, or end the effect by hand.';
+        return;
+      }
+      state.endEffectBusy = false;
+      state.endEffectLeft -= 1;
+      applySaveEndsSuccess(entry);
+      state.endedByEffect = entry;
+      const hasNext = state.index + 1 < state.queue.length;
+      state.hasRolled = true;
+      state.mode = hasNext ? 'advance' : 'close';
+      state.rollButton.textContent = hasNext ? 'Next Condition' : 'Close';
+      if (state.resultElement) {
+        state.resultElement.classList.remove('is-failure');
+        state.resultElement.classList.add('is-success');
+        state.resultElement.textContent = `${state.tokenName} took ${endEffect.damage} damage (${endEffect.label}). ${entry.name} ends.`;
+      }
+      updateEndEffectButton();
+    };
+    const updateEndEffectButton = () => {
+      if (!endEffectButton) return;
+      const entry = state.queue[state.index];
+      const show = Boolean(endEffect && state.endEffectLeft > 0 && entry && !entry.successApplied);
+      endEffectButton.hidden = !show;
+      endEffectButton.disabled = !show || Boolean(state.endEffectBusy);
+      if (endEffect) endEffectButton.textContent = `End it: take ${endEffect.damage} damage`;
+    };
+    state.updateEndEffectButton = updateEndEffectButton;
+    if (endEffectButton) endEffectButton.addEventListener('click', handleEndEffectClick);
 
     state.handleOverlayClick = handleOverlayClick;
     state.handleRollButtonClick = handleRollButtonClick;
@@ -11650,6 +11716,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     renderSaveEndsPromptResult();
+    state.updateEndEffectButton?.();
 
     if (state.rollButton && typeof state.rollButton.focus === 'function') {
       if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
@@ -13713,6 +13780,18 @@ export function mountBoardInteractions(store, routes = {}) {
     completeRequestedTests: function (requestIds) { return requestedTestCoordinator.complete(requestIds); },
     getPowerRollSuggestions: function (payload) { return buildBoardPowerRollSuggestions(payload); },
     consumeRollRiders: function (payload) { return consumeBoardRollRiders(payload); },
+    // Ends one condition on a token (an ability's endCondition). The condition as read from the token.
+    removeCondition: function (payload) {
+      const placementId = String(payload?.placementId || '').trim();
+      const condition = payload?.condition && typeof payload.condition === 'object' ? payload.condition : null;
+      if (!placementId || !condition) return { removed: false };
+      const removed = removeConditionFromPlacementByCondition(placementId, condition);
+      if (removed) {
+        const name = typeof condition.name === 'string' ? condition.name.trim() : '';
+        if (name) showConditionBanner(`${formatPossessiveName(tokenLabel(getPlacementFromStore(placementId)))} ${name} has ended.`, { tone: 'reminder' });
+      }
+      return { removed: Boolean(removed) };
+    },
     getPlacementById: function (placementId) {
       const placement = getPlacementFromStore(placementId);
       return placement ? JSON.parse(JSON.stringify(placement)) : null;

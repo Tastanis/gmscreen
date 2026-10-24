@@ -1352,6 +1352,23 @@ Checks a fact about each target and gives each target the branch that fits it: "
 
 All the fields you give must pass ("size 1 or smaller and winded"). Chat says who passed: "Goblin is prone; Ogre is not."
 
+### `endCondition`
+
+Ends conditions on each target: "an ally within 5 ends one condition on them", "end one save-ends effect on yourself".
+
+```json
+{ "kind": "endCondition", "duration": "saveEnds", "count": 1, "target": "self" }
+```
+
+| Field | Values | Notes |
+|---|---|---|
+| `condition` | string or array | Only these conditions (custom ones by name). Leave out for any condition. |
+| `duration` | `any` (default), `saveEnds`, `endOfTurn`, `endOfEncounter` | Only conditions with this duration. |
+| `count` | integer, default 1 | How many it ends on each target. |
+| `pick` | `choose` (default), `all` | `choose`: when there are more than `count` to choose from, the user picks which. `all`: ends every match. |
+
+Hidden effects and dying are never offered. Chat says what ended.
+
 ### `ifRoll` (rider)
 
 Branches on the accepted power roll of this ability: "+5 damage if the roll had an edge", "on a critical, also prone". Put it inside a tier's `effects`.
@@ -1938,6 +1955,24 @@ Runtime behavior:
 - The VTT character/monster sidebar shows Stability as the stored value plus the temporary bonus, highlighted green.
 - Forced-movement automation uses the boosted Stability while active.
 - If `prone` or `frightened` is applied while active, the VTT shows a warning banner. It does not auto-remove the condition; remove/undo it manually after confirming the ruling.
+
+### End Effect (solos and leaders)
+
+"At the end of each of their turns, the creature can take 20 damage to end one effect on them that can be ended by a saving throw. This damage can't be reduced in any way."
+
+Nothing needs writing: the VTT reads this from the trait's words. The save popup that opens at the end of the creature's turn gets an **End it: take 20 damage** button for each save-ends effect. Pressing it deals the damage (immunity ignored) and ends that effect; the button disappears once used (twice for "up to two"). Rolling the save is still there.
+
+To set it by hand (other wording, a different number), add a passive:
+
+```json
+{ "schema": "ability-automation/v3", "passives": [ { "kind": "endEffect", "damage": 20, "count": 1 } ] }
+```
+
+| Field | Values | Notes |
+|---|---|---|
+| `damage` | integer | Damage taken to end one effect. |
+| `count` | integer, default 1 | How many effects it can end at the end of one turn. |
+| `label` | string | Shown on the damage, default "End Effect". |
 
 ---
 
