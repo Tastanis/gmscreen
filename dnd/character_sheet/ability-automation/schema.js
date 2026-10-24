@@ -2031,6 +2031,57 @@
     return out;
   }
 
+  // Solo/leader End Effect: take `damage` at the end of a turn to end a save-ends effect (the save popup offers it).
+  function normalizeEndEffectPassive(input, warnings, path) {
+    const passive = {
+      kind: "endEffect",
+      label: asTrimmedString(input.label || input.name) || "End Effect",
+      damage: asNonNegInt(input.damage ?? input.amount, 0),
+      count: asPosInt(input.count, 1),
+    };
+    if (!passive.damage) warnings.push(`${path}: endEffect has no damage.`);
+    const extras = pickExtras(input, new Set(["kind", "type", "passive", "id", "label", "name", "damage", "amount", "count"]));
+    if (extras) passive._extra = extras;
+    return passive;
+  }
+
+  // Always-on edge/bane traits ("while winded, it has an edge and strikes against it have an edge"; "strikes against
+  // allies within 2 take a bane"). The roll window shows them ticked, named after the trait.
+  const ROLL_MODIFIERS = ["edge", "bane", "doubleEdge", "doubleBane"];
+  const ROLL_MODIFIER_SIDES = ["own", "against", "both"];
+  const ROLL_MODIFIER_APPLIES = ["abilityRolls", "strikes", "melee", "ranged", "tests"];
+  function normalizeRollModifierPassive(input, warnings, path) {
+    const passive = {
+      kind: "rollModifier",
+      label: asTrimmedString(input.label || input.name),
+      modifier: pickKnownLoose(input.modifier, ROLL_MODIFIERS, "edge"),
+      side: pickKnownLoose(input.side, ROLL_MODIFIER_SIDES, "own"),
+      appliesTo: pickKnownLoose(input.appliesTo, ROLL_MODIFIER_APPLIES, "abilityRolls"),
+    };
+    if (input.modifier !== undefined && !ROLL_MODIFIERS.some((value) => value.toLowerCase() === asTrimmedString(input.modifier).toLowerCase().replace(/[\s_-]+/g, ""))) {
+      warnings.push(`${path}.modifier: use edge, bane, doubleEdge or doubleBane.`);
+    }
+    const scope = pickKnownLoose(input.scope, ["self", "alliesWithin"], "self");
+    if (scope === "alliesWithin") {
+      passive.scope = scope;
+      passive.within = asNonNegInt(input.within, 1);
+      if (passive.side === "own") passive.side = "against";
+    }
+    const raw = input.when && typeof input.when === "object" ? input.when : {};
+    const when = {};
+    for (const key of ["winded", "notWinded", "targetWinded", "adjacentAlly"]) if (raw[key] === true) when[key] = true;
+    for (const key of ["selfCondition", "targetCondition"]) {
+      const names = normalizeWordList(raw[key]);
+      if (names.length) when[key] = names;
+    }
+    const note = asTrimmedString(raw.note);
+    if (note) when.note = note;
+    if (Object.keys(when).length) passive.when = when;
+    const extras = pickExtras(input, new Set(["kind", "type", "passive", "id", "label", "name", "modifier", "side", "appliesTo", "scope", "within", "when"]));
+    if (extras) passive._extra = extras;
+    return passive;
+  }
+
   function normalizePassive(input, warnings, path) {
     if (!input || typeof input !== "object") {
       warnings.push(`${path}: passive must be an object — skipping.`);
@@ -2038,6 +2089,8 @@
     }
     const rawKind = asTrimmedString(input.kind || input.type || input.passive || input.id || input.label || input.name);
     const key = rawKind.toLowerCase().replace(/[^a-z0-9]+/g, "");
+    if (key === "endeffect") return normalizeEndEffectPassive(input, warnings, path);
+    if (key === "rollmodifier") return normalizeRollModifierPassive(input, warnings, path);
     if (key !== "standfirm") {
       warnings.push(`${path}: unknown passive "${rawKind || "(missing)"}" — skipping.`);
       return null;

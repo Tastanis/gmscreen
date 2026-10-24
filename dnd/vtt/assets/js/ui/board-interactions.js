@@ -70,7 +70,7 @@ import {
   createTriggerLifetimeState,
   shouldExpireTriggerEntry,
 } from './automation-trigger-lifetime.js';
-import { getPowerRollSuggestions } from './power-roll-suggestions.js';
+import { getPowerRollSuggestions, collectRollPassives } from './power-roll-suggestions.js';
 import {
   formatHeroicResourcePrompt,
   normalizeHeroicResourceAutomation,
@@ -13697,6 +13697,7 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
+  const rollTraitSheetRequests = new Set();
   function buildBoardPowerRollSuggestions(payload = {}) {
     const state = boardApi.getState?.() ?? {};
     const activeSceneId = state.boardState?.activeSceneId ?? null;
@@ -13718,6 +13719,17 @@ export function mountBoardInteractions(store, routes = {}) {
       getTeam: getCombatantTeam,
       context: payload,
       captainBonus: actorId ? captainBonusFor(getPlacementsForActiveScene(), actorId) : null,
+      // Always-on edge/bane traits: a monster's from its stat block, a hero's from the sheet the VTT already holds.
+      passivesFor: (placement) => {
+        const profileId = placement ? getCharacterSheetProfileIdForPlacement(placement) : '';
+        const sheet = profileId && characterSummaryCache instanceof Map ? characterSummaryCache.get(profileId) : null;
+        // Not loaded yet: load it; the roll window asks again every second and then shows the hero's traits.
+        if (profileId && !sheet && PLAYER_CHARACTER_USER_IDS.includes(profileId) && !rollTraitSheetRequests.has(profileId)) {
+          rollTraitSheetRequests.add(profileId); // once per page: a sheet that fails to load is not asked for every second
+          getAutomationSheetForPlacement(placement.id).catch(() => {});
+        }
+        return collectRollPassives(placement?.monster || placement?.automationTraits || null, sheet || null);
+      },
     });
   }
 

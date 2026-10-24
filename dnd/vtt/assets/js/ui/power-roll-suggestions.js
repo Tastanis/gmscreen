@@ -271,6 +271,140 @@ function hiddenEffectSuggestions(placement, context = {}) {
     .filter(Boolean);
 }
 
+// ---------- always-on edge/bane traits (passive kind "rollModifier") ----------
+//
+// Brandon, October 2026: shown in the roll window "just ticked on and with the name of why tied to that edge" — the
+// trait's name. Gates the board can read (winded, a condition, an adjacent ally) decide whether the trait shows at
+// all; a `note` gate ("outdoors") can't be read, so the trait shows ticked and the note is its reason.
+
+function rollPassivesIn(automation, fallbackLabel) {
+  if (!automation || typeof automation !== 'object') return [];
+  const passives = Array.isArray(automation.passives) ? automation.passives : [];
+  return passives
+    .filter((passive) => normalizeText(passive?.kind).replace(/[^a-z]/g, '') === 'rollmodifier')
+    .map((passive) => ({ ...passive, label: String(passive.label || fallbackLabel || 'Trait').trim() || 'Trait' }));
+}
+
+// Every rollModifier passive a token carries: a monster's traits and abilities, a hero's features.
+export function collectRollPassives(monster, sheet) {
+  const found = [];
+  const traits = Array.isArray(monster?.traits) ? monster.traits : [];
+  traits.forEach((trait) => found.push(...rollPassivesIn(trait?.automation, trait?.name)));
+  const abilities = monster?.abilities && typeof monster.abilities === 'object' ? monster.abilities : {};
+  Object.keys(abilities).forEach((key) => {
+    (Array.isArray(abilities[key]) ? abilities[key] : []).forEach((ability) => found.push(...rollPassivesIn(ability?.automation, ability?.name)));
+  });
+  const features = Array.isArray(sheet?.features) ? sheet.features : [];
+  features.forEach((feature) => found.push(...rollPassivesIn(feature?.automation, feature?.title || feature?.name)));
+  return found;
+}
+
+function staminaOf(placement) {
+  const hp = placement?.hp;
+  const current = Number(hp && typeof hp === 'object' ? hp.current : hp);
+  const max = Number(hp && typeof hp === 'object' ? hp.max : placement?.maxHp);
+  return Number.isFinite(current) && Number.isFinite(max) && max > 0 ? { current, max } : null;
+}
+
+function isWindedPlacement(placement) {
+  const stamina = staminaOf(placement);
+  return Boolean(stamina && stamina.current <= Math.floor(stamina.max / 2));
+}
+
+function hasAnyCondition(placement, names) {
+  return (Array.isArray(names) ? names : []).some((name) => hasCondition(placement, name)
+    || conditionEntries(placement).some(({ condition }) => normalizeText(condition?.text || condition?.label) === normalizeText(name)));
+}
+
+function rollPassiveAppliesToRoll(passive, context) {
+  const keywords = keywordsFromContext(context);
+  switch (passive.appliesTo) {
+    case 'strikes': return isStrike(context) && isAbilityRollContext(context);
+    case 'melee': return isMeleeAbility(context) && isAbilityRollContext(context);
+    case 'ranged': return keywords.some((word) => word === 'ranged' || word.startsWith('ranged ')) && isAbilityRollContext(context);
+    case 'tests': return rollEventFromContext(context) === 'abilitytest';
+    default: return rollEventFromContext(context) === 'powerroll' || rollEventFromContext(context) === 'abilityroll';
+  }
+}
+
+// `self` carries the trait; `other` is the creature on the other side of the roll.
+function rollPassiveGatePasses(when, self, other, placements, getTeam, mapLevels) {
+  const gate = when && typeof when === 'object' ? when : {};
+  if (gate.winded && !isWindedPlacement(self)) return false;
+  if (gate.notWinded && isWindedPlacement(self)) return false;
+  if (gate.targetWinded && !isWindedPlacement(other)) return false;
+  if (gate.selfCondition && !hasAnyCondition(self, gate.selfCondition)) return false;
+  if (gate.targetCondition && !hasAnyCondition(other, gate.targetCondition)) return false;
+  if (gate.adjacentAlly) {
+    const team = placementTeam(self, getTeam);
+    const near = (Array.isArray(placements) ? placements : []).some((candidate) => candidate && candidate.id !== self.id
+      && placementTeam(candidate, getTeam) === team && isAdjacentTo(self, candidate, mapLevels));
+    if (!near) return false;
+  }
+  return true;
+}
+
+function withinSquares(a, b, squares, mapLevels) {
+  if (!a || !b) return false;
+  if (a.id === b.id) return true;
+  return canReachFloor(a, b, squares, mapLevels) && rectDistance(tokenRect(a), tokenRect(b)) <= squares;
+}
+
+function traitSuggestion(id, passive, extra = {}) {
+  const modifier = rollModifierKind(passive.modifier);
+  if (!modifier) return null;
+  return makeSuggestion(id, modifier.kind, passive.label, true, {
+    count: modifier.count,
+    reason: passive.when?.note || extra.reason || 'Trait',
+  });
+}
+
+export function rollPassiveSuggestions({ actor, targets = [], placements = [], mapLevels = [], getTeam = null, context = {}, passivesFor = null } = {}) {
+  if (typeof passivesFor !== 'function' || !actor) return [];
+  const list = [];
+  const targetList = (Array.isArray(targets) ? targets : []).filter(Boolean);
+  // The roller's own traits ("it has an edge on strikes while winded").
+  passivesFor(actor).forEach((passive, index) => {
+    if (passive.scope === 'alliesWithin' || passive.side === 'against') return;
+    if (!rollPassiveAppliesToRoll(passive, context)) return;
+    const others = targetList.length ? targetList : [null];
+    if (!others.some((other) => rollPassiveGatePasses(passive.when, actor, other, placements, getTeam, mapLevels))) return;
+    const suggestion = traitSuggestion(`trait-own-${actor.id || 'actor'}-${index}`, passive);
+    if (suggestion) list.push(suggestion);
+  });
+  // Each target's traits about rolls made against it ("strikes against it have an edge while it is winded").
+  targetList.forEach((target) => {
+    passivesFor(target).forEach((passive, index) => {
+      if (passive.scope === 'alliesWithin' || passive.side === 'own') return;
+      if (!rollPassiveAppliesToRoll(passive, context)) return;
+      if (!rollPassiveGatePasses(passive.when, target, actor, placements, getTeam, mapLevels)) return;
+      const suggestion = traitSuggestion(`trait-vs-${target.id || 'target'}-${index}`, passive);
+      if (suggestion) {
+        if (targetList.length > 1) suggestion.label = `${passive.label} (${target.name || target.label || 'target'})`;
+        list.push(suggestion);
+      }
+    });
+  });
+  // Guards: "strikes against allies within 2 of it take a bane".
+  if (targetList.length) {
+    (Array.isArray(placements) ? placements : []).forEach((guard) => {
+      if (!guard?.id) return;
+      passivesFor(guard).forEach((passive, index) => {
+        if (passive.scope !== 'alliesWithin') return;
+        if (!rollPassiveAppliesToRoll(passive, context)) return;
+        const guardTeam = placementTeam(guard, getTeam);
+        const covered = targetList.some((target) => placementTeam(target, getTeam) === guardTeam
+          && withinSquares(guard, target, Math.max(0, Number(passive.within) || 0), mapLevels));
+        if (!covered) return;
+        if (!rollPassiveGatePasses(passive.when, guard, actor, placements, getTeam, mapLevels)) return;
+        const suggestion = traitSuggestion(`trait-guard-${guard.id}-${index}`, passive, { reason: `${guard.name || 'A guard'} is near` });
+        if (suggestion) list.push(suggestion);
+      });
+    });
+  }
+  return list;
+}
+
 export function getPowerRollSuggestions({
   actor = null,
   targets = [],
@@ -280,6 +414,8 @@ export function getPowerRollSuggestions({
   context = {},
   // What the actor's squad captain grants it right now (see minion-squads.mjs), or null.
   captainBonus = null,
+  // (placement) => the rollModifier passives that token carries (see collectRollPassives).
+  passivesFor = null,
 } = {}) {
   const suggestions = [];
   const targetList = Array.isArray(targets) ? targets.filter(Boolean) : [];
@@ -353,6 +489,7 @@ export function getPowerRollSuggestions({
     }
   }
   suggestions.push(...hiddenEffectSuggestions(actor, context));
+  suggestions.push(...rollPassiveSuggestions({ actor, targets: targetList, placements, mapLevels, getTeam, context, passivesFor }));
   // A minion led by a captain: "Gain an edge on strikes" (or a double edge), already switched on.
   const captainEdge = Math.min(2, Math.max(0, Number.parseInt(captainBonus?.edge, 10) || 0));
   if (strike && abilityRoll && captainEdge > 0) {
@@ -366,6 +503,7 @@ export function getPowerRollSuggestions({
 }
 
 export const __testing = {
+  rollPassiveGatePasses,
   areOppositeAroundTarget,
   hiddenEffectSuggestions,
   hasCondition,

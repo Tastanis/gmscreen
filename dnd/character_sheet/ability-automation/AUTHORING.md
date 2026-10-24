@@ -1981,6 +1981,32 @@ Runtime behavior:
 - Forced-movement automation uses the boosted Stability while active.
 - If `prone` or `frightened` is applied while active, the VTT shows a warning banner. It does not auto-remove the condition; remove/undo it manually after confirming the ruling.
 
+### Edge and bane traits (`rollModifier`)
+
+Always-on traits that give edges or banes: "while winded, the demon has an edge on strikes, and strikes against it have an edge" (Lethe); "strikes against allies within 2 of the guard take a bane" (Wide Guard); "an edge against prone creatures". The roll window shows each one already ticked, named after the trait. Untick it if it doesn't apply.
+
+```json
+{ "schema": "ability-automation/v3", "passives": [
+  { "kind": "rollModifier", "label": "Lethe", "modifier": "edge", "side": "both", "appliesTo": "strikes", "when": { "winded": true } }
+] }
+```
+
+| Field | Values | Notes |
+|---|---|---|
+| `label` | string | The name shown in the roll window. Defaults to the trait's or feature's name. |
+| `modifier` | `edge`, `bane`, `doubleEdge`, `doubleBane` | |
+| `side` | `own` (default), `against`, `both` | `own`: this creature's rolls. `against`: rolls made against it. `both`: either. |
+| `appliesTo` | `abilityRolls` (default), `strikes`, `melee`, `ranged`, `tests` | Which rolls. |
+| `scope` | `self` (default), `alliesWithin` | `alliesWithin`: rolls against this creature's allies within `within` squares (itself included). |
+| `within` | integer | With `scope: "alliesWithin"`. |
+| `when.winded` / `when.notWinded` | `true` | This creature is (not) winded. |
+| `when.targetWinded` | `true` | The creature on the other side of the roll is winded. |
+| `when.selfCondition` / `when.targetCondition` | string or array | This creature / the other side has any of these conditions (custom ones by name). |
+| `when.adjacentAlly` | `true` | This creature is next to an ally. |
+| `when.note` | string | A gate the board can't read ("outdoors", "in darkness"). The trait shows ticked, with the note as its reason. |
+
+A trait only shows when the gates the board can read pass. It works on monster traits and abilities, and on hero features.
+
 ### End Effect (solos and leaders)
 
 "At the end of each of their turns, the creature can take 20 damage to end one effect on them that can be ended by a saving throw. This damage can't be reduced in any way."
