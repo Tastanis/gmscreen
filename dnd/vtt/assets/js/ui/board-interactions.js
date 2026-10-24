@@ -3357,12 +3357,12 @@ export function mountBoardInteractions(store, routes = {}) {
           // Snapshot the firing payload onto the placement so the resolved
           // ability can read it later — needed for effects like
           // `halveTriggeringDamage` that need to know the original damage
-          // amount.
+          // amount. A popup trigger says so: the GM's page asks at once.
           markTriggerReady(
             entry.tokenId,
             entry.abilityId || null,
             payload?.sourceId || null,
-            { eventType, payload }
+            entry.resolveMode === 'popup' ? { eventType, payload, popup: true, at: Date.now() } : { eventType, payload }
           );
           // Post a chat line so the player knows which trigger fired. Useful
           // for debugging predicate matches and for surfacing the trigger so
@@ -3501,7 +3501,8 @@ export function mountBoardInteractions(store, routes = {}) {
         source,
         manual: true,
       });
-      if (beforeValue > 0 && afterValue <= 0) {
+      // Rise again only on damage: a Stamina number typed in by hand is the Director's word.
+      if (beforeValue > 0 && afterValue <= 0 && !(damage && applyDeathRule(placementId, damage.damageType || ''))) {
         triggerFire('staminaZero', {
           placementId,
           targetId: placementId,
@@ -3600,6 +3601,16 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     if (eventType === 'combatEnd') {
       triggerUnregisterAllAuthored();
+      try { resetDeathRuleUsesAtCombatEnd(); } catch (err) { console.warn('[VTT] rise-again uses could not be reset', err); }
+    }
+    if (['combatEnd', 'roundStart', 'turnStart'].includes(eventType)) {
+      try { resetTokenCounters(eventType, boundaryPayload); } catch (err) { console.warn('[VTT] counters could not be reset', err); }
+    }
+    if (eventType === 'turnStart') {
+      try { countSoloTurnStart(boundaryPayload.placementId); } catch (err) { console.warn('[VTT] solo turn could not be counted', err); }
+    }
+    if (eventType === 'turnEnd') {
+      try { noteSoloTurnEnd(boundaryPayload.placementId); } catch (err) { console.warn('[VTT] solo turn end could not be noted', err); }
     }
   }
 
@@ -4466,6 +4477,11 @@ export function mountBoardInteractions(store, routes = {}) {
           if (occupant && isPlacementInsideAutomationAura(owner, aura, occupant)) {
             await applyAutomationAuraEffects(owner, aura, [occupant], 'occupant turn start');
           }
+        } else if (eventType === 'turnEnd' && trigger.event === 'occupantTurnEnd') {
+          const occupant = payload?.placementId ? getPlacementFromStore(payload.placementId) : null;
+          if (occupant && isPlacementInsideAutomationAura(owner, aura, occupant)) {
+            await applyAutomationAuraEffects(owner, aura, [occupant], 'occupant turn end');
+          }
         }
       }
       expireAutomationAuraIfNeeded(owner, aura, eventType, payload);
@@ -4776,7 +4792,7 @@ export function mountBoardInteractions(store, routes = {}) {
       // when a creature inside the zone starts their own turn. Both apply
       // effects only to the triggering creature, not all occupants.
       triggers: Array.isArray(payload.triggers)
-        ? payload.triggers.filter((t) => t === 'onEnter' || t === 'onOccupantTurnStart')
+        ? payload.triggers.filter((t) => t === 'onEnter' || t === 'onOccupantTurnStart' || t === 'onOccupantTurnEnd')
         : [],
       effects: Array.isArray(payload.effects) ? payload.effects : [],
       attributeBonuses: payload.attributeBonuses && typeof payload.attributeBonuses === 'object'
@@ -4980,7 +4996,7 @@ export function mountBoardInteractions(store, routes = {}) {
     return runZoneBoundary(when, {
       expire: () => expirePersistentZonesForOwner(ownerId, when),
       tick: () => tickPersistentZonesForOwner(ownerId, when, {strict:true,sceneId}),
-      occupants: () => fireOccupantTurnStartZones(ownerId, {strict:true,sceneId}),
+      occupants: () => fireOccupantTurnStartZones(ownerId, {strict:true,sceneId}, when === 'endOfTurn' ? 'onOccupantTurnEnd' : 'onOccupantTurnStart'),
       assertCurrent: () => {
         if (getActiveSceneId() !== sceneId) throw new Error('Scene changed during zone turn processing.');
       },
@@ -5006,7 +5022,8 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
-  async function fireOccupantTurnStartZones(combatantId, options = {}) {
+  // "Starts its turn there" (onOccupantTurnStart) or "ends its turn there" (onOccupantTurnEnd).
+  async function fireOccupantTurnStartZones(combatantId, options = {}, zoneTrigger = 'onOccupantTurnStart') {
     if (!combatantId) return;
     const zones = getActivePersistentZones();
     if (!zones.length) return;
@@ -5023,11 +5040,11 @@ export function mountBoardInteractions(store, routes = {}) {
       .filter(Boolean);
     if (!placements.length) return;
     for (const zone of [...zones]) {
-      if (!zone || !Array.isArray(zone.triggers) || !zone.triggers.includes('onOccupantTurnStart')) continue;
+      if (!zone || !Array.isArray(zone.triggers) || !zone.triggers.includes(zoneTrigger)) continue;
       const inside = placements.filter((p) => isPlacementInsideZone(zone, p));
       if (!inside.length) continue;
       try {
-        await applyPersistentZoneEffectsToPlacements(zone, inside, 'turn-start', options);
+        await applyPersistentZoneEffectsToPlacements(zone, inside, zoneTrigger === 'onOccupantTurnEnd' ? 'turn-end' : 'turn-start', options);
       } catch (err) {
         if (options.strict) throw err;
         console.warn('[VTT] Zone occupant-turn-start failed', zone?.abilityName, err);
@@ -5179,14 +5196,23 @@ export function mountBoardInteractions(store, routes = {}) {
         }
         continue;
       }
+      if (effect.kind === 'counter') {
+        const name = String(effect.name || '').trim().toLowerCase();
+        const counted = targets.length ? targets : [getPlacementFromStore(sourceId)].filter(Boolean);
+        counted.forEach((target) => {
+          const result = changeTokenCounter({ placementId: target.id, name, op: effect.op || 'add', amount: effect.amount ?? 1, min: effect.min, max: effect.max });
+          if (!result?.skipped) detailLines.push(`${tokenLabel(target)}'s ${result.label} is now ${result.value}`);
+        });
+        continue;
+      }
       // Malice for the Director (once, not per target): "gain 1 Malice when a demon dies within 10 squares".
       if (effect.kind === 'maliceGain') {
-        const amount = Math.max(0, Number.parseInt(effect.amount, 10) || 0);
+        const amount = Number.parseInt(effect.amount, 10) || 0;
         if (amount && isGmUser() && window.MaliceTracker) {
-          const added = window.MaliceTracker.add(amount);
-          detailLines.push(`+${amount} Malice${Number.isFinite(added?.current) ? ` (now ${added.current})` : ''}`);
+          const now = amount < 0 ? window.MaliceTracker.spend(-amount).remaining : window.MaliceTracker.add(amount).current;
+          detailLines.push(`${amount < 0 ? '−' : '+'}${Math.abs(amount)} Malice${Number.isFinite(now) ? ` (now ${now})` : ''}`);
         } else if (amount) {
-          detailLines.push(`the Director gains ${amount} Malice`);
+          detailLines.push(`the Director ${amount < 0 ? 'loses' : 'gains'} ${Math.abs(amount)} Malice`);
         }
         continue;
       }
@@ -5845,9 +5871,21 @@ export function mountBoardInteractions(store, routes = {}) {
     return text.includes('triggered') && text.includes('free');
   }
 
+  // How a matched trigger is resolved (trigger block `resolve`): click, popup or auto. With none written: auto for
+  // autoResolve, popup for the creature's own "dies" (staminaZero, whose self), else click.
+  function triggerResolveMode(block, match) {
+    const written = String(block?.resolve || '').trim().toLowerCase();
+    if (['click', 'popup', 'auto'].includes(written)) return written;
+    if (block?.autoResolve) return 'auto';
+    const whose = String(match?.filter?.whose || 'any').trim().toLowerCase();
+    if (match?.event === 'staminaZero' && whose === 'self') return 'popup';
+    return 'click';
+  }
+
   function registerAuthoredTriggerBlock({ placementId, action, actionIndex, block, blockIndex = 0, usageLimit = null }) {
     const match = block?.match && typeof block.match === 'object' ? block.match : null;
     if (!placementId || !match?.event) return false;
+    const resolveMode = triggerResolveMode(block, match);
     const casterTeam = getTeamForPlacementId(placementId);
     const abilityId = action?._stableActionId || getStableActionIdForBoard(action, 'triggers', actionIndex);
     const entry = {
@@ -5861,10 +5899,13 @@ export function mountBoardInteractions(store, routes = {}) {
       abilityId,
       registrationKey: `authored:${blockIndex}`,
       abilityName: action?.name || 'Triggered Ability',
-      freeTriggered: isFreeTriggeredActionLabel(action?.actionLabel || action?.type || action?.kind || ''),
+      // A popup trigger ("when it dies") doesn't wait on, or use, the triggered action unless the JSON says so.
+      freeTriggered: isFreeTriggeredActionLabel(action?.actionLabel || action?.type || action?.kind || '')
+        || (resolveMode === 'popup' && block.usesTriggeredAction !== true),
       authored: true,
       condition: block.condition || '',
-      autoResolve: Boolean(block.autoResolve),
+      autoResolve: resolveMode === 'auto',
+      resolveMode,
       effectTarget: block.effectTarget || block.resolveTarget || '',
       effects: Array.isArray(block.effects) ? JSON.parse(JSON.stringify(block.effects)) : [],
       expires: block.expires || block.lifetime || null,
@@ -6133,6 +6174,8 @@ export function mountBoardInteractions(store, routes = {}) {
   if (combatTrackerRoot) {
     combatTrackerRoot.addEventListener('click', handleCombatTrackerClick);
     combatTrackerRoot.addEventListener('dblclick', handleCombatTrackerDoubleClick);
+    combatTrackerRoot.addEventListener('dblclick', handleSoloTurnActivation);
+    combatTrackerRoot.addEventListener('keydown', handleSoloTurnActivation);
     combatTrackerRoot.addEventListener('contextmenu', handleCombatTrackerContextMenu);
     combatTrackerRoot.addEventListener('pointerdown', handleCombatTrackerRightPress);
     window.addEventListener('pointerup', handleCombatTrackerRightRelease);
@@ -10180,6 +10223,7 @@ export function mountBoardInteractions(store, routes = {}) {
         getCombatantTeam,
         getCombatActive: () => combatActive,
         getActiveCombatantId: () => activeCombatantId,
+        getSoloTurns: (combatantId) => soloTurnsFor(combatantId),
         setActiveCombatantId,
         setLastCombatTrackerEntries: (entries) => {
           lastCombatTrackerEntries = entries;
@@ -11298,6 +11342,9 @@ export function mountBoardInteractions(store, routes = {}) {
       // Tick zones owned by this combatant whose tickAt is endOfTurn.
       tickPersistentZonesForOwner(finishedId, 'endOfTurn').catch((err) => {
         console.warn('[VTT] persistent zone end-of-turn tick failed', err);
+      });
+      fireOccupantTurnStartZones(finishedId, {}, 'onOccupantTurnEnd').catch((err) => {
+        console.warn('[VTT] persistent zone occupant-turn-end failed', err);
       });
       expirePersistentZonesForOwner(finishedId, 'endOfTurn');
     }
@@ -13813,11 +13860,19 @@ export function mountBoardInteractions(store, routes = {}) {
     completeRequestedTests: function (requestIds) { return requestedTestCoordinator.complete(requestIds); },
     getPowerRollSuggestions: function (payload) { return buildBoardPowerRollSuggestions(payload); },
     consumeRollRiders: function (payload) { return consumeBoardRollRiders(payload); },
+    // Named counters on a token (rage, deathcount): read, change, list.
+    getCounter: function (payload) { return getTokenCounter(payload?.placementId, payload?.name); },
+    changeCounter: function (payload) { return changeTokenCounter(payload || {}); },
+    getCounters: function (placementId) { return tokenCounters(getPlacementFromStore(placementId)); },
     // An ability's maliceGain: the GM's Malice counter goes up (only the GM keeps the counter).
     gainMalice: function (payload) {
-      const amount = Math.max(0, Number.parseInt(payload?.amount, 10) || 0);
+      const amount = Number.parseInt(payload?.amount, 10) || 0;
       if (!amount) return { skipped: true, reason: 'no-amount' };
       if (!isGmUser() || !window.MaliceTracker) return { skipped: true, reason: 'gm-only' };
+      if (amount < 0) {
+        const spent = window.MaliceTracker.spend(-amount);
+        return { added: -spent.spent, current: spent.remaining };
+      }
       return window.MaliceTracker.add(amount);
     },
     // Ends one condition on a token (an ability's endCondition). The condition as read from the token.
@@ -15411,6 +15466,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const hitName = tokenLabel(getPlacementFromStore(hitPlacementId)) || 'A minion';
 
     if (hit.kills > 0) {
+      fireSquadMinionDeaths(squad, hitPlacementId, hit);
       showMinionKillPopup({
         squad,
         damage: amount,
@@ -15434,6 +15490,28 @@ export function mountBoardInteractions(store, routes = {}) {
       name: hitName || squad.monsterId,
       squadKills: hit.kills,
     };
+  }
+
+  // Each minion that drops counts as dying (its "when it dies" triggers fire): the one hit first, then the nearest
+  // members (the book's order). When the whole squad drops, the hit one is told by the usual Stamina-zero event.
+  function fireSquadMinionDeaths(squad, hitPlacementId, hit) {
+    try {
+      const members = (Array.isArray(squad?.memberIds) ? squad.memberIds : []).filter((id) => getPlacementFromStore(id));
+      const hitPlacement = getPlacementFromStore(hitPlacementId);
+      const levels = getActiveSceneTokenLevelState();
+      const order = [hitPlacementId, ...members.filter((id) => id !== hitPlacementId).sort((a, b) => {
+        const da = placementSquareDistance(hitPlacement, getPlacementFromStore(a), levels) ?? 99;
+        const db = placementSquareDistance(hitPlacement, getPlacementFromStore(b), levels) ?? 99;
+        return da - db;
+      })];
+      const dropped = order.slice(0, Math.max(0, hit.kills));
+      dropped.forEach((id) => {
+        if (id === hitPlacementId && hit.current <= 0) return;
+        triggerFire('staminaZero', { placementId: id, targetId: id, sourceId: '', before: hit.previous, after: 0, delta: -hit.previous, squad: true, abilityName: '' });
+      });
+    } catch (error) {
+      console.warn('[VTT] squad minion deaths could not be told to triggers', error);
+    }
   }
 
   function showMinionKillPopup({ squad, damage, prevPool, nextPool, kills, hitName }) {
@@ -15485,10 +15563,299 @@ export function mountBoardInteractions(store, routes = {}) {
       .replace(/"/g, '&quot;');
   }
 
+  // A token saved by one of the rules below is drawn again (badges, conditions, the tracker).
+  function redrawAfterRuleChange() {
+    try { boardApi?.emitStateUpdate?.(); } catch (error) { console.warn('[VTT] redraw after a rule change failed', error); }
+  }
+
+  // ---------- passives read from a monster's stat block ----------
+  function monsterPassivesOfKind(monster, kind) {
+    const wanted = String(kind || '').toLowerCase();
+    const found = [];
+    const take = (automation, name) => {
+      const passives = Array.isArray(automation?.passives) ? automation.passives : [];
+      passives.forEach((passive) => {
+        if (String(passive?.kind || '').replace(/[^a-z]/gi, '').toLowerCase() === wanted) {
+          found.push({ ...passive, label: String(passive.label || name || '').trim() });
+        }
+      });
+    };
+    (Array.isArray(monster?.traits) ? monster.traits : []).forEach((trait) => take(trait?.automation, trait?.name));
+    const abilities = monster?.abilities && typeof monster.abilities === 'object' ? monster.abilities : {};
+    Object.keys(abilities).forEach((key) => {
+      (Array.isArray(abilities[key]) ? abilities[key] : []).forEach((ability) => take(ability?.automation, ability?.name));
+    });
+    return found;
+  }
+
+  // "Rise again" (deathRule passive): damage that drops a creature to 0 sets it back to `setStamina` with its
+  // `conditions`, if it has uses left and the damage type allows. Says so with a banner. Returns true when it rose
+  // (then it has not died: no "dies" event).
+  function applyDeathRule(placementId, damageType = '') {
+    const placement = getPlacementFromStore(placementId);
+    if (!placement?.monster || getMinionSquadForPlacement(placementId)) return false;
+    const rules = monsterPassivesOfKind(placement.monster, 'deathRule');
+    if (!rules.length) return false;
+    const type = String(damageType || '').trim().toLowerCase();
+    const used = placement.deathRuleUses && typeof placement.deathRuleUses === 'object' ? placement.deathRuleUses : {};
+    const rule = rules.find((candidate) => {
+      const key = candidate.label || 'Rise Again';
+      const limit = candidate.uses === 'unlimited' ? Infinity : Math.max(1, Number.parseInt(candidate.uses, 10) || 1);
+      if ((Number(used[key]) || 0) >= limit) return false;
+      const notWhen = Array.isArray(candidate.notWhenDamageTypes) ? candidate.notWhenDamageTypes.map((t) => String(t).toLowerCase()) : [];
+      const onlyWhen = Array.isArray(candidate.onlyWhenDamageTypes) ? candidate.onlyWhenDamageTypes.map((t) => String(t).toLowerCase()) : [];
+      if (type && notWhen.includes(type)) return false;
+      if (onlyWhen.length && !onlyWhen.includes(type)) return false;
+      return true;
+    });
+    if (!rule) return false;
+    const key = rule.label || 'Rise Again';
+    const setStamina = Math.max(0, Number.parseInt(rule.setStamina ?? 1, 10) || 0);
+    const names = Array.isArray(rule.conditions) ? rule.conditions : ['prone'];
+    const duration = normalizeConditionDurationValue({ endOfEncounter: 'end-of-encounter', saveEnds: 'save-ends', endOfTurn: 'end-of-turn', untilDying: 'until-dying' }[rule.conditionDuration] || 'end-of-encounter');
+    updatePlacementById(placementId, (target) => {
+      const hp = ensurePlacementHitPoints(target.hp);
+      target.hp = { ...hp, current: String(setStamina) };
+      target.deathRuleUses = { ...(target.deathRuleUses && typeof target.deathRuleUses === 'object' ? target.deathRuleUses : {}), [key]: (Number(used[key]) || 0) + 1 };
+      const conditions = ensurePlacementConditions(target.conditions ?? target.condition ?? null);
+      names.forEach((name) => {
+        if (!name || conditions.some((c) => String(c?.name || '').toLowerCase() === String(name).toLowerCase())) return;
+        conditions.push({ name, duration: { type: duration } });
+      });
+      if (conditions.length) { target.conditions = conditions; target.condition = conditions[0]; }
+    });
+    redrawAfterRuleChange();
+    const label = tokenLabel(placement) || 'The creature';
+    showConditionBanner(rule.banner || `${label} rises again!`, { tone: 'danger' });
+    window.dashboardChat?.sendMessage?.({ message: `${label} - ${key}: back to ${setStamina} Stamina${names.length ? `, ${names.join(', ')}` : ''}.`, type: 'text' })?.catch?.(() => {});
+    return true;
+  }
+
+  // ---------- counters (rage, deathcount, charges) ----------
+  // What a token's counters are: those its counter passives declare (with their start, limits, reset) and any an
+  // ability has set. [{ name, label, value, min, max, declared }]
+  function tokenCounterDeclarations(placement) {
+    return placement?.monster ? monsterPassivesOfKind(placement.monster, 'counter').filter((passive) => passive.name) : [];
+  }
+  function tokenCounters(placement) {
+    const set = placement?.counters && typeof placement.counters === 'object' ? placement.counters : {};
+    const list = [];
+    const seen = new Set();
+    tokenCounterDeclarations(placement).forEach((passive) => {
+      const name = String(passive.name).toLowerCase();
+      if (seen.has(name)) return;
+      seen.add(name);
+      const value = Number.isFinite(Number(set[name])) ? Number(set[name]) : Number(passive.start) || 0;
+      if (passive.showWhenZero === false && !value) return;
+      list.push({ name, label: passive.label || name, value, min: Number.isFinite(Number(passive.min)) ? Number(passive.min) : 0, max: Number.isFinite(Number(passive.max)) ? Number(passive.max) : null, declared: true });
+    });
+    Object.keys(set).forEach((name) => {
+      if (seen.has(name)) return;
+      const value = Number(set[name]);
+      if (!Number.isFinite(value)) return;
+      list.push({ name, label: counterNameLabel(name), value, min: 0, max: null, declared: false });
+    });
+    return list;
+  }
+  // "rage" -> "Rage", "death-count" -> "Death Count" for a counter no passive names.
+  function counterNameLabel(name) {
+    return String(name || '').split(/[-_\s]+/).filter(Boolean).map((word) => word[0].toUpperCase() + word.slice(1)).join(' ');
+  }
+  function getTokenCounter(placementId, name) {
+    const key = String(name || '').toLowerCase();
+    const found = tokenCounters(getPlacementFromStore(placementId)).find((entry) => entry.name === key);
+    return found ? found.value : 0;
+  }
+  function changeTokenCounter({ placementId, name, label = '', op = 'add', amount = 1, min, max } = {}) {
+    const key = String(name || '').trim().toLowerCase();
+    const placement = getPlacementFromStore(placementId);
+    if (!key || !placement) return { skipped: true, reason: 'missing' };
+    const declared = tokenCounters(placement).find((entry) => entry.name === key);
+    const previous = declared ? declared.value : 0;
+    const low = Number.isFinite(Number(min)) ? Number(min) : declared ? declared.min : 0;
+    const high = Number.isFinite(Number(max)) ? Number(max) : declared && declared.max !== null ? declared.max : Infinity;
+    const n = Number.parseInt(amount, 10) || 0;
+    let value = op === 'set' ? n : op === 'spend' ? previous - n : previous + n;
+    value = Math.min(high, Math.max(low, value));
+    updatePlacementById(placementId, (target) => {
+      target.counters = { ...(target.counters && typeof target.counters === 'object' ? target.counters : {}), [key]: value };
+    });
+    redrawAfterRuleChange();
+    return { value, previous, label: (declared && declared.label) || label || counterNameLabel(key) };
+  }
+  // Counter resets at a boundary: a counter passive's resetAt (combatEnd by default; roundStart; turnStart = its own
+  // turn). Counters no passive declares go when combat ends.
+  function resetTokenCounters(eventType, payload = {}) {
+    getPlacementsForActiveScene().forEach((placement) => {
+      const set = placement?.counters && typeof placement.counters === 'object' ? placement.counters : null;
+      if (!set) return;
+      const declarations = tokenCounterDeclarations(placement);
+      const next = { ...set };
+      let changed = false;
+      Object.keys(set).forEach((name) => {
+        const passive = declarations.find((entry) => String(entry.name).toLowerCase() === name);
+        const resetAt = passive ? passive.resetAt || 'combatEnd' : 'combatEnd';
+        const due = (eventType === 'combatEnd' && resetAt === 'combatEnd')
+          || (eventType === 'roundStart' && resetAt === 'roundStart')
+          || (eventType === 'turnStart' && resetAt === 'turnStart' && payload.placementId === placement.id);
+        if (!due) return;
+        changed = true;
+        if (passive) next[name] = Number(passive.start) || 0; else delete next[name];
+      });
+      if (!changed) return;
+      updatePlacementById(placement.id, (target) => {
+        if (Object.keys(next).length) target.counters = next; else delete target.counters;
+      });
+      redrawAfterRuleChange();
+    });
+  }
+  function paintTokenCounters(tokenElement, placement) {
+    let badge = tokenElement.querySelector('.vtt-token__counters');
+    const counters = tokenCounters(placement);
+    if (!counters.length) { badge?.remove(); return; }
+    if (!badge) {
+      badge = document.createElement('div');
+      badge.className = 'vtt-token__counters';
+      tokenElement.appendChild(badge);
+    }
+    const text = counters.map((entry) => `${entry.label} ${entry.value}`).join(' · ');
+    if (badge.textContent !== text) badge.textContent = text;
+    badge.title = counters.map((entry) => `${entry.label}: ${entry.value}${entry.max !== null ? ` / ${entry.max}` : ''}`).join('\n');
+  }
+
+  // ---------- solo turns ----------
+  // How many turns a round a monster takes: its soloTurns passive, else 2 for a Solo monster, else 1. With the turns it
+  // has started this round (placement.soloTurnsTaken, stamped with the round) and whether one is going on now.
+  function soloTurnCount(placement) {
+    if (!placement?.monster) return 1;
+    const passive = monsterPassivesOfKind(placement.monster, 'soloTurns')[0];
+    if (passive) return Math.max(1, Number.parseInt(passive.turns, 10) || 1);
+    const kind = `${placement.monster.organization || ''} ${placement.monster.role || ''} ${placement.monster.types || ''}`.toLowerCase();
+    return /\bsolo\b/.test(kind) ? 2 : 1;
+  }
+  function soloTurnsTakenThisRound(placement) {
+    const taken = placement?.soloTurnsTaken;
+    return taken && Number(taken.round) === Number(combatRound) ? Math.max(0, Number.parseInt(taken.count, 10) || 0) : 0;
+  }
+  function soloTurnsFor(combatantId) {
+    const placement = combatantId ? getPlacementFromStore(combatantId) : null;
+    const turns = soloTurnCount(placement);
+    if (turns < 2) return null;
+    return { turns, taken: soloTurnsTakenThisRound(placement), active: activeCombatantId === combatantId };
+  }
+  // Each turn a solo monster starts counts (on the page that started it, so once).
+  function countSoloTurnStart(placementId) {
+    const placement = placementId ? getPlacementFromStore(placementId) : null;
+    if (soloTurnCount(placement) < 2) return;
+    const count = soloTurnsTakenThisRound(placement) + 1;
+    updatePlacementById(placementId, (target) => {
+      target.soloTurnsTaken = { round: combatRound, count, turnCount: roundTurnCount };
+    });
+    redrawAfterRuleChange();
+  }
+  function noteSoloTurnEnd(placementId) {
+    const placement = placementId ? getPlacementFromStore(placementId) : null;
+    if (soloTurnCount(placement) < 2 || !placement.soloTurnsTaken) return;
+    updatePlacementById(placementId, (target) => {
+      target.soloTurnsTaken = { ...target.soloTurnsTaken, endedAtTurnCount: roundTurnCount };
+    });
+  }
+  // Double-click a faded extra turn: that monster's turn starts again. Right after its own turn: a reminder only.
+  async function startSoloExtraTurn(placementId) {
+    const placement = getPlacementFromStore(placementId);
+    if (!combatActive || !isGmUser() || !placement) return;
+    if (activeCombatantId === placementId) return;
+    const taken = placement.soloTurnsTaken;
+    const passive = placement.monster ? monsterPassivesOfKind(placement.monster, 'soloTurns')[0] : null;
+    const backToBack = taken && Number(taken.round) === Number(combatRound)
+      && Number.isFinite(Number(taken.endedAtTurnCount)) && Number(taken.endedAtTurnCount) === Number(roundTurnCount);
+    if (backToBack && passive?.backToBackReminder !== false) {
+      showConditionBanner(`${tokenLabel(placement) || 'A solo monster'}: solo turns can't be back to back.`, { tone: 'reminder' });
+    }
+    if (activeCombatantId) {
+      const currentLabel = getCombatantLabel(activeCombatantId) || 'the current combatant';
+      if (!(await confirmSwitchActiveTurn(currentLabel, `${tokenLabel(placement) || 'the solo monster'} (another turn)`))) return;
+    }
+    if (combatV2Enabled) {
+      await submitCanonicalCombatIntent('turn.start', { combatantId: placementId, holderName: getCurrentUserName(), override: true });
+      return;
+    }
+    if (activeCombatantId) {
+      completeActiveCombatant({ forceReleaseLock: true, suppressAnnouncements: true, suppressRoundCompletionCheck: true, suppressSync: true });
+    }
+    if (completedCombatants.delete(placementId)) markCombatFieldDirty('completedCombatantIds');
+    setActiveCombatantId(placementId);
+    forceAcquireTurnLockForGm(placementId);
+    markCombatTurnStateDirty();
+    beginCombatantTurn(placementId);
+  }
+  function handleSoloTurnActivation(event) {
+    const target = event.target instanceof HTMLElement ? event.target.closest('[data-solo-turn-of]') : null;
+    if (!target || !combatTrackerRoot?.contains(target)) return;
+    if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (target.classList.contains('is-completed') || target.classList.contains('is-active')) return;
+    startSoloExtraTurn(target.dataset.soloTurnOf).catch((error) => console.warn('[VTT] solo turn failed', error));
+  }
+
+  // Uses that reset when combat ends ("once per encounter").
+  function resetDeathRuleUsesAtCombatEnd() {
+    getPlacementsForActiveScene().forEach((placement) => {
+      if (!placement?.deathRuleUses || !placement.monster) return;
+      const keep = new Set(monsterPassivesOfKind(placement.monster, 'deathRule').filter((rule) => rule.resetAt === 'never').map((rule) => rule.label || 'Rise Again'));
+      updatePlacementById(placement.id, (target) => {
+        const next = {};
+        Object.entries(target.deathRuleUses || {}).forEach(([key, value]) => { if (keep.has(key)) next[key] = value; });
+        if (Object.keys(next).length) target.deathRuleUses = next; else delete target.deathRuleUses;
+      });
+    });
+  }
+
+  // Popup triggers ("when it dies"): the GM's page asks as soon as one is waiting on a monster, wherever it fired.
+  // Yes runs the ability as the abilities list would (with its pickers); No lets it go.
+  const promptedTriggerPopups = new Set();
+  function maybePromptTriggerPopups(placement) {
+    if (!placement?.id || !isGmUser() || !placement.monster) return;
+    const payloads = placement.readyTriggerPayloads && typeof placement.readyTriggerPayloads === 'object' ? placement.readyTriggerPayloads : {};
+    Object.keys(payloads).forEach((abilityId) => {
+      const snapshot = payloads[abilityId];
+      if (!snapshot || snapshot.popup !== true) return;
+      const key = `${placement.id}|${abilityId}|${snapshot.at || ''}`;
+      if (promptedTriggerPopups.has(key)) return;
+      promptedTriggerPopups.add(key);
+      promptTriggerPopup(placement.id, abilityId, snapshot).catch((error) => console.warn('[VTT] trigger popup failed', error));
+    });
+  }
+
+  async function promptTriggerPopup(placementId, abilityId, snapshot) {
+    const placement = getPlacementFromStore(placementId);
+    if (!placement?.monster) return;
+    const [, category = '', ...nameParts] = String(abilityId).split(':');
+    const name = nameParts.join(':');
+    const list = Array.isArray(placement.monster.abilities?.[category]) ? placement.monster.abilities[category] : [];
+    const ability = list.find((item) => item?.name === name);
+    const entry = (triggerRegistry.byToken.get(placementId) || []).find((item) => item.abilityId === abilityId);
+    const when = entry?.condition ? ` (${entry.condition})` : '';
+    const clear = () => document.dispatchEvent(new CustomEvent('vtt:clear-trigger-ready', { detail: { placementId, abilityId } }));
+    if (!ability || !window.MonsterAbilityRunner?.start) { clear(); return; }
+    const yes = await confirmBoardAction(`${tokenLabel(placement) || 'A creature'}: ${name}${when}. Use it now?`, { title: name, confirmText: 'Use it', cancelText: 'Skip' });
+    clear();
+    if (!yes) return;
+    window.MonsterAbilityRunner.start(placement.monster, ability, category, placement, {
+      triggerPayload: snapshot?.payload && typeof snapshot.payload === 'object' ? snapshot.payload : null,
+      suggestedTargetId: snapshot?.payload?.sourceId || '',
+    });
+  }
+
   function applyTokenOverlays(tokenElement, placement) {
     if (!tokenElement || !placement) {
       return;
     }
+    // The token is drawn from a trimmed copy; counters and waiting triggers are read from the whole token.
+    const wholePlacement = getPlacementFromStore(placement.id) || placement;
+    maybePromptTriggerPopups(wholePlacement);
+    paintTokenCounters(tokenElement, wholePlacement);
 
     syncTokenTeamAffiliation(tokenElement, placement);
     scheduleSquadBadgeRefresh();
@@ -17896,7 +18263,8 @@ export function mountBoardInteractions(store, routes = {}) {
         delta,
         kind: 'damage',
       });
-      if (beforeStamina !== null && beforeStamina > 0 && afterStamina !== null && afterStamina <= 0) {
+      if (beforeStamina !== null && beforeStamina > 0 && afterStamina !== null && afterStamina <= 0
+        && !applyDeathRule(payload.placementId, payload.damageType || '')) {
         triggerFire('staminaZero', {
           placementId: payload.placementId,
           targetId: payload.placementId,

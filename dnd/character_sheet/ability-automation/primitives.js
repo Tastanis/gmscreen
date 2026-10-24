@@ -39,6 +39,8 @@
     "loseRecoveries",
     "maliceGain",
     "buff",
+    "counter",
+    "ifCounter",
     "setScopedFlag",
     "applyMark",
     "endMark",
@@ -593,6 +595,19 @@
         const thenText = (effect.then || []).map(describeEffect).filter(Boolean).join(", ");
         const elseText = (effect.else || []).map(describeEffect).filter(Boolean).join(", ");
         const label = `the roll ${describeRollTest(effect)}`;
+        if (elseText) return `If ${label}: ${thenText || "(no effect)"} else: ${elseText}`;
+        return `If ${label}: ${thenText || "(no effect)"}`;
+      }
+      case "counter": {
+        const amount = effect.amountDice || effect.amount || 1;
+        if (effect.op === "set") return `${effect.name || "counter"} = ${amount}`;
+        return `${effect.name || "counter"} ${effect.op === "spend" ? "-" : "+"}${amount}`;
+      }
+      case "ifCounter": {
+        const thenText = (effect.then || []).map(describeEffect).filter(Boolean).join(", ");
+        const elseText = (effect.else || []).map(describeEffect).filter(Boolean).join(", ");
+        const band = [effect.min != null ? `≥${effect.min}` : "", effect.max != null ? `≤${effect.max}` : ""].filter(Boolean).join(" & ") || "(any)";
+        const label = `${effect.who === "target" ? "target" : "self"} ${effect.name || "counter"} ${band}`;
         if (elseText) return `If ${label}: ${thenText || "(no effect)"} else: ${elseText}`;
         return `If ${label}: ${thenText || "(no effect)"}`;
       }

@@ -76,6 +76,7 @@ test('accepted automation damage emits the zero-stamina transition; rejected sav
     normalizeAutomationDamageType: value => value, updateStatus() {}, triggerFire: (name, payload) => events.push({name, payload}),
     shouldRevealPlacementHitPointValues: () => false,
     renderTokens() {}, boardApi: {}, tokenLayer: null, viewState: {}, refreshTokenSettings() {},
+    applyDeathRule: () => false, // no rise-again rule on this creature (death-counters.test.mjs covers the rule)
   };
   const handler = new Function('deps', `with(deps) { ${section(board, '  async function handleAutomationDamageRequest(', '  async function handleAutomationSurgeGainRequest(')} return handleAutomationDamageRequest; }`)(deps);
   const detail = {payload:{placementId:'enemy',amount:5},resolve:value=>resolved=value,reject:error=>rejected=error};

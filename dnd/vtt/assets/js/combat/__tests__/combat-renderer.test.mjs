@@ -349,6 +349,35 @@ describe('renderCombatTracker', () => {
 
     assert.equal(combatantTeams.has('unknown'), false);
   });
+
+  // Phase 3 (Brandon, October 2026): a solo monster's extra turns show as faded copies in the tracker, "so it is clear
+  // these are not extra monsters". Turn N is done once the monster has started N turns this round.
+  test('a solo monster shows its extra turns as faded entries, done as they are taken', () => {
+    const render = (taken, active = false) => {
+      const { documentRef, root, waiting, completed } = createTrackerDom();
+      const callbacks = createCallbacks({ teams: { dragon: 'enemy', cal: 'ally' }, activeCombatantId: active ? 'dragon' : null });
+      callbacks.getSoloTurns = (id) => (id === 'dragon' ? { turns: 3, taken, active } : null);
+      renderCombatTracker({
+        elements: { root, waiting, completed },
+        combatants: [{ id: 'dragon', name: 'Meteor Dragon' }, { id: 'cal', name: 'Cal' }],
+        state: { combatantTeams: new Map(), completedCombatants: new Set(taken ? ['dragon'] : []), trackerHoverTokenIds: new Set() },
+        callbacks,
+        documentRef,
+        HTMLElementCtor: FakeElement,
+      });
+      const extras = (list) => list.children.filter((node) => node.dataset.soloTurnOf === 'dragon').map((node) => node.dataset.soloTurn);
+      return { waiting: extras(waiting), completed: extras(completed), nodes: [...waiting.children, ...completed.children].filter((n) => n.dataset.soloTurnOf) };
+    };
+    let view = render(0);
+    assert.deepEqual(view.waiting, ['2', '3'], 'two extra turns waiting');
+    assert.ok(view.nodes.every((node) => node.classList.contains('vtt-combat-token--solo-turn') && node.dataset.combatantId === undefined), 'faded, and not combatants of their own');
+    assert.equal(view.nodes[0].title, 'Meteor Dragon: turn 2');
+    view = render(2, true);
+    assert.deepEqual(view.waiting, ['2', '3'], 'turn 2 going on now stays in waiting, lit');
+    assert.ok(view.nodes.find((node) => node.dataset.soloTurn === '2').classList.contains('is-active'));
+    view = render(3);
+    assert.deepEqual(view.completed, ['2', '3']);
+  });
 });
 
 class FakeDocument {

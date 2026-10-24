@@ -670,7 +670,7 @@
       if (effect.kind === kind) return true;
       if (effect.kind === "potency" && (effectListContainsKind(effect.onFail, kind) || effectListContainsKind(effect.onResist, kind))) return true;
       if (effect.kind === "spend" && effectListContainsKind(effect.effects, kind)) return true;
-      if (effect.kind === "ifKeyword" || effect.kind === "ifPrompt" || effect.kind === "ifMark" || effect.kind === "ifScopedFlag" || effect.kind === "ifDistance" || effect.kind === "ifZone" || effect.kind === "ifStrained" || effect.kind === "ifTarget" || effect.kind === "ifRoll") {
+      if (effect.kind === "ifKeyword" || effect.kind === "ifPrompt" || effect.kind === "ifMark" || effect.kind === "ifScopedFlag" || effect.kind === "ifDistance" || effect.kind === "ifZone" || effect.kind === "ifStrained" || effect.kind === "ifTarget" || effect.kind === "ifRoll" || effect.kind === "ifCounter") {
         if (effectListContainsKind(effect.then, kind) || effectListContainsKind(effect.else, kind)) return true;
       }
       if (effect.kind === "aura" && effectListContainsKind(effect.effects, kind)) return true;
@@ -1988,7 +1988,7 @@
 
   async function applyEffect(state, effect, targets, ctx) {
     if (!effect || typeof effect !== "object") return;
-    if (targets.length && ["damage","condition","forcedMovement","shift","setScopedFlag","applyMark","endMark","halveTriggeringDamage","aura","heal","temporaryStamina","teleport","swap","resourceGain","surgeGain","endCondition","loseRecoveries","buff"].includes(effect.kind)) {
+    if (targets.length && ["damage","condition","forcedMovement","shift","setScopedFlag","applyMark","endMark","halveTriggeringDamage","aura","heal","temporaryStamina","teleport","swap","resourceGain","surgeGain","endCondition","loseRecoveries","buff","counter"].includes(effect.kind)) {
       fireActionUsedEvent(state);
     }
     switch (effect.kind) {
@@ -2030,6 +2030,10 @@
         return applyMaliceGainEffect(state, effect);
       case "buff":
         return applyBuffEffect(state, effect, targets, ctx);
+      case "counter":
+        return applyCounterEffect(state, effect, targets);
+      case "ifCounter":
+        return applyIfCounterEffect(state, effect, targets, ctx);
       case "setScopedFlag":
         return applySetScopedFlagEffect(state, effect, targets, ctx);
       case "applyMark":
@@ -3275,6 +3279,65 @@
     await applyEffects(state, branch, effect.target || state.currentGroup || "primary", ctx);
   }
 
+  // ---------- counters ----------
+  //
+  // Named counters on a creature (rage, deathcount, charges): `counter` changes one, `ifCounter` / branch "counter"
+  // read one. The board keeps them on the token; a counter passive sets its start, limits and reset.
+
+  function counterValueOf(state, subject, name) {
+    if (!subject?.id) return null;
+    if (typeof state.context.getCounter === "function") {
+      const value = Number(state.context.getCounter({ placementId: subject.id, name }));
+      return Number.isFinite(value) ? value : 0;
+    }
+    const token = liveTokenFor(state, subject);
+    const value = Number(token?.counters?.[name]);
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  function counterInBand(value, test) {
+    if (value === null) return false;
+    if (test.min !== undefined && value < test.min) return false;
+    if (test.max !== undefined && value > test.max) return false;
+    return true;
+  }
+
+  async function applyCounterEffect(state, effect, targets) {
+    const recipients = targets && targets.length ? targets : [state.sourcePlacement].filter((item) => item && item.id);
+    const label = state.action.name || "Ability";
+    for (const target of recipients) {
+      if (state.aborted) return;
+      if (!target?.id) continue;
+      const amount = effect.amountDice ? rollDiceFormula(effect.amountDice) : asInt(effect.amount, effect.op === "set" ? 0 : 1);
+      if (typeof state.context.changeCounter !== "function") {
+        await postChat(state.context, { message: `${state.heroName} - ${label}: ${effect.name} ${effect.op === "set" ? "=" : effect.op === "spend" ? "-" : "+"}${amount} on ${target.name || "the target"} (by hand).` });
+        continue;
+      }
+      const result = await state.context.changeCounter({
+        placementId: target.id, name: effect.name, label: effect.label || "", op: effect.op || "add", amount,
+        ...(effect.min !== undefined ? { min: effect.min } : {}), ...(effect.max !== undefined ? { max: effect.max } : {}),
+      });
+      const shown = result?.label || effect.label || effect.name;
+      const short = effect.op === "spend" && result && result.previous < amount ? ` (only had ${result.previous})` : "";
+      await postChat(state.context, { message: `${state.heroName} - ${label}: ${target.name || "the target"}'s ${shown} is now ${result?.value ?? "?"}${short}.` });
+    }
+  }
+
+  async function applyIfCounterEffect(state, effect, targets, ctx) {
+    const group = effect.target || state.currentGroup || "primary";
+    if (effect.who !== "target") {
+      const value = counterValueOf(state, state.sourcePlacement, effect.name);
+      await runSubsetBranch(state, counterInBand(value, effect) ? effect.then : effect.else, null, group, ctx);
+      return;
+    }
+    const subjects = (targets || []).filter((item) => item && item.id);
+    const passed = subjects.filter((subject) => counterInBand(counterValueOf(state, subject, effect.name), effect));
+    const failed = subjects.filter((subject) => !passed.includes(subject));
+    await runSubsetBranch(state, effect.then, passed, group, ctx);
+    if (state.aborted) return;
+    await runSubsetBranch(state, effect.else, failed, group, ctx);
+  }
+
   // ---------- buff ----------
   //
   // "Your next strike gets +2 damage", "edge on your next roll", "+1 potency until the end of your turn", "allies
@@ -3288,6 +3351,8 @@
     else if (effect.appliesTo === "ranged") appliesTo.keywordsAny = ["Ranged"];
     else if (effect.appliesTo === "tests") appliesTo.rollEvent = "abilityTest";
     else appliesTo.rollEvent = "powerRoll";
+    if (Array.isArray(effect.keywordsAny) && effect.keywordsAny.length) appliesTo.keywordsAny = [...(appliesTo.keywordsAny || []), ...effect.keywordsAny];
+    if (Array.isArray(effect.keywordsAll) && effect.keywordsAll.length) appliesTo.keywordsAll = [...(appliesTo.keywordsAll || []), ...effect.keywordsAll];
     const rider = { type: "rollBuff", appliesTo, consume: effect.consume === "duration" ? "manual" : "nextMatchingRoll" };
     if (effect.modifier) rider.modifier = effect.modifier;
     if (effect.damageBonus) rider.damageBonus = effect.damageBonus;
@@ -3317,18 +3382,18 @@
 
   async function applyMaliceGainEffect(state, effect) {
     const label = state.action.name || "Ability";
-    const amount = Math.max(0, effect.amountDice ? rollDiceFormula(effect.amountDice) : asInt(effect.amount, 1));
+    const amount = effect.amountDice ? rollDiceFormula(effect.amountDice) : asInt(effect.amount, 1);
     if (!amount) return;
     fireActionUsedEvent(state);
     const result = typeof state.context.gainMalice === "function"
       ? await state.context.gainMalice({ amount, abilityName: label })
       : null;
     if (!result || result.skipped) {
-      await postChat(state.context, { message: `${state.heroName} - ${label}: the Director gains ${amount} Malice (add it by hand).` });
+      await postChat(state.context, { message: `${state.heroName} - ${label}: the Director ${amount < 0 ? "loses" : "gains"} ${Math.abs(amount)} Malice (${amount < 0 ? "take it off" : "add it"} by hand).` });
       return;
     }
     await postChat(state.context, {
-      message: `${state.heroName} - ${label}: +${amount} Malice${Number.isFinite(result.current) ? ` (now ${result.current})` : ""}.`,
+      message: `${state.heroName} - ${label}: ${amount < 0 ? "−" : "+"}${Math.abs(amount)} Malice${Number.isFinite(result.current) ? ` (now ${result.current})` : ""}.`,
     });
   }
 
@@ -4150,6 +4215,13 @@
       }
       case "roll":
         return rollTestPasses(state, c);
+      case "counter": {
+        if (c.who === "target") {
+          const subjects = getTargetGroup(state, c.target || state.currentGroup || "primary");
+          return subjects.some((subject) => counterInBand(counterValueOf(state, subject, c.name), c));
+        }
+        return counterInBand(counterValueOf(state, state.sourcePlacement, c.name), c);
+      }
       case "zone": {
         const targets = getTargetGroup(state, c.target || state.currentGroup || "primary");
         const result = await resolveZoneCondition(state, c, targets);
@@ -4640,7 +4712,7 @@
         walkEffectList(effect.then || [], visit);
         walkEffectList(effect.else || [], visit);
       }
-      if (effect.kind === "ifDistance" || effect.kind === "ifZone" || effect.kind === "ifStrained" || effect.kind === "ifTarget" || effect.kind === "ifRoll") {
+      if (effect.kind === "ifDistance" || effect.kind === "ifZone" || effect.kind === "ifStrained" || effect.kind === "ifTarget" || effect.kind === "ifRoll" || effect.kind === "ifCounter") {
         walkEffectList(effect.then || [], visit);
         walkEffectList(effect.else || [], visit);
       }

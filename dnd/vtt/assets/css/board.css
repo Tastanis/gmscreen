@@ -6170,3 +6170,65 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
 /* Measure tool, 3D board: the height under the pointer, in a note beside it (drag-ruler.js showHeightNote). */
 .vtt-measure-height-note { position: fixed; z-index: 9000; padding: 3px 8px; border-radius: 6px; background: #111c; color: #f5d284; font: 600 13px/1.3 system-ui, sans-serif; white-space: nowrap; pointer-events: none; }
 .vtt-measure-height-note[hidden] { display: none; }
+
+/* Counters on a token (rage, deathcount): a small pill under its picture. */
+.vtt-token__counters {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--tok-unit) * -9);
+  transform: translateX(-50%);
+  padding: 0 max(3px, calc(var(--tok-unit) * 3));
+  border: 1px solid rgba(240, 214, 138, 0.85);
+  border-radius: 999px;
+  background: rgba(27, 20, 10, 0.92);
+  color: #f0d68a;
+  /* As big as the condition label, never too small to read. */
+  font-size: max(9px, calc(var(--tok-unit) * 6));
+  font-weight: 800;
+  line-height: 1.5;
+  white-space: nowrap;
+  pointer-events: auto;
+  z-index: 2;
+}
+
+.vtt-monster-counters {
+  display: grid;
+  gap: 6px;
+}
+
+.vtt-monster-counter {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.vtt-monster-counter__label { font-weight: 700; }
+.vtt-monster-counter__value { min-width: 3ch; text-align: center; font-weight: 800; font-variant-numeric: tabular-nums; }
+.vtt-monster-counter__step {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+/* A solo monster's extra turns in the tracker: the same picture, faded, so they read as turns, not more monsters. */
+.vtt-combat-token.vtt-combat-token--solo-turn {
+  opacity: 0.55;
+  filter: saturate(0.6);
+  outline: 1px dashed rgba(240, 214, 138, 0.7);
+  outline-offset: -2px;
+}
+
+.vtt-combat-token.vtt-combat-token--solo-turn.is-active {
+  opacity: 1;
+  filter: none;
+}
+
+.vtt-combat-token.vtt-combat-token--solo-turn.is-completed {
+  opacity: 0.35;
+}

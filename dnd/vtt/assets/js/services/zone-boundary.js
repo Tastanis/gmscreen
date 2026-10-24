@@ -10,6 +10,9 @@ export async function runZoneBoundary(when, { expire, tick, occupants, assertCur
   } else if (when === 'endOfTurn') {
     await tick();
     assertCurrent();
+    // "Ends its turn there": before the zone can expire at this turn's end.
+    await occupants();
+    assertCurrent();
     if (await expire() === false) throw new Error('Zone expiration was not confirmed.');
   }
 }

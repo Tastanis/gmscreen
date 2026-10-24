@@ -837,8 +837,43 @@
         if (extras) effect._extra = extras;
         return effect;
       }
+      case "counter": {
+        const known = new Set(["kind", "name", "label", "op", "amount", "amountDice", "min", "max", "target"]);
+        const effect = {
+          kind: "counter",
+          name: normalizeCounterName(input.name),
+          op: pickKnownLoose(input.op, ["add", "set", "spend"], "add"),
+          amount: input.op === "set" ? asInt(input.amount, 0) : asInt(input.amount, 1),
+        };
+        if (!effect.name) warnings.push(`${path}: counter needs a name such as "rage".`);
+        const dice = asTrimmedString(input.amountDice);
+        if (dice) effect.amountDice = dice;
+        const label = asTrimmedString(input.label);
+        if (label) effect.label = label;
+        if (input.min !== undefined && input.min !== null && input.min !== "") effect.min = asInt(input.min, 0);
+        if (input.max !== undefined && input.max !== null && input.max !== "") effect.max = asInt(input.max, 0);
+        const target = asTrimmedString(input.target);
+        if (target) effect.target = target;
+        const extras = pickExtras(input, known);
+        if (extras) effect._extra = extras;
+        return effect;
+      }
+      case "ifCounter": {
+        const known = new Set(["kind", "name", "min", "max", "who", "target", "then", "else"]);
+        const effect = {
+          kind: "ifCounter",
+          ...normalizeCounterTest(input, warnings, path, "ifCounter"),
+          then: normalizeEffectList(input.then || [], warnings, `${path}.then`),
+          else: normalizeEffectList(input.else || [], warnings, `${path}.else`),
+        };
+        const target = asTrimmedString(input.target);
+        if (target) effect.target = target;
+        const extras = pickExtras(input, known);
+        if (extras) effect._extra = extras;
+        return effect;
+      }
       case "buff": {
-        const known = new Set(["kind", "label", "modifier", "damageBonus", "potencyBonus", "side", "appliesTo", "duration", "consume", "target"]);
+        const known = new Set(["kind", "label", "modifier", "damageBonus", "potencyBonus", "side", "appliesTo", "keywordsAny", "keywordsAll", "duration", "consume", "target"]);
         const effect = { kind: "buff", label: asTrimmedString(input.label) || "Buff" };
         if (input.modifier !== undefined && input.modifier !== null && input.modifier !== "") effect.modifier = pickKnownLoose(input.modifier, ["edge", "bane", "doubleEdge", "doubleBane"], "edge");
         const damageBonus = asInt(input.damageBonus, 0);
@@ -847,6 +882,11 @@
         if (potencyBonus) effect.potencyBonus = potencyBonus;
         effect.side = pickKnownLoose(input.side, ["own", "against"], "own");
         effect.appliesTo = pickKnownLoose(input.appliesTo, ["abilityRolls", "strikes", "melee", "ranged", "tests"], "abilityRolls");
+        // Any kind of roll: the ability must have one (keywordsAny) or all (keywordsAll) of these keywords as well.
+        const buffAny = normalizeTextList(input.keywordsAny);
+        if (buffAny.length) effect.keywordsAny = buffAny;
+        const buffAll = normalizeTextList(input.keywordsAll);
+        if (buffAll.length) effect.keywordsAll = buffAll;
         effect.duration = P.normalizeDuration ? P.normalizeDuration(input.duration || "endOfTurn") : (asTrimmedString(input.duration) || "endOfTurn");
         effect.consume = pickKnownLoose(input.consume, ["nextRoll", "duration"], "nextRoll");
         if (!effect.modifier && !effect.damageBonus && !effect.potencyBonus) warnings.push(`${path}: buff has no modifier, damageBonus or potencyBonus.`);
@@ -859,7 +899,8 @@
       }
       case "maliceGain": {
         const known = new Set(["kind", "amount", "amountDice", "target"]);
-        const effect = { kind: "maliceGain", amount: asPosInt(input.amount, 1) };
+        // A negative amount takes Malice away ("the Director loses 2 Malice").
+        const effect = { kind: "maliceGain", amount: asInt(input.amount, 1) || 1 };
         const dice = asTrimmedString(input.amountDice);
         if (dice) effect.amountDice = dice;
         const extras = pickExtras(input, known);
@@ -1329,7 +1370,7 @@
   const TRIGGER_LIFETIME_WHOSE_VALUES = ["self", "ally", "enemy", "target", "any"];
   const STAMINA_DIRECTIONS = ["down", "up", "either"];
   const TRIGGER_LIFETIME_EVENTS = ["turnStart", "turnEnd", "roundStart", "roundEnd", "combatStart", "combatEnd"];
-  const AURA_TRIGGER_EVENTS = [...TRIGGER_EVENTS, "enter", "occupantTurnStart"];
+  const AURA_TRIGGER_EVENTS = [...TRIGGER_EVENTS, "enter", "occupantTurnStart", "occupantTurnEnd"];
 
   function normalizeWhoseValue(value) {
     const raw = asTrimmedString(value);
@@ -1516,6 +1557,8 @@
       selfturnend: "turnEnd",
       occupantturnstart: "occupantTurnStart",
       targetturnstart: "occupantTurnStart",
+      occupantturnend: "occupantTurnEnd",
+      targetturnend: "occupantTurnEnd",
       onenter: "enter",
       enters: "enter",
       enter: "enter",
@@ -1531,7 +1574,7 @@
     const target = asTrimmedString(input.target || input.effectTarget || input.resolveTarget);
     if (target) trigger.target = target;
     const whoseRaw = asTrimmedString(filterInput.whose || input.on || "");
-    if (event === "enter" || event === "occupantTurnStart") {
+    if (event === "enter" || event === "occupantTurnStart" || event === "occupantTurnEnd") {
       trigger.whose = "occupant";
       return trigger;
     }
@@ -1626,6 +1669,7 @@
     "other",
     "ifMark",
     "maliceGain",
+    "counter",
   ]);
 
   function validateAutoResolveEffects(effects, warnings, path) {
@@ -1649,7 +1693,7 @@
   }
 
   function normalizeTriggerBlock(input, warnings, path) {
-    const known = new Set(["type", "id", "condition", "match", "target", "effectTarget", "resolveTarget", "effects", "note", "expires", "lifetime", "autoResolve", "automatic", "resolveAutomatically"]);
+    const known = new Set(["type", "id", "condition", "match", "target", "effectTarget", "resolveTarget", "effects", "note", "expires", "lifetime", "autoResolve", "automatic", "resolveAutomatically", "resolve", "usesTriggeredAction"]);
     const block = {
       type: "trigger",
       id: input.id || createId("trigger"),
@@ -1662,10 +1706,19 @@
     if (match) block.match = match;
     const expires = normalizeTriggerLifetime(input.expires || input.lifetime, warnings, `${path}.expires`);
     if (expires) block.expires = expires;
-    if (input.autoResolve || input.automatic || input.resolveAutomatically) {
-      block.autoResolve = true;
-      validateAutoResolveEffects(block.effects, warnings, `${path}.effects`);
+    // How a matched trigger is resolved: "click" (the "!" on the token; use it from the abilities list), "popup" (the
+    // GM is asked at once; "when it dies" triggers default to this), "auto" (= autoResolve: its effects run by
+    // themselves). Left out: auto with autoResolve, popup for a creature's own "dies", else click.
+    if (input.resolve !== undefined && input.resolve !== null && input.resolve !== "") {
+      const resolve = pickKnownLoose(input.resolve, ["click", "popup", "auto"], "click");
+      block.resolve = resolve;
+      if (resolve === "auto") block.autoResolve = true;
     }
+    if (input.autoResolve || input.automatic || input.resolveAutomatically) block.autoResolve = true;
+    if (block.autoResolve) validateAutoResolveEffects(block.effects, warnings, `${path}.effects`);
+    // A popup trigger does not use up the creature's triggered action unless this says it does.
+    if (input.usesTriggeredAction === true) block.usesTriggeredAction = true;
+    else if (input.usesTriggeredAction === false) block.usesTriggeredAction = false;
     if (!block.condition && !match) {
       warnings.push(`${path}: trigger has no condition text or match config.`);
     }
@@ -1677,7 +1730,7 @@
 
   function normalizePersistentBlock(input, warnings, path) {
     const known = new Set(["type", "id", "cost", "resource", "tickAt", "expiresAt", "triggers", "effects", "note", "target"]);
-    const validTriggers = new Set(["onEnter", "onOccupantTurnStart"]);
+    const validTriggers = new Set(["onEnter", "onOccupantTurnStart", "onOccupantTurnEnd"]);
     const triggers = Array.isArray(input.triggers)
       ? input.triggers.filter((t) => {
           if (validTriggers.has(t)) return true;
@@ -1705,7 +1758,7 @@
     return block;
   }
 
-  const BRANCH_CONDITION_KINDS = ["strained", "winded", "keyword", "prompt", "mark", "scopedFlag", "distance", "zone", "target", "roll"];
+  const BRANCH_CONDITION_KINDS = ["strained", "winded", "keyword", "prompt", "mark", "scopedFlag", "distance", "zone", "target", "roll", "counter"];
 
   // ---------- target checks (ifTarget, branch "target") and roll checks (ifRoll, branch "roll") ----------
   const TARGET_STAMINA_STATES = ["winded", "notWinded", "full", "belowFull", "dying"];
@@ -1765,6 +1818,20 @@
     if (question) test.question = question;
     const checks = ["condition", "sizeMax", "sizeMin", "sizeVsSelf", "stabilityMax", "stabilityMin", "stamina", "keyword", "notKeyword"];
     if (!checks.some((key) => test[key] !== undefined)) warnings.push(`${path}: ${label} checks nothing, so it always passes.`);
+    return test;
+  }
+
+  // Counter names are lower case words: "rage", "deathcount", "charges".
+  function normalizeCounterName(value) {
+    return asTrimmedString(value).toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+  }
+
+  function normalizeCounterTest(input, warnings, path, label) {
+    const test = { name: normalizeCounterName(input.name), who: pickKnownLoose(input.who, ["self", "target"], "self") };
+    if (!test.name) warnings.push(`${path}: ${label} needs a counter name.`);
+    if (input.min !== undefined && input.min !== null && input.min !== "") test.min = asInt(input.min, 0);
+    if (input.max !== undefined && input.max !== null && input.max !== "") test.max = asInt(input.max, 0);
+    if (test.min === undefined && test.max === undefined) warnings.push(`${path}: ${label} has no min or max, so it always passes.`);
     return test;
   }
 
@@ -1833,6 +1900,8 @@
       iftarget: "target",
       roll: "roll",
       ifroll: "roll",
+      counter: "counter",
+      ifcounter: "counter",
     };
     const mappedKind = kindMap[rawKind];
     const kind = mappedKind || "prompt";
@@ -1883,6 +1952,12 @@
     }
     if (kind === "roll") {
       return { kind, ...normalizeRollTest(input, warnings, path, "roll branch condition") };
+    }
+    if (kind === "counter") {
+      const condition = { kind, ...normalizeCounterTest(input, warnings, path, "counter branch condition") };
+      const target = asTrimmedString(input.target);
+      if (target) condition.target = target;
+      return condition;
     }
     if (kind === "zone") {
       const condition = { kind, tags: normalizeZoneTags(input), who: pickKnown(input.who, ["target", "self"], "target") };
@@ -2106,7 +2181,65 @@
     const note = asTrimmedString(raw.note);
     if (note) when.note = note;
     if (Object.keys(when).length) passive.when = when;
-    const extras = pickExtras(input, new Set(["kind", "type", "passive", "id", "label", "name", "modifier", "side", "appliesTo", "scope", "within", "when"]));
+    const rmAny = normalizeTextList(input.keywordsAny);
+    if (rmAny.length) passive.keywordsAny = rmAny;
+    const rmAll = normalizeTextList(input.keywordsAll);
+    if (rmAll.length) passive.keywordsAll = rmAll;
+    const extras = pickExtras(input, new Set(["kind", "type", "passive", "id", "label", "name", "modifier", "side", "appliesTo", "keywordsAny", "keywordsAll", "scope", "within", "when"]));
+    if (extras) passive._extra = extras;
+    return passive;
+  }
+
+  // "Rise again": when damage drops the creature to 0 Stamina, it is set back instead. Defaults are the book's usual
+  // undead rule (1 Stamina, prone, once per combat); every part can be changed in the JSON.
+  function normalizeDeathRulePassive(input, warnings, path) {
+    const passive = {
+      kind: "deathRule",
+      label: asTrimmedString(input.label || input.name) || "Rise Again",
+      setStamina: asNonNegInt(input.setStamina ?? input.stamina, 1),
+      conditions: input.conditions === undefined && input.condition === undefined
+        ? ["prone"]
+        : normalizeWordList(input.conditions !== undefined ? input.conditions : input.condition),
+      conditionDuration: pickKnownLoose(input.conditionDuration, ["endOfEncounter", "saveEnds", "endOfTurn", "untilDying"], "endOfEncounter"),
+    };
+    const uses = asTrimmedString(input.uses).toLowerCase();
+    passive.uses = uses === "unlimited" || uses === "0" || uses === "always" ? "unlimited" : asPosInt(input.uses, 1);
+    passive.resetAt = pickKnownLoose(input.resetAt, ["combatEnd", "never"], "combatEnd");
+    const notWhen = normalizeWordList(input.notWhenDamageTypes);
+    if (notWhen.length) passive.notWhenDamageTypes = notWhen;
+    const onlyWhen = normalizeWordList(input.onlyWhenDamageTypes);
+    if (onlyWhen.length) passive.onlyWhenDamageTypes = onlyWhen;
+    const banner = asTrimmedString(input.banner);
+    if (banner) passive.banner = banner;
+    const extras = pickExtras(input, new Set(["kind", "type", "passive", "id", "label", "name", "setStamina", "stamina", "conditions", "condition", "conditionDuration", "uses", "resetAt", "notWhenDamageTypes", "onlyWhenDamageTypes", "banner"]));
+    if (extras) passive._extra = extras;
+    return passive;
+  }
+
+  // Turns a round: a solo monster takes 2 (the default for one whose organization or role is Solo, even with no
+  // passive). `turns: 3` for three; `turns: 1` turns it off.
+  function normalizeSoloTurnsPassive(input, warnings, path) {
+    const passive = { kind: "soloTurns", label: asTrimmedString(input.label || input.name) || "Solo Turns", turns: asPosInt(input.turns, 2) };
+    if (input.backToBackReminder === false) passive.backToBackReminder = false;
+    const extras = pickExtras(input, new Set(["kind", "type", "passive", "id", "label", "name", "turns", "backToBackReminder"]));
+    if (extras) passive._extra = extras;
+    return passive;
+  }
+
+  // A counter this creature keeps (rage, deathcount): shown on its token and panel from the start.
+  function normalizeCounterPassive(input, warnings, path) {
+    const passive = {
+      kind: "counter",
+      name: normalizeCounterName(input.name || input.label),
+      label: asTrimmedString(input.label || input.name),
+      start: asInt(input.start, 0),
+      min: input.min === undefined || input.min === null || input.min === "" ? 0 : asInt(input.min, 0),
+      resetAt: pickKnownLoose(input.resetAt, ["combatEnd", "roundStart", "turnStart", "never"], "combatEnd"),
+    };
+    if (input.max !== undefined && input.max !== null && input.max !== "") passive.max = asInt(input.max, 0);
+    if (input.showWhenZero === false) passive.showWhenZero = false;
+    if (!passive.name) warnings.push(`${path}: counter passive needs a name.`);
+    const extras = pickExtras(input, new Set(["kind", "type", "passive", "id", "label", "name", "start", "min", "max", "resetAt", "showWhenZero"]));
     if (extras) passive._extra = extras;
     return passive;
   }
@@ -2120,6 +2253,9 @@
     const key = rawKind.toLowerCase().replace(/[^a-z0-9]+/g, "");
     if (key === "endeffect") return normalizeEndEffectPassive(input, warnings, path);
     if (key === "rollmodifier") return normalizeRollModifierPassive(input, warnings, path);
+    if (key === "deathrule") return normalizeDeathRulePassive(input, warnings, path);
+    if (key === "counter") return normalizeCounterPassive(input, warnings, path);
+    if (key === "soloturns") return normalizeSoloTurnsPassive(input, warnings, path);
     if (key !== "standfirm") {
       warnings.push(`${path}: unknown passive "${rawKind || "(missing)"}" — skipping.`);
       return null;

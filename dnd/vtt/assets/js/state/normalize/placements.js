@@ -252,6 +252,16 @@ export function normalizePlacementEntry(entry) {
     normalized.metadata = normalizedMetadata;
   }
 
+  // Rise-again uses (deathRule passives) and named counters on the token.
+  if (entry.deathRuleUses && typeof entry.deathRuleUses === 'object' && !Array.isArray(entry.deathRuleUses)) {
+    normalized.deathRuleUses = clonePlainObject(entry.deathRuleUses);
+  }
+  if (entry.counters && typeof entry.counters === 'object' && !Array.isArray(entry.counters)) {
+    normalized.counters = clonePlainObject(entry.counters);
+  }
+  if (entry.soloTurnsTaken && typeof entry.soloTurnsTaken === 'object' && !Array.isArray(entry.soloTurnsTaken)) {
+    normalized.soloTurnsTaken = clonePlainObject(entry.soloTurnsTaken);
+  }
   if (entry.marks && typeof entry.marks === 'object' && !Array.isArray(entry.marks)) {
     normalized.marks = clonePlainObject(entry.marks);
   }

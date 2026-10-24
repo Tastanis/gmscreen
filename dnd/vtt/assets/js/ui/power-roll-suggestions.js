@@ -318,6 +318,10 @@ function hasAnyCondition(placement, names) {
 
 function rollPassiveAppliesToRoll(passive, context) {
   const keywords = keywordsFromContext(context);
+  const any = Array.isArray(passive.keywordsAny) ? passive.keywordsAny : [];
+  if (any.length && !any.some((keyword) => listContainsNormalized(keywords, keyword))) return false;
+  const all = Array.isArray(passive.keywordsAll) ? passive.keywordsAll : [];
+  if (all.length && !all.every((keyword) => listContainsNormalized(keywords, keyword))) return false;
   switch (passive.appliesTo) {
     case 'strikes': return isStrike(context) && isAbilityRollContext(context);
     case 'melee': return isMeleeAbility(context) && isAbilityRollContext(context);

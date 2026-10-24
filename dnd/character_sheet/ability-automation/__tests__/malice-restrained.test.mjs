@@ -70,3 +70,27 @@ test('monster abilities get the surge and Malice hooks', () => {
   assert.match(glue, /applySurgeGain: board\.applySurgeGain/);
   assert.match(glue, /gainMalice: board\.gainMalice/);
 });
+
+test('flexibility review: Malice can be lost, zones and auras know "ends its turn there", buffs filter by keyword', async () => {
+  const lost = [];
+  const result = await run(malice({ amount: -2 }), { contextOverrides: { gainMalice: (payload) => { lost.push(payload.amount); return { added: -2, current: 3 }; } } });
+  assert.deepEqual(lost, [-2]);
+  assert.match(result.chat, /−2 Malice \(now 3\)\./);
+  const harness = await createAbilityAutomationHarness();
+  try {
+    const { normalized, issues } = harness.validateAutomation({
+      schema: 'ability-automation/v3',
+      cards: [
+        { type: 'target', name: 'area', mode: 'area', shape: 'cube', size: 3, predicate: 'creature' },
+        { type: 'persistent', triggers: ['onOccupantTurnEnd'], effects: [{ kind: 'damage', amount: 2 }] },
+        { type: 'effect', effects: [{ kind: 'aura', radius: 2, triggers: [{ event: 'occupantTurnEnd' }], effects: [{ kind: 'damage', amount: 1 }] }] },
+        { type: 'effect', effects: [{ kind: 'buff', label: 'Arcane Focus', damageBonus: 2, keywordsAny: ['Magic'] }] },
+      ],
+    }, { strict: false });
+    assert.ok(!issues.length, issues.join(' | '));
+    assert.deepEqual(normalized.cards[1].triggers, ['onOccupantTurnEnd']);
+    assert.equal(normalized.cards[3].effects[0].keywordsAny[0], 'Magic');
+  } finally { harness.close(); }
+  const buffed = await run({ schema: 'ability-automation/v3', cards: [{ type: 'effect', effects: [{ kind: 'buff', target: 'self', label: 'Arcane Focus', damageBonus: 2, keywordsAny: ['Magic'] }] }] });
+  assert.deepEqual(buffed.calls.applyCondition[0].condition.rider.appliesTo, { rollEvent: 'powerRoll', keywordsAny: ['Magic'] });
+});

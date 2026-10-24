@@ -160,6 +160,47 @@ export function renderCombatTracker({
     } else {
       waitingFragment.appendChild(token);
     }
+
+    // A solo monster's extra turns: faded copies, so they read as turns, not more monsters. Turn N is done once the
+    // monster has started N turns this round.
+    const solo = callbacks.getSoloTurns?.(representativeId);
+    if (solo && solo.turns > 1) {
+      for (let turn = 2; turn <= solo.turns; turn += 1) {
+        const extra = createCombatantTokenNode({
+          combatant,
+          representativeId,
+          gmViewing,
+          visibleEntryIds,
+          displayRepresentatives,
+          groupColorAssignments: new Map(),
+          combatantTeams,
+          completedCombatants: new Set(),
+          getCombatActive,
+          getActiveCombatantId: () => null,
+          getCombatantTeam: callbacks.getCombatantTeam,
+          getGroupMembers: () => [representativeId],
+          getVisibleGroupMembers: () => [representativeId],
+          documentRef,
+          HTMLElementCtor,
+        });
+        if (!extra) break;
+        delete extra.dataset.combatantId;
+        delete extra.dataset.groupSize;
+        delete extra.dataset.groupColor;
+        extra.dataset.soloTurnOf = representativeId;
+        extra.dataset.soloTurn = String(turn);
+        extra.classList.add('vtt-combat-token--solo-turn');
+        const done = getCombatActive() && solo.taken >= turn;
+        const active = getCombatActive() && solo.active && solo.taken === turn;
+        extra.classList.toggle('is-completed', done && !active);
+        extra.classList.toggle('is-active', active);
+        extra.dataset.combatState = active ? 'active' : done ? 'completed' : 'waiting';
+        const label = `${combatant.name || 'Solo'}: turn ${turn}`;
+        extra.title = label;
+        extra.setAttribute('aria-label', label);
+        (done && !active ? completedFragment : waitingFragment).appendChild(extra);
+      }
+    }
   });
 
   const activeCombatantId = getActiveCombatantId();

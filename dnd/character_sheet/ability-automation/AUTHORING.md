@@ -471,6 +471,18 @@ Triggered abilities do not auto-resolve unless the trigger block has `"autoResol
 
 Resolving a non-free triggered action consumes the character's triggered action for the round (`triggeredActionReady = false`), which prevents other non-free triggered actions from becoming ready until the next round reset. Free triggered actions do not consume that round-limited trigger.
 
+#### How a trigger resolves (`resolve`)
+
+| `resolve` | What happens when the trigger matches |
+|---|---|
+| `click` | The "!" lights on the token; use the ability from the abilities list. The default for most triggers. |
+| `popup` | The Director gets a popup at once ("War Dog: Loyalty Collar. Use it now?"). Use it runs the ability with its usual pickers; Skip lets it go. The default for a creature's own death (`match.event: "staminaZero"`, `whose: "self"`). |
+| `auto` | Same as `autoResolve: true`: the trigger's own `effects` run by themselves. |
+
+A `popup` trigger doesn't use, or wait on, the creature's triggered action. Add `"usesTriggeredAction": true` if it should.
+
+Minions in a squad: each minion that drops counts as dying, so its "when it dies" triggers fire. The minion that was hit drops first, then the nearest ones.
+
 ### `persistent`
 
 A zone that lingers across rounds, ticks at the owner's turn boundary, and applies effects to creatures inside it. Requires a **preceding area `target` block** so the zone has a footprint — without it, falls back to a chat-only reminder.
@@ -524,6 +536,8 @@ A zone that lingers across rounds, ticks at the owner's turn boundary, and appli
 }
 ```
 
+Zone triggers: `"onEnter"` (a creature enters), `"onOccupantTurnStart"` (a creature starts its turn inside), `"onOccupantTurnEnd"` (a creature ends its turn inside). Auras have the same two as `occupantTurnStart` and `occupantTurnEnd`.
+
 ### `branch`
 
 Chooses one nested card sequence or another before continuing with the rest of the top-level cards. Use this when the condition changes targeting, roll structure, later effects, or any other full card sequence.
@@ -561,6 +575,7 @@ Supported `condition.kind` values:
 | `distance` | `from`, `to`, optional `fromGroup`/`toGroup`, `min`, `max` | True when the square distance between the two endpoints falls in the `[min, max]` band. False (takes `else`) when either token has no placement. See below. |
 | `target` | the `ifTarget` fields | True when a checked target (or the user, with `who: "self"`) passes: a condition, size, stability, Stamina state or kind. See `ifTarget`. |
 | `roll` | the `ifRoll` fields | True when the accepted power roll had an edge/bane, was a critical, or landed a tier. See `ifRoll`. |
+| `counter` | the `ifCounter` fields | True when the counter is in the `min`/`max` band (the user's, or with `who: "target"` any target's). See `ifCounter`. |
 
 **`distance` condition** — measures the square (Chebyshev) distance between two tokens. Each endpoint (`from`, `to`) is one of: `self` (the caster), `source`/`eventSource` (the trigger payload's source token), `eventTarget` (the trigger payload's target token), `target` (the current target group), or any named target-group string. `from` defaults to `self`, `to` defaults to `target`. `min`/`max` are square counts (`max: 1` = adjacent). Example — "if the triggering attacker is within 3 squares, retaliate; otherwise just brace":
 
@@ -1357,6 +1372,29 @@ Checks a fact about each target and gives each target the branch that fits it: "
 
 All the fields you give must pass ("size 1 or smaller and winded"). Chat says who passed: "Goblin is prone; Ogre is not."
 
+### `counter` and `ifCounter`
+
+Named counters on a creature: rage, a dragon's deathcount, charges. `counter` changes one; `ifCounter` checks one. The counter shows as a badge on the token and as a row with − and + in the monster panel; everyone can see it.
+
+```json
+{ "kind": "counter", "name": "rage", "amount": 1 }
+{ "kind": "ifCounter", "name": "rage", "min": 3, "then": [ { "kind": "damage", "amount": 4 } ] }
+```
+
+`counter` fields:
+
+| Field | Values | Notes |
+|---|---|---|
+| `name` | string | The counter, e.g. `"rage"`. Lower case is used. |
+| `op` | `add` (default), `spend`, `set` | `spend` never goes below the minimum; chat says when there wasn't enough. |
+| `amount` / `amountDice` | integer / dice | Default 1 (0 for `set`). |
+| `min` / `max` | integer | Limits for this change; otherwise the counter passive's, else 0 and no maximum. |
+| `target` | group or `"self"` | With no target, the effect's targets; with none, the user. |
+
+`ifCounter` fields: `name`, `min`, `max` (the band that passes), `who` (`self` default, or `target`: each target gets the branch that fits it), `then`, `else`.
+
+Counters work in triggers that resolve by themselves: "when the werewolf takes damage, its rage goes up by 1" is a `damage` trigger with `"resolve": "auto"` and a `counter` effect.
+
 ### `buff`
 
 A timed bonus on a creature: "your next strike gets +2 damage", "you have an edge on your next roll", "+1 potency until the end of your turn", "allies have an edge on strikes against the target until the end of your next turn". The buff's name shows on the token (x to remove it). In the roll window it is already ticked; after that roll it is used up. Untick it to keep it for later.
@@ -1373,6 +1411,7 @@ A timed bonus on a creature: "your next strike gets +2 damage", "you have an edg
 | `potencyBonus` | integer | Optional. Added to the roll's potencies ("+1 potency"). |
 | `side` | `own` (default), `against` | `own`: the bearer's rolls. `against`: rolls made against the bearer ("allies have an edge against this target"). |
 | `appliesTo` | `abilityRolls` (default), `strikes`, `melee`, `ranged`, `tests` | Which rolls it is ticked for. |
+| `keywordsAny` / `keywordsAll` | string arrays | Also needs one / all of these ability keywords (e.g. `["Magic"]`). |
 | `duration` | `endOfTurn` (default), `saveEnds`, `endOfEncounter` | When it ends if not used. Put on during the bearer's own turn, `endOfTurn` ends at the end of that turn. |
 | `consume` | `nextRoll` (default), `duration` | `nextRoll`: used up by the next roll it is ticked in. `duration`: stays for every matching roll until it ends. |
 
@@ -1386,7 +1425,7 @@ The Director gains Malice: "gain 1 Malice when a demon dies within 10 squares", 
 { "kind": "maliceGain", "amount": 1 }
 ```
 
-`amount` (default 1) or `amountDice`. Works in triggers that resolve by themselves (`autoResolve`). Only the Director's screen keeps the counter: anywhere else, chat reminds the Director to add it.
+`amount` (default 1) or `amountDice`; a negative amount takes Malice away. Works in triggers that resolve by themselves (`autoResolve`). Only the Director's screen keeps the counter: anywhere else, chat reminds the Director to add it.
 
 ### `loseRecoveries`
 
@@ -2018,6 +2057,7 @@ Always-on traits that give edges or banes: "while winded, the demon has an edge 
 | `modifier` | `edge`, `bane`, `doubleEdge`, `doubleBane` | |
 | `side` | `own` (default), `against`, `both` | `own`: this creature's rolls. `against`: rolls made against it. `both`: either. |
 | `appliesTo` | `abilityRolls` (default), `strikes`, `melee`, `ranged`, `tests` | Which rolls. |
+| `keywordsAny` / `keywordsAll` | string arrays | Also needs one / all of these ability keywords. |
 | `scope` | `self` (default), `alliesWithin` | `alliesWithin`: rolls against this creature's allies within `within` squares (itself included). |
 | `within` | integer | With `scope: "alliesWithin"`. |
 | `when.winded` / `when.notWinded` | `true` | This creature is (not) winded. |
@@ -2027,6 +2067,64 @@ Always-on traits that give edges or banes: "while winded, the demon has an edge 
 | `when.note` | string | A gate the board can't read ("outdoors", "in darkness"). The trait shows ticked, with the note as its reason. |
 
 A trait only shows when the gates the board can read pass. It works on monster traits and abilities, and on hero features.
+
+### Rise again (`deathRule`)
+
+"The first time the skeleton is reduced to 0 Stamina by damage that isn't fire or holy, it has 1 Stamina and falls prone instead." The creature is set back by itself, with a banner, and it has not died (its "when it dies" triggers don't fire). Every part is a field with a default, so other creatures need only different numbers:
+
+```json
+{ "schema": "ability-automation/v3", "passives": [
+  { "kind": "deathRule", "label": "Arise", "notWhenDamageTypes": ["fire", "holy"] }
+] }
+```
+
+| Field | Default | Notes |
+|---|---|---|
+| `label` | the trait's name | Shown in chat; each rule counts its own uses. |
+| `setStamina` | `1` | The Stamina it comes back with. |
+| `conditions` | `["prone"]` | Conditions it gets. `[]` for none. |
+| `conditionDuration` | `endOfEncounter` | Also `saveEnds`, `endOfTurn`, `untilDying`. |
+| `uses` | `1` | How many times; `"unlimited"` for always (a troll). |
+| `resetAt` | `combatEnd` | When the uses come back; `never` for once ever. |
+| `notWhenDamageTypes` | none | Damage types that stop it (fire, holy). |
+| `onlyWhenDamageTypes` | none | If given, only these damage types set it off. |
+| `banner` | "X rises again!" | The banner text. |
+
+It works on damage from abilities and on damage put in by hand. A Stamina number typed into the token is the Director's word and is left alone. Minions in a squad never rise again.
+
+### Counters (`counter` passive)
+
+Declares a counter the creature keeps, so it shows on the token and in the panel from the start:
+
+```json
+{ "schema": "ability-automation/v3", "passives": [ { "kind": "counter", "name": "rage", "label": "Rage", "start": 0, "max": 10 } ] }
+```
+
+| Field | Default | Notes |
+|---|---|---|
+| `name` | | The counter's name, used by `counter` / `ifCounter`. |
+| `label` | the name | Shown on the token and panel. |
+| `start` | `0` | Its value before anything changes it, and after a reset. |
+| `min` / `max` | `0` / none | Its limits. |
+| `resetAt` | `combatEnd` | Also `roundStart`, `turnStart` (its own turn), `never`. |
+| `showWhenZero` | `true` | `false` hides the badge while it is 0. |
+
+A counter no passive declares (set by an ability) goes away when combat ends.
+
+### Solo turns (`soloTurns`)
+
+A solo monster takes two turns a round. The combat tracker shows its extra turns as faded copies of it; double-click one to start that monster's turn again. Starting it right after its own last turn shows a reminder ("solo turns can't be back to back"); the turn still starts.
+
+Nothing needs writing for a monster whose organization or role is Solo: it gets 2 turns. Otherwise, or to change the number:
+
+```json
+{ "schema": "ability-automation/v3", "passives": [ { "kind": "soloTurns", "turns": 2 } ] }
+```
+
+| Field | Default | Notes |
+|---|---|---|
+| `turns` | `2` | Turns a round. `3` for three; `1` turns it off for a Solo monster. |
+| `backToBackReminder` | `true` | `false`: no reminder. |
 
 ### End Effect (solos and leaders)
 

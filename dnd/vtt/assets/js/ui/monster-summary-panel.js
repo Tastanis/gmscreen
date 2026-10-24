@@ -8,6 +8,8 @@
 
     var PANEL_ID = 'vtt-monster-summary-panel';
     var BODY_OPEN_CLASS = 'vtt-monster-summary-is-open';
+    // The token the panel shows (its counter buttons change this token).
+    var currentPlacementId = '';
 
     var CATEGORIES = [
         { key: 'passive',          label: 'Passive Abilities' },
@@ -85,6 +87,7 @@
             '</header>' +
             renderSection('Stamina', renderStaminaSection(hp, healthPercent)) +
             renderSection('Statistics', renderStats(attrs, monster, defenses, placement)) +
+            renderCounters(placement) +
             renderDefenses(defenses) +
             renderSection('Auras, Conditions, & Effects',
                 '<div class="vtt-character-condition-list">' +
@@ -124,6 +127,21 @@
             renderVital('Stability', monster.stability ?? defenses.stability, { bonus: stabilityBonus, source: standFirm?.labels?.[0] || 'Stand Firm' }) +
             renderVital('Size', monster.size || monster.footprint) +
             '</div>';
+    }
+
+    // Counters (rage, deathcount): one row each, with - and +.
+    function renderCounters(placement) {
+        var board = window.VTTBoardCallbacks;
+        var list = placement && placement.id && board && typeof board.getCounters === 'function' ? board.getCounters(placement.id) : [];
+        if (!Array.isArray(list) || !list.length) return '';
+        return renderSection('Counters', '<div class="vtt-monster-counters">' + list.map(function (entry) {
+            return '<div class="vtt-monster-counter">' +
+                '<span class="vtt-monster-counter__label">' + escapeHtml(entry.label) + '</span>' +
+                '<button type="button" class="vtt-monster-counter__step" data-monster-counter="' + escapeAttribute(entry.name) + '" data-monster-counter-delta="-1" aria-label="' + escapeAttribute(entry.label) + ' minus one">−</button>' +
+                '<span class="vtt-monster-counter__value">' + escapeHtml(entry.value) + (entry.max !== null && entry.max !== undefined ? ' / ' + escapeHtml(entry.max) : '') + '</span>' +
+                '<button type="button" class="vtt-monster-counter__step" data-monster-counter="' + escapeAttribute(entry.name) + '" data-monster-counter-delta="1" aria-label="' + escapeAttribute(entry.label) + ' plus one">+</button>' +
+                '</div>';
+        }).join('') + '</div>');
     }
 
     function renderDefenses(defenses) {
@@ -305,6 +323,19 @@
                 close();
                 return;
             }
+            var counterButton = target && target.closest('[data-monster-counter]');
+            if (counterButton && currentPlacementId && window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.changeCounter === 'function') {
+                event.preventDefault();
+                window.VTTBoardCallbacks.changeCounter({
+                    placementId: currentPlacementId,
+                    name: counterButton.getAttribute('data-monster-counter'),
+                    op: 'add',
+                    amount: Number.parseInt(counterButton.getAttribute('data-monster-counter-delta'), 10) || 0
+                });
+                var fresh = window.VTTBoardCallbacks.getPlacementById ? window.VTTBoardCallbacks.getPlacementById(currentPlacementId) : null;
+                if (fresh && fresh.monster) openFor(fresh, fresh.monster);
+                return;
+            }
             var conditionRemove = target && target.closest('[data-character-condition-remove]');
             if (conditionRemove) {
                 event.preventDefault();
@@ -335,6 +366,7 @@
             bindControls(panel);
             panel.dataset.controlsBound = '1';
         }
+        currentPlacementId = placement && placement.id ? placement.id : '';
         render(panel, placement || null, monster || null);
         panel.classList.add('vtt-monster-summary--open');
         panel.classList.remove('vtt-monster-summary--closed');

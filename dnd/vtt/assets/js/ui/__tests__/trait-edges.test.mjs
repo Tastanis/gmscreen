@@ -77,3 +77,10 @@ test('the board hands its tokens\' traits to the suggestions, and the schema kee
     assert.deepEqual(normalized.passives[2], { kind: 'endEffect', label: 'End Effect', damage: 20, count: 2 }, 'endEffect is kept (it used to be skipped)');
   } finally { harness.close(); }
 });
+
+test('an edge/bane trait can name the keywords of the rolls it is for', () => {
+  const caster = token('mage', 'enemy', 0, 0, { monster: { traits: [{ name: 'Spell Sight', automation: { passives: [{ kind: 'rollModifier', modifier: 'edge', keywordsAny: ['Magic'] }] } }] } });
+  const cal = token('cal', 'ally', 1, 0);
+  assert.deepEqual(traits(getPowerRollSuggestions({ actor: caster, targets: [cal], placements: [caster, cal], context: { keywords: ['Magic', 'Ranged'], rollEvent: 'powerRoll' }, passivesFor })), [['edge', 'Spell Sight', true, 1]]);
+  assert.deepEqual(traits(getPowerRollSuggestions({ actor: caster, targets: [cal], placements: [caster, cal], context: { keywords: ['Melee', 'Weapon'], rollEvent: 'powerRoll' }, passivesFor })), []);
+});

@@ -14,7 +14,7 @@ test('zone boundaries await expiration before start effects and ticks before end
     await new Promise(resolve=>setTimeout(resolve,0));
     assert.deepEqual(order,[when==='startOfTurn'?'expire':'tick']);
     release();await result;
-    assert.deepEqual(order,when==='startOfTurn'?['expire','tick','occupants']:['tick','expire']);
+    assert.deepEqual(order,when==='startOfTurn'?['expire','tick','occupants']:['tick','occupants','expire']);
   }
 });
 
