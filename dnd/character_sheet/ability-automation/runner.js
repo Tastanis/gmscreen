@@ -481,6 +481,7 @@
   function resolveTriggerValue(state, amountFrom) {
     if (!amountFrom || typeof amountFrom !== "object") return 0;
     if (amountFrom.source === "damageDealt") return scaleTriggerValue(asInt(state.damageDealt, 0), amountFrom);
+    if (amountFrom.source === "count") return asInt(state.countValue, 0);
     const payload = state.triggerPayload?.payload && typeof state.triggerPayload.payload === "object"
       ? state.triggerPayload.payload
       : state.triggerPayload || null;
@@ -984,6 +985,48 @@
       if (close) candidates.push({ id: placement.id, name: placement.name || placement.label || "Creature", placement });
     }
     return { anchors, candidates };
+  }
+
+  // How many creatures fit `spec` around `center` (or among the ability's targets). Returns null when the board
+  // can't tell (no scene list or distances).
+  async function countCreatures(state, spec, center, targets = []) {
+    const casterId = state.sourcePlacement?.id || "";
+    const casterTeam = tokenTeam(liveTokenFor(state, state.sourcePlacement));
+    const fits = (token) => {
+      if (!token?.id || token.hidden) return false;
+      if (!nearPredicateFits(spec.predicate || "creature", token, casterTeam, casterId)) return false;
+      if (spec.keyword && spec.keyword.length) {
+        const words = tokenKindWords(token);
+        if (!spec.keyword.some((word) => word.split(/\s+/).every((part) => words.has(part)))) return false;
+      }
+      const facts = {};
+      if (spec.condition) facts.condition = spec.condition;
+      if (spec.stamina) facts.stamina = spec.stamina;
+      if (Object.keys(facts).length && checkTargetFacts(state, facts, token) !== true) return false;
+      return true;
+    };
+    let count = 0;
+    if (spec.in === "targets") {
+      count = (targets || []).map((target) => liveTokenFor(state, target)).filter(fits).length;
+    } else {
+      if (!center?.id || typeof state.context.getActiveScenePlacements !== "function" || typeof state.context.getDistanceBetween !== "function") return null;
+      const placements = (await state.context.getActiveScenePlacements()) || [];
+      for (const token of placements) {
+        if (token?.id === center.id) continue;
+        if (token?.id === casterId && !spec.includeSelf) continue;
+        if (!fits(token)) continue;
+        const squares = Number(await state.context.getDistanceBetween(center.id, token.id));
+        if (Number.isFinite(squares) && squares <= Math.max(0, asInt(spec.within, 1))) count += 1;
+      }
+    }
+    if (spec.max !== undefined) count = Math.min(count, spec.max);
+    return count;
+  }
+
+  async function countAmountFor(state, amountFrom, target, targets) {
+    const center = amountFrom.around === "self" ? state.sourcePlacement : target;
+    const count = await countCreatures(state, amountFrom, center, targets);
+    return { count: count ?? 0, extra: scaleTriggerValue(count ?? 0, amountFrom) };
   }
 
   async function runNearTargetPick(state, block, cancelPromise) {
@@ -2030,6 +2073,12 @@
         return applyMaliceGainEffect(state, effect);
       case "buff":
         return applyBuffEffect(state, effect, targets, ctx);
+      case "move":
+        return applyMoveEffect(state, effect, targets, ctx);
+      case "grantAction":
+        return applyGrantActionEffect(state, effect, targets);
+      case "useAbility":
+        return applyUseAbilityEffect(state, effect, targets);
       case "counter":
         return applyCounterEffect(state, effect, targets);
       case "ifCounter":
@@ -2236,7 +2285,8 @@
     const attributeBonus = effect.attribute
       ? resolveAttributeBonusForDamage(state, effect.attribute) * damageMultiplier
       : 0;
-    const triggerValue = resolveTriggerValue(state, effect.amountFrom);
+    const countsCreatures = effect.amountFrom?.source === "count";
+    const triggerValue = countsCreatures ? 0 : resolveTriggerValue(state, effect.amountFrom);
     let damageType = effect.damageType && effect.damageType !== "untyped" ? effect.damageType : "";
     const damageTypeOptions = Array.isArray(effect.damageTypeOptions)
       ? [...new Set(effect.damageTypeOptions
@@ -2287,8 +2337,14 @@
         if (check?.matched) markBonus = rollDiceFormula(effect.markBonusDice);
       }
       const reachBonus = await reachBonusFor(state, effect, target);
-      const amountBeforeSurge = Math.max(0, baseAmount + attributeBonus + diceAmount + markBonus + triggerValue + reachBonus);
+      const counted = countsCreatures ? await countAmountFor(state, effect.amountFrom, target, targets) : null;
+      if (counted) {
+        await postChat(state.context, { message: `${state.heroName} - ${state.action.name || "Ability"}: ${counted.count} counted for ${target.name || "the target"} (+${counted.extra}).` });
+      }
+      const amountBeforeSurge = Math.max(0, baseAmount + attributeBonus + diceAmount + markBonus + triggerValue + reachBonus + (counted ? counted.extra : 0));
       const amount = Math.max(0, amountBeforeSurge + surgeBonus.damage);
+      // Nobody counted and nothing else: no hit of 0.
+      if (counted && amount <= 0) continue;
       const damagePayload = {
         placementId: target.id,
         sourceId: state.sourcePlacement?.id || "",
@@ -2560,10 +2616,11 @@
     const attributeBonus = effect.attribute
       ? resolveAttributeBonusForDamage(state, effect.attribute)
       : 0;
-    const triggerValue = resolveTriggerValue(state, effect.amountFrom);
+    const countsCreatures = effect.amountFrom?.source === "count";
+    const triggerValue = countsCreatures ? 0 : resolveTriggerValue(state, effect.amountFrom);
     const flatAmount = Math.max(0, asInt(effect.amount, 0) + attributeBonus + triggerValue);
 
-    if (!recoveries && !flatAmount) return;
+    if (!recoveries && !flatAmount && !countsCreatures) return;
 
     const lines = [];
     for (const target of targets) {
@@ -2575,6 +2632,12 @@
       // recovery value. Older hosts can still provide only the read hook, in
       // which case chat reminds the player to decrement recoveries manually.
       let amount = flatAmount;
+      // "Regain 2 Stamina for each ally adjacent to you": counted for this target.
+      if (countsCreatures) {
+        const counted = await countAmountFor(state, effect.amountFrom, target, targets);
+        amount += counted.extra;
+        if (!amount && !recoveries) continue;
+      }
       let recoveryValueUsed = 0;
       let recoveryUnknown = false;
       let recoverySpent = 0;
@@ -3182,6 +3245,16 @@
     return unknown ? null : true;
   }
 
+  // The `nearby` part of a target check needs the board, so it is counted here, after the other facts.
+  async function checkNearbyFacts(state, test, subject) {
+    if (!test.nearby) return true;
+    const count = await countCreatures(state, test.nearby, subject, []);
+    if (count === null) return null;
+    if (count < (test.nearby.min ?? 1)) return false;
+    if (test.nearby.max !== undefined && count > test.nearby.max) return false;
+    return true;
+  }
+
   async function resolveTargetTest(state, test, targets) {
     const selfMode = test.who === "self";
     const subjects = selfMode
@@ -3190,7 +3263,11 @@
     const passed = []; const failed = []; const unsure = [];
     if (!subjects.length) return { subjects, passed, failed, asked: false, nobody: true };
     for (const subject of subjects) {
-      const result = checkTargetFacts(state, test, subject);
+      let result = checkTargetFacts(state, test, subject);
+      if (result !== false && test.nearby) {
+        const near = await checkNearbyFacts(state, test, subject);
+        result = near === false ? false : near === null || result === null ? null : true;
+      }
       (result === true ? passed : result === false ? failed : unsure).push(subject);
     }
     if (!unsure.length) return { subjects, passed, failed, asked: false };
@@ -3279,6 +3356,146 @@
     await applyEffects(state, branch, effect.target || state.currentGroup || "primary", ctx);
   }
 
+  // ---------- move other creatures ----------
+  //
+  // "Allies shift up to their speed", "one ally within 3 shifts 2", "each ally moves half its speed, then free
+  // strikes". Monsters and other tokens are moved by whoever uses the ability; a hero gets a popup and moves itself;
+  // the ability waits for the heroes. `then` effects run on each creature after it moved.
+
+  async function moveDistanceFor(state, effect, target) {
+    let base = asInt(effect.distance, 0);
+    if (effect.distance === "speed" || effect.distance === "halfSpeed") {
+      let speed = null;
+      if (typeof state.context.getSpeed === "function") {
+        try { speed = Number(await state.context.getSpeed(target.id)); } catch (_) { speed = null; }
+      }
+      if (!Number.isFinite(speed)) {
+        const token = liveTokenFor(state, target);
+        speed = Number(token?.traits?.speed ?? token?.movementSpeed ?? token?.monster?.speed) || 5;
+      }
+      base = effect.distance === "halfSpeed" ? Math.floor(speed / 2) : speed;
+    }
+    return Math.max(0, base + asInt(effect.bonus, 0));
+  }
+
+  async function moveOneCreature(state, effect, target, distance) {
+    const label = state.action.name || "Ability";
+    if (effect.verb === "teleport") {
+      if (typeof state.context.applyTeleport !== "function") return false;
+      const result = await state.context.applyTeleport({ placementId: target.id, distance, abilityName: label, sourcePlacement: target });
+      return Boolean(result && !result.skipped);
+    }
+    if (typeof state.context.forceMove !== "function") {
+      await postChat(state.context, { message: `${state.heroName} - ${label}: ${target.name || "the creature"} ${effect.verb === "move" ? "moves" : "shifts"} up to ${distance} (by hand).` });
+      return false;
+    }
+    // The creature's own move (as a shift effect is), so it is a walk or a shift, not forced movement.
+    const result = await state.context.forceMove({
+      movement: "slide", verb: "slide", verbLabel: effect.verb === "move" ? "Move" : "Shift",
+      distance, upTo: true, ignoreStability: true, ignoreSizePenalty: true,
+      targetId: target.id, target, sourcePlacement: target, sourceTraits: {},
+      walkKind: effect.verb === "move" ? "walk" : "shift", abilityName: label,
+    });
+    return Boolean(result && !result.skipped);
+  }
+
+  async function applyMoveEffect(state, effect, targets, ctx) {
+    const label = state.action.name || "Ability";
+    const movers = (targets && targets.length ? targets : [state.sourcePlacement]).filter((item) => item && item.id);
+    const moved = [];
+    const heroes = [];
+    for (const target of movers) {
+      if (state.aborted) return;
+      const distance = await moveDistanceFor(state, effect, target);
+      const isHero = effect.heroesMove !== false && effect.verb !== "teleport"
+        && target.id !== state.sourcePlacement?.id
+        && typeof state.context.isHeroPlacement === "function" && state.context.isHeroPlacement(target.id)
+        && typeof state.context.requestHeroMove === "function";
+      if (isHero) { heroes.push({ target, distance }); continue; }
+      if (await moveOneCreature(state, effect, target, distance)) moved.push(target);
+    }
+    if (heroes.length) {
+      const reply = await state.context.requestHeroMove({
+        abilityName: label,
+        sourceName: state.heroName || "",
+        moves: heroes.map(({ target, distance }) => ({ placementId: target.id, name: target.name || "", distance, verb: effect.verb || "shift" })),
+      });
+      const done = new Set((reply?.results || []).filter((item) => item?.moved).map((item) => item.placementId));
+      heroes.forEach(({ target }) => { if (done.has(target.id)) moved.push(target); });
+      const waited = heroes.map(({ target }) => `${target.name || "a hero"} ${done.has(target.id) ? "moved" : "stayed"}`).join(", ");
+      await postChat(state.context, { message: `${state.heroName} - ${label}: ${waited}.` });
+    }
+    if (Array.isArray(effect.then) && effect.then.length && moved.length) {
+      await runSubsetBranch(state, effect.then, moved, effect.target || state.currentGroup || "primary", ctx);
+    }
+  }
+
+  // ---------- use another ability ----------
+  //
+  // The named ability (of the user, or with who:"target" of each target: "the target uses its signature ability")
+  // runs inside this one: its own targets and rolls, `times` times. It costs nothing more. `edge` adds an edge (or,
+  // negative, a bane) to its rolls; `sameTargets` gives it this ability's targets instead of picking.
+  async function applyUseAbilityEffect(state, effect, targets) {
+    const label = state.action.name || "Ability";
+    const users = effect.who === "target"
+      ? (targets || []).filter((item) => item && item.id)
+      : [state.sourcePlacement].filter((item) => item && item.id);
+    const reused = (targets || []).filter((item) => item && item.id);
+    for (const user of users) {
+      if (state.aborted) return;
+      const found = typeof state.context.getAbility === "function"
+        ? await state.context.getAbility({ placementId: user.id, name: effect.ability })
+        : null;
+      const cards = found?.automation && schema?.normalizeAutomation ? schema.normalizeAutomation(found.automation).cards : null;
+      if (!cards || !cards.length) {
+        await postChat(state.context, { message: `${state.heroName} - ${label}: ${user.name || "it"} uses ${found?.name || effect.ability}${effect.times > 1 ? ` ${effect.times} times` : ""} (by hand).` });
+        continue;
+      }
+      const times = Math.max(1, asInt(effect.times, 1));
+      for (let use = 0; use < times; use += 1) {
+        if (state.aborted) return;
+        const saved = { action: state.action, sourcePlacement: state.sourcePlacement, heroName: state.heroName, currentGroup: state.currentGroup };
+        const otherUser = user.id !== state.sourcePlacement?.id;
+        state.action = { ...found, name: found.name || effect.ability };
+        if (otherUser) {
+          state.sourcePlacement = liveTokenFor(state, user) || user;
+          state.heroName = user.name || state.heroName;
+        }
+        await postChat(state.context, { message: `${saved.heroName} - ${label}: ${otherUser ? `${user.name || "the target"} uses` : "uses"} ${state.action.name}${times > 1 ? ` (${use + 1} of ${times})` : ""}.` });
+        const run = JSON.parse(JSON.stringify(cards)).filter((card) => card && card.type !== "trigger");
+        try {
+          for (let index = 0; index < run.length; index += 1) {
+            if (state.aborted) break;
+            const card = run[index];
+            if (card.type === "powerRoll" && effect.edge) {
+              if (effect.edge > 0) card.edge = Math.min(2, asInt(card.edge, 0) + effect.edge);
+              else card.bane = Math.min(2, asInt(card.bane, 0) - effect.edge);
+            }
+            if (card.type === "target" && effect.sameTargets && reused.length) {
+              setTargetGroup(state, card.name || "primary", reused);
+              continue;
+            }
+            await runBlockAt(state, run, index);
+          }
+        } finally {
+          state.action = saved.action;
+          state.sourcePlacement = saved.sourcePlacement;
+          state.heroName = saved.heroName;
+          state.currentGroup = saved.currentGroup;
+        }
+      }
+    }
+  }
+
+  // "An ally gets a main action" / "uses its signature ability": a chat reminder (Brandon: "Chat reminder only").
+  async function applyGrantActionEffect(state, effect, targets) {
+    const label = state.action.name || "Ability";
+    const names = (targets || []).map((target) => target?.name).filter(Boolean);
+    const who = names.length ? names.join(", ") : "an ally";
+    const extra = effect.text ? ` ${effect.text}` : "";
+    await postChat(state.context, { message: `${state.heroName} - ${label}: ${who} ${names.length > 1 ? "get" : "gets"} ${effect.grant}.${extra}` });
+  }
+
   // ---------- counters ----------
   //
   // Named counters on a creature (rage, deathcount, charges): `counter` changes one, `ifCounter` / branch "counter"
@@ -3356,6 +3573,8 @@
     const rider = { type: "rollBuff", appliesTo, consume: effect.consume === "duration" ? "manual" : "nextMatchingRoll" };
     if (effect.modifier) rider.modifier = effect.modifier;
     if (effect.damageBonus) rider.damageBonus = effect.damageBonus;
+    if (effect.speedBonus) rider.speedBonus = effect.speedBonus;
+    ["ignoreDifficultTerrain", "noOpportunityAttacks", "moveThroughCreatures"].forEach((flag) => { if (effect[flag]) rider[flag] = true; });
     if (effect.potencyBonus) rider.potencyBonus = effect.potencyBonus;
     if (effect.side === "against") rider.side = "against";
     return rider;
@@ -4717,6 +4936,7 @@
         walkEffectList(effect.else || [], visit);
       }
       if (effect.kind === "aura" && Array.isArray(effect.effects)) walkEffectList(effect.effects, visit);
+      if (effect.kind === "move" && Array.isArray(effect.then)) walkEffectList(effect.then, visit);
     }
   }
 

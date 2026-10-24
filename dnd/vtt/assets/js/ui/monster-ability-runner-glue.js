@@ -292,6 +292,10 @@
             getActiveScenePlacements: board.getActiveScenePlacements,
             gainMalice: board.gainMalice,
             getCounter: board.getCounter,
+            isHeroPlacement: board.isHeroPlacement,
+            getAbility: board.getAbility,
+            getSpeed: board.getSpeed,
+            requestHeroMove: board.requestHeroMove,
             changeCounter: board.changeCounter,
             // A monster's ability can give heroes surges (retainers, "an ally gains 2 surges").
             applySurgeGain: board.applySurgeGain,

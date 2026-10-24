@@ -281,6 +281,26 @@
     return effect;
   }
 
+  // Counting creatures: who counts (predicate relative to the user, keyword = kind of creature), where (within N
+  // squares of the user or of each target; or among the ability's targets), what state (condition, Stamina), and
+  // whether the user / the centre count. Used by amountFrom { source: "count" } and the ifTarget `nearby` check.
+  function normalizeCountSpec(input) {
+    const spec = {
+      predicate: pickKnownLoose(input.predicate, ["ally", "enemy", "creature"], "creature"),
+      within: asNonNegInt(input.within, 1),
+      around: pickKnownLoose(input.around, ["self", "target"], "target"),
+    };
+    if (pickKnownLoose(input.in, ["area", "targets"], "area") === "targets") spec.in = "targets";
+    const keyword = normalizeWordList(input.keyword);
+    if (keyword.length) spec.keyword = keyword;
+    const condition = normalizeWordList(input.condition);
+    if (condition.length) spec.condition = condition;
+    if (input.stamina !== undefined && input.stamina !== null && input.stamina !== "") spec.stamina = pickKnownLoose(input.stamina, ["winded", "notWinded", "full", "belowFull", "dying"], "winded");
+    if (input.includeSelf === true) spec.includeSelf = true;
+    if (input.max !== undefined && input.max !== null && input.max !== "") spec.max = asNonNegInt(input.max, 0);
+    return spec;
+  }
+
   // `amountFrom` lets a damage/heal amount scale off the captured trigger value
   // (e.g. "the enemy takes half the triggering damage"). The raw captured number
   // is multiplied by `multiplier` and `fraction`, then rounded (default down, the
@@ -315,6 +335,7 @@
       if (rounding === "up" || rounding === "down") amountFrom.rounding = rounding;
       else warnings.push(`${path}.rounding: "${input.rounding}" must be "up" or "down".`);
     }
+    if (amountFrom.source === "count") Object.assign(amountFrom, normalizeCountSpec(input));
     return amountFrom;
   }
 
@@ -837,6 +858,54 @@
         if (extras) effect._extra = extras;
         return effect;
       }
+      case "move": {
+        const known = new Set(["kind", "verb", "distance", "bonus", "heroesMove", "then", "target"]);
+        const effect = { kind: "move", verb: pickKnownLoose(input.verb, ["shift", "move", "teleport"], "shift") };
+        const distanceText = asTrimmedString(input.distance).toLowerCase().replace(/[\s_-]+/g, "");
+        if (distanceText === "speed") effect.distance = "speed";
+        else if (distanceText === "halfspeed" || distanceText === "half") effect.distance = "halfSpeed";
+        else effect.distance = asNonNegInt(input.distance, 0);
+        const bonus = asInt(input.bonus, 0);
+        if (bonus) effect.bonus = bonus;
+        if (input.heroesMove === false) effect.heroesMove = false;
+        const then = normalizeEffectList(input.then || [], warnings, `${path}.then`);
+        if (then.length) effect.then = then;
+        if (effect.distance === 0 && !bonus) warnings.push(`${path}: move has no distance.`);
+        const target = asTrimmedString(input.target);
+        if (target) effect.target = target;
+        const extras = pickExtras(input, known);
+        if (extras) effect._extra = extras;
+        return effect;
+      }
+      case "useAbility": {
+        const known = new Set(["kind", "ability", "who", "times", "edge", "sameTargets", "target"]);
+        const effect = {
+          kind: "useAbility",
+          ability: asTrimmedString(input.ability),
+          who: pickKnownLoose(input.who, ["self", "target"], "self"),
+          times: asPosInt(input.times, 1),
+        };
+        if (!effect.ability) warnings.push(`${path}: useAbility needs the ability's name (or "signature").`);
+        const edge = asInt(input.edge, 0);
+        if (edge) effect.edge = Math.max(-2, Math.min(2, edge));
+        if (input.sameTargets === true) effect.sameTargets = true;
+        const target = asTrimmedString(input.target);
+        if (target) effect.target = target;
+        const extras = pickExtras(input, known);
+        if (extras) effect._extra = extras;
+        return effect;
+      }
+      case "grantAction": {
+        const known = new Set(["kind", "grant", "text", "target"]);
+        const effect = { kind: "grantAction", grant: asTrimmedString(input.grant) || "a main action" };
+        const text = asTrimmedString(input.text);
+        if (text) effect.text = text;
+        const target = asTrimmedString(input.target);
+        if (target) effect.target = target;
+        const extras = pickExtras(input, known);
+        if (extras) effect._extra = extras;
+        return effect;
+      }
       case "counter": {
         const known = new Set(["kind", "name", "label", "op", "amount", "amountDice", "min", "max", "target"]);
         const effect = {
@@ -873,7 +942,7 @@
         return effect;
       }
       case "buff": {
-        const known = new Set(["kind", "label", "modifier", "damageBonus", "potencyBonus", "side", "appliesTo", "keywordsAny", "keywordsAll", "duration", "consume", "target"]);
+        const known = new Set(["kind", "label", "modifier", "damageBonus", "potencyBonus", "side", "appliesTo", "keywordsAny", "keywordsAll", "duration", "consume", "target", "speedBonus", "ignoreDifficultTerrain", "noOpportunityAttacks", "moveThroughCreatures"]);
         const effect = { kind: "buff", label: asTrimmedString(input.label) || "Buff" };
         if (input.modifier !== undefined && input.modifier !== null && input.modifier !== "") effect.modifier = pickKnownLoose(input.modifier, ["edge", "bane", "doubleEdge", "doubleBane"], "edge");
         const damageBonus = asInt(input.damageBonus, 0);
@@ -888,8 +957,11 @@
         const buffAll = normalizeTextList(input.keywordsAll);
         if (buffAll.length) effect.keywordsAll = buffAll;
         effect.duration = P.normalizeDuration ? P.normalizeDuration(input.duration || "endOfTurn") : (asTrimmedString(input.duration) || "endOfTurn");
-        effect.consume = pickKnownLoose(input.consume, ["nextRoll", "duration"], "nextRoll");
-        if (!effect.modifier && !effect.damageBonus && !effect.potencyBonus) warnings.push(`${path}: buff has no modifier, damageBonus or potencyBonus.`);
+        // Movement in a buff ("+2 speed until the end of your turn"): it lasts its duration, not one roll.
+        normalizeMovementFields(input, effect);
+        const moves = Boolean(effect.speedBonus || MOVEMENT_FLAGS.some((flag) => effect[flag]));
+        effect.consume = pickKnownLoose(input.consume, ["nextRoll", "duration"], moves && !effect.modifier && !effect.damageBonus && !effect.potencyBonus ? "duration" : "nextRoll");
+        if (!effect.modifier && !effect.damageBonus && !effect.potencyBonus && !moves) warnings.push(`${path}: buff has no modifier, damageBonus or potencyBonus.`);
         if (!asTrimmedString(input.label)) warnings.push(`${path}: buff has no label; the token and roll window will say "Buff".`);
         const target = asTrimmedString(input.target);
         if (target) effect.target = target;
@@ -1764,7 +1836,7 @@
   const TARGET_STAMINA_STATES = ["winded", "notWinded", "full", "belowFull", "dying"];
   const SIZE_VS_SELF = ["smaller", "sameOrSmaller", "same", "sameOrLarger", "larger"];
   const ROLL_EDGE_STATES = ["edge", "doubleEdge", "anyEdge", "bane", "doubleBane", "anyBane", "none"];
-  const TARGET_TEST_KEYS = ["who", "condition", "conditions", "conditionFrom", "sizeMax", "sizeMin", "sizeVsSelf", "stabilityMax", "stabilityMin", "stamina", "keyword", "keywords", "notKeyword", "target", "question"];
+  const TARGET_TEST_KEYS = ["who", "condition", "conditions", "conditionFrom", "sizeMax", "sizeMin", "sizeVsSelf", "stabilityMax", "stabilityMin", "stamina", "keyword", "keywords", "notKeyword", "nearby", "target", "question"];
   const ROLL_TEST_KEYS = ["edge", "critical", "tier"];
 
   // Matches a word from a list in any case ("Winded" -> "winded").
@@ -1812,11 +1884,19 @@
     if (keyword.length) test.keyword = keyword;
     const notKeyword = normalizeWordList(input.notKeyword);
     if (notKeyword.length) test.notKeyword = notKeyword;
+    // "Adjacent to 3 or more ghoul cravers": creatures counted around the checked creature.
+    if (input.nearby && typeof input.nearby === "object") {
+      const nearby = normalizeCountSpec({ ...input.nearby, around: "target" });
+      delete nearby.around;
+      nearby.min = asNonNegInt(input.nearby.min, 1);
+      if (input.nearby.max !== undefined && input.nearby.max !== null && input.nearby.max !== "") nearby.max = asNonNegInt(input.nearby.max, 0);
+      test.nearby = nearby;
+    }
     const target = asTrimmedString(input.target);
     if (target) test.target = target;
     const question = asTrimmedString(input.question);
     if (question) test.question = question;
-    const checks = ["condition", "sizeMax", "sizeMin", "sizeVsSelf", "stabilityMax", "stabilityMin", "stamina", "keyword", "notKeyword"];
+    const checks = ["condition", "sizeMax", "sizeMin", "sizeVsSelf", "stabilityMax", "stabilityMin", "stamina", "keyword", "notKeyword", "nearby"];
     if (!checks.some((key) => test[key] !== undefined)) warnings.push(`${path}: ${label} checks nothing, so it always passes.`);
     return test;
   }
@@ -2216,6 +2296,29 @@
     return passive;
   }
 
+  // Movement rules: "+2 speed", "ignores difficult terrain", "moving doesn't provoke opportunity attacks", "can move
+  // through creatures"; with gates like an edge/bane trait (winded, its own conditions).
+  const MOVEMENT_FLAGS = ["ignoreDifficultTerrain", "noOpportunityAttacks", "moveThroughCreatures"];
+  function normalizeMovementFields(input, into) {
+    const speedBonus = asInt(input.speedBonus, 0);
+    if (speedBonus) into.speedBonus = speedBonus;
+    MOVEMENT_FLAGS.forEach((flag) => { if (input[flag] === true) into[flag] = true; });
+    return into;
+  }
+  function normalizeMovementPassive(input, warnings, path) {
+    const passive = normalizeMovementFields(input, { kind: "movement", label: asTrimmedString(input.label || input.name) || "Movement" });
+    const raw = input.when && typeof input.when === "object" ? input.when : {};
+    const when = {};
+    for (const key of ["winded", "notWinded"]) if (raw[key] === true) when[key] = true;
+    const selfCondition = normalizeWordList(raw.selfCondition);
+    if (selfCondition.length) when.selfCondition = selfCondition;
+    if (Object.keys(when).length) passive.when = when;
+    if (!passive.speedBonus && !MOVEMENT_FLAGS.some((flag) => passive[flag])) warnings.push(`${path}: movement passive changes nothing.`);
+    const extras = pickExtras(input, new Set(["kind", "type", "passive", "id", "label", "name", "speedBonus", ...MOVEMENT_FLAGS, "when"]));
+    if (extras) passive._extra = extras;
+    return passive;
+  }
+
   // Turns a round: a solo monster takes 2 (the default for one whose organization or role is Solo, even with no
   // passive). `turns: 3` for three; `turns: 1` turns it off.
   function normalizeSoloTurnsPassive(input, warnings, path) {
@@ -2256,6 +2359,7 @@
     if (key === "deathrule") return normalizeDeathRulePassive(input, warnings, path);
     if (key === "counter") return normalizeCounterPassive(input, warnings, path);
     if (key === "soloturns") return normalizeSoloTurnsPassive(input, warnings, path);
+    if (key === "movement") return normalizeMovementPassive(input, warnings, path);
     if (key !== "standfirm") {
       warnings.push(`${path}: unknown passive "${rawKind || "(missing)"}" — skipping.`);
       return null;

@@ -123,7 +123,7 @@
             }).join('') +
             '</div>' +
             '<div class="vtt-character-vitals">' +
-            renderVital('Speed', monster.speed ?? monster.movement) +
+            renderVital('Speed', monster.speed ?? monster.movement, speedBonusFor(placement)) +
             renderVital('Stability', monster.stability ?? defenses.stability, { bonus: stabilityBonus, source: standFirm?.labels?.[0] || 'Stand Firm' }) +
             renderVital('Size', monster.size || monster.footprint) +
             '</div>';
@@ -142,6 +142,14 @@
                 '<button type="button" class="vtt-monster-counter__step" data-monster-counter="' + escapeAttribute(entry.name) + '" data-monster-counter-delta="1" aria-label="' + escapeAttribute(entry.label) + ' plus one">+</button>' +
                 '</div>';
         }).join('') + '</div>');
+    }
+
+    // Speed bonus from movement rules (passives, buffs), shown like Stand Firm's stability.
+    function speedBonusFor(placement) {
+        var board = window.VTTBoardCallbacks;
+        var rules = placement && placement.id && board && typeof board.getMovementRules === 'function' ? board.getMovementRules(placement.id) : null;
+        var bonus = rules ? Number(rules.speedBonus) || 0 : 0;
+        return bonus ? { bonus: bonus, source: (rules.labels && rules.labels[0]) || 'Movement' } : undefined;
     }
 
     function renderDefenses(defenses) {

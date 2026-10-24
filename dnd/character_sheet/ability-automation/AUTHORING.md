@@ -1372,6 +1372,53 @@ Checks a fact about each target and gives each target the branch that fits it: "
 
 All the fields you give must pass ("size 1 or smaller and winded"). Chat says who passed: "Goblin is prone; Ogre is not."
 
+### `move` (other creatures)
+
+"Allies shift up to their speed", "one ally within 3 shifts 2", "each ally in the burst moves half its speed, then makes a free strike". Each target moves itself:
+
+- a monster or other token is moved by whoever uses the ability, with the move picker (Skip leaves it);
+- a hero gets a popup on its player's screen (and the Director's) with its reach shown: Shift/Move or Skip. The ability waits for every hero; its user can stop waiting.
+
+```json
+{ "kind": "move", "verb": "shift", "distance": "speed", "then": [ { "kind": "freeStrike" } ] }
+```
+
+| Field | Values | Notes |
+|---|---|---|
+| `verb` | `shift` (default), `move`, `teleport` | `move` is a walk and can set off opportunity attacks; `shift` can't; `teleport` uses the teleport picker. |
+| `distance` | number, `"speed"`, `"halfSpeed"` | Speed is the creature's own (sheet or stat block, plus captain and movement bonuses). |
+| `bonus` | integer | Added to the distance. |
+| `then` | effects | Run on each creature after it moved (not on one that stayed). |
+| `heroesMove` | `true` (default) | `false`: heroes are moved with the picker too, no popup. |
+
+With no targets the user moves.
+
+### `grantAction`
+
+"An ally gets a main action", "the target uses its signature ability against a creature of your choice": a chat line naming who gets what. The Director runs it.
+
+```json
+{ "kind": "grantAction", "grant": "a main action", "text": "It can use it now." }
+```
+
+### `useAbility`
+
+"Uses Bite twice", a villain action that chains the creature's abilities, "the target uses its signature ability". The named ability runs inside this one, each use with its own targets and its own roll.
+
+```json
+{ "kind": "useAbility", "ability": "Bite", "times": 2 }
+```
+
+| Field | Values | Notes |
+|---|---|---|
+| `ability` | name, or `"signature"` | Matched by name (or part of it). `"signature"`: the ability whose keywords or text say signature, else the first action. |
+| `who` | `self` (default), `target` | `target`: each target uses its own ability ("the target uses its signature ability"). |
+| `times` | integer | Default 1. |
+| `edge` | `1`, `2`, `-1`, `-2` | Edge (or bane, negative) on its rolls. |
+| `sameTargets` | `true` | Use this ability's targets instead of picking again. |
+
+It costs nothing more. Monsters' abilities come from their stat block; heroes' from their sheet.
+
 ### `counter` and `ifCounter`
 
 Named counters on a creature: rage, a dragon's deathcount, charges. `counter` changes one; `ifCounter` checks one. The counter shows as a badge on the token and as a row with − and + in the monster panel; everyone can see it.
@@ -1380,6 +1427,22 @@ Named counters on a creature: rage, a dragon's deathcount, charges. `counter` ch
 { "kind": "counter", "name": "rage", "amount": 1 }
 { "kind": "ifCounter", "name": "rage", "min": 3, "then": [ { "kind": "damage", "amount": 4 } ] }
 ```
+
+Counting creatures in an amount: `"amountFrom": { "source": "count", ... }` on `damage`, `heal` or `temporaryStamina`, for "2 damage per adjacent goblin", "+1 damage for each adjacent recruit", "+5 for each winded target":
+
+| Field | Default | Notes |
+|---|---|---|
+| `predicate` | `creature` | `ally` or `enemy` of the user. |
+| `keyword` | none | The kind of creature ("goblin", "recruit"). |
+| `within` | `1` | Squares (1 = adjacent). |
+| `around` | `target` | Counted around each target, or `self` (the user). |
+| `in` | `area` | `targets`: count among the ability's targets instead. |
+| `condition` / `stamina` | none | Only creatures with this condition / Stamina state (`winded`...). |
+| `includeSelf` | `false` | Whether the user counts. |
+| `max` | none | A cap on the count. |
+| `multiplier` | `1` | Per creature counted. |
+
+The count is said in chat. A count of 0 with nothing else deals no damage. `ifTarget` has the same count as a check: `"nearby": { "predicate": "ally", "keyword": "craver", "within": 1, "min": 3 }` ("an enemy adjacent to 3 or more cravers").
 
 `counter` fields:
 
@@ -2110,6 +2173,24 @@ Declares a counter the creature keeps, so it shows on the token and in the panel
 | `showWhenZero` | `true` | `false` hides the badge while it is 0. |
 
 A counter no passive declares (set by an ability) goes away when combat ends.
+
+### Movement rules (`movement`)
+
+"+2 speed", "ignores difficult terrain", "moving doesn't provoke opportunity attacks", "can move through creatures". The movement ruler's speed, the terrain cost and the opportunity-attack "!" follow them; nothing is blocked.
+
+```json
+{ "schema": "ability-automation/v3", "passives": [ { "kind": "movement", "label": "Fickle and Free", "ignoreDifficultTerrain": true } ] }
+```
+
+| Field | Notes |
+|---|---|
+| `speedBonus` | Added to speed (the ruler, "move up to its speed", the panel shows it). |
+| `ignoreDifficultTerrain` | No zone costs extra movement. The words "ignores difficult terrain" in the movement line do the same. |
+| `noOpportunityAttacks` | Its movement lights no opportunity-attack "!". |
+| `moveThroughCreatures` | Recorded for the table (the board does not stop movement through creatures). |
+| `when` | `winded`, `notWinded`, `selfCondition`. |
+
+The same fields on a `buff` make a timed movement buff ("+2 speed until the end of your turn"); such a buff lasts its duration.
 
 ### Solo turns (`soloTurns`)
 

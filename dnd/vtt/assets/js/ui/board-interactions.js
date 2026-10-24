@@ -250,6 +250,7 @@ import {
 import { squadForPlacement, squadPool, damageSquad, pickCaptain, livingCaptain, captainBonusFor, captainFeature, captainAction, squadBadge, describeCaptainBonus } from './minion-squads.mjs';
 import { lacksDefenses, monsterIdOf, restoredDefenses } from './monster-defense-repair.mjs';
 import { endEffectFor } from './end-effect.mjs';
+import { createTokenSpeedResolver } from '../token-system/speed-resolver.js';
 
 let trackerOverflowResizeListenerAttached = false;
 
@@ -1971,7 +1972,9 @@ export function mountBoardInteractions(store, routes = {}) {
     setRulerSupplement: (text) => setRulerSupplement(text),
     measureRoute: (move) => measureMovementRoute(move),
     getCellInfo: (tokenId) => window.terrainZones?.cellInfoFor?.(tokenId) ?? null,
-    getSpeedBonus: (tokenId) => captainBonusFor(getPlacementsForActiveScene(), tokenId)?.speed ?? 0,
+    // The captain's bonus, movement passives and speed buffs.
+    getSpeedBonus: (tokenId) => (captainBonusFor(getPlacementsForActiveScene(), tokenId)?.speed ?? 0)
+      + (movementRulesFor(getPlacementFromStore(tokenId))?.speedBonus || 0),
     projectCorner: (column, row) => {
       const terrain = window.terrainPrototype?.active ? window.terrainPrototype : null;
       const x = (viewState.gridOffsets?.left || 0) + column * (viewState.gridSize || 64), y = (viewState.gridOffsets?.top || 0) + row * (viewState.gridSize || 64);
@@ -2968,7 +2971,8 @@ export function mountBoardInteractions(store, routes = {}) {
 
       // Built-in opp-attack: opposing-team watchers whose adjacency the mover
       // left during NORMAL movement while combat is active.
-      if (combatActive && leaves && detail.kind === 'normal') {
+      // A creature whose movement doesn't provoke them (a movement rule) sets none off.
+      if (combatActive && leaves && detail.kind === 'normal' && !movementRulesFor(movingPlacement).noOpportunityAttacks) {
         const watcherTeam = getCombatantTeam(watcher.id) || normalizeCombatTeam(watcher.team);
         if (!movingTeam || !watcherTeam || movingTeam !== watcherTeam) {
           markTriggerReady(watcher.id, '__opportunityAttack__', movingId);
@@ -13860,6 +13864,14 @@ export function mountBoardInteractions(store, routes = {}) {
     completeRequestedTests: function (requestIds) { return requestedTestCoordinator.complete(requestIds); },
     getPowerRollSuggestions: function (payload) { return buildBoardPowerRollSuggestions(payload); },
     consumeRollRiders: function (payload) { return consumeBoardRollRiders(payload); },
+    // An ability of a token by name, for useAbility. "signature": the one whose keywords or text say so, else its
+    // first action. Monsters from their stat block; heroes from the sheet the VTT holds.
+    getAbility: function (payload) { return abilityForPlacement(payload?.placementId, payload?.name); },
+    getMovementRules: function (placementId) { return movementRulesFor(getPlacementFromStore(placementId)); },
+    // Moving other creatures: is it a hero (it moves itself), its speed, and asking heroes to move.
+    isHeroPlacement: function (placementId) { return isPlayerCharacterPlacement(getPlacementFromStore(placementId)); },
+    getSpeed: function (placementId) { return speedForPlacement(placementId); },
+    requestHeroMove: function (payload) { return requestHeroMoves(payload || {}); },
     // Named counters on a token (rage, deathcount): read, change, list.
     getCounter: function (payload) { return getTokenCounter(payload?.placementId, payload?.name); },
     changeCounter: function (payload) { return changeTokenCounter(payload || {}); },
@@ -15652,7 +15664,8 @@ export function mountBoardInteractions(store, routes = {}) {
     Object.keys(set).forEach((name) => {
       if (seen.has(name)) return;
       const value = Number(set[name]);
-      if (!Number.isFinite(value)) return;
+      // A counter no passive names shows only while it isn't 0.
+      if (!Number.isFinite(value) || value === 0) return;
       list.push({ name, label: counterNameLabel(name), value, min: 0, max: null, declared: false });
     });
     return list;
@@ -15812,6 +15825,180 @@ export function mountBoardInteractions(store, routes = {}) {
     });
   }
 
+  // ---------- movement rules (movement passives and buffs) ----------
+  // { speedBonus, ignoreDifficultTerrain, noOpportunityAttacks, moveThroughCreatures, labels } for a token: its
+  // movement passives whose gates pass (monster stat block, hero features) and movement on buffs it carries.
+  function movementRulesFor(placementLike) {
+    const placement = placementLike?.id ? getPlacementFromStore(placementLike.id) || placementLike : placementLike;
+    const rules = { speedBonus: 0, ignoreDifficultTerrain: false, noOpportunityAttacks: false, moveThroughCreatures: false, labels: [] };
+    if (!placement) return rules;
+    const take = (source, label) => {
+      rules.speedBonus += Number.parseInt(source.speedBonus, 10) || 0;
+      ['ignoreDifficultTerrain', 'noOpportunityAttacks', 'moveThroughCreatures'].forEach((flag) => { if (source[flag] === true) rules[flag] = true; });
+      if (label && !rules.labels.includes(label)) rules.labels.push(label);
+    };
+    const stamina = ensurePlacementHitPoints(placement.hp);
+    const winded = Number(stamina.current) <= Math.floor(Number(stamina.max) / 2);
+    const conditions = ensurePlacementConditions(placement.conditions ?? placement.condition ?? null);
+    const gatePasses = (when) => {
+      if (!when || typeof when !== 'object') return true;
+      if (when.winded && !winded) return false;
+      if (when.notWinded && winded) return false;
+      if (Array.isArray(when.selfCondition) && when.selfCondition.length
+        && !conditions.some((c) => when.selfCondition.includes(String(c?.name || '').toLowerCase()))) return false;
+      return true;
+    };
+    const passives = placement.monster ? monsterPassivesOfKind(placement.monster, 'movement') : [];
+    const profileId = getCharacterSheetProfileIdForPlacement(placement);
+    const sheet = profileId && characterSummaryCache instanceof Map ? characterSummaryCache.get(profileId) : null;
+    (Array.isArray(sheet?.features) ? sheet.features : []).forEach((feature) => {
+      (Array.isArray(feature?.automation?.passives) ? feature.automation.passives : []).forEach((passive) => {
+        if (String(passive?.kind || '').toLowerCase() === 'movement') passives.push({ ...passive, label: passive.label || feature.title || '' });
+      });
+    });
+    passives.forEach((passive) => { if (gatePasses(passive.when)) take(passive, passive.label); });
+    conditions.forEach((condition) => {
+      const rider = condition?.rider;
+      if (rider && typeof rider === 'object' && (rider.speedBonus || rider.ignoreDifficultTerrain || rider.noOpportunityAttacks || rider.moveThroughCreatures)) take(rider, condition.label || '');
+    });
+    return rules;
+  }
+  // The terrain cost reads this (terrain-zones.mjs movementWaiver).
+  // It is asked for every square of a route while a token is dragged, so an answer is kept for a moment.
+  const movementRulesMemo = new Map();
+  if (typeof window !== 'undefined') {
+    window.vttMovementRulesFor = (placement) => {
+      const id = placement?.id || '';
+      const now = Date.now();
+      const kept = id ? movementRulesMemo.get(id) : null;
+      if (kept && now - kept.at < 300) return kept.rules;
+      const rules = movementRulesFor(placement);
+      if (id) { if (movementRulesMemo.size > 200) movementRulesMemo.clear(); movementRulesMemo.set(id, { at: now, rules }); }
+      return rules;
+    };
+  }
+
+  // ---------- abilities by name (useAbility) ----------
+  function abilityForPlacement(placementId, name) {
+    const placement = getPlacementFromStore(placementId);
+    const wanted = String(name || '').trim().toLowerCase();
+    if (!placement || !wanted) return null;
+    const list = [];
+    const abilities = placement.monster?.abilities && typeof placement.monster.abilities === 'object' ? placement.monster.abilities : null;
+    if (abilities) {
+      ['action', 'maneuver', 'triggered_action', 'villain_action', 'malice', 'passive'].forEach((category) => {
+        (Array.isArray(abilities[category]) ? abilities[category] : []).forEach((ability) => list.push({ ...ability, category }));
+      });
+    } else {
+      const profileId = getCharacterSheetProfileIdForPlacement(placement);
+      const sheet = profileId && characterSummaryCache instanceof Map ? characterSummaryCache.get(profileId) : null;
+      const actions = sheet?.actions && typeof sheet.actions === 'object' ? sheet.actions : {};
+      Object.keys(actions).forEach((kind) => {
+        (Array.isArray(actions[kind]) ? actions[kind] : []).forEach((action) => list.push({ ...action, category: kind }));
+      });
+    }
+    if (!list.length) return null;
+    const textOf = (ability) => [ability.name, ability.keywords, ability.type, ability.tags, ability.description, ability.effect]
+      .map((value) => (Array.isArray(value) ? value.join(' ') : String(value || ''))).join(' ').toLowerCase();
+    const found = wanted === 'signature'
+      ? list.find((ability) => /\bsignature\b/.test(textOf(ability))) || list.find((ability) => ability.category === 'action' || ability.category === 'mains')
+      : list.find((ability) => String(ability.name || '').trim().toLowerCase() === wanted)
+        || list.find((ability) => String(ability.name || '').trim().toLowerCase().includes(wanted));
+    return found ? JSON.parse(JSON.stringify(found)) : null;
+  }
+
+  // ---------- heroes told to move by an ability ----------
+  // The ability puts `pendingMove` on the hero's token; the hero's player (and the Director) get a popup; Move opens
+  // the move picker for that hero with its reach shown; Skip lets it stay. The ability waits for every hero, or until
+  // its user stops waiting.
+  const heroMoveSpeedResolver = createTokenSpeedResolver({ routes });
+  async function speedForPlacement(placementId) {
+    const placement = getPlacementFromStore(placementId);
+    if (!placement) return null;
+    let speed = null;
+    try { speed = Number((await heroMoveSpeedResolver.resolveSpeed(placement))?.speed); } catch (error) { speed = null; }
+    if (!Number.isFinite(speed)) speed = heroMoveSpeedResolver.getInitialSpeed(placement);
+    const captain = Number(captainBonusFor(getPlacementsForActiveScene(), placementId)?.speed) || 0;
+    return Math.max(0, Math.trunc(speed) + captain + (movementRulesFor(placement).speedBonus || 0));
+  }
+
+  function requestHeroMoves({ moves = [], abilityName = '', sourceName = '' } = {}) {
+    const jobs = moves.filter((move) => move?.placementId && getPlacementFromStore(move.placementId));
+    if (!jobs.length) return Promise.resolve({ results: [] });
+    const batch = `move-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+    jobs.forEach((move) => {
+      updatePlacementById(move.placementId, (target) => {
+        target.pendingMove = { id: `${batch}-${move.placementId}`, distance: Math.max(0, Number(move.distance) || 0), verb: move.verb === 'move' ? 'move' : 'shift', label: abilityName, from: sourceName, at: Date.now() };
+      });
+    });
+    redrawAfterRuleChange();
+    return new Promise((resolve) => {
+      const waiting = document.createElement('div');
+      waiting.className = 'vtt-hero-move-waiting';
+      waiting.innerHTML = `<span>Waiting for ${jobs.map((move) => escapeHtml(move.name || tokenLabel(getPlacementFromStore(move.placementId)) || 'a hero')).join(', ')} to move…</span><button type="button" data-hero-move-stop>Stop waiting</button>`;
+      document.body.appendChild(waiting);
+      const results = new Map();
+      const finish = () => {
+        window.clearInterval(timer);
+        waiting.remove();
+        jobs.forEach((move) => {
+          const placement = getPlacementFromStore(move.placementId);
+          if (placement?.pendingMove?.id === `${batch}-${move.placementId}`) {
+            updatePlacementById(move.placementId, (target) => { delete target.pendingMove; });
+          }
+        });
+        redrawAfterRuleChange();
+        resolve({ results: jobs.map((move) => ({ placementId: move.placementId, moved: Boolean(results.get(move.placementId)) })) });
+      };
+      waiting.querySelector('[data-hero-move-stop]').addEventListener('click', finish);
+      const timer = window.setInterval(() => {
+        jobs.forEach((move) => {
+          const pending = getPlacementFromStore(move.placementId)?.pendingMove;
+          if (!pending || pending.id !== `${batch}-${move.placementId}`) { if (!results.has(move.placementId)) results.set(move.placementId, false); return; }
+          if (pending.done) results.set(move.placementId, Boolean(pending.moved));
+        });
+        if (results.size >= jobs.length) finish();
+      }, 400);
+    });
+  }
+
+  const heroMovePopups = new Map(); // pending id -> popup element
+  function maybePromptHeroMove(placement) {
+    const pending = placement?.pendingMove;
+    heroMovePopups.forEach((popup, id) => {
+      const owner = getPlacementFromStore(popup.dataset.placementId);
+      if (!owner?.pendingMove || owner.pendingMove.id !== id || owner.pendingMove.done) { popup.remove(); heroMovePopups.delete(id); }
+    });
+    if (!pending || pending.done || heroMovePopups.has(pending.id) || !canCurrentUserMovePlacement(placement)) return;
+    const popup = document.createElement('div');
+    popup.className = 'vtt-hero-move-popup';
+    popup.dataset.placementId = placement.id;
+    const name = tokenLabel(placement) || 'Your hero';
+    popup.innerHTML = `<div class="vtt-hero-move-popup__text"><strong>${escapeHtml(name)}</strong>: ${escapeHtml(pending.label || 'An ability')} lets you ${pending.verb === 'move' ? 'move' : 'shift'} up to ${escapeHtml(String(pending.distance))}.</div>
+      <div class="vtt-hero-move-popup__actions"><button type="button" class="btn btn--primary" data-hero-move-go>${pending.verb === 'move' ? 'Move' : 'Shift'}</button><button type="button" class="btn" data-hero-move-skip>Skip</button></div>`;
+    const stack = document.querySelector('.vtt-hero-move-stack') || (() => { const el = document.createElement('div'); el.className = 'vtt-hero-move-stack'; document.body.appendChild(el); return el; })();
+    stack.appendChild(popup);
+    heroMovePopups.set(pending.id, popup);
+    const answer = (moved) => {
+      popup.remove();
+      heroMovePopups.delete(pending.id);
+      const now = getPlacementFromStore(placement.id);
+      if (now?.pendingMove?.id !== pending.id) return;
+      updatePlacementById(placement.id, (target) => { target.pendingMove = { ...target.pendingMove, done: true, moved }; });
+      redrawAfterRuleChange();
+    };
+    popup.querySelector('[data-hero-move-skip]').addEventListener('click', () => answer(false));
+    popup.querySelector('[data-hero-move-go]').addEventListener('click', () => {
+      popup.querySelectorAll('button').forEach((button) => { button.disabled = true; });
+      dispatchBoardCustom('vtt:automation-force-move', 'payload', {
+        movement: 'slide', verb: 'slide', verbLabel: pending.verb === 'move' ? 'Move' : 'Shift',
+        distance: pending.distance, upTo: true, ignoreStability: true, ignoreSizePenalty: true,
+        targetId: placement.id, target: { id: placement.id, name }, sourcePlacement: { id: placement.id },
+        walkKind: pending.verb === 'move' ? 'walk' : 'shift', abilityName: pending.label || '',
+      }).then((result) => answer(Boolean(result && !result.skipped)), () => answer(false));
+    });
+  }
+
   // Popup triggers ("when it dies"): the GM's page asks as soon as one is waiting on a monster, wherever it fired.
   // Yes runs the ability as the abilities list would (with its pickers); No lets it go.
   const promptedTriggerPopups = new Set();
@@ -15855,6 +16042,7 @@ export function mountBoardInteractions(store, routes = {}) {
     // The token is drawn from a trimmed copy; counters and waiting triggers are read from the whole token.
     const wholePlacement = getPlacementFromStore(placement.id) || placement;
     maybePromptTriggerPopups(wholePlacement);
+    maybePromptHeroMove(wholePlacement);
     paintTokenCounters(tokenElement, wholePlacement);
 
     syncTokenTeamAffiliation(tokenElement, placement);
@@ -19385,7 +19573,8 @@ export function mountBoardInteractions(store, routes = {}) {
     const verb = getAutomationMoveVerb(request);
     const verbLabel = request.verbLabel || getAutomationMoveVerbLabel(verb);
     const baseVerb = getAutomationMoveBaseVerb(verb);
-    // An ability that moves its own user is a move, not forced movement (see commitOwnAbilityMove).
+    // An ability that moves its own user is a move, not forced movement (see commitOwnAbilityMove). An ability that
+    // moves another creature ("allies shift") moves it the same way: it is passed as its own source.
     const ownMove = Boolean(sourceSnapshot?.id) && sourceSnapshot.id === targetSnapshot?.id && request.movementKind !== 'teleport';
     // A square off the map is never a destination.
     const onMap = cellsOnMap(buildAutomationMoveLegalCells(sourceSnapshot, targetSnapshot, request.effectiveDistance, baseVerb), clampPlacementToBounds, targetSnapshot);
@@ -19457,7 +19646,9 @@ export function mountBoardInteractions(store, routes = {}) {
     request.committing = true;
     let made = false;
     try {
-      made = await commitCanonicalTokenMoves({ sceneId: request.sceneId, moves: [{ placementId: mover.id, column: to.column, row: to.row }], source: 'ability', movementKind: 'shift', drawnRuler: [] });
+      // A move (an ally told to move) is a walk, and can set off opportunity attacks; otherwise a shift.
+      const walkKind = request.payload?.walkKind === 'walk' ? 'walk' : 'shift';
+      made = await commitCanonicalTokenMoves({ sceneId: request.sceneId, moves: [{ placementId: mover.id, column: to.column, row: to.row }], source: 'ability', movementKind: walkKind, drawnRuler: [] });
     } catch (error) {
       console.warn('[VTT] an ability\'s own move failed', error);
       made = false;

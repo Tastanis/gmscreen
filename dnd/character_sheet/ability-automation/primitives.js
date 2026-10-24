@@ -41,6 +41,9 @@
     "buff",
     "counter",
     "ifCounter",
+    "move",
+    "grantAction",
+    "useAbility",
     "setScopedFlag",
     "applyMark",
     "endMark",
@@ -60,7 +63,7 @@
   // reactions because both payloads expose the same distance field.
   // `damageDealt` is not from a trigger: it is the damage this ability has dealt so far (after immunity and
   // weakness), for "heals equal to the damage dealt".
-  const TRIGGER_VALUE_SOURCES = ["triggeringDamage", "triggeringForcedMovement", "damageDealt"];
+  const TRIGGER_VALUE_SOURCES = ["triggeringDamage", "triggeringForcedMovement", "damageDealt", "count"];
 
   // Standard Draw Steel ability keywords. Authors can use any string, but the
   // ones below are recognized for canonical casing and as the registry seed.
@@ -409,7 +412,9 @@
       ? "triggering movement"
       : amountFrom.source === "damageDealt"
         ? "damage dealt"
-        : "triggering damage";
+        : amountFrom.source === "count"
+          ? `each ${amountFrom.keyword || amountFrom.predicate || "creature"}${amountFrom.in === "targets" ? " targeted" : ` within ${amountFrom.within ?? 1}`}`
+          : "triggering damage";
     const parts = [];
     if (amountFrom.multiplier && amountFrom.multiplier !== 1) parts.push(`${amountFrom.multiplier}×`);
     if (amountFrom.fraction && amountFrom.fraction !== 1) {
@@ -440,6 +445,7 @@
     }
     if (t.keyword && t.keyword.length) parts.push(`a ${list(t.keyword)}`);
     if (t.notKeyword && t.notKeyword.length) parts.push(`not a ${list(t.notKeyword)}`);
+    if (t.nearby) parts.push(`next to ${t.nearby.min ?? 1}+ ${t.nearby.keyword ? list(t.nearby.keyword) : t.nearby.predicate || "creature"}${t.nearby.within > 1 ? ` within ${t.nearby.within}` : ""}`);
     return parts.join(" and ") || "anything";
   }
 
@@ -598,6 +604,14 @@
         if (elseText) return `If ${label}: ${thenText || "(no effect)"} else: ${elseText}`;
         return `If ${label}: ${thenText || "(no effect)"}`;
       }
+      case "move": {
+        const how = effect.distance === "speed" ? "its speed" : effect.distance === "halfSpeed" ? "half its speed" : `${effect.distance || 0}`;
+        return `${effect.verb || "shift"} up to ${how}${effect.bonus ? ` + ${effect.bonus}` : ""}`;
+      }
+      case "grantAction":
+        return `grant ${effect.grant || "an action"}`;
+      case "useAbility":
+        return `${effect.who === "target" ? "target uses" : "use"} ${effect.ability || "an ability"}${effect.times > 1 ? ` ×${effect.times}` : ""}`;
       case "counter": {
         const amount = effect.amountDice || effect.amount || 1;
         if (effect.op === "set") return `${effect.name || "counter"} = ${amount}`;

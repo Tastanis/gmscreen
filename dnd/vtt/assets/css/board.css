@@ -6232,3 +6232,48 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
 .vtt-combat-token.vtt-combat-token--solo-turn.is-completed {
   opacity: 0.35;
 }
+
+/* Heroes told to move by an ability: a popup each (bottom centre), and a waiting line for whoever used it. */
+.vtt-hero-move-stack {
+  position: fixed;
+  left: 50%;
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: calc(var(--z-modal, 1000) + 900);
+}
+
+.vtt-hero-move-popup,
+.vtt-hero-move-waiting {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 2px solid #6e5a33;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #26211a, #120f0a);
+  color: #e8d9ae;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+  max-width: min(520px, calc(100vw - 32px));
+}
+
+.vtt-hero-move-popup__actions { display: flex; gap: 8px; flex: none; }
+
+.vtt-hero-move-waiting {
+  position: fixed;
+  right: 16px;
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  z-index: calc(var(--z-modal, 1000) + 900);
+  font-size: 13px;
+}
+
+.vtt-hero-move-waiting button {
+  border: 1px solid #6e5a33;
+  background: transparent;
+  color: #f0d68a;
+  border-radius: 3px;
+  padding: 3px 8px;
+  cursor: pointer;
+}

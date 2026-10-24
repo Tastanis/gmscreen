@@ -242,6 +242,11 @@ const waivers = new Map();
  */
 export function movementWaiver(placement) {
   const text = movementText(placement).toLowerCase();
+  // A movement rule from the token's abilities (board-interactions.js movementRulesFor), or the words "ignores
+  // difficult terrain" in its movement: no zone costs it extra.
+  let rules = null;
+  try { rules = typeof globalThis.vttMovementRulesFor === 'function' ? globalThis.vttMovementRulesFor(placement) : null; } catch (error) { rules = null; }
+  if (rules?.ignoreDifficultTerrain || /\bignor\w*\s+difficult\b/.test(text)) return { all: true, liquids: true, tags: new Set() };
   let waiver = waivers.get(text);
   if (!waiver) {
     const tags = new Set();
@@ -260,7 +265,7 @@ export function movementWaiver(placement) {
 }
 /** The movement multiplier this zone charges this mover: 1 when its movement waives the zone. */
 export function zoneCostFor(zone, waiver = null) {
-  return waiver && ((waiver.liquids && isLiquidTag(zone.tag)) || waiver.tags?.has(zone.tag)) ? 1 : zone.cost;
+  return waiver && (waiver.all || (waiver.liquids && isLiquidTag(zone.tag)) || waiver.tags?.has(zone.tag)) ? 1 : zone.cost;
 }
 
 /**

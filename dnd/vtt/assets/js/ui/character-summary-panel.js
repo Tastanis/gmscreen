@@ -2785,6 +2785,26 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
         ? window.VTTBoardCallbacks.getPlacementById(placementId)
         : null
     ),
+    getAbility: (payload) => (
+      window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.getAbility === 'function'
+        ? window.VTTBoardCallbacks.getAbility(payload)
+        : null
+    ),
+    isHeroPlacement: (placementId) => (
+      window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.isHeroPlacement === 'function'
+        ? window.VTTBoardCallbacks.isHeroPlacement(placementId)
+        : false
+    ),
+    getSpeed: (placementId) => (
+      window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.getSpeed === 'function'
+        ? window.VTTBoardCallbacks.getSpeed(placementId)
+        : null
+    ),
+    requestHeroMove: (payload) => (
+      window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.requestHeroMove === 'function'
+        ? window.VTTBoardCallbacks.requestHeroMove(payload)
+        : { results: [] }
+    ),
     getCounter: (payload) => (
       window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.getCounter === 'function'
         ? window.VTTBoardCallbacks.getCounter(payload)
