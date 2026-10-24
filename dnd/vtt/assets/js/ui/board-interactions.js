@@ -5179,6 +5179,17 @@ export function mountBoardInteractions(store, routes = {}) {
         }
         continue;
       }
+      // Malice for the Director (once, not per target): "gain 1 Malice when a demon dies within 10 squares".
+      if (effect.kind === 'maliceGain') {
+        const amount = Math.max(0, Number.parseInt(effect.amount, 10) || 0);
+        if (amount && isGmUser() && window.MaliceTracker) {
+          const added = window.MaliceTracker.add(amount);
+          detailLines.push(`+${amount} Malice${Number.isFinite(added?.current) ? ` (now ${added.current})` : ''}`);
+        } else if (amount) {
+          detailLines.push(`the Director gains ${amount} Malice`);
+        }
+        continue;
+      }
       if (effect.kind === 'damage') {
         for (const target of targets) {
           const amount = resolveOngoingEffectAmount(effect, attributeBonuses, {
@@ -13780,6 +13791,13 @@ export function mountBoardInteractions(store, routes = {}) {
     completeRequestedTests: function (requestIds) { return requestedTestCoordinator.complete(requestIds); },
     getPowerRollSuggestions: function (payload) { return buildBoardPowerRollSuggestions(payload); },
     consumeRollRiders: function (payload) { return consumeBoardRollRiders(payload); },
+    // An ability's maliceGain: the GM's Malice counter goes up (only the GM keeps the counter).
+    gainMalice: function (payload) {
+      const amount = Math.max(0, Number.parseInt(payload?.amount, 10) || 0);
+      if (!amount) return { skipped: true, reason: 'no-amount' };
+      if (!isGmUser() || !window.MaliceTracker) return { skipped: true, reason: 'gm-only' };
+      return window.MaliceTracker.add(amount);
+    },
     // Ends one condition on a token (an ability's endCondition). The condition as read from the token.
     removeCondition: function (payload) {
       const placementId = String(payload?.placementId || '').trim();
@@ -18783,6 +18801,15 @@ export function mountBoardInteractions(store, routes = {}) {
 
     closeDamageHealWidget();
     closeHealOverflowPopup();
+    // A restrained creature normally can't be force moved. Only a reminder: the move picker still works.
+    const targetConditions = Array.isArray(targetPlacement?.conditions)
+      ? targetPlacement.conditions
+      : targetPlacement?.condition ? [targetPlacement.condition] : [];
+    const targetRestrained = !payload.ignoreRestrained && targetConditions
+      .some((condition) => String((typeof condition === 'string' ? condition : condition?.name) || '').trim().toLowerCase() === 'restrained');
+    if (targetRestrained) {
+      showConditionBanner(`${tokenLabel(targetPlacement)} is restrained: normally can't be force moved. Move it anyway or skip.`, { tone: 'reminder' });
+    }
     startAutomationMoveSelection({
       payload,
       resolve,

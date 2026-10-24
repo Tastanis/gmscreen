@@ -37,6 +37,7 @@
     "ifRoll",
     "endCondition",
     "loseRecoveries",
+    "maliceGain",
     "setScopedFlag",
     "applyMark",
     "endMark",
@@ -594,6 +595,8 @@
         if (elseText) return `If ${label}: ${thenText || "(no effect)"} else: ${elseText}`;
         return `If ${label}: ${thenText || "(no effect)"}`;
       }
+      case "maliceGain":
+        return `gain ${effect.amountDice || effect.amount || 1} Malice`;
       case "loseRecoveries":
         return `lose ${effect.amountDice || effect.amount || 1} Recover${(effect.amountDice || effect.amount || 1) === 1 ? "y" : "ies"}`;
       case "endCondition": {

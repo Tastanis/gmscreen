@@ -820,6 +820,9 @@ Add `ignoreStability` to forced movement when the rule bypasses some or all of t
 
 `true` (or `"all"`) ignores all Stability. A non-negative integer ignores up to that many Stability points. Size resistance remains separate and still applies.
 
+
+`ignoreRestrained: true` — for "a target restrained by this creature can be force moved by this ability". Without it, pushing a restrained creature shows a reminder that it normally can't be force moved; the move picker still opens and you can move it or skip. Nothing is ever blocked, and forced movement never ends restrained by itself.
+
 ### `shift`
 
 Voluntary movement by the caster. Use this for "you shift" effects, including effects that split one movement pool before and after another card.
@@ -1353,6 +1356,16 @@ Checks a fact about each target and gives each target the branch that fits it: "
 | `then` / `else` | effect arrays | `then` runs on the targets that pass, `else` on the rest. |
 
 All the fields you give must pass ("size 1 or smaller and winded"). Chat says who passed: "Goblin is prone; Ogre is not."
+
+### `maliceGain`
+
+The Director gains Malice: "gain 1 Malice when a demon dies within 10 squares", "gain 2 Malice". The counter goes up by itself and chat says why; the Director can still change it by hand.
+
+```json
+{ "kind": "maliceGain", "amount": 1 }
+```
+
+`amount` (default 1) or `amountDice`. Works in triggers that resolve by themselves (`autoResolve`). Only the Director's screen keeps the counter: anywhere else, chat reminds the Director to add it.
 
 ### `loseRecoveries`
 

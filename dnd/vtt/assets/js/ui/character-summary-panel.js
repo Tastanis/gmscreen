@@ -2785,6 +2785,11 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
         ? window.VTTBoardCallbacks.getPlacementById(placementId)
         : null
     ),
+    gainMalice: (payload) => (
+      window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.gainMalice === 'function'
+        ? window.VTTBoardCallbacks.gainMalice(payload)
+        : { skipped: true }
+    ),
     getActiveScenePlacements: () => (
       window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.getActiveScenePlacements === 'function'
         ? window.VTTBoardCallbacks.getActiveScenePlacements()

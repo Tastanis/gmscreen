@@ -290,6 +290,9 @@
             getPlacementById: board.getPlacementById,
             removeCondition: board.removeCondition,
             getActiveScenePlacements: board.getActiveScenePlacements,
+            gainMalice: board.gainMalice,
+            // A monster's ability can give heroes surges (retainers, "an ally gains 2 surges").
+            applySurgeGain: board.applySurgeGain,
             getDistanceBetween: board.getDistanceBetween,
             getZoneTags: board.getZoneTags
         };

@@ -1906,6 +1906,8 @@
         return applyEndConditionEffect(state, effect, targets, ctx);
       case "loseRecoveries":
         return applyLoseRecoveriesEffect(state, effect, targets, ctx);
+      case "maliceGain":
+        return applyMaliceGainEffect(state, effect);
       case "setScopedFlag":
         return applySetScopedFlagEffect(state, effect, targets, ctx);
       case "applyMark":
@@ -2558,6 +2560,7 @@
         keywords: getAbilityKeywords(state),
         abilityName: state.action.name || "Ability",
         ...(effect.ignoreStability !== undefined ? { ignoreStability: effect.ignoreStability } : {}),
+        ...(effect.ignoreRestrained === true ? { ignoreRestrained: true } : {}),
       });
       if (!result || result.skipped) {
         lines.push(`${target.name || "Target"}: ${verb} ${distance} skipped.`);
@@ -3145,6 +3148,28 @@
     const branch = passes ? effect.then : effect.else;
     if (!Array.isArray(branch) || !branch.length) return;
     await applyEffects(state, branch, effect.target || state.currentGroup || "primary", ctx);
+  }
+
+  // ---------- maliceGain ----------
+  //
+  // "Gain 1 Malice when a demon dies within 10 squares": the Malice counter goes up and chat says why. The
+  // Director can still change the counter by hand.
+
+  async function applyMaliceGainEffect(state, effect) {
+    const label = state.action.name || "Ability";
+    const amount = Math.max(0, effect.amountDice ? rollDiceFormula(effect.amountDice) : asInt(effect.amount, 1));
+    if (!amount) return;
+    fireActionUsedEvent(state);
+    const result = typeof state.context.gainMalice === "function"
+      ? await state.context.gainMalice({ amount, abilityName: label })
+      : null;
+    if (!result || result.skipped) {
+      await postChat(state.context, { message: `${state.heroName} - ${label}: the Director gains ${amount} Malice (add it by hand).` });
+      return;
+    }
+    await postChat(state.context, {
+      message: `${state.heroName} - ${label}: +${amount} Malice${Number.isFinite(result.current) ? ` (now ${result.current})` : ""}.`,
+    });
   }
 
   // ---------- loseRecoveries ----------

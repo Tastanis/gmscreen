@@ -532,7 +532,7 @@
         return effect;
       }
       case "forcedMovement": {
-        const known = new Set(["kind", "verb", "distance", "upTo", "attribute", "multiplier", "ignoreStability"]);
+        const known = new Set(["kind", "verb", "distance", "upTo", "attribute", "multiplier", "ignoreStability", "ignoreRestrained"]);
         const verb = P.normalizeForcedMovementVerb(input.verb || "push");
         const effect = {
           kind: "forcedMovement",
@@ -550,6 +550,8 @@
         }
         const ignoreStability = normalizeIgnoredResistance(input.ignoreStability, warnings, `${path}.ignoreStability`);
         if (ignoreStability !== undefined) effect.ignoreStability = ignoreStability;
+        // "A target restrained by a dwarf can be force moved by this ability": no restrained warning.
+        if (input.ignoreRestrained === true) effect.ignoreRestrained = true;
         if (!effect.distance && !effect.attribute) warnings.push(`${path}: forced movement has 0 distance.`);
         const extras = pickExtras(input, known);
         if (extras) effect._extra = extras;
@@ -822,6 +824,15 @@
           else: normalizeEffectList(input.else || [], warnings, `${path}.else`),
         };
         if (!effect.then.length && !effect.else.length) warnings.push(`${path}: ifTarget has no then/else effects.`);
+        const extras = pickExtras(input, known);
+        if (extras) effect._extra = extras;
+        return effect;
+      }
+      case "maliceGain": {
+        const known = new Set(["kind", "amount", "amountDice", "target"]);
+        const effect = { kind: "maliceGain", amount: asPosInt(input.amount, 1) };
+        const dice = asTrimmedString(input.amountDice);
+        if (dice) effect.amountDice = dice;
         const extras = pickExtras(input, known);
         if (extras) effect._extra = extras;
         return effect;
@@ -1585,6 +1596,7 @@
     "note",
     "other",
     "ifMark",
+    "maliceGain",
   ]);
 
   function validateAutoResolveEffects(effects, warnings, path) {
