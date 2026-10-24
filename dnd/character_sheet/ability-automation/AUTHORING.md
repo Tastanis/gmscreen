@@ -211,6 +211,7 @@ Asks the player to pick a token (or place an area template) on the VTT board.
 | `count` | `{ value, mode }` | Token mode only. `"exact"` requires the first pick, then permits **Done** before a multi-target maximum is filled. `"upTo"` also permits **Done** before the first pick. |
 | `optional` | bool | If true, runtime shows a "Skip" button. The automation continues with an empty target group. |
 | `excludeGroups` | string array | Token mode only. Prevents selecting targets already in the named groups. Use for split-role target picks that must be different. |
+| `near` | `{ "group": "primary", "within": 1 }` | Token mode only. Splash: "each enemy adjacent to the target". Every creature that fits `predicate` within `within` squares of anyone in `group` is pre-picked and pulses on the board; the user clicks a token to take it out or add one, then Done. Nobody fits: no picker, a chat line. `includeSelf: true` lets the user of the ability count. |
 | `promptTitle` | string | Optional custom title for the target picker popup. |
 | `promptText` | string | Optional custom instructions for the target picker popup and board status. |
 | `rangeOrigin` | string | Optional name of an earlier token or area target block. Starts this block's advisory range box at that selected token/location instead of the caster. Omit it or use `"self"` for the caster. A multi-token group uses its first selected token. |
@@ -668,13 +669,14 @@ canonicalizes to scalar `damageType`.
 
 | Field | Values |
 |---|---|
-| `source` | `"triggeringDamage"` (reads the triggering damage amount) or `"triggeringForcedMovement"` (reads `distance` / `movedDistance` from normal movement and forced movement). Defaults to `"triggeringDamage"`. |
+| `source` | `"triggeringDamage"` (reads the triggering damage amount), `"triggeringForcedMovement"` (reads `distance` / `movedDistance` from normal movement and forced movement), or `"damageDealt"` (the damage this ability has dealt so far, after each target's immunity and weakness: "heals equal to the damage dealt"). Defaults to `"triggeringDamage"`. |
 | `fraction` | optional positive number multiplied into the captured value. `0.5` = half. Default `1`. |
 | `multiplier` | optional positive number, also multiplied in. Stacks with `fraction` (e.g. both default to 1). Default `1`. |
 | `rounding` | `"down"` (default — Draw Steel rounds halves down) or `"up"`. Applied after scaling. |
 
 Notes:
-- The captured value only exists when the ability is resolved from a ready trigger (a `trigger` card fired it). On a normal, non-reactive use `amountFrom` contributes `0`.
+- The captured value only exists when the ability is resolved from a ready trigger (a `trigger` card fired it). On a normal, non-reactive use `amountFrom` contributes `0`. `damageDealt` is the exception: it works on any use, and counts every damage effect run so far in this ability, on every target.
+- Lifesteal: put the heal after the damage, on `self`: `{ "kind": "heal", "target": "self", "amountFrom": { "source": "damageDealt" } }`. Half: add `"fraction": 0.5`.
 - The tier/inspector preview shows `+ half triggering damage` etc., but cannot show the final number — the runtime only knows the captured amount when the trigger actually resolves.
 - `halveTriggeringDamage` is still the right tool for "**you** take half" (it refunds stamina on the placement that was hit). Use `amountFrom` when the half (or any formula) becomes a **new** damage/heal on a chosen target.
 
@@ -1351,6 +1353,16 @@ Checks a fact about each target and gives each target the branch that fits it: "
 | `then` / `else` | effect arrays | `then` runs on the targets that pass, `else` on the rest. |
 
 All the fields you give must pass ("size 1 or smaller and winded"). Chat says who passed: "Goblin is prone; Ogre is not."
+
+### `loseRecoveries`
+
+The target loses Recoveries, with no healing: "the target loses 1d3 Recoveries".
+
+```json
+{ "kind": "loseRecoveries", "amountDice": "1d3" }
+```
+
+`amount` (default 1) or `amountDice`. Works on heroes (their sheet); a monster has no Recoveries, so chat says to skip it.
 
 ### `endCondition`
 

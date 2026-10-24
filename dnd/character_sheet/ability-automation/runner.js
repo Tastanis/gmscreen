@@ -480,6 +480,7 @@
   // top of the effect's own amount/attribute/dice by the caller.
   function resolveTriggerValue(state, amountFrom) {
     if (!amountFrom || typeof amountFrom !== "object") return 0;
+    if (amountFrom.source === "damageDealt") return scaleTriggerValue(asInt(state.damageDealt, 0), amountFrom);
     const payload = state.triggerPayload?.payload && typeof state.triggerPayload.payload === "object"
       ? state.triggerPayload.payload
       : state.triggerPayload || null;
@@ -494,6 +495,10 @@
         raw = asInt(payload.amount, 0);
         break;
     }
+    return scaleTriggerValue(raw, amountFrom);
+  }
+
+  function scaleTriggerValue(raw, amountFrom) {
     if (!raw) return 0;
     const multiplier = Number.isFinite(amountFrom.multiplier) ? amountFrom.multiplier : 1;
     const fraction = Number.isFinite(amountFrom.fraction) ? amountFrom.fraction : 1;
@@ -670,7 +675,8 @@
   }
 
   function inferTargetPrompt(block, nextBlocks = [], startIndex = -1) {
-    if (!block || block.mode !== "token") return {};
+    // Splash targets ("near") have their own confirm wording.
+    if (!block || block.mode !== "token" || block.near) return {};
     const groupName = block.name || "primary";
     for (let index = startIndex + 1; index < nextBlocks.length; index += 1) {
       const candidate = nextBlocks[index];
@@ -771,7 +777,7 @@
     const desired = getTokenTargetCount(block);
     const upTo = block.count?.mode === "upTo";
     // The board already owns the multi-pick/Done prompt and its cancellation.
-    const useBoardOnlyPrompt = block.mode === "token" && Boolean(block.promptTitle || block.promptText || block.optional || upTo || desired > 1);
+    const useBoardOnlyPrompt = block.mode === "token" && Boolean(block.near || block.promptTitle || block.promptText || block.optional || upTo || desired > 1);
     const host = useBoardOnlyPrompt ? null : showTargetPrompt(state, block);
     const finish = () => removeRunnerHost(host);
 
@@ -859,6 +865,11 @@
         throw new Error("Target selection is not available.");
       }
 
+      if (block.near) {
+        await runNearTargetPick(state, block, cancelPromise);
+        return;
+      }
+
       const rangeOriginPlacement = getRangeOriginPlacement(state, block);
       const selected = [];
       const seen = new Set();
@@ -922,6 +933,92 @@
     } finally {
       finish();
     }
+  }
+
+  // ---------- splash targets (target block "near") ----------
+  //
+  // "Each enemy adjacent to the target also takes 3 damage": every creature that fits is pre-picked and pulses on
+  // the board; the user clicks a token to add or remove it, then Done. Nobody fits: nothing to confirm.
+
+  function tokenTeam(token) {
+    const raw = String(token?.combatTeam ?? token?.team ?? token?.tags?.team ?? token?.faction ?? "").trim().toLowerCase();
+    return raw === "enemy" ? "enemy" : "ally";
+  }
+
+  function nearPredicateFits(predicate, candidate, casterTeam, casterId) {
+    const team = tokenTeam(candidate);
+    switch (predicate) {
+      case "enemy": return team !== casterTeam;
+      case "ally": return team === casterTeam && candidate.id !== casterId;
+      case "selfOrAlly":
+      case "selfAndAlly": return team === casterTeam;
+      default: return true;
+    }
+  }
+
+  async function nearCandidates(state, block) {
+    const near = block.near || {};
+    const anchors = getTargetGroup(state, near.group || "primary").filter((item) => item && item.id);
+    if (!anchors.length || typeof state.context.getActiveScenePlacements !== "function" || typeof state.context.getDistanceBetween !== "function") {
+      return { anchors, candidates: [] };
+    }
+    const anchorIds = new Set(anchors.map((item) => item.id));
+    const casterId = state.sourcePlacement?.id || "";
+    const casterTeam = tokenTeam(liveTokenFor(state, state.sourcePlacement));
+    const within = Math.max(0, asInt(near.within, 1));
+    const placements = (await state.context.getActiveScenePlacements()) || [];
+    const candidates = [];
+    for (const placement of placements) {
+      if (!placement?.id || anchorIds.has(placement.id) || placement.hidden) continue;
+      if (placement.id === casterId && !near.includeSelf) continue;
+      if (!nearPredicateFits(block.predicate || "creature", placement, casterTeam, casterId)) continue;
+      let close = false;
+      for (const anchor of anchors) {
+        const squares = Number(await state.context.getDistanceBetween(anchor.id, placement.id));
+        if (Number.isFinite(squares) && squares <= within) { close = true; break; }
+      }
+      if (close) candidates.push({ id: placement.id, name: placement.name || placement.label || "Creature", placement });
+    }
+    return { anchors, candidates };
+  }
+
+  async function runNearTargetPick(state, block, cancelPromise) {
+    const { anchors, candidates } = await nearCandidates(state, block);
+    const label = state.action.name || "Ability";
+    if (!candidates.length) {
+      const where = anchors.map((item) => item.name || "the target").join(", ") || "the target";
+      await postChat(state.context, { message: `${state.heroName} - ${label}: nobody fits near ${where}.` });
+      setTargetGroup(state, block.name, []);
+      return;
+    }
+    const selected = new Map(candidates.map((item) => [item.id, item]));
+    for (;;) {
+      const result = await Promise.race([
+        state.context.selectTarget({
+          ...block,
+          creature: block.predicate,
+          affects: block.predicate,
+          showPrompt: true,
+          allowDone: true,
+          preselectedIds: [...selected.keys()],
+          promptTitle: block.promptTitle || "Confirm the targets",
+          promptText: block.promptText || `${selected.size} picked. Click a token to add or remove it, then Done.`,
+        }),
+        cancelPromise,
+      ]);
+      if (result?.canceled) {
+        state.context.cancelTargetSelection?.();
+        state.aborted = true;
+        return;
+      }
+      if (result?.skipped || result?.done || !result?.id) {
+        state.context.cancelTargetSelection?.();
+        break;
+      }
+      if (selected.has(result.id)) selected.delete(result.id);
+      else selected.set(result.id, result);
+    }
+    setTargetGroup(state, block.name, [...selected.values()]);
   }
 
   // ---------- power roll block ----------
@@ -1771,7 +1868,7 @@
 
   async function applyEffect(state, effect, targets, ctx) {
     if (!effect || typeof effect !== "object") return;
-    if (targets.length && ["damage","condition","forcedMovement","shift","setScopedFlag","applyMark","endMark","halveTriggeringDamage","aura","heal","temporaryStamina","teleport","swap","resourceGain","surgeGain","endCondition"].includes(effect.kind)) {
+    if (targets.length && ["damage","condition","forcedMovement","shift","setScopedFlag","applyMark","endMark","halveTriggeringDamage","aura","heal","temporaryStamina","teleport","swap","resourceGain","surgeGain","endCondition","loseRecoveries"].includes(effect.kind)) {
       fireActionUsedEvent(state);
     }
     switch (effect.kind) {
@@ -1807,6 +1904,8 @@
         return applyIfRollEffect(state, effect, targets, ctx);
       case "endCondition":
         return applyEndConditionEffect(state, effect, targets, ctx);
+      case "loseRecoveries":
+        return applyLoseRecoveriesEffect(state, effect, targets, ctx);
       case "setScopedFlag":
         return applySetScopedFlagEffect(state, effect, targets, ctx);
       case "applyMark":
@@ -2083,6 +2182,7 @@
         typeof state.context.applyDamage === "function"
           ? await state.context.applyDamage(damagePayload)
           : null;
+      state.damageDealt = asInt(state.damageDealt, 0) + Math.max(0, Number.isFinite(result?.amount) ? result.amount : amount);
       const hidden = Boolean(result?.hidden || target.hidden || target.placement?.hidden);
       if (hidden) {
         visibleHidden += 1;
@@ -3045,6 +3145,29 @@
     const branch = passes ? effect.then : effect.else;
     if (!Array.isArray(branch) || !branch.length) return;
     await applyEffects(state, branch, effect.target || state.currentGroup || "primary", ctx);
+  }
+
+  // ---------- loseRecoveries ----------
+
+  async function applyLoseRecoveriesEffect(state, effect, targets) {
+    const label = state.action.name || "Ability";
+    for (const target of targets || []) {
+      if (state.aborted) return;
+      if (!target?.id) continue;
+      const count = Math.max(1, effect.amountDice ? rollDiceFormula(effect.amountDice) : asInt(effect.amount, 1));
+      const word = count === 1 ? "Recovery" : "Recoveries";
+      if (typeof state.context.spendRecoveryForTarget !== "function") {
+        await postChat(state.context, { message: `${state.heroName} - ${label}: ${target.name || "the target"} loses ${count} ${word} (by hand).` });
+        continue;
+      }
+      const result = await state.context.spendRecoveryForTarget({ placementId: target.id, recoveries: count, abilityName: label });
+      const name = result?.name || target.name || "The target";
+      await postChat(state.context, {
+        message: result?.skipped || !result
+          ? `${state.heroName} - ${label}: ${name} loses ${count} ${word}; take them off by hand${result?.reason ? ` (${result.reason})` : ""}.`
+          : `${state.heroName} - ${label}: ${name} loses ${asInt(result.spent, count)} ${word}${Number.isFinite(result.currentRecoveries) ? ` (${result.currentRecoveries} left)` : ""}.`,
+      });
+    }
   }
 
   // ---------- endCondition ----------

@@ -826,6 +826,17 @@
         if (extras) effect._extra = extras;
         return effect;
       }
+      case "loseRecoveries": {
+        const known = new Set(["kind", "amount", "amountDice", "target"]);
+        const effect = { kind: "loseRecoveries", amount: asPosInt(input.amount, 1) };
+        const dice = asTrimmedString(input.amountDice);
+        if (dice) effect.amountDice = dice;
+        const target = asTrimmedString(input.target);
+        if (target) effect.target = target;
+        const extras = pickExtras(input, known);
+        if (extras) effect._extra = extras;
+        return effect;
+      }
       case "endCondition": {
         const known = new Set(["kind", "condition", "conditions", "duration", "pick", "count", "target"]);
         const effect = { kind: "endCondition" };
@@ -1045,7 +1056,7 @@
       "type", "id", "name", "mode", "predicate", "creature", "count", "optional",
       "distance", "range", "selectionGuide", "shape", "size", "width", "height", "length", "note",
       "promptTitle", "promptText", "excludeGroups", "excludeGroup",
-      "rangeOrigin", "structure", "wallColor", "wallType", "wallStamina",
+      "rangeOrigin", "structure", "wallColor", "wallType", "wallStamina", "near",
     ]);
     const mode = pickKnown(input.mode, P.TARGET_MODES, "token");
     const predicateRaw = input.predicate || input.creature || "creature";
@@ -1064,6 +1075,19 @@
     const promptText = asTrimmedString(input.promptText);
     if (promptTitle) block.promptTitle = promptTitle;
     if (promptText) block.promptText = promptText;
+    // Splash: the creatures near an earlier group ("each enemy adjacent to the target"), pre-picked for the user to
+    // confirm. Token mode only.
+    if (input.near !== undefined && input.near !== null) {
+      if (typeof input.near !== "object" || Array.isArray(input.near)) {
+        warnings.push(`${path}.near: must be an object such as { "group": "primary", "within": 1 }.`);
+      } else if (mode !== "token") {
+        warnings.push(`${path}.near: only works on a token target block.`);
+      } else {
+        const near = { group: asTrimmedString(input.near.group) || "primary", within: asNonNegInt(input.near.within, 1) };
+        if (input.near.includeSelf === true) near.includeSelf = true;
+        block.near = near;
+      }
+    }
     if (input.rangeOrigin !== undefined && input.rangeOrigin !== null) {
       const rangeOrigin = typeof input.rangeOrigin === "string" ? input.rangeOrigin.trim() : "";
       if (rangeOrigin) {

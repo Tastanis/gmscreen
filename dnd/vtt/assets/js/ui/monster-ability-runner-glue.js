@@ -289,6 +289,7 @@
             consumeRollRiders: board.consumeRollRiders,
             getPlacementById: board.getPlacementById,
             removeCondition: board.removeCondition,
+            getActiveScenePlacements: board.getActiveScenePlacements,
             getDistanceBetween: board.getDistanceBetween,
             getZoneTags: board.getZoneTags
         };

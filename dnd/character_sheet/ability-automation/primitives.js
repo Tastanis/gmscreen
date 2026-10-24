@@ -36,6 +36,7 @@
     "ifTarget",
     "ifRoll",
     "endCondition",
+    "loseRecoveries",
     "setScopedFlag",
     "applyMark",
     "endMark",
@@ -53,7 +54,9 @@
   // `triggeringDamage` reads payload.amount. `triggeringForcedMovement` reads
   // payload.distance / movedDistance and is also used for normal move-distance
   // reactions because both payloads expose the same distance field.
-  const TRIGGER_VALUE_SOURCES = ["triggeringDamage", "triggeringForcedMovement"];
+  // `damageDealt` is not from a trigger: it is the damage this ability has dealt so far (after immunity and
+  // weakness), for "heals equal to the damage dealt".
+  const TRIGGER_VALUE_SOURCES = ["triggeringDamage", "triggeringForcedMovement", "damageDealt"];
 
   // Standard Draw Steel ability keywords. Authors can use any string, but the
   // ones below are recognized for canonical casing and as the registry seed.
@@ -400,7 +403,9 @@
     if (!amountFrom || typeof amountFrom !== "object") return "";
     const label = amountFrom.source === "triggeringForcedMovement"
       ? "triggering movement"
-      : "triggering damage";
+      : amountFrom.source === "damageDealt"
+        ? "damage dealt"
+        : "triggering damage";
     const parts = [];
     if (amountFrom.multiplier && amountFrom.multiplier !== 1) parts.push(`${amountFrom.multiplier}×`);
     if (amountFrom.fraction && amountFrom.fraction !== 1) {
@@ -589,6 +594,8 @@
         if (elseText) return `If ${label}: ${thenText || "(no effect)"} else: ${elseText}`;
         return `If ${label}: ${thenText || "(no effect)"}`;
       }
+      case "loseRecoveries":
+        return `lose ${effect.amountDice || effect.amount || 1} Recover${(effect.amountDice || effect.amount || 1) === 1 ? "y" : "ies"}`;
       case "endCondition": {
         const which = Array.isArray(effect.condition) && effect.condition.length ? effect.condition.join(" or ") : effect.duration === "saveEnds" ? "save-ends effect" : "condition";
         const count = effect.pick === "all" ? "every" : effect.count > 1 ? `up to ${effect.count}` : "one";

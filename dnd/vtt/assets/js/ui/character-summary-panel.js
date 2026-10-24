@@ -2785,6 +2785,11 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
         ? window.VTTBoardCallbacks.getPlacementById(placementId)
         : null
     ),
+    getActiveScenePlacements: () => (
+      window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.getActiveScenePlacements === 'function'
+        ? window.VTTBoardCallbacks.getActiveScenePlacements()
+        : []
+    ),
     removeCondition: (payload) => (
       window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.removeCondition === 'function'
         ? window.VTTBoardCallbacks.removeCondition(payload)

@@ -17182,7 +17182,12 @@ export function mountBoardInteractions(store, routes = {}) {
     // movement triggered this opp-attack free strike), pulse it red until
     // the picker resolves or cancels. Player can still click anyone.
     const suggestedId = pendingAutomationTarget.targetConfig?.suggestedTargetId;
-    if (suggestedId) startSuggestedTargetPulse(suggestedId);
+    const preselectedIds = Array.isArray(pendingAutomationTarget.targetConfig?.preselectedIds)
+      ? pendingAutomationTarget.targetConfig.preselectedIds
+      : [];
+    // Splash targets: every pre-picked creature pulses; clicking one takes it out, clicking another adds it.
+    if (preselectedIds.length) startSuggestedTargetPulse(preselectedIds);
+    else if (suggestedId) startSuggestedTargetPulse(suggestedId);
     // Draw the reach/range box around the source token so the player can see
     // who's actually legal to click. Skipped when distance info is missing.
     renderAutomationTargetRangeOverlay(pendingAutomationTarget.targetConfig);
@@ -19547,31 +19552,31 @@ export function mountBoardInteractions(store, routes = {}) {
   // pre-suggested target (e.g. the mover that triggered an opportunity
   // attack). Distinct from `flashAutomationTargetToken` which is a brief
   // post-pick confirmation flash.
-  let suggestedTargetPulseId = null;
-  function startSuggestedTargetPulse(placementId) {
-    stopSuggestedTargetPulse();
-    if (!placementId || !tokenLayer) return;
+  // One id or several (splash targets pre-picked by an ability).
+  let suggestedTargetPulseIds = [];
+  function suggestedTargetToken(placementId) {
     const escapedId = window.CSS?.escape
       ? window.CSS.escape(String(placementId))
       : String(placementId).replace(/["\\]/g, '\\$&');
-    const token = tokenLayer.querySelector(`[data-placement-id="${escapedId}"]`);
-    if (!(token instanceof HTMLElement)) return;
-    token.classList.add('vtt-token--suggested-target');
-    suggestedTargetPulseId = String(placementId);
+    const token = tokenLayer?.querySelector(`[data-placement-id="${escapedId}"]`);
+    return token instanceof HTMLElement ? token : null;
+  }
+  function startSuggestedTargetPulse(placementIds) {
+    stopSuggestedTargetPulse();
+    if (!tokenLayer) return;
+    const ids = (Array.isArray(placementIds) ? placementIds : [placementIds]).map((id) => String(id || '')).filter(Boolean);
+    ids.forEach((id) => {
+      const token = suggestedTargetToken(id);
+      if (!token) return;
+      token.classList.add('vtt-token--suggested-target');
+      suggestedTargetPulseIds.push(id);
+    });
   }
   function stopSuggestedTargetPulse() {
-    if (!suggestedTargetPulseId || !tokenLayer) {
-      suggestedTargetPulseId = null;
-      return;
+    if (tokenLayer) {
+      suggestedTargetPulseIds.forEach((id) => suggestedTargetToken(id)?.classList.remove('vtt-token--suggested-target'));
     }
-    const escapedId = window.CSS?.escape
-      ? window.CSS.escape(suggestedTargetPulseId)
-      : suggestedTargetPulseId.replace(/["\\]/g, '\\$&');
-    const token = tokenLayer.querySelector(`[data-placement-id="${escapedId}"]`);
-    if (token instanceof HTMLElement) {
-      token.classList.remove('vtt-token--suggested-target');
-    }
-    suggestedTargetPulseId = null;
+    suggestedTargetPulseIds = [];
   }
 
   // Floats a -N (red) or +N (green) number above a token. Calls for the same
