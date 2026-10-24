@@ -133,8 +133,8 @@
   function normalizeHiddenEffectRider(input, warnings, path) {
     if (!input || typeof input !== "object") return null;
     const rawType = asTrimmedString(input.type);
-    const type = rawType.toLowerCase() === "rollmodifier" ? "rollModifier" : rawType;
-    if (type !== "rollModifier") {
+    const type = rawType.toLowerCase() === "rollmodifier" ? "rollModifier" : rawType.toLowerCase() === "rollbuff" ? "rollBuff" : rawType;
+    if (type !== "rollModifier" && type !== "rollBuff") {
       warnings.push(`${path}: hiddenEffect rider type "${type || "(blank)"}" is not supported yet.`);
       return JSON.parse(JSON.stringify(input));
     }
@@ -150,7 +150,8 @@
       doubleBane: "doubleBane",
     };
     const modifier = modifierMap[rawModifier] || "";
-    if (!modifier) {
+    // A rollBuff (the buff effect) may carry only +damage or +potency.
+    if (!modifier && (type === "rollModifier" || rawModifier)) {
       warnings.push(`${path}: rollModifier rider needs modifier edge, bane, doubleEdge, or doubleBane.`);
     }
     const appliesToInput = input.appliesTo && typeof input.appliesTo === "object" ? input.appliesTo : {};
@@ -168,7 +169,15 @@
     const target = asTrimmedString(appliesToInput.target);
     if (target) appliesTo.target = target;
     const consume = asTrimmedString(input.consume) || "manual";
-    const rider = { type: "rollModifier", modifier: modifier || rawModifier || "edge" };
+    const rider = type === "rollBuff" ? { type } : { type: "rollModifier", modifier: modifier || rawModifier || "edge" };
+    if (type === "rollBuff") {
+      if (modifier) rider.modifier = modifier;
+      const damageBonus = asInt(input.damageBonus, 0);
+      if (damageBonus) rider.damageBonus = damageBonus;
+      const potencyBonus = asInt(input.potencyBonus, 0);
+      if (potencyBonus) rider.potencyBonus = potencyBonus;
+    }
+    if (asTrimmedString(input.side).toLowerCase() === "against") rider.side = "against";
     if (Object.keys(appliesTo).length) rider.appliesTo = appliesTo;
     rider.consume = pickKnown(consume, ["manual", "nextMatchingRoll"], consume);
     return rider;
@@ -824,6 +833,26 @@
           else: normalizeEffectList(input.else || [], warnings, `${path}.else`),
         };
         if (!effect.then.length && !effect.else.length) warnings.push(`${path}: ifTarget has no then/else effects.`);
+        const extras = pickExtras(input, known);
+        if (extras) effect._extra = extras;
+        return effect;
+      }
+      case "buff": {
+        const known = new Set(["kind", "label", "modifier", "damageBonus", "potencyBonus", "side", "appliesTo", "duration", "consume", "target"]);
+        const effect = { kind: "buff", label: asTrimmedString(input.label) || "Buff" };
+        if (input.modifier !== undefined && input.modifier !== null && input.modifier !== "") effect.modifier = pickKnownLoose(input.modifier, ["edge", "bane", "doubleEdge", "doubleBane"], "edge");
+        const damageBonus = asInt(input.damageBonus, 0);
+        if (damageBonus) effect.damageBonus = damageBonus;
+        const potencyBonus = asInt(input.potencyBonus, 0);
+        if (potencyBonus) effect.potencyBonus = potencyBonus;
+        effect.side = pickKnownLoose(input.side, ["own", "against"], "own");
+        effect.appliesTo = pickKnownLoose(input.appliesTo, ["abilityRolls", "strikes", "melee", "ranged", "tests"], "abilityRolls");
+        effect.duration = P.normalizeDuration ? P.normalizeDuration(input.duration || "endOfTurn") : (asTrimmedString(input.duration) || "endOfTurn");
+        effect.consume = pickKnownLoose(input.consume, ["nextRoll", "duration"], "nextRoll");
+        if (!effect.modifier && !effect.damageBonus && !effect.potencyBonus) warnings.push(`${path}: buff has no modifier, damageBonus or potencyBonus.`);
+        if (!asTrimmedString(input.label)) warnings.push(`${path}: buff has no label; the token and roll window will say "Buff".`);
+        const target = asTrimmedString(input.target);
+        if (target) effect.target = target;
         const extras = pickExtras(input, known);
         if (extras) effect._extra = extras;
         return effect;

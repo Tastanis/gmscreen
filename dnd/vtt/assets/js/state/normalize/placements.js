@@ -507,6 +507,10 @@ export function normalizePlacementCondition(value) {
   if (value.hidden || name.toLowerCase() === 'hiddeneffect') {
     normalized.hidden = true;
   }
+  // A buff: a hidden effect whose label shows on the token.
+  if (value.shown === true) {
+    normalized.shown = true;
+  }
   if (typeof value.description === 'string' && value.description.trim()) {
     normalized.description = value.description.trim();
   }

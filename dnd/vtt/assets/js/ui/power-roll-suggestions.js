@@ -142,7 +142,7 @@ function listContainsNormalized(list, value) {
 
 function hiddenRiderApplies(condition, context = {}) {
   const rider = condition?.rider && typeof condition.rider === 'object' ? condition.rider : null;
-  if (!rider || normalizeText(rider.type) !== 'rollmodifier') return false;
+  if (!rider || !['rollmodifier', 'rollbuff'].includes(normalizeText(rider.type))) return false;
   const appliesTo = rider.appliesTo && typeof rider.appliesTo === 'object' ? rider.appliesTo : {};
   const wantedRoll = normalizeText(appliesTo.rollEvent);
   const rollEvent = rollEventFromContext(context);
@@ -245,30 +245,30 @@ function hasConditionExcludingTargets(placement, name, targetIds) {
     });
 }
 
-function hiddenEffectSuggestions(placement, context = {}) {
-  return conditionEntries(placement)
-    .map(({ condition, index }) => {
-      if (!condition || normalizeText(condition.name) !== 'hiddeneffect') return null;
-      if (!hiddenRiderApplies(condition, context)) return null;
-      const modifier = rollModifierKind(condition.rider?.modifier);
-      if (!modifier) return null;
-      const label = String(condition.label || condition.sourceAbility || 'Hidden effect').trim();
-      return makeSuggestion(
-        `hidden-effect-${placement.id || 'token'}-${index}`,
-        modifier.kind,
-        label || 'Hidden effect',
-        true,
-        {
-          count: modifier.count,
-          consume: condition.rider?.consume || condition.consume || 'manual',
-          conditionRef: {
-            placementId: placement.id || '',
-            conditionIndex: index,
-          },
-        }
-      );
-    })
-    .filter(Boolean);
+// Hidden effects and buffs on a token. `side` "own": the bearer's own rolls; "against": rolls made against the bearer
+// (a buff with rider.side "against", e.g. "allies have an edge against this target"). A buff can give an edge/bane,
+// +damage and +potency at once: one suggestion each, all used up together.
+function hiddenEffectSuggestions(placement, context = {}, side = 'own') {
+  const list = [];
+  conditionEntries(placement).forEach(({ condition, index }) => {
+    if (!condition || normalizeText(condition.name) !== 'hiddeneffect') return;
+    if (!hiddenRiderApplies(condition, context)) return;
+    const riderSide = normalizeText(condition.rider?.side) === 'against' ? 'against' : 'own';
+    if (riderSide !== side) return;
+    const label = String(condition.label || condition.sourceAbility || 'Hidden effect').trim() || 'Hidden effect';
+    const shared = {
+      consume: condition.rider?.consume || condition.consume || 'manual',
+      conditionRef: { placementId: placement.id || '', conditionIndex: index },
+    };
+    const base = `hidden-effect-${placement.id || 'token'}-${index}`;
+    const modifier = rollModifierKind(condition.rider?.modifier);
+    if (modifier) list.push(makeSuggestion(base, modifier.kind, label, true, { count: modifier.count, ...shared }));
+    const damage = Number.parseInt(condition.rider?.damageBonus, 10) || 0;
+    if (damage) list.push(makeSuggestion(`${base}-damage`, 'damage', label, true, { amount: damage, ...shared }));
+    const potency = Number.parseInt(condition.rider?.potencyBonus, 10) || 0;
+    if (potency) list.push(makeSuggestion(`${base}-potency`, 'potency', label, true, { amount: potency, ...shared }));
+  });
+  return list;
 }
 
 // ---------- always-on edge/bane traits (passive kind "rollModifier") ----------
@@ -489,6 +489,7 @@ export function getPowerRollSuggestions({
     }
   }
   suggestions.push(...hiddenEffectSuggestions(actor, context));
+  targetList.forEach((target) => suggestions.push(...hiddenEffectSuggestions(target, context, 'against')));
   suggestions.push(...rollPassiveSuggestions({ actor, targets: targetList, placements, mapLevels, getTeam, context, passivesFor }));
   // A minion led by a captain: "Gain an edge on strikes" (or a double edge), already switched on.
   const captainEdge = Math.min(2, Math.max(0, Number.parseInt(captainBonus?.edge, 10) || 0));

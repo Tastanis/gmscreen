@@ -68,8 +68,10 @@ export function paintTokenMarkIndicator(tokenElement, mark, {interactive = false
 export function paintTokenConditionLabel(tokenElement, conditions = [], {interactive = false, configureConditionTooltip = () => {}, detachConditionTooltip = () => {}} = {}) {
   let label = tokenElement.querySelector('.vtt-token__condition');
   let hiddenBadge = tokenElement.querySelector('.vtt-token__hidden-effect');
-  const hiddenConditions = conditions.filter((condition) => condition?.hidden || String(condition?.name || '').trim().toLowerCase() === 'hiddeneffect');
-  const visibleConditions = conditions.filter((condition) => !(condition?.hidden || String(condition?.name || '').trim().toLowerCase() === 'hiddeneffect'));
+  // A shown hidden effect (a buff) is on the token by its label; other hidden effects only as the FX badge.
+  const isHiddenOnly = (condition) => (condition?.hidden || String(condition?.name || '').trim().toLowerCase() === 'hiddeneffect') && condition?.shown !== true;
+  const hiddenConditions = conditions.filter(isHiddenOnly);
+  const visibleConditions = conditions.filter((condition) => !isHiddenOnly(condition));
   tokenElement.classList.toggle('vtt-token--has-hidden-effects', hiddenConditions.length > 0);
 
   if (!visibleConditions.length) {
@@ -80,7 +82,9 @@ export function paintTokenConditionLabel(tokenElement, conditions = [], {interac
   }
 
   const text = visibleConditions
-    .map((condition) => (condition && typeof condition.name === 'string' ? condition.name.trim() : ''))
+    .map((condition) => (condition?.shown === true && typeof condition.label === 'string' && condition.label.trim()
+      ? condition.label.trim()
+      : condition && typeof condition.name === 'string' ? condition.name.trim() : ''))
     .filter(Boolean)
     .join(' • ');
 

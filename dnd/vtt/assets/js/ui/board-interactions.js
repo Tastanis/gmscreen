@@ -13734,7 +13734,17 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function consumeBoardRollRiders(payload = {}) {
-    const suggestions = Array.isArray(payload.suggestions) ? payload.suggestions : [];
+    // Highest index first on each token, once per condition, so removing one never shifts the next.
+    const seen = new Set();
+    const suggestions = (Array.isArray(payload.suggestions) ? payload.suggestions : [])
+      .filter((suggestion) => {
+        const ref = suggestion?.conditionRef;
+        const key = `${ref?.placementId}#${ref?.conditionIndex}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .sort((a, b) => (Number.parseInt(b?.conditionRef?.conditionIndex, 10) || 0) - (Number.parseInt(a?.conditionRef?.conditionIndex, 10) || 0));
     let removed = 0;
     suggestions.forEach((suggestion) => {
       const consume = String(suggestion?.consume || '').trim();
@@ -18044,6 +18054,9 @@ export function mountBoardInteractions(store, routes = {}) {
     if (conditionPayload.hidden || name === 'hiddenEffect') {
       condition.hidden = true;
     }
+    if (conditionPayload.shown === true) {
+      condition.shown = true;
+    }
     if (conditionPayload.label) {
       condition.label = String(conditionPayload.label);
     }
@@ -18147,7 +18160,8 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     const sourceStats = payload.sourceStats && typeof payload.sourceStats === 'object' ? payload.sourceStats : {};
     const targetStats = await getAutomationStatsForPlacement(placement);
-    const threshold = computeAutomationPotencyThreshold(sourceStats, payload.threshold);
+    // +potency from a buff ticked in the roll window.
+    const threshold = computeAutomationPotencyThreshold(sourceStats, payload.threshold) + (Number.parseInt(payload.thresholdBonus, 10) || 0);
     const attributeValue = getAutomationStatValue(targetStats, payload.attribute);
     resolve?.({
       passes: attributeValue < threshold,

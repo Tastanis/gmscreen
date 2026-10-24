@@ -1357,6 +1357,27 @@ Checks a fact about each target and gives each target the branch that fits it: "
 
 All the fields you give must pass ("size 1 or smaller and winded"). Chat says who passed: "Goblin is prone; Ogre is not."
 
+### `buff`
+
+A timed bonus on a creature: "your next strike gets +2 damage", "you have an edge on your next roll", "+1 potency until the end of your turn", "allies have an edge on strikes against the target until the end of your next turn". The buff's name shows on the token (x to remove it). In the roll window it is already ticked; after that roll it is used up. Untick it to keep it for later.
+
+```json
+{ "kind": "buff", "target": "self", "label": "Poison the Blade", "damageBonus": 2, "modifier": "edge", "appliesTo": "strikes" }
+```
+
+| Field | Values | Notes |
+|---|---|---|
+| `label` | string | Shown on the token and in the roll window. |
+| `modifier` | `edge`, `bane`, `doubleEdge`, `doubleBane` | Optional. |
+| `damageBonus` | integer | Optional. Added to the roll's first damage effect. |
+| `potencyBonus` | integer | Optional. Added to the roll's potencies ("+1 potency"). |
+| `side` | `own` (default), `against` | `own`: the bearer's rolls. `against`: rolls made against the bearer ("allies have an edge against this target"). |
+| `appliesTo` | `abilityRolls` (default), `strikes`, `melee`, `ranged`, `tests` | Which rolls it is ticked for. |
+| `duration` | `endOfTurn` (default), `saveEnds`, `endOfEncounter` | When it ends if not used. Put on during the bearer's own turn, `endOfTurn` ends at the end of that turn. |
+| `consume` | `nextRoll` (default), `duration` | `nextRoll`: used up by the next roll it is ticked in. `duration`: stays for every matching roll until it ends. |
+
+With no `target`, the buff goes on the effect's targets; `"target": "self"` puts it on the user.
+
 ### `maliceGain`
 
 The Director gains Malice: "gain 1 Malice when a demon dies within 10 squares", "gain 2 Malice". The counter goes up by itself and chat says why; the Director can still change it by hand.

@@ -554,7 +554,7 @@
   function normalizeRollSuggestion(input) {
     if (!input || typeof input !== "object") return null;
     const kind = String(input.kind || "").trim().toLowerCase();
-    if (kind !== "edge" && kind !== "bane") return null;
+    if (kind !== "edge" && kind !== "bane" && kind !== "damage" && kind !== "potency") return null;
     const id = String(input.id || `${kind}-${input.label || ""}`).trim();
     const label = String(input.label || id).trim();
     if (!id || !label) return null;
@@ -565,6 +565,8 @@
       reason: typeof input.reason === 'string' ? input.reason : '',
       active: input.active !== false,
       count: Math.max(1, Math.min(2, asInt(input.count, 1))),
+      // +damage / +potency suggestions (timed buffs): the bonus they add.
+      amount: kind === "damage" || kind === "potency" ? asInt(input.amount, 0) : 0,
       conditionRef: input.conditionRef && typeof input.conditionRef === "object"
         ? {
             placementId: String(input.conditionRef.placementId || ""),
@@ -600,7 +602,9 @@
     const active = (Array.isArray(state.rollSuggestions) ? state.rollSuggestions : [])
       .filter((suggestion) => suggestion?.active)
       .map((suggestion) => suggestion.label);
-    return active.length ? `Suggested: ${active.join(", ")}` : "Suggested: none";
+    // One buff can give an edge and +damage: its name once.
+    const names = [...new Set(active)];
+    return names.length ? `Suggested: ${names.join(", ")}` : "Suggested: none";
   }
 
   function resolveTriggerPlacementGroup(state, name) {
@@ -1120,9 +1124,13 @@
     }
     const buttons = suggestions.map((suggestion) => {
       const count = Math.max(1, Math.min(2, asInt(suggestion.count, 1)));
-      const icon = suggestion.kind === "edge"
-        ? (count > 1 ? "^^" : "^")
-        : (count > 1 ? "vv" : "v");
+      const icon = suggestion.kind === "damage"
+        ? `+${asInt(suggestion.amount, 0)} dmg`
+        : suggestion.kind === "potency"
+          ? `+${asInt(suggestion.amount, 0)} potency`
+          : suggestion.kind === "edge"
+            ? (count > 1 ? "^^" : "^")
+            : (count > 1 ? "vv" : "v");
       const pressed = suggestion.active ? "true" : "false";
       return `
         <button
@@ -1546,7 +1554,15 @@
 
     const tier = block.tiers?.[state.selectedTier] || { effects: [] };
     const targetGroupName = block.target;
-    await applyEffects(state, tier.effects || [], targetGroupName, {
+    // Timed buffs ticked in the roll window: +damage on the roll's first damage effect, +potency on its potencies.
+    const rollBonuses = activeRollBonuses(state);
+    const tierEffects = rollBonuses.damage ? withDamageBonus(tier.effects || [], rollBonuses.damage) : (tier.effects || []);
+    if (rollBonuses.labels.length) {
+      await postChat(state.context, { message: `${state.heroName} - ${state.action.name || "Ability"}: ${rollBonuses.labels.join(", ")}.` });
+    }
+    state.rollPotencyBonus = rollBonuses.potency;
+    try {
+    await applyEffects(state, tierEffects, targetGroupName, {
       sourceLabel: `${state.action.name || "Ability"} (${P.tierLabel(state.selectedTier)})`,
       powerRollSurges: {
         requested: clampPowerRollSurges(state, block),
@@ -1554,6 +1570,31 @@
         damage: 0,
         consumed: false,
       },
+    });
+    } finally {
+      state.rollPotencyBonus = 0;
+    }
+  }
+
+  function activeRollBonuses(state) {
+    const result = { damage: 0, potency: 0, labels: [] };
+    (Array.isArray(state.rollSuggestions) ? state.rollSuggestions : []).forEach((suggestion) => {
+      if (!suggestion?.active) return;
+      const amount = asInt(suggestion.amount, 0);
+      if (!amount) return;
+      if (suggestion.kind === "damage") { result.damage += amount; result.labels.push(`+${amount} damage (${suggestion.label})`); }
+      if (suggestion.kind === "potency") { result.potency += amount; result.labels.push(`+${amount} potency (${suggestion.label})`); }
+    });
+    return result;
+  }
+
+  // Adds a bonus to the first damage effect of a tier (as a kit's or captain's damage bonus is added).
+  function withDamageBonus(effects, bonus) {
+    let added = false;
+    return effects.map((effect) => {
+      if (added || !effect || effect.kind !== "damage" || effect.raw) return effect;
+      added = true;
+      return { ...effect, amount: asInt(effect.amount, 0) + bonus };
     });
   }
 
@@ -1650,8 +1691,15 @@
   async function consumeActiveRollRiders(state, block) {
     const callback = state?.context?.consumeRollRiders;
     if (typeof callback !== "function") return;
+    const seenRefs = new Set();
     const activeSuggestions = (Array.isArray(state.rollSuggestions) ? state.rollSuggestions : [])
-      .filter((suggestion) => suggestion?.active && suggestion.conditionRef);
+      .filter((suggestion) => suggestion?.active && suggestion.conditionRef)
+      .filter((suggestion) => {
+        const key = `${suggestion.conditionRef.placementId}#${suggestion.conditionRef.conditionIndex}`;
+        if (seenRefs.has(key)) return false;
+        seenRefs.add(key);
+        return true;
+      });
     if (!activeSuggestions.length) return;
     const targets = getTargetGroup(state, block.target);
     await callback({
@@ -1868,7 +1916,7 @@
 
   async function applyEffect(state, effect, targets, ctx) {
     if (!effect || typeof effect !== "object") return;
-    if (targets.length && ["damage","condition","forcedMovement","shift","setScopedFlag","applyMark","endMark","halveTriggeringDamage","aura","heal","temporaryStamina","teleport","swap","resourceGain","surgeGain","endCondition","loseRecoveries"].includes(effect.kind)) {
+    if (targets.length && ["damage","condition","forcedMovement","shift","setScopedFlag","applyMark","endMark","halveTriggeringDamage","aura","heal","temporaryStamina","teleport","swap","resourceGain","surgeGain","endCondition","loseRecoveries","buff"].includes(effect.kind)) {
       fireActionUsedEvent(state);
     }
     switch (effect.kind) {
@@ -1908,6 +1956,8 @@
         return applyLoseRecoveriesEffect(state, effect, targets, ctx);
       case "maliceGain":
         return applyMaliceGainEffect(state, effect);
+      case "buff":
+        return applyBuffEffect(state, effect, targets, ctx);
       case "setScopedFlag":
         return applySetScopedFlagEffect(state, effect, targets, ctx);
       case "applyMark":
@@ -2233,6 +2283,8 @@
       }
       if (effect.name === "hiddenEffect") {
         conditionPayload.hidden = true;
+        // A buff: its label shows on the token (hidden effects otherwise show only as a badge).
+        if (effect.shown === true) conditionPayload.shown = true;
         conditionPayload.label = effect.label || effect.text || "Hidden effect";
         if (effect.rider && typeof effect.rider === "object") {
           conditionPayload.rider = JSON.parse(JSON.stringify(effect.rider));
@@ -2726,11 +2778,12 @@
               ? Number(effect.threshold)
               : effect.level,
             sourceStats: state.hero?.stats || {},
+            ...(asInt(state.rollPotencyBonus, 0) ? { thresholdBonus: asInt(state.rollPotencyBonus, 0) } : {}),
             })
           : { passes: true };
       if (!result?.passes) {
         await postChat(state.context, {
-          message: `${state.heroName} - ${state.action.name || "Ability"}: ${target.name || "Target"} resisted ${effect.attribute}<${Number.isFinite(Number(effect.threshold)) ? Number(effect.threshold) : effect.level}.`,
+          message: `${state.heroName} - ${state.action.name || "Ability"}: ${target.name || "Target"} resisted ${effect.attribute}<${Number.isFinite(result?.threshold) ? result.threshold : Number.isFinite(Number(effect.threshold)) ? Number(effect.threshold) : effect.level}.`,
         });
         if (Array.isArray(effect.onResist) && effect.onResist.length) {
           await applyPotencyBranch(state, [target], effect.onResist, ctx);
@@ -3148,6 +3201,41 @@
     const branch = passes ? effect.then : effect.else;
     if (!Array.isArray(branch) || !branch.length) return;
     await applyEffects(state, branch, effect.target || state.currentGroup || "primary", ctx);
+  }
+
+  // ---------- buff ----------
+  //
+  // "Your next strike gets +2 damage", "edge on your next roll", "+1 potency until the end of your turn", "allies
+  // have an edge against this target until...". A label on the token with an x; ticked in the roll window; used up
+  // after the next matching roll unless `consume: "duration"`.
+
+  function buffRider(effect) {
+    const appliesTo = {};
+    if (effect.appliesTo === "strikes") appliesTo.keywordsAll = ["Strike"];
+    else if (effect.appliesTo === "melee") appliesTo.keywordsAny = ["Melee"];
+    else if (effect.appliesTo === "ranged") appliesTo.keywordsAny = ["Ranged"];
+    else if (effect.appliesTo === "tests") appliesTo.rollEvent = "abilityTest";
+    else appliesTo.rollEvent = "powerRoll";
+    const rider = { type: "rollBuff", appliesTo, consume: effect.consume === "duration" ? "manual" : "nextMatchingRoll" };
+    if (effect.modifier) rider.modifier = effect.modifier;
+    if (effect.damageBonus) rider.damageBonus = effect.damageBonus;
+    if (effect.potencyBonus) rider.potencyBonus = effect.potencyBonus;
+    if (effect.side === "against") rider.side = "against";
+    return rider;
+  }
+
+  async function applyBuffEffect(state, effect, targets, ctx) {
+    const recipients = targets && targets.length ? targets : [state.sourcePlacement].filter((item) => item && item.id);
+    await applyConditionEffect(state, {
+      kind: "condition",
+      name: "hiddenEffect",
+      shown: true,
+      label: effect.label || "Buff",
+      duration: effect.duration || "endOfTurn",
+      rider: buffRider(effect),
+      consume: effect.consume === "duration" ? "manual" : "nextMatchingRoll",
+      sourceId: state.sourcePlacement?.id || "",
+    }, recipients, ctx);
   }
 
   // ---------- maliceGain ----------

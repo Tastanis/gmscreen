@@ -38,6 +38,7 @@
     "endCondition",
     "loseRecoveries",
     "maliceGain",
+    "buff",
     "setScopedFlag",
     "applyMark",
     "endMark",
@@ -594,6 +595,15 @@
         const label = `the roll ${describeRollTest(effect)}`;
         if (elseText) return `If ${label}: ${thenText || "(no effect)"} else: ${elseText}`;
         return `If ${label}: ${thenText || "(no effect)"}`;
+      }
+      case "buff": {
+        const parts = [];
+        if (effect.modifier) parts.push(effect.modifier.replace(/([A-Z])/g, " $1").toLowerCase());
+        if (effect.damageBonus) parts.push(`+${effect.damageBonus} damage`);
+        if (effect.potencyBonus) parts.push(`+${effect.potencyBonus} potency`);
+        const whose = effect.side === "against" ? " on rolls against them" : "";
+        const when = effect.consume === "duration" ? "" : " (next roll)";
+        return `${effect.label || "buff"}: ${parts.join(", ") || "buff"}${whose}${when}`;
       }
       case "maliceGain":
         return `gain ${effect.amountDice || effect.amount || 1} Malice`;

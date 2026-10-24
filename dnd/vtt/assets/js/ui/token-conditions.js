@@ -99,6 +99,7 @@ export function normalizePlacementCondition(value) {
   if (amount !== null) result.amount = amount;
   if (damageType) result.damageType = damageType;
   if (value.hidden || name.toLowerCase() === 'hiddeneffect') result.hidden = true;
+  if (value.shown === true) result.shown = true;
   if (typeof value.label === 'string' && value.label.trim()) {
     result.label = value.label.trim();
   }
@@ -158,6 +159,9 @@ export function ensurePlacementCondition(value) {
   }
   if (normalized.hidden || normalized.name.toLowerCase() === 'hiddeneffect') {
     condition.hidden = true;
+  }
+  if (normalized.shown === true) {
+    condition.shown = true;
   }
   if (typeof normalized.label === 'string' && normalized.label) {
     condition.label = normalized.label;
