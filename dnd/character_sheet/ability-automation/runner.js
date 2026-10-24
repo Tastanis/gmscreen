@@ -661,7 +661,7 @@
       if (effect.kind === kind) return true;
       if (effect.kind === "potency" && (effectListContainsKind(effect.onFail, kind) || effectListContainsKind(effect.onResist, kind))) return true;
       if (effect.kind === "spend" && effectListContainsKind(effect.effects, kind)) return true;
-      if (effect.kind === "ifKeyword" || effect.kind === "ifPrompt" || effect.kind === "ifMark" || effect.kind === "ifScopedFlag" || effect.kind === "ifDistance" || effect.kind === "ifZone" || effect.kind === "ifStrained") {
+      if (effect.kind === "ifKeyword" || effect.kind === "ifPrompt" || effect.kind === "ifMark" || effect.kind === "ifScopedFlag" || effect.kind === "ifDistance" || effect.kind === "ifZone" || effect.kind === "ifStrained" || effect.kind === "ifTarget" || effect.kind === "ifRoll") {
         if (effectListContainsKind(effect.then, kind) || effectListContainsKind(effect.else, kind)) return true;
       }
       if (effect.kind === "aura" && effectListContainsKind(effect.effects, kind)) return true;
@@ -1442,6 +1442,7 @@
 
     if (state.aborted) return;
     if (!state.selectedTier) return;
+    rememberAcceptedRoll(state, block);
 
     await fireRollTriggerEvent(state, block);
     await consumeActiveRollRiders(state, block);
@@ -1800,6 +1801,10 @@
         return applyIfDistanceEffect(state, effect, targets, ctx);
       case "ifZone":
         return applyIfZoneEffect(state, effect, targets, ctx);
+      case "ifTarget":
+        return applyIfTargetEffect(state, effect, targets, ctx);
+      case "ifRoll":
+        return applyIfRollEffect(state, effect, targets, ctx);
       case "setScopedFlag":
         return applySetScopedFlagEffect(state, effect, targets, ctx);
       case "applyMark":
@@ -2817,6 +2822,229 @@
     await runFor(effect.else, result.outside);
   }
 
+  // ---------- target checks (ifTarget, branch "target") ----------
+  //
+  // Facts read from the token: its conditions (custom ones by their name, e.g. "wet"), size, stability,
+  // Stamina and kind of creature. When the board can't tell a fact (a hero's stability, a token with no
+  // size), the user is asked once, like ifPrompt. Each target gets the branch that fits it.
+
+  const SIZE_LETTER_RANK = { T: 1, S: 2, M: 3, L: 4 };
+
+  // 1T=1, 1S=2, 1M=3, 1L=4, 2=5, 3=6... A bare 1 is 1M for a creature; as a limit it means any size 1.
+  function sizeRank(value, bound) {
+    const text = String(value === null || value === undefined ? "" : value).trim().toUpperCase().replace(/\s+/g, "");
+    const match = /^(\d+)([TSML]?)$/.exec(text);
+    if (!match) return null;
+    const number = parseInt(match[1], 10);
+    if (number <= 1) {
+      if (match[2]) return SIZE_LETTER_RANK[match[2]];
+      return bound === "max" ? 4 : bound === "min" ? 1 : 3;
+    }
+    return number + 3;
+  }
+
+  function liveTokenFor(state, subject) {
+    const id = subject?.id || "";
+    const live = id && typeof state.context.getPlacementById === "function" ? state.context.getPlacementById(id) : null;
+    if (live && typeof live === "object") return live;
+    return subject?.placement && typeof subject.placement === "object" ? { ...subject.placement, ...subject } : subject || null;
+  }
+
+  function tokenSizeRank(token) {
+    const declared = token?.monster?.size ?? token?.automationTraits?.size ?? token?.size;
+    const fromDeclared = declared !== undefined && declared !== null && declared !== "" ? sizeRank(declared, "creature") : null;
+    if (fromDeclared !== null) return fromDeclared;
+    const width = parseInt(token?.width, 10);
+    if (Number.isFinite(width) && width > 0) return width <= 1 ? 3 : width + 3;
+    return null;
+  }
+
+  function tokenStability(token) {
+    const value = token?.monster?.stability ?? token?.automationTraits?.stability ?? token?.stability;
+    const number = parseInt(value, 10);
+    return Number.isFinite(number) ? number : null;
+  }
+
+  function tokenStamina(token) {
+    const hp = token?.hp;
+    let current; let max;
+    if (hp && typeof hp === "object") { current = hp.current; max = hp.max; }
+    else { current = hp; max = token?.maxHp ?? token?.hpMax; }
+    current = Number(current); max = Number(max);
+    return Number.isFinite(current) && Number.isFinite(max) && max > 0 ? { current, max } : null;
+  }
+
+  function tokenConditions(token) {
+    const raw = Array.isArray(token?.conditions) ? token.conditions : token?.condition ? [token.condition] : [];
+    return raw.map((entry) => (typeof entry === "string" ? { name: entry } : entry)).filter((entry) => entry && typeof entry === "object");
+  }
+
+  function tokenKindWords(token) {
+    const monster = token?.monster || token?.automationTraits || {};
+    const text = [monster.role, monster.types, monster.keywords, monster.ancestry, monster.name, token?.name]
+      .map((value) => (Array.isArray(value) ? value.join(" ") : value || "")).join(" ").toLowerCase();
+    return new Set(text.split(/[^a-z0-9']+/).filter(Boolean));
+  }
+
+  // true / false, or null when the board can't tell.
+  function checkTargetFacts(state, test, subject) {
+    const token = liveTokenFor(state, subject);
+    let unknown = false;
+    const fail = () => false;
+    if (test.condition && test.condition.length) {
+      const casterId = state.sourcePlacement?.id || "";
+      const has = tokenConditions(token).some((condition) => {
+        const names = [condition.name, condition.text, condition.label].map((value) => String(value || "").trim().toLowerCase()).filter(Boolean);
+        if (!test.condition.some((wanted) => names.includes(wanted))) return false;
+        return test.conditionFrom !== "self" || String(condition.sourceId || condition.source?.id || "") === casterId;
+      });
+      if (!has) return fail();
+    }
+    if (test.sizeMax || test.sizeMin || test.sizeVsSelf) {
+      const rank = tokenSizeRank(token);
+      if (rank === null) unknown = true;
+      else {
+        if (test.sizeMax && rank > sizeRank(test.sizeMax, "max")) return fail();
+        if (test.sizeMin && rank < sizeRank(test.sizeMin, "min")) return fail();
+        if (test.sizeVsSelf) {
+          const mine = tokenSizeRank(liveTokenFor(state, state.sourcePlacement));
+          if (mine === null) unknown = true;
+          else {
+            const ok = { smaller: rank < mine, sameOrSmaller: rank <= mine, same: rank === mine, sameOrLarger: rank >= mine, larger: rank > mine }[test.sizeVsSelf];
+            if (!ok) return fail();
+          }
+        }
+      }
+    }
+    if (test.stabilityMax !== undefined || test.stabilityMin !== undefined) {
+      const stability = tokenStability(token);
+      if (stability === null) unknown = true;
+      else {
+        if (test.stabilityMax !== undefined && stability > test.stabilityMax) return fail();
+        if (test.stabilityMin !== undefined && stability < test.stabilityMin) return fail();
+      }
+    }
+    if (test.stamina) {
+      const stamina = tokenStamina(token);
+      if (!stamina) unknown = true;
+      else {
+        const winded = stamina.current <= Math.floor(stamina.max / 2);
+        const ok = {
+          winded,
+          notWinded: !winded,
+          full: stamina.current >= stamina.max,
+          belowFull: stamina.current < stamina.max,
+          dying: stamina.current <= 0,
+        }[test.stamina];
+        if (!ok) return fail();
+      }
+    }
+    if ((test.keyword && test.keyword.length) || (test.notKeyword && test.notKeyword.length)) {
+      const words = tokenKindWords(token);
+      const hasWord = (list) => list.some((word) => word.split(/\s+/).every((part) => words.has(part)));
+      if (test.keyword && test.keyword.length && !hasWord(test.keyword)) return fail();
+      if (test.notKeyword && test.notKeyword.length && hasWord(test.notKeyword)) return fail();
+    }
+    return unknown ? null : true;
+  }
+
+  async function resolveTargetTest(state, test, targets) {
+    const selfMode = test.who === "self";
+    const subjects = selfMode
+      ? [state.sourcePlacement].filter((item) => item && item.id)
+      : (test.target ? getTargetGroup(state, test.target) : targets || []).filter((item) => item && item.id);
+    const passed = []; const failed = []; const unsure = [];
+    if (!subjects.length) return { subjects, passed, failed, asked: false, nobody: true };
+    for (const subject of subjects) {
+      const result = checkTargetFacts(state, test, subject);
+      (result === true ? passed : result === false ? failed : unsure).push(subject);
+    }
+    if (!unsure.length) return { subjects, passed, failed, asked: false };
+    const question = test.question || `Is {target} ${P.describeTargetTest(test)}?`;
+    const answer = await askAutomationPrompt(state, { question, yesLabel: "Yes", noLabel: "No" }, unsure);
+    (answer ? passed : failed).push(...unsure);
+    return { subjects, passed, failed, asked: true, answer: Boolean(answer), unsure, question };
+  }
+
+  function targetTestChatLine(state, test, result) {
+    const prefix = `${state.heroName} - ${state.action.name || "Ability"}: `;
+    const names = (list) => list.map((subject) => subject.name || "the target").join(", ");
+    const parts = [];
+    if (result.passed.length) parts.push(`${names(result.passed)} ${result.passed.length === 1 ? "is" : "are"} ${P.describeTargetTest(test)}`);
+    if (result.failed.length) parts.push(`${names(result.failed)} ${result.failed.length === 1 ? "is" : "are"} not`);
+    const asked = result.asked ? ` (${formatPromptQuestion({ question: result.question }, result.unsure)} ${result.answer ? "Yes" : "No"})` : "";
+    return `${prefix}${parts.join("; ")}.${asked}`;
+  }
+
+  async function runSubsetBranch(state, branch, subset, group, ctx) {
+    if (!Array.isArray(branch) || !branch.length) return;
+    if (!subset) { await applyEffects(state, branch, group, ctx); return; }
+    if (!subset.length) return;
+    // A short-lived group holding just the targets this branch applies to.
+    const saved = state.currentGroup;
+    const temp = `__check_${state.zoneGroupSeq = (state.zoneGroupSeq || 0) + 1}`;
+    state.groups[temp] = subset;
+    try { await applyEffects(state, branch, temp, ctx); }
+    finally { delete state.groups[temp]; state.currentGroup = saved; }
+  }
+
+  async function applyIfTargetEffect(state, effect, targets, ctx) {
+    const result = await resolveTargetTest(state, effect, targets);
+    if (state.aborted || result.nobody) return;
+    await postChat(state.context, { message: targetTestChatLine(state, effect, result) });
+    const group = effect.target || state.currentGroup || "primary";
+    if (effect.who === "self") {
+      await runSubsetBranch(state, result.passed.length ? effect.then : effect.else, null, group, ctx);
+      return;
+    }
+    await runSubsetBranch(state, effect.then, result.passed, group, ctx);
+    if (state.aborted) return;
+    await runSubsetBranch(state, effect.else, result.failed, group, ctx);
+  }
+
+  // ---------- roll checks (ifRoll, branch "roll") ----------
+
+  function rememberAcceptedRoll(state, block) {
+    const accepted = getPowerRollTotal(state, block);
+    const natural = state.roll && Number.isFinite(state.roll.total) ? state.roll.total : null;
+    const twoD10 = !block.rollFormula || String(block.rollFormula).replace(/\s+/g, "").toLowerCase() === "2d10";
+    state.lastPowerRoll = {
+      total: accepted.total,
+      net: accepted.edgeState.net,
+      natural,
+      tier: state.selectedTier || "",
+      critical: Boolean(twoD10 && natural !== null && natural >= 19),
+    };
+  }
+
+  function rollTestPasses(state, test) {
+    const roll = state.lastPowerRoll;
+    if (!roll) return false;
+    if (test.edge) {
+      const net = roll.net;
+      const ok = {
+        edge: net === 1,
+        doubleEdge: net >= 2,
+        anyEdge: net >= 1,
+        bane: net === -1,
+        doubleBane: net <= -2,
+        anyBane: net <= -1,
+        none: net === 0,
+      }[test.edge];
+      if (!ok) return false;
+    }
+    if (test.critical === true && !roll.critical) return false;
+    if (Array.isArray(test.tier) && test.tier.length && !test.tier.includes(roll.tier)) return false;
+    return true;
+  }
+
+  async function applyIfRollEffect(state, effect, targets, ctx) {
+    const passes = rollTestPasses(state, effect);
+    const branch = passes ? effect.then : effect.else;
+    if (!Array.isArray(branch) || !branch.length) return;
+    await applyEffects(state, branch, effect.target || state.currentGroup || "primary", ctx);
+  }
+
   async function applyMarkEffect(state, effect, targets) {
     const groupName = effect.target || state.currentGroup || "primary";
     const markTargets = effect.target ? getTargetGroup(state, effect.target) : targets;
@@ -3526,6 +3754,14 @@
         if (squares == null) return false;
         return distanceWithinBand(squares, c);
       }
+      case "target": {
+        const targets = getTargetGroup(state, c.target || state.currentGroup || "primary");
+        const result = await resolveTargetTest(state, c, targets);
+        if (!state.aborted && !result.nobody) await postChat(state.context, { message: targetTestChatLine(state, c, result) });
+        return result.passed.length > 0;
+      }
+      case "roll":
+        return rollTestPasses(state, c);
       case "zone": {
         const targets = getTargetGroup(state, c.target || state.currentGroup || "primary");
         const result = await resolveZoneCondition(state, c, targets);
@@ -4016,7 +4252,7 @@
         walkEffectList(effect.then || [], visit);
         walkEffectList(effect.else || [], visit);
       }
-      if (effect.kind === "ifDistance" || effect.kind === "ifZone" || effect.kind === "ifStrained") {
+      if (effect.kind === "ifDistance" || effect.kind === "ifZone" || effect.kind === "ifStrained" || effect.kind === "ifTarget" || effect.kind === "ifRoll") {
         walkEffectList(effect.then || [], visit);
         walkEffectList(effect.else || [], visit);
       }

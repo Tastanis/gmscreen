@@ -2805,9 +2805,9 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
         ? window.VTTBoardCallbacks.getDistanceBetween(idA, idB)
         : null
     ),
-    getZoneTags: (placementId) => (
+    getZoneTags: (placementId, options) => (
       window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.getZoneTags === 'function'
-        ? window.VTTBoardCallbacks.getZoneTags(placementId)
+        ? window.VTTBoardCallbacks.getZoneTags(placementId, options)
         : null
     ),
   });

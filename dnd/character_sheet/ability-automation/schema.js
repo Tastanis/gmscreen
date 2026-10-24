@@ -813,6 +813,34 @@
         if (extras) effect._extra = extras;
         return effect;
       }
+      case "ifTarget": {
+        const known = new Set(["kind", ...TARGET_TEST_KEYS, "then", "else"]);
+        const effect = {
+          kind: "ifTarget",
+          ...normalizeTargetTest(input, warnings, path, "ifTarget"),
+          then: normalizeEffectList(input.then || [], warnings, `${path}.then`),
+          else: normalizeEffectList(input.else || [], warnings, `${path}.else`),
+        };
+        if (!effect.then.length && !effect.else.length) warnings.push(`${path}: ifTarget has no then/else effects.`);
+        const extras = pickExtras(input, known);
+        if (extras) effect._extra = extras;
+        return effect;
+      }
+      case "ifRoll": {
+        const known = new Set(["kind", ...ROLL_TEST_KEYS, "target", "then", "else"]);
+        const effect = {
+          kind: "ifRoll",
+          ...normalizeRollTest(input, warnings, path, "ifRoll"),
+          then: normalizeEffectList(input.then || [], warnings, `${path}.then`),
+          else: normalizeEffectList(input.else || [], warnings, `${path}.else`),
+        };
+        const target = asTrimmedString(input.target);
+        if (target) effect.target = target;
+        if (!effect.then.length && !effect.else.length) warnings.push(`${path}: ifRoll has no then/else effects.`);
+        const extras = pickExtras(input, known);
+        if (extras) effect._extra = extras;
+        return effect;
+      }
       case "ifDistance": {
         const known = new Set(["kind", "from", "to", "fromGroup", "toGroup", "min", "max", "target", "then", "else"]);
         const effect = {
@@ -1598,7 +1626,79 @@
     return block;
   }
 
-  const BRANCH_CONDITION_KINDS = ["strained", "winded", "keyword", "prompt", "mark", "scopedFlag", "distance", "zone"];
+  const BRANCH_CONDITION_KINDS = ["strained", "winded", "keyword", "prompt", "mark", "scopedFlag", "distance", "zone", "target", "roll"];
+
+  // ---------- target checks (ifTarget, branch "target") and roll checks (ifRoll, branch "roll") ----------
+  const TARGET_STAMINA_STATES = ["winded", "notWinded", "full", "belowFull", "dying"];
+  const SIZE_VS_SELF = ["smaller", "sameOrSmaller", "same", "sameOrLarger", "larger"];
+  const ROLL_EDGE_STATES = ["edge", "doubleEdge", "anyEdge", "bane", "doubleBane", "anyBane", "none"];
+  const TARGET_TEST_KEYS = ["who", "condition", "conditions", "conditionFrom", "sizeMax", "sizeMin", "sizeVsSelf", "stabilityMax", "stabilityMin", "stamina", "keyword", "keywords", "notKeyword", "target", "question"];
+  const ROLL_TEST_KEYS = ["edge", "critical", "tier"];
+
+  // Matches a word from a list in any case ("Winded" -> "winded").
+  function pickKnownLoose(value, list, fallback) {
+    const text = asTrimmedString(value).toLowerCase().replace(/[\s_-]+/g, "");
+    return list.find((item) => item.toLowerCase() === text) || fallback;
+  }
+
+  // A Draw Steel size: 1T, 1S, 1M, 1L, 2, 3... A bare 1 means any size 1.
+  function normalizeSizeBound(value) {
+    if (value === null || value === undefined || value === "") return "";
+    const text = String(value).trim().toUpperCase().replace(/\s+/g, "");
+    return /^\d+[TSML]?$/.test(text) ? text : "";
+  }
+
+  function normalizeWordList(value) {
+    const raw = Array.isArray(value) ? value : value !== null && value !== undefined && value !== "" ? String(value).split(/[,;]+/) : [];
+    return [...new Set(raw.map((item) => String(item == null ? "" : item).trim().toLowerCase()).filter(Boolean))];
+  }
+
+  function normalizeTargetTest(input, warnings, path, label) {
+    const test = { who: pickKnownLoose(input.who, ["target", "self"], "target") };
+    const conditions = normalizeWordList(input.conditions !== undefined ? input.conditions : input.condition);
+    if (conditions.length) {
+      test.condition = conditions;
+      const from = pickKnownLoose(input.conditionFrom, ["any", "self"], "any");
+      if (from === "self") test.conditionFrom = "self";
+    }
+    for (const key of ["sizeMax", "sizeMin"]) {
+      if (input[key] === undefined || input[key] === null || input[key] === "") continue;
+      const size = normalizeSizeBound(input[key]);
+      if (size) test[key] = size;
+      else warnings.push(`${path}.${key}: write a size such as 1, "1S" or 2.`);
+    }
+    if (input.sizeVsSelf !== undefined && input.sizeVsSelf !== null && input.sizeVsSelf !== "") {
+      test.sizeVsSelf = pickKnownLoose(input.sizeVsSelf, SIZE_VS_SELF, "sameOrSmaller");
+    }
+    for (const key of ["stabilityMax", "stabilityMin"]) {
+      if (input[key] !== undefined && input[key] !== null && input[key] !== "") test[key] = asInt(input[key], 0);
+    }
+    if (input.stamina !== undefined && input.stamina !== null && input.stamina !== "") {
+      test.stamina = pickKnownLoose(input.stamina, TARGET_STAMINA_STATES, "winded");
+    }
+    const keyword = normalizeWordList(input.keywords !== undefined ? input.keywords : input.keyword);
+    if (keyword.length) test.keyword = keyword;
+    const notKeyword = normalizeWordList(input.notKeyword);
+    if (notKeyword.length) test.notKeyword = notKeyword;
+    const target = asTrimmedString(input.target);
+    if (target) test.target = target;
+    const question = asTrimmedString(input.question);
+    if (question) test.question = question;
+    const checks = ["condition", "sizeMax", "sizeMin", "sizeVsSelf", "stabilityMax", "stabilityMin", "stamina", "keyword", "notKeyword"];
+    if (!checks.some((key) => test[key] !== undefined)) warnings.push(`${path}: ${label} checks nothing, so it always passes.`);
+    return test;
+  }
+
+  function normalizeRollTest(input, warnings, path, label) {
+    const test = {};
+    if (input.edge !== undefined && input.edge !== null && input.edge !== "") test.edge = pickKnownLoose(input.edge, ROLL_EDGE_STATES, "anyEdge");
+    if (input.critical === true) test.critical = true;
+    const tiers = (Array.isArray(input.tier) ? input.tier : input.tier !== undefined && input.tier !== null && input.tier !== "" ? [input.tier] : [])
+      .map((value) => (P.normalizeTierKey ? P.normalizeTierKey(value) : value)).filter((value) => P.TIER_KEYS.includes(value));
+    if (tiers.length) test.tier = [...new Set(tiers)];
+    if (!test.edge && !test.critical && !test.tier) warnings.push(`${path}: ${label} checks nothing, so it always passes.`);
+    return test;
+  }
 
   // Zone tags as the map writes them: lower case, letters, digits, "-" and "_".
   function normalizeZoneTags(input) {
@@ -1650,6 +1750,10 @@
       zone: "zone",
       ifzone: "zone",
       inzone: "zone",
+      target: "target",
+      iftarget: "target",
+      roll: "roll",
+      ifroll: "roll",
     };
     const mappedKind = kindMap[rawKind];
     const kind = mappedKind || "prompt";
@@ -1694,6 +1798,12 @@
         target: pickKnown(input.target, ["target", "judgedTarget", "eventTarget"], "target"),
         mode: pickKnown(input.mode, ["set", "notSet"], "notSet"),
       };
+    }
+    if (kind === "target") {
+      return { kind, ...normalizeTargetTest(input, warnings, path, "target branch condition") };
+    }
+    if (kind === "roll") {
+      return { kind, ...normalizeRollTest(input, warnings, path, "roll branch condition") };
     }
     if (kind === "zone") {
       const condition = { kind, tags: normalizeZoneTags(input), who: pickKnown(input.who, ["target", "self"], "target") };

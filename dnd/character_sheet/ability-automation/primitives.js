@@ -33,6 +33,8 @@
     "ifScopedFlag",
     "ifDistance",
     "ifZone",
+    "ifTarget",
+    "ifRoll",
     "setScopedFlag",
     "applyMark",
     "endMark",
@@ -408,6 +410,40 @@
   }
 
   // Use describeEffectResolved when the runtime/inspector has the source character.
+  // A target check in plain words: "prone or slowed", "size 1 or smaller and winded".
+  function describeTargetTest(test) {
+    const t = test && typeof test === "object" ? test : {};
+    const parts = [];
+    const list = (value) => (Array.isArray(value) ? value : value ? [value] : []).join(" or ");
+    if (t.condition && t.condition.length) parts.push(`${list(t.condition)}${t.conditionFrom === "self" ? " (from you)" : ""}`);
+    if (t.sizeMax) parts.push(`size ${t.sizeMax} or smaller`);
+    if (t.sizeMin) parts.push(`size ${t.sizeMin} or larger`);
+    if (t.sizeVsSelf) {
+      const words = { smaller: "smaller than you", sameOrSmaller: "your size or smaller", same: "your size", sameOrLarger: "your size or larger", larger: "larger than you" };
+      parts.push(words[t.sizeVsSelf] || "your size or smaller");
+    }
+    if (t.stabilityMax != null) parts.push(`stability ${t.stabilityMax} or less`);
+    if (t.stabilityMin != null) parts.push(`stability ${t.stabilityMin} or more`);
+    if (t.stamina) {
+      const words = { winded: "winded", notWinded: "not winded", full: "at full Stamina", belowFull: "below full Stamina", dying: "dying" };
+      parts.push(words[t.stamina] || t.stamina);
+    }
+    if (t.keyword && t.keyword.length) parts.push(`a ${list(t.keyword)}`);
+    if (t.notKeyword && t.notKeyword.length) parts.push(`not a ${list(t.notKeyword)}`);
+    return parts.join(" and ") || "anything";
+  }
+
+  // The accepted roll in plain words: "had an edge", "was a critical", "landed tier 3".
+  function describeRollTest(test) {
+    const t = test && typeof test === "object" ? test : {};
+    const parts = [];
+    const edgeWords = { edge: "had an edge", doubleEdge: "had a double edge", anyEdge: "had an edge or double edge", bane: "had a bane", doubleBane: "had a double bane", anyBane: "had a bane or double bane", none: "had no edge or bane" };
+    if (t.edge) parts.push(edgeWords[t.edge] || t.edge);
+    if (t.critical === true) parts.push("was a critical");
+    if (Array.isArray(t.tier) && t.tier.length) parts.push(`landed ${t.tier.map((key) => tierLabel(key)).join(" or ")}`);
+    return parts.join(" and ") || "was rolled";
+  }
+
   function describeEffect(effect) {
     if (!effect || typeof effect !== "object") return "";
     switch (effect.kind) {
@@ -538,6 +574,20 @@
         if (elseText) return `If ${label}: ${thenText || "(no effect)"} else: ${elseText}`;
         return `If ${label}: ${thenText || "(no effect)"}`;
       }
+      case "ifTarget": {
+        const thenText = (effect.then || []).map(describeEffect).filter(Boolean).join(", ");
+        const elseText = (effect.else || []).map(describeEffect).filter(Boolean).join(", ");
+        const label = `${effect.who === "self" ? "self" : "target"} ${describeTargetTest(effect)}`;
+        if (elseText) return `If ${label}: ${thenText || "(no effect)"} else: ${elseText}`;
+        return `If ${label}: ${thenText || "(no effect)"}`;
+      }
+      case "ifRoll": {
+        const thenText = (effect.then || []).map(describeEffect).filter(Boolean).join(", ");
+        const elseText = (effect.else || []).map(describeEffect).filter(Boolean).join(", ");
+        const label = `the roll ${describeRollTest(effect)}`;
+        if (elseText) return `If ${label}: ${thenText || "(no effect)"} else: ${elseText}`;
+        return `If ${label}: ${thenText || "(no effect)"}`;
+      }
       case "applyMark":
         return `apply ${effect.markType || "mark"}`;
       case "endMark":
@@ -640,6 +690,8 @@
     shiftTierKey,
     describeEffect,
     describeEffectResolved,
+    describeTargetTest,
+    describeRollTest,
     describeTriggerValue,
     resolveDamageAmount,
     resolveForcedMovementDistance,

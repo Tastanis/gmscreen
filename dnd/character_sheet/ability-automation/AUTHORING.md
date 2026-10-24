@@ -558,6 +558,8 @@ Supported `condition.kind` values:
 | `mark` | `predicate`, `markType`, optional `target` | Uses the same mark predicates as `ifMark`. |
 | `scopedFlag` | `scope`, `key`, `source`, `target`, `mode` | Uses the same round/turn/encounter flags as `ifScopedFlag`. |
 | `distance` | `from`, `to`, optional `fromGroup`/`toGroup`, `min`, `max` | True when the square distance between the two endpoints falls in the `[min, max]` band. False (takes `else`) when either token has no placement. See below. |
+| `target` | the `ifTarget` fields | True when a checked target (or the user, with `who: "self"`) passes: a condition, size, stability, Stamina state or kind. See `ifTarget`. |
+| `roll` | the `ifRoll` fields | True when the accepted power roll had an edge/bane, was a critical, or landed a tier. See `ifRoll`. |
 
 **`distance` condition** — measures the square (Chebyshev) distance between two tokens. Each endpoint (`from`, `to`) is one of: `self` (the caster), `source`/`eventSource` (the trigger payload's source token), `eventTarget` (the trigger payload's target token), `target` (the current target group), or any named target-group string. `from` defaults to `self`, `to` defaults to `target`. `min`/`max` are square counts (`max: 1` = adjacent). Example — "if the triggering attacker is within 3 squares, retaliate; otherwise just brace":
 
@@ -1320,6 +1322,52 @@ What happens at the table:
 - The extra 3 is flat damage, so damage bonuses that apply to rolled damage (a captain's "+N damage bonus to strikes", a hero's kit) do not add to it. It is still reduced by the target's corruption immunity.
 
 To make the extra damage depend on the tier instead, put an `ifZone` inside each tier's `effects`. To check where the user of the ability stands ("while this creature stands in blood, its strikes deal 3 extra damage"), add `"who": "self"`.
+
+### `ifTarget` (rider)
+
+Checks a fact about each target and gives each target the branch that fits it: "+4 damage against a prone target", "size 1 or smaller only", "if the target is winded", "a non-giant". The facts come from the token, so nobody is asked; what the board can't tell (a hero's stability, a token with no size) is asked once, like `ifPrompt`.
+
+```json
+{
+  "kind": "ifTarget",
+  "condition": "prone",
+  "then": [ { "kind": "damage", "amount": 4 } ],
+  "else": []
+}
+```
+
+| Field | Values | Notes |
+|---|---|---|
+| `condition` | string or array | Passes when the target has any of these conditions. Custom ("other") conditions count by their name, e.g. `"wet"`. |
+| `conditionFrom` | `"any"` (default), `"self"` | `"self"`: only conditions this creature put on the target ("the creature you have grabbed"). |
+| `sizeMax` / `sizeMin` | size: `1`, `"1T"`, `"1S"`, `"1M"`, `"1L"`, `2`, `3`... | "Size 1 or smaller" is `sizeMax: 1` (any size 1); `sizeMax: "1S"` stops at 1S. A hero token one square wide counts as 1M. |
+| `sizeVsSelf` | `smaller`, `sameOrSmaller`, `same`, `sameOrLarger`, `larger` | Compares the target's size to the user's ("its size or smaller"). |
+| `stabilityMax` / `stabilityMin` | integer | Read from the monster's stat block; asked for heroes. |
+| `stamina` | `winded`, `notWinded`, `full`, `belowFull`, `dying` | From the token's Stamina. |
+| `keyword` / `notKeyword` | string or array | The kind of creature, matched against the monster's role, types and name ("giant", "undead", "fire giant"). |
+| `who` | `"target"` (default), `"self"` | `"self"` checks the user of the ability instead; the whole group then follows that answer. |
+| `target` | group name | Which group to check (defaults to the effect's group). |
+| `question` | string | Optional wording when the user has to be asked. `{target}` is replaced by the names. |
+| `then` / `else` | effect arrays | `then` runs on the targets that pass, `else` on the rest. |
+
+All the fields you give must pass ("size 1 or smaller and winded"). Chat says who passed: "Goblin is prone; Ogre is not."
+
+### `ifRoll` (rider)
+
+Branches on the accepted power roll of this ability: "+5 damage if the roll had an edge", "on a critical, also prone". Put it inside a tier's `effects`.
+
+```json
+{ "kind": "ifRoll", "edge": "anyEdge", "then": [ { "kind": "damage", "amount": 5 } ] }
+```
+
+| Field | Values | Notes |
+|---|---|---|
+| `edge` | `edge`, `doubleEdge`, `anyEdge`, `bane`, `doubleBane`, `anyBane`, `none` | The net edge/bane of the accepted roll, after edges and banes cancel. |
+| `critical` | `true` | A natural 19 or 20 on 2d10. |
+| `tier` | `"tier3"` or an array | The tier the roll landed on (after any manual change). |
+| `then` / `else` | effect arrays | Run on the effect's own target group. |
+
+With no power roll yet in the ability, `ifRoll` takes `else`.
 
 ### `halveTriggeringDamage` (rider - trigger blocks only)
 
