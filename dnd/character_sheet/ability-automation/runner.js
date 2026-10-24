@@ -1337,7 +1337,11 @@
         .replace(/\(endOfTurn\)/g, "(EoT)")
         .replace(/\(endOfEncounter\)/g, "(end of encounter)")
         .replace(/\(untilDying\)/g, "(until dying)");
-      if (eff?.kind === "potency") return `<span class="pr5-pot">${escapeHtml(text)}</span>`;
+      // Potency as "A < 2" with the number bold, so it reads at a glance.
+      if (eff?.kind === "potency") {
+        const tag = escapeHtml(text).replace(/^([MARIP?])&lt;(\d+)/, (m, letter, number) => `${letter} &lt; <b>${number}</b>`);
+        return `<span class="pr5-pot">${tag}</span>`;
+      }
       if (eff?.kind === "damage" && !bigDone) {
         bigDone = true;
         const match = /^(\d+)(.*)$/.exec(text);

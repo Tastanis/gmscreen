@@ -1090,13 +1090,21 @@
 .pr5-big small { font-size: 14px; color: #ffcf7a; }
 
 .pr5-pot {
-  font-size: 12.5px;
-  padding: 0 5px;
+  font-size: 13.5px;
+  padding: 0 6px;
   border: 1px solid #8a3424;
   border-radius: 2px;
   color: #f0b8a8;
   background: rgba(122, 36, 24, 0.25);
   white-space: nowrap;
+}
+
+.pr5-pot b {
+  font-family: 'Cinzel', 'Palatino Linotype', serif;
+  font-variant-numeric: lining-nums;
+  font-size: 14px;
+  font-weight: 800;
+  color: #ffd2c4;
 }
 
 .pr5-none { color: var(--pr5-faint); }
