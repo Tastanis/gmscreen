@@ -109,6 +109,8 @@ async function start(){
   const turn={ArrowLeft:[.06,0],ArrowRight:[-.06,0],a:[.06,0],A:[.06,0],d:[-.06,0],D:[-.06,0],ArrowUp:[0,.05],ArrowDown:[0,-.05]}[e.key];
   if(turn){on.yaw+=turn[0];on.pitch=Math.max(-1.35,Math.min(1.35,on.pitch+turn[1]));e.preventDefault();e.stopPropagation();}},true);
  document.addEventListener('vtt3d:scene-built',()=>{if(on&&api.view!==on.view)stop('The scene changed: 1st person ended.');});
- window.vtt3dFirstPerson={get active(){return on?{id:on.id,yaw:on.yaw,pitch:on.pitch}:null;},start:id=>{if(on)stop();begin(id);},stop:()=>stop('1st person off.')};
+ window.vtt3dFirstPerson={get active(){return on?{id:on.id,yaw:on.yaw,pitch:on.pitch}:null;},
+  // The eye point the camera uses for a model (Vision (test) looks from the same spot): the camera itself while in 1st person.
+  eyeOf:id=>{if(on&&on.id===id&&api.view)return api.view.camera.position.clone();const b=body(id);return b?new THREE.Vector3(b.x,b.eye,b.y):null;},start:id=>{if(on)stop();begin(id);},stop:()=>stop('1st person off.')};
 }
 start().catch(error=>console.error('[VTT 3D] 1st person',error));

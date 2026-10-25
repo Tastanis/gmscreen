@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { makeSight } from '../assets/js/ui/vision-height.mjs';
+import { supportAt } from '../assets/js/ui/stacked-surfaces.mjs';
+import { resolveSupportSurfaces } from '../assets/js/ui/floor-support.js';
+import { rampHeight } from '../assets/js/ui/imported-ramps.mjs';
 
 // "Vision (test)" (Brandon, October 2026): what the viewing heroes cannot see is dimmed and greyed on the 3D board.
 // Not a light: "I don't want it to look like my player is carrying a torch ... it can't interfere or be interfered
@@ -83,14 +86,16 @@ function compositeMaterial() {
       uniform int count; uniform float dim; uniform float grey;
       ${Array.from({ length: MAX_VIEWERS }, (_, i) => `uniform samplerCube sight${i}; uniform vec3 eye${i}; uniform sampler2D room${i}; uniform vec4 roomBox${i};`).join('\n')}
       // Same room: box = (left, top, span in squares, hero's ground). The map holds, per spot: r = open at the hero's
-      // eye height (the hero's own floor), g = open down to the ground there (slopes, hills), b = that ground's height.
+      // eye height (the hero's own floor), g = open down to the ground there (slopes, hills), b = that ground's height,
+      // a = the lowest ground within a square (so a cliff face between low and high ground counts too).
       // Looked up a little toward the hero, so the face of a wall the hero looks at counts as in the room.
       const float CELLS = ${(ROOM_REACH * 2 * ROOM_STEPS).toFixed(1)};
-      vec3 roomAt(sampler2D map, vec2 uv) {
+      vec4 roomAt(sampler2D map, vec2 uv) {
         vec2 t = uv * CELLS - 0.5, f = fract(t), c = (floor(t) + 0.5) / CELLS, s = vec2(1.0 / CELLS, 0.0);
         vec3 a = texture2D(map, c).rgb, b = texture2D(map, c + s.xy).rgb, d = texture2D(map, c + s.yx).rgb, e = texture2D(map, c + s.xx).rgb;
         vec2 open = mix(mix(a.rg, b.rg, f.x), mix(d.rg, e.rg, f.x), f.y);
-        return vec3(open, texture2D(map, uv).b);
+        vec4 here = texture2D(map, uv);
+        return vec4(open, here.b, here.a);
       }
       bool inRoom(sampler2D map, vec4 box, vec3 world, vec3 eye) {
         if (box.w < -999.0) return false;
@@ -99,9 +104,9 @@ function compositeMaterial() {
         vec2 at = world.xz + (len > 0.01 ? toward / len * min(len, 0.3) : vec2(0.0));
         vec2 uv = (at - box.xy) / box.z;
         if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return false;
-        vec3 room = roomAt(map, uv);
+        vec4 room = roomAt(map, uv);
         bool ownFloor = world.y > box.w - ${FLOOR_BELOW.toFixed(2)} && world.y < box.w + ${FLOOR_ABOVE.toFixed(2)} && room.r > 0.5;
-        bool onGround = world.y > room.b - ${FLOOR_BELOW.toFixed(2)} && world.y < room.b + ${FLOOR_ABOVE.toFixed(2)} && room.g > 0.5;
+        bool onGround = world.y > min(room.a, room.b) - ${FLOOR_BELOW.toFixed(2)} && world.y < room.b + ${FLOOR_ABOVE.toFixed(2)} && room.g > 0.5;
         return ownFloor || onGround;
       }
       varying vec2 vUv;
@@ -192,6 +197,8 @@ async function start() {
     return (own.length ? own : list.filter((p) => words(p).includes(me))).slice(0, MAX_VIEWERS);
   }
   function eyeOf(p) {
+    // Same spot as the 1st person camera (Brandon: "let's make them the same spot").
+    try { const shared = window.vtt3dFirstPerson?.eyeOf?.(p.id); if (shared && Number.isFinite(shared.y)) return shared; } catch (_) { /* fall back */ }
     const w = p.width || 1, h = p.height || 1;
     const ground = Number(bridge.heightFor?.(p.id));
     return new THREE.Vector3(p.column + w / 2, (Number.isFinite(ground) ? ground : 0) + 1.1 * Math.max(w, h) * EYE, p.row + h / 2);
@@ -217,13 +224,25 @@ async function start() {
     });
     const original = renderer.render.bind(renderer);
     const state = { view, renderer, original, target, composite, screen, screenCamera, cubes, distance: distanceMaterial(), capturing: false, eyes: [], rooms: [] };
+    // Board guides (height tethers, movement paths, reach squares) go into the masked picture too: Brandon wants them
+    // gone from the dark. Their own pass is then skipped.
     renderer.render = (scene, camera) => {
+      if (on && !state.capturing && state.eyes.length && scene?.name === 'movement-overlay-pass') {
+        if (state.guides === scene) return undefined;
+        state.guides = scene;
+        return original(scene, camera);
+      }
       if (!on || state.capturing || scene !== view.scene || !state.eyes.length) return original(scene, camera);
       renderer.getDrawingBufferSize(size);
       if (target.width !== size.x || target.height !== size.y) target.setSize(size.x, size.y);
       const previous = renderer.getRenderTarget();
       renderer.setRenderTarget(target);
       original(scene, camera);
+      if (state.guides) {
+        const autoClear = renderer.autoClear;
+        renderer.autoClear = false;
+        try { original(state.guides, camera); } finally { renderer.autoClear = autoClear; }
+      }
       renderer.setRenderTarget(previous);
       const u = composite.uniforms;
       u.tColor.value = target.texture;
@@ -265,15 +284,36 @@ async function start() {
     const ground = Number(bridge.heightFor?.(p.id)) || 0;
     const data = room.image.data;
     const walls = window.wallPrototype?.model;
+    const started = performance.now();
     let see = null, groundAt = () => 0;
     try {
       if (walls?.nodes && walls?.segments) {
         const v = bridge.getContext().view || {}, g = v.gridSize || 64, o = v.gridOffsets || {}, tp = window.terrainPrototype;
-        groundAt = (x, y) => (tp?.heightAt ? Number(tp.heightAt((o.left || 0) + x * g, (o.top || 0) + y * g)) || 0 : 0);
-        see = makeSight({ viewer: p, groundAt, walls, viewerGround: ground });
+        const terrainAt = (x, y) => (tp?.heightAt ? Number(tp.heightAt((o.left || 0) + x * g, (o.top || 0) + y * g)) || 0 : 0);
+        // The top a creature would stand on at each spot, not above the hero's eye: the ground, a floor plate (an
+        // island, a deck, an upper floor) or a stair. Worked out once per spot of the room map, then looked up.
+        const design = tp?.design || {};
+        const surfaces = (() => { try { return resolveSupportSurfaces(design); } catch (_) { return []; } })();
+        const ramps = design.ramps || walls.ramps || [];
+        const reach = eye.y + .5;
+        const topAt = (x, y) => {
+          let top = terrainAt(x, y);
+          try { const plate = surfaces.length ? supportAt(surfaces, { x, y }, reach) : null; if (plate && plate.height > top) top = plate.height; } catch (_) { /* keep */ }
+          for (const ramp of ramps) { try { const h = rampHeight(ramp, x, y); if (h !== null && h <= reach && h > top) top = h; } catch (_) { /* keep */ } }
+          return top;
+        };
+        const tops = new Float32Array(size * size);
+        for (let r = 0; r < size; r += 1) for (let c = 0; c < size; c += 1) tops[r * size + c] = topAt(left + (c + .5) / ROOM_STEPS, top + (r + .5) / ROOM_STEPS);
+        groundAt = (x, y) => {
+          const c = Math.floor((x - left) * ROOM_STEPS), r = Math.floor((y - top) * ROOM_STEPS);
+          return c >= 0 && r >= 0 && c < size && r < size ? tops[r * size + c] : terrainAt(x, y);
+        };
+        // Brandon: outdoors they should see more. Land lower than the hero's eyes never blocks (a ledge, an island
+        // edge, a hill they stand on); only land rising above the eyes does, and drawn walls (indoors: rooms).
+        const blocksAt = (x, y) => { const h = groundAt(x, y); return h > eye.y ? h : -1e6; };
+        see = makeSight({ viewer: p, groundAt: blocksAt, walls, viewerGround: ground });
       }
     } catch (error) { console.warn('[VTT 3D] vision test: room map', error); }
-    const started = performance.now();
     for (let r = 0; r < size; r += 1) {
       for (let c = 0; c < size; c += 1) {
         const x = left + (c + .5) / ROOM_STEPS, y = top + (r + .5) / ROOM_STEPS, k = (r * size + c) * 4;
@@ -286,6 +326,9 @@ async function start() {
         data[k] = level;
         data[k + 1] = down;
         data[k + 2] = there;
+        let low = there;
+        for (let dr = -ROOM_STEPS; dr <= ROOM_STEPS; dr += 1) for (let dc = -ROOM_STEPS; dc <= ROOM_STEPS; dc += 1) low = Math.min(low, groundAt(x + dc / ROOM_STEPS, y + dr / ROOM_STEPS));
+        data[k + 3] = low;
       }
     }
     state.roomMs = Math.round(performance.now() - started);
