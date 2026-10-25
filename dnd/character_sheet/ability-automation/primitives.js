@@ -150,6 +150,10 @@
     "frightened",
     "grabbed",
     "hidden",
+    // Invisible: gone from other players' screens (the Director sees it faded); strikes against it take a bane.
+    // Concealed: the bane only (darkness, fog).
+    "invisible",
+    "concealed",
     // Ability-applied, non-selectable rider. The VTT stores this on tokens
     // like a condition, but token labels do not render it as visible text.
     "hiddenEffect",

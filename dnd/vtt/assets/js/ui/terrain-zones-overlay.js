@@ -1,6 +1,6 @@
 // Draws tagged terrain zones on the board and answers "which zones is this
 // token in". Reads the canonical scene environment; display choice is local.
-import {sceneZones, buildZoneIndex, zonesForFootprint, zoneTags, squareCostMultiplier, zoneGeometry, zoneColor, zoneSurface, summarizeRoute, zonesHiddenFromPlayers, BASE_LEVEL_ID, placeCornerControl, hasMovementType, standsOnPlate, movementWaiver, zoneCostFor, movementText} from './terrain-zones.mjs';
+import {sceneZones, abilityTerrainZones, buildZoneIndex, zonesForFootprint, zoneTags, squareCostMultiplier, zoneGeometry, zoneColor, zoneSurface, summarizeRoute, zonesHiddenFromPlayers, BASE_LEVEL_ID, placeCornerControl, hasMovementType, standsOnPlate, movementWaiver, zoneCostFor, movementText} from './terrain-zones.mjs';
 import {routeSteps, groundSquare, stepCost, climbSurcharge, stepRise} from './terrain-math.mjs';
 import {saveShared} from './environment-sync.mjs';
 import {floorElevations} from '../state/normalize/floor-elevation.js';
@@ -21,8 +21,10 @@ function sceneOf(c) { return c?.state.boardState.sceneState?.[c.state.boardState
 
 function current(c = context()) {
   const sceneId = c?.state.boardState.activeSceneId || '', field = sceneOf(c)?.environment?.zones || null;
-  const key = sceneId + ':' + (field?.revision ?? 'none') + ':' + (field?.value?.zones?.length ?? 0);
-  if (key !== cache.key) { const zones = sceneZones(c?.state.boardState.sceneState, sceneId); cache = {key, zones, index: buildZoneIndex(zones), hiddenFromPlayers: zonesHiddenFromPlayers(field)}; }
+  // Ability zones that are difficult terrain count for movement like painted terrain (they draw themselves).
+  const fromAbilities = abilityTerrainZones(c?.state.boardState.placements?.[sceneId]);
+  const key = sceneId + ':' + (field?.revision ?? 'none') + ':' + (field?.value?.zones?.length ?? 0) + ':' + fromAbilities.map((zone) => zone.id + zone.cost + zone.squares.length).join(',');
+  if (key !== cache.key) { const zones = [...sceneZones(c?.state.boardState.sceneState, sceneId), ...fromAbilities]; cache = {key, zones, index: buildZoneIndex(zones), hiddenFromPlayers: zonesHiddenFromPlayers(field)}; }
   return cache;
 }
 function elevations(c = context()) { return floorElevations(sceneOf(c)?.mapLevels); }
@@ -267,7 +269,7 @@ function draw() {
   const state = current(c), {zones, key} = state, active = terrain(), v = c.view, g = v.gridSize || 64, ox = v.gridOffsets?.left || 0, oy = v.gridOffsets?.top || 0;
   syncControl(c, state);
   // Each person chooses for their own screen; the GM can also switch zones off for every player.
-  const show = zones.length > 0 && visible && (c.isGM || !state.hiddenFromPlayers);
+  const show = zones.some((zone) => !zone.fromAbility) && visible && (c.isGM || !state.hiddenFromPlayers);
   const next = JSON.stringify([key, show, state.hiddenFromPlayers, c.levelId, g, ox, oy, v.mapPixelSize, !!active, active?.revision ?? 0, active?.key ?? '']);
   if (next === signature) return;
   signature = next; builds++;
@@ -276,6 +278,7 @@ function draw() {
   if (!show) { svg.replaceChildren(); return; }
   const floors = elevations(c), nodes = [];
   for (const zone of zones) {
+    if (zone.fromAbility) continue;
     // Ground zones show from every floor; an upper-floor zone shows while that floor is viewed.
     if (zone.levelId !== BASE_LEVEL_ID && zone.levelId !== c.levelId) continue;
     const surface = zoneSurface(zone, floors.get(zone.levelId) ?? 0);

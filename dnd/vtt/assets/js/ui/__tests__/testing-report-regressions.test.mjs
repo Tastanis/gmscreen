@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { normalizePlacementEntry } from '../../state/normalize/placements.js';
-import { resolveAutomationForcedMovementDistance } from '../automation-resistance.js';
+import { resolveAutomationForcedMovementDistance, pickDefense, defenseEntriesFromMonster } from '../automation-resistance.js';
 
 const board = await readFile(new URL('../board-interactions.js', import.meta.url), 'utf8');
 const runner = await readFile(new URL('../../../../../character_sheet/ability-automation/runner.js', import.meta.url), 'utf8');
@@ -55,7 +55,7 @@ test('projected automation data survives hydration and matches GM potency and de
   assert.equal(player.monster, undefined);
   const stats = new Function('getAutomationNumber', `${section(board, '  function getMonsterAutomationStats(', '  function getMonsterAutomationFreeStrike(')} return getMonsterAutomationStats;`)((value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback);
   assert.equal(stats(player.automationTraits).agility, 1);
-  const defense = new Function('normalizeAutomationDamageType', `${section(board, '  function parseMonsterDefenseDamageAdjustment(', '  function parseDamageAdjustmentEntry(')} return parseMonsterDefenseDamageAdjustment;`)(value => String(value || '').toLowerCase());
+  const defense = (traits, kind, type) => pickDefense([...defenseEntriesFromMonster(traits, 'immunity'), ...defenseEntriesFromMonster(traits, 'weakness')], kind, type).value;
   assert.equal(defense(player.automationTraits, 'immunity', 'fire'), 5);
   assert.equal(defense(player.automationTraits, 'immunity', 'cold'), 0);
   assert.equal(defense(player.automationTraits, 'weakness', 'cold'), 3);
@@ -72,7 +72,7 @@ test('accepted automation damage emits the zero-stamina transition; rejected sav
     resolveAutomationDamageAmount: ({amount}) => ({amount, immunity: 0}),
     applyDamageHealToPlacement: () => ({current: -2, max: 20, name: 'Enemy'}),
     awaitSuccessfulPlacementSave: async () => { if (failed) throw Error('conflict'); },
-    isAutomationPlacementHidden: () => true, shouldHideEnemyHitPointValues: () => true,
+    isAutomationPlacementHidden: () => true, shouldHideEnemyHitPointValues: () => true, announceDamageDefense() {},
     normalizeAutomationDamageType: value => value, updateStatus() {}, triggerFire: (name, payload) => events.push({name, payload}),
     shouldRevealPlacementHitPointValues: () => false,
     renderTokens() {}, boardApi: {}, tokenLayer: null, viewState: {}, refreshTokenSettings() {},

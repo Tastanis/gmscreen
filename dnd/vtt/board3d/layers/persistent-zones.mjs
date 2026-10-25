@@ -53,7 +53,7 @@ export function createPersistentZonesLayer({guideScene,overlayHost,helpers,view}
    const ask=twoStep(end,{label:'End',ask:'End?',run:()=>{const own=layer2d()?.querySelector(`[data-zone-end="${CSS.escape(zone.id)}"]`);if(!own||own.disabled)return;own.click();follow(own,end);}});
    entry={el,badge,name,meta,end,ask};tags.set(zone.id,entry);
   }
-  const label=String(zone.abilityName??''),owner=String(zone.ownerName||'Owner'),upkeep=zone.upkeep?.cost?`${zone.upkeep.cost} ${zone.upkeep.resource||'Resource'}/turn`:'no upkeep';
+  const label=String(zone.label||zone.abilityName||''),owner=String(zone.ownerName||'Owner'),upkeep=[zone.upkeep?.cost?`${zone.upkeep.cost} ${zone.upkeep.resource||'Resource'}/turn`:'',zone.terrainCost>1?'difficult':'',zone.endDue?'time up':''].filter(Boolean).join(' • ')||'no upkeep';
   entry.badge.title=`${label} — ${owner} • ${upkeep}`;entry.name.textContent=label;entry.meta.textContent=`${owner} • ${upkeep}`;
   return entry;
  }

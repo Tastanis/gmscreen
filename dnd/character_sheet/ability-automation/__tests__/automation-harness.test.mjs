@@ -803,6 +803,7 @@ test('runner prompts for a target, accepts a power roll, and applies tier damage
       actionKind: 'main',
       cost: '',
       keywords: [],
+      chatBreakdown: true,
     });
     assert.ok(result.calls.fireTriggerEvent.some((event) => event.eventType === 'powerRoll'));
   } finally {
@@ -955,6 +956,7 @@ test('power roll surges spend from the caster and add matching damage metadata',
       actionKind: 'main',
       cost: '',
       keywords: [],
+      chatBreakdown: true,
       includesSurge: true,
       surgeSpent: 2,
       surgeDamage: 4,

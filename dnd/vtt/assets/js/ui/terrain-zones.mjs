@@ -41,6 +41,30 @@ export function zonesHiddenFromPlayers(field) {
 }
 
 /** Zones of one scene from the board state (sceneState keyed by scene id). */
+/** Ability zones (`persistentZones` on tokens) that change the ground: difficult terrain (`terrainCost`) or a tag. */
+export function abilityTerrainZones(placements) {
+  const zones = [];
+  for (const placement of Array.isArray(placements) ? placements : Object.values(placements || {})) {
+    for (const record of Array.isArray(placement?.persistentZones) ? placement.persistentZones : []) {
+      if (!record?.id) continue;
+      const cost = Number.isInteger(record.terrainCost) && record.terrainCost > 1 ? record.terrainCost : 1;
+      const tag = typeof record.tag === 'string' && TAG_PATTERN.test(record.tag) ? record.tag : cost > 1 ? 'difficult' : '';
+      if (!tag) continue;
+      const squares = Array.isArray(record.squares) && record.squares.length
+        ? record.squares.map((square) => [Number(square?.column), Number(square?.row)]).filter(isSquare)
+        : (() => {
+            const t = record.template || {}, list = [];
+            const column = Number(t.column) || 0, row = Number(t.row) || 0, width = Math.max(1, Number(t.width) || 1), height = Math.max(1, Number(t.height) || 1);
+            for (let dx = 0; dx < width; dx += 1) for (let dy = 0; dy < height; dy += 1) list.push([column + dx, row + dy]);
+            return list;
+          })();
+      if (!squares.length) continue;
+      zones.push({ id: `ability:${record.id}`, tag, label: record.label || record.abilityName || '', levelId: typeof record.levelId === 'string' && record.levelId ? record.levelId : BASE_LEVEL_ID, surfaceHeight: null, cost, gmOnly: false, squares, fromAbility: true });
+    }
+  }
+  return zones;
+}
+
 export function sceneZones(sceneState, sceneId) {
   return normalizeZones(sceneState?.[sceneId]?.environment?.zones ?? null);
 }

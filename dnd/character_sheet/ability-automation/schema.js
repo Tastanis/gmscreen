@@ -503,6 +503,7 @@
           "label",
           "amount",
           "damageType",
+          "stacks",
           "hidden",
           "rider",
           "riders",
@@ -525,7 +526,9 @@
         // damageWeakness / damageImmunity carry numeric riders. Preserve them so
         // the board's damage adjuster can read amount + (optional) damageType.
         if ((P.NUMERIC_CONDITIONS || []).includes(name)) {
-          effect.amount = asNonNegInt(input.amount, 0);
+          // "all": immune to all of that damage. `stacks`: adds to the highest instead of competing with it.
+          effect.amount = String(input.amount ?? "").trim().toLowerCase() === "all" ? "all" : asNonNegInt(input.amount, 0);
+          if (input.stacks === true) effect.stacks = true;
           const dt = P.normalizeDamageType(input.damageType || "");
           // Empty / "untyped" means "applies to every type" for these riders.
           effect.damageType = dt === "untyped" ? "" : dt;
@@ -1801,7 +1804,7 @@
   }
 
   function normalizePersistentBlock(input, warnings, path) {
-    const known = new Set(["type", "id", "cost", "resource", "tickAt", "expiresAt", "triggers", "effects", "note", "target"]);
+    const known = new Set(["type", "id", "cost", "resource", "tickAt", "expiresAt", "triggers", "effects", "note", "target", "label", "difficultTerrain", "tag", "expires", "askBeforeEnd"]);
     const validTriggers = new Set(["onEnter", "onOccupantTurnStart", "onOccupantTurnEnd"]);
     const triggers = Array.isArray(input.triggers)
       ? input.triggers.filter((t) => {
@@ -1816,11 +1819,37 @@
       cost: asNonNegInt(input.cost, 0),
       resource: asTrimmedString(input.resource),
       tickAt: pickKnown(input.tickAt, ["startOfTurn", "endOfTurn", "never"], "startOfTurn"),
-      expiresAt: pickKnown(input.expiresAt, ["startOfTurn", "endOfTurn", "never"], "never"),
+      expiresAt: pickKnownLoose(input.expiresAt, ["startOfTurn", "endOfTurn", "never"], "never"),
       triggers,
       effects: normalizeEffectList(input.effects, warnings, `${path}.effects`),
     };
     if (input.target) block.target = asTrimmedString(input.target);
+    // Shown on the zone instead of the ability's name ("Burning ground").
+    const label = asTrimmedString(input.label);
+    if (label) block.label = label;
+    // The area is difficult terrain: true = costs 2 per square; a number = that cost.
+    if (input.difficultTerrain !== undefined && input.difficultTerrain !== false && input.difficultTerrain !== null) {
+      const cost = input.difficultTerrain === true ? 2 : Math.min(10, asNonNegInt(input.difficultTerrain, 2));
+      if (cost > 1) block.terrainCost = cost;
+    }
+    // A terrain word for `ifZone` ("fire", "web").
+    const tag = asTrimmedString(input.tag).toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32);
+    if (tag) block.tag = tag;
+    // How long it lasts beyond its owner's turn: "endOfRound", "endOfEncounter", or a lifetime
+    // { event, whose, count } like an aura's. "expiresAt" takes the same words.
+    const lasting = input.expires !== undefined ? input.expires : (input.expiresAt && !["startOfTurn", "endOfTurn", "never"].includes(input.expiresAt) ? input.expiresAt : undefined);
+    if (lasting !== undefined && lasting !== null && lasting !== "") {
+      const words = { endofround: { event: "roundEnd" }, roundend: { event: "roundEnd" }, startofround: { event: "roundStart" }, endofencounter: { event: "combatEnd" }, endofcombat: { event: "combatEnd" }, combatend: { event: "combatEnd" }, encounter: { event: "combatEnd" } };
+      const compact = typeof lasting === "string" ? lasting.toLowerCase().replace(/[^a-z]/g, "") : "";
+      if (compact === "startofturn" || compact === "endofturn") block.expiresAt = compact === "startofturn" ? "startOfTurn" : "endOfTurn";
+      else {
+        const lifetime = normalizeTriggerLifetime(typeof lasting === "string" ? words[compact] || { event: lasting } : lasting, warnings, `${path}.expires`);
+        if (lifetime) block.expires = lifetime;
+      }
+    }
+    if (!["startOfTurn", "endOfTurn", "never"].includes(block.expiresAt)) block.expiresAt = "never";
+    // When its time is up the Director is asked before it goes; false removes it straight away.
+    if (input.askBeforeEnd === false) block.askBeforeEnd = false;
     if (input.note) block.note = asTrimmedString(input.note);
     if (!block.cost && !block.triggers.length) {
       warnings.push(`${path}: persistent has cost 0 with no triggers; reads as "always-on at owner turn".`);

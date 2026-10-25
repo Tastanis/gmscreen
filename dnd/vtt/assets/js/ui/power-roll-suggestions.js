@@ -47,6 +47,9 @@ function matchingConditionEntries(placement, name) {
     .filter((condition) => normalizeText(condition?.name) === wanted);
 }
 
+// Conditions that give concealment: strikes against the creature take a bane.
+const CONCEALMENT_CONDITIONS = ['invisible', 'concealed'];
+
 function hasCondition(placement, name) {
   return conditionNames(placement).has(normalizeText(name));
 }
@@ -470,6 +473,19 @@ export function getPowerRollSuggestions({
   }
   if (hasCondition(actor, 'hidden')) {
     suggestions.push(makeSuggestion('edge-hidden', EDGE, 'Hidden'));
+  }
+  // Concealment (Draw Steel): strikes against an invisible or concealed creature take a bane. Ticked on, named.
+  if (strike) {
+    const several = targetList.length > 1;
+    targetList.forEach((target) => {
+      const why = CONCEALMENT_CONDITIONS.find((name) => hasCondition(target, name));
+      if (!why) return;
+      const label = why === 'invisible' ? 'Invisible' : 'Concealed';
+      const [condition] = matchingConditionEntries(target, why);
+      suggestions.push(makeSuggestion(`bane-concealed-${target?.id || 'target'}`, BANE, several ? `${label} (${target?.name || 'target'})` : label, true, {
+        reason: condition?.sourceAbility || condition?.sourceName ? `From ${condition.sourceAbility || condition.sourceName}` : 'Strikes against a creature you cannot see take a bane',
+      }));
+    });
   }
   if (hasCondition(actor, 'weakened') && abilityRoll) {
     suggestions.push(makeSuggestion('bane-weakened', BANE, 'Weakened'));

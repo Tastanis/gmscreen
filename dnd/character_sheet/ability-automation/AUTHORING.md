@@ -506,6 +506,11 @@ A zone that lingers across rounds, ticks at the owner's turn boundary, and appli
 | `triggers` | array — extra per-creature triggers. See below. |
 | `effects` | array — tick / trigger effects. `damage` and `condition` are auto-applied; other kinds skipped. |
 | `target` | optional string — name of an earlier target block to reuse as the zone footprint. Default = most recent area placed. |
+| `label` | optional string — shown on the zone instead of the ability's name ("Burning ground"). |
+| `difficultTerrain` | `true` (each square costs 2 movement) or a number (that cost). Movement, the reach outline and "ignores difficult terrain" all follow it. |
+| `tag` | optional terrain word ("fire", "web") that `ifZone` checks can see. |
+| `expires` | how long it lasts: `"endOfRound"`, `"endOfEncounter"`, `"startOfTurn"` / `"endOfTurn"` (the owner's), or a lifetime `{ "event": "roundEnd", "count": 2 }` like an aura's (`turnStart`, `turnEnd`, `roundStart`, `roundEnd`, `combatEnd`; `whose`, `count`). `expiresAt` takes the same words. |
+| `askBeforeEnd` | default `true`: when its time is up the Director gets a popup (Remove / Keep). `false`: it goes at once. |
 
 **`triggers` values** (combine freely with each other AND `tickAt`):
 
@@ -513,15 +518,15 @@ A zone that lingers across rounds, ticks at the owner's turn boundary, and appli
 |---|---|---|
 | `"onEnter"` | A creature enters the zone footprint, the first time per combat round. | Just the mover. |
 | `"onOccupantTurnStart"` | A creature inside the zone starts their own turn. | Just that creature. |
+| `"onOccupantTurnEnd"` | A creature inside the zone ends their own turn. | Just that creature. |
 
 **Behavior**:
 - At the owner's `tickAt`, the runtime deducts `cost` from the owner's resource (or auto-ends the zone if unaffordable), then applies tick effects to every creature inside the zone footprint.
 - `onEnter` deduplicates per round — round-start clears the "already entered" set. Creatures already standing in the zone when it's cast are pre-seeded as "already entered" so they don't take entry damage from the cast itself. Normal movement, forced movement, teleport, and swap all check zone entry.
 - `onOccupantTurnStart` fires once at each occupant's own turn start.
-- Zone is visible on the board as a pulsing orange dashed outline with an "End" button.
-- Auto-ends on encounter end.
-- If `expiresAt` is set, auto-ends at that owner turn boundary.
-- **In-memory only this pass** — a page reload while combat is active will wipe zones. Cast again to re-arm.
+- Zone is visible on the board as a pulsing orange dashed outline with an "End" button; it shows its `label`, "difficult" and, once its time is up, "time up".
+- When its time is up (its `expires` / `expiresAt`, or the encounter ends) the Director is asked once for everything that ran out together: Remove or Keep. Keep leaves it as it was. `askBeforeEnd: false` removes it without asking. Zones on other scenes go at the end of the encounter as before.
+- Zones are saved on the caster's token, so a reload keeps them.
 
 **Example — Incinerate's column of fire** ("Each enemy who enters the area for the first time in a combat round or starts their turn there takes 2 fire damage"):
 
@@ -534,6 +539,14 @@ A zone that lingers across rounds, ticks at the owner's turn boundary, and appli
   "triggers": ["onEnter", "onOccupantTurnStart"],
   "effects": [ { "kind": "damage", "amount": 2, "damageType": "fire" } ]
 }
+```
+
+**Example — a monster's burning ground** ("the area is difficult terrain until the end of the encounter; a creature that enters it or starts its turn there takes 3 fire damage"):
+
+```json
+{ "type": "persistent", "tickAt": "never", "label": "Burning ground", "difficultTerrain": true, "tag": "fire",
+  "expires": "endOfEncounter", "triggers": ["onEnter", "onOccupantTurnStart"],
+  "effects": [ { "kind": "damage", "amount": 3, "damageType": "fire" } ] }
 ```
 
 Zone triggers: `"onEnter"` (a creature enters), `"onOccupantTurnStart"` (a creature starts its turn inside), `"onOccupantTurnEnd"` (a creature ends its turn inside). Auras have the same two as `occupantTurnStart` and `occupantTurnEnd`.
@@ -748,10 +761,11 @@ Applies via the same heal path but allows the new total to exceed max stamina (t
 
 | Field | Values |
 |---|---|
-| `name` | `"bleeding"`, `"dazed"`, `"dying"`, `"frightened"`, `"grabbed"`, `"hidden"`, `"hiddenEffect"`, `"prone"`, `"restrained"`, `"slowed"`, `"taunted"`, `"unconscious"`, `"weakened"`, `"damageWeakness"`, `"damageImmunity"`, `"other"` |
+| `name` | `"bleeding"`, `"dazed"`, `"dying"`, `"frightened"`, `"grabbed"`, `"hidden"`, `"invisible"`, `"concealed"`, `"hiddenEffect"`, `"prone"`, `"restrained"`, `"slowed"`, `"taunted"`, `"unconscious"`, `"weakened"`, `"damageWeakness"`, `"damageImmunity"`, `"other"` |
 | `text` | required when `name === "other"` — describes the homebrew condition |
 | `duration` | `"instantaneous"`, `"endOfTurn"`, `"saveEnds"`, `"endOfEncounter"`, `"untilDying"` |
-| `amount` | int — required for `"damageWeakness"` / `"damageImmunity"`. How much extra damage is taken (weakness) / soaked (immunity). |
+| `amount` | int — required for `"damageWeakness"` / `"damageImmunity"`. How much extra damage is taken (weakness) / soaked (immunity). `"all"` on immunity: none of that damage is taken. |
+| `stacks` | `true` on `"damageWeakness"` / `"damageImmunity"`: adds to the highest one instead of competing with it. |
 | `damageType` | string — optional for `"damageWeakness"` / `"damageImmunity"`. Restricts to one type. Omit / `"untyped"` = applies to all types. |
 
 | Hidden effect field | Values |
@@ -800,7 +814,9 @@ A rider can be bound to a terrain zone with `zone`. The bearer's position is tes
 
 `zone` takes `tag` or `tags` (any one of them is enough) and optionally `"adjacent": true` for "in or adjacent to"; a bare `"zone": "blood"` also works. It is always the bearer of the condition who is tested, whoever the rider's `target` is. When the bearer is not in the zone the rider does nothing that turn and chat says so ("Cal is not in blood: Drag does nothing at the start of turn."). On a scene with no zones the board cannot test it, so the rider applies and its chat line adds "only if in blood" for the GM to judge. Nothing else about the rider changes.
 
-`damageWeakness` and `damageImmunity` are numeric riders. The VTT damage handler stacks `amount` on top of the sheet's own immunity/vulnerability lists when applying damage to the affected target. Example: `{ "kind": "condition", "name": "damageWeakness", "amount": 5, "damageType": "fire", "duration": "saveEnds" }` makes the target take +5 damage from every fire effect until they save out. These riders are shown in the VTT character/monster condition sidebar with readable labels such as `Fire weakness 5` and an `x` remove button.
+`invisible`: the token is gone from other players' screens (the Director and the token's own player see it faded); strikes against it get a bane, ticked on in the roll window and named. `concealed` (darkness, fog): the bane only. Both follow the condition's duration.
+
+`damageWeakness` and `damageImmunity` are numeric riders. Draw Steel: of every immunity that fits the damage (stat block, hero sheet list, these riders) only the highest counts, and the same for weakness; weakness is added first, then immunity taken off. A rider with `stacks: true` adds instead. Every damage path (abilities, zones, auras, free strikes, the Damage/Heal tool, collisions) uses this and says in chat when it changed a hit ("Goblin: fire immunity 5 (10 → 5)."). Example: `{ "kind": "condition", "name": "damageWeakness", "amount": 5, "damageType": "fire", "duration": "saveEnds" }` makes the target take +5 damage from every fire effect until they save out. These riders are shown in the VTT character/monster condition sidebar with readable labels such as `Fire weakness 5` and an `x` remove button.
 
 Automated conditions store the caster/source token id and name. Source-aware conditions such as `taunted`, `grabbed`, and `frightened` use that metadata for power-roll edge/bane suggestions. If an ability says a target is taunted/frightened/grabbed by a different creature than the caster, set `sourceId` / `sourceName` on the condition effect when that source is known; otherwise the caster is used.
 
@@ -2281,7 +2297,7 @@ When this monster is winded the roll bonus rises from +5 to +7, modeling "enrage
 
 The Monster Creator can import one complete monster from a JSON file. Use the template at `dnd/strixhaven/monster-creator/MONSTER_JSON_IMPORT_TEMPLATE.md` when asking an LLM to generate the whole monster, including stats, traits, ability text, and per-ability automation.
 
-Monster `immunities` and `weaknesses` (each an array of `{ "type", "value" }` entries) are applied by VTT automated damage when an entry's `type` matches the incoming `damageType`. Multiple matching entries stack additively. The legacy single-field form (`immunity_type` / `immunity_value` / `weakness_type` / `weakness_value`) is still accepted for back-compat; it's auto-promoted to a one-entry list on import. Temporary automation-applied riders still use `damageImmunity` and `damageWeakness` conditions.
+Monster `immunities` and `weaknesses` (each an array of `{ "type", "value" }` entries) are applied by VTT automated damage when an entry's `type` matches the incoming `damageType` (no type, `"all"` or `"any"` = all damage). Only the highest matching entry counts (Draw Steel); `"stacks": true` on an entry adds it instead. `"value": "all"` = immune to all of that damage. Hero sheet list lines read `fire 5`, `fire immunity 5`, `5` (all damage), `poison all`, `+fire 2` (adds). The legacy single-field form (`immunity_type` / `immunity_value` / `weakness_type` / `weakness_value`) is still accepted for back-compat; it's auto-promoted to a one-entry list on import. Temporary automation-applied riders still use `damageImmunity` and `damageWeakness` conditions.
 
 
 

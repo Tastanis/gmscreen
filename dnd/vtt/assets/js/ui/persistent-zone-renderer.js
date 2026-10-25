@@ -33,8 +33,8 @@ export function renderPersistentZones({layer,zones=[],view={},levelContext,gmVie
       if(!presentation.visible)continue;
       if(presentation.maskRects?.length)applyTemplateVisibilityMask(cell,presentation.maskRects);
       if(!labeled) {
-        const name=String(zone.abilityName ?? ''),owner=String(zone.ownerName || 'Owner');
-        const upkeep=zone.upkeep?.cost?`${zone.upkeep.cost} ${zone.upkeep.resource || 'Resource'}/turn`:'no upkeep';
+        const name=String(zone.label || zone.abilityName || ''),owner=String(zone.ownerName || 'Owner');
+        const upkeep=[zone.upkeep?.cost?`${zone.upkeep.cost} ${zone.upkeep.resource || 'Resource'}/turn`:'',zone.terrainCost>1?'difficult':'',zone.endDue?'time up':''].filter(Boolean).join(' • ')||'no upkeep';
         const badge=document.createElement('div');badge.className='vtt-persistent-zone__badge';
         badge.title=`${name} — ${owner} • ${upkeep}`;badge.setAttribute('aria-hidden','true');badge.textContent='⚡';
         const body=document.createElement('div');body.className='vtt-persistent-zone__body';

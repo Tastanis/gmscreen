@@ -554,9 +554,12 @@ export function normalizePlacementCondition(value) {
     || name.toLowerCase() === 'damageimmunity';
   if (numericRider) {
     const amount = Number.parseInt(value.amount, 10);
-    if (Number.isFinite(amount) && amount > 0) {
+    if (String(value.amount).trim().toLowerCase() === 'all') {
+      normalized.amount = 'all';
+    } else if (Number.isFinite(amount) && amount > 0) {
       normalized.amount = amount;
     }
+    if (value.stacks === true) normalized.stacks = true;
     const damageType = typeof value.damageType === 'string'
       ? value.damageType.trim().toLowerCase()
       : '';
@@ -623,7 +626,7 @@ function buildConditionKey(condition) {
     return `${name}|${type}|${label}|${sourceId}|${sourceAbility}|${rider}`;
   }
   if (name === 'damageweakness' || name === 'damageimmunity') {
-    const amount = Number.isFinite(condition.amount) ? condition.amount : 0;
+    const amount = Number.isFinite(condition.amount) || condition.amount === 'all' ? condition.amount : 0;
     const damageType = typeof condition.damageType === 'string'
       ? condition.damageType.trim().toLowerCase()
       : '';

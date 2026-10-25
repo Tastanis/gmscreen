@@ -141,13 +141,17 @@ import {
   resolveCanonicalTokenPointerTarget,
 } from './token-pointer-routing.js';
 import {
-  calculateConditionDamageAdjustments,
   getManualDamageTypeOptions as getCanonicalManualDamageTypeOptions,
   openDamageWeaknessDialog,
 } from './typed-damage-condition.js';
 import { resolveSelectionRangeGuide, selectionRangeReachesFloor } from './selection-range-guide.js';
 import {
   resolveAutomationDamageAmount,
+  defenseEntriesFromList,
+  defenseEntriesFromMonster,
+  defenseEntriesFromConditions,
+  pickDefense,
+  describeDefense,
   resolveAutomationForcedMovementDistance,
 } from './automation-resistance.js';
 import {
@@ -1259,7 +1263,7 @@ export function mountBoardInteractions(store, routes = {}) {
     if (type === 'combat.end') {
       fireTimingBoundary('combatEnd', { round: previousRound });
       resetPlayerSurgesToZero('combat-end');
-      clearAllPersistentZones({ reason: 'combat ended' });
+      endPersistentZonesAtCombatEnd();
       clearAllMarksForActiveScene({ reason: 'combat ended' });
       clearEndOfEncounterConditions();
       resetAutomationScopedFlags('all');
@@ -1779,6 +1783,16 @@ export function mountBoardInteractions(store, routes = {}) {
       name: 'Grabbed',
       description:
         'While you are grabbed, your speed is 0, you can’t be force moved, you can’t use the Knockback maneuver, and you take a bane on abilities that don’t target the creature grabbing you. If the creature grabbing you moves, they bring you with them. If the creature’s size is equal to or less than yours, their speed is halved while they have you grabbed. The creature grabbing you can use a maneuver to move you into an unoccupied space adjacent to them. The creature grabbing you can end the grab at any time (no action required). You can also attempt to escape being grabbed using the Escape Grab maneuver (see Maneuvers in Combat). If you teleport or if the creature grabbing you is force moved to a space that isn’t adjacent to you, you are no longer grabbed.',
+    },
+    {
+      name: 'Invisible',
+      description:
+        'Other players cannot see this token (the Director and its own player see it faded). Invisible creatures always have concealment: strikes against them take a bane. They can still be targeted unless they are also hidden.',
+    },
+    {
+      name: 'Concealed',
+      description:
+        'Darkness, fog or anything else that fully hides the creature without protecting it. Strikes against it take a bane.',
     },
     {
       name: 'Hidden',
@@ -3599,6 +3613,7 @@ export function mountBoardInteractions(store, routes = {}) {
     fireAutomationAurasForBoundary(eventType, boundaryPayload).catch((err) => {
       console.warn(`[VTT] automation aura ${eventType} failed`, err);
     });
+    try { expirePersistentZoneLifetimes(eventType, boundaryPayload); } catch (err) { console.warn('[VTT] zone lifetime check failed', err); }
     expireTriggerEntriesForBoundary(eventType, boundaryPayload);
     if (eventType === 'turnEnd') {
       endingTurnCombatantId = null;
@@ -4803,6 +4818,11 @@ export function mountBoardInteractions(store, routes = {}) {
         ? { ...payload.attributeBonuses }
         : {},
       note: payload.note || '',
+      ...(payload.label ? { label: String(payload.label) } : {}),
+      ...(Number(payload.terrainCost) > 1 ? { terrainCost: Math.min(10, Math.trunc(Number(payload.terrainCost))) } : {}),
+      ...(payload.tag ? { tag: String(payload.tag) } : {}),
+      ...(payload.expires && typeof payload.expires === 'object' ? { expires: { ...payload.expires } } : {}),
+      ...(payload.askBeforeEnd === false ? { askBeforeEnd: false } : {}),
       createdAt: Date.now(),
     };
     // The record must be JSON-safe — it rides placement state to the server
@@ -4844,6 +4864,7 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function renderPersistentZoneOverlays() {
+    if (isGmUser()) queueMicrotask(() => { try { maybePromptZoneEnds(); } catch (error) { console.warn('[VTT] zone end popup', error); } });
     const state=boardApi.getState?.() ?? {};
     const sceneId=state.boardState?.activeSceneId ?? null;
     renderPersistentZones({layer:ensurePersistentZoneOverlayLayer(),zones:getPersistentZonesForScene(sceneId),
@@ -4950,6 +4971,15 @@ export function mountBoardInteractions(store, routes = {}) {
         type: 'text',
       }).catch(() => {});
     }
+  }
+
+  function endPersistentZonesAtCombatEnd() {
+    const state = boardApi.getState?.() ?? {};
+    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    Object.keys(state.boardState?.placements || {}).forEach((sceneId) => {
+      if (sceneId !== activeSceneId) clearPersistentZonesForScene(sceneId, { reason: 'combat ended' });
+    });
+    endPersistentZonesByTime(getActivePersistentZones(), 'combat ended');
   }
 
   function clearAllPersistentZones({ reason = '' } = {}) {
@@ -5834,7 +5864,94 @@ export function mountBoardInteractions(store, routes = {}) {
     if (!zones.length) return;
     const matching = zones.filter((z) => z && z.casterId === ownerId && z.expiresAt === when);
     if (!matching.length) return;
-    return removePersistentZones(matching.map(zone => zone.id), { reason: `owner ${when}` });
+    const owner = tokenLabel(getPlacementFromStore(ownerId)) || 'its owner';
+    return endPersistentZonesByTime(matching, `${when === 'endOfTurn' ? 'end' : 'start'} of ${owner}'s turn`);
+  }
+
+  // ---------- a zone's time is up (Brandon, October 2026: ask the Director first) ----------
+  // Zones with askBeforeEnd: false go at once. The others are marked `endDue` on their owner's token; the
+  // Director's page asks "Remove / Keep" (one popup for all that ran out together). Keep leaves the zone as it was.
+  async function endPersistentZonesByTime(zones, reason) {
+    const list = (Array.isArray(zones) ? zones : []).filter((zone) => zone?.id && !zone.endDue);
+    if (!list.length) return true;
+    const byCaster = (items) => {
+      const map = new Map();
+      items.forEach((zone) => map.set(zone.casterId, [...(map.get(zone.casterId) || []), zone.id]));
+      return map;
+    };
+    for (const ids of byCaster(list.filter((zone) => zone.askBeforeEnd === false)).values()) {
+      await removePersistentZones(ids, { reason });
+    }
+    const ask = list.filter((zone) => zone.askBeforeEnd !== false);
+    if (ask.length) {
+      const at = Date.now();
+      byCaster(ask).forEach((ids, casterId) => {
+        updatePlacementById(casterId, (target) => {
+          const records = Array.isArray(target.persistentZones) ? target.persistentZones : [];
+          target.persistentZones = records.map((record) => (record && ids.includes(record.id) ? { ...record, endDue: { reason, at } } : record));
+        });
+      });
+      renderPersistentZoneOverlays();
+      maybePromptZoneEnds();
+    }
+    return true;
+  }
+
+  const promptedZoneEnds = new Set();
+  let zoneEndPromptOpen = false;
+  function maybePromptZoneEnds() {
+    if (!isGmUser() || zoneEndPromptOpen) return;
+    const due = getActivePersistentZones().filter((zone) => zone?.endDue && !promptedZoneEnds.has(`${zone.id}|${zone.endDue.at}`));
+    if (!due.length) return;
+    due.forEach((zone) => promptedZoneEnds.add(`${zone.id}|${zone.endDue.at}`));
+    zoneEndPromptOpen = true;
+    const names = due.map((zone) => `${zone.label || zone.abilityName || 'Zone'}${zone.ownerName ? ` (${zone.ownerName})` : ''}`);
+    const reasons = [...new Set(due.map((zone) => zone.endDue.reason).filter(Boolean))];
+    const message = `Time is up${reasons.length ? ` (${reasons.join(', ')})` : ''}: ${names.join(', ')}. Remove ${due.length > 1 ? 'them' : 'it'}?`;
+    Promise.resolve(confirmBoardAction(message, { title: 'Area ended', confirmText: 'Remove', cancelText: 'Keep' }))
+      .then(async (remove) => {
+        const byCaster = new Map();
+        due.forEach((zone) => byCaster.set(zone.casterId, [...(byCaster.get(zone.casterId) || []), zone.id]));
+        for (const [casterId, ids] of byCaster) {
+          if (remove) {
+            await removePersistentZones(ids, { reason: reasons[0] || 'time up' });
+          } else {
+            updatePlacementById(casterId, (target) => {
+              const records = Array.isArray(target.persistentZones) ? target.persistentZones : [];
+              target.persistentZones = records.map((record) => {
+                if (!record || !ids.includes(record.id)) return record;
+                const { endDue, ...kept } = record;
+                return kept;
+              });
+            });
+          }
+        }
+        renderPersistentZoneOverlays();
+      })
+      .catch((error) => console.warn('[VTT] zone end popup failed', error))
+      .finally(() => {
+        zoneEndPromptOpen = false;
+        maybePromptZoneEnds();
+      });
+  }
+
+  // Zones that last "until the end of the round / encounter" (or any lifetime): checked at each boundary.
+  function expirePersistentZoneLifetimes(eventType, payload = {}) {
+    const due = [];
+    for (const zone of getActivePersistentZones()) {
+      if (!zone?.expires || zone.endDue) continue;
+      const entry = { tokenId: zone.casterId, casterTeam: getTeamForPlacementId(zone.casterId), expires: zone.expires, lifetimeState: zone.lifetimeState || null };
+      const before = JSON.stringify(entry.lifetimeState);
+      if (shouldExpireTriggerEntry(entry, { ...payload, eventType }, { activeCombatantId, getTeamForPlacementId })) {
+        due.push(zone);
+      } else if (entry.lifetimeState && JSON.stringify(entry.lifetimeState) !== before) {
+        updatePlacementById(zone.casterId, (target) => {
+          const records = Array.isArray(target.persistentZones) ? target.persistentZones : [];
+          target.persistentZones = records.map((record) => (record?.id === zone.id ? { ...record, lifetimeState: entry.lifetimeState } : record));
+        });
+      }
+    }
+    if (due.length) endPersistentZonesByTime(due, eventType === 'combatEnd' ? 'end of the encounter' : eventType === 'roundEnd' ? 'end of the round' : 'its time is up');
   }
 
   function normalizeAuthoredAutomation(automation) {
@@ -9878,6 +9995,9 @@ export function mountBoardInteractions(store, routes = {}) {
       if (!gmViewing && normalized.hidden) {
         return;
       }
+      if (isInvisibleToViewer(placement)) {
+        return;
+      }
 
       let column = normalized.column;
       let row = normalized.row;
@@ -9952,7 +10072,7 @@ export function mountBoardInteractions(store, routes = {}) {
       token.style.transformOrigin = '50% 50%';
       clearTokenMapLevelVisibilityMask(token);
       applyTokenLevelPresentation(token, presentation);
-      token.classList.toggle('vtt-token--hidden', Boolean(normalized.hidden) || isOffPlayerToken(normalized));
+      token.classList.toggle('vtt-token--hidden', Boolean(normalized.hidden) || isOffPlayerToken(normalized) || hasInvisibleCondition(placement));
 
       if (normalized.imageUrl) {
         let img = token.querySelector('img.vtt-token__image');
@@ -18324,6 +18444,15 @@ export function mountBoardInteractions(store, routes = {}) {
 
   // A token of a player the GM has turned off (the site's player list): players are not sent it at all (the server's
   // projection); the GM sees it faded, as a hidden token, until the player is on again. Nothing on it is changed.
+  function hasInvisibleCondition(placement) {
+    return ensurePlacementConditions(placement?.conditions ?? placement?.condition ?? null)
+      .some((condition) => String(condition?.name || '').trim().toLowerCase() === 'invisible');
+  }
+
+  function isInvisibleToViewer(placement) {
+    return !isGmUser() && hasInvisibleCondition(placement) && !canCurrentUserMovePlacement(placement);
+  }
+
   function isOffPlayerToken(placement) {
     const profile = getCharacterSheetProfileIdForPlacement(placement);
     return Boolean(profile) && !ACTIVE_PLAYER_USER_IDS.includes(profile);
@@ -18379,6 +18508,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const result = adjustedAmount > 0
       ? applyDamageHealToPlacement(payload.placementId, 'damage', adjustedAmount, { fireStaminaTriggers: false })
       : getZeroDamageResult(payload.placementId);
+    if (result && payload.chatBreakdown !== true) announceDamageDefense(payload.placementId, adjustment, damageResolution);
     if (!result) {
       reject?.(new Error('Unable to update stamina for that token.'));
       return;
@@ -18641,9 +18771,12 @@ export function mountBoardInteractions(store, routes = {}) {
     // adjuster reads these directly off the placement's condition list.
     if (name === 'damageWeakness' || name === 'damageImmunity') {
       const amount = Number.parseInt(conditionPayload.amount, 10);
-      if (Number.isFinite(amount) && amount > 0) {
+      if (String(conditionPayload.amount).trim().toLowerCase() === 'all') {
+        condition.amount = 'all';
+      } else if (Number.isFinite(amount) && amount > 0) {
         condition.amount = amount;
       }
+      if (conditionPayload.stacks === true) condition.stacks = true;
       const dt = typeof conditionPayload.damageType === 'string'
         ? conditionPayload.damageType.trim().toLowerCase()
         : '';
@@ -18765,19 +18898,43 @@ export function mountBoardInteractions(store, routes = {}) {
     const placement = getPlacementFromStore(placementId);
     const sheet = await getAutomationSheetForPlacement(placementId);
     const lists = sheet?.sidebar?.lists && typeof sheet.sidebar.lists === 'object' ? sheet.sidebar.lists : {};
-    const sheetImmunity = parseDamageAdjustmentList(lists.immunity, damageType);
-    const sheetVulnerability = parseDamageAdjustmentList(lists.vulnerability ?? lists.weakness, damageType);
-    const monsterImmunity = parseMonsterDefenseDamageAdjustment(placement?.monster || placement?.automationTraits, 'immunity', damageType);
-    const monsterVulnerability = parseMonsterDefenseDamageAdjustment(placement?.monster || placement?.automationTraits, 'weakness', damageType);
-    // Per-placement condition riders. Stack additively on top of the sheet's
-    // immunity/vulnerability lists. `damageWeakness` adds to vulnerability,
-    // `damageImmunity` adds to immunity. An empty / "untyped" damageType on
-    // the condition means "applies to every type".
-    const conditionAdjustment = sumConditionDamageAdjustments(placementId, damageType);
+    // Draw Steel: of every immunity that fits this damage (stat block, hero sheet list, effects on the token) only
+    // the highest counts; the same for weakness. An entry marked `stacks` adds instead. "all" ignores all of it.
+    const traits = placement?.monster || placement?.automationTraits;
+    const conditions = Array.isArray(placement?.conditions) ? placement.conditions : placement?.condition ? [placement.condition] : [];
+    const entries = [
+      ...defenseEntriesFromList(lists.immunity, 'immunity'),
+      ...defenseEntriesFromList(lists.vulnerability ?? lists.weakness, 'weakness'),
+      ...defenseEntriesFromMonster(traits, 'immunity'),
+      ...defenseEntriesFromMonster(traits, 'weakness'),
+      ...defenseEntriesFromConditions(conditions),
+    ];
+    const immunity = pickDefense(entries, 'immunity', damageType);
+    const weakness = pickDefense(entries, 'weakness', damageType);
     return {
-      immunity: sheetImmunity + monsterImmunity + conditionAdjustment.immunity,
-      vulnerability: sheetVulnerability + monsterVulnerability + conditionAdjustment.vulnerability,
+      immunity: immunity.value,
+      vulnerability: weakness.value === 'all' ? 0 : weakness.value,
+      immunityText: describeDefense('immunity', immunity, damageType),
+      weaknessText: describeDefense('weakness', weakness, damageType),
     };
+  }
+
+  // One chat line when weakness or immunity changed a hit: "Goblin: fire immunity 5 (10 → 5)." Not for a token
+  // players can't see; without the numbers when its Stamina is hidden from players.
+  function announceDamageDefense(placementId, adjustment, resolution) {
+    if (!adjustment || !resolution) return;
+    const changed = (resolution.vulnerability || 0) > 0 || (resolution.immunity || 0) > 0 || (resolution.ignoredImmunity || 0) > 0;
+    if (!changed) return;
+    const placement = getPlacementFromStore(placementId);
+    if (!placement || isAutomationPlacementHidden(placement)) return;
+    const parts = [];
+    if (resolution.vulnerability > 0 && adjustment.weaknessText) parts.push(adjustment.weaknessText);
+    if (adjustment.immunityText && (resolution.immunity > 0 || resolution.ignoredImmunity > 0)) {
+      parts.push(resolution.ignoredImmunity > 0 ? `${adjustment.immunityText} (${resolution.immunityAll ? 'all' : resolution.ignoredImmunity} ignored)` : adjustment.immunityText);
+    }
+    if (!parts.length) return;
+    const numbers = shouldHideEnemyHitPointValues(placement) ? '' : ` (${resolution.originalAmount} → ${resolution.amount})`;
+    announceToChat(`${tokenLabel(placement) || 'Target'}: ${parts.join(', ')}${numbers}.`);
   }
 
   // The creature that dealt damage applied by hand: the one token selected, if it is not the target itself
@@ -18794,11 +18951,13 @@ export function mountBoardInteractions(store, routes = {}) {
       return null;
     }
     const adjustment = await getAutomationDamageAdjustment(placementId, normalizedType);
-    const adjustedAmount = Math.max(0, originalAmount + adjustment.vulnerability - adjustment.immunity);
+    const resolution = resolveAutomationDamageAmount({ amount: originalAmount, vulnerability: adjustment.vulnerability, immunity: adjustment.immunity });
+    const adjustedAmount = resolution.amount;
     const result = adjustedAmount > 0
       ? applyDamageHealToPlacement(placementId, 'damage', adjustedAmount, { fireStaminaTriggers: false })
       : getZeroDamageResult(placementId);
     if (!result) return null;
+    announceDamageDefense(placementId, adjustment, resolution);
     // Told to automation as a hit: `damage` (taken) and `damageDealt` (by the source), then the stamina events.
     if (adjustedAmount > 0) {
       fireManualStaminaTriggers({
@@ -18816,24 +18975,10 @@ export function mountBoardInteractions(store, routes = {}) {
       amount: adjustedAmount,
       originalAmount,
       damageType: normalizedType,
-      immunity: adjustment.immunity,
-      vulnerability: adjustment.vulnerability,
+      immunity: resolution.immunity,
+      vulnerability: resolution.vulnerability,
       change: adjustedAmount,
     };
-  }
-
-  function sumConditionDamageAdjustments(placementId, damageType) {
-    const placement = getPlacementFromStore(placementId);
-    const conditions = Array.isArray(placement?.conditions)
-      ? placement.conditions
-      : placement?.condition
-        ? [placement.condition]
-        : [];
-    const result = calculateConditionDamageAdjustments(
-      conditions,
-      normalizeAutomationDamageType(damageType)
-    );
-    return { immunity: result.immunity, vulnerability: result.weakness };
   }
 
   async function getAutomationSheetForPlacement(placementId) {
@@ -18939,82 +19084,6 @@ export function mountBoardInteractions(store, routes = {}) {
       console.warn('[VTT] Failed to save automation sheet summary', error);
       return false;
     }
-  }
-
-  function parseDamageAdjustmentList(list, damageType) {
-    const entries = Array.isArray(list) ? list : [];
-    const normalizedType = normalizeAutomationDamageType(damageType);
-    return entries.reduce((total, entry) => {
-      const text = typeof entry === 'string'
-        ? entry
-        : entry && typeof entry === 'object'
-          ? String(entry.name ?? entry.label ?? entry.value ?? '')
-          : '';
-      const parsed = parseDamageAdjustmentEntry(text);
-      if (!parsed.amount) {
-        return total;
-      }
-      if (parsed.type === 'all' || parsed.type === 'any' || parsed.type === normalizedType || (!parsed.type && !normalizedType)) {
-        return total + parsed.amount;
-      }
-      return total;
-    }, 0);
-  }
-
-  function parseMonsterDefenseDamageAdjustment(monster, kind, damageType) {
-    if (!monster || typeof monster !== 'object') {
-      return 0;
-    }
-    const normalizedType = normalizeAutomationDamageType(damageType);
-    const defenses = monster.defenses && typeof monster.defenses === 'object' ? monster.defenses : {};
-    const listKey = kind === 'immunity' ? 'immunities' : 'weaknesses';
-    const monsterListKey = kind === 'immunity' ? 'immunities' : 'weaknesses';
-
-    // Build the list of {type, value} entries to consider. Prefer the canonical
-    // array form; fall back to the single object or legacy flat fields.
-    const entries = [];
-    if (Array.isArray(defenses[listKey])) {
-      defenses[listKey].forEach(entry => {
-        if (entry && typeof entry === 'object') entries.push(entry);
-      });
-    }
-    if (Array.isArray(monster[monsterListKey])) {
-      monster[monsterListKey].forEach(entry => {
-        if (entry && typeof entry === 'object') entries.push(entry);
-      });
-    }
-    if (entries.length === 0) {
-      if (defenses[kind] && typeof defenses[kind] === 'object') {
-        entries.push(defenses[kind]);
-      } else if (monster[`${kind}_type`] || monster[`${kind}_value`] || monster[`${kind}Type`] || monster[`${kind}Value`]) {
-        entries.push({
-          type: monster[`${kind}_type`] ?? monster[`${kind}Type`] ?? '',
-          value: monster[`${kind}_value`] ?? monster[`${kind}Value`] ?? 0,
-        });
-      }
-    }
-
-    let total = 0;
-    entries.forEach(entry => {
-      const type = normalizeAutomationDamageType(entry?.type ?? '');
-      const value = Number.parseInt(entry?.value ?? entry?.amount ?? 0, 10);
-      if (!Number.isFinite(value) || value <= 0) return;
-      if (!type || type === 'all' || type === 'any' || type === normalizedType) {
-        total += value;
-      }
-    });
-    return total;
-  }
-
-  function parseDamageAdjustmentEntry(text) {
-    const match = String(text || '').trim().match(/^([a-z\s-]*?)(-?\d+)\s*$/i);
-    if (!match) {
-      return { type: '', amount: 0 };
-    }
-    return {
-      type: normalizeAutomationDamageType(match[1]),
-      amount: Math.max(0, Number.parseInt(match[2], 10) || 0),
-    };
   }
 
   function normalizeAutomationDamageType(value) {
@@ -19945,7 +20014,9 @@ export function mountBoardInteractions(store, routes = {}) {
 
   async function applyAutomationCollisionDamage(placementId, amount, damageType) {
     const adjustment = await getAutomationDamageAdjustment(placementId, damageType || '');
-    const adjustedAmount = Math.max(0, amount + adjustment.vulnerability - adjustment.immunity);
+    const resolution = resolveAutomationDamageAmount({ amount, vulnerability: adjustment.vulnerability, immunity: adjustment.immunity });
+    const adjustedAmount = resolution.amount;
+    announceDamageDefense(placementId, adjustment, resolution);
     if (adjustedAmount <= 0) {
       return getZeroDamageResult(placementId);
     }
@@ -19968,7 +20039,7 @@ export function mountBoardInteractions(store, routes = {}) {
       for (const dealt of await collisionDamageDealt(operationId)) {
         if (!getPlacementFromStore(dealt.targetId)) continue;
         const adjustment = await getAutomationDamageAdjustment(dealt.targetId, dealt.damageType);
-        const amount = Math.max(0, dealt.amount + adjustment.vulnerability - adjustment.immunity);
+        const amount = resolveAutomationDamageAmount({ amount: dealt.amount, vulnerability: adjustment.vulnerability, immunity: adjustment.immunity }).amount;
         const result = amount > 0 ? applyDamageHealToPlacement(dealt.targetId, 'heal', amount) : null;
         if (!result) continue;
         await awaitSuccessfulPlacementSave(result);
@@ -27680,10 +27751,10 @@ function createTemplateTool() {
     const state = boardApi.getState?.() ?? {}, sceneId = getActiveSceneId();
     const confirmed = tokenMovementRuntime?.getConfirmedSnapshot?.();
     const sceneConfig = confirmed?.state?.sceneConfig?.[sceneId] ?? state.boardState?.sceneState?.[sceneId] ?? {};
-    const placements = getPlacementsForActiveScene().filter(p => isGmUser() || !isAutomationPlacementHidden(p)).map(p => {
+    const placements = getPlacementsForActiveScene().filter(p => isGmUser() || (!isAutomationPlacementHidden(p) && !isInvisibleToViewer(p))).map(p => {
       const effective = tokenMovementRuntime?.getEffectivePlacement?.(sceneId, p.id) ?? p;
-      // An off player's token is drawn as a hidden one (the GM sees it faded).
-      return { ...JSON.parse(JSON.stringify(effective)), ...(isOffPlayerToken(p) ? { hidden: true } : {}), canMove: canCurrentUserMovePlacement(p), movementLeft: tokenMovementController?.getMovementLeft?.(p.id) ?? null };
+      // An off player's token is drawn as a hidden one (the GM sees it faded); so is an invisible one, for the GM.
+      return { ...JSON.parse(JSON.stringify(effective)), ...(isOffPlayerToken(p) || (isGmUser() && hasInvisibleCondition(p)) ? { hidden: true } : {}), canMove: canCurrentUserMovePlacement(p), movementLeft: tokenMovementController?.getMovementLeft?.(p.id) ?? null };
     });
     return {
       sceneId, placements, selectedIds: [...selectedTokenIds], user: { ...state.user }, isGM: isGmUser(),

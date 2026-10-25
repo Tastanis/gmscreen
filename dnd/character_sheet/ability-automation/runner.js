@@ -1989,11 +1989,18 @@
           effects: block.effects || [],
           attributeBonuses,
           note: block.note || "",
+          ...(block.label ? { label: block.label } : {}),
+          ...(block.terrainCost ? { terrainCost: block.terrainCost } : {}),
+          ...(block.tag ? { tag: block.tag } : {}),
+          ...(block.expires ? { expires: block.expires } : {}),
+          ...(block.askBeforeEnd === false ? { askBeforeEnd: false } : {}),
         });
         const zoneId = result?.zoneId || "(zone)";
         const lines = [`${state.heroName} - ${state.action.name || "Ability"} persistent zone armed (${zoneId}):`];
         lines.push(`Cost ${block.cost || 0}${block.resource ? ` ${block.resource}` : ""} at ${block.tickAt || "startOfTurn"}.`);
         if (block.expiresAt && block.expiresAt !== "never") lines.push(`Expires at owner's ${block.expiresAt}.`);
+        if (block.expires) lines.push(`Lasts until ${block.expires.event === "combatEnd" ? "the end of the encounter" : block.expires.event === "roundEnd" ? `the end of the round${block.expires.count > 1 ? ` (${block.expires.count} rounds)` : ""}` : block.expires.event}.`);
+        if (block.terrainCost) lines.push(`Difficult terrain${block.terrainCost !== 2 ? ` (×${block.terrainCost})` : ""}.`);
         if (inner) lines.push(`Each tick: ${inner}`);
         if (block.note) lines.push(block.note);
         await postChat(ctx, { message: lines.join("\n") });
@@ -2357,6 +2364,8 @@
         keywords: getAbilityKeywords(state),
       };
       if (effect.ignoreImmunity !== undefined) damagePayload.ignoreImmunity = effect.ignoreImmunity;
+      // This chat line shows weakness and immunity itself.
+      damagePayload.chatBreakdown = true;
       if (surgeBonus.spent > 0) {
         damagePayload.includesSurge = true;
         damagePayload.surgeSpent = surgeBonus.spent;
@@ -2376,8 +2385,9 @@
       const finalAmount = Number.isFinite(result?.amount) ? result.amount : amount;
       const adjustments = [];
       if (surgeBonus.damage > 0) adjustments.push(`+${surgeBonus.damage} surge`);
-      if (Number.isFinite(result?.vulnerability) && result.vulnerability > 0) adjustments.push(`+${result.vulnerability} vulnerability`);
-      if (Number.isFinite(result?.immunity) && result.immunity > 0) adjustments.push(`-${result.immunity} immunity`);
+      if (Number.isFinite(result?.vulnerability) && result.vulnerability > 0) adjustments.push(`+${result.vulnerability} weakness`);
+      if (result?.immunityAll && result.immunity > 0) adjustments.push("immune");
+      else if (Number.isFinite(result?.immunity) && result.immunity > 0) adjustments.push(`-${result.immunity} immunity`);
       if (Number.isFinite(result?.ignoredImmunity) && result.ignoredImmunity > 0) adjustments.push(`${result.ignoredImmunity} immunity ignored`);
       const adjustmentText = !result?.hideHitPointValues && adjustments.length
         ? ` (${amountBeforeSurge}${damageType ? ` ${damageType}` : ""} ${adjustments.join(" ")} = ${finalAmount})`
@@ -2409,7 +2419,8 @@
       if (!target?.id) continue;
       const conditionPayload = { name, duration };
       if (isNumeric) {
-        conditionPayload.amount = asInt(effect.amount, 0);
+        conditionPayload.amount = effect.amount === "all" ? "all" : asInt(effect.amount, 0);
+        if (effect.stacks === true) conditionPayload.stacks = true;
         const damageType = effect.damageType || ctx.selectedDamageType || "";
         if (damageType) conditionPayload.damageType = damageType;
       }

@@ -58,7 +58,7 @@ test('undoing a push gives back the damage the push itself dealt', () => {
   assert.match(board, /const givenBack = last\.groupMove \? 0 : await giveBackCollisionDamage\(last\.operationId\);/);
   const giveBack = board.slice(board.indexOf('async function giveBackCollisionDamage('), board.indexOf('function getAutomationCollisionStopCell('));
   assert.match(giveBack, /for \(const dealt of await collisionDamageDealt\(operationId\)\) \{/);
-  assert.match(giveBack, /const amount = Math\.max\(0, dealt\.amount \+ adjustment\.vulnerability - adjustment\.immunity\);/, 'as much as was dealt: the same weakness and immunity');
+  assert.match(giveBack, /const amount = resolveAutomationDamageAmount\(\{ amount: dealt\.amount, vulnerability: adjustment\.vulnerability, immunity: adjustment\.immunity \}\)\.amount;/, 'as much as was dealt: the same weakness and immunity');
   assert.match(giveBack, /applyDamageHealToPlacement\(dealt\.targetId, 'heal', amount\)/, 'as healing, which stops at the maximum and reaches a hero\'s sheet');
   assert.doesNotMatch(giveBack, /allowTempHp/);
   // A failure to give back does not undo the undo: the move is back and the wall is whole.
