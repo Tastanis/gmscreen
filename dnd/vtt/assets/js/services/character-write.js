@@ -1,6 +1,18 @@
 import {getCharacterOperationJournal} from './character-operation-journal.js';
+import {recordSheetUndo} from './undo-client.js';
+
+// Turn undo: the change a confirmed write made to a hero's counters (the server cannot see sheet writes).
+function noteSheetChange(action, fields, result) {
+  const characterId = String(fields?.character || '');
+  if (!characterId) return;
+  const whole = (value) => { const number = Number.parseInt(value, 10); return Number.isFinite(number) ? number : 0; };
+  if (action === 'sync-surges' && fields.delta !== undefined) recordSheetUndo({ characterId, counter: 'surges', delta: whole(fields.delta) });
+  else if (action === 'sync-resource' && fields.delta !== undefined) recordSheetUndo({ characterId, counter: 'resource', delta: whole(fields.delta) });
+  else if (action === 'sync-resource' && fields.spend !== undefined && result?.paid !== false) recordSheetUndo({ characterId, counter: 'resource', delta: -whole(fields.spend) });
+  else if (action === 'sync-vitals' && fields.spendRecoveries !== undefined) recordSheetUndo({ characterId, counter: 'recoveries', delta: -whole(result?.spent ?? fields.spendRecoveries) });
+}
 /** Confirm a narrow character write; an uncertain outcome must never be retried here. */
-export async function confirmCharacterWrite(endpoint, action, fields, {fetchImpl=globalThis.fetch,timeoutMs=15000,operationId,journalOverride}={}) {
+export async function confirmCharacterWrite(endpoint, action, fields, {fetchImpl=globalThis.fetch,timeoutMs=15000,operationId,journalOverride,noUndo=false}={}) {
   const usesReceipt = action === 'sync-surges' || action === 'sync-resource' || (action === 'sync-vitals' && fields.spendRecoveries !== undefined);
   const receiptId = usesReceipt ? (operationId ?? globalThis.crypto.randomUUID()) : null;
   const journal = receiptId ? (journalOverride ?? getCharacterOperationJournal()) : null;
@@ -20,6 +32,7 @@ export async function confirmCharacterWrite(endpoint, action, fields, {fetchImpl
       if(!response.ok || result?.success!==true)throw new Error(result?.error || 'Character save was not confirmed.');
       if (receiptId && result.operationId !== receiptId) throw new Error('Character operation receipt was not confirmed.');
       if (!controller.signal.aborted) journal?.complete(receiptId);
+      if (!noUndo) noteSheetChange(action, fields, result);
       return result;
     })()]);
   } catch (error) {

@@ -5,6 +5,7 @@ import { createCommandClient } from './command-client.js';
 import { createRecoveryPolling } from './recovery-polling.js';
 import { createSerialQueue } from './serial-queue.js';
 import { copyDesigns } from '../state/shared-designs.js';
+import { currentUndoTag } from '../services/undo-client.js';
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value ?? {}));
@@ -70,6 +71,8 @@ export function createTokenMovementRuntime({
       submitCombatCommand: async () => null,
       submitBoardDomainCommands: async () => [],
       submitRequestedTestCommand: async () => null,
+      ingestEvents: async () => null,
+      getSocketId: () => null,
       claimCombatAutomation: async () => null,
       recover: async () => null,
       overlayBoardState: (boardState) => boardState,
@@ -270,6 +273,7 @@ export function createTokenMovementRuntime({
           ...(move.forcedDestination ? {forcedDestination:move.forcedDestination} : {}),
           ...(move.climbLow === true ? {climbLow:true} : {}),
           ...(move.undoRevision !== undefined ? { undoRevision: move.undoRevision } : {}),
+          ...(move.undoRevision === undefined ? currentUndoTag() : {}),
         },
         {
           sceneId,
@@ -401,7 +405,7 @@ export function createTokenMovementRuntime({
     if (!actions.length) return null;
     const before = clone(store.getConfirmedSnapshot());
     try {
-      return await commandClient.submit('placement.batch', { actions });
+      return await commandClient.submit('placement.batch', { actions, ...currentUndoTag() });
     } catch (error) {
       const conflictSnapshot = error?.response?.snapshot;
       if (error?.status === 409 && conflictSnapshot) {
@@ -458,7 +462,7 @@ export function createTokenMovementRuntime({
     }
     await start();
     try {
-      return await commandClient.submit(type, payload, { sceneId });
+      return await commandClient.submit(type, type === 'combat.patch' ? { ...payload, ...currentUndoTag() } : payload, { sceneId });
     } catch (error) {
       const conflictSnapshot = error?.response?.snapshot;
       if (error?.status === 409 && conflictSnapshot) {
@@ -466,6 +470,14 @@ export function createTokenMovementRuntime({
         reconcileSnapshot(store.getConfirmedSnapshot(), { source: 'conflict' });
       }
       throw error;
+    }
+  }
+
+  // Events another endpoint answered with (turn undo): applied here as this page's own, in order.
+  async function ingestEvents(events) {
+    await start();
+    for (const event of Array.isArray(events) ? events : []) {
+      if (event && typeof event === 'object') await eventStream.ingest(event, 'acknowledgement');
     }
   }
 
@@ -670,6 +682,8 @@ export function createTokenMovementRuntime({
     submitBoardDomainCommands,
     submitRequestedTestCommand,
     claimCombatAutomation,
+    ingestEvents,
+    getSocketId: () => pusherTransport?.getSocketId?.() ?? null,
     recover: () => eventStream.recover(),
     overlayBoardState,
     getEffectivePlacement,

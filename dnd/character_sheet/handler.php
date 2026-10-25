@@ -918,6 +918,18 @@ switch ($action) {
             }
             sendJsonResponse($response);
         }
+        // Recoveries given back or taken by an amount (turn undo, October 2026), worked out against the stored number.
+        if (isset($requestData['recoveriesDelta']) && $requestData['recoveriesDelta'] !== '') {
+            $sheet = SheetChanges::move($sheet, 'hero.vitals.currentRecoveries', (int) (SheetChanges::whole($requestData['recoveriesDelta']) ?? 0));
+            $allSheets[$requestedCharacter] = $sheet;
+            if (!saveCharacterSheetData($dataDir, $dataFile, $allSheets)) {
+                sendJsonResponse(array('success' => false, 'error' => 'Failed to save vital values'));
+            }
+            sendJsonResponse(array(
+                'success' => true,
+                'currentRecoveries' => SheetChanges::counter($sheet, 'hero.vitals.currentRecoveries'),
+            ));
+        }
         $hasStamina = isset($requestData['currentStamina']) && $requestData['currentStamina'] !== '';
         $hasRecoveries = isset($requestData['currentRecoveries']) && $requestData['currentRecoveries'] !== '';
         if (!$hasStamina && !$hasRecoveries) {

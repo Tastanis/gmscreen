@@ -10,6 +10,7 @@ require_once __DIR__ . '/CollisionEffects.php';
 require_once __DIR__ . '/FallOutcome.php';
 require_once __DIR__ . '/TeleportLanding.php';
 require_once __DIR__ . '/MovementUndo.php';
+require_once __DIR__ . '/UndoJournal.php';
 require_once __DIR__ . '/PlayerRoster.php';
 require_once __DIR__ . '/SceneCheckpointArchive.php';
 require_once __DIR__ . '/SceneCheckpointRestore.php';
@@ -34,6 +35,7 @@ final class SyncV2Store
 
     private PDO $pdo;
     private string $worldId;
+    private ?UndoJournal $undoJournalInstance = null;
     private int $eventRetention;
     private int $snapshotInterval;
     private int $snapshotRetention;
@@ -1383,6 +1385,12 @@ final class SyncV2Store
                 'serverTime' => $serverTime,
             ];
             $this->insertEvent($event);
+            // Turn undo: a Malice change made during a running turn (not the Malice a new round brings).
+            if ($type === 'combat.patch' && (int) ($before['malice'] ?? 0) !== (int) ($combat['malice'] ?? 0)) {
+                $this->journalUndoSteps([...$state, 'combat' => [...$state['combat'], $sceneId => $before]],
+                    [[$sceneId, $sceneId, ['malice' => (int) ($before['malice'] ?? 0)], ['malice' => (int) ($combat['malice'] ?? 0)]]],
+                    $command, $actorId, $revision, $normalized['operationId'], 'malice');
+            }
             $this->updateWorldState($revision, $state, $serverTime);
             if ($revision % $this->snapshotInterval === 0) {
                 $this->insertSnapshot($revision, $state, $serverTime);
@@ -1397,6 +1405,141 @@ final class SyncV2Store
     }
 
     /** Restore every member of the accepted move identified by an anchor receipt. */
+    private function undoJournal(): UndoJournal
+    {
+        return $this->undoJournalInstance ??= new UndoJournal($this->pdo, $this->worldId);
+    }
+
+    /**
+     * Keeps token changes for turn undo when a turn is running in their scene. `$changes`: [sceneId, placementId,
+     * before, after]. The action they belong to is the command's `undoGroup` (one ability use), else the command.
+     */
+    private function journalUndoSteps(array $state, array $changes, array $command, string $actorId, int $revision, string $operationId, string $kind = 'placement'): void
+    {
+        if ($changes === [] || ($command['payload']['undoReplay'] ?? false) === true) return;
+        $group = UndoJournal::cleanId($command['payload']['undoGroup'] ?? '') ?: $operationId;
+        $label = UndoJournal::cleanLabel($command['payload']['undoLabel'] ?? '');
+        $now = $this->nowMilliseconds();
+        foreach ($changes as [$sceneId, $entityId, $before, $after]) {
+            $turn = UndoJournal::turnKey($state['combat'][$sceneId] ?? null);
+            if ($turn === null) continue;
+            $this->undoJournal()->record($sceneId, $turn, $group, $label, $operationId, $actorId, $revision, $kind, $entityId, $before, $after, $now);
+        }
+    }
+
+    /** Ctrl+Shift+Z asks first: how many actions the running turn has to undo. */
+    public function undoTurnCount(array $command): array
+    {
+        $sceneId = trim((string) ($command['sceneId'] ?? ''));
+        $snapshot = $this->getSnapshot();
+        $turn = UndoJournal::turnKey($snapshot['state']['combat'][$sceneId] ?? null);
+        return ['turn' => $turn !== null, 'actions' => $turn === null ? 0 : $this->undoJournal()->actionCount($sceneId, $turn)];
+    }
+
+    /** A hero sheet counter change during a turn (heroic resource, surges, recoveries), reported by the page that made it. */
+    public function recordSheetUndoStep(array $command, string $actorId): array
+    {
+        $sceneId = trim((string) ($command['sceneId'] ?? ''));
+        $payload = is_array($command['payload'] ?? null) ? $command['payload'] : [];
+        $character = UndoJournal::cleanId($payload['characterId'] ?? '');
+        $counter = (string) ($payload['counter'] ?? '');
+        $delta = $payload['delta'] ?? null;
+        if ($sceneId === '' || $character === '' || !in_array($counter, ['resource', 'surges', 'recoveries', 'stamina', 'victories'], true) || !is_int($delta) || $delta === 0 || abs($delta) > 1000) {
+            throw new InvalidArgumentException('An undo record needs a scene, a character, a counter and a whole-number change.');
+        }
+        $snapshot = $this->getSnapshot();
+        $before = ['counter' => $counter, 'character' => $character, 'name' => UndoJournal::cleanLabel($payload['characterName'] ?? '')];
+        $this->journalUndoSteps($snapshot['state'], [[$sceneId, $character, $before, [...$before, 'delta' => $delta]]],
+            ['payload' => $payload], trim($actorId), (int) $snapshot['revision'], UndoJournal::cleanId($command['operationId'] ?? '') ?: ('sheet-' . bin2hex(random_bytes(6))), 'sheet');
+        return ['recorded' => UndoJournal::turnKey($snapshot['state']['combat'][$sceneId] ?? null) !== null];
+    }
+
+    /**
+     * Undo the running turn's newest action (`whole`: every action of the turn), with server authority: anyone in the
+     * game may, whatever the token. A step is put back only while what it changed is still as it left it; otherwise
+     * it is skipped and said so. Token fields are restored through the restore path of acceptPlacementBatch (no wall
+     * or permission checks), Malice by the opposite change; hero sheet steps are handed back for the page to reverse.
+     *
+     * @return array{status:string,events:array,undo:array,snapshot?:array,error?:string}
+     */
+    public function undoTurnSteps(array $command, string $actorId, bool $whole): array
+    {
+        $actorId = trim($actorId);
+        $sceneId = trim((string) ($command['sceneId'] ?? ''));
+        $operationId = UndoJournal::cleanId($command['operationId'] ?? '', 100);
+        if ($actorId === '' || $sceneId === '' || strlen($operationId) < 8) throw new InvalidArgumentException('An undo needs an authenticated user, a scene and an operation ID.');
+        $snapshot = $this->getSnapshot();
+        $state = $snapshot['state'];
+        $turn = UndoJournal::turnKey($state['combat'][$sceneId] ?? null);
+        if ($turn === null) throw new InvalidArgumentException('No turn is running, so there is no turn to undo.');
+        $rows = $this->undoJournal()->standing($sceneId, $turn, $whole);
+        if ($rows === []) throw new InvalidArgumentException('Nothing left to undo this turn.');
+
+        $working = [];
+        $restores = [];
+        $malice = 0;
+        $undone = [];
+        $skipped = [];
+        foreach ($rows as $row) {
+            if ($row['kind'] === 'placement') {
+                $id = (string) $row['entity_id'];
+                $current = $working[$id] ?? ($state['placements'][$sceneId][$id] ?? null);
+                if (!is_array($current)) { $skipped[] = [...$row, 'reason' => 'gone']; continue; }
+                $unchanged = true;
+                foreach ($row['after'] as $key => $value) {
+                    if (json_encode($current[$key] ?? null) !== json_encode($value)) { $unchanged = false; break; }
+                }
+                if (!$unchanged) { $skipped[] = [...$row, 'reason' => 'changed']; continue; }
+                foreach ($row['before'] as $key => $value) $current[$key] = $value;
+                $working[$id] = $current;
+                // Newest first: an older step's "before" replaces a newer one's for the same field.
+                $restores[$sceneId . '::' . $id] = [...($restores[$sceneId . '::' . $id] ?? []), ...$row['before']];
+                $undone[] = $row;
+            } elseif ($row['kind'] === 'malice') {
+                $malice += (int) ($row['before']['malice'] ?? 0) - (int) ($row['after']['malice'] ?? 0);
+                $undone[] = $row;
+            } else {
+                $undone[] = $row;
+            }
+        }
+
+        $events = [];
+        if ($restores !== []) {
+            $actions = [];
+            foreach ($restores as $key => $patch) {
+                [$restoreScene, $placementId] = explode('::', $key, 2);
+                $actions[] = ['kind' => 'patch', 'sceneId' => $restoreScene, 'placementId' => $placementId,
+                    'entityRevision' => (int) ($state['placements'][$restoreScene][$placementId]['_entityRevision'] ?? 0), 'patch' => $patch];
+            }
+            $result = $this->acceptPlacementBatch(['operationId' => $operationId . ':tokens', 'type' => 'placement.batch',
+                'baseRevision' => $snapshot['revision'], 'payload' => ['actions' => $actions]], $actorId, true, $snapshot['revision'], $restores);
+            if (($result['status'] ?? '') !== 'accepted') return [...$result, 'events' => [], 'undo' => []];
+            $events[] = $result['event'];
+        }
+        if ($malice !== 0) {
+            $result = $this->acceptCombatCommand(['operationId' => $operationId . ':malice', 'type' => 'combat.patch', 'sceneId' => $sceneId,
+                'baseRevision' => 0, 'payload' => ['patch' => ['maliceDelta' => max(-1000, min(1000, $malice))], 'undoReplay' => true]], $actorId, true);
+            if (($result['status'] ?? '') === 'accepted') $events[] = $result['event'];
+        }
+        // A skipped step is set aside too, or every later Ctrl+Z would stop at it and never reach older actions.
+        $this->undoJournal()->markUndone([...array_column($undone, 'id'), ...array_column($skipped, 'id')], $actorId, $this->nowMilliseconds());
+        $describe = static fn(array $row): array => [
+            'kind' => $row['kind'], 'entityId' => $row['entity_id'], 'actorId' => $row['actor_id'], 'groupId' => $row['group_id'],
+            'label' => $row['label'], 'before' => $row['before'], 'after' => $row['after'], 'reason' => $row['reason'] ?? null,
+        ];
+        return [
+            'status' => 'accepted',
+            'events' => $events,
+            'undo' => [
+                'whole' => $whole,
+                'sceneId' => $sceneId,
+                'steps' => array_map($describe, $undone),
+                'skipped' => array_map($describe, $skipped),
+                'remaining' => $this->undoJournal()->actionCount($sceneId, $turn),
+            ],
+        ];
+    }
+
     public function undoMovementGroup(array $command,string $actorId,bool $isGm): array
     {
         $actorId=trim($actorId);
@@ -1489,6 +1632,7 @@ final class SyncV2Store
             $mutations = [];
             $zoneEntryReceipts = [];
             $levelChangedPlacements = [];
+            $undoChanges = [];
 
             // A push that was told to break through: break what it breaks first, as its own change,
             // then make the rest of the push through the opening.
@@ -1654,8 +1798,14 @@ final class SyncV2Store
                     }
                 }
                 if(FloorGeometry::isAirborne($next)||array_key_exists('flightHeight',$current)||array_key_exists('flightHeight',$patch)){
-                    $patch['flightHeight']=FlightHeight::resolve($current,$next,$movementConfig,$action['movementKind'],$action['path']);
-                    $next['flightHeight']=$patch['flightHeight'];
+                    $resolvedHeight=FlightHeight::resolve($current,$next,$movementConfig,$action['movementKind'],$action['path']);
+                    $next['flightHeight']=$resolvedHeight;
+                    // Only a height that was sent or that changed goes into the patch: an hp-only hit on a token with a
+                    // stored (even null) height was reported as a height change, so every page redrew every token and a
+                    // floating damage number played twice (October 2026).
+                    $storedHeight=$current['flightHeight']??null;
+                    $sameHeight=($storedHeight===null&&$resolvedHeight===null)||(is_numeric($storedHeight)&&is_numeric($resolvedHeight)&&abs((float)$storedHeight-(float)$resolvedHeight)<1e-9);
+                    if(array_key_exists('flightHeight',$patch)||!$sameHeight)$patch['flightHeight']=$resolvedHeight;
                 }
                 if(array_key_exists('flightHeight',$patch)||array_key_exists('movementMode',$patch))WallCubes::assertDestination($next,$movementConfig);
                 $teleport=null;
@@ -1679,6 +1829,10 @@ final class SyncV2Store
                     $zoneEntryReceipts[] = ZoneEntryReceipt::create($sceneId, $placementId, $current, $next, $state['combat'][$sceneId] ?? [], $action['movementKind']);
                 }
                 $state['placements'][$sceneId][$placementId] = $next;
+                // Turn undo: what this change did to the token (restores are undos themselves and are not kept).
+                if ($movementRestores === null && ($changedBy = UndoJournal::diff($current, $next, array_keys($patch))) !== null) {
+                    $undoChanges[] = [$sceneId, $placementId, $changedBy[0], $changedBy[1]];
+                }
                 if (
                     $this->placementLevelId($current)
                     !== $this->placementLevelId($next)
@@ -1781,6 +1935,7 @@ final class SyncV2Store
             }
             if ($zoneEntryReceipts !== []) $event['payload']['zoneEntryReceipts'] = $zoneEntryReceipts;
             $this->insertEvent($event);
+            $this->journalUndoSteps($state, $undoChanges, $command, $actorId, $revision, $normalized['operationId']);
             $this->updateWorldState($revision, $state, $serverTime);
             if ($revision % $this->snapshotInterval === 0) {
                 $this->insertSnapshot($revision, $state, $serverTime);
@@ -2083,6 +2238,10 @@ final class SyncV2Store
             }
 
             $this->insertEvent($event);
+            if ($restore === null && is_array($state['placements'][$sceneId][$placementId] ?? null)
+                && ($moved = UndoJournal::diff($current, $state['placements'][$sceneId][$placementId], UndoJournal::POSITION)) !== null) {
+                $this->journalUndoSteps($state, [[$sceneId, $placementId, $moved[0], $moved[1]]], $command, $actorId, $revision, $normalized['operationId']);
+            }
             $this->updateWorldState($revision, $state, $serverTime);
             if ($revision % $this->snapshotInterval === 0) {
                 $this->insertSnapshot($revision, $state, $serverTime);

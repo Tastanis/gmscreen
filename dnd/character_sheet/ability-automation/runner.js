@@ -5156,7 +5156,29 @@
     state.appliedModifiers = matchedModifiers;
   }
 
+  // Turn undo (Brandon, October 2026): everything one ability use changes is one Ctrl+Z. The board's commands carry
+  // this group (services/undo-client.js); an ability run inside another (useAbility) belongs to the outer one.
+  // A page hook may ask first whether to start the creature's turn (vttBeforeAbilityRun).
+  let undoGroupCount = 0;
   async function open(options) {
+    try {
+      if (typeof globalThis.vttBeforeAbilityRun === "function") await globalThis.vttBeforeAbilityRun(options || {});
+    } catch (error) {
+      console.warn("[AbilityAutomationRunner] before-run hook failed", error);
+    }
+    if (globalThis.vttUndoGroup?.id) return openRun(options);
+    // Not from Math.random: that would use up a die meant for the roll.
+    undoGroupCount += 1;
+    const id = globalThis.crypto?.randomUUID ? `ug-${globalThis.crypto.randomUUID()}` : `ug-${Date.now().toString(36)}-${undoGroupCount.toString(36)}`;
+    globalThis.vttUndoGroup = { id, label: options?.action?.name || "" };
+    try {
+      return await openRun(options);
+    } finally {
+      if (globalThis.vttUndoGroup?.id === id) globalThis.vttUndoGroup = null;
+    }
+  }
+
+  async function openRun(options) {
     const automation = schema.normalizeAutomation(options?.automation);
     // Feature modifiers are applied after leading choices so execution-scoped
     // keywords (for melee/ranged mode, etc.) can control modifier matching.

@@ -1,5 +1,6 @@
 import {chooseTeleportHeight} from './teleport-choice.js';
 import { footprintGap, followSquare } from './grab-geometry.mjs';
+import { postUndo, undoChatLines, inUndoGroup, currentUndoTag } from '../services/undo-client.js';
 import { coverFor } from './cover-check.mjs';
 import { objectRules, entryGaps, creaturesAlong } from './object-tokens.mjs';
 import {groundSquare} from './terrain-math.mjs';
@@ -1506,7 +1507,14 @@ export function mountBoardInteractions(store, routes = {}) {
   }
   // What the last move made here came to, for a slide to read between its legs.
   let lastMoveOutcome = null;
-  async function commitCanonicalTokenMoves({ sceneId, moves, source, originalPositions = null, movementKind = 'walk', drawnRuler = null, inTurn = false, slideBeyond = 0 }) {
+  async function commitCanonicalTokenMoves(options) {
+    const { moves, source, inTurn = false } = options || {};
+    if (!inTurn && (source === 'drag' || source === 'keyboard')) await maybeAskStartTurn(moves?.[0]?.placementId);
+    if (globalThis.vttUndoGroup?.id) return commitCanonicalTokenMovesNow(options);
+    return inUndoGroup('', () => commitCanonicalTokenMovesNow(options));
+  }
+
+  async function commitCanonicalTokenMovesNow({ sceneId, moves, source, originalPositions = null, movementKind = 'walk', drawnRuler = null, inTurn = false, slideBeyond = 0 }) {
     const ruler = drawnRuler ?? (source === 'drag' ? getCurrentMeasurementPoints() : []);
     // A move made another way takes its turn among arrow presses (keyboard-movement-queue.js), so
     // this browser's moves reach the server in the order they were made. With no press waiting it
@@ -2035,6 +2043,159 @@ export function mountBoardInteractions(store, routes = {}) {
       mapLevelCutoutEditorActive ||
       isCustomConditionDialogOpen(),
   });
+
+  // ---------- turn undo (Brandon, October 2026) ----------
+  // During a running turn every change by anyone is kept on the server (vtt/lib/UndoJournal.php). Ctrl+Z takes back
+  // the newest action (an ability use, a move, a damage entry), Ctrl+Shift+Z the whole turn after asking; anyone in
+  // the game may. Each undo says so in chat, named for who did it. With no turn running, Ctrl+Z is the move undo.
+  function turnUndoEndpoint() {
+    const commands = typeof routes?.syncV2Commands === 'string' ? routes.syncV2Commands : '';
+    return commands ? commands.replace(/commands\.php(\?.*)?$/, 'undo.php') : '/dnd/vtt/api/v2/undo.php';
+  }
+  function turnIsRunning() {
+    return Boolean(combatActive && activeCombatantId);
+  }
+  function undoActorName(actorId) {
+    const id = String(actorId || '').trim();
+    if (!id) return '';
+    if (id.toLowerCase() === 'gm') return 'GM';
+    return id.charAt(0).toUpperCase() + id.slice(1);
+  }
+  function undoTokenName(placementId) {
+    const placement = placementId ? getPlacementFromStore(placementId) : null;
+    return placement ? tokenLabel(placement) : '';
+  }
+  // Hero sheet counters the server cannot see: the page that changed them reports them while a turn runs.
+  if (typeof window !== 'undefined') {
+    window.vttUndo = {
+      recordSheet(change = {}) {
+        if (!turnIsRunning()) return;
+        const sceneId = getActiveSceneId();
+        const characterId = String(change.characterId || '').trim();
+        const delta = Math.trunc(Number(change.delta) || 0);
+        if (!sceneId || !characterId || !delta) return;
+        const holder = getPlacementsForActiveScene().find((placement) => getCharacterSheetProfileIdForPlacement(placement) === characterId);
+        postUndo(turnUndoEndpoint(), {
+          action: 'record', sceneId, operationId: `sheet-${globalThis.crypto?.randomUUID?.() || Date.now().toString(36)}`,
+          payload: { characterId, counter: change.counter, delta, characterName: holder ? tokenLabel(holder) : undoActorName(characterId), ...currentUndoTag() },
+        }).catch((error) => console.warn('[VTT] could not keep a sheet change for undo', error));
+      },
+    };
+  }
+  async function reverseSheetSteps(steps) {
+    const endpoint = typeof routes?.sheet === 'string' ? routes.sheet : null;
+    if (!endpoint) return;
+    for (const step of steps) {
+      const character = String(step.after?.character || step.entityId || '');
+      const delta = -(Math.trunc(Number(step.after?.delta) || 0));
+      if (!character || !delta) continue;
+      const counter = step.after?.counter;
+      const [action, fields] = counter === 'recoveries' ? ['sync-vitals', { character, recoveriesDelta: String(delta) }]
+        : counter === 'surges' ? ['sync-surges', { character, delta: String(delta) }]
+          : counter === 'victories' ? ['sync-victories', { character, delta: String(delta) }]
+            : ['sync-resource', { character, delta: String(delta) }];
+      try {
+        await confirmCharacterWrite(endpoint, action, fields, { noUndo: true });
+      } catch (error) {
+        console.warn('[VTT] could not give back a sheet change', error);
+      }
+    }
+  }
+  let turnUndoBusy = false;
+  async function performTurnUndo(whole) {
+    if (turnUndoBusy) return;
+    turnUndoBusy = true;
+    try {
+      const sceneId = getActiveSceneId();
+      if (!sceneId) return;
+      const whose = getCombatantLabel(activeCombatantId) || '';
+      if (whole) {
+        const count = await postUndo(turnUndoEndpoint(), { action: 'count', sceneId });
+        const actions = Number(count?.result?.actions) || 0;
+        if (!actions) { updateStatus('Nothing to undo this turn.'); return; }
+        const yes = await confirmBoardAction(`Undo all of ${whose ? `${whose}'s` : 'this'} turn so far (${actions} action${actions === 1 ? '' : 's'})?`, { title: 'Undo turn', confirmText: 'Undo turn', cancelText: 'Keep', danger: true });
+        if (!yes) return;
+      }
+      const result = await postUndo(turnUndoEndpoint(), {
+        action: whole ? 'turn' : 'step', sceneId,
+        operationId: `undo-${globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`}`,
+        socketId: tokenMovementRuntime?.getSocketId?.() || undefined,
+      });
+      await tokenMovementRuntime?.ingestEvents?.(result.events);
+      const undo = result.undo || {};
+      const steps = Array.isArray(undo.steps) ? undo.steps : [];
+      // A hero's Stamina lives on the sheet too: it follows the token back.
+      steps.forEach((step) => {
+        if (step.kind !== 'placement' || !step.before || !('hp' in step.before)) return;
+        const was = Number.parseInt(step.before.hp?.current, 10), is = Number.parseInt(step.after?.hp?.current, 10);
+        if (Number.isFinite(was) && Number.isFinite(is) && was !== is) syncPlacementHitPointsToSheet(step.entityId, { current: String(was), max: step.before.hp?.max }, { before: is });
+      });
+      await reverseSheetSteps(steps.filter((step) => step.kind === 'sheet'));
+      const lines = undoChatLines(steps, { nameOf: undoTokenName, actorNameOf: undoActorName, whole, whose });
+      lines.forEach((line) => announceToChat(line));
+      const skipped = Array.isArray(undo.skipped) ? undo.skipped : [];
+      if (skipped.length) {
+        const names = [...new Set(skipped.map((step) => (step.hidden ? 'a hidden creature' : undoTokenName(step.entityId) || 'a token')))];
+        showConditionBanner(`Not undone: ${names.join(', ')} changed again after that.`, { tone: 'reminder' });
+      }
+      updateStatus(lines[0] || (skipped.length ? 'Nothing could be undone: it changed again since.' : 'Undone.'));
+    } catch (error) {
+      updateStatus(error?.message || 'Undo failed.');
+    } finally {
+      turnUndoBusy = false;
+    }
+  }
+  window.addEventListener('keydown', (event) => {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey || String(event.key || '').toLowerCase() !== 'z') return;
+    if (event.defaultPrevented || event.repeat) return;
+    const target = event.target;
+    if (target instanceof Element && target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;
+    if (isDrawModeActive() || isDrawingInProgress() || mapLevelCutoutEditorActive || isCustomConditionDialogOpen()) return;
+    if (document.getElementById('wall-panel')?.hidden === false) return;
+    if (!turnIsRunning()) {
+      // No turn: plain Ctrl+Z is the move undo (token-movement-controller); a whole turn needs a turn.
+      if (event.shiftKey) { event.preventDefault(); updateStatus('No turn is running: Ctrl+Shift+Z undoes a running turn.'); }
+      return;
+    }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    performTurnUndo(event.shiftKey);
+  }, true);
+
+  // ---------- "Start <name>'s turn?" (Brandon, October 2026) ----------
+  // In combat, while nobody's turn runs, the first move or ability by a creature asks whether to start its turn:
+  // once a round for each creature, never in the way (Not now carries on).
+  const askedStartTurn = new Set();
+  async function maybeAskStartTurn(placementId) {
+    try {
+      if (!placementId || !combatActive || activeCombatantId) return;
+      const placement = getPlacementFromStore(placementId);
+      if (!placement) return;
+      const combatantId = getRepresentativeIdFor(placementId) || placementId;
+      const team = getCombatantTeam(combatantId);
+      if (!team || completedCombatants.has(combatantId)) return;
+      if (!isGmUser() && (team !== 'ally' || !canCurrentUserMovePlacement(placement))) return;
+      const key = `${combatRound}|${combatantId}`;
+      if (askedStartTurn.has(key)) return;
+      askedStartTurn.add(key);
+      const name = getCombatantLabel(combatantId) || tokenLabel(placement) || 'this creature';
+      const yes = await confirmBoardAction(`Start ${name}'s turn?`, { title: 'Start turn', confirmText: 'Start turn', cancelText: 'Not now' });
+      if (!yes || activeCombatantId) return;
+      if (isGmUser()) await handleAutomationStartTurn({ placementId: combatantId, condition: 'any', preflightAccepted: true });
+      else await handlePlayerInitiatedTurn(combatantId);
+    } catch (error) {
+      console.warn('[VTT] start-turn question failed', error);
+    }
+  }
+  if (typeof window !== 'undefined') {
+    // The ability runner asks before an ability runs (not for triggered actions, which happen on others' turns).
+    window.vttBeforeAbilityRun = async (options = {}) => {
+      if (options.triggerPayload || options.manualTriggerResolution) return;
+      const kind = String(options.actionType || options.action?.actionType || options.action?.kind || options.action?.type || '').toLowerCase();
+      if (kind.includes('trigger')) return;
+      await maybeAskStartTurn(options.sourcePlacement?.id || options.sourceToken?.id || '');
+    };
+  }
 
   // Helper functions for dirty tracking
   document.querySelector('[data-action="undo-token-move"]')?.addEventListener('click', async (event) => {
@@ -10517,6 +10678,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
     if (renderedCount > 0) {
       layer.appendChild(fragment);
+      resumeFloatNumbers(layer);
       layer.hidden = false;
     } else {
       layer.hidden = true;
@@ -20764,6 +20926,17 @@ export function mountBoardInteractions(store, routes = {}) {
     return `${prefix}-${random}`;
   }
 
+  // Every token is taken out of the board and put back on a redraw, and putting a node back starts its CSS
+  // animations over: a floating "-8" played a second time. Each float carries its start time; after the redraw its
+  // animation is given a negative delay so it carries on from where it was.
+  function resumeFloatNumbers(layer) {
+    const now = performance.now();
+    layer.querySelectorAll('.vtt-token__float-number[data-float-start]').forEach((span) => {
+      const elapsed = now - Number(span.dataset.floatStart);
+      if (Number.isFinite(elapsed) && elapsed > 0) span.style.animationDelay = `-${Math.round(elapsed)}ms`;
+    });
+  }
+
   function showStaminaFloatNow(placementId, amount, mode, options = {}) {
     const escapedId = window.CSS?.escape
       ? window.CSS.escape(String(placementId))
@@ -20778,6 +20951,9 @@ export function mountBoardInteractions(store, routes = {}) {
       ? normalizeAutomationDamageType(options.damageType || '')
       : '';
     span.textContent = `${prefix}${Math.abs(amount)}${damageType ? ` ${formatDamageTypeLabel(damageType)}` : ''}`;
+    // When it started: a redraw that puts the token back into the board restarts its CSS animation, which showed
+    // the number twice (Brandon, October 2026); resumeFloatNumbers picks it up where it was instead.
+    span.dataset.floatStart = String(performance.now());
     token.appendChild(span);
     window.setTimeout(() => {
       if (span.parentNode === token) {

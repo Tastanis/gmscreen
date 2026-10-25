@@ -1,4 +1,5 @@
 import {showHeroTokenConfirmation} from './hero-token-confirmation.js';
+import {recordSheetUndo} from '../services/undo-client.js';
 // Every player on the site's list, on or off (window.vttConfig.playerRoster); the four when it is missing.
 const PC_CHARACTER_IDS = new Set(Array.isArray(globalThis.vttConfig?.playerRoster) ? globalThis.vttConfig.playerRoster : ['cal', 'sharon', 'indigo', 'zepha']);
 
@@ -3617,6 +3618,7 @@ async function saveCharacterSummaryResources(sheet, options = {}) {
     options.onError?.(String(payload?.error || `Server rejected the save (${response.status}).`));
     return false;
   }
+  if (['surges', 'resource', 'victories'].includes(change)) recordSheetUndo({ characterId, counter: change, delta: amount });
   if (options.broadcast !== false && typeof BroadcastChannel === 'function') {
     const channel = new BroadcastChannel(CHARACTER_SHEET_SYNC_CHANNEL);
     channel.postMessage({
@@ -3672,6 +3674,7 @@ async function saveCharacterHeroicResource(sheet, options = {}) {
   if (Number.isFinite(payload?.resource)) {
     resource.value = payload.resource;
   }
+  if (Number.isFinite(options.before) && held !== options.before) recordSheetUndo({ characterId, counter: 'resource', delta: held - options.before });
   if (options.broadcast !== false && typeof BroadcastChannel === 'function') {
     const channel = new BroadcastChannel(CHARACTER_SHEET_SYNC_CHANNEL);
     channel.postMessage({

@@ -116,3 +116,9 @@ test('character writes persist their mutation and operation receipt atomically',
   const result = spawnSync('php', [script], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
+
+test('turn undo journal: newest action, whole turn, anyone, changed-since skipped, Malice and sheet steps', () => {
+  const script = fileURLToPath(new URL('../../../../api/v2/tests/undo-journal.test.php', import.meta.url));
+  const result = spawnSync('php', [...phpArgsForSqlite(), script], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});
