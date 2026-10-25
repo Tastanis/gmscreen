@@ -7465,18 +7465,18 @@ function updatePeople(t) { const P = UNDER.people, Ly = UNDER.lay; if (!P || !Ly
   const put = (x, y, z, fx, fz, walk, kind, ci, carry, sc) => { if (n >= 480) return; const K = CREW[kind], col = K.cols[ci % K.cols.length], st = Math.sin(walk) * K.stride, bob = Math.abs(Math.cos(walk)) * .08 * sc * K.pace; face(fx, fz);
     if (P.crew) { const mi = kind === 'mummy' ? 3 + (ci % 2) : kind === 'skeleton' ? 6 + (ci % 2) : [0, 1, 2, 5][ci % 4], d = camera.position.distanceTo(WkV.set(x, y, z)), near = d < 60 && crN[mi] < P.crewNN, i = near ? crN[mi]++ : crF[mi]++, set = P.crew[mi][near ? 'near' : 'far']; if (!near && i >= P.crewMax) return;   // Brandon's people and mummies, once loaded
       WkM.compose(WkV.set(x, y, z), WkQ, WkS.setScalar(sc * 1.05)); set.m.setMatrixAt(i, WkM); set.wA.array[i] = walk * (kind === 'mummy' ? .55 : 1);
-      if (carry === 1) setI(P.load, ln++, x + fx * .5 * sc, y + 1.9 * sc, z + fz * .5 * sc, .7 * sc, .55 * sc, .6 * sc, 0x8a6a44); return; }
+      return; }   // (Oct 24: no crates carried any more, at Brandon's word)
     const set = (m, ...a) => setI(m, n, ...a), hip = y + 1.35 * sc + bob, lean = kind === 'mummy' ? .12 : 0, hx = x + fx * lean * 1.6, hy = hip + (K.h + .35) * sc, hz = z + fz * lean * 1.6;
     set(P.body, x + fx * lean, hip + K.h * .5 * sc, z + fz * lean, K.w * sc, K.h * sc, K.w * 1.25 * sc, col[0]);
     set(P.head, hx, hy, hz, .32 * sc, .34 * sc, .32 * sc, col[1]);
     set(P.eyes, hx + fx * .29 * sc, hy + .03 * sc, hz + fz * .29 * sc, sc, sc, sc, kind === 'skeleton' ? 0x100c0a : kind === 'mummy' ? 0xffb040 : 0x2a1a10);
     for (const [leg, sg] of [[P.legL, 1], [P.legR, -1]]) { WkQ2.setFromAxisAngle(WkX, st * sg); WkQ2.premultiply(WkQ); set(leg, x + WkX.x * .17 * sc * sg, hip, z + WkX.z * .17 * sc * sg, .18 * sc, 1.35 * sc, .2 * sc, col[2], WkQ2); }
-    for (const [arm, sg] of [[P.armL, 1], [P.armR, -1]]) { const ang = K.arms === 'out' ? -1.45 + .08 * Math.sin(walk * 2 + sg) : carry ? -.9 : -st * sg * .9; WkQ2.setFromAxisAngle(WkX, ang); WkQ2.premultiply(WkQ);
+    for (const [arm, sg] of [[P.armL, 1], [P.armR, -1]]) { const ang = K.arms === 'out' ? -1.45 + .08 * Math.sin(walk * 2 + sg) : -st * sg * .9; WkQ2.setFromAxisAngle(WkX, ang); WkQ2.premultiply(WkQ);
       const ax = x + WkX.x * (K.w + .1) * sc * sg + fx * lean, ay = hip + K.h * .95 * sc, az = z + WkX.z * (K.w + .1) * sc * sg + fz * lean; set(arm, ax, ay, az, .14 * sc, .95 * sc, .16 * sc, kind === 'person' ? col[1] : col[0], WkQ2);
       if (kind === 'mummy' && sg > 0 && sn < 280) { WkQ2.setFromAxisAngle(WkX, -.25 + .35 * Math.sin(t * 4 + walk)); WkQ2.premultiply(WkQ); setI(P.strip, sn++, ax + fx * .8 * sc, ay - .05, az + fz * .8 * sc, .12 * sc, .9 * sc, 1, col[0], WkQ2); } }
     if (kind === 'person' && ci % 3 !== 2 && hn < 280) setI(P.hat, hn++, hx, hy + .3 * sc, hz, .32 * sc, .32 * sc, .32 * sc, hatCols[ci % 4]);
     if (kind === 'skeleton' && rn < 280) setI(P.ribs, rn++, x, hip + K.h * .62 * sc, z, .36 * sc, .9 * sc, .32 * sc, col[0]);
-    if (carry === 2) set(P.load, x, hip + (K.h + .78) * sc, z, .6 * sc, .4 * sc, .6 * sc, 0x9a7c54); else if (carry === 1) set(P.load, x + fx * .45 * sc, hip + K.h * .55 * sc, z + fz * .45 * sc, .7 * sc, .55 * sc, .6 * sc, 0x8a6a44); else set(P.load, x, y - 60, z, .001, .001, .001, 0);
+    set(P.load, x, y - 60, z, .001, .001, .001, 0);   // (no crates carried)
     n++; };
   const ghost = (x, y, z, fx, fz, ph, sc) => { if (gn >= 160) return; face(fx, fz); const k = .2 * sc, fy = y + .4 + .45 * Math.sin(t * 1.7 + ph);
     if (P.gh) { const mi = ((ph * 977) | 0) & 1, d = camera.position.distanceTo(WkV.set(x, fy, z)), near = d < 70 && ghN[mi] < P.ghNN, i = near ? ghN[mi]++ : ghF[mi]++, m = P.gh[mi][near ? 'near' : 'far']; if (!near && i >= P.ghMax) return;   // Brandon's ghosts, once loaded
