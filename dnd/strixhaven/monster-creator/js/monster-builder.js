@@ -2108,7 +2108,8 @@ function normalizeMonsterDefenseEntry(entry) {
     const type = String(rawType).trim();
     const valueStr = String(rawValue).trim();
     if (!type && !valueStr) return null;
-    return { type, value: valueStr };
+    // "stacks": adds to the highest matching immunity/weakness in the VTT instead of competing with it.
+    return entry.stacks === true ? { type, value: valueStr, stacks: true } : { type, value: valueStr };
 }
 
 function syncLegacyDefenseFields(monster, singularKey) {
@@ -4265,7 +4266,16 @@ function normalizeImportedTrait(rawTrait) {
     const name = cleanText(rawTrait.name);
     const text = cleanText(rawTrait.text ?? rawTrait.description ?? rawTrait.effect ?? '');
     if (!name && !text) return null;
-    return { name, text };
+    const trait = { name, text };
+    // A trait can carry automation (passives such as rollModifier, deathRule, movement, conditionRule, object),
+    // which the VTT reads from traits as well as passive abilities. Kept here like an ability's.
+    if (rawTrait.automation && typeof rawTrait.automation === 'object' && !Array.isArray(rawTrait.automation)) {
+        const automation = cloneImportedPlainObject(rawTrait.automation);
+        trait.automation = window.AbilityAutomationSchema?.normalizeAutomation
+            ? window.AbilityAutomationSchema.normalizeAutomation(automation)
+            : automation;
+    }
+    return trait;
 }
 
 function toImportedInt(value, fallback = 0) {

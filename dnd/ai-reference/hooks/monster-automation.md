@@ -37,7 +37,7 @@ Tier rules text uses `test.tierN.tier_effect` for flat riders alongside damage a
 | Static potency thresholds | Hard-code the potency `threshold` integer from the stat block (e.g. `M<2` → `"threshold": 2`). Numeric `target` is accepted only as a legacy alias; new JSON should not use it because string `target` means effect target-group routing. |
 | `whenWinded` | Works exactly like PCs: shallow-merge override on `powerRoll` (bonus/tiers) or `effect` (effects/target) when token HP ≤ half max. |
 | `usageLimit` | Works for monsters (scoped flags are placement-keyed). `{ "scope": "encounter", "key": "my-key", "target": "self", "message": "1/encounter." }` |
-| No heroic resources | `spend` falls back to a native confirm dialog; `resourceGain`/`surgeGain` post chat reminders. Prefer `note` for these mechanics. |
+| No heroic resources | `spend` falls back to a native confirm dialog; `resourceGain` posts a chat reminder. `surgeGain` works (a monster or retainer can give heroes surges). |
 | No recoveries on monsters | `heal` with flat `amount` works. `recoveries` only works when the recovery **source** resolves to a PC sheet (a monster ability can drain/heal a PC target's recoveries); a monster-as-source recovery skips with a chat note. |
 | Malice costs | Put the cost in the ability's `resource_cost` string (e.g. `"3 Malice"`). Nothing goes in the automation JSON — the runtime parses the first integer. |
 | Marks | `applyMark`/`endMark` are passed through but are PC mechanics — prefer `note` unless intentionally sharing mark state. |
@@ -85,19 +85,25 @@ Authoring implication: give every monster triggered action a `trigger` card with
 | `potency` | an automated potency check starts | `whose`, `attribute`, `level`, `minTargets` |
 | `actionUsed` | an ability automation run starts | `whose`, `actionKind`, `keywordsAny`, `costIncludes` |
 | `markApplied` | a mark is applied/transferred | `whose`, `markType`, `source` |
+| `targeted` | a creature is picked as a target (before any roll; once per target) — "when targeted" interrupts, applied by hand from the `!` | `whose` (`self` = targets this monster), `keywordsAny`, `actionKind` |
+| `conditionGained` / `conditionEnded` | a condition comes onto / leaves a creature | `whose`, `conditionName` |
+| `saveFailed` / `saveSucceeded` | a save-ends roll fails / succeeds | `whose`, `conditionName` |
+| `entersSpace` | a creature moves onto (`within: 0`) or within N of this token, by any movement — traps, pressure plates | `whose`, `within` |
 | `turnStart` / `turnEnd` / `roundStart` / `roundEnd` / `combatStart` / `combatEnd` | combat boundaries | `whose` (turn events) |
 | *(any event)* | — | `withinSquares` / `minSquares` — distance band between this monster and the event's token |
 
-`whose: "self"` means "the event happened to THIS monster" (it was damaged, it was force-moved). `whose: "enemy"` compares combat teams. Trigger effects default to targeting `eventActor`; override with `effectTarget` on the trigger card. Add `expires` for "until the end of the next round"-style listeners, and `autoResolve: true` to run the trigger's effects immediately with no GM click (use sparingly — the campaign convention is confirm-before-fire).
+`whose: "self"` means "the event happened to THIS monster" (it was damaged, it was force-moved). `whose: "enemy"` compares combat teams. Trigger effects default to targeting `eventActor`; override with `effectTarget` on the trigger card. Add `expires` for "until the end of the next round"-style listeners. How it resolves is `resolve`: `click` (default), `popup` (the GM is asked at once; a monster's own "when it dies" defaults to this), `auto` (= `autoResolve: true`: the trigger's own simple effects, no GM click), `run` (the whole ability runs at once with a chat line — traps and objects).
 
 ## Effect kinds — monster quick sheet
 
 Full table in REGISTRY.md. Monster-relevant summary:
 
 - **Fully automatable, use freely:** `damage` (with `amountDice`, `damageType`), `condition`, `forcedMovement` (push/pull/slide), `shift`, `potency` (+ `onFail`), `heal` (flat amount), `temporaryStamina`, `teleport`, `swap`, `freeStrike` (uses the monster's `free_strike` stat), `abilityTest`, `aura` (visual + automated tick rules), `floatingText`, `note`, `ifPrompt`, `ifKeyword`, `ifDistance`, `ifZone`, `ifScopedFlag`, `setScopedFlag`, `halveTriggeringDamage`, `usageLimit` (top level), `whenWinded` (modifier).
+- **Added October 2026 (phases 1–6), use freely:** `ifTarget` (target condition / size / Stamina / nearby count checks), `ifRoll` (the roll had an edge or bane, tier), `endCondition`, `loseRecoveries`, `maliceGain`, `buff` (timed edge / bane / +damage / +potency / movement / `fly`), `counter` and `ifCounter` (rage, charges), `move` (allies or others move; heroes get a popup; `alongPath` for trample), `grantAction` (chat reminder), `useAbility` (run another named ability: "uses Bite twice", "the target uses its signature ability"), `land` (a flier falls). `amountFrom` sources `damageDealt` (lifesteal) and `count` (per adjacent creature). `requestedTest` takes `opposed`. Target group `"grabbed"`.
+- **Passives (in `automation.passives`, on a trait or a `passive` ability):** `rollModifier` (always-on edge / bane), `endEffect`, `deathRule` (rise again), `counter`, `soloTurns`, `movement` (speed, ignore difficult terrain, no opportunity attacks, `grabLimit`), `object` (trap / hazard / siege token), `conditionRule` (a custom condition's rules: wet, slagged), `standFirm`. Full fields in AUTHORING.md, "Passive automation".
 - **Works but PC-flavored — prefer `note`:** `applyMark`, `endMark`, `ifMark`, `startTurn`.
-- **Chat-reminder only on monsters:** `spend`, `resourceGain`, `surgeGain`, `cascade`, `other`.
-- **Do NOT automate (post a `note` instead):** summoning/spawning tokens, controlling another creature's actions, terrain-state changes (scree, walls, pits — describe them), effects requiring an ally's choice, faction-wide behavioral constraints. The GM adjudicates these; the note keeps them visible.
+- **Chat-reminder only on monsters:** `spend`, `resourceGain`, `cascade`, `other`.
+- **Do NOT automate (post a `note` instead):** summoning/spawning tokens, mind control (a charmed foe moved like an ally), terrain-state changes the board can't draw (scree, pits — describe them; areas from an ability go in a `persistent` block), effects requiring an ally's choice, faction-wide behavioral constraints. The GM adjudicates these; the note keeps them visible.
 
 ### Terrain zones, winded, and squad captains
 

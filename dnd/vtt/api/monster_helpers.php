@@ -517,6 +517,8 @@ function normalizeMonsterDefenseEntry($entry): ?array
     $out = [];
     if ($type !== '') $out['type'] = $type;
     if ($value !== '') $out['value'] = $value;
+    // "stacks": adds to the highest matching immunity/weakness instead of competing with it (automation-resistance.js).
+    if (($entry['stacks'] ?? false) === true) $out['stacks'] = true;
     return $out;
 }
 

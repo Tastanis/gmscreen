@@ -241,8 +241,14 @@ Every ability has **three channels**, and each owns a different job. The #1 mist
   `riders`; singular `rider` remains reserved for `hiddenEffect` roll
   modifiers.
 
+### Traits, passive abilities, organization
+
+- A trait may carry `automation` like an ability (`{ "name": "Ghost Step", "text": "...", "automation": { "schema": "ability-automation/v3", "passives": [ ... ] } }`); Import JSON keeps it. Passives work the same on a trait or on an ability in `abilities.passive`: `rollModifier`, `endEffect`, `deathRule`, `counter`, `soloTurns`, `movement`, `object`, `conditionRule`, `standFirm` (AUTHORING.md, "Passive automation").
+- `organization`: `Solo`, `Elite`, `Platoon`, `Horde`, `Minion`, `Retainer`, `Leader` (a Solo gets two turns a round by default). `with_captain`: a minion's "With Captain" bonus in the book's wording ("+2 damage bonus to strikes", "Gain an edge on strikes"); the VTT applies it while the squad has a captain. Don't also add it to the numbers.
+- Traps, hazards, fortifications and siege engines: give them an `object` passive (`{ "kind": "object" }`): no turn of their own, no opportunity attacks, triggers with `"resolve": "run"` fire on their own.
+
 ### Immunities / weaknesses
 
 - `immunities` and `weaknesses` are arrays of `{ "type": "<damage type>", "value": <int> }` entries. Use one entry per damage type — e.g. an undead with "Immunity: corruption 1, poison 1" becomes two entries. Empty `type` matches any incoming damage type. The legacy single-field form (`immunity_type`/`immunity_value`/`weakness_type`/`weakness_value`) is still accepted for back-compat; the importer auto-promotes it to a one-entry array.
-- The VTT automation damage adjuster sums **all matching entries** in the list. Multiple immunities/weaknesses against the same incoming damage type stack additively.
+- The VTT applies Draw Steel's rule: only the **highest** matching immunity counts (and the highest weakness); weakness is added first, then immunity taken off. An entry with `"stacks": true` adds to the highest instead ("fire immunity equal to your level, added to other fire immunity"). `"value": "all"` = immune to all of that damage.
 - To create a temporary weakness or immunity that automation damage does apply, use condition effects named `damageWeakness` or `damageImmunity`.

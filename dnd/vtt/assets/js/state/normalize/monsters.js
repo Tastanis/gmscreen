@@ -556,6 +556,8 @@ function normalizeMonsterDefenseEntry(entry) {
   const out = {};
   if (type) out.type = type;
   if (value) out.value = value;
+  // Adds to the highest matching entry instead of competing with it (automation-resistance.js pickDefense).
+  if (entry.stacks === true) out.stacks = true;
   return out;
 }
 
