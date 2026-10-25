@@ -27,8 +27,9 @@ export function footprintSamples(token) {
 export function coverFor({ actor, target, walls, groundAt = () => 0, groundFor = () => 0, see = null }) {
   const none = { fraction: 1, covered: false, noLineOfEffect: false };
   if (!actor || !target || actor.id === target.id) return none;
-  if (!see && !(Array.isArray(walls?.segments) && walls.segments.length)) return none;
-  const sight = see || makeSight({ viewer: actor, groundAt, walls, viewerGround: groundFor(actor) });
+  // No walls: the ground itself can still be in the way (a hill, a cliff, a floating island).
+  const model = Array.isArray(walls?.segments) && Array.isArray(walls?.nodes) ? walls : { nodes: [], segments: [] };
+  const sight = see || makeSight({ viewer: actor, groundAt, walls: model, viewerGround: groundFor(actor) });
   const size = Math.max(Number(target.width) || 1, Number(target.height) || 1);
   const z = groundFor(target) + size / 2;
   const samples = footprintSamples(target);

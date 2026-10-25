@@ -2044,6 +2044,12 @@ export function mountBoardInteractions(store, routes = {}) {
       isCustomConditionDialogOpen(),
   });
 
+  // The vision test switched on or off, or its heroes changed: draw the tokens again.
+  document.addEventListener('vtt:sight-test-changed', () => {
+    renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState, { skipTracker: true });
+    notifyCoordinateView();
+  });
+
   // ---------- turn undo (Brandon, October 2026) ----------
   // During a running turn every change by anyone is kept on the server (vtt/lib/UndoJournal.php). Ctrl+Z takes back
   // the newest action (an ability use, a move, a damage entry), Ctrl+Shift+Z the whole turn after asking; anyone in
@@ -10485,7 +10491,7 @@ export function mountBoardInteractions(store, routes = {}) {
       if (!gmViewing && normalized.hidden) {
         return;
       }
-      if (isInvisibleToViewer(placement)) {
+      if (isInvisibleToViewer(placement) || isOutOfSightForViewer(placement)) {
         return;
       }
 
@@ -18990,6 +18996,21 @@ export function mountBoardInteractions(store, routes = {}) {
   function hasInvisibleCondition(placement) {
     return ensurePlacementConditions(placement?.conditions ?? placement?.condition ?? null)
       .some((condition) => String(condition?.name || '').trim().toLowerCase() === 'invisible');
+  }
+
+  // "Vision (test)" on the 3D board (board3d/sight-test.mjs): a creature none of this page's viewing heroes can see
+  // (cover-check: no line of effect from any of them) is hidden, like an invisible one. Allies always show.
+  function isOutOfSightForViewer(placement) {
+    const test = typeof window !== 'undefined' ? window.vttSightTest : null;
+    if (!test?.on || !Array.isArray(test.viewerIds) || !test.viewerIds.length || !placement?.id) return false;
+    if (test.viewerIds.includes(placement.id)) return false;
+    const team = String(getCombatantTeam(placement.id) || placement.combatTeam || placement.team || '').toLowerCase();
+    if (team && team !== 'enemy' && !isGmUser()) return false;
+    const target = getPlacementFromStore(placement.id) || placement;
+    return !test.viewerIds.some((id) => {
+      const viewer = getPlacementFromStore(id);
+      return viewer && !coverBetween(viewer, target).noLineOfEffect;
+    });
   }
 
   function isInvisibleToViewer(placement) {
@@ -28394,7 +28415,7 @@ function createTemplateTool() {
     const state = boardApi.getState?.() ?? {}, sceneId = getActiveSceneId();
     const confirmed = tokenMovementRuntime?.getConfirmedSnapshot?.();
     const sceneConfig = confirmed?.state?.sceneConfig?.[sceneId] ?? state.boardState?.sceneState?.[sceneId] ?? {};
-    const placements = getPlacementsForActiveScene().filter(p => isGmUser() || (!isAutomationPlacementHidden(p) && !isInvisibleToViewer(p))).map(p => {
+    const placements = getPlacementsForActiveScene().filter(p => (isGmUser() || (!isAutomationPlacementHidden(p) && !isInvisibleToViewer(p))) && !isOutOfSightForViewer(p)).map(p => {
       const effective = tokenMovementRuntime?.getEffectivePlacement?.(sceneId, p.id) ?? p;
       // An off player's token is drawn as a hidden one (the GM sees it faded); so is an invisible one, for the GM.
       return { ...JSON.parse(JSON.stringify(effective)), ...(isOffPlayerToken(p) || (isGmUser() && hasInvisibleCondition(p)) ? { hidden: true } : {}), canMove: canCurrentUserMovePlacement(p), movementLeft: tokenMovementController?.getMovementLeft?.(p.id) ?? null };

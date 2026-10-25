@@ -107,5 +107,6 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
     <script type="module" src="assets/js/ui/floating-shadows.js?v=<?= $assetVersion ?>"></script>
     <script type="module" src="/dnd/vtt/board3d/integration.mjs?v=<?= $assetVersion ?>"></script>
     <script type="module" src="/dnd/vtt/board3d/first-person.mjs?v=<?= $assetVersion ?>"></script>
+    <script type="module" src="/dnd/vtt/board3d/sight-test.mjs?v=<?= $assetVersion ?>"></script>
 </body>
 </html>
