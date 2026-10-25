@@ -6277,3 +6277,9 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
   padding: 3px 8px;
   cursor: pointer;
 }
+
+/* Vertical push / pull / slide: how many squares go up (phase 6). */
+.vtt-vertical-popup { flex-wrap: wrap; }
+.vtt-vertical-popup__row { display: flex; align-items: center; gap: 6px; }
+.vtt-vertical-popup__row [data-vertical-value] { min-width: 8.5em; text-align: center; font-variant-numeric: tabular-nums; }
+.vtt-vertical-popup__row .btn { min-width: 2.4em; }

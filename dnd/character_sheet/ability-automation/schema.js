@@ -862,7 +862,7 @@
         return effect;
       }
       case "move": {
-        const known = new Set(["kind", "verb", "distance", "bonus", "heroesMove", "then", "target"]);
+        const known = new Set(["kind", "verb", "distance", "bonus", "heroesMove", "then", "target", "alongPath"]);
         const effect = { kind: "move", verb: pickKnownLoose(input.verb, ["shift", "move", "teleport"], "shift") };
         const distanceText = asTrimmedString(input.distance).toLowerCase().replace(/[\s_-]+/g, "");
         if (distanceText === "speed") effect.distance = "speed";
@@ -873,6 +873,18 @@
         if (input.heroesMove === false) effect.heroesMove = false;
         const then = normalizeEffectList(input.then || [], warnings, `${path}.then`);
         if (then.length) effect.then = then;
+        // Trample, blazing charge: effects on each creature the mover went through (`through`) or came next to
+        // (`adjacent`). They are shown pre-picked to confirm (click to drop one), unless `confirm: false`.
+        if (input.alongPath && typeof input.alongPath === "object") {
+          const along = {};
+          const through = normalizeEffectList(input.alongPath.through || [], warnings, `${path}.alongPath.through`);
+          const adjacent = normalizeEffectList(input.alongPath.adjacent || [], warnings, `${path}.alongPath.adjacent`);
+          if (through.length) along.through = through;
+          if (adjacent.length) along.adjacent = adjacent;
+          if (input.alongPath.predicate) along.predicate = pickKnownLoose(input.alongPath.predicate, ["ally", "enemy", "creature"], "creature");
+          if (input.alongPath.confirm === false) along.confirm = false;
+          if (through.length || adjacent.length) effect.alongPath = along;
+        }
         if (effect.distance === 0 && !bonus) warnings.push(`${path}: move has no distance.`);
         const target = asTrimmedString(input.target);
         if (target) effect.target = target;
@@ -896,6 +908,12 @@
         if (target) effect.target = target;
         const extras = pickExtras(input, known);
         if (extras) effect._extra = extras;
+        return effect;
+      }
+      case "land": {
+        const effect = { kind: "land" };
+        const target = asTrimmedString(input.target);
+        if (target) effect.target = target;
         return effect;
       }
       case "grantAction": {
@@ -945,7 +963,7 @@
         return effect;
       }
       case "buff": {
-        const known = new Set(["kind", "label", "modifier", "damageBonus", "potencyBonus", "side", "appliesTo", "keywordsAny", "keywordsAll", "duration", "consume", "target", "speedBonus", "ignoreDifficultTerrain", "noOpportunityAttacks", "moveThroughCreatures"]);
+        const known = new Set(["kind", "label", "modifier", "damageBonus", "potencyBonus", "side", "appliesTo", "keywordsAny", "keywordsAll", "duration", "consume", "target", "speedBonus", "ignoreDifficultTerrain", "noOpportunityAttacks", "moveThroughCreatures", "fly"]);
         const effect = { kind: "buff", label: asTrimmedString(input.label) || "Buff" };
         if (input.modifier !== undefined && input.modifier !== null && input.modifier !== "") effect.modifier = pickKnownLoose(input.modifier, ["edge", "bane", "doubleEdge", "doubleBane"], "edge");
         const damageBonus = asInt(input.damageBonus, 0);
@@ -1437,6 +1455,16 @@
     "abilityRoll",
     "potency",
     "markApplied",
+    // Phase 6: a creature is picked as a target (before any roll; "when targeted" interrupts); a condition is
+    // gained or ends on a creature; a save against a condition fails or succeeds.
+    "targeted",
+    "conditionGained",
+    "conditionEnded",
+    "saveFailed",
+    "saveSucceeded",
+    // A creature moves onto this token's squares (within 0) or comes within N squares of it, by any movement
+    // (walks, shifts, pushes, teleports): traps, pressure plates, hazards.
+    "entersSpace",
   ];
 
   // The `whose` filter answers "whose event is this?" relative to the caster
@@ -1542,6 +1570,25 @@
         ? filterInput.keywordsAny.map((k) => P.normalizeKeyword?.(k) || asTrimmedString(k)).filter(Boolean)
         : [];
       if (keywordsAny.length) filter.keywordsAny = keywordsAny;
+    }
+    if (event === "targeted") {
+      const actionKind = asTrimmedString(filterInput.actionKind);
+      if (actionKind) filter.actionKind = actionKind;
+      const costIncludes = asTrimmedString(filterInput.costIncludes || filterInput.resourceCostIncludes);
+      if (costIncludes) filter.costIncludes = costIncludes;
+      if (filterInput.lineOfEffectTo) filter.lineOfEffectTo = asTrimmedString(filterInput.lineOfEffectTo);
+      const keywordsAny = Array.isArray(filterInput.keywordsAny)
+        ? filterInput.keywordsAny.map((k) => P.normalizeKeyword?.(k) || asTrimmedString(k)).filter(Boolean)
+        : [];
+      if (keywordsAny.length) filter.keywordsAny = keywordsAny;
+    }
+    if (event === "entersSpace") {
+      filter.within = asNonNegInt(filterInput.within, 0);
+    }
+    if (["conditionGained", "conditionEnded", "saveFailed", "saveSucceeded"].includes(event)) {
+      // Which condition (name, the text of an "other" condition, or a buff's label); none = any.
+      const conditionName = normalizeTextList(filterInput.conditionName ?? filterInput.condition);
+      if (conditionName.length) filter.conditionName = conditionName;
     }
     if (event === "powerRoll" || event === "abilityTest" || event === "abilityRoll") {
       const actionKind = asTrimmedString(filterInput.actionKind);
@@ -1699,7 +1746,7 @@
   function normalizeRequestedTestBlock(input, warnings, path) {
     const known = new Set([
       "type", "id", "target", "attribute", "rollMode", "rollFormula",
-      "label", "prompt", "bonus", "edge", "bane", "tiers", "note",
+      "label", "prompt", "bonus", "edge", "bane", "tiers", "note", "opposed",
     ]);
     const tiersInput = input.tiers && typeof input.tiers === "object" ? input.tiers : {};
     const tiers = {};
@@ -1728,6 +1775,16 @@
     };
     if (!block.target) warnings.push(`${path}: requestedTest needs a target group.`);
     if (input.note) block.note = asTrimmedString(input.note);
+    // Opposed test: the user rolls the same test too; the higher total wins. `win` / `lose` / `tie` effects land on
+    // each opponent (instead of the tiers). `true` = compare and say so in chat only.
+    if (input.opposed) {
+      const raw = input.opposed && typeof input.opposed === "object" ? input.opposed : {};
+      block.opposed = {
+        win: normalizeEffectList(raw.win || [], warnings, `${path}.opposed.win`),
+        lose: normalizeEffectList(raw.lose || [], warnings, `${path}.opposed.lose`),
+        tie: normalizeEffectList(raw.tie || [], warnings, `${path}.opposed.tie`),
+      };
+    }
     const extras = pickExtras(input, known);
     if (extras) block._extra = extras;
     return block;
@@ -1783,9 +1840,10 @@
     if (expires) block.expires = expires;
     // How a matched trigger is resolved: "click" (the "!" on the token; use it from the abilities list), "popup" (the
     // GM is asked at once; "when it dies" triggers default to this), "auto" (= autoResolve: its effects run by
-    // themselves). Left out: auto with autoResolve, popup for a creature's own "dies", else click.
+    // themselves), "run" (the whole ability runs on the GM's page at once, rolls and pickers included, with a chat
+    // line: traps). Left out: auto with autoResolve, popup for a creature's own "dies", else click.
     if (input.resolve !== undefined && input.resolve !== null && input.resolve !== "") {
-      const resolve = pickKnownLoose(input.resolve, ["click", "popup", "auto"], "click");
+      const resolve = pickKnownLoose(input.resolve, ["click", "popup", "auto", "run"], "click");
       block.resolve = resolve;
       if (resolve === "auto") block.autoResolve = true;
     }
@@ -2327,11 +2385,15 @@
 
   // Movement rules: "+2 speed", "ignores difficult terrain", "moving doesn't provoke opportunity attacks", "can move
   // through creatures"; with gates like an edge/bane trait (winded, its own conditions).
-  const MOVEMENT_FLAGS = ["ignoreDifficultTerrain", "noOpportunityAttacks", "moveThroughCreatures"];
+  // `fly` on a buff: the creature flies while the buff lasts (and falls when it ends).
+  const MOVEMENT_FLAGS = ["ignoreDifficultTerrain", "noOpportunityAttacks", "moveThroughCreatures", "fly"];
   function normalizeMovementFields(input, into) {
     const speedBonus = asInt(input.speedBonus, 0);
     if (speedBonus) into.speedBonus = speedBonus;
     MOVEMENT_FLAGS.forEach((flag) => { if (input[flag] === true) into[flag] = true; });
+    // How many creatures it can have grabbed at once (default 1; more only warns).
+    const grabLimit = asNonNegInt(input.grabLimit, 0);
+    if (grabLimit) into.grabLimit = grabLimit;
     return into;
   }
   function normalizeMovementPassive(input, warnings, path) {
@@ -2342,8 +2404,8 @@
     const selfCondition = normalizeWordList(raw.selfCondition);
     if (selfCondition.length) when.selfCondition = selfCondition;
     if (Object.keys(when).length) passive.when = when;
-    if (!passive.speedBonus && !MOVEMENT_FLAGS.some((flag) => passive[flag])) warnings.push(`${path}: movement passive changes nothing.`);
-    const extras = pickExtras(input, new Set(["kind", "type", "passive", "id", "label", "name", "speedBonus", ...MOVEMENT_FLAGS, "when"]));
+    if (!passive.speedBonus && !passive.grabLimit && !MOVEMENT_FLAGS.some((flag) => passive[flag])) warnings.push(`${path}: movement passive changes nothing.`);
+    const extras = pickExtras(input, new Set(["kind", "type", "passive", "id", "label", "name", "speedBonus", "grabLimit", ...MOVEMENT_FLAGS, "when"]));
     if (extras) passive._extra = extras;
     return passive;
   }
@@ -2376,6 +2438,43 @@
     return passive;
   }
 
+  // A named custom condition's rules ("wet", "slagged", "dragonsealed"), on the monster whose abilities give it.
+  // Whenever a condition of that name is put on a creature (by an ability), it carries these: a roll `rider`
+  // (edge / bane / +damage / +potency, own rolls or rolls against it), movement fields (speedBonus, fly...),
+  // `weakness` / `immunity` ({ type, amount }), and `riders` (effects at the bearer's turn start / end).
+  function normalizeConditionRulePassive(input, warnings, path) {
+    const name = asTrimmedString(input.name || input.condition);
+    if (!name) {
+      warnings.push(`${path}: conditionRule needs a name — skipping.`);
+      return null;
+    }
+    const rule = { kind: "conditionRule", name: name.toLowerCase() };
+    const description = asTrimmedString(input.description || input.text);
+    if (description) rule.description = description;
+    if (input.rider && typeof input.rider === "object") {
+      const rider = normalizeHiddenEffectRider(input.rider, warnings, `${path}.rider`);
+      if (rider) rule.rider = rider;
+    }
+    const moves = normalizeMovementFields(input, {});
+    if (Object.keys(moves).length) rule.rider = { ...(rule.rider || { type: "rollModifier" }), ...moves };
+    const defense = (value, label) => {
+      if (!value || typeof value !== "object") return null;
+      const amount = String(value.amount ?? value.value ?? "").trim().toLowerCase() === "all" ? "all" : asNonNegInt(value.amount ?? value.value, 0);
+      if (!amount) { warnings.push(`${path}.${label}: needs an amount.`); return null; }
+      const type = asTrimmedString(value.type || value.damageType).toLowerCase();
+      return { amount, ...(type && type !== "untyped" ? { type } : {}) };
+    };
+    const weakness = defense(input.weakness, "weakness");
+    if (weakness) rule.weakness = weakness;
+    const immunity = defense(input.immunity, "immunity");
+    if (immunity) rule.immunity = immunity;
+    if (Array.isArray(input.riders)) {
+      const riders = normalizeConditionRiders(input.riders, warnings, `${path}.riders`);
+      if (riders.length) rule.riders = riders;
+    }
+    return rule;
+  }
+
   function normalizePassive(input, warnings, path) {
     if (!input || typeof input !== "object") {
       warnings.push(`${path}: passive must be an object — skipping.`);
@@ -2389,6 +2488,15 @@
     if (key === "counter") return normalizeCounterPassive(input, warnings, path);
     if (key === "soloturns") return normalizeSoloTurnsPassive(input, warnings, path);
     if (key === "movement") return normalizeMovementPassive(input, warnings, path);
+    if (key === "conditionrule") return normalizeConditionRulePassive(input, warnings, path);
+    if (key === "object") {
+      // A trap, hazard or siege engine (object-tokens.mjs). `inTracker: true` gives it turns; `object: false` says
+      // a creature whose organization reads like an object is not one.
+      const passive = { kind: "object", label: asTrimmedString(input.label || input.name) || "Object" };
+      if (input.inTracker === true) passive.inTracker = true;
+      if (input.object === false) passive.object = false;
+      return passive;
+    }
     if (key !== "standfirm") {
       warnings.push(`${path}: unknown passive "${rawKind || "(missing)"}" — skipping.`);
       return null;

@@ -86,7 +86,9 @@ export function normalizePlacementCondition(value) {
   let damageType = '';
   if (numericRider) {
     const parsedAmount = Number.parseInt(value.amount, 10);
-    if (Number.isFinite(parsedAmount) && parsedAmount > 0) {
+    if (String(value.amount).trim().toLowerCase() === 'all') {
+      amount = 'all';
+    } else if (Number.isFinite(parsedAmount) && parsedAmount > 0) {
       amount = parsedAmount;
     }
     if (typeof value.damageType === 'string') {
@@ -98,6 +100,7 @@ export function normalizePlacementCondition(value) {
   const result = { name, description, duration };
   if (amount !== null) result.amount = amount;
   if (damageType) result.damageType = damageType;
+  if (numericRider && value.stacks === true) result.stacks = true;
   if (value.hidden || name.toLowerCase() === 'hiddeneffect') result.hidden = true;
   if (value.shown === true) result.shown = true;
   if (typeof value.label === 'string' && value.label.trim()) {
@@ -151,9 +154,10 @@ export function ensurePlacementCondition(value) {
     condition.duration = { type: 'save-ends' };
   }
 
-  if (Number.isFinite(normalized.amount) && normalized.amount > 0) {
+  if ((Number.isFinite(normalized.amount) && normalized.amount > 0) || normalized.amount === 'all') {
     condition.amount = normalized.amount;
   }
+  if (normalized.stacks === true) condition.stacks = true;
   if (typeof normalized.damageType === 'string' && normalized.damageType) {
     condition.damageType = normalized.damageType;
   }
@@ -252,9 +256,12 @@ export function buildConditionKey(condition) {
   // into the dedup key so applying both produces two distinct condition
   // entries rather than collapsing into one.
   if (name === 'damageweakness' || name === 'damageimmunity') {
-    const amount = Number.isFinite(condition.amount) ? `${condition.amount}` : '0';
+    const amount = Number.isFinite(condition.amount) || condition.amount === 'all' ? `${condition.amount}${condition.stacks ? '+' : ''}` : '0';
     const dt = typeof condition.damageType === 'string' ? condition.damageType.trim().toLowerCase() : '';
     return `${name}|${type}|${amount}|${dt}`;
+  }
+  if (name === 'grabbed' && typeof condition.sourceId === 'string' && condition.sourceId.trim()) {
+    return `${name}|${type}|${condition.sourceId.trim().toLowerCase()}`;
   }
   if (name === 'hiddeneffect') {
     const label = typeof condition.label === 'string' ? condition.label.trim().toLowerCase() : '';

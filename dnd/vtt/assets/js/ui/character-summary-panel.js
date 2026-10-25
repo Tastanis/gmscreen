@@ -2389,7 +2389,8 @@ function formatConditionLabel(entry, hidden) {
     const damageType = String(entry.damageType || '').trim().toLowerCase();
     const typeLabel = damageType ? `${damageType.charAt(0).toUpperCase()}${damageType.slice(1)} ` : '';
     const rider = normalized === 'damageweakness' ? 'weakness' : 'immunity';
-    return `${typeLabel}${rider}${Number.isFinite(amount) && amount > 0 ? ` ${amount}` : ''}`.trim();
+    const shownAmount = String(entry.amount).trim().toLowerCase() === 'all' ? ' all' : Number.isFinite(amount) && amount > 0 ? ` ${amount}` : '';
+    return `${typeLabel}${rider}${shownAmount}${entry.stacks === true ? ' (adds)' : ''}`.trim();
   }
   return String(
     hidden
@@ -2794,6 +2795,11 @@ function startAbilityAutomation(sheet, action, categoryKey, sourceToken = null, 
       window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.isHeroPlacement === 'function'
         ? window.VTTBoardCallbacks.isHeroPlacement(placementId)
         : false
+    ),
+    landToken: (payload) => (
+      window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.landToken === 'function'
+        ? window.VTTBoardCallbacks.landToken(payload)
+        : null
     ),
     getSpeed: (placementId) => (
       window.VTTBoardCallbacks && typeof window.VTTBoardCallbacks.getSpeed === 'function'

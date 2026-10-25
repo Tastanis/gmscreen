@@ -384,6 +384,10 @@ For PC triggered actions, this is **always-on** once the character token is pres
 | `staminaZero` | Automated damage drops a token from above 0 stamina to 0 or lower | same as `staminaChange` |
 | `actionUsed` | A normal ability automation starts | `whose`, `actionKind`, `keywordsAny`, `costIncludes` |
 | `markApplied` | Automation applies/transfers a mark | `whose`, `markType`, `source` |
+| `targeted` | A creature is picked as a target of an ability (before any roll; once per target). For "when targeted" interrupts: the "!" and the READY line say who targeted it with what; apply the new target / bane / reroll by hand. | `whose` (the creature targeted: `self` = "targets me"), `keywordsAny`, `actionKind`, `costIncludes`, `lineOfEffectTo` |
+| `conditionGained` / `conditionEnded` | A condition comes onto / leaves a creature (abilities, the token menu, ends of turns, saves). | `whose` (the creature), `conditionName` (one or a list; the text of an "other" condition and a buff's label count) |
+| `saveFailed` / `saveSucceeded` | A save-ends roll fails (once the prompt moves on, so +1 can still turn it) / succeeds. | `whose`, `conditionName` |
+| `entersSpace` | A creature moves onto this token's squares (`within: 0`, default) or within N squares of it (`within: 1` = next to it), by any movement: walks, shifts, pushes, teleports. Traps, pressure plates, hazards. | `whose` (the creature moving), `within` |
 
 **`whose` values** — resolved relative to the **caster** (the character who has the triggered ability) and the target group named by the trigger's `target` field (or the most recent target group if `target` is omitted):
 
@@ -548,6 +552,8 @@ A zone that lingers across rounds, ticks at the owner's turn boundary, and appli
   "expires": "endOfEncounter", "triggers": ["onEnter", "onOccupantTurnStart"],
   "effects": [ { "kind": "damage", "amount": 3, "damageType": "fire" } ] }
 ```
+
+**Resolve `"run"`** (traps, objects): `"resolve": "run"` runs the whole ability on the Director's page as soon as it is set off (power rolls and pickers included, no question), with a chat line naming what set it off. `"auto"` runs only the block's own simple effects.
 
 Zone triggers: `"onEnter"` (a creature enters), `"onOccupantTurnStart"` (a creature starts its turn inside), `"onOccupantTurnEnd"` (a creature ends its turn inside). Auras have the same two as `occupantTurnStart` and `occupantTurnEnd`.
 
@@ -1435,6 +1441,48 @@ With no targets the user moves.
 
 It costs nothing more. Monsters' abilities come from their stat block; heroes' from their sheet.
 
+### `move` along a path (`alongPath`): trample, blazing charge
+
+"Each creature you move through takes 5 damage", "each enemy you come next to is knocked prone". On a `move` effect:
+
+```json
+{ "kind": "move", "verb": "shift", "distance": "speed",
+  "alongPath": { "through": [ { "kind": "damage", "amount": 5 } ], "adjacent": [ { "kind": "condition", "name": "prone", "duration": "endOfTurn" } ], "predicate": "enemy" } }
+```
+
+| Field | Notes |
+|---|---|
+| `through` | Effects on each creature the mover went through. |
+| `adjacent` | Effects on each creature it came next to (and not through). |
+| `predicate` | `enemy`, `ally` or `creature` (default). |
+| `confirm` | Default `true`: the creatures are shown pre-picked; click one to drop it, then Done. `false`: no question. |
+
+Works for creatures moved with the picker (monsters, the user); heroes moving from a popup don't report a path.
+
+### `land`
+
+"Knocked out of the sky", "loses its flight": each flying target stops flying; the board's fall review settles the fall from its height. `{ "kind": "land" }`.
+
+Flying the other way: a `buff` with `"fly": true` makes the creature fly (just above its ground; hovering if prone, grabbed, restrained or unconscious) while the buff lasts, and land (fall) when it ends.
+
+### Vertical push, pull and slide
+
+`forcedMovement` with `verticalPush` / `verticalPull` / `verticalSlide` first asks how many of the squares go up (for a flier, minus = down); the rest is the usual picker. A flier's height changes (to the ground = it lands and falls). A creature on the ground goes up and falls back: Draw Steel fall damage (3 squares or more after Agility), prone, asked Apply / Skip like the fall review.
+
+### Grabs
+
+The grabbed condition remembers its grabber (the ability's user; added by hand, the Director clicks the grabber, Esc for none).
+
+- The grabber walks or shifts: the grabbed creature is dragged along, next to it (Undo Move puts both back).
+- The grabbed creature is moved any other way, or either is force moved or teleported apart: the grab ends with a warning.
+- "Most creatures can grab only one": a warning when it holds more than its `grabLimit` (movement passive field, default 1).
+- A push on a grabbed creature warns it normally can't be force moved.
+- Target `"grabbed"` (on an effect or target block) = every creature the user has grabbed. `ifTarget` `conditionFrom: "self"` checks "grabbed by you".
+
+### Opposed tests
+
+On a `requestedTest`: `"opposed": { "win": [...], "lose": [...], "tie": [...] }`. The user rolls the same test (sent to its own player); each opponent's total is compared and chat says who won; `win` effects land on an opponent the user beat, `lose` on one that beat the user. (After a page reload mid-test, compare by hand.)
+
 ### `counter` and `ifCounter`
 
 Named counters on a creature: rage, a dragon's deathcount, charges. `counter` changes one; `ifCounter` checks one. The counter shows as a badge on the token and as a row with − and + in the monster panel; everyone can see it.
@@ -2207,6 +2255,46 @@ A counter no passive declares (set by an ability) goes away when combat ends.
 | `when` | `winded`, `notWinded`, `selfCondition`. |
 
 The same fields on a `buff` make a timed movement buff ("+2 speed until the end of your turn"); such a buff lasts its duration.
+
+`grabLimit` (movement passive): how many creatures it can hold at once before the board warns (default 1).
+
+### Object tokens (`object`) — traps, hazards, siege engines
+
+A monster-style token whose organization or role says Hazard, Trap, Fortification, Siege, Power Fixture, Mechanism, Object or Dynamic Terrain is an object; so is one with an `object` passive.
+
+- It has no turn in the combat tracker (`"inTracker": true` gives it one) and sets off no opportunity attacks.
+- Its triggers work as any monster's; with `"resolve": "run"` they fire on their own with a chat line. Typical: `entersSpace` (a creature steps on it), `damage` + `whose: self` (it is hit), `staminaZero` + `whose: self` (destroyed), `roundStart`, `turnEnd` + `withinSquares: 1` (a creature ends its turn next to it).
+- The Director uses its actions from its own panel (a ballista).
+
+```json
+{ "schema": "ability-automation/v3", "passives": [ { "kind": "object" } ] }
+```
+
+`"object": false` says a creature whose organization reads like an object is not one.
+
+### Custom conditions (`conditionRule`)
+
+"Wet", "slagged", "dragonsealed": a condition with its own rules, written on the monster whose abilities give it. Whenever an ability puts a condition of that name on a creature, it carries these:
+
+```json
+{ "kind": "conditionRule", "name": "wet", "description": "Soaked: lightning hurts more.",
+  "rider": { "type": "rollModifier", "modifier": "bane", "side": "own" },
+  "weakness": { "type": "lightning", "amount": 3 }, "speedBonus": -1,
+  "riders": [ { "when": "turnEnd", "effects": [ { "kind": "note", "text": "No movement left: prone." } ] } ] }
+```
+
+| Field | Notes |
+|---|---|
+| `name` | The condition's name (any case). |
+| `description` | Shown with the condition. |
+| `rider` | A roll rider like a buff's (`modifier`, `damageBonus`, `potencyBonus`, `side: own/against`, `appliesTo`): ticked on in the roll window under the condition's name, never used up. |
+| `weakness` / `immunity` | `{ "type": "fire", "amount": 3 }` (no type = all damage; `"all"` for immunity). Counted with the rest (highest wins). |
+| movement fields | `speedBonus`, `ignoreDifficultTerrain`, `noOpportunityAttacks`, `fly`... |
+| `riders` | Effects at the bearer's turn start / end, as on a condition effect. |
+
+Put the rules on any monster on the scene; the giver's own rules win.
+
+Monster **traits** keep their automation on the board now (they were dropped when a monster was put on the map), so passives can be written on a trait or a passive ability.
 
 ### Solo turns (`soloTurns`)
 

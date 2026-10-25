@@ -254,13 +254,14 @@ function hasConditionExcludingTargets(placement, name, targetIds) {
 function hiddenEffectSuggestions(placement, context = {}, side = 'own') {
   const list = [];
   conditionEntries(placement).forEach(({ condition, index }) => {
-    if (!condition || normalizeText(condition.name) !== 'hiddeneffect') return;
+    const fromRule = condition?.rider?.fromRule === true;
+    if (!condition || (normalizeText(condition.name) !== 'hiddeneffect' && !fromRule)) return;
     if (!hiddenRiderApplies(condition, context)) return;
     const riderSide = normalizeText(condition.rider?.side) === 'against' ? 'against' : 'own';
     if (riderSide !== side) return;
-    const label = String(condition.label || condition.sourceAbility || 'Hidden effect').trim() || 'Hidden effect';
+    const label = String(condition.label || (fromRule ? condition.name : '') || condition.sourceAbility || 'Hidden effect').trim() || 'Hidden effect';
     const shared = {
-      consume: condition.rider?.consume || condition.consume || 'manual',
+      consume: fromRule ? 'manual' : condition.rider?.consume || condition.consume || 'manual',
       conditionRef: { placementId: placement.id || '', conditionIndex: index },
     };
     const base = `hidden-effect-${placement.id || 'token'}-${index}`;
@@ -423,6 +424,8 @@ export function getPowerRollSuggestions({
   captainBonus = null,
   // (placement) => the rollModifier passives that token carries (see collectRollPassives).
   passivesFor = null,
+  // { [targetId]: { covered, noLineOfEffect } } from the walls of the map (cover-check.mjs).
+  cover = {},
 } = {}) {
   const suggestions = [];
   const targetList = Array.isArray(targets) ? targets.filter(Boolean) : [];
@@ -458,7 +461,13 @@ export function getPowerRollSuggestions({
   suggestions.push(makeSuggestion('edge-flanking', EDGE, 'Flanking', melee && strike && isFlanking(actor, primaryTarget, placements, getTeam, mapLevels), {
     reason: 'Automatic flanking checks use visible, adjacent creatures on the same floor. Cross-floor openings and vertical reach require manual confirmation.',
   }));
-  suggestions.push(makeSuggestion('bane-cover', BANE, 'Cover', false));
+  {
+    const covered = targetList.filter((target) => cover?.[target?.id]?.covered);
+    const damaging = context?.dealsDamage !== false;
+    suggestions.push(makeSuggestion('bane-cover', BANE, 'Cover', covered.length > 0 && damaging, covered.length ? {
+      reason: `Half or more of ${covered.map((target) => target?.name || 'the target').join(', ')} is behind something solid`,
+    } : {}));
+  }
   if (strike && hasCondition(actor, 'prone')) {
     suggestions.push(makeSuggestion('bane-prone', BANE, 'Prone'));
   }

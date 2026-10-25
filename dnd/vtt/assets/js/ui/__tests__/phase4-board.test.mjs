@@ -36,7 +36,7 @@ test('movement rules: passives with gates, hero features, and buffs on the token
   const goblin = { id: 'gob', conditions: [{ name: 'hiddenEffect', label: 'Goblin Mode', rider: { type: 'rollBuff', speedBonus: 3, noOpportunityAttacks: true } }] };
   const zepha = { id: 'z', profile: 'zepha' };
   const rules = rulesHarness([elf, healthy, goblin, zepha]);
-  assert.deepEqual(rules(elf), { speedBonus: 2, ignoreDifficultTerrain: true, noOpportunityAttacks: false, moveThroughCreatures: false, labels: ['Fickle and Free'] });
+  assert.deepEqual(rules(elf), { speedBonus: 2, ignoreDifficultTerrain: true, noOpportunityAttacks: false, moveThroughCreatures: false, grabLimit: 1, labels: ['Fickle and Free'] });
   assert.equal(rules(healthy).ignoreDifficultTerrain, false, 'the winded gate');
   assert.deepEqual([rules(goblin).speedBonus, rules(goblin).noOpportunityAttacks], [3, true]);
   assert.equal(rules(zepha).speedBonus, 1, "a hero's feature");

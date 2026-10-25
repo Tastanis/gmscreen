@@ -26,8 +26,8 @@ test('trigger resolve modes: written, auto, popup for its own death, click other
 });
 
 test('popup triggers mark the snapshot, do not use the triggered action, and the GM page asks once', () => {
-  assert.match(board, /entry\.resolveMode === 'popup' \? \{ eventType, payload, popup: true, at: Date\.now\(\) \}/);
-  assert.match(board, /\|\| \(resolveMode === 'popup' && block\.usesTriggeredAction !== true\)/);
+  assert.match(board, /entry\.resolveMode === 'popup' \|\| entry\.resolveMode === 'run'\s*\? \{ eventType, payload, popup: true, at: Date\.now\(\)/);
+  assert.match(board, /\|\| \(\(resolveMode === 'popup' \|\| resolveMode === 'run'\) && block\.usesTriggeredAction !== true\)/);
   const asked = section('  function maybePromptTriggerPopups(', '  async function promptTriggerPopup(');
   assert.match(asked, /!isGmUser\(\)/);
   assert.match(asked, /promptedTriggerPopups\.has\(key\)/);

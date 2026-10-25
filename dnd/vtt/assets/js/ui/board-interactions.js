@@ -1,4 +1,7 @@
 import {chooseTeleportHeight} from './teleport-choice.js';
+import { footprintGap, followSquare } from './grab-geometry.mjs';
+import { coverFor } from './cover-check.mjs';
+import { objectRules, entryGaps, creaturesAlong } from './object-tokens.mjs';
 import {groundSquare} from './terrain-math.mjs';
 import {beginPlayerVisibility} from './player-visibility-ready.js';
 import {createKeyboardMovementQueue} from './keyboard-movement-queue.js';
@@ -6,7 +9,7 @@ import {openQuestion,callAttention,heldMessage} from './open-question.mjs';
 import {projectedMovementCell, movementCellContains, paintProjectedMovementCell, updateMovementLoupe,paintedCellAt,offeredCornerHeight} from './movement-cell-projection.js';
 import {dragMovementKind} from './drag-ruler.js';
 import {floorElevations as teleportFloorElevations} from '../state/normalize/floor-elevation.js';
-import {mountFallReview} from './fall-review.js';
+import {mountFallReview, fallDamage} from './fall-review.js';
 import {createRoutingIntent, deriveRoutingCommands, createSerialQueue} from './scene-routing-commands.mjs';
 import {askClimb} from './climb-prompt.js';
 import {offerBreakThrough} from './break-through-prompt.js';
@@ -1647,6 +1650,7 @@ export function mountBoardInteractions(store, routes = {}) {
         if (source === 'drag' && ['teleport','forced'].includes(movementKind)) {
           for (let index=0;index<moves.length;index++) {
             const id=moves[index].placementId, result=results[index] || results[0];
+            fireEntersSpace(id, canonical[id], getPlacementFromStore(id), { kind: movementKind, sceneId });
             const outcomes=await checkPersistentZoneEntries(id,canonical[id],getPlacementFromStore(id),{sceneId,kind:movementKind,movementOperationId:result?.event?.operationId});
             assertZoneEntryOutcomesConfirmed(outcomes);
           }
@@ -1668,6 +1672,11 @@ export function mountBoardInteractions(store, routes = {}) {
             ? `Moved ${moves.length} ${noun}; ${fallenIds.length} fell.`
             : `Moved ${moves.length} ${noun}.`;
         }
+        try {
+          const origins = new Map(moves.map((move) => [move.placementId, canonical[move.placementId]]).filter(([, origin]) => origin));
+          const operationIds = new Map(moves.map((move, index) => [move.placementId, (results[index] || results[0])?.event?.operationId]).filter(([, id]) => id));
+          await grabsAfterMove(movedIds, { dragAlong: movementKind === 'walk' || movementKind === 'shift', origins, operationIds });
+        } catch (error) { console.warn('[VTT] grab follow-up failed', error); }
         tokenMovementController?.handleDragCommitted?.({
           sceneId,
           movedIds,
@@ -2316,6 +2325,303 @@ export function mountBoardInteractions(store, routes = {}) {
   // the patch as a shallow merge. `id` is never in the patch (the
   // server refuses to overwrite it anyway) and `_lastModified` is
   // excluded so the server's own fresh stamp wins.
+  // Conditions gained / ended by any change saved from this page (abilities, the token menu, ends of turns,
+  // saves): `conditionGained` / `conditionEnded` trigger events. Told apart by name and source.
+  function noticeConditionChanges(placementId, before, after) {
+    if (!placementId || !before || !after) return;
+    const list = (snapshot) => ensurePlacementConditions(snapshot?.conditions ?? snapshot?.condition ?? null);
+    const was = list(before), now = list(after);
+    if (!was.length && !now.length) return;
+    const keyOf = (condition) => `${String(condition?.name || '').trim().toLowerCase()}|${String(condition?.label || '').trim().toLowerCase()}|${condition?.sourceId || ''}`;
+    const wasKeys = new Map(was.map((condition) => [keyOf(condition), condition]));
+    const nowKeys = new Map(now.map((condition) => [keyOf(condition), condition]));
+    const fire = (eventType, condition) => {
+      const payload = {
+        placementId,
+        targetId: placementId,
+        sourceId: condition?.sourceId || '',
+        conditionName: String(condition?.name || '').trim(),
+        label: String(condition?.label || '').trim(),
+        durationType: getConditionDurationType(condition),
+      };
+      queueMicrotask(() => {
+        try { triggerFire(eventType, payload); } catch (error) { console.warn(`[VTT] ${eventType} trigger failed`, error); }
+        try { onConditionChangeRules(eventType, placementId, condition); } catch (error) { console.warn('[VTT] condition rule failed', error); }
+      });
+    };
+    nowKeys.forEach((condition, key) => { if (!wasKeys.has(key)) fire('conditionGained', condition); });
+    wasKeys.forEach((condition, key) => { if (!nowKeys.has(key)) fire('conditionEnded', condition); });
+  }
+
+  // Rules that follow a condition coming or going (filled in by later systems: flying, grabs...).
+  const conditionChangeRules = [];
+
+  // ---------- custom conditions (conditionRule passives) ----------
+  // The rules for a condition of this name: on the creature that gave it first, else on any monster on the scene.
+  function conditionRuleFor(name, sourceId = '') {
+    const key = String(name || '').trim().toLowerCase();
+    if (!key) return null;
+    const source = sourceId ? getPlacementFromStore(sourceId) : null;
+    const candidates = [source, ...getPlacementsForActiveScene()].filter((placement) => placement?.monster);
+    for (const placement of candidates) {
+      const rule = monsterPassivesOfKind(placement.monster, 'conditionRule').find((item) => String(item?.name || '').trim().toLowerCase() === key);
+      if (rule) return rule;
+    }
+    return null;
+  }
+  // Copies the rules onto the condition being given: the roll rider (marked `fromRule` so the roll window shows it
+  // under the condition's name and never uses it up), weakness / immunity, turn riders, the description.
+  function applyConditionRule(condition, sourceId) {
+    const rule = conditionRuleFor(condition?.name, sourceId);
+    if (!rule || String(condition.name).toLowerCase() === 'hiddeneffect') return condition;
+    if (rule.description && !condition.description) condition.description = rule.description;
+    const rider = { ...(rule.rider || {}) };
+    // Movement fields written on the rule itself (speedBonus, fly...) ride on the condition too.
+    ['speedBonus', 'ignoreDifficultTerrain', 'noOpportunityAttacks', 'moveThroughCreatures', 'fly'].forEach((field) => { if (rule[field] !== undefined && rider[field] === undefined) rider[field] = rule[field]; });
+    if (rule.weakness) rider.weakness = { ...rule.weakness };
+    if (rule.immunity) rider.immunity = { ...rule.immunity };
+    if (Object.keys(rider).length && !condition.rider) condition.rider = { ...rider, fromRule: true };
+    if (Array.isArray(rule.riders) && rule.riders.length) {
+      condition.riders = normalizeStoredConditionRiders([...(Array.isArray(condition.riders) ? condition.riders : []), ...JSON.parse(JSON.stringify(rule.riders))]);
+      if (condition.riders.length && !condition.instanceId) condition.instanceId = createNewConditionInstanceId(condition);
+    }
+    return condition;
+  }
+
+  // ---------- height and flying (Brandon, October 2026) ----------
+  // The token's own ground height (where it stands when not flying), in squares.
+  function groundHeightOf(placement) {
+    const standing = { ...placement, movementMode: 'ground', flightHeight: null };
+    const height = window.terrainZones?.standingHeight?.(standing) ?? window.terrainPrototype?.groundFor?.(standing);
+    return Number.isFinite(Number(height)) ? Number(height) : 0;
+  }
+  const NO_FLIGHT_CONDITIONS = ['prone', 'grabbed', 'restrained', 'unconscious'];
+  function flightBlocked(placement) {
+    return ensurePlacementConditions(placement?.conditions ?? placement?.condition ?? null)
+      .some((condition) => NO_FLIGHT_CONDITIONS.includes(String(condition?.name || '').trim().toLowerCase()));
+  }
+  async function saveFlight(placementId, mutate) {
+    const result = updatePlacementById(placementId, mutate, { returnSavePromise: true, movementKind: 'forced' });
+    try {
+      await awaitSuccessfulPlacementSave(result);
+      return true;
+    } catch (error) {
+      renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState, { skipTracker: true });
+      const name = tokenLabel(getPlacementFromStore(placementId)) || 'The token';
+      showConditionBanner(`${name}'s height could not be changed from here (${error?.message || 'refused'}). Set it by hand.`, { tone: 'reminder' });
+      return false;
+    }
+  }
+  // Stops flying: the server records the fall from its height and the fall review settles it.
+  async function landToken(placementId) {
+    const placement = getPlacementFromStore(placementId);
+    if (!placement || !['fly', 'hover'].includes(placement.movementMode)) return { landed: false };
+    const saved = await saveFlight(placementId, (target) => { target.movementMode = 'ground'; target.flightHeight = null; });
+    return { landed: saved };
+  }
+  // Flies (a buff with `fly`): just above its ground, or hovering if a condition stops flight.
+  async function takeOff(placementId) {
+    const placement = getPlacementFromStore(placementId);
+    if (!placement || ['fly', 'hover'].includes(placement.movementMode)) return false;
+    const height = groundHeightOf(placement) + 1;
+    return saveFlight(placementId, (target) => { target.movementMode = flightBlocked(target) ? 'hover' : 'fly'; target.flightHeight = height; });
+  }
+  conditionChangeRules.push((eventType, placementId, condition) => {
+    if (condition?.rider?.fly !== true) return;
+    if (eventType === 'conditionGained') takeOff(placementId);
+    else if (eventType === 'conditionEnded') {
+      // Still flying from another buff: stays up.
+      const still = ensurePlacementConditions(getPlacementFromStore(placementId)?.conditions ?? null).some((c) => c?.rider?.fly === true);
+      if (!still) landToken(placementId);
+    }
+  });
+
+  // Vertical push / pull / slide: how many of the squares go up (or down, for a flier). A small popup.
+  function askVerticalPart(placement, distance, verbLabel) {
+    return new Promise((resolve) => {
+      const flying = ['fly', 'hover'].includes(placement?.movementMode);
+      const stack = document.querySelector('.vtt-hero-move-stack') || (() => { const el = document.createElement('div'); el.className = 'vtt-hero-move-stack'; document.body.appendChild(el); return el; })();
+      const popup = document.createElement('div');
+      popup.className = 'vtt-hero-move-popup vtt-vertical-popup';
+      let up = distance;
+      const min = flying ? -distance : 0;
+      popup.innerHTML = `<div class="vtt-hero-move-popup__text"><strong>${escapeHtml(tokenLabel(placement) || 'Target')}</strong>: ${escapeHtml(verbLabel)} ${escapeHtml(String(distance))}. Squares up${flying ? ' (minus = down)' : ''}:</div>
+        <div class="vtt-vertical-popup__row"><button type="button" class="btn" data-vertical-less aria-label="Fewer up">&minus;</button><span data-vertical-value></span><button type="button" class="btn" data-vertical-more aria-label="More up">+</button></div>
+        <div class="vtt-hero-move-popup__actions"><button type="button" class="btn btn--primary" data-vertical-go>OK</button><button type="button" class="btn" data-vertical-skip>Skip</button></div>`;
+      const value = popup.querySelector('[data-vertical-value]');
+      const show = () => { value.textContent = `${up} up, ${distance - Math.abs(up)} across`; };
+      show();
+      popup.querySelector('[data-vertical-less]').addEventListener('click', () => { up = Math.max(min, up - 1); show(); });
+      popup.querySelector('[data-vertical-more]').addEventListener('click', () => { up = Math.min(distance, up + 1); show(); });
+      const done = (answer) => { popup.remove(); resolve(answer); };
+      popup.querySelector('[data-vertical-go]').addEventListener('click', () => done({ up }));
+      popup.querySelector('[data-vertical-skip]').addEventListener('click', () => done({ skipped: true }));
+      stack.appendChild(popup);
+    });
+  }
+  // The up (or down) part of a vertical move. A flier's height changes; a creature on the ground goes up and
+  // falls back (asked: Apply / Skip, like the fall review). Draw Steel's fall damage (fall-review.js).
+  async function applyVerticalPart(placementId, up, verbLabel) {
+    const placement = getPlacementFromStore(placementId);
+    if (!placement || !up) return null;
+    const name = tokenLabel(placement) || 'The target';
+    if (['fly', 'hover'].includes(placement.movementMode)) {
+      const ground = groundHeightOf(placement);
+      const now = Number.isFinite(Number(placement.flightHeight)) ? Number(placement.flightHeight) : ground + 1;
+      const next = Math.max(ground, now + up);
+      if (next <= ground) { await landToken(placementId); return { landed: true }; }
+      await saveFlight(placementId, (target) => { target.flightHeight = next; });
+      announceToChat(`${name} is moved ${Math.abs(up)} ${up > 0 ? 'up' : 'down'} (${verbLabel}).`);
+      return { height: next };
+    }
+    if (up < 0) return null;
+    const traits = await getAutomationTraitsForPlacement(placement).catch(() => ({}));
+    const damage = fallDamage(up, Number(traits?.agility) || 0, false);
+    const prone = damage > 0;
+    if (!damage) {
+      announceToChat(`${name} goes ${up} up and lands again: too short a fall to hurt.`);
+      return { fell: up, damage: 0 };
+    }
+    const yes = await confirmBoardAction(`${name} goes ${up} up and falls back: ${damage} damage${prone ? ', prone' : ''}.`, { title: verbLabel, confirmText: 'Apply', cancelText: 'Skip' });
+    if (!yes) return { fell: up, damage: 0 };
+    await applyAutomationCollisionDamage(placementId, damage, '');
+    if (prone) {
+      const result = applyConditionToPlacement(placementId, { name: 'Prone' }, { returnSavePromise: true });
+      if (result) await awaitSuccessfulPlacementSave(result).catch(() => {});
+    }
+    announceToChat(`${name} goes ${up} up and falls: ${damage} damage${prone ? ', prone' : ''}.`);
+    return { fell: up, damage };
+  }
+
+  // ---------- object tokens (traps, hazards, siege engines) ----------
+  function objectRulesFor(placement) {
+    const monster = placement?.monster || null;
+    return monster ? objectRules(monster, monsterPassivesOfKind) : null;
+  }
+
+  // `entersSpace`: a creature came onto (or within N of) a token's squares by any movement. Fired once per move,
+  // with how near it came to every other token.
+  function fireEntersSpace(movingId, from, to, { path = [], kind = 'walk', sceneId = getActiveSceneId() } = {}) {
+    if (!movingId || !from || !to) return;
+    const perWatcher = new Map();
+    for (const watcher of getPlacementsForActiveScene()) {
+      if (!watcher?.id || watcher.id === movingId) continue;
+      if ((watcher.levelId || BASE_MAP_LEVEL_ID) !== (to.levelId || from.levelId || BASE_MAP_LEVEL_ID)) continue;
+      perWatcher.set(watcher.id, entryGaps(watcher, from, path, to));
+    }
+    if (!perWatcher.size) return;
+    try {
+      triggerFire('entersSpace', { placementId: movingId, sourceId: movingId, kind, sceneId, from, to, perWatcher });
+    } catch (error) {
+      console.warn('[VTT] entersSpace trigger failed', error);
+    }
+  }
+
+  // ---------- grabs (Brandon, October 2026) ----------
+  // A grab is the grabbed condition on the grabbed creature with its grabber as the source. When the grabber
+  // moves itself the grabbed creature comes along (Undo Move brings both back). When the grabbed creature is moved
+  // any other way, or either is force moved or teleported apart (Draw Steel), the grab ends with a warning.
+  function grabsOnScene() {
+    const grabs = [];
+    for (const placement of getPlacementsForActiveScene()) {
+      ensurePlacementConditions(placement?.conditions ?? placement?.condition ?? null).forEach((condition) => {
+        if (String(condition?.name || '').trim().toLowerCase() === 'grabbed' && condition.sourceId && condition.sourceId !== placement.id) {
+          grabs.push({ grabbedId: placement.id, grabberId: condition.sourceId, condition });
+        }
+      });
+    }
+    return grabs;
+  }
+
+  function endGrab(grab, reason) {
+    const grabbed = getPlacementFromStore(grab.grabbedId), grabber = getPlacementFromStore(grab.grabberId);
+    removeConditionFromPlacementByCondition(grab.grabbedId, grab.condition);
+    const message = `${tokenLabel(grabbed) || 'A creature'} is no longer grabbed by ${tokenLabel(grabber) || grab.condition.sourceName || 'its grabber'} (${reason}).`;
+    showConditionBanner(message, { tone: 'reminder' });
+    updateStatus(message);
+  }
+
+  const grabFollows = new Map(); // grabber's move operation id -> [{ followerId, from, to }]
+  async function grabsAfterMove(movedIds, { dragAlong = false, origins = new Map(), operationIds = new Map() } = {}) {
+    const moved = new Set(movedIds);
+    for (const grab of grabsOnScene()) {
+      const grabbedMoved = moved.has(grab.grabbedId), grabberMoved = moved.has(grab.grabberId);
+      if (grabbedMoved && !grabberMoved) { endGrab(grab, 'it was moved away'); continue; }
+      if (!grabberMoved || grabbedMoved) continue;
+      const grabber = getPlacementFromStore(grab.grabberId), grabbed = getPlacementFromStore(grab.grabbedId);
+      if (!grabber || !grabbed) continue;
+      if (!dragAlong) {
+        if (footprintGap(grabber, grabbed) > 0) endGrab(grab, `${tokenLabel(grabber)} was moved away`);
+        continue;
+      }
+      const grabberFrom = origins.get(grabber.id);
+      if (!grabberFrom) continue;
+      const others = getPlacementsForActiveScene().filter((p) => p && p.id !== grabbed.id && p.id !== grabber.id && !p.hidden
+        && (p.levelId || '') === (grabber.levelId || ''));
+      const to = (grabber.column === grabberFrom.column && grabber.row === grabberFrom.row) ? null : followSquare({
+        grabber, grabberFrom, grabbed, others,
+        inBounds: (column, row, width, height) => {
+          const clamped = clampPlacementToBounds(column, row, width, height);
+          return clamped.column === column && clamped.row === row;
+        },
+      });
+      if (!to) {
+        if (footprintGap(grabber, grabbed) > 0) endGrab(grab, 'there was no room to bring it along');
+        continue;
+      }
+      if (to.column === grabbed.column && to.row === grabbed.row) continue;
+      const from = { column: grabbed.column, row: grabbed.row, levelId: grabbed.levelId || null };
+      const result = updatePlacementById(grabbed.id, (placement) => {
+        placement.column = to.column;
+        placement.row = to.row;
+        if ((grabber.levelId || null) !== (placement.levelId || null)) placement.levelId = grabber.levelId || null;
+      }, { returnSavePromise: true, movementKind: 'shift' });
+      try {
+        await awaitSuccessfulPlacementSave(result);
+        const operationId = operationIds.get(grabber.id);
+        if (operationId) grabFollows.set(operationId, [...(grabFollows.get(operationId) || []), { followerId: grabbed.id, from, to }]);
+        updateStatus(`${tokenLabel(grabbed)} is dragged along by ${tokenLabel(grabber)}.`);
+      } catch (error) {
+        renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState, { skipTracker: true });
+        endGrab(grab, 'it could not be brought along');
+      }
+    }
+  }
+
+  // Undoing the grabber's move puts the creature it dragged back where it was.
+  async function undoGrabFollows(operationId) {
+    const follows = operationId ? grabFollows.get(operationId) : null;
+    if (!follows) return;
+    grabFollows.delete(operationId);
+    for (const follow of follows) {
+      const now = getPlacementFromStore(follow.followerId);
+      if (!now || now.column !== follow.to.column || now.row !== follow.to.row) continue;
+      const result = updatePlacementById(follow.followerId, (placement) => {
+        placement.column = follow.from.column;
+        placement.row = follow.from.row;
+        if (follow.from.levelId !== undefined && (placement.levelId || null) !== follow.from.levelId) placement.levelId = follow.from.levelId;
+      }, { returnSavePromise: true, movementKind: 'shift' });
+      try { await awaitSuccessfulPlacementSave(result); } catch (error) { console.warn('[VTT] could not put the dragged creature back', error); }
+    }
+  }
+
+  // "Most creatures can grab only one creature at a time": a warning when a grabber holds more than it can.
+  function warnGrabLimit(grabberId) {
+    const grabber = getPlacementFromStore(grabberId);
+    if (!grabber) return;
+    const held = grabsOnScene().filter((grab) => grab.grabberId === grabberId);
+    const limit = Math.max(1, Number(movementRulesFor(grabber)?.grabLimit) || 1);
+    if (held.length > limit) {
+      showConditionBanner(`${tokenLabel(grabber)} has ${held.length} creatures grabbed; it can normally hold ${limit}.`, { tone: 'reminder' });
+    }
+  }
+  conditionChangeRules.push((eventType, placementId, condition) => {
+    if (eventType === 'conditionGained' && String(condition?.name || '').trim().toLowerCase() === 'grabbed' && condition.sourceId) warnGrabLimit(condition.sourceId);
+  });
+  function onConditionChangeRules(eventType, placementId, condition) {
+    conditionChangeRules.forEach((rule) => rule(eventType, placementId, condition));
+  }
+
   function clonePlacementForDiff(placement) {
     if (!placement || typeof placement !== 'object') {
       return null;
@@ -2986,7 +3292,8 @@ export function mountBoardInteractions(store, routes = {}) {
       // Built-in opp-attack: opposing-team watchers whose adjacency the mover
       // left during NORMAL movement while combat is active.
       // A creature whose movement doesn't provoke them (a movement rule) sets none off.
-      if (combatActive && leaves && detail.kind === 'normal' && !movementRulesFor(movingPlacement).noOpportunityAttacks) {
+      if (combatActive && leaves && detail.kind === 'normal' && !movementRulesFor(movingPlacement).noOpportunityAttacks
+        && !objectRulesFor(watcher) && !objectRulesFor(movingPlacement)) {
         const watcherTeam = getCombatantTeam(watcher.id) || normalizeCombatTeam(watcher.team);
         if (!movingTeam || !watcherTeam || movingTeam !== watcherTeam) {
           markTriggerReady(watcher.id, '__opportunityAttack__', movingId);
@@ -3032,6 +3339,7 @@ export function mountBoardInteractions(store, routes = {}) {
     } catch (err) {
       console.warn('[VTT] automation-aura enter check failed', err);
     }
+    fireEntersSpace(movingId, from, to, { path: Array.isArray(detail.path) ? detail.path : [], kind: detail.kind === 'normal' ? 'walk' : detail.kind, sceneId });
   });
 
   function checkPersistentZoneEntries(movingId, from, to, movement = {}) {
@@ -3360,6 +3668,24 @@ export function mountBoardInteractions(store, routes = {}) {
     }
   }
 
+  // " - Cal used Strike on Goblin", " - Goblin became Frightened"... for the READY chat line.
+  function triggerCauseText(eventType, payload = {}) {
+    const nameOf = (id) => (id ? tokenLabel(getPlacementFromStore(id)) : '') || '';
+    const source = nameOf(payload.sourceId || payload.actorId);
+    if (eventType === 'entersSpace') return ` - ${nameOf(payload.placementId) || 'a creature'} came onto it`;
+    if (eventType === 'targeted') return ` - ${source || 'a creature'} targets ${payload.targetName || nameOf(payload.targetId) || 'it'} with ${payload.actionName || 'an ability'}`;
+    if (payload.conditionName) {
+      const who = nameOf(payload.placementId) || 'a creature';
+      const what = payload.label || payload.conditionName;
+      if (eventType === 'conditionGained') return ` - ${who} is now ${what}`;
+      if (eventType === 'conditionEnded') return ` - ${who} is no longer ${what}`;
+      if (eventType === 'saveFailed') return ` - ${who} failed a save against ${what}`;
+      if (eventType === 'saveSucceeded') return ` - ${who} saved against ${what}`;
+    }
+    if (payload.actionName && source) return ` - ${source} used ${payload.actionName}`;
+    return '';
+  }
+
   function triggerFire(eventType, payload) {
     try { syncSharedWatches(); } catch (err) { console.warn('[VTT] shared watches could not be read', err); }
     const list = [...(triggerRegistry.byEvent.get(eventType) || [])];
@@ -3380,7 +3706,9 @@ export function mountBoardInteractions(store, routes = {}) {
             entry.tokenId,
             entry.abilityId || null,
             payload?.sourceId || null,
-            entry.resolveMode === 'popup' ? { eventType, payload, popup: true, at: Date.now() } : { eventType, payload }
+            entry.resolveMode === 'popup' || entry.resolveMode === 'run'
+              ? { eventType, payload, popup: true, at: Date.now(), ...(entry.resolveMode === 'run' ? { run: true } : {}) }
+              : { eventType, payload }
           );
           // Post a chat line so the player knows which trigger fired. Useful
           // for debugging predicate matches and for surfacing the trigger so
@@ -3389,7 +3717,7 @@ export function mountBoardInteractions(store, routes = {}) {
           if (entry.authored && entry.abilityName && window.dashboardChat?.sendMessage) {
             const tokenName = tokenLabel(getPlacementFromStore(entry.tokenId)) || 'Token';
             window.dashboardChat.sendMessage({
-              message: `${tokenName}: "${entry.abilityName}" is READY. Use it from ${tokenName}'s abilities to resolve it.`,
+              message: `${tokenName}: "${entry.abilityName}" is READY${triggerCauseText(eventType, payload)}. Use it from ${tokenName}'s abilities to resolve it.${entry.condition ? ` (${entry.condition})` : ''}`,
               type: 'text',
             }).catch(() => {});
           }
@@ -5996,7 +6324,7 @@ export function mountBoardInteractions(store, routes = {}) {
   // autoResolve, popup for the creature's own "dies" (staminaZero, whose self), else click.
   function triggerResolveMode(block, match) {
     const written = String(block?.resolve || '').trim().toLowerCase();
-    if (['click', 'popup', 'auto'].includes(written)) return written;
+    if (['click', 'popup', 'auto', 'run'].includes(written)) return written;
     if (block?.autoResolve) return 'auto';
     const whose = String(match?.filter?.whose || 'any').trim().toLowerCase();
     if (match?.event === 'staminaZero' && whose === 'self') return 'popup';
@@ -6022,7 +6350,7 @@ export function mountBoardInteractions(store, routes = {}) {
       abilityName: action?.name || 'Triggered Ability',
       // A popup trigger ("when it dies") doesn't wait on, or use, the triggered action unless the JSON says so.
       freeTriggered: isFreeTriggeredActionLabel(action?.actionLabel || action?.type || action?.kind || '')
-        || (resolveMode === 'popup' && block.usesTriggeredAction !== true),
+        || ((resolveMode === 'popup' || resolveMode === 'run') && block.usesTriggeredAction !== true),
       authored: true,
       condition: block.condition || '',
       autoResolve: resolveMode === 'auto',
@@ -8882,6 +9210,7 @@ export function mountBoardInteractions(store, routes = {}) {
           // Undoing a push takes back what the push itself did: the wall it broke (mended by the server with the
           // move) and the damage its collisions dealt. What happened to the creature afterwards is left alone.
           const givenBack = last.groupMove ? 0 : await giveBackCollisionDamage(last.operationId);
+          if (!last.groupMove) await undoGrabFollows(last.operationId);
           updateStatus(last.groupMove ? 'Group movement undone, including all floor changes.'
             : `Movement undone, including its floor change.${givenBack ? ` ${givenBack} Stamina given back.` : ''}`);
           return true;
@@ -10029,7 +10358,8 @@ export function mountBoardInteractions(store, routes = {}) {
         row = ahead.row;
       }
 
-      trackerEntries.push(normalized);
+      const objectToken = objectRulesFor(getPlacementFromStore(normalized.id) || placement);
+      if (!objectToken || objectToken.inTracker) trackerEntries.push(normalized);
       renderedIds.add(normalized.id);
 
       const tokenZIndex = getTokenRenderStackOrder(stackOrder, levelId, tokenLevelState);
@@ -11569,6 +11899,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     const state = activeSaveEndsPrompt;
+    reportSaveFailure(state);
     if (state.rollButton && state.handleRollButtonClick) {
       state.rollButton.removeEventListener('click', state.handleRollButtonClick);
     }
@@ -11963,12 +12294,22 @@ export function mountBoardInteractions(store, routes = {}) {
     element.classList.toggle('is-failure', !success);
   }
 
+  function reportSaveFailure(state) {
+    const entry = state?.queue?.[state.index];
+    if (!state?.hasRolled || !entry || entry.successApplied || entry.failureReported) return;
+    entry.failureReported = true;
+    const condition = entry.condition || {};
+    const payload = { placementId: state.placementId, targetId: state.placementId, sourceId: condition.sourceId || '', conditionName: String(condition.name || entry.name || '').trim(), label: String(condition.label || '').trim(), roll: state.roll, total: (Number(state.roll) || 0) + (Number(state.modifier) || 0) };
+    queueMicrotask(() => { try { triggerFire('saveFailed', payload); } catch (error) { console.warn('[VTT] saveFailed trigger failed', error); } });
+  }
+
   function advanceSaveEndsPrompt() {
     if (!activeSaveEndsPrompt) {
       return;
     }
 
     const state = activeSaveEndsPrompt;
+    reportSaveFailure(state);
     if (state.index + 1 >= state.queue.length) {
       closeSaveEndsPrompt();
       return;
@@ -11986,6 +12327,8 @@ export function mountBoardInteractions(store, routes = {}) {
     const state = activeSaveEndsPrompt;
     const removed = removeConditionFromPlacementByCondition(state.placementId, entry.condition);
     entry.successApplied = true;
+    const saved = { placementId: state.placementId, targetId: state.placementId, sourceId: entry.condition?.sourceId || '', conditionName: String(entry.condition?.name || entry.name || '').trim(), label: String(entry.condition?.label || '').trim(), roll: state.roll, total: (Number(state.roll) || 0) + (Number(state.modifier) || 0) };
+    queueMicrotask(() => { try { triggerFire('saveSucceeded', saved); } catch (error) { console.warn('[VTT] saveSucceeded trigger failed', error); } });
 
     if (removed) {
       showConditionBanner(`${state.possessiveTokenName} ${entry.name} has ended.`, { tone: 'reminder' });
@@ -13869,6 +14212,32 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   const rollTraitSheetRequests = new Set();
+  // Cover / line of effect from one token to another, by the walls of the map (cover-check.mjs). Kept for a moment:
+  // the roll window asks every second.
+  const coverMemo = new Map();
+  function coverBetween(actor, target) {
+    if (!actor || !target) return { fraction: 1, covered: false, noLineOfEffect: false };
+    const walls = window.wallPrototype?.model;
+    const key = JSON.stringify([actor.id, actor.column, actor.row, actor.flightHeight ?? null, target.id, target.column, target.row, target.flightHeight ?? null, window.wallPrototype?.revision ?? 0, window.terrainPrototype?.revision ?? 0]);
+    const kept = coverMemo.get(key);
+    if (kept) return kept;
+    let result = { fraction: 1, covered: false, noLineOfEffect: false };
+    try {
+      const gridSize = viewState.gridSize || 64, left = viewState.gridOffsets?.left || 0, top = viewState.gridOffsets?.top || 0;
+      const terrain = window.terrainPrototype;
+      result = coverFor({
+        actor, target, walls,
+        groundAt: (x, y) => (typeof terrain?.heightAt === 'function' ? Number(terrain.heightAt(left + x * gridSize, top + y * gridSize)) || 0 : 0),
+        groundFor: (token) => (typeof terrain?.groundFor === 'function' ? Number(terrain.groundFor(token)) || 0 : 0),
+      });
+    } catch (error) {
+      console.warn('[VTT] cover check failed', error);
+    }
+    if (coverMemo.size > 200) coverMemo.clear();
+    coverMemo.set(key, result);
+    return result;
+  }
+
   function buildBoardPowerRollSuggestions(payload = {}) {
     const state = boardApi.getState?.() ?? {};
     const activeSceneId = state.boardState?.activeSceneId ?? null;
@@ -13889,6 +14258,7 @@ export function mountBoardInteractions(store, routes = {}) {
       mapLevels,
       getTeam: getCombatantTeam,
       context: payload,
+      cover: actor ? Object.fromEntries(targets.map((target) => [target.id, coverBetween(actor, target)])) : {},
       captainBonus: actorId ? captainBonusFor(getPlacementsForActiveScene(), actorId) : null,
       // Always-on edge/bane traits: a monster's from its stat block, a hero's from the sheet the VTT already holds.
       passivesFor: (placement) => {
@@ -13988,6 +14358,7 @@ export function mountBoardInteractions(store, routes = {}) {
     // first action. Monsters from their stat block; heroes from the sheet the VTT holds.
     getAbility: function (payload) { return abilityForPlacement(payload?.placementId, payload?.name); },
     getMovementRules: function (placementId) { return movementRulesFor(getPlacementFromStore(placementId)); },
+    landToken: function (payload) { return landToken(payload?.placementId); },
     // Moving other creatures: is it a hero (it moves itself), its speed, and asking heroes to move.
     isHeroPlacement: function (placementId) { return isPlayerCharacterPlacement(getPlacementFromStore(placementId)); },
     getSpeed: function (placementId) { return speedForPlacement(placementId); },
@@ -15950,10 +16321,11 @@ export function mountBoardInteractions(store, routes = {}) {
   // movement passives whose gates pass (monster stat block, hero features) and movement on buffs it carries.
   function movementRulesFor(placementLike) {
     const placement = placementLike?.id ? getPlacementFromStore(placementLike.id) || placementLike : placementLike;
-    const rules = { speedBonus: 0, ignoreDifficultTerrain: false, noOpportunityAttacks: false, moveThroughCreatures: false, labels: [] };
+    const rules = { speedBonus: 0, ignoreDifficultTerrain: false, noOpportunityAttacks: false, moveThroughCreatures: false, grabLimit: 1, labels: [] };
     if (!placement) return rules;
     const take = (source, label) => {
       rules.speedBonus += Number.parseInt(source.speedBonus, 10) || 0;
+      if (Number.parseInt(source.grabLimit, 10) > rules.grabLimit) rules.grabLimit = Number.parseInt(source.grabLimit, 10);
       ['ignoreDifficultTerrain', 'noOpportunityAttacks', 'moveThroughCreatures'].forEach((flag) => { if (source[flag] === true) rules[flag] = true; });
       if (label && !rules.labels.includes(label)) rules.labels.push(label);
     };
@@ -16146,12 +16518,16 @@ export function mountBoardInteractions(store, routes = {}) {
     const when = entry?.condition ? ` (${entry.condition})` : '';
     const clear = () => document.dispatchEvent(new CustomEvent('vtt:clear-trigger-ready', { detail: { placementId, abilityId } }));
     if (!ability || !window.MonsterAbilityRunner?.start) { clear(); return; }
-    const yes = await confirmBoardAction(`${tokenLabel(placement) || 'A creature'}: ${name}${when}. Use it now?`, { title: name, confirmText: 'Use it', cancelText: 'Skip' });
+    // resolve "run" (traps): no question, a chat line.
+    const runs = snapshot?.run === true;
+    if (runs) announceToChat(`${tokenLabel(placement) || 'A trap'}: ${name}${triggerCauseText(snapshot?.eventType, snapshot?.payload || {})}.`);
+    const yes = runs || await confirmBoardAction(`${tokenLabel(placement) || 'A creature'}: ${name}${when}. Use it now?`, { title: name, confirmText: 'Use it', cancelText: 'Skip' });
     clear();
     if (!yes) return;
     window.MonsterAbilityRunner.start(placement.monster, ability, category, placement, {
       triggerPayload: snapshot?.payload && typeof snapshot.payload === 'object' ? snapshot.payload : null,
-      suggestedTargetId: snapshot?.payload?.sourceId || '',
+      suggestedTargetId: snapshot?.payload?.sourceId || snapshot?.payload?.placementId || '',
+      ...(runs ? { skipTriggeredConfirm: true } : {}),
     });
   }
 
@@ -18115,7 +18491,12 @@ export function mountBoardInteractions(store, routes = {}) {
     clearAutomationTargetRangeOverlay();
     const name = tokenLabel(placement);
     flashAutomationTargetToken(placement.id);
-    updateStatus(`${name} selected as target.`);
+    // A note, never a refusal: no line of effect, or cover.
+    const coverSource = resolveAutomationSourcePlacement(targetRequest.targetConfig?.sourcePlacement);
+    const sight = coverSource && coverSource.id !== placement.id ? coverBetween(getPlacementFromStore(coverSource.id) || coverSource, getPlacementFromStore(placement.id) || placement) : null;
+    const sightNote = sight?.noLineOfEffect ? ' No line of effect: a wall blocks it.' : sight?.covered ? ' It has cover.' : '';
+    updateStatus(`${name} selected as target.${sightNote}`);
+    if (sight?.noLineOfEffect) showConditionBanner(`${name}: no line of effect from ${tokenLabel(coverSource) || 'the user'} (a wall is in the way).`, { tone: 'reminder' });
     targetRequest.resolve?.({
       id: placement.id,
       name,
@@ -18767,6 +19148,7 @@ export function mountBoardInteractions(store, routes = {}) {
         condition.instanceId = createNewConditionInstanceId(condition);
       }
     }
+    applyConditionRule(condition, condition.sourceId || '');
     // Numeric / typed riders for damageWeakness / damageImmunity. The damage
     // adjuster reads these directly off the placement's condition list.
     if (name === 'damageWeakness' || name === 'damageImmunity') {
@@ -19461,14 +19843,34 @@ export function mountBoardInteractions(store, routes = {}) {
     if (targetRestrained) {
       showConditionBanner(`${tokenLabel(targetPlacement)} is restrained: normally can't be force moved. Move it anyway or skip.`, { tone: 'reminder' });
     }
+    const targetGrabbed = !payload.ignoreGrabbed && targetConditions
+      .some((condition) => String((typeof condition === 'string' ? condition : condition?.name) || '').trim().toLowerCase() === 'grabbed');
+    if (targetGrabbed && !targetRestrained) {
+      showConditionBanner(`${tokenLabel(targetPlacement)} is grabbed: normally can't be force moved. Moving it ends the grab.`, { tone: 'reminder' });
+    }
+    // Vertical: ask how much goes up first; the rest is the usual picker; then the height part.
+    let verticalUp = 0;
+    let acrossDistance = effectiveDistance;
+    let finish = resolve;
+    if (verb !== getAutomationMoveBaseVerb(verb) && effectiveDistance > 0) {
+      const answer = await askVerticalPart(targetPlacement, effectiveDistance, payload.verbLabel || verbLabel);
+      if (answer?.skipped) { resolve?.({ skipped: true, reason: 'user-skip' }); return; }
+      verticalUp = Number(answer?.up) || 0;
+      acrossDistance = Math.max(0, effectiveDistance - Math.abs(verticalUp));
+      finish = async (result) => {
+        const height = verticalUp ? await applyVerticalPart(targetPlacement.id, verticalUp, payload.verbLabel || verbLabel).catch((error) => { console.warn('[VTT] vertical part failed', error); return null; }) : null;
+        resolve?.({ ...(result || {}), skipped: Boolean(result?.skipped) && !verticalUp, vertical: { up: verticalUp, ...(height || {}) } });
+      };
+      if (acrossDistance <= 0) { await finish({ skipped: true, name: tokenLabel(targetPlacement), movedDistance: 0 }); return; }
+    }
     startAutomationMoveSelection({
       payload,
-      resolve,
+      resolve: finish,
       reject,
       sourcePlacement,
       targetPlacement,
       requestedDistance,
-      effectiveDistance,
+      effectiveDistance: acrossDistance,
       verb,
       verbLabel: payload.verbLabel || verbLabel,
       collisionDamageType: payload.collisionDamageType || '',
@@ -19733,7 +20135,11 @@ export function mountBoardInteractions(store, routes = {}) {
     }
     flashAutomationTargetToken(mover.id);
     clearAutomationMoveOverlay();
-    request.resolve?.({ skipped: false, name: mover.name, movedDistance: automationChebyshevDistance(mover, now), collision: null });
+    // Who the move went through or came next to (trample: alongPath).
+    const others = getPlacementsForActiveScene().filter((p) => p?.id && p.id !== mover.id && (isGmUser() || !p.hidden)
+      && (p.levelId || BASE_MAP_LEVEL_ID) === (now.levelId || mover.levelId || BASE_MAP_LEVEL_ID));
+    const along = creaturesAlong(mover, [], now, others);
+    request.resolve?.({ skipped: false, name: mover.name, movedDistance: automationChebyshevDistance(mover, now), collision: null, throughIds: along.throughIds, adjacentIds: along.adjacentIds });
     return true;
   }
 
@@ -19980,6 +20386,8 @@ export function mountBoardInteractions(store, routes = {}) {
       }
     }
 
+    try { await grabsAfterMove([request.targetSnapshot.id], { dragAlong: false }); } catch (error) { console.warn('[VTT] grab check failed', error); }
+    fireEntersSpace(request.targetSnapshot.id, request.targetSnapshot, getPlacementFromStore(request.targetSnapshot.id), { kind: request.movementKind || 'forced', sceneId: request.sceneId });
     announceOwnAbilityMove(request);
     flashAutomationTargetToken(request.targetSnapshot.id);
     clearAutomationMoveOverlay();
@@ -20699,6 +21107,7 @@ export function mountBoardInteractions(store, routes = {}) {
     });
 
     if (updated && syncBoard) {
+      noticeConditionChanges(placementId, beforeSnapshot, afterSnapshot);
       markPlacementDirty(activeSceneId, placementId);
 
       // Phase 3-B (commit 3): build a `placement.update` op from the
@@ -20792,6 +21201,7 @@ export function mountBoardInteractions(store, routes = {}) {
     });
 
     if (updatedIds.length && syncBoard) {
+      updatedIds.forEach((id) => noticeConditionChanges(id, patchBeforeById.get(id), patchAfterById.get(id)));
       // Mark each updated placement as dirty so delta saves include these changes.
       // Without this, property changes (e.g. hidden flag toggles) would be lost
       // when other dirty entities exist and a delta save is built.
@@ -23296,7 +23706,8 @@ export function mountBoardInteractions(store, routes = {}) {
     const damageType = String(condition.damageType || '').trim().toLowerCase();
     const typeLabel = damageType ? `${damageType.charAt(0).toUpperCase()}${damageType.slice(1)} ` : '';
     const rider = normalized === 'damageweakness' ? 'weakness' : 'immunity';
-    return `${typeLabel}${rider}${Number.isFinite(amount) && amount > 0 ? ` ${amount}` : ''}`.trim();
+    const shownAmount = String(condition.amount).trim().toLowerCase() === 'all' ? ' all' : Number.isFinite(amount) && amount > 0 ? ` ${amount}` : '';
+    return `${typeLabel}${rider}${shownAmount}${condition.stacks === true ? ' (adds)' : ''}`.trim();
   }
 
 
@@ -23408,6 +23819,10 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     const duration = getSelectedConditionDuration();
+    if (conditionName.toLowerCase() === 'grabbed') {
+      promptGrabberSelection(targetIds, conditionName, duration);
+      return;
+    }
     if (duration === 'save-ends') {
       applyConditionToPlacements(targetIds, {
         name: conditionName,
@@ -23417,6 +23832,58 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     promptConditionTargetSelection(targetIds, { name: conditionName });
+  }
+
+  // A grab added by hand asks who is grabbing, so the grabbed creature can be dragged along. Esc: no grabber.
+  function promptGrabberSelection(placementIds, conditionName, durationType) {
+    const targetIds = normalizePlacementIds(placementIds);
+    if (!targetIds.length) return;
+    dismissConditionPrompt();
+    closeTokenSettings();
+    let done = false;
+    let bannerId = null;
+    const apply = (grabberId) => {
+      if (done) return;
+      done = true;
+      const grabber = grabberId ? getPlacementFromStore(grabberId) : null;
+      const grabberName = grabber ? tokenLabel(grabber) : '';
+      const duration = durationType === 'end-of-turn' && grabber
+        ? { type: 'end-of-turn', targetTokenId: grabber.id, targetTokenName: grabberName }
+        : { type: durationType === 'end-of-turn' ? 'save-ends' : durationType || 'save-ends' };
+      applyConditionToPlacements(targetIds.filter((id) => id !== grabberId), {
+        name: conditionName,
+        duration,
+        ...(grabber ? { sourceId: grabber.id, sourceName: grabberName } : {}),
+      });
+      if (bannerId) dismissConditionBanner(bannerId);
+    };
+    const handlePointerDown = (event) => {
+      if (event.button !== 0) return;
+      const tokenElement = event.target instanceof HTMLElement ? event.target.closest('[data-placement-id]') : null;
+      if (!tokenElement?.dataset?.placementId) return;
+      event.preventDefault();
+      event.stopPropagation();
+      apply(tokenElement.dataset.placementId);
+    };
+    const handleKeydown = (event) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      apply(null);
+    };
+    const cleanup = () => {
+      board.removeEventListener('pointerdown', handlePointerDown, true);
+      document.removeEventListener('keydown', handleKeydown, true);
+      if (activeConditionPrompt && activeConditionPrompt.bannerId === bannerId) activeConditionPrompt = null;
+    };
+    bannerId = showConditionBanner('Click the creature doing the grabbing (Esc: no grabber).', {
+      tone: 'prompt',
+      closeLabel: 'Cancel grab',
+      onDismiss: cleanup,
+    });
+    if (!bannerId) { cleanup(); return; }
+    board.addEventListener('pointerdown', handlePointerDown, true);
+    document.addEventListener('keydown', handleKeydown, true);
+    activeConditionPrompt = { bannerId, cleanup };
   }
 
   function openTypedDamageWeaknessRequest(placementIds = null) {

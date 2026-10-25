@@ -99,3 +99,10 @@ test('invisible: gone for other players, faded for the Director; strikes against
   const fog = getPowerRollSuggestions({ actor: { id: 'a' }, targets: [{ id: 'f', conditions: ['Concealed'] }], context: { keywords: ['Ranged', 'Strike'] } });
   assert.equal(fog.find((s) => s.id === 'bane-concealed-f').label, 'Concealed');
 });
+
+test('the saved condition keeps immunity "all" and "stacks" (token-conditions normalizer)', async () => {
+  const { ensurePlacementCondition } = await import('../token-conditions.js');
+  const kept = ensurePlacementCondition({ name: 'damageImmunity', amount: 'all', damageType: 'poison', duration: { type: 'end-of-encounter' } });
+  assert.deepEqual([kept.amount, kept.damageType], ['all', 'poison']);
+  assert.equal(ensurePlacementCondition({ name: 'damageImmunity', amount: 2, stacks: true, duration: { type: 'save-ends' } }).stacks, true);
+});

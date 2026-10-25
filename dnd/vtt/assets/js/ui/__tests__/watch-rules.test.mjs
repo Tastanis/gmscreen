@@ -104,7 +104,7 @@ test('FAULT 4: a creature moved by its own ability moved willingly; one moved by
 });
 
 test('the "!" says what it is: it marks the triggered action, it does not resolve a waiting trigger', () => {
-  assert.match(board, /is READY\. Use it from \$\{tokenName\}'s abilities to resolve it\.`/);
+  assert.match(board, /is READY\$\{triggerCauseText\(eventType, payload\)\}\. Use it from \$\{tokenName\}'s abilities to resolve it\./);
   assert.doesNotMatch(board, /click the ! to resolve/);
   assert.match(board, /if \(readyTriggerHint\(placementId\)\) return;\s*toggleTriggeredActionState\(placementId\);/, 'with a trigger waiting, the first click explains and changes nothing');
   assert.match(board, /if \(now - \(readyTriggerHintAt\.get\(placementId\) \|\| 0\) < 4000\) \{ readyTriggerHintAt\.delete\(placementId\); return false; \}/, 'a second click marks the action used, as before');

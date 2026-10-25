@@ -124,6 +124,17 @@ export function normalizeMonsterSnapshot(entry) {
     snapshot.abilities = abilities;
   }
 
+  // Traits were dropped here, so the panel's Traits list and any rule written on a trait (passives: rollModifier,
+  // deathRule, conditionRule, movement...) never reached the board. Kept now, with their automation.
+  const traits = (Array.isArray(entry.traits) ? entry.traits : [])
+    .map((trait) => (trait && typeof trait === 'object'
+      ? normalizeMonsterAbility({ ...trait, effect: trait.effect ?? trait.text ?? trait.description }, 'passive')
+      : null))
+    .filter(Boolean);
+  if (traits.length > 0) {
+    snapshot.traits = traits;
+  }
+
   return snapshot;
 }
 

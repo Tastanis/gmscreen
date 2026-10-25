@@ -616,6 +616,9 @@ function buildConditionKey(condition) {
   }
   const name = typeof condition?.name === 'string' ? condition.name.trim().toLowerCase() : '';
   const type = condition?.duration?.type ?? 'save-ends';
+  if (name === 'grabbed' && typeof condition?.sourceId === 'string' && condition.sourceId.trim()) {
+    return `${name}|${type}|${condition.sourceId.trim().toLowerCase()}`;
+  }
   if (name === 'hiddeneffect') {
     const label = typeof condition?.label === 'string' ? condition.label.trim().toLowerCase() : '';
     const sourceId = typeof condition?.sourceId === 'string' ? condition.sourceId.trim().toLowerCase() : '';

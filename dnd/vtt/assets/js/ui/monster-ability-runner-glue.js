@@ -294,6 +294,7 @@
             getCounter: board.getCounter,
             isHeroPlacement: board.isHeroPlacement,
             getAbility: board.getAbility,
+            landToken: board.landToken,
             getSpeed: board.getSpeed,
             requestHeroMove: board.requestHeroMove,
             changeCounter: board.changeCounter,
@@ -360,7 +361,7 @@
             return { aborted: true, reason: 'runner-missing' };
         }
 
-        if (category === TRIGGERED_CATEGORY) {
+        if (category === TRIGGERED_CATEGORY && !(options && options.skipTriggeredConfirm)) {
             if (!(await confirmTriggeredFire(ability))) {
                 return { aborted: true, reason: 'triggered-cancelled' };
             }

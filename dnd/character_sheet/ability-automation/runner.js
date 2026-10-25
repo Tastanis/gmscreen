@@ -543,6 +543,15 @@
     if (String(groupName || "").toLowerCase() === "self") {
       return state.sourcePlacement?.id ? [state.sourcePlacement] : [];
     }
+    // "grabbed": every creature the user has grabbed (the grabbed condition with the user as its source).
+    if (String(groupName || "").toLowerCase() === "grabbed" && !state.groups.grabbed) {
+      const placements = typeof state.context.getActiveScenePlacements === "function" ? state.context.getActiveScenePlacements() : [];
+      const casterId = state.sourcePlacement?.id || "";
+      return (Array.isArray(placements) ? placements : []).filter((token) => token?.id && token.id !== casterId
+        && (Array.isArray(token.conditions) ? token.conditions : token.condition ? [token.condition] : [])
+          .some((c) => String(c?.name || c || "").trim().toLowerCase() === "grabbed" && c?.sourceId === casterId))
+        .map((token) => ({ id: token.id, name: token.name || "" }));
+    }
     const eventTarget = resolveTriggerPlacementGroup(state, groupName);
     if (eventTarget) return eventTarget;
     // "target" means the ability's target: a group of that name, or else the targets picked last.
@@ -842,6 +851,7 @@
         }
         const tokens = Array.isArray(result?.targets) ? result.targets : [];
         setTargetGroup(state, block.name, tokens);
+        fireTargetedEvents(state, tokens);
         // Persist the placed template area so a later `persistent` block in
         // the same automation can reuse the same cells when registering the
         // zone with the board. Schema's target block carries the shape
@@ -931,6 +941,7 @@
         // Count "all"/"each": picking goes on until Done.
       }
       setTargetGroup(state, block.name, selected);
+      fireTargetedEvents(state, selected);
     } catch (error) {
       if (block.mode === "area") state.context.cancelAreaSelection?.();
       else state.context.cancelTargetSelection?.();
@@ -1113,6 +1124,7 @@
       rollEvent: block.rollEvent === "abilityTest" ? "abilityTest" : "powerRoll",
       targets: targetGroup.map((target) => ({ id: target?.id || "", name: target?.name || "" })).filter((target) => target.id),
       targetIds: targetGroup.map((target) => target?.id).filter(Boolean),
+      dealsDamage: Object.values(block.tiers || {}).some((tier) => (tier?.effects || []).some((effect) => effect?.kind === "damage")),
     };
     try {
       const contextKey = JSON.stringify([payload.actorId, payload.actionId, block.id,
@@ -1752,8 +1764,11 @@
       });
       return;
     }
-    const targets = getTargetGroup(state, block.target);
-    if (!targets.length) return;
+    const opponents = getTargetGroup(state, block.target);
+    if (!opponents.length) return;
+    // Opposed: the user rolls the same test (sent to its own player like the others).
+    const self = state.sourcePlacement?.id ? { id: state.sourcePlacement.id, name: state.heroName || state.sourcePlacement.name || "" } : null;
+    const targets = block.opposed && self && !opponents.some((target) => target?.id === self.id) ? [self, ...opponents] : opponents;
     const response = await state.context.requestTest({
       abilityName: state.action.name || "Ability",
       sourcePlacementId: state.sourcePlacement?.id || "",
@@ -1795,11 +1810,41 @@
       }
       return;
     }
-    for (const result of Array.isArray(response?.results) ? response.results : []) {
-      await applyRequestedTestTier(state, block, result);
+    const results = Array.isArray(response?.results) ? response.results : [];
+    if (block.opposed) {
+      await applyOpposedResults(state, block, results, self, opponents);
+    } else {
+      for (const result of results) {
+        await applyRequestedTestTier(state, block, result);
+      }
     }
     if (typeof state.context.completeRequestedTests === "function") {
       await state.context.completeRequestedTests(response?.requestIds || []);
+    }
+  }
+
+  // Opposed test: compare each opponent's total with the user's; win / lose / tie effects on that opponent.
+  async function applyOpposedResults(state, block, results, self, opponents) {
+    const label = state.action.name || "Ability";
+    const rolledBy = (result) => result?.rollerTokenId || (Array.isArray(result?.targetIds) && result.targetIds.length === 1 ? result.targetIds[0] : "");
+    const mine = results.find((result) => self && rolledBy(result) === self.id);
+    if (!mine) {
+      await postChat(state.context, { message: `${state.heroName} - ${label}: the opposed test needs ${state.heroName}'s own roll; compare by hand.` });
+      return;
+    }
+    const myTotal = Number(mine.total) || 0;
+    for (const opponent of opponents) {
+      const theirs = results.find((result) => rolledBy(result) === opponent.id);
+      if (!theirs) continue;
+      const theirTotal = Number(theirs.total) || 0;
+      const outcome = myTotal > theirTotal ? "win" : myTotal < theirTotal ? "lose" : "tie";
+      const said = outcome === "win" ? `${state.heroName} wins` : outcome === "lose" ? `${opponent.name || "the target"} wins` : "a tie";
+      await postChat(state.context, { message: `${state.heroName} - ${label}: ${state.heroName} ${myTotal} vs ${opponent.name || "the target"} ${theirTotal}: ${said}.` });
+      const effects = block.opposed[outcome] || [];
+      if (!effects.length) continue;
+      const group = "__opposed";
+      setTargetGroup(state, group, [opponent]);
+      await applyEffects(state, effects, group, { sourceLabel: label });
     }
   }
 
@@ -1832,6 +1877,33 @@
         conditionRef: suggestion.conditionRef,
       })),
     });
+  }
+
+  // "When this creature is targeted": one event per target, before any roll (interrupts are applied by hand after).
+  function fireTargetedEvents(state, targets) {
+    if (typeof state.context.fireTriggerEvent !== "function" || state.triggerPayload?.eventType === "targeted") return;
+    const list = (Array.isArray(targets) ? targets : []).filter((target) => target?.id && target.id !== state.sourcePlacement?.id);
+    if (!list.length) return;
+    const targetIds = list.map((target) => target.id);
+    for (const target of list) {
+      state.context.fireTriggerEvent({
+        eventType: "targeted",
+        payload: {
+          sourceId: state.sourcePlacement?.id || "",
+          actorId: state.sourcePlacement?.id || "",
+          actorName: state.heroName || "",
+          targetId: target.id,
+          targetName: target.name || "",
+          targetIds,
+          targetCount: targetIds.length,
+          actionId: state.action?.id || "",
+          actionName: state.action?.name || "Ability",
+          actionKind: getActionKind(state),
+          cost: state.action?.cost || state.action?.resource_cost || state.action?.resourceCost || "",
+          keywords: getAbilityKeywords(state),
+        },
+      });
+    }
   }
 
   async function fireRollTriggerEvent(state, block) {
@@ -2084,6 +2156,8 @@
         return applyMoveEffect(state, effect, targets, ctx);
       case "grantAction":
         return applyGrantActionEffect(state, effect, targets);
+      case "land":
+        return applyLandEffect(state, effect, targets);
       case "useAbility":
         return applyUseAbilityEffect(state, effect, targets);
       case "counter":
@@ -3401,13 +3475,50 @@
       return false;
     }
     // The creature's own move (as a shift effect is), so it is a walk or a shift, not forced movement.
+    state.lastMoveResult = null;
     const result = await state.context.forceMove({
       movement: "slide", verb: "slide", verbLabel: effect.verb === "move" ? "Move" : "Shift",
       distance, upTo: true, ignoreStability: true, ignoreSizePenalty: true,
       targetId: target.id, target, sourcePlacement: target, sourceTraits: {},
       walkKind: effect.verb === "move" ? "walk" : "shift", abilityName: label,
     });
+    state.lastMoveResult = result || null;
     return Boolean(result && !result.skipped);
+  }
+
+  // Trample: the creatures the move went through / next to, shown pre-picked; then the effects on those kept.
+  async function applyAlongPath(state, effect, mover, result) {
+    const along = effect.alongPath;
+    if (!along || !result) return;
+    const casterTeam = tokenTeam(liveTokenFor(state, state.sourcePlacement));
+    const lookup = (id) => liveTokenFor(state, { id });
+    for (const [kind, ids] of [["through", result.throughIds], ["adjacent", result.adjacentIds]]) {
+      const effects = along[kind];
+      if (!Array.isArray(effects) || !effects.length) continue;
+      let picked = (Array.isArray(ids) ? ids : []).map(lookup).filter((token) => token?.id && token.id !== mover.id
+        && nearPredicateFits(along.predicate || "creature", token, casterTeam, state.sourcePlacement?.id || ""));
+      if (!picked.length) continue;
+      if (along.confirm !== false && typeof state.context.selectTarget === "function") {
+        const selected = new Map(picked.map((token) => [token.id, { id: token.id, name: token.name || "" }]));
+        for (;;) {
+          const answer = await state.context.selectTarget({
+            mode: "token", creature: along.predicate || "creature", affects: along.predicate || "creature",
+            showPrompt: true, allowDone: true, preselectedIds: [...selected.keys()],
+            promptTitle: kind === "through" ? "Moved through" : "Moved next to",
+            promptText: `${selected.size} picked. Click a token to add or remove it, then Done.`,
+          });
+          if (answer?.canceled) { state.context.cancelTargetSelection?.(); state.aborted = true; return; }
+          if (answer?.skipped || answer?.done || !answer?.id) { state.context.cancelTargetSelection?.(); break; }
+          if (selected.has(answer.id)) selected.delete(answer.id);
+          else selected.set(answer.id, answer);
+        }
+        picked = [...selected.values()];
+      }
+      if (!picked.length) continue;
+      const group = `__along_${kind}`;
+      setTargetGroup(state, group, picked.map((token) => ({ id: token.id, name: token.name || "" })));
+      await applyEffects(state, effects, group, { sourceLabel: state.action.name || "Ability" });
+    }
   }
 
   async function applyMoveEffect(state, effect, targets, ctx) {
@@ -3423,7 +3534,10 @@
         && typeof state.context.isHeroPlacement === "function" && state.context.isHeroPlacement(target.id)
         && typeof state.context.requestHeroMove === "function";
       if (isHero) { heroes.push({ target, distance }); continue; }
-      if (await moveOneCreature(state, effect, target, distance)) moved.push(target);
+      if (await moveOneCreature(state, effect, target, distance)) {
+        moved.push(target);
+        if (effect.alongPath) await applyAlongPath(state, effect, target, state.lastMoveResult);
+      }
     }
     if (heroes.length) {
       const reply = await state.context.requestHeroMove({
@@ -3499,6 +3613,18 @@
   }
 
   // "An ally gets a main action" / "uses its signature ability": a chat reminder (Brandon: "Chat reminder only").
+  // "Knocked out of the sky": each flying target stops flying; the board's fall review settles the fall.
+  async function applyLandEffect(state, effect, targets) {
+    const label = state.action.name || "Ability";
+    const landed = [];
+    for (const target of targets || []) {
+      if (!target?.id) continue;
+      const result = typeof state.context.landToken === "function" ? await state.context.landToken({ placementId: target.id }) : null;
+      if (result?.landed) landed.push(target.name || "Target");
+    }
+    await postChat(state.context, { message: `${state.heroName} - ${label}: ${landed.length ? `${landed.join(", ")} ${landed.length > 1 ? "fall" : "falls"} out of the air.` : "nobody was flying."}` });
+  }
+
   async function applyGrantActionEffect(state, effect, targets) {
     const label = state.action.name || "Ability";
     const names = (targets || []).map((target) => target?.name).filter(Boolean);
@@ -3585,7 +3711,7 @@
     if (effect.modifier) rider.modifier = effect.modifier;
     if (effect.damageBonus) rider.damageBonus = effect.damageBonus;
     if (effect.speedBonus) rider.speedBonus = effect.speedBonus;
-    ["ignoreDifficultTerrain", "noOpportunityAttacks", "moveThroughCreatures"].forEach((flag) => { if (effect[flag]) rider[flag] = true; });
+    ["ignoreDifficultTerrain", "noOpportunityAttacks", "moveThroughCreatures", "fly"].forEach((flag) => { if (effect[flag]) rider[flag] = true; });
     if (effect.potencyBonus) rider.potencyBonus = effect.potencyBonus;
     if (effect.side === "against") rider.side = "against";
     return rider;

@@ -160,6 +160,32 @@ export function buildAutomationTriggerPredicate(entry, env = {}) {
       }
       return true;
     }
+    if (event === 'entersSpace') {
+      // Gaps from object-tokens.mjs: -1 = on its squares, 0 = next to it, N = N squares off.
+      let gaps = null;
+      if (payload.perWatcher instanceof Map) gaps = payload.perWatcher.get(casterId);
+      else if (payload.perWatcher && typeof payload.perWatcher === 'object') gaps = payload.perWatcher[casterId];
+      if (!gaps) return false;
+      const within = Number.parseInt(filter.within, 10) || 0;
+      const limit = within <= 0 ? -1 : within - 1; // within 1 = next to it
+      return gaps.nearestGap <= limit && gaps.startGap > limit;
+    }
+    if (event === 'targeted') {
+      if (filter.actionKind && String(payload.actionKind || '').toLowerCase() !== String(filter.actionKind).toLowerCase()) return false;
+      if (filter.costIncludes && !String(payload.cost || payload.resourceCost || '').toLowerCase().includes(String(filter.costIncludes).toLowerCase())) return false;
+      if (Array.isArray(filter.keywordsAny) && filter.keywordsAny.length) {
+        const have = normalizeKeywords(payload.keywords);
+        if (!filter.keywordsAny.some((keyword) => have.includes(String(keyword).toLowerCase()))) return false;
+      }
+      return true;
+    }
+    if (event === 'conditionGained' || event === 'conditionEnded' || event === 'saveFailed' || event === 'saveSucceeded') {
+      if (Array.isArray(filter.conditionName) && filter.conditionName.length) {
+        const names = [payload.conditionName, payload.label].map((value) => String(value || '').trim().toLowerCase()).filter(Boolean);
+        if (!filter.conditionName.some((name) => names.includes(String(name).trim().toLowerCase()))) return false;
+      }
+      return true;
+    }
     if (event === 'powerRoll' || event === 'abilityTest' || event === 'abilityRoll') {
       if (filter.actionKind && String(payload.actionKind || '').toLowerCase() !== String(filter.actionKind).toLowerCase()) return false;
       if (filter.costIncludes && !String(payload.cost || payload.resourceCost || '').toLowerCase().includes(String(filter.costIncludes).toLowerCase())) return false;
@@ -201,8 +227,8 @@ export function buildAutomationTriggerPredicate(entry, env = {}) {
       if (filter.maxDistance && distance > filter.maxDistance) return false;
       // The kind of move: walk (or move), shift, teleport... (it was accepted and ignored).
       if (filter.verb) {
-        const kind = String(payload.kind || 'walk').toLowerCase(), verb = String(filter.verb).toLowerCase();
-        if (verb !== kind && !(verb === 'move' && kind === 'walk')) return false;
+        const raw = String(payload.kind || 'walk').toLowerCase(), kind = raw === 'normal' ? 'walk' : raw, verb = String(filter.verb).toLowerCase();
+        if (verb !== kind && !((verb === 'move' || verb === 'walk') && kind === 'walk')) return false;
       }
       return true;
     }

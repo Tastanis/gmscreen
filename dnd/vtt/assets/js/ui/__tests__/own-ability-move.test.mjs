@@ -25,6 +25,9 @@ function picker({ tokens, gm = false, confirmedAfter = (id, to) => to, moveAnswe
     const tokenMovementRuntime = { getConfirmedSnapshot: () => ({ state: { placements: { scene: page.confirmed } } }) };
     const getActiveSceneId = () => 'scene';
     const getActiveScenePlacements = () => page.tokens;
+    const getPlacementsForActiveScene = () => page.tokens;
+    const BASE_MAP_LEVEL_ID = 'level-0';
+    const creaturesAlong = () => ({ throughIds: [], adjacentIds: [] });
     const getPlacementFromStore = (id) => page.tokens.find((token) => token.id === id) || null;
     const isGmUser = () => gm;
     const resolvePlacementLevelId = (placement) => placement.levelId || 'level-0';
@@ -125,7 +128,7 @@ test('picking an empty square sends a SHIFT, the way a dragged shift goes: no fo
   await click({ cell: { column: 8, row: 5 } });                                // straight past the ogre
   assert.equal(page.sent.length, 1);
   assert.deepEqual(page.sent[0], { sceneId: 'scene', moves: [{ placementId: 'cal', column: 8, row: 5 }], source: 'ability', movementKind: 'shift', drawnRuler: [] });
-  assert.deepEqual(page.resolved, [{ skipped: false, name: 'cal', movedDistance: 3, collision: null }], 'the sheet is told how far, and that nothing was struck');
+  assert.deepEqual(page.resolved, [{ skipped: false, name: 'cal', movedDistance: 3, collision: null, throughIds: [], adjacentIds: [] }], 'the sheet is told how far, and that nothing was struck');
   assert.equal(pending(), null, 'the picker closes');
   // And in the code: the own move leaves before anything of forced movement is reached.
   const down = piece('handleAutomationMovePointerDown');

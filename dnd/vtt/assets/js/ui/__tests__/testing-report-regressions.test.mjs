@@ -93,7 +93,7 @@ test('forced movement applies Stability and only the larger melee-weapon bonus',
   let selection;
   const deps = {
     getPlacementFromStore: () => ({id:'target'}), resolveAutomationSourcePlacement: value => value,
-    getAutomationMoveVerb: () => 'push', getAutomationMoveVerbLabel: () => 'Push',
+    getAutomationMoveVerb: () => 'push', getAutomationMoveVerbLabel: () => 'Push', getAutomationMoveBaseVerb: (verb) => verb,
     getAutomationTraitsForPlacement: async () => ({size:2,stability:1}),
     getAutomationSizeRank: Number, resolveAutomationForcedMovementDistance,
     closeDamageHealWidget() {}, closeHealOverflowPopup() {}, startAutomationMoveSelection: value => selection=value,

@@ -113,7 +113,13 @@ export function defenseEntriesFromMonster(monster, kind) {
 export function defenseEntriesFromConditions(conditions) {
   return (Array.isArray(conditions) ? conditions : []).flatMap((condition) => {
     const name = String(condition?.name || '').trim().toLowerCase();
-    if (name !== 'damageweakness' && name !== 'damageimmunity') return [];
+    // A custom condition's rules (conditionRule): rider.weakness / rider.immunity = { type, amount }.
+    const ruled = ['weakness', 'immunity'].flatMap((kind) => {
+      const entry = condition?.rider?.[kind];
+      const value = entry ? parseDefenseValue(entry.amount) : 0;
+      return value ? [{ kind, type: cleanType(entry.type), value, source: String(condition.label || condition.name || '').trim() || 'effect' }] : [];
+    });
+    if (name !== 'damageweakness' && name !== 'damageimmunity') return ruled;
     const value = parseDefenseValue(condition.amount);
     if (!value) return [];
     return [{

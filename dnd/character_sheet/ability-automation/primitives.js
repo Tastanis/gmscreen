@@ -43,6 +43,8 @@
     "ifCounter",
     "move",
     "grantAction",
+    // Phase 6: the target stops flying and falls ("knocked out of the sky", "loses its flight").
+    "land",
     "useAbility",
     "setScopedFlag",
     "applyMark",
@@ -614,6 +616,8 @@
       }
       case "grantAction":
         return `grant ${effect.grant || "an action"}`;
+      case "land":
+        return "stops flying and falls";
       case "useAbility":
         return `${effect.who === "target" ? "target uses" : "use"} ${effect.ability || "an ability"}${effect.times > 1 ? ` ×${effect.times}` : ""}`;
       case "counter": {
