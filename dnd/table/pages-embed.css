@@ -1,0 +1,624 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap');
+/* Site pages inside a Table window. The Table adds <html class="in-table diablo|parchment"> to the framed page and
+   links this file (and pages-embed.js, which adds html.pe-<page> and follows the sheet theme). Everything is scoped
+   under html.in-table: opened on their own, the pages are unchanged.
+   Look: the character sheet's (Diablo dark stone + gold by default, Parchment light), compact cards, thin dividers,
+   clear hover on everything clickable, the important facts first. Controls are moved and shrunk, never removed. */
+
+/* ================================================================ tokens */
+html.in-table {
+  --pe-bg: #e2d6bd; --pe-bg2: #fbf7ee; --pe-card: #f8f2e4; --pe-card2: #f1e8d6; --pe-line: #d2c19f; --pe-line2: #c9b48c;
+  --pe-ink: #2a1d12; --pe-dim: #5e4a33; --pe-faint: #8a7658; --pe-gold: #8a6a2a; --pe-head: #3a2a1b; --pe-accent: #8a2c24;
+  --pe-on-bg: #3a2a1b; --pe-on-ink: #f1e3c2; --pe-input: #fffdf8; --pe-ring: 0 0 0 2px rgba(200, 169, 94, .5);
+  --pe-shadow: 0 1px 0 rgba(0, 0, 0, .06), 0 2px 6px rgba(80, 50, 20, .1);
+  --pe-font: "Segoe UI", system-ui, sans-serif; --pe-title: 'Cinzel', Georgia, "Times New Roman", serif;
+}
+html.in-table.diablo {
+  --pe-bg: #080706; --pe-bg2: #16130f; --pe-card: #14110d; --pe-card2: #1b1712; --pe-line: #2e261a; --pe-line2: #4a3b24;
+  --pe-ink: #c4bcac; --pe-dim: #a39a88; --pe-faint: #8d8474; --pe-gold: #c8a95e; --pe-head: #c8a95e; --pe-accent: #c8a95e;
+  --pe-on-bg: #3a2f1c; --pe-on-ink: #e0c27a; --pe-input: #0e0c09; --pe-ring: 0 0 0 2px rgba(200, 169, 94, .45);
+  --pe-shadow: inset 0 0 0 1px rgba(110, 90, 51, .35), 0 3px 10px rgba(0, 0, 0, .5);
+}
+html.in-table, html.in-table body { background: var(--pe-bg) !important; background-image: none !important; color: var(--pe-ink); }
+html.in-table body { font-family: var(--pe-font); min-height: 0; }
+html.in-table.diablo body { background: radial-gradient(ellipse at 50% 0%, rgba(200, 169, 94, .035), transparent 50%), #080706 !important; }
+html.in-table .diablo-ember { display: none !important; }
+html.in-table ::-webkit-scrollbar { width: 10px; height: 10px; }
+html.in-table ::-webkit-scrollbar-thumb { background: var(--pe-line2); border-radius: 6px; border: 2px solid var(--pe-bg); }
+html.in-table ::-webkit-scrollbar-track { background: transparent; }
+html.in-table button:focus-visible, html.in-table [tabindex]:focus-visible { outline: 2px solid #c8a95e; outline-offset: 1px; }
+
+/* ================================================================ 1. Rosters: Students, Staff, Other NPCs (and Locations, same layout) */
+/* the page's own title bar: the window title says it already */
+html.in-table.pe-roster .top-nav { display: none !important; }
+html.in-table.pe-roster .main-container { margin: 0 !important; padding: 0 8px 12px !important; max-width: none; background: transparent !important; }
+
+/* filters: one compact sticky bar */
+html.in-table.pe-roster .control-panel {
+  position: sticky; top: 0; z-index: 60; margin: 0 -8px 8px !important; padding: 6px 8px !important; border-radius: 0 !important;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px; background: var(--pe-bg) !important;
+  border: 0 !important; border-bottom: 1px solid var(--pe-line2) !important; box-shadow: 0 4px 10px -6px rgba(0, 0, 0, .35) !important;
+}
+html.in-table.pe-roster .search-section { margin: 0 !important; flex: 1 1 170px; min-width: 140px; }
+html.in-table.pe-roster .search-input {
+  width: 100%; padding: 5px 9px !important; font-size: 13px !important; border-radius: 6px !important; height: 30px;
+  background: var(--pe-input) !important; color: var(--pe-ink) !important; border: 1px solid var(--pe-line2) !important; box-shadow: none !important;
+}
+html.in-table.pe-roster .search-input:focus { box-shadow: var(--pe-ring) !important; }
+html.in-table.pe-roster .filter-section { display: contents !important; }
+html.in-table.pe-roster .filter-group { display: flex !important; flex-wrap: wrap; align-items: center; gap: 4px !important; margin: 0 !important; justify-content: flex-start !important; }
+html.in-table.pe-roster .filter-group label { font-size: 10px !important; text-transform: uppercase; letter-spacing: .08em; color: var(--pe-faint) !important; margin: 0 2px 0 4px !important; font-weight: 600; text-shadow: none !important; }
+html.in-table.pe-roster .filter-btn, html.in-table.pe-roster .filter-select {
+  padding: 3px 9px !important; height: 28px; font-size: 12px !important; font-weight: 600; border-radius: 14px !important; line-height: 1;
+  font-family: var(--pe-font) !important; text-transform: none !important; letter-spacing: 0 !important; text-shadow: none !important;
+  background: var(--pe-bg2) !important; color: var(--pe-dim) !important; border: 1px solid var(--pe-line2) !important; box-shadow: none !important; cursor: pointer;
+}
+html.in-table.pe-roster .filter-select { border-radius: 7px !important; padding: 2px 6px !important; max-width: 140px; }
+html.in-table.pe-roster .filter-btn:hover, html.in-table.pe-roster .filter-select:hover { color: var(--pe-accent) !important; box-shadow: var(--pe-ring) !important; transform: none !important; }
+html.in-table.pe-roster .filter-btn.active { background: var(--pe-on-bg) !important; color: var(--pe-on-ink) !important; border-color: var(--pe-on-bg) !important; }
+html.in-table.diablo.pe-roster .filter-btn.active { border-color: #6e5a33 !important; }
+html.in-table.pe-roster .admin-controls { display: flex !important; flex-wrap: wrap; align-items: center; gap: 4px; margin: 0 0 0 auto !important; text-align: left !important; }
+html.in-table.pe-roster .admin-controls > button, html.in-table.pe-roster .export-selection-actions button {
+  padding: 3px 9px !important; height: 28px; font-size: 12px !important; font-weight: 600 !important; border-radius: 7px !important; margin: 0 !important;
+  font-family: var(--pe-font) !important; text-transform: none !important; letter-spacing: 0 !important; text-shadow: none !important; white-space: nowrap;
+  background: transparent !important; color: var(--pe-dim) !important; border: 1px dashed var(--pe-line2) !important; box-shadow: none !important; cursor: pointer;
+}
+html.in-table.pe-roster .admin-controls > .btn-add { border-style: solid !important; color: var(--pe-ink) !important; background: var(--pe-bg2) !important; }
+html.in-table.pe-roster .admin-controls > button:hover, html.in-table.pe-roster .export-selection-actions button:hover:not(:disabled) { border-style: solid !important; color: var(--pe-accent) !important; box-shadow: var(--pe-ring) !important; transform: none !important; }
+html.in-table .pe-ico { font-style: normal; }
+/* Emoji icons (📥 📤 ...) toned to the gold palette; the tool buttons are muted gold outlines. */
+html.in-table .pe-ico { filter: grayscale(1) sepia(1) saturate(1.6) brightness(.95); }
+html.in-table :is(.handle-icon, .tab-action-btn, [class^="no-"][class$="-icon"]) { filter: grayscale(1) sepia(1) saturate(1.6) brightness(.95); }
+html.in-table.parchment .pe-ico, html.in-table.parchment :is(.handle-icon, .tab-action-btn, [class^="no-"][class$="-icon"]) { filter: grayscale(1) sepia(1) saturate(1.8) brightness(.7); }
+html.in-table.pe-roster .admin-controls > button, html.in-table.pe-roster .export-selection-actions button { border: 1px solid rgba(200, 169, 94, .45) !important; color: var(--pe-gold) !important; }
+html.in-table.pe-roster .admin-controls > button:hover, html.in-table.pe-roster .export-selection-actions button:hover:not(:disabled),
+html.in-table.pe-roster .admin-controls > button:focus-visible { border-color: #c8a95e !important; color: var(--pe-on-ink) !important; background: rgba(200, 169, 94, .1) !important; outline: none; }
+html.in-table .pe-ico + .pe-lbl { margin-left: 4px; }
+html.in-table .pe-short { display: none; }
+@media (max-width: 760px) {
+  html.in-table.pe-roster .admin-controls > button:has(.pe-ico) .pe-lbl { display: none; }
+  html.in-table.pe-roster .admin-controls > button:has(.pe-ico) { padding: 3px 8px !important; }
+  html.in-table.pe-roster .admin-controls > button:has(.pe-ico) .pe-short { display: inline; margin-left: 4px; }
+  html.in-table.pe-roster .filter-group label { display: none; }
+}
+html.in-table.pe-roster .export-selection-actions { margin: 0 !important; gap: 4px !important; flex-basis: 100%; justify-content: flex-end; }
+html.in-table.pe-roster .export-selection-count { font-size: 12px !important; color: var(--pe-dim) !important; }
+
+/* the grid: rows of small cards, picture left, facts right */
+html.in-table.pe-roster .students-container, html.in-table.pe-roster .staff-container, html.in-table.pe-roster .npcs-container, html.in-table.pe-roster .locations-container {
+  background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; min-height: 0 !important; border-radius: 0 !important;
+}
+html.in-table.pe-roster .students-grid, html.in-table.pe-roster .staff-grid, html.in-table.pe-roster .npcs-grid, html.in-table.pe-roster .locations-grid {
+  display: grid !important; grid-template-columns: repeat(auto-fill, minmax(205px, 1fr)) !important; gap: 6px !important; margin: 0 !important;
+}
+html.in-table.pe-roster .student-card, html.in-table.pe-roster .staff-card, html.in-table.pe-roster .npc-card, html.in-table.pe-roster .location-card {
+  display: grid !important; grid-template-columns: 50px minmax(0, 1fr); grid-template-rows: repeat(3, min-content); column-gap: 9px; align-items: start; align-content: start;
+  padding: 6px 8px 6px 6px !important; min-height: 0 !important; border-radius: 8px !important; text-align: left !important; transform: none !important;
+  background: var(--pe-card) !important; border: 1px solid var(--pe-line) !important; box-shadow: var(--pe-shadow) !important; cursor: pointer;
+}
+html.in-table.diablo.pe-roster .student-card, html.in-table.diablo.pe-roster .staff-card, html.in-table.diablo.pe-roster .npc-card, html.in-table.diablo.pe-roster .location-card {
+  background: linear-gradient(#16130f, #0e0c09) !important; border-color: #000 !important;
+}
+html.in-table.pe-roster .student-card:hover, html.in-table.pe-roster .staff-card:hover, html.in-table.pe-roster .npc-card:hover, html.in-table.pe-roster .location-card:hover,
+html.in-table.pe-roster .student-card:focus-visible, html.in-table.pe-roster .staff-card:focus-visible, html.in-table.pe-roster .npc-card:focus-visible {
+  border-color: var(--pe-gold) !important; box-shadow: var(--pe-ring), var(--pe-shadow) !important; transform: none !important; outline: none;
+}
+html.in-table.pe-roster .is-selected { border-color: var(--pe-gold) !important; box-shadow: 0 0 0 2px var(--pe-gold) !important; }
+html.in-table.pe-roster :is(.student-card, .staff-card, .npc-card, .location-card) > :is(img, .adjusted-image-wrapper, .student-placeholder, .staff-placeholder, .npc-placeholder, .location-placeholder) {
+  grid-column: 1; grid-row: 1 / span 3; width: 50px !important; height: 50px !important; margin: 0 !important; border-radius: 6px !important;
+  border: 1px solid var(--pe-line2) !important; object-fit: cover; object-position: center 20%; font-size: 10px !important; box-shadow: none !important;
+}
+html.in-table.pe-roster :is(.student-card, .staff-card, .npc-card, .location-card):hover > :is(img, .adjusted-image-wrapper) { border-color: var(--pe-gold) !important; }
+html.in-table.pe-roster :is(.student-name, .staff-name, .npc-name, .location-name) {
+  grid-column: 2; font: 700 13.5px/1.2 var(--pe-title) !important; letter-spacing: .02em !important; text-align: left !important; margin: 1px 18px 1px 0 !important;
+  color: var(--pe-ink) !important; text-shadow: none !important; overflow: hidden; text-transform: none !important;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+html.in-table.diablo.pe-roster :is(.student-name, .staff-name, .npc-name, .location-name) { color: #d8cfbd !important; }
+html.in-table.pe-roster :is(.student-info, .staff-info, .npc-info, .location-info) {
+  grid-column: 2; display: flex; flex-wrap: wrap; gap: 0 6px; text-align: left !important; font-size: 11.5px !important; line-height: 1.3 !important; color: var(--pe-faint) !important;
+}
+html.in-table.pe-roster :is(.student-info, .staff-info, .npc-info, .location-info) > div { color: var(--pe-faint) !important; font-weight: 500 !important; margin: 0 !important; font-size: inherit !important; }
+html.in-table.pe-roster :is(.student-info, .staff-info, .npc-info, .location-info) > div + div::before { content: '·'; margin-right: 6px; color: var(--pe-line2); }
+html.in-table.pe-roster :is(.student-college, .staff-college, .npc-college, .location-college) { color: var(--pe-gold) !important; }
+/* One tag in full (cut only when it is longer than the card) and "+N" for the rest (all of them in the tooltip). */
+html.in-table.pe-roster .pe-tags { grid-column: 2; display: flex; flex-wrap: nowrap; gap: 3px; margin-top: 3px; min-width: 0; overflow: hidden; }
+html.in-table.pe-roster .pe-tags span {
+  font-size: 10.5px; line-height: 1.5; padding: 0 6px; border-radius: 9px; border: 1px solid var(--pe-line2); color: var(--pe-dim);
+  background: var(--pe-bg2); flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+html.in-table.pe-roster .pe-tags span:not(.pe-more) { text-transform: capitalize; }
+html.in-table.pe-roster .pe-tags .pe-more { flex: none; color: var(--pe-faint); border-style: dashed; cursor: help; }
+html.in-table.pe-roster :is(.student-favorite, .staff-favorite, .npc-favorite, .location-favorite) {
+  top: 5px !important; right: 6px !important; left: auto !important; width: 16px !important; height: 16px !important; font-size: 10px !important;
+  background: transparent !important; color: #c8962e !important; box-shadow: none !important; border: 0 !important; opacity: 1 !important;
+}
+html.in-table.pe-roster .visibility-indicator { top: 3px !important; left: 3px !important; width: 18px !important; height: 18px !important; font-size: 10px !important; }
+html.in-table.pe-roster .export-select-indicator { top: 5px !important; right: 5px !important; width: 18px !important; height: 18px !important; font-size: 10px !important; }
+html.in-table.pe-roster :is(.no-students, .no-staff, .no-npcs, .no-locations) { grid-column: 1 / -1; padding: 24px 12px !important; color: var(--pe-faint) !important; }
+
+/* the detail view: fills the window, compact header, picture beside the basics */
+html.in-table.pe-roster .modal { backdrop-filter: none !important; background: rgba(0, 0, 0, .45) !important; }
+html.in-table.pe-roster .modal-content {
+  margin: 0 !important; width: 100% !important; max-width: none !important; height: 100vh; max-height: 100vh !important; border-radius: 0 !important;
+  animation: none !important; border: 0 !important; background: var(--pe-bg2) !important; box-shadow: none !important; padding: 0 !important;
+}
+html.in-table.diablo.pe-roster .modal-content { background: linear-gradient(#16130f, #0e0c09) !important; }
+html.in-table.pe-roster #export-modal .modal-content { height: auto; max-height: 100vh !important; }
+html.in-table.pe-roster .modal-header {
+  position: sticky; top: 0; z-index: 5; padding: 5px 10px !important; margin: 0 !important; border-radius: 0 !important; gap: 8px;
+  background: linear-gradient(#3e2e20, #2f2318) !important; border-bottom: 1px solid var(--pe-line2) !important;
+}
+html.in-table.diablo.pe-roster .modal-header { background: linear-gradient(#2a231a, #1a150f) !important; border-bottom-color: #6e5a33 !important; }
+html.in-table.pe-roster .modal-header h2 {
+  font: 700 16px/1.2 var(--pe-title) !important; letter-spacing: .03em !important; text-transform: none !important; margin: 0 !important; padding: 0 !important;
+  color: #f1e3c2 !important; text-shadow: none !important; border: 0 !important; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+html.in-table.pe-roster .modal-header h2::after { display: none !important; }
+html.in-table.diablo.pe-roster .modal-header h2 { color: #c8a95e !important; }
+html.in-table.pe-roster .modal-controls { gap: 4px !important; flex: none; }
+html.in-table.pe-roster .modal-controls button {
+  width: 28px; height: 26px; padding: 0 !important; font-size: 13px !important; border-radius: 6px !important; line-height: 1; margin: 0 !important;
+  background: rgba(255, 255, 255, .08) !important; color: #f1e3c2 !important; border: 1px solid rgba(241, 227, 194, .35) !important; box-shadow: none !important; text-shadow: none !important;
+}
+html.in-table.pe-roster .modal-controls button:hover { box-shadow: var(--pe-ring) !important; transform: none !important; filter: brightness(1.2); }
+html.in-table.pe-roster .modal-controls .btn-favorite.active { color: #f0c65a !important; border-color: #c8a95e !important; }
+html.in-table.pe-roster .modal-controls .btn-danger:hover { background: #6e241c !important; }
+html.in-table.pe-roster .modal-header .close {
+  display: inline-grid; place-items: center; width: 28px; height: 26px; margin: 0 !important; font-size: 20px !important; line-height: 1; border-radius: 6px;
+  color: #f1e3c2 !important; border: 1px solid rgba(241, 227, 194, .35); background: rgba(255, 255, 255, .08); box-shadow: none !important; padding: 0 !important;
+}
+html.in-table.pe-roster .modal-header .close:hover { box-shadow: var(--pe-ring); background: #6e241c; }
+html.in-table.pe-roster .modal-body { padding: 8px 10px 16px !important; }
+html.in-table.pe-roster :is(.student-details, .staff-details, .npc-details, .location-details) { text-align: left !important; color: var(--pe-ink); }
+html.in-table.pe-roster :is(.student-form, .staff-form, .npc-form, .location-form) { display: grid !important; grid-template-columns: minmax(0, 1fr); gap: 8px !important; }
+html.in-table.pe-roster :is(.student-portrait-section, .staff-portrait-section, .npc-portrait-section, .location-image-section) {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 0 !important; text-align: center !important;
+  padding: 0 !important; background: none !important; border: 0 !important; box-shadow: none !important;
+}
+html.in-table.pe-roster :is(.student-portrait-section, .staff-portrait-section, .npc-portrait-section, .location-image-section) .image-gallery { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+html.in-table.pe-roster .gallery-image, html.in-table.pe-roster .location-portrait, html.in-table.pe-roster .image-gallery .adjusted-image-wrapper,
+html.in-table.pe-roster :is(.student-portrait-placeholder, .staff-portrait-placeholder, .npc-portrait-placeholder, .location-portrait-placeholder) {
+  width: 132px !important; height: 132px !important; max-width: 132px !important; max-height: 132px !important; margin: 0 !important;
+  border-radius: 8px !important; border: 1px solid var(--pe-line2) !important; object-fit: cover; box-shadow: none !important;
+}
+html.in-table.pe-roster .gallery-image:hover, html.in-table.pe-roster .image-gallery .adjusted-image-wrapper:hover { transform: none !important; box-shadow: var(--pe-ring) !important; }
+html.in-table.pe-roster .gallery-nav { width: 26px !important; height: 26px !important; font-size: 14px !important; }
+html.in-table.pe-roster .gallery-nav.prev { left: 2px !important; } html.in-table.pe-roster .gallery-nav.next { right: 2px !important; }
+html.in-table.pe-roster .delete-image-btn { top: 4px !important; right: 4px !important; width: 20px !important; height: 20px !important; font-size: 12px !important; }
+html.in-table.pe-roster :is(.adjust-image-btn, .upload-portrait-btn, .upload-image-btn) {
+  padding: 2px 9px !important; font-size: 11.5px !important; border-radius: 6px !important; margin: 0 !important; font-weight: 600 !important;
+  background: var(--pe-bg2) !important; color: var(--pe-dim) !important; border: 1px solid var(--pe-line2) !important; box-shadow: none !important;
+  font-family: var(--pe-font) !important; text-transform: none !important; letter-spacing: 0 !important; text-shadow: none !important;
+}
+html.in-table.pe-roster :is(.adjust-image-btn, .upload-portrait-btn, .upload-image-btn):hover { box-shadow: var(--pe-ring) !important; color: var(--pe-accent) !important; }
+@media (min-width: 560px) {
+  html.in-table.pe-roster :is(.student-form, .staff-form, .npc-form, .location-form) { grid-template-columns: 140px minmax(0, 1fr); }
+  html.in-table.pe-roster :is(.student-form, .staff-form, .npc-form, .location-form) > * { grid-column: 1 / -1; }
+  html.in-table.pe-roster :is(.student-form, .staff-form, .npc-form, .location-form) > :is(.student-portrait-section, .staff-portrait-section, .npc-portrait-section, .location-image-section) { grid-column: 1; align-self: start; }
+  html.in-table.pe-roster :is(.student-form, .staff-form, .npc-form, .location-form) > :is(.student-portrait-section, .staff-portrait-section, .npc-portrait-section, .location-image-section) + .form-section { grid-column: 2; }
+}
+/* sections: thin cards, small headings */
+html.in-table.pe-roster .form-section {
+  margin: 0 !important; padding: 7px 9px 8px !important; border-radius: 8px !important; box-shadow: none !important;
+  background: var(--pe-card) !important; border: 1px solid var(--pe-line) !important;
+}
+html.in-table.diablo.pe-roster .form-section { background: rgba(22, 19, 15, .7) !important; border-color: #2e261a !important; }
+html.in-table.pe-roster .form-section.gm-only { border-left: 3px solid #a8742a !important; }
+html.in-table.pe-roster .form-section h3 {
+  font: 700 12.5px/1.2 var(--pe-title) !important; letter-spacing: .05em !important; text-transform: uppercase; margin: 0 0 6px !important; padding: 0 0 4px !important;
+  color: var(--pe-head) !important; text-shadow: none !important; border-bottom: 1px solid var(--pe-line) !important; background: none !important;
+}
+html.in-table.pe-roster .form-section h3::after, html.in-table.pe-roster .form-section h3::before { display: none !important; }
+html.in-table.pe-roster .form-row { gap: 6px 8px !important; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)) !important; margin: 0 0 6px !important; }
+html.in-table.pe-roster .form-row:last-child { margin-bottom: 0 !important; }
+html.in-table.pe-roster .form-group { margin: 0 !important; min-width: 0; }
+html.in-table.pe-roster .form-group label {
+  display: block; font: 600 10px/1.3 var(--pe-font) !important; letter-spacing: .08em !important; text-transform: uppercase; margin: 0 0 2px !important; padding: 0 !important;
+  color: var(--pe-faint) !important; background: none !important; border: 0 !important; text-shadow: none !important; box-shadow: none !important;
+}
+html.in-table.pe-roster .form-group :is(input, select), html.in-table.pe-roster .tw-input, html.in-table.pe-roster :is(.skills-dropdown, .custom-skill-input, .relationship-points) {
+  padding: 4px 7px !important; font-size: 13px !important; border-radius: 6px !important; height: auto; min-height: 28px; font-family: var(--pe-font) !important;
+  background: var(--pe-input) !important; color: var(--pe-ink) !important; border: 1px solid var(--pe-line2) !important; box-shadow: none !important; text-transform: none !important; letter-spacing: 0 !important;
+}
+html.in-table.pe-roster .form-group textarea, html.in-table.pe-roster .form-section textarea {
+  padding: 5px 7px !important; font-size: 13px !important; border-radius: 6px !important; min-height: 60px;
+  background: var(--pe-input) !important; color: var(--pe-ink) !important; border: 1px solid var(--pe-line2) !important; box-shadow: none !important;
+}
+html.in-table.pe-roster :is(input, select, textarea):focus { box-shadow: var(--pe-ring) !important; outline: none; }
+html.in-table.pe-roster .readonly-field { padding: 3px 0 !important; font-size: 13px !important; background: none !important; border: 0 !important; color: var(--pe-ink) !important; min-height: 0 !important; box-shadow: none !important; }
+html.in-table.pe-roster :is(.club-tag, .skill-tag) { padding: 1px 7px !important; font-size: 11.5px !important; border-radius: 10px !important; background: var(--pe-bg2) !important; color: var(--pe-dim) !important; border: 1px solid var(--pe-line2) !important; text-shadow: none !important; }
+html.in-table.pe-roster .selected-skills { min-height: 0 !important; padding: 5px !important; gap: 4px !important; background: var(--pe-input) !important; border: 1px solid var(--pe-line) !important; }
+html.in-table.pe-roster .skills-container { gap: 6px !important; }
+html.in-table.pe-roster .skills-controls { display: flex; flex-wrap: wrap; gap: 4px !important; }
+html.in-table.pe-roster :is(.skills-controls, .tension-web-add-row) button, html.in-table.pe-roster .btn-add-tension {
+  padding: 3px 10px !important; font-size: 12px !important; border-radius: 6px !important; font-weight: 600 !important; min-height: 28px;
+  background: var(--pe-on-bg) !important; color: var(--pe-on-ink) !important; border: 1px solid var(--pe-on-bg) !important; box-shadow: none !important;
+}
+html.in-table.pe-roster :is(.skills-controls, .tension-web-add-row) button:hover, html.in-table.pe-roster .btn-add-tension:hover { box-shadow: var(--pe-ring) !important; transform: none !important; }
+/* conflict engine: two columns when there is room */
+html.in-table.pe-roster .conflict-engine-section { display: grid !important; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 6px !important; }
+html.in-table.pe-roster .conflict-engine-section > h3, html.in-table.pe-roster .conflict-engine-section > :not(.ce-block) { grid-column: 1 / -1; }
+html.in-table.pe-roster .ce-block { margin: 0 !important; border-radius: 7px !important; }
+html.in-table.pe-roster .ce-block-header { padding: 4px 7px !important; gap: 6px !important; }
+html.in-table.pe-roster .ce-block-body { padding: 5px !important; }
+html.in-table.pe-roster .ce-badge { width: 20px !important; height: 20px !important; font-size: 11px !important; }
+html.in-table.pe-roster .ce-block-title { font-size: 12.5px !important; }
+html.in-table.pe-roster .rich-text-container { border-radius: 6px !important; }
+html.in-table.pe-roster .rich-text-toolbar { padding: 2px 4px !important; gap: 2px !important; }
+html.in-table.pe-roster .rich-text-toolbar :is(button, .toolbar-btn) { min-width: 24px !important; height: 22px !important; padding: 0 5px !important; font-size: 11.5px !important; }
+html.in-table.pe-roster .rich-text-editor { padding: 5px 7px !important; min-height: 44px !important; font-size: 13px !important; }
+html.in-table.pe-roster .rich-text-container.large .rich-text-editor { min-height: 120px !important; }
+/* tension web + relationships */
+html.in-table.pe-roster .tension-web-list { gap: 4px !important; }
+html.in-table.pe-roster .tension-web-entry { padding: 5px 8px !important; margin: 0 0 4px !important; border-radius: 6px !important; }
+html.in-table.pe-roster .tension-web-add { gap: 4px !important; margin-top: 4px !important; }
+html.in-table.pe-roster .tension-web-add-row { gap: 4px !important; margin: 0 0 4px !important; }
+html.in-table.pe-roster .pc-relationships-list { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px !important; }
+html.in-table.pe-roster .pc-relationship { margin: 0 !important; padding: 6px 8px !important; border-radius: 7px !important; background: var(--pe-card2) !important; border: 1px solid var(--pe-line) !important; }
+html.in-table.diablo.pe-roster .pc-relationship { background: #1b1712 !important; border-color: #2e261a !important; }
+html.in-table.pe-roster .pc-relationship-header { margin: 0 0 4px !important; gap: 6px !important; display: flex; align-items: center; justify-content: space-between; }
+html.in-table.pe-roster .pc-relationship-header :is(h4, label, strong) { margin: 0 !important; font: 700 12.5px var(--pe-title) !important; color: var(--pe-ink) !important; }
+html.in-table.pe-roster .relationship-points { width: 64px !important; text-align: center; }
+html.in-table.pe-roster .directors-notes-toggle { cursor: pointer; margin: 0 !important; }
+html.in-table.pe-roster .directors-notes-toggle:hover { color: var(--pe-accent) !important; }
+html.in-table.pe-roster #export-data { height: 50vh !important; }
+
+/* ================================================================ 2. Schedule: the week grid readable in a window */
+html.in-table.pe-schedule {
+  --bg: var(--pe-bg); --panel: var(--pe-card); --panel-alt: var(--pe-card2); --border: var(--pe-line2); --accent: var(--pe-gold);
+  --accent-strong: var(--pe-head); --text: var(--pe-ink); --muted: var(--pe-faint); --chip: var(--pe-bg2);
+}
+html.in-table.pe-schedule .container { padding: 0 8px 10px !important; min-height: 0 !important; }
+html.in-table.pe-schedule header { display: none !important; }
+html.in-table.pe-schedule .week-navigation {
+  position: sticky; top: 0; z-index: 30; margin: 0 -8px 8px !important; padding: 5px 8px !important; gap: 6px !important; border-radius: 0 !important;
+  flex-direction: row !important; justify-content: flex-start !important; flex-wrap: nowrap;
+  background: var(--pe-bg) !important; border: 0 !important; border-bottom: 1px solid var(--pe-line2) !important; box-shadow: 0 4px 10px -6px rgba(0, 0, 0, .35) !important;
+}
+html.in-table.pe-schedule .week-navigation::before, html.in-table.pe-schedule .schedule-container::before { display: none !important; }
+html.in-table.pe-schedule .week-nav-btn {
+  min-width: 0 !important; width: auto !important; max-width: none !important; padding: 3px 10px !important; font-size: 12px !important; gap: 4px !important; border-radius: 7px !important;
+  background: var(--pe-bg2) !important; color: var(--pe-dim) !important; border: 1px solid var(--pe-line2) !important; box-shadow: none !important; transform: none !important; height: 28px;
+}
+html.in-table.pe-schedule .week-nav-btn:hover:not(:disabled) { color: var(--pe-accent) !important; box-shadow: var(--pe-ring) !important; }
+html.in-table.pe-schedule .week-nav-btn:disabled { opacity: .45; }
+html.in-table.pe-schedule .current-week-display {
+  order: 0 !important; display: flex !important; flex-direction: row !important; align-items: baseline; gap: 6px; padding: 0 6px !important;
+  min-width: 0 !important; width: auto !important; max-width: none !important; background: none !important; border: 0 !important; box-shadow: none !important;
+}
+html.in-table.pe-schedule .week-label { font-size: 10px !important; letter-spacing: .1em; text-transform: uppercase; color: var(--pe-faint) !important; margin: 0 !important; }
+html.in-table.pe-schedule .week-number { font: 700 17px/1 var(--pe-font) !important; color: var(--pe-head) !important; text-shadow: none !important; }
+html.in-table.pe-schedule .week-navigation .save-status { margin-left: auto; }
+html.in-table.pe-schedule .save-status { padding: 1px 8px !important; font-size: 11px !important; border-radius: 9px !important; }
+@media (max-width: 560px) { html.in-table.pe-schedule .nav-text { display: none; } }
+html.in-table.pe-schedule .schedule-container { padding: 0 !important; background: none !important; border: 0 !important; box-shadow: none !important; border-radius: 0 !important; }
+html.in-table.pe-schedule .view-info { display: none !important; }
+html.in-table.pe-schedule .view-info:has(.save-status) { display: flex !important; margin: 0 0 6px !important; padding: 0 !important; background: none !important; border: 0 !important; flex-direction: row !important; justify-content: flex-start !important; gap: 8px !important; }
+html.in-table.pe-schedule .view-label { font-size: 11px !important; color: var(--pe-faint) !important; }
+html.in-table.pe-schedule .character-section { margin: 0 0 10px !important; padding: 0 !important; background: none !important; border: 0 !important; box-shadow: none !important; }
+html.in-table.pe-schedule .character-name {
+  margin: 0 0 4px !important; padding: 2px 8px !important; text-align: left !important; font: 700 13px/1.4 var(--pe-title) !important; letter-spacing: .06em !important;
+  background: none !important; border: 0 !important; border-left: 3px solid var(--player-color, var(--pe-gold)) !important; border-radius: 0 !important; color: var(--pe-head) !important;
+}
+html.in-table.pe-schedule .table-wrapper { border-radius: 7px !important; border: 1px solid var(--pe-line); }
+html.in-table.pe-schedule .schedule-table { min-width: 560px !important; table-layout: fixed; border: 0 !important; border-radius: 0 !important; background: var(--pe-card) !important; }
+html.in-table.pe-schedule .schedule-table thead { background: var(--pe-card2) !important; }
+html.in-table.pe-schedule .schedule-table th { padding: 3px 4px !important; font-size: 10.5px !important; letter-spacing: .08em !important; color: var(--pe-dim) !important; border-right: 1px solid var(--pe-line) !important; border-bottom: 1px solid var(--pe-line2); }
+html.in-table.pe-schedule .time-header, html.in-table.pe-schedule .time-label { width: 80px !important; min-width: 80px !important; }
+html.in-table.pe-schedule .time-header { background: var(--pe-card2) !important; color: var(--pe-faint) !important; }
+html.in-table.pe-schedule .time-label {
+  padding: 3px 5px !important; font-size: 10px !important; line-height: 1.25 !important; text-align: left !important; letter-spacing: 0 !important;
+  background: var(--pe-card2) !important; color: var(--pe-dim) !important; border-right: 1px solid var(--pe-line2) !important;
+}
+html.in-table.pe-schedule .schedule-table tbody tr:nth-child(even) { background: transparent !important; }
+html.in-table.pe-schedule .schedule-table tbody tr:hover { background: rgba(200, 169, 94, .05) !important; }
+html.in-table.pe-schedule .schedule-cell { padding: 2px !important; min-width: 0 !important; border: 1px solid var(--pe-line) !important; }
+html.in-table.pe-schedule .schedule-input {
+  min-height: 34px !important; height: auto !important; field-sizing: content; padding: 3px 5px !important; font-size: 12px !important; line-height: 1.3 !important;
+  border-radius: 4px !important; border: 1px solid transparent !important; background: transparent !important; color: var(--pe-ink) !important;
+}
+html.in-table.pe-schedule .schedule-input:hover { border-color: var(--pe-line2) !important; }
+html.in-table.pe-schedule .schedule-input:focus { outline: none !important; border-color: var(--pe-gold) !important; box-shadow: var(--pe-ring); background: var(--pe-input) !important; }
+html.in-table.pe-schedule .schedule-input::placeholder { color: transparent !important; }
+html.in-table.pe-schedule .schedule-input:focus::placeholder { color: var(--pe-faint) !important; }
+html.in-table.pe-schedule .schedule-input.saving { border-color: var(--pe-gold) !important; }
+html.in-table.pe-schedule .schedule-input.saved { border-color: #3f8a52 !important; }
+html.in-table.pe-schedule footer { display: none !important; }
+
+/* ================================================================ shared: rich text editors (people details, GM notes, templates) */
+html.in-table .rich-text-container { background: var(--pe-input) !important; border: 1px solid var(--pe-line2) !important; border-radius: 6px !important; box-shadow: none !important; }
+html.in-table .rich-text-toolbar { background: var(--pe-card2) !important; border-bottom: 1px solid var(--pe-line) !important; padding: 2px 4px !important; gap: 2px !important; min-height: 0 !important; }
+html.in-table .rich-text-toolbar :is(.toolbar-btn, .toolbar-button) {
+  min-width: 24px !important; height: 22px !important; padding: 0 5px !important; font-size: 11.5px !important; border-radius: 4px !important;
+  background: var(--pe-bg2) !important; color: var(--pe-dim) !important; border: 1px solid var(--pe-line2) !important; box-shadow: none !important; transform: none !important;
+}
+html.in-table .rich-text-toolbar :is(.toolbar-btn, .toolbar-button):hover { color: var(--pe-accent) !important; box-shadow: var(--pe-ring) !important; }
+html.in-table .rich-text-toolbar :is(.toolbar-btn, .toolbar-button).active { background: var(--pe-on-bg) !important; color: var(--pe-on-ink) !important; border-color: var(--pe-on-bg) !important; }
+html.in-table .rich-text-toolbar .toolbar-separator { height: 16px !important; margin: 0 3px !important; background: var(--pe-line2) !important; }
+html.in-table .rich-text-editor, html.in-table .rich-text-editor:focus { background: var(--pe-input) !important; color: var(--pe-ink) !important; font-family: var(--pe-font) !important; box-shadow: none !important; }
+html.in-table .rich-text-editor:empty::before { color: var(--pe-faint) !important; }
+
+/* ================================================================ 3. GM notes: the four note panels as an always-open grid */
+html.in-table.pe-gm .background-layer, html.in-table.pe-gm .gm-header, html.in-table.pe-gm .dice-roller { display: none !important; }
+html.in-table.pe-gm .gm-screen-container {
+  display: grid !important; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); align-content: start; gap: 8px;
+  height: auto !important; min-height: 100vh; padding: 0 8px 10px;
+}
+html.in-table.pe-gm .central-content {
+  order: -1; grid-column: 1 / -1; position: sticky !important; top: 0; z-index: 20; min-width: 0 !important; padding: 5px 8px !important; margin: 0 -8px;
+  display: flex !important; flex-direction: row !important; align-items: center; justify-content: flex-end; gap: 6px; backdrop-filter: none !important;
+  background: var(--pe-bg) !important; border-bottom: 1px solid var(--pe-line2); box-shadow: 0 4px 10px -6px rgba(0, 0, 0, .35);
+}
+html.in-table.pe-gm .quick-actions { position: static !important; transform: none !important; display: flex !important; gap: 4px !important; flex-wrap: wrap; margin: 0 !important; }
+html.in-table.pe-gm .quick-actions button {
+  padding: 3px 10px !important; font-size: 12px !important; font-weight: 600 !important; border-radius: 7px !important; height: 28px; backdrop-filter: none !important;
+  background: var(--pe-bg2) !important; color: var(--pe-dim) !important; border: 1px solid var(--pe-line2) !important; box-shadow: none !important; transform: none !important;
+}
+html.in-table.pe-gm .quick-actions button:hover { color: var(--pe-accent) !important; box-shadow: var(--pe-ring) !important; }
+html.in-table.pe-gm .side-panel, html.in-table.pe-gm .side-panel:hover, html.in-table.pe-gm .side-panel.expanded {
+  position: static !important; width: auto !important; height: auto !important; left: auto !important; right: auto !important; top: auto !important;
+  z-index: auto !important; transition: none !important; backdrop-filter: none !important; overflow: visible !important; color: var(--pe-ink) !important;
+  border-radius: 8px !important; background: var(--pe-card) !important; border: 1px solid var(--pe-line) !important; box-shadow: var(--pe-shadow) !important;
+}
+html.in-table.diablo.pe-gm .side-panel { background: linear-gradient(#16130f, #0e0c09) !important; border-color: #000 !important; }
+html.in-table.pe-gm .panel-handle, html.in-table.pe-gm .panel-handle:hover {
+  flex-direction: row !important; justify-content: flex-start !important; gap: 6px; height: auto !important; padding: 5px 9px !important; cursor: default;
+  background: none !important; box-shadow: none !important; border-bottom: 1px solid var(--pe-line2) !important; color: var(--pe-head) !important;
+}
+html.in-table.pe-gm .handle-icon { order: -1; font-size: 13px !important; opacity: .85; text-shadow: none !important; }
+html.in-table.pe-gm .panel-title {
+  max-width: none !important; margin: 0 !important; font: 700 13px/1.3 var(--pe-title) !important; letter-spacing: .04em !important; text-transform: none !important;
+  color: var(--pe-head) !important; text-shadow: none !important; opacity: 1 !important; border-radius: 4px; padding: 0 3px;
+}
+html.in-table.pe-gm .panel-title:hover { box-shadow: var(--pe-ring); }
+html.in-table.pe-gm .panel-content, html.in-table.pe-gm .side-panel:hover .panel-content, html.in-table.pe-gm .side-panel.expanded .panel-content {
+  opacity: 1 !important; visibility: visible !important; height: auto !important; background: none !important; overflow: visible !important;
+}
+html.in-table.pe-gm .panel-header { display: none !important; }
+html.in-table.pe-gm .tabs-container { padding: 3px !important; background: none !important; overflow: visible !important; }
+html.in-table.pe-gm .tabs-list { gap: 0 !important; }
+html.in-table.pe-gm .tab-item {
+  padding: 3px 7px !important; border-radius: 5px !important; border: 0 !important; border-bottom: 1px solid var(--pe-line) !important; box-shadow: none !important;
+  background: none !important; transform: none !important; min-height: 26px;
+}
+html.in-table.pe-gm .tab-item:last-child { border-bottom: 0 !important; }
+html.in-table.pe-gm .tab-item:hover { background: rgba(200, 169, 94, .1) !important; box-shadow: inset 0 0 0 1px var(--pe-gold) !important; }
+html.in-table.pe-gm .tab-name { font-size: 12.5px !important; font-weight: 500 !important; color: var(--pe-ink) !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html.in-table.pe-gm .tab-action-btn { padding: 0 5px !important; font-size: 11px !important; background: transparent !important; border: 1px solid var(--pe-line2) !important; box-shadow: none !important; transform: none !important; }
+/* the note editor: fills the window */
+html.in-table.pe-gm .tab-popup-overlay { backdrop-filter: none !important; background: rgba(0, 0, 0, .45) !important; }
+html.in-table.pe-gm .tab-popup {
+  inset: 0 !important; transform: none !important; width: 100% !important; max-width: none !important; height: 100% !important; max-height: none !important;
+  border-radius: 0 !important; border: 0 !important; backdrop-filter: none !important; background: var(--pe-bg2) !important; box-shadow: none !important;
+}
+html.in-table.diablo.pe-gm .tab-popup { background: linear-gradient(#16130f, #0e0c09) !important; }
+html.in-table.pe-gm .tab-popup-header { padding: 4px 8px !important; gap: 6px; flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; background: var(--pe-card2) !important; border-bottom: 1px solid var(--pe-line2) !important; }
+html.in-table.pe-gm .tab-popup-title { flex: 1 1 auto !important; width: auto !important; text-align: left !important; font: 700 15px var(--pe-title) !important; padding: 3px 6px !important; color: var(--pe-head) !important; max-width: none !important; min-width: 0; border-radius: 5px !important; }
+html.in-table.pe-gm .tab-popup-title:focus { background: var(--pe-input) !important; border-color: var(--pe-line2) !important; }
+html.in-table.pe-gm .tab-popup-controls { gap: 4px !important; flex: none; width: auto !important; justify-content: flex-end !important; }
+html.in-table.pe-gm .tab-popup-controls .save-status { margin-right: 4px !important; font-size: 11px; }
+html.in-table.pe-gm .popup-to-tab-btn, html.in-table.pe-gm .tab-popup-close {
+  height: 26px !important; min-width: 0 !important; padding: 0 9px !important; font-size: 12px !important; border-radius: 6px !important; font-weight: 600 !important;
+  background: var(--pe-bg2) !important; color: var(--pe-dim) !important; border: 1px solid var(--pe-line2) !important; box-shadow: none !important; transform: none !important;
+}
+html.in-table.pe-gm .tab-popup-close { width: 28px !important; padding: 0 !important; font-size: 17px !important; }
+html.in-table.pe-gm :is(.popup-to-tab-btn, .tab-popup-close):hover { color: var(--pe-accent) !important; box-shadow: var(--pe-ring) !important; }
+html.in-table.pe-gm .tab-popup-body { background: none !important; padding: 6px !important; }
+html.in-table.pe-gm #popup-rich-text-container { min-height: 0 !important; }
+html.in-table.pe-gm .rich-text-editor { padding: 8px 10px !important; min-height: 0 !important; font-size: 13.5px !important; }
+/* the character pop-up (names linked in notes) */
+html.in-table.pe-gm #character-modal .modal-content { width: 100% !important; max-width: none !important; height: 100vh !important; max-height: none !important; margin: 0 !important; border-radius: 0 !important; top: 0 !important; left: 0 !important; transform: none !important; }
+
+/* ================================================================ 4. Rules pages: reference cards, less padding */
+html.in-table.pe-rules body { margin: 0 !important; padding: 0 !important; font-size: 13.5px; line-height: 1.45 !important; }
+html.in-table.pe-rules .container {
+  max-width: none !important; margin: 0 !important; padding: 8px 10px 14px !important; border-radius: 0 !important;
+  background: transparent !important; border: 0 !important; box-shadow: none !important;
+}
+html.in-table.pe-rules .container .container { padding: 0 !important; }
+html.in-table.pe-rules h1 {
+  font: 700 17px/1.25 var(--pe-title) !important; letter-spacing: .03em; margin: 0 0 8px !important; padding: 0 0 5px !important;
+  border-bottom-width: 1px !important; text-shadow: none !important; display: flex; align-items: center; gap: 6px;
+}
+html.in-table.pe-rules h1::before, html.in-table.pe-rules h1::after { display: none !important; }
+html.in-table.pe-rules h2 { font: 700 15px/1.3 var(--pe-title) !important; letter-spacing: .03em; margin: 10px 0 6px !important; padding: 0 0 3px !important; border-bottom-width: 1px !important; }
+html.in-table.pe-rules h3 { font-size: 13.5px !important; margin: 8px 0 4px !important; padding: 0 !important; }
+html.in-table.pe-rules h4 { font-size: 13px !important; margin: 6px 0 3px !important; }
+html.in-table.pe-rules p { margin: 0 0 6px !important; }
+html.in-table.pe-rules ul, html.in-table.pe-rules ol { margin: 2px 0 6px !important; padding-left: 18px !important; }
+html.in-table.pe-rules li { margin: 0 0 2px !important; }
+/* the pages' fixed 2- and 3-column grids reflow to the window */
+html.in-table.pe-rules [style*="grid-template-columns"], html.in-table.pe-rules :is(.effects-grid, .actions-grid, .skills-grid) {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)) !important; gap: 8px !important; margin-top: 6px !important;
+}
+html.in-table.pe-rules .concept-grid { gap: 8px !important; }
+@media (max-width: 560px) { html.in-table.pe-rules .concept-grid { grid-template-columns: 1fr !important; } }
+/* every rule box: thin card */
+html.in-table.pe-rules :is(.condition, .action, .rule-item, .skill-category, .effect-box, .material-item, .pitfall, .motivation-type, .flow-step,
+  .ability-block, .dice-box, .cost, .project-section, .study-section, .respite-section, .rules-section, .jump-section, .negotiation-section,
+  .action-category, .attributes-legend, .performance-rule, .point-threshold, .time-requirement, .note, .warning, .success, .intro, .formula, .interest-scale) {
+  padding: 7px 9px !important; margin: 0 0 6px !important; border-radius: 7px !important; box-shadow: none !important;
+}
+html.in-table.pe-rules :is(.condition, .action, .rule-item, .effect-box, .pitfall, .motivation-type, .ability-block) { border-left-width: 3px !important; }
+html.in-table.pe-rules :is(.condition-name, .action-name, .rule-title, .jump-title, .effect-title, .motivation-name, .skill-name, .material-name) {
+  font-size: 13.5px !important; margin: 0 0 3px !important; text-decoration: none !important; letter-spacing: .02em;
+}
+html.in-table.pe-rules :is(.condition-name, .action-name, .rule-title, .effect-title, .motivation-name) { font-family: var(--pe-title) !important; font-weight: 700 !important; }
+html.in-table.pe-rules :is(.condition-text, .action-text, .effect-description) { font-size: 13px !important; line-height: 1.45 !important; }
+html.in-table.pe-rules .skill-item { padding: 3px 7px !important; margin: 0 0 3px !important; }
+/* Keywords read as text: one muted gold, no boxes or red (the pages' own .mechanic red and boxed .highlight). */
+html.in-table.pe-rules span:is(.mechanic, .highlight) {
+  color: #8a6a2a !important; background: none !important; box-shadow: none !important; border: 0 !important; padding: 0 !important; border-radius: 0 !important; text-shadow: none !important;
+}
+html.in-table.pe-rules span.mechanic { font-weight: 600 !important; }
+html.in-table.pe-rules span.highlight { font-weight: 700 !important; }
+html.in-table.diablo.pe-rules span:is(.mechanic, .highlight) { color: #cdb27a !important; }
+/* The other inline chips (damage, bonus, range, keywords) also read as text: no boxes; damage keeps a muted rust. */
+html.in-table.pe-rules span:is(.damage, .bonus, .range, .keywords) { background: none !important; box-shadow: none !important; border: 0 !important; padding: 0 !important; border-radius: 0 !important; font-weight: 700 !important; color: #8a6a2a !important; }
+html.in-table.pe-rules span.damage { color: #8a3a26 !important; }
+html.in-table.diablo.pe-rules span:is(.bonus, .range) { color: #cdb27a !important; }
+html.in-table.diablo.pe-rules span.damage { color: #c98a72 !important; }
+html.in-table.pe-rules :is(h1, h2, h3) > .pe-ico { margin-right: .35em; }
+/* Gold is kept for defined game terms only (conditions, characteristics, Bane/Edge/Surge/Malice/Recovery, named moves):
+   pages-embed.js tags each marked span .pe-term, .pe-label ("Maneuver:" at a line start) or .pe-plain (ordinary emphasis). */
+html.in-table.pe-rules span:is(.mechanic, .highlight, .bonus).pe-plain { color: inherit !important; font-weight: inherit !important; }
+html.in-table.pe-rules span:is(.mechanic, .highlight, .bonus).pe-label { color: inherit !important; font-weight: 700 !important; }
+html.in-table.pe-rules span:is(.mechanic, .highlight, .bonus).pe-term { color: #8a6a2a !important; font-weight: 600 !important; }
+html.in-table.diablo.pe-rules span:is(.mechanic, .highlight, .bonus).pe-term { color: #cdb27a !important; }
+html.in-table.pe-rules span.range, html.in-table.diablo.pe-rules span.range { color: inherit !important; font-weight: 600 !important; }
+html.in-table.pe-rules span.keywords { font-weight: 500 !important; color: var(--pe-faint) !important; }
+html.in-table.pe-rules table { font-size: 12.5px; }
+html.in-table.pe-rules :is(th, td) { padding: 4px 6px !important; }
+/* parchment: page boxes on the parchment ground */
+html.in-table.parchment.pe-rules :is(.condition, .action, .rule-item, .skill-category, .project-section, .study-section, .respite-section, .negotiation-section, .action-category) {
+  background-color: var(--pe-card) !important;
+}
+html.in-table.parchment.pe-rules h1, html.in-table.parchment.pe-rules h2 { color: var(--pe-head) !important; border-color: var(--pe-line2) !important; }
+
+/* ================================================================ 5a. Locations: the roster layout above; its page has no dark skin of its own */
+html.in-table.pe-locations .hex-color-indicator { width: 10px !important; height: 10px !important; margin-right: 3px !important; box-shadow: 0 0 0 1px var(--pe-line2); }
+html.in-table.pe-locations .hex-info { display: inline-flex !important; align-items: center; gap: 2px; }
+html.in-table.pe-locations .hex-number { color: var(--pe-dim) !important; }
+html.in-table.pe-locations .image-modal .modal-content { background: var(--pe-bg2) !important; }
+
+/* ================================================================ 5b. Templates: narrow folder column, small strip, page without paper margins */
+@media screen {
+  html.in-table.pe-templates .template-container { height: 100vh; background: var(--pe-bg) !important; }
+  html.in-table.pe-templates .template-sidebar { width: 168px !important; flex: none; background: var(--pe-card) !important; color: var(--pe-ink) !important; box-shadow: none !important; border-right: 1px solid var(--pe-line2); }
+  html.in-table.diablo.pe-templates .template-sidebar { background: linear-gradient(#16130f, #0e0c09) !important; }
+  html.in-table.pe-templates .sidebar-header { display: none !important; }
+  html.in-table.pe-templates .folder-tree { padding: 5px !important; }
+  html.in-table.pe-templates :is(.folder-header, .subfolder-header) { padding: 4px 6px !important; border-radius: 5px !important; font-size: 12.5px; color: var(--pe-ink); }
+  html.in-table.pe-templates :is(.folder-header, .subfolder-header):hover { background: rgba(200, 169, 94, .12) !important; box-shadow: inset 0 0 0 1px var(--pe-gold); }
+  html.in-table.pe-templates .folder-header.active { background: var(--pe-on-bg) !important; color: var(--pe-on-ink) !important; }
+  html.in-table.pe-templates .subfolder-header.active { background: rgba(200, 169, 94, .22) !important; color: var(--pe-ink) !important; box-shadow: inset 2px 0 0 var(--pe-gold); }
+  html.in-table.pe-templates .folder-content { margin-left: 12px !important; }
+  html.in-table.pe-templates :is(.folder-icon, .subfolder-icon) { width: 14px !important; margin-right: 5px !important; font-size: 10px; }
+  html.in-table.pe-templates .sidebar-footer { padding: 5px !important; display: flex; flex-wrap: wrap; gap: 4px; border-top: 1px solid var(--pe-line2) !important; }
+  html.in-table.pe-templates .sidebar-footer button {
+    width: auto !important; flex: 1 1 auto; margin: 0 !important; padding: 3px 7px !important; font-size: 11.5px !important; border-radius: 6px !important; font-weight: 600;
+    background: var(--pe-bg2) !important; color: var(--pe-dim) !important; border: 1px solid var(--pe-line2) !important; box-shadow: none !important;
+  }
+  html.in-table.pe-templates .sidebar-footer button:hover { color: var(--pe-accent) !important; box-shadow: var(--pe-ring) !important; }
+  html.in-table.pe-templates .sidebar-footer .delete-mode-btn.active, html.in-table.pe-templates .sidebar-footer .delete-mode-btn[aria-pressed="true"] { background: #6e241c !important; color: #f3c2b4 !important; }
+  html.in-table.pe-templates .template-strip-container { padding: 4px 6px !important; gap: 4px !important; background: var(--pe-bg) !important; border-bottom: 1px solid var(--pe-line2) !important; }
+  html.in-table.pe-templates .template-strip { gap: 5px !important; padding: 2px 0 !important; }
+  html.in-table.pe-templates .template-thumbnail {
+    width: 96px !important; height: 96px !important; min-width: 96px !important; min-height: 96px !important; max-width: 96px !important; max-height: 96px !important;
+    border: 1px solid var(--pe-line2) !important; border-radius: 7px !important; background: var(--pe-card) !important; transform: none !important;
+  }
+  html.in-table.pe-templates .template-thumbnail:hover { border-color: var(--pe-gold) !important; box-shadow: var(--pe-ring) !important; }
+  html.in-table.pe-templates .template-thumbnail.active { border-color: var(--pe-gold) !important; box-shadow: 0 0 0 2px var(--pe-gold) !important; }
+  html.in-table.pe-templates .template-thumb-image { background: var(--pe-card2) !important; color: var(--pe-faint); font-size: 11px; max-height: 76px !important; }
+  html.in-table.pe-templates .template-thumb-title { padding: 2px 4px !important; font-size: 10.5px !important; }
+  html.in-table.pe-templates :is(.strip-nav-btn, .add-template-btn) {
+    padding: 0 !important; width: 26px; height: 26px; font-size: 12px !important; border-radius: 6px !important; flex: none;
+    background: var(--pe-bg2) !important; color: var(--pe-dim) !important; border: 1px solid var(--pe-line2) !important;
+  }
+  html.in-table.pe-templates .add-template-btn { font-size: 16px !important; color: var(--pe-ink) !important; }
+  html.in-table.pe-templates :is(.strip-nav-btn, .add-template-btn):hover { color: var(--pe-accent) !important; box-shadow: var(--pe-ring) !important; }
+  html.in-table.pe-templates .template-content { padding: 8px !important; background: transparent !important; }
+  html.in-table.pe-templates .no-template-message { padding: 30px 12px !important; font-size: 13px !important; color: var(--pe-faint) !important; }
+  html.in-table.pe-templates .template-page {
+    min-height: 0 !important; padding: 10px 12px 12px !important; border-radius: 8px; box-shadow: var(--pe-shadow) !important;
+    background: var(--pe-card) !important; color: var(--pe-ink) !important; border: 1px solid var(--pe-line);
+  }
+  html.in-table.pe-templates .template-header-section { margin-bottom: 8px !important; gap: 10px; flex-wrap: wrap; }
+  html.in-table.pe-templates .header-left { padding-right: 0 !important; min-width: 160px; }
+  html.in-table.pe-templates .template-title-input { font: 700 18px var(--pe-title) !important; padding: 3px 0 !important; border-bottom: 1px solid var(--pe-line2) !important; background: transparent !important; color: var(--pe-head) !important; }
+  html.in-table.pe-templates .image-and-circle { gap: 8px !important; }
+  html.in-table.pe-templates .image-container { width: 96px !important; height: 96px !important; border: 1px solid var(--pe-line2) !important; border-radius: 7px !important; }
+  html.in-table.pe-templates .image-placeholder { background: var(--pe-card2) !important; color: var(--pe-faint); font-size: 11px; }
+  html.in-table.pe-templates .upload-image-btn { margin-top: 4px !important; padding: 2px 9px !important; font-size: 11px !important; background: var(--pe-bg2) !important; color: var(--pe-dim) !important; border: 1px solid var(--pe-line2) !important; }
+  html.in-table.pe-templates .color-circle { width: 34px !important; height: 34px !important; border-width: 2px !important; border-color: var(--pe-line2) !important; }
+  html.in-table.pe-templates .color-circle:hover { box-shadow: var(--pe-ring) !important; transform: none !important; }
+  html.in-table.pe-templates .template-sections { margin-top: 6px !important; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px; }
+  html.in-table.pe-templates .template-section { margin: 0 !important; }
+  html.in-table.pe-templates .template-section > label { font: 600 10.5px/1.3 var(--pe-font) !important; letter-spacing: .08em; text-transform: uppercase; color: var(--pe-faint) !important; margin-bottom: 3px !important; }
+  html.in-table.pe-templates .sublabel { font-size: 11px !important; color: var(--pe-faint) !important; margin: 2px 0 !important; }
+  html.in-table.pe-templates .impact-subsection { margin-bottom: 4px !important; }
+  html.in-table.pe-templates .template-divider { grid-column: 1 / -1; margin: 2px 0 !important; border-top: 1px solid var(--pe-line2) !important; }
+  html.in-table.pe-templates .story-section { grid-column: 1 / -1; }
+  html.in-table.pe-templates .rich-text-editor { min-height: 60px !important; padding: 5px 7px !important; font-size: 13px !important; }
+  html.in-table.pe-templates .story-section .rich-text-container { min-height: 140px !important; }
+  html.in-table.pe-templates .action-buttons { margin-top: 10px !important; gap: 6px !important; justify-content: flex-end !important; }
+  html.in-table.pe-templates :is(.print-btn, .save-btn, .delete-btn) {
+    padding: 4px 14px !important; font-size: 12.5px !important; border-radius: 7px !important; font-weight: 600; height: auto !important; min-width: 0 !important;
+    background: var(--pe-bg2) !important; color: var(--pe-dim) !important; border: 1px solid var(--pe-line2) !important; box-shadow: none !important;
+  }
+  html.in-table.pe-templates .save-btn { background: var(--pe-on-bg) !important; color: var(--pe-on-ink) !important; border-color: var(--pe-on-bg) !important; }
+  html.in-table.pe-templates .delete-btn { color: #b0503e !important; }
+  html.in-table.pe-templates :is(.print-btn, .save-btn, .delete-btn):hover { box-shadow: var(--pe-ring) !important; transform: none !important; }
+  html.in-table.pe-templates .save-status { bottom: 10px !important; right: 10px !important; padding: 6px 12px !important; font-size: 12px; }
+  html.in-table.pe-templates .context-menu { background: var(--pe-bg2) !important; border-color: var(--pe-line2) !important; color: var(--pe-ink); }
+  html.in-table.pe-templates .context-menu-item { padding: 5px 10px !important; font-size: 12.5px; }
+  html.in-table.pe-templates .context-menu-item:hover { background: rgba(200, 169, 94, .14) !important; }
+  html.in-table.pe-templates #delete-modal .modal-content { background: var(--pe-bg2) !important; color: var(--pe-ink) !important; }
+  @media (max-width: 600px) {
+    html.in-table.pe-templates .template-sidebar { width: 128px !important; }
+    html.in-table.pe-templates .template-thumbnail { width: 76px !important; height: 76px !important; min-width: 76px !important; min-height: 76px !important; max-width: 76px !important; max-height: 76px !important; }
+    html.in-table.pe-templates .template-thumb-image { max-height: 58px !important; }
+  }
+}
+
+/* ================================================================ 5c. Players: one row per player, Save always in reach */
+html.in-table.pe-players body { font: 13px/1.4 var(--pe-font) !important; }
+html.in-table.pe-players main { max-width: none !important; padding: 6px 8px 0 !important; }
+html.in-table.pe-players h1 { display: none !important; }
+html.in-table.pe-players .hint { font-size: 11.5px !important; line-height: 1.35; color: var(--pe-faint) !important; margin: 0 0 6px !important; }
+html.in-table.pe-players .note { padding: 5px 9px !important; margin-bottom: 6px !important; font-size: 12.5px; }
+html.in-table.pe-players .player {
+  grid-template-columns: 46px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 44px !important; gap: 2px 8px !important; align-items: end;
+  padding: 5px 8px 4px !important; margin-bottom: 5px !important; border-left-width: 4px !important; border-radius: 7px !important;
+  background: var(--pe-card) !important; border-color: var(--pe-line) !important; border-left-color: var(--player-color) !important;
+}
+html.in-table.diablo.pe-players .player { background: linear-gradient(#16130f, #0e0c09) !important; border-color: #2e261a !important; border-left-color: var(--player-color) !important; }
+html.in-table.pe-players .player label { font-size: 10px !important; letter-spacing: .07em; text-transform: uppercase; color: var(--pe-faint) !important; gap: 1px !important; }
+html.in-table.pe-players .player .switch { align-items: center !important; text-align: center; cursor: pointer; }
+html.in-table.pe-players .switch input { width: 16px !important; height: 16px !important; margin: 1px 0 !important; accent-color: #3f8a52; cursor: pointer; }
+html.in-table.pe-players .state { font-size: 11px !important; text-transform: none; letter-spacing: 0; }
+html.in-table.pe-players :is(input[type=text], input[type=password]) {
+  padding: 3px 7px !important; font: 13px var(--pe-font) !important; border-radius: 6px !important; height: 28px; text-transform: none;
+  background: var(--pe-input) !important; color: var(--pe-ink) !important; border: 1px solid var(--pe-line2) !important;
+}
+html.in-table.pe-players :is(input[type=text], input[type=password]):focus { outline: none; box-shadow: var(--pe-ring); }
+html.in-table.pe-players input[type=color] { height: 28px !important; padding: 1px 2px !important; background: var(--pe-input) !important; border-color: var(--pe-line2) !important; cursor: pointer; }
+html.in-table.pe-players .id { font-size: 10.5px !important; margin: 1px 0 0 !important; color: var(--pe-faint) !important; }
+html.in-table.pe-players .bar { margin-top: 6px !important; gap: 6px !important; }
+html.in-table.pe-players form:first-of-type > .bar {
+  position: sticky; bottom: 0; z-index: 5; margin: 6px -8px 0 !important; padding: 6px 8px; background: var(--pe-bg); border-top: 1px solid var(--pe-line2);
+}
+html.in-table.pe-players :is(button, .back) { padding: 4px 14px !important; font: 600 12.5px var(--pe-font) !important; border-radius: 7px !important; }
+html.in-table.pe-players button:not(.link):not(.secondary) { background: var(--pe-on-bg) !important; color: var(--pe-on-ink) !important; border: 1px solid var(--pe-on-bg) !important; }
+html.in-table.pe-players button.secondary { background: var(--pe-bg2) !important; color: var(--pe-dim) !important; border: 1px dashed var(--pe-line2) !important; }
+html.in-table.pe-players button.link { padding: 0 !important; font-size: 10.5px !important; }
+html.in-table.pe-players button:not(.link):hover { box-shadow: var(--pe-ring); filter: brightness(1.1); }
+html.in-table.pe-players form.bar { margin-bottom: 8px !important; }
+@media (max-width: 560px) {
+  html.in-table.pe-players .player { grid-template-columns: 46px minmax(0, 1fr) minmax(0, 1fr) !important; }
+}
+html.in-table.pe-schedule .time-label .pe-when { display: block; font-size: 12px; color: var(--pe-ink); overflow-wrap: anywhere; }
+html.in-table.pe-schedule .time-label small { display: block; font-size: 11px; line-height: 1.25; margin-top: 1px; color: var(--pe-faint); }
+/* Strixhaven has no Wednesday classes: the schedule has no Wed column by design (the page's footer, hidden here, said so). */
+html.in-table.pe-schedule .pe-nowed { font-size: 11px; color: var(--pe-faint); font-style: italic; white-space: nowrap; }
+html.in-table.pe-schedule .time-label { overflow-wrap: anywhere; }
+/* "Sleep/Cram" (shortened by pages-embed.js; the full block name is the tooltip) stays on one line. */
+html.in-table.pe-schedule .time-label .pe-when { white-space: nowrap; overflow-wrap: normal; letter-spacing: -.01em; }
+/* A week with nothing in any cell says so above the grids (cells stay editable). */
+html.in-table.pe-schedule .pe-empty-week { margin: 0 0 8px; padding: 6px 10px; border: 1px dashed var(--pe-line2); border-radius: 7px; color: var(--pe-faint); font-size: 12px; font-style: italic; text-align: center; background: var(--pe-bg2); }
+html.in-table.pe-schedule .pe-empty-week[hidden] { display: none !important; }
+/* A hero with a blank week, folded to one line (pages-embed.js): "Indigo: no plans this week  + Add plans". The line is
+   a button; it opens the grid for typing. Unfolded heroes show their name heading and grid as before. */
+html.in-table.pe-schedule .pe-hero-empty { display: none; }
+html.in-table.pe-schedule .character-section.pe-folded { margin-bottom: 4px !important; }
+html.in-table.pe-schedule .pe-folded .character-name, html.in-table.pe-schedule .pe-folded .table-wrapper { display: none !important; }
+html.in-table.pe-schedule .pe-folded .pe-hero-empty {
+  display: flex; align-items: baseline; gap: 0; width: 100%; padding: 5px 10px; margin: 0; text-align: left; cursor: pointer;
+  background: var(--pe-card); color: var(--pe-faint); border: 1px solid var(--pe-line); border-left: 3px solid var(--player-color, var(--pe-gold)); border-radius: 0 7px 7px 0;
+  font: italic 12px/1.4 var(--pe-font, inherit);
+}
+html.in-table.pe-schedule .pe-hero-empty b { font: 700 12.5px/1.4 var(--pe-title, inherit); font-style: normal; letter-spacing: .06em; color: var(--pe-head); text-transform: uppercase; }
+html.in-table.pe-schedule .pe-hero-empty i { margin-left: auto; font-style: normal; font-weight: 600; color: var(--pe-gold); }
+html.in-table.pe-schedule .pe-hero-empty:hover, html.in-table.pe-schedule .pe-hero-empty:focus-visible { outline: none; box-shadow: var(--pe-ring); color: var(--pe-dim); }
+html.in-table.pe-schedule .save-status { cursor: help; }

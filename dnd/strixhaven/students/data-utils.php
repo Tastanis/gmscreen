@@ -20,6 +20,25 @@ function getDefaultStudentDataset() {
     ];
 }
 
+// Which of a hero's campaign relationships is this student's, for the Students page's save (index.php
+// syncRelationshipsToCharacters): the one with the student's id, or else an older entry with no id that has the
+// student's name, as the campaign page links it (includes/campaign-api.php campaign_relationship_link). -1 for none.
+// October 2026: an entry linked by name only was not found, and each save on the Students page added a second one.
+function findStudentRelationshipIndex(array $relationships, string $studentId, string $studentName) {
+    if ($studentId !== '') {
+        foreach ($relationships as $index => $rel) {
+            if (is_array($rel) && (string) ($rel['student_id'] ?? '') === $studentId) return (int) $index;
+        }
+    }
+    $name = strtolower(trim($studentName));
+    if ($name === '') return -1;
+    foreach ($relationships as $index => $rel) {
+        if (!is_array($rel) || trim((string) ($rel['student_id'] ?? '')) !== '' || trim((string) ($rel['staff_id'] ?? '')) !== '') continue;
+        if (strtolower(trim((string) ($rel['npc_name'] ?? ''))) === $name) return (int) $index;
+    }
+    return -1;
+}
+
 // Points and notes for every player on the list, on or off (includes/players.php)
 function getBlankStudentRelationships() {
     $relationships = [];

@@ -15,6 +15,11 @@ When touching monster creator import or monster ability storage:
 - Update `../strixhaven/monster-creator/MONSTER_JSON_IMPORT_TEMPLATE.md`.
 - Update `vtt-json/INDEX.md` if categories, fields, import aliases, defenses, or automation storage behavior change.
 
+When touching Upload Monsters (`../strixhaven/monster-creator/import-monsters.php`, `includes/monster-import.php`, `js/monster-upload.js`, or the file reader/required stats in `js/monster-json-import-normalize.js`):
+
+- Update `monsters/UPLOAD-GUIDE.md` if file shapes, matching, tab rules, pictures, or what is an error vs a warning change. Its JSON examples are run by `../strixhaven/monster-creator/js/__tests__/monster-upload-prepare.test.mjs`; keep them complete and warning-free.
+- Keep the required-stat list in `js/monster-json-import-normalize.js` in step with the template's non-negotiables.
+
 When touching monster tray or monster runtime:
 
 - Update `hooks/INDEX.md` if callbacks, malice spending, triggered-action behavior, winded logic, stat lookup, or board hook wiring changes.

@@ -801,12 +801,21 @@ function floorUnder(p){
  const hit=pickDrawn({x:(p.x-ox)/g,y:(p.y-oy)/g},{slant:slant(),surfaces:resolveSupportSurfaces(importedDesign()||{}),ramps:importedDesign()?.ramps||[],view:pointerView()});
  return hit?.floor?Number(hit.height)||0:0;
 }
+// The 3D board's choice among the surfaces under the pointer (board3d/surface-choice.mjs): does a straight walk from
+// where this token stands end on this surface ({column,row,surfaceElevation,levelId,surfaceId,rampId})? The same walk
+// and test as the held token's "Can't walk there". Null when it cannot say: a flier, no imported design, no height.
+function walkReaches(who,target){
+ const placement=livePlacement(who);
+ if(!placement||!importedDesign()||['fly','hover'].includes(placement.movementMode)||!target||!Number.isFinite(target.surfaceElevation))return null;
+ const ending=walkEnding(placement,[{column:placement.column,row:placement.row},{column:target.column,row:target.row}]);
+ return pickedSurfaceReached(ending,target)===true;
+}
 function heightShown(z){
  if(!active||!field||!importedDesign())return null;
  const height=Number(z)||0,view=pointerView();
  return height<=0||!view||floorDrawn(height,view);
 }
-window.terrainPrototype={floorUnder,heightShown,get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,slopeMarks,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,unprojectAt,projector,stairRoute,walkEnding,pickedSurfaceReached,rampTargetHeight,heightAt,groundFor,landingHeight,movementGroundFor,movementPlacement,highGround,isCliff,climbFace,walkerNear,get design(){return importedDesign();},route,rulerPass,rulerPoint,routePath,squarePath,paintRoute,movementPresentation,squarePresentation,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get fieldVersion(){return fieldVersion;},get brush3d(){return panel.hidden?null:brush3d;},get key(){return key;},get storageError(){return storageError;},project,get slant(){return slant();},get active(){return active;}};
+window.terrainPrototype={floorUnder,heightShown,get flightRevision(){return flight.revision;},setTokenHeight:(token,z)=>{if(!Number.isFinite(z)||z<0||z>1000000)throw Error('Height must be between 0 and 1000000.');return window.submitFlightHeight(token,z);},setMarkersVisible,slopeMarks,get markersVisible(){return markersVisible;},get markerBuilds(){return markerBuilds;},unproject,unprojectAt,projector,stairRoute,walkEnding,pickedSurfaceReached,walkReaches,rampTargetHeight,heightAt,groundFor,landingHeight,movementGroundFor,movementPlacement,highGround,isCliff,climbFace,walkerNear,get design(){return importedDesign();},route,rulerPass,rulerPoint,routePath,squarePath,paintRoute,movementPresentation,squarePresentation,get revision(){return terrainRevision;},get viewerHeight(){return viewerHeight;},refresh:()=>{dirty=true;},get field(){return field;},get fieldVersion(){return fieldVersion;},get brush3d(){return panel.hidden?null:brush3d;},get key(){return key;},get storageError(){return storageError;},project,get slant(){return slant();},get active(){return active;}};
 requestAnimationFrame(tick);
 
 import('./wall-prototype.js');

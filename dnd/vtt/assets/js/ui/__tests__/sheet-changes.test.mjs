@@ -67,6 +67,17 @@ test('a list is one field and is sent whole; the party\'s hero tokens are never 
   assert.deepEqual(diffSheet(sheet(), partial), []);
 });
 
+test('the skills as stored (a group by name) are one field: a skill taken off is sent, the group whole', () => {
+  // October 2026: a skill removed in the Skills form came back on reload; the group was gone into and a missing name
+  // is never a change there.
+  const was = sheet(); was.sidebar.skills = { Alchemy: { level: 'Trained', bonus: '' }, Sneak: { level: 'Trained', bonus: '1' } };
+  const now = JSON.parse(JSON.stringify(was)); delete now.sidebar.skills.Alchemy;
+  assert.deepEqual(diffSheet(was, now), [{ path: ['sidebar', 'skills'], value: { Sneak: { level: 'Trained', bonus: '1' } } }]);
+  const bonus = JSON.parse(JSON.stringify(was)); bonus.sidebar.skills.Sneak.bonus = '2';
+  assert.deepEqual(diffSheet(was, bonus).map((c) => c.path.join('.')), ['sidebar.skills']);
+  assert.deepEqual(diffSheet(was, JSON.parse(JSON.stringify(was))), []);
+});
+
 test('what was sent becomes the baseline, and a refused save can be taken back out of it', () => {
   const baseline = sheet(), now = sheet(); now.hero.wealth = '3'; now.features = [{ name: 'Flame', text: 'b' }];
   const sent = diffSheet(baseline, now);

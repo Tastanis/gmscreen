@@ -5,6 +5,7 @@ import {rampHeight} from '../assets/js/ui/imported-ramps.mjs';
 import {createMovementRoute} from './movement-route.mjs';
 import {loadArtKit} from './art-kit.mjs';
 import {buildVines,buildHanging,buildGroundCover} from './vine-art.mjs';
+import {quality,shrinkImage} from './quality.mjs';
 
 // Original procedural artwork. Scene data is the only dependency on the map.
 // World coordinates are x/east, y/south, z/up; Three.js is x/up/y.
@@ -119,7 +120,9 @@ export async function createSceneView({canvas,sceneData:d,groundPicture=null,isC
  const near={value:0}; // how close to the camera decoration dissolves (addNearFade), set each frame
  const levelHeights=d.levelHeights||[0,6,12,18,24,30],levelAt=z=>Math.max(0,levelHeights.findIndex(h=>Math.abs(h-z)<.1));
  const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
- renderer.setPixelRatio(Math.min(devicePixelRatio,1.6));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.shadowMap.autoUpdate=false;renderer.shadowMap.needsUpdate=true;
+ // Map quality (quality.mjs): how many pixels, how fine the sun's shadows, how large any loaded picture may be.
+ const Q=quality();
+ renderer.setPixelRatio(Math.min(devicePixelRatio,Q.pixelRatio));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.shadowMap.autoUpdate=false;renderer.shadowMap.needsUpdate=true;
  renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.06;
  const scene=new THREE.Scene();
  // Sky: a gradient dome round the camera (deep blue overhead, a warm haze at the horizon, a misty blue-grey
@@ -147,7 +150,7 @@ export async function createSceneView({canvas,sceneData:d,groundPicture=null,isC
  function home(){controls.target.copy(center);camera.position.copy(center).add(new THREE.Vector3(68,98,80).multiplyScalar(viewScale));controls.update();}
  home();
  const hemi=new THREE.HemisphereLight('#dfeaf0','#4f5a44',.55);scene.add(hemi);
- const sun=new THREE.DirectionalLight('#ffdcae',2.5);sun.position.set(-55,42,-25);sun.target.position.set(d.width/2,10,d.height/2);scene.add(sun,sun.target);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);sun.shadow.camera.left=-57;sun.shadow.camera.right=57;sun.shadow.camera.top=57;sun.shadow.camera.bottom=-57;sun.shadow.camera.near=1;sun.shadow.camera.far=180;sun.shadow.normalBias=.055;sun.shadow.bias=-.0003;
+ const sun=new THREE.DirectionalLight('#ffdcae',2.5);sun.position.set(-55,42,-25);sun.target.position.set(d.width/2,10,d.height/2);scene.add(sun,sun.target);sun.castShadow=true;sun.shadow.mapSize.set(Q.shadow,Q.shadow);sun.shadow.camera.left=-57;sun.shadow.camera.right=57;sun.shadow.camera.top=57;sun.shadow.camera.bottom=-57;sun.shadow.camera.near=1;sun.shadow.camera.far=180;sun.shadow.normalBias=.055;sun.shadow.bias=-.0003;
  const rim=new THREE.DirectionalLight('#aac8d2',1.0);rim.position.set(25,16,-12);scene.add(rim);
  // A map's own art comes lit the way its maker lit it (assets/scenes/index.json "light": sky and ground colours and
  // strength of the soft light, the sun's colour and strength, exposure), not with the Orchard's daylight.
@@ -242,7 +245,7 @@ export async function createSceneView({canvas,sceneData:d,groundPicture=null,isC
  // keeps the picture's edge colour.
  let pictureTexture=null;
  if(groundPicture?.url){pictureTexture=await new THREE.TextureLoader().loadAsync(groundPicture.url).catch(()=>null);
-  if(pictureTexture){pictureTexture.colorSpace=THREE.SRGBColorSpace;pictureTexture.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());pictureTexture.wrapS=pictureTexture.wrapT=THREE.ClampToEdgeWrapping;
+  if(pictureTexture){pictureTexture.image=shrinkImage(pictureTexture.image,Q.maxTexture);pictureTexture.colorSpace=THREE.SRGBColorSpace;pictureTexture.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());pictureTexture.wrapS=pictureTexture.wrapT=THREE.ClampToEdgeWrapping;
    const r=groundPicture;pictureTexture.repeat.set(w/r.width,depth/r.height);pictureTexture.offset.set(-r.left/r.width,1-depth/r.height+r.top/r.height);}
   if(abandoned(surfaceTextures,kit,pictureTexture))return null;}
  const terrainMaterial=pictureTexture?new THREE.MeshStandardMaterial({map:pictureTexture,roughness:1,metalness:0}):photographic?surfaceMaterial(cliffSet||surfaceTextures.sets.rock,{terrainGround:grassSet||surfaceTextures.sets.ground,color:cliffSet?'#ffffff':'#c9cbbd',scale:cliffSet?.22:.48,groundScale:grassSet?.42:.36,normalStrength:.55,tint:cliffSet?{color:'#a2a69a',amount:.72}:null,groundTint:grassSet?{color:'#6c9e47',amount:.8}:null,groundAlt:grassSet?surfaceTextures.sets.ground:null,groundAltTint:{color:'#7d6643',amount:.55}}):new THREE.MeshStandardMaterial({vertexColors:true,roughness:1});
@@ -828,7 +831,18 @@ export async function createSceneView({canvas,sceneData:d,groundPicture=null,isC
   const rect=canvas.getBoundingClientRect();mouse.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(mouse,camera);
   const hit=castSurfaces(raycaster,tokens?[tokenBodies,tokenHeads,tokenBases].filter(m=>m.visible):[]);if(!hit)return null;
   if(hit.object.userData.token){const t=visibleTokens[hit.instanceId];return t?{...t,tokenId:t.id,level:belongsToLevel(t)}:null;}
-  return {x:hit.point.x,y:hit.point.z,z:hit.point.y,level:hit.object.userData.level??0,levelId:hit.object.userData.ramp?null:(hit.object.userData.levelId??d.levels?.[hit.object.userData.level??0]?.id??null),surfaceId:hit.object.userData.surfaceId??null,rampId:hit.object.userData.rampId??null};
+  return surfacePoint(hit);
+ };
+ const surfacePoint=hit=>({x:hit.point.x,y:hit.point.z,z:hit.point.y,level:hit.object.userData.level??0,levelId:hit.object.userData.ramp?null:(hit.object.userData.levelId??d.levels?.[hit.object.userData.level??0]?.id??null),surfaceId:hit.object.userData.surfaceId??null,rampId:hit.object.userData.rampId??null});
+ // Every surface a token could be put down on along the pointer's ray, nearest first: the one `pick` gives, what lies
+ // under it (the hall floor under the gallery that overhangs it), and the floors the Height control hides (`hidden`).
+ // A dragged walker is put down on the one its walk reaches (surface-choice.mjs; Medpilis, October 25, 2026).
+ const pickAll=e=>{
+  const rect=canvas.getBoundingClientRect();mouse.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(mouse,camera);
+  const shown=pickSurfaces.filter(v=>v.visible&&v!==terrain),cut=pickSurfaces.filter(v=>!v.visible&&v!==terrain&&!v.userData.isRoof);
+  const hits=raycaster.intersectObjects([...shown,...cut],false).filter(h=>!h.object.userData.surfaceId||h.face?.normal.y>.5);
+  const ground=terrainCast(raycaster.ray);if(ground)hits.push(ground);
+  return hits.sort((a,b)=>a.distance-b.distance).map(h=>({...surfacePoint(h),hidden:!h.object.visible}));
  };
 
  // Wheel zoom travels toward the point under the pointer and keeps that point
@@ -872,7 +886,7 @@ export async function createSceneView({canvas,sceneData:d,groundPicture=null,isC
  const planeRay=new THREE.Raycaster(),planeNdc=new THREE.Vector2();
  function pointOnPlane(clientX,clientY,y){const rect=canvas.getBoundingClientRect();planeNdc.set((clientX-rect.left)/rect.width*2-1,-(clientY-rect.top)/rect.height*2+1);planeRay.setFromCamera(planeNdc,camera);
   const o=planeRay.ray.origin,dir=planeRay.ray.direction;if(Math.abs(dir.y)<1e-6)return null;const t=(y-o.y)/dir.y;if(t<=0)return null;return {x:o.x+dir.x*t,y:o.z+dir.z*t};}
- return {renderer,scene,guideScene,camera,controls,pick,zoomAt,pointOnPlane,viewport:()=>({width:viewSize.width,height:viewSize.height}),setField,groundHeightAt:heightAt,grabStart,grabMove,orbit:(dx,dy)=>controls.orbit(dx,dy),castRay:castSurfaces,
+ return {renderer,scene,guideScene,camera,controls,pick,pickAll,zoomAt,pointOnPlane,viewport:()=>({width:viewSize.width,height:viewSize.height}),setField,groundHeightAt:heightAt,grabStart,grabMove,orbit:(dx,dy)=>controls.orbit(dx,dy),castRay:castSurfaces,
   setTokenBodiesVisible(value){tokenBodies.visible=tokenHeads.visible=!!value;},
   setTokens(tokens,id){tokenRecords=tokens;selectedId=id;updateTokenMatrices();},
   // Tokens whose mini floats with no base (minis.json noBase): no base or ring is drawn under them.

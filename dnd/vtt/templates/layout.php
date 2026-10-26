@@ -11,6 +11,8 @@ require_once __DIR__ . '/../lib/RubbleImages.php';
 $moduleMap = ModuleAssets::importMap(__DIR__ . '/../assets/js', $assetVersion);
 // The 3D board's modules are versioned like the rest; 'three' is its rendering library.
 $moduleMap['imports'] += ModuleAssets::importMap(__DIR__ . '/../board3d', $assetVersion, '/dnd/vtt/board3d/')['imports'];
+// The character sheet's shared parts (the side panel draws the same sheet parts as the full sheet).
+$moduleMap['imports'] += ModuleAssets::importMap(__DIR__ . '/../../character_sheet/parts', $assetVersion, '/dnd/character_sheet/parts/')['imports'];
 $moduleMap['imports']['three'] = '/dnd/vtt/board3d/lib/three.module.js?v=' . $assetVersion;
 // Pictures laid over broken walls: whatever is in the rubble folder, found by file name.
 $rubbleImages = RubbleImages::urls(__DIR__ . '/../assets/images/rubble', 'assets/images/rubble');
@@ -49,6 +51,9 @@ require_once __DIR__ . '/../../includes/strix-nav.php';
     <link rel="stylesheet" href="assets/css/board.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="assets/css/chat.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="../css/ask-test.css?v=<?= $assetVersion ?>" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap" />
+    <link rel="stylesheet" href="/dnd/character_sheet/parts/sheet-parts.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="assets/css/character-summary.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="assets/css/settings.css?v=<?= $assetVersion ?>" />
     <link rel="stylesheet" href="assets/css/fog-of-war.css?v=<?= $assetVersion ?>" />

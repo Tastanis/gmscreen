@@ -81,8 +81,10 @@ const SCRIPT_DELAY_MS = 250;
 const PAGES = [
   { name: 'the map, as the Director', as: 'GM', path: '/dnd/vtt/', started: () => document.documentElement.dataset.vttStarted === '1' },
   { name: 'the map, as a player', as: 'cal', path: '/dnd/vtt/', started: () => document.documentElement.dataset.vttStarted === '1' },
+  // Changed on purpose (October 2026): the sheet was rebuilt (app.js draws it from parts/); its status bar is drawn
+  // once it has started. The classic sheet (classic.php) was retired when the new one was approved.
   { name: 'the character sheet, as its player', as: 'cal', path: '/dnd/character_sheet/index.php',
-    started: () => document.documentElement.dataset.sheetStarted === '1' && (document.querySelector('#hero-pane, .hero-pane')?.children.length || 0) > 0 },
+    started: () => document.documentElement.dataset.sheetStarted === '1' && Boolean(document.querySelector('[data-sp-status]')) },
   { name: 'the main page, as the Director', as: 'GM', path: '/dnd/dashboard.php', started: () => document.readyState === 'complete' && document.body.children.length > 0 },
   { name: 'the main page, as a player', as: 'cal', path: '/dnd/dashboard.php', started: () => document.readyState === 'complete' && document.body.children.length > 0 },
 ];

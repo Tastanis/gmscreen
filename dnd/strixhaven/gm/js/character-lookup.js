@@ -2,6 +2,15 @@
 // Character Lookup System for Rich Text Editor - FIXED VERSION WITH BETTER ERROR HANDLING
 // =============================================================================
 
+// The campaign data API (api/campaign.php), found from this script's own address so it works from any page.
+var CHARACTER_LOOKUP_API = (function () {
+    try {
+        return new URL('../../../api/campaign.php', document.currentScript.src).href;
+    } catch (e) {
+        return '../../api/campaign.php';
+    }
+})();
+
 class CharacterLookup {
     constructor() {
         this.allCharacters = [];
@@ -52,22 +61,25 @@ class CharacterLookup {
             const formData = new FormData();
             formData.append('action', 'get_all_characters');
             
-            // Try current page first, then fallback to dashboard.php
+            // Try current page first, then the campaign data API (api/campaign.php, same reply shape)
             let response;
             try {
                 response = await fetch(window.location.pathname, {
                     method: 'POST',
                     body: formData
                 });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
             } catch (error) {
-                console.log('Failed to fetch from current page, trying dashboard.php...');
+                console.log('Failed to fetch from current page, trying the campaign API...');
                 try {
-                    response = await fetch('../../dashboard.php', {
+                    response = await fetch(CHARACTER_LOOKUP_API, {
                         method: 'POST',
                         body: formData
                     });
                 } catch (dashboardError) {
-                    console.log('Failed to fetch from dashboard.php, trying index.php...');
+                    console.log('Failed to fetch from the campaign API, trying index.php...');
                     response = await fetch('index.php', {
                         method: 'POST',
                         body: formData

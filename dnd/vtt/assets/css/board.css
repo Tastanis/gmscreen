@@ -4210,6 +4210,29 @@ body.vtt-character-ability-tray-is-open .vtt-board__malice {
   transform: scale(0.95);
 }
 
+/* The one button a banner may carry (the new fight's Undo). */
+.vtt-condition-banner__action {
+  align-self: flex-start;
+  appearance: none;
+  background: rgba(15, 23, 42, 0.35);
+  border: 1px solid rgba(226, 232, 240, 0.55);
+  border-radius: 6px;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  padding: 0.2rem 0.75rem;
+}
+
+.vtt-condition-banner__action:hover {
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.vtt-condition-banner__action:focus-visible {
+  outline: 2px solid rgba(191, 219, 254, 0.8);
+  outline-offset: 2px;
+}
+
 .vtt-condition-tooltip {
   position: fixed;
   z-index: 9999;

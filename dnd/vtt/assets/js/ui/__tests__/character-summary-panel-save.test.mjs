@@ -97,7 +97,7 @@ test('the panel sends amounts, never the numbers it holds', async () => {
   for (const [change, amount, action, expectedFields] of cases) {
     await withFakeSaveEnvironment(async ({ requests }) => {
       const saved = await __testing.saveCharacterSummaryResources(sheet, { characterId: 'sharon', change, amount, broadcast: false });
-      assert.equal(saved, true);
+      assert.deepEqual(saved, { success: true }, 'the server answer is returned');
       assert.equal(requests.length, 1);
       const body = requests[0].options.body;
       assert.equal(body.get('action'), action);
@@ -109,7 +109,7 @@ test('the panel sends amounts, never the numbers it holds', async () => {
   }
   // A change of nothing asks nothing; an unknown kind of change saves nothing (there is no whole-sheet save to fall to).
   await withFakeSaveEnvironment(async ({ requests }) => {
-    assert.equal(await __testing.saveCharacterSummaryResources(sheet, { characterId: 'sharon', change: 'surges', amount: 0 }), true);
+    assert.deepEqual(await __testing.saveCharacterSummaryResources(sheet, { characterId: 'sharon', change: 'surges', amount: 0 }), { success: true });
     assert.equal(await __testing.saveCharacterSummaryResources(sheet, { characterId: 'sharon', change: 'sheet', amount: 3 }), false);
     assert.equal(requests.length, 0);
     assert.equal(__testing.saveCharacterSummarySheet, undefined);

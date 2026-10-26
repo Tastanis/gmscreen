@@ -63,16 +63,17 @@ function syncRelationshipsToCharacters($student) {
                 }
 
                 // Look for existing relationship with this student
+                // (by the student's id, or an older entry with no id by the student's name: data-utils.php)
                 $found = false;
-                foreach ($charactersData[$pc]['relationships'] as &$rel) {
-                    if (isset($rel['student_id']) && $rel['student_id'] === $studentId) {
-                        $rel['points'] = $points;
-                        $rel['extra'] = $notes;
-                        $rel['npc_name'] = $studentName;
-                        $found = true;
-                        $updated = true;
-                        break;
-                    }
+                $at = findStudentRelationshipIndex($charactersData[$pc]['relationships'], (string) $studentId, (string) $studentName);
+                if ($at >= 0) {
+                    $rel = &$charactersData[$pc]['relationships'][$at];
+                    $rel['points'] = $points;
+                    $rel['extra'] = $notes;
+                    $rel['npc_name'] = $studentName;
+                    $rel['student_id'] = $studentId;
+                    $found = true;
+                    $updated = true;
                 }
                 unset($rel);
 

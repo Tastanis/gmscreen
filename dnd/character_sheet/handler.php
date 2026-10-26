@@ -68,6 +68,9 @@ function getDefaultCharacterEntry() {
                 'currentStamina' => 0,
                 'currentRecoveries' => 0,
                 'recoveryValue' => '',
+                // Temporary Stamina, its own number (Director's ruling, October 2026): damage takes it first,
+                // gaining it keeps the higher, healing never touches it, and it ends with combat.
+                'tempStamina' => 0,
             ),
             'bonuses' => array(),
             'hirelings' => array(),
@@ -176,8 +179,10 @@ function normalize_vitals($vitals, $defaults) {
     $normalized['recoveriesMax'] = isset($vitals['recoveriesMax']) ? $vitals['recoveriesMax'] : ($legacyRecoveries !== null ? $legacyRecoveries : $defaults['recoveriesMax']);
     $normalized['currentStamina'] = isset($vitals['currentStamina']) ? $vitals['currentStamina'] : ($legacyStamina !== null ? $legacyStamina : $defaults['currentStamina']);
     $normalized['currentRecoveries'] = isset($vitals['currentRecoveries']) ? $vitals['currentRecoveries'] : ($legacyRecoveries !== null ? $legacyRecoveries : $defaults['currentRecoveries']);
+    $normalized['tempStamina'] = isset($vitals['tempStamina']) ? $vitals['tempStamina'] : 0;
 
-    return $normalized;
+    // Stamina above the maximum (how temporary Stamina used to be kept) becomes temporary Stamina. Idempotent.
+    return SheetChanges::migrateTempVitals($normalized);
 }
 
 function normalize_skills($skills) {
@@ -458,7 +463,34 @@ function saveCharacterSheetData($dataDir, $dataFile, $data) {
     if ($written && is_array($before)) {
         SheetChanges::record($dataDir, (string) ($GLOBALS['currentUser'] ?? ''), (string) ($GLOBALS['action'] ?? ''), $before, $data, array_keys($data));
     }
+    // Each hero whose sheet changed gets a new revision, so pages showing it reload (live editing, October 2026).
+    if ($written) sheet_push_update(SheetLive::noteWrite($dataDir, $dataFile, $before, $data));
     return $written;
+}
+
+/**
+ * When the chat's Pusher is set up, pages with a changed hero's sheet open are told at once ("sheet-updated" on the
+ * chat channel, with no sheet data: they read it themselves). Without it they see the change at their next poll.
+ */
+function sheet_push_update(array $revisions) {
+    if (!$revisions || !is_file(__DIR__ . '/../includes/chat_pusher.php')) return;
+    // After the answer has gone, so a slow Pusher never holds up a save (or a hit on a token).
+    register_shutdown_function(static function () use ($revisions) {
+        if (function_exists('fastcgi_finish_request')) @fastcgi_finish_request();
+        sheet_push_now($revisions);
+    });
+}
+
+function sheet_push_now(array $revisions) {
+    try {
+        require_once __DIR__ . '/../includes/chat_pusher.php';
+        $config = function_exists('loadChatPusherConfig') ? loadChatPusherConfig() : null;
+        if (!is_array($config) || ($config['app_id'] ?? '') === '' || ($config['key'] ?? '') === '' || ($config['secret'] ?? '') === '') return;
+        $client = new PusherClient((string) $config['app_id'], (string) $config['key'], (string) $config['secret'], (string) ($config['cluster'] ?? 'us3'), 2);
+        $client->trigger((string) ($config['chat_channel'] ?? 'dnd-chat'), 'sheet-updated', array('revisions' => $revisions));
+    } catch (Throwable $error) {
+        error_log('[Sheet] Pusher notice failed: ' . $error->getMessage());
+    }
 }
 
 function acquireCharacterSheetWriteLock($dataDir) {
@@ -476,6 +508,16 @@ function acquireCharacterSheetWriteLock($dataDir) {
     }
 
     return $handle;
+}
+
+/** The name shown to others for a signed-in user ("Cal is editing"). */
+function sheet_user_label($user) {
+    $user = (string) $user;
+    $names = is_file(__DIR__ . '/../includes/chat_participants.php') ? @include __DIR__ . '/../includes/chat_participants.php' : null;
+    if (is_array($names)) {
+        foreach ($names as $id => $label) if (strcasecmp((string) $id, $user) === 0) return (string) $label;
+    }
+    return $user === '' ? 'Someone' : ucfirst($user);
 }
 
 function sendJsonResponse($payload) {
@@ -497,7 +539,7 @@ if ($requestMethod !== 'POST' && $requestMethod !== 'GET') {
 $requestData = $requestMethod === 'POST' ? $_POST : $_GET;
 $action = isset($requestData['action']) ? $requestData['action'] : '';
 
-if (!in_array($action, array('operation-status', 'summary', 'load', 'sync-stamina', 'sync-surges', 'sync-token-traits', 'sync-hero-tokens', 'fetch-victories', 'party-vitals'), true) && $requestMethod !== 'POST') {
+if (!in_array($action, array('operation-status', 'summary', 'load', 'live', 'sync-stamina', 'sync-surges', 'sync-token-traits', 'sync-hero-tokens', 'fetch-victories', 'party-vitals'), true) && $requestMethod !== 'POST') {
     sendJsonResponse(array('success' => false, 'error' => 'Invalid request method'));
 }
 
@@ -519,7 +561,7 @@ if ($action === 'party-vitals') {
             $max = SheetChanges::whole($vitals['staminaMax'] ?? null);
             // A sheet with no Stamina maximum has no Stamina to show: the map shows a dash for it, never 0.
             $party[$character] = $max !== null && $max > 0
-                ? array('hasStamina' => true, 'currentStamina' => SheetChanges::whole($vitals['currentStamina'] ?? null) ?? 0, 'staminaMax' => $max)
+                ? array('hasStamina' => true, 'currentStamina' => SheetChanges::whole($vitals['currentStamina'] ?? null) ?? 0, 'staminaMax' => $max, 'tempStamina' => SheetChanges::temp($allSheets[$character]))
                 : array('hasStamina' => false);
         }
         sendJsonResponse(array('success' => true, 'stamp' => is_file($dataFile) ? filemtime($dataFile) . '-' . filesize($dataFile) : 'none', 'party' => $party));
@@ -561,6 +603,23 @@ $allowVttFieldSync =
     && isset($requestData['source'])
     && $requestData['source'] === 'vtt'
     && $currentUser !== '';
+// The party's hero tokens from the map's side panel: one pool shared by the party, so a player using another
+// hero's panel spends or resets the same two tokens. Same narrow rule as the other map writes above.
+$allowVttHeroTokenSync =
+    $action === 'sync-hero-tokens'
+    && $requestMethod === 'POST'
+    && isset($requestData['source'])
+    && $requestData['source'] === 'vtt'
+    && $currentUser !== '';
+// A hero's conditions as its token now has them (the map writes the sheet's mirror of the token's list, October
+// 2026). Any signed-in map user, as for Stamina: whoever changed the token. A sheet's own edit (source sheet, the
+// hero not on the map) keeps the sheet's rule: the hero's player or the Director.
+$allowVttConditionSync =
+    $action === 'sync-conditions'
+    && $requestMethod === 'POST'
+    && isset($requestData['source'])
+    && $requestData['source'] === 'vtt'
+    && $currentUser !== '';
 $allowVttTraitRead =
     $action === 'sync-token-traits'
     && $requestMethod === 'GET'
@@ -572,8 +631,11 @@ $allowPublicSummaryRead =
     && $currentUser !== '';
 
 $allowOperationRead = $action === 'operation-status' && $requestMethod === 'GET' && $currentUser !== '';
+// The live revision and locks of a hero's sheet: any signed-in user may read them (the map's side panel shows any
+// hero, as the summary does). Taking a lock is a write: the sheet's own player or the Director.
+$allowLiveRead = $action === 'live' && $requestMethod === 'GET' && $currentUser !== '';
 
-if (!$is_gm && $requestedCharacter !== strtolower($currentUser) && !$allowVttStaminaSync && !$allowVttSurgeSync && !$allowVttFieldSync && !$allowVttTraitRead && !$allowPublicSummaryRead && !$allowOperationRead) {
+if (!$is_gm && $requestedCharacter !== strtolower($currentUser) && !$allowVttStaminaSync && !$allowVttSurgeSync && !$allowVttFieldSync && !$allowVttHeroTokenSync && !$allowVttConditionSync && !$allowVttTraitRead && !$allowPublicSummaryRead && !$allowOperationRead && !$allowLiveRead) {
     sendJsonResponse(array('success' => false, 'error' => 'Permission denied'));
 }
 
@@ -581,7 +643,7 @@ try {
 $characterSheetWriteLock = null;
 if (
     $requestMethod === 'POST'
-    && in_array($action, array('save-fields', 'respite', 'sync-stamina', 'sync-surges', 'sync-resource', 'sync-vitals', 'sync-victories', 'sync-hero-tokens'), true)
+    && in_array($action, array('save-fields', 'respite', 'sync-stamina', 'sync-surges', 'sync-resource', 'sync-vitals', 'sync-victories', 'sync-hero-tokens', 'sync-conditions'), true)
 ) {
     // Every mutation below is a read-modify-write of shared JSON. Hold one
     // request-wide lock so simultaneous player autosaves and VTT resource
@@ -590,6 +652,27 @@ if (
 }
 
 switch ($action) {
+    case 'live':
+        // A page's cheap poll: the hero's revision (it reloads when it moves) and who holds which field.
+        header('Cache-Control: no-store');
+        $live = SheetLive::state($dataDir, $dataFile, $requestedCharacter, (string) $currentUser);
+        sendJsonResponse(array('success' => true, 'character' => $requestedCharacter, 'revision' => $live['revision'], 'locks' => $live['locks'], 'me' => (string) $currentUser));
+        break;
+
+    case 'lock':
+    case 'heartbeat':
+    case 'unlock':
+        // While somebody edits a field it is locked on other screens: released when they leave it, or 20 seconds
+        // after the last heartbeat (a page sends one every few seconds while the field is in use).
+        $field = SheetLive::field($requestData['field'] ?? null);
+        if ($field === null) throw new InvalidArgumentException('Missing or invalid field.');
+        if ($action === 'unlock') {
+            sendJsonResponse(array('success' => true, 'released' => SheetLive::unlock($dataDir, $requestedCharacter, $field, (string) $currentUser)));
+        }
+        $taken = SheetLive::lock($dataDir, $requestedCharacter, $field, (string) $currentUser, sheet_user_label($currentUser));
+        sendJsonResponse(array('success' => $taken['locked'], 'field' => $field) + $taken + ($taken['locked'] ? array() : array('error' => ($taken['holder']['name'] ?? 'Someone') . ' is editing this.')));
+        break;
+
     case 'operation-status':
         if ($requestMethod !== 'GET') throw new InvalidArgumentException('Operation status requires GET.');
         $operationId = CharacterWriteReceipts::operationId($requestData['operationId'] ?? null);
@@ -608,7 +691,8 @@ switch ($action) {
         sendJsonResponse(array(
             'success' => true,
             'character' => $requestedCharacter,
-            'data' => $sheet
+            'data' => $sheet,
+            'revision' => SheetLive::revision($dataDir, $dataFile, $requestedCharacter),
         ));
         break;
 
@@ -617,7 +701,7 @@ switch ($action) {
         $heroTokens = loadHeroTokens($dataDir, $heroTokenFile);
         $sheet = $allSheets[$requestedCharacter];
         $sheet['hero']['heroTokens'] = $heroTokens;
-        sendJsonResponse(array('success' => true, 'data' => $sheet));
+        sendJsonResponse(array('success' => true, 'data' => $sheet, 'revision' => SheetLive::revision($dataDir, $dataFile, $requestedCharacter)));
         break;
 
     case 'save':
@@ -649,6 +733,19 @@ switch ($action) {
         if (!$changes) {
             sendJsonResponse(array('success' => true, 'applied' => 0));
         }
+        // Live editing: a field somebody else changed since this page last read the sheet ("baseRevision"), or
+        // holds locked, is not overwritten. The page is told and reloads. A page that sends no revision (one from
+        // before this change) is checked for locks only.
+        $baseRevision = isset($_POST['baseRevision']) && $_POST['baseRevision'] !== '' ? SheetChanges::whole($_POST['baseRevision']) : null;
+        $refused = SheetLive::check($dataDir, $dataFile, $requestedCharacter, $changes, $baseRevision, (string) $currentUser);
+        if ($refused !== null) {
+            sendJsonResponse(array(
+                'success' => false,
+                'error' => isset($refused['locked'])
+                    ? (($refused['holder']['name'] ?? 'Someone') . ' is editing that. Nothing was changed.')
+                    : 'Someone else changed this since your page last read it. Nothing was changed; the sheet will reload.',
+            ) + $refused);
+        }
         $changedSheet = SheetChanges::apply($existingSheet, $changes);
         $receipts = $existingSheet['_vttOperations'] ?? null;
         $normalizedSheet = mergeCharacterDefaults($changedSheet, getDefaultCharacterEntry());
@@ -666,7 +763,8 @@ switch ($action) {
         $allSheets[$requestedCharacter] = $normalizedSheet;
         $saveResponse = CharacterWriteReceipts::record($allSheets, $saveOperationId, $currentUser, $requestedCharacter, $action, $saveInput, array('success' => true, 'applied' => count($changes)));
         if (saveCharacterSheetData($dataDir, $dataFile, $allSheets)) {
-            sendJsonResponse($saveResponse);
+            // A page that keeps a revision is told the new one (it reloads if somebody else wrote in between).
+            sendJsonResponse($baseRevision === null ? $saveResponse : $saveResponse + array('revision' => SheetLive::revision($dataDir, $dataFile, $requestedCharacter)));
         } else {
             sendJsonResponse(array('success' => false, 'error' => 'Failed to save sheet'));
         }
@@ -716,13 +814,16 @@ switch ($action) {
             $currentStamina = $staminaDelta === null && isset($requestData['currentStamina']) && $requestData['currentStamina'] !== ''
                 ? (int)$requestData['currentStamina']
                 : null;
+            // The token's temporary Stamina, as it now reads (the token worked out the hit or the gain).
+            $tempStamina = isset($requestData['tempStamina']) && $requestData['tempStamina'] !== '' ? SheetChanges::whole($requestData['tempStamina']) : null;
+            if ($tempStamina !== null) $tempStamina = max(0, min(1000000, $tempStamina));
 
-            if ($currentStamina === null && $staminaDelta === null) {
+            if ($currentStamina === null && $staminaDelta === null && $tempStamina === null) {
                 sendJsonResponse(array('success' => false, 'error' => 'Missing stamina values'));
             }
 
             $staminaOperationId = CharacterWriteReceipts::operationId($requestData['operationId'] ?? null);
-            $staminaInput = ['currentStamina'=>$currentStamina, 'delta'=>$staminaDelta];
+            $staminaInput = ['currentStamina'=>$currentStamina, 'delta'=>$staminaDelta, ...($tempStamina !== null ? ['tempStamina'=>$tempStamina] : [])];
             $replayed = CharacterWriteReceipts::lookup($allSheets, $staminaOperationId, $currentUser, $requestedCharacter, $action, $staminaInput);
             if ($replayed !== null) sendJsonResponse($replayed);
 
@@ -732,6 +833,8 @@ switch ($action) {
                 // A token that had no number before has no amount to give: what it now reads is set.
                 $sheet['hero']['vitals']['currentStamina'] = $currentStamina;
             }
+            if ($tempStamina !== null) $sheet['hero']['vitals']['tempStamina'] = $tempStamina;
+            $sheet = SheetChanges::migrateTemp($sheet);
 
             $allSheets[$requestedCharacter] = $sheet;
 
@@ -742,9 +845,12 @@ switch ($action) {
             'name' => isset($sheet['hero']['name']) && $sheet['hero']['name'] !== '' ? $sheet['hero']['name'] : $requestedCharacter,
             'staminaMax' => isset($sheet['hero']['vitals']['staminaMax']) ? $sheet['hero']['vitals']['staminaMax'] : 0,
             'currentStamina' => isset($sheet['hero']['vitals']['currentStamina']) ? $sheet['hero']['vitals']['currentStamina'] : 0,
+            'tempStamina' => SheetChanges::temp($sheet),
             // False for a sheet with no Stamina maximum: the map then shows a dash on its token, never 0.
             'hasStamina' => (SheetChanges::whole($sheet['hero']['vitals']['staminaMax'] ?? null) ?? 0) > 0,
         );
+        // A token placed (or linked) with no conditions takes the sheet's (read by the map leniently: old free text).
+        if ($requestMethod === 'GET') $response['conditions'] = is_array($sheet['hero']['conditions'] ?? null) ? array_values($sheet['hero']['conditions']) : array();
 
         if ($requestMethod === 'POST') {
             $response = CharacterWriteReceipts::record($allSheets, $staminaOperationId, $currentUser, $requestedCharacter, $action, $staminaInput, $response);
@@ -753,6 +859,88 @@ switch ($action) {
             }
         }
         sendJsonResponse($response);
+        break;
+
+    case 'sync-conditions':
+        // The hero's conditions, the whole list (SheetConditions). Two writers:
+        // - source vtt: the map, after the hero's token changed (or the sheet page after it changed the token), with
+        //   the token's id and revision. The list is the token's: a write from an older revision of the same token
+        //   than the one already mirrored is answered, not taken (two pages, or a slow request, never roll it back).
+        // - source sheet: the sheet page or the side panel while the hero has no token on the map, with the revision
+        //   the page last read. If somebody changed the conditions since, nothing is written and the page re-reads.
+        // - a delta (late October 2026, what pages send now): only what one change did, never a whole list. With the
+        //   token's id and revision each condition's change is taken once and never an older one
+        //   (SheetConditions::guard); without them (the Director's new-fight wipe and its undo) it is applied as it
+        //   comes. Whole lists (below) are still read, for a page open from before.
+        if ($requestMethod !== 'POST') throw new InvalidArgumentException('Conditions are written with POST.');
+        if (isset($requestData['delta'])) {
+            if (($requestData['source'] ?? '') !== 'vtt' && !$is_gm && $requestedCharacter !== strtolower((string) $currentUser)) {
+                sendJsonResponse(array('success' => false, 'error' => 'Permission denied'));
+            }
+            $ops = SheetConditions::readOps(json_decode((string) $requestData['delta'], true));
+            $allSheets = loadCharacterSheetData($dataDir, $dataFile, $characters);
+            $sheet = $allSheets[$requestedCharacter];
+            $stored = SheetConditions::lenient($sheet['hero']['conditions'] ?? array());
+            $mirrored = is_array($sheet['hero']['conditionsSource'] ?? null) ? $sheet['hero']['conditionsSource'] : null;
+            $placementId = substr(trim((string) ($requestData['placementId'] ?? '')), 0, 128);
+            $tokenRevision = SheetChanges::whole($requestData['revision'] ?? null);
+            $source = $mirrored;
+            if ($placementId !== '' && $tokenRevision !== null) {
+                [$ops, $source] = SheetConditions::guard($mirrored, $placementId, $tokenRevision, $ops);
+            }
+            $next = SheetConditions::applyOps($stored, $ops);
+            if (SheetConditions::same($next, $stored) && $source == $mirrored) {
+                sendJsonResponse(array('success' => true, 'applied' => false, 'conditions' => $next, 'revision' => SheetLive::revision($dataDir, $dataFile, $requestedCharacter)));
+            }
+            $sheet['hero']['conditions'] = $next;
+            if ($source !== null) $sheet['hero']['conditionsSource'] = $source;
+            $allSheets[$requestedCharacter] = $sheet;
+            if (!saveCharacterSheetData($dataDir, $dataFile, $allSheets)) {
+                sendJsonResponse(array('success' => false, 'error' => 'Failed to save conditions'));
+            }
+            sendJsonResponse(array('success' => true, 'applied' => !SheetConditions::same($next, $stored), 'conditions' => $next, 'revision' => SheetLive::revision($dataDir, $dataFile, $requestedCharacter)));
+        }
+        $incoming = json_decode((string) ($requestData['conditions'] ?? ''), true);
+        if (!is_array($incoming) || !array_is_list($incoming)) throw new InvalidArgumentException('Missing or invalid conditions.');
+        $next = SheetConditions::normalize($incoming);
+        $fromMap = ($requestData['source'] ?? '') === 'vtt';
+        $allSheets = loadCharacterSheetData($dataDir, $dataFile, $characters);
+        $sheet = $allSheets[$requestedCharacter];
+        $stored = $sheet['hero']['conditions'] ?? array();
+        $mirrored = is_array($sheet['hero']['conditionsSource'] ?? null) ? $sheet['hero']['conditionsSource'] : null;
+        $source = null;
+        if ($fromMap) {
+            $placementId = substr(trim((string) ($requestData['placementId'] ?? '')), 0, 128);
+            $tokenRevision = SheetChanges::whole($requestData['revision'] ?? null);
+            if ($placementId !== '' && $tokenRevision !== null) {
+                if ($mirrored !== null && ($mirrored['placementId'] ?? '') === $placementId && (int) ($mirrored['revision'] ?? 0) >= $tokenRevision) {
+                    sendJsonResponse(array('success' => true, 'applied' => false, 'stale' => true, 'conditions' => SheetConditions::normalize($stored),
+                        'revision' => SheetLive::revision($dataDir, $dataFile, $requestedCharacter)));
+                }
+                $source = array('placementId' => $placementId, 'revision' => $tokenRevision);
+            }
+        } else {
+            $baseRevision = isset($requestData['baseRevision']) && $requestData['baseRevision'] !== '' ? SheetChanges::whole($requestData['baseRevision']) : null;
+            $refused = SheetLive::check($dataDir, $dataFile, $requestedCharacter, array(array('path' => array('hero', 'conditions'), 'value' => $next)), $baseRevision, (string) $currentUser);
+            if ($refused !== null) {
+                sendJsonResponse(array(
+                    'success' => false,
+                    'error' => isset($refused['locked']) ? (($refused['holder']['name'] ?? 'Someone') . ' is editing that. Nothing was changed.') : 'The conditions changed elsewhere. Nothing was changed; the sheet will reload.',
+                ) + $refused);
+            }
+        }
+        $sameSource = $source === null ? $mirrored === null || $fromMap : $mirrored == $source;
+        if ($stored === $next && $sameSource) {
+            sendJsonResponse(array('success' => true, 'applied' => false, 'conditions' => $next, 'revision' => SheetLive::revision($dataDir, $dataFile, $requestedCharacter)));
+        }
+        $sheet['hero']['conditions'] = $next;
+        if ($source !== null) $sheet['hero']['conditionsSource'] = $source;
+        elseif (!$fromMap) unset($sheet['hero']['conditionsSource']);
+        $allSheets[$requestedCharacter] = $sheet;
+        if (!saveCharacterSheetData($dataDir, $dataFile, $allSheets)) {
+            sendJsonResponse(array('success' => false, 'error' => 'Failed to save conditions'));
+        }
+        sendJsonResponse(array('success' => true, 'applied' => true, 'conditions' => $next, 'revision' => SheetLive::revision($dataDir, $dataFile, $requestedCharacter)));
         break;
 
     case 'sync-surges':
@@ -906,15 +1094,45 @@ switch ($action) {
             $deltaInput = ['staminaDelta'=>$amount];
             $replayed = CharacterWriteReceipts::lookup($allSheets, $deltaOperationId, $currentUser, $requestedCharacter, $action, $deltaInput);
             if ($replayed !== null) sendJsonResponse($replayed);
-            $sheet = SheetChanges::move($sheet, 'hero.vitals.currentStamina', $amount);
+            // Damage takes temporary Stamina first; healing stops at the maximum and leaves temporary Stamina alone.
+            $sheet = $amount < 0 ? SheetChanges::damage($sheet, -$amount) : SheetChanges::heal($sheet, $amount);
             $allSheets[$requestedCharacter] = $sheet;
             $response = CharacterWriteReceipts::record($allSheets, $deltaOperationId, $currentUser, $requestedCharacter, $action, $deltaInput, [
                 'success'=>true,
                 'currentStamina'=>SheetChanges::counter($sheet, 'hero.vitals.currentStamina'),
                 'currentRecoveries'=>SheetChanges::counter($sheet, 'hero.vitals.currentRecoveries'),
+                'tempStamina'=>SheetChanges::temp($sheet),
             ]);
             if (!saveCharacterSheetData($dataDir, $dataFile, $allSheets)) {
                 sendJsonResponse(array('success' => false, 'error' => 'Failed to save vital values'));
+            }
+            sendJsonResponse($response);
+        }
+        // Temporary Stamina gained (the higher of held and gained), or set outright (the end of combat sets 0).
+        if ((isset($requestData['gainTemp']) && $requestData['gainTemp'] !== '') || (isset($requestData['tempStamina']) && $requestData['tempStamina'] !== '')) {
+            $gain = isset($requestData['gainTemp']) && $requestData['gainTemp'] !== '' ? SheetChanges::whole($requestData['gainTemp']) : null;
+            $setTo = $gain === null ? SheetChanges::whole($requestData['tempStamina']) : null;
+            $asked = $gain ?? $setTo;
+            if ($asked === null || $asked < 0 || $asked > 1000000) throw new InvalidArgumentException('Invalid temporary Stamina amount');
+            $tempOperationId = CharacterWriteReceipts::operationId($requestData['operationId'] ?? null);
+            $tempInput = $gain !== null ? ['gainTemp'=>$gain] : ['tempStamina'=>$setTo];
+            $replayed = CharacterWriteReceipts::lookup($allSheets, $tempOperationId, $currentUser, $requestedCharacter, $action, $tempInput);
+            if ($replayed !== null) sendJsonResponse($replayed);
+            if ($gain !== null) {
+                $sheet = SheetChanges::gainTemp($sheet, $gain);
+            } else {
+                $sheet = SheetChanges::migrateTemp($sheet);
+                $sheet['hero']['vitals']['tempStamina'] = $setTo;
+            }
+            $allSheets[$requestedCharacter] = $sheet;
+            $response = CharacterWriteReceipts::record($allSheets, $tempOperationId, $currentUser, $requestedCharacter, $action, $tempInput, [
+                'success'=>true,
+                'currentStamina'=>SheetChanges::counter($sheet, 'hero.vitals.currentStamina'),
+                'currentRecoveries'=>SheetChanges::counter($sheet, 'hero.vitals.currentRecoveries'),
+                'tempStamina'=>SheetChanges::temp($sheet),
+            ]);
+            if (!saveCharacterSheetData($dataDir, $dataFile, $allSheets)) {
+                sendJsonResponse(array('success' => false, 'error' => 'Failed to save temporary Stamina'));
             }
             sendJsonResponse($response);
         }

@@ -136,6 +136,16 @@ export function normalizePlacementEntry(entry) {
       entry?.stats?.hp ??
       null
   );
+  // Temporary Stamina is its own number (October 2026). A token from before kept it as Stamina above the
+  // maximum: the excess moves over and Stamina stops at the maximum (idempotent).
+  let tempStamina = Math.max(0, Number.parseInt(entry.tempStamina, 10) || 0);
+  {
+    const current = Number.parseInt(hp.current, 10), max = Number.parseInt(hp.max, 10);
+    if (Number.isFinite(current) && Number.isFinite(max) && max > 0 && current > max) {
+      tempStamina = Math.max(tempStamina, current - max);
+      hp.current = String(max);
+    }
+  }
   const showHp = Boolean(
     entry.showHp ?? entry.showHitPoints ?? entry?.overlays?.hitPoints?.visible ?? false
   );
@@ -193,6 +203,10 @@ export function normalizePlacementEntry(entry) {
     combatTeam,
     hidden,
   };
+
+  if (tempStamina > 0) {
+    normalized.tempStamina = tempStamina;
+  }
 
   if (monsterId) {
     normalized.monsterId = monsterId;

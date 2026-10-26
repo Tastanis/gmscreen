@@ -6,6 +6,7 @@ import { createRecoveryPolling } from './recovery-polling.js';
 import { createSerialQueue } from './serial-queue.js';
 import { copyDesigns } from '../state/shared-designs.js';
 import { currentUndoTag } from '../services/undo-client.js';
+import { rebasePlacementPatch } from './placement-rebase.js';
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value ?? {}));
@@ -393,6 +394,25 @@ export function createTokenMovementRuntime({
     return actions;
   }
 
+  // The user's patches again, as what they did, on the tokens as they now are; null when any clash is not one of
+  // conditions or Stamina (or the token is gone).
+  function rebaseActionsToOps(actions, before, fresh) {
+    const ops = [];
+    for (const action of actions) {
+      if (action.kind !== 'patch') return null;
+      const previous = placementFromSnapshot(before, action.sceneId, action.placementId);
+      const current = placementFromSnapshot(fresh, action.sceneId, action.placementId);
+      if (!previous || !current) return null;
+      const rebased = rebasePlacementPatch(previous, current, action.patch || {});
+      if (!rebased) return null;
+      ops.push({
+        type: 'placement.update', sceneId: action.sceneId, placementId: action.placementId, patch: rebased.patch,
+        movementKind: action.movementKind, path: action.path || [],
+      });
+    }
+    return ops.length ? ops : null;
+  }
+
   async function submitPlacementOps(ops, retry = true) {
     if (!placementsEnabled) return null;
     return enqueueTokenChange(() => sendPlacementOps(ops, retry));
@@ -425,6 +445,18 @@ export function createTokenMovementRuntime({
           );
         });
         if (!safe) {
+          // Somebody changed the same fields first (the Director and a player at once). Conditions and Stamina are
+          // reapplied as what this change did, onto the token as it now is, once (placement-rebase.js).
+          const rebased = rebaseActionsToOps(actions, before, conflictSnapshot);
+          if (rebased) {
+            try {
+              return await sendPlacementOps(rebased, false);
+            } catch (again) {
+              const failed = new Error('Your change clashed with another change to this token and was not saved, even on a second try. Check the token and try again.');
+              failed.cause = again;
+              throw failed;
+            }
+          }
           const changed = new Error('This token changed in the same fields. Review its current state before trying again.');
           changed.cause = error;
           throw changed;

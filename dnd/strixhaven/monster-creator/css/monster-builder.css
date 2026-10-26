@@ -3862,3 +3862,51 @@ body.modal-open {
     background: #efe4d4;
     border-top: 1px solid #b89c84;
 }
+
+/* ---- Upload Monsters (js/monster-upload.js) ---- */
+.monster-upload-toggle { background: #2d5d8a; border-color: #1f4466; }
+.monster-upload-toggle:hover { background: #367099; }
+.monster-upload-modal__dialog { width: min(860px, 94vw); }
+.monster-upload-drop {
+    display: flex; flex-direction: column; gap: 4px; align-items: center; text-align: center;
+    padding: 18px 14px; border: 2px dashed #b89c84; border-radius: 6px; background: #fffbf4;
+    color: #3f2b21; cursor: pointer; font-size: 14px;
+}
+.monster-upload-drop:hover, .monster-upload-drop:focus-visible, .monster-upload-drop.is-dragover { border-color: #5a3e30; background: #f6ecdd; outline: none; }
+.monster-upload-drop.is-busy { opacity: 0.6; cursor: progress; }
+.monster-upload-drop__hint { font-size: 12px; color: #6b5444; max-width: 560px; }
+.monster-upload-files { display: flex; flex-wrap: wrap; gap: 6px; }
+.monster-upload-file { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: #efe4d4; border: 1px solid #b89c84; color: #3f2b21; }
+.monster-upload-file--image { background: #e4eee6; border-color: #8fb398; }
+.monster-upload-status { font-size: 13px; color: #3f2b21; min-height: 1em; }
+.monster-upload-status--error { padding: 8px 10px; background: #f8e1dd; color: #6b1d12; border: 1px solid #c4564a; border-radius: 4px; white-space: pre-wrap; }
+.monster-upload-status--ok { color: #2f5a39; font-weight: 600; }
+.monster-upload-preview { display: flex; flex-direction: column; gap: 8px; }
+.monster-upload-summary { margin: 0; font-weight: 600; color: #2a1f17; }
+.monster-upload-note { margin: 0; font-size: 12.5px; color: #5a3e30; }
+.monster-upload-note--create { padding: 6px 8px; background: #fff3cf; border: 1px solid #d9b453; border-radius: 4px; }
+.monster-upload-default { font-size: 13px; color: #3f2b21; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.monster-upload-default select { max-width: 100%; padding: 3px 6px; }
+.monster-upload-rows { display: flex; flex-direction: column; gap: 6px; }
+.monster-upload-row { border: 1px solid #d6c3ae; border-radius: 5px; background: #fffbf4; padding: 8px 10px; }
+.monster-upload-row.is-blocked { border-color: #c4564a; background: #fdf1ef; }
+.monster-upload-row__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.monster-upload-row__head input { width: 16px; height: 16px; }
+.monster-upload-row__level { font-size: 12px; color: #6b5444; }
+.monster-upload-row__body { margin: 4px 0 0 24px; font-size: 12.5px; color: #3f2b21; display: flex; flex-direction: column; gap: 2px; }
+.monster-upload-row__match, .monster-upload-row__image { color: #6b5444; }
+.monster-upload-row__errors { margin: 2px 0; padding-left: 18px; color: #8a1f12; font-weight: 600; }
+.monster-upload-row__warnings { margin: 2px 0; padding-left: 18px; color: #7a5a12; }
+.monster-upload-row__body details summary { cursor: pointer; color: #7a5a12; }
+.monster-upload-badge { font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 3px; color: #fff; margin-left: 4px; }
+.monster-upload-badge--new { background: #2f6e3f; }
+.monster-upload-badge--update { background: #2d5d8a; }
+.monster-upload-badge--blocked { background: #a33224; }
+.monster-upload-badge--create { background: #a77a12; }
+.monster-upload-results { margin: 0; padding-left: 18px; font-size: 13px; }
+.monster-upload-result--skipped { color: #7a5a12; }
+.monster-upload-result--created, .monster-upload-result--updated { color: #2a1f17; }
+@media (max-width: 600px) {
+    .monster-upload-row__body { margin-left: 0; }
+}
+.monster-upload-note--warn { color: #7a5a12; font-weight: 600; }

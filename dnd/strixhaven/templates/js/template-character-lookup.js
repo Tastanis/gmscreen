@@ -2,6 +2,16 @@
 // Character Lookup System for Template Rich Text Editor
 // =============================================================================
 
+// Students, staff and locations come from the campaign data API (api/campaign.php), found from this script's own
+// address so it works from any page.
+var TEMPLATE_LOOKUP_API = (function () {
+    try {
+        return new URL('../../../api/campaign.php', document.currentScript.src).href;
+    } catch (e) {
+        return '../../api/campaign.php';
+    }
+})();
+
 class TemplateCharacterLookup {
     constructor() {
         this.allCharacters = [];
@@ -33,7 +43,7 @@ class TemplateCharacterLookup {
 
     async loadAllCharacters() {
         try {
-            const response = await fetch('../../dashboard.php', {
+            const response = await fetch(TEMPLATE_LOOKUP_API, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',

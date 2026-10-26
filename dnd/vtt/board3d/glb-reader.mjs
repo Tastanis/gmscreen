@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {MeshoptDecoder} from './lib/meshopt_decoder.module.js';
+import {shrinkBitmap} from './quality.mjs';
 
 // A small reader for plain .glb files (glTF 2.0 binary): meshes with POSITION, NORMAL, COLOR_0, TEXCOORD_0 and
 // indices, the node tree with its transforms, PNG/JPEG images stored in the file, metallic-roughness materials,
@@ -33,7 +34,8 @@ export async function readGlb(url){
   return new THREE.BufferAttribute(out,n,!!a.normalized);};
  const images=await Promise.all((json.images||[]).map(async img=>{
   if(img.bufferView===undefined)return null;const blob=new Blob([bytes(img.bufferView)],{type:img.mimeType||'image/png'});
-  return createImageBitmap(blob,{imageOrientation:'none',premultiplyAlpha:'none'});}));
+  // No picture larger than the map quality allows (quality.mjs).
+  return shrinkBitmap(await createImageBitmap(blob,{imageOrientation:'none',premultiplyAlpha:'none'}));}));
  const textures=new Map();
  const texture=(ref,srgb)=>{if(!ref)return null;const key=ref.index+':'+srgb+':'+JSON.stringify(ref.extensions?.KHR_texture_transform||0);if(textures.has(key))return textures.get(key);const t=json.textures[ref.index],image=images[t.extensions?.EXT_texture_webp?.source??t.source];if(!image)return null;
   const tex=new THREE.Texture(image);tex.flipY=false;const tt=ref.extensions?.KHR_texture_transform;if(tt){if(tt.offset)tex.offset.fromArray(tt.offset);if(tt.scale)tex.repeat.fromArray(tt.scale);if(tt.rotation)tex.rotation=tt.rotation;}tex.colorSpace=srgb?THREE.SRGBColorSpace:THREE.NoColorSpace;const sm=json.samplers?.[t.sampler]||{},wrap=c=>c===33071?THREE.ClampToEdgeWrapping:c===33648?THREE.MirroredRepeatWrapping:THREE.RepeatWrapping;tex.wrapS=wrap(sm.wrapS);tex.wrapT=wrap(sm.wrapT);tex.anisotropy=4;tex.needsUpdate=true;textures.set(key,tex);return tex;};

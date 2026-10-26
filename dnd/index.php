@@ -76,7 +76,7 @@ if (isset($_POST['password']) && $_POST['password'] != '') {
             setcookie(REMEMBER_COOKIE, $token, time() + (REMEMBER_DAYS * 86400), '/');
         }
 
-        header('Location: dashboard.php');
+        header('Location: table/');   // the Table is the front page now (October 2026)
         exit;
     } elseif ($player && !$player['active']) {
         $error_message = 'That player is turned off for now.';
@@ -93,7 +93,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
         if ($user !== false && player_may_play($user)) {
             $_SESSION['user'] = $user;
             $_SESSION['logged_in'] = true;
-            header('Location: dashboard.php');
+            header('Location: table/');   // the Table is the front page now (October 2026)
             exit;
         } else {
             // Invalid/expired token — clear it
@@ -105,7 +105,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 // If already logged in, redirect to dashboard (a player turned off meanwhile is logged out first)
 players_gate();
 if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
-    header('Location: dashboard.php');
+    header('Location: table/');   // the Table is the front page now (October 2026)
     exit;
 }
 ?>

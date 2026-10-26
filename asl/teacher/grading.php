@@ -30,6 +30,28 @@ if ($bucket) {
     }
 }
 
+// Pinned skill columns (ids in ?pins=), from any competency or mode at this level. They sit at the front of the grid
+// and are left out of their usual place. Carried only by this page's own filters; refresh or leaving drops them.
+$pinIds = [];
+foreach (explode(',', is_string($_GET['pins'] ?? null) ? $_GET['pins'] : '') as $raw) {
+    $id = (int)$raw;
+    if ($id > 0 && !in_array($id, $pinIds, true) && count($pinIds) < 12) $pinIds[] = $id;
+}
+$pinned = [];
+if ($pinIds) {
+    $found = [];
+    foreach ($taxonomy as $b) foreach ($b['standards'] as $s0) foreach ($s0['targets'] as $t0) {
+        if (in_array((int)$t0['id'], $pinIds, true)) $found[(int)$t0['id']] = ['standard' => $s0, 'target' => $t0];
+    }
+    foreach ($pinIds as $id) if (isset($found[$id])) $pinned[] = $found[$id];
+    $pinIds = array_map(fn($x) => (int)$x['target']['id'], $pinned);
+    foreach ($standards as $i => $s0) {
+        $standards[$i]['targets'] = array_values(array_filter($s0['targets'], fn($t0) => !in_array((int)$t0['id'], $pinIds, true)));
+    }
+    $standards = array_values(array_filter($standards, fn($s0) => $s0['targets']));
+}
+$modeName = fn($t0) => $hasCompetencies ? (['E' => 'Expression', 'R' => 'Reception', 'S' => 'Other'][$t0['sub_code'] ?? ''] ?? '') : ($t0['target_code'] ?? '');
+
 $filters = [
     'teacher' => $me['teacher'],
     'period' => $_GET['period'] ?? 'all',
@@ -38,7 +60,7 @@ $filters = [
 $students = aslhub_scoped_students($pdo, $me, $filters);
 
 // current scores for these students on visible targets
-$targetIds = [];
+$targetIds = $pinIds;
 foreach ($standards as $s) foreach ($s['targets'] as $t) $targetIds[] = (int)$t['id'];
 $scores = [];
 if ($students && $targetIds) {
@@ -52,6 +74,15 @@ if ($students && $targetIds) {
 
 // rubric + wording for every visible target, for the pinned rubric side panel
 $targetMeta = [];
+foreach ($pinned as $pin) {
+    $targetMeta[(int)$pin['target']['id']] = [
+        'code' => $modeName($pin['target']) ?: ($pin['target']['target_code'] ?? ''),
+        'title' => $pin['target']['title'],
+        'description' => $pin['target']['description'] ?? '',
+        'standard' => $pin['standard']['name'],
+        'rubric' => $pin['target']['rubric'] ?: new stdClass(),
+    ];
+}
 foreach ($standards as $s) {
     foreach ($s['targets'] as $t) {
         $targetMeta[(int)$t['id']] = [
@@ -68,6 +99,7 @@ aslhub_teacher_header($me, 'Grading', 'grading');
 ?>
     <form class="filters-bar" method="GET" id="filter-form">
         <input type="hidden" name="period" value="<?php echo aslhub_h($filters['period']); ?>">
+        <input type="hidden" name="pins" id="pins-field" value="<?php echo aslhub_h(implode(',', $pinIds)); ?>">
         <div class="grading-modes" role="group" aria-label="Period">
         <?php for ($i=1; $i<=6; $i++): ?>
             <button type="button" aria-pressed="<?php echo (string)$filters['period']===(string)$i?'true':'false'; ?>" onclick="this.form.period.value='<?php echo $i; ?>';this.form.requestSubmit()">Period <?php echo $i; ?></button>
@@ -98,7 +130,7 @@ aslhub_teacher_header($me, 'Grading', 'grading');
         <input type="search" id="student-search" name="student_search" placeholder="Student name" autocomplete="off"
             value="<?php echo aslhub_h(is_string($_GET['student_search'] ?? '') ? ($_GET['student_search'] ?? '') : ''); ?>"></label>
         <span class="muted" style="font-size:.82rem;">Click a cell to cycle 1 → available levels → 1. Saves instantly. Right-click to cycle backward.
-            Click a skill header to pin its rubric. Click a student to zoom in.</span>
+            Click a skill header to see its rubric; its small pin keeps that skill at the front while you change competency. Click a student to zoom in.</span>
     </form>
 
     <?php if (!$students): ?>
@@ -112,12 +144,17 @@ aslhub_teacher_header($me, 'Grading', 'grading');
             <thead>
                 <tr>
                     <th class="sticky-col" rowspan="2">Student</th>
+                    <?php if ($pinned): ?><th colspan="<?php echo count($pinned); ?>" class="competency-group-head pinned-group">Pinned</th><?php endif; ?>
                     <?php foreach ($standards as $s): ?><th colspan="<?php echo count($s['targets']); ?>" class="competency-group-head"><?php echo aslhub_h($s['name']); ?></th><?php endforeach; ?>
                 </tr>
                 <tr>
+                    <?php foreach ($pinned as $pin): $t = $pin['target']; ?>
+                        <th class="skill-head pinned" data-target="<?php echo (int)$t['id']; ?>"
+                            title="<?php echo aslhub_h($t['title'] . ' — click to see its rubric'); ?>"><button type="button" class="pin-btn on" data-pin="<?php echo (int)$t['id']; ?>" title="Unpin" aria-label="Unpin <?php echo aslhub_h($t['title']); ?>" aria-pressed="true">&#128204;</button><span class="pin-from"><?php echo aslhub_h($pin['standard']['name'] . ($modeName($t) ? ' · ' . $modeName($t) : '')); ?></span><?php echo aslhub_h($t['title']); ?></th>
+                    <?php endforeach; ?>
                     <?php foreach ($standards as $s): foreach ($s['targets'] as $t): ?>
                         <th class="skill-head" data-target="<?php echo (int)$t['id']; ?>"
-                            title="<?php echo aslhub_h($t['title'] . ' — click to pin the rubric'); ?>"><?php echo aslhub_h($t['title']); ?></th>
+                            title="<?php echo aslhub_h($t['title'] . ' — click to see its rubric'); ?>"><button type="button" class="pin-btn" data-pin="<?php echo (int)$t['id']; ?>" title="Pin to the front (stays while you change competency; refresh unpins)" aria-label="Pin <?php echo aslhub_h($t['title']); ?>" aria-pressed="false">&#128204;</button><?php echo aslhub_h($t['title']); ?></th>
                     <?php endforeach; endforeach; ?>
                 </tr>
                 <tr class="grading-header-buffer" aria-hidden="true"><th colspan="<?php echo count($targetIds) + 1; ?>"></th></tr>
@@ -129,7 +166,7 @@ aslhub_teacher_header($me, 'Grading', 'grading');
                             title="Zoom in on <?php echo aslhub_h($st['first_name']); ?> — browse the standards and grade from the rubrics"><?php
                             echo aslhub_h($st['first_name'] . ' ' . $st['last_name']); ?></a>
                         <span class="muted" style="font-size:.75rem;">P<?php echo (int)$st['class_period']; ?></span></td>
-                    <?php foreach ($standards as $s): foreach ($s['targets'] as $t):
+                    <?php foreach (array_merge(array_map(fn($pin) => $pin['target'], $pinned), ...array_map(fn($s0) => $s0['targets'], $standards)) as $t):
                         $sc = aslhub_effective_score($scores[$sid][(int)$t['id']] ?? null); ?>
                         <td class="grade-cell <?php echo $sc === null ? '' : 'score-' . $sc; ?>"
                             data-student="<?php echo $sid; ?>" data-target="<?php echo (int)$t['id']; ?>"
@@ -137,7 +174,7 @@ aslhub_teacher_header($me, 'Grading', 'grading');
                             style="background:<?php echo $sc === null ? '#f7fafc' : ''; ?>"
                             title="<?php echo aslhub_h($st['first_name'] . ' — ' . $t['title'] . ': ' . ($sc ?? 'not graded')); ?>">
                             <?php echo $sc === null ? '·' : $sc; ?></td>
-                    <?php endforeach; endforeach; ?>
+                    <?php endforeach; ?>
                 </tr>
                 <?php endforeach; ?>
             </tbody>
@@ -211,6 +248,30 @@ try {
         } else window.scrollTo(0, saved.y);
     }
 } catch (_) { /* An unavailable or old browser state must not prevent grading. */ }
+
+/* ===== Pinned skill columns ===== */
+const pinsField = document.getElementById('pins-field');
+const currentPins = () => (pinsField.value || '').split(',').filter(Boolean);
+function togglePin(id) {
+    const pins = currentPins();
+    pinsField.value = (pins.includes(id) ? pins.filter(p => p !== id) : [...pins, id]).join(',');
+    gradingForm.requestSubmit();
+}
+document.addEventListener('click', event => {
+    const btn = event.target.closest('.pin-btn');
+    if (!btn) return;
+    event.stopPropagation();
+    togglePin(btn.dataset.pin);
+}, true);
+// Pins live only while he works through this page's own filters: a refresh, or coming back to the page later, starts clean.
+try {
+    const nav = performance.getEntriesByType('navigation')[0];
+    if (currentPins().length && nav && (nav.type === 'reload' || nav.type === 'back_forward')) {
+        const clean = new URL(location.href);
+        clean.searchParams.delete('pins');
+        location.replace(clean.href);
+    }
+} catch (_) { /* old browsers keep the pins until the pin button is used */ }
 
 document.querySelectorAll('.grade-cell').forEach(cell => {
     cell.addEventListener('click', () => cycle(cell, +1));

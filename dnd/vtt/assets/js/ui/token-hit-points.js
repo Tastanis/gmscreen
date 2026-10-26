@@ -87,25 +87,43 @@ export function parseHitPointsNumber(value) {
   return parsed;
 }
 
-export function calculateHitPointsFillPercentage(value) {
+/**
+ * A token's temporary Stamina (October 2026: its own number, placement.tempStamina). A token from before keeps it as
+ * Stamina above the maximum, which is read the same way.
+ */
+export function placementTempStamina(placement) {
+  if (!placement || typeof placement !== 'object') return 0;
+  const own = Number.parseInt(placement.tempStamina, 10);
+  if (Number.isFinite(own) && own > 0) return own;
+  const hp = normalizePlacementHitPoints(placement.hp);
+  const current = parseHitPointsNumber(hp.current), max = parseHitPointsNumber(hp.max);
+  return current !== null && max !== null && max > 0 && current > max ? current - max : 0;
+}
+
+/**
+ * The bar: `percent` is Stamina as a share of the maximum (green, from the left); `tempPercent` is temporary
+ * Stamina as a share of the maximum (blue, from the RIGHT edge). `temp` is the token's own number; left out, Stamina
+ * above the maximum is read as temporary (older tokens).
+ */
+export function calculateHitPointsFillPercentage(value, temp = undefined) {
   const hp = normalizePlacementHitPoints(value);
   const maxValue = parseHitPointsNumber(hp.max);
   const currentValue = parseHitPointsNumber(hp.current);
+  const ownTemp = Number.parseInt(temp, 10);
 
   if (maxValue === null || maxValue <= 0) {
+    const tempPercent = Number.isFinite(ownTemp) && ownTemp > 0 ? 100 : 0;
     if (currentValue === null || currentValue <= 0) {
-      return { percent: 0, negative: currentValue !== null && currentValue < 0, tempPercent: 0 };
+      return { percent: 0, negative: currentValue !== null && currentValue < 0, tempPercent };
     }
-    return { percent: 100, negative: false, tempPercent: 0 };
+    return { percent: 100, negative: false, tempPercent };
   }
 
   const safeCurrent = currentValue === null ? maxValue : currentValue;
   const isNegative = safeCurrent < 0;
-
-  // Temp HP: current exceeds max
-  const hasTempHp = safeCurrent > maxValue;
-  const baseHp = hasTempHp ? maxValue : Math.abs(safeCurrent);
-  const tempHp = hasTempHp ? safeCurrent - maxValue : 0;
+  const legacyTemp = safeCurrent > maxValue ? safeCurrent - maxValue : 0;
+  const tempHp = Number.isFinite(ownTemp) && ownTemp > 0 ? Math.max(ownTemp, legacyTemp) : legacyTemp;
+  const baseHp = Math.min(Math.abs(safeCurrent), maxValue);
 
   const ratio = Math.min(baseHp / maxValue, 1);
   const tempRatio = Math.min(tempHp / maxValue, 1);
@@ -116,7 +134,7 @@ export function calculateHitPointsFillPercentage(value) {
   };
 }
 
-export function formatHitPointsDisplayParts(value) {
+export function formatHitPointsDisplayParts(value, temp = undefined) {
   const hp = normalizePlacementHitPoints(value);
   if (hp.current === '' && hp.max === '') {
     return { main: DEFAULT_HP_DISPLAY, temp: null };
@@ -127,12 +145,12 @@ export function formatHitPointsDisplayParts(value) {
 
   const currentNum = parseHitPointsNumber(hp.current);
   const maxNum = parseHitPointsNumber(hp.max);
-  if (currentNum !== null && maxNum !== null && currentNum > maxNum) {
-    const tempAmount = currentNum - maxNum;
-    return { main: `${maxText} / ${maxText}`, temp: `(+${tempAmount})` };
-  }
-
-  return { main: `${currentText} / ${maxText}`, temp: null };
+  const ownTemp = Number.parseInt(temp, 10);
+  const legacyTemp = currentNum !== null && maxNum !== null && currentNum > maxNum ? currentNum - maxNum : 0;
+  const tempAmount = Number.isFinite(ownTemp) && ownTemp > 0 ? Math.max(ownTemp, legacyTemp) : legacyTemp;
+  const shownCurrent = legacyTemp > 0 ? maxText : currentText;
+  // "19 / 36 +5": temporary Stamina after the two numbers.
+  return { main: `${shownCurrent} / ${maxText}`, temp: tempAmount > 0 ? `+${tempAmount}` : null };
 }
 
 export function syncTokenHitPoints(tokenElement, placement, {isGm = false} = {}) {
@@ -180,7 +198,8 @@ export function syncTokenHitPoints(tokenElement, placement, {isGm = false} = {})
   }
 
   const hp = normalizePlacementHitPoints(placement.hp);
-  const displayParts = formatHitPointsDisplayParts(hp);
+  const tempStamina = placementTempStamina(placement);
+  const displayParts = formatHitPointsDisplayParts(hp, tempStamina);
 
   if (valueElement && valueElement.textContent !== displayParts.main) {
     valueElement.textContent = displayParts.main;
@@ -204,7 +223,7 @@ export function syncTokenHitPoints(tokenElement, placement, {isGm = false} = {})
   let tempFillElement = track.querySelector('.vtt-token__hp-temp-fill');
 
   if (fillElement) {
-    const { percent, negative, tempPercent } = calculateHitPointsFillPercentage(hp);
+    const { percent, negative, tempPercent } = calculateHitPointsFillPercentage(hp, tempStamina);
     fillElement.style.width = `${percent}%`;
     if (negative) {
       fillElement.classList.add('vtt-token__hp-fill--negative');

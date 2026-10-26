@@ -90,9 +90,12 @@ test('"Start <name>\'s turn?": combat on, nobody\'s turn, own creature, once a r
     isGmUser: () => state.gm, canCurrentUserMovePlacement: (p) => p.id === 'zepha', getCombatantLabel: (id) => names[id], tokenLabel: (p) => p.name,
     confirmBoardAction: async (message) => { asked.push(message); return true; },
     handleAutomationStartTurn: async (p) => { started = ['gm', p.placementId]; }, handlePlayerInitiatedTurn: async (id) => { started = ['player', id]; },
+    lastCombatTrackerEntries: [{ id: 'zepha' }, { id: 'gob' }, { id: 'cal' }, { id: 'done' }],
     console, Set,
   });
   const ask = make();
+  state.gm = true; await ask('stranger'); state.gm = false;   // even the Director, who may start anyone's turn
+  assert.equal(asked.length, 0, 'a token that is not in this fight is not asked (the Map maker, October 25, 2026)');
   await ask('zepha');
   assert.deepEqual([asked, started], [["Start Zepha's turn?"], ['player', 'zepha']]);
   await ask('zepha');
@@ -105,7 +108,10 @@ test('"Start <name>\'s turn?": combat on, nobody\'s turn, own creature, once a r
   state.activeCombatantId = 'cal';
   await ask('cal');
   assert.equal(asked.length, 2, 'not while a turn runs');
-  assert.match(board, /if \(!inTurn && \(source === 'drag' \|\| source === 'keyboard'\)\) await maybeAskStartTurn\(moves\?\.\[0\]\?\.placementId\);/);
+  assert.match(board, /if \(!inTurn && \(source === 'drag' \|\| source === 'keyboard'\)\) \{[^]*?const id = moves\?\.\[0\]\?\.placementId[^]*?await maybeAskStartTurn\(id\);/);
+  // Moved by someone else while the question was open: the drop is not sent from where the token stands now (it
+  // would be another walk; the Map maker's Medpilis run got "blocked by a wall" from it, October 25, 2026).
+  assert.match(board, /await maybeAskStartTurn\(id\);\s*if \(before !== null && at\(\) !== before\) \{[^]*?return false;/);
 });
 
 test('the floating damage number carries on through a redraw instead of playing twice', () => {

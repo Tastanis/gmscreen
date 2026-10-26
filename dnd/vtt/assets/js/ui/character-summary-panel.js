@@ -1,5 +1,13 @@
 import {showHeroTokenConfirmation} from './hero-token-confirmation.js';
 import {recordSheetUndo} from '../services/undo-client.js';
+import {staminaState, damageStamina, healStamina, gainTempStamina} from '../../../../character_sheet/parts/stamina-math.js';
+// The panel draws the same sheet parts as the full sheet, at panel width (October 2026): the status, then Skills &
+// traits / Features / Record. No Abilities tab: the board's ability bar below has them.
+import {statusHtml, traitsHtml, featuresHtml, recordHtml, tabsHtml, themeToggleHtml, readTheme, writeTheme, toggleMore, mediaUrl, conditionChipsHtml, conditionPickerHtml, wireConditionPicker, sheetConditionChips} from '../../../../character_sheet/parts/sheet-parts.js';
+// Conditions: one list for the token, this panel and the sheet (October 2026; parts/conditions.js).
+import {normalizeSheetConditions, durationShort} from '../../../../character_sheet/parts/conditions.js';
+import {editHeroCondition, CONDITION_SYNC_CHANNEL} from '../../../../character_sheet/parts/condition-edits.js';
+import {createSheetLive} from '../../../../character_sheet/parts/sheet-live.js';
 // Every player on the site's list, on or off (window.vttConfig.playerRoster); the four when it is missing.
 const PC_CHARACTER_IDS = new Set(Array.isArray(globalThis.vttConfig?.playerRoster) ? globalThis.vttConfig.playerRoster : ['cal', 'sharon', 'indigo', 'zepha']);
 
@@ -88,22 +96,17 @@ const TEST_TIER_LABELS = {
 };
 
 const PANEL_VISIBILITY_STORAGE_PREFIX = 'vtt:character-summary:open:';
+let conditionSyncChannel = null;
+function getConditionSyncChannel() {
+  if (typeof BroadcastChannel !== 'function') return null;
+  if (!conditionSyncChannel) conditionSyncChannel = new BroadcastChannel(CONDITION_SYNC_CHANNEL);
+  return conditionSyncChannel;
+}
 const ABILITY_TRAY_BODY_OPEN_CLASS = 'vtt-character-ability-tray-is-open';
 const HERO_TOKEN_SYNC_CHANNEL = 'vtt-hero-token-sync';
 const CHARACTER_SHEET_SYNC_CHANNEL = 'vtt-character-sheet-sync';
 const STAMINA_SYNC_CHANNEL = 'vtt-stamina-sync';
 const CHARACTER_SHEET_SYNC_INTERVAL_MS = 4000;
-const CONDITION_OPTIONS = [
-  'Bleeding',
-  'Dazed',
-  'Frightened',
-  'Grabbed',
-  'Prone',
-  'Restrained',
-  'Slowed',
-  'Taunted',
-  'Weakened',
-];
 
 export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   const panel = document.getElementById('vtt-character-summary-panel');
@@ -127,7 +130,12 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   let sheetRefreshRequested = false;
   let pendingResourceSave = null;
   const resourceSaveNotices = new Map();
-  const resourceControlSelector = '[data-character-stamina-action], [data-character-recovery], [data-character-surge-delta], [data-character-resource-delta], [data-character-resource-roll], [data-character-add-victory]';
+  // The panel's tab (Skills & traits / Features / Record) and look (the sheet's switch, the same choice per browser).
+  let activePanelTab = 'skills';
+  let panelTheme = readTheme();
+  const recordCache = new Map();          // character -> the campaign record (null when not available)
+  let liveSheet = null;                   // the revision / lock poll for the hero shown
+  const resourceControlSelector = '[data-character-stamina-action], [data-character-recovery], [data-character-surge-delta], [data-character-resource-delta], [data-character-resource-roll], [data-character-add-victory], [data-character-victory-delta]';
   function syncResourceSaveStatus() {
     const notice = panel.querySelector('[data-character-save-status]');
     if (notice) {
@@ -153,10 +161,20 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     },
   });
 
+  // Inside the Table the board's top strip is the embed's own bar (#te-top): the panel starts flush under it (a fixed
+  // top left a strip of the board showing between the two, read as a light band above the hero's name).
+  let embedTopObserved = null;
+  const panelTopObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(() => updatePanelTop()) : null;
   const updatePanelTop = () => {
-    if (!boardHeader || !document.body) {
-      return;
+    if (!document.body) return;
+    const embedTop = document.documentElement.classList.contains('vtt-embed') ? document.getElementById('te-top') : null;
+    if (embedTop) {
+      if (panelTopObserver && embedTopObserved !== embedTop) { panelTopObserver.observe(embedTop); embedTopObserved = embedTop; }
+      const bottom = embedTop.getBoundingClientRect().bottom;
+      if (bottom > 0) document.body.style.setProperty('--vtt-character-panel-embed-top', `${Math.ceil(bottom) + 1}px`);
+      else document.body.style.removeProperty('--vtt-character-panel-embed-top');
     }
+    if (!boardHeader) return;
     const rect = boardHeader.getBoundingClientRect();
     const top = Math.max(12, Math.ceil(rect.bottom + 4));
     document.body.style.setProperty('--vtt-character-panel-top', `${top}px`);
@@ -164,12 +182,89 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
 
   updatePanelTop();
   window.addEventListener('resize', updatePanelTop);
-  if (typeof ResizeObserver === 'function' && boardHeader) {
-    const observer = new ResizeObserver(updatePanelTop);
-    observer.observe(boardHeader);
+  if (panelTopObserver && boardHeader) panelTopObserver.observe(boardHeader);
+
+  // Changes made on the hero's sheet by anyone reach the panel within the poll (the sheet's revision), and a field
+  // somebody is editing shows as "Name is editing" (the same live poll the full sheet uses).
+  function watchLiveSheet(characterId) {
+    liveSheet?.stop();
+    liveSheet = null;
+    if (!characterId) return;
+    const endpoint = typeof routes?.sheet === 'string' && routes.sheet ? routes.sheet : '/dnd/character_sheet/handler.php';
+    let locksKey = '';
+    liveSheet = createSheetLive({
+      character: characterId,
+      endpoint,
+      timers: {
+        set: (fn, ms) => window.setTimeout(fn, ms), clear: (id) => window.clearTimeout(id),
+        every: (fn, ms) => window.setInterval(fn, ms), stop: (id) => window.clearInterval(id),
+      },
+      onRevision: async (revision) => {
+        if (activeCharacterId !== characterId) return;
+        await refreshActiveSheet({ force: true });
+        if (liveSheet) liveSheet.revision = revision;
+      },
+      onLocks: (locks) => {
+        const key = JSON.stringify(locks.filter((lock) => !lock.mine).map((lock) => [lock.field, lock.user]));
+        if (key === locksKey) return;
+        locksKey = key;
+        if (activeCharacterId === characterId && activeSheet) renderActiveSheet();
+      },
+    });
+    liveSheet.start();
   }
 
+  // The campaign record (player, college, minor, ...) for the Record tab, read from the campaign API; "—" when it
+  // is not available.
+  async function loadRecord(characterId) {
+    if (!characterId || recordCache.has(characterId)) return;
+    try {
+      const response = await fetch(`/dnd/api/campaign.php?action=character&character=${encodeURIComponent(characterId)}`, { credentials: 'same-origin', cache: 'no-store' });
+      const answer = response.ok ? await response.json() : null;
+      const hero = Array.isArray(answer?.heroes) ? (answer.heroes.find((h) => String(h?.id || '').toLowerCase() === characterId) || null) : null;
+      const info = answer?.success ? (hero?.info || answer?.data?.character || null) : null;
+      // The record's portrait is stored under dnd/ ("portraits/x.png"): a URL from this page (dnd/vtt/).
+      recordCache.set(characterId, info ? { ...info, portrait: mediaUrl(info.portrait, '/dnd/') } : null);
+    } catch {
+      recordCache.set(characterId, null);
+    }
+    // The Record tab shows it; a token with no picture uses the record's portrait in the header.
+    if (activeCharacterId === characterId && activeSheet && (activePanelTab === 'record' || !activeToken?.imageUrl)) renderActiveSheet();
+  }
+
+  // The bottom fade says "more below" until the end of the panel is reached.
+  const syncScrollEnd = () => {
+    const atEnd = panel.scrollHeight - panel.scrollTop - panel.clientHeight <= 4;
+    panel.classList.toggle('vtt-character-summary--at-end', atEnd);
+  };
+  panel.addEventListener('scroll', syncScrollEnd, { passive: true });
+  window.addEventListener('resize', syncScrollEnd);
+  // A size change of the panel or its content (pictures and fonts arriving, a section opening, the panel shown after
+  // being measured hidden) re-checks it, so a stale "at the end" never hides the fade over rows still below.
+  const scrollEndObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(() => syncScrollEnd()) : null;
+  scrollEndObserver?.observe(panel);
+  const watchPanelContent = () => {
+    if (!scrollEndObserver) return;
+    scrollEndObserver.disconnect();
+    scrollEndObserver.observe(panel);
+    const content = panel.querySelector('.sp');
+    if (content) scrollEndObserver.observe(content);
+  };
+
+  // The panel's own tabs, look switch and "Show all".
+  panel.addEventListener('click', (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) return;
+    const tab = target.closest('[data-sheet-tab]');
+    if (tab) { event.preventDefault(); activePanelTab = tab.dataset.sheetTab === 'abilities' ? 'skills' : tab.dataset.sheetTab; renderActiveSheet(); return; }
+    if (target.closest('[data-sheet-theme-toggle]')) { event.preventDefault(); panelTheme = writeTheme(panelTheme === 'diablo' ? 'parchment' : 'diablo'); renderActiveSheet(); return; }
+    const more = target.closest('[data-sheet-more]');
+    if (more) { toggleMore(more); syncScrollEnd(); }
+  });
+
   const clearActiveCharacter = () => {
+    liveSheet?.stop();
+    liveSheet = null;
     activeCharacterId = null;
     activeSheet = null;
     activeAbilityCategory = null;
@@ -242,15 +337,21 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     activeDisplayName = activeSheet?.hero?.name || activeToken?.name || formatCharacterName(activeCharacterId);
     const standFirm = resolveCharacterStandFirmState(activeSheet, activeToken);
     const sameCharacter = panel.querySelector('[data-character-id]')?.dataset.characterId === String(activeCharacterId);
-    const referenceOpen = sameCharacter && Boolean(panel.querySelector('[data-character-reference]')?.open);
     const previousScroll = sameCharacter ? panel.scrollTop : 0;
     panel.innerHTML = renderCharacterCard(activeSheet, {
       characterId: activeCharacterId,
       token: activeToken,
       standFirm,
+      tab: activePanelTab,
+      theme: panelTheme,
+      record: recordCache.has(activeCharacterId) ? recordCache.get(activeCharacterId) : undefined,
+      lockOf: (path) => liveSheet?.lockOf(path) || '',
+      canEditSheet: canEditActiveSheet(),
     });
-    panel.querySelector('[data-character-reference]').open = referenceOpen;
     panel.scrollTop = previousScroll;
+    watchPanelContent();
+    updatePanelTop();
+    syncScrollEnd();
     bindCharacterSummaryControls(panel, {
       onTuck: tuckPanel,
       onHeroToken: handleHeroTokenClick,
@@ -260,7 +361,13 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
       onResourceDelta: handleResourceDelta,
       onResourceRoll: handleResourceRoll,
       onVictory: handleVictoryClick,
+      onVictoryDelta: handleVictoryDelta,
+      onOpenSheet: () => openFullCharacterSheet(activeCharacterId),
       onConditionAdd: handleConditionAdd,
+      onSheetConditionRemove: (index) => {
+        const condition = normalizeSheetConditions(activeSheet?.hero?.conditions)[index];
+        if (condition) handleSheetConditionChange('remove', condition);
+      },
     });
     syncResourceSaveStatus();
     renderCurrentAbilityTray();
@@ -335,6 +442,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
       character: characterId,
       currentStamina: Number.isFinite(Number(vitals.currentStamina)) ? Number(vitals.currentStamina) : 0,
       staminaMax: Number.isFinite(Number(vitals.staminaMax)) ? Number(vitals.staminaMax) : 0,
+      tempStamina: Math.max(0, Number.parseInt(vitals.tempStamina, 10) || 0),
     });
   };
 
@@ -351,6 +459,10 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     document.dispatchEvent(new CustomEvent('vtt:character-sheet-updated', {
       detail: { characterId, change },
     }));
+  };
+
+  const notifyPanelUser = (message, kind = 'info') => {
+    if (window.UIKit && typeof window.UIKit.toast === 'function') window.UIKit.toast(message, kind);
   };
 
   // `amount` is how much this panel changed the number by. The server adds it to the number it holds: the panel's
@@ -372,10 +484,26 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
         onError: message => { rejection = message; },
       });
       if (!saved) throw new Error(rejection);
+      if (change === 'recovery' && Number(saved.spent) === 0) {
+        // Nothing was spent and nothing healed: nobody is told of a change. The forced read below puts back
+        // what this panel had already drawn.
+        const reason = `Recovery not spent: ${saved.reason || 'the server spent none.'}`;
+        resourceSaveNotices.set(characterId, reason);
+        notifyPanelUser(reason, 'warning');
+        return false;
+      }
+      // What is drawn and told to the token is the server's answer, not this panel's own sum.
+      applyServerAnswer(sheet, saved);
+      if (activeCharacterId === characterId && activeSheet) {
+        applyServerAnswer(activeSheet, saved);
+        renderActiveSheet();
+      }
       resourceSaveNotices.set(characterId, 'Character resources saved.');
       broadcastSheetChange(change, characterId);
-      if (change === 'stamina' || change === 'recovery') broadcastStaminaChange(characterId, sheet);
-      return true;
+      if ((change === 'stamina' || change === 'temp' || change === 'recovery') && Number.isFinite(Number(saved.currentStamina))) {
+        broadcastStaminaChange(characterId, sheet);
+      }
+      return saved;
     } catch (error) {
       const reason = error?.message || 'Connection interrupted.';
       resourceSaveNotices.set(characterId, `Save not confirmed: ${reason}`);
@@ -441,6 +569,10 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     if (isNewCharacter) sheetReadEpoch++;
     activeCharacterId = characterId;
     if (isNewCharacter) {
+      watchLiveSheet(characterId);
+      loadRecord(characterId);
+    }
+    if (isNewCharacter) {
       activeAbilityCategory = null;
     }
     const requestId = ++activeRequestId;
@@ -498,6 +630,8 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
       payload.append('character', activeCharacterId);
       payload.append('tokenIndex', String(index));
       payload.append('tokenState', tokens[index] ? '1' : '0');
+      // The party's pool, from the map: allowed for any signed-in player, whichever hero's panel this is.
+      payload.append('source', 'vtt');
       const endpoint = typeof routes?.sheet === 'string' && routes.sheet ? routes.sheet : '/dnd/character_sheet/handler.php';
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -521,41 +655,83 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     }
   }
 
+  // The hero's token on the scene in view, when the board can take a hit or a heal for it. Then the board applies
+  // it (damage types, the floating number, triggers, the death rule, turn undo) and writes the sheet itself.
+  function boardTokenForActiveHero() {
+    const board = window.VTTBoardCallbacks;
+    const placementId = typeof activeToken?.id === 'string' ? activeToken.id : '';
+    if (!placementId || typeof board?.applyDamage !== 'function' || typeof board?.applyHeal !== 'function') return null;
+    // Temporary Stamina has its own board path (keep the higher); a board without it gives it as a heal allowed
+    // past the maximum, which the board now reads as the same thing.
+    if (typeof board.getActiveScenePlacements === 'function') {
+      const placements = board.getActiveScenePlacements();
+      if (!Array.isArray(placements) || !placements.some((placement) => placement?.id === placementId)) return null;
+    }
+    return { board, placementId };
+  }
+
+  async function applyStaminaThroughBoard(target, mode, amount, characterId) {
+    pendingResourceSave = characterId;
+    resourceSaveNotices.set(characterId, '');
+    syncResourceSaveStatus();
+    try {
+      const result = mode === 'damage'
+        ? await target.board.applyDamage({ placementId: target.placementId, amount, damageType: '' })
+        : mode === 'temp'
+          ? await (typeof target.board.applyTemporaryStamina === 'function'
+            ? target.board.applyTemporaryStamina({ placementId: target.placementId, amount })
+            : target.board.applyHeal({ placementId: target.placementId, amount, allowTempHp: true }))
+          : await target.board.applyHeal({ placementId: target.placementId, amount });
+      // The token now reads this; the board sends the change to the sheet and the sheet's answer comes back on
+      // the stamina channel, which reads the sheet again.
+      const vitals = activeCharacterId === characterId ? activeSheet?.hero?.vitals : null;
+      if (vitals && Number.isFinite(Number(result?.current))) {
+        vitals.currentStamina = Math.trunc(Number(result.current));
+        appendStaminaHistory(vitals, vitals.currentStamina);
+      }
+      if (vitals && Number.isFinite(Number(result?.temp))) vitals.tempStamina = Math.max(0, Math.trunc(Number(result.temp)));
+      return true;
+    } catch (error) {
+      const reason = `Not applied: ${error?.message || 'the board did not take the change.'}`;
+      resourceSaveNotices.set(characterId, reason);
+      notifyPanelUser(reason, 'warning');
+      return false;
+    } finally {
+      pendingResourceSave = null;
+      if (activeCharacterId === characterId) renderActiveSheet();
+      syncResourceSaveStatus();
+    }
+  }
+
   async function handleStaminaAction(action) {
     if (pendingResourceSave) return;
     const actionCharacterId = activeCharacterId;
     if (!activeSheet?.hero?.vitals) return;
-    const amount = await promptForPositiveInt(action === 'damage' ? 'How much damage?' : 'How much healing?');
+    const question = action === 'damage' ? 'How much damage?' : action === 'temp' ? 'How much temporary Stamina?' : 'How much healing?';
+    const amount = await promptForPositiveInt(question);
     if (!amount || pendingResourceSave || activeCharacterId !== actionCharacterId) return;
     let vitals = activeSheet?.hero?.vitals;
     if (!vitals) return;
-    const current = numberLike(vitals.currentStamina, 0);
-    let before = current;
-    const max = numberLike(vitals.staminaMax, 0);
-    if (action === 'damage') {
-      vitals.currentStamina = current - amount;
-    } else {
-      const healed = current + amount;
-      if (max > 0 && healed > max) {
-        const overflow = healed - max;
-        const useTemp = await confirmSummaryAction(
-          `Healing would go ${overflow} over max. Use the extra as temporary Stamina?`,
-          { title: 'Healing Overflow', confirmText: 'Use as temp', cancelText: 'Heal to max' }
-        );
-        if (pendingResourceSave || activeCharacterId !== actionCharacterId) return;
-        vitals = activeSheet?.hero?.vitals;
-        if (!vitals) return;
-        before = numberLike(vitals.currentStamina, 0);
-        const latestHealed = before + amount;
-        const latestMax = numberLike(vitals.staminaMax, 0);
-        vitals.currentStamina = useTemp || latestMax <= 0 ? latestHealed : Math.max(numberLike(vitals.currentStamina, 0), Math.min(latestMax, latestHealed));
-      } else {
-        vitals.currentStamina = healed;
-      }
+    // Temporary Stamina is its own number (October 2026): damage takes it first, healing never touches it, and
+    // gaining it keeps the higher of held and gained. Healing past the maximum is simply lost.
+    const mode = action === 'damage' ? 'damage' : action === 'temp' ? 'temp' : 'heal';
+    const target = boardTokenForActiveHero();
+    if (target) {
+      await applyStaminaThroughBoard(target, mode, amount, actionCharacterId);
+      return;
     }
+    // No token of this hero on the scene in view: the sheet is changed directly. The server works the change out
+    // from the record it holds (temporary Stamina first for damage); this panel draws its own guess meanwhile.
+    vitals = activeSheet?.hero?.vitals;
+    if (!vitals) return;
+    const now = staminaState(vitals);
+    const next = mode === 'damage' ? damageStamina(now, amount) : mode === 'temp' ? gainTempStamina(now, amount) : healStamina(now, amount);
+    vitals.currentStamina = next.current;
+    vitals.tempStamina = next.temp;
     appendStaminaHistory(vitals, vitals.currentStamina);
     renderActiveSheet();
-    await saveActiveSheet('stamina', numberLike(vitals.currentStamina, 0) - before);
+    if (mode === 'temp') await saveActiveSheet('temp', amount);
+    else await saveActiveSheet('stamina', mode === 'damage' ? -amount : Math.max(0, next.current - now.current));
   }
 
   async function handleRecoveryClick() {
@@ -564,7 +740,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     let vitals = activeSheet?.hero?.vitals;
     if (!vitals) return;
     let currentRecoveries = numberLike(vitals.currentRecoveries, 0);
-    let recoveryValue = numberLike(vitals.recoveryValue || computeRecoveryValue(vitals), 0);
+    let recoveryValue = numberLike(computeRecoveryValue(vitals), 0);
     if (currentRecoveries <= 0 || recoveryValue <= 0) {
       return;
     }
@@ -581,7 +757,7 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     vitals = activeSheet?.hero?.vitals;
     if (!vitals) return;
     currentRecoveries = numberLike(vitals.currentRecoveries, 0);
-    recoveryValue = numberLike(vitals.recoveryValue || computeRecoveryValue(vitals), 0);
+    recoveryValue = numberLike(computeRecoveryValue(vitals), 0);
     if (currentRecoveries <= 0 || recoveryValue <= 0) return;
     const current = numberLike(vitals.currentStamina, 0);
     const max = numberLike(vitals.staminaMax, 0);
@@ -662,20 +838,70 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     await saveActiveSheet('victories', 1);
   }
 
-  function handleConditionAdd(conditionName) {
+  async function handleVictoryDelta(delta) {
+    if (pendingResourceSave || delta >= 0) return;
+    const actionCharacterId = activeCharacterId;
+    const current = Number.parseInt(activeSheet?.hero?.victories ?? 0, 10) || 0;
+    if (current <= 0) return;
+    const removeVictory = await confirmSummaryAction('Remove a victory point?', {
+      title: 'Victory Point',
+      confirmText: 'Remove',
+    });
+    if (!removeVictory || pendingResourceSave || activeCharacterId !== actionCharacterId) return;
+    const hero = activeSheet?.hero;
+    if (!hero) return;
+    const latest = Number.parseInt(hero.victories ?? 0, 10) || 0;
+    const step = Math.max(-latest, delta);
+    if (!step) return;
+    hero.victories = latest + step;
+    renderActiveSheet();
+    await saveActiveSheet('victories', step);
+  }
+
+  // The picker's choice: {name, duration: 'save-ends' | 'end-of-turn'}. With the hero's token shown it goes to the
+  // token the way an ability's condition does (the automation event); with no token, to the sheet's own list.
+  function handleConditionAdd(choice) {
+    const name = String((typeof choice === 'string' ? choice : choice?.name) || '').trim();
+    const duration = (typeof choice === 'object' && choice?.duration) || 'save-ends';
+    if (!name) return;
     const placementId = activeToken?.id || '';
-    const name = String(conditionName || '').trim();
-    if (!placementId || !name) {
+    if (!placementId) {
+      handleSheetConditionChange('add', { name, duration });
       return;
     }
     document.dispatchEvent(new CustomEvent('vtt:automation-apply-condition', {
       detail: {
         payload: {
           placementId,
-          condition: { name, duration: 'save-ends' },
+          condition: { name, duration },
         },
       },
     }));
+  }
+
+  const canEditActiveSheet = () => Boolean(userContext?.isGM) || (Boolean(activeCharacterId) && String(userContext?.name || '').trim().toLowerCase() === String(activeCharacterId).toLowerCase());
+
+  // A hero shown with no token: its sheet's list, the sheet's rule (its player or the Director). If the hero does
+  // have a token on the map after all, the change goes to that token (parts/condition-edits.js).
+  async function handleSheetConditionChange(op, condition) {
+    if (!activeSheet || !activeCharacterId || !canEditActiveSheet()) return;
+    const characterId = activeCharacterId;
+    const endpoint = typeof routes?.sheet === 'string' && routes.sheet ? routes.sheet : '/dnd/character_sheet/handler.php';
+    const result = await editHeroCondition({
+      character: characterId, op, condition, currentList: activeSheet.hero?.conditions, baseRevision: liveSheet?.revision ?? null, sheetEndpoint: endpoint,
+    });
+    if (activeCharacterId !== characterId) return;
+    if (!result.ok) {
+      resourceSaveNotices.set(characterId, `Condition not saved: ${result.error}`);
+      await refreshActiveSheet({ force: true });
+      syncResourceSaveStatus();
+      return;
+    }
+    resourceSaveNotices.set(characterId, '');
+    activeSheet = { ...activeSheet, hero: { ...(activeSheet.hero || {}), conditions: result.conditions } };
+    if (liveSheet && Number.isFinite(result.revision)) liveSheet.revision = result.revision;
+    renderActiveSheet();
+    getConditionSyncChannel()?.postMessage({ type: 'conditions-sync', source: 'panel', character: characterId, conditions: result.conditions, onMap: Boolean(result.onMap) });
   }
 
   const sheetChannel = getSheetSyncChannel();
@@ -700,6 +926,19 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     }
     refreshActiveSheet({ force: true });
   });
+
+  // A hit or heal on this hero's token (or a sheet page in this browser) is told on the stamina channel once the
+  // sheet has taken it: read the sheet at once rather than at the next poll.
+  const staminaChannel = getStaminaSyncChannel();
+  if (staminaChannel) {
+    staminaChannel.addEventListener('message', (event) => {
+      const payload = event?.data;
+      if (!payload || payload.type !== 'stamina-sync') return;
+      const character = String(payload.character || '').trim().toLowerCase();
+      if (!activeCharacterId || (character && character !== activeCharacterId)) return;
+      refreshActiveSheet({ force: true });
+    });
+  }
 
   const heroChannel = getHeroTokenSyncChannel();
   if (heroChannel) {
@@ -791,6 +1030,22 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     }
   }
 
+  function reportChatPost(posted) {
+    Promise.resolve(posted).then((ok) => {
+      if (!ok && window.UIKit && typeof window.UIKit.toast === 'function') {
+        window.UIKit.toast('Unable to post to chat.', 'warning');
+      }
+    });
+  }
+
+  function postAbilityCardFromTray(category, index) {
+    if (!activeSheet) return;
+    reportChatPost(postAbilityToChat(activeSheet, category, index, {
+      activeToken,
+      characterId: activeCharacterId,
+    }));
+  }
+
   abilityTray.addEventListener('click', (event) => {
     const target = event.target instanceof Element ? event.target : null;
     if (!target) {
@@ -802,17 +1057,11 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
       event.preventDefault();
       event.stopPropagation();
       const type = chatPost.dataset.characterChatPost || '';
-      const posted = type === 'item'
-        ? postInventoryItemToChat(activeSheet, chatPost.dataset.itemIndex, { characterId: activeCharacterId })
-        : postAbilityToChat(activeSheet, chatPost.dataset.abilityCategory, chatPost.dataset.abilityIndex, {
-            activeToken,
-            characterId: activeCharacterId,
-          });
-      Promise.resolve(posted).then((ok) => {
-        if (!ok && window.UIKit && typeof window.UIKit.toast === 'function') {
-          window.UIKit.toast('Unable to post to chat.', 'warning');
-        }
-      });
+      if (type === 'item') {
+        reportChatPost(postInventoryItemToChat(activeSheet, chatPost.dataset.itemIndex, { characterId: activeCharacterId }));
+      } else {
+        postAbilityCardFromTray(chatPost.dataset.abilityCategory, chatPost.dataset.abilityIndex);
+      }
       return;
     }
 
@@ -942,6 +1191,11 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
             height: itemRect.height,
           },
         });
+      } else if (action) {
+        // No automation: the click posts the ability's card to chat, as its chat dot does.
+        event.preventDefault();
+        event.stopPropagation();
+        postAbilityCardFromTray(abilityItem.dataset.abilityCategory, abilityItem.dataset.abilityIndex);
       }
       return;
     }
@@ -1007,6 +1261,25 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
   });
 }
 
+// The full sheet for a hero. Inside the Table page (the map embedded in it) the Table opens it in its own window;
+// on its own the sheet opens in a new tab.
+function openFullCharacterSheet(characterId) {
+  const id = normalizeCharacterId(characterId);
+  if (!id) return false;
+  let table = null;
+  try {
+    table = window.parent && window.parent !== window ? window.parent.Table : null;
+  } catch {
+    table = null;
+  }
+  if (table) {
+    window.parent.postMessage({ type: 'table-open-sheet', character: id }, window.location.origin);
+    return true;
+  }
+  window.open(`/dnd/character_sheet/index.php?character=${encodeURIComponent(id)}`, '_blank');
+  return true;
+}
+
 function ensureAbilityTray() {
   let tray = document.getElementById('vtt-character-ability-tray');
   if (!tray) {
@@ -1058,7 +1331,10 @@ function bindCharacterSummaryControls(panel, {
   onResourceDelta = null,
   onResourceRoll = null,
   onVictory = null,
+  onVictoryDelta = null,
+  onOpenSheet = null,
   onConditionAdd = null,
+  onSheetConditionRemove = null,
 } = {}) {
   panel.querySelectorAll('[data-character-summary-tuck]').forEach((button) => {
     button.addEventListener('click', (event) => {
@@ -1144,11 +1420,27 @@ function bindCharacterSummaryControls(panel, {
     });
   });
 
-  panel.querySelectorAll('[data-character-condition-select]').forEach((select) => {
-    select.addEventListener('change', () => {
-      const value = select.value;
-      select.value = '';
-      onConditionAdd?.(value);
+  panel.querySelectorAll('[data-character-victory-delta]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      onVictoryDelta?.(Number.parseInt(button.dataset.characterVictoryDelta || '0', 10) || 0);
+    });
+  });
+
+  panel.querySelectorAll('[data-character-open-sheet]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      onOpenSheet?.();
+    });
+  });
+
+  // The shared "+ condition" menu (sheet parts): SE / EOT, the shared list, Other…
+  wireConditionPicker(panel, (choice) => onConditionAdd?.(choice));
+  panel.querySelectorAll('[data-sheet-condition-remove]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onSheetConditionRemove?.(Number.parseInt(button.dataset.sheetConditionRemove || '', 10));
     });
   });
 }
@@ -1940,121 +2232,41 @@ function formatInventoryItemForChat(sheet, item) {
   return lines.filter(Boolean).join('\n');
 }
 
-function renderCharacterCard(sheet, { characterId, token, standFirm = null } = {}) {
+function renderCharacterCard(sheet, { characterId, token, standFirm = null, tab = 'skills', theme = 'diablo', record = undefined, lockOf = () => '', canEditSheet = false } = {}) {
   const hero = sheet?.hero && typeof sheet.hero === 'object' ? sheet.hero : {};
-  const sidebar = sheet?.sidebar && typeof sheet.sidebar === 'object' ? sheet.sidebar : {};
   const vitals = hero.vitals && typeof hero.vitals === 'object' ? hero.vitals : {};
-  const stats = hero.stats && typeof hero.stats === 'object' ? hero.stats : {};
-  const heroTokens = Array.isArray(hero.heroTokens) ? hero.heroTokens : [];
-  const resource = hero.resource && typeof hero.resource === 'object' ? hero.resource : {};
-  const sidebarResource = sidebar.resource && typeof sidebar.resource === 'object' ? sidebar.resource : {};
   const conditions = normalizeConditions(token?.conditions ?? token?.condition ?? []);
-  const featureList = normalizeFeatures(sheet?.features ?? []);
-
-  const name = hero.name || token?.name || formatCharacterName(characterId);
-  const className = hero.class || '';
-  const classTrack = hero.classTrack || hero.ancestry || '';
   const imageUrl = typeof token?.imageUrl === 'string' ? token.imageUrl : '';
-  const staminaCurrent = numberLike(vitals.currentStamina, 0);
-  const staminaMax = numberLike(vitals.staminaMax, 0);
-  const recoveriesCurrent = numberLike(vitals.currentRecoveries, 0);
-  const recoveriesMax = numberLike(vitals.recoveriesMax, 0);
-  const recoveryValue = valueOrDash(vitals.recoveryValue || computeRecoveryValue(vitals));
-  const healthPercent = staminaMax > 0 ? clamp((staminaCurrent / staminaMax) * 100, 0, 100) : 0;
-  const resourceTitle = resource.title || sidebarResource.title || 'Resource';
-  const resourceValue = valueOrZero(resource.value);
-  const resourceNotes = extractTextBlocks(sidebarResource.text || '');
-  const victories = valueOrZero(hero.victories);
-  const surges = Math.max(0, numberLike(hero.surges, 0));
-  const lists = sidebar.lists && typeof sidebar.lists === 'object' ? sidebar.lists : {};
-  const skills = normalizeSkills(sidebar.skills);
-  const languageList = Array.isArray(lists.languages) ? lists.languages : [];
   const stabilityBonus = standFirm?.active ? Math.max(0, numberLike(standFirm.stabilityBonus, 0)) : 0;
-
+  const base = Number.parseInt(vitals.stability, 10);
+  const stabilityText = stabilityBonus > 0 && Number.isFinite(base) ? `${base}+${stabilityBonus}=${base + stabilityBonus}` : undefined;
+  // The token's conditions while one is shown (the truth on the map); with no token, the sheet's own list.
+  const conditionsHtml = token?.id
+    ? `${conditionChipsHtml(conditions.map((condition) => tokenConditionChip(condition, token.id)), { emptyText: 'No conditions' })}${conditionPickerHtml({ title: 'Add a condition to this token' })}`
+    : `${conditionChipsHtml(sheetConditionChips(hero.conditions, { canEdit: canEditSheet }), { emptyText: 'No conditions' })}${canEditSheet ? conditionPickerHtml({ title: 'Add a condition to this hero' }) : ''}`;
+  const shownTab = ['skills', 'features', 'record'].includes(tab) ? tab : 'skills';
+  const ctx = { editing: false, canEdit: false, lockOf, chat: false, panel: true };
+  const pane = shownTab === 'features'
+    ? featuresHtml(sheet, ctx)
+    : shownTab === 'record'
+      ? recordHtml(sheet, record === undefined ? { player_name: '…' } : record, ctx)
+      : traitsHtml(sheet, ctx);
   return `
-    <article class="vtt-character-card" data-character-id="${escapeHtml(characterId)}">
-      <button type="button" class="vtt-character-summary__tuck" data-character-summary-tuck aria-label="Tuck character sheet" title="Tuck character sheet">&lt;</button>
-      <header class="vtt-character-card__hero">
-        <div class="vtt-character-card__portrait">
-          ${imageUrl ? `<img src="${escapeAttribute(imageUrl)}" alt="${escapeAttribute(name)} token">` : ''}
-        </div>
-        <div class="vtt-character-card__identity">
-          <h2 class="vtt-character-card__name">${escapeHtml(name)}</h2>
-          <div class="vtt-character-card__level">Level ${escapeHtml(hero.level || 1)}</div>
-          ${className ? `<div class="vtt-character-card__class">${escapeHtml(className)}</div>` : ''}
-          ${classTrack ? `<div class="vtt-character-card__track">${escapeHtml(classTrack)}</div>` : ''}
-        </div>
-        <div class="vtt-character-card__quick">
-          ${renderHeroTokenDots(heroTokens)}
-          ${renderSurgeControl(surges)}
-        </div>
-      </header>
-
-      <p class="vtt-character-save-status" data-character-save-status role="status" hidden></p>
-      ${renderSection('Stamina', renderStaminaSection({
-        staminaCurrent,
-        staminaMax,
-        healthPercent,
-        recoveriesCurrent,
-        recoveriesMax,
-        recoveryValue,
-      }))}
-
-      ${renderSection('Heroic Resources', `
-        <div class="vtt-character-resources">
-          <div class="vtt-character-resource-totals">
-            ${renderResource('Victories', victories)}
-            ${renderResource(resourceTitle, resourceValue, { resource })}
-          </div>
-
-        </div>
-      `)}
-
-      ${renderSection('Auras, Conditions, & Effects', `
-        <div class="vtt-character-condition-list">
-          ${conditions.length
-            ? conditions.map((condition) => renderCondition(condition, token?.id)).join('')
-            : renderConditionPicker(token?.id)}
-        </div>
-      `)}
-
-      <details class="vtt-character-reference" data-character-reference>
-        <summary>Character details <span>Statistics, resource rules, skills &amp; feats</span></summary>
-      ${renderSection('Statistics', `
-        <div class="vtt-character-stats">
-          ${renderStat('Might', stats.might)}
-          ${renderStat('Agility', stats.agility)}
-          ${renderStat('Reason', stats.reason)}
-          ${renderStat('Intuition', stats.intuition)}
-          ${renderStat('Presence', stats.presence)}
-        </div>
-        <div class="vtt-character-vitals">
-          ${renderVital('Speed', vitals.speed)}
-          ${renderVital('Disengage', vitals.disengage)}
-          ${renderVital('Stability', vitals.stability, { bonus: stabilityBonus, source: standFirm?.labels?.[0] || 'Stand Firm' })}
-        </div>
-      `)}
-
-      ${renderSection('Resource Rules', `
-          <div class="vtt-character-resource-notes">
-            ${resourceNotes.length
-              ? resourceNotes.map(renderResourceNote).join('')
-              : renderResourceNote('No resource notes listed.')}
-          </div>
-      `)}
-      ${renderSection('Skills & Languages', `
-        <div class="vtt-character-text-list">
-          ${renderSkillGroups(skills)}
-          ${languageList.length ? `<p><strong>Languages:</strong> ${escapeHtml(languageList.join(', '))}</p>` : ''}
-        </div>
-      `)}
-
-      ${renderSection('Feats', `
-        ${featureList.length
-          ? featureList.map(renderFeature).join('')
-          : '<p class="vtt-character-feature">No feats listed.</p>'}
-      `)}
-      </details>
+    <article class="vtt-character-card vtt-character-card--sheet" data-character-id="${escapeHtml(characterId)}">
+      <div class="sp sp--panel" data-sheet-theme="${theme === 'parchment' ? 'parchment' : 'diablo'}">
+        ${statusHtml(sheet, {
+          characterId,
+          portrait: imageUrl || (record && record.portrait) || '',
+          fallbackName: formatCharacterName(characterId),
+          headerExtra: '<button type="button" class="vtt-character-summary__tuck" data-character-summary-tuck aria-label="Tuck character sheet" title="Tuck character sheet">&lt;</button>',
+          openSheetHtml: '<button type="button" class="sp-btn vtt-character-card__open-sheet" data-character-open-sheet title="Open the full character sheet">Sheet</button>',
+          saveStatus: '<p class="vtt-character-save-status sp-save-status" data-character-save-status role="status" hidden></p>',
+          conditionsHtml,
+          stabilityText,
+        })}
+        ${tabsHtml([['skills', 'Skills & traits', ''], ['features', 'Features', (sheet?.features || []).length], ['record', 'Record', '']], shownTab, themeToggleHtml(theme))}
+        <div class="sp-pane">${shownTab === 'skills' ? '<p class="vtt-panel-ability-hint" title="The panel has no Abilities tab: use the ability bar at the bottom of the board">Abilities: on the bar below the board</p>' : ''}${pane}</div>
+      </div>
     </article>
   `;
 }
@@ -2081,10 +2293,10 @@ function renderStaminaSection({ staminaCurrent, staminaMax, healthPercent, recov
         </span>
         ${renderRecoveryTicks(recoveriesCurrent, recoveriesMax)}
       </button>
-      <div class="vtt-character-pill vtt-character-pill--temp" title="Temporary stamina is currently tracked as stamina above your maximum.">
+      <button type="button" class="vtt-character-pill vtt-character-pill--temp" data-character-stamina-action="temp" title="Add temporary Stamina (kept as Stamina above your maximum).">
         <span class="vtt-character-pill__label">Temp</span>
         <span class="vtt-character-pill__value" data-character-temporary-stamina>${escapeHtml(Math.max(0, staminaCurrent - staminaMax))}</span>
-      </div>
+      </button>
     </div>
     <div class="vtt-character-healthbar">
       <div class="vtt-character-healthbar__fill" style="width: ${healthPercent}%;"></div>
@@ -2195,10 +2407,14 @@ function renderResource(label, value, { resource = null } = {}) {
   const autoDice = resource && typeof resource.autoDice === 'string' ? resource.autoDice.trim() : '';
   if (!resource) {
     return `
-      <button type="button" class="vtt-character-resource vtt-character-resource--button" data-character-add-victory>
+      <div class="vtt-character-resource">
         <div class="vtt-character-resource__label">${escapeHtml(label)}</div>
-        <div class="vtt-character-resource__value" data-character-counter="victories">${escapeHtml(value)}</div>
-      </button>
+        <div class="vtt-character-resource__value-row">
+          <button type="button" class="vtt-character-step" data-character-add-victory aria-label="Add a victory">▲</button>
+          <div class="vtt-character-resource__value" data-character-counter="victories">${escapeHtml(value)}</div>
+          <button type="button" class="vtt-character-step" data-character-victory-delta="-1" aria-label="Remove a victory">▼</button>
+        </div>
+      </div>
     `;
   }
   return `
@@ -2223,41 +2439,18 @@ function updateCharacterPanelCounter(panel, counterName, value) {
   return true;
 }
 
-function renderCondition(condition, placementId) {
-  const entry = typeof condition === 'object' && condition
-    ? condition
-    : { label: String(condition || ''), index: 0, hidden: false };
+/** A token condition as a chip: the name, its duration small (SE / EOT), its source and riders, a × that takes it off. */
+function tokenConditionChip(entry, placementId) {
   const label = entry.label || entry.name || 'Effect';
   const index = Number.isInteger(entry.index) ? entry.index : 0;
-  const detail = entry.detail || '';
-  const removeButton = placementId
-    ? `<button class="vtt-character-condition__remove" type="button" data-character-condition-remove data-placement-id="${escapeAttribute(placementId)}" data-condition-index="${escapeAttribute(index)}"${entry.instanceId ? ` data-condition-instance-id="${escapeAttribute(entry.instanceId)}"` : ''} aria-label="Remove ${escapeAttribute(label)}">x</button>`
-    : '';
-
-  return `
-    <span class="vtt-character-condition ${entry.hidden ? 'vtt-character-condition--hidden-effect' : ''}">
-      <span class="vtt-character-condition__body">
-        <span class="vtt-character-condition__name">${escapeHtml(label)}</span>
-        ${detail ? `<span class="vtt-character-condition__detail">${escapeHtml(detail)}</span>` : ''}
-      </span>
-      ${removeButton}
-    </span>
-  `;
-}
-
-function renderConditionPicker(placementId) {
-  if (!placementId) {
-    return '<span class="vtt-character-condition">No conditions</span>';
-  }
-  return `
-    <label class="vtt-character-condition vtt-character-condition--picker">
-      <span>No conditions</span>
-      <select data-character-condition-select aria-label="Add condition">
-        <option value="">Add...</option>
-        ${CONDITION_OPTIONS.map((condition) => `<option value="${escapeAttribute(condition)}">${escapeHtml(condition)}</option>`).join('')}
-      </select>
-    </label>
-  `;
+  return {
+    label,
+    short: entry.durationType && entry.durationType !== 'instantaneous' ? durationShort(entry.durationType) : '',
+    title: [label, entry.detail].filter(Boolean).join(' — '),
+    detail: entry.extra || '',
+    hidden: entry.hidden,
+    removeAttrs: `data-character-condition-remove data-placement-id="${escapeAttribute(placementId)}" data-condition-index="${escapeAttribute(index)}"${entry.instanceId ? ` data-condition-instance-id="${escapeAttribute(entry.instanceId)}"` : ''}`,
+  };
 }
 
 function renderRecoveryTicks(current, max) {
@@ -2374,7 +2567,9 @@ function normalizeConditions(value) {
           instanceId: String(entry.instanceId ?? '').trim(),
           riders: Array.isArray(entry.riders) ? entry.riders : [],
           durationLabel,
+          durationType: typeof entry.duration === 'string' ? entry.duration : String(entry.duration?.type || ''),
           detail: formatConditionDetail(entry, hidden, durationLabel),
+          extra: formatConditionDetail(entry, hidden, ''),
         };
       }
       return null;
@@ -3576,15 +3771,33 @@ function parseAbilityResourceCost(value) {
   return { amount: 0, name: '' };
 }
 
+// Puts the numbers a sheet write answered with (where the stored sheet now stands) on a copy of the sheet.
+function applyServerAnswer(sheet, answer) {
+  const hero = sheet?.hero;
+  if (!hero || typeof hero !== 'object' || !answer || typeof answer !== 'object') return;
+  const take = (target, key, value) => {
+    if (value === undefined || value === null || value === '' || !Number.isFinite(Number(value))) return;
+    target[key] = Math.trunc(Number(value));
+  };
+  if (hero.vitals && typeof hero.vitals === 'object') {
+    take(hero.vitals, 'currentStamina', answer.currentStamina);
+    take(hero.vitals, 'currentRecoveries', answer.currentRecoveries);
+    take(hero.vitals, 'tempStamina', answer.tempStamina);
+  }
+  take(hero, 'surges', answer.surges);
+  take(hero, 'victories', answer.victories);
+  if (hero.resource && typeof hero.resource === 'object') take(hero.resource, 'value', answer.resource);
+}
+
 async function saveCharacterSummaryResources(sheet, options = {}) {
   const characterId = typeof options.characterId === 'string' ? options.characterId : '';
   const change = typeof options.change === 'string' ? options.change : '';
-  if (!characterId || !sheet || !['stamina', 'recovery', 'surges', 'resource', 'victories'].includes(change)) {
+  if (!characterId || !sheet || !['stamina', 'temp', 'recovery', 'surges', 'resource', 'victories'].includes(change)) {
     return false;
   }
   // How much the panel changed the number by; a Recovery is worked out by the server from the stored record.
   const amount = Math.trunc(Number(options.amount) || 0);
-  if (change !== 'recovery' && amount === 0) return true;
+  if (change !== 'recovery' && amount === 0) return { success: true };
 
   const routeConfig = options.routes && typeof options.routes === 'object' ? options.routes : {};
   const endpoint = typeof routeConfig.sheet === 'string' && routeConfig.sheet
@@ -3600,6 +3813,10 @@ async function saveCharacterSummaryResources(sheet, options = {}) {
   } else if (change === 'stamina') {
     body.set('action', 'sync-vitals');
     body.set('staminaDelta', String(amount));
+  } else if (change === 'temp') {
+    // Temporary Stamina gained: the server keeps the higher of held and gained.
+    body.set('action', 'sync-vitals');
+    body.set('gainTemp', String(Math.max(0, amount)));
   } else {
     body.set('action', { surges: 'sync-surges', resource: 'sync-resource', victories: 'sync-victories' }[change]);
     body.set('delta', String(amount));
@@ -3619,6 +3836,11 @@ async function saveCharacterSummaryResources(sheet, options = {}) {
     return false;
   }
   if (['surges', 'resource', 'victories'].includes(change)) recordSheetUndo({ characterId, counter: change, delta: amount });
+  // A Recovery spent is kept for turn undo like the other counters (the healing is the token's own step).
+  const spent = change === 'recovery' ? Math.max(0, Math.trunc(Number(payload.spent) || 0)) : null;
+  if (spent) recordSheetUndo({ characterId, counter: 'recoveries', delta: -spent });
+  // The server's answer is what is returned: a Recovery the server did not spend (none left) changed nothing.
+  if (spent === 0) return payload;
   if (options.broadcast !== false && typeof BroadcastChannel === 'function') {
     const channel = new BroadcastChannel(CHARACTER_SHEET_SYNC_CHANNEL);
     channel.postMessage({
@@ -3629,7 +3851,7 @@ async function saveCharacterSummaryResources(sheet, options = {}) {
     });
     channel.close();
   }
-  return true;
+  return payload;
 }
 
 function requestAutomationClearScopedFlag(payload) {
@@ -3758,7 +3980,11 @@ function getSkillGroup(skill) {
   return 'Other';
 }
 
+// A third of the Stamina maximum (October 2026, as the sheet and the server work it out); a stored value only for a
+// sheet with no maximum.
 function computeRecoveryValue(vitals) {
+  const third = Number(vitals?.staminaMax) || 0;
+  if (third > 0) return Math.floor(third / 3);
   const raw = vitals?.recoveryValue;
   if (raw !== '' && raw !== null && raw !== undefined && Number(raw) !== 0) {
     return Math.floor(Number(raw)) || raw;
@@ -3822,6 +4048,9 @@ function parseAutoDice(value) {
 }
 
 export const __testing = {
+  applyServerAnswer,
+  openFullCharacterSheet,
+  renderStaminaSection,
   formatConditionLabel,
   normalizeConditions,
   renderResource,

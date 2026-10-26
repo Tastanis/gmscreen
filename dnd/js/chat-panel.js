@@ -102,7 +102,11 @@
         return trimmed;
     }
 
-    function initChatPanel(isGM, currentUser) {
+    // options.headless: a hidden chat kept only so the page can post to chat (the Projects screen's project rolls,
+    // campaign/index.php). It shows no toasts, whisper pop-ups or sounds and starts no Ask-a-Test, because the
+    // visible chat on the same desk already does.
+    function initChatPanel(isGM, currentUser, options) {
+        const headless = Boolean(options && options.headless);
         const panel = document.getElementById('chat-panel');
         const toggleButton = document.getElementById('chat-panel-toggle');
         const closeButton = document.getElementById('chat-panel-close');
@@ -245,7 +249,7 @@
         }
 
         function queueChatNotification(message) {
-            if (!message || message.user === currentUser) {
+            if (headless || !message || message.user === currentUser) {
                 return;
             }
             // Only in the window being used (Brandon: not in every version of the chat that is open). The chat
@@ -977,7 +981,7 @@
                 store.splice(0, store.length - MAX_WHISPER_MESSAGES);
             }
 
-            if (normalized.direction === 'incoming' && notify) {
+            if (normalized.direction === 'incoming' && notify && !headless) {
                 const isNewMessage = existingIndex === -1 || wasPending;
                 if (isNewMessage) {
                     openWhisperPopout(partnerId);
@@ -1378,6 +1382,9 @@
 
             const wrapper = document.createElement('div');
             wrapper.className = 'chat-message';
+            // When and who, for pages that group lines or add day dividers (the Table's chat window).
+            if (message.timestamp) wrapper.dataset.ts = String(message.timestamp);
+            wrapper.dataset.user = String(message.user || '');
 
             const messageText = getDisplayText(typeof message.message === 'string' ? message.message : '');
 
@@ -2563,7 +2570,7 @@
             }
         }
         // Tests the Director asks heroes for ride on the chat (js/ask-test.js).
-        if (window.AskTest && typeof window.AskTest.start === 'function') {
+        if (!headless && window.AskTest && typeof window.AskTest.start === 'function') {
             window.AskTest.start({ isGM, currentUser, endpoint: CHAT_ENDPOINT, participants });
         }
         initChatPusher();

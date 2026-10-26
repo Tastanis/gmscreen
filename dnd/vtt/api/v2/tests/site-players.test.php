@@ -34,27 +34,27 @@ $login = static function (array $post = [], array $cookie = [], array $session =
 try {
     require $root . '/includes/players.php';
     // No list yet: the four originals, all on, as before.
-    playersCheck(players_ids() === ['cal', 'sharon', 'indigo', 'zepha'] && players_ids(true) === players_ids(), 'With no list the four originals are the players.');
+    playersCheck(players_ids() === ['cal', 'sharon', 'indigo', 'zepha', 'frunk'] && players_ids(true) === ['cal', 'sharon', 'indigo', 'zepha'], 'With no list the four originals are the players, plus Frunk turned off (October 2026).');
     playersCheck(player_may_play('GM') && player_may_play('sharon') && !player_may_play('nobody'), 'The GM always plays; an unknown user does not.');
 
     // A new player: a fixed id, unnamed, off.
     $list = players_all();
     $list[] = ['id' => players_next_id(), 'name' => '', 'login' => '', 'active' => false, 'color' => '#123456'];
     players_save($list);
-    $new = player_by_id('player5');
-    playersCheck($new !== null && $new['name'] === 'New player' && !$new['active'] && $new['login'] === '', 'A new player is player5, "New player", off, with no login: ' . json_encode($new));
+    $new = player_by_id('player6');
+    playersCheck($new !== null && $new['name'] === 'New player' && !$new['active'] && $new['login'] === '', 'A new player is player6 (after Frunk), "New player", off, with no login: ' . json_encode($new));
     playersCheck(players_ids(true) === ['cal', 'sharon', 'indigo', 'zepha'], 'An off player is not among the players shown.');
 
     // Named later, given a login and a password, turned on; Sharon off. The ids never change.
     $list = players_all();
     foreach ($list as &$player) {
-        if ($player['id'] === 'player5') { $player['name'] = 'Mira'; $player['login'] = 'mira'; $player['active'] = true; $player['passwordHash'] = password_hash('test-only-pass', PASSWORD_DEFAULT); }
+        if ($player['id'] === 'player6') { $player['name'] = 'Mira'; $player['login'] = 'mira'; $player['active'] = true; $player['passwordHash'] = password_hash('test-only-pass', PASSWORD_DEFAULT); }
         if ($player['id'] === 'sharon') { $player['active'] = false; }
     }
     unset($player);
     players_save($list);
-    playersCheck(players_ids() === ['cal', 'sharon', 'indigo', 'zepha', 'player5'], 'Every player keeps their place and id, on or off.');
-    playersCheck(players_ids(true) === ['cal', 'indigo', 'zepha', 'player5'], 'Sharon off, Mira on.');
+    playersCheck(players_ids() === ['cal', 'sharon', 'indigo', 'zepha', 'frunk', 'player6'], 'Every player keeps their place and id, on or off.');
+    playersCheck(players_ids(true) === ['cal', 'indigo', 'zepha', 'player6'], 'Sharon off, Mira on.');
     playersCheck(!str_contains(json_encode(players_public()), 'passwordHash') && !str_contains(players_script(), '$2y$'), 'A password hash never reaches a page.');
     $refused = false;
     try { $dup = players_all(); $dup[0]['login'] = 'mira'; players_save($dup); } catch (InvalidArgumentException $e) { $refused = true; }
@@ -62,7 +62,7 @@ try {
 
     // The login page.
     $mira = $login(['username' => 'Mira', 'password' => 'test-only-pass']);
-    playersCheck(($mira['session']['user'] ?? '') === 'player5' && ($mira['session']['logged_in'] ?? false) === true, 'Mira logs in with her own password, as player5: ' . json_encode($mira));
+    playersCheck(($mira['session']['user'] ?? '') === 'player6' && ($mira['session']['logged_in'] ?? false) === true, 'Mira logs in with her own password, as player6: ' . json_encode($mira));
     $wrong = $login(['username' => 'mira', 'password' => 'not-it']);
     playersCheck(empty($wrong['session']['logged_in']), 'A wrong password is refused.');
     $off = $login(['username' => 'sharon', 'password' => 'anything']);
@@ -88,7 +88,7 @@ try {
 
     // An unreadable list never empties the site.
     file_put_contents($root . '/data/players.json', '{not json');
-    playersCheck(players_ids(true) === ['cal', 'sharon', 'indigo', 'zepha'] || players_all(true) === players_defaults(), 'A broken list falls back to the four.');
+    playersCheck(array_column(players_all(true), 'id') === ['cal', 'sharon', 'indigo', 'zepha', 'frunk'], 'A broken list falls back to the four (plus Frunk, off).');
 } finally {
     $remove($root);
 }

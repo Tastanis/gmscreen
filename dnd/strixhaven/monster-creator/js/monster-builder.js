@@ -3939,6 +3939,13 @@ function importMonsterFromPastedJson() {
         return;
     }
 
+    // Several monsters (a list, or a package with "monsters") go through the upload preview.
+    if (window.MonsterUpload?.isMultiMonster(parsed)) {
+        closeMonsterJsonImportModal();
+        window.MonsterUpload.openWithParsed(parsed, 'pasted.json');
+        return;
+    }
+
     try {
         applyMonsterJsonImport(parsed);
         closeMonsterJsonImportModal();
@@ -3965,6 +3972,11 @@ async function handleMonsterJsonImportFile(input) {
     try {
         const text = await file.text();
         const parsed = JSON.parse(text);
+        if (window.MonsterUpload?.isMultiMonster(parsed)) {
+            closeMonsterJsonImportModal();
+            window.MonsterUpload.openWithParsed(parsed, file.name);
+            return;
+        }
         applyMonsterJsonImport(parsed);
         closeMonsterJsonImportModal();
     } catch (error) {

@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<script>try{document.documentElement.classList.add(localStorage.getItem('sheet-theme')==='parchment'?'parchment':'diablo');}catch(e){document.documentElement.classList.add('diablo');}</script>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chat</title>
+  <!-- The site's own chat (js/chat-panel.js), always open, as a window on the Table. Who you are and where chat lives
+       come from the Table, which reads them from the board. -->
+  <link rel="stylesheet" href="/dnd/css/theme.css">
+  <link rel="stylesheet" href="/dnd/css/ui-kit.css">
+  <link rel="stylesheet" href="/dnd/css/style.css">
+  <link rel="stylesheet" href="/dnd/vtt/assets/css/chat.css">
+  <style>
+    html, body { margin: 0; height: 100%; background: #16100c; overflow: hidden; }
+    #chat-panel, #chat-panel.chat-panel--closed { position: absolute !important; inset: 0 !important; width: auto !important; height: auto !important; max-height: none !important;
+      transform: none !important; opacity: 1 !important; visibility: visible !important; pointer-events: auto !important; border-radius: 0 !important; margin: 0 !important; box-shadow: none !important; display: flex !important; flex-direction: column; }
+    #chat-panel .chat-panel__header { display: none !important; }
+    #chat-panel .chat-panel__history { flex: 1; min-height: 0; }
+    #chat-panel-toggle { display: none !important; }
+    #chat-clear-btn { display: none !important; }
+    /* Diablo skin (default on the Table; the sheet's Parchment setting keeps the site's light chat). */
+    html.diablo, html.diablo body { background: #120d0a; }
+    html.diablo #chat-panel { background: #120d0a !important; border: 0 !important; }
+    html.diablo .chat-panel__history { background: radial-gradient(ellipse at top, #1e1610, #120d0a 70%); gap: 6px; scrollbar-color: #4a3826 transparent; }
+    html.diablo .chat-message { background: linear-gradient(#211913, #1a130e); border: 1px solid #3a2b1d; color: #e9dcc4; border-radius: 7px; max-width: 92%; }
+    html.diablo .chat-message--self { background: linear-gradient(#2a2015, #221a11); border-color: #5a4628; }
+    html.diablo .chat-message__meta { color: #a8977a; }
+    html.diablo .chat-message__meta span:first-child { color: #d9b26a; font-family: Cinzel, Georgia, serif; font-weight: 700; letter-spacing: .02em; }
+    html.diablo .chat-message__text { color: #e9dcc4; }
+    html.diablo .chat-message--dice-roll { background: linear-gradient(#1d1712, #17110d); border-color: #4a3826; }
+    html.diablo .chat-roll-card { background: #0f0b08cc; color: #e9dcc4; border: 1px solid #3a2b1d; }
+    html.diablo .chat-roll-card__breakdown, html.diablo .chat-roll-card__expression { color: #cdbd9f; }
+    html.diablo .chat-roll-card__total { color: #f0d898; }
+    html.diablo .chat-roll-card__project-name { color: #d9b26a; }
+    html.diablo .chat-message.chat-message--project-roll { background: linear-gradient(#2a2213, #201a0e); border-color: #8a6d36; }
+    html.diablo .chat-message.chat-message--project-roll-accepted { background: linear-gradient(#17271b, #122016); border-color: #3f7a4f; }
+    html.diablo .chat-message.chat-message--project-roll-denied { background: linear-gradient(#2a1614, #21110f); border-color: #8a3a30; }
+    html.diablo .chat-panel__whispers { background: #17110d; border-top: 1px solid #3a2b1d; }
+    html.diablo .chat-whisper-btn { background: #1f1711; color: #e9dcc4; border: 1px solid #4a3826; }
+    html.diablo .chat-whisper-btn:hover, html.diablo .chat-whisper-btn:focus-visible { border-color: #c8a95e; color: #f0d898; }
+    html.diablo .chat-panel__input { background: #17110d; border-top: 1px solid #3a2b1d; }
+    html.diablo .chat-panel__textarea { background: #0f0b08; color: #efe4cf; border: 1px solid #4a3826; }
+    html.diablo .chat-panel__textarea:focus { outline: none; border-color: #c8a95e; box-shadow: 0 0 0 2px #c8a95e33; }
+    html.diablo .chat-panel__send { background: linear-gradient(#5a4224, #3e2d18); color: #f0d898; border: 1px solid #8a6d36; font-family: Cinzel, Georgia, serif; }
+    html.diablo .chat-panel__send:hover { background: linear-gradient(#6d5130, #4a3620); border-color: #c8a95e; }
+    /* Bubbles share a minimum width so the edges line up. */
+    .chat-message:not(.undo) { min-width: 62%; box-sizing: border-box; }
+    /* Day dividers, runs of lines from one person, and undo lines kept small. */
+    .chat-day { align-self: stretch; display: flex; align-items: center; gap: 8px; margin: 6px 0 2px; font: 600 10px/1 "Segoe UI", sans-serif; letter-spacing: .12em; text-transform: uppercase; color: #9a8a70; }
+    .chat-day::before, .chat-day::after { content: ""; flex: 1; height: 1px; background: currentColor; opacity: .35; }
+    .chat-message.run { margin-top: -3px; padding-top: 5px; }
+    .chat-message.run .chat-message__meta span:first-child { visibility: hidden; }
+    /* Undo lines are table notices, not anyone's message: centred, small, with the time inline. */
+    .chat-message.undo { align-self: center; max-width: 94%; padding: 2px 10px; font-size: .78rem; opacity: .85; border-radius: 10px; text-align: center; }
+    .chat-message.undo .chat-message__meta { display: none; }
+    .chat-message.undo .chat-message__text::after { content: attr(data-when); margin-left: 6px; opacity: .7; font-size: .9em; }
+    html.diablo .chat-message.undo { background: #17110d; border: 1px dashed #4a3826; }
+    html.diablo .chat-message.undo .chat-message__text { color: #b9a98c; }
+    /* Whisper buttons say what they are. */
+    .chat-panel__whispers::before { content: "Whisper:"; align-self: center; font: 600 11px "Segoe UI", sans-serif; color: #9a8a70; margin-right: 2px; }
+    html.diablo .chat-whisper-btn--unread { border-color: #c8a95e; box-shadow: 0 0 0 1px #c8a95e66; }
+  </style>
+</head>
+<body class="vtt-body">
+  <aside id="chat-panel" class="chat-panel" data-module="vtt-chat">
+    <div class="chat-panel__header"><h3 class="chat-panel__title">Chat</h3><div class="chat-panel__actions">
+      <button type="button" id="chat-clear-btn" class="chat-panel__clear" data-action="clear-chat">Clear Chat</button>
+      <button type="button" id="chat-panel-close" class="chat-panel__close" aria-label="Close chat" data-action="close-chat">&times;</button></div></div>
+    <div id="chat-message-list" class="chat-panel__history" role="log" aria-live="polite"></div>
+    <div id="chat-whisper-targets" class="chat-panel__whispers" role="group" aria-label="Whisper targets"></div>
+    <form id="chat-input-form" class="chat-panel__input" autocomplete="off">
+      <textarea id="chat-input" class="chat-panel__textarea" rows="2" placeholder="Type a message…"></textarea>
+      <button type="submit" id="chat-send-btn" class="chat-panel__send">Send</button>
+    </form>
+    <div id="chat-drop-target" class="chat-drop-target" data-drop-scope="panel" hidden aria-hidden="true">Drop images or image links to share</div>
+  </aside>
+  <button id="chat-panel-toggle" class="chat-panel-toggle" type="button" aria-expanded="false" aria-controls="chat-panel" data-action="toggle-chat">Open Chat</button>
+  <div id="chat-whisper-popouts" class="chat-whisper-popouts" aria-live="polite" aria-atomic="false"></div>
+  <div id="chat-whisper-alerts" class="chat-whisper-alerts" aria-live="assertive" aria-atomic="true"></div>
+  <script>
+    (function () {
+      // Who you are comes from the Table (it reads it from the board it has open).
+      var cfg = null;
+      try { cfg = window.parent && window.parent.Table && window.parent.Table.siteConfig && window.parent.Table.siteConfig(); } catch (e) { cfg = null; }
+      cfg = cfg || {};
+      window.chatHandlerUrl = cfg.chatHandlerUrl || '/dnd/chat_handler.php';
+      window.chatParticipants = cfg.chatParticipants || [];
+      if (cfg.chatPusher) window.chatPusherConfig = cfg.chatPusher;
+      window.tableChatUser = { isGM: !!cfg.isGM, name: cfg.currentUser || '' };
+    })();
+  </script>
+  <script src="https://js.pusher.com/8.4.0/pusher.min.js"></script>
+  <script src="/dnd/js/ui-kit.js"></script>
+  <script src="/dnd/js/chat-panel.js"></script>
+  <script>
+    window.initChatPanel(window.tableChatUser.isGM, window.tableChatUser.name);
+    // The panel opens itself closed; on the Table it is always open.
+    document.getElementById('chat-panel').classList.remove('chat-panel--closed');
+    document.getElementById('chat-panel').setAttribute('aria-hidden', 'false');
+    // Tidy the list after each render: names start with a capital, a divider for each new day,
+    // lines from one person in a row lose the repeated name, undo lines stay small.
+    (function () {
+      var list = document.getElementById('chat-message-list'); var busy = false;
+      function dayLabel(d) { var t = new Date(); var y = new Date(); y.setDate(t.getDate() - 1);
+        if (d.toDateString() === t.toDateString()) return 'Today'; if (d.toDateString() === y.toDateString()) return 'Yesterday';
+        return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }); }
+      function tidy() {
+        if (busy) return; busy = true;
+        try {
+        list.querySelectorAll('.chat-day').forEach(function (n) { n.remove(); });
+        var lastDay = '', lastUser = null, lastTs = 0;
+        list.querySelectorAll('.chat-message').forEach(function (m) {
+          var who = m.querySelector('.chat-message__meta span');
+          if (who && who.textContent && who.textContent.charAt(0) !== who.textContent.charAt(0).toUpperCase()) who.textContent = who.textContent.charAt(0).toUpperCase() + who.textContent.slice(1);
+          var ts = m.dataset.ts ? new Date(m.dataset.ts) : null; var ok = ts && !isNaN(ts.getTime());
+          if (ok && ts.toDateString() !== lastDay) { lastDay = ts.toDateString(); var d = document.createElement('div'); d.className = 'chat-day'; d.textContent = dayLabel(ts); m.before(d); lastUser = null; }
+          var text = (m.querySelector('.chat-message__text') || {}).textContent || '';
+          var isUndo = /^[^A-Za-z0-9]*Undid/.test(text);   // "↶ Undid …", whatever the arrow
+          m.classList.toggle('undo', isUndo);
+          if (isUndo) {   // a notice: time shown inline, and it breaks a run of one person's lines
+            var tx = m.querySelector('.chat-message__text'), tm = m.querySelector('.chat-message__meta span:last-child');
+            if (tx && tm) tx.dataset.when = tm.textContent;
+            m.classList.remove('run'); lastUser = null; return;
+          }
+          var user = m.dataset.user || ''; var t = ok ? ts.getTime() : 0;
+          m.classList.toggle('run', user !== '' && user === lastUser && t - lastTs < 5 * 60 * 1000 && !m.classList.contains('chat-message--project-roll'));
+          lastUser = user; lastTs = t;
+        });
+        } catch (e) { console.warn('[chat tidy]', e); } finally { busy = false; }
+      }
+      new MutationObserver(function () { if (!busy) setTimeout(tidy, 0); }).observe(list, { childList: true });
+      tidy();
+    })();
+  </script>
+</body>
+</html>

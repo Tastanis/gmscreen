@@ -54,7 +54,7 @@ test('both places a token\'s Stamina changes say what it was before', () => {
 });
 
 test('the token takes the sheet\'s answer, unless a newer change of its own is waiting', () => {
-  assert.match(board, /if\(sheetSyncQueue\.get\(key\)===entry\)\{\s*sheetSyncQueue\.delete\(key\);[\s\S]{0,200}if\(stands\?\.success===true && stands\.hasStamina!==false\) applySheetStaminaToTokens\(name,stands\.currentStamina,stands\.staminaMax\);/);
+  assert.match(board, /if\(sheetSyncQueue\.get\(key\)===entry\)\{\s*sheetSyncQueue\.delete\(key\);[\s\S]{0,200}if\(stands\?\.success===true && stands\.hasStamina!==false\) applySheetStaminaToTokens\(name,stands\.currentStamina,stands\.staminaMax,stands\.tempStamina\);/);  // temporary Stamina too (October 2026)
   assert.match(board, /if\(!response\?\.ok\)\{ entry\.failed=true; return response; \}/);
   // Sheet pages in this browser are told where the sheet stands, not the token's copy.
   assert.match(board, /broadcastStaminaSync\(\{\s*character: payload\?\.character,\s*currentStamina: stands\.currentStamina,\s*staminaMax: stands\.staminaMax,/);
@@ -64,7 +64,7 @@ test('a sheet with no Stamina gives a token nothing; the Director\'s page hears 
   assert.match(board, /data\.success === false \|\| data\.hasStamina === false\) \{\s*return;/);
   assert.match(board, /url\.searchParams\.set\('action', 'party-vitals'\);\s*if \(partyVitalsStamp\) url\.searchParams\.set\('since', partyVitalsStamp\);/);
   assert.match(board, /if \(!endpoint \|\| !isGmUser\(\) \|\| partyVitalsBusy \|\| document\.visibilityState === 'hidden'\) return;/, 'the Director\'s page only, and not while its tab is hidden');
-  assert.match(board, /if \(vitals\?\.hasStamina !== true\) continue;\s*if \(sending\.has\(character\.toLowerCase\(\)\) \|\| heroTokenJustChanged\(character\)\) \{ held = true; continue; \}\s*applySheetStaminaToTokens\(character, vitals\.currentStamina, vitals\.staminaMax\);/, 'a hero with a write of this page\'s on its way is left alone');
+  assert.match(board, /if \(vitals\?\.hasStamina !== true\) continue;[\s\S]{0,300}if \(firstRead \|\| partyVitalsSeen\.get\(key\) === stands\) \{ partyVitalsSeen\.set\(key, stands\); continue; \}\s*if \(sending\.has\(key\) \|\| heroTokenJustChanged\(character\)\) \{ held = true; continue; \}\s*partyVitalsSeen\.set\(key, stands\);\s*applySheetStaminaToTokens\(character, vitals\.currentStamina, vitals\.staminaMax, vitals\.tempStamina\);/, 'a hero with a write of this page\'s on its way is left alone; the first read (the page loading) and an unchanged sheet put nothing on a token');
   assert.match(board, /window\.setInterval\(readPartyVitals, PARTY_VITALS_INTERVAL_MS\);/);
   // Putting a sheet's Stamina on a token does not send it back to the sheet.
   const apply = board.slice(board.indexOf('function applySheetStaminaToTokens('), board.indexOf('async function readPartyVitals('));
@@ -75,8 +75,8 @@ test('a sheet with no Stamina gives a token nothing; the Director\'s page hears 
 // once and the sheet a moment later. The Director's read of the sheets, in that gap, would have put the token
 // back to the sheet's older number and forward again when the write landed.
 test('the party read leaves alone a hero whose token has just changed, on any page', () => {
-  assert.match(board, /if \(mutation\?\.placementId && mutation\.changedFields\?\.some\(\(field\) => field === 'hp' \|\| field === '\*'\)\) \{\s*tokenStaminaChangedAt\.set\(mutation\.placementId, Date\.now\(\)\);/);
-  assert.match(board, /if \(sending\.has\(character\.toLowerCase\(\)\) \|\| heroTokenJustChanged\(character\)\) \{ held = true; continue; \}/);
+  assert.match(board, /if \(mutation\?\.placementId && mutation\.changedFields\?\.some\(\(field\) => field === 'hp' \|\| field === 'tempStamina' \|\| field === '\*'\)\) \{\s*tokenStaminaChangedAt\.set\(mutation\.placementId, Date\.now\(\)\);/);
+  assert.match(board, /if \(sending\.has\(key\) \|\| heroTokenJustChanged\(character\)\) \{ held = true; continue; \}/);
   assert.match(board, /partyVitalsStamp = held \? '' : String\(answer\.stamp \|\| ''\);/, 'and reads that hero again next time');
   assert.match(board, /const PARTY_VITALS_SETTLE_MS = 3000;/);
   // The map of times exists before anything that can run while the page starts up.

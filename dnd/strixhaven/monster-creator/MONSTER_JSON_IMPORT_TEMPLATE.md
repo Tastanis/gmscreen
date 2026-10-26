@@ -1,8 +1,11 @@
 # Monster Creator JSON Import Template
 
-Use this format when creating a complete monster for the Strixhaven Monster Creator. The Import JSON button accepts either the object below directly or wrapped as `{ "monster": { ... } }`.
+Use this format when creating a complete monster for the Strixhaven Monster Creator. Two ways in, same monster format and same importer:
 
-The import creates a new monster in editor mode. Review it, then use **Save to Tab**.
+- **Upload Monsters** (preferred for AI-written files): a `.json` file with one monster, a list, or a package with `tab`/`subTab`, plus optional picture files. The server previews each monster (NEW / UPDATE by `id` or name+level / BLOCKED) and **Import** saves straight into the tabs. File shapes, matching, pictures, the error/warning rules and a pre-hand-over checklist: [`../../ai-reference/monsters/UPLOAD-GUIDE.md`](../../ai-reference/monsters/UPLOAD-GUIDE.md).
+- **Import JSON**: paste one monster (the object below, or `{ "monster": { ... } }`). It opens in editor mode; review it, then use **Save to Tab**. A pasted list or package opens the Upload Monsters preview instead.
+
+`id` is optional; Upload Monsters uses it to update that exact monster.
 
 The importer accepts the canonical lowercase `attributes` object shown below. For compatibility with older or third-party exporters, attribute names are matched case-insensitively and the containers `characteristics` and `stats` are also accepted; imported data is always stored in the Monster Creator's flat lowercase fields. When both nested attributes and legacy top-level fields are present, the documented nested object wins so placeholder top-level zeros cannot mask real scores.
 

@@ -68,6 +68,12 @@ require_once '../../version.php';
                 <button class="json-import-toggle" onclick="openMonsterJsonImportModal()" title="Create a complete monster from pasted JSON or a JSON file">
                     Import JSON
                 </button>
+                <!-- Upload Monsters: a .json file (one monster, a list, or a package with tab/subTab)
+                     -> server preview -> Import saves straight into the tabs.
+                     LLM note: file shapes, matching and checks: ../../ai-reference/monsters/UPLOAD-GUIDE.md -->
+                <button class="json-import-toggle monster-upload-toggle" onclick="openMonsterUploadModal()" title="Upload a monster .json file (and pictures): preview, then save straight into the tabs">
+                    Upload Monsters
+                </button>
                 <input
                     type="file"
                     id="monsterJsonImportInput"
@@ -105,6 +111,7 @@ require_once '../../version.php';
                     <p>Select a tab to view monsters, or create a new monster.</p>
                     <button class="btn-primary" onclick="addNewMonster()">Add New Monster</button>
                     <button class="btn-secondary" onclick="openMonsterJsonImportModal()">Import Monster JSON</button>
+                    <button class="btn-secondary" onclick="openMonsterUploadModal()">Upload Monsters</button>
                 </div>
             </div>
 
@@ -208,7 +215,7 @@ require_once '../../version.php';
                 <button class="json-import-modal__close" type="button" onclick="closeMonsterJsonImportModal()" aria-label="Close">&times;</button>
             </div>
             <div class="json-import-modal__body">
-                <p class="json-import-modal__hint">Paste the monster JSON below and click <strong>Import Pasted JSON</strong>, or load it from a file. The imported monster opens in editor mode so you can pick the tab via <strong>Save to Tab</strong>.</p>
+                <p class="json-import-modal__hint">Paste the monster JSON below and click <strong>Import Pasted JSON</strong>, or load it from a file. The imported monster opens in editor mode so you can pick the tab via <strong>Save to Tab</strong>. Several monsters (a list or a package) open in <strong>Upload Monsters</strong> instead.</p>
                 <textarea
                     id="monsterJsonImportTextarea"
                     class="json-import-modal__textarea"
@@ -222,6 +229,31 @@ require_once '../../version.php';
                 <button type="button" class="btn-secondary" onclick="closeMonsterJsonImportModal()">Cancel</button>
                 <button type="button" class="btn-secondary" onclick="triggerMonsterJsonImport()">Load from File…</button>
                 <button type="button" class="btn-primary" onclick="importMonsterFromPastedJson()">Import Pasted JSON</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upload Monsters Modal (js/monster-upload.js) -->
+    <div id="monsterUploadModal" class="json-import-modal monster-upload-modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="monsterUploadTitle">
+        <div class="json-import-modal__backdrop" onclick="closeMonsterUploadModal()"></div>
+        <div class="json-import-modal__dialog monster-upload-modal__dialog">
+            <div class="json-import-modal__header">
+                <h2 id="monsterUploadTitle">Upload Monsters</h2>
+                <button class="json-import-modal__close" type="button" onclick="closeMonsterUploadModal()" aria-label="Close">&times;</button>
+            </div>
+            <div class="json-import-modal__body">
+                <div class="monster-upload-drop" id="monsterUploadDrop" tabindex="0" role="button" aria-describedby="monsterUploadHint">
+                    <strong>Choose a monster .json file</strong> or drop it here
+                    <span id="monsterUploadHint" class="monster-upload-drop__hint">One monster, a list, or a package with a tab. Add PNG/JPEG/GIF/WebP pictures named like the monster to set portraits. Nothing is saved until you press Import.</span>
+                    <input type="file" id="monsterUploadInput" accept=".json,application/json,.png,.jpg,.jpeg,.gif,.webp,image/png,image/jpeg,image/gif,image/webp" multiple hidden>
+                </div>
+                <div class="monster-upload-files" id="monsterUploadFiles"></div>
+                <div class="monster-upload-status" id="monsterUploadStatus" role="status" aria-live="polite"></div>
+                <div class="monster-upload-preview" id="monsterUploadPreview"></div>
+            </div>
+            <div class="json-import-modal__footer">
+                <button type="button" class="btn-secondary" onclick="closeMonsterUploadModal()">Close</button>
+                <button type="button" class="btn-primary" id="monsterUploadApply" disabled onclick="applyMonsterUpload()">Import</button>
             </div>
         </div>
     </div>
@@ -240,6 +272,7 @@ require_once '../../version.php';
     <script src="../../character_sheet/ability-automation/inspector.js"></script>
     <script src="js/monster-json-import-normalize.js"></script>
     <script src="js/monster-builder.js"></script>
+    <script src="js/monster-upload.js"></script>
     <!-- monster-automation-ui.js wires the button hooks. Must load AFTER
          monster-builder.js so window.monsterData / markMonsterDirty exist. -->
     <script src="js/monster-automation-ui.js"></script>

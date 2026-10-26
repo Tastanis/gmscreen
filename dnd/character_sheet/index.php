@@ -1,4 +1,7 @@
 <?php
+// The character sheet (October 2026 rebuild; the design Brandon approved over five rounds of mock-ups). The page is
+// drawn by app.js from the parts in parts/ (shared with the map's side panel). The classic sheet (classic.php) was retired
+// when this one was approved (Brandon, October 2026).
 if (session_status() === PHP_SESSION_NONE) {
   session_start();
 }
@@ -15,6 +18,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || $sessio
 
 $requestedCharacter = isset($_GET['character']) ? strtolower(trim($_GET['character'])) : '';
 
+// Players see their own sheet; the Director any.
 if (!$isGm && $requestedCharacter !== '' && $requestedCharacter !== $sessionUser) {
   $requestedCharacter = $sessionUser;
 }
@@ -41,94 +45,65 @@ $chatPusherConfig = getChatPusherClientConfig();
 
 // Include navigation bar
 require_once '../includes/strix-nav.php';
+$v = (int) $assetVersion;
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-sheet-theme="diablo">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Hero Sheet</title>
-  <link rel="stylesheet" href="../css/chat-panel.css?v=<?php echo (int) $assetVersion; ?>" />
-  <link rel="stylesheet" href="../css/ask-test.css?v=<?php echo (int) $assetVersion; ?>" />
-  <link rel="stylesheet" href="styles.css?v=<?php echo (int) $assetVersion; ?>" />
+  <script>
+    // The sheet's own look, before anything is drawn (no flash): Diablo unless this browser chose Parchment.
+    try { document.documentElement.dataset.sheetTheme = localStorage.getItem('sheet-theme') === 'parchment' ? 'parchment' : 'diablo'; } catch (e) {}
+  </script>
+  <script type="importmap"><?php
+    // Every module the sheet loads, at this build's version (a new build is never served an old part).
+    $imports = array();
+    foreach (array('app.js', 'sheet-changes.mjs') as $file) $imports['/dnd/character_sheet/' . $file] = '/dnd/character_sheet/' . $file . '?v=' . $v;
+    foreach (glob(__DIR__ . '/parts/*.js') ?: array() as $file) $imports['/dnd/character_sheet/parts/' . basename($file)] = '/dnd/character_sheet/parts/' . basename($file) . '?v=' . $v;
+    echo json_encode(array('imports' => $imports), JSON_UNESCAPED_SLASHES);
+  ?></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap">
+  <link rel="stylesheet" href="../css/chat-panel.css?v=<?php echo $v; ?>" />
+  <link rel="stylesheet" href="../css/ask-test.css?v=<?php echo $v; ?>" />
   <?php echo players_script(); ?>
-  <link rel="stylesheet" href="inventory-tab.css?v=<?php echo (int) $assetVersion; ?>" />
-  <link rel="stylesheet" href="../dice-roller/dice-roller.css?v=<?php echo (int) $assetVersion; ?>" />
-  <link rel="stylesheet" href="../dice-roller/diablo-dice.css?v=<?php echo (int) $assetVersion; ?>" />
-  <link rel="stylesheet" href="ability-automation/automation.css?v=<?php echo (int) $assetVersion; ?>" />
-  <link rel="stylesheet" href="../Diablo/theme.css?v=<?php echo (int) $assetVersion; ?>" />
-  <link rel="stylesheet" href="diablo-theme.css?v=<?php echo (int) $assetVersion; ?>" />
-  <script src="../js/diablo-theme-loader.js?v=<?php echo (int) $assetVersion; ?>"></script>
-  <script src="../Diablo/theme.js?v=<?php echo (int) $assetVersion; ?>" defer></script>
-  <script src="ability-automation/primitives.js?v=<?php echo (int) $assetVersion; ?>"></script>
-  <script src="ability-automation/schema.js?v=<?php echo (int) $assetVersion; ?>"></script>
-  <script src="ability-automation/catalog.js?v=<?php echo (int) $assetVersion; ?>"></script>
-  <script src="ability-automation/field-map.js?v=<?php echo (int) $assetVersion; ?>"></script>
-  <script src="ability-automation/paste.js?v=<?php echo (int) $assetVersion; ?>"></script>
-  <script src="ability-automation/inspector.js?v=<?php echo (int) $assetVersion; ?>"></script>
-  <script src="ability-automation/runner.js?v=<?php echo (int) $assetVersion; ?>"></script>
-  <script type="module" src="sheet-changes.mjs?v=<?php echo (int) $assetVersion; ?>"></script>
-  <script type="module" src="sheet.js?v=<?php echo (int) $assetVersion; ?>"></script>
-  <script src="inventory-tab.js?v=<?php echo (int) $assetVersion; ?>" defer></script>
-  <script src="../dice-roller/dice-roller.js?v=<?php echo (int) $assetVersion; ?>" defer></script>
+  <link rel="stylesheet" href="inventory-tab.css?v=<?php echo $v; ?>" />
+  <link rel="stylesheet" href="../dice-roller/dice-roller.css?v=<?php echo $v; ?>" />
+  <link rel="stylesheet" href="../dice-roller/diablo-dice.css?v=<?php echo $v; ?>" />
+  <link rel="stylesheet" href="ability-automation/automation.css?v=<?php echo $v; ?>" />
+  <link rel="stylesheet" href="parts/sheet-parts.css?v=<?php echo $v; ?>" />
+  <link rel="stylesheet" href="app.css?v=<?php echo $v; ?>" />
+  <script src="ability-automation/primitives.js?v=<?php echo $v; ?>"></script>
+  <script src="ability-automation/schema.js?v=<?php echo $v; ?>"></script>
+  <script src="ability-automation/catalog.js?v=<?php echo $v; ?>"></script>
+  <script src="ability-automation/field-map.js?v=<?php echo $v; ?>"></script>
+  <script src="ability-automation/paste.js?v=<?php echo $v; ?>"></script>
+  <script src="ability-automation/inspector.js?v=<?php echo $v; ?>"></script>
+  <script type="module" src="app.js?v=<?php echo $v; ?>"></script>
+  <script src="inventory-tab.js?v=<?php echo $v; ?>" defer></script>
+  <script src="../dice-roller/dice-roller.js?v=<?php echo $v; ?>" defer></script>
 <?php if ($chatPusherConfig !== null): ?>
   <script src="https://js.pusher.com/8.4.0/pusher.min.js"></script>
 <?php endif; ?>
 </head>
-<body class="character-sheet-page" data-character="<?php echo htmlspecialchars($activeCharacter, ENT_QUOTES, 'UTF-8'); ?>" data-user="<?php echo htmlspecialchars($sessionUser, ENT_QUOTES, 'UTF-8'); ?>" data-is-gm="<?php echo $isGm ? '1' : '0'; ?>">
+<body class="character-sheet-page sheet-v2" data-character="<?php echo htmlspecialchars($activeCharacter, ENT_QUOTES, 'UTF-8'); ?>" data-user="<?php echo htmlspecialchars($sessionUser, ENT_QUOTES, 'UTF-8'); ?>" data-is-gm="<?php echo $isGm ? '1' : '0'; ?>">
   <?php renderStrixNav('charactersheet'); ?>
-  <div class="app-shell">
-    <main class="sheet">
-      <header class="sheet__header">
-        <div class="header__title">
-          <p class="title__eyebrow">Character Sheet</p>
-          <h1 id="hero-name-heading">Tableside Hero View</h1>
-        </div>
-        <div class="header__actions">
-          <?php if ($isGm): ?>
-            <button type="button" id="export-character-sheet-btn" class="sheet-export-btn">Export Character Sheet</button>
-            <button type="button" id="export-skills-btn" class="sheet-export-btn sheet-export-btn--skills edit-only">Export Skills</button>
-          <?php endif; ?>
-          <button type="button" id="dice-roller-btn" class="dice-roller-launch" title="Open dice roller">Dice Roller</button>
-          <label class="toggle">
-            <input type="checkbox" id="edit-toggle" />
-            <span class="toggle__slider"></span>
-            <span class="toggle__label">Edit Mode</span>
-          </label>
-        </div>
-      </header>
-
-      <div class="tabs">
-        <button class="tab tab--active" data-tab="hero">Hero</button>
-        <button class="tab" data-tab="features">Features</button>
-        <button class="tab" data-tab="mains">Mains</button>
-        <button class="tab" data-tab="maneuvers">Maneuvers</button>
-        <button class="tab" data-tab="triggers">Triggers</button>
-        <button class="tab" data-tab="free-strikes">Free Strikes</button>
-        <button class="tab" data-tab="inventory">Inventory</button>
+  <main id="sheet-app" class="sp" data-sheet-theme="diablo" aria-label="Character sheet">
+    <div class="sp-layout">
+      <div data-host="status"><p class="sp-none" style="padding:20px">Loading the sheet…</p></div>
+      <div class="sp-main">
+        <div data-host="tabs"></div>
+        <div data-host="banner"></div>
+        <div class="sp-pane" data-host="pane"></div>
+        <!-- The inventory keeps its own code (inventory-tab.js), which looks for this pane, the Edit toggle below and body.edit-mode. -->
+        <div class="pane sp-pane sp-inventory is-hidden" data-pane="inventory" id="inventory-pane"></div>
       </div>
-
-      <div class="sheet__content">
-        <div class="pane" data-pane="hero" id="hero-pane"></div>
-        <div class="pane is-hidden" data-pane="features" id="features-pane"></div>
-        <div class="pane is-hidden" data-pane="mains" id="mains-pane"></div>
-        <div class="pane is-hidden" data-pane="maneuvers" id="maneuvers-pane"></div>
-        <div class="pane is-hidden" data-pane="triggers" id="triggers-pane"></div>
-        <div class="pane is-hidden" data-pane="free-strikes" id="free-strikes-pane"></div>
-        <div class="pane is-hidden" data-pane="inventory" id="inventory-pane"></div>
-      </div>
-    </main>
-
-    <aside class="sidebar">
-      <div class="sidebar__section" id="sidebar-bars"></div>
-      <div class="sidebar__section" id="sidebar-resource"></div>
-      <div class="sidebar__section" id="sidebar-hero-tokens"></div>
-      <div class="sidebar__section" id="sidebar-common"></div>
-      <div class="sidebar__section" id="sidebar-skills"></div>
-      <div class="sidebar__section" id="sidebar-weaknesses"></div>
-      <div class="sidebar__section" id="sidebar-languages"></div>
-    </aside>
-  </div>
+    </div>
+    <input type="checkbox" id="edit-toggle" hidden aria-hidden="true" tabindex="-1" />
+    <button type="button" id="dice-roller-btn" class="dice-roller-launch" hidden aria-hidden="true" tabindex="-1">Dice Roller</button>
+  </main>
 
   <aside
     id="chat-panel"
@@ -178,8 +153,8 @@ require_once '../includes/strix-nav.php';
       currentUser: <?php echo json_encode($currentUser, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>
     };
   </script>
-  <script src="../js/ask-test.js?v=<?php echo (int) $assetVersion; ?>"></script>
-  <script src="../js/chat-panel.js?v=<?php echo (int) $assetVersion; ?>"></script>
+  <script src="../js/ask-test.js?v=<?php echo $v; ?>"></script>
+  <script src="../js/chat-panel.js?v=<?php echo $v; ?>"></script>
   <script>
     document.addEventListener('DOMContentLoaded', function () {
       if (typeof window.initChatPanel === 'function') {

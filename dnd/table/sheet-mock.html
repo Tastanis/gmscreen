@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sheet (mock-up)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap">
+  <link rel="stylesheet" href="sheet-mock.css">
+</head>
+<body>
+  <div class="preview-bar" id="preview" hidden>
+    <span>Preview at</span>
+    <button data-w="380">VTT panel (380)</button>
+    <button data-w="640">Table window (640)</button>
+    <button data-w="0" class="on">Full page</button>
+    <span style="margin-left:12px">Hero</span>
+    <select id="who"><option>indigo</option><option>cal</option><option>sharon</option><option>zepha</option></select>
+  </div>
+  <div class="stage" id="stage"><div class="sheet" id="sheet"><p class="placeholder">Loading the sheet…</p></div></div>
+  <div class="mock-note">Mock-up · real data · nothing saves</div>
+  <script src="sheet-mock.js"></script>
+</body>
+</html>

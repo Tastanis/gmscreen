@@ -7,7 +7,7 @@
 
 function renderStrixNav($currentPage = '') {
     $navItems = [
-        'dashboard' => ['label' => 'Dashboard', 'url' => '/dnd/dashboard.php'],
+        'dashboard' => ['label' => 'Table', 'url' => '/dnd/table/'],   // the Table replaces the dashboard (October 2026)
         'map' => ['label' => 'Map', 'url' => '/dnd/strixhaven/map3d/index.php'],
         'students' => ['label' => 'Students', 'url' => '/dnd/strixhaven/students/index.php'],
         'staff' => ['label' => 'Staff', 'url' => '/dnd/strixhaven/staff/index.php'],

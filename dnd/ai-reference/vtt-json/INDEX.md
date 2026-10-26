@@ -16,6 +16,7 @@ This project has two related JSON surfaces:
 | Runtime execution | `../../character_sheet/ability-automation/runner.js` |
 | Monster import template | `../../strixhaven/monster-creator/MONSTER_JSON_IMPORT_TEMPLATE.md` |
 | Monster import normalizer | `../../strixhaven/monster-creator/js/monster-builder.js` |
+| Monster upload (file shapes, matching, checks) | `../monsters/UPLOAD-GUIDE.md`; code `../../strixhaven/monster-creator/includes/monster-import.php` |
 | VTT monster normalizer | `../../vtt/api/monster_helpers.php` |
 
 ## Current Monster Ability Categories

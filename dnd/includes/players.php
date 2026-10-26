@@ -84,6 +84,13 @@ function players_all(bool $fresh = false): array
     }
     // An unreadable file never empties the site of players: the four originals stand in.
     $cache = $list ?: players_defaults();
+    // Frunk, a past hero whose sheet and record are still saved, is on the roster turned off (Brandon, October 2026).
+    if (!in_array('frunk', array_column($cache, 'id'), true)) {
+        $frunk = players_clean(['id' => 'frunk', 'name' => 'Frunk', 'login' => '', 'active' => false, 'color' => '#8a8f98']);
+        if ($frunk) {
+            $cache[] = $frunk;
+        }
+    }
     return $cache;
 }
 

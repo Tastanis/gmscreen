@@ -1,0 +1,39 @@
+/* The character sheet page around the sheet's parts (parts/sheet-parts.css): the page itself, and the inventory
+   tab (inventory-tab.js, unchanged) dressed to fit the new look in both themes. */
+
+html, body { margin: 0; }
+html[data-sheet-theme="diablo"], html[data-sheet-theme="diablo"] body { background: #080706; color: #c4bcac; }
+html[data-sheet-theme="parchment"], html[data-sheet-theme="parchment"] body { background: #e2d6bd; color: #2a1d12; }
+body.sheet-v2 { min-height: 100vh; }
+#sheet-app { min-height: calc(100vh - 48px); padding-bottom: 56px; position: relative; }
+.sp-main { min-width: 0; }
+/* More below (the hero panel's fade, vtt/assets/css/character-summary.css): a fade at the window's bottom edge with a
+   small gold chevron while rows are below it; app.js sets .sp-at-end once the end is reached. */
+#sheet-app::after { content: "\25BE"; position: sticky; bottom: 0; display: flex; align-items: flex-end; justify-content: center; height: 56px; margin-top: -56px; padding-bottom: 1px; pointer-events: none; background: linear-gradient(rgba(8, 7, 6, 0), rgba(8, 7, 6, .82) 55%, #080706 88%); color: #c8a95e; font: 700 14px/1 "Segoe UI", system-ui, sans-serif; text-shadow: 0 0 6px rgba(200, 169, 94, .45); transition: opacity .15s; z-index: 11; }
+#sheet-app[data-sheet-theme="parchment"]::after { background: linear-gradient(rgba(226, 214, 189, 0), rgba(226, 214, 189, .82) 55%, #e2d6bd 88%); color: #8a6a2a; text-shadow: none; }
+#sheet-app.sp-at-end::after { opacity: 0; }
+.sp-dice { font-weight: 600; }
+
+/* ---------- inventory (the inventory tab's own markup, .ci-*) ---------- */
+.sp-inventory { padding: 10px 10px 40px; }
+.sp .sp-inventory {
+  --panel: var(--bg2); --panel-alt: var(--bg); --border: var(--line2); --accent: #8a2c24; --accent-strong: #6b1f19;
+  --text: var(--ink); --muted: var(--dim); --success: #2f6b3e; --info: #2f6f9e; --danger: #8f2f22;
+}
+.sp[data-sheet-theme="diablo"] .sp-inventory { --accent: #c8a95e; --accent-strong: #e0c27a; --success: #5f9f6a; --info: #6aa6d9; --danger: #c0504a; }
+.sp-inventory .ci-folder { background: var(--btn); color: var(--dim); border-color: var(--line2); border-radius: 16px; padding: 3px 12px; }
+.sp-inventory .ci-folder--active { background: #3a2a1b; color: #f1e3c2; border-color: #3a2a1b; border-bottom-width: 1px; }
+.sp[data-sheet-theme="diablo"] .sp-inventory .ci-folder--active { background: #3a2f1c; color: #e0c27a; border-color: #6e5a33; }
+.sp-inventory .ci-card, .sp-inventory .ci-tile { border-radius: 9px; border-color: var(--line); background: var(--card); color: var(--card-ink); }
+.sp[data-sheet-theme="diablo"] .sp-inventory .ci-card, .sp[data-sheet-theme="diablo"] .sp-inventory .ci-tile { border-color: #000; box-shadow: inset 0 0 0 1px #6e5a33, 0 6px 16px rgba(0, 0, 0, .55); }
+.sp-inventory .ci-card__header { background: linear-gradient(#3e2e20, #2f2318); color: #f1e3c2; }
+.sp[data-sheet-theme="diablo"] .sp-inventory .ci-card__header { background: linear-gradient(#2a231a, #1a150f); border-color: #6e5a33; color: #c8a95e; }
+.sp-inventory .ci-card__header:hover { filter: brightness(1.12); }
+.sp-inventory .ci-input { background: var(--btn); color: var(--card-ink); border-color: var(--line2); }
+.sp[data-sheet-theme="diablo"] .sp-inventory .ci-input { background: #0e0c09; color: #c4bcac; border-color: #4a3b24; }
+.sp-inventory .ci-btn { border-color: var(--line2); background: var(--btn); color: var(--dim); }
+.sp-inventory .ci-btn:hover, .sp-inventory .ci-folder:hover, .sp-inventory .ci-tile:hover { transform: translateY(-1px); box-shadow: 0 0 0 2px rgba(200, 169, 94, .55), 0 3px 8px rgba(0, 0, 0, .25); filter: brightness(1.1); }
+.sp-inventory button:focus-visible, .sp-inventory input:focus-visible, .sp-inventory textarea:focus-visible { outline: 2px solid #c8a95e; outline-offset: 2px; }
+.sp .is-hidden, .sp [hidden] { display: none !important; }
+/* The automation paste box and inspector open over the sheet's edit panel. */
+body.sheet-v2 .ability-paste, body.sheet-v2 .ability-inspector { z-index: 100050 !important; }

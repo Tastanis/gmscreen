@@ -167,13 +167,46 @@ export function traceSurfaceLeg({actor,end,surfaces=[],mapLevels=null,terrain=()
    else{
     // The trajectory is physically unsupported. Its former floor is not a
     // license to stand on an overhead plate encountered later in this leg.
-    ghost={...ghost,levelId:'level-0',_supportSurfaceId:null,_floorTraversal:null};height=terrain(ghost);
-    if(startPlate&&!changedFloor&&Math.abs(height-startPlate.height)<=.55)steppedOffLevel=true;
+    // Off an edge (over a gallery rail, off a balcony) he falls to the first floor below that holds him, as the
+    // move itself lands him (fallLanding, the endpoint fall of commandSurfaceEnding / FloorGeometry::move): onto
+    // the hall floor over the chapel, not through it to the chapel (Medpilis, October 25, 2026).
+    const landing=fallLanding({...ghost,_supportSurfaceId:null,_floorTraversal:null},surfaces,mapLevels,terrain,height);
+    if(landing){ghost={...ghost,levelId:landing.levelId,_supportSurfaceId:landing.id,_floorTraversal:null};height=landing.height;contact=contactFor(ghost);}
+    else{
+     ghost={...ghost,levelId:'level-0',_supportSurfaceId:null,_floorTraversal:null};height=terrain(ghost);
+     if(startPlate&&!changedFloor&&Math.abs(height-startPlate.height)<=.55)steppedOffLevel=true;
+    }
    }
   }
   samples.push({...point,height,placement:{...ghost}});
  }
  return {samples,placement:ghost,height,stairExit:firedThisLeg};
+}
+
+/** The floors in the order the move falls through them: the ground, then each raised floor by zIndex (as
+ * commandSurfaceEnding and FloorGeometry::orderedLevels). */
+function orderedLevels(mapLevels){
+ return [{id:'level-0',cutouts:[]},...(mapLevels?.levels||[]).filter(l=>l.id!=='level-0').map((l,i)=>({...l,_index:i})).sort((a,b)=>(a.zIndex??a._index)-(b.zIndex??b._index)||a._index-b._index)];
+}
+/**
+ * Where a walker that has stepped off its footing comes down: the first raised floor below his own (in floor order)
+ * whose plate holds his square, the same floor the move's endpoint fall picks (commandSurfaceEnding below,
+ * FloorGeometry::fallingDestination). Null when he comes down on the ground (level-0), or the plate found is above
+ * where he was (`altitude`) or under the ground there. Returns the plate ({id, levelId, height}).
+ */
+export function fallLanding(ghost,surfaces,mapLevels,terrain,altitude=Infinity){
+ const levels=orderedLevels(mapLevels);
+ let index=levels.findIndex(l=>l.id===(ghost.levelId||'level-0'));
+ if(index<=0)return null;
+ for(;index>0;index--){
+  const level=levels[index];if(level.hidden)continue;
+  const plates=surfaces.filter(s=>s.kind==='floor'&&!s.boxTop&&!s.templateCube&&(s.levelId||'level-0')===level.id&&intersectsFloor(ghost,s,level.cutouts||[]));
+  if(!plates.length)continue;
+  const plate=plates.sort((a,b)=>b.height-a.height)[0],ground=Number(terrain({...ghost,levelId:'level-0'}));
+  if(plate.height>altitude+PLATE_REACH+1e-6||(Number.isFinite(ground)&&plate.height<ground-.1-1e-6))return null;
+  return plate;
+ }
+ return null;
 }
 
 /** Read-only endpoint compatibility check for the imported-floor sandbox.

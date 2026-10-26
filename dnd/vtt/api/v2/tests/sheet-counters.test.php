@@ -86,16 +86,29 @@ try {
     counterCheck($hero()['vitals']['currentRecoveries'] === 2, 'once');
     $map('cal', 'sync-vitals', ['useRecovery'=>'1']);
     counterCheck($hero()['vitals']['currentStamina'] === 70 && $hero()['vitals']['currentRecoveries'] === 1, 'It heals as far as the maximum, no further: ' . json_encode($hero()['vitals']));
-    // Temporary Stamina above the maximum is not lowered by a Recovery.
+    // Changed on purpose (October 2026): temporary Stamina is its own number. An old map page that still puts
+    // Stamina above the maximum has the excess moved into temporary Stamina, and a Recovery leaves it alone.
     $map('GM', 'sync-stamina', ['delta'=>'10']);
+    counterCheck($hero()['vitals']['currentStamina'] === 70 && $hero()['vitals']['tempStamina'] === 10, 'Stamina above the maximum becomes temporary Stamina: ' . json_encode($hero()['vitals']));
     $map('cal', 'sync-vitals', ['useRecovery'=>'1']);
-    counterCheck($hero()['vitals']['currentStamina'] === 80 && $hero()['vitals']['currentRecoveries'] === 0, 'Stamina above the maximum stays where it is: ' . json_encode($hero()['vitals']));
+    counterCheck($hero()['vitals']['currentStamina'] === 70 && $hero()['vitals']['tempStamina'] === 10 && $hero()['vitals']['currentRecoveries'] === 0, 'Temporary Stamina stays where it is: ' . json_encode($hero()['vitals']));
     $none = $map('cal', 'sync-vitals', ['useRecovery'=>'1']);
-    counterCheck($none['success'] === true && $none['spent'] === 0 && str_contains($none['reason'], 'No Recoveries') && $hero()['vitals']['currentStamina'] === 80, 'With none left nothing changes, and it says why: ' . json_encode($none));
+    counterCheck($none['success'] === true && $none['spent'] === 0 && str_contains($none['reason'], 'No Recoveries') && $hero()['vitals']['currentStamina'] === 70, 'With none left nothing changes, and it says why: ' . json_encode($none));
     // Victories, surges: one more is one more, whoever else also added one.
     $map('cal', 'sync-victories', ['delta'=>'1']); $map('sharon', 'sync-victories', ['delta'=>'1']);
     $map('cal', 'sync-surges', ['delta'=>'1']); $map('cal', 'sync-surges', ['delta'=>'-5']);
     counterCheck($hero()['victories'] === 3 && $hero()['surges'] === 0, 'Two pages that each add a Victory add two; surges never go below none: ' . json_encode([$hero()['victories'], $hero()['surges']]));
+    // The panel's Victory minus: one fewer, never below none.
+    $map('cal', 'sync-victories', ['delta'=>'-1']);
+    $fewer = $map('cal', 'sync-victories', ['delta'=>'-5']);
+    counterCheck($fewer['success'] === true && $fewer['victories'] === 0 && $hero()['victories'] === 0, 'A Victory taken off stops at none: ' . json_encode($fewer));
+    $map('cal', 'sync-victories', ['delta'=>'3']);
+    // Hero tokens are the party's: a player using another hero's panel may spend one from the map, not from elsewhere.
+    $spent = $map('sharon', 'sync-hero-tokens', ['tokenIndex'=>'0', 'tokenState'=>'1']);
+    counterCheck($spent['success'] === true && $spent['heroTokens'][0] === true, 'A hero token spent from another hero\'s panel is taken: ' . json_encode($spent));
+    $refused = $ask('sharon', 'POST', ['action'=>'sync-hero-tokens', 'character'=>'cal', 'tokenIndex'=>'0', 'tokenState'=>'0']);
+    counterCheck(($refused['error'] ?? '') === 'Permission denied', 'but only from the map: ' . json_encode($refused));
+    $map('sharon', 'sync-hero-tokens', ['tokenIndex'=>'0', 'tokenState'=>'0']);
 
     // The heroic resource from the panel's plus and minus: an amount, never below none on a sheet that does not
     // allow it. (A spend by an ability was an amount already: "spend".)
@@ -116,7 +129,7 @@ try {
         ['path'=>['hero', 'vitals', 'currentStamina'], 'value'=>'75', 'from'=>'77'], ['path'=>['hero', 'surges'], 'value'=>0, 'from'=>9], ['path'=>['hero', 'resource', 'value'], 'value'=>6, 'from'=>4],
         ['path'=>['hero', 'wealth'], 'value'=>'2', 'from'=>'1']])]);
     $now = $hero();
-    counterCheck($now['vitals']['currentStamina'] === 78 && $now['surges'] === 0 && $now['resource']['value'] === 6 && $now['wealth'] === '2',
+    counterCheck($now['vitals']['currentStamina'] === 68 && $now['surges'] === 0 && $now['resource']['value'] === 6 && $now['wealth'] === '2',
         'Stamina typed two lower goes two lower; a counter never goes below none; what is not a counter is simply set: ' . json_encode([$now['vitals']['currentStamina'], $now['surges'], $now['resource']['value'], $now['wealth']]));
     $ask('cal', 'POST', ['action'=>'save-fields', 'character'=>'cal', 'changes'=>json_encode([['path'=>['hero', 'surges'], 'value'=>4], ['path'=>['hero', 'victories'], 'value'=>'', 'from'=>3]])]);
     counterCheck($hero()['surges'] === 4 && $hero()['victories'] === '', 'A change that does not say where it came from, or is not a number, is set as it is');
@@ -133,7 +146,7 @@ try {
 
     // ---- the party's Stamina for the Director's page -----------------------------------------
     $party = $ask('GM', 'GET', ['action'=>'party-vitals']);
-    counterCheck($party['success'] === true && $party['party']['cal'] === ['hasStamina'=>true, 'currentStamina'=>78, 'staminaMax'=>70], 'One read gives each hero\'s Stamina: ' . json_encode($party['party']['cal'] ?? null));
+    counterCheck($party['success'] === true && $party['party']['cal'] === ['hasStamina'=>true, 'currentStamina'=>68, 'staminaMax'=>70, 'tempStamina'=>10], 'One read gives each hero\'s Stamina: ' . json_encode($party['party']['cal'] ?? null));
     counterCheck($party['party']['zepha'] === ['hasStamina'=>false], 'A sheet with no Stamina maximum has no Stamina to show, not 0 of 0: ' . json_encode($party['party']['zepha'] ?? null));
     counterCheck($ask('GM', 'GET', ['action'=>'sync-stamina', 'character'=>'zepha'])['hasStamina'] === false && $ask('GM', 'GET', ['action'=>'sync-stamina', 'character'=>'cal'])['hasStamina'] === true, 'and a single read says so too');
     $same = $ask('GM', 'GET', ['action'=>'party-vitals', 'since'=>$party['stamp']]);
@@ -155,7 +168,9 @@ counterCheck(SheetChanges::move(['hero'=>['resource'=>['value'=>1]]], 'hero.reso
 counterCheck(SheetChanges::move(['hero'=>['vitals'=>['currentStamina'=>3]]], 'hero.vitals.currentStamina', -9)['hero']['vitals']['currentStamina'] === -6, 'Stamina goes below none: a dying hero');
 counterCheck(SheetChanges::move([], 'hero.victories', 2)['hero']['victories'] === 2, 'A counter that was never stored counts from none');
 try { SheetChanges::move([], 'hero.name', 1); counterCheck(false, 'A field that is not a counter was moved'); } catch (InvalidArgumentException $error) {}
-counterCheck(SheetChanges::recoveryValue(['recoveryValue'=>'12', 'staminaMax'=>60]) === 12 && SheetChanges::recoveryValue(['recoveryValue'=>'', 'staminaMax'=>61]) === 20 && SheetChanges::recoveryValue([]) === 0, 'The recovery value is the sheet\'s own, else a third of the maximum');
+// Changed on purpose (October 2026): a Recovery heals a third of the maximum, as the sheet shows; a stored number
+// is used only by a sheet with no maximum.
+counterCheck(SheetChanges::recoveryValue(['recoveryValue'=>'12', 'staminaMax'=>60]) === 20 && SheetChanges::recoveryValue(['recoveryValue'=>'', 'staminaMax'=>61]) === 20 && SheetChanges::recoveryValue(['recoveryValue'=>'9', 'staminaMax'=>'']) === 9 && SheetChanges::recoveryValue([]) === 0, 'The recovery value is a third of the maximum, else the sheet\'s own');
 // What the sheet page used to do with no maximum: Stamina set to none. Now the full value is healed.
 $blank = SheetChanges::useRecovery(['hero'=>['vitals'=>['recoveryValue'=>10, 'staminaMax'=>'', 'currentStamina'=>4, 'currentRecoveries'=>2]]]);
 counterCheck($blank['spent'] === 1 && $blank['currentStamina'] === 14 && $blank['currentRecoveries'] === 1, 'A sheet with a recovery value and no maximum heals the value: ' . json_encode([$blank['currentStamina'], $blank['currentRecoveries']]));
@@ -170,3 +185,17 @@ counterCheck(!isset($data['_vttOperations']['old-receipt-01']) && count($data['_
     'Receipts older than two days go, and only the newest four hundred are kept: ' . count($data['_vttOperations']));
 
 echo "sheet counters: a change is an amount added to the stored number; a token's maximum is never written back; Use Recovery is the server's\n";
+
+// Temporary Stamina, its own number (October 2026).
+$temp = ['hero'=>['vitals'=>['currentStamina'=>30, 'staminaMax'=>40, 'tempStamina'=>5]]];
+$hit = SheetChanges::damage($temp, 8);
+counterCheck($hit['hero']['vitals']['tempStamina'] === 0 && $hit['hero']['vitals']['currentStamina'] === 27, 'Damage takes temporary Stamina first: ' . json_encode($hit['hero']['vitals']));
+$small = SheetChanges::damage($temp, 3);
+counterCheck($small['hero']['vitals']['tempStamina'] === 2 && $small['hero']['vitals']['currentStamina'] === 30, 'and a small hit only that');
+counterCheck(SheetChanges::gainTemp($temp, 3)['hero']['vitals']['tempStamina'] === 5 && SheetChanges::gainTemp($temp, 9)['hero']['vitals']['tempStamina'] === 9, 'Gaining keeps the higher, never adds');
+$healed = SheetChanges::heal($temp, 50);
+counterCheck($healed['hero']['vitals']['currentStamina'] === 40 && $healed['hero']['vitals']['tempStamina'] === 5, 'Healing stops at the maximum and leaves temporary Stamina alone');
+$old = SheetChanges::migrateTemp(['hero'=>['vitals'=>['currentStamina'=>47, 'staminaMax'=>40, 'tempStamina'=>2]]]);
+counterCheck($old['hero']['vitals']['currentStamina'] === 40 && $old['hero']['vitals']['tempStamina'] === 7 && SheetChanges::migrateTemp($old) === $old, 'Over-max Stamina becomes temporary Stamina, once: ' . json_encode($old['hero']['vitals']));
+counterCheck(SheetChanges::respite(['hero'=>['vitals'=>['currentStamina'=>3, 'staminaMax'=>40, 'tempStamina'=>6]]])['sheet']['hero']['vitals']['tempStamina'] === 0, 'A respite ends temporary Stamina');
+echo "sheet counters: ok\n";

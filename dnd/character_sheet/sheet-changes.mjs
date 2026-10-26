@@ -16,6 +16,11 @@
 // (SheetChanges::COUNTERS). A plus pressed on a page that is behind adds one to the true number.
 export const COUNTERS = new Set(['hero.surges', 'hero.victories', 'hero.vitals.currentRecoveries', 'hero.vitals.currentStamina', 'hero.resource.value']);
 
+// Named groups that are one field all the same: the skills ({Alchemy: {level, bonus}, ...}). A skill taken off is a
+// name no longer in the group, and "a page does not delete what it does not hold" never sent that, so the group is
+// sent whole when anything in it differs (October 2026: a skill removed in the Skills form came back on reload).
+export const WHOLE_FIELDS = new Set(['sidebar.skills']);
+
 const isMap = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const isNothing = (value) => value === undefined || value === null || value === '';
 
@@ -43,7 +48,7 @@ export function sameValue(a, b) {
  */
 export function diffSheet(baseline, now, path = [], amounts = true) {
   const changes = [];
-  if (isMap(baseline) && isMap(now)) {
+  if (isMap(baseline) && isMap(now) && !WHOLE_FIELDS.has(path.join('.'))) {
     for (const key of new Set([...Object.keys(baseline), ...Object.keys(now)])) {
       if (!(key in now)) continue;                                  // a page does not delete what it does not hold
       if (path.length === 1 && path[0] === 'hero' && key === 'heroTokens') continue;
@@ -76,4 +81,4 @@ export function applyChanges(target, changes) {
 
 // For the sheet page, which loads this file by its own script tag before sheet.js and reads it from the window
 // (sheet.js must not wait for an import: see the note there).
-if (typeof window !== 'undefined') window.SheetChanges = { COUNTERS, sameValue, diffSheet, applyChanges };
+if (typeof window !== 'undefined') window.SheetChanges = { COUNTERS, WHOLE_FIELDS, sameValue, diffSheet, applyChanges };

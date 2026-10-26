@@ -36,4 +36,16 @@ test('fractional inspection displays the terrain square without changing exact h
  c.state.boardState.activeSceneId='a';
  assert.equal(JSON.stringify(c.state),before);
 });
-
+// Medpilis, October 25, 2026: the Director's page opened every scene at Height 0, the basement under the castle's
+// floors at 3 (opening-height.mjs). Ground heights may arrive after the scene: it is worked out again then.
+test('a castle opens at its main floor once its ground heights arrive; a step of his own is kept',()=>{
+ c.isGM=true;c.selectedIds=[];c.levelId='level-0';
+ c.state.boardState.sceneState.castle={mapLevels:{activeLevelId:'level-0',levels:[{id:'g3',elevationSquares:3,zIndex:1}]}};
+ c.state.boardState.activeSceneId='castle';
+ assert.equal(gmVision.height,0,'nothing to go on yet');
+ c.state.boardState.sceneState.castle.environment={terrain:{value:{h:[3,3,3,0,-8]}}};
+ assert.equal(gmVision.height,3);gmVision.syncNavigation();assert.equal(label.textContent,'Height 3');
+ gmVision.step('up');assert.equal(gmVision.height,4);
+ c.state.boardState.sceneState.castle.environment={terrain:{value:{h:[0,0,0]}}};assert.equal(gmVision.height,4,'his own step is kept');
+ c.state.boardState.activeSceneId='a';
+});

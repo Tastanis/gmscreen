@@ -6,6 +6,7 @@
 |---|---|
 | Make a class ability JSON | `source/rules-v1.01b/classes/<class>.md`, then `../character_sheet/ability-automation/AUTHORING.md`, then `../character_sheet/ability-automation/REGISTRY.md` |
 | Make a monster import JSON | `source/monsters/INDEX.md`, one monster chunk, then `../strixhaven/monster-creator/MONSTER_JSON_IMPORT_TEMPLATE.md` |
+| Hand the Director a monster file to upload (one, many, a tab package, updates by id, pictures) | `monsters/UPLOAD-GUIDE.md`, then `../strixhaven/monster-creator/MONSTER_JSON_IMPORT_TEMPLATE.md` for the monster fields |
 | Add automation to an existing monster ability | `hooks/monster-automation.md`, then the monster chunk, then `../character_sheet/ability-automation/REGISTRY.md` for exact field shapes |
 | Check whether an effect/hook exists | `../character_sheet/ability-automation/REGISTRY.md`, then `hooks/INDEX.md` (monsters: `hooks/monster-automation.md`) |
 | Update automation schema/runtime | `UPDATE-GUIDE.md`, `../character_sheet/ability-automation/README.md`, `AUTHORING.md`, and `REGISTRY.md` |
@@ -35,6 +36,7 @@ Saved, paste-ready ability + heroic-resource JSON per player character. Conventi
 - Heroic resource automation authoring: `../character_sheet/heroic-resource-automation/README.md`
 - Automation folder map and invariants: `../character_sheet/ability-automation/README.md`
 - Full monster import shape: `../strixhaven/monster-creator/MONSTER_JSON_IMPORT_TEMPLATE.md`
+- Monster upload files (shapes, matching, checks, checklist): `monsters/UPLOAD-GUIDE.md`
 
 ## Example Lookup
 

@@ -2788,10 +2788,16 @@
       const max = result.max;
       const current = result.current;
       const display = max !== null && max !== undefined ? `${current}/${max}` : `${current}`;
-      const overage = !result.hideHitPointValues && allowTempHp && Number.isFinite(max) && current > max ? ` (+${current - max} temp)` : "";
+      // Temporary Stamina is its own number (October 2026): gaining it keeps the higher of held and gained.
+      const tempNow = Number.isFinite(Number(result.temp)) ? Number(result.temp) : null;
+      const overage = "";
       const finalRecoveryNote = recoveries && recoveryValueUsed
         ? ` (spent ${recoverySpent || recoveries} ${recoverySourceName} recovery -> ${recoveryValueUsed}${flatAmount ? `+${flatAmount}` : ""}${recoveryManualDecrement ? "; decrement recoveries on sheet" : ""})`
         : "";
+      if (allowTempHp) {
+        lines.push(`${targetName} gains ${amount} temporary stamina${tempNow !== null && tempNow > amount ? ` (keeps ${tempNow}, the higher)` : ""}${finalRecoveryNote}${result.hideHitPointValues ? "" : ` (${display}${tempNow ? ` +${tempNow}` : ""})`}.`);
+        continue;
+      }
       lines.push(`${targetName} recovers ${result.change || amount} stamina${overage}${finalRecoveryNote}${result.hideHitPointValues ? "" : ` (${display})`}.`);
     }
     if (lines.length) {

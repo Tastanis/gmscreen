@@ -80,6 +80,7 @@ export function normalizePlacementForRender(placement) {
     imageUrl,
     levelId,
     hp,
+    ...(Number.parseInt(placement.tempStamina, 10) > 0 ? { tempStamina: Number.parseInt(placement.tempStamina, 10) } : {}),
     showHp,
     showTriggeredAction,
     triggeredActionReady: triggeredActionReady !== false,

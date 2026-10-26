@@ -34,6 +34,10 @@ import {renderTokenAuras} from './token-aura-renderer.js';
 import {normalizeAutomationAuraId,createAutomationAuraId,cloneAutomationAuraRecord,getAutomationAuraRecords,getRenderableAurasForPlacement} from './token-aura-records.js';
 import {normalizePlacementForRender,toBoolean} from './token-render-normalize.js';
 import {normalizePlacementCondition,ensurePlacementCondition,normalizePlacementConditions,ensurePlacementConditions,buildConditionKey,normalizeConditionDurationValue} from './token-conditions.js';
+// One condition list for the token, the side panel and the character sheet (October 2026).
+import {CONDITION_NAMES,CUSTOM_CONDITION_NAME,getConditionDefinition,conditionOptionLabel} from '../../../../character_sheet/parts/conditions.js';
+import {createConditionMirror,createConditionTracker,shouldMirrorConditionChange,seedTokenConditions,findHeroToken,writeSheetConditionDelta,planNewFightWipe,restoreRemovedConditions,isShownCondition} from '../services/condition-sync-service.js';
+import {normalizeSheetConditions as normalizeSheetConditionList} from '../../../../character_sheet/parts/conditions.js';
 import {syncTokenTeamAffiliation,syncSquadBadge,paintTokenMarkIndicator,paintTokenConditionLabel} from './token-status-presentation.js';
 import {normalizeHitPointsValue,normalizePlacementHitPoints,parseHitPointsNumber,calculateHitPointsFillPercentage,formatHitPointsDisplayParts,syncTokenHitPoints,shouldRevealPlacementHitPointValues} from './token-hit-points.js';
 import {paintWallTemplate} from './template-wall-renderer.js';
@@ -194,6 +198,7 @@ import {
   writeSheetStamina,
   subscribeToStaminaSync,
 } from '../services/stamina-sync-service.js';
+import { staminaState, damageStamina, healStamina, gainTempStamina } from '../../../../character_sheet/parts/stamina-math.js';
 import {
   cloneArraySimple,
   mergeArrayByIdWithTimestamp,
@@ -994,6 +999,9 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   function reconcileTokenMovementSnapshot(snapshot, context = {}) {
+    // A snapshot (page load, recovery, a conflict's fresh state) is not a change: it is only recorded, so a map
+    // opened with a finished fight's conditions still on it sends the sheets nothing.
+    heroConditionTracker.primeSnapshot(snapshot);
     notifyCoordinateView();
     fallReview.wake();
     applyConfirmedRequestedTests(snapshot);
@@ -1062,11 +1070,17 @@ export function mountBoardInteractions(store, routes = {}) {
   // changed this recently is read again next time instead.
   const PARTY_VITALS_SETTLE_MS = 3000;
   let partyVitalsStamp = '', partyVitalsBusy = false;
+  const partyVitalsSeen = new Map();     // hero -> where its sheet stood at the last party read
+  // A hero token's conditions: this page sends the sheet what a real change did, a delta (services/
+  // condition-sync-service.js). The tracker is what this page last saw of each token: snapshots only record.
+  const heroConditionMirror = createConditionMirror({ endpoint: typeof routes?.sheet === 'string' ? routes.sheet : null });
+  const heroConditionTracker = createConditionTracker();
   function applyConfirmedPlacementBatch(snapshot, mutations, context = {}) {
     notifyCoordinateView();
     for (const mutation of mutations) {
+      mirrorHeroConditions(mutation, context);
       // When a token's Stamina last changed, from any page: readPartyVitals leaves such a hero alone for a moment.
-      if (mutation?.placementId && mutation.changedFields?.some((field) => field === 'hp' || field === '*')) {
+      if (mutation?.placementId && mutation.changedFields?.some((field) => field === 'hp' || field === 'tempStamina' || field === '*')) {
         tokenStaminaChangedAt.set(mutation.placementId, Date.now());
       }
       if (mutation.kind === 'upsert' && !mutation.projectionOnly && mutation.entityRevision === 1
@@ -1244,6 +1258,7 @@ export function mountBoardInteractions(store, routes = {}) {
     }
 
     if (type === 'combat.start') {
+      startNewFightCleanSlate(getActiveSceneId());
       resetPlayerSurgesToZero('combat-start').finally(() => {
         fireTimingBoundary('combatStart', { round: 1 });
         fireTimingBoundary('roundStart', { round: 1 });
@@ -1270,6 +1285,7 @@ export function mountBoardInteractions(store, routes = {}) {
       endPersistentZonesAtCombatEnd();
       clearAllMarksForActiveScene({ reason: 'combat ended' });
       clearEndOfEncounterConditions();
+      clearTemporaryStaminaAtCombatEnd('combat-end');
       resetAutomationScopedFlags('all');
     }
   }
@@ -1333,11 +1349,10 @@ export function mountBoardInteractions(store, routes = {}) {
     const state = boardApi.getState?.() ?? {};
     const activeSceneId = state.boardState?.activeSceneId ?? null;
     if (changeSet.sceneRouting) {
-      // A route change is one of the explicitly permitted full scene mounts.
+      // A route change is one of the explicitly permitted full scene mounts. Opening a scene sends nothing: no
+      // Stamina or conditions read onto its tokens (Brandon, late October 2026: "If a map just gets turned on and
+      // then turned back off, no signals go out"). Start combat reads the fight's heroes from their sheets.
       applyStateToBoard(state);
-      startActiveScenePcStaminaHydration(activeSceneId).catch((error) => {
-        console.warn('[VTT] Failed to refresh PC stamina after scene activation', error);
-      });
       return;
     }
     if (changeSet.grid) {
@@ -1509,7 +1524,24 @@ export function mountBoardInteractions(store, routes = {}) {
   let lastMoveOutcome = null;
   async function commitCanonicalTokenMoves(options) {
     const { moves, source, inTurn = false } = options || {};
-    if (!inTurn && (source === 'drag' || source === 'keyboard')) await maybeAskStartTurn(moves?.[0]?.placementId);
+    if (!inTurn && (source === 'drag' || source === 'keyboard')) {
+      // While "Start this creature's turn?" is open, someone else (the Director) may move the token. The drop was
+      // made from where it stood before, so it is not sent from where it stands now: from there it is another walk
+      // (a rail it was asked about may not be on it, and the server refuses it as blocked). Medpilis walk test,
+      // October 25, 2026.
+      const id = moves?.[0]?.placementId, sceneId = options?.sceneId;
+      const at = () => { const p = tokenMovementRuntime.getConfirmedSnapshot()?.state?.placements?.[sceneId]?.[id]; return p ? [p.column, p.row, p.levelId || BASE_MAP_LEVEL_ID].join('|') : null; };
+      const before = at();
+      await maybeAskStartTurn(id);
+      if (before !== null && at() !== before) {
+        const canonical = tokenMovementRuntime.getConfirmedSnapshot()?.state?.placements?.[sceneId] ?? {};
+        for (const item of moves || []) { const start = canonical[item.placementId]; if (start) updatePlacementById(item.placementId, (placement) => Object.assign(placement, start), { syncBoard: false }); }
+        renderTokens(boardApi.getState?.() ?? {}, tokenLayer, viewState);
+        const words = 'The token was moved meanwhile; drag it again.';
+        updateStatus(words); window.UIKit?.toast?.(words, 'warning');
+        return false;
+      }
+    }
     if (globalThis.vttUndoGroup?.id) return commitCanonicalTokenMovesNow(options);
     return inUndoGroup('', () => commitCanonicalTokenMovesNow(options));
   }
@@ -1775,101 +1807,8 @@ export function mountBoardInteractions(store, routes = {}) {
   } = tokenInteractions;
   const DEFAULT_HP_PLACEHOLDER = '—';
   const DEFAULT_HP_DISPLAY = `${DEFAULT_HP_PLACEHOLDER} / ${DEFAULT_HP_PLACEHOLDER}`;
-  const CUSTOM_CONDITION_DEFINITION = {
-    name: 'Other',
-    description: '',
-    isCustom: true,
-  };
-  const CONDITION_DEFINITIONS = [
-    {
-      name: 'Bleeding',
-      description:
-        'While bleeding, whenever you make a test using Might or Agility, make a strike, or use an action, maneuver, or a triggered action, you lose 1d6 Stamina after the test, action, maneuver, or triggered action is resolved. This Stamina loss can’t be prevented in any way.',
-    },
-    {
-      name: 'Dazed',
-      description:
-        'While you are dazed, you can do only one thing on your turn: use a maneuver, use an action, or take a move action. You also can’t use triggered actions, free triggered actions, or free maneuvers.',
-    },
-    {
-      name: 'Frightened',
-      description:
-        'If you are frightened, ability power rolls you make against the source of your fear take a bane. If that source is a creature, their ability power rolls against you gain an edge. You can’t willingly move closer to the source of your fear if you know the location of that source. If you gain the frightened condition from one source while already frightened by a different source, the new condition replaces the old one.',
-    },
-    {
-      name: 'Grabbed',
-      description:
-        'While you are grabbed, your speed is 0, you can’t be force moved, you can’t use the Knockback maneuver, and you take a bane on abilities that don’t target the creature grabbing you. If the creature grabbing you moves, they bring you with them. If the creature’s size is equal to or less than yours, their speed is halved while they have you grabbed. The creature grabbing you can use a maneuver to move you into an unoccupied space adjacent to them. The creature grabbing you can end the grab at any time (no action required). You can also attempt to escape being grabbed using the Escape Grab maneuver (see Maneuvers in Combat). If you teleport or if the creature grabbing you is force moved to a space that isn’t adjacent to you, you are no longer grabbed.',
-    },
-    {
-      name: 'Invisible',
-      description:
-        'Other players cannot see this token (the Director and its own player see it faded). Invisible creatures always have concealment: strikes against them take a bane. They can still be targeted unless they are also hidden.',
-    },
-    {
-      name: 'Concealed',
-      description:
-        'Darkness, fog or anything else that fully hides the creature without protecting it. Strikes against it take a bane.',
-    },
-    {
-      name: 'Hidden',
-      description:
-        'While you are hidden from another creature, that creature cannot target you with non-area abilities, and you gain an edge on ability rolls made against that creature until the end of the turn in which you are no longer hidden.',
-    },
-    {
-      name: 'Prone',
-      description:
-        'While you are prone, you are flat on the ground, strikes you make take a bane, and melee abilities made against you gain an edge. You must crawl to move along the ground, which costs you 1 additional square of movement for every square you crawl. You can’t climb, jump, swim, or fly while prone. If you are climbing, flying, or jumping while you are knocked prone, you fall. While prone, you can stand up as a maneuver (see Maneuvers in Combat), unless the ability or effect that imposed the condition says otherwise. You can use a maneuver to make an adjacent prone creature stand up.',
-    },
-    {
-      name: 'Restrained',
-      description:
-        'While you are restrained, your speed is 0, you can’t use the Stand Up maneuver, and you can’t be force moved. Your ability power rolls take a bane, abilities against you gain an edge, and you have a bane on Might and Agility tests. If you teleport while restrained, the condition ends.',
-    },
-    {
-      name: 'Slowed',
-      description: 'While you are slowed, your speed is 2 unless it is already lower, and you can’t shift.',
-    },
-    {
-      name: 'Taunted',
-      description:
-        'If you are taunted, you have a double bane on ability power rolls that don’t target the creature who taunted you while you have line of effect to that creature. If you gain the taunted condition from one creature while already taunted by a different creature, the new condition replaces the old one.',
-    },
-    {
-      name: 'Unconscious',
-      description:
-        'While you are unconscious, you can\'t take actions or maneuvers, your speed is 0, you are unaware of your surroundings, and you are prone. Ability rolls against you have a double edge. If you wake up, you can stand up from prone as a free maneuver.',
-    },
-    {
-      name: 'Weakened',
-      description: 'While you are weakened, all your power rolls take a bane.',
-    },
-    {
-      // Numeric rider applied by automation. Stored on the placement with
-      // `amount` and (optionally) `damageType`; the automation damage handler
-      // stacks the amount onto incoming damage of the matching type. Empty
-      // damageType = applies to every type.
-      name: 'damageWeakness',
-      description:
-        'While you have this rider, you take extra damage equal to the rider amount from the matching damage type (or any type if untyped).',
-    },
-    {
-      // Mirror of damageWeakness — soaks `amount` from incoming damage of the
-      // matching type.
-      name: 'damageImmunity',
-      description:
-        'While you have this rider, you ignore damage equal to the rider amount from the matching damage type (or any type if untyped).',
-    },
-    CUSTOM_CONDITION_DEFINITION,
-  ];
-  const CONDITION_NAMES = CONDITION_DEFINITIONS.map((definition) => definition.name);
-  const CONDITION_DEFINITION_MAP = new Map(
-    CONDITION_DEFINITIONS.map((definition) => [definition.name.toLowerCase(), definition])
-  );
-  const CUSTOM_CONDITION_NAME = CUSTOM_CONDITION_DEFINITION.name;
-  const CONDITION_ALIASES = new Map([
-    ['grappled', 'Grabbed'],
-  ]);
+  // The conditions (names, labels, aliases, rules text) are the shared list in character_sheet/parts/conditions.js:
+  // the token-settings menu, the side panel's picker and the sheet's picker all offer the same ones.
   let activeCustomConditionDialog = null;
   let activeDamageWeaknessDialog = null;
 
@@ -1891,21 +1830,6 @@ export function mountBoardInteractions(store, routes = {}) {
 
   function isCustomConditionDialogOpen() {
     return Boolean(getCustomConditionOverlayElement());
-  }
-
-  function getConditionDefinition(name) {
-    if (typeof name !== 'string') {
-      return null;
-    }
-
-    const normalized = name.trim().toLowerCase();
-    if (!normalized) {
-      return null;
-    }
-
-    const alias = CONDITION_ALIASES.get(normalized);
-    const lookupKey = alias ? alias.toLowerCase() : normalized;
-    return CONDITION_DEFINITION_MAP.get(lookupKey) ?? null;
   }
 
   const conditionTooltips = createConditionTooltips({ getConditionDefinition });
@@ -2132,9 +2056,14 @@ export function mountBoardInteractions(store, routes = {}) {
       const steps = Array.isArray(undo.steps) ? undo.steps : [];
       // A hero's Stamina lives on the sheet too: it follows the token back.
       steps.forEach((step) => {
-        if (step.kind !== 'placement' || !step.before || !('hp' in step.before)) return;
+        if (step.kind !== 'placement' || !step.before) return;
+        const tempKnown = 'tempStamina' in step.before || 'tempStamina' in (step.after || {});
+        const tempWas = Math.max(0, Number.parseInt(step.before.tempStamina, 10) || 0), tempIs = Math.max(0, Number.parseInt(step.after?.tempStamina, 10) || 0);
+        if (!('hp' in step.before) && !(tempKnown && tempWas !== tempIs)) return;
         const was = Number.parseInt(step.before.hp?.current, 10), is = Number.parseInt(step.after?.hp?.current, 10);
-        if (Number.isFinite(was) && Number.isFinite(is) && was !== is) syncPlacementHitPointsToSheet(step.entityId, { current: String(was), max: step.before.hp?.max }, { before: is });
+        const temp = tempKnown ? { temp: tempWas, tempChanged: tempWas !== tempIs } : {};
+        if (Number.isFinite(was) && Number.isFinite(is) && was !== is) syncPlacementHitPointsToSheet(step.entityId, { current: String(was), max: step.before.hp?.max }, { before: is, ...temp });
+        else if (tempKnown && tempWas !== tempIs) syncPlacementHitPointsToSheet(step.entityId, { current: step.before.hp?.current ?? step.after?.hp?.current, max: step.before.hp?.max ?? step.after?.hp?.max }, { before: Number.isFinite(was) ? was : is, ...temp });
       });
       await reverseSheetSteps(steps.filter((step) => step.kind === 'sheet'));
       const lines = undoChatLines(steps, { nameOf: undoTokenName, actorNameOf: undoActorName, whole, whose });
@@ -2178,6 +2107,9 @@ export function mountBoardInteractions(store, routes = {}) {
       const placement = getPlacementFromStore(placementId);
       if (!placement) return;
       const combatantId = getRepresentativeIdFor(placementId) || placementId;
+      // Only a creature in this fight is asked (the server answers combatant_not_found for anyone else).
+      const entries = Array.isArray(lastCombatTrackerEntries) ? lastCombatTrackerEntries : [];
+      if (entries.length && !entries.some((entry) => entry && entry.id === combatantId)) return;
       const team = getCombatantTeam(combatantId);
       if (!team || completedCombatants.has(combatantId)) return;
       if (!isGmUser() && (team !== 'ally' || !canCurrentUserMovePlacement(placement))) return;
@@ -3148,6 +3080,19 @@ export function mountBoardInteractions(store, routes = {}) {
       descriptionElement.className = 'vtt-condition-banner__description';
       descriptionElement.textContent = descriptionText;
       content.appendChild(descriptionElement);
+    }
+
+    // One button for what the banner reports (the new fight's Undo).
+    if (options.action && typeof options.action.onClick === 'function') {
+      const actionButton = document.createElement('button');
+      actionButton.type = 'button';
+      actionButton.className = 'vtt-condition-banner__action';
+      actionButton.textContent = String(options.action.label || 'Undo');
+      actionButton.addEventListener('click', () => {
+        dismissConditionBanner(id);
+        options.action.onClick();
+      });
+      content.appendChild(actionButton);
     }
 
     const closeButton = document.createElement('button');
@@ -5781,7 +5726,7 @@ export function mountBoardInteractions(store, routes = {}) {
             abilityName: `${abilityName} (${reason})`,
           });
           if (result?.name) {
-            detailLines.push(`${result.name} recovers ${result.change || amount}`);
+            detailLines.push(allowTempHp ? `${result.name} has ${result.temp ?? amount} temporary stamina` : `${result.name} recovers ${result.change || amount}`);
           }
         }
         continue;
@@ -8232,7 +8177,7 @@ export function mountBoardInteractions(store, routes = {}) {
     // Wait for placement.add before sending the character-sheet stamina
     // patch, so it targets an existing canonical entity revision.
     if (isTokenSourcePlayerVisible(template)) {
-      fetchAndApplyCharacterStamina(placement.id, activeSceneId, dropSavePromise);
+      fetchAndApplyCharacterStamina(placement.id, activeSceneId, dropSavePromise, { seedConditions: true });
     }
 
     if (status) {
@@ -8479,12 +8424,10 @@ export function mountBoardInteractions(store, routes = {}) {
 
   // Sync V2 starts its authenticated private transport and ordered recovery.
   tokenMovementRuntime.start()
+    // The page loading writes no token (late October 2026): heroes are read from their sheets at Start combat.
     .then(() => Promise.all([
       reconcileCurrentPlayerViewToPcToken().catch((error) => {
         reportSyncFailure(error, 'player token level');
-      }),
-      startActiveScenePcStaminaHydration().catch((error) => {
-        console.warn('[VTT] Failed to refresh PC stamina during board startup', error);
       }),
     ]))
     .catch(() => {
@@ -13225,6 +13168,43 @@ export function mountBoardInteractions(store, routes = {}) {
   // At combat start this runs BEFORE the combatStart timing boundary, so any
   // character automation JSON that grants surges at combat start applies on
   // top of the zeroed baseline (the JSON wins over the hard-coded reset).
+  // Temporary Stamina ends with combat (Draw Steel). The Director's page clears it on every token in the scene and
+  // on the sheets of the players who are on (a hero with no token on the map keeps none either).
+  async function clearTemporaryStaminaAtCombatEnd(reason) {
+    if (!isGmUser()) {
+      return;
+    }
+    const placements = getPlacementsForActiveScene();
+    (Array.isArray(placements) ? placements : []).forEach((placement) => {
+      if (!placement?.id || !(Number.parseInt(placement.tempStamina, 10) > 0)) return;
+      updatePlacementById(placement.id, (target) => { delete target.tempStamina; });
+    });
+    const endpoint = typeof routes?.sheet === 'string' && routes.sheet ? routes.sheet : '/dnd/character_sheet/handler.php';
+    await Promise.all(ACTIVE_PLAYER_USER_IDS.map(async (profileId) => {
+      const body = new URLSearchParams();
+      body.set('action', 'sync-vitals');
+      body.set('character', profileId);
+      body.set('source', 'vtt');
+      body.set('tempStamina', '0');
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body,
+        });
+        const result = await response.json().catch(() => null);
+        if (!response.ok || result?.success === false) return;
+        broadcastStaminaSync({ character: profileId, currentStamina: result.currentStamina, tempStamina: 0 });
+        document.dispatchEvent(new CustomEvent('vtt:character-sheet-updated', {
+          detail: { characterId: profileId, change: 'stamina', reason },
+        }));
+      } catch (error) {
+        console.warn('[VTT] Failed to clear temporary Stamina for', profileId, error);
+      }
+    }));
+  }
+
   async function resetPlayerSurgesToZero(reason) {
     if (!isGmUser()) {
       return;
@@ -13296,6 +13276,7 @@ export function mountBoardInteractions(store, routes = {}) {
     currentTurnTeam = initialTeam;
     const startRound = combatRound;
     if (!combatV2Enabled) {
+      startNewFightCleanSlate(startingSceneId);
       resetPlayerSurgesToZero('combat-start').finally(() => {
         fireTimingBoundary('combatStart', { round: startRound });
         fireTimingBoundary('roundStart', { round: startRound });
@@ -13361,6 +13342,7 @@ export function mountBoardInteractions(store, routes = {}) {
       fireTimingBoundary('combatEnd', { round: combatRound });
       resetPlayerSurgesToZero('combat-end');
       clearEndOfEncounterConditions();
+      clearTemporaryStaminaAtCombatEnd('combat-end');
     }
     combatActive = false;
     combatRound = 0;
@@ -14493,7 +14475,8 @@ export function mountBoardInteractions(store, routes = {}) {
     applyCondition: function (payload) { return dispatchBoardCustom('vtt:automation-apply-condition', 'payload', payload); },
     checkPotency: function (payload) { return dispatchBoardCustom('vtt:automation-check-potency', 'payload', payload); },
     forceMove: function (payload) { return dispatchBoardCustom('vtt:automation-force-move', 'payload', payload); },
-    applyTemporaryStamina: function (payload) { return dispatchBoardCustom('vtt:automation-apply-temporary-stamina', 'payload', payload); },
+    // Temporary Stamina is kept as Stamina above the maximum: a heal allowed past it (as the ability runner does).
+    applyTemporaryStamina: function (payload) { return dispatchBoardCustom('vtt:automation-apply-heal', 'payload', { ...(payload || {}), allowTempHp: true }); },
     registerTrigger: function (payload) { return dispatchBoardCustom('vtt:automation-register-trigger', 'payload', payload); },
     applyTeleport: function (payload) { return dispatchBoardCustom('vtt:automation-apply-teleport', 'payload', payload); },
     applySwap: function (payload) { return dispatchBoardCustom('vtt:automation-apply-swap', 'payload', payload); },
@@ -18063,35 +18046,8 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    // Check if healing would exceed max HP - show popup to choose
-    if (action.mode === 'heal' && wouldHealOverflow(placement.id, action.amount)) {
-      showHealOverflowPopup(event, placement, action, (choice) => {
-        const allowTempHp = choice === 'temp';
-        const healResult = applyDamageHealToPlacement(placement.id, 'heal', action.amount, { allowTempHp });
-        if (!healResult) {
-          updateStatus('Unable to update hit points for that token.');
-          return;
-        }
-        floatStaminaDelta(placement.id, healResult.change || action.amount, 'heal');
-        const healName = healResult.name;
-        const healMax = healResult.max;
-        const healMaxDisplay = healMax !== null ? healMax : DEFAULT_HP_PLACEHOLDER;
-        const healCurrent = healResult.current;
-        const showHitPointValues = !shouldHideEnemyHitPointValues(placement);
-        if (allowTempHp && healMax !== null && healCurrent > healMax) {
-          const tempAmount = healCurrent - healMax;
-          updateStatus(showHitPointValues
-            ? `${healName} healed to max + ${tempAmount} temp HP (${healCurrent}/${healMaxDisplay} HP).`
-            : `${healName} recovers ${healResult.change} HP and gains temporary stamina.`);
-        } else {
-          updateStatus(showHitPointValues
-            ? `${healName} recovers ${healResult.change} HP (${healCurrent}/${healMaxDisplay} HP).`
-            : `${healName} recovers ${healResult.change} HP.`);
-        }
-      });
-      return;
-    }
-
+    // Healing stops at the maximum and never becomes temporary Stamina (October 2026): no "use the extra as
+    // temporary Stamina" choice any more.
     const sourceId = action.mode === 'damage' ? manualDamageSourceFor(placement.id) : '';
     const result = action.mode === 'damage'
       ? await applyManualDamageToPlacement(placement.id, action.amount, action.damageType || '', { sourceId })
@@ -19230,9 +19186,9 @@ export function mountBoardInteractions(store, routes = {}) {
     const beforeStamina = beforePlacement
       ? parseHitPointNumber(ensurePlacementHitPoints(beforePlacement.hp).current)
       : null;
-    // For heal: cap at max. For temporaryStamina: allow going over (allowTempHp=true).
+    // Heal: up to the maximum. Temporary Stamina (allowTempHp): its own number, the higher of held and gained.
     const allowTempHp = Boolean(payload.allowTempHp);
-    const result = applyDamageHealToPlacement(payload.placementId, 'heal', amount, { allowTempHp, fireStaminaTriggers: false });
+    const result = applyDamageHealToPlacement(payload.placementId, allowTempHp ? 'temp' : 'heal', amount, { fireStaminaTriggers: false });
     if (!result) {
       reject?.(new Error('Unable to update stamina for that token.'));
       return;
@@ -19248,16 +19204,15 @@ export function mountBoardInteractions(store, routes = {}) {
     const placement = getPlacementFromStore(payload.placementId);
     if (!isAutomationPlacementHidden(placement)) {
       flashAutomationTargetToken(payload.placementId);
-      floatStaminaDelta(payload.placementId, result.change || amount, 'heal');
+      if (!allowTempHp || result.change) floatStaminaDelta(payload.placementId, result.change || amount, 'heal');
     }
     const maxDisplay = result.max !== null ? result.max : DEFAULT_HP_PLACEHOLDER;
-    const hpDisplay = result.max !== null ? `${result.current}/${maxDisplay}` : `${result.current}`;
+    const hpDisplay = result.max !== null ? `${result.current}/${maxDisplay}${result.temp > 0 ? ` +${result.temp}` : ''}` : `${result.current}`;
     const showHitPointValues = !shouldHideEnemyHitPointValues(placement);
-    const overage = showHitPointValues && allowTempHp && Number.isFinite(result.max) && result.current > result.max
-      ? ` (+${result.current - result.max} temp)`
-      : '';
     const hitPointSuffix = showHitPointValues ? ` (${hpDisplay}).` : '.';
-    updateStatus(`${result.name} recovers ${result.change || amount} stamina${overage}${hitPointSuffix}`);
+    updateStatus(allowTempHp
+      ? `${result.name} ${result.change ? `gains temporary stamina (now ${result.temp})` : `keeps ${result.temp} temporary stamina (higher than ${amount})`}${hitPointSuffix}`
+      : `${result.name} recovers ${result.change || amount} stamina${hitPointSuffix}`);
     try {
       const afterStamina = Number.isFinite(result.current) ? result.current : null;
       const delta = beforeStamina !== null && afterStamina !== null
@@ -19595,7 +19550,11 @@ export function mountBoardInteractions(store, routes = {}) {
     return normalizeProfileId(getAutomationProfileIdForPlacement(placementId));
   }
 
+  // A recovery heals a third of the Stamina maximum (October 2026, as the sheet and the server work it out); a stored
+  // recovery value is used only by a sheet with no maximum.
   function resolveAutomationRecoveryValue(vitals = {}) {
+    const third = Number.parseInt(vitals.staminaMax ?? 0, 10);
+    if (Number.isFinite(third) && third > 0) return Math.floor(third / 3) || null;
     const raw = vitals.recoveryValue;
     let parsed = null;
     if (Number.isFinite(raw)) {
@@ -21057,11 +21016,18 @@ export function mountBoardInteractions(store, routes = {}) {
     request.resolve?.({ done: true });
   }
 
+  // Damage, healing and temporary Stamina on a token (October 2026: temporary Stamina is its own number,
+  // placement.tempStamina). Damage takes temporary Stamina first; healing stops at the maximum and never touches
+  // temporary Stamina; gaining temporary Stamina ('temp', or a heal with allowTempHp) keeps the higher of held and
+  // gained. The rules are character_sheet/parts/stamina-math.js, the same the sheet uses.
   function applyDamageHealToPlacement(placementId, mode, amount, { allowTempHp = false, fireStaminaTriggers = true } = {}) {
     if (staminaHydrationSceneId && staminaHydrationSceneId === getActiveSceneId()) {
       return null;
     }
-    if (!placementId || (mode !== 'damage' && mode !== 'heal')) {
+    if (mode === 'heal' && allowTempHp) {
+      mode = 'temp';
+    }
+    if (!placementId || (mode !== 'damage' && mode !== 'heal' && mode !== 'temp')) {
       return null;
     }
 
@@ -21077,7 +21043,7 @@ export function mountBoardInteractions(store, routes = {}) {
     // regain Stamina, and can't gain temporary Stamina").
     const squad = getMinionSquadForPlacement(placementId);
     if (squad) {
-      if (mode === 'heal') {
+      if (mode !== 'damage') {
         return null;
       }
       return applyMinionSquadDamage(squad, placementId, normalizedAmount);
@@ -21088,37 +21054,39 @@ export function mountBoardInteractions(store, routes = {}) {
       placementId,
       (target) => {
       const hp = ensurePlacementHitPoints(target.hp);
-      const currentValue = parseHitPointNumber(hp.current);
       const maxValue = parseHitPointNumber(hp.max);
-      const baseCurrent = currentValue ?? 0;
+      const before = staminaState({ current: parseHitPointNumber(hp.current) ?? 0, max: maxValue }, target.tempStamina);
+      const after = mode === 'damage'
+        ? damageStamina(before, normalizedAmount)
+        : mode === 'temp'
+          ? gainTempStamina(before, normalizedAmount)
+          : healStamina(before, normalizedAmount);
 
-      let nextValue = mode === 'damage' ? baseCurrent - normalizedAmount : baseCurrent + normalizedAmount;
-
-      if (mode === 'heal' && maxValue !== null && !allowTempHp) {
-        nextValue = Math.min(maxValue, nextValue);
-      }
-
-      if (!Number.isFinite(nextValue)) {
-        nextValue = baseCurrent;
-      }
-
-      const finalValue = Math.trunc(nextValue);
+      const finalValue = Math.trunc(after.current);
       const finalString = String(finalValue);
+      // A token whose Stamina was above its maximum (temporary Stamina, the old way) reads its maximum now.
+      const finalMax = hp.max;
 
-      target.hp = { current: finalString, max: hp.max };
+      target.hp = { current: finalString, max: finalMax };
+      if (after.temp > 0) target.tempStamina = after.temp;
+      else delete target.tempStamina;
 
       if (target.overlays && typeof target.overlays === 'object') {
         if (!target.overlays.hitPoints || typeof target.overlays.hitPoints !== 'object') {
           target.overlays.hitPoints = {};
         }
-        target.overlays.hitPoints.value = { current: finalString, max: hp.max };
+        target.overlays.hitPoints.value = { current: finalString, max: finalMax };
       }
 
       result = {
-        previous: baseCurrent,
+        previous: before.current,
         current: finalValue,
         max: maxValue,
-        change: Math.abs(finalValue - baseCurrent),
+        // Damage: all of it (temporary Stamina included). Healing: what Stamina rose by. Temporary: what it rose by.
+        change: mode === 'damage' ? normalizedAmount : mode === 'temp' ? Math.max(0, after.temp - before.temp) : Math.abs(finalValue - before.current),
+        temp: after.temp,
+        previousTemp: before.temp,
+        absorbed: mode === 'damage' ? Math.min(before.temp, normalizedAmount) : 0,
       };
       },
       { returnSavePromise: true }
@@ -21134,10 +21102,12 @@ export function mountBoardInteractions(store, routes = {}) {
       {
         savePromise: updateResult.savePromise,
         before: result.previous,
+        temp: result.temp,
+        tempChanged: result.temp !== result.previousTemp,
       }
     );
 
-    if (fireStaminaTriggers) {
+    if (fireStaminaTriggers && mode !== 'temp') {
       fireManualStaminaTriggers({
         placementId,
         before: result.previous,
@@ -21265,14 +21235,16 @@ export function mountBoardInteractions(store, routes = {}) {
   function updatePlacementById(
     placementId,
     mutator,
-    { syncBoard = true, returnSavePromise = false, movementKind = 'forced', forcedDestination = null, teleportChoice = null, collisionDamageType = '' } = {}
+    { syncBoard = true, returnSavePromise = false, movementKind = 'forced', forcedDestination = null, teleportChoice = null, collisionDamageType = '', sceneId = null } = {}
   ) {
     if (!placementId || typeof mutator !== 'function' || typeof boardApi.updateState !== 'function') {
       return false;
     }
 
     const state = boardApi.getState?.() ?? {};
-    const activeSceneId = state.boardState?.activeSceneId ?? null;
+    // A token on another scene (a hero's token on the players' scene while the Director looks at another one).
+    const onActiveScene = !sceneId || sceneId === (state.boardState?.activeSceneId ?? null);
+    const activeSceneId = sceneId || (state.boardState?.activeSceneId ?? null);
     if (!activeSceneId) {
       return false;
     }
@@ -21304,7 +21276,7 @@ export function mountBoardInteractions(store, routes = {}) {
     });
 
     if (updated && syncBoard) {
-      noticeConditionChanges(placementId, beforeSnapshot, afterSnapshot);
+      if (onActiveScene) noticeConditionChanges(placementId, beforeSnapshot, afterSnapshot);
       markPlacementDirty(activeSceneId, placementId);
 
       // Phase 3-B (commit 3): build a `placement.update` op from the
@@ -21733,6 +21705,7 @@ export function mountBoardInteractions(store, routes = {}) {
           character: payload?.character,
           currentStamina: stands.currentStamina,
           staminaMax: stands.staminaMax,
+          tempStamina: stands.tempStamina,
         });
       }
 
@@ -21754,7 +21727,12 @@ export function mountBoardInteractions(store, routes = {}) {
     // the sheet's own number. Changes not yet sent are added together; a change after one that was not confirmed
     // sends the token's number instead, so the two cannot drift apart for good.
     const waiting = existing && !existing.promise ? existing.write : null;
-    const write = sheetStaminaWrite(waiting, { now: payload.currentStamina, before: payload.before }, existing?.failed === true);
+    let write = sheetStaminaWrite(waiting, { now: payload.currentStamina, before: payload.before }, existing?.failed === true);
+    // Temporary Stamina is sent as the token now reads it, with the Stamina change or by itself (a hit that only
+    // took temporary Stamina changes no Stamina).
+    if (payload.tempStamina !== undefined && (write || payload.tempChanged || waiting)) {
+      write = { ...(write || waiting || {}), tempStamina: payload.tempStamina };
+    }
     if (!write) return;
     const entry = {
       write,
@@ -21773,7 +21751,7 @@ export function mountBoardInteractions(store, routes = {}) {
             sheetSyncQueue.delete(key);
             // Nothing newer is waiting: the token takes where the sheet now stands.
             const stands=await response.clone().json().catch(()=>null);
-            if(stands?.success===true && stands.hasStamina!==false) applySheetStaminaToTokens(name,stands.currentStamina,stands.staminaMax);
+            if(stands?.success===true && stands.hasStamina!==false) applySheetStaminaToTokens(name,stands.currentStamina,stands.staminaMax,stands.tempStamina);
           }
           return response;
         });
@@ -21813,7 +21791,7 @@ export function mountBoardInteractions(store, routes = {}) {
     return delta === 0 && !waiting ? null : { delta };
   }
 
-  function syncPlacementHitPointsToSheet(placementId, hitPoints, { savePromise = null, before = null } = {}) {
+  function syncPlacementHitPointsToSheet(placementId, hitPoints, { savePromise = null, before = null, temp = undefined, tempChanged = false } = {}) {
     if (!placementId) {
       return;
     }
@@ -21843,16 +21821,79 @@ export function mountBoardInteractions(store, routes = {}) {
         character: profileId,
         currentStamina: snapshot.current,
         before,
+        ...(Number.isFinite(Number(temp)) ? { tempStamina: Math.max(0, Math.trunc(Number(temp))), tempChanged: Boolean(tempChanged) } : {}),
       },
       { savePromise, sceneId: activeSceneId }
     );
   }
 
   /**
+   * A hero token's conditions changed (a confirmed change, from any page, on any scene): what that change did, and
+   * only that, goes to the sheet, from the Director's page, the hero's player's page and the page that made the
+   * change (the server takes it once). The token's other conditions are never sent. Never touches a token.
+   */
+  function mirrorHeroConditions(mutation, context = {}) {
+    try {
+      const placement = mutation?.placement;
+      if (!mutation || mutation.kind !== 'upsert' || mutation.projectionOnly || !placement || typeof placement !== 'object') return;
+      const ops = heroConditionTracker.observe(mutation.placementId, mutation.entityRevision, placement.conditions ?? placement.condition ?? null, placement.conditionsQuietMark ?? null);
+      if (!ops) return;
+      if (placement.hidden || placement.isHidden || placement.flags?.hidden) return;
+      const profileId = heroProfileOf(placement);
+      if (!shouldMirrorConditionChange({
+        mutation, profileId, isGm: isGmUser(),
+        currentUserId: getCurrentUserId() || '', actorId: context?.event?.actorId || '',
+      })) return;
+      heroConditionMirror.schedule(profileId, ops, {
+        placementId: mutation.placementId, revision: mutation.entityRevision,
+      });
+    } catch (error) {
+      console.warn('[VTT] Failed to send a hero\'s condition change', error);
+    }
+  }
+
+  /** The hero a token stands for (a player's token linked to a sheet), or ''. */
+  function heroProfileOf(placement) {
+    if (!placement || typeof placement !== 'object') return '';
+    const metadata = extractPlacementMetadata(placement);
+    if (!isPlacementInPlayerFolder(placement, metadata) && !isPlacementPlayerOwned(placement, metadata)) return '';
+    return getCharacterSheetProfileIdForPlacement(placement) || '';
+  }
+
+  /**
+   * A hero's token newly placed with no conditions takes its sheet's list. Never a scene opened or the Director's
+   * page loading (late October 2026): an unused map sends nothing. A token that has any keeps its own.
+   */
+  async function seedHeroTokenConditions(placementId, sceneId, data, pendingSavePromise = null) {
+    if (!data || typeof data !== 'object' || data.success === false || !Array.isArray(data.conditions) || !data.conditions.length) return;
+    if (pendingSavePromise && typeof pendingSavePromise.then === 'function') {
+      try { await pendingSavePromise; } catch (waitError) { /* the placement's own save decides; nothing to seed onto */ }
+    }
+    if (getActiveSceneId() !== sceneId) return;
+    const current = getPlacementFromStore(placementId);
+    if (!current) return;
+    const seeded = seedTokenConditions(ensurePlacementConditions(current.conditions ?? current.condition ?? null), data.conditions, {
+      placementId, tokenName: tokenLabel(current),
+    });
+    if (!seeded) return;
+    const result = updatePlacementById(placementId, (target) => {
+      if (ensurePlacementConditions(target?.conditions ?? target?.condition ?? null).length) return;
+      const list = ensurePlacementConditions(seeded);
+      if (!list.length) return;
+      target.conditions = list;
+      target.condition = list[0];
+    });
+    if (result) {
+      refreshTokenSettings();
+      dispatchTokenSelectionSummary();
+    }
+  }
+
+  /**
    * Fetches stamina from character sheet for a PC placement and updates it.
    * Called when placing a PC token to ensure stamina is pulled from character sheet.
    */
-  async function fetchAndApplyCharacterStamina(placementId, sceneId, pendingSavePromise = null) {
+  async function fetchAndApplyCharacterStamina(placementId, sceneId, pendingSavePromise = null, { seedConditions = false } = {}) {
     if (!placementId || !sceneId) {
       return;
     }
@@ -21897,6 +21938,12 @@ export function mountBoardInteractions(store, routes = {}) {
       }
 
       const data = await response.json();
+      // The same read gives the sheet's conditions: a token just placed with none takes them.
+      if (seedConditions) {
+        seedHeroTokenConditions(placementId, sceneId, data, pendingSavePromise).catch((error) => {
+          console.warn('[VTT] Failed to give a hero token its sheet\'s conditions', error);
+        });
+      }
       // No sheet, or a sheet with no Stamina maximum: the token keeps what it has (a dash, if new), never 0 of 0.
       if (!data || typeof data !== 'object' || data.success === false || data.hasStamina === false) {
         return;
@@ -21904,6 +21951,7 @@ export function mountBoardInteractions(store, routes = {}) {
 
       const currentStamina = data.currentStamina;
       const staminaMax = data.staminaMax;
+      const tempStamina = data.tempStamina;
 
       if (currentStamina === undefined && staminaMax === undefined) {
         return;
@@ -21934,6 +21982,10 @@ export function mountBoardInteractions(store, routes = {}) {
           current: currentStamina !== undefined ? String(currentStamina) : currentHp.current,
           max: staminaMax !== undefined ? String(staminaMax) : currentHp.max,
         };
+        if (tempStamina !== undefined) {
+          if (Number.parseInt(tempStamina, 10) > 0) target.tempStamina = Number.parseInt(tempStamina, 10);
+          else delete target.tempStamina;
+        }
 
         if (target.overlays && typeof target.overlays === 'object') {
           if (!target.overlays.hitPoints || typeof target.overlays.hitPoints !== 'object') {
@@ -22003,36 +22055,31 @@ export function mountBoardInteractions(store, routes = {}) {
       return;
     }
 
-    applySheetStaminaToTokens(characterId, payload.currentStamina, payload.staminaMax);
+    applySheetStaminaToTokens(characterId, payload.currentStamina, payload.staminaMax, payload.tempStamina);
   }
 
   /**
-   * Puts a sheet's Stamina on its hero's tokens in the scene on show, without sending it back to the sheet.
-   * From a sheet page or the side panel in this browser (the broadcast), from the sheet's answer to a token's own
-   * write, and, on the Director's page, from the party read that catches changes made on other devices.
+   * Puts a sheet's Stamina on its hero's token, without sending it back to the sheet: the token on the players'
+   * scene first, else the Director's open scene (late October 2026, the same order as conditions:
+   * services/condition-sync-service.js findHeroToken). From a sheet page or the side panel in this browser (the
+   * broadcast), from the sheet's answer to a token's own write, and, on the Director's page, from the party read
+   * that catches changes made on other devices.
    */
-  function applySheetStaminaToTokens(character, currentStamina, staminaMax) {
+  function applySheetStaminaToTokens(character, currentStamina, staminaMax, tempStamina = undefined) {
     const characterId = normalizeProfileId(character);
-    if (!characterId || (currentStamina === undefined && staminaMax === undefined)) {
+    if (!characterId || (currentStamina === undefined && staminaMax === undefined && tempStamina === undefined)) {
       return;
     }
+    const nextTemp = tempStamina === undefined || tempStamina === null ? undefined : Math.max(0, Number.parseInt(tempStamina, 10) || 0);
 
-    const placements = getPlacementsForActiveScene();
+    // Only the hero's own token (a player's token, not a monster with the same name).
+    const heroToken = findHeroToken(boardApi.getState?.()?.boardState ?? {}, characterId, heroProfileOf);
+    const placements = heroToken ? [heroToken.placement] : [];
+    const tokenSceneId = heroToken?.sceneId ?? null;
+    const onActiveScene = tokenSceneId === getActiveSceneId();
     let anyUpdated = false;
 
     for (const placement of placements) {
-      const placementProfileId = getCharacterSheetProfileIdForPlacement(placement);
-      if (!placementProfileId || placementProfileId !== characterId) {
-        continue;
-      }
-
-      // Only update PC placements, not monsters with the same name
-      const metadata = extractPlacementMetadata(placement);
-      const inPlayerFolder = isPlacementInPlayerFolder(placement, metadata);
-      const isPlayerOwned = isPlacementPlayerOwned(placement, metadata);
-      if (!inPlayerFolder && !isPlayerOwned) {
-        continue;
-      }
 
       const currentHp = placement.hp && typeof placement.hp === 'object'
         ? placement.hp
@@ -22042,13 +22089,20 @@ export function mountBoardInteractions(store, routes = {}) {
       const nextMax = staminaMax !== undefined ? String(staminaMax) : currentHp.max;
       const previousCurrent = currentHp.current;
 
+      const heldTemp = Math.max(0, Number.parseInt(placement.tempStamina, 10) || 0);
+      const tempSame = nextTemp === undefined || nextTemp === heldTemp;
+
       // Skip if values haven't actually changed (prevents unnecessary saves)
-      if (nextCurrent === currentHp.current && nextMax === currentHp.max) {
+      if (nextCurrent === currentHp.current && nextMax === currentHp.max && tempSame) {
         continue;
       }
 
       updatePlacementById(placement.id, (target) => {
         target.hp = { current: nextCurrent, max: nextMax };
+        if (nextTemp !== undefined) {
+          if (nextTemp > 0) target.tempStamina = nextTemp;
+          else delete target.tempStamina;
+        }
 
         if (target.overlays && typeof target.overlays === 'object') {
           if (!target.overlays.hitPoints || typeof target.overlays.hitPoints !== 'object') {
@@ -22056,8 +22110,8 @@ export function mountBoardInteractions(store, routes = {}) {
           }
           target.overlays.hitPoints.value = { current: nextCurrent, max: nextMax };
         }
-      });
-      fireManualStaminaTriggers({
+      }, { sceneId: tokenSceneId });
+      if (onActiveScene) fireManualStaminaTriggers({
         placementId: placement.id,
         before: previousCurrent,
         after: nextCurrent,
@@ -22090,10 +22144,17 @@ export function mountBoardInteractions(store, routes = {}) {
       if (answer?.success !== true || answer.unchanged === true || !answer.party) return;
       const sending = new Set([...sheetSyncQueue.keys()].map((key) => key.slice(key.indexOf('::') + 2)));
       let held = false;
+      // The page's first read only records where each sheet stands; later reads put on a token only a sheet that
+      // changed since (late October 2026: a page loading, or a map opened, writes no token).
+      const firstRead = !partyVitalsSeen.size;
       for (const [character, vitals] of Object.entries(answer.party)) {
         if (vitals?.hasStamina !== true) continue;
-        if (sending.has(character.toLowerCase()) || heroTokenJustChanged(character)) { held = true; continue; }
-        applySheetStaminaToTokens(character, vitals.currentStamina, vitals.staminaMax);
+        const key = character.toLowerCase();
+        const stands = JSON.stringify([vitals.currentStamina, vitals.staminaMax, vitals.tempStamina ?? null]);
+        if (firstRead || partyVitalsSeen.get(key) === stands) { partyVitalsSeen.set(key, stands); continue; }
+        if (sending.has(key) || heroTokenJustChanged(character)) { held = true; continue; }
+        partyVitalsSeen.set(key, stands);
+        applySheetStaminaToTokens(character, vitals.currentStamina, vitals.staminaMax, vitals.tempStamina);
       }
       // A hero that was held is read again next time, whether or not a sheet is written in between.
       partyVitalsStamp = held ? '' : String(answer.stamp || '');
@@ -22243,7 +22304,7 @@ export function mountBoardInteractions(store, routes = {}) {
     const conditionOptions = ['<option value="">None</option>']
       .concat(CONDITION_NAMES.map((name) => {
         const value = escapeHtml(name);
-        const label = escapeHtml(name === 'damageWeakness' ? 'Weakness' : name);
+        const label = escapeHtml(conditionOptionLabel(name));
         return `<option value="${value}">${label}</option>`;
       }))
       .join('');
@@ -24543,6 +24604,115 @@ export function mountBoardInteractions(store, routes = {}) {
   }
 
   // Conditions that last until the end of the encounter come off when combat ends, on every token of the scene.
+  // ---------- new fight, clean slate (Brandon, late October 2026) ----------
+  // "9 times out of ten, if we play combat, we finish it and often I just end up leaving the thing on ... I don't
+  // want it to throw all the conditions back on. I kind of want it to wipe them." Start combat wipes the leftover
+  // conditions of the heroes in this fight: their tokens on this scene and their sheets' lists. Not monsters, not
+  // the Director's hidden effects, not tokens on other scenes (they stay as they are, and send nothing). One banner
+  // says what was cleared, with Undo, which puts back exactly that.
+  async function readSheetConditionList(profileId) {
+    const endpoint = typeof routes?.sheet === 'string' ? routes.sheet : null;
+    if (!endpoint || !profileId) return [];
+    try {
+      const url = new URL(endpoint, window.location.href);
+      url.searchParams.set('action', 'sync-stamina');
+      url.searchParams.set('character', profileId);
+      const response = await fetch(url.toString(), { method: 'GET', credentials: 'same-origin', cache: 'no-store' });
+      const data = response?.ok ? await response.json() : null;
+      return data?.success === false ? [] : normalizeSheetConditionList(data?.conditions);
+    } catch (error) {
+      console.warn('[VTT] Failed to read a hero sheet\'s conditions', error);
+      return [];
+    }
+  }
+
+  async function wipeHeroConditionsForNewFight(sceneId = getActiveSceneId()) {
+    if (!isGmUser() || !sceneId || sceneId !== getActiveSceneId()) return null;
+    const endpoint = typeof routes?.sheet === 'string' ? routes.sheet : null;
+    const heroes = getPlacementsForActiveScene().filter((placement) => placement?.id && !placement.hidden && !placement.isHidden
+      && !placement.flags?.hidden && heroProfileOf(placement));
+    if (!heroes.length) return null;
+    const profiles = [...new Set(heroes.map(heroProfileOf))];
+    const sheetLists = new Map(await Promise.all(profiles.map(async (profileId) => [profileId, await readSheetConditionList(profileId)])));
+    if (getActiveSceneId() !== sceneId) return null;
+    const plan = planNewFightWipe(heroes.map((hero) => {
+      const current = getPlacementFromStore(hero.id) ?? hero;
+      return { placementId: hero.id, profileId: heroProfileOf(hero), name: tokenLabel(current), conditions: ensurePlacementConditions(current.conditions ?? current.condition ?? null) };
+    }), sheetLists);
+    if (!plan.text) return null;
+    // The wipe writes the sheets itself: its token change carries a quiet mark, so no page sends it again.
+    const quietMark = newConditionsQuietMark('nf');
+    if (plan.tokens.size) {
+      updatePlacementsByIds([...plan.tokens.keys()], (target) => {
+        if (!plan.tokens.has(target.id)) return;
+        target.conditionsQuietMark = quietMark;
+        const keep = ensurePlacementConditions(target?.conditions ?? target?.condition ?? null).filter((condition) => !isShownCondition(condition));
+        if (keep.length) {
+          target.conditions = keep;
+          target.condition = keep[0];
+        } else {
+          delete target.conditions;
+          delete target.condition;
+        }
+      });
+      refreshTokenSettings();
+      syncConditionsAfterMutation(true);
+      dispatchTokenSelectionSummary();
+    }
+    if (endpoint) {
+      for (const [profileId, list] of plan.sheets) {
+        writeSheetConditionDelta(endpoint, { character: profileId, ops: list.map((condition) => ({ op: 'remove', condition })), reason: 'new-fight' })
+          .catch((error) => console.warn('[VTT] Failed to clear a hero sheet\'s conditions for the new fight', error));
+      }
+    }
+    const record = { sceneId, plan };
+    lastNewFightWipe = record;
+    showConditionBanner(plan.text, { tone: 'reminder', action: { label: 'Undo', onClick: () => { undoNewFightWipe(record); } } });
+    return record;
+  }
+
+  let lastNewFightWipe = null;
+  const newConditionsQuietMark = (prefix) => prefix + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+  async function undoNewFightWipe(record = lastNewFightWipe) {
+    if (!record) return false;
+    if (lastNewFightWipe === record) lastNewFightWipe = null;
+    const endpoint = typeof routes?.sheet === 'string' ? routes.sheet : null;
+    const keyOf = (condition) => buildConditionKey(condition) || JSON.stringify(condition);
+    let tokensBack = 0;
+    if (getActiveSceneId() === record.sceneId) {
+      for (const [placementId, { removed }] of record.plan.tokens) {
+        if (!getPlacementFromStore(placementId)) continue;
+        const done = updatePlacementById(placementId, (target) => {
+          const next = restoreRemovedConditions(ensurePlacementConditions(target?.conditions ?? target?.condition ?? null), removed, keyOf);
+          if (!next.length) return;
+          // Undo puts each list back as it was: the token's change is not sent to the sheet (it gets its own back).
+          target.conditionsQuietMark = newConditionsQuietMark('nf-undo');
+          target.conditions = next;
+          target.condition = next[0];
+        });
+        if (done) tokensBack++;
+      }
+      if (tokensBack) {
+        refreshTokenSettings();
+        syncConditionsAfterMutation(true);
+        dispatchTokenSelectionSummary();
+      }
+    }
+    await Promise.all([...record.plan.sheets].map(([profileId, list]) => (endpoint
+      ? writeSheetConditionDelta(endpoint, { character: profileId, ops: list.map((condition) => ({ op: 'add', condition })), reason: 'new-fight-undo' })
+        .catch((error) => console.warn('[VTT] Failed to give back a hero sheet\'s conditions', error))
+      : null)));
+    updateStatus('Put back the conditions the new fight cleared.');
+    return true;
+  }
+
+  /** Start combat on the Director's page: the fight's heroes start clean and take their Stamina from their sheets. */
+  function startNewFightCleanSlate(sceneId = getActiveSceneId()) {
+    if (!isGmUser() || !sceneId) return;
+    wipeHeroConditionsForNewFight(sceneId).catch((error) => console.warn('[VTT] Failed to clear the heroes\' conditions for the new fight', error));
+    startActiveScenePcStaminaHydration(sceneId).catch((error) => console.warn('[VTT] Failed to read the heroes\' Stamina for the new fight', error));
+  }
+
   function clearEndOfEncounterConditions() {
     const placements = getPlacementsForActiveScene();
     const isEncounterLong = (condition) => getConditionDurationType(condition) === 'end-of-encounter';
@@ -28704,6 +28874,13 @@ function createTemplateTool() {
       handleSheetStaminaBroadcast,
       fetchAndApplyCharacterStamina,
       syncPlacementHitPointsToSheet,
+      wipeHeroConditionsForNewFight,
+      undoNewFightWipe,
+      applyConfirmedPlacementBatch,
+      reconcileTokenMovementSnapshot,
+      applySheetStaminaToTokens,
+      readPartyVitals,
+      getHeroConditionMirror: () => heroConditionMirror,
     },
   };
 }

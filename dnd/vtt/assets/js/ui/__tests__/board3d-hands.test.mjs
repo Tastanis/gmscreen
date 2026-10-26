@@ -50,8 +50,10 @@ test('Z pressed while a token is already held switches it to up and down, as Shi
 test('a flying token is dragged on a sheet at its own height, keeping where it was grabbed', () => {
   assert.match(board3d, /if\(airborne\(p\)&&view\)\{const w=world\(p\),q=view\.pointOnPlane\(e\.clientX,e\.clientY,w\.z\);if\(q\)drag\.air=\{z:w\.z,dx:w\.x-q\.x,dy:w\.y-q\.y\};\}/, 'the gap between the grab and its middle is kept');
   assert.match(board3d, /const q=view\?\.pointOnPlane\(e\.clientX,e\.clientY,air\.z\);if\(!q\)return null;\s*const x=q\.x\+air\.dx,y=q\.y\+air\.dy;return \{x,y,z:helpers\.groundAt\(x,y\)/);
-  // Every place a held token reads the pointer goes through it: the hover, the route's last search and the drop.
-  assert.equal((board3d.match(/dragHit\(/g) || []).length, 4, 'defined once, used three times');
+  // Every place a held token reads the pointer goes through it: the hover, the route's last search and the drop, and
+  // the two clicks that put a click-held token down (Medpilis, October 25, 2026: the surface its walk reaches).
+  assert.equal((board3d.match(/dragHit\(/g) || []).length, 6, 'defined once, used five times');
+  assert.match(board3d, /function dragHit\(e,p,air=[^\n]*\n  if\(!air\)return walkerHit\(e,p\);/, 'a walker is put down on the surface its walk reaches');
   assert.match(board3d, /const landing=airZ\?\?/, 'and while it is held it stays at its height');
   assert.match(board3d, /const airborne=p=>!!p&&\['fly','hover'\]\.includes\(p\.movementMode\);/, 'a token on the ground follows the surface under the pointer, as before');
 });

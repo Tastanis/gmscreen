@@ -11,6 +11,7 @@ import {rampHeight} from '../assets/js/ui/imported-ramps.mjs';
 import {createWallOverlayLayer} from './wall-overlay.mjs';
 import {createTerrainBrushLayer} from './terrain-brush.mjs';
 import {buildAreaVolume} from './area-volume.mjs';
+import {chooseSurface} from './surface-choice.mjs';
 
 // The 3D board. It draws the scene and the tokens; every rule, command and
 // panel stays the VTT's own. The 2D map layer stays in place, transparent, on
@@ -219,8 +220,20 @@ async function mount(){
  // grabbed and its middle: it moves under the hand, square by square over the ground below it, and never jumps to
  // the ground point behind the pointer (Brandon, October 2026). Anything else follows the surface under the pointer.
  const airborne=p=>!!p&&['fly','hover'].includes(p.movementMode);
+ // A walker held over an overhang, or over a floor the Height control hides, is put down on the surface under the
+ // pointer that its walk reaches, not on the first one the pointer meets (surface-choice.mjs). Each answer is kept
+ // for the token's square, so moving the pointer asks only about squares not yet asked.
+ let reachMemo=new Map(),reachKey='';
+ function walkerHit(e,p){
+  const kind=movementKind(e);
+  if(!p||airborne(p)||!['walk','shift'].includes(kind)||!view?.pickAll)return pickAtClient(e.clientX,e.clientY,{tokens:false});
+  const key=[p.id,p.column,p.row,p.levelId||'',window.terrainPrototype?.revision,window.wallPrototype?.revision].join('|');if(key!==reachKey){reachKey=key;reachMemo=new Map();}
+  const reaches=hit=>{const to=destination(hit,p),target={...to,surfaceElevation:hit.z,levelId:hit.levelId??null,surfaceId:hit.surfaceId??null,rampId:hit.rampId??null};
+   const k=[to.column,to.row,hit.z.toFixed(2),target.levelId,target.surfaceId,target.rampId].join('|');if(!reachMemo.has(k)){if(reachMemo.size>256)reachMemo.clear();reachMemo.set(k,window.terrainPrototype?.walkReaches?.(p.id,target)??null);}return reachMemo.get(k);};
+  return chooseSurface(view.pickAll({clientX:e.clientX,clientY:e.clientY}),{reaches,level:bridge.heightFor?.(p.id)});
+ }
  function dragHit(e,p,air=drag?.air&&drag.id===p?.id?drag.air:null){
-  if(!air)return pickAtClient(e.clientX,e.clientY,{tokens:false});
+  if(!air)return walkerHit(e,p);
   const q=view?.pointOnPlane(e.clientX,e.clientY,air.z);if(!q)return null;
   const x=q.x+air.dx,y=q.y+air.dy;return {x,y,z:helpers.groundAt(x,y),levelId:null,surfaceId:null,rampId:null,air:air.z};}
  function clearGuides(){if(!view)return;view.setReachable([]);view.setPath([]);view.setMovementRoute(null);sayHeld(null);}
@@ -288,7 +301,7 @@ async function mount(){
   if(Math.hypot(e.clientX-start.x,e.clientY-start.y)>5&&!clickMoveTokenId)return;
   const hit=pickAtClient(e.clientX,e.clientY,{tokens:false});if(!hit){if(clickMoveTokenId)cancelDrag();return;}
   if(context.targetMode==='area'||context.targetMode==='move'){bridge.pickAbility?.({column:Math.floor(hit.x),row:Math.floor(hit.y)});return;}
-  if(!clickMoveTokenId)return;const mover=find(clickMoveTokenId);showHover(e,mover);settleRoute(e,mover);const intent=bridge.captureMovementPreview?.();commit(hit,mover,e,intent);},true);
+  if(!clickMoveTokenId)return;const mover=find(clickMoveTokenId);showHover(e,mover);settleRoute(e,mover);const intent=bridge.captureMovementPreview?.();commit(dragHit(e,mover)||hit,mover,e,intent);},true);
 
  // Tokens: select, drag or click-to-move, through the VTT bridge.
  tokenLayer.addEventListener('pointerdown',e=>{const node=e.target.closest('[data-placement-id]');if(!node||e.target.closest('[data-token-trigger-ready],[data-token-judgment-mark],[data-token-hidden-effect],button'))return;
@@ -303,7 +316,7 @@ async function mount(){
   // (it used to put the carried token on that token's square). Brandon, October 16, 2026.
   if(clickMoveTokenId&&e.shiftKey){cancelDrag();bridge.select(id,{additive:true});board.focus({preventScroll:true});return;}
   if(clickMoveTokenId){const mover=find(clickMoveTokenId);if(id===clickMoveTokenId||!mover){cancelDrag();return;}
-   const hit=pickAtClient(e.clientX,e.clientY,{tokens:false});if(!hit){cancelDrag();return;}showHover(e,mover);settleRoute(e,mover);commit(hit,mover,e,bridge.captureMovementPreview?.());return;}
+   const hit=dragHit(e,mover);if(!hit){cancelDrag();return;}showHover(e,mover);settleRoute(e,mover);commit(hit,mover,e,bridge.captureMovementPreview?.());return;}
   if(e.shiftKey||!context.selectedIds?.includes(id))bridge.select(id,{additive:e.shiftKey});planner.warm(find(id));clickMoveTokenId=null;board.focus({preventScroll:true});
   drag={id,x:e.clientX,y:e.clientY,pointerId:e.pointerId,moved:false,shift:!!e.shiftKey};tokenLayer.setPointerCapture(e.pointerId);
   if(airborne(p)&&view){const w=world(p),q=view.pointOnPlane(e.clientX,e.clientY,w.z);if(q)drag.air={z:w.z,dx:w.x-q.x,dy:w.y-q.y};}},true);
@@ -472,7 +485,9 @@ async function mount(){
  // The ground follows the live height field (Height tool, shared edits), at most ~8 times a second.
  let fieldShown=-1,fieldAt=0;
  function syncField(now){const tp=window.terrainPrototype,version=tp?.fieldVersion;if(!Number.isFinite(version)||version===fieldShown||now-fieldAt<120||!tp.field)return;fieldShown=version;fieldAt=now;view.setField(tp.field);}
- function frame(now){const dt=(now-lastTime)/1000;lastTime=now;
+ // The Table (October 2026) pauses a board it has tucked away, covered or minimised: no drawing, a light check
+ // four times a second until it is woken.
+ function frame(now){if(window.vttPaused){lastTime=performance.now();setTimeout(()=>requestAnimationFrame(frame),250);return;}const dt=(now-lastTime)/1000;lastTime=now;
   // Layout is read once, before this frame writes any styles.
   const canvasRect=view&&!document.hidden?canvas.getBoundingClientRect():null,hostRect=canvasRect?overlayHost.getBoundingClientRect():null;
   if(view&&!document.hidden){

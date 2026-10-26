@@ -43,6 +43,8 @@ export function broadcastStaminaSync(payload = {}) {
     character: payload.character,
     currentStamina: payload.currentStamina,
     staminaMax: payload.staminaMax,
+    // Temporary Stamina, its own number (October 2026); left out by a sender that does not know it.
+    ...(payload.tempStamina !== undefined && payload.tempStamina !== null ? { tempStamina: payload.tempStamina } : {}),
   });
 }
 
@@ -146,7 +148,7 @@ export async function writeSheetStamina(endpoint, payload = {}, {
   recoveryTimeoutMs = 3000,
 } = {}) {
   const body = new URLSearchParams({ action: 'sync-stamina', source: 'vtt', operationId });
-  for (const field of ['character', 'currentStamina', 'delta']) {
+  for (const field of ['character', 'currentStamina', 'delta', 'tempStamina']) {
     if (payload[field] !== undefined && payload[field] !== null) body.set(field, payload[field]);
   }
   const journal = journalOverride ?? getCharacterOperationJournal();
@@ -208,7 +210,7 @@ async function inspectStaminaReceipt(endpoint, body, fetchImpl, timeoutMs) {
         if(result.success!==true || result.recorded!==true || receipt?.action!=='sync-stamina'
           || receipt.operationId!==body.get('operationId') || saved?.operationId!==body.get('operationId')
           || saved.success!==true || !Number.isFinite(Number(saved.currentStamina))
-          || (!body.has('delta') && Number(saved.currentStamina)!==Number(body.get('currentStamina'))))return null;
+          || (!body.has('delta') && body.has('currentStamina') && Number(saved.currentStamina)!==Number(body.get('currentStamina'))))return null;
         return saved;
       })(),
     ]);

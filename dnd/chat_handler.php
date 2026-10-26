@@ -405,28 +405,14 @@ function applyProjectRollAward(array $payload)
         return ['error' => 'Character not specified'];
     }
 
-    $dataFile = __DIR__ . '/data/characters.json';
-    if (!file_exists($dataFile)) {
+    // Project-roll awards save through the dashboard's backup-keeping path (loaded only when a roll is accepted).
+    require_once __DIR__ . '/includes/character-data.php';
+    if (!file_exists(character_data_file())) {
         return ['error' => 'Character data not found'];
     }
 
-    $fp = fopen($dataFile, 'c+');
-    if ($fp === false) {
-        return ['error' => 'Unable to open character data'];
-    }
-
-    $lockAcquired = false;
-
-    try {
-        if (!flock($fp, LOCK_EX)) {
-            return ['error' => 'Unable to lock character data'];
-        }
-
-        $lockAcquired = true;
-        rewind($fp);
-        $content = stream_get_contents($fp);
-        $data = json_decode($content, true);
-
+    // Through the shared backup-keeping save (includes/character-data.php): one lock, backups, atomic write.
+    $result = character_data_modify(function (&$data) use ($character, $projectIndex, $projectName, $delta) {
         if (!is_array($data) || !isset($data[$character])) {
             return ['error' => 'Character not found'];
         }
@@ -436,34 +422,33 @@ function applyProjectRollAward(array $payload)
         }
 
         $projects = &$data[$character]['projects'];
+        $nameOf = static function ($project) {
+            if (!is_array($project)) {
+                return '';
+            }
+            if (isset($project['project_name']) && is_string($project['project_name'])) {
+                return $project['project_name'];
+            }
+            return (isset($project['name']) && is_string($project['name'])) ? $project['name'] : '';
+        };
+        $normalizedName = strtolower($projectName);
         $resolvedIndex = null;
 
-        if ($projectIndex >= 0 && isset($projects[$projectIndex])) {
+        // The stored index, unless the project there now has another name (the list changed since the roll).
+        if ($projectIndex >= 0 && isset($projects[$projectIndex])
+            && ($normalizedName === '' || strtolower(trim($nameOf($projects[$projectIndex]))) === $normalizedName)) {
             $resolvedIndex = $projectIndex;
-        } elseif ($projectName !== '') {
-            $normalizedName = strtolower($projectName);
-
+        } elseif ($normalizedName !== '') {
             foreach ($projects as $index => $project) {
-                if (!is_array($project)) {
-                    continue;
-                }
-
-                $candidate = '';
-                if (isset($project['project_name']) && is_string($project['project_name'])) {
-                    $candidate = $project['project_name'];
-                } elseif (isset($project['name']) && is_string($project['name'])) {
-                    $candidate = $project['name'];
-                }
-
-                if ($candidate === '') {
-                    continue;
-                }
-
-                if (strtolower(trim($candidate)) === $normalizedName) {
+                $candidate = $nameOf($project);
+                if ($candidate !== '' && strtolower(trim($candidate)) === $normalizedName) {
                     $resolvedIndex = (int) $index;
                     break;
                 }
             }
+        }
+        if ($resolvedIndex === null && $projectIndex >= 0 && isset($projects[$projectIndex])) {
+            $resolvedIndex = $projectIndex; // renamed since the roll, still in its place
         }
 
         if ($resolvedIndex === null) {
@@ -471,23 +456,8 @@ function applyProjectRollAward(array $payload)
         }
 
         $project = &$projects[$resolvedIndex];
-        $current = isset($project['points_earned']) ? intval($project['points_earned']) : 0;
-        $newTotal = $current + $delta;
-        $project['points_earned'] = (string) $newTotal;
-
-        if (!isset($project['points_history']) || !is_array($project['points_history'])) {
-            $project['points_history'] = [];
-        }
-
-        $project['points_history'][] = $newTotal;
-        if (count($project['points_history']) > 10) {
-            $project['points_history'] = array_slice($project['points_history'], -10);
-        }
-
-        ftruncate($fp, 0);
-        rewind($fp);
-        fwrite($fp, json_encode($data, JSON_PRETTY_PRINT));
-        fflush($fp);
+        $newTotal = (isset($project['points_earned']) ? intval($project['points_earned']) : 0) + $delta;
+        character_data_set_project_points($project, $newTotal);
 
         return [
             'character' => $character,
@@ -495,13 +465,13 @@ function applyProjectRollAward(array $payload)
             'delta' => $delta,
             'newPoints' => $newTotal
         ];
-    } finally {
-        if ($lockAcquired) {
-            flock($fp, LOCK_UN);
-        }
+    });
 
-        fclose($fp);
+    if (empty($result['success'])) {
+        return ['error' => $result['error'] ?? 'Failed to award project roll.'];
     }
+
+    return $result['result'];
 }
 
 function sanitizeImageUrl($url) {

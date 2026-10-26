@@ -94,6 +94,7 @@ require_once '../../includes/strix-nav.php';
 <div id="hud">
   <h1>Strixhaven 3D sandbox</h1>
   <div><span class="stat" id="fps">-- fps</span> &middot; <span id="tris">--</span> tris &middot; <span id="calls">--</span> draws</div>
+  <div title="Map quality: one setting for this browser, shared with the battle map. Lighter levels use less memory.">Quality <select id="qSel"><option value="auto">Auto</option><option value="high">High</option><option value="balanced">Balanced</option><option value="low">Low</option></select> <span id="qNow" style="color:#a9adb6"></span></div>
   <div id="gen" style="color:#a9adb6"></div>
   <div style="margin-top:6px">
     <button id="bGrid" class="on">Hex grid (G)</button>
@@ -159,10 +160,20 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';   // models are packed with meshoptimizer (gltfpack): far smaller to download, unpacked here
+import { qualityChoice, qualityLevel, QUALITY_KEY, LEVELS } from '/dnd/vtt/board3d/quality.mjs';   // map quality shared with the battle map (October 2026)
 
 // ------------------------------------------------------------------ constants
 const params = new URLSearchParams(location.search);
-const LOW = params.get('q') === 'low';
+// Light mode: ?q=low, or the shared map quality set to Low or Balanced (Auto picks it on small laptops); ?q=high forces full.
+const LOW = params.get('q') === 'low' || (params.get('q') !== 'high' && ['low', 'balanced'].includes(qualityLevel()));
+{
+  const sel = document.getElementById('qSel'), now = document.getElementById('qNow');
+  if (sel) {
+    sel.value = qualityChoice();
+    if (now) now.textContent = 'now ' + LEVELS[qualityLevel()].label + (LOW ? ' (light mode)' : '');
+    sel.addEventListener('change', () => { try { localStorage.setItem(QUALITY_KEY, sel.value); } catch (e) { /* no storage */ } location.reload(); });
+  }
+}
 const S = 1.4;                                                  // world scale: bigger hexes, same hex count
 const DR = 50, HEX_R = DR * S, COLS = 36, ROWS = 36, SQ3 = Math.sqrt(3);
 const DW = COLS * 1.5 * DR, DD = ROWS * SQ3 * DR;                // design space: layout and sculpting are authored here

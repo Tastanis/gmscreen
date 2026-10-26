@@ -2,6 +2,8 @@ body.vtt-body {
   --vtt-character-panel-width: 380px;
   --vtt-character-panel-offset: 16px;
   --vtt-character-panel-top: var(--vtt-character-panel-offset);
+  /* The hero panel ends just above the board's ability bar (the tray: 18px up, 38px tall) with an 8px gap. */
+  --vtt-character-panel-bottom: calc(18px + 38px + 8px);
   --vtt-character-panel-effective-width: min(
     var(--vtt-character-panel-width),
     calc(100vw - (var(--vtt-character-panel-offset) * 2))
@@ -368,6 +370,10 @@ button.vtt-character-pill:focus-visible,
 .vtt-character-roll {
   min-width: 34px;
   color: var(--vtt-sheet-gold);
+}
+
+.vtt-character-card__open-sheet {
+  margin-top: 4px;
 }
 
 .vtt-character-token-confirmation {
@@ -820,26 +826,31 @@ body.chat-panel-is-open .vtt-character-ability-tray__inner {
   pointer-events: none;
 }
 
+/* The board's ability bar: the sheet's Diablo frame (dark stone, gold rim, Cinzel), every tab the same height so
+   the labels share one baseline (October 2026 polish). */
 .vtt-character-ability-tab {
   width: 100%;
   min-height: 38px;
-  border: 2px solid;
-  border-top-color: var(--vtt-stone-border-top, #6a5240);
-  border-left-color: var(--vtt-stone-border-left, #5a4230);
-  border-right-color: var(--vtt-stone-border-right, #3a2010);
-  border-bottom-color: var(--vtt-stone-border-bottom, #2a1508);
-  border-radius: 4px;
-  background: linear-gradient(145deg, var(--vtt-stone-face, #3d2a1e) 0%, var(--vtt-stone-mid, #352016) 60%, var(--vtt-stone-base, #2d1b12) 100%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  border: 1px solid #000;
+  border-radius: 6px;
+  background: linear-gradient(#1d1912, #110e0a);
   box-shadow:
-    2px 2px 0 var(--vtt-stone-shadow, #1a0f08),
-    3px 3px 0 var(--vtt-stone-shadow-deep, #150c06),
-    0 4px 10px rgba(0, 0, 0, 0.35);
-  color: var(--vtt-sheet-text);
+    inset 0 0 0 1px #6e5a33,
+    inset 0 0 0 2px #241d12,
+    inset 0 1px 0 2px rgba(200, 169, 94, 0.08),
+    0 6px 16px rgba(0, 0, 0, 0.55);
+  color: #c8a95e;
   cursor: pointer;
-  font: 800 0.86rem/1 "Inter", "Segoe UI", sans-serif;
-  letter-spacing: 0.02em;
+  font: 700 0.82rem/1 'Cinzel', Georgia, "Times New Roman", serif;
+  letter-spacing: 0.08em;
   pointer-events: auto;
   text-transform: uppercase;
+  text-shadow: 0 1px 2px #000;
+  transition: filter 0.12s, box-shadow 0.12s, color 0.12s, transform 0.12s;
 }
 
 .vtt-character-ability-category--items {
@@ -847,19 +858,27 @@ body.chat-panel-is-open .vtt-character-ability-tray__inner {
 }
 
 .vtt-character-ability-tab--items {
-  min-height: 30px;
+  min-height: 38px;
   padding: 0 6px;
-  font-size: 0.68rem;
-  letter-spacing: 0.01em;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
 }
 
-.vtt-character-ability-tab[aria-expanded="true"],
-.vtt-character-ability-tab:hover,
-.vtt-character-ability-tab:focus-visible {
-  border-top-color: #7a6250;
-  border-left-color: #6a5240;
-  color: #fff;
+body.vtt-body .vtt-character-ability-tab[aria-expanded="true"],
+body.vtt-body .vtt-character-ability-tab:hover,
+body.vtt-body .vtt-character-ability-tab:focus-visible {
+  color: #f1dc9e;
+  filter: brightness(1.15);
+  box-shadow:
+    inset 0 0 0 1px #c8a95e,
+    inset 0 0 0 2px #241d12,
+    0 0 0 2px rgba(200, 169, 94, 0.45),
+    0 6px 16px rgba(0, 0, 0, 0.55);
   outline: none;
+}
+
+body.vtt-body .vtt-character-ability-tab[aria-expanded="true"] {
+  background: linear-gradient(#2a2216, #16120c);
 }
 
 .vtt-character-ability-tab.has-ready-trigger {
@@ -1436,3 +1455,49 @@ body.chat-panel-is-open .vtt-character-ability-preview {
     width: calc(100vw - 24px);
   }
 }
+
+/* ---------- the panel as the sheet's parts (October 2026): character_sheet/parts/sheet-parts.css draws it ---------- */
+.vtt-character-card--sheet { background: none; }
+.vtt-character-card--sheet .sp { min-height: 100%; font-size: 13px; }
+.vtt-character-card--sheet .sp-status { position: relative; top: auto; }
+.vtt-character-card--sheet .sp-who { padding-right: 38px; }
+.vtt-character-card--sheet .vtt-character-summary__tuck { position: absolute; top: 6px; right: 6px; float: none; margin: 0; z-index: 2; }
+.vtt-character-card--sheet .sp-tabs { top: 0; }
+.vtt-character-card--sheet .vtt-character-card__open-sheet { margin: 3px 0 0; padding: 1px 9px; }
+.vtt-character-card--sheet .vtt-character-healthbar__text { position: static; inset: auto; display: inline; color: inherit; font: inherit; }
+
+/* Condition chips and the "+ condition" menu: the sheet's own (parts/sheet-parts.css), one look on both pages. */
+.vtt-character-card--sheet .sp-cond-menu { grid-template-columns: repeat(3, minmax(0, 1fr)); min-width: 0; }
+
+/* More below: a fade at the bottom of the scrolling panel with a small gold chevron, gone once the end is reached.
+   Tall enough that a row cut by the panel's edge reads as fading out, never as sliced in half. */
+.vtt-character-card--sheet .sp--panel::after { content: "\25BE"; position: sticky; bottom: 0; display: flex; align-items: flex-end; justify-content: center; height: 56px; margin-top: -56px; padding-bottom: 1px; pointer-events: none; background: linear-gradient(rgba(8, 7, 6, 0), rgba(8, 7, 6, .82) 55%, #080706 88%); color: #c8a95e; font: 700 14px/1 "Segoe UI", system-ui, sans-serif; text-shadow: 0 0 6px rgba(200, 169, 94, .45); transition: opacity .15s; z-index: 11; }
+.vtt-character-card--sheet .sp--panel[data-sheet-theme="parchment"]::after { background: linear-gradient(rgba(226, 214, 189, 0), rgba(226, 214, 189, .82) 55%, #e2d6bd 88%); color: #8a6a2a; text-shadow: none; }
+.vtt-character-summary--at-end .vtt-character-card--sheet .sp--panel::after { opacity: 0; }
+.vtt-character-card--sheet .sp-pane { padding-bottom: 40px; }
+
+/* The hero panel fills down to just above the ability bar (it ended mid-board, its last rows faded out). Top and
+   bottom both set: the panel's height is the room between the board header and the bar, the content scrolls inside.
+   The monster panel shares the class and keeps its own size. */
+.vtt-character-summary:not(.vtt-monster-summary) { bottom: var(--vtt-character-panel-bottom); max-height: none; }
+@media (max-width: 768px) { .vtt-character-summary:not(.vtt-monster-summary) { bottom: calc(var(--vtt-character-panel-bottom) + 4px); } }
+
+/* Where abilities would be: a one-line pointer to the ability bar (the panel has no Abilities tab by design). */
+.vtt-character-card--sheet .vtt-panel-ability-hint { margin: 6px 2px 0; font: italic 11px/1.3 "Segoe UI", system-ui, sans-serif; color: var(--faint); }
+
+/* Ability bar dots: every tab's dot sits top-right at the same size (TRIGGER's was top-centre and larger). A wider
+   invisible ring keeps them easy to click. */
+.vtt-character-ability-tab > .vtt-character-ability-tab__trigger-dot {
+  top: 4px; right: 4px; left: auto; transform: none; width: 9px; height: 9px;
+  border: 1px solid rgba(220, 232, 220, 0.78); box-shadow: 0 0 0 2px rgba(90, 128, 64, 0.2);
+}
+.vtt-character-ability-tab > .vtt-character-ability-tab__trigger-dot.is-spent { border-color: rgba(245, 230, 196, 0.9); background: var(--vtt-warning, #b28739); box-shadow: 0 0 0 2px rgba(178, 135, 57, 0.2); }
+.vtt-character-ability-tab > .vtt-character-ability-tab__trigger-dot:hover,
+.vtt-character-ability-tab > .vtt-character-ability-tab__action-dot:hover { transform: scale(1.3); }
+.vtt-character-ability-tab > .vtt-character-ability-tab__trigger-dot::before,
+.vtt-character-ability-tab > .vtt-character-ability-tab__action-dot::before { content: ""; position: absolute; inset: -6px; border-radius: 50%; }
+.vtt-character-ability-tab > .vtt-character-ability-tab__action-dot { transition: transform 120ms ease; }
+
+/* Inside the Table: the panel starts flush under the embed's top bar (#te-top; the panel script measures it), so no
+   strip of the board shows above the hero's name. 80px is the Table's own value, kept until the bar is measured. */
+html.vtt-embed body.vtt-body .vtt-character-summary { top: var(--vtt-character-panel-embed-top, 80px) !important; }
