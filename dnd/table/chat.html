@@ -82,7 +82,8 @@
     (function () {
       // Who you are comes from the Table (it reads it from the board it has open).
       var cfg = null;
-      try { cfg = window.parent && window.parent.Table && window.parent.Table.siteConfig && window.parent.Table.siteConfig(); } catch (e) { cfg = null; }
+      try { var host = (window.opener && window.opener.Table) ? window.opener : window.parent;   // popped out: the Table that opened it
+      cfg = host && host.Table && host.Table.siteConfig && host.Table.siteConfig(); } catch (e) { cfg = null; }
       cfg = cfg || {};
       window.chatHandlerUrl = cfg.chatHandlerUrl || '/dnd/chat_handler.php';
       window.chatParticipants = cfg.chatParticipants || [];

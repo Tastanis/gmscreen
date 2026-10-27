@@ -36,7 +36,10 @@
     flyout = el('div', 'flyout'); build(flyout);
     document.body.append(flyout);
     const r = btn.getBoundingClientRect();
-    flyout.style.top = Math.max(10, Math.min(window.innerHeight - flyout.offsetHeight - 10, r.top - 8)) + 'px';
+    const fit = (f) => { f.style.top = Math.max(10, Math.min(window.innerHeight - f.offsetHeight - 10, r.top - 8)) + 'px'; };
+    fit(flyout);
+    // A flyout that grows (a search opens every folder) moves up so its bottom stays on screen.
+    if (window.ResizeObserver) { const f = flyout; new ResizeObserver(() => { if (f.isConnected) fit(f); }).observe(f); }
     flyoutBtn = btn; btn.classList.add('open');
     flyout.querySelector('.search')?.focus();
   }
@@ -212,9 +215,9 @@
     }));
     node.querySelectorAll('.grip:not(.dockgrip):not(.spangrip)').forEach((g) => g.addEventListener('pointerdown', (e) => {
       e.stopPropagation(); g.setPointerCapture(e.pointerId); document.body.classList.add('dragging');
-      const s = { x: e.clientX, y: e.clientY, ...w.state }, dir = g.className.split(' ')[1];
+      const s = { ...w.state, px: e.clientX, py: e.clientY }, dir = g.className.split(' ')[1];   // px/py: the pointer; x/y: the window
       const move = (ev) => {
-        const dx = ev.clientX - s.x, dy = ev.clientY - s.y;
+        const dx = ev.clientX - s.px, dy = ev.clientY - s.py;
         let { x, y, w: wd, h: ht } = s;
         if (dir.includes('e')) wd = s.w + dx;
         if (dir.includes('s')) ht = s.h + dy;
@@ -336,13 +339,22 @@
     ['left', 'right', 'top', 'bottom'].forEach((edge) => { if (![...windows.values()].some((o) => o.state.dock === edge)) table.classList.remove('has-' + edge); placeTabs(edge); });
     refreshWork(); saveLayout();
   }
+  // Pop-out: the window's own page opens in a browser window of its own (drag it to a second screen). The page is
+  // the full site page (the map is the whole board with its own tools), and it leaves the table so it is not
+  // running twice. Windows that are part of the table itself (the creature gallery...) stay on the table.
   function popOut(w) {
-    const win = window.open('', 'table-' + w.id, `width=${Math.round(w.state.w)},height=${Math.round(w.state.h)}`);
-    if (!win) { toast('Pop-out blocked by the browser'); return; }
-    win.document.title = w.spec.title;
-    win.document.body.style.cssText = 'margin:0;background:#1b140e;color:#efe4cf;font:14px Segoe UI;display:grid;place-items:center;height:100vh;text-align:center';
-    win.document.body.innerHTML = `<div><h2 style="font-family:Georgia">${w.spec.title}</h2><p>In the real thing the ${w.spec.title.toLowerCase()} runs here,<br>in its own window (move it to a second screen).<br>It stays in sync with the table.</p></div>`;
-    closeWindow(w); toast(`${w.spec.title} popped out`);
+    const f = w.node.querySelector('iframe');
+    let url = '';
+    try { url = f?.contentWindow?.location?.href || ''; } catch (_) { url = ''; }
+    if (!url || url === 'about:blank') url = f ? new URL(f.getAttribute('src') || '', location.href).href : '';
+    if (!url) { toast(`${w.spec.title} lives on the table and cannot pop out`); return; }
+    const wd = Math.max(520, Math.round(w.node.offsetWidth)), ht = Math.max(400, Math.round(w.node.offsetHeight));
+    const left = Math.round((window.screenX || 0) + 40), top = Math.round((window.screenY || 0) + 40);
+    const win = window.open(url, 'table-' + w.id, `popup=yes,width=${wd},height=${ht},left=${left},top=${top}`);
+    if (!win) { toast('The browser blocked the pop-out: allow pop-ups for this site, then try again'); return; }
+    try { win.focus(); } catch (_) { /* some browsers refuse focus */ }
+    closeWindow(w);
+    toast(`${w.spec.title} is in its own window now (drag it to another screen). Close it there when done.`);
   }
 
   // Work level of heavy windows (the map): full when big and in front; low detail when small; paused when
@@ -404,12 +416,14 @@
     rmBtn.onclick = (e) => { e.stopPropagation(); node.remove(); cards.delete(spec.id); saveLayout(); };
     node.addEventListener('pointerdown', (e) => {
       if (e.target.closest('button, .card-grip')) return;
-      table.append(node);   // the card you touch comes to the front of the other cards
+      // Not moved in the page on pointerdown: moving it there loses the click, and with it the double-click that
+      // opens the sheet. A dragged card goes to the front of the other cards when it is let go.
       node.setPointerCapture(e.pointerId);
       const s = { x: e.clientX, y: e.clientY, l: node.offsetLeft, t: node.offsetTop };
+      let moved = false;
       node.style.zIndex = 9;
-      const move = (ev) => { node.style.left = (s.l + ev.clientX - s.x) + 'px'; node.style.top = (s.t + ev.clientY - s.y) + 'px'; };
-      const up = () => { node.removeEventListener('pointermove', move); node.removeEventListener('pointerup', up); node.style.zIndex = 5; saveLayout(); };
+      const move = (ev) => { if (!moved && Math.hypot(ev.clientX - s.x, ev.clientY - s.y) < 3) return; moved = true; node.style.left = (s.l + ev.clientX - s.x) + 'px'; node.style.top = (s.t + ev.clientY - s.y) + 'px'; };
+      const up = () => { node.removeEventListener('pointermove', move); node.removeEventListener('pointerup', up); node.style.zIndex = 5; if (moved) { table.append(node); saveLayout(); } };
       node.addEventListener('pointermove', move); node.addEventListener('pointerup', up);
     });
     saveLayout();
@@ -502,5 +516,5 @@
   table.addEventListener('pointerdown', (e) => { if (e.target === table || e.target.id === 'surface' || e.target.closest?.('#surface')) windows.forEach((w) => { if (w.state.dock && w.state.open) setOpen(w, false); }); });
   window.addEventListener('resize', () => { windows.forEach((w) => { if (w.state.dock) layoutDock(w); else if (w.state.max) { const b = bounds(); Object.assign(w.node.style, { width: b.width + 'px', height: b.height + 'px' }); } }); refreshWork(); });
 
-  window.Table = { $, el, toast, bounds, layoutDock, showTip, hideTip, openFlyout, closeFlyout, openWindow, closeWindow, maximize, dock, undock, setOpen, windows, addCard, cards, dragOut, setBackground, useBackgroundFile, saveBg, loadLayout, clearLayout, refreshWork };
+  window.Table = { $, el, toast, bounds, saveLayout, layoutDock, showTip, hideTip, openFlyout, closeFlyout, openWindow, closeWindow, maximize, dock, undock, setOpen, windows, addCard, cards, dragOut, setBackground, useBackgroundFile, saveBg, loadLayout, clearLayout, refreshWork };
 })();

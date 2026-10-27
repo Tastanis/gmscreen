@@ -148,3 +148,18 @@ test('more below: the bottom fade and chevron show whenever rows are below, re-c
   assert.match(css, /\.sp--panel::after \{ content: "\\25BE"; position: sticky; bottom: 0;[^}]*height: 56px; margin-top: -56px;/, 'a 56px sticky fade with a chevron');
   assert.match(css, /\.vtt-character-summary--at-end \.vtt-character-card--sheet \.sp--panel::after \{ opacity: 0; \}/);
 });
+
+test('a condition put on the hero from the sheet page shows in the open panel: its chips follow the board\'s token, not the copy taken at selection', async () => {
+  await withPanel(async (state, dom) => {
+    const chips = () => [...document.querySelectorAll('#vtt-character-summary-panel [data-character-condition-remove]')].map((b) => b.parentElement.textContent);
+    assert.deepEqual(chips(), [], 'selected with no conditions');
+    // The sheet page added Dazed: the server put it on the token (the board's store) and on the sheet's list.
+    dom.window.VTTBoardCallbacks = { getPlacementById: (id) => (id === 'cal-token' ? { id, conditions: [{ name: 'Dazed', duration: { type: 'save-ends' } }] } : null) };
+    state.sheet.hero.conditions = [{ name: 'Dazed', duration: 'save-ends' }];
+    state.revision = 5;
+    await new Promise((resolve) => setTimeout(resolve, 1800));
+    await settle();
+    assert.equal(chips().length, 1);
+    assert.match(chips()[0], /Dazed/);
+  });
+});

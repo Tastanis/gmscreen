@@ -37,7 +37,7 @@
   const TOOLS = [
     { id: 'measure', t: 'Measure', d: 'Ruler. Click again to stop.', sel: '[data-action="measure-distance"]', toggle: true },
     { id: 'mark', t: 'Mark the board', d: 'Templates (circle, rectangle, wall) and the pen.', menu: 'mark', on: () => pressed('[data-action="toggle-draw"]') },
-    { id: 'damage', t: 'Damage / heal', d: 'For the selected tokens.', sel: '#vtt-damage-heal-btn' },
+    { id: 'damage', t: 'Damage / heal', d: 'Set the amount, press Damage or Heal, then click a token.', sel: '#vtt-damage-heal-btn' },
     { sep: true },
     { id: 'view', t: 'View', d: 'Vision, find token, 1st person, zones.', menu: 'view', on: () => pressed('[data-action="sight-test"]') || pressed('[data-action="first-person"]') },
     { id: 'edits', t: 'Map edits', d: 'Walls, stairs, height brush, floors, fog of war.', menu: 'edits', gm: true, on: () => pressed('[data-action="map-edits"]') },
@@ -53,15 +53,17 @@
   }
   const hideTip = () => tip.classList.remove('show');
   let menu = null;
-  const TOP_BAR = 50;   // #te-top's height: menus open below it
-  function closeMenu() { menu?.remove(); menu = null; }
+  const TOP_BAR = 72;   // #te-top's height (fallback): menus open below it
+  const topBarBottom = () => { const t = doc.getElementById('te-top'); const b = t && getComputedStyle(t).display !== 'none' ? t.getBoundingClientRect().bottom : 0; return b > 0 ? b : TOP_BAR; };
+  let menuTool = '';   // the strip/rail tool whose menu is open: pressing it again closes the menu
+  function closeMenu() { menu?.remove(); menu = null; menuTool = ''; }
   doc.addEventListener('pointerdown', (e) => { if (menu && !menu.contains(e.target) && !e.target.closest('.te-btn')) closeMenu(); }, true);
   doc.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
   function openMenu(anchor, html, wire) {
     closeMenu();
     menu = doc.createElement('div'); menu.className = 'te-menu'; menu.innerHTML = html; doc.body.append(menu);
     const r = anchor.getBoundingClientRect();
-    menu.style.left = r.right + 8 + 'px'; menu.style.top = Math.max(TOP_BAR + 6, Math.min(innerHeight - menu.offsetHeight - 6, r.top - 6)) + 'px';
+    menu.style.left = r.right + 8 + 'px'; menu.style.top = Math.max(topBarBottom() + 6, Math.min(innerHeight - menu.offsetHeight - 6, r.top - 6)) + 'px';
     wire?.(menu);
   }
   const levelName = () => ($('[data-map-level-nav-name]')?.textContent || '').trim();
@@ -77,7 +79,7 @@
       ${$('[data-action="terrain-zones"]') ? `<div class="te-row" style="cursor:default">${svg('zones')}Zones${pressed('[data-action="terrain-zones"]') || pressed('[data-action="terrain-zones-players"]') ? '' : ' <span class="te-off">off</span>'}<span class="te-switch"><button class="${pressed('[data-action="terrain-zones"]') ? 'on' : ''}" data-sel='[data-action="terrain-zones"]' title="Zones on your screen">Me</button>${gm && $('[data-action="terrain-zones-players"]') ? `<button class="${pressed('[data-action="terrain-zones-players"]') ? 'on' : ''}" data-sel='[data-action="terrain-zones-players"]' title="Zones on the players' screens">Players</button>` : ''}</span></div>` : ''}
       ${rows.map(([icon, label, sel, sub]) => { const b = $(sel); if (!b || (sub && !$('[data-action="sight-test"][aria-pressed="true"]'))) return ''; const on = pressed(sel); return `<button class="te-row${on ? ' on' : ''}" data-sel='${sel}'>${svg(icon)}${typeof label === 'function' ? label() : label}${on ? '<span class="k">on</span>' : ''}</button>`; }).join('')}`,
     (m) => {
-      m.querySelectorAll('[data-sel]').forEach((r) => r.onclick = () => { press(r.dataset.sel); setTimeout(() => viewMenu(anchor), 60); });
+      m.querySelectorAll('[data-sel]').forEach((r) => r.onclick = () => { press(r.dataset.sel); setTimeout(() => { viewMenu(anchor); menuTool = 'view'; }, 60); });
       m.querySelectorAll('[data-l]').forEach((b) => b.onclick = () => { press(`[data-action="view-map-level-${b.dataset.l}"]`); setTimeout(() => { const n = m.querySelector('[data-l="name"]'); if (n) n.textContent = levelName(); refresh(); }, 80); });
     });
   }
@@ -107,14 +109,15 @@
   function besideStrip(menuEl, anchor) {
     if (!menuEl || menuEl.hidden) return;
     const r = anchor.getBoundingClientRect();
-    menuEl.style.left = r.right + 8 + 'px'; menuEl.style.top = Math.max(TOP_BAR + 6, Math.min(innerHeight - menuEl.offsetHeight - 6, r.top - 6)) + 'px'; menuEl.style.right = '';
+    menuEl.style.left = r.right + 8 + 'px'; menuEl.style.top = Math.max(topBarBottom() + 6, Math.min(innerHeight - menuEl.offsetHeight - 6, r.top - 6)) + 'px'; menuEl.style.right = '';
   }
 
   function run(id, anchor) {
     const t = TOOLS.find((x) => x.id === id);
-    if (t?.menu === 'view') { viewMenu(anchor); return true; }
-    if (t?.menu === 'mark') { markMenu(anchor); return true; }
-    if (t?.menu === 'edits') { editsMenu(anchor); return true; }
+    if (t?.menu && menu && menuTool === id) { closeMenu(); return true; }   // pressed again: close its menu
+    if (t?.menu === 'view') { viewMenu(anchor); menuTool = id; return true; }
+    if (t?.menu === 'mark') { markMenu(anchor); menuTool = id; return true; }
+    if (t?.menu === 'edits') { editsMenu(anchor); menuTool = id; return true; }
     if (id === 'undo') { key('z'); return true; }
     if (id === 'undoTurn') { key('z', true); return true; }
     if (id === 'endCombat') return status().combat ? press('[data-action="start-combat"]') : false;
@@ -176,6 +179,12 @@
     if (lv) lv.textContent = nav && !nav.hidden ? levelName().replace(/^Height\s*/i, 'H') : '';
   }
   new MutationObserver(refresh).observe(doc.body, { subtree: true, attributes: true, attributeFilter: ['aria-pressed', 'aria-expanded', 'class', 'hidden'] });
+  // The board's Damage / Heal box opens in the top-left corner (inline 16px, 16px), over the strip and the top bar:
+  // it opens beside the strip and under the top bar instead. Dragged afterwards, it stays where it is put.
+  new MutationObserver((list) => list.forEach((m) => m.addedNodes.forEach((n) => {
+    if (n.nodeType !== 1 || !n.classList.contains('vtt-damage-heal') || n.style.left !== '16px' || n.style.top !== '16px') return;
+    n.style.left = (doc.documentElement.classList.contains('te-docked') ? 16 : 52) + 'px'; n.style.top = Math.round(topBarBottom() + 8) + 'px';
+  }))).observe(doc.body, { childList: true });
 
   // ---------------------------------------------------------------- live state for the table's rail
   function status() {

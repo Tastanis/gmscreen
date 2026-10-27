@@ -85,6 +85,7 @@ body.map-docked #map-tools { display: flex; }
 .fold > summary::before { content: "▸"; transition: transform .1s; }
 .fold[open] > summary::before { transform: rotate(90deg); }
 .fold > summary .n { margin-left: auto; }
+.flyout [hidden] { display: none !important; }   /* search hides rows: .item's display must not win */
 .item { display: flex; align-items: center; gap: 9px; padding: 6px; border-radius: 7px; cursor: grab; user-select: none; }
 .item:hover { background: #2d2117; }
 .item .pic { width: 34px; height: 34px; border-radius: 6px; flex: none; display: grid; place-items: center; font: 700 13px var(--title); color: #1d130b; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .25); }
@@ -490,3 +491,12 @@ body.no-map .rail-btn[data-needs-map] { display: none; }
 .card-grip { position: absolute; right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize; z-index: 4; opacity: 0; transition: opacity .15s;
   background: linear-gradient(135deg, transparent 50%, #c8a95e 50%, #c8a95e 58%, transparent 58%, transparent 70%, #c8a95e 70%, #c8a95e 78%, transparent 78%); }
 .card:hover .card-grip { opacity: .85; }
+/* The hover tools (open sheet, remove) sit above the "on <scene>" tag, which steps aside while the card is hovered. */
+.card .tools { z-index: 3; }
+.card:hover .where { opacity: 0; pointer-events: none; }
+/* A short screen (a 1366×768 laptop) with the map filling the table: the map's tools on the rail must all be in sight.
+   The group words go and the buttons get a little shorter (otherwise View and Map edits sit below the screen). */
+@media (max-height: 860px) {
+  body.map-docked #rail .rail-label { display: none; }
+  body.map-docked #rail .rail-btn { height: 34px; }
+}

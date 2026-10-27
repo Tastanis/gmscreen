@@ -339,7 +339,7 @@
       } catch (_) { /* not loaded yet */ }
     },
     onMax(w, on) { document.body.classList.toggle('map-docked', on && !w.state.min); syncDock(); },
-    onClose() { document.body.classList.remove('map-docked'); },
+    onClose() { document.body.classList.remove('map-docked'); const dock = $('#map-tools'); if (dock) dock.innerHTML = ''; },   // its tools leave the rail with it
   });
   function drawMockTokens(c) {
     const board = $('.board', c); if (!board) return; board.querySelectorAll('.token').forEach((n) => n.remove());
@@ -564,7 +564,7 @@
   function flyHeroes(btn) {
     T.openFlyout(btn, (f) => {
       const list = playerView ? HEROES.filter((h) => h.own !== false && (!me.gm || h === HEROES[0])) : HEROES;   // a player: their own hero
-      f.innerHTML = header('Heroes', 'click: sheet · drag: card') + `<div class="body">${list.map((h) => { const [a, m, on, t] = heroHp(h); const r = m ? a / m : 1; return `<div class="item hero" data-key="${h.id}"><div class="pic" style="background:${portrait(h)}">${h.pic && SERVED ? '' : initials(h.name)}</div><div class="txt"><b>${h.name}</b><i>${h.sub}${(() => { const r = liveHero(h.name); return r ? (r.elsewhere ? ' · on ' + esc(shortScene(r.elsewhere)) : ' · on the map') : ''; })()}</i>${m ? `<span class="hpbar"><span style="width:${Math.round(Math.max(0, r) * 100)}%;background:${r <= 0 ? '#d0503e' : r <= .5 ? '#d9a13e' : '#5fbf7a'}"></span>${t ? `<i class="tmp" style="width:${Math.min(100, Math.round(100 * t / m))}%"></i>` : ''}<b>${hpText(a, m, true, t)}</b></span>` : `<span class="offmap-pill">${hpText(a, m, on)}</span>`}</div></div>`; }).join('')}</div>`;
+      f.innerHTML = header('Heroes', 'click: sheet · drag: card') + `<div class="body">${list.map((h) => { const [a, m, on, t] = heroHp(h); const r = m ? a / m : 1; return `<div class="item hero" data-key="${h.id}"><div class="pic" style="background:${portrait(h)}">${(h.pic || h.picUrl) && SERVED ? '' : initials(h.name)}</div><div class="txt"><b>${h.name}</b><i>${h.sub}${(() => { const r = liveHero(h.name); return r ? (r.elsewhere ? ' · on ' + esc(shortScene(r.elsewhere)) : ' · on the map') : ''; })()}</i>${m ? `<span class="hpbar"><span style="width:${Math.round(Math.max(0, r) * 100)}%;background:${r <= 0 ? '#d0503e' : r <= .5 ? '#d9a13e' : '#5fbf7a'}"></span>${t ? `<i class="tmp" style="width:${Math.min(100, Math.round(100 * t / m))}%"></i>` : ''}<b>${hpText(a, m, true, t)}</b></span>` : `<span class="offmap-pill">${hpText(a, m, on)}</span>`}</div></div>`; }).join('')}</div>`;
       f.querySelectorAll('.item').forEach((n) => { const h = HEROES.find((x) => x.id === n.dataset.key);
         n.addEventListener('pointerdown', (e) => { if (e.target.closest('[data-mock]')) return; T.dragOut(e, { click: () => { apps.sheet(h.id); T.closeFlyout(); }, onTable: (x, y) => apps.heroCard(h.id, x, y) },
           `<div class="card" style="position:static"><div class="art" style="background:${portrait(h)}"></div><div class="name">${h.name}</div><div style="height:8px"></div></div>`); }); });
@@ -684,7 +684,7 @@
     const m = T.windows.get('map'), f = m?.node.querySelector('iframe');
     T.toast(`Map quality: ${k === 'auto' ? 'Auto (' + MQ.LEVELS[MQ.autoLevel()].label + ')' : MQ.LEVELS[k].label}. Pictures change when the map reloads.`, f ? { label: 'Reload map now', run: () => { f.style.opacity = 0; f.src = '/dnd/vtt/index.php'; } } : null);
   }
-  function place(w, x, y, wd, ht) { if (w.state.dock) T.undock(w); if (w.state.max) T.maximize(w, false); Object.assign(w.state, { x, y, w: wd, h: ht }); Object.assign(w.node.style, { left: x + 'px', top: y + 'px', width: wd + 'px', height: ht + 'px' }); T.refreshWork(); }
+  function place(w, x, y, wd, ht) { if (w.state.dock) T.undock(w); if (w.state.max) T.maximize(w, false); Object.assign(w.state, { x, y, w: wd, h: ht }); Object.assign(w.node.style, { left: x + 'px', top: y + 'px', width: wd + 'px', height: ht + 'px' }); T.refreshWork(); T.saveLayout?.(); }   // a layout (Prep, Combat) is kept for the next reload
   function togglePlayerView() { playerView = !playerView; T.closeFlyout(); buildRail(); T.toast(playerView ? 'Player view: only what a player has' : 'Director view'); }
 
   // Drawers slide out OVER the table (Brandon: chat opens on top of the map without changing it). Kept off on purpose.

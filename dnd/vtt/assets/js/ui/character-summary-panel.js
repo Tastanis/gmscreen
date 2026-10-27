@@ -330,10 +330,25 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
     }
   };
 
+  // The token's conditions as the board has them now. The copy of the token taken when it was selected misses a
+  // condition added or taken off on the sheet page (that change reaches the token through the server). True when
+  // they changed.
+  const syncActiveTokenConditions = () => {
+    if (!activeToken?.id) return false;
+    const live = window.VTTBoardCallbacks?.getPlacementById?.(activeToken.id);
+    if (!live || typeof live !== 'object') return false;
+    const next = live.conditions ?? live.condition ?? null;
+    if (JSON.stringify(next) === JSON.stringify(activeToken.conditions ?? activeToken.condition ?? null)) return false;
+    activeToken.conditions = clonePlain(live.conditions ?? null);
+    activeToken.condition = clonePlain(live.condition ?? null);
+    return true;
+  };
+
   const renderActiveSheet = () => {
     if (!activeCharacterId || !activeSheet) {
       return;
     }
+    syncActiveTokenConditions();
     activeDisplayName = activeSheet?.hero?.name || activeToken?.name || formatCharacterName(activeCharacterId);
     const standFirm = resolveCharacterStandFirmState(activeSheet, activeToken);
     const sameCharacter = panel.querySelector('[data-character-id]')?.dataset.characterId === String(activeCharacterId);
@@ -390,7 +405,10 @@ export function mountCharacterSummaryPanel(routes = {}, userContext = {}) {
       const sheet = await fetchCharacterSummary(routes, characterId);
       if (activeCharacterId !== characterId || pendingResourceSave || readEpoch !== sheetReadEpoch) return;
       // Preserve open confirmations and ability-tray focus on idle polling.
-      if (JSON.stringify(activeSheet) === JSON.stringify(sheet)) return;
+      if (JSON.stringify(activeSheet) === JSON.stringify(sheet)) {
+        if (syncActiveTokenConditions()) renderActiveSheet();   // the sheet is the same, the token's conditions are not
+        return;
+      }
       activeSheet = sheet;
       renderActiveSheet();
     } catch (error) {
