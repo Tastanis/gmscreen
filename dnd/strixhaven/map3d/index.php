@@ -30,6 +30,9 @@ require_once '../../includes/strix-nav.php';
   canvas#c { display: block; width: 100vw; height: 100vh; }
   #hud { display: none; position: fixed; left: 12px; top: 12px; background: rgba(14,16,20,.78); border: 1px solid rgba(255,255,255,.12); border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 1.5; max-width: 250px; backdrop-filter: blur(4px); }
   #hud h1 { font-size: 14px; margin: 0 0 4px; }
+  #qBtns { position: fixed; top: 2px; right: 8px; z-index: 100000; display: flex; gap: 2px; }   /* picture quality, tiny, at the top right (on the nav bar's empty end) */
+  #qBtns button { font: 600 9px/12px 'Cinzel', 'Palatino Linotype', serif; letter-spacing: .06em; text-transform: uppercase; color: #9a8a66; background: rgba(22, 18, 13, .85); border: 1px solid #4a3d24; border-radius: 2px; padding: 1px 5px; cursor: pointer; }
+  #qBtns button:hover { color: #f0d68a; } #qBtns button.on { color: #f0d68a; border-color: #d4b46a; background: rgba(58, 46, 24, .95); }
   #hud .stat { font-variant-numeric: tabular-nums; color: #ffd98a; }
   #hud button { background: #2a2f3a; color: #e8e6e0; border: 1px solid #454c5c; border-radius: 5px; padding: 3px 7px; margin: 2px 2px 2px 0; font-size: 11px; cursor: pointer; }
   #hud button.on { background: #55633a; border-color: #8ea05a; }
@@ -68,7 +71,7 @@ require_once '../../includes/strix-nav.php';
   #pathTotal { color: #f0d68a; margin-left: 8px; font-variant-numeric: tabular-nums; } #pathMsg { color: #cfc6b4; text-shadow: 0 1px 3px #000, 0 0 6px #000; min-height: 18px; }
   #pathNote { width: 220px; background: #0d0b08; color: #cfc6b4; border: 1px solid #3c3122; font: inherit; padding: 6px 8px; outline: none; }
   #pathDiff .sep { margin: 0 2px 0 10px; color: #8d8474; } #pathDiff button[data-diff=fast].on { color: #7dffac; } #pathDiff button[data-diff=yellow].on { color: #ffe86a; } #pathDiff button[data-diff=red].on { color: #ff7a6a; }
-  body.touring .strix-mini-nav, body.touring #pathBar, body.touring #panel, body.touring #tip, body.touring #imgBig { display: none !important; }
+  body.touring .strix-mini-nav, body.touring #qBtns, body.touring #pathBar, body.touring #panel, body.touring #tip, body.touring #imgBig { display: none !important; }
   #tip { position: fixed; left: 0; top: 0; display: none; pointer-events: none; background: rgba(14,16,20,.9); border: 1px solid #d8c48a; border-radius: 5px; padding: 3px 8px; font-size: 12px; white-space: nowrap; z-index: 5; }
   #labels { display: none; position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
   .lbl { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); text-align: center; pointer-events: auto; cursor: pointer; white-space: nowrap; transition: opacity .25s; text-shadow: 0 1px 3px #000, 0 0 6px #000; font-size: 12px; font-weight: 600; }
@@ -91,10 +94,10 @@ require_once '../../includes/strix-nav.php';
 <?php renderStrixNav('map'); ?>
 <canvas id="c"></canvas>
 <div id="labels"></div>
+<div id="qBtns" title="Picture quality"><button data-q="auto" title="Adjusts itself to keep the map smooth">Auto</button><button data-q="high" title="Everything on">High</button><button data-q="medium" title="Lighter edge smoothing">Med</button><button data-q="low" title="Lighter edge smoothing, drawn at three-quarters size">Low</button></div>
 <div id="hud">
   <h1>Strixhaven 3D sandbox</h1>
   <div><span class="stat" id="fps">-- fps</span> &middot; <span id="tris">--</span> tris &middot; <span id="calls">--</span> draws</div>
-  <div title="Map quality: one setting for this browser, shared with the battle map. Lighter levels use less memory.">Quality <select id="qSel"><option value="auto">Auto</option><option value="high">High</option><option value="balanced">Balanced</option><option value="low">Low</option></select> <span id="qNow" style="color:#a9adb6"></span></div>
   <div id="gen" style="color:#a9adb6"></div>
   <div style="margin-top:6px">
     <button id="bGrid" class="on">Hex grid (G)</button>
@@ -160,20 +163,10 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';   // models are packed with meshoptimizer (gltfpack): far smaller to download, unpacked here
-import { qualityChoice, qualityLevel, QUALITY_KEY, LEVELS } from '/dnd/vtt/board3d/quality.mjs';   // map quality shared with the battle map (October 2026)
 
 // ------------------------------------------------------------------ constants
 const params = new URLSearchParams(location.search);
-// Light mode: ?q=low, or the shared map quality set to Low or Balanced (Auto picks it on small laptops); ?q=high forces full.
-const LOW = params.get('q') === 'low' || (params.get('q') !== 'high' && ['low', 'balanced'].includes(qualityLevel()));
-{
-  const sel = document.getElementById('qSel'), now = document.getElementById('qNow');
-  if (sel) {
-    sel.value = qualityChoice();
-    if (now) now.textContent = 'now ' + LEVELS[qualityLevel()].label + (LOW ? ' (light mode)' : '');
-    sel.addEventListener('change', () => { try { localStorage.setItem(QUALITY_KEY, sel.value); } catch (e) { /* no storage */ } location.reload(); });
-  }
-}
+const LOW = params.get('q') === 'low';                        // light mode (?q=low): a coarser ground, for very slow machines. The picture quality buttons (top right) handle the rest
 const S = 1.4;                                                  // world scale: bigger hexes, same hex count
 const DR = 50, HEX_R = DR * S, COLS = 36, ROWS = 36, SQ3 = Math.sqrt(3);
 const DW = COLS * 1.5 * DR, DD = ROWS * SQ3 * DR;                // design space: layout and sculpting are authored here
@@ -7665,6 +7658,15 @@ const Q = { tier: 0, sum: 0, n: 0, skip: 0, wait: 1, upAt: -99, downAt: -99, ref
     if (this.tier > 0) { if (camera.position.distanceTo(this.cam) > camera.position.distanceTo(controls.target) * .2) this.wait = 1;                 // looking somewhere else now: worth trying at once
       if (avg < Math.max(1 / 52, this.refresh * 1.15) && now - this.downAt >= this.wait) { this.upAt = now; this.set(this.tier - 1); } } } };
 document.addEventListener('visibilitychange', () => { if (!document.hidden) Q.nudge(); });
+// the picture quality buttons (Oct 26): Auto lets the map adjust itself as above; High, Medium and Low fix it, and the choice is kept in this browser.
+// Measured on Brandon's machine at 1920x1080, graphics time a frame: everything on 11.7 ms (22.6 on a sharp screen drawn at 1.5x). The light edge-smoothing pass in place of 4x multisampling saves 28% and is hard to see,
+// so Medium gives that up first; Low also draws at three-quarters size (about 75% saved). The glow costs little once the picture is that size, and shadows little at any size for the depth they give, so every level keeps both
+const QLV = { high: [1, 4], medium: [1, 0], low: [.75, 0] }, QKEY = 'map3d-quality', qFeed = Q.feed; let qMode = 'auto'; try { qMode = localStorage.getItem(QKEY) || 'auto'; } catch (e) { /* no storage */ }
+function setQuality(m) { qMode = QLV[m] ? m : 'auto'; try { localStorage.setItem(QKEY, qMode); } catch (e) { /* no storage */ }
+  if (qMode === 'auto') { Q.feed = qFeed; Q.set(0); } else { Q.feed = () => {}; setScale(QLV[qMode]); document.body.dataset.quality = qMode; }
+  document.querySelectorAll('#qBtns button').forEach(b => b.classList.toggle('on', b.dataset.q === qMode)); }
+document.querySelectorAll('#qBtns button').forEach(b => { b.onclick = () => setQuality(b.dataset.q); });
+setQuality(qMode);
 addEventListener('resize', () => { Q.nudge(); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight); fxaaSize(); });
 
 // ------------------------------------------------------------------ HUD
