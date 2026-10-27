@@ -256,13 +256,15 @@ async function mount(){
    &&(hit.rampId||Number.isFinite(intent.surfaceElevation)&&Math.abs(intent.surfaceElevation-hit.z)<.55);
   if(!matches){bridge.previewMovement?.({placementId:p.id,...to,surfaceElevation:hit.z,levelId:hit.levelId??null,surfaceId:hit.surfaceId??null,rampId:hit.rampId??null});intent=bridge.captureMovementPreview?.();}
   // Where it was being drawn as it was put down: it stays there until the move is answered (frame, `landing`).
+  // Its movement line shrinks away toward where it went instead of vanishing (route-collapse.mjs).
+  const trail=getCurrentMeasurementPresentation();
   const shown=held&&held.id===p.id?{...held}:{id:p.id,x:to.column+(p.width||1)/2,y:to.row+(p.height||1)/2,z:Number.isFinite(hit.air)?hit.air:hit.z};
-  cancelDrag();
+  cancelDrag();view?.collapseMovementRoute?.(trail?JSON.parse(JSON.stringify(trail)):null);
   landing={...shown,column:to.column,row:to.row,answered:false,until:performance.now()+8000};
   // A drop that is refused says why where it can be seen (the board's own status line is read out, not shown).
   const status=document.querySelector('#active-scene-status'),said=status?.textContent;
   try{const result=await bridge.move({...intent,placementId:p.id,...to,surfaceElevation:hit.z,levelId:hit.levelId??null,surfaceId:hit.surfaceId??null,rampId:hit.rampId??null,movementKind:movementKind(e)});
-   if(result?.accepted===false&&landing?.id===p.id)landing=null;
+   if(result?.accepted===false){if(landing?.id===p.id)landing=null;view?.collapseMovementRoute?.(null);}
    if(result?.accepted===false&&!['unchanged','said'].includes(result.reason)){const words=REFUSED[result.reason]||(typeof result.reason==='string'&&/\s/.test(result.reason)?result.reason:status&&status.textContent!==said?status.textContent:'The token was not moved there.');window.UIKit?.toast?.(words,'warning');}}
   catch(error){console.error('[VTT 3D] move',error);window.UIKit?.toast?.(error?.message||'The token was not moved there.','warning');if(landing?.id===p.id)landing=null;}
   finally{if(landing?.id===p.id){landing.answered=true;landing.until=performance.now()+1500;}}

@@ -901,7 +901,7 @@ export async function createSceneView({canvas,sceneData:d,groundPicture=null,isC
   removeLevelArt(object){root.remove(object);const i=props.indexOf(object);if(i>=0)props.splice(i,1);},
   setTokensWithoutBase(ids){const key=[...(ids||[])].sort().join(',');if(key===noBaseKey)return;noBaseKey=key;noBaseIds=new Set(ids||[]);if(tokenRecords.length)updateTokenMatrices();},
   setLevel(level){activeLevel=Number(level);updateLevels();},setGrid(value){gridOn=value;updateLevels();},setRoofs(value){roofsOn=value;updateLevels();},setDoors(value){doorsOpen=value;updateLevels();},
-  setReachable(nodes){setOverlay('reach',nodes);},setVision(nodes,enabled){overlays.vision.visible=!!enabled;setOverlay('vision',enabled?nodes:[]);},setPath,setMovementRoute:movementRoute.set,setTethers,tethers:()=>JSON.parse(tetherSignature||'[]'),
+  setReachable(nodes){setOverlay('reach',nodes);},setVision(nodes,enabled){overlays.vision.visible=!!enabled;setOverlay('vision',enabled?nodes:[]);},setPath,setMovementRoute:movementRoute.set,collapseMovementRoute:movementRoute.collapse,setTethers,tethers:()=>JSON.parse(tetherSignature||'[]'),
   focus(point){const goal=V(point),delta=goal.clone().sub(controls.target);camera.position.add(delta);controls.target.copy(goal);controls.update();},home,
   render(dt){waterUniforms.uTime.value+=Math.min(dt||.016,.1);controls.update();movementRoute.update(dt);
    // The sky stays round the camera; haze starts a little past what is being looked at.

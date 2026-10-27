@@ -33,6 +33,7 @@
     settings: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
     layouts: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M10 10v10"/>',
     help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 015 .5c0 1.5-2.5 2-2.5 3.5M12 17h.01"/>',
+    logout: '<path d="M15 4h3a2 2 0 012 2v12a2 2 0 01-2 2h-3M10 17l5-5-5-5M15 12H4"/>',
     player: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/>',
     picture: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 8"/>',
     radio: '<circle cx="12" cy="12" r="7"/>', radioOn: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/>',
@@ -210,7 +211,7 @@
         const d = f.contentDocument;
         if (!/\/dnd\/table\/chat\.html/.test(url)) { const st = d.createElement('style'); st.textContent = PAGE_CHROME; d.head.append(st); }
         // Older site pages get the compact window look (dnd/table/pages-embed.css/js), in the sheet's theme.
-        if (!/\/dnd\/(table\/chat\.html|campaign\/|character_sheet\/)/.test(url)) {
+        if (!/\/dnd\/(table\/chat\.html|table\/dice\.php|campaign\/|character_sheet\/)/.test(url)) {
           let theme = 'diablo'; try { theme = localStorage.getItem('sheet-theme') === 'parchment' ? 'parchment' : 'diablo'; } catch (_) { /* no storage */ }
           d.documentElement.classList.add('in-table', theme);
           const css = d.createElement('link'); css.rel = 'stylesheet'; css.href = '/dnd/table/pages-embed.css'; d.head.append(css);
@@ -491,8 +492,9 @@
   // Made-up windows for the file version only.
   apps.combat = () => T.openWindow({ id: 'combat', app: 'combat', title: 'Combat', sub: 'Round 3', icon: I.combat, size: [300, 300],
     build(c) { c.innerHTML = '<p class="pad muted">On the site, combat runs on the map: start and end it from the Combat button; the turn bar shows on the board.</p>'; } });
-  apps.dice = () => T.openWindow({ id: 'dice', app: 'dice', title: 'Dice', icon: I.dice, size: [240, 200],
-    build(c) { c.innerHTML = '<div class="dice"><div class="pr">POWER ROLL</div><div class="row"><div class="d">3</div><div class="d">6</div></div></div>'; } });
+  // Dice is a window of its own (Brandon, October 27, 2026: it opened the map): the sheet's roller, rolls to chat (dice.php).
+  apps.dice = () => T.openWindow({ id: 'dice', app: 'dice', title: 'Dice', icon: I.dice, size: [400, 470],
+    build(c) { if (SERVED) { framePage(c, '/dnd/table/dice.php'); return; } c.innerHTML ='<div class="dice"><div class="pr">POWER ROLL</div><div class="row"><div class="d">3</div><div class="d">6</div></div></div>'; } });
 
   // ---------------------------------------------------------------- the rail
   // In order of how often a Director reaches for it mid-session. Live state shows on the button itself.
@@ -503,7 +505,7 @@
       player: { k: 'scenes', t: 'Map', d: 'The map your table is playing on.', open: () => apps.map() } },
     { k: 'creatures', t: 'Creatures', gm: true, needsMap: true, d: 'Every monster as a picture. Drag one onto the map to place it.', now: () => live?.foes ? `${live.foes} foe${live.foes > 1 ? 's' : ''} on this map` : '', open: () => apps.creatures() },
     { k: 'combat', t: 'Combat', needsMap: true, d: 'Start or end the fight, the turn bar, undo, malice.', now: () => live?.combat ? `Round ${live.round} · ${esc(live.turn)}${playerView ? '' : ` · Malice ${live.malice}`}` : 'No fight on', open: (b) => (SERVED ? flyCombat(b) : apps.combat()) },
-    { k: 'dice', t: 'Dice', key: 'D', d: 'The dice roller; results go to chat.', open: () => withVtt((v) => v.run('dice')) || apps.dice() },
+    { k: 'dice', t: 'Dice', key: 'D', d: 'The dice roller; results go to chat.', open: () => apps.dice() },
     { k: 'chat', t: 'Chat', d: 'Table chat, whispers, shared pictures.', now: () => { const u = live?.chatCount > lastChatSeen ? live.chatCount - lastChatSeen : 0; return u ? `${u} new` : ''; }, open: () => { const w = apps.chat(); if (w.state.dock && !w.state.open) T.setOpen(w, true); } },
     { k: 'test', t: 'Ask for a test', gm: true, d: 'Pick heroes; they roll from their sheets.', open: () => withVtt((v) => v.run('test')) || T.toast('Ask for a test: pick heroes…') },
     { label: 'Campaign' },
@@ -664,6 +666,9 @@
       { t: 'Default background', icon: 'settings', note: 'leather', go: () => { T.setBackground(null); T.saveBg(null); } },
       ...(me.gm ? [{ t: playerView ? 'Back to the Director\'s view' : 'See it as a player', icon: 'player', go: togglePlayerView }] : []),
       { t: 'Design notes', icon: 'help', gm: true, go: () => document.body.classList.toggle('show-notes') },
+      // Brandon (October 27, 2026): logging out lives here; the Table has no other way out.
+      { html: '<div class="menu-label">You</div>' },
+      { t: 'Log out', icon: 'logout', note: me.user ? 'signed in as ' + esc(me.user) : '', go: () => { location.href = '/dnd/logout.php'; } },
     ], 'or drop a file on the table');
   }
   function qualityRows() {

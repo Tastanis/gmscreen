@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {prepareCollapse,collapsedRoute,collapseProgress} from './route-collapse.mjs';
 
 // Presentation only: the caller supplies the native VTT's sampled route,
 // slope colors, difficult-square spans, and climb annotations. No pathfinding,
@@ -44,8 +45,20 @@ export function createMovementRoute(scene,camera,canvas){
   const lift=kind==='total'?2.15:kind==='leg'?.7:.46,sprite=new THREE.Sprite(asset.material);sprite.position.copy(point(at,lift));sprite.scale.set(1,.5,1);sprite.renderOrder=1003;sprite.name=`vtt-${kind}-label`;sprite.userData={text,at:{...at},kind,aspect:asset.aspect,size:kind==='total'?20:kind==='leg'?14:16};root.add(sprite);labels.push(sprite);const ghost=sprite.clone();ghost.material=faded(asset.material);ghost.name=sprite.name+'-occluded';root.add(ghost);labels.push(ghost);
  }
  function clear(){const geometries=new Set();for(const child of [...root.children]){root.remove(child);if(child.geometry)geometries.add(child.geometry);}for(const geometry of geometries)geometry.dispose();labels.length=0;}
+ // A token just put down: its line shrinks from the start toward where it went (route-collapse.mjs). While it does,
+ // the board's empty ruler (set(null) every frame) leaves it alone; a new line ends it at once.
+ let collapsing=null;
+ function collapse(payload){
+  collapsing=null;const prepared=payload&&!motion.matches?prepareCollapse(payload):null;
+  if(!prepared){set(null);return;}
+  collapsing={prepared,start:performance.now()};signature='collapsing';draw(collapsedRoute(prepared,0));
+ }
  function set(payload){
-  const next=JSON.stringify(payload||null);if(next===signature)return;signature=next;clear();
+  if(collapsing){if(!payload)return;collapsing=null;}
+  const next=JSON.stringify(payload||null);if(next===signature)return;signature=next;draw(payload);
+ }
+ function draw(payload){
+  clear();
   summary={pieces:0,difficult:0,climbs:0};root.userData={...summary,payload:payload||null};if(!payload){root.visible=false;return;}root.visible=true;
   const normal={positions:[],colors:[]},red={positions:[],colors:[]},outline={positions:[],colors:[]};let last=null;
   for(const piece of payload.pieces||[]){const points=(piece.points||[]).filter(valid);if(points.length<2)continue;const color=new THREE.Color(piece.color||'#111111');stroke(normal,points,.32,color);stroke(outline,points,.48,null);last={points,color};summary.pieces++;}
@@ -61,6 +74,8 @@ export function createMovementRoute(scene,camera,canvas){
   mesh(outline,halo,'vtt-route-halo',1000);mesh(normal,ordinary,'vtt-terrain-route',1001);mesh(red,difficult,'vtt-difficult-route',1002);root.userData={...summary,payload};
  }
  function update(dt){
+  if(collapsing){const {prepared,start}=collapsing,shape=collapsedRoute(prepared,collapseProgress((performance.now()-start)/1000,prepared.duration));
+   if(shape)draw(shape);else{collapsing=null;signature='null';draw(null);}}
   if(!root.visible)return;clock+=(Number.isFinite(dt)?dt:0);difficult.opacity=motion.matches?1:.65+.35*Math.cos(clock*Math.PI*2/.9);
   for(const [material,ghost] of hiddenMaterials)ghost.opacity=material.opacity*.32;
   // Billboard text retains the native ruler's minimum readable label size.
@@ -68,5 +83,5 @@ export function createMovementRoute(scene,camera,canvas){
   for(const sprite of labels){const height=Math.max(.35,camera.position.distanceTo(sprite.position)*worldPerPixel*(sprite.userData.size||16));sprite.scale.set(height*(sprite.userData.aspect||2),height,1);}
  }
  function dispose(){clear();scene.remove(root);for(const geometry of [cylinder,ball,cone])geometry.dispose();ordinary.dispose();difficult.dispose();halo.dispose();for(const material of hiddenMaterials.values())material.dispose();hiddenMaterials.clear();for(const asset of labelAssets.values()){asset.texture.dispose();asset.material.dispose();}labelAssets.clear();}
- set(null);return {set,update,dispose,summary:()=>({...summary})};
+ set(null);return {set,collapse,update,dispose,summary:()=>({...summary}),collapsing:()=>!!collapsing};
 }

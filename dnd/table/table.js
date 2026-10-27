@@ -410,20 +410,28 @@
       g.addEventListener('pointermove', move); g.addEventListener('pointerup', up);
     });
     spec.onAdd?.(node);
-    node.addEventListener('dblclick', () => spec.open?.());
     const [openBtn, rmBtn] = node.querySelectorAll('.tools button');
     openBtn.onclick = (e) => { e.stopPropagation(); spec.open?.(); };
     rmBtn.onclick = (e) => { e.stopPropagation(); node.remove(); cards.delete(spec.id); saveLayout(); };
+    // A quick double-click opens the sheet; press and hold drags. The double-click is counted here, not left to the
+    // browser: a real hand wobbles a few pixels between clicks, and the browser lost the double-click whenever that
+    // wobble counted as a drag (Brandon, October 27, 2026).
+    let lastTap = null;
     node.addEventListener('pointerdown', (e) => {
-      if (e.target.closest('button, .card-grip')) return;
-      // Not moved in the page on pointerdown: moving it there loses the click, and with it the double-click that
-      // opens the sheet. A dragged card goes to the front of the other cards when it is let go.
+      if (e.target.closest('button, .card-grip') || e.button !== 0) return;
+      // Not moved in the page on pointerdown: a dragged card goes to the front of the other cards when it is let go.
       node.setPointerCapture(e.pointerId);
-      const s = { x: e.clientX, y: e.clientY, l: node.offsetLeft, t: node.offsetTop };
+      const s = { x: e.clientX, y: e.clientY, l: node.offsetLeft, t: node.offsetTop, at: performance.now() };
       let moved = false;
       node.style.zIndex = 9;
-      const move = (ev) => { if (!moved && Math.hypot(ev.clientX - s.x, ev.clientY - s.y) < 3) return; moved = true; node.style.left = (s.l + ev.clientX - s.x) + 'px'; node.style.top = (s.t + ev.clientY - s.y) + 'px'; };
-      const up = () => { node.removeEventListener('pointermove', move); node.removeEventListener('pointerup', up); node.style.zIndex = 5; if (moved) { table.append(node); saveLayout(); } };
+      const move = (ev) => { if (!moved && Math.hypot(ev.clientX - s.x, ev.clientY - s.y) < 8) return; moved = true; node.style.left = (s.l + ev.clientX - s.x) + 'px'; node.style.top = (s.t + ev.clientY - s.y) + 'px'; };
+      const up = (ev) => {
+        node.removeEventListener('pointermove', move); node.removeEventListener('pointerup', up); node.style.zIndex = 5;
+        if (moved) { lastTap = null; table.append(node); saveLayout(); return; }
+        const now = performance.now();
+        if (lastTap && now - lastTap.at < 500 && Math.hypot(ev.clientX - lastTap.x, ev.clientY - lastTap.y) < 12) { lastTap = null; spec.open?.(); return; }
+        lastTap = { at: now, x: ev.clientX, y: ev.clientY };
+      };
       node.addEventListener('pointermove', move); node.addEventListener('pointerup', up);
     });
     saveLayout();

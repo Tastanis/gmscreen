@@ -66,7 +66,10 @@ test('a hero card is not moved in the page by a press (that lost the click, and 
     first.dispatchEvent(pointer(w, 'pointerdown', 60, 60));
     first.dispatchEvent(pointer(w, 'pointerup', 60, 60));
     assert.equal(cards()[0], first, 'a plain press leaves the card where it is in the page');
-    first.querySelector('.name').dispatchEvent(new w.MouseEvent('dblclick', { bubbles: true }));
+    // The second quick press, a few pixels off (a real hand wobbles), is the double-click that opens the sheet.
+    first.dispatchEvent(pointer(w, 'pointerdown', 64, 63));
+    first.dispatchEvent(pointer(w, 'pointermove', 66, 64));
+    first.dispatchEvent(pointer(w, 'pointerup', 66, 64));
     assert.ok(w.Table.windows.has('sheet-' + first.dataset.hero), 'the double-click opens that hero\'s sheet');
     // A drag still brings the card to the front.
     first.dispatchEvent(pointer(w, 'pointerdown', 60, 60));
