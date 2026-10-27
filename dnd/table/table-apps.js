@@ -100,15 +100,22 @@
 
   // ---------------------------------------------------------------- the real board (in the map window) and live state
   const vttFrame = () => { const f = T.windows.get('map')?.node.querySelector('iframe'); return f?.contentWindow?.vttEmbed ? f : null; };
-  function withVtt(fn) {
+  // Runs fn on the board in the map window. Without open it never opens or uncovers the map (Brandon, October 27,
+  // 2026: a button opens only the thing asked for) and answers false when there is no board; with open, the map is
+  // the thing asked for (a scene opened for yourself), so it is opened and brought into view.
+  function withVtt(fn, open = false) {
     if (!SERVED) return false;
-    const w = apps.map(); if (w.state.dock && !w.state.open) T.setOpen(w, true);
+    let w = T.windows.get('map');
+    if (!w && !open) return false;
+    if (open) { w = apps.map(); if (w.state.dock && !w.state.open) T.setOpen(w, true); }   // opening it again restores and focuses it
     const go = (n = 0) => { const f = vttFrame(); if (f) { fn(f.contentWindow.vttEmbed, f); return; } if (n < 300) setTimeout(() => go(n + 1), 100); };
     go(); return true;
   }
   // Who you are, chat, scenes: the board page carries them (window.vttConfig).
   let siteCfg = null;
-  T.siteConfig = () => { if (siteCfg) return siteCfg; const f = vttFrame(); const c = f?.contentWindow?.vttConfig; if (c) siteCfg = c; return siteCfg; };
+  T.siteConfig = () => { if (siteCfg) return siteCfg; const f = vttFrame(); const c = f?.contentWindow?.vttConfig; if (c) siteCfg = c; return siteCfg || window.TABLE_CONFIG || null; };
+  // A Table file's address with this build's version on it, so no old copy is used after a deploy.
+  const vers = (url) => url + (url.includes('?') ? '&' : '?') + 'v=' + (window.TABLE_BUILD || 0);
 
   let live = null, lastChatSeen = store.get('chat-seen', null);
   function pollLive() {
@@ -209,13 +216,13 @@
     f.addEventListener('load', () => {
       try {
         const d = f.contentDocument;
-        if (!/\/dnd\/table\/chat\.html/.test(url)) { const st = d.createElement('style'); st.textContent = PAGE_CHROME; d.head.append(st); }
+        if (!/\/dnd\/table\/(chat|test|dice)\.php/.test(url)) { const st = d.createElement('style'); st.textContent = PAGE_CHROME; d.head.append(st); }
         // Older site pages get the compact window look (dnd/table/pages-embed.css/js), in the sheet's theme.
-        if (!/\/dnd\/(table\/chat\.html|table\/dice\.php|campaign\/|character_sheet\/)/.test(url)) {
+        if (!/\/dnd\/(table\/(chat|test|dice)\.php|campaign\/|character_sheet\/)/.test(url)) {
           let theme = 'diablo'; try { theme = localStorage.getItem('sheet-theme') === 'parchment' ? 'parchment' : 'diablo'; } catch (_) { /* no storage */ }
           d.documentElement.classList.add('in-table', theme);
-          const css = d.createElement('link'); css.rel = 'stylesheet'; css.href = '/dnd/table/pages-embed.css'; d.head.append(css);
-          const js = d.createElement('script'); js.src = '/dnd/table/pages-embed.js'; d.body.append(js);
+          const css = d.createElement('link'); css.rel = 'stylesheet'; css.href = vers('/dnd/table/pages-embed.css'); d.head.append(css);
+          const js = d.createElement('script'); js.src = vers('/dnd/table/pages-embed.js'); d.body.append(js);
         }
         d.querySelectorAll('button, a').forEach((b) => { if (/^(logout|←\s*back.*|back to .*)$/i.test((b.textContent || '').trim())) b.style.display = 'none'; });
       } catch (_) { /* another site */ }
@@ -248,12 +255,6 @@
         c.innerHTML = `<div class="sheet-top"><div class="pic" style="background:${portrait(h)}">${initials(h.name)}</div><div><h2>${h.name}</h2><p>${h.sub}</p></div></div>
           <div class="sec"><h4>Stamina</h4><div class="pad">${a} / ${m}</div></div><div class="sec"><h4>The real sheet</h4><div class="pad muted">Opens here when the Table is served by the site.</div></div>`;
       } });
-  };
-  // The proposed sheet layout, with the hero's real data (nothing saves).
-  apps.sheetMock = (id) => {
-    const h = HEROES.find((x) => x.id === id) || HEROES[0];
-    return T.openWindow({ id: 'sheetmock-' + h.id, app: 'sheetMock', arg: h.id, title: h.name, sub: 'new sheet (mock-up)', icon: I.heroes, size: [640, 720],
-      build(c) { if (SERVED) framePage(c, '/dnd/table/sheet-mock.html?character=' + encodeURIComponent(h.id)); else c.innerHTML = '<p class="pad muted">The mock-up needs the site (it loads the real sheet).</p>'; } });
   };
   // The map's hero panel asks for the full sheet.
   window.addEventListener('message', (e) => { if (e.origin === location.origin && e.data?.type === 'table-open-sheet' && e.data.character) apps.sheet(String(e.data.character).toLowerCase()); });
@@ -314,9 +315,9 @@
         const frame = $('iframe', c);
         frame.addEventListener('load', () => {
           const d = frame.contentDocument; if (!d || frame.src.endsWith('about:blank')) return;
-          const css = d.createElement('link'); css.rel = 'stylesheet'; css.href = '/dnd/table/vtt-embed.css'; d.head.append(css);
+          const css = d.createElement('link'); css.rel = 'stylesheet'; css.href = vers('/dnd/table/vtt-embed.css'); d.head.append(css);
           d.documentElement.classList.add('vtt-embed');
-          const js = d.createElement('script'); js.src = '/dnd/table/vtt-embed.js'; d.body.append(js);
+          const js = d.createElement('script'); js.src = vers('/dnd/table/vtt-embed.js'); d.body.append(js);
           const ready = () => { if (!frame.contentWindow?.vttEmbed) { setTimeout(ready, 100); return; } frame.style.opacity = 1; $('.loading', c)?.remove(); siteCfg = null; T.siteConfig(); syncDock(); pollLive(); };
           ready();
         });
@@ -485,16 +486,19 @@
   apps.chat = () => T.openWindow({ id: 'chat', app: 'chat', title: 'Chat', icon: I.chat, size: [340, 520],
     build(c) {
       if (!SERVED) { c.innerHTML = '<div class="chat-log"><p><b>Director:</b> The orchard trembles.</p><p><b>Indigo:</b> I read the Tender\'s mind.</p></div><input class="chat-in" placeholder="Message…">'; return; }
-      const start = () => { if (!T.siteConfig()) { c.innerHTML = '<div class="loading">Waiting for the board…</div>'; if (!T.windows.has('map')) withVtt(() => {}); setTimeout(start, 400); return; } framePage(c, '/dnd/table/chat.html'); };
-      start();
+      framePage(c, vers('/dnd/table/chat.php'));
     } });
 
   // Made-up windows for the file version only.
   apps.combat = () => T.openWindow({ id: 'combat', app: 'combat', title: 'Combat', sub: 'Round 3', icon: I.combat, size: [300, 300],
     build(c) { c.innerHTML = '<p class="pad muted">On the site, combat runs on the map: start and end it from the Combat button; the turn bar shows on the board.</p>'; } });
+  // Ask for a test: a window of its own (Brandon, October 27, 2026: it opened the map). The map's own form (test.php).
+  apps.test = () => T.openWindow({ id: 'test', app: 'test', title: 'Ask for a test', icon: I.test || I.dice, size: [420, 560],
+    build(c) { if (SERVED) { framePage(c, vers('/dnd/table/test.php')); return; } c.innerHTML = '<p class="pad muted">Pick heroes; they roll from their sheets.</p>'; } });
+
   // Dice is a window of its own (Brandon, October 27, 2026: it opened the map): the sheet's roller, rolls to chat (dice.php).
   apps.dice = () => T.openWindow({ id: 'dice', app: 'dice', title: 'Dice', icon: I.dice, size: [400, 470],
-    build(c) { if (SERVED) { framePage(c, '/dnd/table/dice.php'); return; } c.innerHTML ='<div class="dice"><div class="pr">POWER ROLL</div><div class="row"><div class="d">3</div><div class="d">6</div></div></div>'; } });
+    build(c) { if (SERVED) { framePage(c, vers('/dnd/table/dice.php')); return; } c.innerHTML ='<div class="dice"><div class="pr">POWER ROLL</div><div class="row"><div class="d">3</div><div class="d">6</div></div></div>'; } });
 
   // ---------------------------------------------------------------- the rail
   // In order of how often a Director reaches for it mid-session. Live state shows on the button itself.
@@ -507,7 +511,7 @@
     { k: 'combat', t: 'Combat', needsMap: true, d: 'Start or end the fight, the turn bar, undo, malice.', now: () => live?.combat ? `Round ${live.round} · ${esc(live.turn)}${playerView ? '' : ` · Malice ${live.malice}`}` : 'No fight on', open: (b) => (SERVED ? flyCombat(b) : apps.combat()) },
     { k: 'dice', t: 'Dice', key: 'D', d: 'The dice roller; results go to chat.', open: () => apps.dice() },
     { k: 'chat', t: 'Chat', d: 'Table chat, whispers, shared pictures.', now: () => { const u = live?.chatCount > lastChatSeen ? live.chatCount - lastChatSeen : 0; return u ? `${u} new` : ''; }, open: () => { const w = apps.chat(); if (w.state.dock && !w.state.open) T.setOpen(w, true); } },
-    { k: 'test', t: 'Ask for a test', gm: true, d: 'Pick heroes; they roll from their sheets.', open: () => withVtt((v) => v.run('test')) || T.toast('Ask for a test: pick heroes…') },
+    { k: 'test', t: 'Ask for a test', gm: true, d: 'Pick heroes; they roll from their sheets.', open: () => apps.test() },
     { label: 'Campaign' },
     { k: 'projects', t: 'Projects', d: 'Every hero’s projects; project rolls go to chat for your approval.', open: () => apps.page('Projects') },
     { k: 'relations', t: 'Relationships', d: 'Who each hero is close to or at odds with.', open: () => apps.page('Relationships') },
@@ -521,7 +525,7 @@
   function buildRail() {
     const rail = $('#rail'); rail.innerHTML = '';
     const logo = el('button', 'logo', 'S'); logo.setAttribute('aria-label', 'Table menu');
-    logo.addEventListener('mouseenter', () => T.showTip(logo, '<b>Table menu</b><span class="how">Layouts, background, see as a player, design notes.</span>')); logo.addEventListener('mouseleave', T.hideTip);
+    logo.addEventListener('mouseenter', () => T.showTip(logo, '<b>Table menu</b><span class="how">Layouts, background, see as a player, log out.</span>')); logo.addEventListener('mouseleave', T.hideTip);
     logo.addEventListener('click', () => { T.hideTip(); flyTable(logo); });
     rail.append(logo);
     RAIL.forEach((r) => {
@@ -573,8 +577,13 @@
     });
   }
   function flyScenes(btn) {
-    const cfg = SERVED ? T.siteConfig()?.scenes : MOCK_SCENES;
-    if (SERVED && !cfg) { withVtt(() => flyScenes(btn)); T.toast('Opening the board…'); return; }
+    if (SERVED && !btn._fresh) {
+      fetch('/dnd/table/config.php', { cache: 'no-store', credentials: 'same-origin' }).then((r) => r.json()).then((j) => { if (j?.config) window.TABLE_CONFIG = j.config; })
+        .catch(() => {}).finally(() => { btn._fresh = true; try { flyScenes(btn); } finally { btn._fresh = false; } });
+      return;
+    }
+    const cfg = SERVED ? (window.TABLE_CONFIG?.scenes || T.siteConfig()?.scenes) : MOCK_SCENES;
+    if (SERVED && !cfg) { T.toast('The scene list could not be read; try again'); return; }
     T.openFlyout(btn, (f) => {
       const folders = [...(cfg.folders || []), { id: '', name: 'Unsorted' }];
       const items = cfg.items || [];
@@ -605,10 +614,25 @@
         if (e.target.closest('[data-a="twins"]')) { const l = n.nextElementSibling; if (l?.classList.contains('twins-list')) { l.hidden = !l.hidden; e.target.closest('[data-a="twins"]').classList.toggle('on', !l.hidden); } return; }
         const show = e.target.closest('[data-a="show"]'), id = n.dataset.key, name = n.querySelector('b').textContent;
         if (!SERVED) { T.toast(show ? `${name} shown to players` : `Opened ${name}`); if (!show) apps.map(); T.closeFlyout(); return; }
-        withVtt((v) => { const ok = v.run(show ? 'showScene' : 'openScene', id); T.toast(ok ? (show ? `Players now see ${name}` : `Opened ${name}`) : 'Could not find that scene'); });
+        if (show && !vttFrame()) { showToPlayers(id, name); T.closeFlyout(); return; }
+        withVtt((v) => { const ok = v.run(show ? 'showScene' : 'openScene', id); T.toast(ok ? (show ? `Players now see ${name}` : `Opened ${name}`) : 'Could not find that scene'); }, !show);
         T.closeFlyout();
       }));
     });
+  }
+  // Players to a scene with no map open: the scene made visible to them, then the same move the map makes (scene.php).
+  async function showToPlayers(id, name) {
+    const cfg = window.TABLE_CONFIG || {}, scene = (cfg.scenes?.items || []).find((s) => s.id === id);
+    try {
+      if (scene && scene.playerVisible === false && cfg.scenesEndpoint) {
+        const r = await fetch(cfg.scenesEndpoint, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update-scene-visibility', sceneId: id, playerVisible: true }) });
+        const j = await r.json().catch(() => ({})); if (!r.ok || !j.success) throw new Error(j.error || 'The scene could not be made visible.');
+        scene.playerVisible = true;
+      }
+      const r = await fetch('/dnd/table/scene.php', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sceneId: id }) });
+      const j = await r.json().catch(() => ({})); if (!r.ok || !j.success) throw new Error(j.error || 'The players were not moved.');
+      T.toast(`Players now see ${name}`);
+    } catch (error) { T.toast(error?.message || 'The players were not moved.'); }
   }
   function flyCombat(btn) {
     const L = live || {};
@@ -665,7 +689,6 @@
       { t: 'Background…', icon: 'picture', note: 'picture · GIF · MP4', go: () => { const i = Object.assign(el('input'), { type: 'file', accept: 'image/*,video/*' }); i.onchange = () => i.files[0] && T.useBackgroundFile(i.files[0]); i.click(); } },
       { t: 'Default background', icon: 'settings', note: 'leather', go: () => { T.setBackground(null); T.saveBg(null); } },
       ...(me.gm ? [{ t: playerView ? 'Back to the Director\'s view' : 'See it as a player', icon: 'player', go: togglePlayerView }] : []),
-      { t: 'Design notes', icon: 'help', gm: true, go: () => document.body.classList.toggle('show-notes') },
       // Brandon (October 27, 2026): logging out lives here; the Table has no other way out.
       { html: '<div class="menu-label">You</div>' },
       { t: 'Log out', icon: 'logout', note: me.user ? 'signed in as ' + esc(me.user) : '', go: () => { location.href = '/dnd/logout.php'; } },
@@ -713,16 +736,6 @@
     }
   });
 
-  // ---------------------------------------------------------------- design notes
-  $('#notes').innerHTML = `<button class="close" title="Close">×</button><h3>Design notes</h3>
-    <p>The screen is the table. One rail on the left; everything opens as a window you can move, size and snap (drag to an edge). Hold a window at an edge for a moment to tuck it into that side behind a tab.</p>
-    <h4>The rail shows, before you click</h4><ul><li><b>Heroes</b>: a stamina bar per hero; amber number = heroes at half or less.</li><li><b>Scenes</b>: your height; <b>!</b> when the players see a different scene than you.</li><li><b>Creatures</b>: foes on the map.</li><li><b>Combat</b>: the round; purple number = malice.</li><li><b>Chat</b>: new messages.</li></ul>
-    <h4>The map</h4><ul><li>One map window, one board. Its tools: Measure · Mark (templates, pen) · Damage/heal · View (height, find, 1st person, vision, zones) · Map edits (walls, stairs, height, floors, fog).</li><li>Fill the table and those tools move onto the rail.</li><li>Small: low detail. Tucked away, covered or minimised: paused (no drawing at all).</li><li>Undo: Ctrl+Z, Ctrl+Shift+Z, or the Combat menu.</li></ul>
-    <h4>Creatures</h4><ul><li>The Monster Creator's list as pictures, by group and folder; search anything.</li><li>Drag a picture onto the map: placed. No import → create token → drag.</li></ul>
-    <h4>Pages</h4><p>Students, staff, sheets, rules, the Monster Creator open as windows, without their own top bars. Each loads only when opened and is freed when closed.</p>
-    <h4>The S button</h4><p>Layouts (combat, exploration, prep), background, player view, these notes.</p>`;
-  $('#notes .close').onclick = () => document.body.classList.remove('show-notes');
-
   // ---------------------------------------------------------------- start: the last table, or a first one
   (async () => {
   await loadHeroes();
@@ -736,7 +749,6 @@
     HEROES.forEach((h, i) => apps.heroCard(h.id, 24 + (i % 2) * 116, 24 + Math.floor(i / 2) * 196));
     place(apps.map(), 270, 16, b.width - 270 - 40, b.height - 32);   // clear of the right-hand drawer tabs
     if (SERVED) T.dock(apps.chat(), 'right', false, .24);
-    if (me.gm) document.body.classList.add('show-notes');   // the notes are for the Director
   }
   })();
 })();

@@ -10,7 +10,8 @@ const root = new URL('../../../../../table/', import.meta.url);
 const read = (name) => readFileSync(new URL(name, root), 'utf8');
 
 function openTable() {
-  const html = read('index.html').replace(/<script[^>]*><\/script>/g, '');
+  // The page is PHP since October 27, 2026 (versions on its files, settings from the server): its PHP and scripts are left out.
+  const html = read('index.php').replace(/^<\?php[\s\S]*?\?>/, '').replace(/<script[^>]*>[\s\S]*?<\/script>/g, '');
   const dom = new JSDOM(html, { url: 'http://localhost/dnd/table/?mock', runScripts: 'outside-only', pretendToBeVisual: true });
   const w = dom.window;
   w.Element.prototype.setPointerCapture = () => {};

@@ -1,4 +1,4 @@
-/* The Table — core (prototype). Windows, flyouts, cards, background, saved layout.
+/* The Table — core. Windows, flyouts, cards, background, saved layout.
    What opens where is in table-apps.js; this file only knows how to put things on the table. */
 (function () {
   'use strict';
