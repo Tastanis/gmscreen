@@ -34,6 +34,7 @@
     layouts: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M10 10v10"/>',
     help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 015 .5c0 1.5-2.5 2-2.5 3.5M12 17h.01"/>',
     logout: '<path d="M15 4h3a2 2 0 012 2v12a2 2 0 01-2 2h-3M10 17l5-5-5-5M15 12H4"/>',
+    arcane: '<path d="M12 2l3 6 6 1-4.5 4.5L18 20l-6-3-6 3 1.5-6.5L3 9l6-1z"/>',
     player: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/>',
     picture: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 8"/>',
     radio: '<circle cx="12" cy="12" r="7"/>', radioOn: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/>',
@@ -508,7 +509,6 @@
     { k: 'scenes', t: 'Scenes', gm: true, d: 'Open a scene for yourself or show it to the players.', now: () => live?.scene ? `You: ${esc(live.scene)}${live.level ? ' · ' + live.level : ''}${live.playerSceneName && live.playerSceneId !== live.sceneId ? `<br><span class="warn">Players see: ${esc(live.playerSceneName)}</span>` : live.playerSceneName ? '<br>Players see the same scene' : ''}` : '', open: flyScenes,
       player: { k: 'scenes', t: 'Map', d: 'The map your table is playing on.', open: () => apps.map() } },
     { k: 'creatures', t: 'Creatures', gm: true, needsMap: true, d: 'Every monster as a picture. Drag one onto the map to place it.', now: () => live?.foes ? `${live.foes} foe${live.foes > 1 ? 's' : ''} on this map` : '', open: () => apps.creatures() },
-    { k: 'combat', t: 'Combat', needsMap: true, d: 'Start or end the fight, the turn bar, undo, malice.', now: () => live?.combat ? `Round ${live.round} · ${esc(live.turn)}${playerView ? '' : ` · Malice ${live.malice}`}` : 'No fight on', open: (b) => (SERVED ? flyCombat(b) : apps.combat()) },
     { k: 'dice', t: 'Dice', key: 'D', d: 'The dice roller; results go to chat.', open: () => apps.dice() },
     { k: 'chat', t: 'Chat', d: 'Table chat, whispers, shared pictures.', now: () => { const u = live?.chatCount > lastChatSeen ? live.chatCount - lastChatSeen : 0; return u ? `${u} new` : ''; }, open: () => { const w = apps.chat(); if (w.state.dock && !w.state.open) T.setOpen(w, true); } },
     { k: 'test', t: 'Ask for a test', gm: true, d: 'Pick heroes; they roll from their sheets.', open: () => apps.test() },
@@ -516,9 +516,10 @@
     { k: 'projects', t: 'Projects', d: 'Every hero’s projects; project rolls go to chat for your approval.', open: () => apps.page('Projects') },
     { k: 'relations', t: 'Relationships', d: 'Who each hero is close to or at odds with.', open: () => apps.page('Relationships') },
     { k: 'people', t: 'People', d: 'Students, staff and other NPCs.', open: flyPeople },
-    { k: 'campus', t: 'Campus', d: 'Campus map, locations, schedule, campaign record.', open: flyCampus },
+    { k: 'campus', t: 'Campus', d: 'The campus map and the schedule.', open: flyCampus },
     { k: 'notes', t: 'GM notes', gm: true, d: 'Your GM screen notes.', open: () => apps.page('GM notes') },
     { k: 'rules', t: 'Rules', d: 'Rules pages, each in its own window.', open: flyRules },
+    { k: 'arcane', t: 'Arcane Construction', only: 'zepha', d: 'Your arcane construction.', open: () => apps.page('Arcane Construction') },
     { label: 'Prep', gm: true },
     { k: 'workshop', t: 'Workshop', gm: true, d: 'Monster Creator, templates, players and more.', open: flyWorkshop },
   ];
@@ -530,6 +531,7 @@
     rail.append(logo);
     RAIL.forEach((r) => {
       if (playerView && r.gm && !r.player) return;
+      if (r.only && String(me.user || '').toLowerCase() !== r.only) return;   // one player's own button
       if (r.label) { rail.append(el('div', 'rail-label', r.label)); return; }
       const spec = playerView && r.player ? { ...r, ...r.player } : r;
       const b = el('button', 'rail-btn', svg(spec.t === 'Map' ? 'map' : spec.k));
@@ -657,7 +659,6 @@
   function flyCampus(btn) {
     menuFly(btn, 'Campus', [
       { t: 'Campus map', icon: 'map', note: '3D hexes', go: () => apps.page('Campus map') },
-      { t: 'Locations', icon: 'campus', go: () => apps.page('Locations') },
       { t: 'Schedule', icon: 'layouts', note: 'this week', go: () => apps.page('Schedule') },
     ]);
   }
@@ -680,8 +681,6 @@
     const tb = () => $('#table').getBoundingClientRect();
     menuFly(btn, 'The table', [
       { html: '<div class="menu-label">Arrange</div>' },
-      { t: 'Combat', icon: 'combat', note: 'map + chat', go: () => { const b = tb(); const m = apps.map(); place(m, 0, 0, b.width * .74, b.height); T.dock(apps.chat(), 'right', true, .26); } },
-      { t: 'Exploration', icon: 'map', note: 'the map fills the table', go: () => { T.maximize(apps.map(), true); } },
       { t: 'Prep', gm: true, icon: 'workshop', note: 'creatures beside the map', go: () => { const b = tb(); place(apps.creatures(), 0, 0, b.width * .36, b.height); place(apps.map(), b.width * .36, 0, b.width * .64, b.height); } },
       { t: 'Clear the table', icon: 'layouts', go: () => T.clearLayout() },
       ...(SERVED ? qualityRows() : []),
