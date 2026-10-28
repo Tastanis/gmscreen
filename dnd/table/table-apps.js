@@ -210,7 +210,7 @@
     'Conditions': ['/dnd/rules/conditions/index.html'], 'Tests & Studying': ['/dnd/rules/tests-studying/index.html'], 'Project rules': ['/dnd/rules/projects/index.html'], 'Skills': ['/dnd/rules/skills/index.html'],
     'Falling & Jumping': ['/dnd/rules/fall-jump/index.html'], 'Breakthrough': ['/dnd/rules/breakthrough/index.html'], 'Respites': ['/dnd/rules/respites/index.html'], 'Negotiation': ['/dnd/rules/negotiation/index.html'], 'Universal Actions': ['/dnd/rules/universal-actions/index.html'],
   };
-  const PAGE_CHROME = '.strix-mini-nav,.strix-mini-nav-spacer,.nav-btn,.logout-btn,.version-footer,.back-btn,.dice-roller-launch,#chat-panel,#chat-panel-toggle,.chat-panel-toggle,#chat-whisper-popouts{display:none!important}body{padding-top:0!important}';
+  const PAGE_CHROME = '.strix-mini-nav,.strix-mini-nav-spacer,.nav-btn,.logout-btn,.version-footer,.back-btn,.dice-roller-launch,#chat-panel,#chat-panel-toggle,.chat-panel-toggle,#chat-whisper-popouts,button.close-btn[onclick*="window.close"]{display:none!important}body{padding-top:0!important}';
   function framePage(c, url) {
     c.innerHTML = `<iframe src="${url}" class="page-frame" style="opacity:0"></iframe><div class="loading">Opening…</div>`;
     const f = $('iframe', c);
